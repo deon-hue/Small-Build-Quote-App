@@ -1,0 +1,416 @@
+'use client'
+
+import { useEffect, useRef, useState } from 'react'
+import { useApp } from '@/contexts/AppContext'
+import type { Job, QuotePhase, GanttState, GanttPhase } from '@/lib/types'
+import type { Quote } from '@/lib/types'
+import { fmt, quoteTotal, Q_BADGE, Q_LABEL } from '@/lib/utils'
+import { useRouter } from 'next/navigation'
+
+interface Props {
+  job: Job
+  phases: QuotePhase[]
+  linkedQuotes: Quote[]
+  onClose: () => void
+}
+
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+function addDays(date: Date, n: number): Date {
+  const d = new Date(date); d.setDate(d.getDate() + n); return d
+}
+function fmtDate(d: Date): string {
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+function fmtDateShort(d: Date): string {
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+}
+function esc(s: string): string {
+  return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
+}
+
+export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props) {
+  const { getGanttState, saveGanttState } = useApp()
+  const containerRef = useRef<HTMLDivElement>(null)
+  const stateRef = useRef<GanttState | null>(null)
+  const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('week')
+  const router = useRouter()
+
+  function buildState(): GanttState {
+    const totalDays = (job.weeks || 12) * 7
+    const defaultLabels = phases.length
+      ? phases.map(p => p.phase)
+      : ['Preliminaries','Demolition & Enabling','Foundations','Structure','Roof',
+         'External Doors & Windows','First Fix','Insulation','Plastering','Second Fix','External Works']
+
+    const saved = getGanttState(job.id)
+    if (saved && saved.phases.length === defaultLabels.length) return saved
+
+    const n = defaultLabels.length
+    const ganttPhases: GanttPhase[] = defaultLabels.map((label, i) => ({
+      label,
+      startDay: Math.round((i / n) * totalDays),
+      durDays: Math.max(1, Math.round(((i + 1) / n) * totalDays) - Math.round((i / n) * totalDays)),
+    }))
+    return { phases: ganttPhases, totalDays }
+  }
+
+  useEffect(() => {
+    const state = buildState()
+    stateRef.current = state
+    renderGantt(state, viewMode)
+  }, [job, phases, viewMode]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function renderGantt(state: GanttState, mode: 'day' | 'week' | 'month') {
+    const container = containerRef.current
+    if (!container) return
+
+    const totalWeeks = job.weeks || 12
+    const startDate = job.start ? new Date(job.start) : new Date()
+    startDate.setHours(0, 0, 0, 0)
+    const totalDays = totalWeeks * 7
+    const endDate = addDays(startDate, totalDays)
+    const todayDate = new Date(); todayDate.setHours(0, 0, 0, 0)
+    const doneWeeks = Math.min(job.done || 0, totalWeeks)
+
+    const LABEL_W = parseInt(container.dataset.labelW || '220') || 220
+    const ROW_H = 36
+    const CHART_MIN_W = 600
+
+    // Build columns
+    let cols: Array<{ date: Date, isToday: boolean, isWeekend: boolean, label: string, sublabel: string }> = []
+    let colCount = 0
+
+    if (mode === 'day') {
+      colCount = totalDays
+      cols = Array.from({ length: colCount }, (_, i) => {
+        const d = addDays(startDate, i)
+        return { date: d, isToday: d.toDateString() === todayDate.toDateString(),
+          isWeekend: d.getDay() === 0 || d.getDay() === 6,
+          label: d.getDate() + '', sublabel: MONTH_NAMES[d.getMonth()] }
+      })
+    } else if (mode === 'week') {
+      colCount = totalWeeks
+      cols = Array.from({ length: colCount }, (_, w) => {
+        const d = addDays(startDate, w * 7)
+        return { date: d, isToday: todayDate >= addDays(startDate, w * 7) && todayDate < addDays(startDate, (w + 1) * 7),
+          isWeekend: false, label: 'W' + (w + 1), sublabel: fmtDateShort(d) }
+      })
+    } else {
+      let mCursor = new Date(startDate.getFullYear(), startDate.getMonth(), 1)
+      const endMonth = new Date(endDate.getFullYear(), endDate.getMonth(), 1)
+      while (mCursor <= endMonth) {
+        cols.push({ date: new Date(mCursor),
+          isToday: todayDate.getFullYear() === mCursor.getFullYear() && todayDate.getMonth() === mCursor.getMonth(),
+          isWeekend: false, label: MONTH_NAMES[mCursor.getMonth()], sublabel: mCursor.getFullYear() + '' })
+        mCursor.setMonth(mCursor.getMonth() + 1)
+      }
+      colCount = cols.length
+    }
+
+    // Month grouping
+    let monthSections: Array<{ month: number, year: number, span: number }> = []
+    if (mode !== 'month') {
+      let currentMonth = -1, monthSpan = 0
+      cols.forEach((col, i) => {
+        const m = col.date.getMonth()
+        if (m !== currentMonth) {
+          if (currentMonth !== -1) monthSections.push({ month: currentMonth, year: col.date.getMonth() === 0 ? col.date.getFullYear() - 1 : col.date.getFullYear(), span: monthSpan })
+          currentMonth = m; monthSpan = 1
+        } else { monthSpan++ }
+        if (i === cols.length - 1) monthSections.push({ month: currentMonth, year: col.date.getFullYear(), span: monthSpan })
+      })
+    }
+
+    function dayToPct(day: number): number {
+      if (mode !== 'month') return (day / totalDays) * 100
+      const d = addDays(startDate, day)
+      const mIdx = cols.findIndex(c => c.date.getFullYear() === d.getFullYear() && c.date.getMonth() === d.getMonth())
+      if (mIdx < 0) return (day / totalDays) * 100
+      const mEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0)
+      const frac = (d.getDate() - 1) / mEnd.getDate()
+      return ((mIdx + frac) / colCount) * 100
+    }
+
+    const todayOffset = Math.max(0, Math.min(totalDays, (todayDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)))
+
+    const monthRowHtml = mode === 'month' ? '' : monthSections.map(m =>
+      `<div style="flex:${m.span};text-align:center;font-size:10px;font-weight:700;color:#2b2f33;padding:4px 2px;border-right:1px solid #dde1e5;border-bottom:1px solid #dde1e5;background:#eaedf0;white-space:nowrap;overflow:hidden">${MONTH_NAMES[m.month]} ${m.year}</div>`
+    ).join('')
+
+    const weekRowHtml = cols.map(col =>
+      `<div style="flex:1;min-width:${mode === 'day' ? '18px' : mode === 'month' ? '60px' : '40px'};text-align:center;font-size:${mode === 'day' ? '8px' : '9px'};color:${col.isToday ? '#e67e22' : col.isWeekend ? '#a0a8b0' : '#6b7580'};font-weight:${col.isToday ? '700' : '400'};padding:3px 1px;border-right:1px solid #dde1e5;border-bottom:2px solid #dde1e5;background:${col.isToday ? '#fff3e0' : col.isWeekend ? '#f4f6f8' : '#f8fafc'};white-space:nowrap;overflow:hidden">${col.label}${mode !== 'month' ? '<br><span style="font-size:7px">' + col.sublabel + '</span>' : '<br><span style="font-size:8px">' + col.sublabel + '</span>'}</div>`
+    ).join('')
+
+    const phaseRowsHtml = state.phases.map((ph, i) => {
+      const leftPct = dayToPct(ph.startDay)
+      const widthPct = dayToPct(ph.startDay + ph.durDays) - dayToPct(ph.startDay)
+      const phEndDay = ph.startDay + ph.durDays
+      const isDone = phEndDay <= doneWeeks * 7
+      const isActive = ph.startDay < doneWeeks * 7 && phEndDay > doneWeeks * 7
+      const barColor = isDone ? '#7ab533' : isActive ? '#4a90a4' : '#c8d8e8'
+      const textColor = (isDone || isActive) ? 'white' : '#2b2f33'
+      const startD = fmtDateShort(addDays(startDate, ph.startDay))
+      const endD = fmtDateShort(addDays(startDate, phEndDay))
+      return `<div class="gantt-row" style="display:flex;align-items:center;height:${ROW_H}px;margin-bottom:3px">
+        <div class="gantt-label-cell" style="width:${LABEL_W}px;flex-shrink:0;font-size:11px;font-weight:500;color:#1e2022;padding-right:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;justify-content:center;height:${ROW_H}px;text-align:center" title="${esc(ph.label)}">${i + 1}. ${esc(ph.label)}</div>
+        <div class="gantt-col-divider" style="width:5px;flex-shrink:0;align-self:stretch;cursor:col-resize;background:transparent;border-left:2px dashed #c8d0d8;margin-right:4px" title="Drag to resize label column"></div>
+        <div class="gantt-track" style="flex:1;position:relative;height:${ROW_H - 6}px;background:#f0f2f4;border-radius:3px;cursor:default">
+          <div class="gantt-bar" data-idx="${i}" style="position:absolute;left:${leftPct}%;width:${widthPct}%;height:100%;background:${barColor};border-radius:3px;cursor:grab;user-select:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;box-shadow:0 1px 3px rgba(0,0,0,0.15);min-width:6px">
+            <span style="font-size:9px;color:${textColor};white-space:nowrap;overflow:hidden;flex:1">${isDone ? '✓ ' : isActive ? '▶ ' : ''}<span class="bar-dates" style="opacity:0.85">${startD}–${endD}</span></span>
+            <div class="gantt-resize-handle" data-idx="${i}" style="width:8px;height:100%;cursor:ew-resize;flex-shrink:0;display:flex;align-items:center;justify-content:center;opacity:0.6"><div style="width:3px;height:60%;background:${textColor};border-radius:2px"></div></div>
+          </div>
+        </div>
+      </div>`
+    }).join('')
+
+    const milestones = [
+      { day: 0, label: 'Start', color: '#2b2f33' },
+      { day: totalDays * 0.5, label: 'Mid-point', color: '#4a90a4' },
+      { day: totalDays, label: 'Completion', color: '#7ab533' },
+    ]
+    const msHtml = milestones.map(m => {
+      const pct = dayToPct(m.day)
+      const d = fmtDateShort(addDays(startDate, m.day))
+      return `<div style="position:absolute;left:${pct}%;top:0;bottom:0;width:2px;background:${m.color};opacity:0.5;pointer-events:none;z-index:2"><div style="position:absolute;top:-20px;left:50%;transform:translateX(-50%);font-size:8px;color:${m.color};font-weight:700;white-space:nowrap;background:rgba(255,255,255,0.9);padding:1px 3px;border-radius:2px">${m.label}<br>${d}</div></div>`
+    }).join('')
+
+    const todayPct = dayToPct(todayOffset)
+    const todayHtml = todayPct >= 0 && todayPct <= 100
+      ? `<div style="position:absolute;left:${todayPct}%;top:0;bottom:0;width:2px;background:#e67e22;z-index:3;pointer-events:none"><div style="position:absolute;top:-20px;left:50%;transform:translateX(-50%);font-size:8px;color:#e67e22;font-weight:700;white-space:nowrap;background:rgba(255,255,255,0.9);padding:1px 3px;border-radius:2px">TODAY<br>${fmtDateShort(todayDate)}</div></div>`
+      : ''
+
+    container.innerHTML = `
+      <div style="margin-bottom:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div>
+          <span style="font-size:12px;font-weight:600">${esc(job.type)} · ${esc(job.client)}</span>
+          <span style="font-size:11px;color:#6b7580;margin-left:10px">${fmtDate(startDate)} → ${fmtDate(endDate)} · ${totalWeeks} weeks</span>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <div style="display:flex;border:1px solid #dde1e5;border-radius:4px;overflow:hidden;font-size:11px">
+            <button id="gv-day" onclick="window.__ganttView('day')" style="padding:4px 10px;border:none;cursor:pointer;font-family:inherit;font-size:11px;background:${mode === 'day' ? '#2b2f33' : 'white'};color:${mode === 'day' ? 'white' : '#2b2f33'};border-right:1px solid #dde1e5">Day</button>
+            <button id="gv-week" onclick="window.__ganttView('week')" style="padding:4px 10px;border:none;cursor:pointer;font-family:inherit;font-size:11px;background:${mode === 'week' ? '#2b2f33' : 'white'};color:${mode === 'week' ? 'white' : '#2b2f33'};border-right:1px solid #dde1e5">Week</button>
+            <button id="gv-month" onclick="window.__ganttView('month')" style="padding:4px 10px;border:none;cursor:pointer;font-family:inherit;font-size:11px;background:${mode === 'month' ? '#2b2f33' : 'white'};color:${mode === 'month' ? 'white' : '#2b2f33'}">Month</button>
+          </div>
+          <span style="display:flex;align-items:center;gap:4px;font-size:10px"><span style="width:10px;height:10px;border-radius:2px;background:#7ab533;display:inline-block"></span>Complete</span>
+          <span style="display:flex;align-items:center;gap:4px;font-size:10px"><span style="width:10px;height:10px;border-radius:2px;background:#4a90a4;display:inline-block"></span>Active</span>
+          <span style="display:flex;align-items:center;gap:4px;font-size:10px"><span style="width:10px;height:10px;border-radius:2px;background:#c8d8e8;display:inline-block"></span>Upcoming</span>
+          <button onclick="window.__ganttReset()" style="font-size:10px;background:transparent;border:1px solid #dde1e5;border-radius:3px;padding:2px 8px;cursor:pointer;color:#6b7580">Reset</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <div style="min-width:${CHART_MIN_W}px">
+          <div data-hdr-offset="1" style="display:flex;margin-left:${LABEL_W + 9}px;margin-bottom:0">${monthRowHtml}</div>
+          <div data-hdr-offset="1" style="display:flex;margin-left:${LABEL_W + 9}px;margin-bottom:6px">${weekRowHtml}</div>
+          <div style="position:relative;margin-top:20px">${msHtml}${todayHtml}${phaseRowsHtml}</div>
+        </div>
+      </div>
+      <div id="gantt-tooltip" style="position:fixed;background:#2b2f33;color:white;font-size:11px;padding:6px 10px;border-radius:4px;pointer-events:none;display:none;z-index:999;line-height:1.6"></div>
+      <div id="gantt-saved-notice" style="font-size:11px;color:#7ab533;margin-top:8px;display:none">✓ Changes saved</div>
+    `
+
+    attachDrag(container, state, startDate, totalDays)
+    attachLabelResize(container, state, mode)
+  }
+
+  function attachDrag(container: HTMLDivElement, state: GanttState, startDate: Date, totalDays: number) {
+    const tooltip = container.querySelector<HTMLElement>('#gantt-tooltip')
+    const notice = container.querySelector<HTMLElement>('#gantt-saved-notice')
+    let dragging: { type: 'move' | 'resize', idx: number, startX: number, origStart: number, origDur: number, trackW: number } | null = null
+
+    function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)) }
+
+    function updateBar(bar: Element, ph: GanttPhase) {
+      const leftPct = (ph.startDay / totalDays) * 100
+      const widthPct = (ph.durDays / totalDays) * 100;
+      (bar as HTMLElement).style.left = leftPct + '%';
+      (bar as HTMLElement).style.width = widthPct + '%'
+      const datesEl = bar.querySelector('.bar-dates')
+      if (datesEl) {
+        const jStart = job.start ? new Date(job.start) : new Date()
+        jStart.setHours(0, 0, 0, 0)
+        datesEl.textContent = fmtDateShort(addDays(jStart, ph.startDay)) + '–' + fmtDateShort(addDays(jStart, ph.startDay + ph.durDays))
+      }
+    }
+
+    function showTooltip(e: MouseEvent, ph: GanttPhase) {
+      if (!tooltip) return
+      const jStart = job.start ? new Date(job.start) : new Date()
+      jStart.setHours(0, 0, 0, 0)
+      const s = fmtDate(addDays(jStart, ph.startDay))
+      const en = fmtDate(addDays(jStart, ph.startDay + ph.durDays))
+      const dur = Math.ceil(ph.durDays / 7 * 10) / 10
+      tooltip.innerHTML = `<strong>${esc(ph.label)}</strong><br>Start: ${s}<br>End: ${en}<br>Duration: ${dur} weeks`
+      tooltip.style.display = 'block'
+      tooltip.style.left = (e.clientX + 12) + 'px'
+      tooltip.style.top = (e.clientY - 10) + 'px'
+    }
+
+    async function persistState() {
+      await saveGanttState(job.id, state)
+      stateRef.current = state
+      if (notice) {
+        notice.style.display = 'block'
+        setTimeout(() => { if (notice) notice.style.display = 'none' }, 2000)
+      }
+    }
+
+    container.addEventListener('mousedown', (e: Event) => {
+      const me = e as MouseEvent
+      const handle = (me.target as Element).closest('.gantt-resize-handle')
+      const bar = (me.target as Element).closest('.gantt-bar')
+      if (!handle && !bar) return
+      me.preventDefault()
+      const idx = parseInt(((handle || bar) as HTMLElement).dataset.idx || '0')
+      const ph = state.phases[idx]
+      const trackEl = handle ? (handle as Element).closest('.gantt-track') : (bar as Element).closest('.gantt-track')
+      dragging = {
+        type: handle ? 'resize' : 'move', idx, startX: me.clientX,
+        origStart: ph.startDay, origDur: ph.durDays,
+        trackW: trackEl!.getBoundingClientRect().width,
+      }
+      document.body.style.cursor = handle ? 'ew-resize' : 'grabbing'
+    })
+
+    const onMove = (e: Event) => {
+      const me = e as MouseEvent
+      if (!dragging) return
+      const dxPx = me.clientX - dragging.startX
+      const dDays = Math.round(dxPx * (totalDays / dragging.trackW))
+      const ph = state.phases[dragging.idx]
+      if (dragging.type === 'move') {
+        ph.startDay = clamp(dragging.origStart + dDays, 0, totalDays - ph.durDays)
+      } else {
+        ph.durDays = clamp(dragging.origDur + dDays, 1, totalDays - ph.startDay)
+      }
+      const bar = container.querySelector(`.gantt-bar[data-idx="${dragging.idx}"]`)
+      if (bar) updateBar(bar, ph)
+      showTooltip(me, ph)
+    }
+
+    const onUp = () => {
+      if (!dragging) return
+      persistState()
+      dragging = null
+      document.body.style.cursor = ''
+      if (tooltip) tooltip.style.display = 'none'
+    }
+
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+
+    container.addEventListener('mouseover', (e: Event) => {
+      const bar = (e.target as Element).closest('.gantt-bar')
+      if (!bar || dragging) return
+      const idx = parseInt((bar as HTMLElement).dataset.idx || '0')
+      showTooltip(e as MouseEvent, state.phases[idx])
+    })
+    container.addEventListener('mouseout', (e: Event) => {
+      if ((e.target as Element).closest('.gantt-bar') && !dragging && tooltip) tooltip.style.display = 'none'
+    })
+
+    // Cleanup on unmount
+    return () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+  }
+
+  function attachLabelResize(container: HTMLDivElement, state: GanttState, mode: string) {
+    container.addEventListener('mousedown', (e: Event) => {
+      const me = e as MouseEvent
+      const divider = (me.target as Element).closest('.gantt-col-divider')
+      if (!divider) return
+      me.preventDefault()
+      const startX = me.clientX
+      const startW = parseInt(container.dataset.labelW || '220') || 220
+      document.body.style.cursor = 'col-resize'
+      document.body.style.userSelect = 'none'
+
+      function onMove(ev: MouseEvent) {
+        const newW = Math.max(80, Math.min(400, startW + (ev.clientX - startX)))
+        container.dataset.labelW = String(newW)
+        container.querySelectorAll<HTMLElement>('.gantt-label-cell').forEach(el => { el.style.width = newW + 'px' })
+        container.querySelectorAll<HTMLElement>('[data-hdr-offset]').forEach(el => { el.style.marginLeft = (newW + 9) + 'px' })
+      }
+      function onUp() {
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+        document.removeEventListener('mousemove', onMove)
+        document.removeEventListener('mouseup', onUp)
+        renderGantt(stateRef.current || state, mode as 'day' | 'week' | 'month')
+      }
+      document.addEventListener('mousemove', onMove)
+      document.addEventListener('mouseup', onUp)
+    })
+  }
+
+  // Expose view/reset to inline onclick handlers
+  useEffect(() => {
+    (window as unknown as Record<string, unknown>).__ganttView = (mode: 'day' | 'week' | 'month') => setViewMode(mode);
+    (window as unknown as Record<string, unknown>).__ganttReset = () => {
+      if (!confirm('Reset Gantt to default layout? This will clear your custom dates.')) return
+      const state = buildState()
+      stateRef.current = state
+      saveGanttState(job.id, state)
+      renderGantt(state, viewMode)
+    }
+    return () => {
+      delete (window as unknown as Record<string, unknown>).__ganttView
+      delete (window as unknown as Record<string, unknown>).__ganttReset
+    }
+  }) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div style={{ background: 'var(--cream)', borderRadius: 8, width: 'min(980px,96vw)', maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 80px rgba(0,0,0,0.25)' }}>
+        <div className="form-modal-hd">
+          <div>
+            <div className="serif" style={{ fontSize: 20 }}>{job.type} — {job.address}</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{job.client}</div>
+          </div>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px' }}>
+          {/* Gantt chart */}
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 10 }}>
+              Project Gantt Chart
+              <span style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 400, marginLeft: 10 }}>
+                Drag bars to move · drag right edge to resize · drag label divider to widen
+              </span>
+            </div>
+            <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden', minHeight: 200 }}>
+              <div ref={containerRef} style={{ padding: '20px 16px 12px' }} />
+            </div>
+          </div>
+
+          {/* Linked quotes */}
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 10 }}>Linked Quotes</div>
+            {linkedQuotes.length === 0
+              ? <div style={{ fontSize: 12, color: 'var(--muted)', padding: '12px 0' }}>No quotes linked to this job yet.</div>
+              : linkedQuotes.map(q => (
+                  <div key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+                    <span className="mono" style={{ fontSize: 11, color: 'var(--muted)', minWidth: 70 }}>{q.ref || '—'}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 500 }}>{q.jobType}</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>{q.savedDate}</div>
+                    </div>
+                    <div className="serif" style={{ fontSize: 17 }}>{fmt(quoteTotal(q))}</div>
+                    <span className={`badge ${Q_BADGE[q.status] || 'b-pending'}`}>{Q_LABEL[q.status] || q.status}</span>
+                    <button className="btn-sm btn-gold" onClick={() => {
+                      onClose()
+                      // Navigate to quotes page for email
+                      router.push('/quotes')
+                    }}>✉ Email</button>
+                  </div>
+                ))
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

@@ -1,0 +1,2869 @@
+<!DOCTYPE html>
+<!-- ============================================================
+     SMALL BUILD COMPANY LTD — Management System
+     ============================================================
+     TO ENABLE AI SCOPE WRITING:
+     1. Go to https://console.anthropic.com and sign up free
+     2. Click API Keys → Create Key → copy it
+     3. Paste your key below between the quote marks
+     ============================================================ -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Small Build Company Ltd</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script>
+  // ══════════════════════════════════════════════════
+  // PASTE YOUR ANTHROPIC API KEY HERE ↓↓↓
+  // ══════════════════════════════════════════════════
+  var ANTHROPIC_API_KEY = '';
+  // ══════════════════════════════════════════════════
+</script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#1e2022;
+  --paper:#f0f2f4;
+  --warm:#e4e8ec;
+  --slate:#2b2f33;
+  --moss:#7ab533;
+  --terra:#c0392b;
+  --gold:#7ab533;
+  --sky:#4a90a4;
+  --cream:#ffffff;
+  --muted:#6b7580;
+  --border:#dde1e5;
+  --accent:#7ab533;
+  --accent-dark:#5e8f20;
+}
+body{font-family:'DM Sans',sans-serif;background:var(--paper);color:var(--ink);font-size:15px;height:100vh;overflow:hidden}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.serif{font-family:'DM Serif Display',serif}
+.mono{font-family:'DM Mono',monospace}
+
+/* ── App shell ── */
+.app{display:flex;height:100vh;overflow:hidden}
+.sidebar{width:230px;background:#1e2022;color:var(--paper);display:flex;flex-direction:column;flex-shrink:0}
+.sidebar-logo{padding:26px 22px 22px;border-bottom:1px solid rgba(255,255,255,0.07)}
+.logo-name{font-family:'DM Serif Display',serif;font-size:18px;color:#7ab533;line-height:1.3}
+.logo-sub{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-top:4px}
+.nav{padding:12px 0;flex:1;overflow-y:auto}
+.nav-section{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.25);padding:16px 22px 5px}
+.nav-item{display:flex;align-items:center;gap:12px;padding:12px 22px;font-size:14px;font-weight:500;cursor:pointer;color:rgba(245,240,232,0.6);border-left:3px solid transparent;transition:all 0.15s}
+.nav-item:hover{color:var(--paper);background:rgba(255,255,255,0.04)}
+.nav-item.active{color:#7ab533;border-left-color:#7ab533;background:rgba(122,181,51,0.10)}
+.nav-icon{font-size:17px;width:20px;text-align:center}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{background:#ffffff;border-bottom:2px solid var(--border);padding:16px 32px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.topbar-title{font-family:'DM Serif Display',serif;font-size:26px}
+.content{flex:1;overflow-y:auto;padding:26px 32px}
+
+/* ── Buttons ── */
+.btn,.btn-sm{cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;border:none;border-radius:6px;transition:all 0.15s}
+.btn{padding:10px 20px;font-size:14px}
+.btn-sm{padding:7px 14px;font-size:12px}
+.btn-primary{background:#2b2f33;color:white}
+.btn-primary:hover{background:#3d4449}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--ink)}
+.btn-outline:hover{background:var(--warm)}
+.btn-gold{background:#7ab533;color:white}
+.btn-gold:hover{background:#5e8f20}
+.btn-sky{background:#4a90a4;color:white}
+.btn-danger{background:transparent;border:1px solid var(--terra);color:var(--terra)}
+
+/* ── Forms ── */
+input,select,textarea{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:6px;font-family:'DM Sans',sans-serif;font-size:14px;background:white;color:var(--ink);outline:none;box-sizing:border-box}
+input:focus,select:focus,textarea:focus{border-color:var(--slate)}
+textarea{resize:vertical;min-height:56px}
+.fg{margin-bottom:16px}
+.fg label{display:block;font-size:11px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.row2{display:flex;gap:12px}
+.row2 .fg{flex:1}
+
+/* ── Cards ── */
+.card{background:var(--cream);border:1.5px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:18px;box-shadow:0 1px 4px rgba(0,0,0,0.05)}
+.card-hd{padding:14px 20px;border-bottom:1.5px solid var(--border);display:flex;align-items:center;justify-content:space-between;font-weight:700;font-size:13px}
+.card-bd{padding:0}
+
+/* ── Stats ── */
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px}
+.stat{background:var(--cream);border:1.5px solid var(--border);border-radius:8px;padding:20px 22px;position:relative;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.05)}
+.stat::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px}
+.stat.green::before{background:#7ab533}
+.stat.gold::before{background:#7ab533}
+.stat.terra::before{background:#e67e22}
+.stat.sky::before{background:#4a90a4}
+.stat-label{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;font-weight:600}
+.stat-val{font-family:'DM Serif Display',serif;font-size:32px;line-height:1}
+.stat-sub{font-size:12px;color:var(--muted);margin-top:6px}
+
+/* ── Table ── */
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);padding:13px 18px;text-align:left;border-bottom:2px solid var(--border);background:#f0f2f4;font-weight:700}
+.tbl td{padding:14px 18px;border-bottom:1px solid var(--border);font-size:14px}
+.tbl tr:hover td{background:var(--warm);cursor:pointer}
+
+/* ── Badge ── */
+.badge{font-size:11px;padding:4px 10px;border-radius:20px;font-weight:600;white-space:nowrap;display:inline-block}
+.b-active{background:rgba(122,181,51,0.12);color:#5e8f20}
+.b-pending{background:rgba(230,126,34,0.12);color:#c0762a}
+.b-planning{background:rgba(74,144,164,0.12);color:#3a7a94}
+.b-complete{background:rgba(30,32,34,0.07);color:#6b7580}
+.b-onhold{background:rgba(192,57,43,0.10);color:#a93226}
+.b-accepted{background:rgba(122,181,51,0.12);color:#5e8f20}
+.b-declined{background:rgba(192,57,43,0.10);color:#a93226}
+.b-sent{background:rgba(74,144,164,0.12);color:#3a7a94}
+
+/* ── Job rows ── */
+.job-row{display:flex;align-items:center;gap:14px;padding:16px 20px;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.1s}
+.job-row:hover{background:var(--warm)}
+.job-row:last-child{border-bottom:none}
+.job-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.job-info{flex:1;min-width:0}
+.job-name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.job-meta{font-size:12px;color:var(--muted);margin-top:3px}
+.progress{height:3px;background:var(--warm);border-radius:2px;margin-top:5px;max-width:220px;overflow:hidden}
+.progress-bar{height:100%;border-radius:2px}
+.job-right{text-align:right;flex-shrink:0}
+
+/* ── Pipeline ── */
+.pipeline{display:flex;gap:12px;padding:14px 18px;overflow-x:auto}
+.pip-col{flex:1;min-width:130px}
+.pip-label{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid var(--border)}
+.pip-card{background:white;border:1.5px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:10px}
+.pip-card-name{font-weight:600;font-size:13px;margin-bottom:3px}
+.pip-card-val{font-family:'DM Mono',monospace;font-size:12px;color:var(--muted)}
+
+/* ── Activity ── */
+.act-item{display:flex;gap:10px;padding:10px 18px;border-bottom:1px solid var(--border);align-items:flex-start}
+.act-item:last-child{border-bottom:none}
+.act-icon{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0}
+
+/* ── Quote builder ── */
+.qb-topbar{background:#2b2f33;padding:15px 24px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.qb-grid{display:grid;grid-template-columns:270px 1fr;gap:20px;padding:22px;flex:1;overflow:hidden}
+.qb-left{overflow-y:auto;padding-right:4px}
+.qb-right{overflow-y:auto}
+.totals-box{background:#2b2f33;border-radius:8px;padding:18px;color:white}
+.tot-row{display:flex;justify-content:space-between;font-size:13px;margin-bottom:7px;opacity:0.85}
+.tot-final{border-top:1px solid rgba(255,255,255,0.2);margin-top:8px;padding-top:8px;display:flex;justify-content:space-between}
+.phase-block{background:var(--cream);border:1.5px solid var(--border);border-radius:8px;margin-bottom:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04)}
+.phase-hd{background:#f0f2f4;padding:11px 16px;display:flex;align-items:center;gap:10px;border-bottom:1.5px solid var(--border)}
+.phase-hd input{flex:1;border:none;background:transparent;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;color:var(--slate);outline:none;padding:0}
+.col-heads{display:grid;grid-template-columns:1fr 52px 60px 84px 84px 110px 24px;gap:5px;padding:5px 12px;background:#eaedf0;font-size:9px;letter-spacing:0.8px;text-transform:uppercase;color:var(--muted);font-weight:600}
+.item-row{display:grid;grid-template-columns:1fr 52px 60px 84px 84px 110px 24px;gap:5px;padding:5px 12px;border-bottom:1px solid var(--border);align-items:center}
+.rm-btn{background:none;border:none;color:var(--muted);font-size:17px;cursor:pointer;padding:0;line-height:1;width:26px;text-align:center}
+.rm-btn:hover{color:var(--terra)}
+.empty-dashed{background:var(--cream);border:2px dashed var(--border);border-radius:6px;padding:40px 0;text-align:center;color:var(--muted)}
+
+/* ── Saved quotes list ── */
+.sq-card{background:var(--cream);border:1.5px solid var(--border);border-radius:8px;padding:18px 22px;margin-bottom:12px;display:flex;align-items:center;gap:16px;box-shadow:0 1px 4px rgba(0,0,0,0.05)}
+.sq-ref{font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);min-width:62px}
+.sq-info{flex:1}
+.sq-title{font-size:15px;font-weight:600}
+.sq-sub{font-size:12px;color:var(--muted);margin-top:3px}
+.sq-val{font-family:'DM Serif Display',serif;font-size:22px;min-width:110px;text-align:right}
+.sq-actions{display:flex;gap:6px;align-items:center}
+
+/* ── Modal ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(26,22,18,0.6);display:flex;align-items:center;justify-content:center;z-index:400;padding:20px}
+.modal-box{background:var(--cream);border-radius:8px;width:min(860px,96vw);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,0.25)}
+.modal-hd{padding:18px 26px;border-bottom:2px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.modal-close{background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted)}
+.modal-iframe{flex:1;border:none;min-height:560px}
+
+/* ── Job modal form ── */
+.form-modal{background:var(--cream);border-radius:8px;width:min(520px,96vw);max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,0.25)}
+.form-modal-hd{padding:20px 26px 16px;border-bottom:2px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.form-modal-bd{padding:22px 26px}
+.form-modal-ft{padding:16px 26px;border-top:2px solid var(--border);display:flex;justify-content:flex-end;gap:10px}
+
+/* ── Page visibility ── */
+.page{display:none}
+.page.active{display:block}
+.qb-page{display:none;flex-direction:column;flex:1;overflow:hidden;height:calc(100vh - 52px)}
+.qb-page.active{display:flex}
+
+/* ══════════════════════════════════════════════
+   MOBILE RESPONSIVE — 768px and below
+══════════════════════════════════════════════ */
+@media (max-width:768px){
+  body{overflow:auto;height:auto}
+  .app{flex-direction:column;height:auto;min-height:100vh;overflow:visible}
+
+  /* Sidebar slides in from left */
+  .sidebar{
+    position:fixed;top:0;left:-260px;width:260px;height:100vh;
+    z-index:200;transition:left 0.25s ease;
+    box-shadow:4px 0 20px rgba(0,0,0,0.3)
+  }
+  .sidebar.open{left:0}
+  .mobile-overlay.open{display:block}
+
+  /* Topbar */
+  .topbar{padding:10px 16px;position:sticky;top:0;z-index:99}
+  .topbar-title{font-size:17px}
+  .topbar .btn,.topbar .btn-outline{display:none} /* hide desktop topbar buttons */
+  .hamburger{display:flex}
+
+  /* Main content */
+  .main{flex:1;width:100%;padding-bottom:70px}
+  .content{padding:14px 14px 80px;overflow-y:visible;flex:none}
+
+  /* Stats grid — 2 columns on mobile */
+  .stats-grid{grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px}
+  .stat-val{font-size:20px}
+  .stat-sub{font-size:10px}
+
+  /* Dashboard two col → single col */
+  div[style*="grid-template-columns:1.6fr 1fr"]{display:block!important}
+  div[style*="grid-template-columns:1.6fr 1fr"] > div{margin-bottom:14px}
+
+  /* Pipeline — horizontal scroll */
+  .pipeline{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+  /* Quote builder — stack panels */
+  .qb-grid{grid-template-columns:1fr!important;padding:12px!important;overflow:visible!important;height:auto!important;display:block!important}
+  .qb-left{overflow-y:visible;padding-right:0;margin-bottom:16px}
+  .qb-right{overflow-y:visible}
+  .qb-page{height:auto;overflow:visible;padding-bottom:80px}
+  .qb-topbar{padding:10px 14px;flex-wrap:wrap;gap:6px}
+  .qb-topbar .mono{font-size:14px}
+
+  /* Quote lines — horizontal scroll on mobile */
+  .phase-block{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .col-heads,.item-row{min-width:600px}
+
+  /* Saved quotes — stack */
+  .sq-card{flex-wrap:wrap;gap:8px}
+  .sq-ref{min-width:auto}
+  .sq-val{min-width:auto;font-size:16px}
+  .sq-actions{flex-wrap:wrap}
+
+  /* Tables — horizontal scroll */
+  .card{overflow-x:auto}
+  .tbl{min-width:500px}
+
+  /* Modals — full screen on mobile */
+  .modal-overlay{padding:0;align-items:flex-end}
+  .modal-box{width:100vw!important;max-width:100vw!important;border-radius:12px 12px 0 0;max-height:92vh}
+  .form-modal{width:100vw!important;max-width:100vw!important;border-radius:12px 12px 0 0;max-height:92vh}
+  #job-detail-box{width:100vw!important;max-width:100vw!important;border-radius:12px 12px 0 0;max-height:95vh}
+
+  /* Row2 — stack on mobile */
+  .row2{flex-direction:column;gap:0}
+
+  /* Job cards buttons */
+  div[style*="display:flex;gap:6px;margin-top:6px"]{flex-wrap:wrap}
+
+  /* Bottom nav */
+  .mobile-nav{display:block}
+
+  /* Hide desktop nav sections labels */
+  .nav-section{display:none}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-name" style="color:#7ab533">Small Build<br>Company Ltd</div>
+      <div class="logo-sub">Management System</div>
+    </div>
+    <nav class="nav">
+      <div class="nav-section">Overview</div>
+      <div class="nav-item active" onclick="showPage('dashboard',this)" id="nav-dashboard">
+        <span class="nav-icon">◈</span> Dashboard
+      </div>
+      <div class="nav-section">Work</div>
+      <div class="nav-item" onclick="showPage('jobs',this)" id="nav-jobs">
+        <span class="nav-icon">⬡</span> Jobs
+      </div>
+      <div class="nav-item" onclick="showPage('quotes',this)" id="nav-quotes">
+        <span class="nav-icon">◎</span> Saved Quotes
+      </div>
+      <div class="nav-item" onclick="showPage('newquote',this)" id="nav-newquote">
+        <span class="nav-icon">✎</span> New Quote
+      </div>
+      <div class="nav-section">People</div>
+      <div class="nav-item" onclick="showPage('clients',this)" id="nav-clients">
+        <span class="nav-icon">○</span> Clients
+      </div>
+      <div class="nav-section">Settings</div>
+      <div class="nav-item" onclick="showPage('settings',this)" id="nav-settings">
+        <span class="nav-icon">◇</span> Company Setup
+      </div>
+    </nav>
+  </aside>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title" id="page-title">Dashboard</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-outline" style="font-size:12px" onclick="showPage('newquote',document.getElementById('nav-newquote'))">+ New Quote</button>
+        <button class="btn btn-primary" style="font-size:12px" onclick="openJobModal()">+ New Job</button>
+      </div>
+    </div>
+
+    <!-- ═══ DASHBOARD ═══ -->
+    <div class="content page active" id="page-dashboard">
+      <div class="stats-grid">
+        <div class="stat green"><div class="stat-label">Active Jobs</div><div class="stat-val" id="stat-active">0</div><div class="stat-sub" id="stat-active-sub">—</div></div>
+        <div class="stat gold"><div class="stat-label">Open Quotes</div><div class="stat-val" id="stat-quotes">0</div><div class="stat-sub" id="stat-quotes-sub">—</div></div>
+        <div class="stat terra"><div class="stat-label">Total Job Value</div><div class="stat-val" id="stat-revenue">£0</div><div class="stat-sub">all active jobs</div></div>
+        <div class="stat sky"><div class="stat-label">Completed Jobs</div><div class="stat-val" id="stat-complete">0</div><div class="stat-sub" id="stat-complete-sub">—</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:18px;margin-bottom:18px">
+        <div class="card">
+          <div class="card-hd"><span>Active Jobs</span><span onclick="showPage('jobs',document.getElementById('nav-jobs'))" style="font-size:11px;color:var(--muted);cursor:pointer">View all →</span></div>
+          <div id="dash-jobs"></div>
+        </div>
+        <div class="card">
+          <div class="card-hd">Recent Quotes</div>
+          <div id="dash-quotes"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><span>Job Pipeline</span></div>
+        <div class="pipeline" id="dash-pipeline"></div>
+      </div>
+    </div>
+
+    <!-- ═══ JOBS ═══ -->
+    <div class="content page" id="page-jobs">
+      <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:18px" id="jobs-tabs">
+        <div class="tab-btn active" onclick="filterJobs('all',this)" style="padding:8px 18px;font-size:13px;font-weight:500;cursor:pointer;color:var(--slate);border-bottom:2px solid var(--slate);margin-bottom:-1px">All</div>
+        <div class="tab-btn" onclick="filterJobs('active',this)" style="padding:8px 18px;font-size:13px;font-weight:500;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px">On Site</div>
+        <div class="tab-btn" onclick="filterJobs('planning',this)" style="padding:8px 18px;font-size:13px;font-weight:500;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px">Planning</div>
+        <div class="tab-btn" onclick="filterJobs('complete',this)" style="padding:8px 18px;font-size:13px;font-weight:500;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px">Complete</div>
+      </div>
+      <div id="jobs-list"></div>
+    </div>
+
+    <!-- ═══ SAVED QUOTES ═══ -->
+    <div class="content page" id="page-quotes">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+        <div id="quotes-summary" style="font-family:'DM Serif Display',serif;font-size:15px;color:var(--muted)"></div>
+        <button class="btn btn-outline" style="font-size:12px" onclick="showPage('newquote',document.getElementById('nav-newquote'))">+ New Quote</button>
+      </div>
+      <div id="quotes-list"></div>
+    </div>
+
+    <!-- ═══ NEW QUOTE (full-screen builder) ═══ -->
+    <div class="qb-page" id="page-newquote">
+      <div class="qb-topbar">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="serif" style="font-size:18px;color:#7ab533">New Quote</span>
+          <span id="qb-jobtype-badge" style="font-size:11px;background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.7);padding:2px 10px;border-radius:20px">Rear Extension</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="mono" id="qb-total-top" style="color:#7ab533;font-size:15px;font-weight:500">£0.00</span>
+          <button class="btn-sm btn-outline" onclick="openPreview()" style="color:rgba(255,255,255,0.7);border-color:rgba(255,255,255,0.3);background:transparent">Preview</button>
+          <button class="btn-sm btn-gold" id="qb-save-btn" onclick="saveQuote()">💾 Save Quote</button>
+        </div>
+      </div>
+      <!-- Editing notice -->
+      <div id="qb-editing-notice" style="display:none;background:#7ab533;padding:8px 20px;align-items:center;justify-content:space-between;flex-shrink:0">
+        <span style="font-size:12px;font-weight:500;color:#1a1612">✎ Editing saved quote: <strong id="qb-editing-ref"></strong> — changes won't be saved until you click Update Quote</span>
+        <button class="btn-sm" onclick="cancelEdit()" style="background:rgba(0,0,0,0.15);color:#1a1612;border:none;font-size:11px">✕ Cancel Edit</button>
+      </div>
+      <div class="qb-grid">
+        <!-- Left -->
+        <div class="qb-left">
+          <div class="card">
+            <div class="card-hd" style="font-size:11px">Customer Details</div>
+            <div style="padding:12px 14px">
+              <div class="fg">
+                <label>Name</label>
+                <div style="position:relative">
+                  <input id="qb-cust-name" placeholder="Type name or search existing clients..." autocomplete="off"
+                    oninput="clientSearchInput(this.value)"
+                    onfocus="clientSearchInput(this.value)"
+                    onkeydown="clientSearchKey(event)">
+                  <div id="client-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--border);border-top:none;border-radius:0 0 4px 4px;max-height:200px;overflow-y:auto;z-index:200;box-shadow:0 4px 12px rgba(0,0,0,0.1)"></div>
+                </div>
+              </div>
+              <div class="fg"><label>Property Address</label><textarea id="qb-cust-addr" rows="2" placeholder="14 High Street&#10;London SW1 2AB" oninput="updateStreetViewLink()"></textarea></div>
+              <div class="fg"><label>Email</label><input id="qb-cust-email" type="email" placeholder="customer@email.com"></div>
+              <div class="fg"><label>Phone</label><input id="qb-cust-phone" placeholder="07700 000000"></div>
+            </div>
+          </div>
+
+          <!-- Property Photo -->
+          <div class="card">
+            <div class="card-hd" style="font-size:11px">
+              <span>Property Photo</span>
+              <a id="streetview-link" href="#" target="_blank"
+                style="font-size:10px;color:#4a90a4;text-decoration:none;font-weight:500;display:none">
+                🗺 Open Street View
+              </a>
+            </div>
+            <div style="padding:10px 14px">
+              <!-- Drop zone -->
+              <div id="photo-dropzone"
+                onclick="document.getElementById('photo-file-input').click()"
+                ondragover="event.preventDefault();this.style.borderColor='#7ab533'"
+                ondragleave="this.style.borderColor='var(--border)'"
+                ondrop="handlePhotoDrop(event)"
+                style="border:2px dashed var(--border);border-radius:4px;padding:18px 12px;text-align:center;cursor:pointer;transition:border-color 0.15s;background:#fafafa">
+                <div style="font-size:13px;color:var(--muted);margin-bottom:4px">📷 Click or drag a photo here</div>
+                <div style="font-size:10px;color:var(--muted)">JPG, PNG — max 4MB</div>
+              </div>
+              <input type="file" id="photo-file-input" accept="image/*" style="display:none" onchange="handlePhotoFile(this.files[0])">
+              <!-- Preview -->
+              <div id="photo-preview-wrap" style="display:none;margin-top:10px;position:relative">
+                <img id="photo-preview-img" src="" alt="Property photo"
+                  style="width:100%;border-radius:4px;border:1px solid var(--border);display:block;max-height:180px;object-fit:cover">
+                <button onclick="removePhoto()"
+                  style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.55);color:white;border:none;border-radius:50%;width:24px;height:24px;font-size:14px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">×</button>
+                <div style="font-size:10px;color:var(--muted);margin-top:4px;text-align:center">This photo will appear on the quote</div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-hd" style="font-size:11px">Job Type</div>
+            <div style="padding:10px 14px">
+              <select id="qb-jobtype" onchange="onJobTypeChange(this.value)">
+                <option>Rear Extension</option>
+                <option>Side Extension</option>
+                <option>Loft Conversion</option>
+                <option>Full Refurbishment</option>
+                <option>Kitchen Extension</option>
+                <option>Landscaping</option>
+                <option>New Build</option>
+                <option>Other</option>
+              </select>
+              <p style="font-size:10px;color:var(--muted);margin-top:6px">Changing type reloads the template.</p>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-hd" style="font-size:11px">Pricing</div>
+            <div style="padding:10px 14px">
+              <div class="fg">
+                <label>Markup: <span id="qb-markup-lbl" style="color:var(--slate);font-weight:700">15%</span></label>
+                <input type="range" id="qb-markup" min="0" max="40" value="15" oninput="onMarkupChange(this.value)" style="width:100%;accent-color:var(--slate);margin-top:4px">
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <input type="checkbox" id="qb-vat" checked onchange="qbRecalc()" style="accent-color:var(--slate);width:14px;height:14px;flex-shrink:0">
+                <label for="qb-vat" style="font-size:12px;cursor:pointer;font-weight:normal">Add VAT (20%)</label>
+              </div>
+            </div>
+          </div>
+          <div class="totals-box">
+            <div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;opacity:0.6;margin-bottom:10px">Quote Summary</div>
+            <div class="tot-row"><span style="color:#c0392b">Your Cost</span><span class="mono" id="qb-sum-net" style="color:#c0392b">£0.00</span></div>
+            <div class="tot-row"><span id="qb-sum-mkp-lbl">Markup (15%)</span><span class="mono" id="qb-sum-mkp">£0.00</span></div>
+            <div class="tot-row"><span style="color:#2b8a3e;font-weight:600">Sell Price (ex-VAT)</span><span class="mono" id="qb-sum-sub" style="color:#2b8a3e;font-weight:600">£0.00</span></div>
+            <div class="tot-row" id="qb-vat-row"><span>VAT (20%)</span><span class="mono" id="qb-sum-vat">£0.00</span></div>
+            <div class="tot-final"><span style="font-weight:600">TOTAL</span><span class="mono" id="qb-sum-total" style="color:#7ab533;font-size:16px;font-weight:600">£0.00</span></div>
+          </div>
+        </div>
+        <!-- Right -->
+        <div class="qb-right">
+          <!-- Scope of Works -->
+          <div class="card" style="margin-bottom:16px">
+            <div class="card-hd" style="font-size:11px">Scope of Works / Description</div>
+            <div style="padding:10px 14px">
+              <textarea id="qb-scope" rows="5" placeholder="Describe the full scope of works for this project — what's included, any exclusions, special requirements, materials specified, etc."></textarea>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+            <div>
+              <div class="serif" style="font-size:18px">Quote Lines</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:1px">All prices ex-VAT</div>
+            </div>
+            <button class="btn-sm btn-outline" onclick="addPhase()">+ Add Phase</button>
+          </div>
+          <div id="qb-phases"></div>
+          <div id="qb-bottom-btn" style="text-align:right;margin-top:6px;display:none">
+            <button class="btn btn-gold" onclick="saveQuote()">💾 Save Quote →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ CLIENTS ═══ -->
+    <div class="content page" id="page-clients">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+        <button class="btn-sm btn-outline" onclick="openClientModal()">+ Add Client</button>
+      </div>
+      <div class="card">
+        <table class="tbl">
+          <thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Jobs</th><th>Quotes</th><th>Accepted Value</th></tr></thead>
+          <tbody id="clients-table"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ═══ SETTINGS ═══ -->
+    <div class="content page" id="page-settings">
+      <div style="max-width:560px">
+
+        <!-- Logo Upload -->
+        <div class="card">
+          <div class="card-hd">Company Logo</div>
+          <div style="padding:18px 20px">
+            <div style="display:flex;align-items:flex-start;gap:20px">
+              <!-- Preview box -->
+              <div id="logo-preview-box" style="width:160px;height:80px;border:2px dashed var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center;background:#fafafa;flex-shrink:0;overflow:hidden;cursor:pointer" onclick="document.getElementById('logo-file-input').click()">
+                <img id="logo-preview-img" src="" alt="" style="max-width:100%;max-height:100%;display:none;object-fit:contain">
+                <span id="logo-placeholder" style="font-size:11px;color:var(--muted);text-align:center;padding:8px">Click to upload<br>your logo</span>
+              </div>
+              <div style="flex:1">
+                <div style="font-size:13px;font-weight:500;margin-bottom:6px">Upload your company logo</div>
+                <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">PNG or JPG, ideally on a white or transparent background. Appears at the top of all quotes sent to clients.</div>
+                <div style="display:flex;gap:8px">
+                  <button class="btn-sm btn-outline" onclick="document.getElementById('logo-file-input').click()">Choose File</button>
+                  <button class="btn-sm btn-danger" id="logo-remove-btn" onclick="removeLogo()" style="display:none">Remove</button>
+                </div>
+                <input type="file" id="logo-file-input" accept="image/*" style="display:none" onchange="handleLogoFile(this.files[0])">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-hd">Company Details</div>
+          <div style="padding:16px 18px">
+            <div class="fg"><label>Company Name</label><input id="set-name" value="Small Build Company Ltd"></div>
+            <div class="fg"><label>Tagline</label><input id="set-tagline" value="Building Extensions & Renovations"></div>
+            <div class="row2">
+              <div class="fg"><label>Contact Name</label><input id="set-contact" placeholder="Your name"></div>
+              <div class="fg"><label>Phone</label><input id="set-phone" placeholder="07700 900000"></div>
+            </div>
+            <div class="row2">
+              <div class="fg"><label>Email</label><input id="set-email" placeholder="info@smallbuild.co.uk"></div>
+              <div class="fg"><label>Town / Address</label><input id="set-address" placeholder="London"></div>
+            </div>
+            <div class="fg"><label>Payment Terms</label><textarea id="set-terms" rows="3">A deposit of 25% is required prior to commencement of works. Stage payments are then due at agreed milestones throughout the project. Final payment is due upon practical completion.</textarea></div>
+            <div class="fg"><label>Additional Terms / Exclusions</label><textarea id="set-extra" rows="2">All works are carried out in accordance with current Building Regulations. Any variations to the agreed scope of works will be priced and agreed in writing prior to proceeding.</textarea></div>
+            <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+            <span id="settings-saved" style="font-size:12px;color:var(--moss);margin-left:12px;display:none">✓ Saved</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PREVIEW MODAL -->
+<div class="modal-overlay" id="preview-modal" style="display:none" onclick="if(event.target===this)closePreview()">
+  <div class="modal-box">
+    <div class="modal-hd">
+      <span class="serif" style="font-size:17px">Quote Preview</span>
+      <div style="display:flex;gap:8px;align-items:center">
+        <!-- Client view toggle -->
+        <div style="display:flex;border:1px solid var(--border);border-radius:4px;overflow:hidden;font-size:11px">
+          <button id="view-toggle-detailed" onclick="setQuoteView('detailed')"
+            style="padding:4px 12px;border:none;cursor:pointer;font-family:inherit;font-size:11px;background:#2b2f33;color:white;font-weight:500">
+            Detailed
+          </button>
+          <button id="view-toggle-client" onclick="setQuoteView('client')"
+            style="padding:4px 12px;border:none;cursor:pointer;font-family:inherit;font-size:11px;background:white;color:#2b2f33">
+            Client View
+          </button>
+        </div>
+        <button class="btn-sm btn-sky" onclick="printQuote()">🖨 Print / PDF</button>
+        <button class="btn-sm btn-gold" onclick="downloadQuote()">⬇ Download</button>
+        <button class="modal-close" onclick="closePreview()">×</button>
+      </div>
+    </div>
+    <iframe id="preview-frame" class="modal-iframe"></iframe>
+  </div>
+</div>
+
+<!-- JOB MODAL -->
+<div class="modal-overlay" id="job-modal" style="display:none" onclick="if(event.target===this)closeJobModal()">
+  <div class="form-modal">
+    <div class="form-modal-hd">
+      <span class="serif" style="font-size:18px" id="job-modal-title">New Job</span>
+      <button class="modal-close" onclick="closeJobModal()">×</button>
+    </div>
+    <div class="form-modal-bd">
+      <input type="hidden" id="job-edit-id">
+      <input type="hidden" id="jm-quote-id">
+      <div class="row2">
+        <div class="fg"><label>Client Name</label><input id="jm-client" placeholder="Mr & Mrs Davies"></div>
+        <div class="fg"><label>Job Type</label>
+          <select id="jm-type">
+            <option>Rear Extension</option><option>Side Extension</option><option>Loft Conversion</option>
+            <option>Full Refurbishment</option><option>Kitchen Extension</option><option>Landscaping</option><option>Other</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg"><label>Address</label><input id="jm-address" placeholder="Full property address"></div>
+      <div class="row2">
+        <div class="fg"><label>Contract Value (£)</label><input id="jm-value" type="number" placeholder="0"></div>
+        <div class="fg"><label>Stage</label>
+          <select id="jm-stage">
+            <option value="planning">Planning</option><option value="active">On Site</option>
+            <option value="onhold">On Hold</option><option value="complete">Complete</option>
+          </select>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="fg"><label>Start Date</label><input id="jm-start" type="date"></div>
+        <div class="fg"><label>Duration (weeks)</label><input id="jm-weeks" type="number" placeholder="8" value="8"></div>
+      </div>
+      <div class="fg"><label>Weeks Done</label><input id="jm-done" type="number" placeholder="0" value="0"></div>
+      <div class="fg"><label>Notes</label><textarea id="jm-notes" placeholder="Planning status, access notes…"></textarea></div>
+    </div>
+    <div class="form-modal-ft">
+      <button class="btn btn-outline" onclick="closeJobModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveJob()">Save Job</button>
+    </div>
+  </div>
+</div>
+
+<!-- CLIENT MODAL -->
+<div class="modal-overlay" id="client-modal" style="display:none" onclick="if(event.target===this)closeClientModal()">
+  <div class="form-modal">
+    <div class="form-modal-hd">
+      <span class="serif" style="font-size:18px">Add Client</span>
+      <button class="modal-close" onclick="closeClientModal()">×</button>
+    </div>
+    <div class="form-modal-bd">
+      <div class="row2">
+        <div class="fg"><label>First Name</label><input id="cm-first" placeholder="John"></div>
+        <div class="fg"><label>Last Name</label><input id="cm-last" placeholder="Davies"></div>
+      </div>
+      <div class="row2">
+        <div class="fg"><label>Phone</label><input id="cm-phone" placeholder="07700 900000"></div>
+        <div class="fg"><label>Email</label><input id="cm-email" type="email" placeholder="john@email.com"></div>
+      </div>
+      <div class="fg"><label>Address</label><input id="cm-address" placeholder="Full address"></div>
+      <div class="fg"><label>Notes</label><textarea id="cm-notes" placeholder="How did they find you?"></textarea></div>
+    </div>
+    <div class="form-modal-ft">
+      <button class="btn btn-outline" onclick="closeClientModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveClient()">Add Client</button>
+    </div>
+  </div>
+</div>
+
+<!-- CLIENT DETAIL MODAL -->
+<div class="modal-overlay" id="client-detail-modal" style="display:none" onclick="if(event.target===this)closeClientDetail()">
+  <div class="form-modal" style="width:min(680px,96vw);max-height:90vh">
+    <div class="form-modal-hd">
+      <span class="serif" style="font-size:20px" id="client-detail-name"></span>
+      <button class="modal-close" onclick="closeClientDetail()">×</button>
+    </div>
+    <div class="form-modal-bd" id="client-detail-body" style="overflow-y:auto;max-height:calc(90vh - 80px)"></div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// DATA — loads from localStorage, falls back to defaults
+// ════════════════════════════════════════════════════════════
+const STORE_LOGO    = 'sbc_logo';
+const STORE_JOBS    = 'sbc_jobs';
+const STORE_QUOTES  = 'sbc_quotes';
+const STORE_CLIENTS = 'sbc_clients';
+const STORE_SETTINGS= 'sbc_settings';
+
+function load(key, def){ try{ const v=localStorage.getItem(key); return v?JSON.parse(v):def; }catch(e){ return def; } }
+function save(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} }
+
+let jobs    = load(STORE_JOBS, []);
+let quotes  = load(STORE_QUOTES, []);
+let clients = load(STORE_CLIENTS, []);
+let settings= load(STORE_SETTINGS, {
+  name:'Small Build Company Ltd', tagline:'Building Extensions & Renovations',
+  contact:'', phone:'', email:'', address:'',
+  terms:'A deposit of 25% is required prior to commencement of works. Stage payments are then due at agreed milestones throughout the project. Final payment is due upon practical completion.',
+  extra:'All works are carried out in accordance with current Building Regulations. Any variations to the agreed scope of works will be priced and agreed in writing prior to proceeding.'
+});
+
+function persistAll(){ save(STORE_JOBS,jobs); save(STORE_QUOTES,quotes); save(STORE_CLIENTS,clients); save(STORE_SETTINGS,settings); }
+
+// ════════════════════════════════════════════════════════════
+// NAVIGATION
+// ════════════════════════════════════════════════════════════
+const PAGE_TITLES = {dashboard:'Dashboard',jobs:'Jobs',quotes:'Saved Quotes',newquote:'New Quote',clients:'Clients',settings:'Company Setup'};
+
+function showPage(id, navEl){
+  document.querySelectorAll('.page,.qb-page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  const pg = document.getElementById('page-'+id);
+  if(pg) pg.classList.add('active');
+  if(navEl) navEl.classList.add('active');
+  document.getElementById('page-title').textContent = PAGE_TITLES[id]||id;
+  if(id==='dashboard') renderDashboard();
+  if(id==='jobs') renderJobs('all');
+  if(id==='quotes') renderSavedQuotes();
+  if(id==='clients') renderClients();
+  if(id==='settings') loadSettings();
+}
+
+// ════════════════════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════════════════════
+const VAT = 0.20;
+const UNITS = ['Item','m','m²','m³','Nr','Hr','Day','Set','Kg','Tonne'];
+function uid(){ return Date.now()+'-'+Math.floor(Math.random()*10000); }
+function fmt(n){ return '£'+Number(n||0).toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmtK(n){ return n>=1000?'£'+(n/1000).toFixed(0)+'k':fmt(n); }
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+// Cost = labour + materials (what YOU pay)
+function calcItem(i){ return (Number(i.labour)||0)+(Number(i.materials)||0); }
+function calcPhase(p){ return p.items.reduce((s,i)=>s+calcItem(i),0); }
+// Sell = cost + markup (what CLIENT pays, ex-VAT)
+function getMarkupPct(){ var el=document.getElementById('qb-markup'); return el?Number(el.value):0; }
+function calcItemSell(i,mkp){ return calcItem(i)*(1+(mkp||getMarkupPct())/100); }
+function calcPhaseSell(p,mkp){ return p.items.reduce(function(s,i){ return s+calcItemSell(i,mkp); },0); }
+function calcItemVat(i,mkp){ return calcItemSell(i,mkp)*VAT; }
+function calcItemTotal(i,mkp){ return calcItemSell(i,mkp)*(1+VAT); }
+function quoteTotal(q){
+  const net=q.phases.reduce((s,p)=>s+calcPhase(p),0);
+  const sub=net*(1+(q.markup||0)/100);
+  return sub*(q.vatIncluded?1+VAT:1);
+}
+
+const STAGE_COLOR = {planning:'#4a90a4',active:'#7ab533',onhold:'#e67e22',complete:'#9aa3ad'};
+const STAGE_BADGE = {planning:'b-planning',active:'b-active',onhold:'b-onhold',complete:'b-complete'};
+const STAGE_LABEL = {planning:'Planning',active:'On Site',onhold:'On Hold',complete:'Complete'};
+const Q_BADGE = {pending:'b-pending',sent:'b-sent',accepted:'b-accepted',declined:'b-declined'};
+const Q_LABEL = {pending:'Pending',sent:'Sent',accepted:'Accepted',declined:'Declined'};
+
+function badge(status, map, labels){ return `<span class="badge ${map[status]||'b-pending'}">${labels[status]||status}</span>`; }
+
+// ════════════════════════════════════════════════════════════
+// DASHBOARD
+// ════════════════════════════════════════════════════════════
+function renderDashboard(){
+  const active = jobs.filter(j=>j.stage==='active');
+  const open   = quotes.filter(q=>q.status==='pending'||q.status==='sent');
+  const complete= jobs.filter(j=>j.stage==='complete');
+  const totalVal= active.reduce((s,j)=>s+(Number(j.value)||0),0);
+  const pipeline= open.reduce((s,q)=>s+quoteTotal(q),0);
+
+  document.getElementById('stat-active').textContent = active.length;
+  document.getElementById('stat-active-sub').textContent = active.length?active.length+' job'+(active.length!==1?'s':'')+' on site':'No active jobs';
+  document.getElementById('stat-quotes').textContent = open.length;
+  document.getElementById('stat-quotes-sub').textContent = open.length?fmtK(pipeline)+' pipeline':'No open quotes';
+  document.getElementById('stat-revenue').textContent = fmtK(totalVal);
+  document.getElementById('stat-complete').textContent = complete.length;
+  document.getElementById('stat-complete-sub').textContent = complete.length?complete.length+' job'+(complete.length!==1?'s':'')+' done':'None yet';
+
+  // Active jobs
+  const dj = document.getElementById('dash-jobs');
+  if(!active.length){ dj.innerHTML='<div style="padding:24px;text-align:center;color:var(--muted);font-size:12px">No active jobs</div>'; }
+  else {
+    dj.innerHTML = active.slice(0,4).map(j=>{
+      const pct = j.weeks?Math.round((j.done/j.weeks)*100):0;
+      const col = STAGE_COLOR[j.stage]||'var(--muted)';
+      return `<div class="job-row" onclick="showPage('jobs',document.getElementById('nav-jobs'))">
+        <div class="job-dot" style="background:${col}"></div>
+        <div class="job-info">
+          <div class="job-name">${esc(j.type)} — ${esc(j.address)}</div>
+          <div class="job-meta">${esc(j.client)}${j.weeks?' · Week '+j.done+' of '+j.weeks:''}</div>
+          <div class="progress"><div class="progress-bar" style="width:${pct}%;background:${col}"></div></div>
+        </div>
+        <div class="job-right">
+          <div class="mono" style="font-size:13px;font-weight:500">${fmt(j.value)}</div>
+          ${badge(j.stage,STAGE_BADGE,STAGE_LABEL)}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // Recent quotes
+  const dq = document.getElementById('dash-quotes');
+  const recentQ = quotes.slice(-4).reverse();
+  if(!recentQ.length){ dq.innerHTML='<div style="padding:24px;text-align:center;color:var(--muted);font-size:12px">No quotes yet</div>'; }
+  else {
+    dq.innerHTML = recentQ.map(q=>`
+      <div class="job-row" onclick="showPage('quotes',document.getElementById('nav-quotes'))">
+        <div class="job-info">
+          <div class="job-name">${esc(q.jobType)} — ${esc(q.customer.name||'—')}</div>
+          <div class="job-meta">${q.ref||''} · ${esc(q.customer.address||'')}</div>
+        </div>
+        <div class="job-right">
+          <div class="mono" style="font-size:13px;font-weight:500">${fmt(quoteTotal(q))}</div>
+          ${badge(q.status,Q_BADGE,Q_LABEL)}
+        </div>
+      </div>`).join('');
+  }
+
+  // Pipeline
+  const stages=['planning','active','complete'];
+  const pip = document.getElementById('dash-pipeline');
+  pip.innerHTML = stages.map(s=>`
+    <div class="pip-col">
+      <div class="pip-label" style="border-color:${STAGE_COLOR[s]}">${STAGE_LABEL[s]}</div>
+      ${jobs.filter(j=>j.stage===s).map(j=>`
+        <div class="pip-card">
+          <div class="pip-card-name">${esc(j.client)} — ${esc(j.type)}</div>
+          <div class="pip-card-val">${fmt(j.value)}</div>
+        </div>`).join('')||'<div style="font-size:11px;color:var(--muted);padding:4px 0">—</div>'}
+    </div>`).join('');
+}
+
+// ════════════════════════════════════════════════════════════
+// JOBS
+// ════════════════════════════════════════════════════════════
+let jobFilter='all';
+function filterJobs(f, el){
+  jobFilter=f;
+  document.querySelectorAll('.tab-btn').forEach(t=>{ t.style.color='var(--muted)'; t.style.borderBottomColor='transparent'; });
+  el.style.color='var(--slate)'; el.style.borderBottomColor='var(--slate)';
+  renderJobs(f);
+}
+function renderJobs(f){
+  const list = document.getElementById('jobs-list');
+  const filtered = f==='all' ? jobs : jobs.filter(j=>j.stage===f);
+  if(!filtered.length){ list.innerHTML='<div class="empty-dashed"><div style="font-size:14px;margin-bottom:6px">No jobs here</div><div style="font-size:12px">Add a job using the button above.</div></div>'; return; }
+  list.innerHTML = filtered.map(j=>{
+    const pct = j.weeks?Math.round((j.done/j.weeks)*100):0;
+    const col = STAGE_COLOR[j.stage]||'var(--muted)';
+    return `<div class="card" style="margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:12px;padding:14px 18px">
+        <div style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0"></div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:3px">
+            <span style="font-size:14px;font-weight:500">${esc(j.type)} — ${esc(j.address)}</span>
+            ${badge(j.stage,STAGE_BADGE,STAGE_LABEL)}
+          </div>
+          <div style="font-size:11px;color:var(--muted)">${esc(j.client)}${j.weeks?' · Week '+j.done+' of '+j.weeks:''}${j.notes?' · '+esc(j.notes):''}</div>
+          <div class="progress" style="max-width:280px;margin-top:6px"><div class="progress-bar" style="width:${pct}%;background:${col}"></div></div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div class="serif" style="font-size:20px">${fmt(j.value)}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${pct}% complete</div>
+          <div style="display:flex;gap:6px;margin-top:6px;justify-content:flex-end">
+            <button class="btn-sm btn-gold" onclick="openJobDetail('${j.id}')">📋 Open</button>
+            <button class="btn-sm btn-outline" onclick="editJob('${j.id}')">Edit</button>
+            <button class="btn-sm btn-danger" onclick="deleteJob('${j.id}')">Delete</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openJobModal(id){
+  document.getElementById('job-modal-title').textContent = id?'Edit Job':'New Job';
+  document.getElementById('job-edit-id').value = id||'';
+  if(id){
+    const j=jobs.find(x=>x.id===id);
+    if(j){
+      document.getElementById('jm-client').value=j.client||'';
+      document.getElementById('jm-type').value=j.type||'Rear Extension';
+      document.getElementById('jm-address').value=j.address||'';
+      document.getElementById('jm-value').value=j.value||0;
+      document.getElementById('jm-stage').value=j.stage||'planning';
+      document.getElementById('jm-start').value=j.start||'';
+      document.getElementById('jm-weeks').value=j.weeks||8;
+      document.getElementById('jm-done').value=j.done||0;
+      document.getElementById('jm-notes').value=j.notes||'';
+    }
+  } else {
+    ['jm-client','jm-address','jm-notes','jm-start'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('jm-value').value=0;
+    document.getElementById('jm-weeks').value=8;
+    document.getElementById('jm-done').value=0;
+    document.getElementById('jm-stage').value='planning';
+  }
+  document.getElementById('job-modal').style.display='flex';
+}
+function editJob(id){ openJobModal(id); }
+function closeJobModal(){ document.getElementById('job-modal').style.display='none'; }
+
+function deleteJob(id){
+  const j = jobs.find(x=>x.id===id);
+  if(!j) return;
+
+  // Check for a linked quote
+  const linkedQuote = j.quoteId
+    ? quotes.find(q=>q.id===j.quoteId)
+    : null;
+
+  let msg = `Delete job: ${j.type} — ${j.address} (${j.client})?\n\nThis cannot be undone.`;
+  if(linkedQuote){
+    msg = `Delete job: ${j.type} — ${j.address} (${j.client})?\n\n`
+        + `This job is linked to quote ${linkedQuote.ref||linkedQuote.id}.\n\n`
+        + `Click OK to delete the job only and keep the quote.\n`
+        + `Click Cancel to do nothing.`;
+  }
+
+  if(!confirm(msg)) return;
+
+  // Remove the job
+  jobs = jobs.filter(x=>x.id!==id);
+  save(STORE_JOBS, jobs);
+
+  // Clean up Gantt state
+  const ganttAll = loadGanttState();
+  delete ganttAll[id];
+  saveGanttState(ganttAll);
+
+  // If there was a linked quote, unmark its convertedToJob flag
+  // so it can be converted again if needed
+  if(linkedQuote){
+    quotes = quotes.map(q=>q.id===linkedQuote.id ? {...q, convertedToJob:false} : q);
+    save(STORE_QUOTES, quotes);
+  }
+
+  renderJobs(jobFilter);
+  renderSavedQuotes();
+  renderDashboard();
+}
+function saveJob(){
+  const id = document.getElementById('job-edit-id').value;
+  const qLink = document.getElementById('jm-quote-id').value;
+  const j = {
+    id: id||uid(), client:document.getElementById('jm-client').value,
+    type:document.getElementById('jm-type').value, address:document.getElementById('jm-address').value,
+    value:Number(document.getElementById('jm-value').value)||0,
+    stage:document.getElementById('jm-stage').value,
+    start:document.getElementById('jm-start').value,
+    weeks:Number(document.getElementById('jm-weeks').value)||8,
+    done:Number(document.getElementById('jm-done').value)||0,
+    notes:document.getElementById('jm-notes').value,
+    quoteId: qLink||undefined
+  };
+  if(id){ jobs=jobs.map(x=>x.id===id?j:x); } else { jobs.push(j); }
+  // If converted from quote, mark quote as converted
+  if(qLink && !id){
+    quotes=quotes.map(q=>q.id===qLink?{...q,convertedToJob:true}:q);
+    save(STORE_QUOTES,quotes);
+  }
+  document.getElementById('jm-quote-id').value='';
+  save(STORE_JOBS,jobs);
+  closeJobModal();
+  renderJobs(jobFilter);
+  renderDashboard();
+}
+
+// ════════════════════════════════════════════════════════════
+// SAVED QUOTES
+// ════════════════════════════════════════════════════════════
+function renderSavedQuotes(){
+  const list = document.getElementById('quotes-list');
+  const open = quotes.filter(q=>q.status==='pending'||q.status==='sent');
+  const pipeline = open.reduce((s,q)=>s+quoteTotal(q),0);
+  document.getElementById('quotes-summary').textContent = quotes.length
+    ? open.length+' open · '+fmt(pipeline)+' pipeline'
+    : 'No quotes saved yet';
+  if(!quotes.length){
+    list.innerHTML='<div class="empty-dashed"><div style="font-size:14px;margin-bottom:6px">No quotes yet</div><div style="font-size:12px;margin-bottom:14px">Create your first quote using the New Quote tab.</div></div>';
+    return;
+  }
+  list.innerHTML = [...quotes].reverse().map(q=>{
+    // Check if a job already exists for this quote
+    const alreadyJob = jobs.some(j=>{
+      const jn=(j.client||'').toLowerCase();
+      const qn=(q.customer.name||'').toLowerCase();
+      return jn===qn||jn.includes(qn)||qn.includes(jn);
+    });
+    const convertBtn = (q.status==='accepted' && !alreadyJob)
+      ? `<button class="btn-sm btn-gold" onclick="convertQuoteToJob('${q.id}')" style="white-space:nowrap">⬡ Convert to Job</button>`
+      : (q.status==='accepted' && alreadyJob)
+        ? `<span style="font-size:10px;color:var(--moss);font-weight:500">✓ Job created</span>`
+        : '';
+    return `
+    <div class="sq-card" style="${q.status==='accepted'?'border-left:3px solid #7ab533;':''}">
+      <div class="sq-ref">${q.ref||'—'}</div>
+      <div class="sq-info">
+        <div class="sq-title">${esc(q.jobType)} — ${esc(q.customer.name||'—')}</div>
+        <div class="sq-sub">${esc(q.customer.address||'')} · Saved ${q.savedDate||'—'}${q.lastEdited?' · Edited '+q.lastEdited:''}</div>
+      </div>
+      <div class="sq-val">${fmt(quoteTotal(q))}</div>
+      <div style="text-align:center;min-width:200px">
+        ${badge(q.status,Q_BADGE,Q_LABEL)}
+        <div class="sq-actions" style="margin-top:6px;flex-wrap:wrap;gap:4px">
+          <button class="btn-sm btn-primary" onclick="editSaved('${q.id}')">✎ Edit</button>
+          <button class="btn-sm btn-outline" onclick="previewSaved('${q.id}')">View</button>
+          <button class="btn-sm" onclick="emailQuoteOutlook('${q.id}')" style="background:#0078d4;color:white;border:none;border-radius:4px;padding:5px 12px;font-size:11px;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:500">✉ Email</button>
+          ${convertBtn}
+          <select onchange="updateQuoteStatus('${q.id}',this.value)" style="padding:4px 6px;font-size:11px;width:auto">
+            <option value="pending"${q.status==='pending'?' selected':''}>Pending</option>
+            <option value="sent"${q.status==='sent'?' selected':''}>Sent</option>
+            <option value="accepted"${q.status==='accepted'?' selected':''}>Accepted</option>
+            <option value="declined"${q.status==='declined'?' selected':''}>Declined</option>
+          </select>
+          <button class="btn-sm btn-danger" onclick="deleteQuote('${q.id}')">✕</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function editSaved(id){
+  const q = quotes.find(x=>x.id===id);
+  if(!q) return;
+  // Load the quote into the builder
+  document.getElementById('qb-cust-name').value  = q.customer.name||'';
+  document.getElementById('qb-cust-addr').value  = q.customer.address||'';
+  document.getElementById('qb-cust-email').value = q.customer.email||'';
+  document.getElementById('qb-cust-phone').value = q.customer.phone||'';
+  document.getElementById('qb-jobtype').value    = q.jobType||'Rear Extension';
+  document.getElementById('qb-jobtype-badge').textContent = q.jobType||'Rear Extension';
+  document.getElementById('qb-markup').value     = q.markup||15;
+  document.getElementById('qb-markup-lbl').textContent   = (q.markup||15)+'%';
+  document.getElementById('qb-vat').checked      = q.vatIncluded!==false;
+  document.getElementById('qb-scope').value      = q.scope||'';
+  loadPhotoUI(q.photo||'');
+  // Deep copy phases back into builder
+  qbPhases = JSON.parse(JSON.stringify(q.phases));
+  // Reassign local IDs so the builder works correctly
+  phaseC = Date.now();
+  qbPhases.forEach(p=>{ p.id=++phaseC; p.items.forEach(i=>i.id=++itemC); });
+  // Store the ID we're editing so saveQuote knows to update not insert
+  qbEditingId = id;
+  // Update the save button label
+  document.getElementById('qb-save-btn').textContent = '💾 Update Quote';
+  document.getElementById('qb-editing-notice').style.display = 'flex';
+  document.getElementById('qb-editing-ref').textContent = q.ref||id;
+  qbRender();
+  showPage('newquote', document.getElementById('nav-newquote'));
+}
+
+function updateQuoteStatus(id,status){
+  quotes=quotes.map(q=>q.id===id?{...q,status}:q);
+  save(STORE_QUOTES,quotes);
+  renderSavedQuotes();
+  renderDashboard();
+}
+
+function deleteQuote(id){
+  const q = quotes.find(x=>x.id===id);
+  if(!q) return;
+
+  // Find any jobs linked to this quote — by direct quoteId or by client name match
+  const linkedJobs = jobs.filter(j=>{
+    if(j.quoteId === id) return true;
+    const jn=(j.client||'').toLowerCase();
+    const qn=(q.customer.name||'').toLowerCase();
+    return jn && qn && (jn===qn || jn.includes(qn) || qn.includes(jn));
+  });
+
+  let deleteJobs = false;
+
+  if(linkedJobs.length){
+    const jobList = linkedJobs.map(j=>`  • ${j.type} — ${j.address} (${STAGE_LABEL[j.stage]||j.stage})`).join('\n');
+    const choice = confirm(
+      `Deleting quote ${q.ref||id} for ${q.customer.name||'this client'}.\n\n` +
+      `The following job${linkedJobs.length>1?'s are':' is'} linked to this quote:\n${jobList}\n\n` +
+      `Click OK to delete the quote AND the linked job${linkedJobs.length>1?'s':''}.\n` +
+      `Click Cancel to delete the quote only.`
+    );
+    if(choice === null) return; // they closed the dialog — do nothing
+    deleteJobs = choice;
+  } else {
+    if(!confirm(`Delete quote ${q.ref||''} for ${q.customer.name||'this client'}? This cannot be undone.`)) return;
+  }
+
+  // Delete the quote
+  quotes = quotes.filter(x=>x.id!==id);
+  save(STORE_QUOTES, quotes);
+
+  // Optionally delete linked jobs
+  if(deleteJobs && linkedJobs.length){
+    const linkedIds = linkedJobs.map(j=>j.id);
+    jobs = jobs.filter(j=>!linkedIds.includes(j.id));
+    save(STORE_JOBS, jobs);
+    // Also clear their Gantt state
+    const ganttAll = loadGanttState();
+    linkedIds.forEach(jid=>delete ganttAll[jid]);
+    saveGanttState(ganttAll);
+  }
+
+  renderSavedQuotes();
+  renderJobs(jobFilter);
+  renderDashboard();
+}
+
+function convertQuoteToJob(qid){
+  const q = quotes.find(x=>x.id===qid);
+  if(!q) return;
+  const total = quoteTotal(q);
+  // Pre-fill the job modal from the quote data
+  document.getElementById('job-modal-title').textContent = 'New Job from Quote';
+  document.getElementById('job-edit-id').value = '';
+  document.getElementById('jm-client').value   = q.customer.name||'';
+  document.getElementById('jm-type').value     = q.jobType||'Rear Extension';
+  document.getElementById('jm-address').value  = q.customer.address||'';
+  document.getElementById('jm-value').value    = Math.round(total);
+  document.getElementById('jm-stage').value    = 'planning';
+  document.getElementById('jm-start').value    = new Date().toISOString().split('T')[0];
+  // Estimate duration from number of phases — roughly 1-2 weeks per phase
+  const estWeeks = Math.max(4, q.phases.length * 1.5 | 0);
+  document.getElementById('jm-weeks').value    = estWeeks;
+  document.getElementById('jm-done').value     = 0;
+  document.getElementById('jm-notes').value    = 'Converted from quote '+( q.ref||qid)+'. '+( q.phases.length)+' phases.';
+  // Store quote id so saveJob can link them
+  document.getElementById('jm-quote-id').value = qid;
+  document.getElementById('job-modal').style.display='flex';
+}
+
+// ════════════════════════════════════════════════════════════
+// CLIENTS
+// ════════════════════════════════════════════════════════════
+
+// Auto-upsert a client from a quote's customer details
+function upsertClientFromQuote(customer, quoteValue){
+  if(!customer.name) return;
+  const nameLower = customer.name.trim().toLowerCase();
+  const existing = clients.find(c=>(c.first+' '+c.last).toLowerCase()===nameLower || (c.name||'').toLowerCase()===nameLower);
+  if(existing){
+    // Update contact details if we have better info
+    if(customer.email && !existing.email) existing.email = customer.email;
+    if(customer.phone && !existing.phone) existing.phone = customer.phone;
+    if(customer.address && !existing.address) existing.address = customer.address;
+  } else {
+    // Create new client — split name into first/last best we can
+    const parts = customer.name.trim().split(' ');
+    // Strip salutation if present
+    const salutations = ['mr','mrs','ms','miss','dr','mr&mrs','mr & mrs'];
+    let nameParts = parts.filter(p=>!salutations.includes(p.replace(/[^a-z]/gi,'').toLowerCase()));
+    if(!nameParts.length) nameParts = parts;
+    const first = nameParts.slice(0,-1).join(' ') || nameParts[0] || customer.name;
+    const last  = nameParts.length>1 ? nameParts[nameParts.length-1] : '';
+    clients.push({
+      id: uid(),
+      name: customer.name,
+      first, last,
+      phone: customer.phone||'',
+      email: customer.email||'',
+      address: customer.address||'',
+      notes: '',
+      jobs: 0,
+      total: 0,
+      addedFrom: 'quote'
+    });
+  }
+  save(STORE_CLIENTS, clients);
+}
+
+function renderClients(){
+  const tb = document.getElementById('clients-table');
+  if(!clients.length){
+    tb.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:32px">No clients yet — they\'ll appear automatically when you save a quote</td></tr>';
+    return;
+  }
+  tb.innerHTML = clients.map(c=>{
+    const displayName = c.name || (c.first+' '+c.last).trim();
+    const ini = (displayName[0]||'').toUpperCase() + (displayName.split(' ').pop()[0]||'').toUpperCase();
+    // Count their quotes
+    const cQuotes = quotes.filter(q=>{
+      const qName = (q.customer.name||'').trim().toLowerCase();
+      const cName = displayName.toLowerCase();
+      return qName===cName || qName.includes(cName) || cName.includes(qName);
+    });
+    const cJobs = jobs.filter(j=>{
+      const jName = (j.client||'').trim().toLowerCase();
+      const cName = displayName.toLowerCase();
+      return jName===cName || jName.includes(cName) || cName.includes(jName);
+    });
+    const totalVal = cQuotes.filter(q=>q.status==='accepted').reduce((s,q)=>s+quoteTotal(q),0);
+    return `<tr>
+      <td onclick="openClientDetail('${c.id}')" style="cursor:pointer"><span style="width:26px;height:26px;border-radius:50%;background:var(--slate);color:white;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;margin-right:8px;vertical-align:middle">${esc(ini)}</span>${esc(displayName)}</td>
+      <td onclick="openClientDetail('${c.id}')" style="cursor:pointer">${esc(c.phone||'—')}</td>
+      <td onclick="openClientDetail('${c.id}')" style="cursor:pointer">${esc(c.email||'—')}</td>
+      <td onclick="openClientDetail('${c.id}')" style="cursor:pointer">${cJobs.length} job${cJobs.length!==1?'s':''}</td>
+      <td onclick="openClientDetail('${c.id}')" style="cursor:pointer">${cQuotes.length} quote${cQuotes.length!==1?'s':''}</td>
+      <td onclick="openClientDetail('${c.id}')" style="cursor:pointer" class="mono">${totalVal>0?fmt(totalVal):'—'}</td>
+      <td><button onclick="deleteClient('${c.id}')" class="btn-sm btn-danger" style="white-space:nowrap">Delete</button></td>
+    </tr>`;
+  }).join('');
+  // Update table header
+  const thead = document.querySelector('#page-clients .tbl thead tr');
+  if(thead && thead.children.length===5){
+    const thQ = document.createElement('th');
+    thQ.textContent='Quotes';
+    thead.insertBefore(thQ, thead.children[4]);
+    const thD = document.createElement('th');
+    thD.textContent='';
+    thead.appendChild(thD);
+  } else if(thead && thead.children.length===6){
+    if(!thead.children[6]){
+      const thD = document.createElement('th');
+      thD.textContent='';
+      thead.appendChild(thD);
+    }
+  }
+}
+
+function deleteClient(cid){
+  const c = clients.find(x=>x.id===cid);
+  if(!c) return;
+  const displayName = c.name || (c.first+' '+c.last).trim();
+
+  // Check for linked quotes and jobs
+  const cQuotes = quotes.filter(q=>(q.customer.name||'').toLowerCase().includes(displayName.toLowerCase()) || displayName.toLowerCase().includes((q.customer.name||'').toLowerCase()));
+  const cJobs   = jobs.filter(j=>(j.client||'').toLowerCase().includes(displayName.toLowerCase()) || displayName.toLowerCase().includes((j.client||'').toLowerCase()));
+
+  let msg = 'Delete client: ' + displayName + '?';
+  if(cQuotes.length || cJobs.length){
+    msg += '\n\nThis client has:';
+    if(cQuotes.length) msg += '\n  ' + cQuotes.length + ' quote' + (cQuotes.length!==1?'s':'');
+    if(cJobs.length)   msg += '\n  ' + cJobs.length + ' job' + (cJobs.length!==1?'s':'');
+    msg += '\n\nDeleting the client will NOT delete their quotes or jobs — those will remain.';
+  }
+  msg += '\n\nThis cannot be undone.';
+
+  if(!confirm(msg)) return;
+  clients = clients.filter(x=>x.id!==cid);
+  save(STORE_CLIENTS, clients);
+  renderClients();
+  renderDashboard();
+}
+
+function openClientDetail(cid){
+  const c = clients.find(x=>x.id===cid);
+  if(!c) return;
+  const displayName = c.name || (c.first+' '+c.last).trim();
+  // Find their quotes
+  const cQuotes = quotes.filter(q=>{
+    const qName=(q.customer.name||'').trim().toLowerCase();
+    const cName=displayName.toLowerCase();
+    return qName===cName||qName.includes(cName)||cName.includes(qName);
+  });
+  const cJobs = jobs.filter(j=>{
+    const jName=(j.client||'').trim().toLowerCase();
+    const cName=displayName.toLowerCase();
+    return jName===cName||jName.includes(cName)||cName.includes(jName);
+  });
+
+  const quotesHtml = cQuotes.length ? cQuotes.map(q=>`
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+      <span class="mono" style="font-size:11px;color:var(--muted);min-width:70px">${q.ref||'—'}</span>
+      <div style="flex:1">
+        <div style="font-weight:500;font-size:13px">${esc(q.jobType)}</div>
+        <div style="font-size:11px;color:var(--muted)">${q.savedDate||''}${q.lastEdited?' · Edited '+q.lastEdited:''}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="serif" style="font-size:17px">${fmt(quoteTotal(q))}</div>
+        ${badge(q.status,Q_BADGE,Q_LABEL)}
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn-sm btn-primary" onclick="editSaved('${q.id}')">✎ Edit</button>
+        <button class="btn-sm btn-outline" onclick="previewSaved('${q.id}')">View</button>
+      </div>
+    </div>`).join('')
+  : '<div style="padding:16px 0;color:var(--muted);font-size:12px">No quotes yet for this client.</div>';
+
+  const jobsHtml = cJobs.length ? cJobs.map(j=>{
+    const pct=j.weeks?Math.round((j.done/j.weeks)*100):0;
+    const col=STAGE_COLOR[j.stage]||'var(--muted)';
+    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="width:8px;height:8px;border-radius:50%;background:${col};flex-shrink:0"></div>
+      <div style="flex:1">
+        <div style="font-weight:500;font-size:13px">${esc(j.type)} — ${esc(j.address)}</div>
+        <div style="font-size:11px;color:var(--muted)">${STAGE_LABEL[j.stage]||j.stage}${j.weeks?' · Week '+j.done+' of '+j.weeks:''}</div>
+        <div style="height:3px;background:var(--warm);border-radius:2px;margin-top:4px;max-width:180px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${col};border-radius:2px"></div></div>
+      </div>
+      <div style="text-align:right">
+        <div class="serif" style="font-size:17px">${fmt(j.value)}</div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:5px">${pct}% done</div>
+        <div style="display:flex;gap:5px;justify-content:flex-end">
+          <button class="btn-sm btn-gold" onclick="closeClientDetail();openJobDetail('${j.id}')">📋 Gantt</button>
+          <button class="btn-sm btn-outline" onclick="closeClientDetail();editJob('${j.id}');document.getElementById('job-modal').style.display='flex'">Edit</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('')
+  : '<div style="padding:16px 0;color:var(--muted);font-size:12px">No jobs yet for this client.</div>';
+
+  document.getElementById('client-detail-name').textContent = displayName;
+  document.getElementById('client-detail-body').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+      <div class="card" style="margin:0">
+        <div class="card-hd" style="font-size:11px">Contact</div>
+        <div style="padding:12px 16px;font-size:13px;line-height:1.9">
+          <div>${esc(c.email||'—')}</div>
+          <div>${esc(c.phone||'—')}</div>
+          <div style="color:var(--muted);font-size:12px">${esc(c.address||'—')}</div>
+          ${c.notes?`<div style="margin-top:8px;font-size:12px;color:var(--muted);border-top:1px solid var(--border);padding-top:8px">${esc(c.notes)}</div>`:''}
+        </div>
+      </div>
+      <div class="card" style="margin:0">
+        <div class="card-hd" style="font-size:11px">Summary</div>
+        <div style="padding:12px 16px;font-size:13px;line-height:2">
+          <div><span style="color:var(--muted)">Quotes:</span> ${cQuotes.length}</div>
+          <div><span style="color:var(--muted)">Jobs:</span> ${cJobs.length}</div>
+          <div><span style="color:var(--muted)">Accepted value:</span> <span class="mono">${fmt(cQuotes.filter(q=>q.status==='accepted').reduce((s,q)=>s+quoteTotal(q),0))}</span></div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-bottom:20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-weight:600;font-size:12px;letter-spacing:0.3px">Quotes</div>
+        <button class="btn-sm btn-outline" onclick="newQuoteForClient('${c.id}')" style="font-size:11px">+ New Quote for ${esc(displayName.split(' ')[0])}</button>
+      </div>
+      ${quotesHtml}
+    </div>
+    <div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-weight:600;font-size:12px;letter-spacing:0.3px">Jobs</div>
+        <button class="btn-sm btn-gold" onclick="closeClientDetail();addJobForClient('${esc(displayName)}','${esc(c.address||'')}','${c.id}')" style="font-size:11px">⬡ Add New Job</button>
+      </div>
+      ${jobsHtml}
+    </div>`;
+  document.getElementById('client-detail-modal').style.display='flex';
+}
+
+function closeClientDetail(){ document.getElementById('client-detail-modal').style.display='none'; }
+
+function newQuoteForClient(cid){
+  const c = clients.find(x=>x.id===cid);
+  if(!c) return;
+  const displayName = c.name || (c.first+' '+c.last).trim();
+  closeClientDetail();
+  // Reset the quote builder first
+  qbEditingId = null;
+  document.getElementById('qb-save-btn').textContent = '💾 Save Quote';
+  document.getElementById('qb-editing-notice').style.display = 'none';
+  // Pre-fill customer details
+  document.getElementById('qb-cust-name').value  = displayName;
+  document.getElementById('qb-cust-email').value = c.email||'';
+  document.getElementById('qb-cust-phone').value = c.phone||'';
+  document.getElementById('qb-cust-addr').value  = c.address||'';
+  updateStreetViewLink();
+  document.getElementById('qb-scope').value     = '';
+  clearPhotoUI();
+  // Load default template
+  qbLoadTemplate(document.getElementById('qb-jobtype').value);
+  // Navigate to quote builder
+  showPage('newquote', document.getElementById('nav-newquote'));
+}
+
+function addJobForClient(clientName, clientAddress, clientId){
+  // Open job modal pre-filled with client details
+  document.getElementById('job-modal-title').textContent = 'New Job — ' + clientName;
+  document.getElementById('job-edit-id').value  = '';
+  document.getElementById('jm-quote-id').value  = '';
+  document.getElementById('jm-client').value    = clientName;
+  document.getElementById('jm-address').value   = clientAddress;
+  document.getElementById('jm-value').value     = 0;
+  document.getElementById('jm-stage').value     = 'planning';
+  document.getElementById('jm-start').value     = new Date().toISOString().split('T')[0];
+  document.getElementById('jm-weeks').value     = 8;
+  document.getElementById('jm-done').value      = 0;
+  document.getElementById('jm-notes').value     = '';
+  document.getElementById('jm-type').value      = 'Rear Extension';
+  document.getElementById('job-modal').style.display='flex';
+}
+
+function openClientModal(){ document.getElementById('client-modal').style.display='flex'; }
+function closeClientModal(){ document.getElementById('client-modal').style.display='none'; }
+function saveClient(){
+  const c={id:uid(),name:'',first:document.getElementById('cm-first').value,last:document.getElementById('cm-last').value,phone:document.getElementById('cm-phone').value,email:document.getElementById('cm-email').value,address:document.getElementById('cm-address').value,notes:document.getElementById('cm-notes').value,jobs:0,total:0};
+  c.name=(c.first+' '+c.last).trim();
+  clients.push(c); save(STORE_CLIENTS,clients);
+  closeClientModal(); renderClients();
+}
+
+// ════════════════════════════════════════════════════════════
+// SETTINGS
+// ════════════════════════════════════════════════════════════
+function loadSettings(){
+  document.getElementById('set-name').value=settings.name||'Small Build Company Ltd';
+  document.getElementById('set-tagline').value=settings.tagline||'';
+  document.getElementById('set-contact').value=settings.contact||'';
+  document.getElementById('set-phone').value=settings.phone||'';
+  document.getElementById('set-email').value=settings.email||'';
+  document.getElementById('set-address').value=settings.address||'';
+  document.getElementById('set-terms').value=settings.terms||'';
+  document.getElementById('set-extra').value=settings.extra||'';
+}
+function saveSettings(){
+  settings={name:document.getElementById('set-name').value,tagline:document.getElementById('set-tagline').value,contact:document.getElementById('set-contact').value,phone:document.getElementById('set-phone').value,email:document.getElementById('set-email').value,address:document.getElementById('set-address').value,terms:document.getElementById('set-terms').value,extra:document.getElementById('set-extra').value};
+  save(STORE_SETTINGS,settings);
+  const s=document.getElementById('settings-saved');
+  s.style.display='inline'; setTimeout(()=>s.style.display='none',2000);
+}
+
+// ════════════════════════════════════════════════════════════
+// QUOTE BUILDER
+// ════════════════════════════════════════════════════════════
+let qbPhases=[];
+let phaseC=0, itemC=0;
+
+const JOB_TEMPLATES={
+  "Rear Extension":[
+    {phase:"Preliminaries & Site Setup",items:[{desc:"Site setup, hoarding, welfare facilities",qty:1,unit:"Item",labour:450,materials:300,notes:""},{desc:"Scaffold erection and hire (8 weeks)",qty:1,unit:"Item",labour:0,materials:1800,notes:""}]},
+    {phase:"Demolition & Enabling Works",items:[{desc:"Break out existing rear wall / openings",qty:1,unit:"Item",labour:800,materials:0,notes:"Including skip hire"},{desc:"Strip out internal finishes",qty:1,unit:"Item",labour:400,materials:0,notes:""}]},
+    {phase:"Foundations",items:[{desc:"Excavate strip foundations",qty:12,unit:"m",labour:600,materials:0,notes:""},{desc:"Concrete foundations",qty:3.5,unit:"m³",labour:350,materials:700,notes:"C25 mix"},{desc:"Damp proof course",qty:12,unit:"m",labour:150,materials:120,notes:""}]},
+    {phase:"Structure — Walls & Frame",items:[{desc:"Blockwork cavity walls",qty:45,unit:"m²",labour:1800,materials:1350,notes:"100mm block, 100mm insulated cavity"},{desc:"Steel beam supply and install (RSJ)",qty:2,unit:"Nr",labour:600,materials:1200,notes:"Structural engineer spec"},{desc:"Padstones",qty:4,unit:"Nr",labour:80,materials:120,notes:""}]},
+    {phase:"Roof",items:[{desc:"Flat roof — warm roof build-up",qty:18,unit:"m²",labour:900,materials:1440,notes:"GRP or EPDM finish, 10yr guarantee"},{desc:"Roof joists, insulation and decking",qty:18,unit:"m²",labour:720,materials:810,notes:""},{desc:"Fascias, soffits and guttering",qty:1,unit:"Item",labour:350,materials:380,notes:"UPVC white"}]},
+    {phase:"External Doors & Windows",items:[{desc:"Bifold doors supply and install",qty:1,unit:"Set",labour:600,materials:3200,notes:"Aluminium, 3-panel, anthracite grey"},{desc:"Rooflight supply and install",qty:1,unit:"Nr",labour:250,materials:850,notes:"Fixed, double glazed"}]},
+    {phase:"First Fix",items:[{desc:"First fix electrics",qty:1,unit:"Item",labour:900,materials:400,notes:"6 double sockets, 8 downlights"},{desc:"First fix plumbing",qty:1,unit:"Item",labour:600,materials:300,notes:"Extend existing heating circuit"},{desc:"Underfloor heating supply and fit",qty:18,unit:"m²",labour:540,materials:900,notes:"Wet system, screed over"}]},
+    {phase:"Insulation & Airtightness",items:[{desc:"Floor insulation and screed",qty:18,unit:"m²",labour:540,materials:720,notes:"100mm rigid insulation, 75mm screed"},{desc:"Wall insulation — cavity fill",qty:45,unit:"m²",labour:0,materials:450,notes:"Blown bead"}]},
+    {phase:"Plastering & Internal Finishes",items:[{desc:"Plasterboard and skim walls",qty:60,unit:"m²",labour:1200,materials:720,notes:""},{desc:"Plasterboard and skim ceiling",qty:18,unit:"m²",labour:540,materials:360,notes:""}]},
+    {phase:"Second Fix & Decoration",items:[{desc:"Second fix electrics",qty:1,unit:"Item",labour:600,materials:300,notes:""},{desc:"Second fix plumbing",qty:1,unit:"Item",labour:400,materials:200,notes:""},{desc:"Internal decoration — 2 coats throughout",qty:1,unit:"Item",labour:800,materials:350,notes:"Walls and ceiling"}]},
+    {phase:"External Works & Finishes",items:[{desc:"Make good brickwork to existing",qty:1,unit:"Item",labour:400,materials:200,notes:"Match existing brick as closely as possible"},{desc:"External rendering",qty:1,unit:"Item",labour:600,materials:400,notes:"K-rend or similar"},{desc:"Clear site, final clean",qty:1,unit:"Item",labour:300,materials:0,notes:""}]},
+  ],
+  "Landscaping":[
+    {phase:"Preliminaries & Site Setup",items:[{desc:"Site setup, access, welfare",qty:1,unit:"Item",labour:200,materials:100,notes:""}]},
+    {phase:"Clearance & Excavation",items:[{desc:"Strip existing lawn and topsoil",qty:40,unit:"m²",labour:400,materials:0,notes:"Including disposal"},{desc:"Excavation for levels / drainage",qty:1,unit:"Item",labour:500,materials:0,notes:""}]},
+    {phase:"Hard Landscaping",items:[{desc:"Patio — porcelain slabs on screed bed",qty:20,unit:"m²",labour:1000,materials:1400,notes:"600x600 porcelain, colour TBC"},{desc:"Decking — composite boards on frame",qty:15,unit:"m²",labour:900,materials:1350,notes:""},{desc:"Gravel pathway with weed membrane",qty:10,unit:"m²",labour:200,materials:150,notes:""}]},
+    {phase:"Boundaries & Fencing",items:[{desc:"Closeboard fence panels and posts",qty:15,unit:"m",labour:450,materials:600,notes:"1.8m high, concrete posts"},{desc:"Garden wall — single skin brick",qty:8,unit:"m",labour:640,materials:400,notes:""}]},
+    {phase:"Soft Landscaping",items:[{desc:"Topsoil supply and spread",qty:15,unit:"m²",labour:200,materials:300,notes:""},{desc:"Turf supply and lay",qty:20,unit:"m²",labour:300,materials:280,notes:"Premium rolled turf"},{desc:"Planting — shrubs and borders",qty:1,unit:"Item",labour:350,materials:500,notes:"Allowance only, final selection TBC"}]},
+    {phase:"External Lighting",items:[{desc:"Low voltage garden lighting supply and install",qty:1,unit:"Item",labour:400,materials:600,notes:"8 spike lights, 2 wall lights"}]},
+    {phase:"Clear Site & Final Finish",items:[{desc:"Final clean, remove all waste",qty:1,unit:"Item",labour:200,materials:0,notes:""}]},
+  ],
+};
+
+function qbLoadTemplate(type){
+  const tpl=JOB_TEMPLATES[type]||[];
+  qbPhases=tpl.map(p=>({id:++phaseC,phase:p.phase,items:p.items.map(i=>({...i,id:++itemC}))}));
+  qbRender();
+}
+function onJobTypeChange(type){
+  document.getElementById('qb-jobtype-badge').textContent=type;
+  if(qbPhases.length && !confirm('Load the '+type+' template? This replaces current lines.')) return;
+  qbLoadTemplate(type);
+}
+function addPhase(){
+  qbPhases.push({id:++phaseC,phase:'New Phase',items:[{id:++itemC,desc:'',qty:1,unit:'Item',labour:0,materials:0,notes:''}]});
+  qbRender();
+}
+function removePhase(pid){ qbPhases=qbPhases.filter(p=>p.id!==pid); qbRender(); }
+function addItem(pid){ const p=qbPhases.find(p=>p.id===pid); if(p) p.items.push({id:++itemC,desc:'',qty:1,unit:'Item',labour:0,materials:0,notes:''}); qbRender(); }
+function removeItem(pid,iid){ const p=qbPhases.find(p=>p.id===pid); if(p) p.items=p.items.filter(i=>i.id!==iid); qbRender(); }
+function syncPhase(pid,val){ const p=qbPhases.find(p=>p.id===pid); if(p) p.phase=val; qbRecalc(); }
+function syncItem(pid,iid,key,val){ const p=qbPhases.find(p=>p.id===pid); if(p){ const i=p.items.find(i=>i.id===iid); if(i){ i[key]=val; qbRecalc(); } } }
+function onMarkupChange(v){ document.getElementById('qb-markup-lbl').textContent=v+'%'; qbRecalc(); }
+
+function qbRecalc(){
+  const mkp=Number(document.getElementById('qb-markup').value);
+  const vatOn=document.getElementById('qb-vat').checked;
+  const cost=qbPhases.reduce(function(s,p){ return s+calcPhase(p); },0);
+  const sell=qbPhases.reduce(function(s,p){ return s+calcPhaseSell(p,mkp); },0);
+  const mu=sell-cost;
+  const vat=vatOn?sell*VAT:0;
+  const total=sell+vat;
+  document.getElementById('qb-sum-net').textContent=fmt(cost);
+  document.getElementById('qb-sum-mkp-lbl').textContent='Markup ('+mkp+'%)';
+  document.getElementById('qb-sum-mkp').textContent=fmt(mu);
+  document.getElementById('qb-sum-sub').textContent=fmt(sell);
+  document.getElementById('qb-sum-vat').textContent=fmt(vat);
+  document.getElementById('qb-vat-row').style.display=vatOn?'':'none';
+  document.getElementById('qb-sum-total').textContent=fmt(total);
+  document.getElementById('qb-total-top').textContent=fmt(total);
+  // Update phase sell-price totals in header
+  qbPhases.forEach(function(p){
+    var el=document.getElementById('pt-'+p.id);
+    if(el) el.textContent=fmt(calcPhaseSell(p,mkp));
+  });
+  // Update per-line sell/vat cells
+  qbPhases.forEach(function(p){
+    p.items.forEach(function(item){
+      var sellEl=document.getElementById('sell-'+item.id);
+      var vatEl =document.getElementById('vat-'+item.id);
+      var totEl =document.getElementById('tot-'+item.id);
+      var sell=calcItemSell(item,mkp);
+      var vt=vatOn?sell*VAT:0;
+      if(sellEl) sellEl.textContent=fmt(sell);
+      if(vatEl)  vatEl.textContent =vatOn?fmt(vt):'—';
+      if(totEl)  totEl.textContent =fmt(sell+vt);
+    });
+  });
+}
+
+function qbRender(){
+  const c=document.getElementById('qb-phases');
+  const bb=document.getElementById('qb-bottom-btn');
+  if(!qbPhases.length){ c.innerHTML='<div class="empty-dashed"><div style="font-size:14px;margin-bottom:6px">No phases yet</div><div style="font-size:12px">Select a job type to load a template.</div></div>'; bb.style.display='none'; qbRecalc(); return; }
+  bb.style.display='block';
+  c.innerHTML=qbPhases.map((p,pi)=>{
+    const uOpts=UNITS.map(u=>`<option>${u}</option>`).join('');
+    const items=p.items.map(item=>{
+      const uo=UNITS.map(u=>`<option${u===item.unit?' selected':''}>${u}</option>`).join('');
+      const mkpNow=Number(document.getElementById('qb-markup').value);
+      const vatNow=document.getElementById('qb-vat').checked;
+      const costNow=calcItem(item);
+      const sellNow=calcItemSell(item,mkpNow);
+      const vatNow2=vatNow?sellNow*VAT:0;
+      return `<div class="item-row" style="grid-template-columns:1fr 46px 58px 78px 78px 78px 78px 78px 100px 22px">
+        <input value="${esc(item.desc)}" placeholder="Description" oninput="syncItem(${p.id},${item.id},'desc',this.value)">
+        <input type="number" value="${item.qty}" oninput="syncItem(${p.id},${item.id},'qty',this.value)" style="text-align:center">
+        <select onchange="syncItem(${p.id},${item.id},'unit',this.value)">${uo}</select>
+        <input type="number" value="${item.labour}" oninput="syncItem(${p.id},${item.id},'labour',this.value)" style="text-align:right">
+        <input type="number" value="${item.materials}" oninput="syncItem(${p.id},${item.id},'materials',this.value)" style="text-align:right">
+        <span style="text-align:right;font-size:11px;color:#c0392b;font-family:'DM Mono',monospace;padding:0 4px">${fmt(costNow)}</span>
+        <span id="sell-${item.id}" style="text-align:right;font-size:11px;color:#2b8a3e;font-family:'DM Mono',monospace;padding:0 4px;font-weight:600">${fmt(sellNow)}</span>
+        <span id="vat-${item.id}" style="text-align:right;font-size:11px;color:#4a90a4;font-family:'DM Mono',monospace;padding:0 4px">${vatNow?fmt(vatNow2):'—'}</span>
+        <input value="${esc(item.notes)}" placeholder="Note / exclusion" oninput="syncItem(${p.id},${item.id},'notes',this.value)">
+        <button class="rm-btn" onclick="removeItem(${p.id},${item.id})">×</button>
+      </div>`;
+    }).join('');
+    return `<div class="phase-block">
+      <div class="phase-hd">
+        <span style="font-size:11px;color:var(--muted);font-weight:600;min-width:20px">${pi+1}.</span>
+        <input value="${esc(p.phase)}" oninput="syncPhase(${p.id},this.value)">
+        <span class="mono" id="pt-${p.id}" style="font-size:12px;color:var(--slate);font-weight:600;min-width:80px;text-align:right">${fmt(calcPhase(p))}</span>
+        <button class="rm-btn" onclick="removePhase(${p.id})">×</button>
+      </div>
+      <div class="col-heads" style="grid-template-columns:1fr 46px 58px 78px 78px 78px 78px 78px 100px 22px"><span>Description</span><span style="text-align:center">Qty</span><span style="text-align:center">Unit</span><span style="text-align:right">Labour</span><span style="text-align:right">Materials</span><span style="text-align:right;color:#c0392b">Cost</span><span style="text-align:right;color:#7ab533">Sell</span><span style="text-align:right;color:#4a90a4">VAT</span><span>Notes</span><span></span></div>
+      ${items}
+      <div style="padding:7px 12px"><button class="btn-sm btn-outline" onclick="addItem(${p.id})">+ Add Line</button></div>
+    </div>`;
+  }).join('');
+  qbRecalc();
+}
+
+// Save quote
+let qbEditingId = null;
+
+function saveQuote(){
+  const name=document.getElementById('qb-cust-name').value;
+  const jobType=document.getElementById('qb-jobtype').value;
+  if(!name && !confirm('No customer name — save anyway?')) return;
+  if(!qbPhases.length){ alert('Add some quote lines first.'); return; }
+  const mkp=Number(document.getElementById('qb-markup').value);
+  const vatOn=document.getElementById('qb-vat').checked;
+  const now=new Date().toLocaleDateString('en-GB');
+
+  if(qbEditingId){
+    // Update existing quote
+    quotes=quotes.map(q=>{
+      if(q.id!==qbEditingId) return q;
+      return {...q,
+        jobType,markup:mkp,vatIncluded:vatOn,
+        lastEdited:now,
+        scope: document.getElementById('qb-scope').value,
+        photo: qbPhotoDataUrl||q.photo||'',
+        customer:{name:document.getElementById('qb-cust-name').value,address:document.getElementById('qb-cust-addr').value,email:document.getElementById('qb-cust-email').value,phone:document.getElementById('qb-cust-phone').value},
+        phases:JSON.parse(JSON.stringify(qbPhases)),
+      };
+    });
+    save(STORE_QUOTES,quotes);
+    qbEditingId=null;
+    document.getElementById('qb-save-btn').textContent='💾 Save Quote';
+    document.getElementById('qb-editing-notice').style.display='none';
+    alert('Quote updated successfully.');
+  } else {
+    // New quote
+    const customer={name:document.getElementById('qb-cust-name').value,address:document.getElementById('qb-cust-addr').value,email:document.getElementById('qb-cust-email').value,phone:document.getElementById('qb-cust-phone').value};
+    const q={
+      id:uid(),
+      ref:'QT-'+String(Math.floor(Math.random()*9000)+1000),
+      savedDate:now,
+      status:'pending',
+      jobType,markup:mkp,vatIncluded:vatOn,
+      scope: document.getElementById('qb-scope').value,
+      photo: qbPhotoDataUrl||'',
+      customer,
+      phases:JSON.parse(JSON.stringify(qbPhases)),
+    };
+    quotes.push(q);
+    save(STORE_QUOTES,quotes);
+    // Auto-add to clients
+    upsertClientFromQuote(customer, quoteTotal(q));
+    alert('Quote saved! Customer added to Clients automatically.');
+  }
+  showPage('quotes',document.getElementById('nav-quotes'));
+}
+
+function cancelEdit(){
+  qbEditingId=null;
+  document.getElementById('qb-save-btn').textContent='💾 Save Quote';
+  document.getElementById('qb-editing-notice').style.display='none';
+  // Reset builder to blank
+  ['qb-cust-name','qb-cust-email','qb-cust-phone'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('qb-cust-addr').value='';
+  document.getElementById('qb-scope').value='';
+  clearPhotoUI();
+  qbLoadTemplate(document.getElementById('qb-jobtype').value);
+}
+
+// Preview
+let lastHtml='';
+let currentPreviewQid=null;
+function buildHtml(q){
+  const co=settings;
+  const net=q.phases.reduce((s,p)=>s+calcPhase(p),0);
+  const mu=net*(q.markup/100);
+  const sub=net+mu;
+  const vat=q.vatIncluded?sub*VAT:0;
+  const total=sub+vat;
+  const qMkp=q.markup||0;
+  const qVat=q.vatIncluded;
+  const phRows=q.phases.map(p=>`
+    <tr class="ph"><td colspan="${qVat?5:4}">${p.phase}</td><td style="text-align:right;font-size:11px">Sell ex-VAT</td>${qVat?'<td style="text-align:right;font-size:11px">VAT</td>':''}</tr>
+    ${p.items.map(i=>{
+      const sell=calcItemSell(i,qMkp);
+      const vat=qVat?sell*VAT:0;
+      return '<tr><td>'+i.desc+(i.notes?'<br><small>'+i.notes+'</small>':'')+'</td><td style="text-align:center">'+i.qty+'</td><td style="text-align:center">'+i.unit+'</td><td style="text-align:right">'+sell.toFixed(2)+'</td>'+(qVat?'<td style="text-align:right">'+vat.toFixed(2)+'</td>':'')+'</tr>';
+    }).join('')}
+    <tr><td colspan="${qVat?4:3}" style="text-align:right;font-weight:600;font-size:11px;color:#2b2f33">Phase Total</td><td style="text-align:right;font-weight:700">£${calcPhaseSell(p,qMkp).toLocaleString('en-GB',{minimumFractionDigits:2})}</td>${qVat?'<td style="text-align:right;font-weight:700">£'+(calcPhaseSell(p,qMkp)*VAT).toLocaleString('en-GB',{minimumFractionDigits:2})+'</td>':''}</tr>`).join('');
+  const now=new Date();
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+body{font-family:Arial,sans-serif;background:#f0ece4;margin:0;padding:28px}
+.w{max-width:720px;margin:0 auto;background:#fff;border-radius:6px;overflow:hidden;box-shadow:0 2px 20px rgba(0,0,0,0.1)}
+.hd{background:#2b2f33;padding:28px 36px;color:white}
+.co{font-size:22px;font-weight:700;margin-bottom:3px}
+.tag{font-size:11px;opacity:0.7;letter-spacing:1px;text-transform:uppercase}
+.bd{padding:32px 36px}
+.intro{font-size:14px;line-height:1.7;color:#444;margin-bottom:24px}
+.det{display:flex;gap:36px;margin-bottom:24px;padding:18px;background:#f8f5f0;border-radius:4px;flex-wrap:wrap}
+.dl dt{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#8a8278;margin-bottom:2px}
+.dl dd{font-size:13px;color:#1a1612;margin-bottom:10px}
+h3{font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#2b2f33;margin:0 0 10px;padding-bottom:7px;border-bottom:2px solid #3d4a3e}
+table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:12px}
+th{background:#2b2f33;color:white;padding:7px 9px;text-align:left;font-weight:600;font-size:11px}
+tr:nth-child(even) td{background:#f8f5f0}
+td{padding:7px 9px;border-bottom:1px solid #e8e0d0;vertical-align:top}
+.ph td{background:#e8ecf0;font-weight:600;color:#2b2f33}
+.tots{float:right;width:260px;margin-bottom:28px}
+.tots table{margin:0;font-size:13px}
+.tots td{border:none;padding:5px 9px}
+.tr td{font-weight:700;font-size:14px;background:#2b2f33;color:white}
+.terms{background:#f8f5f0;border-radius:4px;padding:16px 18px;margin-top:6px;clear:both}
+.terms h4{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#8a8278;margin-bottom:7px}
+.terms p{font-size:12px;color:#444;line-height:1.6;margin-bottom:5px}
+.ft{background:#2b2f33;padding:16px 36px;text-align:center;color:rgba(255,255,255,0.5);font-size:11px}
+small{font-size:10px;color:#8a8278}
+</style></head><body><div class="w">
+<div class="hd" style="display:flex;align-items:center;gap:24px">
+  ${getLogoDataUrl()?`<div style="flex-shrink:0"><img src="${getLogoDataUrl()}" alt="Logo" style="height:60px;max-width:160px;object-fit:contain;filter:brightness(0) invert(1)"></div>`:''}
+  <div>
+    <div class="co">${co.name||'Small Build Company Ltd'}</div>
+    <div class="tag">${co.tagline||'Building Extensions & Renovations'}</div>
+  </div>
+</div>
+<div class="bd">
+<div class="intro">Dear ${q.customer.name||'Customer'},<br><br>Thank you for the opportunity to quote for the works at <strong>${q.customer.address||'your property'}</strong>. Please find below our detailed estimate for the ${q.jobType} works as discussed. This quotation is valid for 30 days from the date of issue.</div>
+
+${q.scope?`<div style="margin-bottom:24px;padding:16px 18px;background:#f8f5f0;border-left:3px solid #7ab533;border-radius:0 4px 4px 0"><div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#5a8a20;margin-bottom:8px">Scope of Works</div><div style="font-size:13px;color:#1e2022;line-height:1.7">${q.scope.replace(/\n/g,'<br>')}</div></div>`:''}
+${q.photo?`<div style="margin-bottom:24px;text-align:center"><img src="${q.photo}" alt="Property photo" style="max-width:100%;max-height:280px;border-radius:6px;border:1px solid #e0ddd8;object-fit:cover"><div style="font-size:10px;color:#8a8278;margin-top:5px">Property: ${q.customer&&q.customer.address?q.customer.address.replace(/\n/g,', '):''}</div></div>`:''}
+<div class="det">
+  <dl class="dl"><dt>Quote Reference</dt><dd>${q.ref||'—'}</dd><dt>Date Issued</dt><dd>${now.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</dd><dt>Valid Until</dt><dd>${new Date(now.getTime()+30*864e5).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</dd></dl>
+  <dl class="dl"><dt>Prepared For</dt><dd>${q.customer.name||'—'}</dd><dt>Property</dt><dd>${q.customer.address||'—'}</dd><dt>Job Type</dt><dd>${q.jobType}</dd></dl>
+</div>
+<h3>Itemised Estimate — ${q.jobType}</h3>
+<table><thead><tr><th>Description</th><th style="width:48px;text-align:center">Qty</th><th style="width:44px;text-align:center">Unit</th><th style="width:90px;text-align:right">Sell Price (ex-VAT)</th>${qVat?'<th style="width:80px;text-align:right">VAT (20%)</th>':''}</tr></thead><tbody>${phRows}</tbody></table>
+<div class="tots"><table>
+  <tr><td>Sell Price (ex-VAT)</td><td style="text-align:right">£${sub.toLocaleString('en-GB',{minimumFractionDigits:2})}</td></tr>
+  ${q.vatIncluded?`<tr><td>VAT (20%)</td><td style="text-align:right">£${vat.toLocaleString('en-GB',{minimumFractionDigits:2})}</td></tr>`:'<tr><td colspan="2" style="font-size:10px;color:#8a8278">*VAT not included</td></tr>'}
+  <tr class="tr"><td>TOTAL</td><td style="text-align:right">£${total.toLocaleString('en-GB',{minimumFractionDigits:2})}</td></tr>
+</table></div>
+<div style="clear:both"></div>
+<div class="terms"><h4>Payment Terms &amp; Conditions</h4><p>${co.terms||''}</p><p>${co.extra||''}</p></div>
+<p style="margin-top:20px;font-size:13px;color:#444">To accept this quotation or to discuss any aspect of the works:<br><strong>${co.contact||''}</strong> &nbsp;·&nbsp; ${co.email||''} &nbsp;·&nbsp; ${co.phone||''}</p>
+</div>
+<div class="ft">${co.name||'Small Build Company Ltd'} · ${co.address||''} · Registered in England &amp; Wales</div>
+</div></body></html>`;
+}
+
+function openPreview(){
+  currentPreviewQid=null;
+  const mkp=Number(document.getElementById('qb-markup').value);
+  const vatOn=document.getElementById('qb-vat').checked;
+  const q={phases:qbPhases,markup:mkp,vatIncluded:vatOn,scope:document.getElementById('qb-scope').value,photo:qbPhotoDataUrl,jobType:document.getElementById('qb-jobtype').value,ref:'PREVIEW',customer:{name:document.getElementById('qb-cust-name').value,address:document.getElementById('qb-cust-addr').value,email:document.getElementById('qb-cust-email').value,phone:document.getElementById('qb-cust-phone').value}};
+  window._currentPreviewQuote = q;
+  lastHtml=buildHtml(q);
+  document.getElementById('preview-frame').srcdoc=lastHtml;
+  document.getElementById('preview-modal').style.display='flex';
+  setQuoteView('detailed');
+}
+function previewSaved(id){
+  currentPreviewQid=id;
+  const q=quotes.find(x=>x.id===id);
+  if(!q) return;
+  window._currentPreviewQuote = q;
+  lastHtml=buildHtml(q);
+  document.getElementById('preview-frame').srcdoc=lastHtml;
+  document.getElementById('preview-modal').style.display='flex';
+  setQuoteView('detailed');
+}
+function closePreview(){
+  document.getElementById('preview-modal').style.display='none';
+  window._currentPreviewQuote=null;
+}
+
+function setQuoteView(mode){
+  const q = window._currentPreviewQuote;
+  const dtlBtn = document.getElementById('view-toggle-detailed');
+  const cliBtn = document.getElementById('view-toggle-client');
+  if(dtlBtn){ dtlBtn.style.background = mode==='detailed'?'#2b2f33':'white'; dtlBtn.style.color = mode==='detailed'?'white':'#2b2f33'; }
+  if(cliBtn){ cliBtn.style.background = mode==='client'?'#7ab533':'white'; cliBtn.style.color = mode==='client'?'white':'#2b2f33'; }
+  if(!q) return;
+  const html = mode==='client' ? buildHtmlClientView(q) : buildHtml(q);
+  lastHtml = html;
+  document.getElementById('preview-frame').srcdoc = html;
+}
+
+function buildHtmlClientView(q){
+  const co = settings;
+  const qMkp = q.markup||0;
+  const qVat  = q.vatIncluded;
+  const now   = new Date();
+
+  // Phase subtotals only — no line items
+  const phaseRows = q.phases.map(p=>{
+    const sell = calcPhaseSell(p, qMkp);
+    const vat  = qVat ? sell*VAT : 0;
+    return `<tr>
+      <td style="padding:10px 12px;border-bottom:1px solid #e8e0d0;font-weight:500">${p.phase}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e8e0d0;text-align:right;font-weight:600">£${sell.toLocaleString('en-GB',{minimumFractionDigits:2})}</td>
+      ${qVat?`<td style="padding:10px 12px;border-bottom:1px solid #e8e0d0;text-align:right;color:#4a90a4">£${vat.toLocaleString('en-GB',{minimumFractionDigits:2})}</td>`:''}
+    </tr>`;
+  }).join('');
+
+  const sub   = q.phases.reduce((s,p)=>s+calcPhaseSell(p,qMkp),0);
+  const vat   = qVat ? sub*VAT : 0;
+  const total = sub+vat;
+
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+body{font-family:Arial,sans-serif;background:#f0f2f4;margin:0;padding:28px}
+.w{max-width:680px;margin:0 auto;background:#fff;border-radius:6px;overflow:hidden;box-shadow:0 2px 20px rgba(0,0,0,0.1)}
+.hd{background:#2b2f33;padding:28px 36px;color:white}
+.co{font-size:22px;font-weight:700;margin-bottom:3px}
+.tag{font-size:11px;opacity:0.7;letter-spacing:1px;text-transform:uppercase}
+.bd{padding:32px 36px}
+.intro{font-size:14px;line-height:1.7;color:#444;margin-bottom:24px}
+.scope-box{margin-bottom:24px;padding:16px 18px;background:#f8f5f0;border-left:3px solid #7ab533;border-radius:0 4px 4px 0}
+.scope-label{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#5a8a20;margin-bottom:8px}
+.scope-text{font-size:13px;color:#1e2022;line-height:1.7}
+.det{display:flex;gap:36px;margin-bottom:24px;padding:18px;background:#f8f5f0;border-radius:4px;flex-wrap:wrap}
+.dl dt{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#8a8278;margin-bottom:2px}
+.dl dd{font-size:13px;color:#1a1612;margin-bottom:10px}
+h3{font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#2b2f33;margin:0 0 10px;padding-bottom:7px;border-bottom:2px solid #2b2f33}
+table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:13px}
+th{background:#2b2f33;color:white;padding:9px 12px;text-align:left;font-weight:600;font-size:11px}
+.tots{float:right;width:280px;margin-bottom:28px}
+.tots table{margin:0;font-size:13px;border-collapse:collapse}
+.tots td{border:none;padding:6px 10px}
+.tr td{font-weight:700;font-size:15px;background:#2b2f33;color:white;padding:10px}
+.terms{background:#f8f5f0;border-radius:4px;padding:16px 18px;margin-top:6px;clear:both}
+.terms h4{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#8a8278;margin-bottom:7px}
+.terms p{font-size:12px;color:#444;line-height:1.6;margin-bottom:5px}
+.ft{background:#2b2f33;padding:16px 36px;text-align:center;color:rgba(255,255,255,0.5);font-size:11px}
+.note{font-size:10px;color:#aaa;font-style:italic;margin-top:4px}
+</style></head><body><div class="w">
+<div class="hd" style="display:flex;align-items:center;gap:24px">
+  ${getLogoDataUrl()?`<div style="flex-shrink:0"><img src="${getLogoDataUrl()}" alt="Logo" style="height:60px;max-width:160px;object-fit:contain;filter:brightness(0) invert(1)"></div>`:''}
+  <div>
+    <div class="co">${co.name||'Small Build Company Ltd'}</div>
+    <div class="tag">${co.tagline||'Building Extensions & Renovations'}</div>
+  </div>
+</div>
+<div class="bd">
+<div class="intro">Dear ${q.customer.name||'Customer'},<br><br>
+Thank you for the opportunity to quote for the works at <strong>${q.customer.address||'your property'}</strong>. 
+Please find below our quotation for the ${q.jobType} works as discussed. 
+This quotation is valid for 30 days from the date of issue.</div>
+
+${q.scope?`<div class="scope-box"><div class="scope-label">Scope of Works</div><div class="scope-text">${q.scope.replace(/\n/g,'<br>')}</div></div>`:''}
+
+${q.photo?`<div style="margin-bottom:24px;text-align:center"><img src="${q.photo}" alt="Property photo" style="max-width:100%;max-height:280px;border-radius:6px;border:1px solid #e0ddd8;object-fit:cover"><div style="font-size:10px;color:#8a8278;margin-top:5px">Property: ${q.customer&&q.customer.address?q.customer.address.replace(/\n/g,', '):''}</div></div>`:''}
+<div class="det">
+  <dl class="dl">
+    <dt>Quote Reference</dt><dd>${q.ref||'—'}</dd>
+    <dt>Date Issued</dt><dd>${now.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</dd>
+    <dt>Valid Until</dt><dd>${new Date(now.getTime()+30*864e5).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</dd>
+  </dl>
+  <dl class="dl">
+    <dt>Prepared For</dt><dd>${q.customer.name||'—'}</dd>
+    <dt>Property</dt><dd>${q.customer.address||'—'}</dd>
+    <dt>Job Type</dt><dd>${q.jobType}</dd>
+  </dl>
+</div>
+
+<h3>Summary of Works — ${q.jobType}</h3>
+<table>
+  <thead><tr>
+    <th>Phase / Stage of Works</th>
+    <th style="width:110px;text-align:right">Price (ex-VAT)</th>
+    ${qVat?'<th style="width:90px;text-align:right">VAT (20%)</th>':''}
+  </tr></thead>
+  <tbody>${phaseRows}</tbody>
+</table>
+
+<div class="tots"><table>
+  <tr><td>Subtotal (ex-VAT)</td><td style="text-align:right">£${sub.toLocaleString('en-GB',{minimumFractionDigits:2})}</td></tr>
+  ${qVat?`<tr><td>VAT (20%)</td><td style="text-align:right">£${vat.toLocaleString('en-GB',{minimumFractionDigits:2})}</td></tr>`:'<tr><td colspan="2" class="note">*VAT not included — to be advised</td></tr>'}
+  <tr class="tr"><td>TOTAL</td><td style="text-align:right">£${total.toLocaleString('en-GB',{minimumFractionDigits:2})}</td></tr>
+</table></div>
+<div style="clear:both"></div>
+
+<div class="terms">
+  <h4>Payment Terms &amp; Conditions</h4>
+  <p>${co.terms||''}</p>
+  <p>${co.extra||''}</p>
+</div>
+<p style="margin-top:20px;font-size:13px;color:#444">
+  To accept this quotation or to discuss any aspect of the works, please contact us:<br>
+  <strong>${co.contact||''}</strong> &nbsp;·&nbsp; ${co.email||''} &nbsp;·&nbsp; ${co.phone||''}
+</p>
+</div>
+<div class="ft">${co.name||'Small Build Company Ltd'} · ${co.address||''} · Registered in England &amp; Wales</div>
+</div></body></html>`;
+}
+
+function printQuote(){ const w=window.open('','_blank'); w.document.write(lastHtml); w.document.close(); setTimeout(()=>w.print(),500); }
+function downloadQuote(){ const blob=new Blob([lastHtml],{type:'text/html'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='Quote-SmallBuildCompany.html'; a.click(); }
+
+
+// ════════════════════════════════════════════════════════════
+// EMAIL TO OUTLOOK + PDF ATTACHMENT
+// ════════════════════════════════════════════════════════════
+function emailQuoteOutlook(qid){
+  const q = qid ? quotes.find(x=>x.id===qid) : null;
+  const co = settings;
+  let quoteData;
+  if(q){
+    quoteData = q;
+  } else {
+    const mkp=Number(document.getElementById('qb-markup').value);
+    const vatOn=document.getElementById('qb-vat').checked;
+    quoteData={phases:qbPhases,markup:mkp,vatIncluded:vatOn,
+      jobType:document.getElementById('qb-jobtype').value,
+      ref:'DRAFT',
+      customer:{name:document.getElementById('qb-cust-name').value,
+        address:document.getElementById('qb-cust-addr').value,
+        email:document.getElementById('qb-cust-email').value,
+        phone:document.getElementById('qb-cust-phone').value}};
+  }
+
+  const net=quoteData.phases.reduce((s,p)=>s+calcPhase(p),0);
+  const mu=net*((quoteData.markup||0)/100);
+  const sub=net+mu;
+  const vat=quoteData.vatIncluded?sub*0.20:0;
+  const total=sub+vat;
+  const now=new Date();
+  const validDate=new Date(now.getTime()+30*864e5).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+
+  // Build HTML for the PDF — use client view (cleaner for sending to client)
+  const quoteHtml = buildHtmlClientView(quoteData);
+  const pdfFilename = 'Quote-' + (quoteData.ref||'Draft') + '-' + (quoteData.customer.name||'Client').replace(/[^a-z0-9]/gi,'_') + '.pdf';
+
+  // Show instruction modal first
+  const modal = document.getElementById('email-pdf-modal');
+  document.getElementById('epdf-ref').textContent   = quoteData.ref||'Draft';
+  document.getElementById('epdf-name').textContent  = quoteData.customer.name||'Customer';
+  document.getElementById('epdf-email').textContent = quoteData.customer.email||'(no email on file)';
+  document.getElementById('epdf-file').textContent  = pdfFilename;
+
+  // Store for button handlers
+  window._pendingEmailData = { quoteData, quoteHtml, pdfFilename, co, net, mu, sub, vat, total, now, validDate };
+  modal.style.display='flex';
+}
+
+function doDownloadPDF(){
+  const { quoteHtml, pdfFilename } = window._pendingEmailData;
+
+  // Build a print-ready version and auto-download as HTML named .html
+  // User saves as PDF from print dialog — auto-trigger it
+  const printHtml = quoteHtml.replace('</head>',
+    `<style>
+      @media print{
+        body{background:#fff!important;padding:0!important;margin:0!important}
+        .w{box-shadow:none!important;border-radius:0!important;max-width:100%!important}
+        @page{margin:15mm}
+      }
+    </style>
+    <script>window.onload=function(){window.focus();window.print();}<\/script>
+    </head>`);
+
+  const blob = new Blob([printHtml], {type:'text/html'});
+  const url  = URL.createObjectURL(blob);
+
+  // Open in new tab — print dialog fires automatically on load
+  const w = window.open(url, '_blank');
+  if(!w){
+    alert('Pop-up blocked — please allow pop-ups for this page and try again.');
+    return;
+  }
+
+  // Mark step 1 done in the modal
+  setTimeout(()=>{
+    const s1 = document.getElementById('epdf-step1-done');
+    const s2 = document.getElementById('epdf-step2');
+    if(s1) s1.style.display='flex';
+    if(s2) s2.style.opacity='1';
+  }, 1200);
+}
+
+function doOpenOutlook(){
+  const { quoteData, co, net, mu, sub, vat, total, now, validDate, pdfFilename } = window._pendingEmailData;
+
+  let body = '';
+  body += 'Dear ' + (quoteData.customer.name||'') + ',\n\n';
+  body += 'Please find attached our detailed quotation for the ' + quoteData.jobType + ' works';
+  body += quoteData.customer.address ? ' at ' + quoteData.customer.address + '.' : '.';
+  body += '\n\nATTACHMENT: Please attach the PDF file named:\n';
+  body += '  ' + pdfFilename + '\n';
+  body += '(saved to your Downloads folder)\n\n';
+  body += 'This quotation is valid for 30 days (' + validDate + ').\n\n';
+  if(quoteData.scope){
+    body += 'SCOPE OF WORKS\n';
+    body += '────────────────────────────────────────\n';
+    body += quoteData.scope + '\n\n';
+  }
+  body += '────────────────────────────────────────\n';
+  body += 'QUOTE SUMMARY\n';
+  body += '────────────────────────────────────────\n';
+  body += 'Reference:  ' + (quoteData.ref||'—') + '\n';
+  body += 'Job Type:   ' + quoteData.jobType + '\n';
+  body += 'Property:   ' + (quoteData.customer.address||'—') + '\n';
+  body += 'Date:       ' + now.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}) + '\n\n';
+  body += 'Net Cost:   £' + net.toLocaleString('en-GB',{minimumFractionDigits:2}) + '\n';
+  if((quoteData.markup||0)>0) body += 'Overhead & Profit (' + (quoteData.markup||0) + '%): £' + mu.toLocaleString('en-GB',{minimumFractionDigits:2}) + '\n';
+  if(quoteData.vatIncluded) body += 'VAT (20%):  £' + vat.toLocaleString('en-GB',{minimumFractionDigits:2}) + '\n';
+  body += '────────────────────────────────────────\n';
+  body += 'TOTAL:      £' + total.toLocaleString('en-GB',{minimumFractionDigits:2}) + '\n';
+  body += '────────────────────────────────────────\n\n';
+  body += 'PAYMENT TERMS\n' + (co.terms||'') + '\n\n';
+  body += (co.extra||'') + '\n\n';
+  body += 'Please do not hesitate to contact us should you have any questions.\n\n';
+  body += 'Kind regards,\n';
+  body += (co.contact||co.name||'Small Build Company Ltd') + '\n';
+  body += (co.name||'Small Build Company Ltd') + '\n';
+  body += (co.phone||'') + (co.phone&&co.email?' | ':'') + (co.email||'');
+
+  const subject  = encodeURIComponent('Quotation ' + (quoteData.ref||'') + ' — ' + quoteData.jobType + (quoteData.customer.address?' at '+quoteData.customer.address:''));
+  const toEmail  = encodeURIComponent(quoteData.customer.email||'');
+  const bodyEnc  = encodeURIComponent(body);
+  closeEmailPdfModal();
+  window.location.href = 'mailto:'+toEmail+'?subject='+subject+'&body='+bodyEnc;
+}
+
+function closeEmailPdfModal(){
+  document.getElementById('email-pdf-modal').style.display='none';
+  window._pendingEmailData = null;
+}
+
+// ════════════════════════════════════════════════════════════
+// JOB DETAIL + GANTT CHART
+// ════════════════════════════════════════════════════════════
+function openJobDetail(jid){
+  const j = jobs.find(x=>x.id===jid);
+  if(!j) return;
+
+  const linkedQuotes = j.quoteId
+    ? quotes.filter(q=>q.id===j.quoteId || ((q.customer.name||'').toLowerCase().includes((j.client||'').toLowerCase()) || (j.client||'').toLowerCase().includes((q.customer.name||'').toLowerCase())))
+    : quotes.filter(q=>{
+        const qn=(q.customer.name||'').toLowerCase();
+        const jn=(j.client||'').toLowerCase();
+        return qn===jn||qn.includes(jn)||jn.includes(qn);
+      });
+
+  const bestQuote = linkedQuotes.find(q=>q.status==='accepted') || linkedQuotes.find(q=>q.status==='sent') || linkedQuotes[0];
+  const phases = bestQuote ? bestQuote.phases : [];
+
+  document.getElementById('jd-title').textContent = j.type + ' — ' + j.address;
+  document.getElementById('jd-client').textContent = j.client;
+
+  // Build interactive Gantt
+  buildInteractiveGantt('jd-gantt', j, phases);
+
+  // Linked quotes
+  const qHtml = linkedQuotes.length
+    ? linkedQuotes.map(q=>`
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+          <span class="mono" style="font-size:11px;color:var(--muted);min-width:70px">${q.ref||'—'}</span>
+          <div style="flex:1"><div style="font-weight:500">${esc(q.jobType)}</div><div style="font-size:11px;color:var(--muted)">${q.savedDate||''}</div></div>
+          <div class="serif" style="font-size:17px">${fmt(quoteTotal(q))}</div>
+          ${badge(q.status,Q_BADGE,Q_LABEL)}
+          <button class="btn-sm btn-outline" onclick="previewSaved('${q.id}')">View</button>
+          <button class="btn-sm btn-gold" onclick="emailQuoteOutlook('${q.id}')">✉ Email</button>
+        </div>`).join('')
+    : '<div style="font-size:12px;color:var(--muted);padding:12px 0">No quotes linked to this job yet.</div>';
+  document.getElementById('jd-quotes').innerHTML = qHtml;
+
+  document.getElementById('job-detail-modal').style.display='flex';
+}
+
+function closeJobDetail(){
+  document.getElementById('job-detail-modal').style.display='none';
+  // Reset fullscreen and resize state
+  if(ganttIsFullscreen) toggleGanttFullscreen();
+  var wrap = document.getElementById('jd-gantt-wrap');
+  if(wrap){ wrap.style.height=''; wrap.style.minHeight='200px'; }
+}
+
+// ════════════════════════════════════════════════════════════
+// INTERACTIVE GANTT CHART
+// ════════════════════════════════════════════════════════════
+
+// ganttState: persisted per job in localStorage
+// Structure: { jobId: { phases: [{label, startDay, durDays}], totalDays } }
+const STORE_GANTT = 'sbc_gantt';
+function loadGanttState(){ try{ const v=localStorage.getItem(STORE_GANTT); return v?JSON.parse(v):{}; }catch(e){ return {}; } }
+function saveGanttState(s){ try{ localStorage.setItem(STORE_GANTT,JSON.stringify(s)); }catch(e){} }
+
+function addDays(date, n){ const d=new Date(date); d.setDate(d.getDate()+n); return d; }
+function fmtDate(d){ return d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}); }
+function fmtDateShort(d){ return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'}); }
+
+function buildInteractiveGantt(containerId, job, quotePhasesRaw){
+  const container = document.getElementById(containerId);
+  if(!container) return;
+
+  const totalWeeks = job.weeks || 12;
+  const startDate  = job.start ? new Date(job.start) : new Date();
+  startDate.setHours(0,0,0,0);
+  const totalDays  = totalWeeks * 7;
+  const endDate    = addDays(startDate, totalDays);
+  const todayDate  = new Date(); todayDate.setHours(0,0,0,0);
+  const doneWeeks  = Math.min(job.done||0, totalWeeks);
+
+  // Default phase labels — from quote or generic
+  const defaultLabels = quotePhasesRaw.length
+    ? quotePhasesRaw.map(p=>p.phase)
+    : ['Preliminaries & Site Setup','Demolition & Enabling Works','Foundations',
+       'Structure — Walls & Frame','Roof','External Doors & Windows',
+       'First Fix','Insulation & Airtightness','Plastering',
+       'Second Fix & Decoration','External Works & Finishes'];
+
+  // Load or initialise gantt state for this job
+  const allStates = loadGanttState();
+  let state = allStates[job.id];
+  if(!state || state.phases.length !== defaultLabels.length){
+    // Distribute phases evenly
+    const n = defaultLabels.length;
+    const phases = defaultLabels.map((label,i)=>{
+      const startDay = Math.round((i/n)*totalDays);
+      const endDay   = Math.round(((i+1)/n)*totalDays);
+      return { label, startDay, durDays: Math.max(1, endDay - startDay) };
+    });
+    state = { phases, totalDays };
+    allStates[job.id] = state;
+    saveGanttState(allStates);
+  }
+
+  // ── Render ──────────────────────────────────────────────────
+  // Label column width — persisted on container dataset so drag survives re-renders
+  if(!container.dataset.labelW) container.dataset.labelW = '220';
+  const LABEL_W = parseInt(container.dataset.labelW) || 220;
+  const ROW_H   = 36;  // px per phase row
+  const HEADER_H= 52;  // px for date header rows
+  const CHART_MIN_W = 600; // minimum chart body width
+
+  // Build column headers depending on view mode
+  const viewMode = container.dataset.viewMode || 'week';
+  const MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  // Compute columns based on view
+  let cols=[], colUnit='', colCount=0;
+  if(viewMode==='day'){
+    colCount = totalDays;
+    cols = Array.from({length:colCount},(_,i)=>{
+      const d=addDays(startDate,i);
+      const isToday=d.toDateString()===todayDate.toDateString();
+      const isWeekend=d.getDay()===0||d.getDay()===6;
+      return {date:d,isToday,isWeekend,label:d.getDate()+'',sublabel:MONTH_NAMES[d.getMonth()]};
+    });
+  } else if(viewMode==='week'){
+    colCount = totalWeeks;
+    cols = Array.from({length:colCount},(_,w)=>{
+      const d=addDays(startDate,w*7);
+      const isToday=todayDate>=addDays(startDate,w*7)&&todayDate<addDays(startDate,(w+1)*7);
+      return {date:d,isToday,isWeekend:false,label:'W'+(w+1),sublabel:fmtDateShort(d)};
+    });
+  } else { // month
+    // Build month columns from start to end date
+    let mCursor=new Date(startDate.getFullYear(),startDate.getMonth(),1);
+    const endMonth=new Date(endDate.getFullYear(),endDate.getMonth(),1);
+    while(mCursor<=endMonth){
+      const isToday=todayDate.getFullYear()===mCursor.getFullYear()&&todayDate.getMonth()===mCursor.getMonth();
+      cols.push({date:new Date(mCursor),isToday,isWeekend:false,label:MONTH_NAMES[mCursor.getMonth()],sublabel:mCursor.getFullYear()+''});
+      mCursor.setMonth(mCursor.getMonth()+1);
+    }
+    colCount=cols.length;
+  }
+
+  // Month grouping row (for day and week views)
+  let monthSections=[], currentMonth=-1, monthSpan=0;
+  if(viewMode!=='month'){
+    cols.forEach((col,i)=>{
+      const m=col.date.getMonth();
+      if(m!==currentMonth){
+        if(currentMonth!==-1) monthSections.push({month:currentMonth,year:col.date.getMonth()===0?col.date.getFullYear()-1:col.date.getFullYear(),span:monthSpan});
+        currentMonth=m; monthSpan=1;
+      } else { monthSpan++; }
+      if(i===cols.length-1) monthSections.push({month:currentMonth,year:col.date.getFullYear(),span:monthSpan});
+    });
+  }
+
+  const monthRowHtml = viewMode==='month' ? '' : monthSections.map(m=>`
+    <div style="flex:${m.span};text-align:center;font-size:10px;font-weight:700;color:#2b2f33;padding:4px 2px;border-right:1px solid #dde1e5;border-bottom:1px solid #dde1e5;background:#eaedf0;white-space:nowrap;overflow:hidden">
+      ${MONTH_NAMES[m.month]} ${m.year}
+    </div>`).join('');
+
+  const weekRowHtml = cols.map(col=>`
+    <div style="flex:1;min-width:${viewMode==='day'?'18px':viewMode==='month'?'60px':'40px'};text-align:center;font-size:${viewMode==='day'?'8px':'9px'};color:${col.isToday?'#e67e22':col.isWeekend?'#a0a8b0':'#6b7580'};font-weight:${col.isToday?'700':'400'};padding:3px 1px;border-right:1px solid #dde1e5;border-bottom:2px solid #dde1e5;background:${col.isToday?'#fff3e0':col.isWeekend?'#f4f6f8':'#f8fafc'};white-space:nowrap;overflow:hidden">
+      ${col.label}${viewMode!=='month'?'<br><span style="font-size:7px">'+col.sublabel+'</span>':'<br><span style="font-size:8px">'+col.sublabel+'</span>'}
+    </div>`).join('');
+
+  // For bar positioning we always work in days internally
+  // Map col index back to day offset for bar left/width
+  function colToPct(day){
+    if(viewMode==='day') return (day/totalDays)*100;
+    if(viewMode==='week') return (day/totalDays)*100;
+    // month view — map day to fraction of total month-cols
+    const d=addDays(startDate,day);
+    const mIdx=cols.findIndex(c=>c.date.getFullYear()===d.getFullYear()&&c.date.getMonth()===d.getMonth());
+    const mStart=new Date(d.getFullYear(),d.getMonth(),1);
+    const mEnd=new Date(d.getFullYear(),d.getMonth()+1,0);
+    const frac=(d.getDate()-1)/(mEnd.getDate());
+    return ((mIdx+frac)/colCount)*100;
+  }
+  function dayToPct(day){ return colToPct(day); }
+
+  // Today line position (%)
+  const todayDayOffset = Math.max(0, Math.min(totalDays, (todayDate - startDate)/(1000*60*60*24)));
+  const todayPctRaw = (todayDayOffset / totalDays) * 100;
+
+  // Milestone diamonds
+  const milestones = [
+    {day:0,            label:'Start',      color:'#2b2f33'},
+    {day:totalDays*0.5,label:'Mid-point',  color:'#4a90a4'},
+    {day:totalDays,    label:'Completion', color:'#7ab533'},
+  ];
+
+  // Phase bars — rendered as draggable divs via JS after mount
+  const phaseRowsHtml = state.phases.map((ph,i)=>{
+    const leftPct  = dayToPct(ph.startDay);
+    const widthPct = dayToPct(ph.startDay+ph.durDays) - dayToPct(ph.startDay);
+    const phEndDay = ph.startDay + ph.durDays;
+    const isDone   = phEndDay <= doneWeeks*7;
+    const isActive = ph.startDay < doneWeeks*7 && phEndDay > doneWeeks*7;
+    const barColor = isDone?'#7ab533': isActive?'#4a90a4':'#c8d8e8';
+    const textColor= (isDone||isActive)?'white':'#2b2f33';
+    const startD   = fmtDateShort(addDays(startDate, ph.startDay));
+    const endD     = fmtDateShort(addDays(startDate, phEndDay));
+
+    return `<div class="gantt-row" style="display:flex;align-items:center;height:${ROW_H}px;margin-bottom:3px">
+      <div class="gantt-label-cell" style="width:${LABEL_W}px;flex-shrink:0;font-size:11px;font-weight:500;color:#1e2022;padding-right:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;justify-content:center;height:${ROW_H}px;text-align:center" title="${esc(ph.label)}">${i+1}. ${esc(ph.label)}</div>
+      <div class="gantt-col-divider" data-job="${job.id}" style="width:5px;flex-shrink:0;align-self:stretch;cursor:col-resize;background:transparent;border-left:2px dashed #c8d0d8;margin-right:4px;position:relative" title="Drag to resize label column"></div>
+      <div class="gantt-track" style="flex:1;position:relative;height:${ROW_H-6}px;background:#f0f2f4;border-radius:3px;cursor:default">
+        <div class="gantt-bar"
+          data-idx="${i}"
+          data-job="${job.id}"
+          style="position:absolute;left:${leftPct}%;width:${widthPct}%;height:100%;background:${barColor};border-radius:3px;cursor:grab;user-select:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;box-shadow:0 1px 3px rgba(0,0,0,0.15);min-width:6px">
+          <span style="font-size:9px;color:${textColor};white-space:nowrap;overflow:hidden;flex:1">${isDone?'✓ ':isActive?'▶ ':''}<span class="bar-dates" style="opacity:0.85">${startD}–${endD}</span></span>
+          <div class="gantt-resize-handle" data-idx="${i}" data-job="${job.id}"
+            style="width:8px;height:100%;cursor:ew-resize;flex-shrink:0;display:flex;align-items:center;justify-content:center;opacity:0.6">
+            <div style="width:3px;height:60%;background:${textColor};border-radius:2px"></div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Milestone overlay (rendered over chart body)
+  const msHtml = milestones.map(m=>{
+    const pct=dayToPct(m.day);
+    const d = fmtDateShort(addDays(startDate, m.day));
+    return `<div style="position:absolute;left:${pct}%;top:0;bottom:0;width:2px;background:${m.color};opacity:0.5;pointer-events:none;z-index:2">
+      <div style="position:absolute;top:-20px;left:50%;transform:translateX(-50%);font-size:8px;color:${m.color};font-weight:700;white-space:nowrap;background:rgba(255,255,255,0.9);padding:1px 3px;border-radius:2px">${m.label}<br>${d}</div>
+    </div>`;
+  }).join('');
+
+  // Today line
+  const todayPct = dayToPct(todayDayOffset);
+  const todayHtml = todayPct>=0&&todayPct<=100 ? `<div style="position:absolute;left:${todayPct}%;top:0;bottom:0;width:2px;background:#e67e22;z-index:3;pointer-events:none">
+    <div style="position:absolute;top:-20px;left:50%;transform:translateX(-50%);font-size:8px;color:#e67e22;font-weight:700;white-space:nowrap;background:rgba(255,255,255,0.9);padding:1px 3px;border-radius:2px">TODAY<br>${fmtDateShort(todayDate)}</div>
+  </div>` : '';
+
+  // Store current view mode on container element for switcher
+  container.dataset.jobId   = job.id;
+  container.dataset.viewMode= container.dataset.viewMode||'week';
+  const currentView = container.dataset.viewMode;
+
+  container.innerHTML = `
+    <div style="margin-bottom:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div>
+        <span style="font-size:12px;font-weight:600">${esc(job.type)} · ${esc(job.client)}</span>
+        <span style="font-size:11px;color:#6b7580;margin-left:10px">${fmtDate(startDate)} → ${fmtDate(endDate)} · ${totalWeeks} weeks</span>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <div style="display:flex;border:1px solid #dde1e5;border-radius:4px;overflow:hidden;font-size:11px">
+          <button onclick="switchGanttView('${job.id}','day')" id="gv-day-${job.id}" style="padding:4px 10px;border:none;cursor:pointer;font-family:inherit;font-size:11px;background:${currentView==='day'?'#2b2f33':'white'};color:${currentView==='day'?'white':'#2b2f33'};border-right:1px solid #dde1e5">Day</button>
+          <button onclick="switchGanttView('${job.id}','week')" id="gv-week-${job.id}" style="padding:4px 10px;border:none;cursor:pointer;font-family:inherit;font-size:11px;background:${currentView==='week'?'#2b2f33':'white'};color:${currentView==='week'?'white':'#2b2f33'};border-right:1px solid #dde1e5">Week</button>
+          <button onclick="switchGanttView('${job.id}','month')" id="gv-month-${job.id}" style="padding:4px 10px;border:none;cursor:pointer;font-family:inherit;font-size:11px;background:${currentView==='month'?'#2b2f33':'white'};color:${currentView==='month'?'white':'#2b2f33'}">Month</button>
+        </div>
+        <span style="display:flex;align-items:center;gap:4px;font-size:10px"><span style="width:10px;height:10px;border-radius:2px;background:#7ab533;display:inline-block"></span>Complete</span>
+        <span style="display:flex;align-items:center;gap:4px;font-size:10px"><span style="width:10px;height:10px;border-radius:2px;background:#4a90a4;display:inline-block"></span>Active</span>
+        <span style="display:flex;align-items:center;gap:4px;font-size:10px"><span style="width:10px;height:10px;border-radius:2px;background:#c8d8e8;display:inline-block"></span>Upcoming</span>
+        <span style="display:flex;align-items:center;gap:4px;font-size:10px"><span style="width:2px;height:12px;background:#e67e22;display:inline-block"></span>Today</span>
+        <span style="font-size:10px;color:#6b7580;font-style:italic">Drag bars · resize edge → · drag label divider to widen names</span>
+        <button onclick="resetGantt('${job.id}')" style="font-size:10px;background:transparent;border:1px solid #dde1e5;border-radius:3px;padding:2px 8px;cursor:pointer;color:#6b7580">Reset</button>
+      </div>
+    </div>
+    <div style="overflow-x:auto">
+      <div style="min-width:${CHART_MIN_W}px">
+        <!-- Month header -->
+        <div data-hdr-offset="1" style="display:flex;margin-left:${LABEL_W+9}px;margin-bottom:0">${monthRowHtml}</div>
+        <!-- Week header -->
+        <div data-hdr-offset="1" style="display:flex;margin-left:${LABEL_W+9}px;margin-bottom:6px">${weekRowHtml}</div>
+        <!-- Chart body with overlays -->
+        <div style="position:relative;margin-top:20px">
+          ${msHtml}
+          ${todayHtml}
+          ${phaseRowsHtml}
+        </div>
+      </div>
+    </div>
+    <!-- Tooltip -->
+    <div id="gantt-tooltip" style="position:fixed;background:#2b2f33;color:white;font-size:11px;padding:6px 10px;border-radius:4px;pointer-events:none;display:none;z-index:999;line-height:1.6"></div>
+    <!-- Save notice -->
+    <div id="gantt-saved-notice" style="font-size:11px;color:#7ab533;margin-top:8px;display:none">✓ Changes saved</div>`;
+
+  // ── Attach drag behaviour ──────────────────────────────────
+  attachGanttDrag(container, job.id, totalDays, state);
+}
+
+function attachGanttDrag(container, jobId, totalDays, state){
+  const tooltip   = document.getElementById('gantt-tooltip');
+  const notice    = document.getElementById('gantt-saved-notice');
+  let dragging    = null; // { type:'move'|'resize', idx, startX, origStart, origDur, trackW }
+
+  function getTrackW(bar){
+    return bar.closest('.gantt-track').getBoundingClientRect().width;
+  }
+
+  function daysPerPx(trackW){ return totalDays / trackW; }
+
+  function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+
+  function updateBar(bar, ph, totalDays){
+    const leftPct  = (ph.startDay/totalDays)*100;
+    const widthPct = (ph.durDays /totalDays)*100;
+    bar.style.left  = leftPct+'%';
+    bar.style.width = widthPct+'%';
+    // Update dates text
+    const sd = fmtDateShort(addDays(new Date(state.phases[0].startDay ? addDays(new Date(), -(new Date()-new Date())):new Date()), ph.startDay));
+    // get startDate from job
+    const allJ = jobs.find(j=>j.id===jobId);
+    const jStart = allJ&&allJ.start ? new Date(allJ.start) : new Date();
+    jStart.setHours(0,0,0,0);
+    const s = fmtDateShort(addDays(jStart, ph.startDay));
+    const e = fmtDateShort(addDays(jStart, ph.startDay+ph.durDays));
+    const datesEl = bar.querySelector('.bar-dates');
+    if(datesEl) datesEl.textContent = s+'–'+e;
+  }
+
+  function showTooltip(e, ph){
+    const allJ = jobs.find(j=>j.id===jobId);
+    const jStart = allJ&&allJ.start ? new Date(allJ.start) : new Date();
+    jStart.setHours(0,0,0,0);
+    const s = fmtDate(addDays(jStart, ph.startDay));
+    const en= fmtDate(addDays(jStart, ph.startDay+ph.durDays));
+    const dur = Math.ceil(ph.durDays/7*10)/10;
+    tooltip.innerHTML = `<strong>${esc(ph.label)}</strong><br>Start: ${s}<br>End: ${en}<br>Duration: ${dur} weeks (${ph.durDays} days)`;
+    tooltip.style.display='block';
+    tooltip.style.left=(e.clientX+12)+'px';
+    tooltip.style.top =(e.clientY-10)+'px';
+  }
+
+  function saveState(){
+    const all = loadGanttState();
+    all[jobId] = state;
+    saveGanttState(all);
+    if(notice){ notice.style.display='block'; clearTimeout(notice._t); notice._t=setTimeout(()=>notice.style.display='none',2000); }
+  }
+
+  // ── Label column divider drag ───────────────────────────
+  container.addEventListener('mousedown', e=>{
+    const divider = e.target.closest('.gantt-col-divider');
+    if(!divider) return;
+    e.preventDefault();
+    const startX   = e.clientX;
+    const startW   = parseInt(container.dataset.labelW) || 220;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    function onMove(ev){
+      const newW = Math.max(80, Math.min(400, startW + (ev.clientX - startX)));
+      container.dataset.labelW = newW;
+      // Update all label cells and dividers live
+      container.querySelectorAll('.gantt-label-cell').forEach(function(el){
+        el.style.width = newW + 'px';
+      });
+      container.querySelectorAll('.gantt-col-divider').forEach(function(el){
+        el.style.borderLeftColor = '#7ab533';
+      });
+      // Update header offsets
+      container.querySelectorAll('[data-hdr-offset]').forEach(function(el){
+        el.style.marginLeft = (newW+9) + 'px';
+      });
+    }
+    function onUp(){
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      container.querySelectorAll('.gantt-col-divider').forEach(function(el){
+        el.style.borderLeftColor = '#c8d0d8';
+      });
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      // Re-render to lock in new width
+      rebuildGantt(divider.dataset.job);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+
+  // Mouse down on bar (move) or resize handle
+  container.addEventListener('mousedown', e=>{
+    const handle = e.target.closest('.gantt-resize-handle');
+    const bar    = e.target.closest('.gantt-bar');
+    if(!handle && !bar) return;
+    e.preventDefault();
+    const idx = parseInt((handle||bar).dataset.idx);
+    const ph  = state.phases[idx];
+    const trackW = getTrackW(handle ? handle.closest('.gantt-bar') : bar);
+    dragging = {
+      type: handle ? 'resize' : 'move',
+      idx, startX: e.clientX,
+      origStart: ph.startDay,
+      origDur:   ph.durDays,
+      trackW: handle ? handle.closest('.gantt-track').getBoundingClientRect().width
+                     : bar.closest('.gantt-track').getBoundingClientRect().width
+    };
+    document.body.style.cursor = handle ? 'ew-resize' : 'grabbing';
+    if(bar) bar.style.cursor = 'grabbing';
+  });
+
+  document.addEventListener('mousemove', e=>{
+    if(!dragging) return;
+    const dxPx = e.clientX - dragging.startX;
+    const dDays = Math.round(dxPx * daysPerPx(dragging.trackW));
+    const ph = state.phases[dragging.idx];
+    if(dragging.type==='move'){
+      ph.startDay = clamp(dragging.origStart + dDays, 0, totalDays - ph.durDays);
+    } else {
+      ph.durDays = clamp(dragging.origDur + dDays, 1, totalDays - ph.startDay);
+    }
+    // Update the bar visually
+    const bar = container.querySelector(`.gantt-bar[data-idx="${dragging.idx}"]`);
+    if(bar) updateBar(bar, ph, totalDays);
+    // Update tooltip
+    showTooltip(e, ph);
+  });
+
+  document.addEventListener('mouseup', e=>{
+    if(!dragging) return;
+    saveState();
+    dragging = null;
+    document.body.style.cursor='';
+    if(tooltip) tooltip.style.display='none';
+  });
+
+  // Touch support
+  container.addEventListener('touchstart', e=>{
+    const handle = e.target.closest('.gantt-resize-handle');
+    const bar    = e.target.closest('.gantt-bar');
+    if(!handle && !bar) return;
+    const touch = e.touches[0];
+    const idx = parseInt((handle||bar).dataset.idx);
+    const ph  = state.phases[idx];
+    const trackEl = handle ? handle.closest('.gantt-track') : bar.closest('.gantt-track');
+    dragging = {
+      type: handle?'resize':'move', idx,
+      startX: touch.clientX,
+      origStart: ph.startDay, origDur: ph.durDays,
+      trackW: trackEl.getBoundingClientRect().width
+    };
+  },{passive:true});
+
+  container.addEventListener('touchmove', e=>{
+    if(!dragging) return;
+    const touch = e.touches[0];
+    const dxPx = touch.clientX - dragging.startX;
+    const dDays= Math.round(dxPx * daysPerPx(dragging.trackW));
+    const ph = state.phases[dragging.idx];
+    if(dragging.type==='move'){
+      ph.startDay = clamp(dragging.origStart+dDays, 0, totalDays-ph.durDays);
+    } else {
+      ph.durDays = clamp(dragging.origDur+dDays, 1, totalDays-ph.startDay);
+    }
+    const bar = container.querySelector(`.gantt-bar[data-idx="${dragging.idx}"]`);
+    if(bar) updateBar(bar, ph, totalDays);
+  },{passive:true});
+
+  container.addEventListener('touchend', ()=>{
+    if(!dragging) return;
+    saveState(); dragging=null;
+  });
+
+  // Hover tooltip on bars
+  container.addEventListener('mouseover', e=>{
+    const bar = e.target.closest('.gantt-bar');
+    if(!bar || dragging) return;
+    const idx = parseInt(bar.dataset.idx);
+    showTooltip(e, state.phases[idx]);
+  });
+  container.addEventListener('mouseout', e=>{
+    const bar = e.target.closest('.gantt-bar');
+    if(bar && !dragging) tooltip.style.display='none';
+  });
+}
+
+function resetGantt(jobId){
+  if(!confirm('Reset Gantt to default layout? This will clear your custom dates.')) return;
+  const all = loadGanttState();
+  delete all[jobId];
+  saveGanttState(all);
+  rebuildGantt(jobId);
+}
+
+function rebuildGantt(jobId){
+  const j = jobs.find(x=>x.id===jobId);
+  if(!j) return;
+  const linkedQuotes = j.quoteId
+    ? quotes.filter(q=>q.id===j.quoteId||((q.customer.name||'').toLowerCase().includes((j.client||'').toLowerCase())))
+    : quotes.filter(q=>(q.customer.name||'').toLowerCase().includes((j.client||'').toLowerCase()));
+  const bestQuote = linkedQuotes.find(q=>q.status==='accepted')||linkedQuotes[0];
+  buildInteractiveGantt('jd-gantt', j, bestQuote?bestQuote.phases:[]);
+}
+
+function switchGanttView(jobId, mode){
+  const container = document.getElementById('jd-gantt');
+  if(!container) return;
+  container.dataset.viewMode = mode;
+  // Update button styles
+  ['day','week','month'].forEach(v=>{
+    const btn=document.getElementById('gv-'+v+'-'+jobId);
+    if(btn){
+      btn.style.background = v===mode ? '#2b2f33' : 'white';
+      btn.style.color      = v===mode ? 'white'   : '#2b2f33';
+    }
+  });
+  rebuildGantt(jobId);
+}
+
+
+// ════════════════════════════════════════════════════════════
+// COMPANY LOGO
+// ════════════════════════════════════════════════════════════
+function handleLogoFile(file){
+  if(!file || !file.type.startsWith('image/')) return;
+  if(file.size > 3*1024*1024){ alert('Logo too large — please use an image under 3MB.'); return; }
+  var reader = new FileReader();
+  reader.onload = function(e){ applyLogo(e.target.result); localStorage.setItem(STORE_LOGO, e.target.result); };
+  reader.readAsDataURL(file);
+}
+
+function applyLogo(dataUrl){
+  var img = document.getElementById('logo-preview-img');
+  var ph  = document.getElementById('logo-placeholder');
+  var rm  = document.getElementById('logo-remove-btn');
+  if(img){ img.src=dataUrl; img.style.display='block'; }
+  if(ph)  ph.style.display='none';
+  if(rm)  rm.style.display='inline-block';
+}
+
+function removeLogo(){
+  localStorage.removeItem(STORE_LOGO);
+  var img = document.getElementById('logo-preview-img');
+  var ph  = document.getElementById('logo-placeholder');
+  var rm  = document.getElementById('logo-remove-btn');
+  var fi  = document.getElementById('logo-file-input');
+  if(img){ img.src=''; img.style.display='none'; }
+  if(ph)  ph.style.display='block';
+  if(rm)  rm.style.display='none';
+  if(fi)  fi.value='';
+}
+
+function getLogoDataUrl(){
+  return localStorage.getItem(STORE_LOGO)||'';
+}
+
+// ════════════════════════════════════════════════════════════
+// PROPERTY PHOTO
+// ════════════════════════════════════════════════════════════
+var qbPhotoDataUrl = '';
+
+function updateStreetViewLink(){
+  var addr = document.getElementById('qb-cust-addr').value.trim();
+  var link = document.getElementById('streetview-link');
+  if(!link) return;
+  if(addr){
+    var encoded = encodeURIComponent(addr);
+    link.href = 'https://www.google.com/maps?q=' + encoded + '&layer=c&cbll=0,0';
+    // Better: direct street view search
+    link.href = 'https://www.google.com/maps/search/' + encoded;
+    link.style.display = 'inline';
+  } else {
+    link.style.display = 'none';
+  }
+}
+
+function handlePhotoDrop(e){
+  e.preventDefault();
+  document.getElementById('photo-dropzone').style.borderColor = 'var(--border)';
+  var file = e.dataTransfer.files && e.dataTransfer.files[0];
+  if(file) handlePhotoFile(file);
+}
+
+function handlePhotoFile(file){
+  if(!file || !file.type.startsWith('image/')) return;
+  if(file.size > 4*1024*1024){
+    alert('Photo is too large — please use an image under 4MB.');
+    return;
+  }
+  var reader = new FileReader();
+  reader.onload = function(e){
+    setPhoto(e.target.result);
+  };
+  reader.readAsDataURL(file);
+}
+
+function setPhoto(dataUrl){
+  qbPhotoDataUrl = dataUrl;
+  document.getElementById('photo-preview-img').src = dataUrl;
+  document.getElementById('photo-preview-wrap').style.display = 'block';
+  document.getElementById('photo-dropzone').style.display = 'none';
+}
+
+function removePhoto(){
+  qbPhotoDataUrl = '';
+  document.getElementById('photo-preview-img').src = '';
+  document.getElementById('photo-preview-wrap').style.display = 'none';
+  document.getElementById('photo-dropzone').style.display = 'block';
+  document.getElementById('photo-file-input').value = '';
+}
+
+function clearPhotoUI(){
+  qbPhotoDataUrl = '';
+  var pw = document.getElementById('photo-preview-wrap');
+  var dz = document.getElementById('photo-dropzone');
+  var pi = document.getElementById('photo-preview-img');
+  if(pw) pw.style.display='none';
+  if(dz) dz.style.display='block';
+  if(pi) pi.src='';
+  var fi = document.getElementById('photo-file-input');
+  if(fi) fi.value='';
+}
+
+function loadPhotoUI(dataUrl){
+  if(dataUrl && dataUrl.length > 0){
+    qbPhotoDataUrl = dataUrl;
+    setPhoto(dataUrl);
+  } else {
+    clearPhotoUI();
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// CLIENT SEARCH AUTOCOMPLETE
+// ════════════════════════════════════════════════════════════
+var clientSearchHighlight = -1;
+
+function clientSearchInput(val){
+  var dd = document.getElementById('client-dropdown');
+  var query = val.trim().toLowerCase();
+
+  // Always show all clients when focused with empty field,
+  // or filter by what's typed
+  var matches = clients.filter(function(c){
+    var name = c.name || ((c.first||'') + ' ' + (c.last||'')).trim();
+    if(!query) return true;
+    return name.toLowerCase().indexOf(query) >= 0
+      || (c.email||'').toLowerCase().indexOf(query) >= 0
+      || (c.phone||'').toLowerCase().indexOf(query) >= 0
+      || (c.address||'').toLowerCase().indexOf(query) >= 0;
+  });
+
+  if(!matches.length){
+    dd.style.display = 'none';
+    return;
+  }
+
+  clientSearchHighlight = -1;
+  dd.innerHTML = matches.map(function(c, idx){
+    var name = c.name || ((c.first||'') + ' ' + (c.last||'')).trim();
+    var sub  = [c.address ? c.address.split('\n')[0] : '', c.phone||''].filter(Boolean).join(' · ');
+    return '<div class="cdd-item" data-idx="'+idx+'" data-id="'+c.id+'"'
+      + ' onmousedown="selectClient(\''+c.id+'\')"'
+      + ' onmouseover="highlightItem(this)"'
+      + ' style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">'
+      + '<div style="width:28px;height:28px;border-radius:50%;background:var(--slate);color:white;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0">'
+      + ((name[0]||'').toUpperCase())+'</div>'
+      + '<div><div style="font-size:13px;font-weight:500">'+esc(name)+'</div>'
+      + (sub ? '<div style="font-size:11px;color:var(--muted)">'+esc(sub)+'</div>' : '')
+      + '</div></div>';
+  }).join('');
+
+  dd.style.display = 'block';
+}
+
+function highlightItem(el){
+  document.querySelectorAll('.cdd-item').forEach(function(i){ i.style.background=''; });
+  el.style.background = 'var(--warm)';
+}
+
+function clientSearchKey(e){
+  var dd = document.getElementById('client-dropdown');
+  var items = dd.querySelectorAll('.cdd-item');
+  if(!items.length) return;
+
+  if(e.key === 'ArrowDown'){
+    e.preventDefault();
+    clientSearchHighlight = Math.min(clientSearchHighlight+1, items.length-1);
+  } else if(e.key === 'ArrowUp'){
+    e.preventDefault();
+    clientSearchHighlight = Math.max(clientSearchHighlight-1, 0);
+  } else if(e.key === 'Enter' && clientSearchHighlight >= 0){
+    e.preventDefault();
+    var item = items[clientSearchHighlight];
+    if(item) selectClient(item.dataset.id);
+    return;
+  } else if(e.key === 'Escape'){
+    dd.style.display = 'none';
+    return;
+  }
+
+  items.forEach(function(i, idx){
+    i.style.background = idx === clientSearchHighlight ? 'var(--warm)' : '';
+  });
+  if(items[clientSearchHighlight]) items[clientSearchHighlight].scrollIntoView({block:'nearest'});
+}
+
+function selectClient(cid){
+  var c = clients.find(function(x){ return x.id===cid; });
+  if(!c) return;
+
+  var name = c.name || ((c.first||'') + ' ' + (c.last||'')).trim();
+  document.getElementById('qb-cust-name').value  = name;
+  document.getElementById('qb-cust-email').value = c.email||'';
+  document.getElementById('qb-cust-phone').value = c.phone||'';
+  document.getElementById('qb-cust-addr').value  = c.address||'';
+  updateStreetViewLink();
+  document.getElementById('qb-scope').value     = '';
+  clearPhotoUI();
+  document.getElementById('client-dropdown').style.display = 'none';
+
+  // Flash the filled fields green briefly so user sees what was filled
+  ['qb-cust-email','qb-cust-phone','qb-cust-addr'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(!el || !el.value) return;
+    el.style.transition = 'background 0.2s';
+    el.style.background = '#f0f7e6';
+    setTimeout(function(){ el.style.background = ''; }, 1200);
+  });
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e){
+  var dd = document.getElementById('client-dropdown');
+  if(dd && !dd.contains(e.target) && e.target.id !== 'qb-cust-name'){
+    dd.style.display = 'none';
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════════════
+qbLoadTemplate('Rear Extension');
+renderDashboard();
+// Load saved logo
+(function(){ var d=localStorage.getItem(STORE_LOGO); if(d) applyLogo(d); })();
+</script>
+
+<!-- JOB DETAIL + GANTT MODAL -->
+<div class="modal-overlay" id="job-detail-modal" style="display:none" onclick="if(event.target===this)closeJobDetail()">
+  <div id="job-detail-box" style="background:var(--cream);border-radius:8px;width:min(960px,96vw);max-height:92vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,0.25);transition:width 0.2s,max-height 0.2s">
+    <div class="form-modal-hd" style="flex-shrink:0">
+      <div>
+        <div class="serif" style="font-size:20px" id="jd-title"></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px" id="jd-client"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <!-- Fullscreen toggle -->
+        <button id="jd-fullscreen-btn" onclick="toggleGanttFullscreen()" title="Toggle fullscreen"
+          style="background:var(--warm);border:1px solid var(--border);border-radius:4px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:inherit;color:var(--ink)">
+          ⛶ Expand
+        </button>
+        <button class="modal-close" onclick="closeJobDetail()">×</button>
+      </div>
+    </div>
+
+    <div style="flex:1;overflow-y:auto;padding:18px 22px" id="jd-scroll-body">
+      <!-- Gantt -->
+      <div style="margin-bottom:24px">
+        <div style="font-weight:600;font-size:12px;letter-spacing:0.3px;margin-bottom:10px;display:flex;align-items:center;gap:10px">
+          <span>Project Gantt Chart</span>
+          <span style="font-size:10px;color:var(--muted);font-weight:400">Drag bars to move · drag right edge to resize · drag bottom edge of chart to resize height</span>
+        </div>
+
+        <!-- Resizable Gantt wrapper -->
+        <div id="jd-gantt-wrap" style="position:relative;background:#f8fafc;border:1px solid var(--border);border-radius:6px;overflow:hidden;min-height:200px">
+          <div id="jd-gantt" style="padding:20px 16px 12px"></div>
+          <!-- Resize handle at bottom -->
+          <div id="jd-gantt-resize" title="Drag to resize chart height"
+            style="position:absolute;bottom:0;left:0;right:0;height:8px;background:var(--border);cursor:ns-resize;display:flex;align-items:center;justify-content:center;opacity:0.6;transition:opacity 0.15s"
+            onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6">
+            <div style="width:40px;height:3px;background:var(--muted);border-radius:2px"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Linked quotes -->
+      <div>
+        <div style="font-weight:600;font-size:12px;letter-spacing:0.3px;margin-bottom:10px">Linked Quotes</div>
+        <div id="jd-quotes"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// GANTT RESIZE + FULLSCREEN
+// ════════════════════════════════════════════════════════════
+var ganttResizing = false;
+var ganttResizeStartY = 0;
+var ganttResizeStartH = 0;
+var ganttIsFullscreen = false;
+
+// Vertical resize handle drag
+document.addEventListener('mousedown', function(e){
+  var handle = document.getElementById('jd-gantt-resize');
+  if(!handle || e.target !== handle) return;
+  e.preventDefault();
+  ganttResizing = true;
+  ganttResizeStartY = e.clientY;
+  var wrap = document.getElementById('jd-gantt-wrap');
+  ganttResizeStartH = wrap ? wrap.offsetHeight : 300;
+  document.body.style.cursor = 'ns-resize';
+  document.body.style.userSelect = 'none';
+});
+
+document.addEventListener('mousemove', function(e){
+  if(!ganttResizing) return;
+  var wrap = document.getElementById('jd-gantt-wrap');
+  if(!wrap) return;
+  var newH = Math.max(150, ganttResizeStartH + (e.clientY - ganttResizeStartY));
+  wrap.style.height = newH + 'px';
+  wrap.style.minHeight = newH + 'px';
+});
+
+document.addEventListener('mouseup', function(){
+  if(ganttResizing){
+    ganttResizing = false;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }
+});
+
+// Touch resize
+document.addEventListener('touchstart', function(e){
+  var handle = document.getElementById('jd-gantt-resize');
+  if(!handle || e.target !== handle) return;
+  ganttResizing = true;
+  ganttResizeStartY = e.touches[0].clientY;
+  var wrap = document.getElementById('jd-gantt-wrap');
+  ganttResizeStartH = wrap ? wrap.offsetHeight : 300;
+},{passive:true});
+
+document.addEventListener('touchmove', function(e){
+  if(!ganttResizing) return;
+  var wrap = document.getElementById('jd-gantt-wrap');
+  if(!wrap) return;
+  var newH = Math.max(150, ganttResizeStartH + (e.touches[0].clientY - ganttResizeStartY));
+  wrap.style.height = newH + 'px';
+  wrap.style.minHeight = newH + 'px';
+},{passive:true});
+
+document.addEventListener('touchend', function(){
+  ganttResizing = false;
+});
+
+function toggleGanttFullscreen(){
+  var box = document.getElementById('job-detail-box');
+  var btn = document.getElementById('jd-fullscreen-btn');
+  var wrap = document.getElementById('jd-gantt-wrap');
+  if(!box) return;
+
+  ganttIsFullscreen = !ganttIsFullscreen;
+  if(ganttIsFullscreen){
+    box.style.width   = '99vw';
+    box.style.maxHeight = '97vh';
+    box.style.borderRadius = '4px';
+    if(wrap){ wrap.style.height = '62vh'; wrap.style.minHeight = '62vh'; }
+    if(btn){ btn.textContent = 'Collapse'; }
+  } else {
+    box.style.width   = 'min(960px,96vw)';
+    box.style.maxHeight = '92vh';
+    box.style.borderRadius = '8px';
+    if(wrap){ wrap.style.height = ''; wrap.style.minHeight = '200px'; }
+    if(btn){ btn.textContent = 'Expand'; }
+  }
+}
+</script>
+
+
+
+
+<!-- EMAIL + PDF MODAL -->
+<div class="modal-overlay" id="email-pdf-modal" style="display:none" onclick="if(event.target===this)closeEmailPdfModal()">
+  <div class="form-modal" style="width:min(500px,96vw)">
+    <div class="form-modal-hd">
+      <span class="serif" style="font-size:18px">Send Quote by Email</span>
+      <button class="modal-close" onclick="closeEmailPdfModal()">×</button>
+    </div>
+    <div class="form-modal-bd">
+
+      <!-- Recipient -->
+      <div style="background:#f0f7e6;border:1px solid #7ab533;border-radius:6px;padding:12px 16px;margin-bottom:20px">
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#5a8a20;margin-bottom:6px">Sending to</div>
+        <div style="font-size:14px;font-weight:600" id="epdf-name"></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px" id="epdf-email"></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">Quote ref: <span id="epdf-ref"></span></div>
+      </div>
+
+      <!-- Step 1 -->
+      <div style="display:flex;gap:14px;margin-bottom:16px;align-items:flex-start">
+        <div style="width:28px;height:28px;border-radius:50%;background:#2b2f33;color:white;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;margin-top:2px">1</div>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:13px;margin-bottom:4px">Save the quote as a PDF</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">
+            Clicking below opens the quote in a new tab and the <strong>Print dialog appears automatically</strong>.<br>
+            Change the destination to <strong>"Save as PDF"</strong>, then save it — remember the filename:
+            <div style="margin-top:6px;padding:6px 10px;background:#f0f2f4;border-radius:4px;font-family:monospace;font-size:11px;color:#2b2f33" id="epdf-file"></div>
+          </div>
+          <button class="btn btn-primary" style="font-size:12px;padding:7px 16px" onclick="doDownloadPDF()">📄 Open Quote &amp; Print to PDF</button>
+          <!-- Confirmation tick — shown after clicking -->
+          <div id="epdf-step1-done" style="display:none;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:#5a8a20;font-weight:500">
+            <span style="width:20px;height:20px;border-radius:50%;background:#7ab533;color:white;display:inline-flex;align-items:center;justify-content:center;font-size:11px">✓</span>
+            Print dialog opened — save as PDF then come back here
+          </div>
+        </div>
+      </div>
+
+      <div style="border-top:1px solid var(--border);margin-bottom:16px"></div>
+
+      <!-- Step 2 -->
+      <div id="epdf-step2" style="display:flex;gap:14px;align-items:flex-start;opacity:0.5;transition:opacity 0.4s">
+        <div style="width:28px;height:28px;border-radius:50%;background:#0078d4;color:white;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;margin-top:2px">2</div>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:13px;margin-bottom:4px">Open Outlook &amp; attach the PDF</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">
+            Outlook opens with the recipient, subject line and email body already filled in.<br>
+            <strong>Find the PDF in your Downloads folder and drag it into the email</strong>, then hit Send.
+          </div>
+          <button class="btn" onclick="doOpenOutlook()" style="background:#0078d4;color:white;font-size:12px;padding:7px 16px;border:none;border-radius:4px;cursor:pointer;font-family:inherit;font-weight:500">✉ Open in Outlook</button>
+        </div>
+      </div>
+
+      <div style="margin-top:16px;font-size:11px;color:var(--muted);background:var(--paper);padding:10px 12px;border-radius:4px;line-height:1.6">
+        <strong>Why can't it attach automatically?</strong> Browsers block web pages from attaching files to emails for security. This two-step process takes under a minute and gives your client a clean professional PDF.
+      </div>
+
+    </div>
+    <div class="form-modal-ft">
+      <button class="btn btn-outline" onclick="closeEmailPdfModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+
+
+
+</body>
+</html>
