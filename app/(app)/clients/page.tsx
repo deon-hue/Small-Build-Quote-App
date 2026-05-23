@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useApp } from '@/contexts/AppContext'
+import { createClient } from '@/lib/supabase/client'
 import { fmt, quoteTotal, STAGE_COLOR, STAGE_LABEL, Q_BADGE, Q_LABEL } from '@/lib/utils'
 import type { Client, PortalStatus } from '@/lib/types'
 import { useRouter } from 'next/navigation'
@@ -36,10 +37,13 @@ function fmtDateTime(iso: string | null | undefined) {
 
 export default function ClientsPage() {
   const { clients, quotes, jobs, settings, addClient, updateClient, deleteClient, markPortalInvite, loading } = useApp()
+  const supabase = createClient()
   const [selected, setSelected] = useState<Client | null>(null)
   const [previewQuote, setPreviewQuote] = useState<Quote | null>(null)
   const [inviteClient, setInviteClient] = useState<Client | null>(null)
   const [inviteSent, setInviteSent] = useState(false)
+  const [inviteSending, setInviteSending] = useState(false)
+  const [inviteError, setInviteError] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [editingClient, setEditingClient] = useState<Client | null>(null)
@@ -84,42 +88,39 @@ export default function ClientsPage() {
   function openInvite(c: Client) {
     setInviteClient(c)
     setInviteSent(false)
+    setInviteError('')
     setCopiedId(null)
   }
 
-  async function sendInvite(c: Client, method: 'email' | 'copy') {
-    // Mark as invited in DB
-    await markPortalInvite(c.id)
-    setInviteSent(true)
-
-    if (method === 'copy') {
-      await navigator.clipboard.writeText(portalUrl(c))
-      setCopiedId(c.id)
-      setTimeout(() => setCopiedId(null), 3000)
-    } else {
-      const company = settings.name || 'Your Builder'
-      // Use raw (un-encoded) email in the link — encodeURIComponent on the body will encode it once correctly
-      const rawLink = `${portalBase}?email=${c.email}`
-      const subject = encodeURIComponent(`Your private client portal — ${company}`)
-      const body = encodeURIComponent(
-`Hi ${c.first || c.name},
-
-We've set up a private client portal for you where you can view your project information, quotes, documents and invoices online.
-
-Click the link below to access your portal:
-
-${rawLink}
-
-Important: please register using this email address (${c.email}) so the system links you to your project automatically.
-
-If you already have an account, simply sign in at the same link.
-
-If you have any questions, please don't hesitate to get in touch.
-
-Kind regards,
-${company}`)
-      window.open(`mailto:${c.email}?subject=${subject}&body=${body}`)
+  async function sendMagicLinkInvite(c: Client) {
+    if (!c.email) return
+    setInviteSending(true)
+    setInviteError('')
+    try {
+      // Send a Supabase magic link — proper HTML email with a real clickable button.
+      // This does NOT affect the admin's current session.
+      const { error: otpErr } = await supabase.auth.signInWithOtp({
+        email: c.email,
+        options: {
+          shouldCreateUser: true,
+          emailRedirectTo: `${window.location.origin}/portal`,
+        },
+      })
+      if (otpErr) {
+        setInviteError(otpErr.message || 'Failed to send invite. Please try again.')
+        return
+      }
+      await markPortalInvite(c.id)
+      setInviteSent(true)
+    } finally {
+      setInviteSending(false)
     }
+  }
+
+  async function copyInviteLink(c: Client) {
+    await navigator.clipboard.writeText(portalUrl(c))
+    setCopiedId(c.id)
+    setTimeout(() => setCopiedId(null), 3000)
   }
 
   function getClientQuotes(c: Client) {
@@ -453,17 +454,18 @@ ${company}`)
                   <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
                   <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>Invite sent to {inviteClient.name}</div>
                   <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 20 }}>
-                    {inviteClient.email} has been marked as invited.<br />
-                    They can now register at their private portal link.
+                    A sign-in email has been sent to <strong>{inviteClient.email}</strong>.<br />
+                    They just need to click the link in that email to access their private portal.
                   </div>
-                  <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 14px', display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <span style={{ flex: 1, fontSize: 12, color: 'var(--muted)', wordBreak: 'break-all', textAlign: 'left' }}>{portalUrl(inviteClient)}</span>
+                  <div style={{ background: '#f0f9e8', border: '1px solid #b8e08a', borderRadius: 8, padding: '12px 16px', fontSize: 13, color: '#4a7c1f', marginBottom: 16 }}>
+                    💡 The link in the email expires after 24 hours. Use &quot;Resend Invite&quot; to send a fresh one.
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
                     <button
                       className={`btn-sm ${copiedId === inviteClient.id ? 'btn-gold' : 'btn-outline'}`}
-                      onClick={() => sendInvite(inviteClient, 'copy')}
-                      style={{ flexShrink: 0 }}
+                      onClick={() => copyInviteLink(inviteClient)}
                     >
-                      {copiedId === inviteClient.id ? '✓ Copied' : '📋 Copy'}
+                      {copiedId === inviteClient.id ? '✓ Link Copied' : '📋 Copy Portal Link'}
                     </button>
                   </div>
                 </div>
@@ -478,15 +480,33 @@ ${company}`)
 
                   {/* Explanation */}
                   <div style={{ background: 'var(--warm)', borderRadius: 8, padding: '14px 16px', marginBottom: 18, fontSize: 13, lineHeight: 1.6 }}>
-                    <div style={{ fontWeight: 600, marginBottom: 6 }}>How the private portal works</div>
+                    <div style={{ fontWeight: 600, marginBottom: 6 }}>How it works</div>
                     <div style={{ color: 'var(--muted)' }}>
-                      <strong>{inviteClient.name}</strong> will receive a personal link. They register using <strong>{inviteClient.email || 'their email'}</strong> and are automatically connected to their own private portal — showing only their jobs, quotes and invoices.
+                      <strong>{inviteClient.name}</strong> will receive an email with a secure sign-in button. One click and they&apos;re straight into their private portal — showing only their jobs, quotes and invoices. No password needed.
                     </div>
                   </div>
 
-                  {/* Portal link */}
-                  <div className="fg">
-                    <label>Their Private Portal Link</label>
+                  {/* Sending to */}
+                  {inviteClient.email && (
+                    <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <span style={{ fontSize: 20 }}>📧</span>
+                      <div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 2 }}>Sending to</div>
+                        <div style={{ fontWeight: 600, fontSize: 14 }}>{inviteClient.email}</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Error */}
+                  {inviteError && (
+                    <div style={{ background: '#fdf0ef', border: '1px solid #f0b8b8', borderRadius: 8, padding: '10px 14px', marginBottom: 12, fontSize: 13, color: '#c0392b' }}>
+                      ⚠️ {inviteError}
+                    </div>
+                  )}
+
+                  {/* Copy link fallback */}
+                  <div className="fg" style={{ marginBottom: 0 }}>
+                    <label>Or copy the portal link manually</label>
                     <div style={{ display: 'flex', gap: 8 }}>
                       <input
                         readOnly
@@ -497,38 +517,13 @@ ${company}`)
                       <button
                         className="btn-sm btn-outline"
                         disabled={!inviteClient.email}
-                        onClick={() => sendInvite(inviteClient, 'copy')}
+                        onClick={() => copyInviteLink(inviteClient)}
                         style={{ flexShrink: 0, minWidth: 90 }}
                       >
                         {copiedId === inviteClient.id ? '✓ Copied!' : '📋 Copy'}
                       </button>
                     </div>
                   </div>
-
-                  {/* Invite email preview */}
-                  {inviteClient.email && (
-                    <div className="fg">
-                      <label>Email Preview</label>
-                      <textarea
-                        readOnly rows={9}
-                        style={{ fontSize: 12, background: '#f8f9fa', color: 'var(--muted)', lineHeight: 1.7, resize: 'none' }}
-                        value={`Hi ${inviteClient.first || inviteClient.name},
-
-We've set up a private client portal for you where you can view your project information, quotes, documents and invoices online.
-
-Click the link below to access your portal:
-
-${portalBase}?email=${inviteClient.email}
-
-Important: please register using this email address (${inviteClient.email}) so the system links you to your project automatically.
-
-If you already have an account, simply sign in at the same link.
-
-Kind regards,
-${settings.name || 'Your Builder'}`}
-                      />
-                    </div>
-                  )}
                 </>
               )}
             </div>
@@ -537,22 +532,14 @@ ${settings.name || 'Your Builder'}`}
                 {inviteSent ? 'Close' : 'Cancel'}
               </button>
               {!inviteSent && (
-                <>
-                  <button
-                    className="btn btn-outline"
-                    disabled={!inviteClient.email}
-                    onClick={() => window.open(portalUrl(inviteClient), '_blank')}
-                  >
-                    🌐 Open Portal
-                  </button>
-                  <button
-                    className="btn btn-primary"
-                    disabled={!inviteClient.email}
-                    onClick={() => sendInvite(inviteClient, 'email')}
-                  >
-                    📧 Send Invite Email
-                  </button>
-                </>
+                <button
+                  className="btn btn-primary"
+                  disabled={!inviteClient.email || inviteSending}
+                  onClick={() => sendMagicLinkInvite(inviteClient)}
+                  style={{ minWidth: 160 }}
+                >
+                  {inviteSending ? 'Sending…' : '📧 Send Invite Email'}
+                </button>
               )}
             </div>
           </div>

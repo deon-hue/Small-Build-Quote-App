@@ -55,6 +55,18 @@ export function PortalProvider({ children }: { children: ReactNode }) {
     setTick(t => t + 1)
   }
 
+  // Auto-refresh when client switches back to the tab
+  // This picks up any Gantt/job/quote changes the admin made while the tab was in the background
+  useEffect(() => {
+    function handleVisibility() {
+      if (document.visibilityState === 'visible') {
+        setTick(t => t + 1)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     async function load() {
       setLoading(true)
