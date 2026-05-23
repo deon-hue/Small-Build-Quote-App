@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Quote, Job, Invoice } from '@/lib/types'
+import type { Quote, Job, Invoice, GanttState } from '@/lib/types'
 
 export interface PortalSettings {
   name: string
@@ -17,6 +17,7 @@ interface PortalContextType {
   quotes: Quote[]
   jobs: Job[]
   invoices: Invoice[]
+  ganttStates: Record<string, GanttState>
   settings: PortalSettings
   userEmail: string
   loading: boolean
@@ -41,6 +42,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   const [quotes, setQuotes] = useState<Quote[]>([])
   const [jobs, setJobs] = useState<Job[]>([])
   const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [ganttStates, setGanttStates] = useState<Record<string, GanttState>>({})
   const [settings, setSettings] = useState<PortalSettings>(DEFAULT_SETTINGS)
   const [userEmail, setUserEmail] = useState('')
   const [loading, setLoading] = useState(true)
@@ -104,15 +106,20 @@ export function PortalProvider({ children }: { children: ReactNode }) {
         })))
       }
 
-      // Map jobs
+      // Map jobs + extract gantt states
       if (Array.isArray(result?.jobs)) {
+        const ganttMap: Record<string, GanttState> = {}
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        setJobs(result.jobs.map((r: any) => ({
-          id: r.id, client: r.client, type: r.type, address: r.address || '',
-          value: Number(r.value), stage: r.stage,
-          start: r.start_date || '', weeks: r.weeks, done: r.done,
-          notes: r.notes || '',
-        })))
+        setJobs(result.jobs.map((r: any) => {
+          if (r.gantt_state) ganttMap[r.id] = r.gantt_state as GanttState
+          return {
+            id: r.id, client: r.client, type: r.type, address: r.address || '',
+            value: Number(r.value), stage: r.stage,
+            start: r.start_date || '', weeks: r.weeks, done: r.done,
+            notes: r.notes || '',
+          }
+        }))
+        setGanttStates(ganttMap)
       }
 
       // Map invoices
@@ -148,7 +155,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   }, [tick]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <PortalContext.Provider value={{ quotes, jobs, invoices, settings, userEmail, loading, error, reload }}>
+    <PortalContext.Provider value={{ quotes, jobs, invoices, ganttStates, settings, userEmail, loading, error, reload }}>
       {children}
     </PortalContext.Provider>
   )

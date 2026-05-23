@@ -147,10 +147,13 @@ ${company}`)
                       <td onClick={() => setSelected(c)} style={{ cursor: 'pointer' }} className="mono">{val > 0 ? fmt(val) : '—'}</td>
                       <td>
                         <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                          {c.email
-                            ? <button className="btn-sm btn-sky" title="Send portal invite" onClick={() => setInviteClient(c)}>🔗 Invite</button>
-                            : <button className="btn-sm btn-outline" disabled style={{ opacity: 0.4, cursor: 'not-allowed' }} title="No email on file">🔗 Invite</button>
-                          }
+                          <button
+                            className="btn-sm btn-sky"
+                            title={c.email ? 'Open client portal' : 'No email on file'}
+                            onClick={() => window.open(portalUrl, '_blank')}
+                          >
+                            🌐 Portal
+                          </button>
                           <button className="btn-sm btn-outline" onClick={() => openEdit(c)}>Edit</button>
                           <button className="btn-sm btn-danger" onClick={() => handleDelete(c)}>Delete</button>
                         </div>
@@ -170,11 +173,9 @@ ${company}`)
             <div className="modal-hd">
               <div style={{ fontWeight: 700, fontSize: 18 }}>{selected.name}</div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                {selected.email && (
-                  <button className="btn-sm btn-sky" onClick={() => { setInviteClient(selected); setSelected(null) }}>
-                    🔗 Send Portal Invite
-                  </button>
-                )}
+                <button className="btn-sm btn-sky" onClick={() => window.open(portalUrl, '_blank')}>
+                  🌐 Client Portal
+                </button>
                 <button className="btn-sm btn-outline" onClick={() => openEdit(selected)}>✎ Edit</button>
                 <button className="btn-sm btn-gold" onClick={() => {
                   sessionStorage.setItem('sbc_prefill_client', selected.id)
@@ -333,7 +334,7 @@ ${company}`)
           <div className="form-modal" style={{ width: 'min(480px, 96vw)' }}>
             <div className="form-modal-hd">
               <div>
-                <div style={{ fontWeight: 700, fontSize: 17 }}>Send Portal Invite</div>
+                <div style={{ fontWeight: 700, fontSize: 17 }}>🌐 Client Portal</div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{inviteClient.name}</div>
               </div>
               <button className="modal-close" onClick={() => setInviteClient(null)}>×</button>
@@ -395,10 +396,16 @@ ${settings.name || 'Your Builder'}`}
             <div className="form-modal-ft">
               <button className="btn btn-outline" onClick={() => setInviteClient(null)}>Close</button>
               <button
+                className="btn btn-outline"
+                onClick={() => window.open(portalUrl, '_blank')}
+              >
+                🌐 Open Portal
+              </button>
+              <button
                 className="btn btn-primary"
                 onClick={() => openEmailInvite(inviteClient)}
               >
-                📧 Open in Email App
+                📧 Send Invite Email
               </button>
             </div>
           </div>

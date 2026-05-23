@@ -132,8 +132,30 @@ BEGIN
   WHERE q.user_id = v_admin_id
     AND LOWER((q.customer->>'email')::TEXT) = LOWER(v_email);
 
-  -- Jobs where client name matches a client record with this email
-  SELECT json_agg(j ORDER BY j.created_at ASC) INTO v_jobs
+  -- Jobs (with embedded gantt_state) where client name matches a client record with this email
+  SELECT json_agg(
+    json_build_object(
+      'id',          j.id,
+      'client',      j.client,
+      'type',        j.type,
+      'address',     j.address,
+      'value',       j.value,
+      'stage',       j.stage,
+      'start_date',  j.start_date,
+      'weeks',       j.weeks,
+      'done',        j.done,
+      'notes',       j.notes,
+      'quote_id',    j.quote_id,
+      'created_at',  j.created_at,
+      'gantt_state', (
+        SELECT gs.state
+        FROM gantt_states gs
+        WHERE gs.job_id = j.id
+          AND gs.user_id = v_admin_id
+        LIMIT 1
+      )
+    ) ORDER BY j.created_at ASC
+  ) INTO v_jobs
   FROM jobs j
   WHERE j.user_id = v_admin_id
     AND EXISTS (

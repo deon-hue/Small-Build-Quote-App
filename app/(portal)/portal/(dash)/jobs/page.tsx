@@ -1,10 +1,13 @@
 'use client'
 
+import { useState } from 'react'
 import { usePortal } from '@/contexts/PortalContext'
 import { STAGE_COLOR, STAGE_LABEL } from '@/lib/utils'
+import PortalGanttChart from '@/components/PortalGanttChart'
 
 export default function PortalJobsPage() {
-  const { jobs, loading, error } = usePortal()
+  const { jobs, ganttStates, loading, error } = usePortal()
+  const [expandedGantt, setExpandedGantt] = useState<string | null>(null)
 
   if (loading) return <div className="portal-loading">Loading…</div>
   if (error && error !== 'no_admin_linked') {
@@ -27,6 +30,9 @@ export default function PortalJobsPage() {
         jobs.map(j => {
           const pct = j.weeks ? Math.min(100, Math.round((j.done / j.weeks) * 100)) : 0
           const col = STAGE_COLOR[j.stage] || '#888'
+          const ganttState = ganttStates[j.id] || null
+          const ganttOpen = expandedGantt === j.id
+
           return (
             <div key={j.id} className="portal-card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
@@ -58,6 +64,33 @@ export default function PortalJobsPage() {
                   {j.notes}
                 </div>
               )}
+
+              {/* Programme / Gantt toggle */}
+              <div style={{ marginTop: 14, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                <button
+                  onClick={() => setExpandedGantt(ganttOpen ? null : j.id)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6, background: 'none',
+                    border: '1px solid var(--border)', borderRadius: 6, padding: '6px 12px',
+                    fontSize: 12, fontWeight: 600, color: 'var(--ink)', cursor: 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  <span>📋</span>
+                  {ganttOpen ? 'Hide Programme' : 'View Programme'}
+                  <span style={{ fontSize: 10, color: 'var(--muted)', marginLeft: 2 }}>
+                    {ganttOpen ? '▲' : '▼'}
+                  </span>
+                </button>
+
+                {ganttOpen && (
+                  <PortalGanttChart
+                    job={j}
+                    phases={[]}
+                    ganttState={ganttState}
+                  />
+                )}
+              </div>
             </div>
           )
         })
