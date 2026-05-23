@@ -149,8 +149,8 @@ ${company}`)
                         <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                           <button
                             className="btn-sm btn-sky"
-                            title={c.email ? 'Open client portal' : 'No email on file'}
-                            onClick={() => window.open(portalUrl, '_blank')}
+                            title={c.email ? `Open portal for ${c.name}` : 'No email on file'}
+                            onClick={() => window.open(c.email ? `${portalUrl}?email=${encodeURIComponent(c.email)}` : portalUrl, '_blank')}
                           >
                             🌐 Portal
                           </button>
@@ -173,7 +173,7 @@ ${company}`)
             <div className="modal-hd">
               <div style={{ fontWeight: 700, fontSize: 18 }}>{selected.name}</div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button className="btn-sm btn-sky" onClick={() => window.open(portalUrl, '_blank')}>
+                <button className="btn-sm btn-sky" onClick={() => window.open(selected.email ? `${portalUrl}?email=${encodeURIComponent(selected.email)}` : portalUrl, '_blank')}>
                   🌐 Client Portal
                 </button>
                 <button className="btn-sm btn-outline" onClick={() => openEdit(selected)}>✎ Edit</button>

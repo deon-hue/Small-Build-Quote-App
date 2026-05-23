@@ -1,18 +1,25 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
-export default function PortalLoginPage() {
+function PortalLoginForm() {
   const supabase = createClient()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+
+  // Pre-fill email from URL param (set by admin portal button)
+  useEffect(() => {
+    const emailParam = searchParams.get('email')
+    if (emailParam) setEmail(emailParam)
+  }, [searchParams])
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -21,7 +28,6 @@ export default function PortalLoginPage() {
     try {
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
       if (signInError) { setError(signInError.message); return }
-      // Ensure customer profile exists (safe to call every time — no-op if already set up)
       await supabase.rpc('create_customer_profile')
       router.push('/portal')
       router.refresh()
@@ -37,7 +43,6 @@ export default function PortalLoginPage() {
     try {
       const { error: signUpError } = await supabase.auth.signUp({ email, password })
       if (signUpError) { setError(signUpError.message); return }
-      // Link customer profile to admin via email matching
       await supabase.rpc('create_customer_profile')
       setMessage('Account created! Please sign in below.')
       setMode('login')
@@ -123,5 +128,13 @@ export default function PortalLoginPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function PortalLoginPage() {
+  return (
+    <Suspense>
+      <PortalLoginForm />
+    </Suspense>
   )
 }
