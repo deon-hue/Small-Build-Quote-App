@@ -3,6 +3,13 @@ import { NextResponse, type NextRequest } from 'next/server'
 import type { ResponseCookie } from 'next/dist/compiled/@edge-runtime/cookies'
 
 export async function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname
+
+  // Route classification
+  const isPortalRoute  = pathname.startsWith('/portal')
+  const isPortalLogin  = pathname === '/portal/login'
+  const isAdminLogin   = pathname === '/login'
+
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -24,14 +31,22 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  const isLoginPage = request.nextUrl.pathname === '/login'
-
-  if (!user && !isLoginPage) {
-    return NextResponse.redirect(new URL('/login', request.url))
-  }
-
-  if (user && isLoginPage) {
-    return NextResponse.redirect(new URL('/dashboard', request.url))
+  if (isPortalRoute) {
+    // Portal routes: unauthenticated → /portal/login; logged-in on login page → /portal
+    if (!user && !isPortalLogin) {
+      return NextResponse.redirect(new URL('/portal/login', request.url))
+    }
+    if (user && isPortalLogin) {
+      return NextResponse.redirect(new URL('/portal', request.url))
+    }
+  } else {
+    // Admin routes: unauthenticated → /login; logged-in on login page → /dashboard
+    if (!user && !isAdminLogin) {
+      return NextResponse.redirect(new URL('/login', request.url))
+    }
+    if (user && isAdminLogin) {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
   }
 
   return supabaseResponse

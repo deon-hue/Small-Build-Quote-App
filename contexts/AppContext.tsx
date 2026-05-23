@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Job, Quote, Client, Settings, GanttState, Invoice, JobNote } from '@/lib/types'
+import type { Job, Quote, Client, Settings, GanttState, Invoice, JobNote, PaymentMilestone } from '@/lib/types'
 import { uid } from '@/lib/utils'
 
 interface AppContextType {
@@ -136,6 +136,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           vatAmount: Number(r.vat_amount), total: Number(r.total),
           status: r.status, issueDate: r.issue_date || '', dueDate: r.due_date || '',
           notes: r.notes || '', createdAt: r.created_at,
+          paymentPlan: r.payment_plan || null,
         })))
       }
 
@@ -324,7 +325,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       subtotal: inv.subtotal, vat_included: inv.vatIncluded,
       vat_amount: inv.vatAmount, total: inv.total,
       status: inv.status, issue_date: inv.issueDate, due_date: inv.dueDate,
-      notes: inv.notes,
+      notes: inv.notes, payment_plan: inv.paymentPlan || null,
     }).select().single()
     if (error) throw error
     const newInv: Invoice = {
@@ -335,6 +336,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       vatAmount: Number(data.vat_amount), total: Number(data.total),
       status: data.status, issueDate: data.issue_date || '', dueDate: data.due_date || '',
       notes: data.notes || '', createdAt: data.created_at,
+      paymentPlan: data.payment_plan || null,
     }
     setInvoices(prev => [newInv, ...prev])
     return newInv
@@ -347,7 +349,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       subtotal: inv.subtotal, vat_included: inv.vatIncluded,
       vat_amount: inv.vatAmount, total: inv.total,
       status: inv.status, issue_date: inv.issueDate, due_date: inv.dueDate,
-      notes: inv.notes,
+      notes: inv.notes, payment_plan: inv.paymentPlan || null,
     }).eq('id', inv.id)
     setInvoices(prev => prev.map(x => x.id === inv.id ? inv : x))
   }, [supabase])

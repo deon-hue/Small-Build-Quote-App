@@ -108,6 +108,35 @@ export function buildInvoiceHtml(inv: Invoice, settings: Settings): string {
     </div>
   </div>
 
+  <!-- Payment plan / schedule -->
+  ${inv.paymentPlan && inv.paymentPlan.length > 0 ? `
+  <div style="margin-top:32px">
+    <div style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:#888;font-weight:700;margin-bottom:12px">Payment Schedule</div>
+    <table style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr style="background:#f0f2f4">
+          <th style="padding:8px 12px;text-align:left;font-size:11px;letter-spacing:0.8px;text-transform:uppercase;color:#888">Milestone</th>
+          <th style="padding:8px 12px;text-align:center;font-size:11px;letter-spacing:0.8px;text-transform:uppercase;color:#888">Due Date</th>
+          <th style="padding:8px 12px;text-align:right;font-size:11px;letter-spacing:0.8px;text-transform:uppercase;color:#888">Amount</th>
+          <th style="padding:8px 12px;text-align:center;font-size:11px;letter-spacing:0.8px;text-transform:uppercase;color:#888">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${inv.paymentPlan.map(m => `
+        <tr style="border-bottom:1px solid #eee">
+          <td style="padding:10px 12px;font-size:13px">${m.description || '—'}</td>
+          <td style="padding:10px 12px;font-size:13px;text-align:center;color:#666">${m.dueDate ? new Date(m.dueDate).toLocaleDateString('en-GB') : 'TBC'}</td>
+          <td style="padding:10px 12px;font-size:13px;text-align:right;font-family:monospace;font-weight:600">${fmt(m.amount)}</td>
+          <td style="padding:10px 12px;text-align:center">
+            <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:${m.paid ? '#e8f5d6' : '#f0f2f4'};color:${m.paid ? '#5e8f20' : '#888'}">
+              ${m.paid ? '✓ PAID' : 'PENDING'}
+            </span>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>` : ''}
+
   <!-- Notes -->
   ${inv.notes ? `
   <div style="margin-top:32px;padding:16px 20px;background:#f8f9fa;border-radius:8px;font-size:13px;color:#555;line-height:1.6">

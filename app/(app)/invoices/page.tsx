@@ -4,11 +4,15 @@ import { useState } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { fmt, fmtK, calcPhaseSell } from '@/lib/utils'
 import { buildInvoiceHtml } from '@/lib/invoiceHtml'
-import type { Invoice, InvoiceLineItem } from '@/lib/types'
+import type { Invoice, InvoiceLineItem, PaymentMilestone } from '@/lib/types'
 
 let lineCounter = 0
+let milestoneCounter = 0
 
 const BLANK_LINE = (): InvoiceLineItem => ({ id: ++lineCounter, desc: '', qty: 1, unitPrice: 0, total: 0 })
+const BLANK_MILESTONE = (): PaymentMilestone => ({
+  id: ++milestoneCounter, description: '', amount: 0, dueDate: '', paid: false, paidDate: '',
+})
 
 const INV_BADGE: Record<string, string> = {
   draft: 'b-complete', sent: 'b-sent', paid: 'b-accepted', overdue: 'b-onhold',
@@ -40,7 +44,10 @@ export default function InvoicesPage() {
   const [status, setStatus] = useState<Invoice['status']>('draft')
   const [fromJobId, setFromJobId] = useState('')
   const [saving, setSaving] = useState(false)
-  const [previewInv, setPreviewInv] = useState<Invoice | null>(null)
+
+  // Payment plan state
+  const [payPlanOn, setPayPlanOn] = useState(false)
+  const [milestones, setMilestones] = useState<PaymentMilestone[]>([])
 
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
 
@@ -56,6 +63,7 @@ export default function InvoicesPage() {
     setLineItems([BLANK_LINE()])
     setVatOn(true); setIssueDate(todayStr()); setDueDate(due30Str())
     setNotes(''); setStatus('draft'); setFromJobId('')
+    setPayPlanOn(false); setMilestones([])
     setShowModal(true)
   }
 
@@ -65,6 +73,9 @@ export default function InvoicesPage() {
     setLineItems(inv.lineItems.map(l => ({ ...l, id: ++lineCounter })))
     setVatOn(inv.vatIncluded); setIssueDate(inv.issueDate); setDueDate(inv.dueDate)
     setNotes(inv.notes); setStatus(inv.status); setFromJobId(inv.jobId || '')
+    const pp = inv.paymentPlan || []
+    setPayPlanOn(pp.length > 0)
+    setMilestones(pp.map(m => ({ ...m, id: ++milestoneCounter })))
     setShowModal(true)
   }
 
@@ -73,7 +84,6 @@ export default function InvoicesPage() {
     if (!job) return
     setClientName(job.client)
     setClientAddress(job.address)
-    // Try to find linked quote for line items
     const linked = quotes.find(q => q.id === job.quoteId) ||
       quotes.find(q => {
         const qn = (q.customer.name || '').toLowerCase()
@@ -88,10 +98,24 @@ export default function InvoicesPage() {
       })
       setLineItems(items.length ? items : [BLANK_LINE()])
     } else {
-      // Single line for the job value
       setLineItems([{ id: ++lineCounter, desc: job.type + ' works', qty: 1, unitPrice: job.value, total: job.value }])
     }
     setFromJobId(jobId)
+  }
+
+  function loadMilestonesFromPhases() {
+    // Use line items as milestone basis
+    const newMilestones: PaymentMilestone[] = lineItems
+      .filter(l => l.total > 0)
+      .map(l => ({
+        id: ++milestoneCounter,
+        description: l.desc || 'Payment milestone',
+        amount: l.total,
+        dueDate: '',
+        paid: false,
+        paidDate: '',
+      }))
+    setMilestones(newMilestones.length ? newMilestones : [BLANK_MILESTONE()])
   }
 
   function updateLine(id: number, key: keyof InvoiceLineItem, val: string | number) {
@@ -103,17 +127,24 @@ export default function InvoicesPage() {
     }))
   }
 
+  function updateMilestone(id: number, key: keyof PaymentMilestone, val: string | number | boolean) {
+    setMilestones(prev => prev.map(m => m.id === id ? { ...m, [key]: val } : m))
+  }
+
   const subtotal = lineItems.reduce((s, l) => s + (l.total || 0), 0)
   const vatAmount = vatOn ? Math.round(subtotal * 0.2 * 100) / 100 : 0
   const total = subtotal + vatAmount
+  const milestonesTotal = milestones.reduce((s, m) => s + (m.amount || 0), 0)
+  const milestoneDiff = Math.round((total - milestonesTotal) * 100) / 100
 
   async function handleSave() {
     setSaving(true)
     try {
+      const paymentPlan = payPlanOn && milestones.length > 0 ? milestones : null
       const data = {
         jobId: fromJobId, quoteId: '', clientName, clientAddress, clientEmail,
         lineItems, subtotal, vatIncluded: vatOn, vatAmount, total,
-        status, issueDate, dueDate, notes,
+        status, issueDate, dueDate, notes, paymentPlan,
       }
       if (editing) {
         await updateInvoice({ ...editing, ...data })
@@ -196,6 +227,11 @@ export default function InvoicesPage() {
                 <div className="sq-sub">
                   Issued {inv.issueDate ? new Date(inv.issueDate).toLocaleDateString('en-GB') : '—'}
                   {' · '}Due {inv.dueDate ? new Date(inv.dueDate).toLocaleDateString('en-GB') : '—'}
+                  {inv.paymentPlan && inv.paymentPlan.length > 0 && (
+                    <span style={{ marginLeft: 6, color: 'var(--sky)', fontWeight: 600 }}>
+                      · {inv.paymentPlan.filter(m => m.paid).length}/{inv.paymentPlan.length} milestones paid
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="sq-val">{fmt(inv.total)}</div>
@@ -228,6 +264,7 @@ export default function InvoicesPage() {
               <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
             </div>
             <div className="form-modal-bd">
+
               {/* From job picker */}
               {!editing && (
                 <div className="fg">
@@ -305,6 +342,94 @@ export default function InvoicesPage() {
                   <input type="checkbox" checked={vatOn} onChange={e => setVatOn(e.target.checked)} style={{ width: 'auto' }} />
                   Include VAT (20%)
                 </label>
+              </div>
+
+              {/* ── Payment Plan ── */}
+              <div style={{ borderTop: '2px solid var(--border)', paddingTop: 16, marginBottom: 16 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: payPlanOn ? 14 : 0 }}>
+                  <input
+                    type="checkbox"
+                    checked={payPlanOn}
+                    onChange={e => {
+                      setPayPlanOn(e.target.checked)
+                      if (e.target.checked && milestones.length === 0) setMilestones([BLANK_MILESTONE()])
+                    }}
+                    style={{ width: 'auto' }}
+                  />
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 14 }}>Payment Plan</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>Split this invoice into milestone payments</div>
+                  </div>
+                </label>
+
+                {payPlanOn && (
+                  <div>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                      <button className="btn-sm btn-sky" onClick={loadMilestonesFromPhases}>
+                        ↓ Load from line items
+                      </button>
+                      <button className="btn-sm btn-outline" onClick={() => setMilestones(p => [...p, BLANK_MILESTONE()])}>
+                        + Add milestone
+                      </button>
+                    </div>
+
+                    {/* Milestones table */}
+                    <div style={{ border: '1.5px solid var(--border)', borderRadius: 6, overflow: 'hidden', marginBottom: 8 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 110px 80px 28px', gap: 0, background: '#f0f2f4', padding: '6px 10px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)' }}>
+                        <span>Description</span><span style={{ textAlign: 'right' }}>Amount</span><span style={{ textAlign: 'center' }}>Due Date</span><span style={{ textAlign: 'center' }}>Paid</span><span />
+                      </div>
+                      {milestones.map(m => (
+                        <div key={m.id} style={{ display: 'grid', gridTemplateColumns: '1fr 100px 110px 80px 28px', gap: 0, borderTop: '1px solid var(--border)', padding: '4px 6px', alignItems: 'center' }}>
+                          <input
+                            value={m.description}
+                            onChange={e => updateMilestone(m.id, 'description', e.target.value)}
+                            placeholder="e.g. Deposit"
+                            style={{ border: 'none', outline: 'none', fontSize: 13, padding: '4px 4px' }}
+                          />
+                          <input
+                            type="number"
+                            value={m.amount || ''}
+                            onChange={e => updateMilestone(m.id, 'amount', Number(e.target.value))}
+                            placeholder="0.00"
+                            style={{ border: 'none', outline: 'none', fontSize: 13, textAlign: 'right', padding: '4px 4px', fontFamily: 'DM Mono, monospace' }}
+                          />
+                          <input
+                            type="date"
+                            value={m.dueDate}
+                            onChange={e => updateMilestone(m.id, 'dueDate', e.target.value)}
+                            style={{ border: 'none', outline: 'none', fontSize: 12, padding: '4px 4px' }}
+                          />
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                            <input
+                              type="checkbox"
+                              checked={m.paid}
+                              onChange={e => {
+                                updateMilestone(m.id, 'paid', e.target.checked)
+                                if (e.target.checked) updateMilestone(m.id, 'paidDate', new Date().toISOString().split('T')[0])
+                                else updateMilestone(m.id, 'paidDate', '')
+                              }}
+                              style={{ width: 'auto', cursor: 'pointer' }}
+                            />
+                            {m.paid && <span style={{ fontSize: 11, color: '#7ab533', fontWeight: 700 }}>✓</span>}
+                          </div>
+                          <button className="rm-btn" onClick={() => setMilestones(p => p.filter(x => x.id !== m.id))}>×</button>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Running total check */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '6px 10px', borderRadius: 6, background: Math.abs(milestoneDiff) > 0.01 ? '#fff3cd' : '#f0f7e6' }}>
+                      <span style={{ color: 'var(--muted)' }}>
+                        Milestones total: <strong style={{ fontFamily: 'DM Mono, monospace' }}>{fmt(milestonesTotal)}</strong>
+                        {' · '}Invoice total: <strong style={{ fontFamily: 'DM Mono, monospace' }}>{fmt(total)}</strong>
+                      </span>
+                      {Math.abs(milestoneDiff) > 0.01
+                        ? <span style={{ color: '#856404', fontWeight: 600 }}>⚠ {fmt(Math.abs(milestoneDiff))} {milestoneDiff > 0 ? 'under' : 'over'}</span>
+                        : <span style={{ color: '#7ab533', fontWeight: 600 }}>✓ Balanced</span>
+                      }
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="fg">

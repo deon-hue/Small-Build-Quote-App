@@ -200,3 +200,87 @@ textarea{resize:vertical;min-height:56px}
   .pipeline{flex-direction:column}
   .pip-col{min-width:unset}
 }
+
+/* ═══════════════════════════════════════════════════════════
+   CUSTOMER PORTAL
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Portal shell ── */
+.portal-wrap{height:100vh;overflow-y:auto;background:#f5f6f8;display:flex;flex-direction:column}
+.portal-main{flex:1;max-width:760px;width:100%;margin:0 auto;padding:28px 20px 60px}
+
+/* ── Portal header / nav ── */
+.portal-header{background:#1e2022;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,0.2)}
+.portal-header-inner{max-width:960px;margin:0 auto;padding:0 20px;height:58px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.portal-logo{font-family:'DM Serif Display',serif;font-size:17px;color:#7ab533;white-space:nowrap}
+.portal-nav{display:flex;align-items:center;gap:4px}
+.portal-nav-link{padding:8px 14px;font-size:13px;font-weight:500;color:rgba(245,240,232,0.6);border-radius:6px;text-decoration:none;transition:all 0.15s}
+.portal-nav-link:hover{color:white;background:rgba(255,255,255,0.07)}
+.portal-nav-link.active{color:#7ab533;background:rgba(122,181,51,0.12)}
+.portal-signout-btn{padding:7px 14px;font-size:12px;font-weight:600;background:transparent;border:1px solid rgba(255,255,255,0.15);color:rgba(245,240,232,0.5);border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.15s;margin-left:8px}
+.portal-signout-btn:hover{border-color:rgba(255,255,255,0.3);color:white}
+.portal-hamburger{display:none;flex-direction:column;gap:5px;background:none;border:none;cursor:pointer;padding:6px}
+.portal-hamburger span{display:block;width:22px;height:2px;background:rgba(245,240,232,0.7);border-radius:2px}
+.portal-nav-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99}
+
+/* ── Portal login ── */
+.portal-login-wrap{height:100vh;overflow-y:auto;display:flex;align-items:center;justify-content:center;background:#f5f6f8;padding:20px}
+.portal-login-card{background:white;border:1.5px solid var(--border);border-radius:12px;padding:40px 36px;width:min(420px,100%);box-shadow:0 4px 24px rgba(0,0,0,0.08)}
+.portal-login-logo{font-family:'DM Serif Display',serif;font-size:22px;color:#7ab533;text-align:center;margin-bottom:20px}
+.portal-alert{padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:16px}
+.portal-alert-error{background:#fde8e8;color:#a93226;border:1px solid #f5c6c6}
+.portal-alert-success{background:#e8f5d6;color:#5e8f20;border:1px solid #c3e6a3}
+.portal-link-btn{background:none;border:none;color:#7ab533;font-weight:600;cursor:pointer;font-size:inherit;font-family:inherit;padding:0;text-decoration:underline}
+.portal-link-btn:hover{color:#5e8f20}
+
+/* ── Portal page header ── */
+.portal-page-hd{margin-bottom:20px}
+.portal-page-hd h1{font-family:'DM Serif Display',serif;font-size:26px;color:var(--ink)}
+.portal-page-hd p{font-size:13px;color:var(--muted);margin-top:4px}
+.portal-company-name{font-size:14px;color:var(--muted);margin-top:2px}
+
+/* ── Portal stats ── */
+.portal-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px}
+.portal-stat{background:white;border:1.5px solid var(--border);border-radius:8px;padding:16px 18px;box-shadow:0 1px 4px rgba(0,0,0,0.04)}
+.portal-stat-num{font-family:'DM Serif Display',serif;font-size:24px;color:var(--ink);line-height:1;margin-bottom:4px}
+.portal-stat-label{font-size:11px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;color:var(--muted)}
+
+/* ── Portal sections ── */
+.portal-section{margin-bottom:28px}
+.portal-section-title{font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
+.portal-section-link{font-size:12px;font-weight:600;color:#7ab533;text-decoration:none;letter-spacing:0;text-transform:none}
+.portal-section-link:hover{color:#5e8f20}
+
+/* ── Portal cards ── */
+.portal-card{background:white;border:1.5px solid var(--border);border-radius:8px;padding:18px 20px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,0.04)}
+
+/* ── Portal badge ── */
+.portal-badge{display:inline-block;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;color:white;letter-spacing:0.5px;white-space:nowrap}
+
+/* ── Portal progress bar ── */
+.portal-progress{height:6px;background:var(--warm);border-radius:3px;overflow:hidden}
+.portal-progress-bar{height:100%;border-radius:3px;transition:width 0.3s}
+
+/* ── Portal notice / empty state ── */
+.portal-notice{background:white;border:1.5px solid var(--border);border-radius:8px;padding:40px 24px;text-align:center;color:var(--ink)}
+.portal-notice h2{font-size:18px;font-weight:700;margin-bottom:8px}
+.portal-notice p{font-size:14px;color:var(--muted);line-height:1.6;max-width:380px;margin:0 auto 8px}
+.portal-loading{padding:60px 20px;text-align:center;color:var(--muted);font-size:15px}
+
+/* ── Portal mobile ── */
+@media (max-width:640px){
+  .portal-stats{grid-template-columns:repeat(2,1fr);gap:10px}
+  .portal-stat-num{font-size:18px}
+  .portal-hamburger{display:flex}
+  .portal-nav{
+    display:none;position:fixed;top:58px;left:0;right:0;bottom:0;
+    background:#1e2022;flex-direction:column;align-items:flex-start;
+    padding:20px 16px;gap:4px;z-index:100;overflow-y:auto
+  }
+  .portal-nav.open{display:flex}
+  .portal-nav-overlay{display:block}
+  .portal-nav-link{width:100%;padding:14px 16px;font-size:15px;border-radius:6px}
+  .portal-signout-btn{width:100%;margin-left:0;margin-top:12px;padding:12px 16px;font-size:14px;text-align:left}
+  .portal-login-card{padding:28px 20px}
+  .portal-main{padding:18px 14px 60px}
+}

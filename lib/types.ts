@@ -94,6 +94,15 @@ export interface InvoiceLineItem {
   total: number
 }
 
+export interface PaymentMilestone {
+  id: number
+  description: string
+  amount: number
+  dueDate: string
+  paid: boolean
+  paidDate: string
+}
+
 export interface Invoice {
   id: string
   ref: string
@@ -112,6 +121,7 @@ export interface Invoice {
   dueDate: string
   notes: string
   createdAt: string
+  paymentPlan: PaymentMilestone[] | null
 }
 
 export interface JobNote {
