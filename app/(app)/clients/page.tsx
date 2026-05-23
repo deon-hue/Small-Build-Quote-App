@@ -98,17 +98,19 @@ export default function ClientsPage() {
       setTimeout(() => setCopiedId(null), 3000)
     } else {
       const company = settings.name || 'Your Builder'
+      // Use raw (un-encoded) email in the link — encodeURIComponent on the body will encode it once correctly
+      const rawLink = `${portalBase}?email=${c.email}`
       const subject = encodeURIComponent(`Your private client portal — ${company}`)
       const body = encodeURIComponent(
 `Hi ${c.first || c.name},
 
 We've set up a private client portal for you where you can view your project information, quotes, documents and invoices online.
 
-To access your portal, please register using this link:
+Click the link below to access your portal:
 
-${portalUrl(c)}
+${rawLink}
 
-Important: please register using this email address (${c.email}) so the system can link you to your project automatically.
+Important: please register using this email address (${c.email}) so the system links you to your project automatically.
 
 If you already have an account, simply sign in at the same link.
 
@@ -514,11 +516,13 @@ ${company}`)
 
 We've set up a private client portal for you where you can view your project information, quotes, documents and invoices online.
 
-To access your portal, please register using this link:
+Click the link below to access your portal:
 
-${portalUrl(inviteClient)}
+${portalBase}?email=${inviteClient.email}
 
-Important: please register using this email address (${inviteClient.email}) so the system can link you to your project automatically.
+Important: please register using this email address (${inviteClient.email}) so the system links you to your project automatically.
+
+If you already have an account, simply sign in at the same link.
 
 Kind regards,
 ${settings.name || 'Your Builder'}`}
