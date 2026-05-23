@@ -37,19 +37,16 @@ export default function ScopeChat({ jobType, address, phases, onInsert, onClose 
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [listening, setListening] = useState(false)
-  const [micAvailable, setMicAvailable] = useState(false)
+  // Lazy initialiser runs only on the client — avoids the async useEffect timing issue
+  const [micAvailable] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return !!(window.SpeechRecognition || window.webkitSpeechRecognition)
+  })
   const recognitionRef = useRef<SpeechRecognition | null>(null)
   const [loading, setLoading] = useState(false)
   const [latestScope, setLatestScope] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
-
-  // Check mic availability on mount
-  useEffect(() => {
-    if (typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition)) {
-      setMicAvailable(true)
-    }
-  }, [])
 
   const stopListening = useCallback(() => {
     recognitionRef.current?.stop()
