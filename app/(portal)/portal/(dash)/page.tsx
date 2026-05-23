@@ -4,25 +4,17 @@ import Link from 'next/link'
 import { usePortal } from '@/contexts/PortalContext'
 import { fmt, STAGE_COLOR, STAGE_LABEL } from '@/lib/utils'
 
-export default function PortalDashboard() {
-  const { quotes, jobs, invoices, settings, userEmail, loading, error } = usePortal()
-
-  if (loading) {
-    return <div className="portal-loading">Loading your portal…</div>
-  }
-
-  if (error === 'no_admin_linked') {
+function PortalError({ error, userEmail, reload }: { error: string; userEmail: string; reload: () => void }) {
+  if (error === 'setup_required') {
     return (
       <div className="portal-notice">
-        <div style={{ fontSize: 48, marginBottom: 16 }}>📋</div>
-        <h2 style={{ marginBottom: 8 }}>Account not yet linked</h2>
-        <p style={{ marginBottom: 8 }}>
-          Your account (<strong>{userEmail}</strong>) hasn&apos;t been matched to a client record yet.
+        <div style={{ fontSize: 40, marginBottom: 16 }}>🔧</div>
+        <h2 style={{ marginBottom: 8 }}>Portal not set up yet</h2>
+        <p>The admin needs to run the database setup (phase3.sql) before the portal can be used.</p>
+        <p style={{ marginTop: 8, color: 'var(--muted)', fontSize: 13 }}>
+          If you&apos;re the builder, please open Supabase → SQL Editor and run the phase3.sql migration.
         </p>
-        <p style={{ color: 'var(--muted)', fontSize: 14 }}>
-          Please contact your builder and ask them to add <strong>{userEmail}</strong> to your client record.
-          Once they do, your quotes, jobs and invoices will appear here.
-        </p>
+        <button className="btn btn-outline" style={{ marginTop: 16 }} onClick={reload}>Try again</button>
       </div>
     )
   }
@@ -30,9 +22,9 @@ export default function PortalDashboard() {
   if (error === 'not_customer') {
     return (
       <div className="portal-notice">
-        <div style={{ fontSize: 48, marginBottom: 16 }}>🔑</div>
+        <div style={{ fontSize: 40, marginBottom: 16 }}>🔑</div>
         <h2 style={{ marginBottom: 8 }}>Admin account detected</h2>
-        <p>This portal is for clients only.</p>
+        <p>This portal is for clients only. Your account is set up as an admin.</p>
         <p style={{ marginTop: 8 }}>
           <Link href="/dashboard" style={{ color: 'var(--moss)', fontWeight: 600 }}>
             Go to the admin dashboard →
@@ -42,12 +34,51 @@ export default function PortalDashboard() {
     )
   }
 
-  if (error) {
+  if (error === 'no_admin_linked') {
     return (
       <div className="portal-notice">
-        <p>Something went wrong loading your data. Please refresh the page.</p>
+        <div style={{ fontSize: 40, marginBottom: 16 }}>📋</div>
+        <h2 style={{ marginBottom: 8 }}>Account not yet linked</h2>
+        <p>
+          Your account (<strong>{userEmail}</strong>) hasn&apos;t been matched to a client record yet.
+        </p>
+        <p style={{ marginTop: 8, color: 'var(--muted)', fontSize: 13 }}>
+          Please contact your builder and ask them to save <strong>{userEmail}</strong> as your email address in the Clients list.
+          Once they do, your quotes, jobs and invoices will appear here automatically.
+        </p>
+        <button className="btn btn-outline" style={{ marginTop: 16 }} onClick={reload}>Check again</button>
       </div>
     )
+  }
+
+  // Generic / rpc_error / no_profile
+  return (
+    <div className="portal-notice">
+      <div style={{ fontSize: 40, marginBottom: 16 }}>⚠️</div>
+      <h2 style={{ marginBottom: 8 }}>Something went wrong</h2>
+      <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 16 }}>
+        We couldn&apos;t load your portal data.
+        {error === 'rpc_error' && ' This may mean the database setup hasn\'t been run yet.'}
+      </p>
+      <button className="btn btn-primary" onClick={reload}>Try again</button>
+    </div>
+  )
+}
+
+export default function PortalDashboard() {
+  const { quotes, jobs, invoices, settings, userEmail, loading, error, reload } = usePortal()
+
+  if (loading) {
+    return (
+      <div className="portal-loading">
+        <div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div>
+        Loading your portal…
+      </div>
+    )
+  }
+
+  if (error) {
+    return <PortalError error={error} userEmail={userEmail} reload={reload} />
   }
 
   const openQuotes = quotes.filter(q => q.status === 'pending' || q.status === 'sent')

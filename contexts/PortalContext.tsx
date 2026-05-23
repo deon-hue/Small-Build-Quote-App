@@ -21,6 +21,7 @@ interface PortalContextType {
   userEmail: string
   loading: boolean
   error: string | null
+  reload: () => void
 }
 
 const PortalContext = createContext<PortalContextType | null>(null)
@@ -44,32 +45,55 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   const [userEmail, setUserEmail] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [tick, setTick] = useState(0)
+
+  function reload() {
+    setError(null)
+    setLoading(true)
+    setTick(t => t + 1)
+  }
 
   useEffect(() => {
     async function load() {
+      setLoading(true)
+      setError(null)
+
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setLoading(false); return }
 
       setUserEmail(user.email || '')
 
-      const { data, error: rpcError } = await supabase.rpc('get_portal_data')
-
-      if (rpcError) {
-        setError('Failed to load your data. Please try again.')
+      // Always ensure a profile exists — safe to call every time (no-op if already set up)
+      const { error: profileErr } = await supabase.rpc('create_customer_profile')
+      if (profileErr) {
+        // RPC doesn't exist yet → phase3.sql not run
+        setError('setup_required')
         setLoading(false)
         return
       }
 
-      if (data?.error) {
-        setError(data.error as string)
+      // Fetch all portal data in one call
+      const { data, error: rpcError } = await supabase.rpc('get_portal_data')
+
+      if (rpcError) {
+        setError('rpc_error')
+        setLoading(false)
+        return
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = data as any
+
+      if (result?.error) {
+        setError(result.error as string)
         setLoading(false)
         return
       }
 
       // Map quotes
-      if (Array.isArray(data?.quotes)) {
+      if (Array.isArray(result?.quotes)) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        setQuotes(data.quotes.map((r: any) => ({
+        setQuotes(result.quotes.map((r: any) => ({
           id: r.id, ref: r.ref, savedDate: r.saved_date || '',
           lastEdited: r.last_edited || '', status: r.status,
           jobType: r.job_type, markup: Number(r.markup),
@@ -81,9 +105,9 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       }
 
       // Map jobs
-      if (Array.isArray(data?.jobs)) {
+      if (Array.isArray(result?.jobs)) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        setJobs(data.jobs.map((r: any) => ({
+        setJobs(result.jobs.map((r: any) => ({
           id: r.id, client: r.client, type: r.type, address: r.address || '',
           value: Number(r.value), stage: r.stage,
           start: r.start_date || '', weeks: r.weeks, done: r.done,
@@ -92,9 +116,9 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       }
 
       // Map invoices
-      if (Array.isArray(data?.invoices)) {
+      if (Array.isArray(result?.invoices)) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        setInvoices(data.invoices.map((r: any) => ({
+        setInvoices(result.invoices.map((r: any) => ({
           id: r.id, ref: r.ref, jobId: r.job_id || '', quoteId: r.quote_id || '',
           clientName: r.client_name, clientAddress: r.client_address || '',
           clientEmail: r.client_email || '', lineItems: r.line_items || [],
@@ -107,24 +131,24 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       }
 
       // Map settings
-      if (data?.settings) {
+      if (result?.settings) {
         setSettings({
-          name: data.settings.name || '',
-          tagline: data.settings.tagline || '',
-          email: data.settings.email || '',
-          phone: data.settings.phone || '',
-          address: data.settings.address || '',
-          logo: data.settings.logo || '',
+          name: result.settings.name || '',
+          tagline: result.settings.tagline || '',
+          email: result.settings.email || '',
+          phone: result.settings.phone || '',
+          address: result.settings.address || '',
+          logo: result.settings.logo || '',
         })
       }
 
       setLoading(false)
     }
     load()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tick]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <PortalContext.Provider value={{ quotes, jobs, invoices, settings, userEmail, loading, error }}>
+    <PortalContext.Provider value={{ quotes, jobs, invoices, settings, userEmail, loading, error, reload }}>
       {children}
     </PortalContext.Provider>
   )

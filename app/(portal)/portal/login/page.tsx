@@ -21,6 +21,8 @@ export default function PortalLoginPage() {
     try {
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
       if (signInError) { setError(signInError.message); return }
+      // Ensure customer profile exists (safe to call every time — no-op if already set up)
+      await supabase.rpc('create_customer_profile')
       router.push('/portal')
       router.refresh()
     } finally {
