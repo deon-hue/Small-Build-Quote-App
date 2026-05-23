@@ -113,7 +113,7 @@ export default function NewQuotePage() {
     setSaving(true)
     try {
       const customer = { name: custName, address: custAddr, email: custEmail, phone: custPhone }
-      const qData = { status: 'pending' as const, jobType, markup, vatIncluded: vatOn, scope, photo, convertedToJob: false, customer, phases: JSON.parse(JSON.stringify(phases)) }
+      const qData = { status: 'pending' as const, jobType, markup, vatIncluded: vatOn, scope, photo, convertedToJob: false, lastEdited: '', customer, phases: JSON.parse(JSON.stringify(phases)) }
 
       if (editingId) {
         const existing = quotes.find(q => q.id === editingId)!
