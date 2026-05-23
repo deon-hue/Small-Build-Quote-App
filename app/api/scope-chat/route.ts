@@ -48,6 +48,13 @@ Works comprise a single-storey rear extension to extend the existing kitchen and
     })
 
     const data = await res.json()
+    if (data.error) {
+      console.error('Anthropic API error:', data.error)
+      const msg = data.error?.type === 'authentication_error'
+        ? 'AI not configured — please add your ANTHROPIC_API_KEY in Netlify environment variables.'
+        : `AI error: ${data.error?.message || 'Unknown error'}`
+      return NextResponse.json({ reply: msg })
+    }
     const reply = data.content?.[0]?.text || 'Sorry, I could not generate a response. Please try again.'
     return NextResponse.json({ reply })
   } catch (err) {

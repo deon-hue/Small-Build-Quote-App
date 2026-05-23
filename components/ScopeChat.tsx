@@ -2,13 +2,8 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 
-// Browser SpeechRecognition type declarations
-declare global {
-  interface Window {
-    SpeechRecognition: new () => SpeechRecognition
-    webkitSpeechRecognition: new () => SpeechRecognition
-  }
-}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnySpeechRecognition = any
 
 interface Message {
   role: 'user' | 'assistant'
@@ -37,7 +32,7 @@ export default function ScopeChat({ jobType, address, phases, onInsert, onClose 
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [listening, setListening] = useState(false)
-  const recognitionRef = useRef<SpeechRecognition | null>(null)
+  const recognitionRef = useRef<AnySpeechRecognition>(null)
   const [loading, setLoading] = useState(false)
   const [latestScope, setLatestScope] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -52,22 +47,25 @@ export default function ScopeChat({ jobType, address, phases, onInsert, onClose 
   const toggleMic = useCallback(() => {
     if (listening) { stopListening(); return }
 
-    const SR = (window as Window).SpeechRecognition || (window as Window).webkitSpeechRecognition
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     if (!SR) {
       alert('Voice input is not supported in this browser. Please use Chrome or Edge.')
       return
     }
 
-    const rec = new SR()
+    const rec: AnySpeechRecognition = new SR()
     rec.lang = 'en-GB'
     rec.continuous = false
     rec.interimResults = true
 
     rec.onstart = () => setListening(true)
 
-    rec.onresult = (e: SpeechRecognitionEvent) => {
-      const transcript = Array.from(e.results)
-        .map(r => r[0].transcript)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onresult = (e: any) => {
+      const transcript = Array.from(e.results as ArrayLike<any>)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .map((r: any) => r[0].transcript)
         .join('')
       setInput(transcript)
     }
