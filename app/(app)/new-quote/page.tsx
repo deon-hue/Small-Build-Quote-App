@@ -5,6 +5,7 @@ import { useApp } from '@/contexts/AppContext'
 import { fmt, VAT, UNITS, JOB_TYPES, JOB_TEMPLATES, calcItem, calcPhase, calcItemSell, calcPhaseSell, quoteTotal } from '@/lib/utils'
 import type { QuotePhase, QuoteItem, Quote } from '@/lib/types'
 import QuotePreviewModal from '@/components/QuotePreviewModal'
+import ScopeChat from '@/components/ScopeChat'
 
 let phaseCounter = 0
 let itemCounter = 0
@@ -30,6 +31,7 @@ export default function NewQuotePage() {
   const [showPreview, setShowPreview] = useState(false)
   const [saving, setSaving] = useState(false)
   const [generatingScope, setGeneratingScope] = useState(false)
+  const [showScopeChat, setShowScopeChat] = useState(false)
   const [clientDrop, setClientDrop] = useState(false)
   const [clientSearch, setClientSearch] = useState('')
   const photoInputRef = useRef<HTMLInputElement>(null)
@@ -308,8 +310,8 @@ export default function NewQuotePage() {
           <div className="card">
             <div className="card-hd">
               <span>Scope of Works</span>
-              <button className="btn-sm btn-sky" onClick={generateScope} disabled={generatingScope} style={{ fontSize: 11 }}>
-                {generatingScope ? '…' : '✦ AI Write'}
+              <button className="btn-sm btn-sky" onClick={() => setShowScopeChat(true)} style={{ fontSize: 11 }}>
+                ✦ AI Chat
               </button>
             </div>
             <div style={{ padding: '14px 16px' }}>
@@ -418,6 +420,16 @@ export default function NewQuotePage() {
 
       {showPreview && (
         <QuotePreviewModal quote={previewQuote} onClose={() => setShowPreview(false)} />
+      )}
+
+      {showScopeChat && (
+        <ScopeChat
+          jobType={jobType}
+          address={custAddr}
+          phases={phases.map(p => p.phase)}
+          onInsert={text => setScope(text)}
+          onClose={() => setShowScopeChat(false)}
+        />
       )}
     </>
   )
