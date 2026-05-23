@@ -47,13 +47,6 @@ export async function middleware(request: NextRequest) {
     if (user && isAdminLogin) {
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
-    // Customer trying to access admin routes → send them to their portal
-    if (user) {
-      const { data: role } = await supabase.rpc('get_my_role')
-      if (role === 'customer') {
-        return NextResponse.redirect(new URL('/portal', request.url))
-      }
-    }
   }
 
   return supabaseResponse

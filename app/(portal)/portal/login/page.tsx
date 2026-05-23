@@ -29,7 +29,13 @@ function PortalLoginForm() {
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
       if (signInError) { setError(signInError.message); return }
       await supabase.rpc('create_customer_profile')
-      router.push('/portal')
+      // If this is an admin account, send them to the admin dashboard instead
+      const { data: role } = await supabase.rpc('get_my_role')
+      if (role === 'admin') {
+        router.push('/dashboard')
+      } else {
+        router.push('/portal')
+      }
       router.refresh()
     } finally {
       setLoading(false)
