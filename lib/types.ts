@@ -53,6 +53,8 @@ export interface Job {
   quoteId?: string
 }
 
+export type PortalStatus = 'no_email' | 'not_invited' | 'invited' | 'active'
+
 export interface Client {
   id: string
   name: string
@@ -63,6 +65,9 @@ export interface Client {
   address: string
   notes: string
   addedFrom: string
+  portalInvitedAt?: string | null
+  portalStatus?: PortalStatus
+  portalLastLogin?: string | null
 }
 
 export interface Settings {

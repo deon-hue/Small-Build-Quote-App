@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Job, Quote, Client, Settings, GanttState, Invoice, JobNote, PaymentMilestone } from '@/lib/types'
+import type { Job, Quote, Client, Settings, GanttState, Invoice, JobNote, PortalStatus } from '@/lib/types'
 import { uid } from '@/lib/utils'
 
 interface AppContextType {
@@ -27,6 +27,7 @@ interface AppContextType {
   updateClient: (client: Client) => Promise<void>
   deleteClient: (id: string) => Promise<void>
   upsertClientFromQuote: (customer: Quote['customer']) => Promise<void>
+  markPortalInvite: (clientId: string) => Promise<void>
 
   saveSettings: (s: Settings) => Promise<void>
   saveGanttState: (jobId: string, state: GanttState) => Promise<void>
@@ -76,10 +77,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setLoading(false); return }
 
-      const [jobsRes, quotesRes, clientsRes, settingsRes, ganttRes, invoicesRes, notesRes] = await Promise.all([
+      const [jobsRes, quotesRes, clientsRpc, settingsRes, ganttRes, invoicesRes, notesRes] = await Promise.all([
         supabase.from('jobs').select('*').order('created_at', { ascending: true }),
         supabase.from('quotes').select('*').order('created_at', { ascending: true }),
-        supabase.from('clients').select('*').order('created_at', { ascending: true }),
+        supabase.rpc('get_clients_with_portal_status'),
         supabase.from('settings').select('*').eq('user_id', user.id).maybeSingle(),
         supabase.from('gantt_states').select('*'),
         supabase.from('invoices').select('*').order('created_at', { ascending: false }),
@@ -105,11 +106,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         })))
       }
 
-      if (clientsRes.data) {
-        setClients(clientsRes.data.map(r => ({
-          id: r.id, name: r.name, first: r.first_name, last: r.last_name,
-          phone: r.phone, email: r.email, address: r.address,
-          notes: r.notes, addedFrom: r.added_from,
+      if (Array.isArray(clientsRpc.data)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setClients(clientsRpc.data.map((r: any) => ({
+          id: r.id, name: r.name, first: r.first_name || '', last: r.last_name || '',
+          phone: r.phone || '', email: r.email || '', address: r.address || '',
+          notes: r.notes || '', addedFrom: r.added_from || '',
+          portalInvitedAt: r.portal_invited_at || null,
+          portalStatus: (r.portal_status || 'not_invited') as PortalStatus,
+          portalLastLogin: r.portal_last_login || null,
         })))
       }
 
@@ -240,9 +245,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }).select().single()
     if (error) throw error
     setClients(prev => [...prev, {
-      id: data.id, name: data.name, first: data.first_name, last: data.last_name,
-      phone: data.phone, email: data.email, address: data.address,
-      notes: data.notes, addedFrom: data.added_from,
+      id: data.id, name: data.name, first: data.first_name || '', last: data.last_name || '',
+      phone: data.phone || '', email: data.email || '', address: data.address || '',
+      notes: data.notes || '', addedFrom: data.added_from || '',
+      portalInvitedAt: null, portalStatus: 'not_invited', portalLastLogin: null,
     }])
   }, [supabase])
 
@@ -257,6 +263,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const deleteClient = useCallback(async (id: string) => {
     await supabase.from('clients').delete().eq('id', id)
     setClients(prev => prev.filter(c => c.id !== id))
+  }, [supabase])
+
+  const markPortalInvite = useCallback(async (clientId: string) => {
+    await supabase.rpc('mark_portal_invite', { p_client_id: clientId })
+    const now = new Date().toISOString()
+    setClients(prev => prev.map(c => c.id === clientId
+      ? { ...c, portalInvitedAt: now, portalStatus: c.portalStatus === 'active' ? 'active' : 'invited' }
+      : c
+    ))
   }, [supabase])
 
   const upsertClientFromQuote = useCallback(async (customer: Quote['customer']) => {
@@ -383,7 +398,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       jobs, quotes, clients, settings, ganttStates, invoices, jobNotes, loading,
       addJob, updateJob, deleteJob,
       addQuote, updateQuote, deleteQuote,
-      addClient, updateClient, deleteClient, upsertClientFromQuote,
+      addClient, updateClient, deleteClient, upsertClientFromQuote, markPortalInvite,
       saveSettings,
       saveGanttState, getGanttState,
       addInvoice, updateInvoice, deleteInvoice,
