@@ -440,9 +440,18 @@ export default function NewQuotePage() {
                         <select value={item.unit} onChange={e => updateItem(p.id, item.id, 'unit', e.target.value)}>
                           {UNITS.map(u => <option key={u}>{u}</option>)}
                         </select>
-                        <input type="number" value={item.labour} onChange={e => updateItem(p.id, item.id, 'labour', Number(e.target.value))} style={{ textAlign: 'right' }} />
-                        <input type="number" value={item.materials} onChange={e => updateItem(p.id, item.id, 'materials', Number(e.target.value))} style={{ textAlign: 'right' }} />
-                        <input type="number" value={item.plantHire ?? 0} onChange={e => updateItem(p.id, item.id, 'plantHire', Number(e.target.value))} style={{ textAlign: 'right' }} placeholder="0" />
+                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                          <span style={{ position: 'absolute', left: 6, fontSize: 11, color: 'var(--muted)', pointerEvents: 'none' }}>£</span>
+                          <input type="number" value={item.labour} onChange={e => updateItem(p.id, item.id, 'labour', Number(e.target.value))} style={{ textAlign: 'right', width: '100%', paddingLeft: 14 }} />
+                        </div>
+                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                          <span style={{ position: 'absolute', left: 6, fontSize: 11, color: 'var(--muted)', pointerEvents: 'none' }}>£</span>
+                          <input type="number" value={item.materials} onChange={e => updateItem(p.id, item.id, 'materials', Number(e.target.value))} style={{ textAlign: 'right', width: '100%', paddingLeft: 14 }} />
+                        </div>
+                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                          <span style={{ position: 'absolute', left: 6, fontSize: 11, color: 'var(--muted)', pointerEvents: 'none' }}>£</span>
+                          <input type="number" value={item.plantHire ?? 0} onChange={e => updateItem(p.id, item.id, 'plantHire', Number(e.target.value))} style={{ textAlign: 'right', width: '100%', paddingLeft: 14 }} />
+                        </div>
                         <span style={{ textAlign: 'right', fontSize: 11, color: '#c0392b', fontFamily: 'DM Mono, monospace', padding: '0 4px' }}>{fmt(itemCost)}</span>
                         <span style={{ textAlign: 'right', fontSize: 11, color: '#2b8a3e', fontFamily: 'DM Mono, monospace', padding: '0 4px', fontWeight: 600 }}>{fmt(itemSell)}</span>
                         <span style={{ textAlign: 'right', fontSize: 11, color: '#4a90a4', fontFamily: 'DM Mono, monospace', padding: '0 4px' }}>{vatOn ? fmt(itemVat) : '—'}</span>
