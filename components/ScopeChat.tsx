@@ -37,11 +37,6 @@ export default function ScopeChat({ jobType, address, phases, onInsert, onClose 
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [listening, setListening] = useState(false)
-  // Lazy initialiser runs only on the client — avoids the async useEffect timing issue
-  const [micAvailable] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false
-    return !!(window.SpeechRecognition || window.webkitSpeechRecognition)
-  })
   const recognitionRef = useRef<SpeechRecognition | null>(null)
   const [loading, setLoading] = useState(false)
   const [latestScope, setLatestScope] = useState<string | null>(null)
@@ -57,8 +52,11 @@ export default function ScopeChat({ jobType, address, phases, onInsert, onClose 
   const toggleMic = useCallback(() => {
     if (listening) { stopListening(); return }
 
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!SR) return
+    const SR = (window as Window).SpeechRecognition || (window as Window).webkitSpeechRecognition
+    if (!SR) {
+      alert('Voice input is not supported in this browser. Please use Chrome or Edge.')
+      return
+    }
 
     const rec = new SR()
     rec.lang = 'en-GB'
@@ -302,31 +300,28 @@ export default function ScopeChat({ jobType, address, phases, onInsert, onClose 
             }}
           />
 
-          {/* Mic button */}
-          {micAvailable && (
-            <button
-              onClick={toggleMic}
-              title={listening ? 'Stop recording' : 'Speak your description'}
-              style={{
-                border: 'none', borderRadius: 8, width: 42, flexShrink: 0,
-                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 18, transition: 'background 0.2s',
-                background: listening ? '#e74c3c' : '#f0f2ee',
-                color: listening ? '#fff' : 'var(--ink)',
-                position: 'relative',
-              }}
-            >
-              🎤
-              {/* Pulsing ring when active */}
-              {listening && (
-                <span style={{
-                  position: 'absolute', inset: -3, borderRadius: 11,
-                  border: '2px solid #e74c3c', animation: 'micPulse 1s ease-in-out infinite',
-                  pointerEvents: 'none',
-                }} />
-              )}
-            </button>
-          )}
+          {/* Mic button — always rendered, handles unsupported browsers on click */}
+          <button
+            onClick={toggleMic}
+            title={listening ? 'Stop recording' : 'Click to speak'}
+            style={{
+              border: 'none', borderRadius: 8, width: 42, flexShrink: 0,
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 18, transition: 'background 0.2s',
+              background: listening ? '#e74c3c' : '#f0f2ee',
+              color: listening ? '#fff' : 'var(--ink)',
+              position: 'relative',
+            }}
+          >
+            🎤
+            {listening && (
+              <span style={{
+                position: 'absolute', inset: -3, borderRadius: 11,
+                border: '2px solid #e74c3c', animation: 'micPulse 1s ease-in-out infinite',
+                pointerEvents: 'none',
+              }} />
+            )}
+          </button>
 
           {/* Send button */}
           <button
