@@ -77,15 +77,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setLoading(false); return }
 
-      const [jobsRes, quotesRes, clientsRpc, settingsRes, ganttRes, invoicesRes, notesRes] = await Promise.all([
+      const [jobsRes, quotesRes, clientsRes, settingsRes, ganttRes, invoicesRes, notesRes] = await Promise.all([
         supabase.from('jobs').select('*').order('created_at', { ascending: true }),
         supabase.from('quotes').select('*').order('created_at', { ascending: true }),
-        supabase.rpc('get_clients_with_portal_status').catch(() => ({ data: null, error: true })),
+        supabase.from('clients').select('*').order('created_at', { ascending: true }),
         supabase.from('settings').select('*').eq('user_id', user.id).maybeSingle(),
         supabase.from('gantt_states').select('*'),
         supabase.from('invoices').select('*').order('created_at', { ascending: false }),
         supabase.from('job_notes').select('*').order('created_at', { ascending: true }),
       ])
+
+      // Separately try to get portal status — only available after phase5.sql is run
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let portalStatusMap: Record<string, any> = {}
+      try {
+        const { data: statusData } = await supabase.rpc('get_clients_with_portal_status')
+        if (Array.isArray(statusData)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          statusData.forEach((r: any) => { portalStatusMap[r.id] = r })
+        }
+      } catch { /* phase5.sql not run yet — portal status stays as defaults */ }
 
       if (jobsRes.data) {
         setJobs(jobsRes.data.map(r => ({
@@ -106,29 +117,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         })))
       }
 
-      if (Array.isArray(clientsRpc.data)) {
-        // RPC succeeded (phase5.sql has been run) — use rich data with portal status
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        setClients(clientsRpc.data.map((r: any) => ({
+      if (clientsRes.data) {
+        setClients(clientsRes.data.map(r => ({
           id: r.id, name: r.name, first: r.first_name || '', last: r.last_name || '',
           phone: r.phone || '', email: r.email || '', address: r.address || '',
           notes: r.notes || '', addedFrom: r.added_from || '',
-          portalInvitedAt: r.portal_invited_at || null,
-          portalStatus: (r.portal_status || 'not_invited') as PortalStatus,
-          portalLastLogin: r.portal_last_login || null,
+          portalInvitedAt: portalStatusMap[r.id]?.portal_invited_at || null,
+          portalStatus: (portalStatusMap[r.id]?.portal_status || (r.email ? 'not_invited' : 'no_email')) as PortalStatus,
+          portalLastLogin: portalStatusMap[r.id]?.portal_last_login || null,
         })))
-      } else {
-        // RPC not available yet (phase5.sql not run) — fall back to direct query
-        const { data: clientsData } = await supabase
-          .from('clients').select('*').order('created_at', { ascending: true })
-        if (clientsData) {
-          setClients(clientsData.map(r => ({
-            id: r.id, name: r.name, first: r.first_name || '', last: r.last_name || '',
-            phone: r.phone || '', email: r.email || '', address: r.address || '',
-            notes: r.notes || '', addedFrom: r.added_from || '',
-            portalInvitedAt: null, portalStatus: 'not_invited' as PortalStatus, portalLastLogin: null,
-          })))
-        }
       }
 
       if (settingsRes.data) {
