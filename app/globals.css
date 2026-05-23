@@ -158,12 +158,20 @@ textarea{resize:vertical;min-height:56px}
 .login-page{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--paper)}
 .login-box{background:white;border:1.5px solid var(--border);border-radius:12px;padding:40px;width:min(400px,96vw);box-shadow:0 4px 24px rgba(0,0,0,0.08)}
 
+/* ── Hamburger menu ── */
+.hamburger{display:none;flex-direction:column;gap:5px;background:none;border:none;cursor:pointer;padding:6px;border-radius:4px;margin-right:12px}
+.hamburger span{display:block;width:22px;height:2px;background:var(--ink);border-radius:2px;transition:all 0.2s}
+.hamburger:hover span{background:var(--slate)}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:199}
+
 /* ── Mobile responsive ── */
 @media (max-width:768px){
   body{overflow:auto;height:auto}
   .app{flex-direction:column;height:auto;min-height:100vh;overflow:visible}
   .sidebar{position:fixed;top:0;left:-260px;width:260px;height:100vh;z-index:200;transition:left 0.25s ease;box-shadow:4px 0 20px rgba(0,0,0,0.3)}
   .sidebar.open{left:0}
+  .sidebar-overlay{display:block}
+  .hamburger{display:flex}
   .topbar{padding:10px 16px;position:sticky;top:0;z-index:99}
   .topbar-title{font-size:17px}
   .main{flex:1;width:100%}
@@ -175,9 +183,12 @@ textarea{resize:vertical;min-height:56px}
   .qb-right{overflow-y:visible}
   .sq-card{flex-wrap:wrap;gap:8px}
   .sq-val{min-width:auto;font-size:16px}
+  .sq-actions{flex-wrap:wrap}
   .card{overflow-x:auto}
   .tbl{min-width:500px}
   .modal-overlay{padding:0;align-items:flex-end}
   .modal-box,.form-modal{width:100vw!important;max-width:100vw!important;border-radius:12px 12px 0 0;max-height:92vh}
   .row2{flex-direction:column;gap:0}
+  .pipeline{flex-direction:column}
+  .pip-col{min-width:unset}
 }

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { fmt, quoteTotal, STAGE_LABEL, Q_BADGE, Q_LABEL } from '@/lib/utils'
+import { buildHtmlClientView } from '@/lib/quoteHtml'
 import type { Quote } from '@/lib/types'
 import QuotePreviewModal from '@/components/QuotePreviewModal'
 import { useRouter } from 'next/navigation'
@@ -69,6 +70,33 @@ export default function SavedQuotesPage() {
     router.push('/jobs')
   }
 
+  function downloadQuote(q: Quote) {
+    const html = buildHtmlClientView(q, settings)
+    const blob = new Blob([html], { type: 'text/html' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `Quote-${q.ref || 'Draft'}-${(q.customer.name || 'Client').replace(/[^a-z0-9]/gi, '_')}.html`
+    a.click()
+  }
+
+  function quoteExpiry(savedDate: string) {
+    if (!savedDate) return ''
+    const parts = savedDate.split('/')
+    if (parts.length !== 3) return ''
+    const d = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]))
+    d.setDate(d.getDate() + 30)
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+  }
+
+  function isExpired(savedDate: string) {
+    if (!savedDate) return false
+    const parts = savedDate.split('/')
+    if (parts.length !== 3) return false
+    const d = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]))
+    d.setDate(d.getDate() + 30)
+    return d < new Date()
+  }
+
   function emailQuote(q: Quote) {
     const co = settings
     const net = q.phases.reduce((s, p) => s + p.items.reduce((ps, i) => ps + (Number(i.labour) || 0) + (Number(i.materials) || 0), 0), 0)
@@ -123,6 +151,11 @@ export default function SavedQuotesPage() {
                   <div className="sq-sub">
                     {q.customer.address || ''} · Saved {q.savedDate || '—'}
                     {q.lastEdited ? ' · Edited ' + q.lastEdited : ''}
+                    {quoteExpiry(q.savedDate) && (
+                      <span style={{ marginLeft: 6, color: isExpired(q.savedDate) ? 'var(--terra)' : 'var(--muted)' }}>
+                        · {isExpired(q.savedDate) ? '⚠ Expired' : 'Expires'} {quoteExpiry(q.savedDate)}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="sq-val">{fmt(quoteTotal(q))}</div>
@@ -135,6 +168,7 @@ export default function SavedQuotesPage() {
                       router.push('/new-quote')
                     }}>✎ Edit</button>
                     <button className="btn-sm btn-outline" onClick={() => setPreviewQuote(q)}>View</button>
+                    <button className="btn-sm btn-outline" onClick={() => downloadQuote(q)}>⬇ PDF</button>
                     <button className="btn-sm" style={{ background: '#0078d4', color: 'white', border: 'none', borderRadius: 4, padding: '5px 12px', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500 }}
                       onClick={() => emailQuote(q)}>
                       ✉ Email
