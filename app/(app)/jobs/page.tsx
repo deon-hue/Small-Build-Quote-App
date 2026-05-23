@@ -12,7 +12,7 @@ const BLANK_JOB: Omit<Job, 'id'> = {
 }
 
 export default function JobsPage() {
-  const { jobs, quotes, addJob, updateJob, deleteJob, updateQuote, loading } = useApp()
+  const { jobs, quotes, jobNotes, addJob, updateJob, deleteJob, updateQuote, addJobNote, deleteJobNote, loading } = useApp()
   const [filter, setFilter] = useState('all')
   const [showModal, setShowModal] = useState(false)
   const [editJob, setEditJob] = useState<Job | null>(null)
@@ -20,6 +20,9 @@ export default function JobsPage() {
   const [prefillQuoteId, setPrefillQuoteId] = useState('')
   const [ganttJob, setGanttJob] = useState<Job | null>(null)
   const [saving, setSaving] = useState(false)
+  const [notesJob, setNotesJob] = useState<Job | null>(null)
+  const [newNote, setNewNote] = useState('')
+  const [addingNote, setAddingNote] = useState(false)
 
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
 
@@ -125,6 +128,9 @@ export default function JobsPage() {
                   </div>
                   <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                     <button className="btn-sm btn-gold" onClick={() => setGanttJob(j)}>📋 Gantt</button>
+                    <button className="btn-sm btn-sky" onClick={() => { setNotesJob(j); setNewNote('') }}>
+                      📝 Notes {jobNotes.filter(n => n.jobId === j.id).length > 0 ? `(${jobNotes.filter(n => n.jobId === j.id).length})` : ''}
+                    </button>
                     <button className="btn-sm btn-outline" onClick={() => openEdit(j)}>Edit</button>
                     <button className="btn-sm btn-danger" onClick={() => handleDelete(j)}>✕</button>
                   </div>
@@ -203,6 +209,56 @@ export default function JobsPage() {
               <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
                 {saving ? 'Saving…' : editJob ? 'Update Job' : 'Add Job'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Job notes modal */}
+      {notesJob && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setNotesJob(null) }}>
+          <div className="form-modal" style={{ width: 'min(520px, 96vw)', maxHeight: '85vh', overflowY: 'auto' }}>
+            <div className="form-modal-hd">
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 17 }}>Activity Log</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{notesJob.type} — {notesJob.client}</div>
+              </div>
+              <button className="modal-close" onClick={() => setNotesJob(null)}>×</button>
+            </div>
+            <div className="form-modal-bd">
+              {/* Add note */}
+              <div className="fg">
+                <label>Add Note</label>
+                <textarea value={newNote} onChange={e => setNewNote(e.target.value)} rows={3} placeholder="Site update, issue, milestone reached…" />
+              </div>
+              <button className="btn btn-primary" disabled={!newNote.trim() || addingNote}
+                onClick={async () => {
+                  if (!newNote.trim()) return
+                  setAddingNote(true)
+                  await addJobNote(notesJob.id, newNote.trim())
+                  setNewNote('')
+                  setAddingNote(false)
+                }}>
+                {addingNote ? 'Adding…' : '+ Add Note'}
+              </button>
+
+              {/* Notes list */}
+              <div style={{ marginTop: 20 }}>
+                {jobNotes.filter(n => n.jobId === notesJob.id).length === 0
+                  ? <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', padding: '20px 0' }}>No notes yet</div>
+                  : [...jobNotes.filter(n => n.jobId === notesJob.id)].reverse().map(n => (
+                      <div key={n.id} style={{ borderBottom: '1px solid var(--border)', padding: '12px 0', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, lineHeight: 1.5 }}>{n.note}</div>
+                          <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                            {new Date(n.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </div>
+                        <button className="rm-btn" onClick={() => deleteJobNote(n.id)}>×</button>
+                      </div>
+                    ))
+                }
+              </div>
             </div>
           </div>
         </div>

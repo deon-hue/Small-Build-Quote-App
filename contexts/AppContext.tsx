@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Job, Quote, Client, Settings, GanttState } from '@/lib/types'
+import type { Job, Quote, Client, Settings, GanttState, Invoice, JobNote } from '@/lib/types'
 import { uid } from '@/lib/utils'
 
 interface AppContextType {
@@ -11,6 +11,8 @@ interface AppContextType {
   clients: Client[]
   settings: Settings
   ganttStates: Record<string, GanttState>
+  invoices: Invoice[]
+  jobNotes: JobNote[]
   loading: boolean
 
   addJob: (job: Omit<Job, 'id'>) => Promise<Job>
@@ -29,6 +31,13 @@ interface AppContextType {
   saveSettings: (s: Settings) => Promise<void>
   saveGanttState: (jobId: string, state: GanttState) => Promise<void>
   getGanttState: (jobId: string) => GanttState | null
+
+  addInvoice: (inv: Omit<Invoice, 'id' | 'ref' | 'createdAt'>) => Promise<Invoice>
+  updateInvoice: (inv: Invoice) => Promise<void>
+  deleteInvoice: (id: string) => Promise<void>
+
+  addJobNote: (jobId: string, note: string) => Promise<JobNote>
+  deleteJobNote: (id: string) => Promise<void>
 
   nextQuoteRef: () => string
 }
@@ -57,6 +66,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [clients, setClients] = useState<Client[]>([])
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
   const [ganttStates, setGanttStates] = useState<Record<string, GanttState>>({})
+  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [jobNotes, setJobNotes] = useState<JobNote[]>([])
   const [loading, setLoading] = useState(true)
 
   // ── Load all data on mount ──────────────────────────────────
@@ -65,12 +76,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setLoading(false); return }
 
-      const [jobsRes, quotesRes, clientsRes, settingsRes, ganttRes] = await Promise.all([
+      const [jobsRes, quotesRes, clientsRes, settingsRes, ganttRes, invoicesRes, notesRes] = await Promise.all([
         supabase.from('jobs').select('*').order('created_at', { ascending: true }),
         supabase.from('quotes').select('*').order('created_at', { ascending: true }),
         supabase.from('clients').select('*').order('created_at', { ascending: true }),
         supabase.from('settings').select('*').eq('user_id', user.id).maybeSingle(),
         supabase.from('gantt_states').select('*'),
+        supabase.from('invoices').select('*').order('created_at', { ascending: false }),
+        supabase.from('job_notes').select('*').order('created_at', { ascending: true }),
       ])
 
       if (jobsRes.data) {
@@ -114,6 +127,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setGanttStates(map)
       }
 
+      if (invoicesRes.data) {
+        setInvoices(invoicesRes.data.map(r => ({
+          id: r.id, ref: r.ref, jobId: r.job_id || '', quoteId: r.quote_id || '',
+          clientName: r.client_name, clientAddress: r.client_address || '',
+          clientEmail: r.client_email || '', lineItems: r.line_items || [],
+          subtotal: Number(r.subtotal), vatIncluded: r.vat_included,
+          vatAmount: Number(r.vat_amount), total: Number(r.total),
+          status: r.status, issueDate: r.issue_date || '', dueDate: r.due_date || '',
+          notes: r.notes || '', createdAt: r.created_at,
+        })))
+      }
+
+      if (notesRes.data) {
+        setJobNotes(notesRes.data.map(r => ({
+          id: r.id, jobId: r.job_id, note: r.note, createdAt: r.created_at,
+        })))
+      }
+
       setLoading(false)
     }
     load()
@@ -149,8 +180,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const deleteJob = useCallback(async (id: string) => {
     await supabase.from('jobs').delete().eq('id', id)
     await supabase.from('gantt_states').delete().eq('job_id', id)
+    await supabase.from('job_notes').delete().eq('job_id', id)
     setJobs(prev => prev.filter(j => j.id !== id))
     setGanttStates(prev => { const n = { ...prev }; delete n[id]; return n })
+    setJobNotes(prev => prev.filter(n => n.jobId !== id))
   }, [supabase])
 
   // ── Quotes ───────────────────────────────────────────────────
@@ -279,14 +312,78 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return ganttStates[jobId] || null
   }, [ganttStates])
 
+  // ── Invoices ─────────────────────────────────────────────────
+  const addInvoice = useCallback(async (inv: Omit<Invoice, 'id' | 'ref' | 'createdAt'>): Promise<Invoice> => {
+    const { data: { user } } = await supabase.auth.getUser()
+    const ref = 'INV-' + String(Math.floor(Math.random() * 9000) + 1000)
+    const { data, error } = await supabase.from('invoices').insert({
+      user_id: user!.id, ref,
+      job_id: inv.jobId || '', quote_id: inv.quoteId || '',
+      client_name: inv.clientName, client_address: inv.clientAddress,
+      client_email: inv.clientEmail, line_items: inv.lineItems,
+      subtotal: inv.subtotal, vat_included: inv.vatIncluded,
+      vat_amount: inv.vatAmount, total: inv.total,
+      status: inv.status, issue_date: inv.issueDate, due_date: inv.dueDate,
+      notes: inv.notes,
+    }).select().single()
+    if (error) throw error
+    const newInv: Invoice = {
+      id: data.id, ref: data.ref, jobId: data.job_id || '', quoteId: data.quote_id || '',
+      clientName: data.client_name, clientAddress: data.client_address || '',
+      clientEmail: data.client_email || '', lineItems: data.line_items || [],
+      subtotal: Number(data.subtotal), vatIncluded: data.vat_included,
+      vatAmount: Number(data.vat_amount), total: Number(data.total),
+      status: data.status, issueDate: data.issue_date || '', dueDate: data.due_date || '',
+      notes: data.notes || '', createdAt: data.created_at,
+    }
+    setInvoices(prev => [newInv, ...prev])
+    return newInv
+  }, [supabase])
+
+  const updateInvoice = useCallback(async (inv: Invoice) => {
+    await supabase.from('invoices').update({
+      client_name: inv.clientName, client_address: inv.clientAddress,
+      client_email: inv.clientEmail, line_items: inv.lineItems,
+      subtotal: inv.subtotal, vat_included: inv.vatIncluded,
+      vat_amount: inv.vatAmount, total: inv.total,
+      status: inv.status, issue_date: inv.issueDate, due_date: inv.dueDate,
+      notes: inv.notes,
+    }).eq('id', inv.id)
+    setInvoices(prev => prev.map(x => x.id === inv.id ? inv : x))
+  }, [supabase])
+
+  const deleteInvoice = useCallback(async (id: string) => {
+    await supabase.from('invoices').delete().eq('id', id)
+    setInvoices(prev => prev.filter(i => i.id !== id))
+  }, [supabase])
+
+  // ── Job Notes ────────────────────────────────────────────────
+  const addJobNote = useCallback(async (jobId: string, note: string): Promise<JobNote> => {
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data, error } = await supabase.from('job_notes').insert({
+      user_id: user!.id, job_id: jobId, note,
+    }).select().single()
+    if (error) throw error
+    const newNote: JobNote = { id: data.id, jobId: data.job_id, note: data.note, createdAt: data.created_at }
+    setJobNotes(prev => [...prev, newNote])
+    return newNote
+  }, [supabase])
+
+  const deleteJobNote = useCallback(async (id: string) => {
+    await supabase.from('job_notes').delete().eq('id', id)
+    setJobNotes(prev => prev.filter(n => n.id !== id))
+  }, [supabase])
+
   return (
     <AppContext.Provider value={{
-      jobs, quotes, clients, settings, ganttStates, loading,
+      jobs, quotes, clients, settings, ganttStates, invoices, jobNotes, loading,
       addJob, updateJob, deleteJob,
       addQuote, updateQuote, deleteQuote,
       addClient, updateClient, deleteClient, upsertClientFromQuote,
       saveSettings,
       saveGanttState, getGanttState,
+      addInvoice, updateInvoice, deleteInvoice,
+      addJobNote, deleteJobNote,
       nextQuoteRef,
     }}>
       {children}

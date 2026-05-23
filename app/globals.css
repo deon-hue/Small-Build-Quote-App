@@ -158,6 +158,14 @@ textarea{resize:vertical;min-height:56px}
 .login-page{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--paper)}
 .login-box{background:white;border:1.5px solid var(--border);border-radius:12px;padding:40px;width:min(400px,96vw);box-shadow:0 4px 24px rgba(0,0,0,0.08)}
 
+/* ── Invoice stats ── */
+.inv-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
+
+/* ── Calendar ── */
+@media (max-width:768px){
+  .cal-grid{font-size:11px}
+}
+
 /* ── Hamburger menu ── */
 .hamburger{display:none;flex-direction:column;gap:5px;background:none;border:none;cursor:pointer;padding:6px;border-radius:4px;margin-right:12px}
 .hamburger span{display:block;width:22px;height:2px;background:var(--ink);border-radius:2px;transition:all 0.2s}

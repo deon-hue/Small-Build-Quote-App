@@ -39,10 +39,12 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
         <nav className="nav">
           <div className="nav-section">Overview</div>
           {navItem('/dashboard', '◈', 'Dashboard')}
+          {navItem('/calendar', '▦', 'Calendar')}
           <div className="nav-section">Work</div>
           {navItem('/jobs', '⬡', 'Jobs')}
           {navItem('/quotes', '◎', 'Saved Quotes')}
           {navItem('/new-quote', '✎', 'New Quote')}
+          {navItem('/invoices', '◻', 'Invoices')}
           <div className="nav-section">People</div>
           {navItem('/clients', '○', 'Clients')}
           <div className="nav-section">Settings</div>
@@ -80,9 +82,11 @@ function AppLayoutInner({ children, title }: { children: React.ReactNode, title:
 
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard': 'Dashboard',
+  '/calendar': 'Calendar',
   '/jobs': 'Jobs',
   '/quotes': 'Saved Quotes',
   '/new-quote': 'New Quote',
+  '/invoices': 'Invoices',
   '/clients': 'Clients',
   '/settings': 'Company Setup',
 }

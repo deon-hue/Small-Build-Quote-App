@@ -85,3 +85,38 @@ export interface GanttState {
   phases: GanttPhase[]
   totalDays: number
 }
+
+export interface InvoiceLineItem {
+  id: number
+  desc: string
+  qty: number
+  unitPrice: number
+  total: number
+}
+
+export interface Invoice {
+  id: string
+  ref: string
+  jobId: string
+  quoteId: string
+  clientName: string
+  clientAddress: string
+  clientEmail: string
+  lineItems: InvoiceLineItem[]
+  subtotal: number
+  vatIncluded: boolean
+  vatAmount: number
+  total: number
+  status: 'draft' | 'sent' | 'paid' | 'overdue'
+  issueDate: string
+  dueDate: string
+  notes: string
+  createdAt: string
+}
+
+export interface JobNote {
+  id: string
+  jobId: string
+  note: string
+  createdAt: string
+}
