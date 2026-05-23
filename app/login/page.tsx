@@ -9,7 +9,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [mode, setMode] = useState<'login' | 'signup'>('login')
+  const [resetSent, setResetSent] = useState(false)
+  const [showReset, setShowReset] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -18,22 +19,78 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      if (mode === 'login') {
-        const { error } = await supabase.auth.signInWithPassword({ email, password })
-        if (error) throw error
-      } else {
-        const { error } = await supabase.auth.signUp({ email, password })
-        if (error) throw error
-        setError('Account created — check your email to confirm, then log in.')
-        setLoading(false)
-        return
-      }
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) throw error
       router.push('/dashboard')
       router.refresh()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
       setLoading(false)
     }
+  }
+
+  async function handleReset(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      })
+      if (error) throw error
+      setResetSent(true)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Something went wrong')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (showReset) {
+    return (
+      <div className="login-page">
+        <div className="login-box">
+          <div style={{ marginBottom: 28, textAlign: 'center' }}>
+            <div className="logo-name" style={{ fontSize: 22, marginBottom: 4 }}>Small Build Company Ltd</div>
+            <div className="logo-sub" style={{ color: 'var(--muted)' }}>Reset Password</div>
+          </div>
+
+          {resetSent ? (
+            <div style={{ textAlign: 'center', fontSize: 14, color: 'var(--muted)', lineHeight: 1.6 }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>✉</div>
+              Check your email for a password reset link.
+              <br /><br />
+              <button onClick={() => { setShowReset(false); setResetSent(false) }}
+                style={{ background: 'none', border: 'none', color: 'var(--moss)', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
+                Back to sign in
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleReset}>
+              <div className="fg">
+                <label>Email</label>
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                  placeholder="you@example.com" required autoFocus />
+              </div>
+              {error && (
+                <div style={{ padding: '10px 14px', background: 'rgba(192,57,43,0.1)', color: 'var(--terra)', borderRadius: 6, fontSize: 13, marginBottom: 14 }}>
+                  {error}
+                </div>
+              )}
+              <button type="submit" className="btn btn-primary" style={{ width: '100%', marginBottom: 12 }} disabled={loading}>
+                {loading ? 'Sending…' : 'Send Reset Link'}
+              </button>
+              <div style={{ textAlign: 'center', fontSize: 13 }}>
+                <button onClick={() => setShowReset(false)}
+                  style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 13 }}>
+                  Back to sign in
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -72,8 +129,8 @@ export default function LoginPage() {
           {error && (
             <div style={{
               padding: '10px 14px',
-              background: error.includes('created') ? 'rgba(122,181,51,0.1)' : 'rgba(192,57,43,0.1)',
-              color: error.includes('created') ? '#5e8f20' : 'var(--terra)',
+              background: 'rgba(192,57,43,0.1)',
+              color: 'var(--terra)',
               borderRadius: 6,
               fontSize: 13,
               marginBottom: 14,
@@ -88,30 +145,17 @@ export default function LoginPage() {
             style={{ width: '100%', marginBottom: 12 }}
             disabled={loading}
           >
-            {loading ? 'Please wait…' : mode === 'login' ? 'Sign In' : 'Create Account'}
+            {loading ? 'Please wait…' : 'Sign In'}
           </button>
         </form>
 
         <div style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)' }}>
-          {mode === 'login' ? (
-            <>No account?{' '}
-              <button
-                onClick={() => setMode('signup')}
-                style={{ background: 'none', border: 'none', color: 'var(--moss)', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
-              >
-                Create one
-              </button>
-            </>
-          ) : (
-            <>Already have an account?{' '}
-              <button
-                onClick={() => setMode('login')}
-                style={{ background: 'none', border: 'none', color: 'var(--moss)', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
-              >
-                Sign in
-              </button>
-            </>
-          )}
+          <button
+            onClick={() => setShowReset(true)}
+            style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 13, textDecoration: 'underline' }}
+          >
+            Forgot password?
+          </button>
         </div>
       </div>
     </div>
