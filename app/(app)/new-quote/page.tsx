@@ -31,6 +31,7 @@ export default function NewQuotePage() {
   const [showPreview, setShowPreview] = useState(false)
   const [saving, setSaving] = useState(false)
   const [generatingScope, setGeneratingScope] = useState(false)
+  const [generatingPhases, setGeneratingPhases] = useState(false)
   const [showScopeChat, setShowScopeChat] = useState(false)
   const [clientDrop, setClientDrop] = useState(false)
   const [clientSearch, setClientSearch] = useState('')
@@ -77,9 +78,42 @@ export default function NewQuotePage() {
     loadTemplate(type)
   }
 
+  // Generate phases from scope via AI
+  async function generatePhases() {
+    if (!scope.trim()) { alert('Write a scope of works first — then click Generate Phases.'); return }
+    if (phases.length && !confirm('Replace current phases with AI-generated ones?')) return
+    setGeneratingPhases(true)
+    try {
+      const res = await fetch('/api/generate-phases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scope, jobType, address: custAddr }),
+      })
+      const data = await res.json()
+      if (data.error) { alert('Could not generate phases: ' + data.error); return }
+      if (Array.isArray(data.phases) && data.phases.length) {
+        setPhases(data.phases.map((p: { phase: string; items: Omit<QuoteItem, 'id'>[] }) =>
+          makePhase(p.phase, p.items.map(i => ({
+            desc: String(i.desc || ''),
+            qty: Number(i.qty) || 1,
+            unit: String(i.unit || 'Item'),
+            labour: Number(i.labour) || 0,
+            materials: Number(i.materials) || 0,
+            plantHire: Number(i.plantHire) || 0,
+            notes: String(i.notes || ''),
+          })))
+        ))
+      }
+    } catch {
+      alert('Failed to generate phases — check your connection.')
+    } finally {
+      setGeneratingPhases(false)
+    }
+  }
+
   // Phases
   function addPhase() {
-    setPhases(prev => [...prev, makePhase('New Phase', [{ desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, notes: '' }])])
+    setPhases(prev => [...prev, makePhase('New Phase', [{ desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, notes: '' }])])
   }
   function removePhase(id: number) { setPhases(prev => prev.filter(p => p.id !== id)) }
   function updatePhaseName(id: number, name: string) {
@@ -89,7 +123,7 @@ export default function NewQuotePage() {
   // Items
   function addItem(phaseId: number) {
     setPhases(prev => prev.map(p => p.id === phaseId
-      ? { ...p, items: [...p.items, { id: ++itemCounter, desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, notes: '' }] }
+      ? { ...p, items: [...p.items, { id: ++itemCounter, desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, notes: '' }] }
       : p))
   }
   function removeItem(phaseId: number, itemId: number) {
@@ -359,7 +393,18 @@ export default function NewQuotePage() {
         <div className="qb-right">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
             <div style={{ fontWeight: 700, fontSize: 15 }}>Quote Lines — <span style={{ color: 'var(--muted)', fontWeight: 400 }}>{phases.length} phase{phases.length !== 1 ? 's' : ''}</span></div>
-            <button className="btn-sm btn-primary" onClick={addPhase}>+ Add Phase</button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                className="btn-sm btn-sky"
+                onClick={generatePhases}
+                disabled={generatingPhases}
+                title="Generate phases from scope of works"
+                style={{ fontSize: 11 }}
+              >
+                {generatingPhases ? '⏳ Generating…' : '✦ Generate Phases'}
+              </button>
+              <button className="btn-sm btn-primary" onClick={addPhase}>+ Add Phase</button>
+            </div>
           </div>
 
           {!phases.length
@@ -375,9 +420,10 @@ export default function NewQuotePage() {
                     <button className="rm-btn" onClick={() => removePhase(p.id)}>×</button>
                   </div>
                   {/* Column headers */}
-                  <div className="col-heads" style={{ gridTemplateColumns: '1fr 46px 58px 78px 78px 78px 78px 78px 100px 22px' }}>
+                  <div className="col-heads" style={{ gridTemplateColumns: '1fr 46px 58px 78px 78px 78px 78px 78px 78px 100px 22px' }}>
                     <span>Description</span><span style={{ textAlign: 'center' }}>Qty</span><span style={{ textAlign: 'center' }}>Unit</span>
                     <span style={{ textAlign: 'right' }}>Labour</span><span style={{ textAlign: 'right' }}>Materials</span>
+                    <span style={{ textAlign: 'right' }}>Plant Hire</span>
                     <span style={{ textAlign: 'right', color: '#c0392b' }}>Cost</span>
                     <span style={{ textAlign: 'right', color: '#7ab533' }}>Sell</span>
                     <span style={{ textAlign: 'right', color: '#4a90a4' }}>VAT</span>
@@ -388,7 +434,7 @@ export default function NewQuotePage() {
                     const itemSell = calcItemSell(item, markup)
                     const itemVat = vatOn ? itemSell * VAT : 0
                     return (
-                      <div key={item.id} className="item-row" style={{ gridTemplateColumns: '1fr 46px 58px 78px 78px 78px 78px 78px 100px 22px' }}>
+                      <div key={item.id} className="item-row" style={{ gridTemplateColumns: '1fr 46px 58px 78px 78px 78px 78px 78px 78px 100px 22px' }}>
                         <input value={item.desc} onChange={e => updateItem(p.id, item.id, 'desc', e.target.value)} placeholder="Description" />
                         <input type="number" value={item.qty} onChange={e => updateItem(p.id, item.id, 'qty', Number(e.target.value))} style={{ textAlign: 'center' }} />
                         <select value={item.unit} onChange={e => updateItem(p.id, item.id, 'unit', e.target.value)}>
@@ -396,6 +442,7 @@ export default function NewQuotePage() {
                         </select>
                         <input type="number" value={item.labour} onChange={e => updateItem(p.id, item.id, 'labour', Number(e.target.value))} style={{ textAlign: 'right' }} />
                         <input type="number" value={item.materials} onChange={e => updateItem(p.id, item.id, 'materials', Number(e.target.value))} style={{ textAlign: 'right' }} />
+                        <input type="number" value={item.plantHire ?? 0} onChange={e => updateItem(p.id, item.id, 'plantHire', Number(e.target.value))} style={{ textAlign: 'right' }} placeholder="0" />
                         <span style={{ textAlign: 'right', fontSize: 11, color: '#c0392b', fontFamily: 'DM Mono, monospace', padding: '0 4px' }}>{fmt(itemCost)}</span>
                         <span style={{ textAlign: 'right', fontSize: 11, color: '#2b8a3e', fontFamily: 'DM Mono, monospace', padding: '0 4px', fontWeight: 600 }}>{fmt(itemSell)}</span>
                         <span style={{ textAlign: 'right', fontSize: 11, color: '#4a90a4', fontFamily: 'DM Mono, monospace', padding: '0 4px' }}>{vatOn ? fmt(itemVat) : '—'}</span>

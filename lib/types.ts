@@ -5,6 +5,7 @@ export interface QuoteItem {
   unit: string
   labour: number
   materials: number
+  plantHire?: number
   notes: string
 }
 

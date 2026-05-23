@@ -17,7 +17,7 @@ export function fmtK(n: number): string {
 }
 
 export function calcItem(i: QuoteItem): number {
-  return (Number(i.labour) || 0) + (Number(i.materials) || 0)
+  return (Number(i.labour) || 0) + (Number(i.materials) || 0) + (Number(i.plantHire) || 0)
 }
 
 export function calcPhase(p: QuotePhase): number {
