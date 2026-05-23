@@ -8,13 +8,47 @@ import { useRouter } from 'next/navigation'
 import QuotePreviewModal from '@/components/QuotePreviewModal'
 import type { Quote } from '@/lib/types'
 
+const BLANK_FORM = { name: '', first: '', last: '', email: '', phone: '', address: '', notes: '' }
+
 export default function ClientsPage() {
-  const { clients, quotes, jobs, settings, deleteClient, loading } = useApp()
+  const { clients, quotes, jobs, settings, addClient, updateClient, deleteClient, loading } = useApp()
   const [selected, setSelected] = useState<Client | null>(null)
   const [previewQuote, setPreviewQuote] = useState<Quote | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [inviteClient, setInviteClient] = useState<Client | null>(null)
+  const [showForm, setShowForm] = useState(false)
+  const [editingClient, setEditingClient] = useState<Client | null>(null)
+  const [form, setForm] = useState(BLANK_FORM)
+  const [saving, setSaving] = useState(false)
   const router = useRouter()
+
+  function openNew() {
+    setEditingClient(null)
+    setForm(BLANK_FORM)
+    setShowForm(true)
+  }
+
+  function openEdit(c: Client) {
+    setEditingClient(c)
+    setForm({ name: c.name, first: c.first, last: c.last, email: c.email, phone: c.phone, address: c.address, notes: c.notes })
+    setSelected(null)
+    setShowForm(true)
+  }
+
+  async function handleSave() {
+    if (!form.name.trim()) return
+    setSaving(true)
+    try {
+      if (editingClient) {
+        await updateClient({ ...editingClient, ...form })
+      } else {
+        await addClient({ ...form, addedFrom: 'manual' })
+      }
+      setShowForm(false)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
 
@@ -81,6 +115,10 @@ ${company}`)
 
   return (
     <>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+        <button className="btn btn-primary" onClick={openNew}>+ New Client</button>
+      </div>
+
       <div className="card">
         <table className="tbl">
           <thead>
@@ -90,7 +128,7 @@ ${company}`)
           </thead>
           <tbody>
             {!clients.length
-              ? <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>No clients yet — they appear automatically when you save a quote</td></tr>
+              ? <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>No clients yet — add one above or save a quote to create one automatically</td></tr>
               : clients.map(c => {
                   const ini = (c.name[0] || '').toUpperCase() + ((c.name.split(' ').pop() || '')[0] || '').toUpperCase()
                   const cQ = getClientQuotes(c)
@@ -110,15 +148,10 @@ ${company}`)
                       <td>
                         <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                           {c.email
-                            ? <button
-                                className="btn-sm btn-sky"
-                                title="Send portal invite"
-                                onClick={() => setInviteClient(c)}
-                              >
-                                🔗 Invite
-                              </button>
+                            ? <button className="btn-sm btn-sky" title="Send portal invite" onClick={() => setInviteClient(c)}>🔗 Invite</button>
                             : <button className="btn-sm btn-outline" disabled style={{ opacity: 0.4, cursor: 'not-allowed' }} title="No email on file">🔗 Invite</button>
                           }
+                          <button className="btn-sm btn-outline" onClick={() => openEdit(c)}>Edit</button>
                           <button className="btn-sm btn-danger" onClick={() => handleDelete(c)}>Delete</button>
                         </div>
                       </td>
@@ -142,6 +175,7 @@ ${company}`)
                     🔗 Send Portal Invite
                   </button>
                 )}
+                <button className="btn-sm btn-outline" onClick={() => openEdit(selected)}>✎ Edit</button>
                 <button className="btn-sm btn-gold" onClick={() => {
                   sessionStorage.setItem('sbc_prefill_client', selected.id)
                   setSelected(null)
@@ -231,6 +265,63 @@ ${company}`)
                     })
                 }
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add / Edit client modal */}
+      {showForm && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowForm(false) }}>
+          <div className="form-modal" style={{ width: 'min(520px, 96vw)' }}>
+            <div className="form-modal-hd">
+              <div style={{ fontWeight: 700, fontSize: 17 }}>{editingClient ? 'Edit Client' : 'New Client'}</div>
+              <button className="modal-close" onClick={() => setShowForm(false)}>×</button>
+            </div>
+            <div className="form-modal-bd">
+              <div className="fg">
+                <label>Full Name</label>
+                <input
+                  value={form.name}
+                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="Mr & Mrs Davies"
+                  autoFocus
+                />
+              </div>
+              <div className="row2">
+                <div className="fg">
+                  <label>First Name</label>
+                  <input value={form.first} onChange={e => setForm(f => ({ ...f, first: e.target.value }))} placeholder="John" />
+                </div>
+                <div className="fg">
+                  <label>Last Name</label>
+                  <input value={form.last} onChange={e => setForm(f => ({ ...f, last: e.target.value }))} placeholder="Davies" />
+                </div>
+              </div>
+              <div className="row2">
+                <div className="fg">
+                  <label>Email</label>
+                  <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="john@email.com" />
+                </div>
+                <div className="fg">
+                  <label>Phone</label>
+                  <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="07700 900000" />
+                </div>
+              </div>
+              <div className="fg">
+                <label>Address</label>
+                <textarea value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} rows={2} placeholder="14 Thornton Road, London" />
+              </div>
+              <div className="fg">
+                <label>Notes</label>
+                <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Any extra info…" />
+              </div>
+            </div>
+            <div className="form-modal-ft">
+              <button className="btn btn-outline" onClick={() => setShowForm(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleSave} disabled={saving || !form.name.trim()}>
+                {saving ? 'Saving…' : editingClient ? 'Save Changes' : 'Add Client'}
+              </button>
             </div>
           </div>
         </div>
