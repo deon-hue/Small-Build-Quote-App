@@ -9,12 +9,42 @@ import QuotePreviewModal from '@/components/QuotePreviewModal'
 import type { Quote } from '@/lib/types'
 
 export default function ClientsPage() {
-  const { clients, quotes, jobs, deleteClient, loading } = useApp()
+  const { clients, quotes, jobs, settings, deleteClient, loading } = useApp()
   const [selected, setSelected] = useState<Client | null>(null)
   const [previewQuote, setPreviewQuote] = useState<Quote | null>(null)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [inviteClient, setInviteClient] = useState<Client | null>(null)
   const router = useRouter()
 
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
+
+  const portalUrl = (typeof window !== 'undefined' ? window.location.origin : '') + '/portal/login'
+
+  function copyLink(clientId: string) {
+    navigator.clipboard.writeText(portalUrl).then(() => {
+      setCopiedId(clientId)
+      setTimeout(() => setCopiedId(null), 2000)
+    })
+  }
+
+  function openEmailInvite(c: Client) {
+    const company = settings.name || 'Your Builder'
+    const subject = encodeURIComponent(`Your client portal — ${company}`)
+    const body = encodeURIComponent(
+`Hi ${c.first || c.name},
+
+We've set up a secure client portal where you can view your quotes, track your project and see your invoices online.
+
+To get started, click the link below and register using this email address (${c.email}):
+
+${portalUrl}
+
+If you have any questions, please don't hesitate to get in touch.
+
+Kind regards,
+${company}`)
+    window.open(`mailto:${c.email}?subject=${subject}&body=${body}`)
+  }
 
   function getClientQuotes(c: Client) {
     const n = (c.name || '').toLowerCase()
@@ -77,7 +107,21 @@ export default function ClientsPage() {
                       <td onClick={() => setSelected(c)} style={{ cursor: 'pointer' }}>{cJ.length} job{cJ.length !== 1 ? 's' : ''}</td>
                       <td onClick={() => setSelected(c)} style={{ cursor: 'pointer' }}>{cQ.length} quote{cQ.length !== 1 ? 's' : ''}</td>
                       <td onClick={() => setSelected(c)} style={{ cursor: 'pointer' }} className="mono">{val > 0 ? fmt(val) : '—'}</td>
-                      <td><button className="btn-sm btn-danger" onClick={() => handleDelete(c)}>Delete</button></td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                          {c.email
+                            ? <button
+                                className="btn-sm btn-sky"
+                                title="Send portal invite"
+                                onClick={() => setInviteClient(c)}
+                              >
+                                🔗 Invite
+                              </button>
+                            : <button className="btn-sm btn-outline" disabled style={{ opacity: 0.4, cursor: 'not-allowed' }} title="No email on file">🔗 Invite</button>
+                          }
+                          <button className="btn-sm btn-danger" onClick={() => handleDelete(c)}>Delete</button>
+                        </div>
+                      </td>
                     </tr>
                   )
                 })
@@ -93,6 +137,11 @@ export default function ClientsPage() {
             <div className="modal-hd">
               <div style={{ fontWeight: 700, fontSize: 18 }}>{selected.name}</div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {selected.email && (
+                  <button className="btn-sm btn-sky" onClick={() => { setInviteClient(selected); setSelected(null) }}>
+                    🔗 Send Portal Invite
+                  </button>
+                )}
                 <button className="btn-sm btn-gold" onClick={() => {
                   sessionStorage.setItem('sbc_prefill_client', selected.id)
                   setSelected(null)
@@ -182,6 +231,84 @@ export default function ClientsPage() {
                     })
                 }
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Portal invite modal */}
+      {inviteClient && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setInviteClient(null) }}>
+          <div className="form-modal" style={{ width: 'min(480px, 96vw)' }}>
+            <div className="form-modal-hd">
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 17 }}>Send Portal Invite</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{inviteClient.name}</div>
+              </div>
+              <button className="modal-close" onClick={() => setInviteClient(null)}>×</button>
+            </div>
+            <div className="form-modal-bd">
+
+              {/* Explanation */}
+              <div style={{ background: 'var(--warm)', borderRadius: 8, padding: '14px 16px', marginBottom: 20, fontSize: 13, lineHeight: 1.6 }}>
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>How it works</div>
+                <div style={{ color: 'var(--muted)' }}>
+                  Send <strong>{inviteClient.name}</strong> the link below. They register with{' '}
+                  <strong>{inviteClient.email}</strong> and are automatically linked to their quotes, jobs and invoices.
+                </div>
+              </div>
+
+              {/* Portal link */}
+              <div className="fg">
+                <label>Portal Link</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    readOnly
+                    value={portalUrl}
+                    style={{ flex: 1, background: '#f8f9fa', color: 'var(--muted)', fontSize: 13 }}
+                    onFocus={e => e.target.select()}
+                  />
+                  <button
+                    className={`btn-sm ${copiedId === inviteClient.id ? 'btn-gold' : 'btn-outline'}`}
+                    onClick={() => copyLink(inviteClient.id)}
+                    style={{ flexShrink: 0, minWidth: 80 }}
+                  >
+                    {copiedId === inviteClient.id ? '✓ Copied!' : '📋 Copy'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Pre-written email */}
+              <div className="fg">
+                <label>Preview — Email Message</label>
+                <textarea
+                  readOnly
+                  rows={9}
+                  style={{ fontSize: 12, background: '#f8f9fa', color: 'var(--muted)', lineHeight: 1.7, resize: 'none' }}
+                  value={`Hi ${inviteClient.first || inviteClient.name},
+
+We've set up a secure client portal where you can view your quotes, track your project and see your invoices online.
+
+To get started, click the link below and register using this email address (${inviteClient.email}):
+
+${portalUrl}
+
+If you have any questions, please don't hesitate to get in touch.
+
+Kind regards,
+${settings.name || 'Your Builder'}`}
+                />
+              </div>
+
+            </div>
+            <div className="form-modal-ft">
+              <button className="btn btn-outline" onClick={() => setInviteClient(null)}>Close</button>
+              <button
+                className="btn btn-primary"
+                onClick={() => openEmailInvite(inviteClient)}
+              >
+                📧 Open in Email App
+              </button>
             </div>
           </div>
         </div>
