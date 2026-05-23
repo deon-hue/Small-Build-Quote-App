@@ -35,6 +35,8 @@ export interface Quote {
   convertedToJob: boolean
   customer: QuoteCustomer
   phases: QuotePhase[]
+  clientApprovedAt?: string | null
+  clientApprovedBy?: string | null
 }
 
 export interface Job {

@@ -100,6 +100,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           status: r.status, jobType: r.job_type, markup: Number(r.markup),
           vatIncluded: r.vat_included, scope: r.scope, photo: r.photo,
           convertedToJob: r.converted_to_job, customer: r.customer, phases: r.phases,
+          clientApprovedAt: r.client_approved_at || null,
+          clientApprovedBy: r.client_approved_by || null,
         })))
       }
 

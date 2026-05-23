@@ -103,6 +103,8 @@ export function PortalProvider({ children }: { children: ReactNode }) {
           convertedToJob: r.converted_to_job,
           customer: r.customer || { name: '', address: '', email: '', phone: '' },
           phases: r.phases || [],
+          clientApprovedAt: r.client_approved_at || null,
+          clientApprovedBy: r.client_approved_by || null,
         })))
       }
 

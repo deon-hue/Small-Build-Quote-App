@@ -161,6 +161,13 @@ export default function SavedQuotesPage() {
                 <div className="sq-val">{fmt(quoteTotal(q))}</div>
                 <div style={{ textAlign: 'center', minWidth: 200 }}>
                   <span className={`badge ${Q_BADGE[q.status] || 'b-pending'}`}>{Q_LABEL[q.status] || q.status}</span>
+                  {q.clientApprovedBy && (
+                    <div style={{ marginTop: 4 }} title={`Approved ${q.clientApprovedAt ? new Date(q.clientApprovedAt).toLocaleString('en-GB') : ''}`}>
+                      <span style={{ fontSize: 10, background: '#f0f9e8', color: '#4a7c1f', border: '1px solid #b8e08a', borderRadius: 4, padding: '2px 6px', fontWeight: 600 }}>
+                        ✅ Signed by {q.clientApprovedBy}
+                      </span>
+                    </div>
+                  )}
                   <div className="sq-actions" style={{ marginTop: 6 }}>
                     <button className="btn-sm btn-primary" onClick={() => {
                       // Store quote ID in sessionStorage for the builder to pick up

@@ -1,18 +1,67 @@
 'use client'
 
+import { useState } from 'react'
 import { usePortal } from '@/contexts/PortalContext'
 import { calcPhaseSell } from '@/lib/utils'
+import { createClient } from '@/lib/supabase/client'
+import type { Quote } from '@/lib/types'
 
 const STATUS_LABEL: Record<string, string> = {
-  pending: 'Pending', sent: 'Sent to you', accepted: 'Accepted', declined: 'Declined',
+  pending: 'Awaiting review', sent: 'Sent — awaiting your approval',
+  accepted: 'Approved', declined: 'Declined',
 }
 const STATUS_COLOR: Record<string, string> = {
-  pending: '#888', sent: '#4a90a4', accepted: '#7ab533', declined: '#c0392b',
+  pending: '#888', sent: '#e67e22', accepted: '#7ab533', declined: '#c0392b',
 }
 const fmt = (n: number) => '£' + Number(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
+function fmtDateTime(iso: string) {
+  try {
+    return new Date(iso).toLocaleDateString('en-GB', {
+      day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    })
+  } catch { return iso }
+}
+
 export default function PortalQuotesPage() {
-  const { quotes, loading, error } = usePortal()
+  const supabase = createClient()
+  const { quotes, reload, loading, error } = usePortal()
+  const [approvingQuote, setApprovingQuote] = useState<Quote | null>(null)
+  const [sigName, setSigName] = useState('')
+  const [agreed, setAgreed] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [approveError, setApproveError] = useState('')
+
+  function openApproval(q: Quote) {
+    setApprovingQuote(q)
+    setSigName('')
+    setAgreed(false)
+    setApproveError('')
+  }
+
+  function closeApproval() {
+    setApprovingQuote(null)
+  }
+
+  async function handleApprove() {
+    if (!approvingQuote || !sigName.trim() || !agreed) return
+    setSubmitting(true)
+    setApproveError('')
+    try {
+      const { data, error: rpcErr } = await supabase.rpc('approve_quote', {
+        p_quote_id: approvingQuote.id,
+        p_signature: sigName.trim(),
+      })
+      if (rpcErr || data?.error) {
+        setApproveError(rpcErr?.message || data?.error || 'Something went wrong. Please try again.')
+        return
+      }
+      closeApproval()
+      reload()
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   if (loading) return <div className="portal-loading">Loading…</div>
   if (error && error !== 'no_admin_linked') {
@@ -35,8 +84,12 @@ export default function PortalQuotesPage() {
         quotes.map(q => {
           const total = q.phases.reduce((s, p) => s + calcPhaseSell(p, q.markup), 0)
           const vatTotal = q.vatIncluded ? total * 1.2 : total
+          const canApprove = q.status === 'pending' || q.status === 'sent'
+          const isApproved = q.status === 'accepted'
+
           return (
             <div key={q.id} className="portal-card">
+              {/* Header */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
                 <div>
                   <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>{q.ref}</div>
@@ -53,6 +106,19 @@ export default function PortalQuotesPage() {
                   </span>
                 </div>
               </div>
+
+              {/* Approved banner */}
+              {isApproved && q.clientApprovedBy && (
+                <div style={{ background: '#f0f9e8', border: '1px solid #b8e08a', borderRadius: 8, padding: '12px 16px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 20 }}>✅</span>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#4a7c1f' }}>Approved by {q.clientApprovedBy}</div>
+                    {q.clientApprovedAt && (
+                      <div style={{ fontSize: 12, color: '#6a9a3a' }}>{fmtDateTime(q.clientApprovedAt)}</div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Phases breakdown */}
               {q.phases.length > 0 && (
@@ -77,14 +143,119 @@ export default function PortalQuotesPage() {
 
               {/* Scope of works */}
               {q.scope && (
-                <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, borderTop: '1px solid var(--border)', paddingTop: 10, marginBottom: 14 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: 6 }}>Scope of Works</div>
-                  {q.scope}
+                  <div style={{ whiteSpace: 'pre-wrap' }}>{q.scope}</div>
+                </div>
+              )}
+
+              {/* Approve button */}
+              {canApprove && (
+                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>
+                  <button
+                    className="btn btn-primary"
+                    style={{ width: '100%', fontSize: 14, padding: '10px 0' }}
+                    onClick={() => openApproval(q)}
+                  >
+                    ✍️ Review &amp; Approve Quote
+                  </button>
                 </div>
               )}
             </div>
           )
         })
+      )}
+
+      {/* Approval modal */}
+      {approvingQuote && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) closeApproval() }}>
+          <div className="portal-modal">
+            <div className="portal-modal-hd">
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 18 }}>Approve Quote</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{approvingQuote.ref} — {approvingQuote.jobType}</div>
+              </div>
+              <button className="modal-close" onClick={closeApproval}>×</button>
+            </div>
+
+            <div className="portal-modal-bd">
+              {/* Summary */}
+              <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 8, padding: '14px 16px', marginBottom: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontSize: 13, color: 'var(--muted)' }}>Quote reference</span>
+                  <span style={{ fontSize: 13, fontFamily: 'DM Mono, monospace' }}>{approvingQuote.ref}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontSize: 13, color: 'var(--muted)' }}>Works</span>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{approvingQuote.jobType}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 13, color: 'var(--muted)' }}>Total</span>
+                  <span style={{ fontSize: 15, fontWeight: 700, fontFamily: 'DM Mono, monospace' }}>
+                    {fmt(approvingQuote.vatIncluded
+                      ? approvingQuote.phases.reduce((s, p) => s + calcPhaseSell(p, approvingQuote.markup), 0) * 1.2
+                      : approvingQuote.phases.reduce((s, p) => s + calcPhaseSell(p, approvingQuote.markup), 0)
+                    )}
+                    {approvingQuote.vatIncluded && <span style={{ fontSize: 11, fontWeight: 400, marginLeft: 4 }}>inc. VAT</span>}
+                  </span>
+                </div>
+              </div>
+
+              {/* Declaration */}
+              <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.7, marginBottom: 20, padding: '14px 16px', background: '#fffbf0', border: '1px solid #f0d080', borderRadius: 8 }}>
+                <strong>Please read before signing:</strong><br />
+                By approving this quote, you confirm that you have read and understood the scope of works and agree to proceed on the terms stated. This approval is legally binding.
+              </div>
+
+              {/* Signature field */}
+              <div className="fg" style={{ marginBottom: 16 }}>
+                <label style={{ fontWeight: 600 }}>Your Full Name <span style={{ color: '#c0392b' }}>*</span></label>
+                <input
+                  type="text"
+                  value={sigName}
+                  onChange={e => setSigName(e.target.value)}
+                  placeholder="Type your full name to sign"
+                  autoFocus
+                  style={{ fontSize: 15 }}
+                />
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>This acts as your electronic signature</div>
+              </div>
+
+              {/* Agree checkbox */}
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginBottom: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={agreed}
+                  onChange={e => setAgreed(e.target.checked)}
+                  style={{ marginTop: 2, flexShrink: 0, width: 16, height: 16 }}
+                />
+                <span style={{ fontSize: 13, lineHeight: 1.5 }}>
+                  I have read and agree to the quote and scope of works above
+                </span>
+              </label>
+
+              {approveError && (
+                <div style={{ color: '#c0392b', fontSize: 13, marginTop: 12, padding: '8px 12px', background: '#fdf0ef', borderRadius: 6 }}>
+                  {approveError}
+                </div>
+              )}
+            </div>
+
+            <div className="portal-modal-ft">
+              <button className="btn btn-outline" onClick={closeApproval} disabled={submitting}>
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleApprove}
+                disabled={submitting || !sigName.trim() || !agreed}
+                style={{ minWidth: 160 }}
+              >
+                {submitting ? 'Approving…' : '✍️ Approve Quote'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )
