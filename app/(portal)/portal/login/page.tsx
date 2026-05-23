@@ -41,7 +41,11 @@ function PortalLoginForm() {
     setError(''); setMessage('')
     setLoading(true)
     try {
-      const { error: signUpError } = await supabase.auth.signUp({ email, password })
+      const { error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: `${window.location.origin}/portal/login` },
+      })
       if (signUpError) { setError(signUpError.message); return }
       await supabase.rpc('create_customer_profile')
       setMessage('Account created! Please sign in below.')
