@@ -420,7 +420,7 @@ export default function NewQuotePage() {
                     <button className="rm-btn" onClick={() => removePhase(p.id)}>×</button>
                   </div>
                   {/* Column headers */}
-                  <div className="col-heads" style={{ gridTemplateColumns: '1fr 46px 58px 78px 78px 78px 78px 78px 78px 100px 22px' }}>
+                  <div className="col-heads" style={{ gridTemplateColumns: '1fr 60px 58px 78px 78px 78px 78px 78px 78px 100px 22px' }}>
                     <span>Description</span><span style={{ textAlign: 'center' }}>Qty</span><span style={{ textAlign: 'center' }}>Unit</span>
                     <span style={{ textAlign: 'right' }}>Labour</span><span style={{ textAlign: 'right' }}>Materials</span>
                     <span style={{ textAlign: 'right' }}>Plant Hire</span>
@@ -434,7 +434,7 @@ export default function NewQuotePage() {
                     const itemSell = calcItemSell(item, markup)
                     const itemVat = vatOn ? itemSell * VAT : 0
                     return (
-                      <div key={item.id} className="item-row" style={{ gridTemplateColumns: '1fr 46px 58px 78px 78px 78px 78px 78px 78px 100px 22px' }}>
+                      <div key={item.id} className="item-row" style={{ gridTemplateColumns: '1fr 60px 58px 78px 78px 78px 78px 78px 78px 100px 22px' }}>
                         <input value={item.desc} onChange={e => updateItem(p.id, item.id, 'desc', e.target.value)} placeholder="Description" />
                         <input type="number" value={item.qty} onChange={e => updateItem(p.id, item.id, 'qty', Number(e.target.value))} style={{ textAlign: 'center' }} />
                         <select value={item.unit} onChange={e => updateItem(p.id, item.id, 'unit', e.target.value)}>
