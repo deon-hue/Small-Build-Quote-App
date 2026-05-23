@@ -1,6 +1,14 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+
+// Browser SpeechRecognition type declarations
+declare global {
+  interface Window {
+    SpeechRecognition: new () => SpeechRecognition
+    webkitSpeechRecognition: new () => SpeechRecognition
+  }
+}
 
 interface Message {
   role: 'user' | 'assistant'
@@ -28,10 +36,64 @@ function parseMessage(text: string): { scope: string | null; commentary: string 
 export default function ScopeChat({ jobType, address, phases, onInsert, onClose }: Props) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
+  const [listening, setListening] = useState(false)
+  const [micAvailable, setMicAvailable] = useState(false)
+  const recognitionRef = useRef<SpeechRecognition | null>(null)
   const [loading, setLoading] = useState(false)
   const [latestScope, setLatestScope] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  // Check mic availability on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition)) {
+      setMicAvailable(true)
+    }
+  }, [])
+
+  const stopListening = useCallback(() => {
+    recognitionRef.current?.stop()
+    recognitionRef.current = null
+    setListening(false)
+  }, [])
+
+  const toggleMic = useCallback(() => {
+    if (listening) { stopListening(); return }
+
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SR) return
+
+    const rec = new SR()
+    rec.lang = 'en-GB'
+    rec.continuous = false
+    rec.interimResults = true
+
+    rec.onstart = () => setListening(true)
+
+    rec.onresult = (e: SpeechRecognitionEvent) => {
+      const transcript = Array.from(e.results)
+        .map(r => r[0].transcript)
+        .join('')
+      setInput(transcript)
+    }
+
+    rec.onend = () => {
+      setListening(false)
+      recognitionRef.current = null
+      setTimeout(() => inputRef.current?.focus(), 50)
+    }
+
+    rec.onerror = () => {
+      setListening(false)
+      recognitionRef.current = null
+    }
+
+    recognitionRef.current = rec
+    rec.start()
+  }, [listening, stopListening])
+
+  // Stop mic if chat closes
+  useEffect(() => () => stopListening(), [stopListening])
 
   // Greeting on open
   useEffect(() => {
@@ -230,15 +292,46 @@ export default function ScopeChat({ jobType, address, phases, onInsert, onClose 
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKey}
-            placeholder="Describe the job or ask for changes… (Enter to send)"
+            placeholder={listening ? 'Listening… speak now' : 'Describe the job or ask for changes… (Enter to send)'}
             rows={2}
             disabled={loading}
             style={{
-              flex: 1, resize: 'none', border: '1px solid var(--border)', borderRadius: 8,
+              flex: 1, resize: 'none', borderRadius: 8,
               padding: '8px 12px', fontSize: 13, fontFamily: 'inherit',
               outline: 'none', lineHeight: 1.5,
+              border: listening ? '2px solid #e74c3c' : '1px solid var(--border)',
+              background: listening ? '#fff8f8' : '#fff',
+              transition: 'border-color 0.2s, background 0.2s',
             }}
           />
+
+          {/* Mic button */}
+          {micAvailable && (
+            <button
+              onClick={toggleMic}
+              title={listening ? 'Stop recording' : 'Speak your description'}
+              style={{
+                border: 'none', borderRadius: 8, width: 42, flexShrink: 0,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 18, transition: 'background 0.2s',
+                background: listening ? '#e74c3c' : '#f0f2ee',
+                color: listening ? '#fff' : 'var(--ink)',
+                position: 'relative',
+              }}
+            >
+              🎤
+              {/* Pulsing ring when active */}
+              {listening && (
+                <span style={{
+                  position: 'absolute', inset: -3, borderRadius: 11,
+                  border: '2px solid #e74c3c', animation: 'micPulse 1s ease-in-out infinite',
+                  pointerEvents: 'none',
+                }} />
+              )}
+            </button>
+          )}
+
+          {/* Send button */}
           <button
             onClick={send}
             disabled={loading || !input.trim()}
@@ -258,6 +351,10 @@ export default function ScopeChat({ jobType, address, phases, onInsert, onClose 
         @keyframes slideUp {
           from { transform: translateY(20px); opacity: 0; }
           to   { transform: translateY(0);    opacity: 1; }
+        }
+        @keyframes micPulse {
+          0%, 100% { transform: scale(1);    opacity: 1; }
+          50%       { transform: scale(1.25); opacity: 0.4; }
         }
       `}</style>
     </div>
