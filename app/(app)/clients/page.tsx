@@ -103,7 +103,7 @@ export default function ClientsPage() {
         email: c.email,
         options: {
           shouldCreateUser: true,
-          emailRedirectTo: `${window.location.origin}/portal`,
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=/portal`,
         },
       })
       if (otpErr) {

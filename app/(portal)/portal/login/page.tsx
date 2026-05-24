@@ -29,7 +29,7 @@ function PortalLoginForm() {
     try {
       const { error: otpError } = await supabase.auth.signInWithOtp({
         email,
-        options: { emailRedirectTo: `${window.location.origin}/portal` },
+        options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=/portal` },
       })
       if (otpError) { setError(otpError.message); return }
       setMessage('Sign-in link sent! Check your email and click the link to access your portal.')
