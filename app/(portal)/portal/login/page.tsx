@@ -10,7 +10,7 @@ function PortalLoginForm() {
   const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [mode, setMode] = useState<'login' | 'register'>('login')
+  const [mode, setMode] = useState<'link' | 'password'>('link')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -21,7 +21,25 @@ function PortalLoginForm() {
     if (emailParam) setEmail(emailParam)
   }, [searchParams])
 
-  async function handleLogin(e: React.FormEvent) {
+  // Send magic link — works for all invited customers (no password needed)
+  async function handleMagicLink(e: React.FormEvent) {
+    e.preventDefault()
+    setError(''); setMessage('')
+    setLoading(true)
+    try {
+      const { error: otpError } = await supabase.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: `${window.location.origin}/portal` },
+      })
+      if (otpError) { setError(otpError.message); return }
+      setMessage('Sign-in link sent! Check your email and click the link to access your portal.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Password sign-in — for customers who set up a password
+  async function handlePassword(e: React.FormEvent) {
     e.preventDefault()
     setError(''); setMessage('')
     setLoading(true)
@@ -29,7 +47,6 @@ function PortalLoginForm() {
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
       if (signInError) { setError(signInError.message); return }
       await supabase.rpc('create_customer_profile')
-      // If this is an admin account, send them to the admin dashboard instead
       const { data: role } = await supabase.rpc('get_my_role')
       if (role === 'admin') {
         router.push('/dashboard')
@@ -42,100 +59,111 @@ function PortalLoginForm() {
     }
   }
 
-  async function handleRegister(e: React.FormEvent) {
-    e.preventDefault()
-    setError(''); setMessage('')
-    setLoading(true)
-    try {
-      const { error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { emailRedirectTo: `${window.location.origin}/portal/login` },
-      })
-      if (signUpError) { setError(signUpError.message); return }
-      await supabase.rpc('create_customer_profile')
-      setMessage('Account created! Please sign in below.')
-      setMode('login')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   return (
     <div className="portal-login-wrap">
       <div className="portal-login-card">
         <div className="portal-login-logo">🏗 Client Portal</div>
         <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6, textAlign: 'center' }}>
-          {mode === 'login' ? 'Sign in to your portal' : 'Create your account'}
+          Sign in to your portal
         </h1>
         <p style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', marginBottom: 24, lineHeight: 1.5 }}>
-          {mode === 'login'
-            ? 'Access your quotes, jobs and invoices'
-            : 'Use the email address your builder has on file for you'}
+          Access your quotes, jobs and invoices
         </p>
+
+        {/* Mode tabs */}
+        <div style={{ display: 'flex', background: '#f0f2ee', borderRadius: 8, padding: 3, marginBottom: 24, gap: 3 }}>
+          <button
+            type="button"
+            onClick={() => { setMode('link'); setError(''); setMessage('') }}
+            style={{
+              flex: 1, padding: '8px 0', borderRadius: 6, border: 'none', fontSize: 13, fontWeight: 600,
+              cursor: 'pointer', transition: 'all 0.15s',
+              background: mode === 'link' ? '#fff' : 'transparent',
+              color: mode === 'link' ? 'var(--ink)' : 'var(--muted)',
+              boxShadow: mode === 'link' ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
+            }}
+          >
+            📧 Email link
+          </button>
+          <button
+            type="button"
+            onClick={() => { setMode('password'); setError(''); setMessage('') }}
+            style={{
+              flex: 1, padding: '8px 0', borderRadius: 6, border: 'none', fontSize: 13, fontWeight: 600,
+              cursor: 'pointer', transition: 'all 0.15s',
+              background: mode === 'password' ? '#fff' : 'transparent',
+              color: mode === 'password' ? 'var(--ink)' : 'var(--muted)',
+              boxShadow: mode === 'password' ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
+            }}
+          >
+            🔑 Password
+          </button>
+        </div>
 
         {error && <div className="portal-alert portal-alert-error">{error}</div>}
         {message && <div className="portal-alert portal-alert-success">{message}</div>}
 
-        <form onSubmit={mode === 'login' ? handleLogin : handleRegister}>
-          <div className="fg">
-            <label>Email Address</label>
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-              autoFocus
-              placeholder="your@email.com"
-            />
-          </div>
-          <div className="fg">
-            <label>Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              placeholder="••••••••"
-              minLength={6}
-            />
-            {mode === 'register' && (
-              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Minimum 6 characters</div>
-            )}
-          </div>
-          <button
-            className="btn btn-primary"
-            style={{ width: '100%', marginTop: 4 }}
-            type="submit"
-            disabled={loading}
-          >
-            {loading ? 'Please wait…' : mode === 'login' ? 'Sign In' : 'Create Account'}
-          </button>
-        </form>
-
-        <div style={{ textAlign: 'center', marginTop: 20, fontSize: 13, color: 'var(--muted)', borderTop: '1px solid var(--border)', paddingTop: 16 }}>
-          {mode === 'login' ? (
-            <>
-              New here?{' '}
-              <button
-                className="portal-link-btn"
-                onClick={() => { setMode('register'); setError(''); setMessage('') }}
-              >
-                Create an account
-              </button>
-            </>
-          ) : (
-            <>
-              Already have an account?{' '}
-              <button
-                className="portal-link-btn"
-                onClick={() => { setMode('login'); setError(''); setMessage('') }}
-              >
-                Sign in
-              </button>
-            </>
-          )}
-        </div>
+        {mode === 'link' ? (
+          /* ── Magic link ── */
+          <form onSubmit={handleMagicLink}>
+            <div className="fg">
+              <label>Email Address</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                autoFocus
+                placeholder="your@email.com"
+              />
+            </div>
+            <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
+              We&apos;ll email you a secure one-click sign-in link — no password needed.
+            </div>
+            <button
+              className="btn btn-primary"
+              style={{ width: '100%' }}
+              type="submit"
+              disabled={loading}
+            >
+              {loading ? 'Sending…' : '📧 Send sign-in link'}
+            </button>
+          </form>
+        ) : (
+          /* ── Password ── */
+          <form onSubmit={handlePassword}>
+            <div className="fg">
+              <label>Email Address</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                autoFocus
+                placeholder="your@email.com"
+              />
+            </div>
+            <div className="fg">
+              <label>Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                placeholder="••••••••"
+                minLength={6}
+              />
+            </div>
+            <button
+              className="btn btn-primary"
+              style={{ width: '100%', marginTop: 4 }}
+              type="submit"
+              disabled={loading}
+            >
+              {loading ? 'Please wait…' : 'Sign In'}
+            </button>
+          </form>
+        )}
       </div>
     </div>
   )
