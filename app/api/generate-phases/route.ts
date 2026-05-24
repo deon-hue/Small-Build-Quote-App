@@ -64,9 +64,12 @@ Generate a full phase breakdown for this quote.`
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 3000,
+        max_tokens: 4096,
         system,
-        messages: [{ role: 'user', content: userMessage }],
+        messages: [
+          { role: 'user', content: userMessage },
+          { role: 'assistant', content: '{' },  // prefill — forces pure JSON, no preamble
+        ],
       }),
     })
 
@@ -77,18 +80,27 @@ Generate a full phase breakdown for this quote.`
       return NextResponse.json({ error: data.error?.message || 'AI error' }, { status: 500 })
     }
 
-    const text = data.content?.[0]?.text || ''
+    // The assistant turn was prefilled with '{', so prepend it back
+    const rawText = data.content?.[0]?.text || ''
+    const text = '{' + rawText
 
-    // Try to parse JSON — strip markdown code fences if present
+    // Strip markdown fences just in case
     let jsonStr = text.trim()
     const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
     if (fenceMatch) jsonStr = fenceMatch[1].trim()
+
+    // Last resort: extract outermost { ... }
+    if (!jsonStr.startsWith('{')) {
+      const start = jsonStr.indexOf('{')
+      const end = jsonStr.lastIndexOf('}')
+      if (start !== -1 && end !== -1) jsonStr = jsonStr.slice(start, end + 1)
+    }
 
     let parsed
     try {
       parsed = JSON.parse(jsonStr)
     } catch {
-      console.error('Failed to parse AI JSON:', jsonStr.slice(0, 200))
+      console.error('Failed to parse AI JSON:', jsonStr.slice(0, 300))
       return NextResponse.json({ error: 'AI returned invalid JSON' }, { status: 500 })
     }
 
