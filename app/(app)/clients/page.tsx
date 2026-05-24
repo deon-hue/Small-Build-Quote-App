@@ -107,7 +107,12 @@ export default function ClientsPage() {
         },
       })
       if (otpErr) {
-        setInviteError(otpErr.message || 'Failed to send invite. Please try again.')
+        const msg = otpErr.message
+        if (!msg || msg === '{}' || msg.trim() === '') {
+          setInviteError('Email failed to send — your Supabase Custom SMTP may be misconfigured. Disable it in Supabase → Project Settings → Authentication → SMTP Settings, or use the Copy Link option below.')
+        } else {
+          setInviteError(msg)
+        }
         return
       }
       await markPortalInvite(c.id)
