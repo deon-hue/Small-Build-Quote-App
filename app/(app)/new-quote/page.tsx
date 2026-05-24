@@ -53,7 +53,21 @@ export default function NewQuotePage() {
 
   function loadTemplate(type: string) {
     const tpl = JOB_TEMPLATES[type] || []
-    setPhases(tpl.map(p => makePhase(p.phase, p.items)))
+    setPhases(tpl.map(p => {
+      // Check if items are already typed (itemType set)
+      if (p.items.some(i => i.itemType)) {
+        return makePhase(p.phase, p.items)
+      }
+      // Aggregate old-format items into the 3 typed rows
+      const totalLabour = p.items.reduce((s, i) => s + (Number(i.labour) || 0), 0)
+      const totalMaterials = p.items.reduce((s, i) => s + (Number(i.materials) || 0), 0)
+      const totalPlant = p.items.reduce((s, i) => s + (Number(i.plantHire) || 0), 0)
+      return makePhase(p.phase, [
+        { desc: '', qty: 1, unit: 'Item', labour: totalLabour, materials: 0, plantHire: 0, notes: '', itemType: 'labour' as const },
+        { desc: '', qty: 1, unit: 'Item', labour: 0, materials: totalMaterials, plantHire: 0, notes: '', itemType: 'materials' as const },
+        { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: totalPlant, notes: '', itemType: 'plant' as const },
+      ])
+    }))
   }
 
   function loadQuoteForEdit(q: Quote) {
@@ -66,9 +80,24 @@ export default function NewQuotePage() {
     setVatOn(q.vatIncluded !== false)
     setScope(q.scope || '')
     setPhoto(q.photo || '')
-    setPhases(JSON.parse(JSON.stringify(q.phases)).map((p: QuotePhase) => ({
-      ...p, id: ++phaseCounter, items: p.items.map((i: QuoteItem) => ({ ...i, id: ++itemCounter }))
-    })))
+    setPhases(JSON.parse(JSON.stringify(q.phases)).map((p: QuotePhase) => {
+      const newId = ++phaseCounter
+      // If all items are legacy (no itemType), aggregate into typed rows
+      if (p.items.length > 0 && p.items.every((i: QuoteItem) => !i.itemType)) {
+        const totalLabour = p.items.reduce((s: number, i: QuoteItem) => s + (Number(i.labour) || 0), 0)
+        const totalMaterials = p.items.reduce((s: number, i: QuoteItem) => s + (Number(i.materials) || 0), 0)
+        const totalPlant = p.items.reduce((s: number, i: QuoteItem) => s + (Number(i.plantHire) || 0), 0)
+        return {
+          ...p, id: newId,
+          items: [
+            { id: ++itemCounter, desc: '', qty: 1, unit: 'Item', labour: totalLabour, materials: 0, plantHire: 0, notes: '', itemType: 'labour' as const },
+            { id: ++itemCounter, desc: '', qty: 1, unit: 'Item', labour: 0, materials: totalMaterials, plantHire: 0, notes: '', itemType: 'materials' as const },
+            { id: ++itemCounter, desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: totalPlant, notes: '', itemType: 'plant' as const },
+          ]
+        }
+      }
+      return { ...p, id: newId, items: p.items.map((i: QuoteItem) => ({ ...i, id: ++itemCounter })) }
+    }))
     setEditingId(q.id)
   }
 
