@@ -6,13 +6,16 @@ export interface QuoteItem {
   labour: number
   materials: number
   plantHire?: number
-  itemType?: 'labour' | 'materials' | 'plant'
+  subcontractors?: number
+  other?: number
+  itemType?: 'labour' | 'materials' | 'plant' | 'subcontractors' | 'other'
   notes: string
 }
 
 export interface QuotePhase {
   id: number
-  phase: string
+  phase: string          // Sub-phase / category name
+  parentPhase?: string   // Main phase grouping header
   items: QuoteItem[]
 }
 

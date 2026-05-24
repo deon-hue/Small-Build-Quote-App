@@ -12,35 +12,47 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No scope provided' }, { status: 400 })
   }
 
-  const system = `You are an expert UK quantity surveyor and building contractor. Convert a scope of works into a structured cost breakdown by phase.
+  const system = `You are an expert UK quantity surveyor and building contractor. Convert a scope of works into a structured cost breakdown using UK industry standard build phases.
 
-Each phase must have THREE separate cost lines: labour, materials, and plant hire.
+The phase structure is job-type dependent. Use a two-level hierarchy:
+- parentPhase = main phase group (e.g. "Phase 2 – Groundworks & Foundations")
+- phase = sub-phase / category (e.g. "Excavation", "Concrete Foundations", "Underground Drainage")
+
+Each sub-phase has FIVE separate cost rows.
 
 Return ONLY valid JSON — no markdown, no code blocks, no explanation:
 
 {
   "phases": [
     {
-      "phase": "Phase Name",
-      "labour": 1200,
-      "labourNotes": "Brief description of labour tasks",
-      "materials": 800,
-      "materialsNotes": "Key materials required",
-      "plant": 300,
-      "plantNotes": "Plant/machinery needed (empty string if none)"
+      "parentPhase": "Phase 1 – Site Setup & Preparation",
+      "phase": "Site Establishment",
+      "labour": 700,
+      "labourNotes": "Welfare, site management, H&S setup",
+      "materials": 400,
+      "materialsNotes": "Hoarding, protection sheets, heras fencing",
+      "plant": 800,
+      "plantNotes": "Scaffold erect/dismantle",
+      "subcontractors": 0,
+      "subNotes": "",
+      "other": 200,
+      "otherNotes": "Building Control application fee"
     }
   ]
 }
 
 Rules:
 - Use realistic UK 2024 contractor rates (all costs ex-VAT)
-- labour = cost of all workers for this phase
-- materials = cost of all materials, components and supplies for this phase
-- plant = cost of machinery hire: excavators, scaffolding, skips, mixers, access platforms etc — use 0 if none needed
+- labour = direct labour cost for this sub-phase
+- materials = materials, components and supplies
+- plant = machinery hire: excavators, scaffolding, skips, mixers, access platforms — use 0 if none
+- subcontractors = specialist subcontract cost (structural engineer, window fitter, etc) — use 0 if not applicable
+- other = miscellaneous: Building Control fees, survey fees, provisional sums — use 0 if none
 - All cost fields must be numbers (no £ signs)
-- Include 5–12 phases appropriate to the job type
-- Phase names must use professional UK construction terminology
-- Notes fields should be brief (max 10 words) or empty string
+- Group sub-phases under the correct UK industry standard main phase header for this job type
+- For rear/side extension: ~10 main phases with 2–4 sub-phases each
+- For landscaping or fit-out jobs: fewer phases, typically 5–8 main phases
+- Notes fields must be brief (max 10 words) or empty string
 - Do not include profit, markup or VAT`
 
   const userMessage = `Job type: ${jobType || 'general building works'}
@@ -49,7 +61,8 @@ Property: ${address || 'not specified'}
 Scope of works:
 ${scope}
 
-Generate a full phase cost breakdown with labour, materials and plant hire for each phase.`
+Generate a full phase cost breakdown using UK industry standard phases for this job type.
+Group sub-phases under main phase headers. Include all five cost types per sub-phase.`
 
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -61,7 +74,7 @@ Generate a full phase cost breakdown with labour, materials and plant hire for e
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 4096,
+        max_tokens: 8192,
         system,
         messages: [
           { role: 'user', content: userMessage },
