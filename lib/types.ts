@@ -6,6 +6,7 @@ export interface QuoteItem {
   labour: number
   materials: number
   plantHire?: number
+  itemType?: 'labour' | 'materials' | 'plant'
   notes: string
 }
 

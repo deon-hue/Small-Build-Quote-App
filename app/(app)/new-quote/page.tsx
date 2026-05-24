@@ -92,16 +92,12 @@ export default function NewQuotePage() {
       const data = await res.json()
       if (data.error) { alert('Could not generate phases: ' + data.error); return }
       if (Array.isArray(data.phases) && data.phases.length) {
-        setPhases(data.phases.map((p: { phase: string; items: Omit<QuoteItem, 'id'>[] }) =>
-          makePhase(p.phase, p.items.map(i => ({
-            desc: String(i.desc || ''),
-            qty: Number(i.qty) || 1,
-            unit: String(i.unit || 'Item'),
-            labour: Number(i.labour) || 0,
-            materials: Number(i.materials) || 0,
-            plantHire: Number(i.plantHire) || 0,
-            notes: String(i.notes || ''),
-          })))
+        setPhases(data.phases.map((p: { phase: string; labour: number; labourNotes: string; materials: number; materialsNotes: string; plant: number; plantNotes: string }) =>
+          makePhase(p.phase, [
+            { desc: '', qty: 1, unit: 'Item', labour: Number(p.labour) || 0, materials: 0, plantHire: 0, notes: String(p.labourNotes || ''), itemType: 'labour' as const },
+            { desc: '', qty: 1, unit: 'Item', labour: 0, materials: Number(p.materials) || 0, plantHire: 0, notes: String(p.materialsNotes || ''), itemType: 'materials' as const },
+            { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: Number(p.plant) || 0, notes: String(p.plantNotes || ''), itemType: 'plant' as const },
+          ])
         ))
       }
     } catch {
@@ -113,7 +109,11 @@ export default function NewQuotePage() {
 
   // Phases
   function addPhase() {
-    setPhases(prev => [...prev, makePhase('New Phase', [{ desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, notes: '' }])])
+    setPhases(prev => [...prev, makePhase('New Phase', [
+      { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, notes: '', itemType: 'labour' as const },
+      { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, notes: '', itemType: 'materials' as const },
+      { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, notes: '', itemType: 'plant' as const },
+    ])])
   }
   function removePhase(id: number) { setPhases(prev => prev.filter(p => p.id !== id)) }
   function updatePhaseName(id: number, name: string) {
@@ -124,6 +124,11 @@ export default function NewQuotePage() {
   function addItem(phaseId: number) {
     setPhases(prev => prev.map(p => p.id === phaseId
       ? { ...p, items: [...p.items, { id: ++itemCounter, desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, notes: '' }] }
+      : p))
+  }
+  function addTypedItem(phaseId: number, itemType: 'labour' | 'materials' | 'plant') {
+    setPhases(prev => prev.map(p => p.id === phaseId
+      ? { ...p, items: [...p.items, { id: ++itemCounter, desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, notes: '', itemType }] }
       : p))
   }
   function removeItem(phaseId: number, itemId: number) {
@@ -419,50 +424,130 @@ export default function NewQuotePage() {
                     </span>
                     <button className="rm-btn" onClick={() => removePhase(p.id)}>×</button>
                   </div>
-                  {/* Column headers */}
-                  <div className="col-heads" style={{ gridTemplateColumns: '1fr 60px 58px 78px 78px 78px 78px 78px 78px 100px 22px' }}>
-                    <span>Description</span><span style={{ textAlign: 'center' }}>Qty</span><span style={{ textAlign: 'center' }}>Unit</span>
-                    <span style={{ textAlign: 'right' }}>Labour</span><span style={{ textAlign: 'right' }}>Materials</span>
-                    <span style={{ textAlign: 'right' }}>Plant Hire</span>
-                    <span style={{ textAlign: 'right', color: '#c0392b' }}>Cost</span>
-                    <span style={{ textAlign: 'right', color: '#7ab533' }}>Sell</span>
-                    <span style={{ textAlign: 'right', color: '#4a90a4' }}>VAT</span>
-                    <span>Notes</span><span></span>
-                  </div>
-                  {p.items.map(item => {
-                    const itemCost = calcItem(item)
-                    const itemSell = calcItemSell(item, markup)
-                    const itemVat = vatOn ? itemSell * VAT : 0
+                  {/* ── Typed rows: Labour / Materials / Plant Hire ── */}
+                  {p.items.some(i => i.itemType) && (() => {
+                    const TYPE_CFG = {
+                      labour:    { label: 'Labour',     emoji: '🔨', bg: '#e8f4f8', color: '#2a7090', border: '#4a90a4' },
+                      materials: { label: 'Materials',  emoji: '📦', bg: '#fff3e8', color: '#b85c00', border: '#e67e22' },
+                      plant:     { label: 'Plant Hire', emoji: '🚜', bg: '#eef8e0', color: '#4a7a1a', border: '#7ab533' },
+                    }
+                    const typedItems = p.items.filter(i => i.itemType)
+                    const TCOLS = '140px 1fr 100px 78px 78px 78px 22px'
                     return (
-                      <div key={item.id} className="item-row" style={{ gridTemplateColumns: '1fr 60px 58px 78px 78px 78px 78px 78px 78px 100px 22px' }}>
-                        <input value={item.desc} onChange={e => updateItem(p.id, item.id, 'desc', e.target.value)} placeholder="Description" />
-                        <input type="number" value={item.qty} onChange={e => updateItem(p.id, item.id, 'qty', Number(e.target.value))} style={{ textAlign: 'center' }} />
-                        <select value={item.unit} onChange={e => updateItem(p.id, item.id, 'unit', e.target.value)}>
-                          {UNITS.map(u => <option key={u}>{u}</option>)}
-                        </select>
-                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                          <span style={{ position: 'absolute', left: 6, fontSize: 11, color: 'var(--muted)', pointerEvents: 'none' }}>£</span>
-                          <input type="number" value={item.labour} onChange={e => updateItem(p.id, item.id, 'labour', Number(e.target.value))} style={{ textAlign: 'right', width: '100%', paddingLeft: 14 }} />
+                      <>
+                        <div className="col-heads" style={{ gridTemplateColumns: TCOLS }}>
+                          <span>Type</span>
+                          <span>Notes</span>
+                          <span style={{ textAlign: 'right' }}>£ Amount</span>
+                          <span style={{ textAlign: 'right', color: '#c0392b' }}>Cost</span>
+                          <span style={{ textAlign: 'right', color: '#7ab533' }}>Sell</span>
+                          <span style={{ textAlign: 'right', color: '#4a90a4' }}>VAT</span>
+                          <span></span>
                         </div>
-                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                          <span style={{ position: 'absolute', left: 6, fontSize: 11, color: 'var(--muted)', pointerEvents: 'none' }}>£</span>
-                          <input type="number" value={item.materials} onChange={e => updateItem(p.id, item.id, 'materials', Number(e.target.value))} style={{ textAlign: 'right', width: '100%', paddingLeft: 14 }} />
+                        {typedItems.map(item => {
+                          const cfg = TYPE_CFG[item.itemType!]
+                          const amount = item.itemType === 'labour' ? item.labour : item.itemType === 'materials' ? item.materials : (item.plantHire ?? 0)
+                          const itemCost = calcItem(item)
+                          const itemSell = calcItemSell(item, markup)
+                          const itemVat = vatOn ? itemSell * VAT : 0
+                          return (
+                            <div key={item.id} className="item-row" style={{ gridTemplateColumns: TCOLS, alignItems: 'center' }}>
+                              <div style={{ padding: '0 8px' }}>
+                                <span style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}55`, padding: '3px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+                                  {cfg.emoji} {cfg.label}
+                                </span>
+                              </div>
+                              <input value={item.notes} onChange={e => updateItem(p.id, item.id, 'notes', e.target.value)} placeholder="Notes…" />
+                              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                <span style={{ position: 'absolute', left: 6, fontSize: 11, color: 'var(--muted)', pointerEvents: 'none' }}>£</span>
+                                <input
+                                  type="number"
+                                  value={amount}
+                                  onChange={e => updateItem(p.id, item.id, item.itemType === 'labour' ? 'labour' : item.itemType === 'materials' ? 'materials' : 'plantHire', Number(e.target.value))}
+                                  style={{ textAlign: 'right', width: '100%', paddingLeft: 14 }}
+                                />
+                              </div>
+                              <span style={{ textAlign: 'right', fontSize: 11, color: '#c0392b', fontFamily: 'DM Mono, monospace', padding: '0 4px' }}>{fmt(itemCost)}</span>
+                              <span style={{ textAlign: 'right', fontSize: 11, color: '#2b8a3e', fontFamily: 'DM Mono, monospace', padding: '0 4px', fontWeight: 600 }}>{fmt(itemSell)}</span>
+                              <span style={{ textAlign: 'right', fontSize: 11, color: '#4a90a4', fontFamily: 'DM Mono, monospace', padding: '0 4px' }}>{vatOn ? fmt(itemVat) : '—'}</span>
+                              <button className="rm-btn" onClick={() => removeItem(p.id, item.id)}>×</button>
+                            </div>
+                          )
+                        })}
+                        {/* Add typed row buttons */}
+                        <div style={{ padding: '6px 12px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {(['labour', 'materials', 'plant'] as const).map(t => (
+                            <button key={t} className="btn-sm btn-outline" style={{ fontSize: 11 }} onClick={() => addTypedItem(p.id, t)}>
+                              + {TYPE_CFG[t].emoji} {TYPE_CFG[t].label}
+                            </button>
+                          ))}
                         </div>
-                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                          <span style={{ position: 'absolute', left: 6, fontSize: 11, color: 'var(--muted)', pointerEvents: 'none' }}>£</span>
-                          <input type="number" value={item.plantHire ?? 0} onChange={e => updateItem(p.id, item.id, 'plantHire', Number(e.target.value))} style={{ textAlign: 'right', width: '100%', paddingLeft: 14 }} />
-                        </div>
-                        <span style={{ textAlign: 'right', fontSize: 11, color: '#c0392b', fontFamily: 'DM Mono, monospace', padding: '0 4px' }}>{fmt(itemCost)}</span>
-                        <span style={{ textAlign: 'right', fontSize: 11, color: '#2b8a3e', fontFamily: 'DM Mono, monospace', padding: '0 4px', fontWeight: 600 }}>{fmt(itemSell)}</span>
-                        <span style={{ textAlign: 'right', fontSize: 11, color: '#4a90a4', fontFamily: 'DM Mono, monospace', padding: '0 4px' }}>{vatOn ? fmt(itemVat) : '—'}</span>
-                        <input value={item.notes} onChange={e => updateItem(p.id, item.id, 'notes', e.target.value)} placeholder="Note" />
-                        <button className="rm-btn" onClick={() => removeItem(p.id, item.id)}>×</button>
-                      </div>
+                      </>
                     )
-                  })}
-                  <div style={{ padding: '7px 12px' }}>
-                    <button className="btn-sm btn-outline" onClick={() => addItem(p.id)}>+ Add Line</button>
-                  </div>
+                  })()}
+
+                  {/* ── General rows (legacy / manually added detail lines) ── */}
+                  {p.items.some(i => !i.itemType) && (() => {
+                    const generalItems = p.items.filter(i => !i.itemType)
+                    const GCOLS = '1fr 60px 58px 78px 78px 78px 78px 78px 78px 100px 22px'
+                    return (
+                      <>
+                        {p.items.some(i => i.itemType) && (
+                          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'var(--muted)', padding: '8px 12px 2px' }}>Detail Lines</div>
+                        )}
+                        <div className="col-heads" style={{ gridTemplateColumns: GCOLS }}>
+                          <span>Description</span><span style={{ textAlign: 'center' }}>Qty</span><span style={{ textAlign: 'center' }}>Unit</span>
+                          <span style={{ textAlign: 'right' }}>Labour</span><span style={{ textAlign: 'right' }}>Materials</span>
+                          <span style={{ textAlign: 'right' }}>Plant</span>
+                          <span style={{ textAlign: 'right', color: '#c0392b' }}>Cost</span>
+                          <span style={{ textAlign: 'right', color: '#7ab533' }}>Sell</span>
+                          <span style={{ textAlign: 'right', color: '#4a90a4' }}>VAT</span>
+                          <span>Notes</span><span></span>
+                        </div>
+                        {generalItems.map(item => {
+                          const itemCost = calcItem(item)
+                          const itemSell = calcItemSell(item, markup)
+                          const itemVat = vatOn ? itemSell * VAT : 0
+                          return (
+                            <div key={item.id} className="item-row" style={{ gridTemplateColumns: GCOLS }}>
+                              <input value={item.desc} onChange={e => updateItem(p.id, item.id, 'desc', e.target.value)} placeholder="Description" />
+                              <input type="number" value={item.qty} onChange={e => updateItem(p.id, item.id, 'qty', Number(e.target.value))} style={{ textAlign: 'center' }} />
+                              <select value={item.unit} onChange={e => updateItem(p.id, item.id, 'unit', e.target.value)}>
+                                {UNITS.map(u => <option key={u}>{u}</option>)}
+                              </select>
+                              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                <span style={{ position: 'absolute', left: 6, fontSize: 11, color: 'var(--muted)', pointerEvents: 'none' }}>£</span>
+                                <input type="number" value={item.labour} onChange={e => updateItem(p.id, item.id, 'labour', Number(e.target.value))} style={{ textAlign: 'right', width: '100%', paddingLeft: 14 }} />
+                              </div>
+                              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                <span style={{ position: 'absolute', left: 6, fontSize: 11, color: 'var(--muted)', pointerEvents: 'none' }}>£</span>
+                                <input type="number" value={item.materials} onChange={e => updateItem(p.id, item.id, 'materials', Number(e.target.value))} style={{ textAlign: 'right', width: '100%', paddingLeft: 14 }} />
+                              </div>
+                              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                <span style={{ position: 'absolute', left: 6, fontSize: 11, color: 'var(--muted)', pointerEvents: 'none' }}>£</span>
+                                <input type="number" value={item.plantHire ?? 0} onChange={e => updateItem(p.id, item.id, 'plantHire', Number(e.target.value))} style={{ textAlign: 'right', width: '100%', paddingLeft: 14 }} />
+                              </div>
+                              <span style={{ textAlign: 'right', fontSize: 11, color: '#c0392b', fontFamily: 'DM Mono, monospace', padding: '0 4px' }}>{fmt(itemCost)}</span>
+                              <span style={{ textAlign: 'right', fontSize: 11, color: '#2b8a3e', fontFamily: 'DM Mono, monospace', padding: '0 4px', fontWeight: 600 }}>{fmt(itemSell)}</span>
+                              <span style={{ textAlign: 'right', fontSize: 11, color: '#4a90a4', fontFamily: 'DM Mono, monospace', padding: '0 4px' }}>{vatOn ? fmt(itemVat) : '—'}</span>
+                              <input value={item.notes} onChange={e => updateItem(p.id, item.id, 'notes', e.target.value)} placeholder="Note" />
+                              <button className="rm-btn" onClick={() => removeItem(p.id, item.id)}>×</button>
+                            </div>
+                          )
+                        })}
+                        <div style={{ padding: '7px 12px' }}>
+                          <button className="btn-sm btn-outline" onClick={() => addItem(p.id)}>+ Add Line</button>
+                        </div>
+                      </>
+                    )
+                  })()}
+
+                  {/* If phase has NO items at all */}
+                  {!p.items.length && (
+                    <div style={{ padding: '7px 12px' }}>
+                      <button className="btn-sm btn-outline" onClick={() => addItem(p.id)}>+ Add Line</button>
+                    </div>
+                  )}
                 </div>
               ))
           }

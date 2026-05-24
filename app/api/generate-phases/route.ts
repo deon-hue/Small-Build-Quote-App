@@ -12,39 +12,36 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No scope provided' }, { status: 400 })
   }
 
-  const system = `You are an expert UK quantity surveyor and building contractor. Your job is to convert a scope of works into a structured quote breakdown.
+  const system = `You are an expert UK quantity surveyor and building contractor. Convert a scope of works into a structured cost breakdown by phase.
 
-Return ONLY valid JSON — no markdown, no code blocks, no explanation. The JSON must match this exact structure:
+Each phase must have THREE separate cost lines: labour, materials, and plant hire.
+
+Return ONLY valid JSON — no markdown, no code blocks, no explanation:
 
 {
   "phases": [
     {
       "phase": "Phase Name",
-      "items": [
-        {
-          "desc": "Item description",
-          "qty": 1,
-          "unit": "Item",
-          "labour": 500,
-          "materials": 300,
-          "plantHire": 0,
-          "notes": ""
-        }
-      ]
+      "labour": 1200,
+      "labourNotes": "Brief description of labour tasks",
+      "materials": 800,
+      "materialsNotes": "Key materials required",
+      "plant": 300,
+      "plantNotes": "Plant/machinery needed (empty string if none)"
     }
   ]
 }
 
 Rules:
-- Use realistic UK 2024 contractor rates (labour in £/unit, materials ex-VAT)
-- Split every work item into its labour cost, materials cost, and plant hire cost separately
-- Plant hire is for machinery: excavators, scaffolding, skips, concrete mixers, access platforms, etc. — set to 0 if not needed
-- Valid units: Item, m, m², m³, Nr, Hr, Day, Set, Kg, Tonne
-- qty and all cost fields must be numbers (no £ signs, no strings)
-- Include 5–12 phases appropriate to the job type, each with 2–6 line items
-- Phase names should be professional UK construction terminology
-- notes field should be brief (max 8 words) or empty string
-- Do not include pricing contingencies, profit, or VAT — costs only`
+- Use realistic UK 2024 contractor rates (all costs ex-VAT)
+- labour = cost of all workers for this phase
+- materials = cost of all materials, components and supplies for this phase
+- plant = cost of machinery hire: excavators, scaffolding, skips, mixers, access platforms etc — use 0 if none needed
+- All cost fields must be numbers (no £ signs)
+- Include 5–12 phases appropriate to the job type
+- Phase names must use professional UK construction terminology
+- Notes fields should be brief (max 10 words) or empty string
+- Do not include profit, markup or VAT`
 
   const userMessage = `Job type: ${jobType || 'general building works'}
 Property: ${address || 'not specified'}
@@ -52,7 +49,7 @@ Property: ${address || 'not specified'}
 Scope of works:
 ${scope}
 
-Generate a full phase breakdown for this quote.`
+Generate a full phase cost breakdown with labour, materials and plant hire for each phase.`
 
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -68,7 +65,7 @@ Generate a full phase breakdown for this quote.`
         system,
         messages: [
           { role: 'user', content: userMessage },
-          { role: 'assistant', content: '{' },  // prefill — forces pure JSON, no preamble
+          { role: 'assistant', content: '{' }, // prefill — forces pure JSON
         ],
       }),
     })
@@ -80,16 +77,14 @@ Generate a full phase breakdown for this quote.`
       return NextResponse.json({ error: data.error?.message || 'AI error' }, { status: 500 })
     }
 
-    // The assistant turn was prefilled with '{', so prepend it back
+    // Prepend the prefilled '{' back
     const rawText = data.content?.[0]?.text || ''
     const text = '{' + rawText
 
-    // Strip markdown fences just in case
     let jsonStr = text.trim()
     const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
     if (fenceMatch) jsonStr = fenceMatch[1].trim()
 
-    // Last resort: extract outermost { ... }
     if (!jsonStr.startsWith('{')) {
       const start = jsonStr.indexOf('{')
       const end = jsonStr.lastIndexOf('}')
