@@ -267,13 +267,22 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       <div id="gantt-tooltip" style="position:fixed;background:#2b2f33;color:white;font-size:11px;padding:6px 10px;border-radius:4px;pointer-events:none;display:none;z-index:999;line-height:1.6"></div>
     `
 
-    // Clean up previous drag listeners before attaching new ones
+    // Remove ALL previous event listeners (container + document) before attaching new ones.
+    // Critical: container.innerHTML replacement removes child DOM, but NOT listeners on the
+    // container div itself. Without this cleanup, each renderGantt call accumulates an extra
+    // stale mouseover/mousedown handler, causing the tooltip to read durDays from an old
+    // state object (e.g. the saved value "31 days") instead of the current in-memory state.
     cleanupDragRef.current?.()
-    cleanupDragRef.current = attachDrag(container, state, startDate, totalDays, mode)
-    attachLabelResize(container, state, mode)
+    const cleanupDrag   = attachDrag(container, state, startDate, totalDays, mode)
+    const cleanupResize = attachLabelResize(container, state, mode)
+    cleanupDragRef.current = () => { cleanupDrag(); cleanupResize() }
   }
 
-  // Returns a cleanup function for the document-level listeners
+  // Returns a COMPREHENSIVE cleanup for ALL event listeners — container AND document.
+  // Container listeners are named functions (not anonymous) so they can be individually
+  // removed. Without this, multiple renderGantt calls silently stack up extra mouseover
+  // handlers on the container div, each closing over a different (possibly stale) state
+  // object, causing the tooltip to show old durDays values after re-renders.
   function attachDrag(container: HTMLDivElement, state: GanttState, startDate: Date, totalDays: number, mode: 'day' | 'week' | 'month'): () => void {
     const tooltip = container.querySelector<HTMLElement>('#gantt-tooltip')
     let dragging: { type: 'move' | 'resize', idx: number, startX: number, origStart: number, origDur: number, trackW: number } | null = null
@@ -297,16 +306,26 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       if (!tooltip) return
       const jStart = job.start ? new Date(job.start) : new Date()
       jStart.setHours(0, 0, 0, 0)
-      const s = fmtDate(addDays(jStart, ph.startDay))
-      const en = fmtDate(addDays(jStart, ph.startDay + ph.durDays))
-      const durText = formatGanttDuration(ph.durDays, mode)
-      tooltip.innerHTML = `<strong>${esc(ph.label)}</strong><br>Start: ${s}<br>End: ${en}<br>Duration: ${durText}`
+      const barStart = addDays(jStart, ph.startDay)
+      const barEnd   = addDays(jStart, ph.startDay + ph.durDays)
+      const durText  = formatGanttDuration(ph.durDays, mode)
+      // Debug: open browser DevTools console to verify bar ↔ tooltip parity
+      console.debug('[Gantt tooltip]', `"${ph.label}"`, {
+        mode,
+        startDay: ph.startDay,
+        durDays: ph.durDays,
+        barStart: fmtDateShort(barStart),
+        barEnd: fmtDateShort(barEnd),
+        durText,
+      })
+      tooltip.innerHTML = `<strong>${esc(ph.label)}</strong><br>Start: ${fmtDate(barStart)}<br>End: ${fmtDate(barEnd)}<br>Duration: ${durText}`
       tooltip.style.display = 'block'
       tooltip.style.left = (e.clientX + 12) + 'px'
       tooltip.style.top = (e.clientY - 10) + 'px'
     }
 
-    container.addEventListener('mousedown', (e: Event) => {
+    // ── Named container handlers (must be named to be removable) ─────────────
+    function onContainerMouseDown(e: Event) {
       const me = e as MouseEvent
       const handle = (me.target as Element).closest('.gantt-resize-handle')
       const bar = (me.target as Element).closest('.gantt-bar')
@@ -321,7 +340,22 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
         trackW: trackEl!.getBoundingClientRect().width,
       }
       document.body.style.cursor = handle ? 'ew-resize' : 'grabbing'
-    })
+    }
+
+    function onContainerMouseOver(e: Event) {
+      const bar = (e.target as Element).closest('.gantt-bar')
+      if (!bar || dragging) return
+      const idx = parseInt((bar as HTMLElement).dataset.idx || '0')
+      showTooltip(e as MouseEvent, state.phases[idx])
+    }
+
+    function onContainerMouseOut(e: Event) {
+      if ((e.target as Element).closest('.gantt-bar') && !dragging && tooltip) tooltip.style.display = 'none'
+    }
+
+    container.addEventListener('mousedown', onContainerMouseDown)
+    container.addEventListener('mouseover', onContainerMouseOver)
+    container.addEventListener('mouseout',  onContainerMouseOut)
 
     const onMove = (e: Event) => {
       const me = e as MouseEvent
@@ -351,26 +385,22 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     }
 
     document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
+    document.addEventListener('mouseup',   onUp)
 
-    container.addEventListener('mouseover', (e: Event) => {
-      const bar = (e.target as Element).closest('.gantt-bar')
-      if (!bar || dragging) return
-      const idx = parseInt((bar as HTMLElement).dataset.idx || '0')
-      showTooltip(e as MouseEvent, state.phases[idx])
-    })
-    container.addEventListener('mouseout', (e: Event) => {
-      if ((e.target as Element).closest('.gantt-bar') && !dragging && tooltip) tooltip.style.display = 'none'
-    })
-
+    // Cleanup removes ALL listeners — container + document.
+    // This is called at the start of every renderGantt so no stale handlers remain.
     return () => {
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
+      container.removeEventListener('mousedown', onContainerMouseDown)
+      container.removeEventListener('mouseover', onContainerMouseOver)
+      container.removeEventListener('mouseout',  onContainerMouseOut)
+      document.removeEventListener('mousemove',  onMove)
+      document.removeEventListener('mouseup',    onUp)
     }
   }
 
-  function attachLabelResize(container: HTMLDivElement, state: GanttState, mode: string) {
-    container.addEventListener('mousedown', (e: Event) => {
+  function attachLabelResize(container: HTMLDivElement, state: GanttState, mode: string): () => void {
+    // Named so it can be removed — prevents mousedown accumulation across re-renders
+    function onContainerMouseDown(e: Event) {
       const me = e as MouseEvent
       const divider = (me.target as Element).closest('.gantt-col-divider')
       if (!divider) return
@@ -395,7 +425,10 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       }
       document.addEventListener('mousemove', onMove)
       document.addEventListener('mouseup', onUp)
-    })
+    }
+
+    container.addEventListener('mousedown', onContainerMouseDown)
+    return () => { container.removeEventListener('mousedown', onContainerMouseDown) }
   }
 
   // Expose view/reset to inline onclick handlers
