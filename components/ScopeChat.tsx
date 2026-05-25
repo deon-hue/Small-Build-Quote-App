@@ -56,7 +56,7 @@ export default function ScopeChat({ jobType, address, phases, onInsert, onClose 
 
     const rec: AnySpeechRecognition = new SR()
     rec.lang = 'en-GB'
-    rec.continuous = false
+    rec.continuous = true
     rec.interimResults = true
 
     rec.onstart = () => setListening(true)
