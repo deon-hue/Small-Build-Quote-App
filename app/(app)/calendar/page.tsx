@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { useApp } from '@/contexts/AppContext'
-import { STAGE_COLOR, STAGE_LABEL, fmt } from '@/lib/utils'
+import { STAGE_COLOR, STAGE_LABEL, fmt, JOB_COLORS, jobColor } from '@/lib/utils'
 import type { Job } from '@/lib/types'
 
 // ── Date helpers ───────────────────────────────────────────────
@@ -17,12 +17,6 @@ function getMonday(d: Date): Date {
   const day = d.getDay()
   return addDays(new Date(d.getFullYear(), d.getMonth(), d.getDate()), day === 0 ? -6 : 1 - day)
 }
-function hashCode(s: string): number {
-  let h = 0
-  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0
-  return h
-}
-
 // ── Types ──────────────────────────────────────────────────────
 interface CalEvent {
   id: string
@@ -44,10 +38,7 @@ interface WeekSlot {
 }
 
 // ── Constants ──────────────────────────────────────────────────
-const JOB_COLORS = [
-  '#4a90a4', '#7ab533', '#e07b22', '#9b59b6', '#2980b9',
-  '#e74c3c', '#1abc9c', '#b5870a', '#16a085', '#c0392b',
-]
+// JOB_COLORS is imported from lib/utils (shared with Jobs page)
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const MAX_ROWS = 3  // max event rows visible per week strip in month view
 const DATE_H   = 26 // px – date-number strip height
@@ -119,7 +110,7 @@ export default function CalendarPage() {
       const jobStart = new Date(job.start)
       jobStart.setHours(0, 0, 0, 0)
 
-      const color = JOB_COLORS[Math.abs(hashCode(job.id)) % JOB_COLORS.length]
+      const color = jobColor(job.id)
       const gs    = ganttStates[job.id]
 
       // Calendar phase priority:
@@ -677,7 +668,7 @@ export default function CalendarPage() {
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {jobs.filter(j => j.start).map(j => {
-              const color    = JOB_COLORS[Math.abs(hashCode(j.id)) % JOB_COLORS.length]
+              const color    = jobColor(j.id)
               const isLit    = highlightJobId === j.id
               const jobNum   = getJobNum(j.id)
               return (

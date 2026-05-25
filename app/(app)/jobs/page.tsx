@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useApp } from '@/contexts/AppContext'
-import { fmt, STAGE_COLOR, STAGE_BADGE, STAGE_LABEL, JOB_TYPES } from '@/lib/utils'
+import { fmt, jobColor, STAGE_BADGE, STAGE_LABEL, JOB_TYPES } from '@/lib/utils'
 import type { Job } from '@/lib/types'
 import GanttModal from '@/components/GanttModal'
 import VariationModal from '@/components/VariationModal'
@@ -108,7 +108,7 @@ export default function JobsPage() {
         : filtered.map(j => {
             const jobNum = (() => { const idx = jobs.findIndex(x => x.id === j.id); return idx >= 0 ? `JOB-${String(idx + 1).padStart(3, '0')}` : '' })()
             const pct = j.weeks ? Math.min(100, Math.round((j.done / j.weeks) * 100)) : 0
-            const col = STAGE_COLOR[j.stage] || 'var(--muted)'
+            const col = jobColor(j.id)
             const jobVars = variations.filter(v => v.jobId === j.id)
             const approvedVarTotal = jobVars
               .filter(v => v.status === 'approved' || v.status === 'invoiced' || v.status === 'paid')

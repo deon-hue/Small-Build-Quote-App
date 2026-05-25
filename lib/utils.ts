@@ -39,6 +39,22 @@ export function quoteTotal(q: Quote): number {
   return sub * (q.vatIncluded ? 1 + VAT : 1)
 }
 
+// ── Per-job unique colours (matches calendar view) ───────────────────────────
+// Each job gets a persistent colour derived from its ID so the dot / badge on
+// the Jobs list page uses the same colour the user sees on the Calendar page.
+export const JOB_COLORS = [
+  '#4a90a4', '#7ab533', '#e07b22', '#9b59b6', '#2980b9',
+  '#e74c3c', '#1abc9c', '#b5870a', '#16a085', '#c0392b',
+]
+function _hashCode(s: string): number {
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0
+  return h
+}
+export function jobColor(jobId: string): string {
+  return JOB_COLORS[Math.abs(_hashCode(jobId)) % JOB_COLORS.length]
+}
+
 export const STAGE_COLOR: Record<string, string> = {
   planning: '#4a90a4', active: '#7ab533', onhold: '#e67e22', complete: '#9aa3ad',
 }
