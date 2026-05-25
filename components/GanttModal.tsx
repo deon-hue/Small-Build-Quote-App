@@ -51,16 +51,18 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     const saved = getGanttState(job.id)
     if (saved && saved.phases && saved.phases.length > 0) return saved
 
-    // No saved state → build from quote phases or sensible defaults
-    const defaultLabels = phases.length
+    // No saved state → first-time creation: every phase starts at day 0 (job start date),
+    // duration 2 days. User then drags/resizes to schedule properly.
+    // Deduplicate labels — quote rows repeat the sub-phase name once per cost type.
+    const rawLabels = phases.length
       ? phases.map(p => p.phase)
       : ['Preliminaries','Demolition & Enabling','Foundations','Structure','Roof',
          'External Doors & Windows','First Fix','Insulation','Plastering','Second Fix','External Works']
-    const n = defaultLabels.length
-    const ganttPhases: GanttPhase[] = defaultLabels.map((label, i) => ({
+    const defaultLabels = [...new Set(rawLabels)]
+    const ganttPhases: GanttPhase[] = defaultLabels.map(label => ({
       label,
-      startDay: Math.round((i / n) * totalDays),
-      durDays: Math.max(1, Math.round(((i + 1) / n) * totalDays) - Math.round((i / n) * totalDays)),
+      startDay: 0,
+      durDays: 2,
     }))
     return { phases: ganttPhases, totalDays }
   }
@@ -442,18 +444,18 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     (window as unknown as Record<string, unknown>).__ganttView = (mode: 'day' | 'week' | 'month') => setViewMode(mode);
     (window as unknown as Record<string, unknown>).__ganttReset = async () => {
       if (!confirm('Reset Gantt to default layout? This will clear your custom dates.')) return
-      // Build a fresh default state ignoring any saved state
+      // Build a fresh default state — same as first-time creation:
+      // all phases start at day 0, duration 2 days.
       const totalDays = (job.weeks || 12) * 7
-      const defaultLabels = phases.length
+      const rawLabels = phases.length
         ? phases.map(p => p.phase)
         : ['Preliminaries','Demolition & Enabling','Foundations','Structure','Roof',
            'External Doors & Windows','First Fix','Insulation','Plastering','Second Fix','External Works']
-      const n = defaultLabels.length
       const freshState: GanttState = {
-        phases: defaultLabels.map((label, i) => ({
+        phases: [...new Set(rawLabels)].map(label => ({
           label,
-          startDay: Math.round((i / n) * totalDays),
-          durDays: Math.max(1, Math.round(((i + 1) / n) * totalDays) - Math.round((i / n) * totalDays)),
+          startDay: 0,
+          durDays: 2,
         })),
         totalDays,
       }
