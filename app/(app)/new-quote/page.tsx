@@ -550,6 +550,7 @@ export default function NewQuotePage() {
 
       {showScopeChat && (
         <ScopeChat
+          quoteId={editingId}
           jobType={jobType}
           address={custAddr}
           phases={phases.map(p => p.phase)}
