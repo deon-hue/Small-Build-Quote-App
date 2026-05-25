@@ -114,12 +114,10 @@ export default function CalendarPage() {
       const gs    = ganttStates[job.id]
 
       // Calendar phase priority:
-      //  1. Quote sub-phases (p.phase) spread evenly — always preferred for calendar detail
-      //  2. Saved Gantt phases (only if no quote found — preserves drag-scheduled dates)
-      //  3. 5 generic fallback phases
-      //
-      // The Gantt state stores main-phase-level bars for Gantt scheduling.
-      // The calendar needs the finer sub-phase breakdown from the quote.
+      //  1. Saved Gantt state — user has explicitly scheduled these phases by dragging;
+      //     always use it when present so calendar reflects actual planned dates.
+      //  2. Quote sub-phases spread evenly — initial layout before user touches the Gantt.
+      //  3. 5 generic fallback phases — job has no quote and no saved Gantt layout.
       const totalDays = (job.weeks || 12) * 7
 
       // Find the best linked quote (same matching logic as GanttModal / jobs page)
@@ -139,17 +137,17 @@ export default function CalendarPage() {
         ? best!.phases.map(p => p.phase).filter((v, i, a) => a.indexOf(v) === i)
         : null
 
-      const phases = rawSubPhases
-        ? (() => {
-            const n = rawSubPhases.length
-            return rawSubPhases.map((label, i) => ({
-              label,
-              startDay: Math.round((i / n) * totalDays),
-              durDays:  Math.max(1, Math.round(((i + 1) / n) * totalDays) - Math.round((i / n) * totalDays)),
-            }))
-          })()
-        : (gs?.phases?.length ?? 0) > 0
-          ? gs!.phases   // no quote → use saved Gantt phases
+      const phases = (gs?.phases?.length ?? 0) > 0
+        ? gs!.phases   // ← saved Gantt layout: reflects every drag/resize the user has made
+        : rawSubPhases
+          ? (() => {
+              const n = rawSubPhases.length
+              return rawSubPhases.map((label, i) => ({
+                label,
+                startDay: Math.round((i / n) * totalDays),
+                durDays:  Math.max(1, Math.round(((i + 1) / n) * totalDays) - Math.round((i / n) * totalDays)),
+              }))
+            })()
           : (() => {
               const lbls = ['Preliminaries', 'Structural Works', 'First Fix', 'Second Fix', 'Completion & Snagging']
               const n = lbls.length
