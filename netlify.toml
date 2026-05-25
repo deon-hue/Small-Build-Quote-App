@@ -2,6 +2,10 @@
   command = "npm run build"
   publish = ".next"
 
+# Increase timeout for the Next.js server handler (needed for AI + file processing)
+[functions."___netlify-handler"]
+  timeout = 26
+
 [[headers]]
   for = "/*"
   [headers.values]

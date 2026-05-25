@@ -118,7 +118,7 @@ Works comprise a single-storey rear extension to extend the existing kitchen and
   // Sonnet 4.6 for document-enhanced chats (strongest vision + PDF reading);
   // Haiku 4.5 for text-only (faster and cheaper).
   const model     = hasFiles ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001'
-  const maxTokens = hasFiles ? 2000 : 700
+  const maxTokens = hasFiles ? 800 : 700
 
   // ── Call Anthropic API ────────────────────────────────────
   try {
