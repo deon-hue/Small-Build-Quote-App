@@ -148,3 +148,45 @@ export interface TemplatePhaseData {
   phase: string
   items: Omit<QuoteItem, 'id'>[]
 }
+
+// ── Variations / Change Orders ───────────────────────────────
+
+export type VariationStatus =
+  | 'draft'
+  | 'sent'
+  | 'approved'
+  | 'rejected'
+  | 'cancelled'
+  | 'invoiced'
+  | 'paid'
+
+export interface VariationLineItem {
+  id: number
+  itemType: 'labour' | 'materials' | 'plant' | 'subcontractors' | 'other'
+  desc: string
+  qty: number
+  unit: string
+  rate: number   // cost rate per unit; selling price = rate × (1 + markup/100)
+  notes: string
+}
+
+export interface Variation {
+  id: string
+  jobId: string
+  ref: string
+  title: string
+  description: string
+  status: VariationStatus
+  items: VariationLineItem[]
+  markup: number
+  vatIncluded: boolean
+  total: number           // final total (sell + VAT if applicable)
+  notes: string
+  locked: boolean
+  clientApprovedAt: string | null
+  clientApprovedBy: string | null
+  clientRejectedAt: string | null
+  clientRejectionReason: string | null
+  sentAt: string | null
+  createdAt: string
+}

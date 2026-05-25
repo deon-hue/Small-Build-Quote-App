@@ -5,6 +5,7 @@ import { useApp } from '@/contexts/AppContext'
 import { fmt, STAGE_COLOR, STAGE_BADGE, STAGE_LABEL, JOB_TYPES } from '@/lib/utils'
 import type { Job } from '@/lib/types'
 import GanttModal from '@/components/GanttModal'
+import VariationModal from '@/components/VariationModal'
 
 const BLANK_JOB: Omit<Job, 'id'> = {
   client: '', type: 'Rear Extension', address: '', value: 0,
@@ -12,13 +13,14 @@ const BLANK_JOB: Omit<Job, 'id'> = {
 }
 
 export default function JobsPage() {
-  const { jobs, quotes, jobNotes, addJob, updateJob, deleteJob, updateQuote, addJobNote, deleteJobNote, loading } = useApp()
+  const { jobs, quotes, jobNotes, variations, addJob, updateJob, deleteJob, updateQuote, addJobNote, deleteJobNote, loading } = useApp()
   const [filter, setFilter] = useState('all')
   const [showModal, setShowModal] = useState(false)
   const [editJob, setEditJob] = useState<Job | null>(null)
   const [form, setForm] = useState<Omit<Job, 'id'>>(BLANK_JOB)
   const [prefillQuoteId, setPrefillQuoteId] = useState('')
   const [ganttJob, setGanttJob] = useState<Job | null>(null)
+  const [variationJob, setVariationJob] = useState<Job | null>(null)
   const [saving, setSaving] = useState(false)
   const [notesJob, setNotesJob] = useState<Job | null>(null)
   const [newNote, setNewNote] = useState('')
@@ -106,6 +108,12 @@ export default function JobsPage() {
         : filtered.map(j => {
             const pct = j.weeks ? Math.min(100, Math.round((j.done / j.weeks) * 100)) : 0
             const col = STAGE_COLOR[j.stage] || 'var(--muted)'
+            const jobVars = variations.filter(v => v.jobId === j.id)
+            const approvedVarTotal = jobVars
+              .filter(v => v.status === 'approved' || v.status === 'invoiced' || v.status === 'paid')
+              .reduce((s, v) => s + v.total, 0)
+            const sentVarCount = jobVars.filter(v => v.status === 'sent').length
+            const effectiveValue = j.value + approvedVarTotal
             return (
               <div key={j.id} className="card" style={{ marginBottom: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px' }}>
@@ -121,7 +129,12 @@ export default function JobsPage() {
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <div className="mono" style={{ fontSize: 18, fontWeight: 600 }}>{fmt(j.value)}</div>
+                    <div className="mono" style={{ fontSize: 18, fontWeight: 600 }}>{fmt(effectiveValue)}</div>
+                    {approvedVarTotal > 0 && (
+                      <div style={{ fontSize: 10, color: '#27ae60', marginTop: 1 }}>
+                        Base {fmt(j.value)} +{fmt(approvedVarTotal)} variations
+                      </div>
+                    )}
                     <span className={`badge ${STAGE_BADGE[j.stage] || 'b-planning'}`} style={{ marginTop: 4, display: 'block' }}>
                       {STAGE_LABEL[j.stage] || j.stage}
                     </span>
@@ -130,6 +143,14 @@ export default function JobsPage() {
                     <button className="btn-sm btn-gold" onClick={() => setGanttJob(j)}>📋 Gantt</button>
                     <button className="btn-sm btn-sky" onClick={() => { setNotesJob(j); setNewNote('') }}>
                       📝 Notes {jobNotes.filter(n => n.jobId === j.id).length > 0 ? `(${jobNotes.filter(n => n.jobId === j.id).length})` : ''}
+                    </button>
+                    <button
+                      className={sentVarCount > 0 ? 'btn-sm btn-primary' : 'btn-sm btn-outline'}
+                      onClick={() => setVariationJob(j)}
+                      title="Variations / change orders for this job"
+                    >
+                      ±&nbsp;Variations{jobVars.length > 0 ? ` (${jobVars.length})` : ''}
+                      {sentVarCount > 0 ? ` · ${sentVarCount} pending` : ''}
                     </button>
                     <button className="btn-sm btn-outline" onClick={() => openEdit(j)}>Edit</button>
                     <button className="btn-sm btn-danger" onClick={() => handleDelete(j)}>✕</button>
@@ -262,6 +283,14 @@ export default function JobsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Variations modal */}
+      {variationJob && (
+        <VariationModal
+          job={variationJob}
+          onClose={() => setVariationJob(null)}
+        />
       )}
 
       {/* Gantt modal */}

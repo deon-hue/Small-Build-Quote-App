@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Job, Quote, Client, Settings, GanttState, Invoice, JobNote, PortalStatus, TemplatePhaseData } from '@/lib/types'
+import type { Job, Quote, Client, Settings, GanttState, Invoice, JobNote, PortalStatus, TemplatePhaseData, Variation, VariationStatus } from '@/lib/types'
 import { uid, JOB_TEMPLATES } from '@/lib/utils'
 
 interface AppContextType {
@@ -13,6 +13,7 @@ interface AppContextType {
   ganttStates: Record<string, GanttState>
   invoices: Invoice[]
   jobNotes: JobNote[]
+  variations: Variation[]
   customTemplates: Record<string, TemplatePhaseData[]>
   loading: boolean
 
@@ -40,6 +41,10 @@ interface AppContextType {
 
   addJobNote: (jobId: string, note: string) => Promise<JobNote>
   deleteJobNote: (id: string) => Promise<void>
+
+  addVariation: (jobId: string, v: Omit<Variation, 'id' | 'ref' | 'createdAt' | 'jobId'>) => Promise<Variation>
+  updateVariation: (v: Variation) => Promise<void>
+  deleteVariation: (id: string) => Promise<void>
 
   saveJobTypeTemplate: (jobType: string, template: TemplatePhaseData[]) => Promise<void>
   resetJobTypeTemplate: (jobType: string) => Promise<void>
@@ -74,6 +79,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [ganttStates, setGanttStates] = useState<Record<string, GanttState>>({})
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [jobNotes, setJobNotes] = useState<JobNote[]>([])
+  const [variations, setVariations] = useState<Variation[]>([])
   const [customTemplates, setCustomTemplates] = useState<Record<string, TemplatePhaseData[]>>({})
   const [loading, setLoading] = useState(true)
 
@@ -83,7 +89,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setLoading(false); return }
 
-      const [jobsRes, quotesRes, clientsRes, settingsRes, ganttRes, invoicesRes, notesRes] = await Promise.all([
+      const [jobsRes, quotesRes, clientsRes, settingsRes, ganttRes, invoicesRes, notesRes, variationsRes] = await Promise.all([
         supabase.from('jobs').select('*').order('created_at', { ascending: true }),
         supabase.from('quotes').select('*').order('created_at', { ascending: true }),
         supabase.from('clients').select('*').order('created_at', { ascending: true }),
@@ -91,6 +97,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         supabase.from('gantt_states').select('*'),
         supabase.from('invoices').select('*').order('created_at', { ascending: false }),
         supabase.from('job_notes').select('*').order('created_at', { ascending: true }),
+        supabase.from('variations').select('*').order('created_at', { ascending: true }),
       ])
 
       // Separately try to get portal status — only available after phase5.sql is run
@@ -169,6 +176,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
         })))
       }
 
+      if (variationsRes.data) {
+        setVariations(variationsRes.data.map(r => ({
+          id: r.id, jobId: r.job_id, ref: r.ref, title: r.title,
+          description: r.description, status: r.status as VariationStatus,
+          items: r.items || [], markup: Number(r.markup), vatIncluded: r.vat_included,
+          total: Number(r.total), notes: r.notes || '', locked: r.locked,
+          clientApprovedAt: r.client_approved_at || null,
+          clientApprovedBy: r.client_approved_by || null,
+          clientRejectedAt: r.client_rejected_at || null,
+          clientRejectionReason: r.client_rejection_reason || null,
+          sentAt: r.sent_at || null,
+          createdAt: r.created_at,
+        })))
+      }
+
       // Load custom job type templates — only available after phase6.sql is run
       try {
         const { data: tplData } = await supabase.from('job_type_templates').select('*')
@@ -216,9 +238,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await supabase.from('jobs').delete().eq('id', id)
     await supabase.from('gantt_states').delete().eq('job_id', id)
     await supabase.from('job_notes').delete().eq('job_id', id)
+    await supabase.from('variations').delete().eq('job_id', id)
     setJobs(prev => prev.filter(j => j.id !== id))
     setGanttStates(prev => { const n = { ...prev }; delete n[id]; return n })
     setJobNotes(prev => prev.filter(n => n.jobId !== id))
+    setVariations(prev => prev.filter(v => v.jobId !== id))
   }, [supabase])
 
   // ── Quotes ───────────────────────────────────────────────────
@@ -409,6 +433,56 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setInvoices(prev => prev.filter(i => i.id !== id))
   }, [supabase])
 
+  // ── Variations ───────────────────────────────────────────────
+  const addVariation = useCallback(async (
+    jobId: string,
+    v: Omit<Variation, 'id' | 'ref' | 'createdAt' | 'jobId'>
+  ): Promise<Variation> => {
+    const { data: { user } } = await supabase.auth.getUser()
+    const ref = 'VAR-' + String(Math.floor(Math.random() * 9000) + 1000)
+    const { data, error } = await supabase.from('variations').insert({
+      user_id: user!.id, job_id: jobId, ref,
+      title: v.title, description: v.description, status: v.status,
+      items: v.items, markup: v.markup, vat_included: v.vatIncluded,
+      total: v.total, notes: v.notes, locked: v.locked,
+      client_approved_at: v.clientApprovedAt, client_approved_by: v.clientApprovedBy,
+      client_rejected_at: v.clientRejectedAt, client_rejection_reason: v.clientRejectionReason,
+      sent_at: v.sentAt,
+    }).select().single()
+    if (error) throw error
+    const newVar: Variation = {
+      id: data.id, jobId: data.job_id, ref: data.ref, title: data.title,
+      description: data.description, status: data.status as VariationStatus,
+      items: data.items || [], markup: Number(data.markup), vatIncluded: data.vat_included,
+      total: Number(data.total), notes: data.notes || '', locked: data.locked,
+      clientApprovedAt: data.client_approved_at || null,
+      clientApprovedBy: data.client_approved_by || null,
+      clientRejectedAt: data.client_rejected_at || null,
+      clientRejectionReason: data.client_rejection_reason || null,
+      sentAt: data.sent_at || null, createdAt: data.created_at,
+    }
+    setVariations(prev => [...prev, newVar])
+    return newVar
+  }, [supabase])
+
+  const updateVariation = useCallback(async (v: Variation) => {
+    const { error } = await supabase.from('variations').update({
+      title: v.title, description: v.description, status: v.status,
+      items: v.items, markup: v.markup, vat_included: v.vatIncluded,
+      total: v.total, notes: v.notes, locked: v.locked,
+      client_approved_at: v.clientApprovedAt, client_approved_by: v.clientApprovedBy,
+      client_rejected_at: v.clientRejectedAt, client_rejection_reason: v.clientRejectionReason,
+      sent_at: v.sentAt, updated_at: new Date().toISOString(),
+    }).eq('id', v.id)
+    if (error) throw error
+    setVariations(prev => prev.map(x => x.id === v.id ? v : x))
+  }, [supabase])
+
+  const deleteVariation = useCallback(async (id: string) => {
+    await supabase.from('variations').delete().eq('id', id)
+    setVariations(prev => prev.filter(v => v.id !== id))
+  }, [supabase])
+
   // ── Job Notes ────────────────────────────────────────────────
   const addJobNote = useCallback(async (jobId: string, note: string): Promise<JobNote> => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -452,7 +526,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider value={{
-      jobs, quotes, clients, settings, ganttStates, invoices, jobNotes, customTemplates, loading,
+      jobs, quotes, clients, settings, ganttStates, invoices, jobNotes, variations, customTemplates, loading,
       addJob, updateJob, deleteJob,
       addQuote, updateQuote, deleteQuote,
       addClient, updateClient, deleteClient, upsertClientFromQuote, markPortalInvite,
@@ -460,6 +534,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       saveGanttState, getGanttState,
       addInvoice, updateInvoice, deleteInvoice,
       addJobNote, deleteJobNote,
+      addVariation, updateVariation, deleteVariation,
       saveJobTypeTemplate, resetJobTypeTemplate, getTemplate,
       nextQuoteRef,
     }}>

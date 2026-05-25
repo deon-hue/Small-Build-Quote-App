@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Quote, Job, Invoice, GanttState } from '@/lib/types'
+import type { Quote, Job, Invoice, GanttState, Variation, VariationStatus } from '@/lib/types'
 
 export interface PortalSettings {
   name: string
@@ -17,6 +17,7 @@ interface PortalContextType {
   quotes: Quote[]
   jobs: Job[]
   invoices: Invoice[]
+  variations: Variation[]
   ganttStates: Record<string, GanttState>
   settings: PortalSettings
   userEmail: string
@@ -42,6 +43,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   const [quotes, setQuotes] = useState<Quote[]>([])
   const [jobs, setJobs] = useState<Job[]>([])
   const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [variations, setVariations] = useState<Variation[]>([])
   const [ganttStates, setGanttStates] = useState<Record<string, GanttState>>({})
   const [settings, setSettings] = useState<PortalSettings>(DEFAULT_SETTINGS)
   const [userEmail, setUserEmail] = useState('')
@@ -184,6 +186,22 @@ export function PortalProvider({ children }: { children: ReactNode }) {
         })))
       }
 
+      // Map variations
+      if (Array.isArray(result?.variations)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setVariations(result.variations.map((r: any) => ({
+          id: r.id, jobId: r.job_id, ref: r.ref, title: r.title,
+          description: r.description, status: r.status as VariationStatus,
+          items: r.items || [], markup: Number(r.markup), vatIncluded: r.vat_included,
+          total: Number(r.total), notes: r.notes || '', locked: r.locked,
+          clientApprovedAt: r.client_approved_at || null,
+          clientApprovedBy: r.client_approved_by || null,
+          clientRejectedAt: r.client_rejected_at || null,
+          clientRejectionReason: r.client_rejection_reason || null,
+          sentAt: r.sent_at || null, createdAt: r.created_at,
+        })))
+      }
+
       // Map settings
       if (result?.settings) {
         setSettings({
@@ -202,7 +220,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   }, [tick]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <PortalContext.Provider value={{ quotes, jobs, invoices, ganttStates, settings, userEmail, loading, error, reload }}>
+    <PortalContext.Provider value={{ quotes, jobs, invoices, variations, ganttStates, settings, userEmail, loading, error, reload }}>
       {children}
     </PortalContext.Provider>
   )
