@@ -8,12 +8,21 @@ interface AttachmentPayload {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
-    return NextResponse.json({ error: 'API key not configured' }, { status: 500 })
+    return NextResponse.json({ reply: 'AI not configured — please add your ANTHROPIC_API_KEY in Netlify environment variables.' })
   }
 
-  const { messages, context, rawInput, attachments } = await req.json()
+  let body: { messages?: unknown; context?: unknown; rawInput?: unknown; attachments?: unknown }
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ reply: 'Bad request: could not parse body.' }, { status: 400 })
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { messages, context, rawInput, attachments } = body as any
   const { jobType, address, phases } = context || {}
   const hasFiles = Array.isArray(attachments) && attachments.length > 0
 
@@ -141,6 +150,11 @@ Works comprise a single-storey rear extension to extend the existing kitchen and
     return NextResponse.json({ reply })
   } catch (err) {
     console.error('AI scope chat error:', err)
-    return NextResponse.json({ error: 'Failed to get response' }, { status: 500 })
+    return NextResponse.json({ reply: `Server error: ${err instanceof Error ? err.message : String(err)}` }, { status: 500 })
+  }
+
+  } catch (outerErr) {
+    console.error('scope-chat unhandled error:', outerErr)
+    return NextResponse.json({ reply: `Unexpected error: ${outerErr instanceof Error ? outerErr.message : String(outerErr)}` }, { status: 500 })
   }
 }
