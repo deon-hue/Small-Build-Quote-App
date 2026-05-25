@@ -1,3 +1,7 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
 # Increase function timeout to allow time for Claude to process large plan documents
 [functions]
   timeout = 60
