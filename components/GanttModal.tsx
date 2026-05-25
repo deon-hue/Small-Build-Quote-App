@@ -5,6 +5,7 @@ import { useApp } from '@/contexts/AppContext'
 import type { Job, QuotePhase, GanttState, GanttPhase } from '@/lib/types'
 import type { Quote } from '@/lib/types'
 import { fmt, quoteTotal, Q_BADGE, Q_LABEL } from '@/lib/utils'
+import { formatGanttDuration } from '@/lib/gantt-utils'
 import { useRouter } from 'next/navigation'
 
 interface Props {
@@ -268,12 +269,12 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
 
     // Clean up previous drag listeners before attaching new ones
     cleanupDragRef.current?.()
-    cleanupDragRef.current = attachDrag(container, state, startDate, totalDays)
+    cleanupDragRef.current = attachDrag(container, state, startDate, totalDays, mode)
     attachLabelResize(container, state, mode)
   }
 
   // Returns a cleanup function for the document-level listeners
-  function attachDrag(container: HTMLDivElement, state: GanttState, startDate: Date, totalDays: number): () => void {
+  function attachDrag(container: HTMLDivElement, state: GanttState, startDate: Date, totalDays: number, mode: 'day' | 'week' | 'month'): () => void {
     const tooltip = container.querySelector<HTMLElement>('#gantt-tooltip')
     let dragging: { type: 'move' | 'resize', idx: number, startX: number, origStart: number, origDur: number, trackW: number } | null = null
 
@@ -298,8 +299,8 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       jStart.setHours(0, 0, 0, 0)
       const s = fmtDate(addDays(jStart, ph.startDay))
       const en = fmtDate(addDays(jStart, ph.startDay + ph.durDays))
-      const dur = Math.ceil(ph.durDays / 7 * 10) / 10
-      tooltip.innerHTML = `<strong>${esc(ph.label)}</strong><br>Start: ${s}<br>End: ${en}<br>Duration: ${dur} weeks`
+      const durText = formatGanttDuration(ph.durDays, mode)
+      tooltip.innerHTML = `<strong>${esc(ph.label)}</strong><br>Start: ${s}<br>End: ${en}<br>Duration: ${durText}`
       tooltip.style.display = 'block'
       tooltip.style.left = (e.clientX + 12) + 'px'
       tooltip.style.top = (e.clientY - 10) + 'px'
