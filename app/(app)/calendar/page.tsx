@@ -86,13 +86,30 @@ function layoutWeek(events: CalEvent[], weekStart: Date): WeekSlot[] {
 
 // ── Main component ─────────────────────────────────────────────
 export default function CalendarPage() {
-  const { jobs, ganttStates, loading } = useApp()
+  const { jobs, quotes, ganttStates, loading } = useApp()
   const router = useRouter()
 
   const today = useMemo(() => new Date(new Date().setHours(0, 0, 0, 0)), [])
-  const [view,     setView]     = useState<'month' | 'week' | 'day'>('month')
-  const [anchor,   setAnchor]   = useState<Date>(() => new Date(today.getFullYear(), today.getMonth(), 1))
-  const [selected, setSelected] = useState<CalEvent | null>(null)
+  const [view,            setView]           = useState<'month' | 'week' | 'day'>('month')
+  const [anchor,          setAnchor]         = useState<Date>(() => new Date(today.getFullYear(), today.getMonth(), 1))
+  const [selected,        setSelected]       = useState<CalEvent | null>(null)
+  const [highlightJobId,  setHighlightJobId] = useState<string | null>(null)
+
+  // ── Job number helper (JOB-001 based on creation order) ──────
+  function getJobNum(jobId: string): string {
+    const idx = jobs.findIndex(j => j.id === jobId)
+    return idx >= 0 ? `JOB-${String(idx + 1).padStart(3, '0')}` : ''
+  }
+
+  // ── Event style helpers (highlight / dim) ────────────────────
+  function barOpacity(jobId: string): number {
+    if (!highlightJobId) return 1
+    return jobId === highlightJobId ? 1 : 0.18
+  }
+  function barShadow(jobId: string, baseColor: string): string {
+    if (!highlightJobId || jobId !== highlightJobId) return '0 1px 3px rgba(0,0,0,0.15)'
+    return `0 0 0 2px white, 0 0 0 4px ${baseColor}, 0 2px 8px rgba(0,0,0,0.25)`
+  }
 
   // ── Build calendar events from all jobs + Gantt states ───────
   const calEvents = useMemo((): CalEvent[] => {
@@ -105,16 +122,52 @@ export default function CalendarPage() {
       const color = JOB_COLORS[Math.abs(hashCode(job.id)) % JOB_COLORS.length]
       const gs    = ganttStates[job.id]
 
-      // Use saved Gantt phases, or fall back to a default sequential layout
-      const phases = (gs?.phases?.length ?? 0) > 0 ? gs!.phases : (() => {
-        const totalDays = (job.weeks || 12) * 7
-        const lbls = ['Preliminaries', 'Structural Works', 'First Fix', 'Second Fix', 'Completion & Snagging']
-        return lbls.map((label, i, a) => ({
-          label,
-          startDay: Math.round((i / a.length) * totalDays),
-          durDays:  Math.max(1, Math.round(((i + 1) / a.length) * totalDays) - Math.round((i / a.length) * totalDays)),
-        }))
-      })()
+      // Calendar phase priority:
+      //  1. Quote sub-phases (p.phase) spread evenly — always preferred for calendar detail
+      //  2. Saved Gantt phases (only if no quote found — preserves drag-scheduled dates)
+      //  3. 5 generic fallback phases
+      //
+      // The Gantt state stores main-phase-level bars for Gantt scheduling.
+      // The calendar needs the finer sub-phase breakdown from the quote.
+      const totalDays = (job.weeks || 12) * 7
+
+      // Find the best linked quote (same matching logic as GanttModal / jobs page)
+      const linked = job.quoteId
+        ? quotes.filter(q => q.id === job.quoteId)
+        : quotes.filter(q => {
+            const qn = (q.customer.name || '').toLowerCase()
+            const jn = (job.client || '').toLowerCase()
+            return qn === jn || qn.includes(jn) || jn.includes(qn)
+          })
+      const best = linked.find(q => q.status === 'accepted')
+        || linked.find(q => q.status === 'sent')
+        || linked[0]
+
+      // Deduplicate sub-phase names (quote can repeat names across cost-type rows)
+      const rawSubPhases = (best?.phases?.length ?? 0) > 0
+        ? best!.phases.map(p => p.phase).filter((v, i, a) => a.indexOf(v) === i)
+        : null
+
+      const phases = rawSubPhases
+        ? (() => {
+            const n = rawSubPhases.length
+            return rawSubPhases.map((label, i) => ({
+              label,
+              startDay: Math.round((i / n) * totalDays),
+              durDays:  Math.max(1, Math.round(((i + 1) / n) * totalDays) - Math.round((i / n) * totalDays)),
+            }))
+          })()
+        : (gs?.phases?.length ?? 0) > 0
+          ? gs!.phases   // no quote → use saved Gantt phases
+          : (() => {
+              const lbls = ['Preliminaries', 'Structural Works', 'First Fix', 'Second Fix', 'Completion & Snagging']
+              const n = lbls.length
+              return lbls.map((label, i) => ({
+                label,
+                startDay: Math.round((i / n) * totalDays),
+                durDays:  Math.max(1, Math.round(((i + 1) / n) * totalDays) - Math.round((i / n) * totalDays)),
+              }))
+            })()
 
       phases.forEach((ph, i) => {
         events.push({
@@ -126,7 +179,7 @@ export default function CalendarPage() {
       })
     }
     return events.sort((a, b) => a.startDate.getTime() - b.startDate.getTime())
-  }, [jobs, ganttStates])
+  }, [jobs, quotes, ganttStates])
 
   // ── Navigation ───────────────────────────────────────────────
   function prev() {
@@ -223,7 +276,7 @@ export default function CalendarPage() {
                 <div
                   key={slot.event.id}
                   onClick={() => setSelected(slot.event)}
-                  title={`${slot.event.job.client} · ${slot.event.job.type}\n${slot.event.phaseLabel}\n${fmtShort(slot.event.startDate)} – ${fmtShort(addDays(slot.event.endDate, -1))}`}
+                  title={`${getJobNum(slot.event.job.id)} · ${slot.event.job.client} · ${slot.event.job.type}\n${slot.event.phaseLabel}\n${fmtShort(slot.event.startDate)} – ${fmtShort(addDays(slot.event.endDate, -1))}`}
                   style={{
                     position: 'absolute',
                     top: DATE_H + slot.row * EVT_H + 1,
@@ -232,14 +285,18 @@ export default function CalendarPage() {
                     height: EVT_H - 3,
                     background: slot.event.color,
                     borderRadius: `${slot.startsHere ? 3 : 0}px ${slot.endsHere ? 3 : 0}px ${slot.endsHere ? 3 : 0}px ${slot.startsHere ? 3 : 0}px`,
-                    cursor: 'pointer', overflow: 'hidden', zIndex: 1,
+                    cursor: 'pointer', overflow: 'hidden',
+                    zIndex: highlightJobId === slot.event.job.id ? 3 : 1,
+                    opacity: barOpacity(slot.event.job.id),
+                    boxShadow: barShadow(slot.event.job.id, slot.event.color),
                     display: 'flex', alignItems: 'center',
                     paddingLeft: slot.startsHere ? 5 : 2, paddingRight: 2,
+                    transition: 'opacity 0.2s, box-shadow 0.2s',
                   }}
                 >
                   {slot.startsHere && (
                     <span style={{ fontSize: 10, color: 'white', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {slot.event.job.client} · {slot.event.phaseLabel}
+                      {getJobNum(slot.event.job.id)} · {slot.event.job.client} · {slot.event.phaseLabel}
                     </span>
                   )}
                 </div>
@@ -322,7 +379,7 @@ export default function CalendarPage() {
               <div
                 key={slot.event.id}
                 onClick={() => setSelected(slot.event)}
-                title={`${slot.event.job.client} · ${slot.event.phaseLabel}`}
+                title={`${getJobNum(slot.event.job.id)} · ${slot.event.job.client} · ${slot.event.phaseLabel}`}
                 style={{
                   position: 'absolute',
                   top: 8 + slot.row * 40,
@@ -331,10 +388,13 @@ export default function CalendarPage() {
                   height: 34,
                   background: slot.event.color,
                   borderRadius: `${slot.startsHere ? 4 : 0}px ${slot.endsHere ? 4 : 0}px ${slot.endsHere ? 4 : 0}px ${slot.startsHere ? 4 : 0}px`,
-                  cursor: 'pointer', overflow: 'hidden', zIndex: 1,
+                  cursor: 'pointer', overflow: 'hidden',
+                  zIndex: highlightJobId === slot.event.job.id ? 3 : 1,
+                  opacity: barOpacity(slot.event.job.id),
+                  boxShadow: barShadow(slot.event.job.id, slot.event.color),
                   display: 'flex', alignItems: 'center',
                   paddingLeft: slot.startsHere ? 8 : 4, paddingRight: 4,
-                  boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
+                  transition: 'opacity 0.2s, box-shadow 0.2s',
                 }}
               >
                 <div style={{ minWidth: 0, flex: 1 }}>
@@ -343,7 +403,7 @@ export default function CalendarPage() {
                   </div>
                   {slot.startsHere && (
                     <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.85)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {slot.event.job.client} · {slot.event.job.type} · {Math.ceil(durDays / 7 * 10) / 10}w
+                      {getJobNum(slot.event.job.id)} · {slot.event.job.client} · {slot.event.job.type} · {Math.ceil(durDays / 7 * 10) / 10}w
                     </div>
                   )}
                 </div>
@@ -380,10 +440,19 @@ export default function CalendarPage() {
               key={evt.id}
               onClick={() => setSelected(evt)}
               className="card"
-              style={{ padding: '14px 16px', cursor: 'pointer', borderLeft: `4px solid ${evt.color}`, display: 'flex', alignItems: 'center', gap: 16 }}
+              style={{
+                padding: '14px 16px', cursor: 'pointer', borderLeft: `4px solid ${evt.color}`,
+                display: 'flex', alignItems: 'center', gap: 16,
+                opacity: barOpacity(evt.job.id), transition: 'opacity 0.2s',
+              }}
             >
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 14 }}>{evt.phaseLabel}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 2 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: 'white', background: evt.color, borderRadius: 3, padding: '1px 5px', flexShrink: 0 }}>
+                    {getJobNum(evt.job.id)}
+                  </span>
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>{evt.phaseLabel}</div>
+                </div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
                   {evt.job.client} · {evt.job.type}
                 </div>
@@ -430,6 +499,7 @@ export default function CalendarPage() {
 
           {/* Details */}
           <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <DetailRow label="Job ref"    value={<span className="mono" style={{ fontWeight: 700 }}>{getJobNum(evt.job.id)}</span>} />
             <DetailRow label="Customer"   value={evt.job.client} />
             <DetailRow label="Job type"   value={evt.job.type} />
             <DetailRow label="Address"    value={evt.job.address} />
@@ -470,10 +540,60 @@ export default function CalendarPage() {
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
 
   const jobsOnCalendar = jobs.filter(j => j.start).length
+  const jobsNoStart    = jobs.filter(j => !j.start)
   const activeCount    = jobs.filter(j => j.stage === 'active').length
+  const firstEvent     = calEvents[0] ?? null
+  const lastEvent      = calEvents[calEvents.length - 1] ?? null
+
+  // Determine if the current view has any events
+  const viewStart = view === 'month'
+    ? new Date(anchor.getFullYear(), anchor.getMonth(), 1)
+    : view === 'week'
+    ? getMonday(anchor)
+    : new Date(anchor)
+  const viewEnd = view === 'month'
+    ? new Date(anchor.getFullYear(), anchor.getMonth() + 1, 1)
+    : view === 'week'
+    ? addDays(getMonday(anchor), 7)
+    : addDays(anchor, 1)
+  const eventsInView = calEvents.filter(e => e.startDate < viewEnd && e.endDate > viewStart)
+
+  function jumpToFirst() {
+    if (!firstEvent) return
+    const d = firstEvent.startDate
+    if (view === 'month') setAnchor(new Date(d.getFullYear(), d.getMonth(), 1))
+    else if (view === 'week') setAnchor(getMonday(d))
+    else setAnchor(new Date(d))
+  }
 
   return (
     <>
+      {/* No-start-date warning */}
+      {jobsNoStart.length > 0 && (
+        <div style={{
+          background: '#fff8e1', border: '1px solid #f59e0b', borderRadius: 8,
+          padding: '10px 14px', marginBottom: 12,
+          display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap',
+        }}>
+          <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#92400e' }}>
+              {jobsNoStart.length} job{jobsNoStart.length > 1 ? 's' : ''} {jobsNoStart.length > 1 ? 'have' : 'has'} no start date — set one in Jobs to show {jobsNoStart.length > 1 ? 'them' : 'it'} here
+            </div>
+            <div style={{ fontSize: 11, color: '#b45309', marginTop: 3 }}>
+              {jobsNoStart.map(j => j.client + ' · ' + j.type).join('  |  ')}
+            </div>
+          </div>
+          <button
+            className="btn-sm btn-outline"
+            style={{ fontSize: 11, padding: '4px 10px', flexShrink: 0 }}
+            onClick={() => window.location.href = '/jobs'}
+          >
+            Go to Jobs →
+          </button>
+        </div>
+      )}
+
       {/* Toolbar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         {/* View switcher */}
@@ -510,21 +630,78 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* Calendar body */}
-      {view === 'month' && renderMonth()}
-      {view === 'week'  && renderWeek()}
-      {view === 'day'   && renderDay()}
+      {/* Jump-to-first banner — shown when this view is empty but events exist elsewhere */}
+      {eventsInView.length === 0 && calEvents.length > 0 && firstEvent && (
+        <div style={{
+          background: '#f0f7ff', border: '1px solid #93c5fd', borderRadius: 8,
+          padding: '10px 14px', marginBottom: 12,
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+        }}>
+          <span style={{ fontSize: 13, color: '#1e40af', flex: 1 }}>
+            No phases in this {view}. First phase starts <strong>{fmtShort(firstEvent.startDate)}</strong>
+            {lastEvent && lastEvent !== firstEvent ? <>, last ends <strong>{fmtShort(lastEvent.endDate)}</strong></> : null}.
+          </span>
+          <button className="btn-sm btn-outline" style={{ fontSize: 11, padding: '4px 10px' }} onClick={jumpToFirst}>
+            Jump to first phase →
+          </button>
+        </div>
+      )}
 
-      {/* Job colour legend */}
+      {/* Empty state — no jobs at all */}
+      {jobs.length === 0 && (
+        <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>No jobs yet</div>
+          <div style={{ fontSize: 13 }}>Create a job in the Jobs section and set a start date to see it here.</div>
+        </div>
+      )}
+
+      {/* Calendar body */}
+      {jobs.length > 0 && view === 'month' && renderMonth()}
+      {jobs.length > 0 && view === 'week'  && renderWeek()}
+      {jobs.length > 0 && view === 'day'   && renderDay()}
+
+      {/* Job legend + highlight toggles */}
       {jobs.filter(j => j.start).length > 0 && (
-        <div style={{ display: 'flex', gap: 12, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>Jobs:</span>
-          {jobs.filter(j => j.start).map(j => (
-            <div key={j.id} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11 }}>
-              <div style={{ width: 10, height: 10, borderRadius: 2, background: JOB_COLORS[Math.abs(hashCode(j.id)) % JOB_COLORS.length], flexShrink: 0 }} />
-              <span>{j.client} · {j.type}</span>
-            </div>
-          ))}
+        <div style={{ marginTop: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>Jobs:</span>
+            {highlightJobId && (
+              <button
+                onClick={() => setHighlightJobId(null)}
+                style={{ fontSize: 10, padding: '2px 8px', border: '1px solid #f59e0b', borderRadius: 10, background: '#fff8e1', color: '#92400e', cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                ✕ Clear highlight
+              </button>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {jobs.filter(j => j.start).map(j => {
+              const color    = JOB_COLORS[Math.abs(hashCode(j.id)) % JOB_COLORS.length]
+              const isLit    = highlightJobId === j.id
+              const jobNum   = getJobNum(j.id)
+              return (
+                <div
+                  key={j.id}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    background: isLit ? color : 'var(--warm)',
+                    border: `2px solid ${isLit ? color : 'transparent'}`,
+                    borderRadius: 8, padding: '5px 10px', cursor: 'pointer',
+                    boxShadow: isLit ? `0 0 0 3px ${color}44` : 'none',
+                    transition: 'all 0.15s',
+                  }}
+                  onClick={() => setHighlightJobId(isLit ? null : j.id)}
+                  title={isLit ? 'Click to remove highlight' : 'Click to highlight this job on the calendar'}
+                >
+                  <div style={{ width: 10, height: 10, borderRadius: 2, background: isLit ? 'white' : color, flexShrink: 0 }} />
+                  <span style={{ fontSize: 11, fontWeight: 700, color: isLit ? 'white' : 'var(--ink)', fontFamily: 'monospace' }}>{jobNum}</span>
+                  <span style={{ fontSize: 11, color: isLit ? 'rgba(255,255,255,0.9)' : 'var(--muted)' }}>{j.client} · {j.type}</span>
+                  <span style={{ fontSize: 10, color: isLit ? 'rgba(255,255,255,0.75)' : 'var(--muted)', marginLeft: 2 }}>{isLit ? '● highlighted' : '○ highlight'}</span>
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
 

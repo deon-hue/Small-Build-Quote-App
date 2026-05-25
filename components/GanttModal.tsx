@@ -174,8 +174,28 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     ).join('')
 
     const weekRowHtml = cols.map(col =>
-      `<div style="flex:1;min-width:${mode === 'day' ? '18px' : mode === 'month' ? '60px' : '40px'};text-align:center;font-size:${mode === 'day' ? '8px' : '9px'};color:${col.isToday ? '#e67e22' : col.isWeekend ? '#a0a8b0' : '#6b7580'};font-weight:${col.isToday ? '700' : '400'};padding:3px 1px;border-right:1px solid #dde1e5;border-bottom:2px solid #dde1e5;background:${col.isToday ? '#fff3e0' : col.isWeekend ? '#f4f6f8' : '#f8fafc'};white-space:nowrap;overflow:hidden">${col.label}${mode !== 'month' ? '<br><span style="font-size:7px">' + col.sublabel + '</span>' : '<br><span style="font-size:8px">' + col.sublabel + '</span>'}</div>`
+      `<div style="flex:1;min-width:${mode === 'day' ? '18px' : mode === 'month' ? '60px' : '40px'};text-align:center;font-size:${mode === 'day' ? '8px' : '9px'};color:${col.isToday ? '#e67e22' : col.isWeekend ? '#7080a8' : '#6b7580'};font-weight:${col.isToday ? '700' : col.isWeekend ? '600' : '400'};padding:3px 1px;border-right:1px solid #dde1e5;border-bottom:2px solid #dde1e5;background:${col.isToday ? '#fff3e0' : col.isWeekend ? '#dde3f0' : '#f8fafc'};white-space:nowrap;overflow:hidden">${col.label}${mode !== 'month' ? '<br><span style="font-size:7px">' + col.sublabel + '</span>' : '<br><span style="font-size:8px">' + col.sublabel + '</span>'}</div>`
     ).join('')
+
+    // ── Weekend column stripes (all modes) ───────────────────────
+    // Iterate over every real calendar day in the project.
+    // Use dayToPct() so positioning is correct in day / week / month views.
+    // Pairs of Sat+Sun stripes sit side by side making a clearly visible band.
+    const trackWeekendHtml = (() => {
+      const parts: string[] = []
+      for (let day = 0; day < totalDays; day++) {
+        const d = addDays(startDate, day)
+        const dow = d.getDay()          // 0 = Sun, 6 = Sat
+        if (dow !== 0 && dow !== 6) continue
+        const lPct = dayToPct(day).toFixed(3)
+        const wPct = (dayToPct(day + 1) - dayToPct(day)).toFixed(3)
+        parts.push(
+          `<div style="position:absolute;left:${lPct}%;width:${wPct}%;top:0;bottom:0;` +
+          `background:#d8e2f8;pointer-events:none;z-index:0"></div>`
+        )
+      }
+      return parts.join('')
+    })()
 
     const phaseRowsHtml = state.phases.map((ph, i) => {
       const leftPct = dayToPct(ph.startDay)
@@ -190,8 +210,9 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       return `<div class="gantt-row" style="display:flex;align-items:center;height:${ROW_H}px;margin-bottom:3px">
         <div class="gantt-label-cell" style="width:${LABEL_W}px;flex-shrink:0;font-size:11px;font-weight:500;color:#1e2022;padding-right:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;justify-content:center;height:${ROW_H}px;text-align:center" title="${esc(ph.label)}">${i + 1}. ${esc(ph.label)}</div>
         <div class="gantt-col-divider" style="width:5px;flex-shrink:0;align-self:stretch;cursor:col-resize;background:transparent;border-left:2px dashed #c8d0d8;margin-right:4px" title="Drag to resize label column"></div>
-        <div class="gantt-track" style="flex:1;position:relative;height:${ROW_H - 6}px;background:#f0f2f4;border-radius:3px;cursor:default">
-          <div class="gantt-bar" data-idx="${i}" style="position:absolute;left:${leftPct}%;width:${widthPct}%;height:100%;background:${barColor};border-radius:3px;cursor:grab;user-select:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;box-shadow:0 1px 3px rgba(0,0,0,0.15);min-width:6px">
+        <div class="gantt-track" style="flex:1;position:relative;height:${ROW_H - 6}px;background:#f0f2f4;border-radius:3px;cursor:default;overflow:hidden">
+          ${trackWeekendHtml}
+          <div class="gantt-bar" data-idx="${i}" style="position:absolute;left:${leftPct}%;width:${widthPct}%;height:100%;background:${barColor};border-radius:3px;cursor:grab;user-select:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;box-shadow:0 1px 3px rgba(0,0,0,0.15);min-width:6px;z-index:1">
             <span style="font-size:9px;color:${textColor};white-space:nowrap;overflow:hidden;flex:1">${isDone ? '✓ ' : isActive ? '▶ ' : ''}<span class="bar-dates" style="opacity:0.85">${startD}–${endD}</span></span>
             <div class="gantt-resize-handle" data-idx="${i}" style="width:8px;height:100%;cursor:ew-resize;flex-shrink:0;display:flex;align-items:center;justify-content:center;opacity:0.6"><div style="width:3px;height:60%;background:${textColor};border-radius:2px"></div></div>
           </div>

@@ -106,6 +106,7 @@ export default function JobsPage() {
             <div style={{ fontSize: 12, marginBottom: 14 }}>Add your first job above.</div>
           </div>
         : filtered.map(j => {
+            const jobNum = (() => { const idx = jobs.findIndex(x => x.id === j.id); return idx >= 0 ? `JOB-${String(idx + 1).padStart(3, '0')}` : '' })()
             const pct = j.weeks ? Math.min(100, Math.round((j.done / j.weeks) * 100)) : 0
             const col = STAGE_COLOR[j.stage] || 'var(--muted)'
             const jobVars = variations.filter(v => v.jobId === j.id)
@@ -119,7 +120,10 @@ export default function JobsPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px' }}>
                   <div className="job-dot" style={{ background: col }} />
                   <div className="job-info" style={{ flex: 1 }}>
-                    <div className="job-name">{j.type} — {j.client}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                      <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'white', background: col, borderRadius: 4, padding: '2px 6px', letterSpacing: '0.5px' }}>{jobNum}</span>
+                      <div className="job-name">{j.type} — {j.client}</div>
+                    </div>
                     <div className="job-meta">{j.address}{j.start ? ' · Started ' + new Date(j.start).toLocaleDateString('en-GB') : ''}</div>
                     <div className="progress" style={{ maxWidth: 240, marginTop: 6 }}>
                       <div className="progress-bar" style={{ width: pct + '%', background: col }} />
