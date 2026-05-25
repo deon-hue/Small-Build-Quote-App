@@ -274,15 +274,31 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
           })),
         }),
       })
+
+      // If Netlify returns an error page (502/504) it won't be JSON
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        const hint = res.status === 413
+          ? 'Files are too large — try a smaller image or PDF.'
+          : res.status >= 500
+          ? `Server error (${res.status}). The function may have timed out — try without attachments first.`
+          : `Request failed (${res.status}).`
+        setMessages(prev => [...prev, { role: 'assistant', content: hint }])
+        console.error('scope-chat non-OK response:', res.status, text.slice(0, 300))
+        return
+      }
+
       const data  = await res.json()
       const reply = data.reply || 'Sorry, something went wrong. Please try again.'
       setMessages(prev => [...prev, { role: 'assistant', content: reply }])
       const { scope } = parseMessage(reply)
       if (scope) setLatestScope(scope)
-    } catch {
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err)
+      console.error('scope-chat fetch error:', detail)
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: 'Failed to connect. Please check your internet and try again.',
+        content: `Connection error: ${detail}`,
       }])
     } finally {
       setLoading(false)
