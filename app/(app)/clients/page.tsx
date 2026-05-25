@@ -51,10 +51,19 @@ export default function ClientsPage() {
   const [saving, setSaving] = useState(false)
   const router = useRouter()
 
-  const portalBase = (typeof window !== 'undefined' ? window.location.origin : '') + '/portal/login'
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  const portalBase = origin + '/portal/login'
 
+  // URL for sending to the client (magic-link target / copy link)
   function portalUrl(c: Client) {
     return c.email ? `${portalBase}?email=${encodeURIComponent(c.email)}` : portalBase
+  }
+
+  // URL for admin to preview what the client sees (no sign-in required)
+  function adminPreviewUrl(c: Client) {
+    return c.email
+      ? `${origin}/portal-preview?email=${encodeURIComponent(c.email)}`
+      : `${origin}/portal-preview`
   }
 
   function openNew() {
@@ -236,11 +245,11 @@ export default function ClientsPage() {
                               🔄 Resend Invite
                             </button>
                           )}
-                          {/* Direct portal link */}
+                          {/* Admin preview of client portal */}
                           <button
                             className="btn-sm btn-sky"
-                            title={c.email ? `Open portal for ${c.name}` : 'No email on file'}
-                            onClick={() => window.open(portalUrl(c), '_blank')}
+                            title={c.email ? `Preview portal as ${c.name}` : 'No email on file'}
+                            onClick={() => window.open(adminPreviewUrl(c), '_blank')}
                           >
                             🌐 Portal
                           </button>
@@ -268,7 +277,7 @@ export default function ClientsPage() {
                     📧 Invite to Portal
                   </button>
                 )}
-                <button className="btn-sm btn-sky" onClick={() => window.open(portalUrl(selected), '_blank')}>
+                <button className="btn-sm btn-sky" onClick={() => window.open(adminPreviewUrl(selected), '_blank')} title="Preview portal as this client">
                   🌐 Portal
                 </button>
                 <button className="btn-sm btn-outline" onClick={() => openEdit(selected)}>✎ Edit</button>

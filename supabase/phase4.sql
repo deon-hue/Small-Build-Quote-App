@@ -40,13 +40,9 @@ BEGIN
   END IF;
 
   -- Check if this user owns any admin data (settings, jobs, or quotes)
-  SELECT EXISTS (
-    SELECT 1 FROM settings WHERE user_id = auth.uid()
-    UNION ALL
-    SELECT 1 FROM jobs    WHERE user_id = auth.uid() LIMIT 1
-    UNION ALL
-    SELECT 1 FROM quotes  WHERE user_id = auth.uid() LIMIT 1
-  ) INTO v_is_admin;
+  v_is_admin := EXISTS (SELECT 1 FROM settings WHERE user_id = auth.uid())
+             OR EXISTS (SELECT 1 FROM jobs     WHERE user_id = auth.uid())
+             OR EXISTS (SELECT 1 FROM quotes   WHERE user_id = auth.uid());
 
   IF v_is_admin THEN
     INSERT INTO profiles (id, role, admin_user_id)

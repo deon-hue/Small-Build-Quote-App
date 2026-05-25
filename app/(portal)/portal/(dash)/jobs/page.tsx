@@ -6,7 +6,7 @@ import { STAGE_COLOR, STAGE_LABEL } from '@/lib/utils'
 import PortalGanttChart from '@/components/PortalGanttChart'
 
 export default function PortalJobsPage() {
-  const { jobs, ganttStates, loading, error } = usePortal()
+  const { jobs, ganttStates, loading, error, reload } = usePortal()
   const [expandedGantt, setExpandedGantt] = useState<string | null>(null)
 
   if (loading) return <div className="portal-loading">Loading…</div>
@@ -16,9 +16,23 @@ export default function PortalJobsPage() {
 
   return (
     <>
-      <div className="portal-page-hd">
-        <h1>Your Jobs</h1>
-        <p>{jobs.length} job{jobs.length !== 1 ? 's' : ''} on file</p>
+      <div className="portal-page-hd" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <div>
+          <h1>Your Jobs</h1>
+          <p>{jobs.length} job{jobs.length !== 1 ? 's' : ''} on file</p>
+        </div>
+        <button
+          onClick={reload}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            background: 'none', border: '1px solid var(--border)',
+            borderRadius: 6, padding: '6px 12px', fontSize: 12,
+            fontWeight: 600, color: 'var(--ink)', cursor: 'pointer',
+            fontFamily: 'inherit',
+          }}
+        >
+          ↻ Refresh
+        </button>
       </div>
 
       {!jobs.length ? (

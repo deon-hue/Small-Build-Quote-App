@@ -75,7 +75,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
         silentPollRef.current = true
         setTick(t => t + 1)
       }
-    }, 30_000)
+    }, 15_000)
     return () => clearInterval(timer)
   }, [])
 
@@ -134,20 +134,39 @@ export function PortalProvider({ children }: { children: ReactNode }) {
         })))
       }
 
-      // Map jobs + extract gantt states
+      // Map jobs
       if (Array.isArray(result?.jobs)) {
-        const ganttMap: Record<string, GanttState> = {}
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        setJobs(result.jobs.map((r: any) => {
-          if (r.gantt_state) ganttMap[r.id] = r.gantt_state as GanttState
-          return {
-            id: r.id, client: r.client, type: r.type, address: r.address || '',
-            value: Number(r.value), stage: r.stage,
-            start: r.start_date || '', weeks: r.weeks, done: r.done,
-            notes: r.notes || '',
-          }
-        }))
-        setGanttStates(ganttMap)
+        setJobs(result.jobs.map((r: any) => ({
+          id: r.id, client: r.client, type: r.type, address: r.address || '',
+          value: Number(r.value), stage: r.stage,
+          start: r.start_date || '', weeks: r.weeks, done: r.done,
+          notes: r.notes || '',
+        })))
+      }
+
+      // Fetch gantt states via dedicated function (works regardless of whether
+      // get_portal_data has been updated with the gantt_state join).
+      // Falls back gracefully if the function hasn't been deployed yet.
+      try {
+        const { data: ganttData } = await supabase.rpc('get_gantt_states_for_portal')
+        if (Array.isArray(ganttData)) {
+          const ganttMap: Record<string, GanttState> = {}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ganttData.forEach((r: any) => { if (r.state) ganttMap[r.job_id] = r.state as GanttState })
+          setGanttStates(ganttMap)
+        }
+      } catch {
+        // get_gantt_states_for_portal not yet deployed — fall back to any gantt_state
+        // embedded in the get_portal_data result (requires fix-gantt.sql to have been run)
+        if (Array.isArray(result?.jobs)) {
+          const ganttMap: Record<string, GanttState> = {}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ;(result.jobs as any[]).forEach((r: any) => {
+            if (r.gantt_state) ganttMap[r.id] = r.gantt_state as GanttState
+          })
+          setGanttStates(ganttMap)
+        }
       }
 
       // Map invoices

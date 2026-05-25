@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import type { Job, QuotePhase, GanttState, GanttPhase } from '@/lib/types'
 import type { Quote } from '@/lib/types'
@@ -33,19 +33,28 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
   const { getGanttState, saveGanttState } = useApp()
   const containerRef = useRef<HTMLDivElement>(null)
   const stateRef = useRef<GanttState | null>(null)
+  // Stores the cleanup fn for the current drag event listeners so we
+  // can remove them before each re-render and on unmount.
+  const cleanupDragRef = useRef<(() => void) | null>(null)
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('week')
+  // dirty = true means the chart has been dragged since the last save
+  const [dirty, setDirty] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const router = useRouter()
 
   function buildState(): GanttState {
     const totalDays = (job.weeks || 12) * 7
+
+    // Use any previously saved layout — no phase-count gate so a custom arrangement
+    // (different number of bars, renamed labels) is never silently discarded.
+    const saved = getGanttState(job.id)
+    if (saved && saved.phases && saved.phases.length > 0) return saved
+
+    // No saved state → build from quote phases or sensible defaults
     const defaultLabels = phases.length
       ? phases.map(p => p.phase)
       : ['Preliminaries','Demolition & Enabling','Foundations','Structure','Roof',
          'External Doors & Windows','First Fix','Insulation','Plastering','Second Fix','External Works']
-
-    const saved = getGanttState(job.id)
-    if (saved && saved.phases.length === defaultLabels.length) return saved
-
     const n = defaultLabels.length
     const ganttPhases: GanttPhase[] = defaultLabels.map((label, i) => ({
       label,
@@ -55,10 +64,36 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     return { phases: ganttPhases, totalDays }
   }
 
+  // ── Explicit save handler ────────────────────────────────────
+  const handleSave = useCallback(async (overrideState?: GanttState) => {
+    const s = overrideState ?? stateRef.current
+    if (!s) return
+    setSaveStatus('saving')
+    const ok = await saveGanttState(job.id, s)
+    if (ok) {
+      stateRef.current = s
+      setDirty(false)
+      setSaveStatus('saved')
+      setTimeout(() => setSaveStatus('idle'), 3000)
+    } else {
+      setSaveStatus('error')
+      setTimeout(() => setSaveStatus('idle'), 5000)
+    }
+  }, [job.id, saveGanttState])
+
+  // Re-render the chart when job props or view mode changes.
+  // Reset dirty/status when a different job is opened.
   useEffect(() => {
+    setDirty(false)
+    setSaveStatus('idle')
     const state = buildState()
     stateRef.current = state
     renderGantt(state, viewMode)
+    return () => {
+      // Clean up drag listeners when effect re-runs or component unmounts
+      cleanupDragRef.current?.()
+      cleanupDragRef.current = null
+    }
   }, [job, phases, viewMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function renderGantt(state: GanttState, mode: 'day' | 'week' | 'month') {
@@ -195,7 +230,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
           <span style="display:flex;align-items:center;gap:4px;font-size:10px"><span style="width:10px;height:10px;border-radius:2px;background:#7ab533;display:inline-block"></span>Complete</span>
           <span style="display:flex;align-items:center;gap:4px;font-size:10px"><span style="width:10px;height:10px;border-radius:2px;background:#4a90a4;display:inline-block"></span>Active</span>
           <span style="display:flex;align-items:center;gap:4px;font-size:10px"><span style="width:10px;height:10px;border-radius:2px;background:#c8d8e8;display:inline-block"></span>Upcoming</span>
-          <button onclick="window.__ganttReset()" style="font-size:10px;background:transparent;border:1px solid #dde1e5;border-radius:3px;padding:2px 8px;cursor:pointer;color:#6b7580">Reset</button>
+          <button onclick="window.__ganttReset()" style="font-size:10px;background:transparent;border:1px solid #dde1e5;border-radius:3px;padding:2px 8px;cursor:pointer;color:#6b7580">Reset to default</button>
         </div>
       </div>
       <div style="overflow-x:auto">
@@ -206,16 +241,17 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
         </div>
       </div>
       <div id="gantt-tooltip" style="position:fixed;background:#2b2f33;color:white;font-size:11px;padding:6px 10px;border-radius:4px;pointer-events:none;display:none;z-index:999;line-height:1.6"></div>
-      <div id="gantt-saved-notice" style="font-size:11px;color:#7ab533;margin-top:8px;display:none">✓ Changes saved</div>
     `
 
-    attachDrag(container, state, startDate, totalDays)
+    // Clean up previous drag listeners before attaching new ones
+    cleanupDragRef.current?.()
+    cleanupDragRef.current = attachDrag(container, state, startDate, totalDays)
     attachLabelResize(container, state, mode)
   }
 
-  function attachDrag(container: HTMLDivElement, state: GanttState, startDate: Date, totalDays: number) {
+  // Returns a cleanup function for the document-level listeners
+  function attachDrag(container: HTMLDivElement, state: GanttState, startDate: Date, totalDays: number): () => void {
     const tooltip = container.querySelector<HTMLElement>('#gantt-tooltip')
-    const notice = container.querySelector<HTMLElement>('#gantt-saved-notice')
     let dragging: { type: 'move' | 'resize', idx: number, startX: number, origStart: number, origDur: number, trackW: number } | null = null
 
     function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)) }
@@ -244,15 +280,6 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       tooltip.style.display = 'block'
       tooltip.style.left = (e.clientX + 12) + 'px'
       tooltip.style.top = (e.clientY - 10) + 'px'
-    }
-
-    async function persistState() {
-      await saveGanttState(job.id, state)
-      stateRef.current = state
-      if (notice) {
-        notice.style.display = 'block'
-        setTimeout(() => { if (notice) notice.style.display = 'none' }, 2000)
-      }
     }
 
     container.addEventListener('mousedown', (e: Event) => {
@@ -290,10 +317,13 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
 
     const onUp = () => {
       if (!dragging) return
-      persistState()
       dragging = null
       document.body.style.cursor = ''
       if (tooltip) tooltip.style.display = 'none'
+      // Mark as dirty — user must click Save to persist
+      stateRef.current = state
+      setDirty(true)
+      setSaveStatus('idle')
     }
 
     document.addEventListener('mousemove', onMove)
@@ -309,7 +339,6 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       if ((e.target as Element).closest('.gantt-bar') && !dragging && tooltip) tooltip.style.display = 'none'
     })
 
-    // Cleanup on unmount
     return () => {
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
@@ -348,18 +377,58 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
   // Expose view/reset to inline onclick handlers
   useEffect(() => {
     (window as unknown as Record<string, unknown>).__ganttView = (mode: 'day' | 'week' | 'month') => setViewMode(mode);
-    (window as unknown as Record<string, unknown>).__ganttReset = () => {
+    (window as unknown as Record<string, unknown>).__ganttReset = async () => {
       if (!confirm('Reset Gantt to default layout? This will clear your custom dates.')) return
-      const state = buildState()
-      stateRef.current = state
-      saveGanttState(job.id, state)
-      renderGantt(state, viewMode)
+      // Build a fresh default state ignoring any saved state
+      const totalDays = (job.weeks || 12) * 7
+      const defaultLabels = phases.length
+        ? phases.map(p => p.phase)
+        : ['Preliminaries','Demolition & Enabling','Foundations','Structure','Roof',
+           'External Doors & Windows','First Fix','Insulation','Plastering','Second Fix','External Works']
+      const n = defaultLabels.length
+      const freshState: GanttState = {
+        phases: defaultLabels.map((label, i) => ({
+          label,
+          startDay: Math.round((i / n) * totalDays),
+          durDays: Math.max(1, Math.round(((i + 1) / n) * totalDays) - Math.round((i / n) * totalDays)),
+        })),
+        totalDays,
+      }
+      stateRef.current = freshState
+      // Reset immediately saves and clears the dirty flag
+      setSaveStatus('saving')
+      setDirty(false)
+      const ok = await saveGanttState(job.id, freshState)
+      setSaveStatus(ok ? 'saved' : 'error')
+      if (ok) setTimeout(() => setSaveStatus('idle'), 3000)
+      else setTimeout(() => setSaveStatus('idle'), 5000)
+      renderGantt(freshState, viewMode)
     }
     return () => {
       delete (window as unknown as Record<string, unknown>).__ganttView
       delete (window as unknown as Record<string, unknown>).__ganttReset
     }
   }) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Save button label / colour helpers ──────────────────────
+  function saveBtnLabel() {
+    if (saveStatus === 'saving') return 'Saving…'
+    if (saveStatus === 'saved')  return '✓ Saved'
+    if (saveStatus === 'error')  return '⚠ Save failed'
+    return 'Save Gantt Chart'
+  }
+  function saveBtnStyle(): React.CSSProperties {
+    const base: React.CSSProperties = {
+      border: 'none', borderRadius: 5, padding: '7px 18px',
+      fontSize: 12, fontWeight: 700, cursor: 'pointer',
+      fontFamily: 'inherit', transition: 'background 0.2s, opacity 0.2s',
+    }
+    if (saveStatus === 'saving')       return { ...base, background: '#888', color: '#fff', cursor: 'default' }
+    if (saveStatus === 'saved')        return { ...base, background: '#7ab533', color: '#fff', cursor: 'default' }
+    if (saveStatus === 'error')        return { ...base, background: '#c0392b', color: '#fff' }
+    if (dirty)                         return { ...base, background: 'var(--moss)', color: '#fff' }
+    return { ...base, background: '#e0e3e0', color: '#888', cursor: 'default' }
+  }
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
@@ -375,12 +444,44 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
         <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px' }}>
           {/* Gantt chart */}
           <div style={{ marginBottom: 24 }}>
-            <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 10 }}>
-              Project Gantt Chart
-              <span style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 400, marginLeft: 10 }}>
-                Drag bars to move · drag right edge to resize · drag label divider to widen
-              </span>
+            {/* Section header + save controls */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ fontWeight: 700, fontSize: 13 }}>Project Gantt Chart</span>
+                <span style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 400, marginLeft: 10 }}>
+                  Drag bars to move · drag right edge to resize · drag divider to widen labels
+                </span>
+              </div>
+
+              {/* Unsaved-changes pill */}
+              {dirty && saveStatus === 'idle' && (
+                <span style={{
+                  fontSize: 11, fontWeight: 600, color: '#e67e22',
+                  background: '#fff8ee', border: '1px solid #f5c77a',
+                  borderRadius: 20, padding: '3px 10px',
+                  display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap',
+                }}>
+                  ● Unsaved changes
+                </span>
+              )}
+
+              {/* Save button */}
+              <button
+                onClick={() => handleSave()}
+                disabled={!dirty || saveStatus === 'saving' || saveStatus === 'saved'}
+                style={saveBtnStyle()}
+              >
+                {saveBtnLabel()}
+              </button>
             </div>
+
+            {/* Save-error detail */}
+            {saveStatus === 'error' && (
+              <div style={{ marginBottom: 8, padding: '7px 12px', background: '#fff0ef', border: '1px solid #f5a0a0', borderRadius: 6, fontSize: 12, color: '#c0392b' }}>
+                ⚠ The Gantt chart could not be saved. Check your internet connection, then try again. If the problem persists, open the browser console for details.
+              </div>
+            )}
+
             <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden', minHeight: 200 }}>
               <div ref={containerRef} style={{ padding: '20px 16px 12px' }} />
             </div>
@@ -402,7 +503,6 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
                     <span className={`badge ${Q_BADGE[q.status] || 'b-pending'}`}>{Q_LABEL[q.status] || q.status}</span>
                     <button className="btn-sm btn-gold" onClick={() => {
                       onClose()
-                      // Navigate to quotes page for email
                       router.push('/quotes')
                     }}>✉ Email</button>
                   </div>

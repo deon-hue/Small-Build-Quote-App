@@ -91,6 +91,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/clients': 'Clients',
   '/settings': 'Company Setup',
   '/back-office': 'Back Office',
+  '/portal-preview': 'Portal Preview',
 }
 
 function AppLayoutWrapper({ children }: { children: React.ReactNode }) {

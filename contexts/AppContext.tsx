@@ -31,7 +31,7 @@ interface AppContextType {
   markPortalInvite: (clientId: string) => Promise<void>
 
   saveSettings: (s: Settings) => Promise<void>
-  saveGanttState: (jobId: string, state: GanttState) => Promise<void>
+  saveGanttState: (jobId: string, state: GanttState) => Promise<boolean>
   getGanttState: (jobId: string) => GanttState | null
 
   addInvoice: (inv: Omit<Invoice, 'id' | 'ref' | 'createdAt'>) => Promise<Invoice>
@@ -344,13 +344,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [supabase])
 
   // ── Gantt ────────────────────────────────────────────────────
-  const saveGanttState = useCallback(async (jobId: string, state: GanttState) => {
+  const saveGanttState = useCallback(async (jobId: string, state: GanttState): Promise<boolean> => {
     const { data: { user } } = await supabase.auth.getUser()
-    await supabase.from('gantt_states').upsert(
-      { job_id: jobId, user_id: user!.id, state },
+    if (!user) { console.error('[saveGanttState] No authenticated user'); return false }
+    const { error } = await supabase.from('gantt_states').upsert(
+      { job_id: jobId, user_id: user.id, state },
       { onConflict: 'job_id,user_id' }
     )
+    if (error) {
+      console.error('[saveGanttState] Supabase error:', error)
+      return false
+    }
     setGanttStates(prev => ({ ...prev, [jobId]: state }))
+    return true
   }, [supabase])
 
   const getGanttState = useCallback((jobId: string): GanttState | null => {
