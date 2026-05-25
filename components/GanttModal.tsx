@@ -112,6 +112,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     const LABEL_W = parseInt(container.dataset.labelW || '220') || 220
     const ROW_H = 36
     const CHART_MIN_W = 600
+    const COL_MIN_W = mode === 'day' ? 18 : mode === 'month' ? 60 : 40
 
     // Build columns
     let cols: Array<{ date: Date, isToday: boolean, isWeekend: boolean, label: string, sublabel: string }> = []
@@ -143,6 +144,11 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       }
       colCount = cols.length
     }
+
+    // Inner div must be wide enough that flex:1 tracks match the overflowing column headers.
+    // Without this, tracks are constrained to the visible modal width while day columns
+    // expand to colCount * COL_MIN_W — causing bars to be squashed vs the column grid.
+    const innerMinW = Math.max(CHART_MIN_W, LABEL_W + 9 + colCount * COL_MIN_W)
 
     // Month grouping
     let monthSections: Array<{ month: number, year: number, span: number }> = []
@@ -258,7 +264,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
         </div>
       </div>
       <div style="overflow-x:auto">
-        <div style="min-width:${CHART_MIN_W}px">
+        <div style="min-width:${innerMinW}px">
           <div data-hdr-offset="1" style="display:flex;margin-left:${LABEL_W + 9}px;margin-bottom:0">${monthRowHtml}</div>
           <div data-hdr-offset="1" style="display:flex;margin-left:${LABEL_W + 9}px;margin-bottom:6px">${weekRowHtml}</div>
           <div style="position:relative;margin-top:20px">${msHtml}${todayHtml}${phaseRowsHtml}</div>
