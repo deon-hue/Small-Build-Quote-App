@@ -54,6 +54,7 @@ export default function NewQuotePage() {
   const [generatingScope, setGeneratingScope] = useState(false)
   const [generatingPhases, setGeneratingPhases] = useState(false)
   const [showScopeChat, setShowScopeChat] = useState(false)
+  const [showScopeHelp, setShowScopeHelp] = useState(false)
   const [clientDrop, setClientDrop] = useState(false)
   const [clientSearch, setClientSearch] = useState('')
   const photoInputRef = useRef<HTMLInputElement>(null)
@@ -413,7 +414,15 @@ export default function NewQuotePage() {
           <div className="card">
             <div className="card-hd">
               <span>Scope of Works</span>
-              <button className="btn-sm btn-sky" onClick={() => setShowScopeChat(true)} style={{ fontSize: 11 }}>✦ AI Chat</button>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <button
+                  className="btn-sm btn-outline"
+                  onClick={() => setShowScopeHelp(true)}
+                  title="How to use the AI Scope Writer"
+                  style={{ fontSize: 11, width: 24, height: 24, padding: 0, borderRadius: '50%', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}
+                >?</button>
+                <button className="btn-sm btn-sky" onClick={() => setShowScopeChat(true)} style={{ fontSize: 11 }}>✦ AI Chat</button>
+              </div>
             </div>
             <div style={{ padding: '14px 16px' }}>
               <textarea value={scope} onChange={e => setScope(e.target.value)} rows={6} placeholder="Describe the works to be carried out…" />
@@ -546,6 +555,84 @@ export default function NewQuotePage() {
 
       {showPreview && (
         <QuotePreviewModal quote={previewQuote} onClose={() => setShowPreview(false)} />
+      )}
+
+      {/* ── Scope of Works AI help modal ── */}
+      {showScopeHelp && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowScopeHelp(false) }}>
+          <div className="form-modal" style={{ width: 'min(500px, 96vw)', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div className="form-modal-hd">
+              <div style={{ fontWeight: 700, fontSize: 17 }}>✦ How to use the AI Scope Writer</div>
+              <button className="modal-close" onClick={() => setShowScopeHelp(false)}>×</button>
+            </div>
+            <div className="form-modal-bd" style={{ fontSize: 13, lineHeight: 1.7 }}>
+
+              {/* Step list */}
+              {[
+                {
+                  n: '1', icon: '🖊️', title: 'Open the chat',
+                  body: 'Click the “❖ AI Chat” button on the Scope of Works card. A chat window will open in the corner of the screen.',
+                },
+                {
+                  n: '2', icon: '📝', title: 'Describe the job',
+                  body: 'Type a short description of the project — the job type, size, and key works. For example: “Single storey rear extension, approx 5m \xd7 4m, new kitchen, bi-fold doors, structural steel beam.”',
+                },
+                {
+                  n: '3', icon: '📎', title: 'Attach plans or photos (optional)',
+                  body: 'Click the \u{1F4CE} paperclip button to attach building plans, architect drawings, or site photos. The AI will read them and pull out key details automatically. Supports PDF, JPG, and PNG (max 3 files, 8 MB each).',
+                },
+                {
+                  n: '4', icon: '⚡', title: 'Use a quick prompt',
+                  body: 'Hit one of the suggestion chips that appear — like “Write a scope based on the phases” or “Make it detailed with all trades” — or type your own instruction.',
+                },
+                {
+                  n: '5', icon: '🎤', title: 'Or dictate it (optional)',
+                  body: 'Click the microphone button and speak your description aloud. Works in Chrome and Edge.',
+                },
+                {
+                  n: '6', icon: '✅', title: 'Insert into your quote',
+                  body: 'When you’re happy with the scope, click “✓ Use This Scope” inside the chat bubble, or “✓ Insert into Quote” in the sticky bar at the bottom. The text is pasted straight into the Scope of Works box.',
+                },
+                {
+                  n: '7', icon: '✏️', title: 'Refine with follow-up messages',
+                  body: 'Keep chatting to tweak it. Try: “Make it shorter”, “Add exclusions at the end”, “Add a provisional sums paragraph”, or “Make it more formal.”',
+                },
+              ].map(step => (
+                <div key={step.n} style={{ display: 'flex', gap: 14, marginBottom: 18 }}>
+                  <div style={{
+                    width: 28, height: 28, borderRadius: '50%', background: 'var(--accent)',
+                    color: '#fff', fontWeight: 700, fontSize: 13, flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>{step.n}</div>
+                  <div>
+                    <div style={{ fontWeight: 600, marginBottom: 2 }}>{step.icon} {step.title}</div>
+                    <div style={{ color: 'var(--muted)' }}>{step.body}</div>
+                  </div>
+                </div>
+              ))}
+
+              {/* Tip box */}
+              <div style={{
+                background: 'rgba(74,144,164,0.08)', border: '1px solid rgba(74,144,164,0.25)',
+                borderRadius: 8, padding: '12px 14px', marginTop: 4,
+              }}>
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>💡 Tips</div>
+                <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--muted)' }}>
+                  <li>Fill in the <strong>job type</strong> and <strong>client address</strong> first — the AI uses these automatically.</li>
+                  <li>If you’ve already added phases, the AI can see them and write the scope around them.</li>
+                  <li>You can re-open the chat to regenerate the scope as many times as you like.</li>
+                  <li>The scope won’t be saved until you click <strong>“Save Quote”</strong>.</li>
+                </ul>
+              </div>
+            </div>
+            <div className="form-modal-ft">
+              <button className="btn btn-primary" onClick={() => { setShowScopeHelp(false); setShowScopeChat(true) }}>
+                ✦ Open AI Chat
+              </button>
+              <button className="btn btn-outline" onClick={() => setShowScopeHelp(false)}>Close</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showScopeChat && (
