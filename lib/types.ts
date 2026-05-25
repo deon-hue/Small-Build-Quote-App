@@ -142,3 +142,9 @@ export interface JobNote {
   note: string
   createdAt: string
 }
+
+export interface TemplatePhaseData {
+  parentPhase: string
+  phase: string
+  items: Omit<QuoteItem, 'id'>[]
+}

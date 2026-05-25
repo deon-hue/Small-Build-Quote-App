@@ -2,8 +2,8 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Job, Quote, Client, Settings, GanttState, Invoice, JobNote, PortalStatus } from '@/lib/types'
-import { uid } from '@/lib/utils'
+import type { Job, Quote, Client, Settings, GanttState, Invoice, JobNote, PortalStatus, TemplatePhaseData } from '@/lib/types'
+import { uid, JOB_TEMPLATES } from '@/lib/utils'
 
 interface AppContextType {
   jobs: Job[]
@@ -13,6 +13,7 @@ interface AppContextType {
   ganttStates: Record<string, GanttState>
   invoices: Invoice[]
   jobNotes: JobNote[]
+  customTemplates: Record<string, TemplatePhaseData[]>
   loading: boolean
 
   addJob: (job: Omit<Job, 'id'>) => Promise<Job>
@@ -39,6 +40,10 @@ interface AppContextType {
 
   addJobNote: (jobId: string, note: string) => Promise<JobNote>
   deleteJobNote: (id: string) => Promise<void>
+
+  saveJobTypeTemplate: (jobType: string, template: TemplatePhaseData[]) => Promise<void>
+  resetJobTypeTemplate: (jobType: string) => Promise<void>
+  getTemplate: (jobType: string) => TemplatePhaseData[]
 
   nextQuoteRef: () => string
 }
@@ -69,6 +74,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [ganttStates, setGanttStates] = useState<Record<string, GanttState>>({})
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [jobNotes, setJobNotes] = useState<JobNote[]>([])
+  const [customTemplates, setCustomTemplates] = useState<Record<string, TemplatePhaseData[]>>({})
   const [loading, setLoading] = useState(true)
 
   // ── Load all data on mount ──────────────────────────────────
@@ -162,6 +168,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
           id: r.id, jobId: r.job_id, note: r.note, createdAt: r.created_at,
         })))
       }
+
+      // Load custom job type templates — only available after phase6.sql is run
+      try {
+        const { data: tplData } = await supabase.from('job_type_templates').select('*')
+        if (Array.isArray(tplData)) {
+          const map: Record<string, TemplatePhaseData[]> = {}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          tplData.forEach((r: any) => { map[r.job_type] = r.template })
+          setCustomTemplates(map)
+        }
+      } catch { /* phase6.sql not run yet — use built-in templates */ }
 
       setLoading(false)
     }
@@ -403,9 +420,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setJobNotes(prev => prev.filter(n => n.id !== id))
   }, [supabase])
 
+  // ── Job Type Templates ────────────────────────────────────────
+  const saveJobTypeTemplate = useCallback(async (jobType: string, template: TemplatePhaseData[]) => {
+    const { data: { user } } = await supabase.auth.getUser()
+    await supabase.from('job_type_templates').upsert({
+      user_id: user!.id, job_type: jobType, template,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,job_type' })
+    setCustomTemplates(prev => ({ ...prev, [jobType]: template }))
+  }, [supabase])
+
+  const resetJobTypeTemplate = useCallback(async (jobType: string) => {
+    const { data: { user } } = await supabase.auth.getUser()
+    await supabase.from('job_type_templates').delete().eq('user_id', user!.id).eq('job_type', jobType)
+    setCustomTemplates(prev => {
+      const next = { ...prev }
+      delete next[jobType]
+      return next
+    })
+  }, [supabase])
+
+  const getTemplate = useCallback((jobType: string): TemplatePhaseData[] => {
+    return customTemplates[jobType] || JOB_TEMPLATES[jobType] || []
+  }, [customTemplates])
+
   return (
     <AppContext.Provider value={{
-      jobs, quotes, clients, settings, ganttStates, invoices, jobNotes, loading,
+      jobs, quotes, clients, settings, ganttStates, invoices, jobNotes, customTemplates, loading,
       addJob, updateJob, deleteJob,
       addQuote, updateQuote, deleteQuote,
       addClient, updateClient, deleteClient, upsertClientFromQuote, markPortalInvite,
@@ -413,6 +454,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       saveGanttState, getGanttState,
       addInvoice, updateInvoice, deleteInvoice,
       addJobNote, deleteJobNote,
+      saveJobTypeTemplate, resetJobTypeTemplate, getTemplate,
       nextQuoteRef,
     }}>
       {children}

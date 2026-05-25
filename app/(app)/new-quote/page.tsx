@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/contexts/AppContext'
-import { fmt, VAT, UNITS, JOB_TYPES, JOB_TEMPLATES, calcItem, calcPhase, calcItemSell, calcPhaseSell } from '@/lib/utils'
+import { fmt, VAT, UNITS, JOB_TYPES, calcItem, calcPhase, calcItemSell, calcPhaseSell } from '@/lib/utils'
 import type { QuotePhase, QuoteItem, Quote } from '@/lib/types'
 import QuotePreviewModal from '@/components/QuotePreviewModal'
 import ScopeChat from '@/components/ScopeChat'
@@ -35,7 +35,7 @@ const TYPE_CFG = {
 type ItemType = keyof typeof TYPE_CFG
 
 export default function NewQuotePage() {
-  const { quotes, clients, addQuote, updateQuote, upsertClientFromQuote, loading } = useApp()
+  const { quotes, clients, addQuote, updateQuote, upsertClientFromQuote, getTemplate, loading } = useApp()
 
   const [custName, setCustName] = useState('')
   const [custAddr, setCustAddr] = useState('')
@@ -68,7 +68,7 @@ export default function NewQuotePage() {
   }, [quotes]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function loadTemplate(type: string) {
-    const tpl = JOB_TEMPLATES[type] || []
+    const tpl = getTemplate(type)
     setPhases(tpl.map(p => makePhase(p.phase, p.items, p.parentPhase)))
   }
 

@@ -49,6 +49,7 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
           {navItem('/clients', '○', 'Clients')}
           <div className="nav-section">Settings</div>
           {navItem('/settings', '◇', 'Company Setup')}
+          {navItem('/back-office', '⊞', 'Back Office')}
           <div className="nav-section">Account</div>
           <div className="nav-item" onClick={signOut} style={{ cursor: 'pointer' }}>
             <span className="nav-icon">⏻</span> Sign Out
@@ -89,6 +90,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/invoices': 'Invoices',
   '/clients': 'Clients',
   '/settings': 'Company Setup',
+  '/back-office': 'Back Office',
 }
 
 function AppLayoutWrapper({ children }: { children: React.ReactNode }) {
