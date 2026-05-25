@@ -591,11 +591,15 @@ export default function NewQuotePage() {
                 },
                 {
                   n: '6', icon: '✅', title: 'Insert into your quote',
-                  body: 'When you’re happy with the scope, click “✓ Use This Scope” inside the chat bubble, or “✓ Insert into Quote” in the sticky bar at the bottom. The text is pasted straight into the Scope of Works box.',
+                  body: `When you are happy with the scope, click “✔ Use This Scope” inside the chat bubble, or “✔ Insert into Quote” in the sticky bar at the bottom. The text is pasted straight into the Scope of Works box.`,
                 },
                 {
-                  n: '7', icon: '✏️', title: 'Refine with follow-up messages',
-                  body: 'Keep chatting to tweak it. Try: “Make it shorter”, “Add exclusions at the end”, “Add a provisional sums paragraph”, or “Make it more formal.”',
+                  n: '7', icon: '⚙️', title: 'Generate your build phases',
+                  body: `Once the scope has been pasted in, scroll down to the Phases section and click the “✶ Generate Phases” button. The AI will read your scope and automatically build out all the relevant construction phases and cost rows for your quote.`,
+                },
+                {
+                  n: '8', icon: '✏️', title: 'Refine with follow-up messages',
+                  body: `Keep chatting to tweak the scope. Try: “Make it shorter”, “Add exclusions at the end”, “Add a provisional sums paragraph”, or “Make it more formal.”`,
                 },
               ].map(step => (
                 <div key={step.n} style={{ display: 'flex', gap: 14, marginBottom: 18 }}>
@@ -619,9 +623,9 @@ export default function NewQuotePage() {
                 <div style={{ fontWeight: 600, marginBottom: 4 }}>💡 Tips</div>
                 <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--muted)' }}>
                   <li>Fill in the <strong>job type</strong> and <strong>client address</strong> first — the AI uses these automatically.</li>
-                  <li>If you’ve already added phases, the AI can see them and write the scope around them.</li>
+                  <li>If you've already added phases, the AI can see them and write the scope around them.</li>
                   <li>You can re-open the chat to regenerate the scope as many times as you like.</li>
-                  <li>The scope won’t be saved until you click <strong>“Save Quote”</strong>.</li>
+                  <li>The scope won't be saved until you click <strong>“Save Quote”</strong>.</li>
                 </ul>
               </div>
             </div>
