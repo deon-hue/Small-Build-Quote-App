@@ -48,6 +48,7 @@ export default function NewQuotePage() {
   const [photo, setPhoto] = useState('')
   const [phases, setPhases] = useState<QuotePhase[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [isLockedQuote, setIsLockedQuote] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [saving, setSaving] = useState(false)
   const [generatingScope, setGeneratingScope] = useState(false)
@@ -104,6 +105,7 @@ export default function NewQuotePage() {
       items: toTypedItems(p.items).map((i: Omit<QuoteItem,'id'>) => ({ ...i, id: ++itemCounter })),
     })))
     setEditingId(q.id)
+    setIsLockedQuote(q.status === 'accepted')
   }
 
   function onJobTypeChange(type: string) {
@@ -202,6 +204,7 @@ export default function NewQuotePage() {
 
   // ── Save ───────────────────────────────────────────────────────────────────
   async function handleSave() {
+    if (isLockedQuote) { alert('This quote has been accepted and is locked — it cannot be modified.'); return }
     if (!custName && !confirm('No customer name — save anyway?')) return
     if (!phases.length) { alert('Add some quote lines first.'); return }
     setSaving(true)
@@ -228,6 +231,7 @@ export default function NewQuotePage() {
 
   function cancelEdit() {
     setEditingId(null)
+    setIsLockedQuote(false)
     setCustName(''); setCustAddr(''); setCustEmail(''); setCustPhone('')
     setScope(''); setPhoto('')
     loadTemplate(jobType)
@@ -300,7 +304,18 @@ export default function NewQuotePage() {
 
   return (
     <>
-      {editingId && (
+      {editingId && isLockedQuote && (
+        <div style={{ background: '#f0f9e8', border: '1.5px solid #7ab533', borderRadius: 6, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13 }}>
+          <span>
+            🔒 <strong>Accepted quote — read only.</strong>{' '}
+            <span style={{ color: 'var(--muted)' }}>
+              {quotes.find(q => q.id === editingId)?.ref || editingId} · This quote has been accepted and cannot be modified.
+            </span>
+          </span>
+          <button className="btn-sm btn-outline" onClick={cancelEdit}>Close</button>
+        </div>
+      )}
+      {editingId && !isLockedQuote && (
         <div style={{ background: 'rgba(74,144,164,0.1)', border: '1px solid #4a90a4', borderRadius: 6, padding: '10px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13 }}>
           <span>✎ Editing saved quote: <strong>{quotes.find(q => q.id === editingId)?.ref || editingId}</strong></span>
           <button className="btn-sm btn-outline" onClick={cancelEdit}>Cancel Edit</button>
@@ -434,8 +449,10 @@ export default function NewQuotePage() {
 
           <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
             <button className="btn btn-outline" onClick={() => setShowPreview(true)} style={{ flex: 1 }}>👁 Preview</button>
-            <button className="btn btn-primary" onClick={handleSave} disabled={saving} style={{ flex: 1 }}>
-              {saving ? 'Saving…' : editingId ? '💾 Update Quote' : '💾 Save Quote'}
+            <button className="btn btn-primary" onClick={handleSave} disabled={saving || isLockedQuote}
+              style={{ flex: 1, opacity: isLockedQuote ? 0.45 : 1 }}
+              title={isLockedQuote ? 'Accepted quotes are locked and cannot be modified' : undefined}>
+              {saving ? 'Saving…' : isLockedQuote ? '🔒 Locked' : editingId ? '💾 Update Quote' : '💾 Save Quote'}
             </button>
           </div>
         </div>

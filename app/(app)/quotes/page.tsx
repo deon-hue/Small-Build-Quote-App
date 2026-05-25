@@ -169,11 +169,20 @@ export default function SavedQuotesPage() {
                     </div>
                   )}
                   <div className="sq-actions" style={{ marginTop: 6 }}>
-                    <button className="btn-sm btn-primary" onClick={() => {
-                      // Store quote ID in sessionStorage for the builder to pick up
-                      sessionStorage.setItem('sbc_edit_quote', q.id)
-                      router.push('/new-quote')
-                    }}>✎ Edit</button>
+                    {q.status === 'accepted' ? (
+                      <span style={{
+                        fontSize: 11, fontWeight: 600, padding: '4px 10px',
+                        background: '#f0f9e8', color: '#4a7c1f',
+                        border: '1px solid #b8e08a', borderRadius: 4,
+                      }} title="Accepted quotes are locked and cannot be edited">
+                        🔒 Locked
+                      </span>
+                    ) : (
+                      <button className="btn-sm btn-primary" onClick={() => {
+                        sessionStorage.setItem('sbc_edit_quote', q.id)
+                        router.push('/new-quote')
+                      }}>✎ Edit</button>
+                    )}
                     <button className="btn-sm btn-outline" onClick={() => setPreviewQuote(q)}>View</button>
                     <button className="btn-sm btn-outline" onClick={() => downloadQuote(q)}>⬇ PDF</button>
                     <button className="btn-sm" style={{ background: '#0078d4', color: 'white', border: 'none', borderRadius: 4, padding: '5px 12px', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500 }}
