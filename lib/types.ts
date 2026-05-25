@@ -149,6 +149,62 @@ export interface TemplatePhaseData {
   items: Omit<QuoteItem, 'id'>[]
 }
 
+// ── Team Members & Permissions ────────────────────────────────
+
+export interface UserPermissions {
+  dashboard:   boolean
+  calendar:    boolean
+  jobs:        boolean
+  quotes:      boolean
+  invoices:    boolean
+  clients:     boolean
+  settings:    boolean
+  back_office: boolean
+  team:        boolean
+}
+
+export type TeamMemberRole   = 'admin' | 'manager' | 'staff' | 'view_only'
+export type TeamMemberStatus = 'invited' | 'active' | 'disabled'
+
+export interface TeamMember {
+  id:           string
+  ownerId:      string
+  authUserId:   string | null
+  email:        string
+  name:         string
+  role:         TeamMemberRole
+  status:       TeamMemberStatus
+  permissions:  UserPermissions
+  inviteToken:  string | null
+  invitedAt:    string | null
+  lastActiveAt: string | null
+  createdAt:    string
+}
+
+export const FULL_PERMISSIONS: UserPermissions = {
+  dashboard: true, calendar: true, jobs: true, quotes: true,
+  invoices: true, clients: true, settings: true, back_office: true, team: true,
+}
+
+export const ROLE_PERMISSIONS: Record<TeamMemberRole, UserPermissions> = {
+  admin: {
+    dashboard: true, calendar: true, jobs: true, quotes: true,
+    invoices: true, clients: true, settings: true, back_office: true, team: true,
+  },
+  manager: {
+    dashboard: true, calendar: true, jobs: true, quotes: true,
+    invoices: true, clients: true, settings: false, back_office: false, team: false,
+  },
+  staff: {
+    dashboard: true, calendar: true, jobs: true, quotes: false,
+    invoices: false, clients: false, settings: false, back_office: false, team: false,
+  },
+  view_only: {
+    dashboard: true, calendar: true, jobs: false, quotes: false,
+    invoices: false, clients: false, settings: false, back_office: false, team: false,
+  },
+}
+
 // ── Variations / Change Orders ───────────────────────────────
 
 export type VariationStatus =

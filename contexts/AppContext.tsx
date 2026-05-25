@@ -1,8 +1,9 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Job, Quote, Client, Settings, GanttState, Invoice, JobNote, PortalStatus, TemplatePhaseData, Variation, VariationStatus } from '@/lib/types'
+import type { Job, Quote, Client, Settings, GanttState, Invoice, JobNote, PortalStatus, TemplatePhaseData, Variation, VariationStatus, TeamMember, TeamMemberRole, UserPermissions } from '@/lib/types'
+import { FULL_PERMISSIONS } from '@/lib/types'
 import { uid, JOB_TEMPLATES } from '@/lib/utils'
 
 interface AppContextType {
@@ -16,6 +17,12 @@ interface AppContextType {
   variations: Variation[]
   customTemplates: Record<string, TemplatePhaseData[]>
   loading: boolean
+
+  // Team / permissions
+  teamMembers: TeamMember[]
+  currentMember: TeamMember | null   // null = this user is the owner
+  isOwner: boolean
+  permissions: UserPermissions
 
   addJob: (job: Omit<Job, 'id'>) => Promise<Job>
   updateJob: (job: Job) => Promise<void>
@@ -51,6 +58,14 @@ interface AppContextType {
   getTemplate: (jobType: string) => TemplatePhaseData[]
 
   nextQuoteRef: () => string
+
+  // Team management (owner only)
+  inviteTeamMember: (data: { email: string; name: string; role: TeamMemberRole; permissions: UserPermissions }) => Promise<TeamMember>
+  updateTeamMember: (member: TeamMember) => Promise<void>
+  deleteTeamMember: (id: string) => Promise<void>
+  resendInvite: (id: string) => Promise<string>   // returns new invite token
+  disableTeamMember: (id: string) => Promise<void>
+  enableTeamMember: (id: string) => Promise<void>
 }
 
 const AppContext = createContext<AppContextType | null>(null)
@@ -70,6 +85,23 @@ const DEFAULT_SETTINGS: Settings = {
   logo: '',
 }
 
+function mapTeamMember(r: Record<string, unknown>): TeamMember {
+  return {
+    id:           r.id as string,
+    ownerId:      r.owner_id as string,
+    authUserId:   (r.auth_user_id as string | null) ?? null,
+    email:        r.email as string,
+    name:         r.name as string,
+    role:         r.role as TeamMemberRole,
+    status:       r.status as TeamMember['status'],
+    permissions:  (r.permissions as UserPermissions) || FULL_PERMISSIONS,
+    inviteToken:  (r.invite_token as string | null) ?? null,
+    invitedAt:    (r.invited_at as string | null) ?? null,
+    lastActiveAt: (r.last_active_at as string | null) ?? null,
+    createdAt:    r.created_at as string,
+  }
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const supabase = createClient()
   const [jobs, setJobs] = useState<Job[]>([])
@@ -82,6 +114,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [variations, setVariations] = useState<Variation[]>([])
   const [customTemplates, setCustomTemplates] = useState<Record<string, TemplatePhaseData[]>>({})
   const [loading, setLoading] = useState(true)
+  // Team state
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
+  const [currentMember, setCurrentMember] = useState<TeamMember | null>(null)
+  const [isOwner, setIsOwner] = useState(true)
+  const [permissions, setPermissions] = useState<UserPermissions>(FULL_PERMISSIONS)
+  // Resolved owner ID used for all data inserts (ref avoids stale-closure in callbacks)
+  const dataOwnerIdRef = useRef<string | null>(null)
 
   // ── Load all data on mount ──────────────────────────────────
   useEffect(() => {
@@ -89,11 +128,44 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setLoading(false); return }
 
+      // ── Resolve effective owner ID (sub-users get their owner's ID) ──
+      let resolvedOwnerId = user.id
+      try {
+        const { data: ownerIdData } = await supabase.rpc('get_effective_owner_id')
+        if (ownerIdData) resolvedOwnerId = ownerIdData as string
+      } catch { /* phase10.sql not run yet — use own ID */ }
+      dataOwnerIdRef.current = resolvedOwnerId
+
+      // ── Check if this user is a team member ──
+      try {
+        const { data: memberRow } = await supabase
+          .from('team_members').select('*').eq('auth_user_id', user.id).maybeSingle()
+        if (memberRow) {
+          const member = mapTeamMember(memberRow as Record<string, unknown>)
+          setCurrentMember(member)
+          setIsOwner(false)
+          setPermissions(member.permissions || FULL_PERMISSIONS)
+          // Update last_active_at
+          await supabase.from('team_members')
+            .update({ last_active_at: new Date().toISOString() })
+            .eq('id', memberRow.id)
+        } else {
+          setIsOwner(true)
+          setPermissions(FULL_PERMISSIONS)
+          // Load team members for the owner
+          const { data: teamData } = await supabase
+            .from('team_members').select('*').order('created_at', { ascending: true })
+          if (Array.isArray(teamData)) {
+            setTeamMembers(teamData.map(r => mapTeamMember(r as Record<string, unknown>)))
+          }
+        }
+      } catch { /* phase10.sql not run yet — single-user mode */ }
+
       const [jobsRes, quotesRes, clientsRes, settingsRes, ganttRes, invoicesRes, notesRes, variationsRes] = await Promise.all([
         supabase.from('jobs').select('*').order('created_at', { ascending: true }),
         supabase.from('quotes').select('*').order('created_at', { ascending: true }),
         supabase.from('clients').select('*').order('created_at', { ascending: true }),
-        supabase.from('settings').select('*').eq('user_id', user.id).maybeSingle(),
+        supabase.from('settings').select('*').eq('user_id', resolvedOwnerId).maybeSingle(),
         supabase.from('gantt_states').select('*'),
         supabase.from('invoices').select('*').order('created_at', { ascending: false }),
         supabase.from('job_notes').select('*').order('created_at', { ascending: true }),
@@ -210,8 +282,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ── Jobs ─────────────────────────────────────────────────────
   const addJob = useCallback(async (job: Omit<Job, 'id'>): Promise<Job> => {
     const { data: { user } } = await supabase.auth.getUser()
+    const ownerId = dataOwnerIdRef.current || user!.id
     const { data, error } = await supabase.from('jobs').insert({
-      user_id: user!.id, client: job.client, type: job.type, address: job.address,
+      user_id: ownerId, client: job.client, type: job.type, address: job.address,
       value: job.value, stage: job.stage, start_date: job.start || null,
       weeks: job.weeks, done: job.done, notes: job.notes, quote_id: job.quoteId || null,
     }).select().single()
@@ -252,10 +325,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addQuote = useCallback(async (q: Omit<Quote, 'id' | 'ref' | 'savedDate'>): Promise<Quote> => {
     const { data: { user } } = await supabase.auth.getUser()
+    const ownerId = dataOwnerIdRef.current || user!.id
     const ref = 'QT-' + String(Math.floor(Math.random() * 9000) + 1000)
     const savedDate = new Date().toLocaleDateString('en-GB')
     const { data, error } = await supabase.from('quotes').insert({
-      user_id: user!.id, ref, saved_date: savedDate, last_edited: '',
+      user_id: ownerId, ref, saved_date: savedDate, last_edited: '',
       status: q.status || 'pending', job_type: q.jobType, markup: q.markup,
       vat_included: q.vatIncluded, scope: q.scope, photo: q.photo,
       converted_to_job: false, customer: q.customer, phases: q.phases,
@@ -289,8 +363,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ── Clients ──────────────────────────────────────────────────
   const addClient = useCallback(async (c: Omit<Client, 'id'>) => {
     const { data: { user } } = await supabase.auth.getUser()
+    const ownerId = dataOwnerIdRef.current || user!.id
     const { data, error } = await supabase.from('clients').insert({
-      user_id: user!.id, name: c.name, first_name: c.first, last_name: c.last,
+      user_id: ownerId, name: c.name, first_name: c.first, last_name: c.last,
       phone: c.phone, email: c.email, address: c.address,
       notes: c.notes, added_from: c.addedFrom,
     }).select().single()
@@ -358,8 +433,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ── Settings ─────────────────────────────────────────────────
   const saveSettings = useCallback(async (s: Settings) => {
     const { data: { user } } = await supabase.auth.getUser()
+    const ownerId = dataOwnerIdRef.current || user!.id
     await supabase.from('settings').upsert({
-      user_id: user!.id, company_name: s.name, tagline: s.tagline,
+      user_id: ownerId, company_name: s.name, tagline: s.tagline,
       contact: s.contact, phone: s.phone, email: s.email, address: s.address,
       terms: s.terms, extra: s.extra, logo: s.logo,
       updated_at: new Date().toISOString(),
@@ -371,8 +447,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const saveGanttState = useCallback(async (jobId: string, state: GanttState): Promise<boolean> => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { console.error('[saveGanttState] No authenticated user'); return false }
+    const ownerId = dataOwnerIdRef.current || user.id
     const { error } = await supabase.from('gantt_states').upsert(
-      { job_id: jobId, user_id: user.id, state },
+      { job_id: jobId, user_id: ownerId, state },
       { onConflict: 'job_id,user_id' }
     )
     if (error) {
@@ -390,9 +467,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ── Invoices ─────────────────────────────────────────────────
   const addInvoice = useCallback(async (inv: Omit<Invoice, 'id' | 'ref' | 'createdAt'>): Promise<Invoice> => {
     const { data: { user } } = await supabase.auth.getUser()
+    const ownerId = dataOwnerIdRef.current || user!.id
     const ref = 'INV-' + String(Math.floor(Math.random() * 9000) + 1000)
     const { data, error } = await supabase.from('invoices').insert({
-      user_id: user!.id, ref,
+      user_id: ownerId, ref,
       job_id: inv.jobId || '', quote_id: inv.quoteId || '',
       client_name: inv.clientName, client_address: inv.clientAddress,
       client_email: inv.clientEmail, line_items: inv.lineItems,
@@ -439,9 +517,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     v: Omit<Variation, 'id' | 'ref' | 'createdAt' | 'jobId'>
   ): Promise<Variation> => {
     const { data: { user } } = await supabase.auth.getUser()
+    const ownerId = dataOwnerIdRef.current || user!.id
     const ref = 'VAR-' + String(Math.floor(Math.random() * 9000) + 1000)
     const { data, error } = await supabase.from('variations').insert({
-      user_id: user!.id, job_id: jobId, ref,
+      user_id: ownerId, job_id: jobId, ref,
       title: v.title, description: v.description, status: v.status,
       items: v.items, markup: v.markup, vat_included: v.vatIncluded,
       total: v.total, notes: v.notes, locked: v.locked,
@@ -486,8 +565,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ── Job Notes ────────────────────────────────────────────────
   const addJobNote = useCallback(async (jobId: string, note: string): Promise<JobNote> => {
     const { data: { user } } = await supabase.auth.getUser()
+    const ownerId = dataOwnerIdRef.current || user!.id
     const { data, error } = await supabase.from('job_notes').insert({
-      user_id: user!.id, job_id: jobId, note,
+      user_id: ownerId, job_id: jobId, note,
     }).select().single()
     if (error) throw error
     const newNote: JobNote = { id: data.id, jobId: data.job_id, note: data.note, createdAt: data.created_at }
@@ -503,8 +583,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ── Job Type Templates ────────────────────────────────────────
   const saveJobTypeTemplate = useCallback(async (jobType: string, template: TemplatePhaseData[]) => {
     const { data: { user } } = await supabase.auth.getUser()
+    const ownerId = dataOwnerIdRef.current || user!.id
     await supabase.from('job_type_templates').upsert({
-      user_id: user!.id, job_type: jobType, template,
+      user_id: ownerId, job_type: jobType, template,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id,job_type' })
     setCustomTemplates(prev => ({ ...prev, [jobType]: template }))
@@ -512,7 +593,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const resetJobTypeTemplate = useCallback(async (jobType: string) => {
     const { data: { user } } = await supabase.auth.getUser()
-    await supabase.from('job_type_templates').delete().eq('user_id', user!.id).eq('job_type', jobType)
+    const ownerId = dataOwnerIdRef.current || user!.id
+    await supabase.from('job_type_templates').delete().eq('user_id', ownerId).eq('job_type', jobType)
     setCustomTemplates(prev => {
       const next = { ...prev }
       delete next[jobType]
@@ -524,9 +606,66 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return customTemplates[jobType] || JOB_TEMPLATES[jobType] || []
   }, [customTemplates])
 
+  // ── Team Management (owner only) ─────────────────────────────
+  const inviteTeamMember = useCallback(async (data: {
+    email: string; name: string; role: TeamMemberRole; permissions: UserPermissions
+  }): Promise<TeamMember> => {
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: row, error } = await supabase.from('team_members').insert({
+      owner_id: user!.id,
+      email: data.email.trim().toLowerCase(),
+      name: data.name.trim(),
+      role: data.role,
+      permissions: data.permissions,
+      status: 'invited',
+    }).select().single()
+    if (error) throw error
+    const member = mapTeamMember(row as Record<string, unknown>)
+    setTeamMembers(prev => [...prev, member])
+    return member
+  }, [supabase])
+
+  const updateTeamMember = useCallback(async (member: TeamMember) => {
+    const { error } = await supabase.from('team_members').update({
+      name: member.name, role: member.role, permissions: member.permissions,
+    }).eq('id', member.id)
+    if (error) throw error
+    setTeamMembers(prev => prev.map(m => m.id === member.id ? member : m))
+  }, [supabase])
+
+  const deleteTeamMember = useCallback(async (id: string) => {
+    await supabase.from('team_members').delete().eq('id', id)
+    setTeamMembers(prev => prev.filter(m => m.id !== id))
+  }, [supabase])
+
+  const resendInvite = useCallback(async (id: string): Promise<string> => {
+    // Generate a fresh invite token
+    const newToken = crypto.randomUUID()
+    const { error } = await supabase.from('team_members').update({
+      invite_token: newToken, invited_at: new Date().toISOString(), status: 'invited',
+    }).eq('id', id)
+    if (error) throw error
+    setTeamMembers(prev => prev.map(m => m.id === id
+      ? { ...m, inviteToken: newToken, status: 'invited' as const }
+      : m
+    ))
+    return newToken
+  }, [supabase])
+
+  const disableTeamMember = useCallback(async (id: string) => {
+    await supabase.from('team_members').update({ status: 'disabled' }).eq('id', id)
+    setTeamMembers(prev => prev.map(m => m.id === id ? { ...m, status: 'disabled' as const } : m))
+  }, [supabase])
+
+  const enableTeamMember = useCallback(async (id: string) => {
+    await supabase.from('team_members').update({ status: 'active' }).eq('id', id)
+    setTeamMembers(prev => prev.map(m => m.id === id ? { ...m, status: 'active' as const } : m))
+  }, [supabase])
+
   return (
     <AppContext.Provider value={{
       jobs, quotes, clients, settings, ganttStates, invoices, jobNotes, variations, customTemplates, loading,
+      teamMembers, currentMember, isOwner, permissions,
       addJob, updateJob, deleteJob,
       addQuote, updateQuote, deleteQuote,
       addClient, updateClient, deleteClient, upsertClientFromQuote, markPortalInvite,
@@ -537,6 +676,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addVariation, updateVariation, deleteVariation,
       saveJobTypeTemplate, resetJobTypeTemplate, getTemplate,
       nextQuoteRef,
+      inviteTeamMember, updateTeamMember, deleteTeamMember, resendInvite,
+      disableTeamMember, enableTeamMember,
     }}>
       {children}
     </AppContext.Provider>
