@@ -106,13 +106,10 @@ Works comprise a single-storey rear extension to extend the existing kitchen and
   }
 
   // ── Model selection ───────────────────────────────────────
-  // Sonnet for document-enhanced chats (stronger at reading plans + PDFs);
-  // Haiku for text-only (faster and cheaper).
-  const model     = hasFiles ? 'claude-3-5-sonnet-20241022' : 'claude-3-5-haiku-20241022'
+  // Sonnet 4.6 for document-enhanced chats (strongest vision + PDF reading);
+  // Haiku 4.5 for text-only (faster and cheaper).
+  const model     = hasFiles ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001'
   const maxTokens = hasFiles ? 2000 : 700
-
-  // PDF document blocks require the pdfs beta header
-  const betaHeader: Record<string, string> = hasFiles ? { 'anthropic-beta': 'pdfs-2024-09-25' } : {}
 
   // ── Call Anthropic API ────────────────────────────────────
   try {
@@ -122,7 +119,6 @@ Works comprise a single-storey rear extension to extend the existing kitchen and
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
-        ...betaHeader,
       },
       body: JSON.stringify({
         model,
