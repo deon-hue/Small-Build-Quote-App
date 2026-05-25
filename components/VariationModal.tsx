@@ -637,11 +637,35 @@ export default function VariationModal({ job, onClose }: Props) {
 
           {/* Draft → Send to Customer */}
           {isDraft && (
-            <button className="btn btn-primary" disabled={busy || !form.title.trim()} onClick={async () => {
+            <button className="btn btn-primary" disabled={busy || saving || !form.title.trim()} onClick={async () => {
               if (!form.title.trim()) { alert('Please enter a title first.'); return }
               if (!confirm(`Send variation "${form.title}" to the customer portal? They will be able to view, approve, or reject it.`)) return
-              await handleSave()
-              await changeStatus('sent')
+              setBusy(true)
+              const total = calcVarTotal(form.items, form.markup, form.vatIncluded)
+              try {
+                if (editingVar) {
+                  // Existing draft: update fields + set status in one write
+                  const updated: Variation = {
+                    ...editingVar,
+                    title: form.title, description: form.description, items: form.items,
+                    markup: form.markup, vatIncluded: form.vatIncluded, total, notes: form.notes,
+                    status: 'sent', sentAt: new Date().toISOString(),
+                  }
+                  await updateVariation(updated)
+                  setEditingVar(updated)
+                } else {
+                  // New variation: create directly with status 'sent'
+                  await addVariation(job.id, {
+                    title: form.title, description: form.description, status: 'sent',
+                    items: form.items, markup: form.markup, vatIncluded: form.vatIncluded,
+                    total, notes: form.notes, locked: false,
+                    clientApprovedAt: null, clientApprovedBy: null,
+                    clientRejectedAt: null, clientRejectionReason: null,
+                    sentAt: new Date().toISOString(),
+                  })
+                }
+                backToList()
+              } finally { setBusy(false) }
             }}>
               {busy ? 'Sending…' : '📤 Send to Customer'}
             </button>
