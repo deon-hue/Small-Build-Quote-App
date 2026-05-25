@@ -208,7 +208,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       const startD = fmtDateShort(addDays(startDate, ph.startDay))
       const endD = fmtDateShort(addDays(startDate, phEndDay))
       return `<div class="gantt-row" style="display:flex;align-items:center;height:${ROW_H}px;margin-bottom:3px">
-        <div class="gantt-label-cell" style="width:${LABEL_W}px;flex-shrink:0;font-size:11px;font-weight:500;color:#1e2022;padding-right:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;justify-content:center;height:${ROW_H}px;text-align:center" title="${esc(ph.label)}">${i + 1}. ${esc(ph.label)}</div>
+        <div class="gantt-label-cell" style="width:${LABEL_W}px;flex-shrink:0;font-size:11px;font-weight:500;color:#1e2022;padding:0 10px 0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;justify-content:flex-start;height:${ROW_H}px;text-align:left" title="${esc(ph.label)}">${i + 1}. ${esc(ph.label)}</div>
         <div class="gantt-col-divider" style="width:5px;flex-shrink:0;align-self:stretch;cursor:col-resize;background:transparent;border-left:2px dashed #c8d0d8;margin-right:4px" title="Drag to resize label column"></div>
         <div class="gantt-track" style="flex:1;position:relative;height:${ROW_H - 6}px;background:#f0f2f4;border-radius:3px;cursor:default;overflow:hidden">
           ${trackWeekendHtml}
@@ -228,12 +228,14 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     const msHtml = milestones.map(m => {
       const pct = dayToPct(m.day)
       const d = fmtDateShort(addDays(startDate, m.day))
-      return `<div style="position:absolute;left:${pct}%;top:0;bottom:0;width:2px;background:${m.color};opacity:0.5;pointer-events:none;z-index:2"><div style="position:absolute;top:-20px;left:50%;transform:translateX(-50%);font-size:8px;color:${m.color};font-weight:700;white-space:nowrap;background:rgba(255,255,255,0.9);padding:1px 3px;border-radius:2px">${m.label}<br>${d}</div></div>`
+      const lblPos = pct < 5 ? 'left:0;transform:none' : pct > 95 ? 'right:0;left:auto;transform:none' : 'left:50%;transform:translateX(-50%)'
+      return `<div style="position:absolute;left:${pct}%;top:0;bottom:0;width:2px;background:${m.color};opacity:0.5;pointer-events:none;z-index:2"><div style="position:absolute;top:-20px;${lblPos};font-size:8px;color:${m.color};font-weight:700;white-space:nowrap;background:rgba(255,255,255,0.9);padding:1px 3px;border-radius:2px">${m.label}<br>${d}</div></div>`
     }).join('')
 
     const todayPct = dayToPct(todayOffset)
+    const todayLabelPos = todayPct < 5 ? 'left:0;transform:none' : todayPct > 95 ? 'right:0;left:auto;transform:none' : 'left:50%;transform:translateX(-50%)'
     const todayHtml = todayPct >= 0 && todayPct <= 100
-      ? `<div style="position:absolute;left:${todayPct}%;top:0;bottom:0;width:2px;background:#e67e22;z-index:3;pointer-events:none"><div style="position:absolute;top:-20px;left:50%;transform:translateX(-50%);font-size:8px;color:#e67e22;font-weight:700;white-space:nowrap;background:rgba(255,255,255,0.9);padding:1px 3px;border-radius:2px">TODAY<br>${fmtDateShort(todayDate)}</div></div>`
+      ? `<div style="position:absolute;left:${todayPct}%;top:0;bottom:0;width:2px;background:#e67e22;z-index:3;pointer-events:none"><div style="position:absolute;top:-20px;${todayLabelPos};font-size:8px;color:#e67e22;font-weight:700;white-space:nowrap;background:rgba(255,255,255,0.9);padding:1px 3px;border-radius:2px">TODAY<br>${fmtDateShort(todayDate)}</div></div>`
       : ''
 
     container.innerHTML = `
