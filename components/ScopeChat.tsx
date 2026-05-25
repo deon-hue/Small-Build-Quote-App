@@ -476,35 +476,50 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
         {/* ── Input row ── */}
         <div style={{ padding: '10px 16px 14px', borderTop: attachments.length > 0 || processing ? 'none' : '1px solid var(--border)', display: 'flex', gap: 8, flexShrink: 0, alignItems: 'flex-end' }}>
 
-          {/* Attach button */}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={processing || attachments.length >= MAX_ATTACH}
+          {/* Attach button — overlay pattern so no programmatic .click() needed */}
+          <div
             title={
               attachments.length >= MAX_ATTACH
                 ? `Max ${MAX_ATTACH} files per message`
                 : 'Attach building plans, drawings, or photos (PDF, JPG, PNG)'
             }
-            style={{
-              border: 'none', borderRadius: 8, width: 42, height: 42, flexShrink: 0,
-              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 20,
-              background: attachments.length > 0 ? '#dff0f8' : '#f0f2ee',
-              color:      attachments.length > 0 ? '#1a6080' : 'var(--ink)',
-              opacity: (processing || attachments.length >= MAX_ATTACH) ? 0.4 : 1,
-              transition: 'background 0.2s',
-            }}
+            style={{ position: 'relative', width: 42, height: 42, flexShrink: 0 }}
           >
-            📎
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*,.pdf,application/pdf"
-            multiple
-            style={{ display: 'none' }}
-            onChange={e => { if (e.target.files?.length) handleFiles(e.target.files) }}
-          />
+            {/* Visual button face */}
+            <div
+              style={{
+                width: '100%', height: '100%', borderRadius: 8,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 20,
+                background: attachments.length > 0 ? '#dff0f8' : '#f0f2ee',
+                color:      attachments.length > 0 ? '#1a6080' : 'var(--ink)',
+                opacity: (processing || attachments.length >= MAX_ATTACH) ? 0.4 : 1,
+                transition: 'background 0.2s',
+                pointerEvents: 'none',          // let the input on top receive clicks
+              }}
+            >
+              📎
+            </div>
+            {/* Transparent file input covers the whole button */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,.pdf,application/pdf"
+              multiple
+              disabled={processing || attachments.length >= MAX_ATTACH}
+              style={{
+                position: 'absolute', top: 0, left: 0,
+                width: '100%', height: '100%',
+                opacity: 0,
+                cursor: (processing || attachments.length >= MAX_ATTACH) ? 'not-allowed' : 'pointer',
+              }}
+              onChange={e => {
+                if (e.target.files?.length) handleFiles(e.target.files)
+                // Reset so the same file can be re-selected if needed
+                e.target.value = ''
+              }}
+            />
+          </div>
 
           {/* Text input */}
           <textarea
