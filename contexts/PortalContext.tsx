@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Quote, Job, Invoice, GanttState } from '@/lib/types'
 
@@ -48,6 +48,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
+  const silentPollRef = useRef(false)
 
   function reload() {
     setError(null)
@@ -56,7 +57,6 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   }
 
   // Auto-refresh when client switches back to the tab
-  // This picks up any Gantt/job/quote changes the admin made while the tab was in the background
   useEffect(() => {
     function handleVisibility() {
       if (document.visibilityState === 'visible') {
@@ -67,9 +67,23 @@ export function PortalProvider({ children }: { children: ReactNode }) {
     return () => document.removeEventListener('visibilitychange', handleVisibility)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Silent background poll every 30 s — picks up Gantt changes, job progress
+  // updates, etc. made by the admin without flashing the loading spinner
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        silentPollRef.current = true
+        setTick(t => t + 1)
+      }
+    }, 30_000)
+    return () => clearInterval(timer)
+  }, [])
+
   useEffect(() => {
     async function load() {
-      setLoading(true)
+      const silent = silentPollRef.current
+      silentPollRef.current = false
+      if (!silent) setLoading(true)
       setError(null)
 
       const { data: { user } } = await supabase.auth.getUser()
