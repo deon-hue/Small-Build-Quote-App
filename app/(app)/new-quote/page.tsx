@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/contexts/AppContext'
-import { fmt, VAT, UNITS, JOB_TYPES, calcItem, calcPhase, calcItemSell, calcPhaseSell } from '@/lib/utils'
+import { fmt, VAT, JOB_TYPES, calcPhase, calcPhaseSell } from '@/lib/utils'
 import type { QuotePhase, QuoteItem, Quote } from '@/lib/types'
 import { itemFromTemplate } from '@/lib/estimator'
 import type { EstimatorItem } from '@/lib/estimator'
@@ -25,7 +25,7 @@ function makePhase(
     parentPhase,
     items: items.map(i => ({ ...i, id: ++itemCounter })),
     estimatorItems: estimatorItems ?? [],
-    useEstimator: false,
+    useEstimator: true,
   }
 }
 
@@ -39,15 +39,6 @@ function defaultTypedItems(): Omit<QuoteItem, 'id'>[] {
   ]
 }
 
-const TYPE_CFG = {
-  labour:         { label: 'Labour',          emoji: '🔨', bg: '#e8f4f8', color: '#2a7090', border: '#4a90a4' },
-  materials:      { label: 'Materials',        emoji: '📦', bg: '#fff3e8', color: '#b85c00', border: '#e67e22' },
-  plant:          { label: 'Plant Hire',       emoji: '🚜', bg: '#eef8e0', color: '#4a7a1a', border: '#7ab533' },
-  subcontractors: { label: 'Subcontractors',   emoji: '👷', bg: '#f3e8ff', color: '#6b21a8', border: '#9333ea' },
-  other:          { label: 'Other',            emoji: '📋', bg: '#f5f5f5', color: '#555555', border: '#999999' },
-} as const
-
-type ItemType = keyof typeof TYPE_CFG
 
 export default function NewQuotePage() {
   const { quotes, clients, addQuote, updateQuote, upsertClientFromQuote, getTemplate, loading } = useApp()
@@ -195,21 +186,6 @@ export default function NewQuotePage() {
     setPhases(prev => prev.map(p => p.id === id ? { ...p, phase: name } : p))
   }
 
-  // ── Items ──────────────────────────────────────────────────────────────────
-  function addTypedItem(phaseId: number, itemType: ItemType) {
-    setPhases(prev => prev.map(p => p.id === phaseId
-      ? { ...p, items: [...p.items, { id: ++itemCounter, desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType }] }
-      : p))
-  }
-  function removeItem(phaseId: number, itemId: number) {
-    setPhases(prev => prev.map(p => p.id === phaseId ? { ...p, items: p.items.filter(i => i.id !== itemId) } : p))
-  }
-  function updateItem(phaseId: number, itemId: number, key: keyof QuoteItem, val: string | number) {
-    setPhases(prev => prev.map(p => p.id === phaseId
-      ? { ...p, items: p.items.map(i => i.id === itemId ? { ...i, [key]: val } : i) }
-      : p))
-  }
-
   // ── Full-phase update (used by EstimatorBreakdown) ───────────────────────
   function updatePhase(updated: QuotePhase) {
     setPhases(prev => prev.map(p => p.id === updated.id ? updated : p))
@@ -322,7 +298,7 @@ export default function NewQuotePage() {
     phases: JSON.parse(JSON.stringify(phases)),
   }
 
-  const TCOLS = '140px 1fr 100px 78px 78px 78px 22px'
+
 
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
 
@@ -539,12 +515,8 @@ export default function NewQuotePage() {
                           pi={pi}
                           markup={markup}
                           vatOn={vatOn}
-                          TCOLS={TCOLS}
                           onUpdatePhaseName={updatePhaseName}
                           onRemovePhase={removePhase}
-                          onUpdateItem={updateItem}
-                          onRemoveItem={removeItem}
-                          onAddTypedItem={addTypedItem}
                           onUpdatePhase={updatePhase}
                         />
                       ))}
@@ -560,12 +532,8 @@ export default function NewQuotePage() {
                     pi={pi}
                     markup={markup}
                     vatOn={vatOn}
-                    TCOLS={TCOLS}
                     onUpdatePhaseName={updatePhaseName}
                     onRemovePhase={removePhase}
-                    onUpdateItem={updateItem}
-                    onRemoveItem={removeItem}
-                    onAddTypedItem={addTypedItem}
                     onUpdatePhase={updatePhase}
                   />
                 ))}
@@ -684,20 +652,13 @@ interface SubPhaseBlockProps {
   pi: number
   markup: number
   vatOn: boolean
-  TCOLS: string
   onUpdatePhaseName: (id: number, name: string) => void
   onRemovePhase: (id: number) => void
-  onUpdateItem: (phaseId: number, itemId: number, key: keyof QuoteItem, val: string | number) => void
-  onRemoveItem: (phaseId: number, itemId: number) => void
-  onAddTypedItem: (phaseId: number, type: ItemType) => void
   onUpdatePhase: (updated: QuotePhase) => void
 }
 
-function SubPhaseBlock({ p, pi, markup, vatOn, TCOLS, onUpdatePhaseName, onRemovePhase, onUpdateItem, onRemoveItem, onAddTypedItem, onUpdatePhase }: SubPhaseBlockProps) {
-  const typedItems  = p.items.filter(i => i.itemType)
-  const generalItems = p.items.filter(i => !i.itemType)
+function SubPhaseBlock({ p, pi, markup, onUpdatePhaseName, onRemovePhase, onUpdatePhase }: SubPhaseBlockProps) {
   const subSell = calcPhaseSell(p, markup)
-  const synced  = !!p.useEstimator
 
   return (
     <div className="phase-block" style={{ borderRadius: p.parentPhase ? '0' : undefined, marginBottom: 2 }}>
@@ -708,140 +669,7 @@ function SubPhaseBlock({ p, pi, markup, vatOn, TCOLS, onUpdatePhaseName, onRemov
         <button className="rm-btn" onClick={() => onRemovePhase(p.id)} title="Remove this sub-phase">×</button>
       </div>
 
-      {/* Typed cost rows */}
-      {typedItems.length > 0 && (
-        <>
-          {synced && (
-            <div style={{ fontSize: 11, padding: '4px 12px', background: 'rgba(74,144,164,0.08)', color: '#2a7090', borderBottom: '1px solid rgba(74,144,164,0.2)', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span>📐</span>
-              <span>Cost rows synced from estimator &mdash; edit the breakdown below to update values.</span>
-            </div>
-          )}
-          <div className="col-heads" style={{ gridTemplateColumns: TCOLS }}>
-            <span>Type</span>
-            <span>Notes</span>
-            <span style={{ textAlign: 'right' }}>£ Amount</span>
-            <span style={{ textAlign: 'right', color: '#c0392b' }}>Cost</span>
-            <span style={{ textAlign: 'right', color: '#7ab533' }}>Sell</span>
-            <span style={{ textAlign: 'right', color: '#4a90a4' }}>VAT</span>
-            <span></span>
-          </div>
-          {typedItems.map(item => {
-            const t = item.itemType as ItemType
-            const cfg = TYPE_CFG[t]
-            const amount = t === 'labour' ? item.labour
-              : t === 'materials' ? item.materials
-              : t === 'plant' ? (item.plantHire ?? 0)
-              : t === 'subcontractors' ? (item.subcontractors ?? 0)
-              : (item.other ?? 0)
-            const fieldKey = t === 'labour' ? 'labour'
-              : t === 'materials' ? 'materials'
-              : t === 'plant' ? 'plantHire'
-              : t === 'subcontractors' ? 'subcontractors'
-              : 'other'
-            const itemCost = calcItem(item)
-            const itemSell = calcItemSell(item, markup)
-            const itemVat = vatOn ? itemSell * VAT : 0
-            return (
-              <div key={item.id} className="item-row" style={{ gridTemplateColumns: TCOLS, alignItems: 'center' }}>
-                <div style={{ padding: '0 8px' }}>
-                  <span style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}55`, padding: '3px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
-                    {cfg.emoji} {cfg.label}
-                  </span>
-                </div>
-                <input value={item.notes} onChange={e => onUpdateItem(p.id, item.id, 'notes', e.target.value)} placeholder="Notes…" />
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <span style={{ position: 'absolute', left: 6, fontSize: 11, color: 'var(--muted)', pointerEvents: 'none' }}>£</span>
-                  <input
-                    type="number"
-                    value={amount}
-                    readOnly={synced}
-                    onChange={e => !synced && onUpdateItem(p.id, item.id, fieldKey as keyof QuoteItem, Number(e.target.value))}
-                    style={{ textAlign: 'right', width: '100%', paddingLeft: 14, opacity: synced ? 0.6 : 1, background: synced ? '#f5f8fa' : undefined }}
-                    title={synced ? 'Synced from estimator — uncheck "Sync to phase costs" to edit manually' : undefined}
-                  />
-                </div>
-                <span style={{ textAlign: 'right', fontSize: 11, color: '#c0392b', fontFamily: 'DM Mono, monospace', padding: '0 4px' }}>{fmt(itemCost)}</span>
-                <span style={{ textAlign: 'right', fontSize: 11, color: '#2b8a3e', fontFamily: 'DM Mono, monospace', padding: '0 4px', fontWeight: 600 }}>{fmt(itemSell)}</span>
-                <span style={{ textAlign: 'right', fontSize: 11, color: '#4a90a4', fontFamily: 'DM Mono, monospace', padding: '0 4px' }}>{vatOn ? fmt(itemVat) : '—'}</span>
-                <button className="rm-btn" onClick={() => onRemoveItem(p.id, item.id)}>×</button>
-              </div>
-            )
-          })}
-          {/* Add typed row buttons */}
-          <div style={{ padding: '6px 12px', display: 'flex', gap: 6, flexWrap: 'wrap', borderTop: '1px solid #f0f0f0' }}>
-            {(Object.keys(TYPE_CFG) as ItemType[]).map(t => (
-              <button key={t} className="btn-sm btn-outline" style={{ fontSize: 11 }} onClick={() => onAddTypedItem(p.id, t)}>
-                + {TYPE_CFG[t].emoji} {TYPE_CFG[t].label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-
-      {/* Legacy general rows */}
-      {generalItems.length > 0 && (() => {
-        const GCOLS = '1fr 60px 58px 78px 78px 78px 78px 78px 78px 100px 22px'
-        return (
-          <>
-            {typedItems.length > 0 && (
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'var(--muted)', padding: '8px 12px 2px' }}>Detail Lines</div>
-            )}
-            <div className="col-heads" style={{ gridTemplateColumns: GCOLS }}>
-              <span>Description</span><span style={{ textAlign: 'center' }}>Qty</span><span style={{ textAlign: 'center' }}>Unit</span>
-              <span style={{ textAlign: 'right' }}>Labour</span><span style={{ textAlign: 'right' }}>Materials</span>
-              <span style={{ textAlign: 'right' }}>Plant</span>
-              <span style={{ textAlign: 'right', color: '#c0392b' }}>Cost</span>
-              <span style={{ textAlign: 'right', color: '#7ab533' }}>Sell</span>
-              <span style={{ textAlign: 'right', color: '#4a90a4' }}>VAT</span>
-              <span>Notes</span><span></span>
-            </div>
-            {generalItems.map(item => {
-              const itemCost = calcItem(item)
-              const itemSell = calcItemSell(item, markup)
-              const itemVat = vatOn ? itemSell * VAT : 0
-              return (
-                <div key={item.id} className="item-row" style={{ gridTemplateColumns: GCOLS }}>
-                  <input value={item.desc} onChange={e => onUpdateItem(p.id, item.id, 'desc', e.target.value)} placeholder="Description" />
-                  <input type="number" value={item.qty} onChange={e => onUpdateItem(p.id, item.id, 'qty', Number(e.target.value))} style={{ textAlign: 'center' }} />
-                  <select value={item.unit} onChange={e => onUpdateItem(p.id, item.id, 'unit', e.target.value)}>
-                    {UNITS.map(u => <option key={u}>{u}</option>)}
-                  </select>
-                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                    <span style={{ position: 'absolute', left: 6, fontSize: 11, color: 'var(--muted)', pointerEvents: 'none' }}>£</span>
-                    <input type="number" value={item.labour} onChange={e => onUpdateItem(p.id, item.id, 'labour', Number(e.target.value))} style={{ textAlign: 'right', width: '100%', paddingLeft: 14 }} />
-                  </div>
-                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                    <span style={{ position: 'absolute', left: 6, fontSize: 11, color: 'var(--muted)', pointerEvents: 'none' }}>£</span>
-                    <input type="number" value={item.materials} onChange={e => onUpdateItem(p.id, item.id, 'materials', Number(e.target.value))} style={{ textAlign: 'right', width: '100%', paddingLeft: 14 }} />
-                  </div>
-                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                    <span style={{ position: 'absolute', left: 6, fontSize: 11, color: 'var(--muted)', pointerEvents: 'none' }}>£</span>
-                    <input type="number" value={item.plantHire ?? 0} onChange={e => onUpdateItem(p.id, item.id, 'plantHire', Number(e.target.value))} style={{ textAlign: 'right', width: '100%', paddingLeft: 14 }} />
-                  </div>
-                  <span style={{ textAlign: 'right', fontSize: 11, color: '#c0392b', fontFamily: 'DM Mono, monospace', padding: '0 4px' }}>{fmt(itemCost)}</span>
-                  <span style={{ textAlign: 'right', fontSize: 11, color: '#2b8a3e', fontFamily: 'DM Mono, monospace', padding: '0 4px', fontWeight: 600 }}>{fmt(itemSell)}</span>
-                  <span style={{ textAlign: 'right', fontSize: 11, color: '#4a90a4', fontFamily: 'DM Mono, monospace', padding: '0 4px' }}>{vatOn ? fmt(itemVat) : '—'}</span>
-                  <input value={item.notes} onChange={e => onUpdateItem(p.id, item.id, 'notes', e.target.value)} placeholder="Note" />
-                  <button className="rm-btn" onClick={() => onRemoveItem(p.id, item.id)}>×</button>
-                </div>
-              )
-            })}
-          </>
-        )
-      })()}
-
-      {!p.items.length && (
-        <div style={{ padding: '7px 12px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {(Object.keys(TYPE_CFG) as ItemType[]).map(t => (
-            <button key={t} className="btn-sm btn-outline" style={{ fontSize: 11 }} onClick={() => onAddTypedItem(p.id, t)}>
-              + {TYPE_CFG[t].emoji} {TYPE_CFG[t].label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Estimator breakdown */}
+      {/* Cost breakdown — estimator is the sole pricing engine */}
       <EstimatorBreakdown phase={p} onUpdatePhase={onUpdatePhase} />
     </div>
   )

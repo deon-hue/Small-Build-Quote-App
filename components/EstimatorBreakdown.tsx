@@ -207,7 +207,7 @@ function ItemRow({ item, onUpdate, onRemove, onMeasure }: RowProps) {
 
 // ── Main EstimatorBreakdown ───────────────────────────────────────────────────
 export default function EstimatorBreakdown({ phase, onUpdatePhase }: Props) {
-  const [open, setOpen]             = useState(false)
+  const [open, setOpen]             = useState(true)
   const [measureItem, setMeasureItem] = useState<EstimatorItem | null>(null)
 
   const items: EstimatorItem[] = phase.estimatorItems || []
@@ -215,13 +215,15 @@ export default function EstimatorBreakdown({ phase, onUpdatePhase }: Props) {
   const costedCount = items.filter(i => i.isCosted).length
 
   // ── item mutation helpers ──────────────────────────────────────────────────
+  // Estimator is always the single source of truth — sync to items on every change
   function applyItems(newItems: EstimatorItem[]) {
-    let updated: QuotePhase = { ...phase, estimatorItems: newItems }
-    if (phase.useEstimator) {
-      const a = estimatorAggregates(newItems)
-      updated = { ...updated, items: syncToItems(phase.items, a) }
-    }
-    onUpdatePhase(updated)
+    const a = estimatorAggregates(newItems)
+    onUpdatePhase({
+      ...phase,
+      estimatorItems: newItems,
+      useEstimator: true,
+      items: syncToItems(phase.items, a),
+    })
   }
 
   function handleUpdate(item: EstimatorItem) {
@@ -274,15 +276,6 @@ export default function EstimatorBreakdown({ phase, onUpdatePhase }: Props) {
     applyItems([...items, ...newItems])
   }
 
-  function toggleUseEstimator(use: boolean) {
-    let updated: QuotePhase = { ...phase, useEstimator: use }
-    if (use) {
-      const a = estimatorAggregates(items)
-      updated = { ...updated, items: syncToItems(phase.items, a) }
-    }
-    onUpdatePhase(updated)
-  }
-
   // ── header strip ──────────────────────────────────────────────────────────
   return (
     <div style={{ borderTop: '2px solid rgba(74,144,164,0.2)', background: 'rgba(74,144,164,0.04)' }}>
@@ -296,41 +289,19 @@ export default function EstimatorBreakdown({ phase, onUpdatePhase }: Props) {
       >
         <span style={{ fontSize: 10, color: '#4a90a4' }}>{open ? '▼' : '▶'}</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: '#4a90a4', flex: 1 }}>
-          📐 Estimator
+          📐 Cost Breakdown
           {items.length > 0 && (
             <span style={{ fontWeight: 400, color: 'var(--muted)', marginLeft: 6 }}>
               {items.length} item{items.length !== 1 ? 's' : ''}
-              {costedCount > 0 && <>, {costedCount} costed &mdash; cost: </>}
-              {costedCount > 0 && <span style={{ fontFamily: 'DM Mono, monospace', color: '#e07b22' }}>{fmt(agg.total)}</span>}
+              {costedCount > 0 && <> &mdash; <span style={{ fontFamily: 'DM Mono, monospace', color: '#e07b22' }}>{fmt(agg.total)}</span></>}
             </span>
           )}
         </span>
-
-        {/* Use estimator toggle — stop propagation so it doesn't close the panel */}
-        <label
-          onClick={e => e.stopPropagation()}
-          style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 11, color: '#4a90a4', fontWeight: 600 }}
-        >
-          <input
-            type="checkbox"
-            checked={!!phase.useEstimator}
-            onChange={e => toggleUseEstimator(e.target.checked)}
-            style={{ width: 'auto' }}
-          />
-          Sync to phase costs
-        </label>
       </div>
 
       {/* Expanded panel */}
       {open && (
         <div>
-          {/* ── notice when synced ── */}
-          {phase.useEstimator && agg.total > 0 && (
-            <div style={{ margin: '0 12px 8px', padding: '7px 12px', background: 'rgba(74,144,164,0.1)', border: '1px solid rgba(74,144,164,0.25)', borderRadius: 5, fontSize: 12, color: '#2a7090' }}>
-              ✓ Phase costs are synced from the estimator. Manual edits to the cost rows above are overridden.
-            </div>
-          )}
-
           {/* ── empty state ── */}
           {items.length === 0 && (
             <div style={{ padding: '14px 16px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
@@ -405,15 +376,6 @@ export default function EstimatorBreakdown({ phase, onUpdatePhase }: Props) {
             {items.length < getPhaseEstimatorDefaults(phase.phase).length && (
               <button className="btn btn-sm btn-outline" style={{ fontSize: 11 }} onClick={handleLoadDefaults}>
                 ↓ Load defaults
-              </button>
-            )}
-            {items.length > 0 && agg.total > 0 && !phase.useEstimator && (
-              <button
-                className="btn btn-sm btn-sky"
-                style={{ fontSize: 11 }}
-                onClick={() => toggleUseEstimator(true)}
-              >
-                ↑ Sync {fmt(agg.total)} to phase
               </button>
             )}
           </div>
