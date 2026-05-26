@@ -87,6 +87,7 @@ function tp(
   return {
     parentPhase: pp,
     phase: ph,
+    estimatorItems: getPhaseEstimatorDefaults(ph),
     items: [
       { desc: '', qty: 1, unit: 'Item', labour: l,   materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: nl, itemType: 'labour'        as const },
       { desc: '', qty: 1, unit: 'Item', labour: 0,   materials: m, plantHire: 0, subcontractors: 0, other: 0, notes: nm, itemType: 'materials'     as const },
