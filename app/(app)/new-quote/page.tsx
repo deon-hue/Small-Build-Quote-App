@@ -346,6 +346,10 @@ export default function NewQuotePage() {
         </div>
       )}
 
+      <div style={{ background: '#e74c3c', color: '#fff', padding: '8px 16px', borderRadius: 6, marginBottom: 12, fontSize: 13, fontWeight: 700 }}>
+        🔴 DEPLOY TEST v2 — if you see this, Netlify is live
+      </div>
+
       <div className="qb-grid" style={{ gridTemplateColumns: '270px 1fr' }}>
         {/* Left panel */}
         <div className="qb-left">
