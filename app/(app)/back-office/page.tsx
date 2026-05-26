@@ -2,163 +2,144 @@
 
 import { useState, useEffect } from 'react'
 import { useApp } from '@/contexts/AppContext'
-import { JOB_TYPES, JOB_TEMPLATES, fmt } from '@/lib/utils'
+import { JOB_TYPES, JOB_TEMPLATES } from '@/lib/utils'
 import type { TemplatePhaseData, QuoteItem } from '@/lib/types'
 import type { EstimatorItemTemplate, MeasurementType } from '@/lib/estimator'
 import { MEASUREMENT_LABELS } from '@/lib/estimator'
 import { getPhaseEstimatorDefaults } from '@/lib/estimatorDefaults'
 
-type ItemType = 'labour' | 'materials' | 'plant' | 'subcontractors' | 'other'
-
-const TYPE_CFG: Record<ItemType, { label: string; emoji: string; color: string; bg: string; border: string }> = {
-  labour:         { label: 'Labour',        emoji: '🔨', color: '#2a7090', bg: '#e8f4f8', border: '#4a90a4' },
-  materials:      { label: 'Materials',     emoji: '📦', color: '#b85c00', bg: '#fff3e8', border: '#e67e22' },
-  plant:          { label: 'Plant Hire',    emoji: '🚜', color: '#4a7a1a', bg: '#eef8e0', border: '#7ab533' },
-  subcontractors: { label: 'Subcontractors',emoji: '👷', color: '#6b21a8', bg: '#f3e8ff', border: '#9333ea' },
-  other:          { label: 'Other',         emoji: '📋', color: '#555555', bg: '#f5f5f5', border: '#999999' },
-}
-
-const ITEM_TYPES: ItemType[] = ['labour', 'materials', 'plant', 'subcontractors', 'other']
+function deepClone<T>(v: T): T { return JSON.parse(JSON.stringify(v)) }
 
 function defaultItems(): Omit<QuoteItem, 'id'>[] {
   return [
-    { desc: '', qty: 1, unit: 'Item', labour: 0,   materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'labour'         },
-    { desc: '', qty: 1, unit: 'Item', labour: 0,   materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials'      },
-    { desc: '', qty: 1, unit: 'Item', labour: 0,   materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'plant'          },
-    { desc: '', qty: 1, unit: 'Item', labour: 0,   materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'subcontractors' },
-    { desc: '', qty: 1, unit: 'Item', labour: 0,   materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'other'          },
+    { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'labour' },
+    { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials' },
+    { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'plant' },
+    { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'subcontractors' },
+    { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'other' },
   ]
 }
 
-function deepClone<T>(v: T): T { return JSON.parse(JSON.stringify(v)) }
+// ── Estimator items editor (main pricing surface per phase) ──────────────────
+const MEAS_TYPES = Object.keys(MEASUREMENT_LABELS) as MeasurementType[]
+const RATE_COLS = '1fr 90px 55px 55px 55px 55px 55px 44px 24px'
 
-function getItemVal(items: Omit<QuoteItem, 'id'>[], t: ItemType): number {
-  const item = items.find(i => i.itemType === t)
-  if (!item) return 0
-  if (t === 'labour') return item.labour
-  if (t === 'materials') return item.materials
-  if (t === 'plant') return item.plantHire ?? 0
-  if (t === 'subcontractors') return item.subcontractors ?? 0
-  return item.other ?? 0
-}
-
-function getItemNote(items: Omit<QuoteItem, 'id'>[], t: ItemType): string {
-  return items.find(i => i.itemType === t)?.notes || ''
-}
-
-function subPhaseTotal(items: Omit<QuoteItem, 'id'>[]): number {
-  return items.reduce((s, i) =>
-    s + i.labour + i.materials + (i.plantHire ?? 0) + (i.subcontractors ?? 0) + (i.other ?? 0), 0)
-}
-
-function mainPhaseTotal(template: TemplatePhaseData[], pp: string): number {
-  return template.filter(p => p.parentPhase === pp).reduce((s, p) => s + subPhaseTotal(p.items), 0)
-}
-
-// ── Estimator defaults editor (compact, per-phase) ───────────────────────────
-interface EstimatorDefaultsEditorProps {
-  phaseIdx: number
+interface EstimatorEditorProps {
   phase: TemplatePhaseData
+  phaseIdx: number
   onLoad: () => void
   onAdd: () => void
   onUpdate: (item: EstimatorItemTemplate) => void
   onRemove: (id: string) => void
 }
 
-function EstimatorDefaultsEditor({ phaseIdx: _phaseIdx, phase, onLoad, onAdd, onUpdate, onRemove }: EstimatorDefaultsEditorProps) {
-  const [open, setOpen] = useState(false)
+function EstimatorEditor({ phase, onLoad, onAdd, onUpdate, onRemove }: EstimatorEditorProps) {
   const items: EstimatorItemTemplate[] = phase.estimatorItems || []
   const builtIn = getPhaseEstimatorDefaults(phase.phase)
+  const hasBuiltIn = builtIn.length > 0
 
   return (
-    <div style={{ marginTop: 10, borderTop: '1px dashed #e2e8f0', paddingTop: 8 }}>
-      <div
-        onClick={() => setOpen(o => !o)}
-        style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}
-      >
-        <span style={{ fontSize: 10, color: '#4a90a4' }}>{open ? '▼' : '▶'}</span>
-        <span style={{ fontSize: 12, color: '#4a90a4', fontWeight: 600 }}>
-          📐 Estimator defaults
-        </span>
-        <span style={{ fontSize: 11, color: '#94a3b8' }}>
-          {items.length > 0 ? `${items.length} item${items.length !== 1 ? 's' : ''}` : builtIn.length > 0 ? `${builtIn.length} available` : 'none available'}
-        </span>
-      </div>
-
-      {open && (
-        <div style={{ marginTop: 8 }}>
-          {items.length === 0 ? (
-            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>
-              No estimator defaults for this phase yet.
-              {builtIn.length > 0 && (
-                <button
-                  onClick={onLoad}
-                  style={{ marginLeft: 8, padding: '2px 8px', border: '1px solid #4a90a4', borderRadius: 4, background: 'transparent', color: '#4a90a4', fontSize: 11, cursor: 'pointer' }}
-                >
-                  Load built-in defaults ({builtIn.length})
-                </button>
-              )}
-            </div>
-          ) : (
-            <div style={{ marginBottom: 8 }}>
-              {items.map(item => (
-                <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '1fr 90px 60px 60px 60px 24px', gap: 4, alignItems: 'center', marginBottom: 4 }}>
-                  <input
-                    value={item.name}
-                    onChange={e => onUpdate({ ...item, name: e.target.value })}
-                    style={{ fontSize: 12, padding: '3px 6px', border: '1px solid #e2e8f0', borderRadius: 4 }}
-                  />
-                  <select
-                    value={item.measurementType}
-                    onChange={e => onUpdate({ ...item, measurementType: e.target.value as MeasurementType, unit: MEASUREMENT_LABELS[e.target.value as MeasurementType].unit })}
-                    style={{ fontSize: 11, padding: '3px 4px', border: '1px solid #e2e8f0', borderRadius: 4 }}
-                  >
-                    {(Object.keys(MEASUREMENT_LABELS) as MeasurementType[]).map(t => (
-                      <option key={t} value={t}>{MEASUREMENT_LABELS[t].label}</option>
-                    ))}
-                  </select>
-                  <input type="number" value={item.labourRate} min={0} step={0.5}
-                    onChange={e => onUpdate({ ...item, labourRate: Number(e.target.value) })}
-                    placeholder="Labour"
-                    style={{ fontSize: 11, padding: '3px 4px', border: '1px solid #e2e8f0', borderRadius: 4, textAlign: 'right' }}
-                    title="Labour rate £/unit"
-                  />
-                  <input type="number" value={item.materialsRate} min={0} step={0.5}
-                    onChange={e => onUpdate({ ...item, materialsRate: Number(e.target.value) })}
-                    placeholder="Mat"
-                    style={{ fontSize: 11, padding: '3px 4px', border: '1px solid #e2e8f0', borderRadius: 4, textAlign: 'right' }}
-                    title="Materials rate £/unit"
-                  />
-                  <input type="number" value={item.plantRate} min={0} step={0.5}
-                    onChange={e => onUpdate({ ...item, plantRate: Number(e.target.value) })}
-                    placeholder="Plant"
-                    style={{ fontSize: 11, padding: '3px 4px', border: '1px solid #e2e8f0', borderRadius: 4, textAlign: 'right' }}
-                    title="Plant rate £/unit"
-                  />
-                  <button
-                    onClick={() => onRemove(item.id)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 14, padding: 0, lineHeight: 1 }}
-                  >×</button>
-                </div>
-              ))}
-            </div>
-          )}
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <button onClick={onAdd} style={{ padding: '3px 10px', border: '1px solid #4a90a4', borderRadius: 4, background: 'transparent', color: '#4a90a4', fontSize: 11, cursor: 'pointer' }}>
-              + Add item
+    <div>
+      {items.length === 0 ? (
+        <div style={{ padding: '14px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+          No estimator items for this phase yet.
+          {hasBuiltIn && (
+            <button
+              onClick={onLoad}
+              style={{ marginLeft: 10, padding: '4px 12px', border: '1px solid #4a90a4', borderRadius: 5, background: 'transparent', color: '#4a90a4', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}
+            >
+              Load {builtIn.length} built-in defaults
             </button>
-            {builtIn.length > 0 && (
-              <button onClick={onLoad} style={{ padding: '3px 10px', border: '1px solid #94a3b8', borderRadius: 4, background: 'transparent', color: '#94a3b8', fontSize: 11, cursor: 'pointer' }}>
-                ↺ Reset to defaults
-              </button>
-            )}
-          </div>
+          )}
         </div>
+      ) : (
+        <>
+          {/* Column headers */}
+          <div style={{ display: 'grid', gridTemplateColumns: RATE_COLS, gap: 3, padding: '3px 0 5px', borderBottom: '1px solid #e2e8f0', marginBottom: 3 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Item name</span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Measure</span>
+            {['🔨 Lab', '📦 Mat', '🚜 Plant', '👷 Sub', '📋 Other'].map(h => (
+              <span key={h} style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{h}</span>
+            ))}
+            <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Waste%</span>
+            <span />
+          </div>
+
+          {/* Item rows */}
+          {items.map(item => (
+            <div key={item.id} style={{ display: 'grid', gridTemplateColumns: RATE_COLS, gap: 3, alignItems: 'center', marginBottom: 4 }}>
+              <input
+                value={item.name}
+                onChange={e => onUpdate({ ...item, name: e.target.value })}
+                style={{ padding: '3px 6px', border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 12 }}
+              />
+              <select
+                value={item.measurementType}
+                onChange={e => {
+                  const t = e.target.value as MeasurementType
+                  onUpdate({ ...item, measurementType: t, unit: MEASUREMENT_LABELS[t].unit })
+                }}
+                style={{ padding: '3px 4px', border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 11 }}
+              >
+                {MEAS_TYPES.map(t => (
+                  <option key={t} value={t}>{MEASUREMENT_LABELS[t].label} ({MEASUREMENT_LABELS[t].unit})</option>
+                ))}
+              </select>
+              {(
+                [
+                  ['labourRate',    item.labourRate]    as const,
+                  ['materialsRate', item.materialsRate] as const,
+                  ['plantRate',     item.plantRate]     as const,
+                  ['subRate',       item.subRate]       as const,
+                  ['otherRate',     item.otherRate]     as const,
+                  ['wastePercent',  item.wastePercent]  as const,
+                ]
+              ).map(([key, val]) => (
+                <input
+                  key={key}
+                  type="number"
+                  value={val}
+                  min={0}
+                  step={0.5}
+                  onChange={e => onUpdate({ ...item, [key]: Number(e.target.value) })}
+                  style={{
+                    padding: '3px 4px', border: `1px solid ${val > 0 ? '#c7d7e0' : '#e2e8f0'}`,
+                    borderRadius: 4, fontSize: 12, textAlign: 'right',
+                    background: val > 0 ? '#f0f8fc' : '#fafafa',
+                  }}
+                />
+              ))}
+              <button
+                onClick={() => onRemove(item.id)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1', fontSize: 15, padding: 0, lineHeight: 1, textAlign: 'center' }}
+              >×</button>
+            </div>
+          ))}
+        </>
       )}
+
+      {/* Toolbar */}
+      <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+        <button
+          onClick={onAdd}
+          style={{ padding: '4px 12px', border: '1px solid #4a90a4', borderRadius: 5, background: 'transparent', color: '#4a90a4', fontSize: 12, cursor: 'pointer' }}
+        >
+          + Add item
+        </button>
+        {hasBuiltIn && (
+          <button
+            onClick={onLoad}
+            style={{ padding: '4px 12px', border: '1px solid #94a3b8', borderRadius: 5, background: 'transparent', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}
+          >
+            ↺ Reset to {builtIn.length} built-in defaults
+          </button>
+        )}
+      </div>
     </div>
   )
 }
 
+// ── Main back-office page ────────────────────────────────────────────────────
 export default function BackOfficePage() {
   const { customTemplates, getTemplate, saveJobTypeTemplate, resetJobTypeTemplate, loading } = useApp()
 
@@ -168,7 +149,6 @@ export default function BackOfficePage() {
   const [saving, setSaving] = useState(false)
   const [dupFrom, setDupFrom] = useState('')
 
-  // Load template when job type changes or data finishes loading
   useEffect(() => {
     if (!loading) {
       setLocalTemplate(deepClone(getTemplate(selectedJobType)))
@@ -182,11 +162,9 @@ export default function BackOfficePage() {
     return acc
   }, [])
 
-  // Flat template = all phases have no parent (Rear Extension new structure)
   const isFlatTemplate = mainPhaseOrder.length === 1 && mainPhaseOrder[0] === ''
-
   const isCustomised = !!customTemplates[selectedJobType]
-  const totalCost = localTemplate.reduce((s, p) => s + subPhaseTotal(p.items), 0)
+  const totalEstimatorItems = localTemplate.reduce((s, p) => s + (p.estimatorItems?.length || 0), 0)
 
   function handleSelectJobType(jt: string) {
     if (dirty && !confirm('You have unsaved changes. Discard them?')) return
@@ -231,31 +209,10 @@ export default function BackOfficePage() {
     }
   }
 
-  // ── Template edit functions ──────────────────────────────────────────────────
+  // ── Phase structure ──────────────────────────────────────────────────────────
 
-  function updateCostVal(phaseIdx: number, t: ItemType, val: number) {
-    const fieldKey = t === 'labour' ? 'labour'
-      : t === 'materials' ? 'materials'
-      : t === 'plant' ? 'plantHire'
-      : t === 'subcontractors' ? 'subcontractors'
-      : 'other'
-    setLocalTemplate(prev => prev.map((p, i) => i !== phaseIdx ? p : {
-      ...p,
-      items: p.items.map(item => item.itemType !== t ? item : { ...item, [fieldKey]: val }),
-    }))
-    setDirty(true)
-  }
-
-  function updateCostNote(phaseIdx: number, t: ItemType, note: string) {
-    setLocalTemplate(prev => prev.map((p, i) => i !== phaseIdx ? p : {
-      ...p,
-      items: p.items.map(item => item.itemType !== t ? item : { ...item, notes: note }),
-    }))
-    setDirty(true)
-  }
-
-  function renameSubPhase(phaseIdx: number, name: string) {
-    setLocalTemplate(prev => prev.map((p, i) => i !== phaseIdx ? p : { ...p, phase: name }))
+  function renameSubPhase(idx: number, name: string) {
+    setLocalTemplate(prev => prev.map((p, i) => i !== idx ? p : { ...p, phase: name }))
     setDirty(true)
   }
 
@@ -270,7 +227,7 @@ export default function BackOfficePage() {
       for (let i = prev.length - 1; i >= 0; i--) {
         if (prev[i].parentPhase === parentPhase) { lastIdx = i; break }
       }
-      const newPhase: TemplatePhaseData = { parentPhase, phase: 'New Sub-Phase', items: defaultItems() }
+      const newPhase: TemplatePhaseData = { parentPhase, phase: 'New Sub-Phase', items: defaultItems(), estimatorItems: [] }
       const next = [...prev]
       next.splice(lastIdx + 1, 0, newPhase)
       return next
@@ -278,15 +235,14 @@ export default function BackOfficePage() {
     setDirty(true)
   }
 
-  function removeSubPhase(phaseIdx: number) {
-    setLocalTemplate(prev => prev.filter((_, i) => i !== phaseIdx))
+  function removeSubPhase(idx: number) {
+    setLocalTemplate(prev => prev.filter((_, i) => i !== idx))
     setDirty(true)
   }
 
   function addMainPhase() {
-    const num = mainPhaseOrder.length + 1
-    const name = `Phase ${num} – New Phase`
-    setLocalTemplate(prev => [...prev, { parentPhase: name, phase: 'New Sub-Phase', items: defaultItems() }])
+    const name = `Phase ${mainPhaseOrder.length + 1} – New Phase`
+    setLocalTemplate(prev => [...prev, { parentPhase: name, phase: 'New Sub-Phase', items: defaultItems(), estimatorItems: [] }])
     setDirty(true)
   }
 
@@ -297,7 +253,7 @@ export default function BackOfficePage() {
     setDirty(true)
   }
 
-  // ── Estimator defaults ───────────────────────────────────────────────────────
+  // ── Estimator item defaults ──────────────────────────────────────────────────
 
   function loadEstimatorDefaults(phaseIdx: number, phaseName: string) {
     const defs = getPhaseEstimatorDefaults(phaseName)
@@ -385,11 +341,9 @@ export default function BackOfficePage() {
                   {isCustomised ? '● Custom template' : '○ Built-in defaults'}
                 </span>
                 {' · '}
-                {mainPhaseOrder.length} main phase{mainPhaseOrder.length !== 1 ? 's' : ''}
+                {localTemplate.length} phase{localTemplate.length !== 1 ? 's' : ''}
                 {' · '}
-                {localTemplate.length} sub-phase{localTemplate.length !== 1 ? 's' : ''}
-                {' · '}
-                {fmt(totalCost)} template total
+                {totalEstimatorItems} estimator item{totalEstimatorItems !== 1 ? 's' : ''}
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -397,10 +351,7 @@ export default function BackOfficePage() {
                 value={dupFrom}
                 onChange={handleDuplicateFrom}
                 disabled={saving}
-                style={{
-                  padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: 6,
-                  fontSize: 13, background: '#fff', color: '#374151', cursor: 'pointer',
-                }}
+                style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, background: '#fff', color: '#374151', cursor: 'pointer' }}
               >
                 <option value="">Duplicate from…</option>
                 {JOB_TYPES.filter(jt => jt !== selectedJobType).map(jt => (
@@ -412,10 +363,7 @@ export default function BackOfficePage() {
                 <button
                   onClick={handleReset}
                   disabled={saving}
-                  style={{
-                    padding: '6px 14px', border: '1px solid #d1d5db', borderRadius: 6,
-                    fontSize: 13, background: '#fff', color: '#6b7280', cursor: 'pointer',
-                  }}
+                  style={{ padding: '6px 14px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, background: '#fff', color: '#6b7280', cursor: 'pointer' }}
                 >
                   Reset to Default
                 </button>
@@ -442,7 +390,7 @@ export default function BackOfficePage() {
           )}
         </div>
 
-        {/* Loading state */}
+        {/* Loading / empty */}
         {loading ? (
           <div className="card" style={{ textAlign: 'center', color: '#64748b', padding: 48 }}>
             Loading templates…
@@ -452,234 +400,148 @@ export default function BackOfficePage() {
             <p style={{ margin: '0 0 16px' }}>No phases yet for this job type.</p>
             <button
               onClick={addMainPhase}
-              style={{
-                padding: '8px 20px', border: 'none', borderRadius: 6,
-                background: '#4a90a4', color: '#fff', fontSize: 13, cursor: 'pointer',
-              }}
+              style={{ padding: '8px 20px', border: 'none', borderRadius: 6, background: '#4a90a4', color: '#fff', fontSize: 13, cursor: 'pointer' }}
             >
               + Add First Phase
             </button>
           </div>
+
         ) : isFlatTemplate ? (
-          /* ── Flat template (e.g. Rear Extension) — no parent grouping ── */
+          /* ── Flat template (Rear Extension etc.) ── */
           <>
-            {localTemplate.map((sp, globalIdx) => (
-              <div key={globalIdx} style={{
-                border: '1px solid #e2e8f0', borderRadius: 8,
-                background: '#fff', marginBottom: 10, overflow: 'hidden',
-              }}>
-                <div style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '7px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, minWidth: 22 }}>{globalIdx + 1}.</span>
-                  <input
-                    value={sp.phase}
-                    onChange={e => renameSubPhase(globalIdx, e.target.value)}
-                    style={{ flex: 1, padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: 5, fontSize: 13, fontWeight: 600 }}
-                  />
-                  <span style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap' }}>{fmt(subPhaseTotal(sp.items))}</span>
-                  <button onClick={() => removeSubPhase(globalIdx)} style={{ padding: '3px 8px', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 4, color: '#dc2626', fontSize: 11, cursor: 'pointer' }}>Remove</button>
-                </div>
-                <div style={{ padding: '10px 14px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                    {ITEM_TYPES.map(t => {
-                      const val = getItemVal(sp.items, t)
-                      const note = getItemNote(sp.items, t)
-                      const cfg = TYPE_CFG[t]
-                      return (
-                        <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ width: 128, flexShrink: 0, fontSize: 12, color: cfg.color, fontWeight: 500 }}>{cfg.emoji} {cfg.label}</span>
-                          <span style={{ color: '#94a3b8', fontSize: 13, flexShrink: 0 }}>£</span>
-                          <input type="number" min={0} value={val === 0 ? '' : val}
-                            onChange={e => updateCostVal(globalIdx, t, Number(e.target.value) || 0)}
-                            style={{ width: 90, flexShrink: 0, padding: '3px 6px', border: `1px solid ${val > 0 ? cfg.border : '#e2e8f0'}`, borderRadius: 4, fontSize: 13, textAlign: 'right', background: val > 0 ? cfg.bg : '#fafafa' }}
-                            placeholder="0"
-                          />
-                          <input value={note} onChange={e => updateCostNote(globalIdx, t, e.target.value)}
-                            style={{ flex: 1, minWidth: 0, padding: '3px 6px', border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 12, color: '#64748b' }}
-                            placeholder="Notes (optional)"
-                          />
-                        </div>
-                      )
-                    })}
+            {localTemplate.map((sp, idx) => {
+              const itemCount = sp.estimatorItems?.length || 0
+              return (
+                <div key={idx} style={{ border: '1px solid #e2e8f0', borderRadius: 8, background: '#fff', marginBottom: 10, overflow: 'hidden' }}>
+                  {/* Phase header */}
+                  <div style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, minWidth: 24 }}>{idx + 1}.</span>
+                    <input
+                      value={sp.phase}
+                      onChange={e => renameSubPhase(idx, e.target.value)}
+                      style={{ flex: 1, padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: 5, fontSize: 13, fontWeight: 600 }}
+                    />
+                    <span style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                      {itemCount} item{itemCount !== 1 ? 's' : ''}
+                    </span>
+                    <button
+                      onClick={() => removeSubPhase(idx)}
+                      style={{ padding: '3px 8px', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 4, color: '#dc2626', fontSize: 11, cursor: 'pointer' }}
+                    >
+                      Remove
+                    </button>
                   </div>
-                  <EstimatorDefaultsEditor
-                    phaseIdx={globalIdx}
-                    phase={sp}
-                    onLoad={() => loadEstimatorDefaults(globalIdx, sp.phase)}
-                    onAdd={() => addEstimatorItem(globalIdx)}
-                    onUpdate={item => updateEstimatorItem(globalIdx, item)}
-                    onRemove={id => removeEstimatorItem(globalIdx, id)}
-                  />
+
+                  {/* Estimator items — the sole pricing content */}
+                  <div style={{ padding: '10px 14px' }}>
+                    <EstimatorEditor
+                      phase={sp}
+                      phaseIdx={idx}
+                      onLoad={() => loadEstimatorDefaults(idx, sp.phase)}
+                      onAdd={() => addEstimatorItem(idx)}
+                      onUpdate={item => updateEstimatorItem(idx, item)}
+                      onRemove={id => removeEstimatorItem(idx, id)}
+                    />
+                  </div>
                 </div>
-              </div>
-            ))}
-            <button onClick={() => {
-              setLocalTemplate(prev => [...prev, { parentPhase: '', phase: 'New Phase', items: defaultItems(), estimatorItems: [] }])
-              setDirty(true)
-            }} style={{ width: '100%', padding: '12px 20px', border: '2px dashed #cbd5e1', borderRadius: 8, background: 'transparent', color: '#64748b', fontSize: 13, cursor: 'pointer', marginTop: 4 }}>
+              )
+            })}
+            <button
+              onClick={() => {
+                setLocalTemplate(prev => [...prev, { parentPhase: '', phase: 'New Phase', items: defaultItems(), estimatorItems: [] }])
+                setDirty(true)
+              }}
+              style={{ width: '100%', padding: '12px 20px', border: '2px dashed #cbd5e1', borderRadius: 8, background: 'transparent', color: '#64748b', fontSize: 13, cursor: 'pointer', marginTop: 4 }}
+            >
               + Add Phase
             </button>
           </>
+
         ) : (
+          /* ── Grouped template (all other job types) ── */
           <>
             {mainPhaseOrder.map(pp => {
-              const ppTotal = mainPhaseTotal(localTemplate, pp)
-              type IndexedPhase = { tpl: TemplatePhaseData; idx: number }
-              const subPhases: IndexedPhase[] = localTemplate.reduce<IndexedPhase[]>((acc, p, i) => {
+              type Indexed = { tpl: TemplatePhaseData; idx: number }
+              const subPhases: Indexed[] = localTemplate.reduce<Indexed[]>((acc, p, i) => {
                 if (p.parentPhase === pp) acc.push({ tpl: p, idx: i })
                 return acc
               }, [])
+              const ppItemCount = subPhases.reduce((s, { tpl }) => s + (tpl.estimatorItems?.length || 0), 0)
 
               return (
                 <div key={pp} style={{ marginBottom: 14 }}>
                   {/* Main phase header */}
-                  <div style={{
-                    background: '#2c3e50', color: '#ecf0f1', padding: '9px 14px',
-                    borderRadius: '8px 8px 0 0',
-                    display: 'flex', alignItems: 'center', gap: 8,
-                  }}>
+                  <div style={{ background: '#2c3e50', color: '#ecf0f1', padding: '9px 14px', borderRadius: '8px 8px 0 0', display: 'flex', alignItems: 'center', gap: 8 }}>
                     <input
                       value={pp}
                       onChange={e => renameMainPhase(pp, e.target.value)}
-                      style={{
-                        flex: 1, background: 'transparent', border: 'none',
-                        color: '#ecf0f1', fontWeight: 600, fontSize: 13,
-                        outline: 'none', minWidth: 0,
-                      }}
+                      style={{ flex: 1, background: 'transparent', border: 'none', color: '#ecf0f1', fontWeight: 600, fontSize: 13, outline: 'none', minWidth: 0 }}
                     />
-                    <span style={{ fontSize: 12, opacity: 0.75, whiteSpace: 'nowrap', flexShrink: 0 }}>
-                      {fmt(ppTotal)}
+                    <span style={{ fontSize: 11, opacity: 0.65, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                      {ppItemCount} item{ppItemCount !== 1 ? 's' : ''}
                     </span>
                     <button
                       onClick={() => addSubPhase(pp)}
-                      style={{
-                        padding: '3px 10px', background: 'rgba(255,255,255,0.12)',
-                        border: '1px solid rgba(255,255,255,0.25)', borderRadius: 4,
-                        color: '#e2e8f0', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
-                      }}
+                      style={{ padding: '3px 10px', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 4, color: '#e2e8f0', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
                     >
                       + Sub-Phase
                     </button>
                     <button
                       onClick={() => removeMainPhase(pp)}
-                      title="Remove this main phase"
-                      style={{
-                        padding: '3px 9px', background: 'rgba(220,50,50,0.25)',
-                        border: '1px solid rgba(220,50,50,0.45)', borderRadius: 4,
-                        color: '#fca5a5', fontSize: 15, cursor: 'pointer', lineHeight: 1, flexShrink: 0,
-                      }}
+                      style={{ padding: '3px 9px', background: 'rgba(220,50,50,0.25)', border: '1px solid rgba(220,50,50,0.45)', borderRadius: 4, color: '#fca5a5', fontSize: 15, cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}
                     >
                       ×
                     </button>
                   </div>
 
                   {/* Sub-phases */}
-                  <div style={{
-                    border: '1px solid #e2e8f0', borderTop: 'none',
-                    borderRadius: '0 0 8px 8px', overflow: 'hidden',
-                    background: '#fff',
-                  }}>
-                    {subPhases.map(({ tpl: sp, idx: globalIdx }, spLocalIdx) => (
-                      <div
-                        key={globalIdx}
-                        style={{
-                          borderBottom: spLocalIdx < subPhases.length - 1 ? '1px solid #e2e8f0' : 'none',
-                          padding: '12px 14px',
-                        }}
-                      >
-                        {/* Sub-phase name row */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                          <input
-                            value={sp.phase}
-                            onChange={e => renameSubPhase(globalIdx, e.target.value)}
-                            style={{
-                              flex: 1, padding: '5px 9px', border: '1px solid #d1d5db',
-                              borderRadius: 5, fontSize: 13, fontWeight: 600,
-                            }}
-                            placeholder="Sub-phase name"
+                  <div style={{ border: '1px solid #e2e8f0', borderTop: 'none', borderRadius: '0 0 8px 8px', overflow: 'hidden', background: '#fff' }}>
+                    {subPhases.map(({ tpl: sp, idx: globalIdx }, spLocalIdx) => {
+                      const itemCount = sp.estimatorItems?.length || 0
+                      return (
+                        <div
+                          key={globalIdx}
+                          style={{ borderBottom: spLocalIdx < subPhases.length - 1 ? '1px solid #e2e8f0' : 'none', padding: '12px 14px' }}
+                        >
+                          {/* Sub-phase header */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                            <input
+                              value={sp.phase}
+                              onChange={e => renameSubPhase(globalIdx, e.target.value)}
+                              style={{ flex: 1, padding: '5px 9px', border: '1px solid #d1d5db', borderRadius: 5, fontSize: 13, fontWeight: 600 }}
+                              placeholder="Sub-phase name"
+                            />
+                            <span style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                              {itemCount} item{itemCount !== 1 ? 's' : ''}
+                            </span>
+                            <button
+                              onClick={() => removeSubPhase(globalIdx)}
+                              style={{ padding: '4px 10px', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 5, color: '#dc2626', fontSize: 12, cursor: 'pointer', flexShrink: 0 }}
+                            >
+                              Remove
+                            </button>
+                          </div>
+
+                          {/* Estimator items — the sole pricing content */}
+                          <EstimatorEditor
+                            phase={sp}
+                            phaseIdx={globalIdx}
+                            onLoad={() => loadEstimatorDefaults(globalIdx, sp.phase)}
+                            onAdd={() => addEstimatorItem(globalIdx)}
+                            onUpdate={item => updateEstimatorItem(globalIdx, item)}
+                            onRemove={id => removeEstimatorItem(globalIdx, id)}
                           />
-                          <span style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                            {fmt(subPhaseTotal(sp.items))}
-                          </span>
-                          <button
-                            onClick={() => removeSubPhase(globalIdx)}
-                            style={{
-                              padding: '4px 10px', background: '#fee2e2',
-                              border: '1px solid #fca5a5', borderRadius: 5,
-                              color: '#dc2626', fontSize: 12, cursor: 'pointer', flexShrink: 0,
-                            }}
-                          >
-                            Remove
-                          </button>
                         </div>
-
-                        {/* Cost type rows */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                          {ITEM_TYPES.map(t => {
-                            const val = getItemVal(sp.items, t)
-                            const note = getItemNote(sp.items, t)
-                            const cfg = TYPE_CFG[t]
-                            return (
-                              <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <span style={{
-                                  width: 128, flexShrink: 0, fontSize: 12,
-                                  color: cfg.color, fontWeight: 500,
-                                }}>
-                                  {cfg.emoji} {cfg.label}
-                                </span>
-                                <span style={{ color: '#94a3b8', fontSize: 13, flexShrink: 0 }}>£</span>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={val === 0 ? '' : val}
-                                  onChange={e => updateCostVal(globalIdx, t, Number(e.target.value) || 0)}
-                                  style={{
-                                    width: 90, flexShrink: 0, padding: '3px 6px',
-                                    border: `1px solid ${val > 0 ? cfg.border : '#e2e8f0'}`,
-                                    borderRadius: 4, fontSize: 13, textAlign: 'right',
-                                    background: val > 0 ? cfg.bg : '#fafafa',
-                                  }}
-                                  placeholder="0"
-                                />
-                                <input
-                                  value={note}
-                                  onChange={e => updateCostNote(globalIdx, t, e.target.value)}
-                                  style={{
-                                    flex: 1, minWidth: 0, padding: '3px 6px',
-                                    border: '1px solid #e2e8f0', borderRadius: 4,
-                                    fontSize: 12, color: '#64748b',
-                                  }}
-                                  placeholder="Notes (optional)"
-                                />
-                              </div>
-                            )
-                          })}
-                        </div>
-
-                        {/* Estimator defaults section */}
-                        <EstimatorDefaultsEditor
-                          phaseIdx={globalIdx}
-                          phase={sp}
-                          onLoad={() => loadEstimatorDefaults(globalIdx, sp.phase)}
-                          onAdd={() => addEstimatorItem(globalIdx)}
-                          onUpdate={item => updateEstimatorItem(globalIdx, item)}
-                          onRemove={id => removeEstimatorItem(globalIdx, id)}
-                        />
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               )
             })}
 
-            {/* Add main phase */}
             <button
               onClick={addMainPhase}
-              style={{
-                width: '100%', padding: '12px 20px',
-                border: '2px dashed #cbd5e1', borderRadius: 8,
-                background: 'transparent', color: '#64748b',
-                fontSize: 13, cursor: 'pointer', marginTop: 4,
-              }}
+              style={{ width: '100%', padding: '12px 20px', border: '2px dashed #cbd5e1', borderRadius: 8, background: 'transparent', color: '#64748b', fontSize: 13, cursor: 'pointer', marginTop: 4 }}
             >
               + Add Main Phase
             </button>
