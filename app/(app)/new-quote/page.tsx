@@ -4,14 +4,29 @@ import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { fmt, VAT, UNITS, JOB_TYPES, calcItem, calcPhase, calcItemSell, calcPhaseSell } from '@/lib/utils'
 import type { QuotePhase, QuoteItem, Quote } from '@/lib/types'
+import { itemFromTemplate } from '@/lib/estimator'
+import type { EstimatorItem } from '@/lib/estimator'
 import QuotePreviewModal from '@/components/QuotePreviewModal'
 import ScopeChat from '@/components/ScopeChat'
+import EstimatorBreakdown from '@/components/EstimatorBreakdown'
 
 let phaseCounter = 0
 let itemCounter = 0
 
-function makePhase(phase: string, items: Omit<QuoteItem, 'id'>[], parentPhase?: string): QuotePhase {
-  return { id: ++phaseCounter, phase, parentPhase, items: items.map(i => ({ ...i, id: ++itemCounter })) }
+function makePhase(
+  phase: string,
+  items: Omit<QuoteItem, 'id'>[],
+  parentPhase?: string,
+  estimatorItems?: EstimatorItem[],
+): QuotePhase {
+  return {
+    id: ++phaseCounter,
+    phase,
+    parentPhase,
+    items: items.map(i => ({ ...i, id: ++itemCounter })),
+    estimatorItems: estimatorItems ?? [],
+    useEstimator: false,
+  }
 }
 
 function defaultTypedItems(): Omit<QuoteItem, 'id'>[] {
@@ -71,7 +86,10 @@ export default function NewQuotePage() {
 
   function loadTemplate(type: string) {
     const tpl = getTemplate(type)
-    setPhases(tpl.map(p => makePhase(p.phase, p.items, p.parentPhase)))
+    setPhases(tpl.map(p => makePhase(
+      p.phase, p.items, p.parentPhase || undefined,
+      p.estimatorItems?.map(itemFromTemplate),
+    )))
   }
 
   function toTypedItems(items: QuoteItem[]): Omit<QuoteItem, 'id'>[] {
@@ -190,6 +208,11 @@ export default function NewQuotePage() {
     setPhases(prev => prev.map(p => p.id === phaseId
       ? { ...p, items: p.items.map(i => i.id === itemId ? { ...i, [key]: val } : i) }
       : p))
+  }
+
+  // ── Full-phase update (used by EstimatorBreakdown) ───────────────────────
+  function updatePhase(updated: QuotePhase) {
+    setPhases(prev => prev.map(p => p.id === updated.id ? updated : p))
   }
 
   // ── Totals ─────────────────────────────────────────────────────────────────
@@ -522,6 +545,7 @@ export default function NewQuotePage() {
                           onUpdateItem={updateItem}
                           onRemoveItem={removeItem}
                           onAddTypedItem={addTypedItem}
+                          onUpdatePhase={updatePhase}
                         />
                       ))}
                     </div>
@@ -542,6 +566,7 @@ export default function NewQuotePage() {
                     onUpdateItem={updateItem}
                     onRemoveItem={removeItem}
                     onAddTypedItem={addTypedItem}
+                    onUpdatePhase={updatePhase}
                   />
                 ))}
               </>
@@ -665,12 +690,14 @@ interface SubPhaseBlockProps {
   onUpdateItem: (phaseId: number, itemId: number, key: keyof QuoteItem, val: string | number) => void
   onRemoveItem: (phaseId: number, itemId: number) => void
   onAddTypedItem: (phaseId: number, type: ItemType) => void
+  onUpdatePhase: (updated: QuotePhase) => void
 }
 
-function SubPhaseBlock({ p, pi, markup, vatOn, TCOLS, onUpdatePhaseName, onRemovePhase, onUpdateItem, onRemoveItem, onAddTypedItem }: SubPhaseBlockProps) {
-  const typedItems = p.items.filter(i => i.itemType)
+function SubPhaseBlock({ p, pi, markup, vatOn, TCOLS, onUpdatePhaseName, onRemovePhase, onUpdateItem, onRemoveItem, onAddTypedItem, onUpdatePhase }: SubPhaseBlockProps) {
+  const typedItems  = p.items.filter(i => i.itemType)
   const generalItems = p.items.filter(i => !i.itemType)
   const subSell = calcPhaseSell(p, markup)
+  const synced  = !!p.useEstimator
 
   return (
     <div className="phase-block" style={{ borderRadius: p.parentPhase ? '0' : undefined, marginBottom: 2 }}>
@@ -684,6 +711,12 @@ function SubPhaseBlock({ p, pi, markup, vatOn, TCOLS, onUpdatePhaseName, onRemov
       {/* Typed cost rows */}
       {typedItems.length > 0 && (
         <>
+          {synced && (
+            <div style={{ fontSize: 11, padding: '4px 12px', background: 'rgba(74,144,164,0.08)', color: '#2a7090', borderBottom: '1px solid rgba(74,144,164,0.2)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span>📐</span>
+              <span>Cost rows synced from estimator &mdash; edit the breakdown below to update values.</span>
+            </div>
+          )}
           <div className="col-heads" style={{ gridTemplateColumns: TCOLS }}>
             <span>Type</span>
             <span>Notes</span>
@@ -722,8 +755,10 @@ function SubPhaseBlock({ p, pi, markup, vatOn, TCOLS, onUpdatePhaseName, onRemov
                   <input
                     type="number"
                     value={amount}
-                    onChange={e => onUpdateItem(p.id, item.id, fieldKey as keyof QuoteItem, Number(e.target.value))}
-                    style={{ textAlign: 'right', width: '100%', paddingLeft: 14 }}
+                    readOnly={synced}
+                    onChange={e => !synced && onUpdateItem(p.id, item.id, fieldKey as keyof QuoteItem, Number(e.target.value))}
+                    style={{ textAlign: 'right', width: '100%', paddingLeft: 14, opacity: synced ? 0.6 : 1, background: synced ? '#f5f8fa' : undefined }}
+                    title={synced ? 'Synced from estimator — uncheck "Sync to phase costs" to edit manually' : undefined}
                   />
                 </div>
                 <span style={{ textAlign: 'right', fontSize: 11, color: '#c0392b', fontFamily: 'DM Mono, monospace', padding: '0 4px' }}>{fmt(itemCost)}</span>
@@ -805,6 +840,9 @@ function SubPhaseBlock({ p, pi, markup, vatOn, TCOLS, onUpdatePhaseName, onRemov
           ))}
         </div>
       )}
+
+      {/* Estimator breakdown */}
+      <EstimatorBreakdown phase={p} onUpdatePhase={onUpdatePhase} />
     </div>
   )
 }

@@ -4,6 +4,9 @@ import { useState, useEffect } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { JOB_TYPES, JOB_TEMPLATES, fmt } from '@/lib/utils'
 import type { TemplatePhaseData, QuoteItem } from '@/lib/types'
+import type { EstimatorItemTemplate, MeasurementType } from '@/lib/estimator'
+import { MEASUREMENT_LABELS } from '@/lib/estimator'
+import { getPhaseEstimatorDefaults } from '@/lib/estimatorDefaults'
 
 type ItemType = 'labour' | 'materials' | 'plant' | 'subcontractors' | 'other'
 
@@ -52,6 +55,110 @@ function mainPhaseTotal(template: TemplatePhaseData[], pp: string): number {
   return template.filter(p => p.parentPhase === pp).reduce((s, p) => s + subPhaseTotal(p.items), 0)
 }
 
+// ── Estimator defaults editor (compact, per-phase) ───────────────────────────
+interface EstimatorDefaultsEditorProps {
+  phaseIdx: number
+  phase: TemplatePhaseData
+  onLoad: () => void
+  onAdd: () => void
+  onUpdate: (item: EstimatorItemTemplate) => void
+  onRemove: (id: string) => void
+}
+
+function EstimatorDefaultsEditor({ phaseIdx: _phaseIdx, phase, onLoad, onAdd, onUpdate, onRemove }: EstimatorDefaultsEditorProps) {
+  const [open, setOpen] = useState(false)
+  const items: EstimatorItemTemplate[] = phase.estimatorItems || []
+  const builtIn = getPhaseEstimatorDefaults(phase.phase)
+
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px dashed #e2e8f0', paddingTop: 8 }}>
+      <div
+        onClick={() => setOpen(o => !o)}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}
+      >
+        <span style={{ fontSize: 10, color: '#4a90a4' }}>{open ? '▼' : '▶'}</span>
+        <span style={{ fontSize: 12, color: '#4a90a4', fontWeight: 600 }}>
+          📐 Estimator defaults
+        </span>
+        <span style={{ fontSize: 11, color: '#94a3b8' }}>
+          {items.length > 0 ? `${items.length} item${items.length !== 1 ? 's' : ''}` : builtIn.length > 0 ? `${builtIn.length} available` : 'none available'}
+        </span>
+      </div>
+
+      {open && (
+        <div style={{ marginTop: 8 }}>
+          {items.length === 0 ? (
+            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>
+              No estimator defaults for this phase yet.
+              {builtIn.length > 0 && (
+                <button
+                  onClick={onLoad}
+                  style={{ marginLeft: 8, padding: '2px 8px', border: '1px solid #4a90a4', borderRadius: 4, background: 'transparent', color: '#4a90a4', fontSize: 11, cursor: 'pointer' }}
+                >
+                  Load built-in defaults ({builtIn.length})
+                </button>
+              )}
+            </div>
+          ) : (
+            <div style={{ marginBottom: 8 }}>
+              {items.map(item => (
+                <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '1fr 90px 60px 60px 60px 24px', gap: 4, alignItems: 'center', marginBottom: 4 }}>
+                  <input
+                    value={item.name}
+                    onChange={e => onUpdate({ ...item, name: e.target.value })}
+                    style={{ fontSize: 12, padding: '3px 6px', border: '1px solid #e2e8f0', borderRadius: 4 }}
+                  />
+                  <select
+                    value={item.measurementType}
+                    onChange={e => onUpdate({ ...item, measurementType: e.target.value as MeasurementType, unit: MEASUREMENT_LABELS[e.target.value as MeasurementType].unit })}
+                    style={{ fontSize: 11, padding: '3px 4px', border: '1px solid #e2e8f0', borderRadius: 4 }}
+                  >
+                    {(Object.keys(MEASUREMENT_LABELS) as MeasurementType[]).map(t => (
+                      <option key={t} value={t}>{MEASUREMENT_LABELS[t].label}</option>
+                    ))}
+                  </select>
+                  <input type="number" value={item.labourRate} min={0} step={0.5}
+                    onChange={e => onUpdate({ ...item, labourRate: Number(e.target.value) })}
+                    placeholder="Labour"
+                    style={{ fontSize: 11, padding: '3px 4px', border: '1px solid #e2e8f0', borderRadius: 4, textAlign: 'right' }}
+                    title="Labour rate £/unit"
+                  />
+                  <input type="number" value={item.materialsRate} min={0} step={0.5}
+                    onChange={e => onUpdate({ ...item, materialsRate: Number(e.target.value) })}
+                    placeholder="Mat"
+                    style={{ fontSize: 11, padding: '3px 4px', border: '1px solid #e2e8f0', borderRadius: 4, textAlign: 'right' }}
+                    title="Materials rate £/unit"
+                  />
+                  <input type="number" value={item.plantRate} min={0} step={0.5}
+                    onChange={e => onUpdate({ ...item, plantRate: Number(e.target.value) })}
+                    placeholder="Plant"
+                    style={{ fontSize: 11, padding: '3px 4px', border: '1px solid #e2e8f0', borderRadius: 4, textAlign: 'right' }}
+                    title="Plant rate £/unit"
+                  />
+                  <button
+                    onClick={() => onRemove(item.id)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 14, padding: 0, lineHeight: 1 }}
+                  >×</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <button onClick={onAdd} style={{ padding: '3px 10px', border: '1px solid #4a90a4', borderRadius: 4, background: 'transparent', color: '#4a90a4', fontSize: 11, cursor: 'pointer' }}>
+              + Add item
+            </button>
+            {builtIn.length > 0 && (
+              <button onClick={onLoad} style={{ padding: '3px 10px', border: '1px solid #94a3b8', borderRadius: 4, background: 'transparent', color: '#94a3b8', fontSize: 11, cursor: 'pointer' }}>
+                ↺ Reset to defaults
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function BackOfficePage() {
   const { customTemplates, getTemplate, saveJobTypeTemplate, resetJobTypeTemplate, loading } = useApp()
 
@@ -74,6 +181,9 @@ export default function BackOfficePage() {
     if (!acc.includes(p.parentPhase)) acc.push(p.parentPhase)
     return acc
   }, [])
+
+  // Flat template = all phases have no parent (Rear Extension new structure)
+  const isFlatTemplate = mainPhaseOrder.length === 1 && mainPhaseOrder[0] === ''
 
   const isCustomised = !!customTemplates[selectedJobType]
   const totalCost = localTemplate.reduce((s, p) => s + subPhaseTotal(p.items), 0)
@@ -184,6 +294,40 @@ export default function BackOfficePage() {
     const count = localTemplate.filter(p => p.parentPhase === pp).length
     if (!confirm(`Remove "${pp}" and all ${count} sub-phase${count !== 1 ? 's' : ''} under it?`)) return
     setLocalTemplate(prev => prev.filter(p => p.parentPhase !== pp))
+    setDirty(true)
+  }
+
+  // ── Estimator defaults ───────────────────────────────────────────────────────
+
+  function loadEstimatorDefaults(phaseIdx: number, phaseName: string) {
+    const defs = getPhaseEstimatorDefaults(phaseName)
+    setLocalTemplate(prev => prev.map((p, i) => i !== phaseIdx ? p : { ...p, estimatorItems: defs }))
+    setDirty(true)
+  }
+
+  function addEstimatorItem(phaseIdx: number) {
+    const newItem: EstimatorItemTemplate = {
+      id: `custom-${Date.now()}`,
+      name: 'New item', description: '', measurementType: 'quantity', unit: 'nr',
+      labourRate: 0, materialsRate: 0, plantRate: 0, subRate: 0, otherRate: 0, wastePercent: 0,
+    }
+    setLocalTemplate(prev => prev.map((p, i) => i !== phaseIdx ? p : {
+      ...p, estimatorItems: [...(p.estimatorItems || []), newItem],
+    }))
+    setDirty(true)
+  }
+
+  function updateEstimatorItem(phaseIdx: number, updated: EstimatorItemTemplate) {
+    setLocalTemplate(prev => prev.map((p, i) => i !== phaseIdx ? p : {
+      ...p, estimatorItems: (p.estimatorItems || []).map(ei => ei.id === updated.id ? updated : ei),
+    }))
+    setDirty(true)
+  }
+
+  function removeEstimatorItem(phaseIdx: number, itemId: string) {
+    setLocalTemplate(prev => prev.map((p, i) => i !== phaseIdx ? p : {
+      ...p, estimatorItems: (p.estimatorItems || []).filter(ei => ei.id !== itemId),
+    }))
     setDirty(true)
   }
 
@@ -316,6 +460,65 @@ export default function BackOfficePage() {
               + Add First Phase
             </button>
           </div>
+        ) : isFlatTemplate ? (
+          /* ── Flat template (e.g. Rear Extension) — no parent grouping ── */
+          <>
+            {localTemplate.map((sp, globalIdx) => (
+              <div key={globalIdx} style={{
+                border: '1px solid #e2e8f0', borderRadius: 8,
+                background: '#fff', marginBottom: 10, overflow: 'hidden',
+              }}>
+                <div style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '7px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, minWidth: 22 }}>{globalIdx + 1}.</span>
+                  <input
+                    value={sp.phase}
+                    onChange={e => renameSubPhase(globalIdx, e.target.value)}
+                    style={{ flex: 1, padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: 5, fontSize: 13, fontWeight: 600 }}
+                  />
+                  <span style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap' }}>{fmt(subPhaseTotal(sp.items))}</span>
+                  <button onClick={() => removeSubPhase(globalIdx)} style={{ padding: '3px 8px', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 4, color: '#dc2626', fontSize: 11, cursor: 'pointer' }}>Remove</button>
+                </div>
+                <div style={{ padding: '10px 14px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    {ITEM_TYPES.map(t => {
+                      const val = getItemVal(sp.items, t)
+                      const note = getItemNote(sp.items, t)
+                      const cfg = TYPE_CFG[t]
+                      return (
+                        <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ width: 128, flexShrink: 0, fontSize: 12, color: cfg.color, fontWeight: 500 }}>{cfg.emoji} {cfg.label}</span>
+                          <span style={{ color: '#94a3b8', fontSize: 13, flexShrink: 0 }}>£</span>
+                          <input type="number" min={0} value={val === 0 ? '' : val}
+                            onChange={e => updateCostVal(globalIdx, t, Number(e.target.value) || 0)}
+                            style={{ width: 90, flexShrink: 0, padding: '3px 6px', border: `1px solid ${val > 0 ? cfg.border : '#e2e8f0'}`, borderRadius: 4, fontSize: 13, textAlign: 'right', background: val > 0 ? cfg.bg : '#fafafa' }}
+                            placeholder="0"
+                          />
+                          <input value={note} onChange={e => updateCostNote(globalIdx, t, e.target.value)}
+                            style={{ flex: 1, minWidth: 0, padding: '3px 6px', border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 12, color: '#64748b' }}
+                            placeholder="Notes (optional)"
+                          />
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <EstimatorDefaultsEditor
+                    phaseIdx={globalIdx}
+                    phase={sp}
+                    onLoad={() => loadEstimatorDefaults(globalIdx, sp.phase)}
+                    onAdd={() => addEstimatorItem(globalIdx)}
+                    onUpdate={item => updateEstimatorItem(globalIdx, item)}
+                    onRemove={id => removeEstimatorItem(globalIdx, id)}
+                  />
+                </div>
+              </div>
+            ))}
+            <button onClick={() => {
+              setLocalTemplate(prev => [...prev, { parentPhase: '', phase: 'New Phase', items: defaultItems(), estimatorItems: [] }])
+              setDirty(true)
+            }} style={{ width: '100%', padding: '12px 20px', border: '2px dashed #cbd5e1', borderRadius: 8, background: 'transparent', color: '#64748b', fontSize: 13, cursor: 'pointer', marginTop: 4 }}>
+              + Add Phase
+            </button>
+          </>
         ) : (
           <>
             {mainPhaseOrder.map(pp => {
@@ -451,6 +654,16 @@ export default function BackOfficePage() {
                             )
                           })}
                         </div>
+
+                        {/* Estimator defaults section */}
+                        <EstimatorDefaultsEditor
+                          phaseIdx={globalIdx}
+                          phase={sp}
+                          onLoad={() => loadEstimatorDefaults(globalIdx, sp.phase)}
+                          onAdd={() => addEstimatorItem(globalIdx)}
+                          onUpdate={item => updateEstimatorItem(globalIdx, item)}
+                          onRemove={id => removeEstimatorItem(globalIdx, id)}
+                        />
                       </div>
                     ))}
                   </div>

@@ -1,4 +1,5 @@
-import type { Quote, QuotePhase, QuoteItem } from './types'
+import type { Quote, QuotePhase, QuoteItem, TemplatePhaseData } from './types'
+import { getPhaseEstimatorDefaults } from './estimatorDefaults'
 
 export const VAT = 0.20
 
@@ -82,7 +83,7 @@ function tp(
   pp: string, ph: string,
   l: number, m: number, p: number, s = 0, o = 0,
   nl = '', nm = '', np = '', ns = '', no = ''
-): { parentPhase: string; phase: string; items: Omit<QuoteItem, 'id'>[] } {
+): TemplatePhaseData {
   return {
     parentPhase: pp,
     phase: ph,
@@ -96,40 +97,99 @@ function tp(
   }
 }
 
-export const JOB_TEMPLATES: Record<string, Array<{parentPhase: string; phase: string; items: Omit<QuoteItem, 'id'>[]}>> = {
+// ft — flat template phase (no parent grouping; embeds estimator defaults automatically)
+function ft(
+  ph: string,
+  l: number, m: number, p: number, s = 0, o = 0,
+  nl = '', nm = '', np = '', ns = '', no = ''
+): TemplatePhaseData {
+  return {
+    parentPhase: '',
+    phase: ph,
+    estimatorItems: getPhaseEstimatorDefaults(ph),
+    items: [
+      { desc: '', qty: 1, unit: 'Item', labour: l,   materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: nl, itemType: 'labour'        as const },
+      { desc: '', qty: 1, unit: 'Item', labour: 0,   materials: m, plantHire: 0, subcontractors: 0, other: 0, notes: nm, itemType: 'materials'     as const },
+      { desc: '', qty: 1, unit: 'Item', labour: 0,   materials: 0, plantHire: p, subcontractors: 0, other: 0, notes: np, itemType: 'plant'         as const },
+      { desc: '', qty: 1, unit: 'Item', labour: 0,   materials: 0, plantHire: 0, subcontractors: s, other: 0, notes: ns, itemType: 'subcontractors' as const },
+      { desc: '', qty: 1, unit: 'Item', labour: 0,   materials: 0, plantHire: 0, subcontractors: 0, other: o, notes: no, itemType: 'other'         as const },
+    ],
+  }
+}
 
-  // ─── Rear Extension ──────────────────────────────────────────────────────────
+export const JOB_TEMPLATES: Record<string, TemplatePhaseData[]> = {
+
+  // ─── Rear Extension (flat 18-phase structure) ────────────────────────────────
   'Rear Extension': [
-    tp('Phase 1 – Site Setup & Preparation','Site Establishment',        700,400,800,0,200,'Welfare, site management, H&S','Hoarding, protection sheets, heras fencing','Scaffold erect/dismantle','','Building Control application fee'),
-    tp('Phase 1 – Site Setup & Preparation','Strip-Out & Demolition',    900,0,300,0,0,'Demolition of rear wall and openings, strip patios','Skip for arisings','Skip hire'),
-    tp('Phase 2 – Groundworks & Foundations','Excavation',               1200,0,1200,0,0,'Groundworkers — setting out and excavation','','Excavator, dumper truck hire'),
-    tp('Phase 2 – Groundworks & Foundations','Concrete Foundations & DPC Blockwork',1200,2200,400,0,0,'Foundation concrete and blockwork to DPC','Concrete (C25), foundation blocks, DPC, mortar','Concrete pump'),
-    tp('Phase 2 – Groundworks & Foundations','Underground Drainage & Services',900,1200,200,0,0,'Drainage installation, inspection chambers, service ducting','Drainage pipes, chambers, connectors, ducting','Mini excavator'),
-    tp('Phase 2 – Groundworks & Foundations','Oversite Preparation & Floor Slab',700,1800,400,0,0,'Hardcore, sand blinding, insulation, DPM, slab pour','Hardcore, sand, DPM, rigid insulation, concrete slab','Compactor plate, concrete pump'),
-    tp('Phase 3 – Structural Shell','External Walls & Blockwork',        2800,3200,200,0,0,'Bricklayers/blocklayers — cavity walls, DPC, lintels','Blocks, facing bricks, cavity insulation, lintels, wall ties','Mortar mixer'),
-    tp('Phase 3 – Structural Shell','Structural Steelwork',              600,2200,400,0,0,'Steel fixers — RSJ beam install, padstones, propping','RSJ steels, padstones, structural fixings','Hiab/crane for steel delivery'),
-    tp('Phase 3 – Structural Shell','Knock-Through & Making Good',       600,300,0,0,0,'Remove rear wall sections, form opening, make good','Making-good materials, lintels, plaster',''),
-    tp('Phase 4 – Roof Construction','Roof Structure & Decking',         1400,1800,300,0,0,'Carpenter — roof joists, firrings, OSB decking','Timber joists, OSB, joist hangers, noggins','Scissor lift / hop-up'),
-    tp('Phase 4 – Roof Construction','Roof Coverings & Weatherproofing', 1000,2200,0,0,0,'Roofer — EPDM/GRP system, lead flashings, abutments','EPDM/GRP flat roof kit, lead flashing, breathable membrane',''),
-    tp('Phase 4 – Roof Construction','Fascia, Soffits & Guttering',      400,400,0,0,0,'Fascia and soffit boards, guttering and downpipes','UPVC fascia, soffits, guttering, brackets, fixings',''),
-    tp('Phase 4 – Roof Construction','Roof Glazing & Rooflights',        350,1800,0,0,0,'Rooflight or roof lantern installation','Rooflight/lantern — supply and fit, flashings',''),
-    tp('Phase 5 – External Envelope','Windows',                          400,2200,0,0,0,'Window installation, sealing, making good','Windows — supply and fit, sealant',''),
-    tp('Phase 5 – External Envelope','External Doors (Bifold / French)', 500,3200,0,0,0,'Bifold or French door installation, threshold','Bifold/French doors — supply and fit',''),
-    tp('Phase 6 – First Fix Services','Plumbing & Heating First Fix',    900,800,0,0,0,'Plumber — hot/cold pipework, waste, boiler alteration','Pipework, fittings, waste pipes',''),
-    tp('Phase 6 – First Fix Services','Underfloor Heating',              600,900,0,0,0,'UFH installation, manifold, zone controls','UFH kit, manifold, pipe, screed additive',''),
-    tp('Phase 6 – First Fix Services','Electrical First Fix',            700,600,0,0,0,'Electrician — cable runs, circuits, back boxes','Cables, containment, back boxes, consumer unit upgrade',''),
-    tp('Phase 6 – First Fix Services','Ventilation',                     300,300,0,0,0,'Extraction ducting, fan wiring','Extractor fans, ducting, grilles',''),
-    tp('Phase 7 – Internal Construction','Internal Framing & Stud Walls',600,500,0,0,0,'Carpenter — stud walls, service boxing','C16 timber, stud, noggins, fixings',''),
-    tp('Phase 7 – Internal Construction','Insulation & Plasterboarding', 1200,1800,0,0,0,'Insulation fix, plasterboard all surfaces','Rigid insulation, plasterboard, joint tape, screws',''),
-    tp('Phase 7 – Internal Construction','Plastering & Dry-Out',         1800,700,350,0,0,'Plasterer — skim walls and ceilings, make good existing','Bonding, finish plaster, angle beads, scrim tape','Dehumidifiers for dry-out period'),
-    tp('Phase 8 – Second Fix & Finishes','Second Fix Plumbing',          600,500,0,0,0,'Plumber — sanitaryware, taps, commissioning','Sanitaryware, taps, valves, heating controls',''),
-    tp('Phase 8 – Second Fix & Finishes','Second Fix Electrical',        700,700,0,0,0,'Electrician — sockets, switches, lights, certification','Sockets, switches, light fittings, consumer unit, certs',''),
-    tp('Phase 8 – Second Fix & Finishes','Second Fix Carpentry',         600,400,0,0,0,'Carpenter — skirting, architraves, internal doors, ironmongery','Skirting, architraves, doors, ironmongery',''),
-    tp('Phase 9 – Flooring & Decoration','Floor Preparation & Screeding',400,500,0,0,0,'Screed laying, prep for floor finish','Floor screed, primer',''),
-    tp('Phase 9 – Flooring & Decoration','Floor Finishes',               800,1800,0,0,0,'Tiler, flooring fitter — tiles, engineered or vinyl','Porcelain/stone tiles, engineered timber, adhesive, grout',''),
-    tp('Phase 9 – Flooring & Decoration','Decoration',                   800,350,0,0,0,'Decorator — mist coat and two coats throughout','Mist coat, emulsion, gloss, filling, tape',''),
-    tp('Phase 10 – External Works & Completion','External Paving & Making Good',800,1200,300,0,0,'Patio laying, make good brickwork externally','Paving slabs, pointing mortar, topsoil, turf allowance','Mini excavator, final skip'),
-    tp('Phase 10 – External Works & Completion','Snagging, Clean & Handover',400,100,0,0,300,'Snagging works, builders clean, client walkthrough','Touch-up materials','','','Building Control final inspection fee'),
+    ft('Preliminaries',            800,400,600,0,300,
+      'Site manager, H&S plan, welfare setup, Building Control liaison',
+      'Hoarding, protection sheets, heras fencing, signage',
+      'Scaffold erection and hire',
+      '',
+      'Building Control application fee, structural engineer fee'),
+    ft('Groundworks',              2200,0,1800,0,0,
+      'Groundworkers — strip topsoil, bulk excavation, setting out',
+      'Disposal of arisings, imported fill if required',
+      'Excavator, dumper truck hire'),
+    ft('Drainage',                 900,1200,300,0,0,
+      'Groundworkers — underground drainage, inspection chambers, connections',
+      'Drainage pipes, inspection chambers, connectors, channel drain',
+      'Mini excavator'),
+    ft('Substructure',             2000,4000,600,0,0,
+      'Groundworkers — concrete foundations, blockwork to DPC, hardcore, floor slab',
+      'Concrete (C25), foundation blocks, DPC, hardcore, sand blinding, DPM, rigid insulation',
+      'Concrete pump, compactor plate'),
+    ft('Superstructure',           2800,3200,200,0,0,
+      'Bricklayers/blocklayers — cavity walls, DPC course, lintels, wall ties',
+      'Facing bricks, blocks, cavity insulation, lintels, wall ties, mortar',
+      'Mortar mixer, material hoist'),
+    ft('Structural Steels',        600,2200,400,0,0,
+      'Steel fixers — RSJ beam install, padstones, propping, knock-through rear wall',
+      'RSJ steels, padstones, structural fixings, making-good materials',
+      'Hiab/crane for steel delivery, propping kit'),
+    ft('Roof Structure & Covering',2400,4000,300,0,0,
+      'Carpenter — roof joists, firrings, OSB decking; roofer — EPDM/GRP/tiles, fascia, guttering, rooflight',
+      'Roof joists, OSB, EPDM/GRP kit, lead flashing, fascia, soffits, guttering, rooflight if spec\'d',
+      'Scissor lift / hop-up scaffold'),
+    ft('Windows & Doors',          900,5400,0,0,0,
+      'Window and door installation, sealing, making good reveals',
+      'Windows, bifold/French doors — supply and fit, sealant, thresholds'),
+    ft('First Fix Plumbing',       900,800,0,0,0,
+      'Plumber — hot/cold pipework, waste runs, boiler alteration, UFH manifold',
+      'Pipework, fittings, waste pipes, UFH kit and manifold'),
+    ft('First Fix Electrics',      700,600,0,0,0,
+      'Electrician — cable runs, circuits, back boxes, consumer unit alteration',
+      'Cables, containment, back boxes, consumer unit upgrade'),
+    ft('Insulation & Plasterboarding',1200,1800,0,0,0,
+      'Fix rigid insulation, CLS stud framing, plasterboard all surfaces',
+      'Rigid insulation (Kingspan/Celotex), CLS stud, plasterboard, joint tape, screws'),
+    ft('Plastering',               1800,700,350,0,0,
+      'Plasterer — skim walls and ceilings throughout, make good existing surfaces',
+      'Bonding, finish plaster, angle beads, scrim tape',
+      'Dehumidifiers for dry-out period'),
+    ft('Screed & Floor Build-Up',  500,1200,150,0,0,
+      'Screed laying, floor level build-up, prep for floor finish',
+      'Floor screed, primer, DPM tape, expansion edge strip',
+      'Pump if liquid screed'),
+    ft('Second Fix',               1800,1600,0,0,0,
+      'Plumber, electrician, carpenter — all second fix throughout',
+      'Sockets, switches, lights, skirting, architraves, doors, ironmongery, sanitaryware'),
+    ft('Kitchen & Client Items',   1200,5500,0,0,0,
+      'Kitchen fitter — unit installation, worktop template and fit, appliance integration',
+      'Kitchen units, worktops, appliances, sink, tap, fixings, splashback'),
+    ft('Decoration',               800,350,0,0,0,
+      'Decorator — mist coat and two finish coats throughout',
+      'Mist coat, emulsion, gloss, filler, tape, caulk'),
+    ft('External Works',           1200,1800,400,0,0,
+      'Patio/drive reinstatement, make good brickwork externally, garden tidy',
+      'Paving slabs, pointing mortar, topsoil, turf allowance',
+      'Mini excavator, final skip'),
+    ft('Completion & Handover',    400,100,0,0,300,
+      'Snagging works, builders clean, client walkthrough',
+      'Touch-up materials, remediation sundries',
+      '',
+      '',
+      'Building Control final inspection fee, certification'),
   ],
 
   // ─── Side Extension ──────────────────────────────────────────────────────────

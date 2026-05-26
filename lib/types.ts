@@ -1,3 +1,6 @@
+import type { EstimatorItem, EstimatorItemTemplate } from './estimator'
+export type { EstimatorItem, EstimatorItemTemplate }
+
 export interface QuoteItem {
   id: number
   desc: string
@@ -17,6 +20,8 @@ export interface QuotePhase {
   phase: string          // Sub-phase / category name
   parentPhase?: string   // Main phase grouping header
   items: QuoteItem[]
+  estimatorItems?: EstimatorItem[]
+  useEstimator?: boolean  // true = lump sums auto-computed from estimatorItems
 }
 
 export interface QuoteCustomer {
@@ -147,6 +152,7 @@ export interface TemplatePhaseData {
   parentPhase: string
   phase: string
   items: Omit<QuoteItem, 'id'>[]
+  estimatorItems?: EstimatorItemTemplate[]
 }
 
 // ── Team Members & Permissions ────────────────────────────────
