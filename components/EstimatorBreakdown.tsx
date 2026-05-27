@@ -335,34 +335,10 @@ function ItemRow({
             }
           />
 
-          {/* Rate fields — colour coded */}
+          {/* Rate fields — colour coded (Labour removed — use Task Labour Lines above) */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 10, marginBottom: 10 }}>
             {CATS.map(cat => {
-              // When task labour lines are active, replace the Labour rate
-              // field with a non-editable indicator so the user knows it's
-              // being driven by the lines above.
-              if (cat.id === 'labour' && hasTaskLabour) {
-                return (
-                  <div key="labour-from-tasks">
-                    <div style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 4,
-                      fontSize: 10, fontWeight: 700, color: cat.color,
-                      textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4,
-                    }}>
-                      <cat.Icon size={10} strokeWidth={2.2} style={{ flexShrink: 0 }} />
-                      Labour/unit
-                    </div>
-                    <div style={{
-                      fontSize: 11, padding: '5px 7px', borderRadius: 4, textAlign: 'center',
-                      background: 'rgba(59,130,246,0.07)',
-                      border: '1.5px solid rgba(59,130,246,0.2)',
-                      color: '#1e40af', fontStyle: 'italic',
-                    }}>
-                      ↑ task lines
-                    </div>
-                  </div>
-                )
-              }
+              if (cat.id === 'labour') return null
               return (
                 <RateField
                   key={cat.id}
@@ -386,15 +362,15 @@ function ItemRow({
             </div>
           </div>
 
-          {/* Per-unit rate summary — excludes labour when task lines are active */}
-          {CATS.some(c => c.id !== 'labour' && c.getRate(item) > 0) || (!hasTaskLabour && CATS.some(c => c.getRate(item) > 0)) ? (
+          {/* Per-unit rate summary — labour excluded */}
+          {CATS.some(c => c.id !== 'labour' && c.getRate(item) > 0) ? (
             <div style={{
               padding: '7px 10px', background: 'rgba(0,0,0,0.03)', borderRadius: 5,
               fontSize: 11, color: 'var(--muted)', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center',
             }}>
               <span>Rate / {item.unit}:</span>
               {CATS.map(cat => {
-                if (cat.id === 'labour' && hasTaskLabour) return null
+                if (cat.id === 'labour') return null
                 const r = cat.getRate(item)
                 return r > 0 ? (
                   <span key={cat.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: cat.color, fontFamily: 'DM Mono, monospace', fontWeight: 700 }}>
