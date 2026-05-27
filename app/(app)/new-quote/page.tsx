@@ -63,7 +63,20 @@ export default function NewQuotePage() {
   const [showScopeHelp, setShowScopeHelp] = useState(false)
   const [clientDrop, setClientDrop] = useState(false)
   const [clientSearch, setClientSearch] = useState('')
+  const [collapsedPhases, setCollapsedPhases] = useState<Set<number>>(new Set())
   const photoInputRef = useRef<HTMLInputElement>(null)
+
+  // ── Phase collapse helpers ────────────────────────────────────────────────
+  function togglePhase(id: number) {
+    setCollapsedPhases(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+  function collapseAllPhases() { setCollapsedPhases(new Set(phases.map(p => p.id))) }
+  function expandAllPhases()   { setCollapsedPhases(new Set()) }
+  const allCollapsed = phases.length > 0 && phases.every(p => collapsedPhases.has(p.id))
 
   // Wait for ALL context data (including customTemplates) to finish loading before
   // calling loadTemplate. Previously this depended on [quotes] which fires before
@@ -495,6 +508,16 @@ export default function NewQuotePage() {
               Quote Lines — <span style={{ color: 'var(--muted)', fontWeight: 400 }}>{mainPhaseOrder.length} phase{mainPhaseOrder.length !== 1 ? 's' : ''}</span>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
+              {phases.length > 0 && (
+                <button
+                  className="btn-sm btn-outline"
+                  onClick={allCollapsed ? expandAllPhases : collapseAllPhases}
+                  title={allCollapsed ? 'Expand all phases' : 'Collapse all phases'}
+                  style={{ fontSize: 11 }}
+                >
+                  {allCollapsed ? '▶▶ Expand All' : '▼▼ Collapse All'}
+                </button>
+              )}
               <button className="btn-sm btn-sky" onClick={generatePhases} disabled={generatingPhases} style={{ fontSize: 11 }}>
                 {generatingPhases ? '⏳ Generating…' : '✦ Generate Phases'}
               </button>
@@ -538,6 +561,8 @@ export default function NewQuotePage() {
                           pi={pi}
                           markup={markup}
                           vatOn={vatOn}
+                          collapsed={collapsedPhases.has(p.id)}
+                          onToggleCollapse={() => togglePhase(p.id)}
                           onUpdatePhaseName={updatePhaseName}
                           onRemovePhase={removePhase}
                           onUpdatePhase={updatePhase}
@@ -555,6 +580,8 @@ export default function NewQuotePage() {
                     pi={pi}
                     markup={markup}
                     vatOn={vatOn}
+                    collapsed={collapsedPhases.has(p.id)}
+                    onToggleCollapse={() => togglePhase(p.id)}
                     onUpdatePhaseName={updatePhaseName}
                     onRemovePhase={removePhase}
                     onUpdatePhase={updatePhase}
@@ -675,13 +702,14 @@ interface SubPhaseBlockProps {
   pi: number
   markup: number
   vatOn: boolean
+  collapsed: boolean
+  onToggleCollapse: () => void
   onUpdatePhaseName: (id: number, name: string) => void
   onRemovePhase: (id: number) => void
   onUpdatePhase: (updated: QuotePhase) => void
 }
 
-function SubPhaseBlock({ p, pi, markup, onUpdatePhaseName, onRemovePhase, onUpdatePhase }: SubPhaseBlockProps) {
-  const [collapsed, setCollapsed] = useState(false)
+function SubPhaseBlock({ p, pi, markup, collapsed, onToggleCollapse, onUpdatePhaseName, onRemovePhase, onUpdatePhase }: SubPhaseBlockProps) {
   const subSell = calcPhaseSell(p, markup)
 
   return (
@@ -689,7 +717,7 @@ function SubPhaseBlock({ p, pi, markup, onUpdatePhaseName, onRemovePhase, onUpda
       <div className="phase-hd" style={{ background: '#f7f9f7', borderTop: '1px solid #e8ede8' }}>
         {/* Collapse / expand toggle */}
         <button
-          onClick={() => setCollapsed(c => !c)}
+          onClick={onToggleCollapse}
           title={collapsed ? 'Expand phase' : 'Collapse phase'}
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
