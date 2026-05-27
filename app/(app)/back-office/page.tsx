@@ -30,7 +30,7 @@ function defaultItems(): Omit<QuoteItem, 'id'>[] {
 
 // ── Estimator items editor (main pricing surface per phase) ──────────────────
 const MEAS_TYPES = Object.keys(MEASUREMENT_LABELS) as MeasurementType[]
-const RATE_COLS = '1fr 90px 55px 55px 55px 55px 55px 44px 24px'
+const RATE_COLS = '1fr 90px 55px 55px 55px 55px 44px 24px'
 
 interface EstimatorEditorProps {
   phase: TemplatePhaseData
@@ -75,7 +75,7 @@ function EstimatorEditor({ phase, onLoad, onAdd, onUpdate, onRemove }: Estimator
           <div style={{ display: 'grid', gridTemplateColumns: RATE_COLS, gap: 3, padding: '3px 0 5px', borderBottom: '1px solid #e2e8f0', marginBottom: 3 }}>
             <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Item name</span>
             <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Measure</span>
-            {COST_CATEGORIES.map(cat => (
+            {COST_CATEGORIES.filter(cat => cat.id !== 'labour').map(cat => (
               <span key={cat.id} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: 3, fontSize: 10, fontWeight: 700, color: '#94a3b8', textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
                 <cat.Icon size={10} strokeWidth={2.2} />
                 {cat.shortLabel}
@@ -120,7 +120,6 @@ function EstimatorEditor({ phase, onLoad, onAdd, onUpdate, onRemove }: Estimator
                   </select>
                   {(
                     [
-                      ['labourRate',    item.labourRate]    as const,
                       ['materialsRate', item.materialsRate] as const,
                       ['plantRate',     item.plantRate]     as const,
                       ['subRate',       item.subRate]       as const,
