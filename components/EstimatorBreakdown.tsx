@@ -415,30 +415,44 @@ function SummaryPanel({ items, agg }: { items: EstimatorItem[]; agg: AggResult }
   return (
     <div style={{ padding: '14px 16px' }}>
 
-      {/* Category cards — all 5 always shown; zero-value ones are dimmed */}
+      {/* Category breakdown — all 5 always shown as rows; zero-value ones are dimmed */}
       {activeCats.length > 0 && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-          {activeCats.map(cat => {
+        <div style={{ marginBottom: 12, borderRadius: 7, overflow: 'hidden', border: '1px solid #e8e4de' }}>
+          {activeCats.map((cat, idx) => {
             const val = cat.getAgg(agg)
             return (
               <div key={cat.id} style={{
-                display: 'flex', flexDirection: 'column', gap: 2,
-                padding: '8px 12px', borderRadius: 6,
-                background: cat.bg, border: `1px solid ${cat.border}`,
-                minWidth: 88,
-                opacity: val === 0 ? 0.38 : 1,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '9px 14px',
+                background: val > 0 ? cat.bg : idx % 2 === 0 ? '#fafaf9' : 'white',
+                borderBottom: idx < activeCats.length - 1 ? '1px solid #ede9e3' : 'none',
+                opacity: val === 0 ? 0.5 : 1,
                 transition: 'opacity 0.2s',
               }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, color: cat.color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  <cat.Icon size={11} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: cat.color, fontWeight: 700 }}>
+                  <cat.Icon size={13} strokeWidth={2.2} style={{ flexShrink: 0 }} />
                   {cat.label}
                 </span>
-                <span style={{ fontSize: 16, fontFamily: 'DM Mono, monospace', fontWeight: 700, color: cat.color }}>
+                <span style={{ fontSize: 14, fontFamily: 'DM Mono, monospace', fontWeight: 700, color: val > 0 ? cat.color : '#bbb' }}>
                   {fmt(val)}
                 </span>
               </div>
             )
           })}
+          {/* Total row */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '10px 14px',
+            background: '#f0ede8',
+            borderTop: '2px solid #ddd8d0',
+          }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--slate)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Phase Total (cost)
+            </span>
+            <span style={{ fontSize: 16, fontFamily: 'DM Mono, monospace', fontWeight: 700, color: total > 0 ? '#15803d' : '#aaa' }}>
+              {fmt(total)}
+            </span>
+          </div>
         </div>
       )}
 
@@ -498,7 +512,7 @@ function SummaryPanel({ items, agg }: { items: EstimatorItem[]; agg: AggResult }
 // ── Main component ────────────────────────────────────────────────────────────
 export default function EstimatorBreakdown({ phase, onUpdatePhase, markup = 0 }: Props) {
   const [open,        setOpen]        = useState(true)
-  const [view,        setView]        = useState<'summary' | 'detail'>('detail')
+  const [view,        setView]        = useState<'summary' | 'detail'>('summary')
   const [measureItem, setMeasureItem] = useState<EstimatorItem | null>(null)
 
   const items        = phase.estimatorItems || []
