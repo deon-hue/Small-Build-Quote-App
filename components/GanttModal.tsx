@@ -6,6 +6,7 @@ import type { Job, QuotePhase, GanttState, GanttPhase } from '@/lib/types'
 import type { Quote } from '@/lib/types'
 import { fmt, quoteTotal, Q_BADGE, Q_LABEL } from '@/lib/utils'
 import { formatGanttDuration, buildGanttFromQuote } from '@/lib/gantt-utils'
+import { notifyClient } from '@/lib/notify'
 import { useRouter } from 'next/navigation'
 
 interface Props {
@@ -31,7 +32,7 @@ function esc(s: string): string {
 }
 
 export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props) {
-  const { getGanttState, saveGanttState } = useApp()
+  const { getGanttState, saveGanttState, clients, settings } = useApp()
   const containerRef = useRef<HTMLDivElement>(null)
   const stateRef = useRef<GanttState | null>(null)
   // Stores the cleanup fn for the current drag event listeners so we
@@ -73,11 +74,34 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       setDirty(false)
       setSaveStatus('saved')
       setTimeout(() => setSaveStatus('idle'), 3000)
+
+      // ── Notify client that schedule has been updated ──────────
+      // Only on explicit user-driven saves (not on auto-generate at job creation)
+      const client = clients.find(c =>
+        c.name?.toLowerCase() === job.client?.toLowerCase()
+      )
+      if (client?.phone || client?.email) {
+        notifyClient({
+          type:         'schedule_updated',
+          clientName:   client.name || job.client,
+          clientPhone:  client.phone || undefined,
+          clientEmail:  client.email || undefined,
+          jobType:      job.type,
+          jobAddress:   job.address,
+          companyName:  settings?.name,
+          companyPhone: settings?.phone,
+          companyEmail: settings?.email,
+          portalUrl:    typeof window !== 'undefined'
+                          ? window.location.origin + '/portal'
+                          : undefined,
+        })
+      }
+      // ─────────────────────────────────────────────────────────
     } else {
       setSaveStatus('error')
       setTimeout(() => setSaveStatus('idle'), 5000)
     }
-  }, [job.id, saveGanttState])
+  }, [job, clients, settings, saveGanttState])
 
   // Re-render the chart when job props or view mode changes.
   // Reset dirty/status when a different job is opened.

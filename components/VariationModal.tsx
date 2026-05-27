@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import type { Job, Variation, VariationLineItem, VariationStatus } from '@/lib/types'
 import { fmt } from '@/lib/utils'
+import { notifyClient } from '@/lib/notify'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -93,7 +94,7 @@ function fmtDateTime(iso: string | null | undefined): string {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function VariationModal({ job, onClose }: Props) {
-  const { variations, addVariation, updateVariation, deleteVariation } = useApp()
+  const { variations, addVariation, updateVariation, deleteVariation, clients, settings } = useApp()
 
   const jobVars = variations
     .filter(v => v.jobId === job.id)
@@ -643,6 +644,7 @@ export default function VariationModal({ job, onClose }: Props) {
               setBusy(true)
               const total = calcVarTotal(form.items, form.markup, form.vatIncluded)
               try {
+                let savedRef = editingVar?.ref ?? ''
                 if (editingVar) {
                   // Existing draft: update fields + set status in one write
                   const updated: Variation = {
@@ -655,7 +657,7 @@ export default function VariationModal({ job, onClose }: Props) {
                   setEditingVar(updated)
                 } else {
                   // New variation: create directly with status 'sent'
-                  await addVariation(job.id, {
+                  const created = await addVariation(job.id, {
                     title: form.title, description: form.description, status: 'sent',
                     items: form.items, markup: form.markup, vatIncluded: form.vatIncluded,
                     total, notes: form.notes, locked: false,
@@ -663,7 +665,35 @@ export default function VariationModal({ job, onClose }: Props) {
                     clientRejectedAt: null, clientRejectionReason: null,
                     sentAt: new Date().toISOString(),
                   })
+                  savedRef = created?.ref ?? ''
                 }
+
+                // ── Notify client ─────────────────────────────────────
+                const client = clients.find(c =>
+                  c.name?.toLowerCase() === job.client?.toLowerCase()
+                )
+                if (client?.phone || client?.email) {
+                  notifyClient({
+                    type:           'variation_sent',
+                    clientName:     client.name || job.client,
+                    clientPhone:    client.phone || undefined,
+                    clientEmail:    client.email || undefined,
+                    jobType:        job.type,
+                    jobAddress:     job.address,
+                    variationRef:   savedRef,
+                    variationTitle: form.title,
+                    variationTotal: total,
+                    vatIncluded:    form.vatIncluded,
+                    companyName:    settings?.name,
+                    companyPhone:   settings?.phone,
+                    companyEmail:   settings?.email,
+                    portalUrl:      typeof window !== 'undefined'
+                                      ? window.location.origin + '/portal'
+                                      : undefined,
+                  })
+                }
+                // ─────────────────────────────────────────────────────
+
                 backToList()
               } finally { setBusy(false) }
             }}>
