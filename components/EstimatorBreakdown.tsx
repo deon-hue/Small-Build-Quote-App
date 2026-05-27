@@ -2,7 +2,7 @@
 // EstimatorBreakdown — redesigned cost-breakdown panel
 // Summary / Detail views, colour-coded categories, inline warnings, mobile-friendly
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { QuotePhase, QuoteItem } from '@/lib/types'
 import type { EstimatorItem, EstimatorItemTemplate } from '@/lib/estimator'
 import {
@@ -393,48 +393,58 @@ function ItemRow({
 // ── Summary panel ─────────────────────────────────────────────────────────────
 function SummaryPanel({ items, agg }: { items: EstimatorItem[]; agg: AggResult }) {
   const costedCount    = items.filter(i => i.isCosted).length
+  // noMeasureCount: only warn about measurement if non-labour rates are set
+  // (task labour lines don't require measurement)
   const noMeasureCount = items.filter(i =>
-    CATS.some(c => c.getRate(i) > 0) && i.measurement === 0
+    CATS.filter(c => c.id !== 'labour').some(c => c.getRate(i) > 0) && i.measurement === 0
   ).length
+  // noRatesCount: item has no task labour lines AND all non-labour rates are 0
   const noRatesCount   = items.filter(i =>
-    CATS.every(c => c.getRate(i) === 0)
+    !(i.taskLabourLines?.length) &&
+    i.materialsRate === 0 && i.plantRate === 0 && i.subRate === 0 && i.otherRate === 0
   ).length
 
-  const activeCats = CATS.filter(c => c.getAgg(agg) > 0)
+  // Always show all 5 categories when items exist — zero is a valid cost value.
+  const activeCats = items.length > 0 ? CATS : []
   const total      = agg.total
 
   return (
     <div style={{ padding: '14px 16px' }}>
 
-      {/* Category cards */}
+      {/* Category cards — all 5 always shown; zero-value ones are dimmed */}
       {activeCats.length > 0 && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-          {activeCats.map(cat => (
-            <div key={cat.id} style={{
-              display: 'flex', flexDirection: 'column', gap: 2,
-              padding: '8px 12px', borderRadius: 6,
-              background: cat.bg, border: `1px solid ${cat.border}`,
-              minWidth: 88,
-            }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, color: cat.color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                <cat.Icon size={11} strokeWidth={2.2} style={{ flexShrink: 0 }} />
-                {cat.label}
-              </span>
-              <span style={{ fontSize: 16, fontFamily: 'DM Mono, monospace', fontWeight: 700, color: cat.color }}>
-                {fmt(cat.getAgg(agg))}
-              </span>
-            </div>
-          ))}
+          {activeCats.map(cat => {
+            const val = cat.getAgg(agg)
+            return (
+              <div key={cat.id} style={{
+                display: 'flex', flexDirection: 'column', gap: 2,
+                padding: '8px 12px', borderRadius: 6,
+                background: cat.bg, border: `1px solid ${cat.border}`,
+                minWidth: 88,
+                opacity: val === 0 ? 0.38 : 1,
+                transition: 'opacity 0.2s',
+              }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, color: cat.color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  <cat.Icon size={11} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+                  {cat.label}
+                </span>
+                <span style={{ fontSize: 16, fontFamily: 'DM Mono, monospace', fontWeight: 700, color: cat.color }}>
+                  {fmt(val)}
+                </span>
+              </div>
+            )
+          })}
         </div>
       )}
 
-      {/* Proportional colour bar */}
+      {/* Proportional colour bar — only when total > 0 (proportions meaningless at zero) */}
       {total > 0 && (
         <div style={{
           height: 7, borderRadius: 4, background: '#ebe8e3',
           display: 'flex', overflow: 'hidden', marginBottom: 12, gap: 1,
         }}>
-          {activeCats.map(cat => (
+          {activeCats.filter(c => c.getAgg(agg) > 0).map(cat => (
             <div
               key={cat.id}
               title={`${cat.label}: ${fmt(cat.getAgg(agg))}`}
@@ -493,6 +503,26 @@ export default function EstimatorBreakdown({ phase, onUpdatePhase, markup = 0 }:
     t => migrateLabourTrade(t as Parameters<typeof migrateLabourTrade>[0]),
   )
   const agg          = estimatorAggregates(items, labourTrades)
+
+  // ── Mount sync ─────────────────────────────────────────────────────────────
+  // On first render, sync typed QuoteItems from the current estimator aggregate.
+  // This ensures that stale hardcoded template amounts in phase.items are
+  // replaced by the estimator's actual values (which may be £0 when Back Office
+  // defaults have been zeroed — zero is a valid cost value).
+  useEffect(() => {
+    if (!phase.useEstimator || items.length === 0) return
+    const a    = estimatorAggregates(items, labourTrades)
+    const synced = syncToItems(phase.items, a)
+    const needsSync = phase.items.some(qi => {
+      if (qi.itemType === 'labour')         return (qi.labour         ?? 0) !== a.labour
+      if (qi.itemType === 'materials')      return (qi.materials      ?? 0) !== a.materials
+      if (qi.itemType === 'plant')          return (qi.plantHire      ?? 0) !== a.plant
+      if (qi.itemType === 'subcontractors') return (qi.subcontractors ?? 0) !== a.subcontractors
+      if (qi.itemType === 'other')          return (qi.other          ?? 0) !== a.other
+      return false
+    })
+    if (needsSync) onUpdatePhase({ ...phase, items: synced })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── mutations ──────────────────────────────────────────────────────────────
   function applyItems(newItems: EstimatorItem[]) {
@@ -725,8 +755,13 @@ export default function EstimatorBreakdown({ phase, onUpdatePhase, markup = 0 }:
 
                 {/* Warning row */}
                 {(() => {
-                  const nm = items.filter(i => CATS.some(c => c.getRate(i) > 0) && i.measurement === 0).length
-                  const nr = items.filter(i => CATS.every(c => c.getRate(i) === 0)).length
+                  const nm = items.filter(i =>
+                    CATS.filter(c => c.id !== 'labour').some(c => c.getRate(i) > 0) && i.measurement === 0
+                  ).length
+                  const nr = items.filter(i =>
+                    !(i.taskLabourLines?.length) &&
+                    i.materialsRate === 0 && i.plantRate === 0 && i.subRate === 0 && i.otherRate === 0
+                  ).length
                   if (!nm && !nr) return null
                   return (
                     <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>

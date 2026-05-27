@@ -158,22 +158,23 @@ export function estimatorAggregates(
   items: EstimatorItem[],
   labourTrades?: import('./tradeRates').LabourTrade[],
 ) {
-  const costed = items.filter(i => i.isCosted)
+  // Include ALL items regardless of isCosted — zero is a valid cost value.
+  // isCosted remains as informational metadata only (used for UI warning counts).
   const hasLabourTrades = (labourTrades?.length ?? 0) > 0
 
   const labour = hasLabourTrades
     ? +labourTrades!.reduce((s, t) => s + t.quotePrice, 0).toFixed(2)
-    : +costed.reduce((s, i) => s + i.labourTotal, 0).toFixed(2)
+    : +items.reduce((s, i) => s + i.labourTotal, 0).toFixed(2)
 
-  const materials      = +costed.reduce((s, i) => s + i.materialsTotal, 0).toFixed(2)
-  const plant          = +costed.reduce((s, i) => s + i.plantTotal,     0).toFixed(2)
-  const subcontractors = +costed.reduce((s, i) => s + i.subTotal,       0).toFixed(2)
-  const other          = +costed.reduce((s, i) => s + i.otherTotal,     0).toFixed(2)
+  const materials      = +items.reduce((s, i) => s + i.materialsTotal, 0).toFixed(2)
+  const plant          = +items.reduce((s, i) => s + i.plantTotal,     0).toFixed(2)
+  const subcontractors = +items.reduce((s, i) => s + i.subTotal,       0).toFixed(2)
+  const other          = +items.reduce((s, i) => s + i.otherTotal,     0).toFixed(2)
 
   // When using labour trades, item lineTotals exclude labour (it's handled above).
   const itemNonLabourTotal = hasLabourTrades
     ? +(materials + plant + subcontractors + other).toFixed(2)
-    : +costed.reduce((s, i) => s + i.lineTotal, 0).toFixed(2)
+    : +items.reduce((s, i) => s + i.lineTotal, 0).toFixed(2)
 
   const total = hasLabourTrades
     ? +(labour + itemNonLabourTotal).toFixed(2)
