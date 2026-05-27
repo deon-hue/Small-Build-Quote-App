@@ -512,7 +512,7 @@ function SummaryPanel({ items, agg }: { items: EstimatorItem[]; agg: AggResult }
 // ── Main component ────────────────────────────────────────────────────────────
 export default function EstimatorBreakdown({ phase, onUpdatePhase, markup = 0 }: Props) {
   const [open,        setOpen]        = useState(true)
-  const [view,        setView]        = useState<'summary' | 'detail'>('summary')
+  const [view,        setView]        = useState<'summary' | 'detail'>('detail')
   const [measureItem, setMeasureItem] = useState<EstimatorItem | null>(null)
 
   const items        = phase.estimatorItems || []
@@ -731,42 +731,45 @@ export default function EstimatorBreakdown({ phase, onUpdatePhase, markup = 0 }:
                 />
               ))}
 
-              {/* ── Phase totals footer ── */}
-              <div style={{
-                background: '#f5f4f1', borderTop: '2px solid #e0dbd4',
-                padding: '10px 14px',
-              }}>
-                {/* Category totals — always show all 5 when items exist (dimmed at £0) */}
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginRight: 4 }}>
-                    Phase total
-                  </span>
-                  {CATS.map(cat => <CostChip key={cat.id} cat={cat} val={cat.getAgg(agg)} size="md" showZero />)}
-                </div>
-
-                {/* Colour bar + grand total */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  {agg.total > 0 && (
-                    <div style={{
-                      flex: 1, height: 6, borderRadius: 3,
-                      background: '#ddd', display: 'flex', overflow: 'hidden', gap: 1,
+              {/* ── Phase totals footer — labelled rows, always visible ── */}
+              <div style={{ borderTop: '2px solid #e0dbd4' }}>
+                {/* One row per cost category */}
+                {CATS.map((cat, idx) => {
+                  const val = cat.getAgg(agg)
+                  return (
+                    <div key={cat.id} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '8px 14px',
+                      background: val > 0 ? cat.bg : idx % 2 === 0 ? '#f7f6f3' : '#f2f1ee',
+                      borderBottom: '1px solid #ede9e3',
+                      opacity: val === 0 ? 0.55 : 1,
+                      transition: 'opacity 0.2s',
                     }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: cat.color, fontWeight: 700 }}>
+                        <cat.Icon size={13} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+                        {cat.label}
+                      </span>
+                      <span style={{ fontSize: 13, fontFamily: 'DM Mono, monospace', fontWeight: 700, color: val > 0 ? cat.color : '#bbb' }}>
+                        {fmt(val)}
+                      </span>
+                    </div>
+                  )
+                })}
+
+                {/* Grand total row + colour bar */}
+                <div style={{ padding: '10px 14px', background: '#f0ede8', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--slate)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Phase Total
+                  </span>
+                  {agg.total > 0 && (
+                    <div style={{ flex: 1, height: 5, borderRadius: 3, background: '#ddd', display: 'flex', overflow: 'hidden', gap: 1 }}>
                       {CATS.filter(c => c.getAgg(agg) > 0).map(cat => (
-                        <div
-                          key={cat.id}
-                          title={`${cat.label}: ${fmt(cat.getAgg(agg))}`}
-                          style={{
-                            width: `${(cat.getAgg(agg) / agg.total) * 100}%`,
-                            background: cat.bar, transition: 'width 0.3s',
-                          }}
-                        />
+                        <div key={cat.id} title={`${cat.label}: ${fmt(cat.getAgg(agg))}`}
+                          style={{ width: `${(cat.getAgg(agg) / agg.total) * 100}%`, background: cat.bar, transition: 'width 0.3s' }} />
                       ))}
                     </div>
                   )}
-                  <span style={{
-                    fontSize: 16, fontFamily: 'DM Mono, monospace', fontWeight: 700,
-                    color: agg.total > 0 ? '#15803d' : '#aaa', flexShrink: 0,
-                  }}>
+                  <span style={{ fontSize: 16, fontFamily: 'DM Mono, monospace', fontWeight: 700, color: agg.total > 0 ? '#15803d' : '#aaa', marginLeft: 'auto' }}>
                     {fmt(agg.total)}
                   </span>
                 </div>
@@ -782,7 +785,7 @@ export default function EstimatorBreakdown({ phase, onUpdatePhase, markup = 0 }:
                   ).length
                   if (!nm && !nr) return null
                   return (
-                    <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: 8, padding: '6px 14px 8px', flexWrap: 'wrap', background: '#f0ede8' }}>
                       {nm > 0 && (
                         <span style={{ fontSize: 11, color: '#92400e', background: 'rgba(245,158,11,0.10)', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>
                           ⚠️ {nm} item{nm !== 1 ? 's' : ''} need a measurement
