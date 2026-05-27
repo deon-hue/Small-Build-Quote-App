@@ -35,6 +35,8 @@ interface Props {
   phases: string[]
   onInsert: (scope: string) => void
   onClose: () => void
+  /** When provided, shows a "Build Estimate" button that converts the scope into fully-populated quote phases */
+  onBuildEstimate?: (scope: string) => void
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -98,7 +100,7 @@ const MAX_TOTAL_BASE64 = 4 * 1024 * 1024        // 4MB total base64 payload ceil
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function ScopeChat({ quoteId, jobType, address, phases, onInsert, onClose }: Props) {
+export default function ScopeChat({ quoteId, jobType, address, phases, onInsert, onClose, onBuildEstimate }: Props) {
   const supabase = createClient()
 
   const [messages, setMessages] = useState<Message[]>([])
@@ -441,12 +443,23 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
           <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', background: '#f8faf5', flexShrink: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: '#7ab533', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Latest scope</span>
-              <button
-                onClick={() => { onInsert(latestScope); onClose() }}
-                style={{ background: 'var(--moss)', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-              >
-                ✓ Insert into Quote
-              </button>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {onBuildEstimate && (
+                  <button
+                    onClick={() => { onBuildEstimate(latestScope); onClose() }}
+                    title="Analyse the scope and auto-populate all phases and tasks from the task library"
+                    style={{ background: '#e67e22', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  >
+                    ✦ Build Estimate
+                  </button>
+                )}
+                <button
+                  onClick={() => { onInsert(latestScope); onClose() }}
+                  style={{ background: 'var(--moss)', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                >
+                  ✓ Insert into Quote
+                </button>
+              </div>
             </div>
             <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, maxHeight: 40, overflow: 'hidden' }}>
               {latestScope.slice(0, 120)}{latestScope.length > 120 ? '…' : ''}

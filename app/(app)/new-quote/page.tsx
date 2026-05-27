@@ -5,7 +5,8 @@ import { useApp } from '@/contexts/AppContext'
 import { fmt, VAT, JOB_TYPES, calcPhase, calcPhaseSell } from '@/lib/utils'
 import type { QuotePhase, QuoteItem, Quote } from '@/lib/types'
 import { itemFromTemplate, estimatorAggregates } from '@/lib/estimator'
-import type { EstimatorItem } from '@/lib/estimator'
+import type { EstimatorItem, EstimatorItemTemplate, MeasurementType } from '@/lib/estimator'
+import { getPhaseEstimatorDefaults } from '@/lib/estimatorDefaults'
 import QuotePreviewModal from '@/components/QuotePreviewModal'
 import ScopeChat from '@/components/ScopeChat'
 import EstimatorBreakdown from '@/components/EstimatorBreakdown'
@@ -40,6 +41,25 @@ function defaultTypedItems(): Omit<QuoteItem, 'id'>[] {
 }
 
 
+// Shape returned by /api/scope-to-quote
+interface ScopeToQuotePhase {
+  parentPhase: string
+  phase: string
+  selectedTasks: string[]
+  extraTasks?: {
+    name: string
+    description?: string
+    measurementType?: string
+    unit?: string
+    labourRate?: number
+    materialsRate?: number
+    plantRate?: number
+    subRate?: number
+    otherRate?: number
+    wastePercent?: number
+  }[]
+}
+
 export default function NewQuotePage() {
   const { quotes, clients, addQuote, updateQuote, upsertClientFromQuote, getTemplate, loading } = useApp()
 
@@ -60,6 +80,7 @@ export default function NewQuotePage() {
   const [generatingScope, setGeneratingScope] = useState(false)
   const [generatingPhases, setGeneratingPhases] = useState(false)
   const [showScopeChat, setShowScopeChat] = useState(false)
+  const [buildingEstimate, setBuildingEstimate] = useState(false)
   const [showScopeHelp, setShowScopeHelp] = useState(false)
   const [clientDrop, setClientDrop] = useState(false)
   const [clientSearch, setClientSearch] = useState('')
@@ -195,6 +216,69 @@ export default function NewQuotePage() {
       alert('Failed to generate phases — check your connection.')
     } finally {
       setGeneratingPhases(false)
+    }
+  }
+
+  // ── AI Scope → fully-populated estimate ───────────────────────────────────
+  async function handleBuildEstimate(scopeText: string) {
+    if (phases.length && !confirm('Replace current phases with AI-generated estimate from scope?')) return
+    setBuildingEstimate(true)
+    try {
+      const res = await fetch('/api/scope-to-quote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scope: scopeText, jobType }),
+      })
+      const data = await res.json()
+      if (data.error) { alert('Could not build estimate: ' + data.error); return }
+      if (!Array.isArray(data.phases)) { alert('Unexpected response from AI.'); return }
+
+      const VALID_TYPES: MeasurementType[] = ['area', 'volume', 'linear', 'quantity']
+
+      const built: QuotePhase[] = (data.phases as ScopeToQuotePhase[]).map(sp => {
+        // Get all default template items for this phase, filtered to AI-selected task names
+        const allDefaults = getPhaseEstimatorDefaults(sp.phase)
+        const selectedSet = new Set(sp.selectedTasks ?? [])
+        const templateItems = allDefaults.filter(t => selectedSet.has(t.name))
+
+        // Convert extra tasks (genuinely out-of-library work) to EstimatorItemTemplate
+        const extraTemplates: EstimatorItemTemplate[] = (sp.extraTasks ?? []).map(et => ({
+          id: `extra-${Date.now()}-${Math.floor(Math.random() * 99999)}`,
+          name: et.name,
+          description: et.description ?? '',
+          measurementType: VALID_TYPES.includes(et.measurementType as MeasurementType)
+            ? (et.measurementType as MeasurementType)
+            : 'quantity',
+          unit: et.unit ?? 'nr',
+          labourRate:    et.labourRate    ?? 0,
+          materialsRate: et.materialsRate ?? 0,
+          plantRate:     et.plantRate     ?? 0,
+          subRate:       et.subRate       ?? 0,
+          otherRate:     et.otherRate     ?? 0,
+          wastePercent:  et.wastePercent  ?? 0,
+        }))
+
+        const estimatorItems = [...templateItems, ...extraTemplates].map(itemFromTemplate)
+
+        // Sync the 5 typed QuoteItem rows from estimator aggregates
+        const agg = estimatorAggregates(estimatorItems, [])
+        const typedItems: Omit<QuoteItem, 'id'>[] = [
+          { desc: '', qty: 1, unit: 'Item', labour: agg.labour,         materials: 0, plantHire: 0, subcontractors: 0, other: 0,         notes: '', itemType: 'labour'         as const },
+          { desc: '', qty: 1, unit: 'Item', labour: 0, materials: agg.materials,      plantHire: 0, subcontractors: 0, other: 0,         notes: '', itemType: 'materials'      as const },
+          { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0,    plantHire: agg.plant,        subcontractors: 0, other: 0,         notes: '', itemType: 'plant'          as const },
+          { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0,    plantHire: 0, subcontractors: agg.subcontractors, other: 0,       notes: '', itemType: 'subcontractors' as const },
+          { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0,    plantHire: 0, subcontractors: 0, other: agg.other,                notes: '', itemType: 'other'          as const },
+        ]
+
+        return makePhase(sp.phase, typedItems, sp.parentPhase || undefined, estimatorItems)
+      })
+
+      setPhases(built)
+      setScope(scopeText)
+    } catch {
+      alert('Failed to build estimate — check your connection.')
+    } finally {
+      setBuildingEstimate(false)
     }
   }
 
@@ -525,7 +609,15 @@ export default function NewQuotePage() {
             </div>
           </div>
 
-          {!phases.length
+          {buildingEstimate
+            ? (
+              <div className="empty-dashed" style={{ textAlign: 'center', padding: '40px 20px' }}>
+                <div style={{ fontSize: 28, marginBottom: 10 }}>⏳</div>
+                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Building Estimate…</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)' }}>Analysing scope and matching tasks from the library. This takes a few seconds.</div>
+              </div>
+            )
+            : !phases.length
             ? <div className="empty-dashed"><div style={{ fontSize: 14, marginBottom: 6 }}>No phases yet</div><div style={{ fontSize: 12 }}>Select a job type to load a template, or click Add Phase.</div></div>
             : <>
                 {/* ── Grouped main phases ── */}
@@ -690,6 +782,7 @@ export default function NewQuotePage() {
           phases={phases.map(p => p.phase)}
           onInsert={text => setScope(text)}
           onClose={() => setShowScopeChat(false)}
+          onBuildEstimate={handleBuildEstimate}
         />
       )}
     </>
