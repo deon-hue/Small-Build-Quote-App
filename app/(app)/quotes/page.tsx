@@ -4,12 +4,13 @@ import { useState } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { fmt, quoteTotal, STAGE_LABEL, Q_BADGE, Q_LABEL } from '@/lib/utils'
 import { buildHtmlClientView } from '@/lib/quoteHtml'
+import { buildGanttFromQuote } from '@/lib/gantt-utils'
 import type { Quote } from '@/lib/types'
 import QuotePreviewModal from '@/components/QuotePreviewModal'
 import { useRouter } from 'next/navigation'
 
 export default function SavedQuotesPage() {
-  const { quotes, jobs, settings, updateQuote, deleteQuote, deleteJob, addJob, loading } = useApp()
+  const { quotes, jobs, settings, updateQuote, deleteQuote, deleteJob, addJob, saveGanttState, loading } = useApp()
   const [previewQuote, setPreviewQuote] = useState<Quote | null>(null)
   const router = useRouter()
 
@@ -58,13 +59,23 @@ export default function SavedQuotesPage() {
       `Convert quote ${q.ref} to a job?\n\nThis will create a new job:\n• Client: ${q.customer.name}\n• Type: ${q.jobType}\n• Value: ${fmt(total)}\n• Estimated duration: ${estWeeks} weeks`
     )
     if (!confirmed) return
-    await addJob({
+    const newJob = await addJob({
       client: q.customer.name, type: q.jobType, address: q.customer.address,
       value: Math.round(total), stage: 'planning', start: today,
       weeks: estWeeks, done: 0,
       notes: `Converted from quote ${q.ref}. ${q.phases.length} phases.`,
       quoteId: q.id,
     })
+    // Auto-generate Gantt from quote phases
+    if (newJob?.id) {
+      try {
+        const ganttState = buildGanttFromQuote(q.phases, estWeeks)
+        await saveGanttState(newJob.id, ganttState)
+      } catch (err) {
+        console.warn('Could not auto-generate Gantt chart:', err)
+        // Non-fatal — job was still created successfully
+      }
+    }
     await updateQuote({ ...q, convertedToJob: true })
     alert('Job created! Find it in the Jobs section.')
     router.push('/jobs')

@@ -5,7 +5,7 @@ import { useApp } from '@/contexts/AppContext'
 import type { Job, QuotePhase, GanttState, GanttPhase } from '@/lib/types'
 import type { Quote } from '@/lib/types'
 import { fmt, quoteTotal, Q_BADGE, Q_LABEL } from '@/lib/utils'
-import { formatGanttDuration } from '@/lib/gantt-utils'
+import { formatGanttDuration, buildGanttFromQuote } from '@/lib/gantt-utils'
 import { useRouter } from 'next/navigation'
 
 interface Props {
@@ -44,26 +44,21 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
   const router = useRouter()
 
   function buildState(): GanttState {
-    const totalDays = (job.weeks || 12) * 7
-
-    // Use any previously saved layout — no phase-count gate so a custom arrangement
-    // (different number of bars, renamed labels) is never silently discarded.
+    // Use any previously saved layout — never silently discard a custom arrangement.
     const saved = getGanttState(job.id)
     if (saved && saved.phases && saved.phases.length > 0) return saved
 
-    // No saved state → first-time creation: every phase starts at day 0 (job start date),
-    // duration 2 days. User then drags/resizes to schedule properly.
-    // Deduplicate labels — quote rows repeat the sub-phase name once per cost type.
-    const rawLabels = phases.length
-      ? phases.map(p => p.phase)
-      : ['Preliminaries','Demolition & Enabling','Foundations','Structure','Roof',
-         'External Doors & Windows','First Fix','Insulation','Plastering','Second Fix','External Works']
-    const defaultLabels = [...new Set(rawLabels)]
-    const ganttPhases: GanttPhase[] = defaultLabels.map(label => ({
-      label,
-      startDay: 0,
-      durDays: 2,
-    }))
+    // No saved state → build hierarchical Gantt from quote phases if available.
+    if (phases.length) {
+      return buildGanttFromQuote(phases, job.weeks || 12)
+    }
+
+    // Fallback for jobs with no linked quote phases — flat generic list.
+    const totalDays = (job.weeks || 12) * 7
+    const ganttPhases: GanttPhase[] = [
+      'Preliminaries','Demolition & Enabling','Foundations','Structure','Roof',
+      'External Doors & Windows','First Fix','Insulation','Plastering','Second Fix','External Works',
+    ].map(label => ({ label, startDay: 0, durDays: 2 }))
     return { phases: ganttPhases, totalDays }
   }
 
@@ -206,23 +201,72 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       return parts.join('')
     })()
 
+    // Build a lookup: id → collapsed, for ancestor visibility checks
+    const collapsedById: Record<string, boolean> = {}
+    state.phases.forEach(p => { if (p.id) collapsedById[p.id] = !!p.collapsed })
+
+    function isRowVisible(ph: GanttPhase): boolean {
+      if (!ph.parentId) return true
+      if (collapsedById[ph.parentId]) return false
+      const parent = state.phases.find(p => p.id === ph.parentId)
+      return parent ? isRowVisible(parent) : true
+    }
+
+    const hasHierarchy = state.phases.some(p => p.level !== undefined)
+
     const phaseRowsHtml = state.phases.map((ph, i) => {
+      const level = ph.level ?? 1  // legacy phases (no level field) render as level 1
+      const visible = isRowVisible(ph)
+      const displayStyle = visible ? 'flex' : 'none'
+
+      // ── Level 0: group header ─────────────────────────────────
+      if (level === 0) {
+        const toggleIcon = ph.collapsed ? '▶' : '▼'
+        const idAttr = ph.id ? `data-row-id="${esc(ph.id)}"` : ''
+        return `<div class="gantt-row" ${idAttr} data-level="0" style="display:${displayStyle};align-items:center;height:${ROW_H}px;margin-bottom:2px;background:#e5e8ec;border-radius:3px">
+          <div class="gantt-label-cell" style="width:${LABEL_W}px;flex-shrink:0;font-size:11px;font-weight:700;color:#1e2022;padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;height:${ROW_H}px;gap:5px" title="${esc(ph.label)}">
+            <span class="gantt-toggle" data-for="${esc(ph.id ?? '')}" onclick="window.__ganttToggle('${esc(ph.id ?? '')}')" style="cursor:pointer;font-size:9px;opacity:0.65;user-select:none;flex-shrink:0;line-height:1">${toggleIcon}</span>
+            ${esc(ph.label)}
+          </div>
+          <div class="gantt-col-divider" style="width:5px;flex-shrink:0;align-self:stretch;cursor:col-resize;background:transparent;border-left:2px dashed #c8d0d8;margin-right:4px" title="Drag to resize label column"></div>
+          <div class="gantt-track" style="flex:1;position:relative;height:${ROW_H - 8}px;background:#e5e8ec;border-radius:3px;overflow:hidden">
+            ${trackWeekendHtml}
+            <div style="position:absolute;left:${dayToPct(ph.startDay).toFixed(2)}%;width:${(dayToPct(ph.startDay + ph.durDays) - dayToPct(ph.startDay)).toFixed(2)}%;height:3px;top:50%;transform:translateY(-50%);background:#b8bec8;border-radius:2px;pointer-events:none"></div>
+          </div>
+        </div>`
+      }
+
+      // ── Level 1: phase bar / Level 2: task bar ────────────────
+      const rowH = level === 2 ? 28 : ROW_H
       const leftPct = dayToPct(ph.startDay)
       const widthPct = dayToPct(ph.startDay + ph.durDays) - dayToPct(ph.startDay)
       const phEndDay = ph.startDay + ph.durDays
       const isDone = phEndDay <= doneWeeks * 7
       const isActive = ph.startDay < doneWeeks * 7 && phEndDay > doneWeeks * 7
-      const barColor = isDone ? '#7ab533' : isActive ? '#4a90a4' : '#c8d8e8'
+      const barColor = level === 2
+        ? (isDone ? '#5a9e2a' : isActive ? '#3a7a94' : '#a8c4d4')
+        : (isDone ? '#7ab533' : isActive ? '#4a90a4' : '#c8d8e8')
       const textColor = (isDone || isActive) ? 'white' : '#2b2f33'
       const startD = fmtDateShort(addDays(startDate, ph.startDay))
       const endD = fmtDateShort(addDays(startDate, phEndDay))
-      return `<div class="gantt-row" style="display:flex;align-items:center;height:${ROW_H}px;margin-bottom:3px">
-        <div class="gantt-label-cell" style="width:${LABEL_W}px;flex-shrink:0;font-size:11px;font-weight:500;color:#1e2022;padding:0 10px 0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;justify-content:flex-start;height:${ROW_H}px;text-align:left" title="${esc(ph.label)}">${i + 1}. ${esc(ph.label)}</div>
+      const indentPx = level === 2 ? 28 : 18
+      const hasChildren = level === 1 && state.phases.some(p => p.parentId === ph.id)
+      const toggleIcon = ph.collapsed ? '▶' : '▼'
+      const idAttr = ph.id ? `data-row-id="${esc(ph.id)}"` : ''
+      const parentAttr = ph.parentId ? `data-parent-id="${esc(ph.parentId)}"` : ''
+
+      return `<div class="gantt-row" ${idAttr} ${parentAttr} data-level="${level}" style="display:${displayStyle};align-items:center;height:${rowH}px;margin-bottom:3px">
+        <div class="gantt-label-cell" style="width:${LABEL_W}px;flex-shrink:0;font-size:${level === 2 ? '10px' : '11px'};font-weight:${level === 2 ? '400' : '500'};color:#1e2022;padding:0 8px 0 ${indentPx}px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:4px;height:${rowH}px;text-align:left" title="${esc(ph.label)}">
+          ${hasChildren
+            ? `<span class="gantt-toggle" data-for="${esc(ph.id ?? '')}" onclick="window.__ganttToggle('${esc(ph.id ?? '')}')" style="cursor:pointer;font-size:8px;opacity:0.55;user-select:none;flex-shrink:0;line-height:1">${toggleIcon}</span>`
+            : (level === 1 ? '<span style="display:inline-block;width:10px;flex-shrink:0"></span>' : '')}
+          ${esc(ph.label)}
+        </div>
         <div class="gantt-col-divider" style="width:5px;flex-shrink:0;align-self:stretch;cursor:col-resize;background:transparent;border-left:2px dashed #c8d0d8;margin-right:4px" title="Drag to resize label column"></div>
-        <div class="gantt-track" style="flex:1;position:relative;height:${ROW_H - 6}px;background:#f0f2f4;border-radius:3px;cursor:default;overflow:hidden">
+        <div class="gantt-track" style="flex:1;position:relative;height:${rowH - 6}px;background:#f0f2f4;border-radius:3px;cursor:default;overflow:hidden">
           ${trackWeekendHtml}
           <div class="gantt-bar" data-idx="${i}" style="position:absolute;left:${leftPct}%;width:${widthPct}%;height:100%;background:${barColor};border-radius:3px;cursor:grab;user-select:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;box-shadow:0 1px 3px rgba(0,0,0,0.15);min-width:6px;z-index:1">
-            <span style="font-size:9px;color:${textColor};white-space:nowrap;overflow:hidden;flex:1">${isDone ? '✓ ' : isActive ? '▶ ' : ''}<span class="bar-dates" style="opacity:0.85">${startD}–${endD}</span></span>
+            <span style="font-size:${level === 2 ? '8px' : '9px'};color:${textColor};white-space:nowrap;overflow:hidden;flex:1">${isDone ? '✓ ' : isActive ? '▶ ' : ''}<span class="bar-dates" style="opacity:0.85">${startD}–${endD}</span></span>
             <div class="gantt-resize-handle" data-idx="${i}" style="width:8px;height:100%;cursor:ew-resize;flex-shrink:0;display:flex;align-items:center;justify-content:center;opacity:0.6"><div style="width:3px;height:60%;background:${textColor};border-radius:2px"></div></div>
           </div>
         </div>
@@ -262,6 +306,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
           <span style="display:flex;align-items:center;gap:4px;font-size:10px"><span style="width:10px;height:10px;border-radius:2px;background:#7ab533;display:inline-block"></span>Complete</span>
           <span style="display:flex;align-items:center;gap:4px;font-size:10px"><span style="width:10px;height:10px;border-radius:2px;background:#4a90a4;display:inline-block"></span>Active</span>
           <span style="display:flex;align-items:center;gap:4px;font-size:10px"><span style="width:10px;height:10px;border-radius:2px;background:#c8d8e8;display:inline-block"></span>Upcoming</span>
+          ${hasHierarchy ? `<button onclick="window.__ganttExpandAll()" style="font-size:10px;background:transparent;border:1px solid #dde1e5;border-radius:3px;padding:2px 8px;cursor:pointer;color:#6b7580" title="Expand all groups">▼ All</button><button onclick="window.__ganttCollapseAll()" style="font-size:10px;background:transparent;border:1px solid #dde1e5;border-radius:3px;padding:2px 8px;cursor:pointer;color:#6b7580" title="Collapse all groups">▶ All</button>` : ''}
           <button onclick="window.__ganttReset()" style="font-size:10px;background:transparent;border:1px solid #dde1e5;border-radius:3px;padding:2px 8px;cursor:pointer;color:#6b7580">Reset to default</button>
         </div>
       </div>
@@ -439,28 +484,22 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     return () => { container.removeEventListener('mousedown', onContainerMouseDown) }
   }
 
-  // Expose view/reset to inline onclick handlers
+  // Expose view/reset/toggle to inline onclick handlers
   useEffect(() => {
-    (window as unknown as Record<string, unknown>).__ganttView = (mode: 'day' | 'week' | 'month') => setViewMode(mode);
-    (window as unknown as Record<string, unknown>).__ganttReset = async () => {
+    const win = window as unknown as Record<string, unknown>
+    win.__ganttView = (mode: 'day' | 'week' | 'month') => setViewMode(mode)
+
+    win.__ganttReset = async () => {
       if (!confirm('Reset Gantt to default layout? This will clear your custom dates.')) return
-      // Build a fresh default state — same as first-time creation:
-      // all phases start at day 0, duration 2 days.
-      const totalDays = (job.weeks || 12) * 7
-      const rawLabels = phases.length
-        ? phases.map(p => p.phase)
-        : ['Preliminaries','Demolition & Enabling','Foundations','Structure','Roof',
-           'External Doors & Windows','First Fix','Insulation','Plastering','Second Fix','External Works']
-      const freshState: GanttState = {
-        phases: [...new Set(rawLabels)].map(label => ({
-          label,
-          startDay: 0,
-          durDays: 2,
-        })),
-        totalDays,
-      }
+      const freshState: GanttState = phases.length
+        ? buildGanttFromQuote(phases, job.weeks || 12)
+        : {
+            totalDays: (job.weeks || 12) * 7,
+            phases: ['Preliminaries','Demolition & Enabling','Foundations','Structure','Roof',
+              'External Doors & Windows','First Fix','Insulation','Plastering','Second Fix','External Works',
+            ].map(label => ({ label, startDay: 0, durDays: 2 })),
+          }
       stateRef.current = freshState
-      // Reset immediately saves and clears the dirty flag
       setSaveStatus('saving')
       setDirty(false)
       const ok = await saveGanttState(job.id, freshState)
@@ -469,9 +508,82 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       else setTimeout(() => setSaveStatus('idle'), 5000)
       renderGantt(freshState, viewMode)
     }
+
+    win.__ganttToggle = (id: string) => {
+      const s = stateRef.current
+      if (!s) return
+      const ph = s.phases.find(p => p.id === id)
+      if (!ph) return
+      ph.collapsed = !ph.collapsed
+      const container = containerRef.current
+      if (!container) return
+      // Update toggle icon
+      container.querySelectorAll<HTMLElement>(`.gantt-toggle[data-for="${id}"]`).forEach(el => {
+        el.textContent = ph.collapsed ? '▶' : '▼'
+      })
+      // Recalculate visibility for all non-root rows
+      function isVisible(rowId: string): boolean {
+        const el = container!.querySelector<HTMLElement>(`[data-row-id="${rowId}"]`)
+        if (!el) return true
+        const pId = el.dataset.parentId
+        if (!pId) return true
+        const parentPh = s!.phases.find(p => p.id === pId)
+        if (!parentPh) return true
+        if (parentPh.collapsed) return false
+        return isVisible(pId)
+      }
+      s.phases.forEach(p => {
+        if (!p.id || (p.level ?? 1) === 0) return
+        const el = container!.querySelector<HTMLElement>(`[data-row-id="${p.id}"]`)
+        if (el) el.style.display = isVisible(p.id) ? 'flex' : 'none'
+      })
+      setDirty(true)
+    }
+
+    win.__ganttExpandAll = () => {
+      const s = stateRef.current
+      if (!s) return
+      const container = containerRef.current
+      if (!container) return
+      s.phases.forEach(p => {
+        p.collapsed = false
+        if (p.id) {
+          container.querySelectorAll<HTMLElement>(`.gantt-toggle[data-for="${p.id}"]`).forEach(el => { el.textContent = '▼' })
+        }
+        if (p.id && (p.level ?? 1) > 0) {
+          const el = container.querySelector<HTMLElement>(`[data-row-id="${p.id}"]`)
+          if (el) el.style.display = 'flex'
+        }
+      })
+      setDirty(true)
+    }
+
+    win.__ganttCollapseAll = () => {
+      const s = stateRef.current
+      if (!s) return
+      const container = containerRef.current
+      if (!container) return
+      s.phases.forEach(p => {
+        if ((p.level ?? 1) <= 1) {
+          p.collapsed = true
+          if (p.id) {
+            container.querySelectorAll<HTMLElement>(`.gantt-toggle[data-for="${p.id}"]`).forEach(el => { el.textContent = '▶' })
+          }
+        }
+        if (p.id && (p.level ?? 1) > 0) {
+          const el = container.querySelector<HTMLElement>(`[data-row-id="${p.id}"]`)
+          if (el) el.style.display = 'none'
+        }
+      })
+      setDirty(true)
+    }
+
     return () => {
-      delete (window as unknown as Record<string, unknown>).__ganttView
-      delete (window as unknown as Record<string, unknown>).__ganttReset
+      delete win.__ganttView
+      delete win.__ganttReset
+      delete win.__ganttToggle
+      delete win.__ganttExpandAll
+      delete win.__ganttCollapseAll
     }
   }) // eslint-disable-line react-hooks/exhaustive-deps
 

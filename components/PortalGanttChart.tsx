@@ -132,26 +132,47 @@ export default function PortalGanttChart({ job, phases, ganttState }: Props) {
       return ((mIdx + (d.getDate() - 1) / mEnd.getDate()) / colCount) * 100
     }
 
-    const phaseRowsHtml = state.phases.map((ph: GanttPhase, i: number) => {
-      const leftPct = dayToPct(ph.startDay)
-      const widthPct = dayToPct(ph.startDay + ph.durDays) - dayToPct(ph.startDay)
-      const phEndDay = ph.startDay + ph.durDays
-      const isDone = phEndDay <= doneWeeks * 7
-      const isActive = ph.startDay < doneWeeks * 7 && phEndDay > doneWeeks * 7
-      const barColor = isDone ? '#7ab533' : isActive ? '#4a90a4' : '#c8d8e8'
-      const textColor = (isDone || isActive) ? 'white' : '#2b2f33'
-      const startD = fmtDateShort(addDays(startDate, ph.startDay))
-      const endD = fmtDateShort(addDays(startDate, phEndDay))
-      return `<div style="display:flex;align-items:center;height:${ROW_H}px;margin-bottom:3px">
-        <div style="width:${LABEL_W}px;flex-shrink:0;font-size:11px;font-weight:500;color:#1e2022;padding-right:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right" title="${esc(ph.label)}">${i + 1}. ${esc(ph.label)}</div>
-        <div style="width:8px;flex-shrink:0"></div>
-        <div style="flex:1;position:relative;height:${ROW_H - 8}px;background:#f0f2f4;border-radius:3px">
-          <div style="position:absolute;left:${leftPct}%;width:${widthPct}%;height:100%;background:${barColor};border-radius:3px;display:flex;align-items:center;padding:0 6px;min-width:6px;box-shadow:0 1px 3px rgba(0,0,0,0.12)">
-            <span style="font-size:9px;color:${textColor};white-space:nowrap;overflow:hidden">${isDone ? '✓ ' : isActive ? '▶ ' : ''}${startD}–${endD}</span>
+    // Portal: show level 0 group headers + level 1 phase bars only.
+    // Never show level 2 tasks (too granular for clients).
+    // Always fully expanded — ignore collapsed flags.
+    let phaseIndex = 0
+    const phaseRowsHtml = state.phases
+      .filter((ph: GanttPhase) => (ph.level ?? 1) <= 1)
+      .map((ph: GanttPhase) => {
+        const level = ph.level ?? 1
+
+        if (level === 0) {
+          // Group header row — no bar, just a dark label stripe
+          return `<div style="display:flex;align-items:center;height:${ROW_H}px;margin-bottom:2px;background:#e5e8ec;border-radius:3px">
+            <div style="width:${LABEL_W}px;flex-shrink:0;font-size:11px;font-weight:700;color:#1e2022;padding:0 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(ph.label)}">${esc(ph.label)}</div>
+            <div style="width:8px;flex-shrink:0"></div>
+            <div style="flex:1;position:relative;height:${ROW_H - 8}px;background:#e5e8ec;border-radius:3px">
+              <div style="position:absolute;left:${dayToPct(ph.startDay).toFixed(2)}%;width:${(dayToPct(ph.startDay + ph.durDays) - dayToPct(ph.startDay)).toFixed(2)}%;height:2px;top:50%;transform:translateY(-50%);background:#b0b8c8;border-radius:1px"></div>
+            </div>
+          </div>`
+        }
+
+        // Level 1 phase bar
+        const idx = phaseIndex++
+        const leftPct = dayToPct(ph.startDay)
+        const widthPct = dayToPct(ph.startDay + ph.durDays) - dayToPct(ph.startDay)
+        const phEndDay = ph.startDay + ph.durDays
+        const isDone = phEndDay <= doneWeeks * 7
+        const isActive = ph.startDay < doneWeeks * 7 && phEndDay > doneWeeks * 7
+        const barColor = isDone ? '#7ab533' : isActive ? '#4a90a4' : '#c8d8e8'
+        const textColor = (isDone || isActive) ? 'white' : '#2b2f33'
+        const startD = fmtDateShort(addDays(startDate, ph.startDay))
+        const endD = fmtDateShort(addDays(startDate, phEndDay))
+        return `<div style="display:flex;align-items:center;height:${ROW_H}px;margin-bottom:3px">
+          <div style="width:${LABEL_W}px;flex-shrink:0;font-size:11px;font-weight:500;color:#1e2022;padding-right:12px;padding-left:${ph.level !== undefined ? '18px' : '0'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right" title="${esc(ph.label)}">${ph.level === undefined ? (idx + 1) + '. ' : ''}${esc(ph.label)}</div>
+          <div style="width:8px;flex-shrink:0"></div>
+          <div style="flex:1;position:relative;height:${ROW_H - 8}px;background:#f0f2f4;border-radius:3px">
+            <div style="position:absolute;left:${leftPct}%;width:${widthPct}%;height:100%;background:${barColor};border-radius:3px;display:flex;align-items:center;padding:0 6px;min-width:6px;box-shadow:0 1px 3px rgba(0,0,0,0.12)">
+              <span style="font-size:9px;color:${textColor};white-space:nowrap;overflow:hidden">${isDone ? '✓ ' : isActive ? '▶ ' : ''}${startD}–${endD}</span>
+            </div>
           </div>
-        </div>
-      </div>`
-    }).join('')
+        </div>`
+      }).join('')
 
     // Today marker
     const todayOffset = Math.max(0, Math.min(totalDays, (todayDate.getTime() - startDate.getTime()) / 86400000))

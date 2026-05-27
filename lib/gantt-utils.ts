@@ -1,3 +1,105 @@
+import type { QuotePhase, GanttPhase, GanttState } from './types'
+
+/**
+ * Build a hierarchical GanttState from quote phases.
+ *
+ * Produces a 3-level structure:
+ *   level 0 — parentPhase group header (no bar, just a label row)
+ *   level 1 — sub-phase bar (default 2 days each, sequential within group)
+ *   level 2 — individual estimator task bar (default 1 day each, sequential within phase)
+ *
+ * Phases that share a parentPhase are grouped together.
+ * All days are calendar days from a day-0 project start.
+ *
+ * @param quotePhases  The QuotePhase[] array from the saved quote.
+ * @param totalWeeks   The planned job length in weeks (used as minimum totalDays).
+ */
+export function buildGanttFromQuote(
+  quotePhases: QuotePhase[],
+  totalWeeks = 8,
+): GanttState {
+  const rows: GanttPhase[] = []
+  let cursor = 0   // running project day counter
+
+  // Default durations (calendar days)
+  const PHASE_DAYS = 2
+  const TASK_DAYS  = 1
+
+  // Group phases by parentPhase — preserve insertion order
+  const groupOrder: string[] = []
+  const groupMap: Record<string, QuotePhase[]> = {}
+
+  for (const qp of quotePhases) {
+    const group = qp.parentPhase?.trim() || qp.phase.trim()
+    if (!groupMap[group]) {
+      groupOrder.push(group)
+      groupMap[group] = []
+    }
+    groupMap[group].push(qp)
+  }
+
+  for (const groupLabel of groupOrder) {
+    const groupId = `grp-${groupLabel.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    const groupPhases = groupMap[groupLabel]
+
+    // Level 0 — group header row (spans duration of all its children)
+    const groupStartDay = cursor
+    const groupHeaderIndex = rows.length
+    rows.push({
+      id: groupId,
+      label: groupLabel,
+      level: 0,
+      startDay: groupStartDay,
+      durDays: 0,     // filled in after children are processed
+      collapsed: false,
+    })
+
+    for (const qp of groupPhases) {
+      const phaseId = `ph-${qp.phase.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+      const phaseStart = cursor
+
+      // Collect task names from estimatorItems (if any)
+      const tasks = qp.estimatorItems ?? []
+
+      // Level 1 — phase row
+      const phaseDur = tasks.length > 0 ? tasks.length * TASK_DAYS : PHASE_DAYS
+      rows.push({
+        id: phaseId,
+        label: qp.phase,
+        level: 1,
+        parentId: groupId,
+        startDay: phaseStart,
+        durDays: phaseDur,
+        collapsed: false,
+      })
+
+      // Level 2 — task rows (sequential within phase)
+      let taskCursor = phaseStart
+      for (const task of tasks) {
+        rows.push({
+          id: `task-${task.id ?? Math.random().toString(36).slice(2, 8)}`,
+          label: task.name || task.description || 'Task',
+          level: 2,
+          parentId: phaseId,
+          startDay: taskCursor,
+          durDays: TASK_DAYS,
+        })
+        taskCursor += TASK_DAYS
+      }
+
+      cursor = phaseStart + phaseDur
+    }
+
+    // Backfill the group header span
+    rows[groupHeaderIndex].durDays = cursor - groupStartDay
+  }
+
+  const minDays = totalWeeks * 7
+  const totalDays = Math.max(cursor, minDays)
+
+  return { phases: rows, totalDays }
+}
+
 /**
  * Gantt chart duration helpers.
  *

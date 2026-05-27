@@ -98,6 +98,10 @@ export interface GanttPhase {
   label: string
   startDay: number
   durDays: number
+  id?: string
+  level?: 0 | 1 | 2   // 0 = parentPhase group header, 1 = phase bar, 2 = task bar
+  parentId?: string
+  collapsed?: boolean
 }
 
 export interface GanttState {
