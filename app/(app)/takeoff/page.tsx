@@ -94,20 +94,14 @@ function exportJSON(project: TakeoffProject) {
 function exportCSV(project: TakeoffProject) {
   const header = ['Name', 'Phase', 'Sub-Phase', 'Spec', 'Drawing Ref',
     'Length (m)', 'Width (m)', 'Height (m)', 'Area (m²)', 'Volume (m³)',
-    'Qty', 'Unit', 'Labour Rate', 'Materials Rate', 'Plant Rate',
-    'Sub Rate', 'Other Rate', 'Labour Total', 'Materials Total',
-    'Plant Total', 'Sub Total', 'Other Total', 'Notes']
+    'Qty', 'Unit', 'Building Regs Notes', 'Notes']
 
   const rows = project.items.map(item => [
     item.name, item.phase, item.subPhase ?? '', item.spec ?? '', item.drawingRef ?? '',
     item.length ?? '', item.width ?? '', item.height ?? '',
     item.area ?? '', item.volume ?? '',
     item.qty, item.unit,
-    item.labourRate ?? '', item.materialsRate ?? '', item.plantRate ?? '',
-    item.subRate ?? '', item.otherRate ?? '',
-    item.labourTotal ?? '', item.materialsTotal ?? '',
-    item.plantTotal ?? '', item.subTotal ?? '', item.otherTotal ?? '',
-    item.notes ?? '',
+    item.buildingRegsNotes ?? '', item.notes ?? '',
   ])
 
   const csv = [header, ...rows]
@@ -326,20 +320,11 @@ export default function TakeoffPage() {
   }
 
   function saveItemEdit(item: TakeoffItem) {
-    // Recompute totals
-    const updated: TakeoffItem = {
-      ...item,
-      labourTotal:    item.labourRate    ? +(item.qty * item.labourRate).toFixed(2)    : undefined,
-      materialsTotal: item.materialsRate ? +(item.qty * item.materialsRate).toFixed(2) : undefined,
-      plantTotal:     item.plantRate     ? +(item.qty * item.plantRate).toFixed(2)     : undefined,
-      subTotal:       item.subRate       ? +(item.qty * item.subRate).toFixed(2)       : undefined,
-      otherTotal:     item.otherRate     ? +(item.qty * item.otherRate).toFixed(2)     : undefined,
-    }
     setProject(p => ({
       ...p,
-      items: p.items.map(it => it.id === updated.id ? updated : it),
+      items: p.items.map(it => it.id === item.id ? item : it),
     }))
-    setEditingItem(updated)
+    setEditingItem(item)
   }
 
   // ── Manual add item ────────────────────────────────────────────────────────
@@ -425,25 +410,10 @@ export default function TakeoffPage() {
     setCalibPts([])
   }
 
-  // ── Totals ─────────────────────────────────────────────────────────────────
-  const totals = project.items.reduce((acc, it) => {
-    acc.labour    += it.labourTotal    ?? 0
-    acc.materials += it.materialsTotal ?? 0
-    acc.plant     += it.plantTotal     ?? 0
-    acc.sub       += it.subTotal       ?? 0
-    acc.other     += it.otherTotal     ?? 0
-    return acc
-  }, { labour: 0, materials: 0, plant: 0, sub: 0, other: 0 })
-
-  const grandTotal = totals.labour + totals.materials + totals.plant + totals.sub + totals.other
-
   // ── Phase summary for schedule panel ──────────────────────────────────────
   const phaseGroups = TAKEOFF_PHASES.map(ph => ({
     phase: ph,
     items: project.items.filter(it => it.phase === ph),
-    total: project.items.filter(it => it.phase === ph).reduce((s, it) =>
-      s + (it.labourTotal ?? 0) + (it.materialsTotal ?? 0) + (it.plantTotal ?? 0) +
-        (it.subTotal ?? 0) + (it.otherTotal ?? 0), 0),
   })).filter(g => g.items.length > 0)
 
   // ── Export for quote import ────────────────────────────────────────────────
@@ -652,35 +622,6 @@ export default function TakeoffPage() {
           </div>
         </div>
 
-        <div style={{ borderTop: '1px solid #2a3a2a', paddingTop: 10, marginBottom: 10 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#8aa', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>
-            Rates (£ per unit)
-          </div>
-          {(['labourRate', 'materialsRate', 'plantRate', 'subRate', 'otherRate'] as const).map(key => {
-            const labels: Record<string, string> = {
-              labourRate: '🔨 Labour', materialsRate: '📦 Materials',
-              plantRate: '🚜 Plant', subRate: '👷 Sub', otherRate: '📋 Other',
-            }
-            return (
-              <div key={key} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 6 }}>
-                <div>
-                  <label style={{ ...labelStyle, marginBottom: 2 }}>{labels[key]}</label>
-                  <input type="number" style={inputStyle} placeholder="0.00"
-                    value={item[key] ?? ''}
-                    onChange={e => saveItemEdit({ ...item, [key]: e.target.value ? +e.target.value : undefined })}
-                  />
-                </div>
-                <div>
-                  <label style={{ ...labelStyle, marginBottom: 2 }}>Total</label>
-                  <input type="text" style={{ ...inputStyle, background: '#1a2a1a', color: '#c8d8a8' }} readOnly
-                    value={item[key] ? `£${(item.qty * (item[key] as number)).toFixed(2)}` : '—'}
-                  />
-                </div>
-              </div>
-            )
-          })}
-        </div>
-
         <div style={{ marginBottom: 12 }}>
           <label style={labelStyle}>Building Regs Notes</label>
           <textarea style={{ ...inputStyle, height: 52, resize: 'none' }}
@@ -750,45 +691,26 @@ export default function TakeoffPage() {
 
     return (
       <div style={{ overflowY: 'auto', height: '100%' }}>
-        {/* Grand total */}
-        <div style={{ padding: '12px 14px', background: '#1a2a1a', borderBottom: '1px solid #2a3a2a' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 12, color: '#8aa', textTransform: 'uppercase', letterSpacing: 1 }}>Estimated Total</span>
-            <span style={{ fontSize: 18, fontWeight: 700, color: '#c8d8a8', fontFamily: 'monospace' }}>
-              £{grandTotal.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-          </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-            {[
-              { label: 'Labour',    val: totals.labour,    color: '#3498db' },
-              { label: 'Materials', val: totals.materials, color: '#27ae60' },
-              { label: 'Plant',     val: totals.plant,     color: '#e67e22' },
-              { label: 'Sub',       val: totals.sub,       color: '#9b59b6' },
-              { label: 'Other',     val: totals.other,     color: '#95a5a6' },
-            ].filter(t => t.val > 0).map(t => (
-              <div key={t.label} style={{ fontSize: 11, background: '#0d1a0d', borderRadius: 4, padding: '2px 7px', color: t.color }}>
-                {t.label}: £{t.val.toLocaleString('en-GB', { minimumFractionDigits: 0 })}
-              </div>
-            ))}
-          </div>
+        {/* Item count summary */}
+        <div style={{ padding: '10px 14px', background: '#1a2a1a', borderBottom: '1px solid #2a3a2a',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 12, color: '#8aa', textTransform: 'uppercase', letterSpacing: 1 }}>
+            Quantities
+          </span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#c8d8a8' }}>
+            {project.items.length} item{project.items.length !== 1 ? 's' : ''}
+          </span>
         </div>
 
         {/* Phase groups */}
         {phaseGroups.map(g => (
           <div key={g.phase}>
             <div style={{ padding: '8px 14px', background: '#162216', borderBottom: '1px solid #2a3a2a',
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <div style={{ width: 10, height: 10, borderRadius: 2, background: PHASE_COLORS[g.phase] }} />
-                <span style={{ fontSize: 12, fontWeight: 700, color: '#c8d8a8' }}>{g.phase}</span>
-                <span style={{ fontSize: 11, color: '#6a8a6a', background: '#0d1a0d', borderRadius: 10,
-                  padding: '1px 7px' }}>{g.items.length}</span>
-              </div>
-              {g.total > 0 && (
-                <span style={{ fontSize: 12, color: '#c8d8a8', fontFamily: 'monospace' }}>
-                  £{g.total.toLocaleString('en-GB', { minimumFractionDigits: 0 })}
-                </span>
-              )}
+              display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ width: 10, height: 10, borderRadius: 2, background: PHASE_COLORS[g.phase], flexShrink: 0 }} />
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#c8d8a8' }}>{g.phase}</span>
+              <span style={{ fontSize: 11, color: '#6a8a6a', background: '#0d1a0d', borderRadius: 10,
+                padding: '1px 7px', marginLeft: 2 }}>{g.items.length}</span>
             </div>
             {g.items.map(item => (
               <div
@@ -803,28 +725,16 @@ export default function TakeoffPage() {
                 style={{
                   padding: '7px 14px', borderBottom: '1px solid #1a2a1a',
                   cursor: 'pointer', background: editingItem?.id === item.id ? '#1a2e1a' : 'transparent',
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
                 }}
               >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#dde', whiteSpace: 'nowrap',
-                    overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>
-                  <div style={{ fontSize: 11, color: '#6a8a6a', marginTop: 1 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#dde', whiteSpace: 'nowrap',
+                  overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>
+                <div style={{ fontSize: 11, color: '#6a8a6a', marginTop: 2 }}>
+                  <span style={{ color: '#c8d8a8', fontFamily: 'monospace' }}>
                     {item.qty} {item.unit}
-                    {item.subPhase ? ` · ${item.subPhase}` : ''}
-                    {item.drawingRef ? ` · ${item.drawingRef}` : ''}
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right', marginLeft: 8, flexShrink: 0 }}>
-                  {(() => {
-                    const t = (item.labourTotal ?? 0) + (item.materialsTotal ?? 0) +
-                      (item.plantTotal ?? 0) + (item.subTotal ?? 0) + (item.otherTotal ?? 0)
-                    return t > 0 ? (
-                      <div style={{ fontSize: 12, color: '#c8d8a8', fontFamily: 'monospace' }}>
-                        £{t.toLocaleString('en-GB', { minimumFractionDigits: 0 })}
-                      </div>
-                    ) : null
-                  })()}
+                  </span>
+                  {item.spec ? ` · ${item.spec}` : ''}
+                  {item.drawingRef ? <span style={{ color: '#4a7a4a' }}> [{item.drawingRef}]</span> : ''}
                 </div>
               </div>
             ))}

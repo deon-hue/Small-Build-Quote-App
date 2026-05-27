@@ -111,7 +111,7 @@ export interface TakeoffItem {
   drawingRef?: string           // drawing reference e.g. "SK-01"
   buildingRegsNotes?: string
 
-  // Dimensions
+  // Dimensions (extracted from drawing)
   length?:     number   // m
   width?:      number   // m
   height?:     number   // m
@@ -119,20 +119,6 @@ export interface TakeoffItem {
   volume?:     number   // m³
   qty:         number
   unit:        string   // 'm', 'm²', 'm³', 'nr', 'item', 'bag', etc.
-
-  // Costs (per unit)
-  labourRate?:    number
-  materialsRate?: number
-  plantRate?:     number
-  subRate?:       number
-  otherRate?:     number
-
-  // Totals (qty × rate)
-  labourTotal?:    number
-  materialsTotal?: number
-  plantTotal?:     number
-  subTotal?:       number
-  otherTotal?:     number
 
   notes?: string
 }

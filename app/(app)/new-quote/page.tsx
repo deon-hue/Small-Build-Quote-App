@@ -237,45 +237,37 @@ export default function NewQuotePage() {
 
         if (phases.length && !confirm('Import take-off? This will replace your current phases.')) return
 
-        // Group take-off items by phase
-        const groups: Record<string, TakeoffItem[]> = {}
-        for (const item of data.items as TakeoffItem[]) {
-          const ph = item.phase as TakeoffPhase
-          if (!groups[ph]) groups[ph] = []
-          groups[ph].push(item)
-        }
+        // One quote phase per take-off item — quantities as description, £0 for estimator to fill in
+        const newPhases: QuotePhase[] = (data.items as TakeoffItem[]).map(item => {
+          const parentPhase = PHASE_TO_QUOTE_PARENT[item.phase as TakeoffPhase] || item.phase
 
-        const newPhases: QuotePhase[] = []
-        for (const [ph, items] of Object.entries(groups)) {
-          const parentPhase = PHASE_TO_QUOTE_PARENT[ph as TakeoffPhase] || ph
-          // Aggregate all items in this phase into 5 typed rows
-          const labourTotal    = items.reduce((s, it) => s + (it.labourTotal    ?? 0), 0)
-          const materialsTotal = items.reduce((s, it) => s + (it.materialsTotal ?? 0), 0)
-          const plantTotal     = items.reduce((s, it) => s + (it.plantTotal     ?? 0), 0)
-          const subTotal       = items.reduce((s, it) => s + (it.subTotal       ?? 0), 0)
-          const otherTotal     = items.reduce((s, it) => s + (it.otherTotal     ?? 0), 0)
+          // Build a readable quantity string: "24.50 m² · Cavity wall 305mm [SK-01]"
+          const qtyStr = `${item.qty} ${item.unit}`
+          const specStr = item.spec ? ` · ${item.spec}` : ''
+          const refStr  = item.drawingRef ? ` [${item.drawingRef}]` : ''
+          const desc = `${qtyStr}${specStr}${refStr}`
 
-          // Build description from item names
-          const desc = items.map(it =>
-            `${it.name} (${it.qty} ${it.unit}${it.spec ? ' — ' + it.spec : ''})`
-          ).join('; ')
+          const notes = [
+            item.buildingRegsNotes ? `Bldg Regs: ${item.buildingRegsNotes}` : '',
+            item.notes ?? '',
+          ].filter(Boolean).join(' | ')
 
-          newPhases.push(makePhase(ph, [
-            { desc, qty: 1, unit: 'Item', labour: labourTotal, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: `Imported from take-off: ${items.length} item(s)`, itemType: 'labour' },
-            { desc: '', qty: 1, unit: 'Item', labour: 0, materials: materialsTotal, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials' },
-            { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: plantTotal, subcontractors: 0, other: 0, notes: '', itemType: 'plant' },
-            { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: subTotal, other: 0, notes: '', itemType: 'subcontractors' },
-            { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: otherTotal, notes: '', itemType: 'other' },
-          ], parentPhase))
-        }
+          return makePhase(item.name, [
+            { desc, qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes, itemType: 'labour' },
+            { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials' },
+            { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'plant' },
+            { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'subcontractors' },
+            { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'other' },
+          ], parentPhase)
+        })
 
         setPhases(newPhases)
 
-        // Prefill address if blank
+        // Prefill address / job type if blank
         if (!custAddr && data.address) setCustAddr(data.address)
-        if (!jobType && data.jobType)   setJobType(data.jobType)
+        if (data.jobType) setJobType(data.jobType)
 
-        alert(`✓ Imported ${data.items.length} take-off item(s) across ${newPhases.length} phase(s).`)
+        alert(`✓ Imported ${newPhases.length} take-off item(s) — add your rates to complete the estimate.`)
       } catch {
         alert('Could not parse take-off file. Make sure it was exported from the Take-off tool.')
       }
