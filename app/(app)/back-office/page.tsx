@@ -11,9 +11,10 @@ import { COST_CATEGORIES } from '@/lib/costCategories'
 import {
   TRADE_TYPES, BUILT_IN_TRADE_RATES, loadTradeRates, saveTradeRatesToStorage,
   getHourlyRate, getHalfDayRate,
-  type TradeRate,
+  type TradeRate, type TaskLabourLine,
 } from '@/lib/tradeRates'
 import { HardHat, RotateCcw } from 'lucide-react'
+import TaskLabourLinesEditor from '@/components/TaskLabourLinesEditor'
 
 function deepClone<T>(v: T): T { return JSON.parse(JSON.stringify(v)) }
 
@@ -29,7 +30,7 @@ function defaultItems(): Omit<QuoteItem, 'id'>[] {
 
 // ── Estimator items editor (main pricing surface per phase) ──────────────────
 const MEAS_TYPES = Object.keys(MEASUREMENT_LABELS) as MeasurementType[]
-const RATE_COLS = '1fr 90px 55px 55px 55px 55px 55px 44px 24px'
+const RATE_COLS = '1fr 90px 55px 55px 55px 55px 55px 44px 32px 24px'
 
 interface EstimatorEditorProps {
   phase: TemplatePhaseData
@@ -44,6 +45,15 @@ function EstimatorEditor({ phase, onLoad, onAdd, onUpdate, onRemove }: Estimator
   const items: EstimatorItemTemplate[] = phase.estimatorItems || []
   const builtIn = getPhaseEstimatorDefaults(phase.phase)
   const hasBuiltIn = builtIn.length > 0
+
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set())
+  function toggleExpand(id: string) {
+    setExpandedItems(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
 
   return (
     <div>
@@ -72,59 +82,119 @@ function EstimatorEditor({ phase, onLoad, onAdd, onUpdate, onRemove }: Estimator
               </span>
             ))}
             <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Waste%</span>
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Task Labour Lines">
+              <HardHat size={10} strokeWidth={2.2} style={{ color: '#94a3b8' }} />
+            </span>
             <span />
           </div>
 
           {/* Item rows */}
-          {items.map(item => (
-            <div key={item.id} style={{ display: 'grid', gridTemplateColumns: RATE_COLS, gap: 3, alignItems: 'center', marginBottom: 4 }}>
-              <input
-                value={item.name}
-                onChange={e => onUpdate({ ...item, name: e.target.value })}
-                style={{ padding: '3px 6px', border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 12 }}
-              />
-              <select
-                value={item.measurementType}
-                onChange={e => {
-                  const t = e.target.value as MeasurementType
-                  onUpdate({ ...item, measurementType: t, unit: MEASUREMENT_LABELS[t].unit })
+          {items.map(item => {
+            const isOpen   = expandedItems.has(item.id)
+            const hasLines = (item.defaultTaskLabourLines?.length ?? 0) > 0
+            return (
+              <div
+                key={item.id}
+                style={{
+                  marginBottom: 4,
+                  border:       isOpen ? '1.5px solid rgba(59,130,246,0.2)' : '1px solid transparent',
+                  borderRadius: isOpen ? 6 : 0,
+                  background:   isOpen ? 'rgba(59,130,246,0.02)' : 'transparent',
                 }}
-                style={{ padding: '3px 4px', border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 11 }}
               >
-                {MEAS_TYPES.map(t => (
-                  <option key={t} value={t}>{MEASUREMENT_LABELS[t].label} ({MEASUREMENT_LABELS[t].unit})</option>
-                ))}
-              </select>
-              {(
-                [
-                  ['labourRate',    item.labourRate]    as const,
-                  ['materialsRate', item.materialsRate] as const,
-                  ['plantRate',     item.plantRate]     as const,
-                  ['subRate',       item.subRate]       as const,
-                  ['otherRate',     item.otherRate]     as const,
-                  ['wastePercent',  item.wastePercent]  as const,
-                ]
-              ).map(([key, val]) => (
-                <input
-                  key={key}
-                  type="number"
-                  value={val}
-                  min={0}
-                  step={0.5}
-                  onChange={e => onUpdate({ ...item, [key]: Number(e.target.value) })}
-                  style={{
-                    padding: '3px 4px', border: `1px solid ${val > 0 ? '#c7d7e0' : '#e2e8f0'}`,
-                    borderRadius: 4, fontSize: 12, textAlign: 'right',
-                    background: val > 0 ? '#f0f8fc' : '#fafafa',
-                  }}
-                />
-              ))}
-              <button
-                onClick={() => onRemove(item.id)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1', fontSize: 15, padding: 0, lineHeight: 1, textAlign: 'center' }}
-              >×</button>
-            </div>
-          ))}
+                {/* Main grid row */}
+                <div style={{ display: 'grid', gridTemplateColumns: RATE_COLS, gap: 3, alignItems: 'center', padding: isOpen ? '4px 6px 4px 4px' : 0 }}>
+                  <input
+                    value={item.name}
+                    onChange={e => onUpdate({ ...item, name: e.target.value })}
+                    style={{ padding: '3px 6px', border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 12 }}
+                  />
+                  <select
+                    value={item.measurementType}
+                    onChange={e => {
+                      const t = e.target.value as MeasurementType
+                      onUpdate({ ...item, measurementType: t, unit: MEASUREMENT_LABELS[t].unit })
+                    }}
+                    style={{ padding: '3px 4px', border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 11 }}
+                  >
+                    {MEAS_TYPES.map(t => (
+                      <option key={t} value={t}>{MEASUREMENT_LABELS[t].label} ({MEASUREMENT_LABELS[t].unit})</option>
+                    ))}
+                  </select>
+                  {(
+                    [
+                      ['labourRate',    item.labourRate]    as const,
+                      ['materialsRate', item.materialsRate] as const,
+                      ['plantRate',     item.plantRate]     as const,
+                      ['subRate',       item.subRate]       as const,
+                      ['otherRate',     item.otherRate]     as const,
+                      ['wastePercent',  item.wastePercent]  as const,
+                    ]
+                  ).map(([key, val]) => (
+                    <input
+                      key={key}
+                      type="number"
+                      value={val}
+                      min={0}
+                      step={0.5}
+                      onChange={e => onUpdate({ ...item, [key]: Number(e.target.value) })}
+                      style={{
+                        padding: '3px 4px', border: `1px solid ${val > 0 ? '#c7d7e0' : '#e2e8f0'}`,
+                        borderRadius: 4, fontSize: 12, textAlign: 'right',
+                        background: val > 0 ? '#f0f8fc' : '#fafafa',
+                      }}
+                    />
+                  ))}
+
+                  {/* Labour lines toggle button */}
+                  <button
+                    onClick={() => toggleExpand(item.id)}
+                    title={hasLines
+                      ? `${item.defaultTaskLabourLines!.length} default trade${item.defaultTaskLabourLines!.length !== 1 ? 's' : ''} — click to edit`
+                      : 'Set default task labour trades for this item'
+                    }
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2,
+                      padding: '3px 5px', borderRadius: 4, cursor: 'pointer',
+                      border:      isOpen    ? '1.5px solid rgba(59,130,246,0.35)' :
+                                   hasLines  ? '1px solid rgba(59,130,246,0.25)'   : 'none',
+                      background:  isOpen    ? 'rgba(59,130,246,0.12)'             :
+                                   hasLines  ? 'rgba(59,130,246,0.08)'             : 'none',
+                      color:       (isOpen || hasLines) ? '#1e40af' : '#cbd5e1',
+                    }}
+                  >
+                    <HardHat size={11} strokeWidth={2.2} />
+                    {hasLines && (
+                      <span style={{ fontSize: 9, fontWeight: 700 }}>
+                        {item.defaultTaskLabourLines!.length}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Remove */}
+                  <button
+                    onClick={() => onRemove(item.id)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1', fontSize: 15, padding: 0, lineHeight: 1, textAlign: 'center' }}
+                  >×</button>
+                </div>
+
+                {/* Task Labour Lines editor — expands inline */}
+                {isOpen && (
+                  <div style={{ padding: '0 8px 10px 8px' }}>
+                    <div style={{ fontSize: 10, color: '#64748b', marginBottom: 6, marginTop: 2 }}>
+                      Default task labour trades for <strong>{item.name}</strong> — copied to every new quote that uses this template.
+                    </div>
+                    <TaskLabourLinesEditor
+                      lines={item.defaultTaskLabourLines || []}
+                      onChange={(lines: TaskLabourLine[]) =>
+                        onUpdate({ ...item, defaultTaskLabourLines: lines.length > 0 ? lines : undefined })
+                      }
+                    />
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </>
       )}
 

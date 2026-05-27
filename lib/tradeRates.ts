@@ -185,3 +185,63 @@ export function labourTradesTotal(trades: LabourTrade[]): number {
 export function labourTradesCostTotal(trades: LabourTrade[]): number {
   return +trades.reduce((s, t) => s + t.cost, 0).toFixed(2)
 }
+
+// ── TaskLabourLine — per-task labour allocation (cost only, no markup) ────────
+// Used inside individual EstimatorItems.  Global quote markup is applied later
+// by calcPhaseSell — these lines intentionally carry no per-line markup.
+export interface TaskLabourLine {
+  id: string
+  trade: string
+  qty: number
+  unit: LabourUnit
+  /** Back Office default day rate at time of creation. */
+  defaultDayRate: number
+  /** Effective day rate for this task line (may be overridden). */
+  dayRate: number
+  /** True when dayRate !== defaultDayRate. */
+  isOverridden: boolean
+  /** Derived: £ per selected unit */
+  unitRate: number
+  /** Derived: qty × unitRate  (cost, no markup) */
+  total: number
+}
+
+export function calcTaskLabourLine(l: TaskLabourLine): TaskLabourLine {
+  const unitRate = getUnitRate(l.dayRate, l.unit)
+  const total    = +(l.qty * unitRate).toFixed(2)
+  return {
+    ...l,
+    unitRate,
+    isOverridden: l.dayRate !== l.defaultDayRate,
+    total,
+  }
+}
+
+/**
+ * Migrate a TaskLabourLine saved in an old format (costRate field, missing
+ * fields).  Safe to call on already-valid records.
+ */
+export function migrateTaskLabourLine(
+  raw: Partial<TaskLabourLine> & { costRate?: number },
+): TaskLabourLine {
+  const dayRate = raw.dayRate ?? raw.costRate ?? 0
+  const unit: LabourUnit =
+    raw.unit === 'half-day' ? 'half-day' :
+    raw.unit === 'hr'       ? 'hr'       :
+    'day'
+  return calcTaskLabourLine({
+    id:             raw.id    ?? `task-trade-${Date.now()}-${Math.floor(Math.random() * 9999)}`,
+    trade:          raw.trade ?? 'Builder',
+    qty:            raw.qty   ?? 1,
+    unit,
+    defaultDayRate: raw.defaultDayRate ?? dayRate,
+    dayRate,
+    isOverridden:   false,
+    unitRate:       0,
+    total:          0,
+  })
+}
+
+export function taskLabourLinesTotal(lines: TaskLabourLine[]): number {
+  return +lines.reduce((s, l) => s + l.total, 0).toFixed(2)
+}

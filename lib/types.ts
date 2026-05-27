@@ -1,6 +1,6 @@
 import type { EstimatorItem, EstimatorItemTemplate } from './estimator'
-import type { LabourTrade } from './tradeRates'
-export type { EstimatorItem, EstimatorItemTemplate, LabourTrade }
+import type { LabourTrade, TaskLabourLine } from './tradeRates'
+export type { EstimatorItem, EstimatorItemTemplate, LabourTrade, TaskLabourLine }
 
 export interface QuoteItem {
   id: number

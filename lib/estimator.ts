@@ -2,6 +2,9 @@
 // Measurement-based cost breakdown layer added to each quote phase.
 // Stored as QuotePhase.estimatorItems in the existing JSONB phases column.
 
+import { calcTaskLabourLine, type TaskLabourLine } from './tradeRates'
+export type { TaskLabourLine }
+
 export type MeasurementType = 'area' | 'volume' | 'linear' | 'quantity'
 
 export const MEASUREMENT_LABELS: Record<MeasurementType, {
@@ -26,13 +29,19 @@ export interface EstimatorItem {
   qty: number
   measurement: number
   manualMeasurement: boolean
-  // Rates (cost per unit)
+  // Rates (cost per unit) — labour rate ignored when taskLabourLines present
   labourRate: number
   materialsRate: number
   plantRate: number
   subRate: number
   otherRate: number
   wastePercent: number
+  /**
+   * Per-task trade labour lines.  When present and non-empty, labourTotal is
+   * computed from these lines instead of from labourRate × measurement.
+   * Each line is cost-only — global quote markup is applied later.
+   */
+  taskLabourLines?: TaskLabourLine[]
   // Computed totals
   labourTotal: number
   materialsTotal: number
@@ -57,6 +66,9 @@ export interface EstimatorItemTemplate {
   subRate: number
   otherRate: number
   wastePercent: number
+  /** Default task labour lines pre-configured in Back Office.
+   *  Copied to taskLabourLines when the item is added to a quote. */
+  defaultTaskLabourLines?: TaskLabourLine[]
 }
 
 // ── Calculation functions ──────────────────────────────────────────────────
@@ -80,8 +92,17 @@ export function calcEstimatorItem(item: EstimatorItem): EstimatorItem {
   const m = item.manualMeasurement
     ? item.measurement
     : calcMeasurement(item.measurementType, item.length, item.width, item.depth, item.qty)
-  const wasteMult      = 1 + item.wastePercent / 100
-  const labourTotal    = +(m * item.labourRate).toFixed(2)
+  const wasteMult = 1 + item.wastePercent / 100
+
+  // Recalculate task labour lines so totals are always fresh after a rate change
+  const taskLabourLines = item.taskLabourLines?.map(calcTaskLabourLine)
+  const hasTaskLabour   = (taskLabourLines?.length ?? 0) > 0
+
+  // When task lines are present, labour total comes from them (cost only, no
+  // per-line markup).  Global quote markup is applied later by calcPhaseSell.
+  const labourTotal    = hasTaskLabour
+    ? +taskLabourLines!.reduce((s, l) => s + l.total, 0).toFixed(2)
+    : +(m * item.labourRate).toFixed(2)
   const materialsTotal = +(m * item.materialsRate * wasteMult).toFixed(2)
   const plantTotal     = +(m * item.plantRate).toFixed(2)
   const subTotal       = +(m * item.subRate).toFixed(2)
@@ -89,6 +110,7 @@ export function calcEstimatorItem(item: EstimatorItem): EstimatorItem {
   const lineTotal      = labourTotal + materialsTotal + plantTotal + subTotal + otherTotal
   return {
     ...item,
+    taskLabourLines,
     measurement: m,
     labourTotal, materialsTotal, plantTotal, subTotal, otherTotal, lineTotal,
     isCosted: lineTotal > 0,
@@ -111,12 +133,16 @@ export function itemFromTemplate(tpl: EstimatorItemTemplate): EstimatorItem {
     subRate: tpl.subRate,
     otherRate: tpl.otherRate,
     wastePercent: tpl.wastePercent,
+    // Copy default task labour lines from the template if configured
+    taskLabourLines: tpl.defaultTaskLabourLines?.length
+      ? tpl.defaultTaskLabourLines.map(l => ({ ...l }))
+      : undefined,
     labourTotal: 0, materialsTotal: 0, plantTotal: 0,
     subTotal: 0, otherTotal: 0, lineTotal: 0,
     notes: '',
     isCosted: false,
   }
-  return base
+  return calcEstimatorItem(base)
 }
 
 /** Aggregate estimator items → per-type totals for lump-sum compatibility.
