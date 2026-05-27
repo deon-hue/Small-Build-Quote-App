@@ -11,6 +11,8 @@ import {
 } from '@/lib/estimator'
 import { getPhaseEstimatorDefaults } from '@/lib/estimatorDefaults'
 import { fmt } from '@/lib/utils'
+import { COST_CATEGORIES } from '@/lib/costCategories'
+import type { LucideIcon } from 'lucide-react'
 import MeasureModal from './MeasureModal'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -22,42 +24,40 @@ interface Props {
 type AggResult = ReturnType<typeof estimatorAggregates>
 
 // ── Cost category config ──────────────────────────────────────────────────────
+// Spread from the shared COST_CATEGORIES (icons, colours, labels) and add
+// estimator-specific accessor functions.
+const [_lab, _mat, _pla, _sub, _oth] = COST_CATEGORIES
 const CATS = [
   {
-    id: 'labour' as const, label: 'Labour', icon: '🔨',
-    color: '#1e40af', bg: 'rgba(59,130,246,0.09)', border: 'rgba(59,130,246,0.22)', bar: '#3b82f6',
+    ..._lab,
     getAgg:   (a: AggResult)     => a.labour,
     getTotal: (i: EstimatorItem) => i.labourTotal,
     getRate:  (i: EstimatorItem) => i.labourRate,
     setRate:  (i: EstimatorItem, v: number) => calcEstimatorItem({ ...i, labourRate: v }),
   },
   {
-    id: 'materials' as const, label: 'Materials', icon: '📦',
-    color: '#92400e', bg: 'rgba(245,158,11,0.09)', border: 'rgba(245,158,11,0.28)', bar: '#f59e0b',
+    ..._mat,
     getAgg:   (a: AggResult)     => a.materials,
     getTotal: (i: EstimatorItem) => i.materialsTotal,
     getRate:  (i: EstimatorItem) => i.materialsRate,
     setRate:  (i: EstimatorItem, v: number) => calcEstimatorItem({ ...i, materialsRate: v }),
   },
   {
-    id: 'plant' as const, label: 'Plant', icon: '🚜',
-    color: '#166534', bg: 'rgba(34,197,94,0.09)', border: 'rgba(34,197,94,0.25)', bar: '#22c55e',
+    ..._pla,
     getAgg:   (a: AggResult)     => a.plant,
     getTotal: (i: EstimatorItem) => i.plantTotal,
     getRate:  (i: EstimatorItem) => i.plantRate,
     setRate:  (i: EstimatorItem, v: number) => calcEstimatorItem({ ...i, plantRate: v }),
   },
   {
-    id: 'sub' as const, label: 'Sub', icon: '👷',
-    color: '#4c1d95', bg: 'rgba(139,92,246,0.09)', border: 'rgba(139,92,246,0.25)', bar: '#8b5cf6',
+    ..._sub,
     getAgg:   (a: AggResult)     => a.subcontractors,
     getTotal: (i: EstimatorItem) => i.subTotal,
     getRate:  (i: EstimatorItem) => i.subRate,
     setRate:  (i: EstimatorItem, v: number) => calcEstimatorItem({ ...i, subRate: v }),
   },
   {
-    id: 'other' as const, label: 'Other', icon: '📋',
-    color: '#374151', bg: 'rgba(107,117,128,0.09)', border: 'rgba(107,117,128,0.22)', bar: '#6b7280',
+    ..._oth,
     getAgg:   (a: AggResult)     => a.other,
     getTotal: (i: EstimatorItem) => i.otherTotal,
     getRate:  (i: EstimatorItem) => i.otherRate,
@@ -87,6 +87,8 @@ function CostChip({ cat, val, size = 'sm' }: {
   size?: 'sm' | 'md' | 'lg'
 }) {
   if (val <= 0) return null
+  const iconSize = size === 'lg' ? 12 : 10
+  const { Icon } = cat
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 3,
@@ -100,7 +102,7 @@ function CostChip({ cat, val, size = 'sm' }: {
       fontWeight: 600,
       whiteSpace: 'nowrap',
     }}>
-      <span style={{ fontSize: size === 'lg' ? 12 : 10 }}>{cat.icon}</span>
+      <Icon size={iconSize} strokeWidth={2.2} style={{ flexShrink: 0 }} />
       {fmt(val)}
     </span>
   )
@@ -108,16 +110,21 @@ function CostChip({ cat, val, size = 'sm' }: {
 
 // ── Rate field ────────────────────────────────────────────────────────────────
 function RateField({
-  label, icon, val, color, bg, border, onChange,
+  label, Icon, val, color, bg, border, onChange,
 }: {
-  label: string; icon: string; val: number
+  label: string; Icon: LucideIcon; val: number
   color: string; bg: string; border: string
   onChange: (n: number) => void
 }) {
   return (
     <div>
-      <div style={{ fontSize: 10, fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
-        {icon} {label}
+      <div style={{
+        display: 'inline-flex', alignItems: 'center', gap: 4,
+        fontSize: 10, fontWeight: 700, color,
+        textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4,
+      }}>
+        <Icon size={10} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+        {label}
       </div>
       <input
         type="number" value={val} min={0} step={0.5}
@@ -296,7 +303,7 @@ function ItemRow({
               <RateField
                 key={cat.id}
                 label={`${cat.label}/unit`}
-                icon={cat.icon}
+                Icon={cat.Icon}
                 val={cat.getRate(item)}
                 color={cat.color}
                 bg={cat.bg}
@@ -324,8 +331,9 @@ function ItemRow({
               {CATS.map(cat => {
                 const r = cat.getRate(item)
                 return r > 0 ? (
-                  <span key={cat.id} style={{ color: cat.color, fontFamily: 'DM Mono, monospace', fontWeight: 700 }}>
-                    {cat.icon} £{r.toFixed(2)}
+                  <span key={cat.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: cat.color, fontFamily: 'DM Mono, monospace', fontWeight: 700 }}>
+                    <cat.Icon size={10} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+                    £{r.toFixed(2)}
                   </span>
                 ) : null
               })}
@@ -366,8 +374,9 @@ function SummaryPanel({ items, agg }: { items: EstimatorItem[]; agg: AggResult }
               background: cat.bg, border: `1px solid ${cat.border}`,
               minWidth: 88,
             }}>
-              <span style={{ fontSize: 10, color: cat.color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                {cat.icon} {cat.label}
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, color: cat.color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                <cat.Icon size={11} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+                {cat.label}
               </span>
               <span style={{ fontSize: 16, fontFamily: 'DM Mono, monospace', fontWeight: 700, color: cat.color }}>
                 {fmt(cat.getAgg(agg))}

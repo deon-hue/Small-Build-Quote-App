@@ -7,6 +7,7 @@ import type { TemplatePhaseData, QuoteItem } from '@/lib/types'
 import type { EstimatorItemTemplate, MeasurementType } from '@/lib/estimator'
 import { MEASUREMENT_LABELS } from '@/lib/estimator'
 import { getPhaseEstimatorDefaults } from '@/lib/estimatorDefaults'
+import { COST_CATEGORIES } from '@/lib/costCategories'
 
 function deepClone<T>(v: T): T { return JSON.parse(JSON.stringify(v)) }
 
@@ -58,8 +59,11 @@ function EstimatorEditor({ phase, onLoad, onAdd, onUpdate, onRemove }: Estimator
           <div style={{ display: 'grid', gridTemplateColumns: RATE_COLS, gap: 3, padding: '3px 0 5px', borderBottom: '1px solid #e2e8f0', marginBottom: 3 }}>
             <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Item name</span>
             <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Measure</span>
-            {['🔨 Lab', '📦 Mat', '🚜 Plant', '👷 Sub', '📋 Other'].map(h => (
-              <span key={h} style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{h}</span>
+            {COST_CATEGORIES.map(cat => (
+              <span key={cat.id} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: 3, fontSize: 10, fontWeight: 700, color: '#94a3b8', textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                <cat.Icon size={10} strokeWidth={2.2} />
+                {cat.shortLabel}
+              </span>
             ))}
             <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Waste%</span>
             <span />
