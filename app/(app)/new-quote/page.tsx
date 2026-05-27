@@ -65,7 +65,12 @@ export default function NewQuotePage() {
   const [clientSearch, setClientSearch] = useState('')
   const photoInputRef = useRef<HTMLInputElement>(null)
 
+  // Wait for ALL context data (including customTemplates) to finish loading before
+  // calling loadTemplate. Previously this depended on [quotes] which fires before
+  // customTemplates is populated — causing the hardcoded JOB_TEMPLATES to be used
+  // instead of the saved Back Office template with zeroed rates.
   useEffect(() => {
+    if (loading) return
     const editId = sessionStorage.getItem('sbc_edit_quote')
     if (editId) {
       sessionStorage.removeItem('sbc_edit_quote')
@@ -73,7 +78,7 @@ export default function NewQuotePage() {
       if (q) { loadQuoteForEdit(q); return }
     }
     loadTemplate('Rear Extension')
-  }, [quotes]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function loadTemplate(type: string) {
     const tpl = getTemplate(type)
