@@ -145,11 +145,8 @@ function ItemRow({
 }) {
   const [expanded, setExpanded] = useState(false)
 
-  const hasVal    = item.measurement > 0
-  const hasRates  = CATS.some(c => c.getRate(item) > 0)
-  const noMeasure = hasRates && !hasVal
-  const noRates   = !hasRates
-  const mLabel    = MEASUREMENT_LABELS[item.measurementType]
+  const hasVal   = item.measurement > 0
+  const mLabel   = MEASUREMENT_LABELS[item.measurementType]
 
   return (
     <div style={{
@@ -191,26 +188,6 @@ function ItemRow({
           onFocus={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'white' }}
           onBlur={e => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.background = 'transparent' }}
         />
-
-        {/* Warning: no rates */}
-        {noRates && (
-          <span style={{
-            fontSize: 10, background: 'rgba(192,57,43,0.08)', color: '#a93226',
-            borderRadius: 4, padding: '2px 6px', flexShrink: 0, fontWeight: 600,
-          }}>No rates</span>
-        )}
-
-        {/* Warning: needs measurement */}
-        {noMeasure && (
-          <button
-            onClick={onMeasure}
-            style={{
-              fontSize: 10, background: 'rgba(245,158,11,0.12)', color: '#92400e',
-              borderRadius: 4, padding: '2px 8px', flexShrink: 0, fontWeight: 600,
-              border: 'none', cursor: 'pointer',
-            }}
-          >⚠️ Enter measurement</button>
-        )}
 
         {/* Measurement button */}
         <button
@@ -338,7 +315,7 @@ function ItemRow({
           </div>
 
           {/* Per-unit rate summary */}
-          {hasRates && (
+          {CATS.some(c => c.getRate(item) > 0) && (
             <div style={{
               padding: '7px 10px', background: 'rgba(0,0,0,0.03)', borderRadius: 5,
               fontSize: 11, color: 'var(--muted)', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center',
