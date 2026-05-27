@@ -10,6 +10,8 @@ import { getPhaseEstimatorDefaults } from '@/lib/estimatorDefaults'
 import QuotePreviewModal from '@/components/QuotePreviewModal'
 import ScopeChat from '@/components/ScopeChat'
 import EstimatorBreakdown from '@/components/EstimatorBreakdown'
+import type { TakeoffItem, TakeoffPhase } from '@/lib/takeoff-types'
+import { PHASE_TO_QUOTE_PARENT } from '@/lib/takeoff-types'
 
 let phaseCounter = 0
 let itemCounter = 0
@@ -86,6 +88,7 @@ export default function NewQuotePage() {
   const [clientSearch, setClientSearch] = useState('')
   const [collapsedPhases, setCollapsedPhases] = useState<Set<number>>(new Set())
   const photoInputRef = useRef<HTMLInputElement>(null)
+  const takeoffInputRef = useRef<HTMLInputElement>(null)
 
   // ── Phase collapse helpers ────────────────────────────────────────────────
   function togglePhase(id: number) {
@@ -217,6 +220,69 @@ export default function NewQuotePage() {
     } finally {
       setGeneratingPhases(false)
     }
+  }
+
+  // ── Import from Take-off tool ─────────────────────────────────────────────
+  function importTakeoff(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = ev => {
+      try {
+        const data = JSON.parse(ev.target?.result as string)
+        if (data.version !== 1 || !Array.isArray(data.items)) {
+          alert('Not a valid take-off file. Export a take-off from the Take-off tool first.')
+          return
+        }
+
+        if (phases.length && !confirm('Import take-off? This will replace your current phases.')) return
+
+        // Group take-off items by phase
+        const groups: Record<string, TakeoffItem[]> = {}
+        for (const item of data.items as TakeoffItem[]) {
+          const ph = item.phase as TakeoffPhase
+          if (!groups[ph]) groups[ph] = []
+          groups[ph].push(item)
+        }
+
+        const newPhases: QuotePhase[] = []
+        for (const [ph, items] of Object.entries(groups)) {
+          const parentPhase = PHASE_TO_QUOTE_PARENT[ph as TakeoffPhase] || ph
+          // Aggregate all items in this phase into 5 typed rows
+          const labourTotal    = items.reduce((s, it) => s + (it.labourTotal    ?? 0), 0)
+          const materialsTotal = items.reduce((s, it) => s + (it.materialsTotal ?? 0), 0)
+          const plantTotal     = items.reduce((s, it) => s + (it.plantTotal     ?? 0), 0)
+          const subTotal       = items.reduce((s, it) => s + (it.subTotal       ?? 0), 0)
+          const otherTotal     = items.reduce((s, it) => s + (it.otherTotal     ?? 0), 0)
+
+          // Build description from item names
+          const desc = items.map(it =>
+            `${it.name} (${it.qty} ${it.unit}${it.spec ? ' — ' + it.spec : ''})`
+          ).join('; ')
+
+          newPhases.push(makePhase(ph, [
+            { desc, qty: 1, unit: 'Item', labour: labourTotal, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: `Imported from take-off: ${items.length} item(s)`, itemType: 'labour' },
+            { desc: '', qty: 1, unit: 'Item', labour: 0, materials: materialsTotal, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials' },
+            { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: plantTotal, subcontractors: 0, other: 0, notes: '', itemType: 'plant' },
+            { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: subTotal, other: 0, notes: '', itemType: 'subcontractors' },
+            { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: otherTotal, notes: '', itemType: 'other' },
+          ], parentPhase))
+        }
+
+        setPhases(newPhases)
+
+        // Prefill address if blank
+        if (!custAddr && data.address) setCustAddr(data.address)
+        if (!jobType && data.jobType)   setJobType(data.jobType)
+
+        alert(`✓ Imported ${data.items.length} take-off item(s) across ${newPhases.length} phase(s).`)
+      } catch {
+        alert('Could not parse take-off file. Make sure it was exported from the Take-off tool.')
+      }
+    }
+    reader.readAsText(file)
+    // Reset so the same file can be re-imported
+    e.target.value = ''
   }
 
   // ── AI Scope → fully-populated estimate ───────────────────────────────────
@@ -605,6 +671,11 @@ export default function NewQuotePage() {
               <button className="btn-sm btn-sky" onClick={generatePhases} disabled={generatingPhases} style={{ fontSize: 11 }}>
                 {generatingPhases ? '⏳ Generating…' : '✦ Generate Phases'}
               </button>
+              <label className="btn-sm btn-outline" style={{ fontSize: 11, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                title="Import take-off from the Take-off tool">
+                📐 Import Take-off
+                <input ref={takeoffInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={importTakeoff} />
+              </label>
               <button className="btn-sm btn-primary" onClick={addMainPhase}>+ Add Phase</button>
             </div>
           </div>

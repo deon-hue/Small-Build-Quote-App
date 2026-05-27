@@ -64,6 +64,7 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
           {can('jobs')    && navItem('/jobs',      '⬡', 'Jobs')}
           {can('quotes')  && navItem('/quotes',    '◎', 'Saved Quotes')}
           {can('quotes')  && navItem('/new-quote', '✎', 'New Quote')}
+          {can('quotes')  && navItem('/takeoff',   '📐', 'Take-off')}
           {can('invoices')&& navItem('/invoices',  '◻', 'Invoices')}
           <div className="nav-section">People</div>
           {can('clients') && navItem('/clients', '○', 'Clients')}
@@ -108,6 +109,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/jobs':         'Jobs',
   '/quotes':       'Saved Quotes',
   '/new-quote':    'New Quote',
+  '/takeoff':      'Take-off',
   '/invoices':     'Invoices',
   '/clients':      'Clients',
   '/settings':     'Company Setup',
