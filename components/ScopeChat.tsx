@@ -41,14 +41,18 @@ interface Props {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function parseMessage(text: string): { scope: string | null; commentary: string } {
-  const match = text.match(/\[SCOPE\]([\s\S]*?)\[\/SCOPE\]/i)
+function parseMessage(text: string): { scope: string | null; commentary: string; readyToBuild: boolean } {
+  // Detect and strip the [READY_TO_BUILD] signal before rendering
+  const readyToBuild = text.includes('[READY_TO_BUILD]')
+  const cleaned = text.replace(/\[READY_TO_BUILD\]/g, '').trim()
+
+  const match = cleaned.match(/\[SCOPE\]([\s\S]*?)\[\/SCOPE\]/i)
   if (match) {
     const scope = match[1].trim()
-    const commentary = text.replace(/\[SCOPE\][\s\S]*?\[\/SCOPE\]/i, '').trim()
-    return { scope, commentary }
+    const commentary = cleaned.replace(/\[SCOPE\][\s\S]*?\[\/SCOPE\]/i, '').trim()
+    return { scope, commentary, readyToBuild }
   }
-  return { scope: null, commentary: text }
+  return { scope: null, commentary: cleaned, readyToBuild }
 }
 
 function fmtBytes(bytes: number): string {
@@ -109,6 +113,7 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
   const recognitionRef = useRef<AnySpeechRecognition>(null)
   const [loading, setLoading] = useState(false)
   const [latestScope, setLatestScope] = useState<string | null>(null)
+  const [readyToBuild, setReadyToBuild] = useState(false)
 
   const [attachments, setAttachments] = useState<AttachedFile[]>([])
   const [processing, setProcessing] = useState(false)
@@ -151,12 +156,12 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
   useEffect(() => {
     const phaseList = phases.length ? phases.join(', ') : null
     const greeting = [
-      `Hi! I'll help you write the scope of works for this **${jobType}**${address ? ` at ${address}` : ''}.`,
+      `Hi! I'll help you build a full cost estimate for this **${jobType}**${address ? ` at ${address}` : ''}.`,
       phaseList
-        ? `I can see you have ${phases.length} phase${phases.length > 1 ? 's' : ''}: ${phaseList}.`
+        ? `\nI can see you've already added ${phases.length} phase${phases.length > 1 ? 's' : ''}: ${phaseList}.`
         : '',
-      `\nYou can **📎 attach building plans, drawings, or photos** — I'll read them and extract the key details. Or describe the job and say **"write scope"** to get started.`,
-    ].filter(Boolean).join(' ')
+      `\n\nTell me about the project — main works, approximate size, any specific requirements. I'll ask a few targeted follow-up questions, then generate a complete scope and cost breakdown.\n\n**📎 Attach plans or drawings** and I'll read them automatically.`,
+    ].filter(Boolean).join('')
 
     setMessages([{ role: 'assistant', content: greeting }])
     setTimeout(() => inputRef.current?.focus(), 100)
@@ -231,13 +236,14 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
   }
 
   // ── Send ───────────────────────────────────────────────────
-  async function send() {
-    const textInput = input.trim()
+  // overrideText: when a chip sends directly (bypasses input field; no attachments sent)
+  async function send(overrideText?: string) {
+    const textInput = overrideText !== undefined ? overrideText : input.trim()
     if (!textInput && attachments.length === 0) return
     if (loading) return
 
     // Guard: check combined base64 payload size before sending
-    const currentAttachments = [...attachments]
+    const currentAttachments = overrideText !== undefined ? [] : [...attachments]
     const totalBase64Bytes = currentAttachments.reduce(
       (s, a) => s + Math.ceil(a.dataBase64.length * 0.75), 0
     )
@@ -256,7 +262,7 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
 
     setMessages(updated)
     setInput('')
-    setAttachments([])
+    if (overrideText === undefined) setAttachments([])
     setLoading(true)
 
     try {
@@ -293,8 +299,9 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
       const data  = await res.json()
       const reply = data.reply || 'Sorry, something went wrong. Please try again.'
       setMessages(prev => [...prev, { role: 'assistant', content: reply }])
-      const { scope } = parseMessage(reply)
+      const { scope, readyToBuild: rdy } = parseMessage(reply)
       if (scope) setLatestScope(scope)
+      if (rdy)   setReadyToBuild(true)
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err)
       console.error('scope-chat fetch error:', detail)
@@ -318,26 +325,29 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
   }
 
   // ── Quick prompts ──────────────────────────────────────────
-  const quickPrompts = attachments.length > 0
-    ? [
-        'Analyse the plans and write a scope',
-        'What construction phases are needed?',
-        'Extract all dimensions and room names',
-        'What structural work is shown?',
-      ]
-    : !latestScope
-    ? [
-        'Write a scope based on the phases',
-        'Make it detailed with all trades',
-        'Keep it simple – two paragraphs',
-        'Add structural engineer requirement',
-      ]
-    : [
-        'Make it shorter and simpler',
-        'Make it more detailed',
-        'Add exclusions at the end',
-        'Add a provisional sums paragraph',
-      ]
+  // Four contextual sets — depends on stage of conversation
+  const quickPrompts: string[] =
+    attachments.length > 0
+      // Plans attached — prompt to analyse
+      ? ['Analyse the plans and write a scope', 'What structural work is shown?', 'Extract all dimensions', 'List all rooms and areas']
+      : latestScope
+      // Scope exists — offer refinements
+      ? ['Add more detail to the scope', 'Add a list of exclusions', 'Add provisional sums paragraph', 'Simplify the language']
+      : messages.length <= 1
+      // Initial state — give example starters so user knows what to type
+      ? [
+          'Single storey rear extension, flat roof, bifold doors',
+          'Loft conversion with rear dormer and en-suite',
+          'Full house refurbishment, 4 bed Victorian terrace',
+          'Kitchen extension with structural knock-through',
+        ]
+      // Mid-interview — offer skip / allowance shortcuts
+      : [
+          'Skip that',
+          "Not sure — make an allowance",
+          "That's everything, generate the scope now",
+          'Keep it simple',
+        ]
 
   const canSend = !loading && (input.trim().length > 0 || attachments.length > 0)
 
@@ -362,7 +372,7 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
             <div style={{ fontWeight: 700, fontSize: 15 }}>✦ AI Scope Writer</div>
             <div style={{ fontSize: 12, opacity: 0.8, marginTop: 1 }}>
               {jobType}{address ? ` · ${address}` : ''}
-              <span style={{ opacity: 0.65 }}> · Attach plans with 📎</span>
+              <span style={{ opacity: 0.65 }}> · Pre-estimate interview · 📎 attach plans</span>
             </div>
           </div>
           <button
@@ -400,12 +410,22 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
                         ✓ Scope Draft
                       </div>
                       <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{scope}</div>
-                      <button
-                        onClick={() => { onInsert(scope); onClose() }}
-                        style={{ marginTop: 10, background: 'var(--moss)', color: '#fff', border: 'none', borderRadius: 6, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', width: '100%' }}
-                      >
-                        ✓ Use This Scope
-                      </button>
+                      <div style={{ marginTop: 10, display: 'flex', gap: 6 }}>
+                        {onBuildEstimate && (
+                          <button
+                            onClick={() => { onBuildEstimate(scope); onClose() }}
+                            style={{ flex: 2, background: '#e67e22', color: '#fff', border: 'none', borderRadius: 6, padding: '7px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                          >
+                            ✦ Build Estimate
+                          </button>
+                        )}
+                        <button
+                          onClick={() => { onInsert(scope); onClose() }}
+                          style={{ flex: 1, background: 'var(--moss)', color: '#fff', border: 'none', borderRadius: 6, padding: '7px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                        >
+                          ✓ Scope Only
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -422,46 +442,98 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
         </div>
 
         {/* ── Quick prompts ── */}
-        {(!latestScope && messages.length <= 1 && !loading) || (attachments.length > 0 && !loading)
-          ? (
-            <div style={{ padding: '6px 16px 0', display: 'flex', flexWrap: 'wrap', gap: 6, flexShrink: 0 }}>
-              {quickPrompts.map(p => (
+        {!loading && !readyToBuild && (
+          <div style={{ padding: '6px 16px 0', display: 'flex', flexWrap: 'wrap', gap: 6, flexShrink: 0 }}>
+            {quickPrompts.map(p => {
+              // Short interview-response chips send immediately; descriptive starter chips set input
+              const inInterviewPhase = messages.length > 1 && !latestScope
+              const sendImmediately  = inInterviewPhase &&
+                (p === 'Skip that' || p.startsWith('Not sure') || p.startsWith("That's"))
+              const isInterviewChip  = inInterviewPhase &&
+                (p === 'Skip that' || p.startsWith('Not sure') || p.startsWith("That's") || p === 'Keep it simple')
+              return (
                 <button
                   key={p}
-                  onClick={() => { setInput(p); setTimeout(() => inputRef.current?.focus(), 0) }}
-                  style={{ background: '#f0f2ee', border: '1px solid var(--border)', borderRadius: 20, padding: '5px 12px', fontSize: 11, color: 'var(--ink)', cursor: 'pointer', fontFamily: 'inherit' }}
+                  onClick={() => {
+                    if (sendImmediately) {
+                      send(p)
+                    } else {
+                      setInput(p)
+                      setTimeout(() => inputRef.current?.focus(), 0)
+                    }
+                  }}
+                  style={{
+                    background: isInterviewChip ? '#fef3e8' : '#f0f2ee',
+                    border: `1px solid ${isInterviewChip ? '#f0c080' : 'var(--border)'}`,
+                    borderRadius: 20, padding: '5px 12px', fontSize: 11,
+                    color: isInterviewChip ? '#a04000' : 'var(--ink)',
+                    cursor: 'pointer', fontFamily: 'inherit',
+                  }}
                 >
                   {p}
                 </button>
-              ))}
-            </div>
-          ) : null
-        }
+              )
+            })}
+          </div>
+        )}
 
-        {/* ── Latest scope sticky bar ── */}
+        {/* ── Scope / ready-to-build sticky bar ── */}
         {latestScope && (
-          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', background: '#f8faf5', flexShrink: 0 }}>
+          <div style={{
+            padding: readyToBuild ? '14px 16px' : '10px 16px',
+            borderTop: `2px solid ${readyToBuild ? '#7ab533' : 'var(--border)'}`,
+            background: readyToBuild ? '#f0f9e8' : '#f8faf5',
+            flexShrink: 0,
+            transition: 'background 0.3s, border-color 0.3s',
+          }}>
+            {/* Interview-complete banner */}
+            {readyToBuild && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                <span style={{ fontSize: 16 }}>✅</span>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#3a7a1a' }}>Interview complete</div>
+                  <div style={{ fontSize: 11, color: '#5a9a3a' }}>Scope is ready — click Build Estimate to auto-populate all phases and tasks</div>
+                </div>
+              </div>
+            )}
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#7ab533', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Latest scope</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#7ab533', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                {readyToBuild ? 'Scope ready' : 'Latest scope'}
+              </span>
               <div style={{ display: 'flex', gap: 6 }}>
                 {onBuildEstimate && (
                   <button
                     onClick={() => { onBuildEstimate(latestScope); onClose() }}
                     title="Analyse the scope and auto-populate all phases and tasks from the task library"
-                    style={{ background: '#e67e22', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                    style={{
+                      background: '#e67e22',
+                      color: '#fff', border: 'none', borderRadius: 6,
+                      padding: readyToBuild ? '9px 18px' : '6px 14px',
+                      fontSize: readyToBuild ? 13 : 12,
+                      fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
+                      boxShadow: readyToBuild ? '0 2px 10px rgba(230,126,34,0.45)' : 'none',
+                      transition: 'all 0.2s',
+                    }}
                   >
                     ✦ Build Estimate
                   </button>
                 )}
                 <button
                   onClick={() => { onInsert(latestScope); onClose() }}
-                  style={{ background: 'var(--moss)', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  title="Paste scope text into the quote — estimate not built yet"
+                  style={{
+                    background: 'var(--moss)', color: '#fff', border: 'none', borderRadius: 6,
+                    padding: '6px 14px', fontSize: 12, fontWeight: 600,
+                    cursor: 'pointer', whiteSpace: 'nowrap',
+                    opacity: readyToBuild ? 0.7 : 1,
+                  }}
                 >
-                  ✓ Insert into Quote
+                  ✓ Insert Scope Only
                 </button>
               </div>
             </div>
-            <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, maxHeight: 40, overflow: 'hidden' }}>
+            <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, maxHeight: 36, overflow: 'hidden' }}>
               {latestScope.slice(0, 120)}{latestScope.length > 120 ? '…' : ''}
             </div>
           </div>
@@ -595,7 +667,7 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
 
           {/* Send button */}
           <button
-            onClick={send}
+            onClick={() => send()}
             disabled={!canSend}
             style={{
               background: 'var(--moss)', color: '#fff', border: 'none', borderRadius: 8,

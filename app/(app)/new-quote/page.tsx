@@ -706,35 +706,35 @@ export default function NewQuotePage() {
               {[
                 {
                   n: '1', icon: '🖊️', title: 'Open the chat',
-                  body: 'Click the “❖ AI Chat” button on the Scope of Works card. A chat window will open in the corner of the screen.',
+                  body: 'Click the “✦ AI Chat” button on the Scope of Works card. A chat panel will open — this is your pre-estimate interview.',
                 },
                 {
-                  n: '2', icon: '📝', title: 'Describe the job',
-                  body: 'Type a short description of the project — the job type, size, and key works. For example: “Single storey rear extension, approx 5m \xd7 4m, new kitchen, bi-fold doors, structural steel beam.”',
+                  n: '2', icon: '💬', title: 'Describe the job',
+                  body: 'Tell the AI about the project in plain English — job type, approximate size, and the main works. For example: "Single storey rear extension, roughly 4m wide × 5m out, flat roof, bifold doors, open-plan kitchen."',
                 },
                 {
-                  n: '3', icon: '📎', title: 'Attach plans or photos (optional)',
-                  body: 'Click the \u{1F4CE} paperclip button to attach building plans, architect drawings, or site photos. The AI will read them and pull out key details automatically. Supports PDF, JPG, and PNG (max 3 files, 8 MB each).',
+                  n: '3', icon: '❓', title: 'Answer the follow-up questions',
+                  body: "The AI will ask a few targeted questions about things it needs to know — roof type, structural works, drainage, finishes, etc. Answer naturally. If you're unsure, say \"not sure\" or \"make an allowance\" and the AI will use a sensible standard assumption.",
                 },
                 {
-                  n: '4', icon: '⚡', title: 'Use a quick prompt',
-                  body: 'Hit one of the suggestion chips that appear — like “Write a scope based on the phases” or “Make it detailed with all trades” — or type your own instruction.',
+                  n: '4', icon: '📎', title: 'Attach plans or photos (optional)',
+                  body: 'Click the paperclip button to attach building plans, architect drawings, or site photos. The AI will extract dimensions, room names and structural details automatically. Supports PDF, JPG and PNG (max 3 files, 8 MB each).',
                 },
                 {
-                  n: '5', icon: '🎤', title: 'Or dictate it (optional)',
-                  body: 'Click the microphone button and speak your description aloud. Works in Chrome and Edge.',
+                  n: '5', icon: '🎤', title: 'Or speak it (optional)',
+                  body: 'Click the microphone button and describe the job aloud instead of typing. Works in Chrome and Edge.',
                 },
                 {
-                  n: '6', icon: '✅', title: 'Insert into your quote',
-                  body: `When you are happy with the scope, click “✔ Use This Scope” inside the chat bubble, or “✔ Insert into Quote” in the sticky bar at the bottom. The text is pasted straight into the Scope of Works box.`,
+                  n: '6', icon: '✦', title: 'Build the estimate',
+                  body: `Once the AI has enough information it generates a scope and shows a green "✦ Build Estimate" button. Click it — the system automatically creates all phases, selects tasks from your library, and populates labour, materials, plant and subcontractor allowances from Back Office rates.`,
                 },
                 {
-                  n: '7', icon: '⚙️', title: 'Generate your build phases',
-                  body: `Once the scope has been pasted in, scroll down to the Phases section and click the “✶ Generate Phases” button. The AI will read your scope and automatically build out all the relevant construction phases and cost rows for your quote.`,
+                  n: '7', icon: '✏️', title: 'Review and adjust',
+                  body: 'The estimate is now live. Add or remove phases, adjust quantities and rates on any task — totals update instantly. Nothing is locked before you save.',
                 },
                 {
-                  n: '8', icon: '✏️', title: 'Refine with follow-up messages',
-                  body: `Keep chatting to tweak the scope. Try: “Make it shorter”, “Add exclusions at the end”, “Add a provisional sums paragraph”, or “Make it more formal.”`,
+                  n: '8', icon: '💬', title: 'Refine the scope text',
+                  body: `Re-open the chat at any time to tweak the scope wording. Try: "Add a list of exclusions", "Add a provisional sums paragraph", or "Simplify the language."`,
                 },
               ].map(step => (
                 <div key={step.n} style={{ display: 'flex', gap: 14, marginBottom: 18 }}>
@@ -757,10 +757,11 @@ export default function NewQuotePage() {
               }}>
                 <div style={{ fontWeight: 600, marginBottom: 4 }}>💡 Tips</div>
                 <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--muted)' }}>
-                  <li>Fill in the <strong>job type</strong> and <strong>client address</strong> first — the AI uses these automatically.</li>
-                  <li>If you've already added phases, the AI can see them and write the scope around them.</li>
-                  <li>You can re-open the chat to regenerate the scope as many times as you like.</li>
-                  <li>The scope won't be saved until you click <strong>“Save Quote”</strong>.</li>
+                  <li>Fill in <strong>job type</strong> and <strong>client address</strong> first — the AI reads them automatically.</li>
+                  <li>You don't need to write a long description — a sentence or two is enough to start the interview.</li>
+                  <li>If you answer “not sure” or “skip”, the AI makes a sensible industry-standard assumption and notes it in the scope.</li>
+                  <li>The <strong>✦ Build Estimate</strong> button appears once the AI has enough info — clicking it auto-populates all phases and tasks from your Back Office rates.</li>
+                  <li>Nothing is saved until you click <strong>”Save Quote”</strong> — you can keep adjusting.</li>
                 </ul>
               </div>
             </div>
