@@ -681,11 +681,24 @@ interface SubPhaseBlockProps {
 }
 
 function SubPhaseBlock({ p, pi, markup, onUpdatePhaseName, onRemovePhase, onUpdatePhase }: SubPhaseBlockProps) {
+  const [collapsed, setCollapsed] = useState(false)
   const subSell = calcPhaseSell(p, markup)
 
   return (
     <div className="phase-block" style={{ borderRadius: p.parentPhase ? '0' : undefined, marginBottom: 2 }}>
       <div className="phase-hd" style={{ background: '#f7f9f7', borderTop: '1px solid #e8ede8' }}>
+        {/* Collapse / expand toggle */}
+        <button
+          onClick={() => setCollapsed(c => !c)}
+          title={collapsed ? 'Expand phase' : 'Collapse phase'}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'var(--muted)', fontSize: 10, padding: '0 2px',
+            lineHeight: 1, flexShrink: 0,
+          }}
+        >
+          {collapsed ? '▶' : '▼'}
+        </button>
         <span style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, minWidth: 16 }}>{pi + 1}.</span>
         <input value={p.phase} onChange={e => onUpdatePhaseName(p.id, e.target.value)} style={{ fontSize: 13 }} />
         <span className="mono" style={{ fontSize: 11, color: 'var(--slate)', fontWeight: 600, minWidth: 70, textAlign: 'right' }}>{fmt(subSell)}</span>
@@ -693,7 +706,9 @@ function SubPhaseBlock({ p, pi, markup, onUpdatePhaseName, onRemovePhase, onUpda
       </div>
 
       {/* Cost breakdown — estimator is the sole pricing engine */}
-      <EstimatorBreakdown phase={p} onUpdatePhase={onUpdatePhase} markup={markup} />
+      {!collapsed && (
+        <EstimatorBreakdown phase={p} onUpdatePhase={onUpdatePhase} markup={markup} />
+      )}
     </div>
   )
 }
