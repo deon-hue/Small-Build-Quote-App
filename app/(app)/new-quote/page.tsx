@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { fmt, VAT, JOB_TYPES, calcPhase, calcPhaseSell } from '@/lib/utils'
 import type { QuotePhase, QuoteItem, Quote } from '@/lib/types'
-import { itemFromTemplate } from '@/lib/estimator'
+import { itemFromTemplate, estimatorAggregates } from '@/lib/estimator'
 import type { EstimatorItem } from '@/lib/estimator'
 import QuotePreviewModal from '@/components/QuotePreviewModal'
 import ScopeChat from '@/components/ScopeChat'
@@ -77,10 +77,28 @@ export default function NewQuotePage() {
 
   function loadTemplate(type: string) {
     const tpl = getTemplate(type)
-    setPhases(tpl.map(p => makePhase(
-      p.phase, p.items, p.parentPhase || undefined,
-      p.estimatorItems?.map(itemFromTemplate),
-    )))
+    setPhases(tpl.map(p => {
+      const estimatorItems = p.estimatorItems?.map(itemFromTemplate) ?? []
+
+      // Synchronously sync typed QuoteItems from current estimator aggregates.
+      // This ensures stale hardcoded template amounts (e.g. labour=£800) are
+      // replaced by the actual estimator values immediately — including £0
+      // when Back Office defaults have been zeroed. Zero is a valid cost value.
+      let typedItems: Omit<QuoteItem, 'id'>[] = p.items
+      if (estimatorItems.length > 0) {
+        const agg = estimatorAggregates(estimatorItems, [])
+        typedItems = p.items.map(qi => {
+          if (qi.itemType === 'labour')         return { ...qi, labour:         agg.labour }
+          if (qi.itemType === 'materials')      return { ...qi, materials:      agg.materials }
+          if (qi.itemType === 'plant')          return { ...qi, plantHire:      agg.plant }
+          if (qi.itemType === 'subcontractors') return { ...qi, subcontractors: agg.subcontractors }
+          if (qi.itemType === 'other')          return { ...qi, other:          agg.other }
+          return qi
+        })
+      }
+
+      return makePhase(p.phase, typedItems, p.parentPhase || undefined, estimatorItems)
+    }))
   }
 
   function toTypedItems(items: QuoteItem[]): Omit<QuoteItem, 'id'>[] {
