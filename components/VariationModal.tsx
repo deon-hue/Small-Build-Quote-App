@@ -701,6 +701,45 @@ export default function VariationModal({ job, onClose }: Props) {
             </button>
           )}
 
+          {/* Draft → Accept directly (admin approval without sending to portal) */}
+          {isDraft && (
+            <button
+              className="btn btn-primary"
+              disabled={busy || saving || !form.title.trim()}
+              style={{ background: '#27ae60', borderColor: '#27ae60' }}
+              onClick={async () => {
+                if (!form.title.trim()) { alert('Please enter a title first.'); return }
+                if (!confirm(`Accept variation "${form.title}" on behalf of the client?\n\nThis will mark it as approved and lock the record.`)) return
+                setBusy(true)
+                const total = calcVarTotal(form.items, form.markup, form.vatIncluded)
+                const now = new Date().toISOString()
+                try {
+                  if (editingVar) {
+                    const updated: Variation = {
+                      ...editingVar,
+                      title: form.title, description: form.description, items: form.items,
+                      markup: form.markup, vatIncluded: form.vatIncluded, total, notes: form.notes,
+                      status: 'approved', locked: true,
+                      clientApprovedAt: now, clientApprovedBy: '(Admin)',
+                    }
+                    await updateVariation(updated)
+                  } else {
+                    await addVariation(job.id, {
+                      title: form.title, description: form.description, status: 'approved',
+                      items: form.items, markup: form.markup, vatIncluded: form.vatIncluded,
+                      total, notes: form.notes, locked: true,
+                      clientApprovedAt: now, clientApprovedBy: '(Admin)',
+                      clientRejectedAt: null, clientRejectionReason: null, sentAt: null,
+                    })
+                  }
+                  backToList()
+                } finally { setBusy(false) }
+              }}
+            >
+              {busy ? 'Saving…' : '✓ Accept'}
+            </button>
+          )}
+
           {/* Sent → approve or reject by admin */}
           {isSent && (
             <>
@@ -709,11 +748,16 @@ export default function VariationModal({ job, onClose }: Props) {
               }}>
                 ✗ Reject
               </button>
-              <button className="btn btn-primary" disabled={busy} onClick={async () => {
-                if (!confirm(`Mark variation "${editingVar?.title}" as Approved? This locks the record.`)) return
-                await changeStatus('approved')
-              }}>
-                {busy ? 'Saving…' : '✓ Approve (Admin)'}
+              <button
+                className="btn btn-primary"
+                disabled={busy}
+                style={{ background: '#27ae60', borderColor: '#27ae60' }}
+                onClick={async () => {
+                  if (!confirm(`Accept variation "${editingVar?.title}" on behalf of the client?\n\nThis will mark it as approved and lock the record.`)) return
+                  await changeStatus('approved')
+                }}
+              >
+                {busy ? 'Saving…' : '✓ Accept'}
               </button>
             </>
           )}
