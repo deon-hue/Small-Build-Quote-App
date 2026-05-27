@@ -88,12 +88,14 @@ function syncToItems(items: QuoteItem[], agg: AggResult): QuoteItem[] {
 }
 
 // ── Cost chip ─────────────────────────────────────────────────────────────────
-function CostChip({ cat, val, size = 'sm' }: {
+function CostChip({ cat, val, size = 'sm', showZero = false }: {
   cat: typeof CATS[number]
   val: number
   size?: 'sm' | 'md' | 'lg'
+  /** When true, renders the chip even at £0 (dimmed) so the category is always visible */
+  showZero?: boolean
 }) {
-  if (val <= 0) return null
+  if (val <= 0 && !showZero) return null
   const iconSize = size === 'lg' ? 12 : 10
   const { Icon } = cat
   return (
@@ -108,6 +110,8 @@ function CostChip({ cat, val, size = 'sm' }: {
       fontFamily: 'DM Mono, monospace',
       fontWeight: 600,
       whiteSpace: 'nowrap',
+      opacity: val <= 0 ? 0.38 : 1,
+      transition: 'opacity 0.2s',
     }}>
       <Icon size={iconSize} strokeWidth={2.2} style={{ flexShrink: 0 }} />
       {fmt(val)}
@@ -594,10 +598,10 @@ export default function EstimatorBreakdown({ phase, onUpdatePhase, markup = 0 }:
         <span style={{ fontSize: 9, color: '#4a90a4', flexShrink: 0 }}>{open ? '▼' : '▶'}</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: '#4a90a4', flexShrink: 0 }}>📐 Cost Breakdown</span>
 
-        {/* Mini cost chips in header */}
+        {/* Mini cost chips in header — always show all 5 when items exist (dimmed at £0) */}
         {items.length > 0 && (
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', flex: 1 }}>
-            {CATS.map(cat => <CostChip key={cat.id} cat={cat} val={cat.getAgg(agg)} />)}
+            {CATS.map(cat => <CostChip key={cat.id} cat={cat} val={cat.getAgg(agg)} showZero />)}
           </div>
         )}
 
@@ -718,12 +722,12 @@ export default function EstimatorBreakdown({ phase, onUpdatePhase, markup = 0 }:
                 background: '#f5f4f1', borderTop: '2px solid #e0dbd4',
                 padding: '10px 14px',
               }}>
-                {/* Category totals */}
+                {/* Category totals — always show all 5 when items exist (dimmed at £0) */}
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
                   <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginRight: 4 }}>
                     Phase total
                   </span>
-                  {CATS.map(cat => <CostChip key={cat.id} cat={cat} val={cat.getAgg(agg)} size="md" />)}
+                  {CATS.map(cat => <CostChip key={cat.id} cat={cat} val={cat.getAgg(agg)} size="md" showZero />)}
                 </div>
 
                 {/* Colour bar + grand total */}
@@ -747,9 +751,9 @@ export default function EstimatorBreakdown({ phase, onUpdatePhase, markup = 0 }:
                   )}
                   <span style={{
                     fontSize: 16, fontFamily: 'DM Mono, monospace', fontWeight: 700,
-                    color: agg.total > 0 ? '#15803d' : '#ccc', flexShrink: 0,
+                    color: agg.total > 0 ? '#15803d' : '#aaa', flexShrink: 0,
                   }}>
-                    {agg.total > 0 ? fmt(agg.total) : '—'}
+                    {fmt(agg.total)}
                   </span>
                 </div>
 
