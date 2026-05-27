@@ -192,6 +192,13 @@ export default function TakeoffPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const importJsonRef = useRef<HTMLInputElement>(null)
 
+  // PDF state
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pdfDocRef = useRef<any>(null)
+  const [pdfCurrentPage, setPdfCurrentPage] = useState(1)
+  const [pdfTotalPages, setPdfTotalPages] = useState(0)
+  const [pdfLoading, setPdfLoading] = useState(false)
+
   // ── Persist on change ──────────────────────────────────────────────────────
   useEffect(() => {
     const p = { ...project, updatedAt: new Date().toISOString() }
@@ -342,10 +349,60 @@ export default function TakeoffPage() {
     setPanelMode('properties')
   }
 
-  // ── Load plan image ────────────────────────────────────────────────────────
-  function handleImageLoad(e: ChangeEvent<HTMLInputElement>) {
+  // ── Render a PDF page to planImage ────────────────────────────────────────
+  async function renderPdfPage(pageNum: number) {
+    if (!pdfDocRef.current) return
+    setPdfLoading(true)
+    try {
+      const page = await pdfDocRef.current.getPage(pageNum)
+      const viewport = page.getViewport({ scale: 2.0 })
+      const canvas = document.createElement('canvas')
+      canvas.width  = viewport.width
+      canvas.height = viewport.height
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+      await page.render({ canvasContext: ctx, viewport }).promise
+      setPlanImage(canvas.toDataURL('image/png'))
+      setPdfCurrentPage(pageNum)
+    } finally {
+      setPdfLoading(false)
+    }
+  }
+
+  // ── Load plan image (image or PDF) ─────────────────────────────────────────
+  async function handleImageLoad(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
+
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+
+    if (isPdf) {
+      setPdfLoading(true)
+      try {
+        // Dynamic import avoids SSR issues and keeps the bundle lean
+        const pdfjsLib = await import('pdfjs-dist')
+        // Use CDN worker — avoids Next.js bundling complexity
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+          `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
+
+        const arrayBuffer = await file.arrayBuffer()
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+        pdfDocRef.current = pdf
+        setPdfTotalPages(pdf.numPages)
+        setPdfCurrentPage(1)
+        await renderPdfPage(1)
+      } catch (err) {
+        console.error('PDF load error:', err)
+        alert('Could not load PDF. Make sure it is a valid PDF file.')
+      } finally {
+        setPdfLoading(false)
+      }
+      return
+    }
+
+    // Regular image
+    pdfDocRef.current = null
+    setPdfTotalPages(0)
     const reader = new FileReader()
     reader.onload = ev => setPlanImage(ev.target?.result as string)
     reader.readAsDataURL(file)
@@ -855,10 +912,29 @@ export default function TakeoffPage() {
 
         <div style={{ flex: 1 }} />
 
-        <input type="file" accept="image/*" ref={fileInputRef} style={{ display: 'none' }} onChange={handleImageLoad} />
-        <button style={btnStyle} onClick={() => fileInputRef.current?.click()}>
-          🖼 Load Plan
+        <input type="file" accept="image/*,application/pdf,.pdf" ref={fileInputRef} style={{ display: 'none' }} onChange={handleImageLoad} />
+        <button style={btnStyle} onClick={() => fileInputRef.current?.click()} disabled={pdfLoading}>
+          {pdfLoading ? '⏳ Loading…' : '🖼 Load Plan'}
         </button>
+
+        {/* PDF page navigation */}
+        {pdfTotalPages > 1 && (
+          <>
+            <button style={{ ...btnStyle, padding: '6px 8px' }}
+              disabled={pdfCurrentPage <= 1 || pdfLoading}
+              onClick={() => renderPdfPage(pdfCurrentPage - 1)}>
+              ◀
+            </button>
+            <span style={{ fontSize: 12, color: '#c8d8a8', whiteSpace: 'nowrap' }}>
+              p.{pdfCurrentPage}/{pdfTotalPages}
+            </span>
+            <button style={{ ...btnStyle, padding: '6px 8px' }}
+              disabled={pdfCurrentPage >= pdfTotalPages || pdfLoading}
+              onClick={() => renderPdfPage(pdfCurrentPage + 1)}>
+              ▶
+            </button>
+          </>
+        )}
 
         <input type="file" accept=".json" ref={importJsonRef} style={{ display: 'none' }} onChange={handleImportJson} />
         <button style={btnStyle} onClick={() => importJsonRef.current?.click()}>
