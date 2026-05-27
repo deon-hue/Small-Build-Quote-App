@@ -1,5 +1,6 @@
 import type { EstimatorItem, EstimatorItemTemplate } from './estimator'
-export type { EstimatorItem, EstimatorItemTemplate }
+import type { LabourTrade } from './tradeRates'
+export type { EstimatorItem, EstimatorItemTemplate, LabourTrade }
 
 export interface QuoteItem {
   id: number
@@ -22,6 +23,7 @@ export interface QuotePhase {
   items: QuoteItem[]
   estimatorItems?: EstimatorItem[]
   useEstimator?: boolean  // true = lump sums auto-computed from estimatorItems
+  labourTrades?: LabourTrade[]  // explicit day-rate trade entries for this phase
 }
 
 export interface QuoteCustomer {

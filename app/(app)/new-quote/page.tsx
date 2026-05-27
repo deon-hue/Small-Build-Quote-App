@@ -670,7 +670,7 @@ function SubPhaseBlock({ p, pi, markup, onUpdatePhaseName, onRemovePhase, onUpda
       </div>
 
       {/* Cost breakdown — estimator is the sole pricing engine */}
-      <EstimatorBreakdown phase={p} onUpdatePhase={onUpdatePhase} />
+      <EstimatorBreakdown phase={p} onUpdatePhase={onUpdatePhase} markup={markup} />
     </div>
   )
 }

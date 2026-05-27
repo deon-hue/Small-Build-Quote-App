@@ -8,6 +8,11 @@ import type { EstimatorItemTemplate, MeasurementType } from '@/lib/estimator'
 import { MEASUREMENT_LABELS } from '@/lib/estimator'
 import { getPhaseEstimatorDefaults } from '@/lib/estimatorDefaults'
 import { COST_CATEGORIES } from '@/lib/costCategories'
+import {
+  TRADE_TYPES, BUILT_IN_TRADE_RATES, loadTradeRates, saveTradeRatesToStorage,
+  type TradeRate,
+} from '@/lib/tradeRates'
+import { HardHat } from 'lucide-react'
 
 function deepClone<T>(v: T): T { return JSON.parse(JSON.stringify(v)) }
 
@@ -153,6 +158,12 @@ export default function BackOfficePage() {
   const [saving, setSaving] = useState(false)
   const [dupFrom, setDupFrom] = useState('')
 
+  // Trade rate defaults (loaded from localStorage)
+  const [tradeRates, setTradeRates] = useState<TradeRate[]>(BUILT_IN_TRADE_RATES)
+  const [tradeRatesDirty, setTradeRatesDirty] = useState(false)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setTradeRates(loadTradeRates()) }, [])
+
   useEffect(() => {
     if (!loading) {
       setLocalTemplate(deepClone(getTemplate(selectedJobType)))
@@ -294,6 +305,7 @@ export default function BackOfficePage() {
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
+    <>
     <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
 
       {/* ── Left: job type list ─────────────────────────────────────────── */}
@@ -553,5 +565,109 @@ export default function BackOfficePage() {
         )}
       </div>
     </div>
+
+    {/* ── Trade Rate Defaults ────────────────────────────────────────────── */}
+    <div className="card" style={{ marginTop: 24 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <HardHat size={18} strokeWidth={2} style={{ color: '#3b82f6' }} />
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>Trade Day &amp; Hour Rates</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+              Default cost rates used when adding labour trades to a phase. Editable per-quote.
+            </div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {tradeRatesDirty && (
+            <button
+              onClick={() => { setTradeRates(loadTradeRates()); setTradeRatesDirty(false) }}
+              style={{ padding: '6px 14px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, background: '#fff', color: '#6b7280', cursor: 'pointer' }}
+            >
+              Cancel
+            </button>
+          )}
+          <button
+            onClick={() => { setTradeRates([...BUILT_IN_TRADE_RATES]); setTradeRatesDirty(true) }}
+            style={{ padding: '6px 14px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, background: '#fff', color: '#6b7280', cursor: 'pointer' }}
+          >
+            Reset to Built-in
+          </button>
+          <button
+            onClick={() => { saveTradeRatesToStorage(tradeRates); setTradeRatesDirty(false) }}
+            disabled={!tradeRatesDirty}
+            style={{
+              padding: '6px 18px', border: 'none', borderRadius: 6, fontSize: 13,
+              fontWeight: 600, cursor: tradeRatesDirty ? 'pointer' : 'not-allowed',
+              background: tradeRatesDirty ? '#4a90a4' : '#cbd5e1', color: '#fff',
+              transition: 'background 0.15s',
+            }}
+          >
+            Save Rates
+          </button>
+        </div>
+      </div>
+
+      {tradeRatesDirty && (
+        <div style={{ fontSize: 12, color: '#b85c00', fontWeight: 500, marginBottom: 12 }}>
+          ● Unsaved changes — click Save Rates to apply
+        </div>
+      )}
+
+      {/* Column headers */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: '160px 1fr 1fr',
+        gap: 8, padding: '6px 12px',
+        borderBottom: '2px solid #e2e8f0', marginBottom: 4,
+      }}>
+        {['Trade', 'Day Rate (£)', 'Hour Rate (£)'].map(h => (
+          <span key={h} style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</span>
+        ))}
+      </div>
+
+      {/* Rate rows */}
+      {TRADE_TYPES.map(trade => {
+        const row = tradeRates.find(r => r.trade === trade) ?? BUILT_IN_TRADE_RATES.find(r => r.trade === trade)!
+        return (
+          <div key={trade} style={{
+            display: 'grid', gridTemplateColumns: '160px 1fr 1fr',
+            gap: 8, padding: '7px 12px', alignItems: 'center',
+            borderBottom: '1px solid #f1f5f9',
+          }}>
+            <span style={{ fontSize: 14, fontWeight: 500, color: '#374151' }}>{trade}</span>
+            <input
+              type="number" value={row.dayRate} min={0} step={5}
+              onChange={e => {
+                setTradeRates(prev => prev.map(r =>
+                  r.trade === trade ? { ...r, dayRate: Number(e.target.value) } : r,
+                ))
+                setTradeRatesDirty(true)
+              }}
+              style={{
+                padding: '5px 8px', border: '1px solid #e2e8f0', borderRadius: 5,
+                fontSize: 13, textAlign: 'right', fontFamily: 'DM Mono, monospace',
+                background: '#fafafa', maxWidth: 120,
+              }}
+            />
+            <input
+              type="number" value={row.hourRate} min={0} step={1}
+              onChange={e => {
+                setTradeRates(prev => prev.map(r =>
+                  r.trade === trade ? { ...r, hourRate: Number(e.target.value) } : r,
+                ))
+                setTradeRatesDirty(true)
+              }}
+              style={{
+                padding: '5px 8px', border: '1px solid #e2e8f0', borderRadius: 5,
+                fontSize: 13, textAlign: 'right', fontFamily: 'DM Mono, monospace',
+                background: '#fafafa', maxWidth: 120,
+              }}
+            />
+          </div>
+        )
+      })}
+    </div>
+    </>
   )
 }

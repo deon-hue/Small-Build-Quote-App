@@ -31,7 +31,16 @@ export function calcItemSell(i: QuoteItem, mkp: number): number {
 }
 
 export function calcPhaseSell(p: QuotePhase, mkp: number): number {
-  return p.items.reduce((s, i) => s + calcItemSell(i, mkp), 0)
+  // When a phase uses explicit labour trades, the labour QuoteItem already holds
+  // the trade sell price (cost + per-trade markup). Applying global markup on top
+  // would double-count. All other item types still get the global markup.
+  const hasLabourTrades = (p.labourTrades?.length ?? 0) > 0
+  return p.items.reduce((s, i) => {
+    if (i.itemType === 'labour' && hasLabourTrades) {
+      return s + (Number(i.labour) || 0)  // pass through — already marked up
+    }
+    return s + calcItemSell(i, mkp)
+  }, 0)
 }
 
 export function quoteTotal(q: Quote): number {

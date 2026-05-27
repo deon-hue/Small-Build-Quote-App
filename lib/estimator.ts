@@ -119,15 +119,38 @@ export function itemFromTemplate(tpl: EstimatorItemTemplate): EstimatorItem {
   return base
 }
 
-/** Aggregate estimator items → per-type totals for lump-sum compatibility */
-export function estimatorAggregates(items: EstimatorItem[]) {
+/** Aggregate estimator items → per-type totals for lump-sum compatibility.
+ *
+ * When `labourTrades` are supplied and non-empty, the `labour` total is taken
+ * from the trades' `quotePrice` values (which already include per-trade markup).
+ * In that case `calcPhaseSell` will NOT apply the global quote markup to labour
+ * again — preventing double-markup. All other cost types always come from item
+ * rates and will receive the global markup as normal.
+ */
+export function estimatorAggregates(
+  items: EstimatorItem[],
+  labourTrades?: import('./tradeRates').LabourTrade[],
+) {
   const costed = items.filter(i => i.isCosted)
-  return {
-    labour:         +costed.reduce((s, i) => s + i.labourTotal,    0).toFixed(2),
-    materials:      +costed.reduce((s, i) => s + i.materialsTotal, 0).toFixed(2),
-    plant:          +costed.reduce((s, i) => s + i.plantTotal,     0).toFixed(2),
-    subcontractors: +costed.reduce((s, i) => s + i.subTotal,       0).toFixed(2),
-    other:          +costed.reduce((s, i) => s + i.otherTotal,     0).toFixed(2),
-    total:          +costed.reduce((s, i) => s + i.lineTotal,      0).toFixed(2),
-  }
+  const hasLabourTrades = (labourTrades?.length ?? 0) > 0
+
+  const labour = hasLabourTrades
+    ? +labourTrades!.reduce((s, t) => s + t.quotePrice, 0).toFixed(2)
+    : +costed.reduce((s, i) => s + i.labourTotal, 0).toFixed(2)
+
+  const materials      = +costed.reduce((s, i) => s + i.materialsTotal, 0).toFixed(2)
+  const plant          = +costed.reduce((s, i) => s + i.plantTotal,     0).toFixed(2)
+  const subcontractors = +costed.reduce((s, i) => s + i.subTotal,       0).toFixed(2)
+  const other          = +costed.reduce((s, i) => s + i.otherTotal,     0).toFixed(2)
+
+  // When using labour trades, item lineTotals exclude labour (it's handled above).
+  const itemNonLabourTotal = hasLabourTrades
+    ? +(materials + plant + subcontractors + other).toFixed(2)
+    : +costed.reduce((s, i) => s + i.lineTotal, 0).toFixed(2)
+
+  const total = hasLabourTrades
+    ? +(labour + itemNonLabourTotal).toFixed(2)
+    : itemNonLabourTotal
+
+  return { labour, materials, plant, subcontractors, other, total }
 }

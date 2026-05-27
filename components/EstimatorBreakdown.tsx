@@ -14,11 +14,15 @@ import { fmt } from '@/lib/utils'
 import { COST_CATEGORIES } from '@/lib/costCategories'
 import type { LucideIcon } from 'lucide-react'
 import MeasureModal from './MeasureModal'
+import LabourTradesPanel from './LabourTradesPanel'
+import type { LabourTrade } from '@/lib/tradeRates'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Props {
-  phase: QuotePhase
-  onUpdatePhase: (updated: QuotePhase) => void
+  phase:          QuotePhase
+  onUpdatePhase:  (updated: QuotePhase) => void
+  /** Quote-level global markup %; used to pre-fill new labour trade rows. */
+  markup?:        number
 }
 
 type AggResult = ReturnType<typeof estimatorAggregates>
@@ -440,22 +444,33 @@ function SummaryPanel({ items, agg }: { items: EstimatorItem[]; agg: AggResult }
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function EstimatorBreakdown({ phase, onUpdatePhase }: Props) {
+export default function EstimatorBreakdown({ phase, onUpdatePhase, markup = 0 }: Props) {
   const [open,        setOpen]        = useState(true)
   const [view,        setView]        = useState<'summary' | 'detail'>('detail')
   const [measureItem, setMeasureItem] = useState<EstimatorItem | null>(null)
 
-  const items = phase.estimatorItems || []
-  const agg   = estimatorAggregates(items)
+  const items        = phase.estimatorItems || []
+  const labourTrades = phase.labourTrades   || []
+  const agg          = estimatorAggregates(items, labourTrades)
 
   // ── mutations ──────────────────────────────────────────────────────────────
   function applyItems(newItems: EstimatorItem[]) {
-    const a = estimatorAggregates(newItems)
+    const a = estimatorAggregates(newItems, labourTrades)
     onUpdatePhase({
       ...phase,
       estimatorItems: newItems,
+      useEstimator:   true,
+      items:          syncToItems(phase.items, a),
+    })
+  }
+
+  function handleLabourTradesChange(newTrades: LabourTrade[]) {
+    const a = estimatorAggregates(items, newTrades)
+    onUpdatePhase({
+      ...phase,
+      labourTrades: newTrades,
       useEstimator: true,
-      items: syncToItems(phase.items, a),
+      items:        syncToItems(phase.items, a),
     })
   }
 
@@ -705,6 +720,13 @@ export default function EstimatorBreakdown({ phase, onUpdatePhase }: Props) {
               </div>
             </>
           )}
+
+          {/* ── Labour Trades panel ──────────────────────────────────────── */}
+          <LabourTradesPanel
+            trades={labourTrades}
+            defaultMarkup={markup}
+            onChange={handleLabourTradesChange}
+          />
         </div>
       )}
 
