@@ -30,7 +30,7 @@ function defaultItems(): Omit<QuoteItem, 'id'>[] {
 
 // ── Estimator items editor (main pricing surface per phase) ──────────────────
 const MEAS_TYPES = Object.keys(MEASUREMENT_LABELS) as MeasurementType[]
-const RATE_COLS = '1fr 90px 55px 55px 55px 55px 55px 44px 32px 24px'
+const RATE_COLS = '1fr 90px 55px 55px 55px 55px 55px 44px 24px'
 
 interface EstimatorEditorProps {
   phase: TemplatePhaseData
@@ -82,9 +82,6 @@ function EstimatorEditor({ phase, onLoad, onAdd, onUpdate, onRemove }: Estimator
               </span>
             ))}
             <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textAlign: 'right', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Waste%</span>
-            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Task Labour Lines">
-              <HardHat size={10} strokeWidth={2.2} style={{ color: '#94a3b8' }} />
-            </span>
             <span />
           </div>
 
@@ -103,7 +100,7 @@ function EstimatorEditor({ phase, onLoad, onAdd, onUpdate, onRemove }: Estimator
                 }}
               >
                 {/* Main grid row */}
-                <div style={{ display: 'grid', gridTemplateColumns: RATE_COLS, gap: 3, alignItems: 'center', padding: isOpen ? '4px 6px 4px 4px' : 0 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: RATE_COLS, gap: 3, alignItems: 'center' }}>
                   <input
                     value={item.name}
                     onChange={e => onUpdate({ ...item, name: e.target.value })}
@@ -145,32 +142,6 @@ function EstimatorEditor({ phase, onLoad, onAdd, onUpdate, onRemove }: Estimator
                       }}
                     />
                   ))}
-
-                  {/* Labour lines toggle button */}
-                  <button
-                    onClick={() => toggleExpand(item.id)}
-                    title={hasLines
-                      ? `${item.defaultTaskLabourLines!.length} default trade${item.defaultTaskLabourLines!.length !== 1 ? 's' : ''} — click to edit`
-                      : 'Set default task labour trades for this item'
-                    }
-                    style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2,
-                      padding: '3px 5px', borderRadius: 4, cursor: 'pointer',
-                      border:      isOpen    ? '1.5px solid rgba(59,130,246,0.35)' :
-                                   hasLines  ? '1px solid rgba(59,130,246,0.25)'   : 'none',
-                      background:  isOpen    ? 'rgba(59,130,246,0.12)'             :
-                                   hasLines  ? 'rgba(59,130,246,0.08)'             : 'none',
-                      color:       (isOpen || hasLines) ? '#1e40af' : '#cbd5e1',
-                    }}
-                  >
-                    <HardHat size={11} strokeWidth={2.2} />
-                    {hasLines && (
-                      <span style={{ fontSize: 9, fontWeight: 700 }}>
-                        {item.defaultTaskLabourLines!.length}
-                      </span>
-                    )}
-                  </button>
-
                   {/* Remove */}
                   <button
                     onClick={() => onRemove(item.id)}
@@ -178,12 +149,45 @@ function EstimatorEditor({ phase, onLoad, onAdd, onUpdate, onRemove }: Estimator
                   >×</button>
                 </div>
 
+                {/* Labour defaults bar — always visible below the rate row */}
+                <button
+                  onClick={() => toggleExpand(item.id)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    width: '100%', marginTop: 3,
+                    padding: '5px 8px', borderRadius: 4, cursor: 'pointer',
+                    textAlign: 'left',
+                    border: hasLines
+                      ? '1px solid rgba(59,130,246,0.3)'
+                      : '1px dashed #d1d5db',
+                    background: isOpen
+                      ? 'rgba(59,130,246,0.08)'
+                      : hasLines
+                        ? 'rgba(59,130,246,0.05)'
+                        : '#fafafa',
+                  }}
+                >
+                  <HardHat
+                    size={13} strokeWidth={2.2}
+                    style={{ color: (isOpen || hasLines) ? '#1e40af' : '#94a3b8', flexShrink: 0 }}
+                  />
+                  <span style={{
+                    fontSize: 11, fontWeight: hasLines ? 600 : 400,
+                    color: (isOpen || hasLines) ? '#1e40af' : '#94a3b8',
+                  }}>
+                    {hasLines
+                      ? `${item.defaultTaskLabourLines!.length} default labour trade${item.defaultTaskLabourLines!.length !== 1 ? 's' : ''} set — click to edit`
+                      : '+ Set default task labour trades for this item'
+                    }
+                  </span>
+                  {isOpen && (
+                    <span style={{ marginLeft: 'auto', fontSize: 10, color: '#1e40af' }}>▲ collapse</span>
+                  )}
+                </button>
+
                 {/* Task Labour Lines editor — expands inline */}
                 {isOpen && (
-                  <div style={{ padding: '0 8px 10px 8px' }}>
-                    <div style={{ fontSize: 10, color: '#64748b', marginBottom: 6, marginTop: 2 }}>
-                      Default task labour trades for <strong>{item.name}</strong> — copied to every new quote that uses this template.
-                    </div>
+                  <div style={{ padding: '6px 0 10px 0' }}>
                     <TaskLabourLinesEditor
                       lines={item.defaultTaskLabourLines || []}
                       onChange={(lines: TaskLabourLine[]) =>
