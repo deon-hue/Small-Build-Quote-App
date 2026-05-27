@@ -10,9 +10,10 @@ import { getPhaseEstimatorDefaults } from '@/lib/estimatorDefaults'
 import { COST_CATEGORIES } from '@/lib/costCategories'
 import {
   TRADE_TYPES, BUILT_IN_TRADE_RATES, loadTradeRates, saveTradeRatesToStorage,
+  getHourlyRate, getHalfDayRate,
   type TradeRate,
 } from '@/lib/tradeRates'
-import { HardHat } from 'lucide-react'
+import { HardHat, RotateCcw } from 'lucide-react'
 
 function deepClone<T>(v: T): T { return JSON.parse(JSON.stringify(v)) }
 
@@ -568,14 +569,16 @@ export default function BackOfficePage() {
 
     {/* ── Trade Rate Defaults ────────────────────────────────────────────── */}
     <div className="card" style={{ marginTop: 24 }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
+
+      {/* ── Card header ─────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 4 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <HardHat size={18} strokeWidth={2} style={{ color: '#3b82f6' }} />
           <div>
-            <div style={{ fontWeight: 700, fontSize: 16 }}>Trade Day &amp; Hour Rates</div>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>Trade Labour Rates</div>
             <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-              Default cost rates used when adding labour trades to a phase. Editable per-quote.
+              Day rate is the master rate. Half-day and hourly are auto-calculated (Day ÷ 2 and Day ÷ 8).
+              Half-day can be manually overridden. These are cost rates before markup.
             </div>
           </div>
         </div>
@@ -610,63 +613,144 @@ export default function BackOfficePage() {
       </div>
 
       {tradeRatesDirty && (
-        <div style={{ fontSize: 12, color: '#b85c00', fontWeight: 500, marginBottom: 12 }}>
+        <div style={{ fontSize: 12, color: '#b85c00', fontWeight: 500, marginBottom: 10, marginTop: 6 }}>
           ● Unsaved changes — click Save Rates to apply
         </div>
       )}
 
-      {/* Column headers */}
+      {/* ── Column headers ─────────────────────────────────────────── */}
       <div style={{
-        display: 'grid', gridTemplateColumns: '160px 1fr 1fr',
-        gap: 8, padding: '6px 12px',
-        borderBottom: '2px solid #e2e8f0', marginBottom: 4,
+        display: 'grid',
+        gridTemplateColumns: '140px 110px 140px 110px 110px',
+        gap: 8, padding: '8px 12px',
+        borderBottom: '2px solid #e2e8f0',
+        borderTop: '1px solid #f1f5f9',
+        marginTop: 12,
       }}>
-        {['Trade', 'Day Rate (£)', 'Hour Rate (£)'].map(h => (
-          <span key={h} style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</span>
+        {[
+          { label: 'Trade',              hint: ''                              },
+          { label: 'Day Rate',           hint: '(£/day) — master rate'        },
+          { label: 'Half-Day Rate',      hint: '(auto = Day ÷ 2)'             },
+          { label: 'Hourly Rate',        hint: '(auto = Day ÷ 8)'             },
+          { label: 'Default Markup',     hint: '(% applied to new trades)'    },
+        ].map(({ label, hint }) => (
+          <div key={label}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
+            {hint && <div style={{ fontSize: 9.5, color: '#94a3b8', marginTop: 1 }}>{hint}</div>}
+          </div>
         ))}
       </div>
 
-      {/* Rate rows */}
+      {/* ── Rate rows ──────────────────────────────────────────────── */}
       {TRADE_TYPES.map(trade => {
-        const row = tradeRates.find(r => r.trade === trade) ?? BUILT_IN_TRADE_RATES.find(r => r.trade === trade)!
+        const row         = tradeRates.find(r => r.trade === trade) ?? BUILT_IN_TRADE_RATES.find(r => r.trade === trade)!
+        const autoHalf    = +(row.dayRate / 2).toFixed(2)
+        const calcHourly  = getHourlyRate(row.dayRate)
+        const halfValue   = getHalfDayRate(row.dayRate, row.halfDayRateOverride)
+        const halfOverrid = row.halfDayRateOverride != null
+
+        function setField(patch: Partial<TradeRate>) {
+          setTradeRates(prev => prev.map(r => r.trade === trade ? { ...r, ...patch } : r))
+          setTradeRatesDirty(true)
+        }
+
         return (
           <div key={trade} style={{
-            display: 'grid', gridTemplateColumns: '160px 1fr 1fr',
-            gap: 8, padding: '7px 12px', alignItems: 'center',
+            display: 'grid',
+            gridTemplateColumns: '140px 110px 140px 110px 110px',
+            gap: 8, padding: '9px 12px', alignItems: 'center',
             borderBottom: '1px solid #f1f5f9',
           }}>
-            <span style={{ fontSize: 14, fontWeight: 500, color: '#374151' }}>{trade}</span>
+
+            {/* Trade name */}
+            <span style={{ fontSize: 14, fontWeight: 600, color: '#1e293b' }}>{trade}</span>
+
+            {/* Day Rate — PRIMARY */}
             <input
               type="number" value={row.dayRate} min={0} step={5}
-              onChange={e => {
-                setTradeRates(prev => prev.map(r =>
-                  r.trade === trade ? { ...r, dayRate: Number(e.target.value) } : r,
-                ))
-                setTradeRatesDirty(true)
-              }}
+              onChange={e => setField({ dayRate: Math.max(0, Number(e.target.value)) })}
               style={{
-                padding: '5px 8px', border: '1px solid #e2e8f0', borderRadius: 5,
+                padding: '6px 8px', border: '1.5px solid #3b82f6', borderRadius: 5,
                 fontSize: 13, textAlign: 'right', fontFamily: 'DM Mono, monospace',
-                background: '#fafafa', maxWidth: 120,
+                background: '#eff6ff', maxWidth: 100, fontWeight: 700,
               }}
             />
-            <input
-              type="number" value={row.hourRate} min={0} step={1}
-              onChange={e => {
-                setTradeRates(prev => prev.map(r =>
-                  r.trade === trade ? { ...r, hourRate: Number(e.target.value) } : r,
-                ))
-                setTradeRatesDirty(true)
-              }}
-              style={{
-                padding: '5px 8px', border: '1px solid #e2e8f0', borderRadius: 5,
-                fontSize: 13, textAlign: 'right', fontFamily: 'DM Mono, monospace',
-                background: '#fafafa', maxWidth: 120,
-              }}
-            />
+
+            {/* Half-Day Rate — auto or overridden */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <input
+                type="number" value={halfValue} min={0} step={5}
+                onChange={e => {
+                  const v = Math.max(0, Number(e.target.value))
+                  // If the user sets it to the auto value, clear the override
+                  setField({ halfDayRateOverride: v === autoHalf ? undefined : v })
+                }}
+                style={{
+                  padding: '6px 8px', maxWidth: 80,
+                  border: halfOverrid
+                    ? '1.5px solid rgba(234,179,8,0.7)'
+                    : '1px solid #e2e8f0',
+                  borderRadius: 5,
+                  fontSize: 13, textAlign: 'right', fontFamily: 'DM Mono, monospace',
+                  background: halfOverrid ? '#fffbeb' : '#f8fafc',
+                }}
+              />
+              {halfOverrid ? (
+                <button
+                  onClick={() => setField({ halfDayRateOverride: undefined })}
+                  title="Clear override — revert to Day ÷ 2"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#b45309', padding: 2 }}
+                >
+                  <RotateCcw size={12} strokeWidth={2.5} />
+                </button>
+              ) : (
+                <span style={{
+                  fontSize: 9, color: '#94a3b8', background: '#f1f5f9',
+                  border: '1px solid #e2e8f0', borderRadius: 3, padding: '2px 5px',
+                  fontWeight: 700, letterSpacing: '0.3px',
+                }}>AUTO</span>
+              )}
+            </div>
+
+            {/* Hourly Rate — always calculated, read-only */}
+            <div style={{
+              padding: '6px 8px', borderRadius: 5,
+              background: '#f8fafc', border: '1px solid #e2e8f0',
+              fontSize: 13, textAlign: 'right', fontFamily: 'DM Mono, monospace',
+              color: '#64748b', maxWidth: 100,
+              display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5,
+            }}>
+              £{calcHourly.toFixed(2)}
+              <span style={{ fontSize: 9, color: '#94a3b8', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 3, padding: '2px 4px', fontWeight: 700 }}>AUTO</span>
+            </div>
+
+            {/* Default Markup % */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <input
+                type="number" value={row.defaultMarkup} min={0} max={100} step={1}
+                onChange={e => setField({ defaultMarkup: Math.max(0, Number(e.target.value)) })}
+                style={{
+                  padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 5,
+                  fontSize: 13, textAlign: 'right', fontFamily: 'DM Mono, monospace',
+                  background: '#fafafa', maxWidth: 70,
+                }}
+              />
+              <span style={{ fontSize: 12, color: '#94a3b8' }}>%</span>
+            </div>
           </div>
         )
       })}
+
+      {/* ── Formula reminder ── */}
+      <div style={{
+        padding: '10px 12px', background: '#f8fafc', borderTop: '1px solid #e2e8f0',
+        fontSize: 11, color: '#64748b', display: 'flex', gap: 20, flexWrap: 'wrap',
+      }}>
+        <span>📐 Standard day = 8 hours</span>
+        <span>Hourly = Day ÷ 8</span>
+        <span>Half-Day = Day ÷ 2 (auto) or manually set</span>
+        <span>Rates are cost prices before markup</span>
+      </div>
     </div>
     </>
   )

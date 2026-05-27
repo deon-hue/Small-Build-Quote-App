@@ -1,7 +1,11 @@
-// ── Labour trade types & default day / hour rates ───────────────────────────
-// Default rates are based on UK market 2024–25 (London / South East).
-// The Back Office "Trade Rates" section lets the user override these defaults.
-// They are persisted to localStorage so they survive page reloads.
+// ── Labour trade types & rates ───────────────────────────────────────────────
+// Standard working day = 8 hours.
+// Day rate is the MASTER rate; half-day and hourly are derived from it.
+//   Hourly   = Day ÷ 8
+//   Half-Day = Day ÷ 2  (or manually overridden in Back Office)
+//
+// Back Office overrides are persisted to localStorage.
+// Default rates are UK market 2024–25 (London / South East).
 
 export const TRADE_TYPES = [
   'Labourer',
@@ -16,41 +20,81 @@ export const TRADE_TYPES = [
 ] as const
 
 export type TradeType = typeof TRADE_TYPES[number]
+export type LabourUnit = 'day' | 'half-day' | 'hr'
 
+export const LABOUR_UNIT_OPTIONS: { value: LabourUnit; label: string; short: string }[] = [
+  { value: 'day',      label: 'Days',      short: 'day'  },
+  { value: 'half-day', label: 'Half Days', short: 'half' },
+  { value: 'hr',       label: 'Hours',     short: 'hr'   },
+]
+
+// ── Back Office trade rate config ─────────────────────────────────────────────
 export interface TradeRate {
   trade: TradeType
-  dayRate: number   // £ per day
-  hourRate: number  // £ per hour
+  /** PRIMARY master rate (£/day). All other rates are derived from this. */
+  dayRate: number
+  /** Manually-set half-day rate. When absent, auto-calculated as dayRate ÷ 2. */
+  halfDayRateOverride?: number
+  /** Default markup % applied when this trade is first added to a phase. */
+  defaultMarkup: number
 }
 
-/** One trade line within a phase's Labour Trades panel */
+// ── Derived helpers (never stored) ───────────────────────────────────────────
+/** Hourly rate = Day rate ÷ 8 */
+export function getHourlyRate(dayRate: number): number {
+  return +(dayRate / 8).toFixed(2)
+}
+
+/** Half-day rate = Day rate ÷ 2, unless manually overridden */
+export function getHalfDayRate(dayRate: number, halfDayRateOverride?: number): number {
+  return halfDayRateOverride != null
+    ? halfDayRateOverride
+    : +(dayRate / 2).toFixed(2)
+}
+
+/** Rate for a given unit, derived from the master day rate */
+export function getUnitRate(dayRate: number, unit: LabourUnit, halfDayRateOverride?: number): number {
+  switch (unit) {
+    case 'day':      return dayRate
+    case 'half-day': return getHalfDayRate(dayRate, halfDayRateOverride)
+    case 'hr':       return getHourlyRate(dayRate)
+  }
+}
+
+// ── LabourTrade — one trade line within a phase ───────────────────────────────
 export interface LabourTrade {
   id: string
-  trade: string          // one of TRADE_TYPES
-  qty: number            // number of days (or hours)
-  unit: 'day' | 'hr'
-  costRate: number       // £/day or £/hr (pulled from defaults, overridable)
-  markup: number         // % markup applied to this trade's cost
-  // Calculated fields (always in sync via calcLabourTrade)
-  cost: number           // qty × costRate
+  trade: string
+  qty: number
+  unit: LabourUnit
+  /** Snapshot of the Back Office default day rate when this trade was added. */
+  defaultDayRate: number
+  /** Effective day rate for this quote. May differ from defaultDayRate if overridden. */
+  dayRate: number
+  /** True when dayRate has been changed from defaultDayRate for this quote. */
+  isOverridden: boolean
+  markup: number
+  // Calculated — always updated by calcLabourTrade():
+  unitRate: number       // £ per selected unit (day/half/hr)
+  cost: number           // qty × unitRate
   markupAmount: number   // cost × markup / 100
   quotePrice: number     // cost + markupAmount  (sell price, ex VAT)
 }
 
-// ── Built-in default rates ────────────────────────────────────────────────────
+// ── Built-in defaults ─────────────────────────────────────────────────────────
 export const BUILT_IN_TRADE_RATES: TradeRate[] = [
-  { trade: 'Labourer',    dayRate: 180, hourRate: 22 },
-  { trade: 'Builder',     dayRate: 250, hourRate: 31 },
-  { trade: 'Carpenter',   dayRate: 280, hourRate: 35 },
-  { trade: 'Bricklayer',  dayRate: 280, hourRate: 35 },
-  { trade: 'Plasterer',   dayRate: 270, hourRate: 34 },
-  { trade: 'Electrician', dayRate: 350, hourRate: 44 },
-  { trade: 'Plumber',     dayRate: 350, hourRate: 44 },
-  { trade: 'Decorator',   dayRate: 230, hourRate: 29 },
-  { trade: 'Roofer',      dayRate: 290, hourRate: 36 },
+  { trade: 'Labourer',    dayRate: 160, defaultMarkup: 20 },
+  { trade: 'Builder',     dayRate: 240, defaultMarkup: 20 },
+  { trade: 'Carpenter',   dayRate: 280, defaultMarkup: 20 },
+  { trade: 'Bricklayer',  dayRate: 280, defaultMarkup: 20 },
+  { trade: 'Plasterer',   dayRate: 260, defaultMarkup: 20 },
+  { trade: 'Electrician', dayRate: 320, defaultMarkup: 20 },
+  { trade: 'Plumber',     dayRate: 320, defaultMarkup: 20 },
+  { trade: 'Decorator',   dayRate: 220, defaultMarkup: 20 },
+  { trade: 'Roofer',      dayRate: 280, defaultMarkup: 20 },
 ]
 
-// ── localStorage persistence (Back Office overrides) ─────────────────────────
+// ── localStorage persistence ──────────────────────────────────────────────────
 const STORAGE_KEY = 'sbc_trade_rates'
 
 export function loadTradeRates(): TradeRate[] {
@@ -59,19 +103,19 @@ export function loadTradeRates(): TradeRate[] {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<TradeRate>[]
-      // Merge stored rates with built-ins so new trades added to TRADE_TYPES are never missing
-      const map = new Map(parsed.map(r => [r.trade, r]))
+      const map    = new Map(parsed.map(r => [r.trade, r]))
       return TRADE_TYPES.map(trade => {
-        const stored = map.get(trade)
+        const stored  = map.get(trade)
         const builtin = BUILT_IN_TRADE_RATES.find(d => d.trade === trade)!
         return {
           trade,
-          dayRate:  stored?.dayRate  ?? builtin.dayRate,
-          hourRate: stored?.hourRate ?? builtin.hourRate,
+          dayRate:             stored?.dayRate             ?? builtin.dayRate,
+          halfDayRateOverride: stored?.halfDayRateOverride,   // undefined = auto
+          defaultMarkup:       stored?.defaultMarkup       ?? builtin.defaultMarkup,
         }
       })
     }
-  } catch { /* ignore parse errors */ }
+  } catch { /* ignore */ }
   return BUILT_IN_TRADE_RATES
 }
 
@@ -81,28 +125,63 @@ export function saveTradeRatesToStorage(rates: TradeRate[]): void {
   }
 }
 
-/** Get default rate for a given trade + unit from stored/built-in defaults */
-export function getDefaultCostRate(trade: string, unit: 'day' | 'hr'): number {
+/** Full TradeRate for a given trade name. Falls back to a safe zero-rate default. */
+export function getDefaultTradeRate(trade: string): TradeRate {
   const rates = loadTradeRates()
-  const found = rates.find(r => r.trade === trade)
-  if (!found) return 0
-  return unit === 'day' ? found.dayRate : found.hourRate
+  return (
+    rates.find(r => r.trade === trade) ?? {
+      trade: trade as TradeType,
+      dayRate: 0,
+      defaultMarkup: 20,
+    }
+  )
 }
 
-// ── Trade calculation ─────────────────────────────────────────────────────────
+// ── Calculation ───────────────────────────────────────────────────────────────
 export function calcLabourTrade(t: LabourTrade): LabourTrade {
-  const cost         = +(t.qty * t.costRate).toFixed(2)
+  const unitRate     = getUnitRate(t.dayRate, t.unit)
+  const cost         = +(t.qty * unitRate).toFixed(2)
   const markupAmount = +(cost * t.markup / 100).toFixed(2)
   const quotePrice   = +(cost + markupAmount).toFixed(2)
-  return { ...t, cost, markupAmount, quotePrice }
+  return {
+    ...t,
+    unitRate,
+    isOverridden: t.dayRate !== t.defaultDayRate,
+    cost,
+    markupAmount,
+    quotePrice,
+  }
 }
 
-/** Sum of quotePrice across all trades (the charged sell amount) */
+/**
+ * Migrate a LabourTrade saved in the old format (costRate field, no dayRate /
+ * defaultDayRate). Safe to call on already-migrated records.
+ */
+export function migrateLabourTrade(
+  raw: Partial<LabourTrade> & { costRate?: number },
+): LabourTrade {
+  const dayRate = raw.dayRate ?? raw.costRate ?? 0
+  const unit: LabourUnit =
+    raw.unit === 'half-day' ? 'half-day' :
+    raw.unit === 'hr'       ? 'hr'       :
+    'day'
+  return calcLabourTrade({
+    id:             raw.id    ?? `trade-${Date.now()}-${Math.floor(Math.random() * 9999)}`,
+    trade:          raw.trade ?? 'Builder',
+    qty:            raw.qty   ?? 1,
+    unit,
+    defaultDayRate: raw.defaultDayRate ?? dayRate,
+    dayRate,
+    isOverridden:   false,
+    markup:         raw.markup ?? 20,
+    unitRate: 0, cost: 0, markupAmount: 0, quotePrice: 0,
+  })
+}
+
 export function labourTradesTotal(trades: LabourTrade[]): number {
   return +trades.reduce((s, t) => s + t.quotePrice, 0).toFixed(2)
 }
 
-/** Sum of cost across all trades */
 export function labourTradesCostTotal(trades: LabourTrade[]): number {
   return +trades.reduce((s, t) => s + t.cost, 0).toFixed(2)
 }

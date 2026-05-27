@@ -15,6 +15,7 @@ import { COST_CATEGORIES } from '@/lib/costCategories'
 import type { LucideIcon } from 'lucide-react'
 import MeasureModal from './MeasureModal'
 import LabourTradesPanel from './LabourTradesPanel'
+import { migrateLabourTrade } from '@/lib/tradeRates'
 import type { LabourTrade } from '@/lib/tradeRates'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -450,7 +451,10 @@ export default function EstimatorBreakdown({ phase, onUpdatePhase, markup = 0 }:
   const [measureItem, setMeasureItem] = useState<EstimatorItem | null>(null)
 
   const items        = phase.estimatorItems || []
-  const labourTrades = phase.labourTrades   || []
+  // Migrate any trades saved with the old costRate shape → new dayRate shape
+  const labourTrades = (phase.labourTrades || []).map(
+    t => migrateLabourTrade(t as Parameters<typeof migrateLabourTrade>[0]),
+  )
   const agg          = estimatorAggregates(items, labourTrades)
 
   // ── mutations ──────────────────────────────────────────────────────────────
