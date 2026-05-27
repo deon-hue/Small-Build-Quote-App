@@ -98,11 +98,12 @@ export function calcEstimatorItem(item: EstimatorItem): EstimatorItem {
   const taskLabourLines = item.taskLabourLines?.map(calcTaskLabourLine)
   const hasTaskLabour   = (taskLabourLines?.length ?? 0) > 0
 
-  // When task lines are present, labour total comes from them (cost only, no
-  // per-line markup).  Global quote markup is applied later by calcPhaseSell.
+  // Labour total comes exclusively from task labour lines.
+  // labourRate is kept in the data model for backward compat but is no longer
+  // used in calculations — the UI field has been removed.
   const labourTotal    = hasTaskLabour
     ? +taskLabourLines!.reduce((s, l) => s + l.total, 0).toFixed(2)
-    : +(m * item.labourRate).toFixed(2)
+    : 0
   const materialsTotal = +(m * item.materialsRate * wasteMult).toFixed(2)
   const plantTotal     = +(m * item.plantRate).toFixed(2)
   const subTotal       = +(m * item.subRate).toFixed(2)
