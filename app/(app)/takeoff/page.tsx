@@ -855,7 +855,14 @@ export default function TakeoffPage() {
   function renderFloorProperties(item: TakeoffItem) {
     const makeup = FLOOR_MAKEUPS.find(m => m.id === item.floorMakeupId)
     const area = item.area ?? 0
-    const perimeter = item.perimeter ?? 0
+    // Compute perimeter from geometry if it wasn't stored on the item
+    const _floorEl = item.elementId ? project.elements.find(e => e.id === item.elementId) : null
+    const perimeter = item.perimeter ??
+      (_floorEl?.type === 'rect' && _floorEl.points.length >= 2
+        ? rectPerimeter(_floorEl.points, project.calibration.mpp)
+        : _floorEl?.type === 'polygon' && _floorEl.points.length >= 3
+          ? polyPerimeter(_floorEl.points, project.calibration.mpp)
+          : 0)
     const toggles = item.floorLayerToggles ?? {}
     const thicknesses = item.floorLayerThicknesses ?? {}
 
@@ -1102,8 +1109,28 @@ export default function TakeoffPage() {
       )
     }
 
-    // Floor items get their dedicated panel
-    if (editingItem.floorMakeupId) return renderFloorProperties(editingItem)
+    // Floor items get their dedicated panel.
+    // Check both the item's floorMakeupId AND the linked element's phase as a
+    // fallback — covers cases where the ref-queuing didn't attach floorMakeupId.
+    const _linkedEl = editingItem.elementId
+      ? project.elements.find(e => e.id === editingItem.elementId)
+      : null
+    const _isFloorItem =
+      !!editingItem.floorMakeupId ||
+      (_linkedEl?.phase === 'Floors & Screeds' && _linkedEl?.type !== 'line')
+
+    if (_isFloorItem) {
+      // Ensure floorMakeupId is present; default to concrete slab if missing
+      const _floorItem = editingItem.floorMakeupId
+        ? editingItem
+        : { ...editingItem, floorMakeupId: FLOOR_MAKEUPS[1].id }
+      // Persist the default so it sticks on next click
+      if (!editingItem.floorMakeupId) {
+        const _makeup = FLOOR_MAKEUPS[1]
+        saveItemEdit({ ..._floorItem, spec: _makeup.clientDescription })
+      }
+      return renderFloorProperties(_floorItem)
+    }
 
     const item = editingItem
     const el = editingElement
