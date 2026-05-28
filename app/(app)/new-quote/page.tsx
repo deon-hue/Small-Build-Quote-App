@@ -13,6 +13,7 @@ import EstimatorBreakdown from '@/components/EstimatorBreakdown'
 import type { TakeoffItem, TakeoffPhase } from '@/lib/takeoff-types'
 import { PHASE_TO_QUOTE_PARENT, ALL_MAKEUPS, calcLayerQty, WALL_OPENING_LABELS } from '@/lib/takeoff-types'
 import { DEFAULT_DEMO_SUBPHASES, calcDemoSellingPrice, DEMO_UNIT_LABELS, type DemoUnit } from '@/lib/demolition-data'
+import { ALL_PHASE_SUBPHASES, calcPhaseTaskSellingPrice } from '@/lib/phase-tasks'
 
 let phaseCounter = 0
 let itemCounter = 0
@@ -323,6 +324,35 @@ export default function NewQuotePage() {
                 { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: plant, subcontractors: 0, other: 0, notes: `Plant inc.`, itemType: 'plant' },
                 { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: subCost, other: 0, notes: '', itemType: 'subcontractors' },
                 { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: waste + other, notes: `Waste £${waste.toFixed(0)} | Other £${other.toFixed(0)} | Markup ${markupPct}% → sell £${selling.toFixed(2)}`, itemType: 'other' },
+              ],
+              parentPhase,
+            ))
+            continue
+          }
+
+          // ── Generic phase task item: pre-fill costs from takeoff ──
+          if (item.taskSubphaseId && item.taskId) {
+            const phaseSub  = ALL_PHASE_SUBPHASES.find(s => s.id === item.taskSubphaseId)
+            const phaseTask = phaseSub?.tasks.find(t => t.id === item.taskId)
+            const markupPct = item.taskMarkupPct ?? phaseSub?.markupPct ?? 20
+            const labour    = item.taskLabour        ?? 0
+            const materials = item.taskMaterials     ?? 0
+            const plant     = item.taskPlant         ?? 0
+            const subCost   = item.taskSubcontractor ?? 0
+            const other     = item.taskOther         ?? 0
+            const selling   = calcPhaseTaskSellingPrice(labour, materials, plant, subCost, other, markupPct)
+            const taskDesc  = item.spec || phaseTask?.notes || item.name
+            const refStr    = item.drawingRef ? ` [${item.drawingRef}]` : ''
+            const taskSubName = phaseSub?.name ?? item.subPhase ?? item.phase
+
+            newPhases.push(makePhase(
+              taskSubName,
+              [
+                { desc: `${item.qty} ${item.unit} — ${taskDesc}${refStr}`, qty: item.qty, unit: item.unit, labour, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes, itemType: 'labour' },
+                { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials' },
+                { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: plant, subcontractors: 0, other: 0, notes: plant > 0 ? 'Plant/equipment' : '', itemType: 'plant' },
+                { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: subCost, other: 0, notes: '', itemType: 'subcontractors' },
+                { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other, notes: `Markup ${markupPct}% → sell £${selling.toFixed(2)}`, itemType: 'other' },
               ],
               parentPhase,
             ))

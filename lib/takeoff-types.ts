@@ -175,6 +175,16 @@ export interface TakeoffItem {
   demoWaste?:          number
   demoSubcontractor?:  number
   demoOther?:          number
+
+  // Generic phase task fields (Plastering, Roof, Electrics, Plumbing, etc.)
+  taskSubphaseId?:     string     // PhaseSubphase.id
+  taskId?:             string     // PhaseTask.id
+  taskMarkupPct?:      number     // override subphase default markup
+  taskLabour?:         number     // total labour cost (qty × unit rate)
+  taskMaterials?:      number     // total materials cost
+  taskPlant?:          number     // total plant cost
+  taskSubcontractor?:  number     // total subcontractor cost
+  taskOther?:          number     // total other cost
 }
 
 // ── Calibration ───────────────────────────────────────────────────────────────

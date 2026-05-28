@@ -15,6 +15,11 @@ import {
   calcDemoSellingPrice, DEMO_UNIT_LABELS, DEMO_UNITS,
   type DemoSubphase, type DemoTask, type DemoUnit,
 } from '@/lib/demolition-data'
+import {
+  ALL_PHASE_SUBPHASES, getAllSubphasesForPhase, getTasksForSubphase,
+  calcPhaseTaskSellingPrice, PHASE_TASK_UNIT_LABELS,
+  type PhaseSubphase, type PhaseTask, type PhaseTaskUnit,
+} from '@/lib/phase-tasks'
 
 // ── ID helpers ────────────────────────────────────────────────────────────────
 function uid() { return Math.random().toString(36).slice(2, 10) }
@@ -1963,6 +1968,282 @@ export default function TakeoffPage() {
     )
   }
 
+  // ── Generic Phase Task properties panel ──────────────────────────────────────
+  function renderPhaseTaskProperties(item: TakeoffItem) {
+    const PHASE_ACCENT: Record<string, string> = {
+      'Structural Frame':             '#2980b9',
+      'Roof':                         '#d35400',
+      'Windows & Doors':              '#27ae60',
+      'Internal Walls & Partitions':  '#2c3e50',
+      'Drainage & Services':          '#7f8c8d',
+      'Electrics':                    '#f1c40f',
+      'Plumbing & Heating':           '#1abc9c',
+      'Plastering & Boarding':        '#95a5a6',
+      'Joinery & Fixtures':           '#6d4c41',
+      'Tiling & Finishes':            '#ad1457',
+      'Decoration':                   '#4a148c',
+      'External Works & Landscaping': '#558b2f',
+      'Preliminaries':                '#0277bd',
+    }
+    const accentColor = PHASE_ACCENT[item.phase] ?? '#7ab533'
+    const bgDark  = darkMode ? '#0e1520' : '#f0f4ff'
+    const bdColor = darkMode ? '#1a2a40' : '#c0d0ee'
+
+    const subphases = getAllSubphasesForPhase(item.phase)
+    const selSub = subphases.find(s => s.id === item.taskSubphaseId) ?? subphases[0]
+    const tasks = selSub ? getTasksForSubphase(selSub.id) : []
+    const selTask = tasks.find(t => t.id === item.taskId) ?? tasks[0]
+
+    const qty     = item.qty || 1
+    const markup  = item.taskMarkupPct ?? (selSub?.markupPct ?? 20)
+    const labour  = item.taskLabour      ?? 0
+    const mats    = item.taskMaterials   ?? 0
+    const plant   = item.taskPlant       ?? 0
+    const sub     = item.taskSubcontractor ?? 0
+    const other   = item.taskOther       ?? 0
+    const selling = calcPhaseTaskSellingPrice(labour, mats, plant, sub, other, markup)
+    const cost    = labour + mats + plant + sub + other
+
+    const hdr: React.CSSProperties = {
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      background: accentColor, color: '#fff', padding: '10px 14px',
+      borderRadius: '8px 8px 0 0', fontSize: 13, fontWeight: 700,
+    }
+    const card: React.CSSProperties = {
+      background: bgDark, border: `1px solid ${bdColor}`,
+      borderRadius: 8, marginBottom: 12, overflow: 'hidden',
+    }
+    const row: React.CSSProperties = { padding: '10px 14px' }
+    const twoCol: React.CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }
+    const costRow: React.CSSProperties = {
+      display: 'grid', gridTemplateColumns: '110px 1fr', alignItems: 'center', gap: 6, marginBottom: 7,
+    }
+    const costLabel: React.CSSProperties = { fontSize: 12, color: 'var(--to-muted)', fontWeight: 600 }
+    const linkedEl = item.elementId ? project.elements.find(e => e.id === item.elementId) : null
+
+    function applyTask(subphaseId: string, taskId: string, overrideQty?: number) {
+      const sp = getAllSubphasesForPhase(item.phase).find(s => s.id === subphaseId)
+      const tk = sp?.tasks.find(t => t.id === taskId)
+      if (!sp || !tk) return
+      const q = overrideQty ?? (item.qty > 0 ? item.qty : tk.defaultQty)
+      const updated: TakeoffItem = {
+        ...item,
+        name:               tk.name,
+        spec:               tk.notes ?? '',
+        taskSubphaseId:     subphaseId,
+        taskId:             taskId,
+        taskMarkupPct:      sp.markupPct,
+        subPhase:           sp.name,
+        unit:               tk.unit,
+        qty:                q,
+        taskLabour:         +(tk.labour       * q).toFixed(2),
+        taskMaterials:      +(tk.materials    * q).toFixed(2),
+        taskPlant:          +(tk.plant        * q).toFixed(2),
+        taskSubcontractor:  +(tk.subcontractor * q).toFixed(2),
+        taskOther:          +(tk.other        * q).toFixed(2),
+      }
+      saveItemEdit(updated)
+    }
+
+    return (
+      <div style={{ padding: 14, fontSize: 13, overflowY: 'auto', height: '100%' }}>
+        {/* Header */}
+        <div style={{ ...card, marginBottom: 14 }}>
+          <div style={hdr}>
+            <span>{item.phase}</span>
+            <span style={{ fontSize: 18, fontWeight: 900 }}>
+              £{selling.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          </div>
+          <div style={{ ...row, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 11, color: 'var(--to-muted)' }}>
+              Cost: <strong style={{ color: 'var(--to-text)' }}>£{cost.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</strong>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--to-muted)' }}>
+              Markup:&nbsp;
+              <input
+                type="number" min={0} max={200} style={{ ...inputStyle, width: 60, display: 'inline-block', padding: '2px 4px' }}
+                value={markup}
+                onChange={e => saveItemEdit({ ...item, taskMarkupPct: +e.target.value })}
+              />
+              %
+            </div>
+          </div>
+        </div>
+
+        {/* Drawing label */}
+        {linkedEl && (
+          <div style={{ marginBottom: 10 }}>
+            <label style={labelStyle}>Drawing Label</label>
+            <input style={inputStyle} value={linkedEl.label}
+              onChange={e => saveElementEdit({ ...linkedEl, label: e.target.value })} />
+          </div>
+        )}
+
+        {/* Item name */}
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle}>Item Name</label>
+          <input style={inputStyle} value={item.name}
+            onChange={e => saveItemEdit({ ...item, name: e.target.value })} />
+        </div>
+
+        {/* Subphase selector */}
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle}>Sub-Phase</label>
+          <select style={inputStyle} value={item.taskSubphaseId ?? (subphases[0]?.id ?? '')}
+            onChange={e => {
+              const sp = getAllSubphasesForPhase(item.phase).find(s => s.id === e.target.value)
+              const firstTask = sp?.tasks[0]
+              if (sp && firstTask) applyTask(sp.id, firstTask.id)
+            }}>
+            {subphases.map(sp => (
+              <option key={sp.id} value={sp.id}>{sp.name}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Task selector */}
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle}>Task</label>
+          <select style={inputStyle} value={item.taskId ?? (tasks[0]?.id ?? '')}
+            onChange={e => applyTask(item.taskSubphaseId ?? subphases[0]?.id ?? '', e.target.value)}>
+            {tasks.map(t => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* UK Warning */}
+        {selSub?.ukWarning && (
+          <div style={{
+            background: darkMode ? '#2a1a00' : '#fffbe6',
+            border: '1px solid #f59e0b',
+            borderRadius: 6, padding: '8px 10px', marginBottom: 10, fontSize: 11.5,
+            color: darkMode ? '#fcd34d' : '#92400e', lineHeight: 1.5,
+          }}>
+            ⚠️ {selSub.ukWarning}
+          </div>
+        )}
+
+        {/* Qty / Unit */}
+        <div style={twoCol}>
+          <div>
+            <label style={labelStyle}>Qty</label>
+            <input type="number" step="any" min={0} style={inputStyle}
+              value={qty}
+              onChange={e => {
+                const q = +e.target.value
+                const tk = selTask
+                if (!tk) { saveItemEdit({ ...item, qty: q }); return }
+                saveItemEdit({
+                  ...item,
+                  qty: q,
+                  taskLabour:        +(tk.labour        * q).toFixed(2),
+                  taskMaterials:     +(tk.materials     * q).toFixed(2),
+                  taskPlant:         +(tk.plant         * q).toFixed(2),
+                  taskSubcontractor: +(tk.subcontractor * q).toFixed(2),
+                  taskOther:         +(tk.other         * q).toFixed(2),
+                })
+              }}
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>Unit</label>
+            <select style={inputStyle} value={item.unit}
+              onChange={e => saveItemEdit({ ...item, unit: e.target.value })}>
+              {(Object.keys(PHASE_TASK_UNIT_LABELS) as PhaseTaskUnit[]).map(u => (
+                <option key={u} value={u}>{PHASE_TASK_UNIT_LABELS[u]}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Cost breakdown */}
+        <div style={card}>
+          <div style={{ ...hdr, background: darkMode ? '#1a2a3a' : '#e0e8f0', color: 'var(--to-text)', fontSize: 11, padding: '8px 14px' }}>
+            Cost Breakdown
+          </div>
+          <div style={{ padding: '10px 14px' }}>
+            {(
+              [
+                { key: 'taskLabour',        label: '🔨 Labour',          color: '#f39c12' },
+                { key: 'taskMaterials',     label: '📦 Materials',       color: '#3498db' },
+                { key: 'taskPlant',         label: '🚜 Plant',           color: '#9b59b6' },
+                { key: 'taskSubcontractor', label: '👷 Subcontractor',   color: '#e74c3c' },
+                { key: 'taskOther',         label: '📋 Other',           color: '#95a5a6' },
+              ] as { key: keyof TakeoffItem; label: string; color: string }[]
+            ).map(({ key, label, color }) => (
+              <div key={key} style={costRow}>
+                <label style={{ ...costLabel, color }}>{label}</label>
+                <input type="number" step="any" min={0} style={inputStyle}
+                  value={(item[key] as number | undefined) ?? 0}
+                  onChange={e => saveItemEdit({ ...item, [key]: +e.target.value })}
+                />
+              </div>
+            ))}
+            <div style={{ borderTop: `1px solid ${bdColor}`, paddingTop: 8, marginTop: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--to-muted)' }}>
+                <span>Total Cost</span>
+                <strong style={{ color: 'var(--to-text)' }}>£{cost.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginTop: 4, color: accentColor, fontWeight: 700 }}>
+                <span>Selling Price (incl. {markup}% markup)</span>
+                <strong>£{selling.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Notes fields */}
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle}>Client Description</label>
+          <textarea style={{ ...inputStyle, height: 52, resize: 'none' }}
+            value={item.spec ?? selTask?.notes ?? ''}
+            onChange={e => saveItemEdit({ ...item, spec: e.target.value })}
+          />
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+          <div>
+            <label style={labelStyle}>Drawing Ref</label>
+            <input style={inputStyle} value={item.drawingRef ?? ''}
+              onChange={e => saveItemEdit({ ...item, drawingRef: e.target.value })} />
+          </div>
+          <div>
+            <label style={labelStyle}>Phase</label>
+            <select style={inputStyle} value={item.phase}
+              onChange={e => saveItemEdit({ ...item, phase: e.target.value as import('@/lib/takeoff-types').TakeoffPhase })}>
+              {TAKEOFF_PHASES.map(ph => <option key={ph} value={ph}>{ph}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <label style={labelStyle}>Building Regs Notes</label>
+          <textarea style={{ ...inputStyle, height: 44, resize: 'none' }}
+            value={item.buildingRegsNotes ?? ''}
+            onChange={e => saveItemEdit({ ...item, buildingRegsNotes: e.target.value })}
+          />
+        </div>
+
+        {/* Delete */}
+        <button
+          onClick={() => {
+            setProject(p => ({ ...p, items: p.items.filter(it => it.id !== item.id) }))
+            setEditingItem(null)
+            setPanelMode('schedule')
+          }}
+          style={{
+            background: 'none', border: `1px solid #c0392b`, color: '#c0392b',
+            borderRadius: 6, padding: '6px 14px', fontSize: 12, cursor: 'pointer', width: '100%', marginTop: 4,
+          }}
+        >
+          🗑 Delete Item
+        </button>
+      </div>
+    )
+  }
+
   // ── Properties panel ───────────────────────────────────────────────────────
   function renderProperties() {
     if (!editingItem) {
@@ -2052,6 +2333,39 @@ export default function TakeoffPage() {
         saveItemEdit({ ..._buildupItem, spec: _defaultMakeup.clientDescription })
       }
       return renderBuildupProperties(_buildupItem)
+    }
+
+    // ── Generic phase task panel (Structural Frame, Roof, Windows & Doors, etc.) ──
+    const _phaseHasTasks = ALL_PHASE_SUBPHASES.some(s => s.phase === editingItem.phase)
+    if (_phaseHasTasks) {
+      let _taskItem = { ...editingItem }
+      // Auto-init with first subphase/task if not set
+      if (!_taskItem.taskSubphaseId) {
+        const _subphases = getAllSubphasesForPhase(_taskItem.phase)
+        const _defSub  = _subphases[0]
+        const _defTask = _defSub?.tasks[0]
+        if (_defSub && _defTask) {
+          const q = _taskItem.qty > 0 ? _taskItem.qty : _defTask.defaultQty
+          _taskItem = {
+            ..._taskItem,
+            name:               _defTask.name,
+            spec:               _defTask.notes ?? '',
+            taskSubphaseId:     _defSub.id,
+            taskId:             _defTask.id,
+            taskMarkupPct:      _defSub.markupPct,
+            subPhase:           _defSub.name,
+            unit:               _defTask.unit,
+            qty:                q,
+            taskLabour:         +(_defTask.labour        * q).toFixed(2),
+            taskMaterials:      +(_defTask.materials     * q).toFixed(2),
+            taskPlant:          +(_defTask.plant         * q).toFixed(2),
+            taskSubcontractor:  +(_defTask.subcontractor * q).toFixed(2),
+            taskOther:          +(_defTask.other         * q).toFixed(2),
+          }
+          saveItemEdit(_taskItem)
+        }
+      }
+      return renderPhaseTaskProperties(_taskItem)
     }
 
     const item = editingItem

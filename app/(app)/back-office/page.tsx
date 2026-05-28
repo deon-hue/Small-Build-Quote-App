@@ -12,6 +12,11 @@ import {
   DEMO_UNITS, DEMO_UNIT_LABELS, getAllDemoSubphases,
   type DemoSubphase, type DemoTask, type DemoUnit,
 } from '@/lib/demolition-data'
+import {
+  ALL_PHASE_SUBPHASES, loadCustomPhaseSubphases, saveCustomPhaseSubphases,
+  PHASE_TASK_UNIT_LABELS,
+  type PhaseSubphase, type PhaseTask, type PhaseTaskUnit,
+} from '@/lib/phase-tasks'
 import type { TemplatePhaseData, QuoteItem } from '@/lib/types'
 import type { EstimatorItemTemplate, MeasurementType } from '@/lib/estimator'
 import { MEASUREMENT_LABELS } from '@/lib/estimator'
@@ -295,6 +300,53 @@ export default function BackOfficePage() {
   function deleteDemoTask(subId: string, taskId: string) {
     if (!confirm('Delete this task?')) return
     saveDemoSubphases(demoSubphases.map(s => s.id !== subId ? s : { ...s, tasks: s.tasks.filter(t => t.id !== taskId) }))
+  }
+
+  // ── Phase Task admin (localStorage) ──────────────────────────────────────
+  const [phaseTaskSubs, setPhaseTaskSubs] = useState<PhaseSubphase[]>(() => {
+    try {
+      const custom = loadCustomPhaseSubphases()
+      // Merge custom overrides over defaults
+      return ALL_PHASE_SUBPHASES.map(d => custom.find(c => c.id === d.id) ?? d)
+    } catch { return ALL_PHASE_SUBPHASES.map(s => ({ ...s })) }
+  })
+  const [phaseTaskFilter, setPhaseTaskFilter] = useState<string>('Structural Frame')
+  const [expandedPhaseSub, setExpandedPhaseSub] = useState<string | null>(null)
+  const [editingPhaseTask, setEditingPhaseTask] = useState<{ subphaseId: string; task: PhaseTask } | null>(null)
+
+  function savePhaseTaskSubs(subs: PhaseSubphase[]) {
+    setPhaseTaskSubs(subs)
+    saveCustomPhaseSubphases(subs.filter(s => {
+      const def = ALL_PHASE_SUBPHASES.find(d => d.id === s.id)
+      return def ? JSON.stringify(s) !== JSON.stringify(def) : true
+    }))
+  }
+  function updatePhaseSubMarkup(id: string, pct: number) {
+    savePhaseTaskSubs(phaseTaskSubs.map(s => s.id === id ? { ...s, markupPct: pct } : s))
+  }
+  function savePhaseTaskEdit() {
+    if (!editingPhaseTask) return
+    savePhaseTaskSubs(phaseTaskSubs.map(s => s.id !== editingPhaseTask.subphaseId ? s : {
+      ...s, tasks: s.tasks.map(t => t.id === editingPhaseTask.task.id ? editingPhaseTask.task : t),
+    }))
+    setEditingPhaseTask(null)
+  }
+  function addCustomPhaseTask(subId: string) {
+    const newTask: PhaseTask = {
+      id: `custom-${Date.now()}`,
+      name: 'New Task',
+      unit: 'nr',
+      defaultQty: 1,
+      labour: 0, materials: 0, plant: 0, subcontractor: 0, other: 0,
+      notes: '',
+      visible: true,
+    }
+    savePhaseTaskSubs(phaseTaskSubs.map(s => s.id !== subId ? s : { ...s, tasks: [...s.tasks, newTask] }))
+    setEditingPhaseTask({ subphaseId: subId, task: newTask })
+  }
+  function deletePhaseTask(subId: string, taskId: string) {
+    if (!confirm('Delete this task?')) return
+    savePhaseTaskSubs(phaseTaskSubs.map(s => s.id !== subId ? s : { ...s, tasks: s.tasks.filter(t => t.id !== taskId) }))
   }
 
   function saveWallTypes(types: FloorMakeup[]) {
@@ -1278,6 +1330,123 @@ export default function BackOfficePage() {
       ))}
     </div>
 
+    {/* ── Phase Tasks Admin ─────────────────────────────────────────────────── */}
+    <div className="card" style={{ marginTop: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 16 }}>🏗️ Phase Task Rates</div>
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+            Default tasks, UK 2024 rates, markup and visibility for each takeoff phase.
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select
+            value={phaseTaskFilter}
+            onChange={e => { setPhaseTaskFilter(e.target.value); setExpandedPhaseSub(null) }}
+            style={{ padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13 }}
+          >
+            {Array.from(new Set(ALL_PHASE_SUBPHASES.map(s => s.phase))).map(ph => (
+              <option key={ph} value={ph}>{ph}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => {
+              if (!confirm(`Reset all ${phaseTaskFilter} tasks to built-in defaults?`)) return
+              const defaults = ALL_PHASE_SUBPHASES.filter(s => s.phase === phaseTaskFilter).map(s => ({ ...s }))
+              savePhaseTaskSubs(phaseTaskSubs.map(s => s.phase === phaseTaskFilter ? (defaults.find(d => d.id === s.id) ?? s) : s))
+            }}
+            style={{ padding: '6px 14px', border: '1px solid #e74c3c', borderRadius: 6, background: 'transparent', color: '#e74c3c', fontSize: 12, cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}
+          >
+            <RotateCcw size={13} /> Reset Phase
+          </button>
+        </div>
+      </div>
+
+      {phaseTaskSubs.filter(s => s.phase === phaseTaskFilter).map(sub => (
+        <div key={sub.id} style={{ border: '1px solid #e2e8f0', borderRadius: 8, marginBottom: 10, overflow: 'hidden' }}>
+          {/* Subphase header */}
+          <div
+            onClick={() => setExpandedPhaseSub(expandedPhaseSub === sub.id ? null : sub.id)}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: '#f8fafc', cursor: 'pointer', userSelect: 'none' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{sub.name}</span>
+              <span style={{ fontSize: 11, background: '#e2e8f0', color: '#64748b', borderRadius: 99, padding: '1px 8px' }}>
+                {sub.tasks.length} tasks
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <label style={{ fontSize: 12, color: '#64748b' }}>
+                Markup:&nbsp;
+                <input
+                  type="number" min={0} max={200}
+                  value={sub.markupPct}
+                  onClick={e => e.stopPropagation()}
+                  onChange={e => updatePhaseSubMarkup(sub.id, +e.target.value)}
+                  style={{ width: 55, padding: '2px 6px', border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 12 }}
+                />
+                %
+              </label>
+              <span style={{ fontSize: 18, color: '#94a3b8' }}>{expandedPhaseSub === sub.id ? '▲' : '▼'}</span>
+            </div>
+          </div>
+
+          {/* Tasks table */}
+          {expandedPhaseSub === sub.id && (
+            <div style={{ padding: '0 16px 14px' }}>
+              {sub.ukWarning && (
+                <div style={{ background: '#fffbe6', border: '1px solid #f59e0b', borderRadius: 6, padding: '6px 10px', marginTop: 10, fontSize: 11.5, color: '#92400e' }}>
+                  ⚠️ {sub.ukWarning}
+                </div>
+              )}
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginTop: 10 }}>
+                <thead>
+                  <tr style={{ color: '#64748b', borderBottom: '1px solid #e2e8f0' }}>
+                    <th style={{ padding: '4px 6px', textAlign: 'left' }}>Task</th>
+                    <th style={{ padding: '4px 6px', textAlign: 'center' }}>Unit</th>
+                    <th style={{ padding: '4px 6px', textAlign: 'right' }}>Labour</th>
+                    <th style={{ padding: '4px 6px', textAlign: 'right' }}>Materials</th>
+                    <th style={{ padding: '4px 6px', textAlign: 'right' }}>Plant</th>
+                    <th style={{ padding: '4px 6px', textAlign: 'right' }}>Sub</th>
+                    <th style={{ padding: '4px 6px', textAlign: 'right' }}>Other</th>
+                    <th style={{ padding: '4px 4px' }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sub.tasks.map(task => (
+                    <tr key={task.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '5px 6px' }}>
+                        <div style={{ fontWeight: 600, color: '#1e293b' }}>{task.name}</div>
+                        {task.notes && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>{task.notes}</div>}
+                      </td>
+                      <td style={{ padding: '5px 6px', textAlign: 'center', color: '#64748b' }}>/{task.unit}</td>
+                      <td style={{ padding: '5px 6px', textAlign: 'right', color: task.labour  > 0 ? '#f39c12' : '#cbd5e1' }}>£{task.labour.toFixed(0)}</td>
+                      <td style={{ padding: '5px 6px', textAlign: 'right', color: task.materials > 0 ? '#3498db' : '#cbd5e1' }}>£{task.materials.toFixed(0)}</td>
+                      <td style={{ padding: '5px 6px', textAlign: 'right', color: task.plant > 0 ? '#9b59b6' : '#cbd5e1' }}>£{task.plant.toFixed(0)}</td>
+                      <td style={{ padding: '5px 6px', textAlign: 'right', color: task.subcontractor > 0 ? '#e74c3c' : '#cbd5e1' }}>£{task.subcontractor.toFixed(0)}</td>
+                      <td style={{ padding: '5px 6px', textAlign: 'right', color: task.other > 0 ? '#95a5a6' : '#cbd5e1' }}>£{task.other.toFixed(0)}</td>
+                      <td style={{ padding: '5px 4px', textAlign: 'right' }}>
+                        <button
+                          onClick={() => setEditingPhaseTask({ subphaseId: sub.id, task: { ...task } })}
+                          style={{ padding: '2px 8px', border: '1px solid #e2e8f0', borderRadius: 4, background: '#fff', fontSize: 11, cursor: 'pointer' }}
+                        >✏️</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <button
+                onClick={() => addCustomPhaseTask(sub.id)}
+                style={{ marginTop: 10, padding: '5px 14px', border: '1px solid #0277bd', borderRadius: 6, background: 'transparent', color: '#0277bd', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}
+              >
+                + Add Custom Task
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+
     {/* ── Demolition Task Editor Modal ──────────────────────────────────────── */}
     {editingDemoTask && (
       <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 20px', overflowY: 'auto' }}>
@@ -1370,6 +1539,104 @@ export default function BackOfficePage() {
               style={{ padding: '8px 22px', background: '#e74c3c', border: 'none', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
               Save Task
             </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* ── Phase Task Editor Modal ────────────────────────────────────────────── */}
+    {editingPhaseTask && (
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 20px', overflowY: 'auto' }}>
+        <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 700, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 22px', borderBottom: '1px solid #e2e8f0' }}>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>✏️ Edit Phase Task</div>
+            <button onClick={() => setEditingPhaseTask(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8' }}>×</button>
+          </div>
+          <div style={{ padding: '18px 22px', display: 'grid', gap: 12 }}>
+            {/* Name */}
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>Task Name</label>
+              <input style={{ width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13 }}
+                value={editingPhaseTask.task.name}
+                onChange={e => setEditingPhaseTask({ ...editingPhaseTask, task: { ...editingPhaseTask.task, name: e.target.value } })}
+              />
+            </div>
+            {/* Notes */}
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>Estimator Notes</label>
+              <textarea style={{ width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, resize: 'vertical', minHeight: 52 }}
+                value={editingPhaseTask.task.notes ?? ''}
+                onChange={e => setEditingPhaseTask({ ...editingPhaseTask, task: { ...editingPhaseTask.task, notes: e.target.value } })}
+              />
+            </div>
+            {/* Unit + defaultQty */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>Unit</label>
+                <select style={{ width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13 }}
+                  value={editingPhaseTask.task.unit}
+                  onChange={e => setEditingPhaseTask({ ...editingPhaseTask, task: { ...editingPhaseTask.task, unit: e.target.value as PhaseTaskUnit } })}
+                >
+                  {(Object.entries(PHASE_TASK_UNIT_LABELS) as [PhaseTaskUnit, string][]).map(([u, l]) => (
+                    <option key={u} value={u}>{l}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>Default Qty</label>
+                <input type="number" min={0} step={0.5} style={{ width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13 }}
+                  value={editingPhaseTask.task.defaultQty}
+                  onChange={e => setEditingPhaseTask({ ...editingPhaseTask, task: { ...editingPhaseTask.task, defaultQty: +e.target.value || 1 } })}
+                />
+              </div>
+            </div>
+            {/* Default costs per unit */}
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 8 }}>Default Costs (per unit, ex-VAT)</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                {([
+                  { label: '🔨 Labour',       key: 'labour'        },
+                  { label: '📦 Materials',     key: 'materials'     },
+                  { label: '🚜 Plant',         key: 'plant'         },
+                  { label: '👷 Subcontractor', key: 'subcontractor' },
+                  { label: '📋 Other',         key: 'other'         },
+                ] as { label: string; key: keyof PhaseTask }[]).map(({ label, key }) => (
+                  <div key={key}>
+                    <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 3 }}>{label}</label>
+                    <input type="number" min={0} step={1} style={{ width: '100%', padding: '5px 8px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 13 }}
+                      value={editingPhaseTask.task[key] as number ?? 0}
+                      onChange={e => setEditingPhaseTask({ ...editingPhaseTask, task: { ...editingPhaseTask.task, [key]: +e.target.value } })}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Visibility */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+              <input type="checkbox"
+                checked={editingPhaseTask.task.visible !== false}
+                onChange={() => setEditingPhaseTask({ ...editingPhaseTask, task: { ...editingPhaseTask.task, visible: !(editingPhaseTask.task.visible !== false) } })}
+              />
+              Show in Takeoff Tool
+            </label>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '12px 22px', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
+            <button
+              onClick={() => { deletePhaseTask(editingPhaseTask.subphaseId, editingPhaseTask.task.id); setEditingPhaseTask(null) }}
+              style={{ padding: '8px 14px', border: '1px solid #e74c3c', borderRadius: 6, fontSize: 13, background: '#fff', color: '#e74c3c', cursor: 'pointer' }}
+            >
+              🗑 Delete
+            </button>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setEditingPhaseTask(null)}
+                style={{ padding: '8px 18px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, background: '#fff', color: '#374151', cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button onClick={savePhaseTaskEdit}
+                style={{ padding: '8px 22px', background: '#0277bd', border: 'none', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                Save Task
+              </button>
+            </div>
           </div>
         </div>
       </div>
