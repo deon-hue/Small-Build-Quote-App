@@ -279,8 +279,8 @@ export default function TakeoffPage() {
   }
 
   function handleMouseDown(e: React.MouseEvent<SVGSVGElement>) {
-    // Middle mouse, Space+left, or left button in select mode = pan
-    if (e.button === 1 || (e.button === 0 && spaceHeld) || (e.button === 0 && tool === 'select')) {
+    // Middle mouse, Space+left, or left button in select mode = pan (but not while calibrating)
+    if (!calibDrawing && (e.button === 1 || (e.button === 0 && spaceHeld) || (e.button === 0 && tool === 'select'))) {
       e.preventDefault()
       hasPannedRef.current = false
       setIsPanning(true)
@@ -309,7 +309,7 @@ export default function TakeoffPage() {
 
   function handleSvgClick(e: React.MouseEvent<SVGSVGElement>) {
     if (hasPannedRef.current) { hasPannedRef.current = false; return }
-    if (tool === 'select') return
+    // Calibration takes priority over everything else
     if (calibDrawing) {
       const pt = svgCoords(e)
       setCalibPts(prev => {
@@ -320,6 +320,7 @@ export default function TakeoffPage() {
       })
       return
     }
+    if (tool === 'select') return
     const pt = svgCoords(e)
     if (tool === 'rect') {
       if (!isDrawing) {
@@ -672,7 +673,7 @@ export default function TakeoffPage() {
 
     const ptsStr = pts.map(p => `${p.x},${p.y}`).join(' ')
     return (
-      <g>
+      <g style={{ pointerEvents: 'none' }}>
         <polyline points={ptsStr} fill="none" stroke="#f1c40f" strokeWidth={2} strokeDasharray="4 3" />
         {pts.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={4} fill="#f1c40f" />)}
       </g>
@@ -1183,6 +1184,7 @@ export default function TakeoffPage() {
             onMouseMove={handleMouseMove}
             onMouseDown={handleMouseDown}
             onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
             onWheel={handleWheel}
           >
             {/* Everything inside this group is zoomed/panned together */}
@@ -1377,6 +1379,8 @@ export default function TakeoffPage() {
               <button
                 style={{ ...btnStyle, background: '#2b5a2b', borderColor: '#4a8a4a', marginBottom: 12 }}
                 onClick={() => {
+                  hasPannedRef.current = false   // clear any stale pan flag before calibrating
+                  setIsPanning(false)
                   setCalibDrawing(true)
                   setCalibPts([])
                   setShowCalib(false)   // close dialog so canvas is accessible
