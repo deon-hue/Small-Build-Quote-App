@@ -104,8 +104,55 @@ const CAT_COLOR: Record<string, string> = {
   labour: '#f39c12', materials: '#3498db', plant: '#9b59b6', other: '#95a5a6',
 }
 
+// ── Theme ─────────────────────────────────────────────────────────────────────
+
+const DARK_VARS: Record<string, string> = {
+  '--to-bg':        '#0d1a0d',   // canvas / deepest bg
+  '--to-panel':     '#162216',   // panels, topbar
+  '--to-alt':       '#1a2a1a',   // secondary bg (rows, cards)
+  '--to-hover':     '#1e2e1e',   // hover / tertiary
+  '--to-active':    '#2b5a2b',   // active tool bg
+  '--to-border':    '#2a3a2a',   // main border
+  '--to-blt':       '#1e2a1e',   // light border
+  '--to-active-bd': '#4a8a4a',   // active border
+  '--to-btn-bd':    '#3a4a3a',   // button border
+  '--to-text':      '#c8d8a8',   // primary text
+  '--to-textb':     '#dde',      // bright text
+  '--to-muted':     '#6a8a6a',   // muted text
+  '--to-dim':       '#4a6a4a',   // dim / labels
+  '--to-sub':       '#8aa',      // secondary text
+  '--to-link':      '#9ab',      // links / dim accents
+  '--to-input':     '#0d1a0d',   // input bg
+  '--to-input-bd':  '#2a3a2a',   // input border
+  '--to-accent':    '#7ab533',   // company green
+  '--to-scrim':     'rgba(0,0,0,0.45)',
+}
+
+const LIGHT_VARS: Record<string, string> = {
+  '--to-bg':        '#e8ecf0',
+  '--to-panel':     '#ffffff',
+  '--to-alt':       '#f5f6f8',
+  '--to-hover':     '#f0f2f4',
+  '--to-active':    'rgba(122,181,51,0.14)',
+  '--to-border':    '#dde1e5',
+  '--to-blt':       '#eaecef',
+  '--to-active-bd': '#7ab533',
+  '--to-btn-bd':    '#c8cdd5',
+  '--to-text':      '#2b2f33',
+  '--to-textb':     '#1e2022',
+  '--to-muted':     '#6b7580',
+  '--to-dim':       '#9aa0a8',
+  '--to-sub':       '#6b7580',
+  '--to-link':      '#4a7a9b',
+  '--to-input':     '#ffffff',
+  '--to-input-bd':  '#dde1e5',
+  '--to-accent':    '#7ab533',
+  '--to-scrim':     'rgba(30,32,34,0.6)',
+}
+
 // ── localStorage key ──────────────────────────────────────────────────────────
 const LS_KEY = 'sbc_takeoff_project'
+const LS_THEME = 'sbc_takeoff_theme'
 
 function loadProject(): TakeoffProject | null {
   try {
@@ -236,6 +283,17 @@ export default function TakeoffPage() {
 
   // Header edit
   const [editingName, setEditingName] = useState(false)
+
+  // Theme
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    try { return localStorage.getItem(LS_THEME) !== 'light' } catch { return true }
+  })
+  const toggleTheme = () => setDarkMode(d => {
+    const next = !d
+    try { localStorage.setItem(LS_THEME, next ? 'dark' : 'light') } catch {}
+    return next
+  })
+  const TV = darkMode ? DARK_VARS : LIGHT_VARS   // theme vars shorthand
 
   // Floor tool state
   const [floorDrawMode, setFloorDrawMode] = useState<'rect' | 'polygon'>('rect')
@@ -806,9 +864,9 @@ export default function TakeoffPage() {
 
         {/* ── Key metrics ── */}
         <div style={{
-          background: 'linear-gradient(135deg, #1a2a0a, #1a2a1a)',
+          background: darkMode ? 'linear-gradient(135deg, #1a2a0a, #1a2a1a)' : 'linear-gradient(135deg, rgba(122,181,51,0.08), rgba(122,181,51,0.04))',
           borderRadius: 8, padding: '12px 14px', marginBottom: 12,
-          border: '1px solid #3a5a1a',
+          border: `1px solid ${darkMode ? '#3a5a1a' : 'rgba(122,181,51,0.3)'}`,
         }}>
           <div style={{ fontSize: 10, color: '#f39c12', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
             🏗 Floor Build-up
@@ -1035,7 +1093,7 @@ export default function TakeoffPage() {
   function renderProperties() {
     if (!editingItem) {
       return (
-        <div style={{ padding: '16px', color: '#888', fontSize: 13, textAlign: 'center', paddingTop: 40 }}>
+        <div style={{ padding: '16px', color: 'var(--to-muted)', fontSize: 13, textAlign: 'center', paddingTop: 40 }}>
           <div style={{ fontSize: 28, marginBottom: 12 }}>☝️</div>
           Click an element on the canvas to view and edit its properties.
           <br /><br />
@@ -1180,7 +1238,7 @@ export default function TakeoffPage() {
   function renderSchedule() {
     if (project.items.length === 0) {
       return (
-        <div style={{ padding: '24px 16px', color: '#888', fontSize: 13, textAlign: 'center' }}>
+        <div style={{ padding: '24px 16px', color: 'var(--to-muted)', fontSize: 13, textAlign: 'center' }}>
           <div style={{ fontSize: 28, marginBottom: 12 }}>📋</div>
           No items yet.
           <br /><br />
@@ -1192,12 +1250,12 @@ export default function TakeoffPage() {
     return (
       <div style={{ overflowY: 'auto', height: '100%' }}>
         {/* Item count summary */}
-        <div style={{ padding: '10px 14px', background: '#1a2a1a', borderBottom: '1px solid #2a3a2a',
+        <div style={{ padding: '10px 14px', background: 'var(--to-alt)', borderBottom: '1px solid var(--to-border)',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 12, color: '#8aa', textTransform: 'uppercase', letterSpacing: 1 }}>
+          <span style={{ fontSize: 12, color: 'var(--to-sub)', textTransform: 'uppercase', letterSpacing: 1 }}>
             Quantities
           </span>
-          <span style={{ fontSize: 13, fontWeight: 700, color: '#c8d8a8' }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--to-text)' }}>
             {project.items.length} item{project.items.length !== 1 ? 's' : ''}
           </span>
         </div>
@@ -1205,11 +1263,11 @@ export default function TakeoffPage() {
         {/* Phase groups */}
         {phaseGroups.map(g => (
           <div key={g.phase}>
-            <div style={{ padding: '8px 14px', background: '#162216', borderBottom: '1px solid #2a3a2a',
+            <div style={{ padding: '8px 14px', background: 'var(--to-panel)', borderBottom: '1px solid var(--to-border)',
               display: 'flex', alignItems: 'center', gap: 6 }}>
               <div style={{ width: 10, height: 10, borderRadius: 2, background: PHASE_COLORS[g.phase], flexShrink: 0 }} />
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#c8d8a8' }}>{g.phase}</span>
-              <span style={{ fontSize: 11, color: '#6a8a6a', background: '#0d1a0d', borderRadius: 10,
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--to-text)' }}>{g.phase}</span>
+              <span style={{ fontSize: 11, color: 'var(--to-muted)', background: 'var(--to-bg)', borderRadius: 10,
                 padding: '1px 7px', marginLeft: 2 }}>{g.items.length}</span>
             </div>
             {g.items.map(item => (
@@ -1223,14 +1281,14 @@ export default function TakeoffPage() {
                   setPanelMode('properties')
                 }}
                 style={{
-                  padding: '7px 14px', borderBottom: '1px solid #1a2a1a',
-                  cursor: 'pointer', background: editingItem?.id === item.id ? '#1a2e1a' : 'transparent',
+                  padding: '7px 14px', borderBottom: '1px solid var(--to-blt)',
+                  cursor: 'pointer', background: editingItem?.id === item.id ? 'var(--to-hover)' : 'transparent',
                 }}
               >
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#dde', whiteSpace: 'nowrap',
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--to-textb)', whiteSpace: 'nowrap',
                   overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>
-                <div style={{ fontSize: 11, color: '#6a8a6a', marginTop: 2 }}>
-                  <span style={{ color: '#c8d8a8', fontFamily: 'monospace' }}>
+                <div style={{ fontSize: 11, color: 'var(--to-muted)', marginTop: 2 }}>
+                  <span style={{ color: 'var(--to-text)', fontFamily: 'monospace' }}>
                     {item.qty} {item.unit}
                   </span>
                   {item.floorMakeupId
@@ -1247,12 +1305,12 @@ export default function TakeoffPage() {
         ))}
 
         {/* Export to quote button */}
-        <div style={{ padding: '14px', borderTop: '1px solid #2a3a2a', marginTop: 8 }}>
-          <button style={{ ...btnStyle, width: '100%', background: '#2b3a2b', justifyContent: 'center' }}
+        <div style={{ padding: '14px', borderTop: '1px solid var(--to-border)', marginTop: 8 }}>
+          <button style={{ ...btnStyle, width: '100%', background: darkMode ? '#2b3a2b' : 'rgba(122,181,51,0.1)', justifyContent: 'center', borderColor: 'var(--to-active-bd)' }}
             onClick={exportForQuote}>
             📤 Export for Quote Import
           </button>
-          <div style={{ fontSize: 11, color: '#6a8a6a', marginTop: 6, textAlign: 'center' }}>
+          <div style={{ fontSize: 11, color: 'var(--to-muted)', marginTop: 6, textAlign: 'center' }}>
             Then use &ldquo;📐 Import Take-off&rdquo; in New Quote
           </div>
         </div>
@@ -1260,41 +1318,42 @@ export default function TakeoffPage() {
     )
   }
 
-  // ── Shared styles ──────────────────────────────────────────────────────────
+  // ── Shared styles (theme-aware) ────────────────────────────────────────────
   const inputStyle: React.CSSProperties = {
-    width: '100%', background: '#0d1a0d', border: '1px solid #2a3a2a', borderRadius: 5,
-    color: '#dde', padding: '5px 8px', fontSize: 12, boxSizing: 'border-box',
+    width: '100%', background: 'var(--to-input)', border: '1px solid var(--to-input-bd)', borderRadius: 5,
+    color: 'var(--to-textb)', padding: '5px 8px', fontSize: 12, boxSizing: 'border-box',
     outline: 'none',
   }
   const labelStyle: React.CSSProperties = {
-    display: 'block', fontSize: 10, color: '#6a8a6a', letterSpacing: 1,
+    display: 'block', fontSize: 10, color: 'var(--to-muted)', letterSpacing: 1,
     textTransform: 'uppercase', marginBottom: 4,
   }
   const btnStyle: React.CSSProperties = {
     display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 10px',
-    background: '#1e2e1e', border: '1px solid #3a4a3a', borderRadius: 5,
-    color: '#c8d8a8', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
+    background: 'var(--to-hover)', border: '1px solid var(--to-btn-bd)', borderRadius: 5,
+    color: 'var(--to-text)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
   }
   const dimRow: React.CSSProperties = {
-    display: 'flex', justifyContent: 'space-between', color: '#9ab', fontSize: 12, marginBottom: 3,
+    display: 'flex', justifyContent: 'space-between', color: 'var(--to-link)', fontSize: 12, marginBottom: 3,
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div style={{
+      ...TV as React.CSSProperties,
       margin: '-26px -32px',
       height: 'calc(100dvh - 56px)',
       display: 'flex',
       flexDirection: 'column',
-      background: '#0d1a0d',
-      color: '#dde',
+      background: 'var(--to-bg)',
+      color: 'var(--to-text)',
       fontFamily: 'system-ui, sans-serif',
       overflow: 'hidden',
     }}>
 
       {/* ── Top bar ──────────────────────────────────────────────────────── */}
       <div style={{
-        height: 48, background: '#162216', borderBottom: '1px solid #2a3a2a',
+        height: 48, background: 'var(--to-panel)', borderBottom: '1px solid var(--to-border)',
         display: 'flex', alignItems: 'center', padding: '0 12px', gap: 8, flexShrink: 0,
       }}>
         {/* Project name */}
@@ -1310,7 +1369,7 @@ export default function TakeoffPage() {
         ) : (
           <div
             onClick={() => setEditingName(true)}
-            style={{ fontWeight: 700, fontSize: 13, color: '#c8d8a8', cursor: 'text', minWidth: 120,
+            style={{ fontWeight: 700, fontSize: 13, color: 'var(--to-text)', cursor: 'text', minWidth: 120,
               padding: '3px 6px', borderRadius: 4, border: '1px solid transparent' }}
             title="Click to edit project name"
           >
@@ -1325,7 +1384,7 @@ export default function TakeoffPage() {
           onChange={e => setProject(p => ({ ...p, address: e.target.value }))}
         />
 
-        <div style={{ width: 1, height: 28, background: '#2a3a2a', margin: '0 4px' }} />
+        <div style={{ width: 1, height: 28, background: 'var(--to-border)', margin: '0 4px' }} />
 
         {/* Scale */}
         <select
@@ -1411,7 +1470,25 @@ export default function TakeoffPage() {
           📊 CSV
         </button>
 
-        <button style={{ ...btnStyle, background: '#c0392b33', borderColor: '#c0392b' }}
+        {/* Theme toggle */}
+        <button
+          onClick={toggleTheme}
+          title={darkMode ? 'Switch to light theme' : 'Switch to dark theme'}
+          style={{
+            ...btnStyle,
+            padding: '6px 10px',
+            background: darkMode ? 'var(--to-hover)' : 'rgba(122,181,51,0.12)',
+            borderColor: 'var(--to-accent)',
+            color: 'var(--to-accent)',
+            gap: 4,
+          }}
+        >
+          {darkMode ? '☀' : '◑'} {darkMode ? 'Light' : 'Dark'}
+        </button>
+
+        <div style={{ width: 1, height: 28, background: 'var(--to-border)' }} />
+
+        <button style={{ ...btnStyle, background: '#c0392b33', borderColor: '#c0392b', color: '#e57373' }}
           onClick={handleNew}>
           + New
         </button>
@@ -1421,14 +1498,13 @@ export default function TakeoffPage() {
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
         {/* Left panel: tool icons + phase legend */}
-        {/* Left panel: tools + phase legend */}
         <div style={{
-          width: 130, background: '#162216', borderRight: '1px solid #2a3a2a',
+          width: 130, background: 'var(--to-panel)', borderRight: '1px solid var(--to-border)',
           display: 'flex', flexDirection: 'column', alignItems: 'stretch',
           padding: '8px 6px', gap: 0, flexShrink: 0, overflowY: 'auto',
         }}>
           {/* Section label */}
-          <div style={{ fontSize: 9, color: '#4a6a4a', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 5, paddingLeft: 4 }}>
+          <div style={{ fontSize: 9, color: 'var(--to-dim)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 5, paddingLeft: 4 }}>
             Tools
           </div>
 
@@ -1445,9 +1521,9 @@ export default function TakeoffPage() {
               style={{
                 display: 'flex', alignItems: 'center', gap: 7,
                 padding: '7px 8px', marginBottom: 3, borderRadius: 5, cursor: 'pointer',
-                background: tool === t ? '#2b5a2b' : '#1a2a1a',
-                border: `1px solid ${tool === t ? '#4a8a4a' : '#2a3a2a'}`,
-                color: '#c8d8a8', fontSize: 12, fontFamily: 'inherit',
+                background: tool === t ? 'var(--to-active)' : 'var(--to-alt)',
+                border: `1px solid ${tool === t ? 'var(--to-active-bd)' : 'var(--to-border)'}`,
+                color: 'var(--to-text)', fontSize: 12, fontFamily: 'inherit',
               }}
             >
               <span style={{ fontSize: 14, lineHeight: 1, width: 16, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
@@ -1523,8 +1599,8 @@ export default function TakeoffPage() {
               style={{
                 display: 'flex', alignItems: 'center', gap: 7,
                 padding: '7px 8px', marginBottom: 3, borderRadius: 5, cursor: 'pointer',
-                background: '#5a1a1a', border: '1px solid #8a2a2a',
-                color: '#f1a0a0', fontSize: 12, fontFamily: 'inherit',
+                background: darkMode ? '#5a1a1a' : '#fdecea', border: `1px solid ${darkMode ? '#8a2a2a' : '#e57373'}`,
+                color: darkMode ? '#f1a0a0' : '#c0392b', fontSize: 12, fontFamily: 'inherit',
               }}
             >
               <span style={{ fontSize: 14, lineHeight: 1, width: 16, textAlign: 'center', flexShrink: 0 }}>✕</span>
@@ -1532,7 +1608,7 @@ export default function TakeoffPage() {
             </div>
           )}
 
-          <div style={{ height: 1, background: '#2a3a2a', margin: '8px 0' }} />
+          <div style={{ height: 1, background: 'var(--to-border)', margin: '8px 0' }} />
 
           {/* Add manual item */}
           <div
@@ -1540,18 +1616,18 @@ export default function TakeoffPage() {
             style={{
               display: 'flex', alignItems: 'center', gap: 7,
               padding: '7px 8px', marginBottom: 3, borderRadius: 5, cursor: 'pointer',
-              background: '#1e2e1e', border: '1px solid #3a4a3a',
-              color: '#c8d8a8', fontSize: 12, fontFamily: 'inherit',
+              background: 'var(--to-hover)', border: '1px solid var(--to-btn-bd)',
+              color: 'var(--to-text)', fontSize: 12, fontFamily: 'inherit',
             }}
           >
             <span style={{ fontSize: 14, lineHeight: 1, width: 16, textAlign: 'center', flexShrink: 0 }}>+</span>
             <span>Add Item</span>
           </div>
 
-          <div style={{ height: 1, background: '#2a3a2a', margin: '8px 0' }} />
+          <div style={{ height: 1, background: 'var(--to-border)', margin: '8px 0' }} />
 
           {/* Section label */}
-          <div style={{ fontSize: 9, color: '#4a6a4a', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 5, paddingLeft: 4 }}>
+          <div style={{ fontSize: 9, color: 'var(--to-dim)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 5, paddingLeft: 4 }}>
             Phase
           </div>
 
@@ -1564,21 +1640,21 @@ export default function TakeoffPage() {
               style={{
                 display: 'flex', alignItems: 'center', gap: 6,
                 padding: '5px 6px', marginBottom: 2, borderRadius: 4, cursor: 'pointer',
-                background: activePhase === ph ? '#1e2e1e' : 'transparent',
-                border: `1px solid ${activePhase === ph ? '#3a5a3a' : 'transparent'}`,
+                background: activePhase === ph ? 'var(--to-hover)' : 'transparent',
+                border: `1px solid ${activePhase === ph ? 'var(--to-btn-bd)' : 'transparent'}`,
                 transition: 'all 0.12s',
               }}
             >
               <div style={{
                 width: 10, height: 10, borderRadius: 2, flexShrink: 0,
                 background: PHASE_COLORS[ph],
-                boxShadow: activePhase === ph ? `0 0 0 2px #fff4` : 'none',
+                boxShadow: activePhase === ph ? `0 0 0 2px ${darkMode ? '#fff4' : '#0003'}` : 'none',
               }} />
               <span style={{
-                fontSize: 11, color: activePhase === ph ? '#c8d8a8' : '#8aa',
+                fontSize: 11, color: activePhase === ph ? 'var(--to-text)' : 'var(--to-sub)',
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
               }}>
-                {ph.replace(' & ', ' & ').replace('External Works & Landscaping', 'Ext. Works').replace('Internal Walls & Partitions', 'Int. Walls').replace('Site Setup & Demolition', 'Demolition').replace('Plastering & Boarding', 'Plastering').replace('Structural Frame', 'Struct. Frame').replace('Windows & Doors', 'Windows/Doors').replace('Plumbing & Heating', 'Plumbing').replace('Drainage & Services', 'Drainage').replace('Joinery & Fixtures', 'Joinery').replace('Tiling & Finishes', 'Tiling').replace('Floors & Screeds', 'Floors').replace('Preliminaries', 'Prelims')}
+                {ph.replace('External Works & Landscaping', 'Ext. Works').replace('Internal Walls & Partitions', 'Int. Walls').replace('Site Setup & Demolition', 'Demolition').replace('Plastering & Boarding', 'Plastering').replace('Structural Frame', 'Struct. Frame').replace('Windows & Doors', 'Windows/Doors').replace('Plumbing & Heating', 'Plumbing').replace('Drainage & Services', 'Drainage').replace('Joinery & Fixtures', 'Joinery').replace('Tiling & Finishes', 'Tiling').replace('Floors & Screeds', 'Floors').replace('Preliminaries', 'Prelims')}
               </span>
             </div>
           ))}
@@ -1587,7 +1663,7 @@ export default function TakeoffPage() {
         {/* Centre: SVG canvas */}
         <div
           ref={containerRef}
-          style={{ flex: 1, overflow: 'hidden', position: 'relative', background: '#0d1a0d' }}
+          style={{ flex: 1, overflow: 'hidden', position: 'relative', background: 'var(--to-bg)' }}
         >
           <svg
             ref={svgRef}
@@ -1682,10 +1758,10 @@ export default function TakeoffPage() {
           {calibDrawing && !showCalib && (
             <div style={{
               position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)',
-              background: '#1a3a1a', border: '2px solid #4a8a4a', borderRadius: 8,
-              padding: '10px 20px', color: '#c8d8a8', fontSize: 13, fontWeight: 600,
+              background: 'var(--to-panel)', border: '2px solid var(--to-active-bd)', borderRadius: 8,
+              padding: '10px 20px', color: 'var(--to-text)', fontSize: 13, fontWeight: 600,
               display: 'flex', alignItems: 'center', gap: 12, zIndex: 10,
-              boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
             }}>
               <span style={{ fontSize: 18 }}>📏</span>
               <span>
@@ -1693,13 +1769,13 @@ export default function TakeoffPage() {
                   ? 'Click the START of a known dimension on the plan'
                   : 'Click the END of the known dimension'}
               </span>
-              <span style={{ fontSize: 12, color: '#6a8a6a', marginLeft: 4 }}>
+              <span style={{ fontSize: 12, color: 'var(--to-muted)', marginLeft: 4 }}>
                 ({calibPts.length}/2 points)
               </span>
               <button
                 onClick={() => { setCalibDrawing(false); setCalibPts([]) }}
-                style={{ background: 'none', border: '1px solid #4a6a4a', borderRadius: 4,
-                  color: '#6a8a6a', fontSize: 11, cursor: 'pointer', padding: '2px 8px', marginLeft: 4 }}
+                style={{ background: 'none', border: '1px solid var(--to-btn-bd)', borderRadius: 4,
+                  color: 'var(--to-muted)', fontSize: 11, cursor: 'pointer', padding: '2px 8px', marginLeft: 4 }}
               >
                 Cancel
               </button>
@@ -1709,11 +1785,11 @@ export default function TakeoffPage() {
           {/* Status bar */}
           <div style={{
             position: 'absolute', bottom: 0, left: 0, right: 0, height: 22,
-            background: '#162216', borderTop: '1px solid #2a3a2a',
+            background: 'var(--to-panel)', borderTop: '1px solid var(--to-border)',
             display: 'flex', alignItems: 'center', padding: '0 10px', gap: 16,
-            fontSize: 11, color: '#6a8a6a',
+            fontSize: 11, color: 'var(--to-muted)',
           }}>
-            <span>Tool: <strong style={{ color: tool === 'floor' ? '#f39c12' : '#c8d8a8' }}>{
+            <span>Tool: <strong style={{ color: tool === 'floor' ? '#f39c12' : 'var(--to-text)' }}>{
               calibDrawing ? '📏 CALIBRATING' :
               tool === 'select' ? 'Select' :
               tool === 'line' ? 'Line / Polyline (dbl-click to finish)' :
@@ -1722,13 +1798,13 @@ export default function TakeoffPage() {
               'Polygon (dbl-click to close)'
             }</strong></span>
             <span>Phase: <strong style={{ color: PHASE_COLORS[activePhase] }}>{activePhase}</strong></span>
-            <span>Scale: <strong style={{ color: '#c8d8a8' }}>{project.calibration.label || '—'}</strong></span>
-            <span>Zoom: <strong style={{ color: '#c8d8a8' }}>{Math.round(zoom * 100)}%</strong></span>
-            <span style={{ color: '#4a6a4a' }}>Scroll to zoom · Space+drag or middle-mouse to pan</span>
+            <span>Scale: <strong style={{ color: 'var(--to-text)' }}>{project.calibration.label || '—'}</strong></span>
+            <span>Zoom: <strong style={{ color: 'var(--to-text)' }}>{Math.round(zoom * 100)}%</strong></span>
+            <span style={{ color: 'var(--to-dim)' }}>Scroll to zoom · Space+drag or middle-mouse to pan</span>
             <span>x: {Math.round(mousePos.x)}, y: {Math.round(mousePos.y)}</span>
             {selectedId && <span style={{ color: '#f1c40f' }}>Selected — press Delete to remove</span>}
             {isDrawing && drawPoints.length > 0 && (
-              <span style={{ color: '#c8d8a8' }}>
+              <span style={{ color: 'var(--to-text)' }}>
                 {drawPoints.length} point{drawPoints.length !== 1 ? 's' : ''}
                 {tool !== 'rect' ? ' — dbl-click to finish' : ' — click to finish'}
               </span>
@@ -1738,19 +1814,19 @@ export default function TakeoffPage() {
 
         {/* Right panel */}
         <div style={{
-          width: 300, background: '#162216', borderLeft: '1px solid #2a3a2a',
+          width: 300, background: 'var(--to-panel)', borderLeft: '1px solid var(--to-border)',
           display: 'flex', flexDirection: 'column', flexShrink: 0,
         }}>
           {/* Panel tabs */}
-          <div style={{ display: 'flex', borderBottom: '1px solid #2a3a2a', flexShrink: 0 }}>
+          <div style={{ display: 'flex', borderBottom: '1px solid var(--to-border)', flexShrink: 0 }}>
             {(['schedule', 'properties'] as PanelMode[]).map(m => (
               <button
                 key={m}
                 onClick={() => setPanelMode(m)}
                 style={{
-                  flex: 1, padding: '9px 0', background: panelMode === m ? '#1e2e1e' : 'transparent',
-                  border: 'none', borderBottom: panelMode === m ? '2px solid #4a8a4a' : '2px solid transparent',
-                  color: panelMode === m ? '#c8d8a8' : '#6a8a6a', fontSize: 12, cursor: 'pointer',
+                  flex: 1, padding: '9px 0', background: panelMode === m ? 'var(--to-hover)' : 'transparent',
+                  border: 'none', borderBottom: panelMode === m ? '2px solid var(--to-active-bd)' : '2px solid transparent',
+                  color: panelMode === m ? 'var(--to-text)' : 'var(--to-muted)', fontSize: 12, cursor: 'pointer',
                   fontFamily: 'inherit', fontWeight: panelMode === m ? 700 : 400,
                 }}
               >
@@ -1768,14 +1844,15 @@ export default function TakeoffPage() {
       {/* ── Calibration dialog ─────────────────────────────────────────────── */}
       {showCalib && (
         <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+          position: 'fixed', inset: 0, background: 'var(--to-scrim)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
         }}>
           <div style={{
-            background: '#162216', border: '1px solid #2a3a2a', borderRadius: 10,
+            background: 'var(--to-panel)', border: '1px solid var(--to-border)', borderRadius: 10,
             padding: 28, width: 420, maxWidth: '90vw',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
           }}>
-            <h3 style={{ margin: '0 0 16px', color: '#c8d8a8' }}>📏 Scale Calibration</h3>
+            <h3 style={{ margin: '0 0 16px', color: 'var(--to-text)' }}>📏 Scale Calibration</h3>
 
             <div style={{ marginBottom: 16 }}>
               <label style={labelStyle}>Quick Presets</label>
@@ -1792,8 +1869,8 @@ export default function TakeoffPage() {
               </div>
             </div>
 
-            <div style={{ borderTop: '1px solid #2a3a2a', paddingTop: 16, marginBottom: 16 }}>
-              <p style={{ fontSize: 13, color: '#9ab', marginBottom: 12 }}>
+            <div style={{ borderTop: '1px solid var(--to-border)', paddingTop: 16, marginBottom: 16 }}>
+              <p style={{ fontSize: 13, color: 'var(--to-link)', marginBottom: 12 }}>
                 Or draw a line over a known dimension on the plan, then enter its real-world length:
               </p>
 
@@ -1819,7 +1896,7 @@ export default function TakeoffPage() {
                 </div>
               )}
               {calibPts.length === 0 && (
-                <div style={{ fontSize: 12, color: '#6a8a6a', marginBottom: 8 }}>
+                <div style={{ fontSize: 12, color: 'var(--to-muted)', marginBottom: 8 }}>
                   No line drawn yet — click the button above, then click 2 points on the plan.
                 </div>
               )}
