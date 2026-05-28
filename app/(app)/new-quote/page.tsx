@@ -11,7 +11,7 @@ import QuotePreviewModal from '@/components/QuotePreviewModal'
 import ScopeChat from '@/components/ScopeChat'
 import EstimatorBreakdown from '@/components/EstimatorBreakdown'
 import type { TakeoffItem, TakeoffPhase } from '@/lib/takeoff-types'
-import { PHASE_TO_QUOTE_PARENT, FLOOR_MAKEUPS, calcLayerQty } from '@/lib/takeoff-types'
+import { PHASE_TO_QUOTE_PARENT, ALL_MAKEUPS, calcLayerQty, WALL_OPENING_LABELS } from '@/lib/takeoff-types'
 
 let phaseCounter = 0
 let itemCounter = 0
@@ -245,18 +245,32 @@ export default function NewQuotePage() {
           // sub-phase name = the take-off phase name (matches back-office template)
           const subPhaseName = item.phase
 
+          // Build notes string; for wall items include opening deductions
+          const openingsSummary = item.openings && item.openings.length > 0
+            ? `Openings: ${item.openings.map(o => `${WALL_OPENING_LABELS[o.type as keyof typeof WALL_OPENING_LABELS] ?? o.type} ${o.width.toFixed(2)}×${o.height.toFixed(2)}m`).join(', ')} (−${item.openings.reduce((s, o) => s + o.width * o.height, 0).toFixed(2)}m² deducted)`
+            : ''
+          const wallAreaSummary = item.phase === 'External Walls' && item.wallHeight != null
+            ? `Gross ${(item.area ?? 0).toFixed(2)}m² → net ${item.qty.toFixed(2)}m² | H=${item.wallHeight.toFixed(2)}m`
+            : ''
+
           const notes = [
             item.name,  // drawing label as a note so it's not lost
+            wallAreaSummary,
+            openingsSummary,
             item.buildingRegsNotes ? `Bldg Regs: ${item.buildingRegsNotes}` : '',
             item.notes ?? '',
           ].filter(Boolean).join(' | ')
 
           if (item.floorMakeupId) {
-            // ── Floor build-up item: expand each layer into its own sub-phase ──
-            const makeup = FLOOR_MAKEUPS.find(m => m.id === item.floorMakeupId)
+            // ── Build-up item: expand each layer into its own sub-phase ──
+            const makeup = ALL_MAKEUPS.find(m => m.id === item.floorMakeupId)
             if (makeup) {
-              const area = item.area ?? item.qty ?? 0
-              const perimeter = item.perimeter ?? 0
+              // For wall items: area = gross, qty = net (after openings); use net for layers
+              const grossArea  = item.area ?? item.qty ?? 0
+              const area       = item.phase === 'External Walls' ? item.qty : grossArea
+              const perimeter  = item.phase === 'External Walls'
+                ? (item.length ?? item.perimeter ?? 0)   // wall run for DPC/perimeter layers
+                : (item.perimeter ?? 0)
               const toggles = item.floorLayerToggles ?? {}
               const thicknesses = item.floorLayerThicknesses ?? {}
 
@@ -307,9 +321,9 @@ export default function NewQuotePage() {
         if (!custAddr && data.address) setCustAddr(data.address)
         if (data.jobType) setJobType(data.jobType)
 
-        const floorCount = (data.items as TakeoffItem[]).filter((i: TakeoffItem) => i.floorMakeupId).length
-        const msg = floorCount > 0
-          ? `✓ Imported ${newPhases.length} sub-phases (including ${floorCount} floor build-up${floorCount !== 1 ? 's' : ''} expanded into layers) — add your rates to complete the estimate.`
+        const buildupCount = (data.items as TakeoffItem[]).filter((i: TakeoffItem) => i.floorMakeupId).length
+        const msg = buildupCount > 0
+          ? `✓ Imported ${newPhases.length} sub-phases (including ${buildupCount} build-up${buildupCount !== 1 ? 's' : ''} expanded into layers) — add your rates to complete the estimate.`
           : `✓ Imported ${newPhases.length} sub-phases — add your rates to complete the estimate.`
         alert(msg)
       } catch {

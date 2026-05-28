@@ -99,6 +99,38 @@ export interface DrawnElement {
   unit?:       string   // 'm', 'm²', 'm³', 'nr', 'item'
 }
 
+// ── Wall openings ─────────────────────────────────────────────────────────────
+
+export type WallOpeningType = 'window' | 'door' | 'bifold' | 'french_door' | 'garage_door' | 'other'
+
+export const WALL_OPENING_LABELS: Record<WallOpeningType, string> = {
+  window:      'Window',
+  door:        'Door',
+  bifold:      'Bifold Door',
+  french_door: 'French Doors',
+  garage_door: 'Garage Door',
+  other:       'Other Opening',
+}
+
+/** Default width × height (metres) for quick-add */
+export const WALL_OPENING_DEFAULTS: Record<WallOpeningType, { width: number; height: number }> = {
+  window:      { width: 0.9,  height: 1.0  },
+  door:        { width: 0.9,  height: 2.1  },
+  bifold:      { width: 2.4,  height: 2.1  },
+  french_door: { width: 1.5,  height: 2.1  },
+  garage_door: { width: 2.4,  height: 2.1  },
+  other:       { width: 1.0,  height: 1.0  },
+}
+
+/** An opening (window, door etc.) cut from a wall and deducted from gross area */
+export interface WallOpening {
+  id:     string
+  type:   WallOpeningType
+  label:  string
+  width:  number   // metres
+  height: number   // metres
+}
+
 // ── Take-off line item (attached to a drawn element or manually added) ─────────
 
 export interface TakeoffItem {
@@ -115,18 +147,22 @@ export interface TakeoffItem {
   length?:     number   // m
   width?:      number   // m
   height?:     number   // m
-  area?:       number   // m²
+  area?:       number   // m²  (gross wall area for wall items; floor area for floor items)
   volume?:     number   // m³
-  qty:         number
+  qty:         number   // net area for wall items (gross minus openings)
   unit:        string   // 'm', 'm²', 'm³', 'nr', 'item', 'bag', etc.
 
   notes?: string
 
-  // Floor-specific (set when item created by the Floor tool)
-  floorMakeupId?:        string                      // references FLOOR_MAKEUPS[].id
+  // Build-up (floors, walls, foundations, plastering)
+  floorMakeupId?:        string                      // references any FloorMakeup[].id
   perimeter?:            number                      // m, calculated from drawn geometry
   floorLayerToggles?:    Record<string, boolean>     // layerId → enabled override
   floorLayerThicknesses?: Record<string, number>     // layerId → thickness override (mm)
+
+  // Wall-specific
+  wallHeight?:  number           // metres — storey height for LINE-drawn walls
+  openings?:    WallOpening[]    // deducted openings (windows, doors, bifolds, etc.)
 }
 
 // ── Calibration ───────────────────────────────────────────────────────────────
@@ -323,6 +359,284 @@ export const FLOOR_MAKEUPS: FloorMakeup[] = [
     ],
   },
 ]
+
+// ── Wall build-up types ───────────────────────────────────────────────────────
+
+export const WALL_MAKEUPS: FloorMakeup[] = [
+  {
+    id: 'cav_wall_partial',
+    name: 'Cavity Wall – Partial Fill',
+    clientDescription:
+      'Supply and build cavity wall construction with 102.5mm facing brick outer leaf, 75mm partial-fill mineral wool cavity batts, stainless wall ties and 100mm blockwork inner leaf, including DPC at base of wall, ready to receive internal finishes.',
+    labourHrsPerM2: 3.5,
+    wastePercent: 10,
+    layers: [
+      { id: 'w_labour',       name: 'Brickwork & blockwork labour',          thickness: 0,   unit: 'm²', qtyType: 'area',      description: 'Labour – build outer brick leaf, cavity, inner block leaf',           category: 'labour',    defaultEnabled: true  },
+      { id: 'w_outer_brick',  name: 'Outer leaf brickwork 102.5mm',          thickness: 102, unit: 'm²', qtyType: 'area',      description: 'Facing brickwork 102.5mm (client to specify brick type & bond)',      category: 'materials', defaultEnabled: true  },
+      { id: 'w_cavity_batt',  name: 'Cavity insulation – partial fill 75mm', thickness: 75,  unit: 'm²', qtyType: 'area',      description: 'Rockwool or Knauf partial-fill cavity batts 75mm (Part L compliant)', category: 'materials', defaultEnabled: true  },
+      { id: 'w_wall_ties',    name: 'Stainless steel wall ties',             thickness: 0,   unit: 'm²', qtyType: 'area',      description: 'SS double-triangle wall ties at 900×450mm centres',                  category: 'materials', defaultEnabled: true  },
+      { id: 'w_inner_block',  name: 'Inner leaf blockwork 100mm',            thickness: 100, unit: 'm²', qtyType: 'area',      description: '7.3N/mm² medium-density concrete block 100mm',                      category: 'materials', defaultEnabled: true  },
+      { id: 'w_dpc',          name: 'DPC to base of wall',                   thickness: 0,   unit: 'lm', qtyType: 'perimeter', description: '112mm polythene DPC at base of cavity wall',                         category: 'materials', defaultEnabled: true  },
+    ],
+  },
+  {
+    id: 'cav_wall_full',
+    name: 'Cavity Wall – Full Fill',
+    clientDescription:
+      'Supply and build cavity wall with 102.5mm facing brick outer leaf, full-fill mineral wool cavity insulation, stainless wall ties and 100mm blockwork inner leaf, including DPC at base, ready to receive internal finishes.',
+    labourHrsPerM2: 3.5,
+    wastePercent: 10,
+    layers: [
+      { id: 'cwf_labour',      name: 'Brickwork & blockwork labour',          thickness: 0,   unit: 'm²', qtyType: 'area',      description: 'Labour – build outer brick, full-fill cavity, inner block',          category: 'labour',    defaultEnabled: true  },
+      { id: 'cwf_outer_brick', name: 'Outer leaf brickwork 102.5mm',          thickness: 102, unit: 'm²', qtyType: 'area',      description: 'Facing brickwork 102.5mm (client to specify brick type)',            category: 'materials', defaultEnabled: true  },
+      { id: 'cwf_full_fill',   name: 'Full-fill mineral wool batts 100mm',    thickness: 100, unit: 'm²', qtyType: 'area',      description: 'Full-fill mineral wool cavity batts 100mm (Part L compliant)',       category: 'materials', defaultEnabled: true  },
+      { id: 'cwf_wall_ties',   name: 'Stainless steel wall ties',             thickness: 0,   unit: 'm²', qtyType: 'area',      description: 'SS wall ties at 900×450mm centres',                                 category: 'materials', defaultEnabled: true  },
+      { id: 'cwf_inner_block', name: 'Inner leaf blockwork 100mm',            thickness: 100, unit: 'm²', qtyType: 'area',      description: '7.3N/mm² medium-density concrete block 100mm',                      category: 'materials', defaultEnabled: true  },
+      { id: 'cwf_dpc',         name: 'DPC to base of wall',                   thickness: 0,   unit: 'lm', qtyType: 'perimeter', description: '112mm polythene DPC at base of cavity wall',                         category: 'materials', defaultEnabled: true  },
+    ],
+  },
+  {
+    id: 'solid_brick_225',
+    name: 'Solid Brick 225mm',
+    clientDescription:
+      'Supply and build solid brick 225mm wall with insulated internal dry-lining, DPC and associated work, ready to receive finishes.',
+    labourHrsPerM2: 4.0,
+    wastePercent: 10,
+    layers: [
+      { id: 'sb_labour',      name: 'Brickwork labour',                      thickness: 0,   unit: 'm²', qtyType: 'area',      description: 'Labour – build 225mm solid brick wall',                             category: 'labour',    defaultEnabled: true  },
+      { id: 'sb_brickwork',   name: 'Solid brickwork 225mm',                 thickness: 225, unit: 'm²', qtyType: 'area',      description: 'Engineering or facing brick 225mm solid wall',                      category: 'materials', defaultEnabled: true  },
+      { id: 'sb_dpc',         name: 'DPC to base of wall',                   thickness: 0,   unit: 'lm', qtyType: 'perimeter', description: 'Polythene DPC at base of wall',                                      category: 'materials', defaultEnabled: true  },
+      { id: 'sb_dry_lining',  name: 'Insulated dry-lining (internal) 72mm',  thickness: 72,  unit: 'm²', qtyType: 'area',      description: '50mm PIR insulated plasterboard dry-lining to internal face',        category: 'materials', defaultEnabled: true  },
+    ],
+  },
+  {
+    id: 'timber_frame_wall',
+    name: 'Timber Frame Wall',
+    clientDescription:
+      'Supply and erect timber frame wall including treated sole plate, 140×38mm C16 studwork at 400/600mm centres, mineral wool insulation, OSB sheathing, vapour control layer and breather membrane externally, ready to receive cladding and internal finishes.',
+    labourHrsPerM2: 2.8,
+    wastePercent: 12,
+    layers: [
+      { id: 'tfw_labour',     name: 'Frame erection labour',                 thickness: 0,   unit: 'm²', qtyType: 'area',      description: 'Labour – erect stud frame, insulate, board and membrane',           category: 'labour',    defaultEnabled: true  },
+      { id: 'tfw_sole_plate', name: 'Sole plate treated timber',             thickness: 0,   unit: 'lm', qtyType: 'perimeter', description: '75×50mm treated timber sole plate with DPC underneath',             category: 'materials', defaultEnabled: true  },
+      { id: 'tfw_studs',      name: 'Timber studwork 140×38 C16',            thickness: 140, unit: 'm²', qtyType: 'area',      description: '140×38mm C16 timber studs at 400mm or 600mm centres',              category: 'materials', defaultEnabled: true  },
+      { id: 'tfw_insulation', name: 'Mineral wool insulation 140mm',         thickness: 140, unit: 'm²', qtyType: 'area',      description: '140mm mineral wool between studs (Part L compliant)',               category: 'materials', defaultEnabled: true  },
+      { id: 'tfw_osb',        name: 'OSB structural sheathing 11mm',         thickness: 11,  unit: 'm²', qtyType: 'area',      description: '11mm OSB3 structural sheathing to external face',                   category: 'materials', defaultEnabled: true  },
+      { id: 'tfw_vcl',        name: 'Vapour control layer',                  thickness: 0,   unit: 'm²', qtyType: 'area',      description: '500g polythene VCL to warm side of insulation',                     category: 'materials', defaultEnabled: true  },
+      { id: 'tfw_membrane',   name: 'Breather membrane',                     thickness: 0,   unit: 'm²', qtyType: 'area',      description: 'Tyvek or similar breather membrane to external face',               category: 'materials', defaultEnabled: true  },
+    ],
+  },
+  {
+    id: 'blockwork_100',
+    name: 'Concrete Blockwork 100mm',
+    clientDescription:
+      'Supply and build 100mm dense concrete blockwork partition or external leaf with associated DPC, mortar and sundries, ready to receive finishes.',
+    labourHrsPerM2: 2.2,
+    wastePercent: 8,
+    layers: [
+      { id: 'bk_labour',      name: 'Blockwork labour',                      thickness: 0,   unit: 'm²', qtyType: 'area',      description: 'Labour – build 100mm concrete blockwork wall',                      category: 'labour',    defaultEnabled: true  },
+      { id: 'bk_blocks',      name: 'Dense concrete blocks 100mm',           thickness: 100, unit: 'm²', qtyType: 'area',      description: '7.3N/mm² dense concrete block 100mm, mortar-set',                  category: 'materials', defaultEnabled: true  },
+      { id: 'bk_dpc',         name: 'DPC to base of wall',                   thickness: 0,   unit: 'lm', qtyType: 'perimeter', description: 'Polythene DPC at base of blockwork wall',                            category: 'materials', defaultEnabled: true  },
+    ],
+  },
+]
+
+// ── Foundation build-up types ─────────────────────────────────────────────────
+
+export const FOUNDATION_MAKEUPS: FloorMakeup[] = [
+  {
+    id: 'strip_found',
+    name: 'Strip Foundation (Traditional)',
+    clientDescription:
+      'Excavate trenches to required depth, lay mass concrete strip foundations to structural engineer\'s design, build blockwork from foundation to DPC level including all associated earthwork and make-good.',
+    labourHrsPerM2: 0,
+    wastePercent: 10,
+    layers: [
+      { id: 'sf_excavation',  name: 'Trench excavation',                     thickness: 0,   unit: 'lm', qtyType: 'perimeter', description: 'Machine & hand excavate foundation trench (rate per lm of wall run)', category: 'labour',    defaultEnabled: true  },
+      { id: 'sf_concrete',    name: 'Mass concrete C15/20',                  thickness: 0,   unit: 'lm', qtyType: 'perimeter', description: 'Mass concrete strip foundation (rate per lm, includes concrete volume)', category: 'materials', defaultEnabled: true  },
+      { id: 'sf_blockwork',   name: 'Blockwork to DPC level',                thickness: 0,   unit: 'lm', qtyType: 'perimeter', description: 'Solid concrete blockwork from foundation to DPC level',              category: 'materials', defaultEnabled: true  },
+      { id: 'sf_dpc',         name: 'DPC at floor level',                    thickness: 0,   unit: 'lm', qtyType: 'perimeter', description: 'Polythene DPC at ground floor slab / screed level',                  category: 'materials', defaultEnabled: true  },
+      { id: 'sf_backfill',    name: 'Backfill & compaction',                 thickness: 0,   unit: 'lm', qtyType: 'perimeter', description: 'Backfill trench sides, compact and make good',                       category: 'labour',    defaultEnabled: true  },
+    ],
+  },
+  {
+    id: 'trench_fill',
+    name: 'Trench Fill Foundation',
+    clientDescription:
+      'Excavate trenches and fill with mass concrete to within 150mm of finished ground level, including all associated earthwork, DPC and make-good.',
+    labourHrsPerM2: 0,
+    wastePercent: 10,
+    layers: [
+      { id: 'trf_excavation', name: 'Trench excavation',                     thickness: 0,   unit: 'lm', qtyType: 'perimeter', description: 'Machine excavate trench to required depth (rate per lm)',            category: 'labour',    defaultEnabled: true  },
+      { id: 'trf_concrete',   name: 'Trench fill concrete C25',              thickness: 0,   unit: 'lm', qtyType: 'perimeter', description: 'Trench fill mass concrete C25 (rate per lm, includes volume)',       category: 'materials', defaultEnabled: true  },
+      { id: 'trf_dpc',        name: 'DPC at ground floor level',             thickness: 0,   unit: 'lm', qtyType: 'perimeter', description: 'Polythene DPC strip at ground floor level',                          category: 'materials', defaultEnabled: true  },
+    ],
+  },
+  {
+    id: 'raft_found',
+    name: 'Raft Foundation',
+    clientDescription:
+      'Supply and construct reinforced concrete raft foundation including bulk excavation, 150mm compacted hardcore, DPM, EPS edge insulation, A393 reinforcement mesh and C30 concrete raft slab.',
+    labourHrsPerM2: 3.5,
+    wastePercent: 10,
+    layers: [
+      { id: 'rf_excavation',  name: 'Bulk excavation & formation',           thickness: 0,   unit: 'm²', qtyType: 'area',      description: 'Bulk excavation and trim to formation level',                       category: 'labour',    defaultEnabled: true  },
+      { id: 'rf_hardcore',    name: 'Hardcore sub-base 150mm',               thickness: 150, unit: 'm³', qtyType: 'volume',    description: 'Compacted MOT Type 1 hardcore 150mm',                               category: 'materials', defaultEnabled: true  },
+      { id: 'rf_blinding',    name: 'Sand blinding 50mm',                    thickness: 50,  unit: 'm²', qtyType: 'area',      description: 'Sand blinding layer to hardcore',                                    category: 'materials', defaultEnabled: true  },
+      { id: 'rf_dpm',         name: 'DPM',                                   thickness: 0,   unit: 'm²', qtyType: 'area',      description: '1200g polythene DPM',                                               category: 'materials', defaultEnabled: true  },
+      { id: 'rf_edge_ins',    name: 'EPS edge insulation 100mm',             thickness: 100, unit: 'lm', qtyType: 'perimeter', description: 'EPS edge insulation board 100mm to perimeter upstand',               category: 'materials', defaultEnabled: true  },
+      { id: 'rf_mesh',        name: 'Reinforcement mesh A393',               thickness: 0,   unit: 'm²', qtyType: 'area',      description: 'A393 fabric reinforcement mesh (2 layers as required)',             category: 'materials', defaultEnabled: true  },
+      { id: 'rf_concrete',    name: 'Concrete raft C30 (200mm)',             thickness: 200, unit: 'm³', qtyType: 'volume',    description: 'C30/37 concrete raft slab 200mm minimum thickness',                 category: 'materials', defaultEnabled: true  },
+    ],
+  },
+  {
+    id: 'pad_found',
+    name: 'Pad Foundations',
+    clientDescription:
+      'Excavate individual pad positions, form formwork, place reinforcement cage and pour C30 concrete pad foundations to structural engineer\'s design.',
+    labourHrsPerM2: 4.0,
+    wastePercent: 12,
+    layers: [
+      { id: 'pf_excavation',  name: 'Excavation to pad positions',           thickness: 0,   unit: 'm²', qtyType: 'area',      description: 'Excavate each pad position (qty = overall foundation zone m²)',    category: 'labour',    defaultEnabled: true  },
+      { id: 'pf_blinding',    name: 'Blinding concrete 75mm',                thickness: 75,  unit: 'm³', qtyType: 'volume',    description: 'C10 blinding concrete 75mm to pad base',                            category: 'materials', defaultEnabled: true  },
+      { id: 'pf_formwork',    name: 'Formwork to pads',                      thickness: 0,   unit: 'm²', qtyType: 'area',      description: 'Plywood formwork to sides of pads',                                 category: 'materials', defaultEnabled: true  },
+      { id: 'pf_rebar',       name: 'Reinforcement cage',                    thickness: 0,   unit: 'm²', qtyType: 'area',      description: 'Steel reinforcement cage to SE design (adjust qty for pad count)',  category: 'materials', defaultEnabled: true  },
+      { id: 'pf_concrete',    name: 'Pad concrete C30',                      thickness: 0,   unit: 'm²', qtyType: 'area',      description: 'C30 structural concrete to pad foundations',                        category: 'materials', defaultEnabled: true  },
+    ],
+  },
+  {
+    id: 'piled_found',
+    name: 'Piled Foundation',
+    clientDescription:
+      'Install CFA or mini-piles to structural engineer\'s design, including pile caps, ring beam / ground beam and associated DPM.',
+    labourHrsPerM2: 0,
+    wastePercent: 5,
+    layers: [
+      { id: 'pl_piling',      name: 'Piling works (sub-contract)',           thickness: 0,   unit: 'nr', qtyType: 'count',     description: 'CFA or mini-pile installation — specialist sub-contractor (adjust nr)', category: 'other',    defaultEnabled: true  },
+      { id: 'pl_pile_caps',   name: 'Pile caps concrete',                    thickness: 0,   unit: 'm²', qtyType: 'area',      description: 'Reinforced concrete pile caps to SE design',                        category: 'materials', defaultEnabled: true  },
+      { id: 'pl_ring_beam',   name: 'Ring beam / ground beam',               thickness: 0,   unit: 'lm', qtyType: 'perimeter', description: 'Reinforced concrete ring or ground beam perimeter',                  category: 'materials', defaultEnabled: true  },
+      { id: 'pl_dpm',         name: 'DPM to beam zone',                      thickness: 0,   unit: 'm²', qtyType: 'area',      description: '1200g polythene DPM',                                               category: 'materials', defaultEnabled: true  },
+    ],
+  },
+]
+
+// ── Plastering & Boarding build-up types ──────────────────────────────────────
+
+export const PLASTER_MAKEUPS: FloorMakeup[] = [
+  {
+    id: 'dot_dab',
+    name: 'Dot & Dab Plasterboard (to masonry)',
+    clientDescription:
+      'Supply and fix 12.5mm tapered-edge plasterboard to masonry walls using adhesive dabs, including skim finish plaster, scrim tape and all associated surface preparation.',
+    labourHrsPerM2: 0.9,
+    wastePercent: 10,
+    layers: [
+      { id: 'dd_prep',        name: 'Surface preparation',                   thickness: 0,   unit: 'm²', qtyType: 'area',      description: 'Clean, dust and PVA prime masonry surface',                         category: 'labour',    defaultEnabled: true  },
+      { id: 'dd_adhesive',    name: 'Plasterboard adhesive (dabs)',          thickness: 0,   unit: 'm²', qtyType: 'area',      description: 'Thistle Bond-It or Gyproc Dri-Wall adhesive dabs',                  category: 'materials', defaultEnabled: true  },
+      { id: 'dd_board',       name: 'Plasterboard 12.5mm',                   thickness: 12,  unit: 'm²', qtyType: 'area',      description: 'Gyproc Wallboard 12.5mm tapered-edge',                              category: 'materials', defaultEnabled: true  },
+      { id: 'dd_tape',        name: 'Joint scrim tape & compound',           thickness: 0,   unit: 'm²', qtyType: 'area',      description: 'Paper tape and jointing compound to all joints and angles',          category: 'materials', defaultEnabled: true  },
+      { id: 'dd_skim',        name: 'Finish plaster skim 2mm',               thickness: 2,   unit: 'm²', qtyType: 'area',      description: 'Thistle MultiFinish skim coat approx 2mm',                          category: 'materials', defaultEnabled: true  },
+    ],
+  },
+  {
+    id: 'skim_only',
+    name: 'Skim Coat (to existing surface)',
+    clientDescription:
+      'Supply and apply finish plaster skim coat to existing plasterboard or bonded masonry surface, including surface preparation and PVA bonding.',
+    labourHrsPerM2: 0.5,
+    wastePercent: 8,
+    layers: [
+      { id: 'sk_prep',        name: 'Surface preparation & PVA bond',        thickness: 0,   unit: 'm²', qtyType: 'area',      description: 'Prepare existing surface, apply PVA bonding agent',                category: 'labour',    defaultEnabled: true  },
+      { id: 'sk_skim',        name: 'Finish plaster skim 2mm',               thickness: 2,   unit: 'm²', qtyType: 'area',      description: 'Thistle MultiFinish skim coat — 2 coats to 2mm',                    category: 'materials', defaultEnabled: true  },
+    ],
+  },
+  {
+    id: 'metal_stud_partition',
+    name: 'Metal Stud Partition',
+    clientDescription:
+      'Supply and erect metal stud partition including floor and ceiling track, 70mm studs at 600mm centres, 50mm acoustic mineral wool, 12.5mm plasterboard to both faces and skim finish.',
+    labourHrsPerM2: 1.2,
+    wastePercent: 10,
+    layers: [
+      { id: 'ms_labour',      name: 'Partition erection labour',             thickness: 0,   unit: 'm²', qtyType: 'area',      description: 'Labour – erect stud, board both faces and skim finish',             category: 'labour',    defaultEnabled: true  },
+      { id: 'ms_track',       name: 'Floor & ceiling track 48mm',            thickness: 0,   unit: 'lm', qtyType: 'perimeter', description: 'Knauf or British Gypsum 48mm steel floor / ceiling track',           category: 'materials', defaultEnabled: true  },
+      { id: 'ms_studs',       name: 'Metal studs 70mm',                      thickness: 70,  unit: 'm²', qtyType: 'area',      description: '70mm metal studs at 600mm centres',                                 category: 'materials', defaultEnabled: true  },
+      { id: 'ms_insulation',  name: 'Acoustic mineral wool 50mm',            thickness: 50,  unit: 'm²', qtyType: 'area',      description: '50mm Knauf Earthwool acoustic mineral wool between studs',           category: 'materials', defaultEnabled: true  },
+      { id: 'ms_board_a',     name: 'Plasterboard 12.5mm (face A)',          thickness: 12,  unit: 'm²', qtyType: 'area',      description: '12.5mm Gyproc Wallboard to one face',                               category: 'materials', defaultEnabled: true  },
+      { id: 'ms_board_b',     name: 'Plasterboard 12.5mm (face B)',          thickness: 12,  unit: 'm²', qtyType: 'area',      description: '12.5mm Gyproc Wallboard to other face',                             category: 'materials', defaultEnabled: true  },
+      { id: 'ms_skim',        name: 'Scrim tape & skim both faces',          thickness: 0,   unit: 'm²', qtyType: 'area',      description: 'Scrim, tape and Thistle MultiFinish skim coat — both faces',         category: 'materials', defaultEnabled: true  },
+    ],
+  },
+  {
+    id: 'wet_plaster_two_coat',
+    name: 'Wet Plaster Two-coat',
+    clientDescription:
+      'Supply and apply traditional two-coat wet plaster system: 11mm sand:cement scratch coat and 2mm Thistle finish coat to masonry backgrounds, ready to decorate.',
+    labourHrsPerM2: 1.4,
+    wastePercent: 12,
+    layers: [
+      { id: 'wp_prep',        name: 'Surface preparation & dubbing',         thickness: 0,   unit: 'm²', qtyType: 'area',      description: 'Clean surface, dub out voids, fix angle beads and render stops',    category: 'labour',    defaultEnabled: true  },
+      { id: 'wp_scratch',     name: 'Scratch coat sand:cement 11mm',         thickness: 11,  unit: 'm³', qtyType: 'volume',    description: 'Sand:cement scratch coat 11mm to masonry (1:3 mix)',                category: 'materials', defaultEnabled: true  },
+      { id: 'wp_finish',      name: 'Finish coat Thistle 2mm',               thickness: 2,   unit: 'm²', qtyType: 'area',      description: 'Thistle MultiFinish 2mm finish coat',                               category: 'materials', defaultEnabled: true  },
+    ],
+  },
+  {
+    id: 'ext_render_three_coat',
+    name: 'External Render Three-coat',
+    clientDescription:
+      'Supply and apply three-coat external render system to masonry: key / bonding coat, 11mm sand:cement render base coat, 6mm float coat and through-colour silicone or monocouche finish coat.',
+    labourHrsPerM2: 1.8,
+    wastePercent: 12,
+    layers: [
+      { id: 'er_prep',        name: 'Surface preparation & key coat',        thickness: 0,   unit: 'm²', qtyType: 'area',      description: 'Clean masonry, apply bonding agent / key coat, fix render beads',   category: 'labour',    defaultEnabled: true  },
+      { id: 'er_base_coat',   name: 'Render base coat (sand:cement) 11mm',   thickness: 11,  unit: 'm³', qtyType: 'volume',    description: 'Sand:cement render base coat 11mm',                                 category: 'materials', defaultEnabled: true  },
+      { id: 'er_float',       name: 'Float coat 6mm',                        thickness: 6,   unit: 'm²', qtyType: 'area',      description: 'Float and scratch render coat 6mm',                                 category: 'materials', defaultEnabled: true  },
+      { id: 'er_finish',      name: 'Finish coat (silicone render)',          thickness: 0,   unit: 'm²', qtyType: 'area',      description: 'Through-colour silicone render or monocouche finish coat',           category: 'materials', defaultEnabled: true  },
+    ],
+  },
+]
+
+// ── Combined lookup ───────────────────────────────────────────────────────────
+
+/** All makeups from every phase combined — use for ID lookups (e.g. quote import) */
+export const ALL_MAKEUPS: FloorMakeup[] = [
+  ...FLOOR_MAKEUPS,
+  ...WALL_MAKEUPS,
+  ...FOUNDATION_MAKEUPS,
+  ...PLASTER_MAKEUPS,
+]
+
+/** Maps TakeoffPhase → its array of build-up makeups (only phases that support them) */
+export const PHASE_MAKEUPS: Partial<Record<TakeoffPhase, FloorMakeup[]>> = {
+  'Floors & Screeds':      FLOOR_MAKEUPS,
+  'External Walls':        WALL_MAKEUPS,
+  'Foundations':           FOUNDATION_MAKEUPS,
+  'Plastering & Boarding': PLASTER_MAKEUPS,
+}
+
+// ── Custom wall type storage (localStorage) ───────────────────────────────────
+
+const CUSTOM_WALL_TYPES_KEY = 'sbc_custom_wall_types'
+
+/** Load user-defined custom wall types from localStorage */
+export function loadCustomWallTypes(): FloorMakeup[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = localStorage.getItem(CUSTOM_WALL_TYPES_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
+}
+
+/** Persist custom wall types to localStorage */
+export function saveCustomWallTypes(types: FloorMakeup[]): void {
+  if (typeof window === 'undefined') return
+  try { localStorage.setItem(CUSTOM_WALL_TYPES_KEY, JSON.stringify(types)) } catch {}
+}
+
+/** Return all wall types: built-in WALL_MAKEUPS + any saved custom types */
+export function getAllWallTypes(): FloorMakeup[] {
+  return [...WALL_MAKEUPS, ...loadCustomWallTypes()]
+}
 
 // ── Layer quantity calculator (shared between take-off tool and quote import) ──
 

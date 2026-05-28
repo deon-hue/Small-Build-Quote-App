@@ -3,6 +3,10 @@
 import { useState, useEffect } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { JOB_TYPES, JOB_TEMPLATES } from '@/lib/utils'
+import {
+  WALL_MAKEUPS, loadCustomWallTypes, saveCustomWallTypes,
+  type FloorMakeup, type FloorLayer,
+} from '@/lib/takeoff-types'
 import type { TemplatePhaseData, QuoteItem } from '@/lib/types'
 import type { EstimatorItemTemplate, MeasurementType } from '@/lib/estimator'
 import { MEASUREMENT_LABELS } from '@/lib/estimator'
@@ -237,6 +241,76 @@ export default function BackOfficePage() {
   const [tradeRatesDirty, setTradeRatesDirty] = useState(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { setTradeRates(loadTradeRates()) }, [])
+
+  // Custom wall types (localStorage)
+  const [customWallTypes, setCustomWallTypes] = useState<FloorMakeup[]>([])
+  const [wallTypeDirty, setWallTypeDirty] = useState(false)
+  const [expandedWallType, setExpandedWallType] = useState<string | null>(null)
+  const [editingWallType, setEditingWallType] = useState<FloorMakeup | null>(null)
+  useEffect(() => { setCustomWallTypes(loadCustomWallTypes()) }, [])
+
+  function saveWallTypes(types: FloorMakeup[]) {
+    setCustomWallTypes(types)
+    saveCustomWallTypes(types)
+    setWallTypeDirty(false)
+  }
+
+  function deleteCustomWallType(id: string) {
+    if (!confirm('Delete this custom wall type?')) return
+    const updated = customWallTypes.filter(t => t.id !== id)
+    saveWallTypes(updated)
+  }
+
+  function startNewWallType() {
+    const newType: FloorMakeup = {
+      id: 'custom_' + Math.random().toString(36).slice(2, 8),
+      name: 'New Custom Wall Type',
+      clientDescription: '',
+      labourHrsPerM2: 3.0,
+      wastePercent: 10,
+      layers: [
+        { id: 'cl_labour',   name: 'Labour', thickness: 0,   unit: 'm²', qtyType: 'area', description: '', category: 'labour',    defaultEnabled: true },
+        { id: 'cl_mat',      name: 'Main materials', thickness: 0, unit: 'm²', qtyType: 'area', description: '', category: 'materials', defaultEnabled: true },
+      ],
+    }
+    setEditingWallType(newType)
+  }
+
+  function saveEditingWallType() {
+    if (!editingWallType) return
+    const exists = customWallTypes.find(t => t.id === editingWallType.id)
+    const updated = exists
+      ? customWallTypes.map(t => t.id === editingWallType.id ? editingWallType : t)
+      : [...customWallTypes, editingWallType]
+    saveWallTypes(updated)
+    setEditingWallType(null)
+  }
+
+  function addLayerToEditingType() {
+    if (!editingWallType) return
+    const newLayer: FloorLayer = {
+      id: 'cl_' + Math.random().toString(36).slice(2, 8),
+      name: 'New Layer',
+      thickness: 0,
+      unit: 'm²',
+      qtyType: 'area',
+      description: '',
+      category: 'materials',
+      defaultEnabled: true,
+    }
+    setEditingWallType({ ...editingWallType, layers: [...editingWallType.layers, newLayer] })
+  }
+
+  function updateEditingLayer(layerIdx: number, changes: Partial<FloorLayer>) {
+    if (!editingWallType) return
+    const newLayers = editingWallType.layers.map((l, i) => i === layerIdx ? { ...l, ...changes } : l)
+    setEditingWallType({ ...editingWallType, layers: newLayers })
+  }
+
+  function removeEditingLayer(layerIdx: number) {
+    if (!editingWallType) return
+    setEditingWallType({ ...editingWallType, layers: editingWallType.layers.filter((_, i) => i !== layerIdx) })
+  }
 
   useEffect(() => {
     if (!loading) {
@@ -825,6 +899,244 @@ export default function BackOfficePage() {
         <span>Rates are cost prices before markup</span>
       </div>
     </div>
+
+    {/* ── Wall Type Configurations ──────────────────────────────────────────── */}
+    <div className="card" style={{ marginTop: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 16 }}>🧱 External Wall Types</div>
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+            UK-standard external wall build-ups for estimating. Built-in types are read-only. Add custom types below.
+          </div>
+          <div style={{ fontSize: 11, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 5, padding: '5px 10px', marginTop: 8, maxWidth: 600 }}>
+            ⚠️ Wall make-up is for estimating purposes only and should be confirmed against drawings, structural design and Building Control requirements.
+          </div>
+        </div>
+        <button
+          onClick={startNewWallType}
+          style={{ padding: '8px 18px', background: '#16a085', border: 'none', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+        >
+          + Add Custom Wall Type
+        </button>
+      </div>
+
+      {/* ── Built-in wall types (read-only, expandable) ── */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+          Built-in Types ({WALL_MAKEUPS.length})
+        </div>
+        {WALL_MAKEUPS.map(wt => (
+          <div key={wt.id} style={{ border: '1px solid #e2e8f0', borderRadius: 8, marginBottom: 6, overflow: 'hidden' }}>
+            <button
+              onClick={() => setExpandedWallType(expandedWallType === wt.id ? null : wt.id)}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '10px 14px', background: '#f8fafc', border: 'none', cursor: 'pointer',
+                fontSize: 13, fontWeight: 600, color: '#1e293b', textAlign: 'left',
+              }}
+            >
+              <span>🧱 {wt.name}</span>
+              <span style={{ fontSize: 11, color: '#64748b', fontWeight: 400 }}>
+                {wt.layers.length} layers · ~{wt.labourHrsPerM2}hrs/m² {expandedWallType === wt.id ? '▲' : '▼'}
+              </span>
+            </button>
+            {expandedWallType === wt.id && (
+              <div style={{ padding: '10px 14px', borderTop: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8, fontStyle: 'italic' }}>{wt.clientDescription}</div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: '#f1f5f9' }}>
+                      {['Layer', 'Thickness', 'Qty Type', 'Category', 'Description'].map(h => (
+                        <th key={h} style={{ padding: '5px 8px', textAlign: 'left', fontWeight: 600, color: '#475569', borderBottom: '1px solid #e2e8f0' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {wt.layers.map((l, i) => (
+                      <tr key={l.id} style={{ background: i % 2 ? '#f8fafc' : '#fff' }}>
+                        <td style={{ padding: '5px 8px', fontWeight: 500, color: '#1e293b' }}>{l.name}</td>
+                        <td style={{ padding: '5px 8px', color: '#64748b' }}>{l.thickness > 0 ? `${l.thickness}mm` : '—'}</td>
+                        <td style={{ padding: '5px 8px', color: '#64748b' }}>{l.qtyType}</td>
+                        <td style={{ padding: '5px 8px' }}>
+                          <span style={{
+                            fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 3,
+                            background: l.category === 'labour' ? '#fef3c7' : l.category === 'materials' ? '#dbeafe' : l.category === 'other' ? '#f1f5f9' : '#f3e8ff',
+                            color: l.category === 'labour' ? '#92400e' : l.category === 'materials' ? '#1d4ed8' : l.category === 'other' ? '#475569' : '#7e22ce',
+                          }}>{l.category}</span>
+                        </td>
+                        <td style={{ padding: '5px 8px', color: '#64748b', fontSize: 11 }}>{l.description}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* ── Custom wall types ── */}
+      {customWallTypes.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+            Custom Types ({customWallTypes.length})
+          </div>
+          {customWallTypes.map(wt => (
+            <div key={wt.id} style={{ border: '1px solid #bfdbfe', borderRadius: 8, marginBottom: 6, overflow: 'hidden' }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '10px 14px', background: '#eff6ff',
+              }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#1e3a8a' }}>★ {wt.name}</span>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <span style={{ fontSize: 11, color: '#3b82f6' }}>{wt.layers.length} layers</span>
+                  <button onClick={() => setEditingWallType({ ...wt })}
+                    style={{ padding: '3px 10px', background: '#3b82f6', border: 'none', borderRadius: 5, color: '#fff', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>Edit</button>
+                  <button onClick={() => deleteCustomWallType(wt.id)}
+                    style={{ padding: '3px 10px', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 5, color: '#dc2626', fontSize: 11, cursor: 'pointer' }}>Delete</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {customWallTypes.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: 13, border: '2px dashed #e2e8f0', borderRadius: 8 }}>
+          No custom wall types yet. Click <strong>+ Add Custom Wall Type</strong> to create one.
+        </div>
+      )}
+    </div>
+
+    {/* ── Custom Wall Type Editor Modal ─────────────────────────────────────── */}
+    {editingWallType && (
+      <div style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000,
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+        padding: '40px 20px', overflowY: 'auto',
+      }}>
+        <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 780, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+          {/* Header */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 24px', borderBottom: '1px solid #e2e8f0' }}>
+            <div style={{ fontWeight: 700, fontSize: 17 }}>
+              {customWallTypes.find(t => t.id === editingWallType.id) ? '✏️ Edit' : '+ New'} Custom Wall Type
+            </div>
+            <button onClick={() => setEditingWallType(null)}
+              style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8' }}>×</button>
+          </div>
+
+          <div style={{ padding: '20px 24px' }}>
+            {/* Name */}
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>Wall Type Name</label>
+              <input
+                style={{ width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 14, fontWeight: 600 }}
+                value={editingWallType.name}
+                onChange={e => setEditingWallType({ ...editingWallType, name: e.target.value })}
+                placeholder="e.g. ICF Wall (Insulated Concrete Form)"
+              />
+            </div>
+
+            {/* Client description */}
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>Client Description (used in quote text)</label>
+              <textarea
+                style={{ width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, resize: 'vertical', minHeight: 64 }}
+                value={editingWallType.clientDescription}
+                onChange={e => setEditingWallType({ ...editingWallType, clientDescription: e.target.value })}
+                placeholder="Supply and construct wall including..."
+              />
+            </div>
+
+            {/* Labour hrs / waste % */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 18 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>Labour hrs/m² (indicative)</label>
+                <input type="number" min={0} step={0.1}
+                  style={{ width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13 }}
+                  value={editingWallType.labourHrsPerM2}
+                  onChange={e => setEditingWallType({ ...editingWallType, labourHrsPerM2: +e.target.value })} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>Waste % (material allowance)</label>
+                <input type="number" min={0} max={50} step={1}
+                  style={{ width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13 }}
+                  value={editingWallType.wastePercent}
+                  onChange={e => setEditingWallType({ ...editingWallType, wastePercent: +e.target.value })} />
+              </div>
+            </div>
+
+            {/* Layers */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Layers</label>
+                <button onClick={addLayerToEditingType}
+                  style={{ padding: '4px 12px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 5, color: '#166534', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
+                  + Add Layer
+                </button>
+              </div>
+
+              {/* Layer column headers */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 90px 100px 32px', gap: 6, padding: '4px 0', borderBottom: '1px solid #e2e8f0', marginBottom: 6 }}>
+                {['Layer Name', 'Thick (mm)', 'Qty Type', 'Category', ''].map(h => (
+                  <span key={h} style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>{h}</span>
+                ))}
+              </div>
+
+              {editingWallType.layers.map((layer, li) => (
+                <div key={layer.id} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 90px 100px 32px', gap: 6, marginBottom: 6, alignItems: 'center' }}>
+                  <input
+                    style={{ padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 13 }}
+                    value={layer.name}
+                    onChange={e => updateEditingLayer(li, { name: e.target.value })}
+                    placeholder="Layer name"
+                  />
+                  <input type="number" min={0}
+                    style={{ padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 13, textAlign: 'right' }}
+                    value={layer.thickness}
+                    onChange={e => updateEditingLayer(li, { thickness: +e.target.value })}
+                  />
+                  <select style={{ padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 12 }}
+                    value={layer.qtyType}
+                    onChange={e => updateEditingLayer(li, { qtyType: e.target.value as FloorLayer['qtyType'] })}>
+                    <option value="area">area (m²)</option>
+                    <option value="volume">volume (m³)</option>
+                    <option value="perimeter">perimeter (lm)</option>
+                    <option value="count">count (nr)</option>
+                  </select>
+                  <select style={{ padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 12 }}
+                    value={layer.category}
+                    onChange={e => updateEditingLayer(li, { category: e.target.value as FloorLayer['category'] })}>
+                    <option value="labour">Labour</option>
+                    <option value="materials">Materials</option>
+                    <option value="plant">Plant</option>
+                    <option value="other">Other</option>
+                  </select>
+                  <button onClick={() => removeEditingLayer(li)}
+                    style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 5, color: '#dc2626', fontSize: 14, cursor: 'pointer', padding: '4px 6px', lineHeight: 1 }}>×</button>
+                </div>
+              ))}
+
+              {editingWallType.layers.length === 0 && (
+                <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: 12, padding: '12px 0' }}>No layers — click + Add Layer</div>
+              )}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '14px 24px', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
+            <button onClick={() => setEditingWallType(null)}
+              style={{ padding: '8px 18px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, background: '#fff', color: '#374151', cursor: 'pointer' }}>
+              Cancel
+            </button>
+            <button onClick={saveEditingWallType}
+              style={{ padding: '8px 22px', background: '#16a085', border: 'none', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+              Save Wall Type
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     </>
   )
 }

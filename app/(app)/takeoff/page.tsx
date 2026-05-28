@@ -3,10 +3,12 @@
 import { useState, useRef, useEffect, useCallback, ChangeEvent } from 'react'
 import {
   TAKEOFF_PHASES, PHASE_COLORS, DEFAULT_MPP, SCALE_PRESETS,
-  FLOOR_MAKEUPS, calcLayerQty,
+  FLOOR_MAKEUPS, WALL_MAKEUPS, PHASE_MAKEUPS, calcLayerQty,
+  loadCustomWallTypes, saveCustomWallTypes,
+  WALL_OPENING_LABELS, WALL_OPENING_DEFAULTS,
   type TakeoffPhase, type DrawingTool, type TakeoffPoint,
   type DrawnElement, type TakeoffItem, type TakeoffProject, type ScaleCalibration,
-  type FloorLayer,
+  type FloorLayer, type FloorMakeup, type WallOpeningType, type WallOpening,
 } from '@/lib/takeoff-types'
 
 // ── ID helpers ────────────────────────────────────────────────────────────────
@@ -244,13 +246,32 @@ function recalcItemsForMpp(
 
     if (el.type === 'line') {
       length = polylineLength(el.points, mpp)
-      qty = length
+      // Wall items: recalculate gross area and net area from new length
+      if (item.phase === 'External Walls' && item.wallHeight != null) {
+        area = +(length * item.wallHeight).toFixed(3)
+        const openingsArea = (item.openings ?? []).reduce((s, o) => s + o.width * o.height, 0)
+        qty = +(Math.max(0, area - openingsArea)).toFixed(3)
+      } else {
+        qty = length
+      }
     } else if (el.type === 'rect') {
       area = rectArea(el.points, mpp)
-      qty = area
+      // Wall items: preserve opening deductions
+      if (item.phase === 'External Walls') {
+        const openingsArea = (item.openings ?? []).reduce((s, o) => s + o.width * o.height, 0)
+        qty = +(Math.max(0, area - openingsArea)).toFixed(3)
+      } else {
+        qty = area
+      }
     } else if (el.type === 'polygon') {
       area = polygonArea(el.points, mpp)
-      qty = area
+      // Wall items: preserve opening deductions
+      if (item.phase === 'External Walls') {
+        const openingsArea = (item.openings ?? []).reduce((s, o) => s + o.width * o.height, 0)
+        qty = +(Math.max(0, area - openingsArea)).toFixed(3)
+      } else {
+        qty = area
+      }
     }
 
     const perimeter = item.perimeter != null
@@ -322,6 +343,10 @@ export default function TakeoffPage() {
   // Floor tool state
   const [floorDrawMode, setFloorDrawMode] = useState<'rect' | 'polygon'>('rect')
   const [activeFloorMakeup, setActiveFloorMakeup] = useState<string>(FLOOR_MAKEUPS[1].id) // default: concrete slab
+
+  // Custom wall types (loaded from localStorage on mount)
+  const [customWallTypes, setCustomWallTypes] = useState<FloorMakeup[]>([])
+  useEffect(() => { setCustomWallTypes(loadCustomWallTypes()) }, [])
 
   // Refs
   const svgRef = useRef<SVGSVGElement>(null)
@@ -890,45 +915,460 @@ export default function TakeoffPage() {
     )
   }
 
-  // ── Floor properties panel ────────────────────────────────────────────────
-  function renderFloorProperties(item: TakeoffItem) {
-    const makeup = FLOOR_MAKEUPS.find(m => m.id === item.floorMakeupId)
-    const area = item.area ?? 0
-    // Compute perimeter from geometry if it wasn't stored on the item
-    const _floorEl = item.elementId ? project.elements.find(e => e.id === item.elementId) : null
-    const perimeter = item.perimeter ??
-      (_floorEl?.type === 'rect' && _floorEl.points.length >= 2
-        ? rectPerimeter(_floorEl.points, project.calibration.mpp)
-        : _floorEl?.type === 'polygon' && _floorEl.points.length >= 3
-          ? polyPerimeter(_floorEl.points, project.calibration.mpp)
-          : 0)
-    const toggles = item.floorLayerToggles ?? {}
+  // ── External Wall properties panel ───────────────────────────────────────────
+  function renderWallProperties(item: TakeoffItem) {
+    const allWallTypes: FloorMakeup[] = [...WALL_MAKEUPS, ...customWallTypes]
+    const makeup = allWallTypes.find(m => m.id === item.floorMakeupId)
+    const accentColor = '#16a085'   // External Walls teal
+    const linkEl = item.elementId ? project.elements.find(e => e.id === item.elementId) : null
+    const isLineBased = linkEl?.type === 'line'
+
+    // Measurements
+    const wallLength = item.length ?? 0
+    const wallHeight = item.wallHeight ?? 2.7
+    const grossArea  = isLineBased
+      ? +(wallLength * wallHeight).toFixed(3)
+      : (item.area ?? item.qty ?? 0)
+    const openings      = item.openings ?? []
+    const openingsArea  = +openings.reduce((s, o) => s + o.width * o.height, 0).toFixed(3)
+    const netArea       = +(Math.max(0, grossArea - openingsArea)).toFixed(3)
+
+    // Perimeter for layer calcs: wall run (for DPC etc.)
+    const wallPerimeter = isLineBased
+      ? wallLength
+      : (linkEl?.type === 'rect' && linkEl.points.length >= 2
+          ? rectPerimeter(linkEl.points, project.calibration.mpp)
+          : linkEl?.type === 'polygon' && linkEl.points.length >= 3
+            ? polyPerimeter(linkEl.points, project.calibration.mpp)
+            : 0)
+
+    const toggles    = item.floorLayerToggles    ?? {}
     const thicknesses = item.floorLayerThicknesses ?? {}
+
+    // Opening helpers
+    function addOpening(type: WallOpeningType) {
+      const def = WALL_OPENING_DEFAULTS[type]
+      const newOpening: WallOpening = {
+        id: Math.random().toString(36).slice(2, 8),
+        type, label: WALL_OPENING_LABELS[type],
+        width: def.width, height: def.height,
+      }
+      const updatedOpenings = [...openings, newOpening]
+      const newOpenArea = +updatedOpenings.reduce((s, o) => s + o.width * o.height, 0).toFixed(3)
+      const newNet = +(Math.max(0, grossArea - newOpenArea)).toFixed(3)
+      saveItemEdit({ ...item, openings: updatedOpenings, qty: newNet, unit: 'm²', area: grossArea })
+    }
+
+    function updateOpening(id: string, changes: Partial<WallOpening>) {
+      const updated = openings.map(o => o.id === id ? { ...o, ...changes } : o)
+      const newOpenArea = +updated.reduce((s, o) => s + o.width * o.height, 0).toFixed(3)
+      const newNet = +(Math.max(0, grossArea - newOpenArea)).toFixed(3)
+      saveItemEdit({ ...item, openings: updated, qty: newNet, unit: 'm²', area: grossArea })
+    }
+
+    function removeOpening(id: string) {
+      const updated = openings.filter(o => o.id !== id)
+      const newOpenArea = +updated.reduce((s, o) => s + o.width * o.height, 0).toFixed(3)
+      const newNet = +(Math.max(0, grossArea - newOpenArea)).toFixed(3)
+      saveItemEdit({ ...item, openings: updated, qty: newNet, unit: 'm²', area: grossArea })
+    }
+
+    // Hex → RGB for accent bg
+    const [r2, g2, b2] = [0x16, 0xa0, 0x85]
+    const bgDark  = `rgba(${r2},${g2},${b2},0.08)`
+    const bgLight = `rgba(${r2},${g2},${b2},0.06)`
+    const bdColor = `rgba(${r2},${g2},${b2},0.30)`
+
+    const builtInIds = new Set(WALL_MAKEUPS.map(m => m.id))
 
     return (
       <div style={{ padding: 14, fontSize: 13, overflowY: 'auto', height: '100%' }}>
 
         {/* ── Key metrics ── */}
         <div style={{
-          background: darkMode ? 'linear-gradient(135deg, #1a2a0a, #1a2a1a)' : 'linear-gradient(135deg, rgba(122,181,51,0.08), rgba(122,181,51,0.04))',
+          background: darkMode ? bgDark : bgLight,
           borderRadius: 8, padding: '12px 14px', marginBottom: 12,
-          border: `1px solid ${darkMode ? '#3a5a1a' : 'rgba(122,181,51,0.3)'}`,
+          border: `1px solid ${bdColor}`,
         }}>
-          <div style={{ fontSize: 10, color: '#f39c12', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
-            🏗 Floor Build-up
+          <div style={{ fontSize: 10, color: accentColor, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
+            🧱 External Wall
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: isLineBased ? '1fr 1fr 1fr' : '1fr 1fr', gap: 8 }}>
+            {isLineBased && (
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: accentColor, fontFamily: 'monospace', lineHeight: 1 }}>{fmt2(wallLength)}</div>
+                <div style={{ fontSize: 10, color: '#6a8a6a', marginTop: 2 }}>m wall run</div>
+              </div>
+            )}
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: darkMode ? '#c8d8a8' : '#2b3a2b', fontFamily: 'monospace', lineHeight: 1 }}>{fmt2(grossArea)}</div>
+              <div style={{ fontSize: 10, color: '#6a8a6a', marginTop: 2 }}>m² gross area{openingsArea > 0 ? ` (−${fmt2(openingsArea)} openings)` : ''}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: accentColor, fontFamily: 'monospace', lineHeight: 1 }}>{fmt2(netArea)}</div>
+              <div style={{ fontSize: 10, color: '#6a8a6a', marginTop: 2 }}>m² net wall area</div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Label ── */}
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle}>Drawing Label</label>
+          <input style={inputStyle} value={editingElement?.label ?? item.name}
+            onChange={e => {
+              if (editingElement) saveElementEdit({ ...editingElement, label: e.target.value })
+              saveItemEdit({ ...item, name: e.target.value })
+            }} />
+        </div>
+
+        {/* ── Wall height (line-based only) ── */}
+        {isLineBased && (
+          <div style={{ marginBottom: 10 }}>
+            <label style={labelStyle}>Wall Height (m) — storey or section height</label>
+            <input
+              type="number" step={0.05} min={0.5} max={10}
+              style={{ ...inputStyle, color: accentColor }}
+              value={wallHeight}
+              onChange={e => {
+                const h = Math.max(0.1, +e.target.value || 2.7)
+                const newGross = +(wallLength * h).toFixed(3)
+                const newNet   = +(Math.max(0, newGross - openingsArea)).toFixed(3)
+                saveItemEdit({ ...item, wallHeight: h, area: newGross, qty: newNet, unit: 'm²' })
+              }}
+            />
+          </div>
+        )}
+
+        {/* ── Wall Construction Type ── */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={labelStyle}>Wall Construction Type</label>
+          <select
+            style={{ ...inputStyle, color: accentColor }}
+            value={item.floorMakeupId ?? ''}
+            onChange={e => {
+              const newM = allWallTypes.find(m => m.id === e.target.value)
+              saveItemEdit({
+                ...item,
+                floorMakeupId: e.target.value,
+                spec: newM?.clientDescription ?? item.spec,
+                floorLayerToggles: {},
+                floorLayerThicknesses: {},
+              })
+            }}
+          >
+            <optgroup label="── Built-in Wall Types">
+              {WALL_MAKEUPS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </optgroup>
+            {customWallTypes.length > 0 && (
+              <optgroup label="── Custom Wall Types">
+                {customWallTypes.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </optgroup>
+            )}
+          </select>
+          {makeup && (
+            <div style={{ fontSize: 10, color: '#6a8a6a', marginTop: 3, fontStyle: 'italic' }}>
+              {builtInIds.has(item.floorMakeupId ?? '') ? 'Built-in' : '★ Custom'} · {makeup.layers.length} layers
+              {makeup.labourHrsPerM2 > 0 && ` · ~${fmt2(netArea * makeup.labourHrsPerM2)} hrs labour`}
+            </div>
+          )}
+        </div>
+
+        {/* ── Layer Schedule ── */}
+        {makeup && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{
+              fontSize: 10, color: '#6a8a6a', letterSpacing: 1, textTransform: 'uppercase',
+              marginBottom: 6, display: 'flex', justifyContent: 'space-between',
+            }}>
+              <span>Layer Schedule (net area)</span>
+            </div>
+            <div style={{
+              display: 'grid', gridTemplateColumns: '16px 1fr 64px 8px',
+              gap: 4, padding: '3px 6px', marginBottom: 2,
+              fontSize: 9, color: '#4a6a4a', textTransform: 'uppercase', letterSpacing: 0.5,
+            }}>
+              <span /><span>Layer</span><span style={{ textAlign: 'right' }}>Qty</span><span />
+            </div>
+            {makeup.layers.map(layer => {
+              const enabled = toggles[layer.id] ?? layer.defaultEnabled
+              const thk = thicknesses[layer.id] ?? layer.thickness
+              const { qty: lQty, unit: lUnit } = calcLayerQty(layer, netArea, wallPerimeter, thk || undefined)
+              return (
+                <div key={layer.id} style={{
+                  display: 'grid', gridTemplateColumns: '16px 1fr 64px 8px',
+                  gap: 4, alignItems: 'center',
+                  padding: '5px 6px', marginBottom: 2, borderRadius: 4,
+                  background: enabled ? (darkMode ? '#0a181a' : '#f0f8f8') : (darkMode ? '#090f09' : '#f8f9fa'),
+                  border: `1px solid ${enabled ? (darkMode ? '#1a3030' : '#cce6e4') : (darkMode ? '#111' : '#eee')}`,
+                  opacity: enabled ? 1 : 0.5,
+                }}>
+                  <input type="checkbox" checked={enabled}
+                    onChange={ev => saveItemEdit({ ...item, floorLayerToggles: { ...toggles, [layer.id]: ev.target.checked } })}
+                    style={{ margin: 0, accentColor, cursor: 'pointer' }} />
+                  <div>
+                    <div style={{ fontSize: 11, color: enabled ? (darkMode ? '#c8d8a8' : '#2b3a2b') : '#6a8a6a', lineHeight: 1.2 }}>{layer.name}</div>
+                    {layer.thickness > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginTop: 2 }}>
+                        <input type="number" value={thk} min={0}
+                          onChange={ev => saveItemEdit({ ...item, floorLayerThicknesses: { ...thicknesses, [layer.id]: +ev.target.value } })}
+                          style={{ width: 38, background: darkMode ? '#0a181a' : '#f0f8f8', border: '1px solid #2a3a2a', borderRadius: 3, color: '#8aa', fontSize: 10, padding: '1px 3px', textAlign: 'right', outline: 'none' }} />
+                        <span style={{ fontSize: 9, color: '#4a6a4a' }}>mm</span>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 11, fontFamily: 'monospace', color: enabled ? (darkMode ? '#c8d8a8' : '#2b3a2b') : '#4a6a4a', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {enabled ? `${lQty} ${lUnit}` : '—'}
+                  </div>
+                  <div style={{ width: 7, height: 7, borderRadius: '50%', background: CAT_COLOR[layer.category] ?? '#95a5a6', flexShrink: 0, alignSelf: 'center' }} title={layer.category} />
+                </div>
+              )
+            })}
+            <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+              {(['labour', 'materials', 'plant', 'other'] as const).map(cat => (
+                <span key={cat} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: '#6a8a6a' }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: CAT_COLOR[cat], display: 'inline-block' }} />
+                  {cat}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Openings & Deductions ── */}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ fontSize: 10, color: '#6a8a6a', letterSpacing: 1, textTransform: 'uppercase' }}>
+              Openings & Deductions
+            </span>
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              {(['window', 'door', 'bifold', 'french_door'] as WallOpeningType[]).map(t => (
+                <button key={t} onClick={() => addOpening(t)} style={{
+                  fontSize: 10, padding: '2px 6px', borderRadius: 4, cursor: 'pointer',
+                  background: darkMode ? '#0a181a' : '#e8f5f4',
+                  border: `1px solid ${darkMode ? '#1a3030' : '#a0d4cf'}`,
+                  color: accentColor, fontWeight: 600,
+                }}>
+                  + {WALL_OPENING_LABELS[t].replace(' Door', '').replace('French Doors', 'French')}
+                </button>
+              ))}
+              <button onClick={() => addOpening('other')} style={{
+                fontSize: 10, padding: '2px 6px', borderRadius: 4, cursor: 'pointer',
+                background: darkMode ? '#1a1a1a' : '#f0f0f0',
+                border: `1px solid ${darkMode ? '#333' : '#ccc'}`,
+                color: '#6a8a6a',
+              }}>+ Other</button>
+            </div>
+          </div>
+
+          {openings.length === 0 ? (
+            <div style={{ fontSize: 11, color: '#6a8a6a', textAlign: 'center', padding: '8px 0', fontStyle: 'italic' }}>
+              No openings — click + to add windows, doors or bifolds
+            </div>
+          ) : (
+            <>
+              {openings.map(op => (
+                <div key={op.id} style={{
+                  display: 'grid', gridTemplateColumns: '90px 1fr 48px 4px 48px 36px 20px',
+                  gap: 3, alignItems: 'center', marginBottom: 4,
+                  padding: '5px 6px', borderRadius: 4,
+                  background: darkMode ? '#0a181a' : '#f0f8f8',
+                  border: `1px solid ${darkMode ? '#1a3030' : '#cce6e4'}`,
+                }}>
+                  <select
+                    style={{ ...inputStyle, padding: '2px 4px', fontSize: 11 }}
+                    value={op.type}
+                    onChange={e => updateOpening(op.id, { type: e.target.value as WallOpeningType, label: WALL_OPENING_LABELS[e.target.value as WallOpeningType] })}
+                  >
+                    {(Object.keys(WALL_OPENING_LABELS) as WallOpeningType[]).map(t => (
+                      <option key={t} value={t}>{WALL_OPENING_LABELS[t]}</option>
+                    ))}
+                  </select>
+                  <input
+                    style={{ ...inputStyle, fontSize: 11 }}
+                    placeholder="Label"
+                    value={op.label}
+                    onChange={e => updateOpening(op.id, { label: e.target.value })}
+                  />
+                  <input type="number" step={0.05} min={0.1}
+                    style={{ ...inputStyle, fontSize: 11, textAlign: 'right' }}
+                    value={op.width}
+                    onChange={e => updateOpening(op.id, { width: +e.target.value })}
+                    title="Width (m)"
+                  />
+                  <span style={{ fontSize: 10, color: '#6a8a6a', textAlign: 'center' }}>×</span>
+                  <input type="number" step={0.05} min={0.1}
+                    style={{ ...inputStyle, fontSize: 11, textAlign: 'right' }}
+                    value={op.height}
+                    onChange={e => updateOpening(op.id, { height: +e.target.value })}
+                    title="Height (m)"
+                  />
+                  <div style={{ fontSize: 10, color: '#e74c3c', fontFamily: 'monospace', textAlign: 'right' }}>
+                    −{fmt2(op.width * op.height)}
+                  </div>
+                  <button onClick={() => removeOpening(op.id)} style={{
+                    background: 'none', border: 'none', color: '#e74c3c', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0,
+                  }}>×</button>
+                </div>
+              ))}
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '5px 6px', borderRadius: 4, marginTop: 2,
+                background: darkMode ? '#0d1a12' : '#e8f5f0',
+                border: `1px solid ${darkMode ? '#1a3020' : '#b0d8c4'}`,
+                fontSize: 11,
+              }}>
+                <span style={{ color: '#6a8a6a' }}>Total openings deducted</span>
+                <span style={{ color: '#e74c3c', fontFamily: 'monospace', fontWeight: 700 }}>−{fmt2(openingsArea)} m²</span>
+              </div>
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '5px 6px', borderRadius: 4, marginTop: 3,
+                background: darkMode ? bgDark : bgLight,
+                border: `1px solid ${bdColor}`,
+                fontSize: 11,
+              }}>
+                <span style={{ color: '#6a8a6a' }}>Net wall area (to price)</span>
+                <span style={{ color: accentColor, fontFamily: 'monospace', fontWeight: 700 }}>{fmt2(netArea)} m²</span>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* ── Disclaimer ── */}
+        <div style={{
+          fontSize: 10, lineHeight: 1.5, padding: '7px 10px', borderRadius: 6, marginBottom: 10,
+          background: darkMode ? '#1a1500' : '#fffbeb',
+          border: `1px solid ${darkMode ? '#3a3000' : '#fde68a'}`,
+          color: darkMode ? '#c8b060' : '#92400e',
+        }}>
+          ⚠️ Wall make-up is for estimating purposes only and should be confirmed against drawings, structural design and Building Control requirements.
+        </div>
+
+        {/* ── Client Description ── */}
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle}>Client Description (quote text)</label>
+          <textarea style={{ ...inputStyle, height: 64, resize: 'none', fontSize: 11, lineHeight: 1.5 }}
+            value={item.spec ?? ''}
+            onChange={e => saveItemEdit({ ...item, spec: e.target.value })}
+          />
+        </div>
+
+        {/* ── Drawing Ref ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+          <div>
+            <label style={labelStyle}>Drawing Ref</label>
+            <input style={inputStyle} value={item.drawingRef ?? ''}
+              onChange={e => saveItemEdit({ ...item, drawingRef: e.target.value })} />
+          </div>
+          <div>
+            <label style={labelStyle}>Sub-Phase</label>
+            <input style={inputStyle} value={item.subPhase ?? ''}
+              onChange={e => saveItemEdit({ ...item, subPhase: e.target.value })} />
+          </div>
+        </div>
+
+        {/* ── Building Regs Notes ── */}
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle}>Building Regs Notes</label>
+          <textarea style={{ ...inputStyle, height: 52, resize: 'none' }}
+            value={item.buildingRegsNotes ?? ''}
+            onChange={e => saveItemEdit({ ...item, buildingRegsNotes: e.target.value })} />
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <label style={labelStyle}>Notes</label>
+          <textarea style={{ ...inputStyle, height: 52, resize: 'none' }}
+            value={item.notes ?? ''}
+            onChange={e => saveItemEdit({ ...item, notes: e.target.value })} />
+        </div>
+
+        {/* ── Delete ── */}
+        <button
+          style={{ ...btnStyle, background: '#c0392b', borderColor: '#c0392b', marginTop: 4 }}
+          onClick={() => {
+            if (item.elementId) {
+              setProject(p => ({
+                ...p,
+                elements: p.elements.filter(el2 => el2.id !== item.elementId),
+                items: p.items.filter(it => it.id !== item.id),
+              }))
+              setSelectedId(null)
+            } else {
+              setProject(p => ({ ...p, items: p.items.filter(it => it.id !== item.id) }))
+            }
+            setEditingItem(null)
+            setEditingElement(null)
+            setPanelMode('schedule')
+          }}
+        >
+          🗑 Delete Wall Item
+        </button>
+      </div>
+    )
+  }
+
+  // ── Build-up properties panel (floors, walls, foundations, plastering) ───────
+  function renderBuildupProperties(item: TakeoffItem) {
+    const makeups = PHASE_MAKEUPS[item.phase] ?? FLOOR_MAKEUPS
+    const makeup = makeups.find(m => m.id === item.floorMakeupId)
+    const accentColor = PHASE_COLORS[item.phase] ?? '#f39c12'
+    const area = item.area ?? 0
+    // Compute perimeter from geometry if it wasn't stored on the item
+    const _buildEl = item.elementId ? project.elements.find(e => e.id === item.elementId) : null
+    const perimeter = item.perimeter ??
+      (_buildEl?.type === 'rect' && _buildEl.points.length >= 2
+        ? rectPerimeter(_buildEl.points, project.calibration.mpp)
+        : _buildEl?.type === 'polygon' && _buildEl.points.length >= 3
+          ? polyPerimeter(_buildEl.points, project.calibration.mpp)
+          : 0)
+    const toggles = item.floorLayerToggles ?? {}
+    const thicknesses = item.floorLayerThicknesses ?? {}
+
+    // Phase-specific labels
+    const phaseEmoji: Partial<Record<TakeoffPhase, string>> = {
+      'Floors & Screeds': '🏗', 'External Walls': '🧱', 'Foundations': '⛏', 'Plastering & Boarding': '🪣',
+    }
+    const areaLabel: Partial<Record<TakeoffPhase, string>> = {
+      'Floors & Screeds': 'floor area', 'External Walls': 'wall area', 'Foundations': 'base area', 'Plastering & Boarding': 'surface area',
+    }
+    const perimLabel = item.phase === 'Foundations' ? 'strip run (lm)' : 'perimeter (lm)'
+    const emoji = phaseEmoji[item.phase] ?? '🏗'
+    const aLbl = areaLabel[item.phase] ?? 'area'
+
+    // Derive subtle tinted bg from accent color
+    const hexToRgb = (h: string) => {
+      const c = h.replace('#', '')
+      return [parseInt(c.slice(0, 2), 16), parseInt(c.slice(2, 4), 16), parseInt(c.slice(4, 6), 16)]
+    }
+    const [r, g, b] = hexToRgb(accentColor)
+    const bgDark  = `rgba(${r},${g},${b},0.07)`
+    const bgLight = `rgba(${r},${g},${b},0.06)`
+    const bdColor = `rgba(${r},${g},${b},0.30)`
+
+    return (
+      <div style={{ padding: 14, fontSize: 13, overflowY: 'auto', height: '100%' }}>
+
+        {/* ── Key metrics ── */}
+        <div style={{
+          background: darkMode ? bgDark : bgLight,
+          borderRadius: 8, padding: '12px 14px', marginBottom: 12,
+          border: `1px solid ${bdColor}`,
+        }}>
+          <div style={{ fontSize: 10, color: accentColor, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
+            {emoji} {item.phase} Build-up
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
-              <div style={{ fontSize: 20, fontWeight: 700, color: '#f39c12', fontFamily: 'monospace', lineHeight: 1 }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: accentColor, fontFamily: 'monospace', lineHeight: 1 }}>
                 {fmt2(area)}
               </div>
-              <div style={{ fontSize: 10, color: '#6a8a6a', marginTop: 2 }}>m² floor area</div>
+              <div style={{ fontSize: 10, color: '#6a8a6a', marginTop: 2 }}>m² {aLbl}</div>
             </div>
             <div>
               <div style={{ fontSize: 20, fontWeight: 700, color: '#c8d8a8', fontFamily: 'monospace', lineHeight: 1 }}>
                 {fmt2(perimeter)}
               </div>
-              <div style={{ fontSize: 10, color: '#6a8a6a', marginTop: 2 }}>m perimeter</div>
+              <div style={{ fontSize: 10, color: '#6a8a6a', marginTop: 2 }}>{perimLabel}</div>
             </div>
           </div>
         </div>
@@ -946,14 +1386,14 @@ export default function TakeoffPage() {
           />
         </div>
 
-        {/* ── Floor Makeup selector ── */}
+        {/* ── Build-up type selector ── */}
         <div style={{ marginBottom: 12 }}>
-          <label style={labelStyle}>Floor Construction Type</label>
+          <label style={labelStyle}>Construction Type</label>
           <select
-            style={{ ...inputStyle, color: '#f39c12' }}
+            style={{ ...inputStyle, color: accentColor }}
             value={item.floorMakeupId ?? ''}
             onChange={e => {
-              const newM = FLOOR_MAKEUPS.find(m => m.id === e.target.value)
+              const newM = makeups.find(m => m.id === e.target.value)
               saveItemEdit({
                 ...item,
                 floorMakeupId: e.target.value,
@@ -963,7 +1403,7 @@ export default function TakeoffPage() {
               })
             }}
           >
-            {FLOOR_MAKEUPS.map(m => (
+            {makeups.map(m => (
               <option key={m.id} value={m.id}>{m.name}</option>
             ))}
           </select>
@@ -1016,7 +1456,7 @@ export default function TakeoffPage() {
                       ...item,
                       floorLayerToggles: { ...toggles, [layer.id]: ev.target.checked },
                     })}
-                    style={{ margin: 0, accentColor: '#4a8a4a', cursor: 'pointer' }}
+                    style={{ margin: 0, accentColor, cursor: 'pointer' }}
                   />
                   <div>
                     <div style={{ fontSize: 11, color: enabled ? '#c8d8a8' : '#6a8a6a', lineHeight: 1.2 }}>
@@ -1129,7 +1569,7 @@ export default function TakeoffPage() {
             setPanelMode('schedule')
           }}
         >
-          🗑 Delete Floor Item
+          🗑 Delete Item
         </button>
       </div>
     )
@@ -1148,27 +1588,52 @@ export default function TakeoffPage() {
       )
     }
 
-    // Floor items get their dedicated panel.
-    // Check both the item's floorMakeupId AND the linked element's phase as a
-    // fallback — covers cases where the ref-queuing didn't attach floorMakeupId.
     const _linkedEl = editingItem.elementId
       ? project.elements.find(e => e.id === editingItem.elementId)
       : null
-    const _isFloorItem =
-      !!editingItem.floorMakeupId ||
-      (_linkedEl?.phase === 'Floors & Screeds' && _linkedEl?.type !== 'line')
 
-    if (_isFloorItem) {
-      // Ensure floorMakeupId is present; default to concrete slab if missing
-      const _floorItem = editingItem.floorMakeupId
+    // ── External Walls: dedicated wall panel for ALL element types (line, rect, polygon) ──
+    if (editingItem.phase === 'External Walls') {
+      const _allWallTypes = [...WALL_MAKEUPS, ...customWallTypes]
+      const _defaultWall  = _allWallTypes[0] ?? WALL_MAKEUPS[0]
+      let _wallItem = { ...editingItem }
+
+      // Ensure a wall makeup type is selected
+      if (!_wallItem.floorMakeupId) {
+        _wallItem = { ..._wallItem, floorMakeupId: _defaultWall.id, spec: _defaultWall.clientDescription }
+        saveItemEdit(_wallItem)
+      }
+
+      // Auto-initialise wall height for new LINE items
+      if (_linkedEl?.type === 'line' && _wallItem.wallHeight == null) {
+        const _wallLen = _wallItem.length ?? 0
+        const _defH    = 2.7
+        const _gross   = +(_wallLen * _defH).toFixed(3)
+        _wallItem = { ..._wallItem, wallHeight: _defH, area: _gross, qty: _gross, unit: 'm²' }
+        saveItemEdit(_wallItem)
+      }
+
+      return renderWallProperties(_wallItem)
+    }
+
+    // ── Other build-up phases (floors, foundations, plastering) — rect/polygon only ──
+    const _phaseMakeups = PHASE_MAKEUPS[editingItem.phase]
+    const _isBuildupItem =
+      !!editingItem.floorMakeupId ||
+      (!!_phaseMakeups && !!_linkedEl && _linkedEl.type !== 'line')
+
+    if (_isBuildupItem) {
+      // Default makeup: concrete slab for floors, first option for other phases
+      const _defaultMakeupIdx = editingItem.phase === 'Floors & Screeds' ? 1 : 0
+      const _defaultMakeup = (_phaseMakeups ?? FLOOR_MAKEUPS)[_defaultMakeupIdx]
+      const _buildupItem = editingItem.floorMakeupId
         ? editingItem
-        : { ...editingItem, floorMakeupId: FLOOR_MAKEUPS[1].id }
+        : { ...editingItem, floorMakeupId: _defaultMakeup.id }
       // Persist the default so it sticks on next click
       if (!editingItem.floorMakeupId) {
-        const _makeup = FLOOR_MAKEUPS[1]
-        saveItemEdit({ ..._floorItem, spec: _makeup.clientDescription })
+        saveItemEdit({ ..._buildupItem, spec: _defaultMakeup.clientDescription })
       }
-      return renderFloorProperties(_floorItem)
+      return renderBuildupProperties(_buildupItem)
     }
 
     const item = editingItem
