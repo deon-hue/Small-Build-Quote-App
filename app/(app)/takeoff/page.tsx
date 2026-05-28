@@ -76,6 +76,26 @@ function polyPerimeter(pts: TakeoffPoint[], mpp: number): number {
   return +(total * mpp).toFixed(3)
 }
 
+/** Offset a polyline by d pixels perpendicular to its path (left of travel direction when d > 0) */
+function offsetPoly(pts: TakeoffPoint[], d: number): TakeoffPoint[] {
+  return pts.map((pt, i) => {
+    let nx = 0, ny = 0
+    if (i < pts.length - 1) {
+      const dx = pts[i + 1].x - pt.x, dy = pts[i + 1].y - pt.y
+      const len = Math.hypot(dx, dy)
+      if (len > 0) { nx += -dy / len; ny += dx / len }
+    }
+    if (i > 0) {
+      const dx = pt.x - pts[i - 1].x, dy = pt.y - pts[i - 1].y
+      const len = Math.hypot(dx, dy)
+      if (len > 0) { nx += -dy / len; ny += dx / len }
+    }
+    const len = Math.hypot(nx, ny)
+    if (len > 0) { nx /= len; ny /= len }
+    return { x: pt.x + nx * d, y: pt.y + ny * d }
+  })
+}
+
 /** Calculate a layer's qty from drawn geometry */
 // calcLayerQty is imported from @/lib/takeoff-types
 
@@ -812,11 +832,86 @@ export default function TakeoffPage() {
   // ── Render: SVG elements ───────────────────────────────────────────────────
   function renderElement(el: DrawnElement) {
     const sel = selectedId === el.id
-    const stroke = sel ? '#fff' : el.color
     const isWall = el.phase === 'External Walls'
-    const sw = sel ? (isWall ? 5 : 3) : (isWall ? 4 : 2)
+    const stroke = sel ? '#fff' : el.color
+    const sw = sel ? 3 : 2
     const fill = el.color + '33'  // 20% opacity
 
+    // ── External Walls LINE: draw as cavity wall (two parallel lines + fill) ──
+    if (isWall && el.type === 'line') {
+      const halfW = 9  // pixels — half the wall band width on screen
+      const outer = offsetPoly(el.points, halfW)
+      const inner = offsetPoly(el.points, -halfW)
+      const outerPts = outer.map(p => `${p.x},${p.y}`).join(' ')
+      const innerPts = inner.map(p => `${p.x},${p.y}`).join(' ')
+      const centrePts = el.points.map(p => `${p.x},${p.y}`).join(' ')
+      // Closed polygon between the two offset lines (for fill)
+      const bodyPts = [...outer, ...[...inner].reverse()].map(p => `${p.x},${p.y}`).join(' ')
+      const mid = centroid(el.points)
+      const faceColor  = sel ? '#ffffff' : el.color
+      const fillAlpha  = sel ? '55' : '1a'
+      const cavityAlpha = sel ? '99' : '55'
+      return (
+        <g key={el.id} onClick={() => selectElement(el)} style={{ cursor: tool === 'select' ? 'pointer' : 'default' }}>
+          {/* Wall body fill */}
+          <polygon points={bodyPts} fill={el.color + fillAlpha} stroke="none" />
+          {/* Outer leaf face */}
+          <polyline points={outerPts} fill="none" stroke={faceColor} strokeWidth={sel ? 2.5 : 2} strokeLinecap="square" strokeLinejoin="miter" />
+          {/* Inner leaf face */}
+          <polyline points={innerPts} fill="none" stroke={faceColor} strokeWidth={sel ? 2.5 : 2} strokeLinecap="square" strokeLinejoin="miter" />
+          {/* Cavity centre line (dashed) */}
+          <polyline points={centrePts} fill="none" stroke={el.color} strokeWidth={0.8} strokeDasharray="5 4" strokeOpacity={cavityAlpha} />
+          {/* Selection highlight */}
+          {sel && <polygon points={bodyPts} fill="none" stroke="#fff" strokeWidth={1} strokeOpacity={0.4} strokeDasharray="5 3" />}
+          <text x={mid.x} y={mid.y - (halfW + 4)} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : el.color} fontFamily="monospace" fontWeight={600}>
+            {el.label}
+          </text>
+          <text x={mid.x} y={mid.y + (halfW + 12)} textAnchor="middle" fontSize={10} fill={sel ? '#ccc' : '#999'} fontFamily="monospace">
+            {fmtM(polylineLength(el.points, project.calibration.mpp))}
+          </text>
+        </g>
+      )
+    }
+
+    // ── External Walls RECT: thick border to represent wall line ──
+    if (isWall && el.type === 'rect') {
+      const { x, y, width: w, height: h } = rectAttrs(el.points)
+      const wallSw = sel ? 10 : 8
+      const mid = centroid(el.points)
+      return (
+        <g key={el.id} onClick={() => selectElement(el)} style={{ cursor: tool === 'select' ? 'pointer' : 'default' }}>
+          <rect x={x} y={y} width={w} height={h} fill={el.color + '18'} stroke={stroke} strokeWidth={wallSw} />
+          {sel && <rect x={x} y={y} width={w} height={h} fill="none" stroke="#fff" strokeWidth={1} strokeOpacity={0.4} strokeDasharray="5 3" />}
+          <text x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : el.color} fontFamily="monospace" fontWeight={600}>
+            {el.label}
+          </text>
+          <text x={mid.x} y={mid.y + 8} textAnchor="middle" fontSize={10} fill={sel ? '#ccc' : '#999'} fontFamily="monospace">
+            {fmt2(rectArea(el.points, project.calibration.mpp))} m²
+          </text>
+        </g>
+      )
+    }
+
+    // ── External Walls POLYGON: thick border ──
+    if (isWall && el.type === 'polygon') {
+      const pts = el.points.map(p => `${p.x},${p.y}`).join(' ')
+      const mid = centroid(el.points)
+      const wallSw = sel ? 10 : 8
+      return (
+        <g key={el.id} onClick={() => selectElement(el)} style={{ cursor: tool === 'select' ? 'pointer' : 'default' }}>
+          <polygon points={pts} fill={el.color + '18'} stroke={stroke} strokeWidth={wallSw} strokeLinejoin="miter" />
+          {sel && <polygon points={pts} fill="none" stroke="#fff" strokeWidth={1} strokeOpacity={0.4} strokeDasharray="5 3" />}
+          <text x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : el.color} fontFamily="monospace" fontWeight={600}>
+            {el.label}
+          </text>
+          <text x={mid.x} y={mid.y + 8} textAnchor="middle" fontSize={10} fill={sel ? '#ccc' : '#999'} fontFamily="monospace">
+            {fmt2(polygonArea(el.points, project.calibration.mpp))} m²
+          </text>
+        </g>
+      )
+    }
+
+    // ── Standard rendering for all other phases ──
     if (el.type === 'line') {
       const pts = el.points.map(p => `${p.x},${p.y}`).join(' ')
       const mid = centroid(el.points)
