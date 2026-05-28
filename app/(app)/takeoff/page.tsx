@@ -199,6 +199,14 @@ export default function TakeoffPage() {
   const [pdfTotalPages, setPdfTotalPages] = useState(0)
   const [pdfLoading, setPdfLoading] = useState(false)
 
+  // Zoom / pan state
+  const [zoom, setZoom] = useState(1)
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 })
+  const [isPanning, setIsPanning] = useState(false)
+  const [spaceHeld, setSpaceHeld] = useState(false)
+  const [canvasImgSize, setCanvasImgSize] = useState<{ w: number; h: number } | null>(null)
+  const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 })
+
   // ── Persist on change ──────────────────────────────────────────────────────
   useEffect(() => {
     const p = { ...project, updatedAt: new Date().toISOString() }
@@ -234,15 +242,64 @@ export default function TakeoffPage() {
     return () => obs.disconnect()
   }, [])
 
-  // ── SVG coordinate helper ──────────────────────────────────────────────────
+  // ── Fit image to canvas ────────────────────────────────────────────────────
+  function fitToScreen(imgW?: number, imgH?: number) {
+    const iw = imgW ?? canvasImgSize?.w
+    const ih = imgH ?? canvasImgSize?.h
+    if (!iw || !ih) { setZoom(1); setPanOffset({ x: 0, y: 0 }); return }
+    const cw = svgSize.w
+    const ch = svgSize.h
+    const scale = Math.min(cw / iw, ch / ih) * 0.95
+    setPanOffset({ x: (cw - iw * scale) / 2, y: (ch - ih * scale) / 2 })
+    setZoom(scale)
+  }
+
+  // ── SVG coordinate helper (accounts for zoom/pan) ──────────────────────────
   function svgCoords(e: React.MouseEvent<SVGSVGElement>): TakeoffPoint {
     const rect = svgRef.current!.getBoundingClientRect()
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top }
+    const rawX = e.clientX - rect.left
+    const rawY = e.clientY - rect.top
+    return { x: (rawX - panOffset.x) / zoom, y: (rawY - panOffset.y) / zoom }
   }
 
   // ── Mouse handlers ─────────────────────────────────────────────────────────
   function handleMouseMove(e: React.MouseEvent<SVGSVGElement>) {
+    if (isPanning) {
+      setPanOffset({
+        x: panStart.current.panX + e.clientX - panStart.current.x,
+        y: panStart.current.panY + e.clientY - panStart.current.y,
+      })
+      return
+    }
     setMousePos(svgCoords(e))
+  }
+
+  function handleMouseDown(e: React.MouseEvent<SVGSVGElement>) {
+    // Middle mouse or Space+left drag = pan
+    if (e.button === 1 || (e.button === 0 && spaceHeld)) {
+      e.preventDefault()
+      setIsPanning(true)
+      panStart.current = { x: e.clientX, y: e.clientY, panX: panOffset.x, panY: panOffset.y }
+    }
+  }
+
+  function handleMouseUp() {
+    if (isPanning) setIsPanning(false)
+  }
+
+  function handleWheel(e: React.WheelEvent<SVGSVGElement>) {
+    e.preventDefault()
+    const rect = svgRef.current!.getBoundingClientRect()
+    const mx = e.clientX - rect.left
+    const my = e.clientY - rect.top
+    const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12
+    const newZoom = Math.max(0.05, Math.min(20, zoom * factor))
+    // Zoom toward cursor
+    setPanOffset({
+      x: mx - (mx - panOffset.x) * (newZoom / zoom),
+      y: my - (my - panOffset.y) * (newZoom / zoom),
+    })
+    setZoom(newZoom)
   }
 
   function handleSvgClick(e: React.MouseEvent<SVGSVGElement>) {
@@ -363,6 +420,8 @@ export default function TakeoffPage() {
       if (!ctx) return
       await page.render({ canvasContext: ctx, viewport }).promise
       setPlanImage(canvas.toDataURL('image/png'))
+      setCanvasImgSize({ w: viewport.width, h: viewport.height })
+      fitToScreen(viewport.width, viewport.height)
       setPdfCurrentPage(pageNum)
     } finally {
       setPdfLoading(false)
@@ -404,7 +463,17 @@ export default function TakeoffPage() {
     pdfDocRef.current = null
     setPdfTotalPages(0)
     const reader = new FileReader()
-    reader.onload = ev => setPlanImage(ev.target?.result as string)
+    reader.onload = ev => {
+      const dataUrl = ev.target?.result as string
+      setPlanImage(dataUrl)
+      // Get natural dimensions then fit to screen
+      const img = new Image()
+      img.onload = () => {
+        setCanvasImgSize({ w: img.naturalWidth, h: img.naturalHeight })
+        fitToScreen(img.naturalWidth, img.naturalHeight)
+      }
+      img.src = dataUrl
+    }
     reader.readAsDataURL(file)
   }
 
@@ -485,9 +554,13 @@ export default function TakeoffPage() {
     alert('Take-off exported. Use "📐 Import Take-off" in the New Quote page to import it.')
   }
 
-  // ── Keyboard shortcut: Delete ──────────────────────────────────────────────
+  // ── Keyboard shortcuts ─────────────────────────────────────────────────────
   useEffect(() => {
-    function onKey(e: KeyboardEvent) {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === ' ' && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
+        e.preventDefault()
+        setSpaceHeld(true)
+      }
       if ((e.key === 'Delete' || e.key === 'Backspace') &&
           !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
         deleteSelected()
@@ -498,8 +571,12 @@ export default function TakeoffPage() {
         if (calibDrawing) { setCalibDrawing(false); setCalibPts([]) }
       }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    function onKeyUp(e: KeyboardEvent) {
+      if (e.key === ' ') { setSpaceHeld(false); setIsPanning(false) }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('keyup', onKeyUp) }
   })
 
   // ── Render: SVG elements ───────────────────────────────────────────────────
@@ -936,6 +1013,28 @@ export default function TakeoffPage() {
           </>
         )}
 
+        {/* Zoom controls */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <button style={{ ...btnStyle, padding: '6px 8px' }} onClick={() => {
+            const rect = svgRef.current!.getBoundingClientRect()
+            const cx = rect.width / 2, cy = rect.height / 2
+            const nz = Math.min(zoom * 1.25, 20)
+            setPanOffset({ x: cx - (cx - panOffset.x) * (nz / zoom), y: cy - (cy - panOffset.y) * (nz / zoom) })
+            setZoom(nz)
+          }} title="Zoom in (scroll wheel)">+</button>
+          <span style={{ fontSize: 11, color: '#c8d8a8', minWidth: 38, textAlign: 'center', fontFamily: 'monospace' }}>
+            {Math.round(zoom * 100)}%
+          </span>
+          <button style={{ ...btnStyle, padding: '6px 8px' }} onClick={() => {
+            const rect = svgRef.current!.getBoundingClientRect()
+            const cx = rect.width / 2, cy = rect.height / 2
+            const nz = Math.max(zoom / 1.25, 0.05)
+            setPanOffset({ x: cx - (cx - panOffset.x) * (nz / zoom), y: cy - (cy - panOffset.y) * (nz / zoom) })
+            setZoom(nz)
+          }} title="Zoom out">−</button>
+          <button style={btnStyle} onClick={() => fitToScreen()} title="Fit plan to screen">⊡</button>
+        </div>
+
         <input type="file" accept=".json" ref={importJsonRef} style={{ display: 'none' }} onChange={handleImportJson} />
         <button style={btnStyle} onClick={() => importJsonRef.current?.click()}>
           📂 Open
@@ -998,13 +1097,7 @@ export default function TakeoffPage() {
         {/* Centre: SVG canvas */}
         <div
           ref={containerRef}
-          style={{
-            flex: 1, overflow: 'hidden', position: 'relative', background: '#0d1a0d',
-            backgroundImage: planImage ? `url(${planImage})` : undefined,
-            backgroundSize: 'contain',
-            backgroundRepeat: 'no-repeat',
-            backgroundPosition: 'center',
-          }}
+          style={{ flex: 1, overflow: 'hidden', position: 'relative', background: '#0d1a0d' }}
         >
           <svg
             ref={svgRef}
@@ -1013,55 +1106,75 @@ export default function TakeoffPage() {
             style={{
               display: 'block',
               position: 'absolute', top: 0, left: 0,
-              cursor: tool === 'select' ? 'default' : 'crosshair',
+              cursor: isPanning ? 'grabbing' : spaceHeld ? 'grab' : tool === 'select' ? 'default' : 'crosshair',
+              userSelect: 'none',
             }}
             onClick={handleSvgClick}
             onDoubleClick={handleSvgDblClick}
             onMouseMove={handleMouseMove}
+            onMouseDown={handleMouseDown}
+            onMouseUp={handleMouseUp}
+            onWheel={handleWheel}
           >
-            {/* Grid */}
-            {showGrid && (() => {
-              const mpp = project.calibration.mpp || DEFAULT_MPP
-              const pxPerM = 1 / mpp
-              const minor = Math.max(4, pxPerM)   // 1m grid
-              const major = minor * 5               // 5m grid
-              return (
-                <g>
-                  <defs>
-                    <pattern id="grid-minor" width={minor} height={minor} patternUnits="userSpaceOnUse">
-                      <path d={`M ${minor} 0 L 0 0 0 ${minor}`} fill="none" stroke="#1e2e1e" strokeWidth={0.5} />
-                    </pattern>
-                    <pattern id="grid-major" width={major} height={major} patternUnits="userSpaceOnUse">
-                      <rect width={major} height={major} fill="url(#grid-minor)" />
-                      <path d={`M ${major} 0 L 0 0 0 ${major}`} fill="none" stroke="#2a3a2a" strokeWidth={1} />
-                    </pattern>
-                  </defs>
-                  <rect width="100%" height="100%" fill="url(#grid-major)" />
-                </g>
-              )
-            })()}
+            {/* Everything inside this group is zoomed/panned together */}
+            <g transform={`translate(${panOffset.x}, ${panOffset.y}) scale(${zoom})`}>
 
-            {/* Drawn elements */}
-            {project.elements.map(renderElement)}
+              {/* Plan image */}
+              {planImage && canvasImgSize && (
+                <image
+                  href={planImage}
+                  x={0} y={0}
+                  width={canvasImgSize.w}
+                  height={canvasImgSize.h}
+                  preserveAspectRatio="none"
+                />
+              )}
 
-            {/* In-progress ghost */}
-            {renderGhost()}
+              {/* Grid */}
+              {showGrid && (() => {
+                const mpp = project.calibration.mpp || DEFAULT_MPP
+                const pxPerM = 1 / mpp
+                const minor = Math.max(4, pxPerM)
+                const major = minor * 5
+                const gridW = canvasImgSize?.w ?? svgSize.w / zoom
+                const gridH = canvasImgSize?.h ?? svgSize.h / zoom
+                return (
+                  <g>
+                    <defs>
+                      <pattern id="grid-minor" width={minor} height={minor} patternUnits="userSpaceOnUse">
+                        <path d={`M ${minor} 0 L 0 0 0 ${minor}`} fill="none" stroke="#1e2e1e" strokeWidth={0.5} />
+                      </pattern>
+                      <pattern id="grid-major" width={major} height={major} patternUnits="userSpaceOnUse">
+                        <rect width={major} height={major} fill="url(#grid-minor)" />
+                        <path d={`M ${major} 0 L 0 0 0 ${major}`} fill="none" stroke="#2a3a2a" strokeWidth={1} />
+                      </pattern>
+                    </defs>
+                    <rect x={0} y={0} width={gridW} height={gridH} fill="url(#grid-major)" />
+                  </g>
+                )
+              })()}
 
-            {/* Calibration ghost */}
-            {renderCalibGhost()}
+              {/* Drawn elements */}
+              {project.elements.map(renderElement)}
 
-            {/* Origin cross */}
-            <line x1={20} y1={10} x2={20} y2={30} stroke="#2a4a2a" strokeWidth={1} />
-            <line x1={10} y1={20} x2={30} y2={20} stroke="#2a4a2a" strokeWidth={1} />
+              {/* In-progress ghost */}
+              {renderGhost()}
+
+              {/* Calibration ghost */}
+              {renderCalibGhost()}
+
+            </g>
+
+            {/* Fixed UI — outside transform group so it stays at screen position */}
 
             {/* Scale indicator */}
             {(() => {
-              const mpp = project.calibration.mpp || DEFAULT_MPP
+              const mpp = (project.calibration.mpp || DEFAULT_MPP) / zoom
               const pxPer5m = 5 / mpp
-              const barW = Math.min(pxPer5m, 120)
+              const barW = Math.min(Math.max(pxPer5m, 30), 150)
               const realM = barW * mpp
               const x = svgSize.w - barW - 20
-              const y = svgSize.h - 20
+              const y = svgSize.h - 30
               return (
                 <g>
                   <line x1={x} y1={y} x2={x + barW} y2={y} stroke="#4a6a4a" strokeWidth={2} />
@@ -1090,6 +1203,8 @@ export default function TakeoffPage() {
             }</strong></span>
             <span>Phase: <strong style={{ color: PHASE_COLORS[activePhase] }}>{activePhase}</strong></span>
             <span>Scale: <strong style={{ color: '#c8d8a8' }}>{project.calibration.label || '—'}</strong></span>
+            <span>Zoom: <strong style={{ color: '#c8d8a8' }}>{Math.round(zoom * 100)}%</strong></span>
+            <span style={{ color: '#4a6a4a' }}>Scroll to zoom · Space+drag or middle-mouse to pan</span>
             <span>x: {Math.round(mousePos.x)}, y: {Math.round(mousePos.y)}</span>
             {selectedId && <span style={{ color: '#f1c40f' }}>Selected — press Delete to remove</span>}
             {isDrawing && drawPoints.length > 0 && (
