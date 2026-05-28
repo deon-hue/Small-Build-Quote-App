@@ -135,6 +135,7 @@ export interface ScaleCalibration {
 export const SCALE_PRESETS: { label: string; mpp: number }[] = [
   { label: '1:50  (A3)',   mpp: 0.05  / 50   },    // 1px ≈ 0.05m at 50dpi — approximate
   { label: '1:100 (A3)',   mpp: 0.10  / 50   },
+  { label: '1:50  (A1)',   mpp: 0.05  / 96   },    // 1:50 on A1 at 96dpi
   { label: '1:100 (A1)',   mpp: 0.10  / 96   },
   { label: '1:200 (A1)',   mpp: 0.20  / 96   },
   { label: 'Custom…',      mpp: 0             },

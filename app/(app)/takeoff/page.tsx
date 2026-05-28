@@ -206,6 +206,7 @@ export default function TakeoffPage() {
   const [spaceHeld, setSpaceHeld] = useState(false)
   const [canvasImgSize, setCanvasImgSize] = useState<{ w: number; h: number } | null>(null)
   const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 })
+  const hasPannedRef = useRef(false)
 
   // ── Persist on change ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -265,9 +266,12 @@ export default function TakeoffPage() {
   // ── Mouse handlers ─────────────────────────────────────────────────────────
   function handleMouseMove(e: React.MouseEvent<SVGSVGElement>) {
     if (isPanning) {
+      const dx = e.clientX - panStart.current.x
+      const dy = e.clientY - panStart.current.y
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) hasPannedRef.current = true
       setPanOffset({
-        x: panStart.current.panX + e.clientX - panStart.current.x,
-        y: panStart.current.panY + e.clientY - panStart.current.y,
+        x: panStart.current.panX + dx,
+        y: panStart.current.panY + dy,
       })
       return
     }
@@ -275,9 +279,10 @@ export default function TakeoffPage() {
   }
 
   function handleMouseDown(e: React.MouseEvent<SVGSVGElement>) {
-    // Middle mouse or Space+left drag = pan
-    if (e.button === 1 || (e.button === 0 && spaceHeld)) {
+    // Middle mouse, Space+left, or left button in select mode = pan
+    if (e.button === 1 || (e.button === 0 && spaceHeld) || (e.button === 0 && tool === 'select')) {
       e.preventDefault()
+      hasPannedRef.current = false
       setIsPanning(true)
       panStart.current = { x: e.clientX, y: e.clientY, panX: panOffset.x, panY: panOffset.y }
     }
@@ -303,6 +308,7 @@ export default function TakeoffPage() {
   }
 
   function handleSvgClick(e: React.MouseEvent<SVGSVGElement>) {
+    if (hasPannedRef.current) { hasPannedRef.current = false; return }
     if (tool === 'select') return
     if (calibDrawing) {
       const pt = svgCoords(e)
