@@ -47,13 +47,31 @@ Rules:
 - materials = materials, components and supplies
 - plant = machinery hire: excavators, scaffolding, skips, mixers, access platforms — use 0 if none
 - subcontractors = specialist subcontract cost (structural engineer, window fitter, etc) — use 0 if not applicable
-- other = miscellaneous: Building Control fees, survey fees, provisional sums — use 0 if none
+- other = miscellaneous: Building Control fees, survey fees, provisional sums, skip hire, waste disposal — use 0 if none
 - All cost fields must be numbers (no £ signs)
 - Group sub-phases under the correct UK industry standard main phase header for this job type
 - For rear/side extension: ~10 main phases with 2–4 sub-phases each
 - For landscaping or fit-out jobs: fewer phases, typically 5–8 main phases
 - Notes fields must be brief (max 10 words) or empty string
-- Do not include profit, markup or VAT`
+- Do not include profit, markup or VAT
+
+DEMOLITION / STRIP OUT RULES — when the scope mentions any demolition, strip out, or removal work, create detailed sub-phases within Phase 1 – Site Setup & Preparation:
+- "knock through" or "remove load-bearing wall" → sub-phase: Structural Demolition — Remove load-bearing wall (include SE fee in subcontractors, acrow props in plant)
+- "remove wall" or "knock down" → sub-phase: Structural Demolition — Remove masonry wall
+- "chimney breast" → sub-phase: Structural Demolition — Break out chimney breast
+- "strip ceiling" or "remove ceiling" → sub-phase: Ceiling Strip Out
+- "hack off plaster" or "remove plaster" → sub-phase: Wall Finishes Strip Out — Hack off plaster
+- "remove tiles" or "tile removal" → sub-phase: Wall Finishes Strip Out — Remove tiles from walls
+- "lift floorboards" or "remove floor" → sub-phase: Floor Strip Out
+- "strip out kitchen" or "remove kitchen" → sub-phase: Kitchen/Bathroom Strip Out — Remove kitchen units (include services cap-off in subcontractors)
+- "strip out bathroom" or "remove bathroom" → sub-phase: Kitchen/Bathroom Strip Out — Remove bathroom suite
+- "remove stud wall" or "stud partition" → sub-phase: Non-Structural Demolition — Remove stud wall
+- "remove shed" or "remove outbuilding" → sub-phase: External Demolition — Remove outbuilding
+- "remove patio" or "paving" → sub-phase: External Demolition — Remove patio / paving
+- "skip" or "clear site" or "clear waste" → sub-phase: Waste & Clearance — include skip hire (other) and labour loading out (labour)
+- Always add a Waste & Clearance sub-phase when demolition is present: skip hire (other £310/skip), labour loading out (labour £300/day)
+- Flag asbestos risk in buildingRegsNotes for any pre-1985 property or where existing coatings are being removed
+- Always include a provisional sum for hazardous materials in older properties`
 
   const userMessage = `Job type: ${jobType || 'general building works'}
 Property: ${address || 'not specified'}

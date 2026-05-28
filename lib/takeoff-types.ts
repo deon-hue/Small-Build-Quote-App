@@ -164,6 +164,17 @@ export interface TakeoffItem {
   wallHeight?:   number           // metres — storey height for LINE-drawn walls
   openings?:     WallOpening[]    // deducted openings (windows, doors, bifolds, etc.)
   wallBandPx?:   number           // half-width of wall band on canvas in pixels (default 9)
+
+  // Demolition-specific
+  demoSubphaseId?:     string     // e.g. 'structural'
+  demoTaskId?:         string     // e.g. 'structural-masonry'
+  demoMarkupPct?:      number     // override subphase markup (default from subphase)
+  demoLabour?:         number     // total costs for this item (qty × unit rate)
+  demoMaterials?:      number
+  demoPlant?:          number
+  demoWaste?:          number
+  demoSubcontractor?:  number
+  demoOther?:          number
 }
 
 // ── Calibration ───────────────────────────────────────────────────────────────

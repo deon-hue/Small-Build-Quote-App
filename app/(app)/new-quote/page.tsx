@@ -12,6 +12,7 @@ import ScopeChat from '@/components/ScopeChat'
 import EstimatorBreakdown from '@/components/EstimatorBreakdown'
 import type { TakeoffItem, TakeoffPhase } from '@/lib/takeoff-types'
 import { PHASE_TO_QUOTE_PARENT, ALL_MAKEUPS, calcLayerQty, WALL_OPENING_LABELS } from '@/lib/takeoff-types'
+import { DEFAULT_DEMO_SUBPHASES, calcDemoSellingPrice, DEMO_UNIT_LABELS, type DemoUnit } from '@/lib/demolition-data'
 
 let phaseCounter = 0
 let itemCounter = 0
@@ -295,6 +296,37 @@ export default function NewQuotePage() {
               }
               continue
             }
+          }
+
+          // ── Demolition item: pre-fill costs from takeoff ──
+          if (item.demoSubphaseId && item.demoTaskId) {
+            const demoSub = DEFAULT_DEMO_SUBPHASES.find(s => s.id === item.demoSubphaseId)
+            const demoTask = demoSub?.tasks.find(t => t.id === item.demoTaskId)
+            const markupPct = item.demoMarkupPct ?? demoSub?.markupPct ?? 20
+            const labour    = item.demoLabour        ?? 0
+            const materials = item.demoMaterials     ?? 0
+            const plant     = item.demoPlant         ?? 0
+            const waste     = item.demoWaste         ?? 0
+            const subCost   = item.demoSubcontractor ?? 0
+            const other     = item.demoOther         ?? 0
+            const selling   = calcDemoSellingPrice(labour, materials, plant, waste, subCost, other, markupPct)
+            const unitLabel = DEMO_UNIT_LABELS[item.unit as DemoUnit] ?? item.unit
+            const taskDesc  = item.spec || demoTask?.clientDescription || item.name
+            const refStr    = item.drawingRef ? ` [${item.drawingRef}]` : ''
+            const demoPhaseName = demoSub?.name ?? item.subPhase ?? 'Demolition'
+
+            newPhases.push(makePhase(
+              demoPhaseName,
+              [
+                { desc: `${item.qty} ${unitLabel} — ${taskDesc}${refStr}`, qty: item.qty, unit: item.unit, labour, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes, itemType: 'labour' },
+                { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials' },
+                { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: plant, subcontractors: 0, other: 0, notes: `Plant inc.`, itemType: 'plant' },
+                { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: subCost, other: 0, notes: '', itemType: 'subcontractors' },
+                { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: waste + other, notes: `Waste £${waste.toFixed(0)} | Other £${other.toFixed(0)} | Markup ${markupPct}% → sell £${selling.toFixed(2)}`, itemType: 'other' },
+              ],
+              parentPhase,
+            ))
+            continue
           }
 
           // ── Regular item: one sub-phase using the take-off phase name ──

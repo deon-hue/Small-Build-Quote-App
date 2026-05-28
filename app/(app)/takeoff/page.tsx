@@ -10,6 +10,11 @@ import {
   type DrawnElement, type TakeoffItem, type TakeoffProject, type ScaleCalibration,
   type FloorLayer, type FloorMakeup, type WallOpeningType, type WallOpening,
 } from '@/lib/takeoff-types'
+import {
+  DEFAULT_DEMO_SUBPHASES, getAllDemoSubphases, loadCustomDemoSubphases,
+  calcDemoSellingPrice, DEMO_UNIT_LABELS, DEMO_UNITS,
+  type DemoSubphase, type DemoTask, type DemoUnit,
+} from '@/lib/demolition-data'
 
 // ── ID helpers ────────────────────────────────────────────────────────────────
 function uid() { return Math.random().toString(36).slice(2, 10) }
@@ -372,6 +377,10 @@ export default function TakeoffPage() {
   // Custom wall types (loaded from localStorage on mount)
   const [customWallTypes, setCustomWallTypes] = useState<FloorMakeup[]>([])
   useEffect(() => { setCustomWallTypes(loadCustomWallTypes()) }, [])
+
+  // Custom demolition subphases (loaded from localStorage on mount)
+  const [customDemoSubphases, setCustomDemoSubphases] = useState<DemoSubphase[]>([])
+  useEffect(() => { setCustomDemoSubphases(loadCustomDemoSubphases()) }, [])
 
   // Refs
   const svgRef = useRef<SVGSVGElement>(null)
@@ -1467,6 +1476,225 @@ export default function TakeoffPage() {
     )
   }
 
+  // ── Demolition properties panel ──────────────────────────────────────────────
+  function renderDemolitionProperties(item: TakeoffItem) {
+    const accentColor   = '#e74c3c'
+    const bgDark        = darkMode ? '#1a0d0d' : '#fff5f5'
+    const bdColor       = darkMode ? '#4a1a1a' : '#fecaca'
+    const labelStyle2: React.CSSProperties = { fontSize: 10, letterSpacing: 1, color: 'var(--to-muted)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }
+    const inputStyle2: React.CSSProperties = { width: '100%', background: 'var(--to-input)', border: '1px solid var(--to-input-bd)', borderRadius: 4, padding: '5px 8px', fontSize: 12, color: 'var(--to-text)', boxSizing: 'border-box' }
+    const btnStyle2: React.CSSProperties = { padding: '5px 10px', borderRadius: 4, border: `1px solid ${accentColor}`, background: accentColor, color: '#fff', fontSize: 11, cursor: 'pointer', fontWeight: 600 }
+
+    const allSubphases = getAllDemoSubphases(customDemoSubphases)
+    const subphase: DemoSubphase = allSubphases.find(s => s.id === item.demoSubphaseId) ?? allSubphases[0]
+    const task: DemoTask         = subphase.tasks.find(t => t.id === item.demoTaskId)   ?? subphase.tasks[0]
+
+    const markupPct = item.demoMarkupPct ?? subphase.markupPct
+    const labour    = item.demoLabour        ?? +(task.labourCost        * item.qty).toFixed(2)
+    const materials = item.demoMaterials     ?? +(task.materialCost      * item.qty).toFixed(2)
+    const plant     = item.demoPlant         ?? +(task.plantCost         * item.qty).toFixed(2)
+    const waste     = item.demoWaste         ?? +(task.wasteCost         * item.qty).toFixed(2)
+    const sub       = item.demoSubcontractor ?? +(task.subcontractorCost * item.qty).toFixed(2)
+    const other     = item.demoOther         ?? +(task.otherCost         * item.qty).toFixed(2)
+    const base      = labour + materials + plant + waste + sub + other
+    const selling   = calcDemoSellingPrice(labour, materials, plant, waste, sub, other, markupPct)
+
+    const allWarnings = [...(subphase.warnings ?? []), ...(task.warnings ?? [])]
+    const demoUnit  = (item.unit as DemoUnit) || task.unit
+
+    function applyTaskDefaults(newSubphase: DemoSubphase, newTask: DemoTask) {
+      const q = item.qty > 0 ? item.qty : newTask.defaultQty
+      saveItemEdit({
+        ...item,
+        name:               newTask.name,
+        spec:               newTask.clientDescription,
+        demoSubphaseId:     newSubphase.id,
+        demoTaskId:         newTask.id,
+        demoMarkupPct:      newSubphase.markupPct,
+        subPhase:           newSubphase.name,
+        unit:               newTask.unit,
+        qty:                q,
+        demoLabour:         +(newTask.labourCost        * q).toFixed(2),
+        demoMaterials:      +(newTask.materialCost      * q).toFixed(2),
+        demoPlant:          +(newTask.plantCost         * q).toFixed(2),
+        demoWaste:          +(newTask.wasteCost         * q).toFixed(2),
+        demoSubcontractor:  +(newTask.subcontractorCost * q).toFixed(2),
+        demoOther:          +(newTask.otherCost         * q).toFixed(2),
+      })
+    }
+
+    return (
+      <div style={{ padding: 14, fontSize: 13, overflowY: 'auto', height: '100%' }}>
+
+        {/* Header */}
+        <div style={{ background: bgDark, border: `1px solid ${bdColor}`, borderRadius: 8, padding: '10px 12px', marginBottom: 12 }}>
+          <div style={{ fontSize: 10, letterSpacing: 2, color: accentColor, fontWeight: 700, marginBottom: 6 }}>🔨 DEMOLITION / STRIP OUT</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, textAlign: 'center' }}>
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--to-text)', fontFamily: 'monospace' }}>{item.qty} {DEMO_UNIT_LABELS[demoUnit]}</div>
+              <div style={{ fontSize: 10, color: 'var(--to-muted)' }}>quantity</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: accentColor, fontFamily: 'monospace' }}>£{selling.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <div style={{ fontSize: 10, color: 'var(--to-muted)' }}>selling price</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Subphase */}
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle2}>Demolition Subphase</label>
+          <select style={{ ...inputStyle2, color: accentColor }}
+            value={subphase.id}
+            onChange={e => {
+              const newSub = allSubphases.find(s => s.id === e.target.value) ?? allSubphases[0]
+              applyTaskDefaults(newSub, newSub.tasks[0])
+            }}>
+            {allSubphases.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </div>
+
+        {/* Task */}
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle2}>Demolition Task</label>
+          <select style={{ ...inputStyle2, color: accentColor }}
+            value={task.id}
+            onChange={e => {
+              const newTask = subphase.tasks.find(t => t.id === e.target.value) ?? subphase.tasks[0]
+              applyTaskDefaults(subphase, newTask)
+            }}>
+            {subphase.tasks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </div>
+
+        {/* Qty + Unit */}
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8, marginBottom: 10 }}>
+          <div>
+            <label style={labelStyle2}>Quantity</label>
+            <input type="number" min={0} step={0.5} style={inputStyle2}
+              value={item.qty}
+              onChange={e => {
+                const q = Math.max(0, +e.target.value || 0)
+                saveItemEdit({
+                  ...item, qty: q,
+                  demoLabour:        +(task.labourCost        * q).toFixed(2),
+                  demoMaterials:     +(task.materialCost      * q).toFixed(2),
+                  demoPlant:         +(task.plantCost         * q).toFixed(2),
+                  demoWaste:         +(task.wasteCost         * q).toFixed(2),
+                  demoSubcontractor: +(task.subcontractorCost * q).toFixed(2),
+                  demoOther:         +(task.otherCost         * q).toFixed(2),
+                })
+              }}
+            />
+          </div>
+          <div>
+            <label style={labelStyle2}>Unit</label>
+            <select style={inputStyle2} value={demoUnit}
+              onChange={e => saveItemEdit({ ...item, unit: e.target.value })}>
+              {DEMO_UNITS.map(u => <option key={u} value={u}>{DEMO_UNIT_LABELS[u]}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Cost breakdown */}
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle2}>Cost Breakdown (total, ex-VAT)</label>
+          {[
+            { label: '🔨 Labour',       key: 'demoLabour',        val: labour    },
+            { label: '📦 Materials',     key: 'demoMaterials',     val: materials },
+            { label: '🚜 Plant',         key: 'demoPlant',         val: plant     },
+            { label: '🗑 Waste / Skips', key: 'demoWaste',         val: waste     },
+            { label: '👷 Subcontractor', key: 'demoSubcontractor', val: sub       },
+            { label: '📋 Other',         key: 'demoOther',         val: other     },
+          ].map(({ label, key, val }) => (
+            <div key={key} style={{ display: 'grid', gridTemplateColumns: '130px 1fr', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+              <span style={{ fontSize: 11, color: 'var(--to-sub)' }}>{label}</span>
+              <div style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--to-muted)' }}>£</span>
+                <input type="number" min={0} step={1} style={{ ...inputStyle2, paddingLeft: 18 }}
+                  value={val}
+                  onChange={e => saveItemEdit({ ...item, [key]: Math.max(0, +e.target.value || 0) })}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Markup & selling price */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+          <div>
+            <label style={labelStyle2}>Markup %</label>
+            <input type="number" min={0} max={200} step={1} style={inputStyle2}
+              value={markupPct}
+              onChange={e => saveItemEdit({ ...item, demoMarkupPct: Math.max(0, +e.target.value || 0) })}
+            />
+          </div>
+          <div>
+            <label style={labelStyle2}>Selling Price</label>
+            <div style={{ ...inputStyle2, background: bgDark, border: `1px solid ${bdColor}`, color: accentColor, fontWeight: 700, fontFamily: 'monospace' }}>
+              £{selling.toLocaleString('en-GB', { minimumFractionDigits: 2 })}
+            </div>
+          </div>
+        </div>
+
+        {/* Base cost breakdown summary */}
+        <div style={{ fontSize: 10, color: 'var(--to-muted)', marginBottom: 10 }}>
+          Base cost: £{base.toFixed(2)} + {markupPct}% = £{selling.toFixed(2)}
+        </div>
+
+        {/* Warnings */}
+        {allWarnings.length > 0 && (
+          <div style={{ fontSize: 10, lineHeight: 1.6, padding: '8px 10px', borderRadius: 6, marginBottom: 10, background: darkMode ? '#1a1200' : '#fffbeb', border: `1px solid ${darkMode ? '#4a3000' : '#fde68a'}`, color: darkMode ? '#c8a060' : '#92400e' }}>
+            {allWarnings.map((w, i) => <div key={i}>⚠️ {w}</div>)}
+          </div>
+        )}
+
+        {/* Client Description */}
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle2}>Client Description (quote text)</label>
+          <textarea style={{ ...inputStyle2, height: 72, resize: 'none', fontSize: 11, lineHeight: 1.5 }}
+            value={item.spec ?? ''}
+            onChange={e => saveItemEdit({ ...item, spec: e.target.value })}
+          />
+        </div>
+
+        {/* Drawing Ref / Sub-Phase */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+          <div>
+            <label style={labelStyle2}>Drawing Ref</label>
+            <input style={inputStyle2} value={item.drawingRef ?? ''} onChange={e => saveItemEdit({ ...item, drawingRef: e.target.value })} />
+          </div>
+          <div>
+            <label style={labelStyle2}>Bldg Regs Notes</label>
+            <input style={inputStyle2} value={item.buildingRegsNotes ?? ''} onChange={e => saveItemEdit({ ...item, buildingRegsNotes: e.target.value })} />
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelStyle2}>Notes</label>
+          <textarea style={{ ...inputStyle2, height: 48, resize: 'none' }}
+            value={item.notes ?? ''}
+            onChange={e => saveItemEdit({ ...item, notes: e.target.value })}
+          />
+        </div>
+
+        {/* Delete */}
+        <button style={{ ...btnStyle2, background: '#c0392b', borderColor: '#c0392b', marginTop: 4, width: '100%' }}
+          onClick={() => {
+            if (item.elementId) {
+              setProject(p => ({ ...p, elements: p.elements.filter(el2 => el2.id !== item.elementId), items: p.items.filter(it => it.id !== item.id) }))
+              setSelectedId(null)
+            } else {
+              setProject(p => ({ ...p, items: p.items.filter(it => it.id !== item.id) }))
+            }
+            setEditingItem(null); setEditingElement(null); setPanelMode('schedule')
+          }}>
+          🗑 Delete Demolition Item
+        </button>
+      </div>
+    )
+  }
+
   // ── Build-up properties panel (floors, walls, foundations, plastering) ───────
   function renderBuildupProperties(item: TakeoffItem) {
     const makeups = PHASE_MAKEUPS[item.phase] ?? FLOOR_MAKEUPS
@@ -1751,6 +1979,36 @@ export default function TakeoffPage() {
     const _linkedEl = editingItem.elementId
       ? project.elements.find(e => e.id === editingItem.elementId)
       : null
+
+    // ── Demolition: dedicated demolition panel ──
+    if (editingItem.phase === 'Site Setup & Demolition') {
+      const allSubphases = getAllDemoSubphases(customDemoSubphases)
+      let _demoItem = { ...editingItem }
+      // Auto-initialise with first subphase/task defaults if not set
+      if (!_demoItem.demoSubphaseId) {
+        const defSub  = allSubphases[0]
+        const defTask = defSub.tasks[0]
+        _demoItem = {
+          ..._demoItem,
+          name:               defTask.name,
+          spec:               defTask.clientDescription,
+          demoSubphaseId:     defSub.id,
+          demoTaskId:         defTask.id,
+          demoMarkupPct:      defSub.markupPct,
+          subPhase:           defSub.name,
+          unit:               defTask.unit,
+          qty:                _demoItem.qty > 0 ? _demoItem.qty : defTask.defaultQty,
+          demoLabour:         +(defTask.labourCost        * (_demoItem.qty || defTask.defaultQty)).toFixed(2),
+          demoMaterials:      +(defTask.materialCost      * (_demoItem.qty || defTask.defaultQty)).toFixed(2),
+          demoPlant:          +(defTask.plantCost         * (_demoItem.qty || defTask.defaultQty)).toFixed(2),
+          demoWaste:          +(defTask.wasteCost         * (_demoItem.qty || defTask.defaultQty)).toFixed(2),
+          demoSubcontractor:  +(defTask.subcontractorCost * (_demoItem.qty || defTask.defaultQty)).toFixed(2),
+          demoOther:          +(defTask.otherCost         * (_demoItem.qty || defTask.defaultQty)).toFixed(2),
+        }
+        saveItemEdit(_demoItem)
+      }
+      return renderDemolitionProperties(_demoItem)
+    }
 
     // ── External Walls: dedicated wall panel for ALL element types (line, rect, polygon) ──
     if (editingItem.phase === 'External Walls') {

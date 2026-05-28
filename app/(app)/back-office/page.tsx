@@ -7,6 +7,11 @@ import {
   WALL_MAKEUPS, loadCustomWallTypes, saveCustomWallTypes,
   type FloorMakeup, type FloorLayer,
 } from '@/lib/takeoff-types'
+import {
+  DEFAULT_DEMO_SUBPHASES, loadCustomDemoSubphases, saveCustomDemoSubphases,
+  DEMO_UNITS, DEMO_UNIT_LABELS, getAllDemoSubphases,
+  type DemoSubphase, type DemoTask, type DemoUnit,
+} from '@/lib/demolition-data'
 import type { TemplatePhaseData, QuoteItem } from '@/lib/types'
 import type { EstimatorItemTemplate, MeasurementType } from '@/lib/estimator'
 import { MEASUREMENT_LABELS } from '@/lib/estimator'
@@ -248,6 +253,49 @@ export default function BackOfficePage() {
   const [expandedWallType, setExpandedWallType] = useState<string | null>(null)
   const [editingWallType, setEditingWallType] = useState<FloorMakeup | null>(null)
   useEffect(() => { setCustomWallTypes(loadCustomWallTypes()) }, [])
+
+  // Demolition admin (localStorage)
+  const [demoSubphases, setDemoSubphases] = useState<DemoSubphase[]>(() => {
+    try { const raw = loadCustomDemoSubphases(); return raw.length ? raw : DEFAULT_DEMO_SUBPHASES.map(s => ({ ...s })) } catch { return DEFAULT_DEMO_SUBPHASES.map(s => ({ ...s })) }
+  })
+  const [expandedDemoSub, setExpandedDemoSub] = useState<string | null>(null)
+  const [editingDemoTask, setEditingDemoTask] = useState<{ subphaseId: string; task: DemoTask } | null>(null)
+
+  function saveDemoSubphases(subs: DemoSubphase[]) {
+    setDemoSubphases(subs)
+    saveCustomDemoSubphases(subs)
+  }
+  function updateDemoSubMarkup(id: string, pct: number) {
+    saveDemoSubphases(demoSubphases.map(s => s.id === id ? { ...s, markupPct: pct } : s))
+  }
+  function toggleDemoTask(subId: string, taskId: string, field: 'showInTakeoff' | 'showInAiScope') {
+    saveDemoSubphases(demoSubphases.map(s => s.id !== subId ? s : {
+      ...s, tasks: s.tasks.map(t => t.id !== taskId ? t : { ...t, [field]: !t[field] }),
+    }))
+  }
+  function saveDemoTaskEdit() {
+    if (!editingDemoTask) return
+    saveDemoSubphases(demoSubphases.map(s => s.id !== editingDemoTask.subphaseId ? s : {
+      ...s, tasks: s.tasks.map(t => t.id === editingDemoTask.task.id ? editingDemoTask.task : t),
+    }))
+    setEditingDemoTask(null)
+  }
+  function addCustomDemoTask(subId: string) {
+    const newTask: DemoTask = {
+      id: 'custom_' + Math.random().toString(36).slice(2, 8),
+      name: 'New Custom Task',
+      clientDescription: '',
+      unit: 'item', defaultQty: 1,
+      labourCost: 0, materialCost: 0, plantCost: 0, wasteCost: 0, subcontractorCost: 0, otherCost: 0,
+      showInTakeoff: true, showInAiScope: false,
+    }
+    saveDemoSubphases(demoSubphases.map(s => s.id !== subId ? s : { ...s, tasks: [...s.tasks, newTask] }))
+    setEditingDemoTask({ subphaseId: subId, task: newTask })
+  }
+  function deleteDemoTask(subId: string, taskId: string) {
+    if (!confirm('Delete this task?')) return
+    saveDemoSubphases(demoSubphases.map(s => s.id !== subId ? s : { ...s, tasks: s.tasks.filter(t => t.id !== taskId) }))
+  }
 
   function saveWallTypes(types: FloorMakeup[]) {
     setCustomWallTypes(types)
@@ -1132,6 +1180,195 @@ export default function BackOfficePage() {
             <button onClick={saveEditingWallType}
               style={{ padding: '8px 22px', background: '#16a085', border: 'none', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
               Save Wall Type
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    {/* ── Demolition Admin ─────────────────────────────────────────────────── */}
+    <div className="card" style={{ marginTop: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 16 }}>🔨 Demolition / Strip Out</div>
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+            Default tasks, unit rates, markup and visibility for the demolition takeoff tool.
+          </div>
+        </div>
+        <button
+          style={{ padding: '7px 16px', background: '#e74c3c', border: 'none', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+          onClick={() => { if (confirm('Reset all demolition tasks to factory defaults?')) saveDemoSubphases(DEFAULT_DEMO_SUBPHASES.map(s => ({ ...s }))) }}>
+          ↺ Reset to Defaults
+        </button>
+      </div>
+
+      {demoSubphases.map(sub => (
+        <div key={sub.id} style={{ border: '1px solid #e2e8f0', borderRadius: 8, marginBottom: 10, overflow: 'hidden' }}>
+          {/* Subphase header */}
+          <div
+            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#f8fafc', cursor: 'pointer', userSelect: 'none' }}
+            onClick={() => setExpandedDemoSub(expandedDemoSub === sub.id ? null : sub.id)}>
+            <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{expandedDemoSub === sub.id ? '▾' : '▸'} {sub.name}</span>
+            <span style={{ fontSize: 11, color: '#64748b' }}>{sub.tasks.length} tasks</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={e => e.stopPropagation()}>
+              <span style={{ fontSize: 11, color: '#64748b' }}>Markup</span>
+              <input type="number" min={0} max={200} step={1}
+                style={{ width: 58, padding: '3px 6px', border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 12, fontWeight: 700, color: '#e74c3c' }}
+                value={sub.markupPct}
+                onChange={e => updateDemoSubMarkup(sub.id, Math.max(0, +e.target.value || 0))}
+              />
+              <span style={{ fontSize: 11, color: '#64748b' }}>%</span>
+            </div>
+          </div>
+
+          {/* Subphase tasks */}
+          {expandedDemoSub === sub.id && (
+            <div style={{ padding: '0 14px 12px' }}>
+              {sub.warnings && sub.warnings.length > 0 && (
+                <div style={{ fontSize: 11, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '6px 10px', marginTop: 10, marginBottom: 8, lineHeight: 1.5 }}>
+                  {sub.warnings.map((w, i) => <div key={i}>⚠️ {w}</div>)}
+                </div>
+              )}
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginTop: 8 }}>
+                <thead>
+                  <tr style={{ background: '#f1f5f9' }}>
+                    <th style={{ textAlign: 'left', padding: '6px 8px', fontWeight: 600, color: '#475569' }}>Task</th>
+                    <th style={{ textAlign: 'center', padding: '6px 6px', fontWeight: 600, color: '#475569', width: 56 }}>Unit</th>
+                    <th style={{ textAlign: 'right', padding: '6px 6px', fontWeight: 600, color: '#475569', width: 68 }}>Labour/u</th>
+                    <th style={{ textAlign: 'right', padding: '6px 6px', fontWeight: 600, color: '#475569', width: 68 }}>Plant/u</th>
+                    <th style={{ textAlign: 'right', padding: '6px 6px', fontWeight: 600, color: '#475569', width: 68 }}>Waste/u</th>
+                    <th style={{ textAlign: 'center', padding: '6px 4px', fontWeight: 600, color: '#475569', width: 44 }}>Takeoff</th>
+                    <th style={{ textAlign: 'center', padding: '6px 4px', fontWeight: 600, color: '#475569', width: 44 }}>AI</th>
+                    <th style={{ width: 60 }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sub.tasks.map(task => (
+                    <tr key={task.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '7px 8px', color: '#1e293b' }}>{task.name}</td>
+                      <td style={{ textAlign: 'center', padding: '7px 6px', color: '#64748b' }}>{DEMO_UNIT_LABELS[task.unit]}</td>
+                      <td style={{ textAlign: 'right', padding: '7px 6px', fontFamily: 'monospace', color: '#334155' }}>£{task.labourCost}</td>
+                      <td style={{ textAlign: 'right', padding: '7px 6px', fontFamily: 'monospace', color: '#334155' }}>£{task.plantCost}</td>
+                      <td style={{ textAlign: 'right', padding: '7px 6px', fontFamily: 'monospace', color: '#334155' }}>£{task.wasteCost}</td>
+                      <td style={{ textAlign: 'center', padding: '7px 4px' }}>
+                        <input type="checkbox" checked={task.showInTakeoff} onChange={() => toggleDemoTask(sub.id, task.id, 'showInTakeoff')} />
+                      </td>
+                      <td style={{ textAlign: 'center', padding: '7px 4px' }}>
+                        <input type="checkbox" checked={task.showInAiScope} onChange={() => toggleDemoTask(sub.id, task.id, 'showInAiScope')} />
+                      </td>
+                      <td style={{ padding: '4px 6px', textAlign: 'right' }}>
+                        <button
+                          onClick={() => setEditingDemoTask({ subphaseId: sub.id, task: { ...task } })}
+                          style={{ padding: '3px 8px', fontSize: 11, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 4, color: '#1d4ed8', cursor: 'pointer', marginRight: 4 }}>✏️</button>
+                        <button
+                          onClick={() => deleteDemoTask(sub.id, task.id)}
+                          style={{ padding: '3px 8px', fontSize: 11, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, color: '#dc2626', cursor: 'pointer' }}>×</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <button
+                onClick={() => addCustomDemoTask(sub.id)}
+                style={{ marginTop: 8, padding: '5px 14px', fontSize: 12, background: '#fff', border: '1px dashed #cbd5e1', borderRadius: 6, color: '#64748b', cursor: 'pointer' }}>
+                + Add Task to {sub.name}
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+
+    {/* ── Demolition Task Editor Modal ──────────────────────────────────────── */}
+    {editingDemoTask && (
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 20px', overflowY: 'auto' }}>
+        <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 700, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 22px', borderBottom: '1px solid #e2e8f0' }}>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>✏️ Edit Demolition Task</div>
+            <button onClick={() => setEditingDemoTask(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8' }}>×</button>
+          </div>
+          <div style={{ padding: '18px 22px', display: 'grid', gap: 12 }}>
+            {/* Name */}
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>Task Name</label>
+              <input style={{ width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13 }}
+                value={editingDemoTask.task.name}
+                onChange={e => setEditingDemoTask({ ...editingDemoTask, task: { ...editingDemoTask.task, name: e.target.value } })}
+              />
+            </div>
+            {/* Client Description */}
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>Client Description (quote text)</label>
+              <textarea style={{ width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, resize: 'vertical', minHeight: 60 }}
+                value={editingDemoTask.task.clientDescription}
+                onChange={e => setEditingDemoTask({ ...editingDemoTask, task: { ...editingDemoTask.task, clientDescription: e.target.value } })}
+              />
+            </div>
+            {/* Unit + Default Qty */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>Default Unit</label>
+                <select style={{ width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13 }}
+                  value={editingDemoTask.task.unit}
+                  onChange={e => setEditingDemoTask({ ...editingDemoTask, task: { ...editingDemoTask.task, unit: e.target.value as DemoUnit } })}>
+                  {DEMO_UNITS.map(u => <option key={u} value={u}>{DEMO_UNIT_LABELS[u]} ({u})</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>Default Qty</label>
+                <input type="number" min={0} step={0.5} style={{ width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13 }}
+                  value={editingDemoTask.task.defaultQty}
+                  onChange={e => setEditingDemoTask({ ...editingDemoTask, task: { ...editingDemoTask.task, defaultQty: +e.target.value || 1 } })}
+                />
+              </div>
+            </div>
+            {/* Default costs per unit */}
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 8 }}>Default Costs (per unit, ex-VAT)</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                {([
+                  { label: '🔨 Labour',         key: 'labourCost'        },
+                  { label: '📦 Materials',       key: 'materialCost'      },
+                  { label: '🚜 Plant',           key: 'plantCost'         },
+                  { label: '🗑 Waste / Skips',   key: 'wasteCost'         },
+                  { label: '👷 Subcontractor',   key: 'subcontractorCost' },
+                  { label: '📋 Other',           key: 'otherCost'         },
+                ] as { label: string; key: keyof DemoTask }[]).map(({ label, key }) => (
+                  <div key={key}>
+                    <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 3 }}>{label}</label>
+                    <div style={{ position: 'relative' }}>
+                      <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: '#94a3b8' }}>£</span>
+                      <input type="number" min={0} step={1}
+                        style={{ width: '100%', padding: '5px 8px 5px 18px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 12, boxSizing: 'border-box' }}
+                        value={editingDemoTask.task[key] as number}
+                        onChange={e => setEditingDemoTask({ ...editingDemoTask, task: { ...editingDemoTask.task, [key]: Math.max(0, +e.target.value || 0) } })}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Visibility toggles */}
+            <div style={{ display: 'flex', gap: 24 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+                <input type="checkbox" checked={editingDemoTask.task.showInTakeoff}
+                  onChange={() => setEditingDemoTask({ ...editingDemoTask, task: { ...editingDemoTask.task, showInTakeoff: !editingDemoTask.task.showInTakeoff } })} />
+                Show in Takeoff Tool
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+                <input type="checkbox" checked={editingDemoTask.task.showInAiScope}
+                  onChange={() => setEditingDemoTask({ ...editingDemoTask, task: { ...editingDemoTask.task, showInAiScope: !editingDemoTask.task.showInAiScope } })} />
+                Show in AI Scope Writer
+              </label>
+            </div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '12px 22px', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
+            <button onClick={() => setEditingDemoTask(null)}
+              style={{ padding: '8px 18px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, background: '#fff', color: '#374151', cursor: 'pointer' }}>
+              Cancel
+            </button>
+            <button onClick={saveDemoTaskEdit}
+              style={{ padding: '8px 22px', background: '#e74c3c', border: 'none', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+              Save Task
             </button>
           </div>
         </div>
