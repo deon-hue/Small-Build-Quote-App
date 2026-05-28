@@ -3,8 +3,10 @@
 import { useState, useRef, useEffect, useCallback, ChangeEvent } from 'react'
 import {
   TAKEOFF_PHASES, PHASE_COLORS, DEFAULT_MPP, SCALE_PRESETS,
+  FLOOR_MAKEUPS,
   type TakeoffPhase, type DrawingTool, type TakeoffPoint,
   type DrawnElement, type TakeoffItem, type TakeoffProject, type ScaleCalibration,
+  type FloorLayer,
 } from '@/lib/takeoff-types'
 
 // ── ID helpers ────────────────────────────────────────────────────────────────
@@ -51,6 +53,55 @@ function fmt2(n: number | undefined) {
 function fmtM(n: number | undefined) {
   if (n == null) return '—'
   return n >= 1000 ? `${(n / 1000).toFixed(1)}km` : `${n.toFixed(2)}m`
+}
+
+// ── Floor helpers ─────────────────────────────────────────────────────────────
+
+function rectPerimeter(pts: TakeoffPoint[], mpp: number): number {
+  const w = Math.abs(pts[1].x - pts[0].x) * mpp
+  const h = Math.abs(pts[1].y - pts[0].y) * mpp
+  return +(2 * (w + h)).toFixed(3)
+}
+
+function polyPerimeter(pts: TakeoffPoint[], mpp: number): number {
+  let total = 0
+  for (let i = 0; i < pts.length; i++) {
+    const j = (i + 1) % pts.length
+    const dx = pts[j].x - pts[i].x
+    const dy = pts[j].y - pts[i].y
+    total += Math.sqrt(dx * dx + dy * dy)
+  }
+  return +(total * mpp).toFixed(3)
+}
+
+/** Calculate a layer's qty from drawn geometry */
+function calcLayerQty(
+  layer: FloorLayer,
+  area: number,
+  perimeter: number,
+  thicknessOverride?: number,
+): { qty: number; unit: string } {
+  const thickness = (thicknessOverride != null ? thicknessOverride : layer.thickness) / 1000
+  switch (layer.qtyType) {
+    case 'area':
+      return { qty: +area.toFixed(3), unit: 'm²' }
+    case 'volume':
+      return { qty: +(area * thickness).toFixed(3), unit: 'm³' }
+    case 'perimeter':
+      return { qty: +perimeter.toFixed(2), unit: 'lm' }
+    case 'ufh_pipe': {
+      const spacingM = (layer.spacing ?? 200) / 1000
+      return { qty: +(area / spacingM * 1.15).toFixed(1), unit: 'lm' }
+    }
+    case 'count':
+      return { qty: 1, unit: 'nr' }
+    default:
+      return { qty: +area.toFixed(3), unit: 'm²' }
+  }
+}
+
+const CAT_COLOR: Record<string, string> = {
+  labour: '#f39c12', materials: '#3498db', plant: '#9b59b6', other: '#95a5a6',
 }
 
 // ── localStorage key ──────────────────────────────────────────────────────────
@@ -186,9 +237,14 @@ export default function TakeoffPage() {
   // Header edit
   const [editingName, setEditingName] = useState(false)
 
+  // Floor tool state
+  const [floorDrawMode, setFloorDrawMode] = useState<'rect' | 'polygon'>('rect')
+  const [activeFloorMakeup, setActiveFloorMakeup] = useState<string>(FLOOR_MAKEUPS[1].id) // default: concrete slab
+
   // Refs
   const svgRef = useRef<SVGSVGElement>(null)
   const queuedFinishRef = useRef<DrawnElement | null>(null)
+  const queuedFloorMakeupRef = useRef<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const importJsonRef = useRef<HTMLInputElement>(null)
 
@@ -220,7 +276,24 @@ export default function TakeoffPage() {
     const el = queuedFinishRef.current
     if (!el) return
     queuedFinishRef.current = null
+    const floorMakeupId = queuedFloorMakeupRef.current
+    queuedFloorMakeupRef.current = null
+
     const item = itemFromElement(el, project.calibration.mpp)
+
+    // Floor-specific enrichment
+    if (floorMakeupId) {
+      item.floorMakeupId = floorMakeupId
+      const makeup = FLOOR_MAKEUPS.find(m => m.id === floorMakeupId)
+      if (makeup) item.spec = makeup.clientDescription
+      // Compute perimeter from geometry
+      if (el.type === 'rect' && el.points.length >= 2) {
+        item.perimeter = rectPerimeter(el.points, project.calibration.mpp)
+      } else if (el.type === 'polygon' && el.points.length >= 3) {
+        item.perimeter = polyPerimeter(el.points, project.calibration.mpp)
+      }
+    }
+
     setProject(p => ({
       ...p,
       elements: [...p.elements, el],
@@ -322,6 +395,23 @@ export default function TakeoffPage() {
     }
     if (tool === 'select') return
     const pt = svgCoords(e)
+
+    // Floor tool
+    if (tool === 'floor') {
+      if (floorDrawMode === 'rect') {
+        if (!isDrawing) {
+          setDrawPoints([pt]); setIsDrawing(true)
+        } else {
+          finishElement('rect', [drawPoints[0], pt], true)
+        }
+      } else {
+        // polygon mode — accumulate points, finish on dblclick
+        setDrawPoints(prev => [...prev, pt])
+        setIsDrawing(true)
+      }
+      return
+    }
+
     if (tool === 'rect') {
       if (!isDrawing) {
         setDrawPoints([pt])
@@ -340,22 +430,28 @@ export default function TakeoffPage() {
 
   function handleSvgDblClick(e: React.MouseEvent<SVGSVGElement>) {
     if (tool === 'select' || tool === 'rect') return
+    if (tool === 'floor' && floorDrawMode === 'rect') return
     e.preventDefault()
     const pts = [...drawPoints]
     if (pts.length < 2) { setDrawPoints([]); setIsDrawing(false); return }
-    finishElement(tool, pts)
+    if (tool === 'floor') {
+      if (pts.length < 3) { setDrawPoints([]); setIsDrawing(false); return }
+      finishElement('polygon', pts, true)
+    } else {
+      finishElement(tool as 'line' | 'polygon', pts)
+    }
   }
 
-  function finishElement(type: 'line' | 'rect' | 'polygon', pts: TakeoffPoint[]) {
-    const color = PHASE_COLORS[activePhase]
-    const el: DrawnElement = {
-      id: uid(),
-      type,
-      points: pts,
-      phase: activePhase,
-      label: `${activePhase} ${Date.now().toString(36).slice(-4)}`,
-      color,
-    }
+  function finishElement(type: 'line' | 'rect' | 'polygon', pts: TakeoffPoint[], isFloor = false) {
+    const phase: TakeoffPhase = isFloor ? 'Floors & Screeds' : activePhase
+    const color = PHASE_COLORS[phase]
+    const shortId = Date.now().toString(36).slice(-4)
+    const label = isFloor
+      ? `Floor area ${shortId}`
+      : `${activePhase} ${shortId}`
+    const el: DrawnElement = { id: uid(), type, points: pts, phase, label, color }
+    // Capture floor makeup before state update
+    if (isFloor) queuedFloorMakeupRef.current = activeFloorMakeup
     setDrawPoints(_ => {
       setIsDrawing(false)
       queuedFinishRef.current = el
@@ -651,13 +747,30 @@ export default function TakeoffPage() {
   // ── Render: in-progress drawing ghost ─────────────────────────────────────
   function renderGhost() {
     if (!isDrawing || drawPoints.length === 0) return null
-    const color = PHASE_COLORS[activePhase]
+    const isFloor = tool === 'floor'
+    const color = isFloor ? PHASE_COLORS['Floors & Screeds'] : PHASE_COLORS[activePhase]
     const allPts = [...drawPoints, mousePos]
+    const effectiveType = isFloor ? floorDrawMode : tool
 
-    if (tool === 'rect') {
+    if (effectiveType === 'rect') {
       if (drawPoints.length < 1) return null
       const { x, y, width: w, height: h } = rectAttrs([drawPoints[0], mousePos])
-      return <rect x={x} y={y} width={w} height={h} fill={color + '22'} stroke={color} strokeWidth={2} strokeDasharray="5 3" />
+      return (
+        <g>
+          <rect x={x} y={y} width={w} height={h} fill={color + '33'} stroke={color} strokeWidth={2} strokeDasharray="5 3" />
+          {isFloor && w > 20 && h > 20 && (() => {
+            const mpp = project.calibration.mpp
+            const areaM2 = Math.abs(w) * mpp * Math.abs(h) * mpp
+            return (
+              <text x={x + w / 2} y={y + h / 2} textAnchor="middle" dominantBaseline="middle"
+                fontSize={Math.max(10, Math.min(18, w / 8))} fill={color + 'cc'}
+                fontFamily="monospace" fontWeight={700} style={{ pointerEvents: 'none' }}>
+                {fmt2(areaM2)} m²
+              </text>
+            )
+          })()}
+        </g>
+      )
     }
 
     const pts = allPts.map(p => `${p.x},${p.y}`).join(' ')
@@ -680,6 +793,244 @@ export default function TakeoffPage() {
     )
   }
 
+  // ── Floor properties panel ────────────────────────────────────────────────
+  function renderFloorProperties(item: TakeoffItem) {
+    const makeup = FLOOR_MAKEUPS.find(m => m.id === item.floorMakeupId)
+    const area = item.area ?? 0
+    const perimeter = item.perimeter ?? 0
+    const toggles = item.floorLayerToggles ?? {}
+    const thicknesses = item.floorLayerThicknesses ?? {}
+
+    return (
+      <div style={{ padding: 14, fontSize: 13, overflowY: 'auto', height: '100%' }}>
+
+        {/* ── Key metrics ── */}
+        <div style={{
+          background: 'linear-gradient(135deg, #1a2a0a, #1a2a1a)',
+          borderRadius: 8, padding: '12px 14px', marginBottom: 12,
+          border: '1px solid #3a5a1a',
+        }}>
+          <div style={{ fontSize: 10, color: '#f39c12', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
+            🏗 Floor Build-up
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#f39c12', fontFamily: 'monospace', lineHeight: 1 }}>
+                {fmt2(area)}
+              </div>
+              <div style={{ fontSize: 10, color: '#6a8a6a', marginTop: 2 }}>m² floor area</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#c8d8a8', fontFamily: 'monospace', lineHeight: 1 }}>
+                {fmt2(perimeter)}
+              </div>
+              <div style={{ fontSize: 10, color: '#6a8a6a', marginTop: 2 }}>m perimeter</div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Label ── */}
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle}>Label</label>
+          <input
+            style={inputStyle}
+            value={editingElement?.label ?? item.name}
+            onChange={e => {
+              if (editingElement) saveElementEdit({ ...editingElement, label: e.target.value })
+              saveItemEdit({ ...item, name: e.target.value })
+            }}
+          />
+        </div>
+
+        {/* ── Floor Makeup selector ── */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={labelStyle}>Floor Construction Type</label>
+          <select
+            style={{ ...inputStyle, color: '#f39c12' }}
+            value={item.floorMakeupId ?? ''}
+            onChange={e => {
+              const newM = FLOOR_MAKEUPS.find(m => m.id === e.target.value)
+              saveItemEdit({
+                ...item,
+                floorMakeupId: e.target.value,
+                spec: newM?.clientDescription ?? item.spec,
+                floorLayerToggles: {},
+                floorLayerThicknesses: {},
+              })
+            }}
+          >
+            {FLOOR_MAKEUPS.map(m => (
+              <option key={m.id} value={m.id}>{m.name}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* ── Layer Schedule ── */}
+        {makeup && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{
+              fontSize: 10, color: '#6a8a6a', letterSpacing: 1, textTransform: 'uppercase',
+              marginBottom: 6, display: 'flex', justifyContent: 'space-between',
+            }}>
+              <span>Layer Schedule</span>
+              <span style={{ color: '#4a6a4a' }}>
+                ~{fmt2(area * makeup.labourHrsPerM2)} hrs labour
+              </span>
+            </div>
+
+            {/* Column headers */}
+            <div style={{
+              display: 'grid', gridTemplateColumns: '16px 1fr 64px 8px',
+              gap: 4, padding: '3px 6px', marginBottom: 2,
+              fontSize: 9, color: '#4a6a4a', textTransform: 'uppercase', letterSpacing: 0.5,
+            }}>
+              <span />
+              <span>Layer</span>
+              <span style={{ textAlign: 'right' }}>Qty</span>
+              <span />
+            </div>
+
+            {makeup.layers.map(layer => {
+              const enabled = toggles[layer.id] ?? layer.defaultEnabled
+              const thk = thicknesses[layer.id] ?? layer.thickness
+              const { qty, unit } = calcLayerQty(layer, area, perimeter, thk || undefined)
+
+              return (
+                <div key={layer.id} style={{
+                  display: 'grid',
+                  gridTemplateColumns: '16px 1fr 64px 8px',
+                  gap: 4, alignItems: 'center',
+                  padding: '5px 6px', marginBottom: 2, borderRadius: 4,
+                  background: enabled ? '#0d1a0d' : '#090f09',
+                  border: `1px solid ${enabled ? '#1e2e1e' : '#111'}`,
+                  opacity: enabled ? 1 : 0.5,
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={enabled}
+                    onChange={ev => saveItemEdit({
+                      ...item,
+                      floorLayerToggles: { ...toggles, [layer.id]: ev.target.checked },
+                    })}
+                    style={{ margin: 0, accentColor: '#4a8a4a', cursor: 'pointer' }}
+                  />
+                  <div>
+                    <div style={{ fontSize: 11, color: enabled ? '#c8d8a8' : '#6a8a6a', lineHeight: 1.2 }}>
+                      {layer.name}
+                    </div>
+                    {layer.thickness > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginTop: 2 }}>
+                        <input
+                          type="number"
+                          value={thk}
+                          min={0}
+                          onChange={ev => saveItemEdit({
+                            ...item,
+                            floorLayerThicknesses: { ...thicknesses, [layer.id]: +ev.target.value },
+                          })}
+                          style={{
+                            width: 38, background: '#162216', border: '1px solid #2a3a2a',
+                            borderRadius: 3, color: '#8aa', fontSize: 10,
+                            padding: '1px 3px', textAlign: 'right', outline: 'none',
+                          }}
+                        />
+                        <span style={{ fontSize: 9, color: '#4a6a4a' }}>mm</span>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{
+                    fontSize: 11, fontFamily: 'monospace', color: enabled ? '#c8d8a8' : '#4a6a4a',
+                    textAlign: 'right', whiteSpace: 'nowrap',
+                  }}>
+                    {enabled ? `${qty} ${unit}` : '—'}
+                  </div>
+                  <div style={{
+                    width: 7, height: 7, borderRadius: '50%',
+                    background: CAT_COLOR[layer.category] ?? '#95a5a6',
+                    flexShrink: 0, alignSelf: 'center',
+                  }} title={layer.category} />
+                </div>
+              )
+            })}
+
+            {/* Category legend */}
+            <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+              {(['labour', 'materials', 'plant', 'other'] as const).map(cat => (
+                <span key={cat} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: '#6a8a6a' }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: CAT_COLOR[cat], display: 'inline-block' }} />
+                  {cat}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Client Description ── */}
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle}>Client Description (quote text)</label>
+          <textarea
+            style={{ ...inputStyle, height: 80, resize: 'none', fontSize: 11, lineHeight: 1.5 }}
+            value={item.spec ?? ''}
+            onChange={e => saveItemEdit({ ...item, spec: e.target.value })}
+          />
+        </div>
+
+        {/* ── Drawing ref ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+          <div>
+            <label style={labelStyle}>Drawing Ref</label>
+            <input style={inputStyle} value={item.drawingRef ?? ''}
+              onChange={e => saveItemEdit({ ...item, drawingRef: e.target.value })} />
+          </div>
+          <div>
+            <label style={labelStyle}>Sub-Phase</label>
+            <input style={inputStyle} value={item.subPhase ?? ''}
+              onChange={e => saveItemEdit({ ...item, subPhase: e.target.value })} />
+          </div>
+        </div>
+
+        {/* ── Building Regs Notes ── */}
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle}>Building Regs Notes</label>
+          <textarea style={{ ...inputStyle, height: 52, resize: 'none' }}
+            value={item.buildingRegsNotes ?? ''}
+            onChange={e => saveItemEdit({ ...item, buildingRegsNotes: e.target.value })}
+          />
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <label style={labelStyle}>Notes</label>
+          <textarea style={{ ...inputStyle, height: 52, resize: 'none' }}
+            value={item.notes ?? ''}
+            onChange={e => saveItemEdit({ ...item, notes: e.target.value })}
+          />
+        </div>
+
+        {/* ── Delete ── */}
+        <button
+          style={{ ...btnStyle, background: '#c0392b', borderColor: '#c0392b', marginTop: 4 }}
+          onClick={() => {
+            if (item.elementId) {
+              setProject(p => ({
+                ...p,
+                elements: p.elements.filter(el => el.id !== item.elementId),
+                items: p.items.filter(it => it.id !== item.id),
+              }))
+              setSelectedId(null)
+            } else {
+              setProject(p => ({ ...p, items: p.items.filter(it => it.id !== item.id) }))
+            }
+            setEditingItem(null)
+            setEditingElement(null)
+            setPanelMode('schedule')
+          }}
+        >
+          🗑 Delete Floor Item
+        </button>
+      </div>
+    )
+  }
+
   // ── Properties panel ───────────────────────────────────────────────────────
   function renderProperties() {
     if (!editingItem) {
@@ -692,6 +1043,9 @@ export default function TakeoffPage() {
         </div>
       )
     }
+
+    // Floor items get their dedicated panel
+    if (editingItem.floorMakeupId) return renderFloorProperties(editingItem)
 
     const item = editingItem
     const el = editingElement
@@ -879,7 +1233,12 @@ export default function TakeoffPage() {
                   <span style={{ color: '#c8d8a8', fontFamily: 'monospace' }}>
                     {item.qty} {item.unit}
                   </span>
-                  {item.spec ? ` · ${item.spec}` : ''}
+                  {item.floorMakeupId
+                    ? <span style={{ color: '#f39c12' }}> · {FLOOR_MAKEUPS.find(m => m.id === item.floorMakeupId)?.name ?? 'Floor'}</span>
+                    : item.spec ? ` · ${item.spec}` : ''}
+                  {item.perimeter != null && (
+                    <span style={{ color: '#6a8a6a' }}>, {fmt2(item.perimeter)}m perim</span>
+                  )}
                   {item.drawingRef ? <span style={{ color: '#4a7a4a' }}> [{item.drawingRef}]</span> : ''}
                 </div>
               </div>
@@ -1096,6 +1455,67 @@ export default function TakeoffPage() {
             </div>
           ))}
 
+          {/* ── Floor tool ── */}
+          <div
+            onClick={() => { setTool('floor'); setDrawPoints([]); setIsDrawing(false) }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7,
+              padding: '7px 8px', marginBottom: 3, borderRadius: 5, cursor: 'pointer',
+              background: tool === 'floor' ? '#3d2b0a' : '#1a2a1a',
+              border: `1px solid ${tool === 'floor' ? '#f39c12' : '#2a3a2a'}`,
+              color: tool === 'floor' ? '#f39c12' : '#c8d8a8',
+              fontSize: 12, fontFamily: 'inherit',
+            }}
+          >
+            <span style={{ fontSize: 14, lineHeight: 1, width: 16, textAlign: 'center', flexShrink: 0 }}>⬛</span>
+            <span>Floor</span>
+          </div>
+
+          {/* Floor sub-controls — visible only when floor tool active */}
+          {tool === 'floor' && (
+            <div style={{ margin: '2px 0 4px 6px', paddingLeft: 6, borderLeft: '2px solid #5a3a00' }}>
+              {/* Draw mode */}
+              <div style={{ fontSize: 9, color: '#8a6a3a', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 3 }}>
+                Draw mode
+              </div>
+              {(['rect', 'polygon'] as const).map(mode => (
+                <div
+                  key={mode}
+                  onClick={() => { setFloorDrawMode(mode); setDrawPoints([]); setIsDrawing(false) }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    padding: '4px 6px', marginBottom: 2, borderRadius: 4, cursor: 'pointer',
+                    background: floorDrawMode === mode ? '#2b2000' : 'transparent',
+                    border: `1px solid ${floorDrawMode === mode ? '#7a5a00' : 'transparent'}`,
+                    color: floorDrawMode === mode ? '#f39c12' : '#9ab',
+                    fontSize: 11,
+                  }}
+                >
+                  <span style={{ width: 12 }}>{mode === 'rect' ? '▭' : '⬠'}</span>
+                  <span>{mode === 'rect' ? 'Rectangle' : 'Polygon'}</span>
+                </div>
+              ))}
+
+              {/* Floor type quick-pick */}
+              <div style={{ fontSize: 9, color: '#8a6a3a', letterSpacing: 1, textTransform: 'uppercase', marginTop: 6, marginBottom: 3 }}>
+                Floor type
+              </div>
+              <select
+                value={activeFloorMakeup}
+                onChange={e => setActiveFloorMakeup(e.target.value)}
+                style={{
+                  width: '100%', background: '#1a1000', border: '1px solid #5a3a00', borderRadius: 4,
+                  color: '#f39c12', padding: '4px 5px', fontSize: 10, outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+              >
+                {FLOOR_MAKEUPS.map(m => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Cancel drawing — only shown while actively drawing */}
           {isDrawing && (
             <div
@@ -1293,11 +1713,12 @@ export default function TakeoffPage() {
             display: 'flex', alignItems: 'center', padding: '0 10px', gap: 16,
             fontSize: 11, color: '#6a8a6a',
           }}>
-            <span>Tool: <strong style={{ color: '#c8d8a8' }}>{
+            <span>Tool: <strong style={{ color: tool === 'floor' ? '#f39c12' : '#c8d8a8' }}>{
               calibDrawing ? '📏 CALIBRATING' :
               tool === 'select' ? 'Select' :
               tool === 'line' ? 'Line / Polyline (dbl-click to finish)' :
               tool === 'rect' ? 'Rectangle (click start, click finish)' :
+              tool === 'floor' ? `⬛ Floor — ${FLOOR_MAKEUPS.find(m => m.id === activeFloorMakeup)?.name} (${floorDrawMode === 'rect' ? 'click two corners' : 'click points, dbl-click to close'})` :
               'Polygon (dbl-click to close)'
             }</strong></span>
             <span>Phase: <strong style={{ color: PHASE_COLORS[activePhase] }}>{activePhase}</strong></span>
