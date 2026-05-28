@@ -333,6 +333,15 @@ export default function TakeoffPage() {
   })
   const TV = darkMode ? DARK_VARS : LIGHT_VARS   // theme vars shorthand
 
+  // Toast notification
+  const [toast, setToast] = useState<string | null>(null)
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  function showToast(msg: string) {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    setToast(msg)
+    toastTimerRef.current = setTimeout(() => setToast(null), 2800)
+  }
+
   // Floor tool state
   const [floorDrawMode, setFloorDrawMode] = useState<'rect' | 'polygon'>('rect')
   const [activeFloorMakeup, setActiveFloorMakeup] = useState<string>(FLOOR_MAKEUPS[1].id) // default: concrete slab
@@ -741,11 +750,15 @@ export default function TakeoffPage() {
     const dy = calibPts[1].y - calibPts[0].y
     const pixLen = Math.sqrt(dx * dx + dy * dy)
     const mpp = realM / pixLen
+    const lbl = calibLabel || `${realM}m ref`
+    const updatedItems = recalcItemsForMpp(project.items, project.elements, mpp)
+    const n = updatedItems.filter(it => !!it.elementId).length
     setProject(p => ({
       ...p,
-      calibration: { mpp, label: calibLabel || `${realM}m ref` },
+      calibration: { mpp, label: lbl },
       items: recalcItemsForMpp(p.items, p.elements, mpp),
     }))
+    showToast(`Calibration applied (${lbl}) — ${n} item${n !== 1 ? 's' : ''} recalculated ✓`)
     setShowCalib(false)
     setCalibDrawing(false)
     setCalibPts([])
@@ -1470,11 +1483,15 @@ export default function TakeoffPage() {
             const preset = SCALE_PRESETS.find(s => s.label === e.target.value)
             if (!preset) return
             if (preset.mpp === 0) { setShowCalib(true); return }
+            // Snapshot current items/elements for the toast count (outside updater)
+            const updatedItems = recalcItemsForMpp(project.items, project.elements, preset.mpp)
+            const n = updatedItems.filter(it => !!it.elementId).length
             setProject(p => ({
               ...p,
               calibration: { mpp: preset.mpp, label: preset.label },
               items: recalcItemsForMpp(p.items, p.elements, preset.mpp),
             }))
+            showToast(`Scale set to ${preset.label} — ${n} item${n !== 1 ? 's' : ''} recalculated ✓`)
           }}
         >
           {SCALE_PRESETS.map(s => <option key={s.label} value={s.label}>{s.label}</option>)}
@@ -2009,6 +2026,22 @@ export default function TakeoffPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── Toast notification ─────────────────────────────────────────────── */}
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: 36, left: '50%', transform: 'translateX(-50%)',
+          background: darkMode ? '#1e3a1e' : '#2d6a2d',
+          color: '#c8f0a8', border: '1px solid #4a8a4a',
+          borderRadius: 8, padding: '10px 20px', fontSize: 13, fontWeight: 600,
+          boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+          zIndex: 2000, whiteSpace: 'nowrap',
+          animation: 'fadeIn 0.15s ease',
+          pointerEvents: 'none',
+        }}>
+          {toast}
         </div>
       )}
     </div>
