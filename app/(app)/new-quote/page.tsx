@@ -11,7 +11,7 @@ import QuotePreviewModal from '@/components/QuotePreviewModal'
 import ScopeChat from '@/components/ScopeChat'
 import EstimatorBreakdown from '@/components/EstimatorBreakdown'
 import type { TakeoffItem, TakeoffPhase } from '@/lib/takeoff-types'
-import { PHASE_TO_QUOTE_PARENT } from '@/lib/takeoff-types'
+import { PHASE_TO_QUOTE_PARENT, FLOOR_MAKEUPS, calcLayerQty } from '@/lib/takeoff-types'
 
 let phaseCounter = 0
 let itemCounter = 0
@@ -237,29 +237,69 @@ export default function NewQuotePage() {
 
         if (phases.length && !confirm('Import take-off? This will replace your current phases.')) return
 
-        // One quote phase per take-off item — quantities as description, £0 for estimator to fill in
-        const newPhases: QuotePhase[] = (data.items as TakeoffItem[]).map(item => {
-          const parentPhase = PHASE_TO_QUOTE_PARENT[item.phase as TakeoffPhase] || item.phase
+        const newPhases: QuotePhase[] = []
 
-          // Build a readable quantity string: "24.50 m² · Cavity wall 305mm [SK-01]"
-          const qtyStr = `${item.qty} ${item.unit}`
-          const specStr = item.spec ? ` · ${item.spec}` : ''
-          const refStr  = item.drawingRef ? ` [${item.drawingRef}]` : ''
-          const desc = `${qtyStr}${specStr}${refStr}`
+        for (const item of data.items as TakeoffItem[]) {
+          // parentPhase maps to the back-office main phase structure
+          const parentPhase = PHASE_TO_QUOTE_PARENT[item.phase as TakeoffPhase] || item.phase
+          // sub-phase name = the take-off phase name (matches back-office template)
+          const subPhaseName = item.phase
 
           const notes = [
+            item.name,  // drawing label as a note so it's not lost
             item.buildingRegsNotes ? `Bldg Regs: ${item.buildingRegsNotes}` : '',
             item.notes ?? '',
           ].filter(Boolean).join(' | ')
 
-          return makePhase(item.name, [
-            { desc, qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes, itemType: 'labour' },
-            { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials' },
-            { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'plant' },
-            { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'subcontractors' },
-            { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'other' },
-          ], parentPhase)
-        })
+          if (item.floorMakeupId) {
+            // ── Floor build-up item: expand each layer into its own sub-phase ──
+            const makeup = FLOOR_MAKEUPS.find(m => m.id === item.floorMakeupId)
+            if (makeup) {
+              const area = item.area ?? item.qty ?? 0
+              const perimeter = item.perimeter ?? 0
+              const toggles = item.floorLayerToggles ?? {}
+              const thicknesses = item.floorLayerThicknesses ?? {}
+
+              for (const layer of makeup.layers) {
+                const enabled = toggles[layer.id] ?? layer.defaultEnabled
+                if (!enabled) continue
+                const thkOverride = thicknesses[layer.id]
+                const { qty, unit } = calcLayerQty(layer, area, perimeter, thkOverride)
+                const desc = `${layer.description} — ${qty} ${unit}`
+
+                newPhases.push(makePhase(
+                  layer.name,
+                  [
+                    { desc: layer.category === 'labour' ? desc : '', qty, unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: layer.category === 'labour' ? notes : '', itemType: 'labour' },
+                    { desc: layer.category === 'materials' ? desc : '', qty, unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials' },
+                    { desc: '', qty, unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'plant' },
+                    { desc: '', qty, unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'subcontractors' },
+                    { desc: layer.category === 'other' ? desc : '', qty, unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'other' },
+                  ],
+                  parentPhase,
+                ))
+              }
+              continue
+            }
+          }
+
+          // ── Regular item: one sub-phase using the take-off phase name ──
+          const refStr = item.drawingRef ? ` [${item.drawingRef}]` : ''
+          const specStr = item.spec ? ` · ${item.spec}` : ''
+          const desc = `${item.qty} ${item.unit}${specStr}${refStr}`
+
+          newPhases.push(makePhase(
+            subPhaseName,
+            [
+              { desc, qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes, itemType: 'labour' },
+              { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials' },
+              { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'plant' },
+              { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'subcontractors' },
+              { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'other' },
+            ],
+            parentPhase,
+          ))
+        }
 
         setPhases(newPhases)
 
@@ -267,13 +307,16 @@ export default function NewQuotePage() {
         if (!custAddr && data.address) setCustAddr(data.address)
         if (data.jobType) setJobType(data.jobType)
 
-        alert(`✓ Imported ${newPhases.length} take-off item(s) — add your rates to complete the estimate.`)
+        const floorCount = (data.items as TakeoffItem[]).filter((i: TakeoffItem) => i.floorMakeupId).length
+        const msg = floorCount > 0
+          ? `✓ Imported ${newPhases.length} sub-phases (including ${floorCount} floor build-up${floorCount !== 1 ? 's' : ''} expanded into layers) — add your rates to complete the estimate.`
+          : `✓ Imported ${newPhases.length} sub-phases — add your rates to complete the estimate.`
+        alert(msg)
       } catch {
         alert('Could not parse take-off file. Make sure it was exported from the Take-off tool.')
       }
     }
     reader.readAsText(file)
-    // Reset so the same file can be re-imported
     e.target.value = ''
   }
 
