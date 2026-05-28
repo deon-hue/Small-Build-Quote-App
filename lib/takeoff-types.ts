@@ -161,8 +161,9 @@ export interface TakeoffItem {
   floorLayerThicknesses?: Record<string, number>     // layerId → thickness override (mm)
 
   // Wall-specific
-  wallHeight?:  number           // metres — storey height for LINE-drawn walls
-  openings?:    WallOpening[]    // deducted openings (windows, doors, bifolds, etc.)
+  wallHeight?:   number           // metres — storey height for LINE-drawn walls
+  openings?:     WallOpening[]    // deducted openings (windows, doors, bifolds, etc.)
+  wallBandPx?:   number           // half-width of wall band on canvas in pixels (default 9)
 }
 
 // ── Calibration ───────────────────────────────────────────────────────────────

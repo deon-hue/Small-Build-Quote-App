@@ -99,6 +99,11 @@ function offsetPoly(pts: TakeoffPoint[], d: number): TakeoffPoint[] {
 /** Calculate a layer's qty from drawn geometry */
 // calcLayerQty is imported from @/lib/takeoff-types
 
+// ── High-visibility wall colours (readable on B&W / greyscale plans) ─────────
+const WALL_LINE_COLOR = '#FF1111'   // vivid red face lines
+const WALL_FILL_COLOR = '#FF8800'   // amber fill between the two leaves
+const WALL_CAVI_COLOR = '#FF1111'   // red cavity centre dashes
+
 const CAT_COLOR: Record<string, string> = {
   labour: '#f39c12', materials: '#3498db', plant: '#9b59b6', other: '#95a5a6',
 }
@@ -391,6 +396,15 @@ export default function TakeoffPage() {
   const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 })
   const hasPannedRef = useRef(false)
 
+  // Drag-to-move state
+  const dragRef = useRef<{
+    id: string
+    startSvgX: number
+    startSvgY: number
+    origPoints: TakeoffPoint[]
+  } | null>(null)
+  const [isDraggingEl, setIsDraggingEl] = useState(false)
+
   // ── Persist on change ──────────────────────────────────────────────────────
   useEffect(() => {
     const p = { ...project, updatedAt: new Date().toISOString() }
@@ -463,7 +477,8 @@ export default function TakeoffPage() {
   }
 
   // ── SVG coordinate helper (accounts for zoom/pan) ──────────────────────────
-  function svgCoords(e: React.MouseEvent<SVGSVGElement>): TakeoffPoint {
+  // Accepts any mouse event (SVG-level or element-level)
+  function svgCoords(e: React.MouseEvent): TakeoffPoint {
     const rect = svgRef.current!.getBoundingClientRect()
     const rawX = e.clientX - rect.left
     const rawY = e.clientY - rect.top
@@ -472,6 +487,21 @@ export default function TakeoffPage() {
 
   // ── Mouse handlers ─────────────────────────────────────────────────────────
   function handleMouseMove(e: React.MouseEvent<SVGSVGElement>) {
+    // Element drag takes priority over everything
+    if (dragRef.current) {
+      const pt = svgCoords(e)
+      const dx = pt.x - dragRef.current.startSvgX
+      const dy = pt.y - dragRef.current.startSvgY
+      const id = dragRef.current.id
+      const orig = dragRef.current.origPoints
+      setProject(prev => ({
+        ...prev,
+        elements: prev.elements.map(el =>
+          el.id === id ? { ...el, points: orig.map(p => ({ x: p.x + dx, y: p.y + dy })) } : el
+        ),
+      }))
+      return
+    }
     if (isPanning) {
       const dx = e.clientX - panStart.current.x
       const dy = e.clientY - panStart.current.y
@@ -486,7 +516,8 @@ export default function TakeoffPage() {
   }
 
   function handleMouseDown(e: React.MouseEvent<SVGSVGElement>) {
-    // Middle mouse, Space+left, or left button in select mode = pan (but not while calibrating)
+    // Middle mouse, Space+left, or left button in select mode on canvas background = pan
+    // (element onMouseDown calls stopPropagation so this won't fire for element clicks)
     if (!calibDrawing && (e.button === 1 || (e.button === 0 && spaceHeld) || (e.button === 0 && tool === 'select'))) {
       e.preventDefault()
       hasPannedRef.current = false
@@ -496,6 +527,13 @@ export default function TakeoffPage() {
   }
 
   function handleMouseUp() {
+    if (dragRef.current) {
+      dragRef.current = null
+      setIsDraggingEl(false)
+      // Recalculate measurements after move
+      setProject(p => ({ ...p, items: recalcItemsForMpp(p.items, p.elements, p.calibration.mpp) }))
+      return
+    }
     if (isPanning) setIsPanning(false)
   }
 
@@ -835,54 +873,62 @@ export default function TakeoffPage() {
     const isWall = el.phase === 'External Walls'
     const stroke = sel ? '#fff' : el.color
     const sw = sel ? 3 : 2
-    const fill = el.color + '33'  // 20% opacity
+    const fill = el.color + '33'
 
-    // ── External Walls LINE: draw as cavity wall (two parallel lines + fill) ──
+    // Drag initiator — attached to every element <g>
+    const elCursor = tool === 'select' ? (isDraggingEl && sel ? 'grabbing' : 'grab') : 'default'
+    function onElMouseDown(e: React.MouseEvent<SVGGElement>) {
+      if (tool !== 'select') return
+      e.stopPropagation()   // prevent canvas pan from starting
+      selectElement(el)
+      const pt = svgCoords(e)
+      dragRef.current = { id: el.id, startSvgX: pt.x, startSvgY: pt.y, origPoints: [...el.points] }
+      setIsDraggingEl(true)
+    }
+
+    // ── External Walls LINE: two parallel lines = cavity wall cross-section ──
     if (isWall && el.type === 'line') {
-      const halfW = 9  // pixels — half the wall band width on screen
+      const linkedItem = project.items.find(it => it.elementId === el.id)
+      const halfW = linkedItem?.wallBandPx ?? 9
       const outer = offsetPoly(el.points, halfW)
       const inner = offsetPoly(el.points, -halfW)
-      const outerPts = outer.map(p => `${p.x},${p.y}`).join(' ')
-      const innerPts = inner.map(p => `${p.x},${p.y}`).join(' ')
+      const outerPts  = outer.map(p => `${p.x},${p.y}`).join(' ')
+      const innerPts  = inner.map(p => `${p.x},${p.y}`).join(' ')
       const centrePts = el.points.map(p => `${p.x},${p.y}`).join(' ')
-      // Closed polygon between the two offset lines (for fill)
-      const bodyPts = [...outer, ...[...inner].reverse()].map(p => `${p.x},${p.y}`).join(' ')
+      const bodyPts   = [...outer, ...[...inner].reverse()].map(p => `${p.x},${p.y}`).join(' ')
       const mid = centroid(el.points)
-      const faceColor  = sel ? '#ffffff' : el.color
-      const fillAlpha  = sel ? '55' : '1a'
-      const cavityAlpha = sel ? '99' : '55'
+      const faceC  = sel ? '#ffffff' : WALL_LINE_COLOR
+      const fillC  = sel ? WALL_LINE_COLOR + '44' : WALL_FILL_COLOR + '28'
+      const caviC  = sel ? '#ffffff' : WALL_CAVI_COLOR
       return (
-        <g key={el.id} onClick={() => selectElement(el)} style={{ cursor: tool === 'select' ? 'pointer' : 'default' }}>
-          {/* Wall body fill */}
-          <polygon points={bodyPts} fill={el.color + fillAlpha} stroke="none" />
-          {/* Outer leaf face */}
-          <polyline points={outerPts} fill="none" stroke={faceColor} strokeWidth={sel ? 2.5 : 2} strokeLinecap="square" strokeLinejoin="miter" />
-          {/* Inner leaf face */}
-          <polyline points={innerPts} fill="none" stroke={faceColor} strokeWidth={sel ? 2.5 : 2} strokeLinecap="square" strokeLinejoin="miter" />
-          {/* Cavity centre line (dashed) */}
-          <polyline points={centrePts} fill="none" stroke={el.color} strokeWidth={0.8} strokeDasharray="5 4" strokeOpacity={cavityAlpha} />
-          {/* Selection highlight */}
-          {sel && <polygon points={bodyPts} fill="none" stroke="#fff" strokeWidth={1} strokeOpacity={0.4} strokeDasharray="5 3" />}
-          <text x={mid.x} y={mid.y - (halfW + 4)} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : el.color} fontFamily="monospace" fontWeight={600}>
+        <g key={el.id} onClick={() => selectElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor }}>
+          <polygon points={bodyPts} fill={fillC} stroke="none" />
+          <polyline points={outerPts} fill="none" stroke={faceC} strokeWidth={sel ? 2.5 : 2} strokeLinecap="square" strokeLinejoin="miter" />
+          <polyline points={innerPts} fill="none" stroke={faceC} strokeWidth={sel ? 2.5 : 2} strokeLinecap="square" strokeLinejoin="miter" />
+          <polyline points={centrePts} fill="none" stroke={caviC} strokeWidth={0.8} strokeDasharray="5 4" strokeOpacity={sel ? 0.7 : 0.4} />
+          {sel && <polygon points={bodyPts} fill="none" stroke="#fff" strokeWidth={1} strokeOpacity={0.5} strokeDasharray="5 3" />}
+          <text x={mid.x} y={mid.y - (halfW + 5)} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : WALL_LINE_COLOR} fontFamily="monospace" fontWeight={700}>
             {el.label}
           </text>
-          <text x={mid.x} y={mid.y + (halfW + 12)} textAnchor="middle" fontSize={10} fill={sel ? '#ccc' : '#999'} fontFamily="monospace">
+          <text x={mid.x} y={mid.y + (halfW + 13)} textAnchor="middle" fontSize={10} fill={sel ? '#ccc' : '#999'} fontFamily="monospace">
             {fmtM(polylineLength(el.points, project.calibration.mpp))}
           </text>
         </g>
       )
     }
 
-    // ── External Walls RECT: thick border to represent wall line ──
+    // ── External Walls RECT: thick coloured border ──
     if (isWall && el.type === 'rect') {
       const { x, y, width: w, height: h } = rectAttrs(el.points)
-      const wallSw = sel ? 10 : 8
+      const linkedItem = project.items.find(it => it.elementId === el.id)
+      const wallSw = (linkedItem?.wallBandPx ?? 9) * 2
       const mid = centroid(el.points)
+      const wallStroke = sel ? '#fff' : WALL_LINE_COLOR
       return (
-        <g key={el.id} onClick={() => selectElement(el)} style={{ cursor: tool === 'select' ? 'pointer' : 'default' }}>
-          <rect x={x} y={y} width={w} height={h} fill={el.color + '18'} stroke={stroke} strokeWidth={wallSw} />
-          {sel && <rect x={x} y={y} width={w} height={h} fill="none" stroke="#fff" strokeWidth={1} strokeOpacity={0.4} strokeDasharray="5 3" />}
-          <text x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : el.color} fontFamily="monospace" fontWeight={600}>
+        <g key={el.id} onClick={() => selectElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor }}>
+          <rect x={x} y={y} width={w} height={h} fill={WALL_FILL_COLOR + '20'} stroke={wallStroke} strokeWidth={wallSw} />
+          {sel && <rect x={x} y={y} width={w} height={h} fill="none" stroke="#fff" strokeWidth={1} strokeOpacity={0.5} strokeDasharray="5 3" />}
+          <text x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : WALL_LINE_COLOR} fontFamily="monospace" fontWeight={700}>
             {el.label}
           </text>
           <text x={mid.x} y={mid.y + 8} textAnchor="middle" fontSize={10} fill={sel ? '#ccc' : '#999'} fontFamily="monospace">
@@ -892,16 +938,18 @@ export default function TakeoffPage() {
       )
     }
 
-    // ── External Walls POLYGON: thick border ──
+    // ── External Walls POLYGON: thick coloured border ──
     if (isWall && el.type === 'polygon') {
       const pts = el.points.map(p => `${p.x},${p.y}`).join(' ')
       const mid = centroid(el.points)
-      const wallSw = sel ? 10 : 8
+      const linkedItem = project.items.find(it => it.elementId === el.id)
+      const wallSw = (linkedItem?.wallBandPx ?? 9) * 2
+      const wallStroke = sel ? '#fff' : WALL_LINE_COLOR
       return (
-        <g key={el.id} onClick={() => selectElement(el)} style={{ cursor: tool === 'select' ? 'pointer' : 'default' }}>
-          <polygon points={pts} fill={el.color + '18'} stroke={stroke} strokeWidth={wallSw} strokeLinejoin="miter" />
-          {sel && <polygon points={pts} fill="none" stroke="#fff" strokeWidth={1} strokeOpacity={0.4} strokeDasharray="5 3" />}
-          <text x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : el.color} fontFamily="monospace" fontWeight={600}>
+        <g key={el.id} onClick={() => selectElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor }}>
+          <polygon points={pts} fill={WALL_FILL_COLOR + '20'} stroke={wallStroke} strokeWidth={wallSw} strokeLinejoin="miter" />
+          {sel && <polygon points={pts} fill="none" stroke="#fff" strokeWidth={1} strokeOpacity={0.5} strokeDasharray="5 3" />}
+          <text x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : WALL_LINE_COLOR} fontFamily="monospace" fontWeight={700}>
             {el.label}
           </text>
           <text x={mid.x} y={mid.y + 8} textAnchor="middle" fontSize={10} fill={sel ? '#ccc' : '#999'} fontFamily="monospace">
@@ -916,7 +964,7 @@ export default function TakeoffPage() {
       const pts = el.points.map(p => `${p.x},${p.y}`).join(' ')
       const mid = centroid(el.points)
       return (
-        <g key={el.id} onClick={() => selectElement(el)} style={{ cursor: tool === 'select' ? 'pointer' : 'default' }}>
+        <g key={el.id} onClick={() => selectElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor }}>
           <polyline points={pts} fill="none" stroke={stroke} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
           {sel && <polyline points={pts} fill="none" stroke="#fff" strokeWidth={1} strokeOpacity={0.4} strokeDasharray="4 3" />}
           <text x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : el.color} fontFamily="monospace" fontWeight={600}>
@@ -932,7 +980,7 @@ export default function TakeoffPage() {
     if (el.type === 'rect') {
       const { x, y, width: w, height: h } = rectAttrs(el.points)
       return (
-        <g key={el.id} onClick={() => selectElement(el)} style={{ cursor: tool === 'select' ? 'pointer' : 'default' }}>
+        <g key={el.id} onClick={() => selectElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor }}>
           <rect x={x} y={y} width={w} height={h} fill={fill} stroke={stroke} strokeWidth={sw} />
           <text x={x + w / 2} y={y + h / 2 - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : el.color} fontFamily="monospace" fontWeight={600}>
             {el.label}
@@ -948,7 +996,7 @@ export default function TakeoffPage() {
       const pts = el.points.map(p => `${p.x},${p.y}`).join(' ')
       const mid = centroid(el.points)
       return (
-        <g key={el.id} onClick={() => selectElement(el)} style={{ cursor: tool === 'select' ? 'pointer' : 'default' }}>
+        <g key={el.id} onClick={() => selectElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor }}>
           <polygon points={pts} fill={fill} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
           <text x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : el.color} fontFamily="monospace" fontWeight={600}>
             {el.label}
@@ -1134,6 +1182,22 @@ export default function TakeoffPage() {
             />
           </div>
         )}
+
+        {/* ── Canvas line width slider ── */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={labelStyle}>Canvas Line Width — how thick on plan</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+            <input
+              type="range" min={4} max={30} step={1}
+              style={{ flex: 1, accentColor }}
+              value={item.wallBandPx ?? 9}
+              onChange={e => saveItemEdit({ ...item, wallBandPx: Number(e.target.value) })}
+            />
+            <span style={{ fontSize: 13, color: accentColor, fontWeight: 700, minWidth: 36, textAlign: 'right' }}>
+              {(item.wallBandPx ?? 9) * 2}px
+            </span>
+          </div>
+        </div>
 
         {/* ── Wall Construction Type ── */}
         <div style={{ marginBottom: 12 }}>
