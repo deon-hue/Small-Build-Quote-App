@@ -250,6 +250,44 @@ function itemFromElement(el: DrawnElement, mpp: number): TakeoffItem {
   }
 }
 
+// ── Recalculate all element-linked item quantities for a new mpp ──────────────
+function recalcItemsForMpp(
+  items: TakeoffItem[],
+  elements: DrawnElement[],
+  mpp: number,
+): TakeoffItem[] {
+  return items.map(item => {
+    if (!item.elementId) return item               // manual items: leave untouched
+    const el = elements.find(e => e.id === item.elementId)
+    if (!el) return item
+
+    let length: number | undefined, area: number | undefined
+    let qty = item.qty
+    const unit = item.unit
+
+    if (el.type === 'line') {
+      length = polylineLength(el.points, mpp)
+      qty = length
+    } else if (el.type === 'rect') {
+      area = rectArea(el.points, mpp)
+      qty = area
+    } else if (el.type === 'polygon') {
+      area = polygonArea(el.points, mpp)
+      qty = area
+    }
+
+    const perimeter = item.perimeter != null
+      ? (el.type === 'rect' && el.points.length >= 2
+          ? rectPerimeter(el.points, mpp)
+          : el.type === 'polygon' && el.points.length >= 3
+            ? polyPerimeter(el.points, mpp)
+            : undefined)
+      : undefined
+
+    return { ...item, qty: +(qty).toFixed(3), unit, length, area, perimeter }
+  })
+}
+
 // ── Panel modes ───────────────────────────────────────────────────────────────
 type PanelMode = 'schedule' | 'properties'
 
@@ -362,6 +400,13 @@ export default function TakeoffPage() {
     setEditingElement(el)
     setEditingItem(item)
   })
+
+  // ── Keep editingItem in sync when project.items is recalculated ──────────────
+  useEffect(() => {
+    if (!editingItem) return
+    const fresh = project.items.find(it => it.id === editingItem.id)
+    if (fresh && fresh !== editingItem) setEditingItem(fresh)
+  }, [project.items]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── SVG container resize ───────────────────────────────────────────────────
   const containerRef = useRef<HTMLDivElement>(null)
@@ -696,7 +741,11 @@ export default function TakeoffPage() {
     const dy = calibPts[1].y - calibPts[0].y
     const pixLen = Math.sqrt(dx * dx + dy * dy)
     const mpp = realM / pixLen
-    setProject(p => ({ ...p, calibration: { mpp, label: calibLabel || `${realM}m ref` } }))
+    setProject(p => ({
+      ...p,
+      calibration: { mpp, label: calibLabel || `${realM}m ref` },
+      items: recalcItemsForMpp(p.items, p.elements, mpp),
+    }))
     setShowCalib(false)
     setCalibDrawing(false)
     setCalibPts([])
@@ -1421,11 +1470,18 @@ export default function TakeoffPage() {
             const preset = SCALE_PRESETS.find(s => s.label === e.target.value)
             if (!preset) return
             if (preset.mpp === 0) { setShowCalib(true); return }
-            setProject(p => ({ ...p, calibration: { mpp: preset.mpp, label: preset.label } }))
+            setProject(p => ({
+              ...p,
+              calibration: { mpp: preset.mpp, label: preset.label },
+              items: recalcItemsForMpp(p.items, p.elements, preset.mpp),
+            }))
           }}
         >
           {SCALE_PRESETS.map(s => <option key={s.label} value={s.label}>{s.label}</option>)}
-          <option value={project.calibration.label ?? ''}>{project.calibration.label ?? 'Scale'}</option>
+          {/* Show current custom calibration label if it isn't one of the presets */}
+          {project.calibration.label && !SCALE_PRESETS.some(s => s.label === project.calibration.label) && (
+            <option value={project.calibration.label}>{project.calibration.label}</option>
+          )}
         </select>
 
         <button style={btnStyle} onClick={() => setShowCalib(true)} title="Calibrate scale from drawing">
