@@ -312,7 +312,12 @@ export default function TakeoffPage() {
     if (tool === 'select') return
     if (calibDrawing) {
       const pt = svgCoords(e)
-      if (calibPts.length < 2) setCalibPts(prev => [...prev, pt])
+      setCalibPts(prev => {
+        const next = [...prev, pt]
+        // After 2nd point, auto-reopen the dialog so user can enter the real length
+        if (next.length >= 2) setShowCalib(true)
+        return next.slice(0, 2)
+      })
       return
     }
     const pt = svgCoords(e)
@@ -1251,6 +1256,34 @@ export default function TakeoffPage() {
             })()}
           </svg>
 
+          {/* Calibration overlay hint */}
+          {calibDrawing && !showCalib && (
+            <div style={{
+              position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)',
+              background: '#1a3a1a', border: '2px solid #4a8a4a', borderRadius: 8,
+              padding: '10px 20px', color: '#c8d8a8', fontSize: 13, fontWeight: 600,
+              display: 'flex', alignItems: 'center', gap: 12, zIndex: 10,
+              boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+            }}>
+              <span style={{ fontSize: 18 }}>📏</span>
+              <span>
+                {calibPts.length === 0
+                  ? 'Click the START of a known dimension on the plan'
+                  : 'Click the END of the known dimension'}
+              </span>
+              <span style={{ fontSize: 12, color: '#6a8a6a', marginLeft: 4 }}>
+                ({calibPts.length}/2 points)
+              </span>
+              <button
+                onClick={() => { setCalibDrawing(false); setCalibPts([]) }}
+                style={{ background: 'none', border: '1px solid #4a6a4a', borderRadius: 4,
+                  color: '#6a8a6a', fontSize: 11, cursor: 'pointer', padding: '2px 8px', marginLeft: 4 }}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+
           {/* Status bar */}
           <div style={{
             position: 'absolute', bottom: 0, left: 0, right: 0, height: 22,
@@ -1342,19 +1375,27 @@ export default function TakeoffPage() {
               </p>
 
               <button
-                style={{ ...btnStyle, background: calibDrawing ? '#2b5a2b' : '#1e2e1e',
-                  borderColor: calibDrawing ? '#4a8a4a' : '#3a4a3a', marginBottom: 12 }}
-                onClick={() => { setCalibDrawing(!calibDrawing); setCalibPts([]) }}
+                style={{ ...btnStyle, background: '#2b5a2b', borderColor: '#4a8a4a', marginBottom: 12 }}
+                onClick={() => {
+                  setCalibDrawing(true)
+                  setCalibPts([])
+                  setShowCalib(false)   // close dialog so canvas is accessible
+                }}
               >
-                {calibDrawing ? '✓ Click 2 points on plan' : '✏️ Draw calibration line'}
+                ✏️ Draw calibration line on plan
               </button>
 
               {calibPts.length === 2 && (
-                <div style={{ fontSize: 12, color: '#c8d8a8', marginBottom: 8 }}>
-                  ✓ Line drawn ({Math.round(Math.sqrt(
+                <div style={{ fontSize: 13, color: '#4a8a4a', marginBottom: 8, fontWeight: 600 }}>
+                  ✓ Line drawn — {Math.round(Math.sqrt(
                     Math.pow(calibPts[1].x - calibPts[0].x, 2) +
                     Math.pow(calibPts[1].y - calibPts[0].y, 2)
-                  ))}px)
+                  ))} canvas pixels. Now enter the real-world length below.
+                </div>
+              )}
+              {calibPts.length === 0 && (
+                <div style={{ fontSize: 12, color: '#6a8a6a', marginBottom: 8 }}>
+                  No line drawn yet — click the button above, then click 2 points on the plan.
                 </div>
               )}
 
