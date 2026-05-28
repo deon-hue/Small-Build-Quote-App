@@ -907,13 +907,6 @@ export default function TakeoffPage() {
   const dimRow: React.CSSProperties = {
     display: 'flex', justifyContent: 'space-between', color: '#9ab', fontSize: 12, marginBottom: 3,
   }
-  const toolBtn = (t: DrawingTool): React.CSSProperties => ({
-    width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center',
-    background: tool === t ? '#2b5a2b' : '#1a2a1a',
-    border: tool === t ? '1px solid #4a8a4a' : '1px solid #2a3a2a',
-    borderRadius: 6, cursor: 'pointer', fontSize: 16, color: '#c8d8a8',
-    marginBottom: 4,
-  })
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -1057,40 +1050,105 @@ export default function TakeoffPage() {
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
         {/* Left panel: tool icons + phase legend */}
+        {/* Left panel: tools + phase legend */}
         <div style={{
-          width: 56, background: '#162216', borderRight: '1px solid #2a3a2a',
-          display: 'flex', flexDirection: 'column', alignItems: 'center',
-          padding: '8px 0', gap: 0, flexShrink: 0, overflowY: 'auto',
+          width: 130, background: '#162216', borderRight: '1px solid #2a3a2a',
+          display: 'flex', flexDirection: 'column', alignItems: 'stretch',
+          padding: '8px 6px', gap: 0, flexShrink: 0, overflowY: 'auto',
         }}>
-          <div title="Select" style={toolBtn('select')} onClick={() => setTool('select')}>↖</div>
-          <div title="Line / Polyline" style={toolBtn('line')} onClick={() => setTool('line')}>╱</div>
-          <div title="Rectangle" style={toolBtn('rect')} onClick={() => setTool('rect')}>▭</div>
-          <div title="Polygon" style={toolBtn('polygon')} onClick={() => setTool('polygon')}>⬠</div>
-
-          <div style={{ width: 36, height: 1, background: '#2a3a2a', margin: '8px 0' }} />
-
-          {/* + Add manual item */}
-          <div title="Add manual item" style={{ ...toolBtn('select'), background: '#1e2e1e', border: '1px solid #3a4a3a' }}
-            onClick={addManualItem}>
-            +
+          {/* Section label */}
+          <div style={{ fontSize: 9, color: '#4a6a4a', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 5, paddingLeft: 4 }}>
+            Tools
           </div>
 
-          <div style={{ width: 36, height: 1, background: '#2a3a2a', margin: '8px 0' }} />
+          {/* Drawing tools */}
+          {([
+            { t: 'select',  icon: '↖', label: 'Select'    },
+            { t: 'line',    icon: '╱', label: 'Line'       },
+            { t: 'rect',    icon: '▭', label: 'Rectangle'  },
+            { t: 'polygon', icon: '⬠', label: 'Polygon'    },
+          ] as { t: DrawingTool; icon: string; label: string }[]).map(({ t, icon, label }) => (
+            <div
+              key={t}
+              onClick={() => { setTool(t); if (t === 'select') { setDrawPoints([]); setIsDrawing(false) } }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 7,
+                padding: '7px 8px', marginBottom: 3, borderRadius: 5, cursor: 'pointer',
+                background: tool === t ? '#2b5a2b' : '#1a2a1a',
+                border: `1px solid ${tool === t ? '#4a8a4a' : '#2a3a2a'}`,
+                color: '#c8d8a8', fontSize: 12, fontFamily: 'inherit',
+              }}
+            >
+              <span style={{ fontSize: 14, lineHeight: 1, width: 16, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
+              <span>{label}</span>
+            </div>
+          ))}
 
-          {/* Phase color dots */}
+          {/* Cancel drawing — only shown while actively drawing */}
+          {isDrawing && (
+            <div
+              onClick={() => { setDrawPoints([]); setIsDrawing(false) }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 7,
+                padding: '7px 8px', marginBottom: 3, borderRadius: 5, cursor: 'pointer',
+                background: '#5a1a1a', border: '1px solid #8a2a2a',
+                color: '#f1a0a0', fontSize: 12, fontFamily: 'inherit',
+              }}
+            >
+              <span style={{ fontSize: 14, lineHeight: 1, width: 16, textAlign: 'center', flexShrink: 0 }}>✕</span>
+              <span>Cancel</span>
+            </div>
+          )}
+
+          <div style={{ height: 1, background: '#2a3a2a', margin: '8px 0' }} />
+
+          {/* Add manual item */}
+          <div
+            onClick={addManualItem}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7,
+              padding: '7px 8px', marginBottom: 3, borderRadius: 5, cursor: 'pointer',
+              background: '#1e2e1e', border: '1px solid #3a4a3a',
+              color: '#c8d8a8', fontSize: 12, fontFamily: 'inherit',
+            }}
+          >
+            <span style={{ fontSize: 14, lineHeight: 1, width: 16, textAlign: 'center', flexShrink: 0 }}>+</span>
+            <span>Add Item</span>
+          </div>
+
+          <div style={{ height: 1, background: '#2a3a2a', margin: '8px 0' }} />
+
+          {/* Section label */}
+          <div style={{ fontSize: 9, color: '#4a6a4a', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 5, paddingLeft: 4 }}>
+            Phase
+          </div>
+
+          {/* Phase list */}
           {TAKEOFF_PHASES.map(ph => (
             <div
               key={ph}
               title={ph}
               onClick={() => setActivePhase(ph)}
               style={{
-                width: 28, height: 28, borderRadius: 5, marginBottom: 3, cursor: 'pointer',
-                background: PHASE_COLORS[ph],
-                border: activePhase === ph ? '2px solid #fff' : '2px solid transparent',
-                opacity: activePhase === ph ? 1 : 0.65,
-                transition: 'all 0.15s',
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '5px 6px', marginBottom: 2, borderRadius: 4, cursor: 'pointer',
+                background: activePhase === ph ? '#1e2e1e' : 'transparent',
+                border: `1px solid ${activePhase === ph ? '#3a5a3a' : 'transparent'}`,
+                transition: 'all 0.12s',
               }}
-            />
+            >
+              <div style={{
+                width: 10, height: 10, borderRadius: 2, flexShrink: 0,
+                background: PHASE_COLORS[ph],
+                boxShadow: activePhase === ph ? `0 0 0 2px #fff4` : 'none',
+              }} />
+              <span style={{
+                fontSize: 11, color: activePhase === ph ? '#c8d8a8' : '#8aa',
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>
+                {ph.replace(' & ', ' & ').replace('External Works & Landscaping', 'Ext. Works').replace('Internal Walls & Partitions', 'Int. Walls').replace('Site Setup & Demolition', 'Demolition').replace('Plastering & Boarding', 'Plastering').replace('Structural Frame', 'Struct. Frame').replace('Windows & Doors', 'Windows/Doors').replace('Plumbing & Heating', 'Plumbing').replace('Drainage & Services', 'Drainage').replace('Joinery & Fixtures', 'Joinery').replace('Tiling & Finishes', 'Tiling').replace('Floors & Screeds', 'Floors').replace('Preliminaries', 'Prelims')}
+              </span>
+            </div>
           ))}
         </div>
 
