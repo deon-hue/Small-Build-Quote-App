@@ -323,3 +323,30 @@ export const FLOOR_MAKEUPS: FloorMakeup[] = [
     ],
   },
 ]
+
+// ── Layer quantity calculator (shared between take-off tool and quote import) ──
+
+export function calcLayerQty(
+  layer: FloorLayer,
+  area: number,
+  perimeter: number,
+  thicknessOverride?: number,
+): { qty: number; unit: string } {
+  const thickness = (thicknessOverride != null ? thicknessOverride : layer.thickness) / 1000
+  switch (layer.qtyType) {
+    case 'area':
+      return { qty: +area.toFixed(3), unit: 'm²' }
+    case 'volume':
+      return { qty: +(area * thickness).toFixed(3), unit: 'm³' }
+    case 'perimeter':
+      return { qty: +perimeter.toFixed(2), unit: 'lm' }
+    case 'ufh_pipe': {
+      const spacingM = (layer.spacing ?? 200) / 1000
+      return { qty: +(area / spacingM * 1.15).toFixed(1), unit: 'lm' }
+    }
+    case 'count':
+      return { qty: 1, unit: 'nr' }
+    default:
+      return { qty: +area.toFixed(3), unit: 'm²' }
+  }
+}

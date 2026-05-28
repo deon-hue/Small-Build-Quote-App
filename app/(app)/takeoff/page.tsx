@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback, ChangeEvent } from 'react'
 import {
   TAKEOFF_PHASES, PHASE_COLORS, DEFAULT_MPP, SCALE_PRESETS,
-  FLOOR_MAKEUPS,
+  FLOOR_MAKEUPS, calcLayerQty,
   type TakeoffPhase, type DrawingTool, type TakeoffPoint,
   type DrawnElement, type TakeoffItem, type TakeoffProject, type ScaleCalibration,
   type FloorLayer,
@@ -75,30 +75,7 @@ function polyPerimeter(pts: TakeoffPoint[], mpp: number): number {
 }
 
 /** Calculate a layer's qty from drawn geometry */
-function calcLayerQty(
-  layer: FloorLayer,
-  area: number,
-  perimeter: number,
-  thicknessOverride?: number,
-): { qty: number; unit: string } {
-  const thickness = (thicknessOverride != null ? thicknessOverride : layer.thickness) / 1000
-  switch (layer.qtyType) {
-    case 'area':
-      return { qty: +area.toFixed(3), unit: 'm²' }
-    case 'volume':
-      return { qty: +(area * thickness).toFixed(3), unit: 'm³' }
-    case 'perimeter':
-      return { qty: +perimeter.toFixed(2), unit: 'lm' }
-    case 'ufh_pipe': {
-      const spacingM = (layer.spacing ?? 200) / 1000
-      return { qty: +(area / spacingM * 1.15).toFixed(1), unit: 'lm' }
-    }
-    case 'count':
-      return { qty: 1, unit: 'nr' }
-    default:
-      return { qty: +area.toFixed(3), unit: 'm²' }
-  }
-}
+// calcLayerQty is imported from @/lib/takeoff-types
 
 const CAT_COLOR: Record<string, string> = {
   labour: '#f39c12', materials: '#3498db', plant: '#9b59b6', other: '#95a5a6',
