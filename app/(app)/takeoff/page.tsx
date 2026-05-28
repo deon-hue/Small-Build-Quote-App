@@ -813,7 +813,8 @@ export default function TakeoffPage() {
   function renderElement(el: DrawnElement) {
     const sel = selectedId === el.id
     const stroke = sel ? '#fff' : el.color
-    const sw = sel ? 3 : 2
+    const isWall = el.phase === 'External Walls'
+    const sw = sel ? (isWall ? 5 : 3) : (isWall ? 4 : 2)
     const fill = el.color + '33'  // 20% opacity
 
     if (el.type === 'line') {
