@@ -3121,67 +3121,6 @@ export default function TakeoffPage() {
             </div>
           ))}
 
-          {/* ── Floor tool ── */}
-          <div
-            onClick={() => { setTool('floor'); setDrawPoints([]); setIsDrawing(false) }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 7,
-              padding: '7px 8px', marginBottom: 3, borderRadius: 5, cursor: 'pointer',
-              background: tool === 'floor' ? '#3d2b0a' : '#1a2a1a',
-              border: `1px solid ${tool === 'floor' ? '#f39c12' : '#2a3a2a'}`,
-              color: tool === 'floor' ? '#f39c12' : '#c8d8a8',
-              fontSize: 12, fontFamily: 'inherit',
-            }}
-          >
-            <span style={{ fontSize: 14, lineHeight: 1, width: 16, textAlign: 'center', flexShrink: 0 }}>⬛</span>
-            <span>Floor</span>
-          </div>
-
-          {/* Floor sub-controls — visible only when floor tool active */}
-          {tool === 'floor' && (
-            <div style={{ margin: '2px 0 4px 6px', paddingLeft: 6, borderLeft: '2px solid #5a3a00' }}>
-              {/* Draw mode */}
-              <div style={{ fontSize: 9, color: '#8a6a3a', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 3 }}>
-                Draw mode
-              </div>
-              {(['rect', 'polygon'] as const).map(mode => (
-                <div
-                  key={mode}
-                  onClick={() => { setFloorDrawMode(mode); setDrawPoints([]); setIsDrawing(false) }}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 5,
-                    padding: '4px 6px', marginBottom: 2, borderRadius: 4, cursor: 'pointer',
-                    background: floorDrawMode === mode ? '#2b2000' : 'transparent',
-                    border: `1px solid ${floorDrawMode === mode ? '#7a5a00' : 'transparent'}`,
-                    color: floorDrawMode === mode ? '#f39c12' : '#9ab',
-                    fontSize: 11,
-                  }}
-                >
-                  <span style={{ width: 12 }}>{mode === 'rect' ? '▭' : '⬠'}</span>
-                  <span>{mode === 'rect' ? 'Rectangle' : 'Polygon'}</span>
-                </div>
-              ))}
-
-              {/* Floor type quick-pick */}
-              <div style={{ fontSize: 9, color: '#8a6a3a', letterSpacing: 1, textTransform: 'uppercase', marginTop: 6, marginBottom: 3 }}>
-                Floor type
-              </div>
-              <select
-                value={activeFloorMakeup}
-                onChange={e => setActiveFloorMakeup(e.target.value)}
-                style={{
-                  width: '100%', background: '#1a1000', border: '1px solid #5a3a00', borderRadius: 4,
-                  color: '#f39c12', padding: '4px 5px', fontSize: 10, outline: 'none',
-                  boxSizing: 'border-box',
-                }}
-              >
-                {FLOOR_MAKEUPS.map(m => (
-                  <option key={m.id} value={m.id}>{m.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
           {/* Cancel drawing — only shown while actively drawing */}
           {isDrawing && (
             <div
@@ -3243,8 +3182,8 @@ export default function TakeoffPage() {
 
           {/* Phase list */}
           {TAKEOFF_PHASES.map(ph => (
+            <div key={ph}>
             <div
-              key={ph}
               title={ph}
               onClick={() => selectPhase(ph)}
               style={{
@@ -3266,6 +3205,50 @@ export default function TakeoffPage() {
               }}>
                 {ph.replace('External Works & Landscaping', 'Ext. Works').replace('Internal Walls & Partitions', 'Int. Walls').replace('Site Setup & Demolition', 'Demolition').replace('Plastering & Boarding', 'Plastering').replace('Structural Frame', 'Struct. Frame').replace('Windows & Doors', 'Windows/Doors').replace('Plumbing & Heating', 'Plumbing').replace('Drainage & Services', 'Drainage').replace('Joinery & Fixtures', 'Joinery').replace('Tiling & Finishes', 'Tiling').replace('Floors & Screeds', 'Floors').replace('Preliminaries', 'Prelims')}
               </span>
+            </div>
+
+            {/* Floor sub-controls — inline expansion when Floors & Screeds is active */}
+            {ph === 'Floors & Screeds' && activePhase === 'Floors & Screeds' && (
+              <div style={{ margin: '2px 0 4px 10px', paddingLeft: 8, borderLeft: `2px solid #f39c12` }}>
+                <div style={{ fontSize: 9, color: '#8a6a3a', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 3 }}>
+                  Draw shape
+                </div>
+                {(['rect', 'polygon'] as const).map(mode => (
+                  <div
+                    key={mode}
+                    onClick={() => { setFloorDrawMode(mode); setDrawPoints([]); setIsDrawing(false) }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      padding: '4px 6px', marginBottom: 2, borderRadius: 4, cursor: 'pointer',
+                      background: floorDrawMode === mode ? '#2b2000' : 'transparent',
+                      border: `1px solid ${floorDrawMode === mode ? '#7a5a00' : 'transparent'}`,
+                      color: floorDrawMode === mode ? '#f39c12' : 'var(--to-sub)',
+                      fontSize: 11,
+                    }}
+                  >
+                    <span style={{ width: 12 }}>{mode === 'rect' ? '▭' : '⬠'}</span>
+                    <span>{mode === 'rect' ? 'Rectangle' : 'Polygon'}</span>
+                  </div>
+                ))}
+                <div style={{ fontSize: 9, color: '#8a6a3a', letterSpacing: 1, textTransform: 'uppercase', marginTop: 6, marginBottom: 3 }}>
+                  Floor type
+                </div>
+                <select
+                  value={activeFloorMakeup}
+                  onChange={e => setActiveFloorMakeup(e.target.value)}
+                  style={{
+                    width: '100%', background: darkMode ? '#1a1000' : '#fff8ec',
+                    border: '1px solid #5a3a00', borderRadius: 4,
+                    color: '#f39c12', padding: '4px 5px', fontSize: 10, outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                >
+                  {FLOOR_MAKEUPS.map(m => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             </div>
           ))}
         </div>
