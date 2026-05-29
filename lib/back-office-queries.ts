@@ -1,0 +1,500 @@
+// Back Office CRUD helpers + seed defaults
+// All functions take a Supabase browser client and userId.
+
+import type { SupabaseClient } from '@supabase/supabase-js'
+import type {
+  BOLabourTrade, BOPhase, BOSubPhase, BOTask,
+  BOProduct, BOPlantItem, BOTakeoffTool, BOTakeoffSubtype,
+  BOToolTaskMapping, BOFormulaRule, BOAIScopeMapping,
+} from './back-office-types'
+
+// ── Labour Trades ─────────────────────────────────────────────────────────────
+
+export async function fetchLabourTrades(sb: SupabaseClient, userId: string): Promise<BOLabourTrade[]> {
+  const { data } = await sb.from('bo_labour_trades').select('*').eq('user_id', userId).order('display_order')
+  return data ?? []
+}
+
+export async function upsertLabourTrade(sb: SupabaseClient, trade: Partial<BOLabourTrade> & { user_id: string }): Promise<BOLabourTrade | null> {
+  const { data } = await sb.from('bo_labour_trades').upsert({ ...trade, updated_at: new Date().toISOString() }).select().single()
+  return data
+}
+
+export async function deleteLabourTrade(sb: SupabaseClient, id: string): Promise<void> {
+  await sb.from('bo_labour_trades').delete().eq('id', id)
+}
+
+// ── Phases ────────────────────────────────────────────────────────────────────
+
+export async function fetchPhases(sb: SupabaseClient, userId: string): Promise<BOPhase[]> {
+  const { data } = await sb.from('bo_phases').select('*').eq('user_id', userId).order('display_order')
+  return data ?? []
+}
+
+export async function upsertPhase(sb: SupabaseClient, phase: Partial<BOPhase> & { user_id: string }): Promise<BOPhase | null> {
+  const { data } = await sb.from('bo_phases').upsert(phase).select().single()
+  return data
+}
+
+export async function deletePhase(sb: SupabaseClient, id: string): Promise<void> {
+  await sb.from('bo_phases').delete().eq('id', id)
+}
+
+// ── Sub-Phases ────────────────────────────────────────────────────────────────
+
+export async function fetchSubPhases(sb: SupabaseClient, userId: string, phaseId?: string): Promise<BOSubPhase[]> {
+  let q = sb.from('bo_sub_phases').select('*').eq('user_id', userId).order('display_order')
+  if (phaseId) q = q.eq('phase_id', phaseId)
+  const { data } = await q
+  return data ?? []
+}
+
+export async function upsertSubPhase(sb: SupabaseClient, sp: Partial<BOSubPhase> & { user_id: string }): Promise<BOSubPhase | null> {
+  const { data } = await sb.from('bo_sub_phases').upsert(sp).select().single()
+  return data
+}
+
+export async function deleteSubPhase(sb: SupabaseClient, id: string): Promise<void> {
+  await sb.from('bo_sub_phases').delete().eq('id', id)
+}
+
+// ── Tasks ─────────────────────────────────────────────────────────────────────
+
+export async function fetchTasks(sb: SupabaseClient, userId: string, phaseId?: string, subPhaseId?: string): Promise<BOTask[]> {
+  let q = sb.from('bo_tasks').select('*').eq('user_id', userId).order('display_order')
+  if (phaseId) q = q.eq('phase_id', phaseId)
+  if (subPhaseId) q = q.eq('sub_phase_id', subPhaseId)
+  const { data } = await q
+  return data ?? []
+}
+
+export async function upsertTask(sb: SupabaseClient, task: Partial<BOTask> & { user_id: string }): Promise<BOTask | null> {
+  const { data } = await sb.from('bo_tasks').upsert({ ...task, updated_at: new Date().toISOString() }).select().single()
+  return data
+}
+
+export async function deleteTask(sb: SupabaseClient, id: string): Promise<void> {
+  await sb.from('bo_tasks').delete().eq('id', id)
+}
+
+// ── Products ──────────────────────────────────────────────────────────────────
+
+export async function fetchProducts(sb: SupabaseClient, userId: string): Promise<BOProduct[]> {
+  const { data } = await sb.from('bo_products').select('*').eq('user_id', userId).order('name')
+  return data ?? []
+}
+
+export async function upsertProduct(sb: SupabaseClient, product: Partial<BOProduct> & { user_id: string }): Promise<BOProduct | null> {
+  const { data } = await sb.from('bo_products').upsert({ ...product, updated_at: new Date().toISOString() }).select().single()
+  return data
+}
+
+export async function deleteProduct(sb: SupabaseClient, id: string): Promise<void> {
+  await sb.from('bo_products').delete().eq('id', id)
+}
+
+// ── Plant Items ───────────────────────────────────────────────────────────────
+
+export async function fetchPlantItems(sb: SupabaseClient, userId: string): Promise<BOPlantItem[]> {
+  const { data } = await sb.from('bo_plant_items').select('*').eq('user_id', userId).order('display_order')
+  return data ?? []
+}
+
+export async function upsertPlantItem(sb: SupabaseClient, item: Partial<BOPlantItem> & { user_id: string }): Promise<BOPlantItem | null> {
+  const { data } = await sb.from('bo_plant_items').upsert({ ...item, updated_at: new Date().toISOString() }).select().single()
+  return data
+}
+
+export async function deletePlantItem(sb: SupabaseClient, id: string): Promise<void> {
+  await sb.from('bo_plant_items').delete().eq('id', id)
+}
+
+// ── Takeoff Tools ─────────────────────────────────────────────────────────────
+
+export async function fetchTakeoffTools(sb: SupabaseClient, userId: string): Promise<BOTakeoffTool[]> {
+  const { data } = await sb.from('bo_takeoff_tools').select('*').eq('user_id', userId).order('display_order')
+  return data ?? []
+}
+
+export async function upsertTakeoffTool(sb: SupabaseClient, tool: Partial<BOTakeoffTool> & { user_id: string }): Promise<BOTakeoffTool | null> {
+  const { data } = await sb.from('bo_takeoff_tools').upsert(tool).select().single()
+  return data
+}
+
+export async function deleteTakeoffTool(sb: SupabaseClient, id: string): Promise<void> {
+  await sb.from('bo_takeoff_tools').delete().eq('id', id)
+}
+
+export async function fetchTakeoffSubtypes(sb: SupabaseClient, userId: string, toolId?: string): Promise<BOTakeoffSubtype[]> {
+  let q = sb.from('bo_takeoff_subtypes').select('*').eq('user_id', userId).order('display_order')
+  if (toolId) q = q.eq('tool_id', toolId)
+  const { data } = await q
+  return data ?? []
+}
+
+export async function upsertTakeoffSubtype(sb: SupabaseClient, st: Partial<BOTakeoffSubtype> & { user_id: string }): Promise<BOTakeoffSubtype | null> {
+  const { data } = await sb.from('bo_takeoff_subtypes').upsert(st).select().single()
+  return data
+}
+
+export async function deleteTakeoffSubtype(sb: SupabaseClient, id: string): Promise<void> {
+  await sb.from('bo_takeoff_subtypes').delete().eq('id', id)
+}
+
+export async function fetchToolTaskMappings(sb: SupabaseClient, subtypeId: string): Promise<BOToolTaskMapping[]> {
+  const { data } = await sb.from('bo_tool_task_mappings').select('*, task:bo_tasks(*)').eq('subtype_id', subtypeId).order('display_order')
+  return (data ?? []) as BOToolTaskMapping[]
+}
+
+export async function upsertToolTaskMapping(sb: SupabaseClient, m: Partial<BOToolTaskMapping> & { user_id: string }): Promise<BOToolTaskMapping | null> {
+  const { task: _task, ...row } = m as BOToolTaskMapping
+  const { data } = await sb.from('bo_tool_task_mappings').upsert(row).select().single()
+  return data
+}
+
+export async function deleteToolTaskMapping(sb: SupabaseClient, id: string): Promise<void> {
+  await sb.from('bo_tool_task_mappings').delete().eq('id', id)
+}
+
+// ── Formula Rules ─────────────────────────────────────────────────────────────
+
+export async function fetchFormulaRules(sb: SupabaseClient, userId: string): Promise<BOFormulaRule[]> {
+  const { data } = await sb.from('bo_formula_rules').select('*').eq('user_id', userId).order('name')
+  return (data ?? []).map(r => ({ ...r, variables: r.variables ?? [] }))
+}
+
+export async function upsertFormulaRule(sb: SupabaseClient, rule: Partial<BOFormulaRule> & { user_id: string }): Promise<BOFormulaRule | null> {
+  const { data } = await sb.from('bo_formula_rules').upsert({ ...rule, updated_at: new Date().toISOString() }).select().single()
+  return data
+}
+
+export async function deleteFormulaRule(sb: SupabaseClient, id: string): Promise<void> {
+  await sb.from('bo_formula_rules').delete().eq('id', id)
+}
+
+// ── AI Scope Mappings ─────────────────────────────────────────────────────────
+
+export async function fetchAIScopeMappings(sb: SupabaseClient, userId: string): Promise<BOAIScopeMapping[]> {
+  const { data } = await sb.from('bo_ai_scope_mappings').select('*, phase:bo_phases(*), sub_phase:bo_sub_phases(*), task:bo_tasks(*)').eq('user_id', userId).order('weight', { ascending: false })
+  return (data ?? []) as BOAIScopeMapping[]
+}
+
+export async function upsertAIScopeMapping(sb: SupabaseClient, m: Partial<BOAIScopeMapping> & { user_id: string }): Promise<BOAIScopeMapping | null> {
+  const { phase: _p, sub_phase: _sp, task: _t, ...row } = m as BOAIScopeMapping
+  const { data } = await sb.from('bo_ai_scope_mappings').upsert(row).select().single()
+  return data
+}
+
+export async function deleteAIScopeMapping(sb: SupabaseClient, id: string): Promise<void> {
+  await sb.from('bo_ai_scope_mappings').delete().eq('id', id)
+}
+
+// ── Seed Defaults ─────────────────────────────────────────────────────────────
+// Called on first Back Office visit. Inserts built-in defaults if tables are empty.
+
+const DEFAULT_PHASES = [
+  'Preliminaries', 'Demolition', 'Groundworks', 'Foundations', 'Drainage',
+  'Oversite & Floors', 'External Walls', 'Structural Steel', 'Roof Structure',
+  'Roofing', 'Windows & Doors', 'First Fix Plumbing', 'First Fix Electrical',
+  'Insulation', 'Plasterboarding', 'Plastering', 'Screed', 'Underfloor Heating',
+  'Kitchen', 'Second Fix Carpentry', 'Second Fix Plumbing', 'Second Fix Electrical',
+  'Decoration', 'External Works', 'Waste / Clearance', 'Handover',
+]
+
+const DEFAULT_SUB_PHASES: Record<string, string[]> = {
+  'Demolition': ['Strip out', 'Wall removal', 'Ceiling removal', 'Floor removal', 'Plaster removal', 'Waste removal'],
+  'Roofing': ['Flat roof', 'Warm roof', 'Cold roof', 'Pitched roof', 'Vaulted roof', 'Roof lanterns', 'Roof windows'],
+  'External Walls': ['Brick and block cavity wall', 'Blockwork', 'Timber frame wall', 'Garden room wall build-up', 'Render finish'],
+  'Oversite & Floors': ['Concrete slab', 'Beam and block', 'Timber floor', 'Screed', 'Insulated slab', 'UFH overlay'],
+  'Foundations': ['Strip foundation', 'Trench fill', 'Pad foundation', 'Raft foundation', 'Piled foundation'],
+  'Groundworks': ['Excavation', 'Spoil removal', 'Hardcore fill', 'Sand blinding'],
+  'Drainage': ['Foul drainage', 'Surface water drainage', 'Soakaway', 'Manholes'],
+  'Roof Structure': ['Flat roof joists', 'Pitched roof rafters', 'Ridge beam', 'Structural beam'],
+  'Insulation': ['Floor insulation', 'Wall insulation', 'Roof insulation', 'Cavity insulation'],
+  'Plastering': ['Skim coat', 'Hard wall plaster', 'Dry lining', 'Coving'],
+  'First Fix Plumbing': ['Soil stack', 'Hot/cold pipework', 'Boiler/plant connections'],
+  'First Fix Electrical': ['Consumer unit', 'Cable runs', 'Back boxes'],
+  'Decoration': ['Primer/undercoat', 'Emulsion', 'Gloss / satin', 'External masonry paint'],
+  'External Works': ['Paving', 'Decking', 'Fencing', 'Landscaping', 'Drainage'],
+}
+
+const DEFAULT_TASKS: Array<{ phase: string; subPhase?: string; name: string; unit: string; labour: number; materials: number; plant: number; sub: number; waste: number }> = [
+  // Demolition
+  { phase: 'Demolition', subPhase: 'Strip out', name: 'Strip out existing finishes', unit: 'm2', labour: 18, materials: 0, plant: 2, sub: 0, waste: 5 },
+  { phase: 'Demolition', subPhase: 'Wall removal', name: 'Remove non-structural wall', unit: 'item', labour: 280, materials: 0, plant: 50, sub: 0, waste: 40 },
+  { phase: 'Demolition', subPhase: 'Waste removal', name: 'Skip hire and loading', unit: 'item', labour: 120, materials: 0, plant: 280, sub: 0, waste: 0 },
+  // Groundworks
+  { phase: 'Groundworks', subPhase: 'Excavation', name: 'Excavate to formation level', unit: 'm3', labour: 45, materials: 0, plant: 35, sub: 0, waste: 0 },
+  { phase: 'Groundworks', subPhase: 'Spoil removal', name: 'Remove and dispose of spoil', unit: 'm3', labour: 0, materials: 0, plant: 28, sub: 0, waste: 0 },
+  { phase: 'Groundworks', subPhase: 'Hardcore fill', name: 'Supply and compact hardcore', unit: 'm3', labour: 25, materials: 38, plant: 15, sub: 0, waste: 5 },
+  // Foundations
+  { phase: 'Foundations', subPhase: 'Strip foundation', name: 'Excavate strip foundations', unit: 'm', labour: 55, materials: 0, plant: 30, sub: 0, waste: 0 },
+  { phase: 'Foundations', subPhase: 'Strip foundation', name: 'Pour concrete to foundations', unit: 'm3', labour: 65, materials: 95, plant: 25, sub: 0, waste: 8 },
+  { phase: 'Foundations', subPhase: 'Strip foundation', name: 'Build foundation blockwork to DPC', unit: 'm2', labour: 45, materials: 28, plant: 0, sub: 0, waste: 5 },
+  // External Walls
+  { phase: 'External Walls', subPhase: 'Brick and block cavity wall', name: 'Brick outer leaf', unit: 'm2', labour: 65, materials: 48, plant: 0, sub: 0, waste: 8 },
+  { phase: 'External Walls', subPhase: 'Brick and block cavity wall', name: 'Block inner leaf', unit: 'm2', labour: 45, materials: 28, plant: 0, sub: 0, waste: 5 },
+  { phase: 'External Walls', subPhase: 'Brick and block cavity wall', name: 'Cavity insulation', unit: 'm2', labour: 12, materials: 18, plant: 0, sub: 0, waste: 3 },
+  { phase: 'External Walls', subPhase: 'Render finish', name: 'External render two-coat', unit: 'm2', labour: 28, materials: 18, plant: 0, sub: 0, waste: 5 },
+  // Roof Structure
+  { phase: 'Roof Structure', subPhase: 'Flat roof joists', name: 'Supply and fix flat roof joists', unit: 'm2', labour: 35, materials: 42, plant: 0, sub: 0, waste: 5 },
+  { phase: 'Roof Structure', subPhase: 'Flat roof joists', name: 'Firrings and decking', unit: 'm2', labour: 22, materials: 28, plant: 0, sub: 0, waste: 5 },
+  // Roofing
+  { phase: 'Roofing', subPhase: 'Warm roof', name: 'Warm roof insulation board', unit: 'm2', labour: 18, materials: 45, plant: 0, sub: 0, waste: 5 },
+  { phase: 'Roofing', subPhase: 'Warm roof', name: 'EPDM membrane', unit: 'm2', labour: 25, materials: 55, plant: 0, sub: 0, waste: 3 },
+  { phase: 'Roofing', subPhase: 'Roof lanterns', name: 'Supply and install roof lantern', unit: 'item', labour: 480, materials: 0, plant: 0, sub: 2400, waste: 0 },
+  // Oversite & Floors
+  { phase: 'Oversite & Floors', subPhase: 'Concrete slab', name: 'Sand blinding layer', unit: 'm2', labour: 8, materials: 6, plant: 0, sub: 0, waste: 5 },
+  { phase: 'Oversite & Floors', subPhase: 'Concrete slab', name: 'DPM membrane', unit: 'm2', labour: 5, materials: 4, plant: 0, sub: 0, waste: 5 },
+  { phase: 'Oversite & Floors', subPhase: 'Concrete slab', name: 'Floor insulation', unit: 'm2', labour: 10, materials: 22, plant: 0, sub: 0, waste: 5 },
+  { phase: 'Oversite & Floors', subPhase: 'Concrete slab', name: 'Pour and power float slab', unit: 'm2', labour: 22, materials: 38, plant: 18, sub: 0, waste: 5 },
+  // Windows & Doors
+  { phase: 'Windows & Doors', name: 'Supply and fit bifold doors', unit: 'item', labour: 480, materials: 0, plant: 0, sub: 3200, waste: 0 },
+  { phase: 'Windows & Doors', name: 'Supply and fit window', unit: 'item', labour: 240, materials: 0, plant: 0, sub: 850, waste: 0 },
+  // Plastering
+  { phase: 'Plastering', subPhase: 'Skim coat', name: 'Plasterboard and skim walls', unit: 'm2', labour: 22, materials: 14, plant: 0, sub: 0, waste: 5 },
+  { phase: 'Plastering', subPhase: 'Skim coat', name: 'Skim coat ceiling', unit: 'm2', labour: 18, materials: 8, plant: 0, sub: 0, waste: 5 },
+  // Decoration
+  { phase: 'Decoration', subPhase: 'Emulsion', name: 'Mist coat and two coat emulsion walls', unit: 'm2', labour: 8, materials: 3, plant: 0, sub: 0, waste: 0 },
+  { phase: 'Decoration', subPhase: 'Emulsion', name: 'Emulsion ceiling', unit: 'm2', labour: 7, materials: 2, plant: 0, sub: 0, waste: 0 },
+  // UFH
+  { phase: 'Underfloor Heating', name: 'UFH pipe and manifold', unit: 'm2', labour: 18, materials: 28, plant: 0, sub: 0, waste: 3 },
+  { phase: 'Underfloor Heating', name: 'UFH controls and commissioning', unit: 'item', labour: 240, materials: 180, plant: 0, sub: 0, waste: 0 },
+  // Screed
+  { phase: 'Screed', name: 'Liquid screed (pump)', unit: 'm2', labour: 8, materials: 22, plant: 35, sub: 0, waste: 5 },
+  { phase: 'Screed', name: 'Sand and cement screed', unit: 'm2', labour: 18, materials: 14, plant: 8, sub: 0, waste: 5 },
+  // Drainage
+  { phase: 'Drainage', subPhase: 'Foul drainage', name: 'Excavate and lay foul drain', unit: 'm', labour: 45, materials: 28, plant: 25, sub: 0, waste: 0 },
+  { phase: 'Drainage', subPhase: 'Foul drainage', name: 'Inspection chamber', unit: 'item', labour: 240, materials: 180, plant: 0, sub: 0, waste: 0 },
+  // Structural Steel
+  { phase: 'Structural Steel', name: 'Supply and install RSJ beam', unit: 'item', labour: 0, materials: 0, plant: 0, sub: 1200, waste: 0 },
+  { phase: 'Structural Steel', name: 'Padstones', unit: 'item', labour: 45, materials: 35, plant: 0, sub: 0, waste: 5 },
+  // Handover
+  { phase: 'Handover', name: 'Snagging and defects', unit: 'day', labour: 240, materials: 50, plant: 0, sub: 0, waste: 0 },
+  { phase: 'Handover', name: 'Final clean', unit: 'item', labour: 360, materials: 0, plant: 0, sub: 0, waste: 0 },
+]
+
+const DEFAULT_PRODUCTS = [
+  { name: 'Ready mix concrete C25', category: 'Concrete & Masonry', unit: 'm3', cost: 95, supplier: '', waste: 8, markup: 15 },
+  { name: 'Dense aggregate blocks 100mm', category: 'Concrete & Masonry', unit: 'item', cost: 2.20, supplier: '', waste: 5, markup: 15 },
+  { name: 'Facing bricks (standard)', category: 'Concrete & Masonry', unit: 'item', cost: 0.45, supplier: '', waste: 10, markup: 15 },
+  { name: 'Building sand (bulk bag)', category: 'Concrete & Masonry', unit: 'item', cost: 45, supplier: '', waste: 5, markup: 15 },
+  { name: 'Cement (25kg bag)', category: 'Concrete & Masonry', unit: 'bag', cost: 7.50, supplier: '', waste: 5, markup: 15 },
+  { name: 'PIR insulation 50mm', category: 'Insulation', unit: 'm2', cost: 8.50, supplier: '', waste: 5, markup: 20 },
+  { name: 'PIR insulation 100mm', category: 'Insulation', unit: 'm2', cost: 16.00, supplier: '', waste: 5, markup: 20 },
+  { name: 'Mineral wool batt 100mm', category: 'Insulation', unit: 'm2', cost: 4.80, supplier: '', waste: 5, markup: 15 },
+  { name: 'Plasterboard 12.5mm', category: 'Plasterboard & Plaster', unit: 'm2', cost: 4.80, supplier: '', waste: 8, markup: 15 },
+  { name: 'Plasterboard 15mm', category: 'Plasterboard & Plaster', unit: 'm2', cost: 6.20, supplier: '', waste: 8, markup: 15 },
+  { name: 'Multi-finish plaster (25kg)', category: 'Plasterboard & Plaster', unit: 'bag', cost: 9.50, supplier: '', waste: 5, markup: 15 },
+  { name: 'Timber C16 47x150mm', category: 'Timber & Sheet', unit: 'm', cost: 4.20, supplier: '', waste: 10, markup: 15 },
+  { name: 'OSB3 18mm', category: 'Timber & Sheet', unit: 'm2', cost: 9.80, supplier: '', waste: 8, markup: 15 },
+  { name: 'DPM membrane 1200g', category: 'Waterproofing & DPM', unit: 'm2', cost: 1.20, supplier: '', waste: 10, markup: 20 },
+  { name: 'EPDM membrane 1.2mm', category: 'Roofing', unit: 'm2', cost: 28.00, supplier: '', waste: 10, markup: 20 },
+  { name: 'Lead flashing code 4', category: 'Roofing', unit: 'm', cost: 18.50, supplier: '', waste: 10, markup: 20 },
+  { name: 'Hardcore (bulk bag)', category: 'Concrete & Masonry', unit: 'item', cost: 55, supplier: '', waste: 5, markup: 10 },
+  { name: 'Sand blinding (bulk bag)', category: 'Concrete & Masonry', unit: 'item', cost: 38, supplier: '', waste: 5, markup: 10 },
+  { name: 'Wall ties (bag of 250)', category: 'Concrete & Masonry', unit: 'item', cost: 14, supplier: '', waste: 5, markup: 15 },
+  { name: 'Screed (per m2 @ 65mm)', category: 'Concrete & Masonry', unit: 'm2', cost: 22, supplier: '', waste: 5, markup: 15 },
+]
+
+const DEFAULT_PLANT = [
+  { name: 'Mini digger 1.5t', unit: 'day', cost: 280, markup: 20 },
+  { name: 'Mini digger 3t', unit: 'day', cost: 380, markup: 20 },
+  { name: 'Dumper 1t', unit: 'day', cost: 150, markup: 20 },
+  { name: 'Mixer 130L', unit: 'day', cost: 55, markup: 20 },
+  { name: 'Acrow props x4', unit: 'day', cost: 40, markup: 20 },
+  { name: 'Scaffold (full kit)', unit: 'week', cost: 650, markup: 20 },
+  { name: 'Tower scaffold', unit: 'week', cost: 130, markup: 20 },
+  { name: 'Skip 6 yard', unit: 'item', cost: 280, markup: 15 },
+  { name: 'Skip 8 yard', unit: 'item', cost: 320, markup: 15 },
+  { name: 'Grab lorry hire', unit: 'item', cost: 350, markup: 15 },
+  { name: 'Wacker plate', unit: 'day', cost: 65, markup: 20 },
+  { name: 'Rotary laser level', unit: 'day', cost: 45, markup: 20 },
+  { name: 'Concrete pump', unit: 'day', cost: 850, markup: 15 },
+  { name: 'Telehandler', unit: 'day', cost: 420, markup: 20 },
+]
+
+const DEFAULT_LABOUR = [
+  { name: 'Labourer', day_rate: 160, markup: 20 },
+  { name: 'Builder', day_rate: 240, markup: 20 },
+  { name: 'Carpenter', day_rate: 280, markup: 20 },
+  { name: 'Bricklayer', day_rate: 280, markup: 20 },
+  { name: 'Plasterer', day_rate: 260, markup: 20 },
+  { name: 'Electrician', day_rate: 320, markup: 20 },
+  { name: 'Plumber', day_rate: 320, markup: 20 },
+  { name: 'Decorator', day_rate: 220, markup: 20 },
+  { name: 'Roofer', day_rate: 280, markup: 20 },
+  { name: 'Groundworker', day_rate: 260, markup: 20 },
+  { name: 'Tiler', day_rate: 260, markup: 20 },
+  { name: 'Kitchen fitter', day_rate: 280, markup: 20 },
+  { name: 'Site manager', day_rate: 380, markup: 20 },
+]
+
+const DEFAULT_FORMULAS = [
+  { name: 'Wall area', expression: 'length * height', variables: [{ name: 'length', label: 'Length (m)', defaultValue: 0 }, { name: 'height', label: 'Height (m)', defaultValue: 2.4 }], description: 'Calculate wall area from length × height' },
+  { name: 'Floor area', expression: 'length * width', variables: [{ name: 'length', label: 'Length (m)', defaultValue: 0 }, { name: 'width', label: 'Width (m)', defaultValue: 0 }], description: 'Calculate floor area from length × width' },
+  { name: 'Volume', expression: 'length * width * depth', variables: [{ name: 'length', label: 'Length (m)', defaultValue: 0 }, { name: 'width', label: 'Width (m)', defaultValue: 0 }, { name: 'depth', label: 'Depth (m)', defaultValue: 0 }], description: 'Calculate volume from length × width × depth' },
+  { name: 'Labour days', expression: 'measured_qty / productivity_rate', variables: [{ name: 'measured_qty', label: 'Quantity', defaultValue: 0 }, { name: 'productivity_rate', label: 'Productivity (units/day)', defaultValue: 10 }], description: 'Labour days = quantity / productivity rate' },
+  { name: 'Waste allowance', expression: 'base_qty * (1 + waste_pct / 100)', variables: [{ name: 'base_qty', label: 'Base quantity', defaultValue: 0 }, { name: 'waste_pct', label: 'Waste %', defaultValue: 10 }], description: 'Order quantity including waste allowance' },
+  { name: 'Linear metres', expression: 'length', variables: [{ name: 'length', label: 'Length (m)', defaultValue: 0 }], description: 'Simple linear measurement' },
+]
+
+const DEFAULT_TAKEOFF_TOOLS = [
+  {
+    name: 'Foundation Tool',
+    phaseName: 'Foundations',
+    description: 'Measure and price foundations',
+    subtypes: [
+      { name: 'Strip foundation', description: 'Concrete strip along walls' },
+      { name: 'Trench fill', description: 'Fully filled concrete trench' },
+      { name: 'Pad foundation', description: 'Isolated concrete pads' },
+      { name: 'Raft foundation', description: 'Reinforced slab across full footprint' },
+      { name: 'Piled foundation', description: 'Driven or bored concrete piles' },
+    ],
+  },
+  {
+    name: 'External Wall Tool',
+    phaseName: 'External Walls',
+    description: 'Measure and price external walls',
+    subtypes: [
+      { name: 'Brick and block cavity wall', description: '102.5mm brick + 100mm block + 75mm cavity' },
+      { name: 'Blockwork wall', description: '100mm or 140mm dense block' },
+      { name: 'Timber frame wall', description: 'Structural timber frame with sheathing' },
+      { name: 'Garden room wall build-up', description: 'Timber clad garden room construction' },
+      { name: 'Rendered external wall', description: 'Block wall with external render finish' },
+    ],
+  },
+  {
+    name: 'Roof Tool',
+    phaseName: 'Roofing',
+    description: 'Measure and price roof structures and coverings',
+    subtypes: [
+      { name: 'Warm flat roof', description: 'Insulation above decking — preferred modern spec' },
+      { name: 'Cold flat roof', description: 'Insulation between joists' },
+      { name: 'Pitched roof', description: 'Traditional rafters or trussed rafter roof' },
+      { name: 'Vaulted roof', description: 'Exposed structural roof — insulated rafters' },
+    ],
+  },
+  {
+    name: 'Floor Tool',
+    phaseName: 'Oversite & Floors',
+    description: 'Measure and price floor construction',
+    subtypes: [
+      { name: 'Concrete slab', description: 'RC slab on hardcore and insulation' },
+      { name: 'Beam and block', description: 'Pre-stressed concrete beams with infill blocks' },
+      { name: 'Timber floor', description: 'Suspended timber joists' },
+      { name: 'Liquid screed', description: 'Pumped anhydrite or cementitious screed' },
+      { name: 'UFH overlay screed', description: 'Screed incorporating underfloor heating pipes' },
+    ],
+  },
+]
+
+export async function seedBackOfficeDefaults(sb: SupabaseClient, userId: string): Promise<void> {
+  const [
+    { count: tradeCount },
+    { count: phaseCount },
+    { count: productCount },
+    { count: plantCount },
+    { count: formulaCount },
+    { count: toolCount },
+  ] = await Promise.all([
+    sb.from('bo_labour_trades').select('*', { count: 'exact', head: true }).eq('user_id', userId),
+    sb.from('bo_phases').select('*', { count: 'exact', head: true }).eq('user_id', userId),
+    sb.from('bo_products').select('*', { count: 'exact', head: true }).eq('user_id', userId),
+    sb.from('bo_plant_items').select('*', { count: 'exact', head: true }).eq('user_id', userId),
+    sb.from('bo_formula_rules').select('*', { count: 'exact', head: true }).eq('user_id', userId),
+    sb.from('bo_takeoff_tools').select('*', { count: 'exact', head: true }).eq('user_id', userId),
+  ])
+
+  // Seed labour trades
+  if (!tradeCount) {
+    await sb.from('bo_labour_trades').insert(
+      DEFAULT_LABOUR.map((t, i) => ({ user_id: userId, name: t.name, day_rate: t.day_rate, markup_pct: t.markup, display_order: i }))
+    )
+  }
+
+  // Seed phases, sub-phases, tasks
+  if (!phaseCount) {
+    const phases = DEFAULT_PHASES.map((name, i) => ({ user_id: userId, name, display_order: i }))
+    const { data: insertedPhases } = await sb.from('bo_phases').insert(phases).select()
+    if (insertedPhases) {
+      const phaseMap = Object.fromEntries(insertedPhases.map(p => [p.name, p.id]))
+
+      // Sub-phases
+      const subPhaseRows: Array<{ user_id: string; phase_id: string; name: string; display_order: number }> = []
+      for (const [phaseName, subs] of Object.entries(DEFAULT_SUB_PHASES)) {
+        const phaseId = phaseMap[phaseName]
+        if (!phaseId) continue
+        subs.forEach((name, i) => subPhaseRows.push({ user_id: userId, phase_id: phaseId, name, display_order: i }))
+      }
+      const { data: insertedSubPhases } = await sb.from('bo_sub_phases').insert(subPhaseRows).select()
+      const subPhaseMap = Object.fromEntries((insertedSubPhases ?? []).map(sp => [`${sp.phase_id}:${sp.name}`, sp.id]))
+
+      // Tasks
+      const taskRows = DEFAULT_TASKS.map((t, i) => {
+        const phaseId = phaseMap[t.phase] ?? null
+        const subPhaseId = t.subPhase && phaseId ? (subPhaseMap[`${phaseId}:${t.subPhase}`] ?? null) : null
+        return {
+          user_id: userId,
+          phase_id: phaseId,
+          sub_phase_id: subPhaseId,
+          name: t.name,
+          unit: t.unit,
+          labour_cost: t.labour,
+          materials_cost: t.materials,
+          plant_cost: t.plant,
+          subcontract_cost: t.sub,
+          waste_cost: t.waste,
+          from_takeoff: true,
+          from_ai: true,
+          display_order: i,
+        }
+      })
+      await sb.from('bo_tasks').insert(taskRows)
+    }
+  }
+
+  // Seed products
+  if (!productCount) {
+    await sb.from('bo_products').insert(
+      DEFAULT_PRODUCTS.map(p => ({
+        user_id: userId, name: p.name, category: p.category, unit: p.unit,
+        default_cost: p.cost, supplier: p.supplier, waste_pct: p.waste, markup_pct: p.markup,
+      }))
+    )
+  }
+
+  // Seed plant
+  if (!plantCount) {
+    await sb.from('bo_plant_items').insert(
+      DEFAULT_PLANT.map((p, i) => ({ user_id: userId, name: p.name, unit: p.unit, default_cost: p.cost, markup_pct: p.markup, display_order: i }))
+    )
+  }
+
+  // Seed formula rules
+  if (!formulaCount) {
+    await sb.from('bo_formula_rules').insert(
+      DEFAULT_FORMULAS.map(f => ({ user_id: userId, ...f }))
+    )
+  }
+
+  // Seed takeoff tools + subtypes
+  if (!toolCount) {
+    // Fetch phase IDs so we can link tools to their phase
+    const { data: allPhases } = await sb.from('bo_phases').select('id, name').eq('user_id', userId)
+    const phaseNameToId = Object.fromEntries((allPhases ?? []).map(p => [p.name, p.id]))
+
+    for (let i = 0; i < DEFAULT_TAKEOFF_TOOLS.length; i++) {
+      const tool = DEFAULT_TAKEOFF_TOOLS[i]
+      const phaseId = phaseNameToId[tool.phaseName] ?? null
+      const { data: inserted } = await sb.from('bo_takeoff_tools').insert({
+        user_id: userId, name: tool.name, description: tool.description, display_order: i, phase_id: phaseId,
+      }).select().single()
+      if (inserted) {
+        await sb.from('bo_takeoff_subtypes').insert(
+          tool.subtypes.map((st, j) => ({ user_id: userId, tool_id: inserted.id, name: st.name, description: st.description, display_order: j }))
+        )
+      }
+    }
+  }
+}

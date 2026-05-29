@@ -14,6 +14,7 @@ import type { TakeoffItem, TakeoffPhase } from '@/lib/takeoff-types'
 import { PHASE_TO_QUOTE_PARENT, ALL_MAKEUPS, calcLayerQty, WALL_OPENING_LABELS } from '@/lib/takeoff-types'
 import { DEFAULT_DEMO_SUBPHASES, calcDemoSellingPrice, DEMO_UNIT_LABELS, type DemoUnit } from '@/lib/demolition-data'
 import { ALL_PHASE_SUBPHASES, calcPhaseTaskSellingPrice } from '@/lib/phase-tasks'
+import { createClient } from '@/lib/supabase/client'
 
 let phaseCounter = 0
 let itemCounter = 0
@@ -64,6 +65,19 @@ interface ScopeToQuotePhase {
   }[]
 }
 
+// Per-task rate data returned from scope-to-quote (populated from Back Office when available)
+interface TaskRateEntry {
+  description: string
+  unit: string
+  labourRate: number
+  materialsRate: number
+  plantRate: number
+  subRate: number
+  otherRate: number
+  wastePercent: number
+  measurementType: string
+}
+
 export default function NewQuotePage() {
   const { quotes, clients, addQuote, updateQuote, upsertClientFromQuote, getTemplate, loading } = useApp()
 
@@ -85,6 +99,7 @@ export default function NewQuotePage() {
   const [generatingPhases, setGeneratingPhases] = useState(false)
   const [showScopeChat, setShowScopeChat] = useState(false)
   const [buildingEstimate, setBuildingEstimate] = useState(false)
+  const [estimateUsedDB, setEstimateUsedDB] = useState(false)
   const [showScopeHelp, setShowScopeHelp] = useState(false)
   const [clientDrop, setClientDrop] = useState(false)
   const [clientSearch, setClientSearch] = useState('')
@@ -224,14 +239,147 @@ export default function NewQuotePage() {
     }
   }
 
+  // ── Fetch Back Office task rates grouped by phase name ─────────────────────
+  async function fetchBOTakeoffRates(): Promise<Record<string, Array<{
+    name: string; unit: string;
+    labour: number; materials: number; plant: number; sub: number; other: number; markup: number;
+  }>>> {
+    const sb = createClient()
+    const { data: { user } } = await sb.auth.getUser()
+    if (!user) return {}
+
+    const [{ data: phases }, { data: subPhases }, { data: tasks }] = await Promise.all([
+      sb.from('bo_phases').select('id, name').eq('user_id', user.id).eq('active', true),
+      sb.from('bo_sub_phases').select('id, name, phase_id').eq('user_id', user.id).eq('active', true),
+      sb.from('bo_tasks').select('name, unit, labour_cost, materials_cost, plant_cost, subcontract_cost, other_cost, markup_pct, phase_id, sub_phase_id')
+        .eq('user_id', user.id).eq('active', true).eq('from_takeoff', true),
+    ])
+
+    if (!tasks || tasks.length === 0) return {}
+
+    const phaseById = Object.fromEntries((phases ?? []).map(p => [p.id, p.name]))
+    const subPhaseToPhase = Object.fromEntries((subPhases ?? []).map(sp => [sp.id, sp.phase_id]))
+
+    const result: Record<string, Array<{ name: string; unit: string; labour: number; materials: number; plant: number; sub: number; other: number; markup: number }>> = {}
+
+    for (const t of tasks) {
+      // Resolve the top-level phase name (go through sub-phase if needed)
+      const phaseId = t.sub_phase_id ? (subPhaseToPhase[t.sub_phase_id] ?? t.phase_id) : t.phase_id
+      const phaseName = phaseId ? phaseById[phaseId] : null
+      if (!phaseName) continue
+
+      if (!result[phaseName]) result[phaseName] = []
+      result[phaseName].push({
+        name: t.name,
+        unit: t.unit,
+        labour: t.labour_cost,
+        materials: t.materials_cost,
+        plant: t.plant_cost,
+        sub: t.subcontract_cost,
+        other: t.other_cost,
+        markup: t.markup_pct,
+      })
+    }
+    return result
+  }
+
+  // ── Save estimator item rates back to Back Office ─────────────────────────
+  async function savePhaseRatesToBO(phase: QuotePhase) {
+    const items = phase.estimatorItems ?? []
+    if (items.length === 0) {
+      alert('No estimator items in this phase — rates are set using the Estimator panel.')
+      return
+    }
+    const sb = createClient()
+    const { data: { user } } = await sb.auth.getUser()
+    if (!user) { alert('Not logged in.'); return }
+
+    const taskNames = items.map(i => i.name)
+
+    // Fetch all matching tasks in one query
+    const { data: existing } = await sb
+      .from('bo_tasks')
+      .select('id, name')
+      .eq('user_id', user.id)
+      .in('name', taskNames)
+
+    const existingByName = Object.fromEntries((existing ?? []).map(t => [t.name, t.id]))
+
+    let updated = 0
+    let created = 0
+    const toCreate: object[] = []
+
+    for (const item of items) {
+      const taskId = existingByName[item.name]
+      if (taskId) {
+        await sb.from('bo_tasks').update({
+          labour_cost: item.labourRate,
+          materials_cost: item.materialsRate,
+          plant_cost: item.plantRate,
+          subcontract_cost: item.subRate,
+          other_cost: item.otherRate,
+          unit: item.unit,
+        }).eq('id', taskId)
+        updated++
+      } else {
+        // Create new task — resolve phase_id by matching phase name
+        const { data: boPhase } = await sb
+          .from('bo_phases')
+          .select('id')
+          .eq('user_id', user.id)
+          .ilike('name', phase.phase)
+          .single()
+
+        toCreate.push({
+          user_id: user.id,
+          name: item.name,
+          description: item.description ?? '',
+          unit: item.unit,
+          labour_cost: item.labourRate,
+          materials_cost: item.materialsRate,
+          plant_cost: item.plantRate,
+          subcontract_cost: item.subRate,
+          other_cost: item.otherRate,
+          markup_pct: 0,
+          from_takeoff: true,
+          from_ai: true,
+          phase_id: boPhase?.id ?? null,
+          display_order: 999,
+        })
+        created++
+      }
+    }
+
+    if (toCreate.length > 0) {
+      await sb.from('bo_tasks').insert(toCreate)
+    }
+
+    const parts = []
+    if (updated > 0) parts.push(`${updated} task${updated !== 1 ? 's' : ''} updated`)
+    if (created > 0) parts.push(`${created} new task${created !== 1 ? 's' : ''} added`)
+    alert(`✓ Back Office updated — ${parts.join(', ')}.`)
+  }
+
   // ── Import from Take-off tool ─────────────────────────────────────────────
-  function importTakeoff(e: React.ChangeEvent<HTMLInputElement>) {
+  async function importTakeoff(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = ev => {
-      try {
-        const data = JSON.parse(ev.target?.result as string)
+
+    // Fetch Back Office task rates (from_takeoff=true tasks, grouped by phase)
+    const boRates = await fetchBOTakeoffRates()
+    const hasBORates = Object.keys(boRates).length > 0
+
+    let data: { version: number; items: TakeoffItem[]; address?: string; jobType?: string }
+    try {
+      const text = await file.text()
+      data = JSON.parse(text)
+    } catch {
+      alert('Could not parse take-off file. Make sure it was exported from the Take-off tool.')
+      e.target.value = ''
+      return
+    }
+
+    try {
         if (data.version !== 1 || !Array.isArray(data.items)) {
           alert('Not a valid take-off file. Export a take-off from the Take-off tool first.')
           return
@@ -359,22 +507,43 @@ export default function NewQuotePage() {
             continue
           }
 
-          // ── Regular item: one sub-phase using the take-off phase name ──
+          // ── Regular item — use Back Office task rates if available ──
           const refStr = item.drawingRef ? ` [${item.drawingRef}]` : ''
           const specStr = item.spec ? ` · ${item.spec}` : ''
           const desc = `${item.qty} ${item.unit}${specStr}${refStr}`
 
-          newPhases.push(makePhase(
-            subPhaseName,
-            [
-              { desc, qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes, itemType: 'labour' },
-              { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials' },
-              { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'plant' },
-              { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'subcontractors' },
-              { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'other' },
-            ],
-            parentPhase,
-          ))
+          const boTasksForPhase = boRates[item.phase] ?? []
+
+          if (hasBORates && boTasksForPhase.length > 0) {
+            // Create one sub-phase row per Back Office task, with costs = qty × rate
+            for (const boTask of boTasksForPhase) {
+              const taskDesc = `${item.qty} ${item.unit} — ${boTask.name}${refStr}`
+              newPhases.push(makePhase(
+                boTask.name,
+                [
+                  { desc: taskDesc, qty: item.qty, unit: boTask.unit, labour: +(item.qty * boTask.labour).toFixed(2), materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes, itemType: 'labour' },
+                  { desc: '', qty: item.qty, unit: boTask.unit, labour: 0, materials: +(item.qty * boTask.materials).toFixed(2), plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials' },
+                  { desc: '', qty: item.qty, unit: boTask.unit, labour: 0, materials: 0, plantHire: +(item.qty * boTask.plant).toFixed(2), subcontractors: 0, other: 0, notes: '', itemType: 'plant' },
+                  { desc: '', qty: item.qty, unit: boTask.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: +(item.qty * boTask.sub).toFixed(2), other: 0, notes: '', itemType: 'subcontractors' },
+                  { desc: '', qty: item.qty, unit: boTask.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: +(item.qty * boTask.other).toFixed(2), notes: `Markup ${boTask.markup}%`, itemType: 'other' },
+                ],
+                parentPhase,
+              ))
+            }
+          } else {
+            // No Back Office data — create empty phase (user fills rates manually)
+            newPhases.push(makePhase(
+              subPhaseName,
+              [
+                { desc, qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes, itemType: 'labour' },
+                { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials' },
+                { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'plant' },
+                { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'subcontractors' },
+                { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'other' },
+              ],
+              parentPhase,
+            ))
+          }
         }
 
         setPhases(newPhases)
@@ -384,15 +553,14 @@ export default function NewQuotePage() {
         if (data.jobType) setJobType(data.jobType)
 
         const buildupCount = (data.items as TakeoffItem[]).filter((i: TakeoffItem) => i.floorMakeupId).length
+        const ratesNote = hasBORates ? ' Back Office rates applied.' : ' Add your rates to complete the estimate.'
         const msg = buildupCount > 0
-          ? `✓ Imported ${newPhases.length} sub-phases (including ${buildupCount} build-up${buildupCount !== 1 ? 's' : ''} expanded into layers) — add your rates to complete the estimate.`
-          : `✓ Imported ${newPhases.length} sub-phases — add your rates to complete the estimate.`
+          ? `✓ Imported ${newPhases.length} sub-phases (including ${buildupCount} build-up${buildupCount !== 1 ? 's' : ''} expanded into layers).${ratesNote}`
+          : `✓ Imported ${newPhases.length} sub-phases.${ratesNote}`
         alert(msg)
       } catch {
-        alert('Could not parse take-off file. Make sure it was exported from the Take-off tool.')
+        alert('Could not process take-off file. Make sure it was exported from the Take-off tool.')
       }
-    }
-    reader.readAsText(file)
     e.target.value = ''
   }
 
@@ -410,13 +578,41 @@ export default function NewQuotePage() {
       if (data.error) { alert('Could not build estimate: ' + data.error); return }
       if (!Array.isArray(data.phases)) { alert('Unexpected response from AI.'); return }
 
+      // taskRates comes from Back Office when available; otherwise empty
+      const taskRates: Record<string, TaskRateEntry> = data.taskRates ?? {}
       const VALID_TYPES: MeasurementType[] = ['area', 'volume', 'linear', 'quantity']
 
       const built: QuotePhase[] = (data.phases as ScopeToQuotePhase[]).map(sp => {
-        // Get all default template items for this phase, filtered to AI-selected task names
-        const allDefaults = getPhaseEstimatorDefaults(sp.phase)
         const selectedSet = new Set(sp.selectedTasks ?? [])
-        const templateItems = allDefaults.filter(t => selectedSet.has(t.name))
+
+        // Build template items — prefer Back Office rates, fall back to static defaults
+        const templateItems: EstimatorItemTemplate[] = []
+        for (const taskName of sp.selectedTasks ?? []) {
+          if (taskRates[taskName]) {
+            // ✅ Back Office rate found
+            const r = taskRates[taskName]
+            templateItems.push({
+              id: `bo-${taskName}`,
+              name: taskName,
+              description: r.description,
+              measurementType: VALID_TYPES.includes(r.measurementType as MeasurementType)
+                ? (r.measurementType as MeasurementType)
+                : 'quantity',
+              unit: r.unit,
+              labourRate:    r.labourRate,
+              materialsRate: r.materialsRate,
+              plantRate:     r.plantRate,
+              subRate:       r.subRate,
+              otherRate:     r.otherRate,
+              wastePercent:  r.wastePercent,
+            })
+          } else {
+            // Fallback: look up static defaults
+            const allDefaults = getPhaseEstimatorDefaults(sp.phase)
+            const match = allDefaults.find(t => selectedSet.has(t.name) && t.name === taskName)
+            if (match) templateItems.push(match)
+          }
+        }
 
         // Convert extra tasks (genuinely out-of-library work) to EstimatorItemTemplate
         const extraTemplates: EstimatorItemTemplate[] = (sp.extraTasks ?? []).map(et => ({
@@ -452,6 +648,7 @@ export default function NewQuotePage() {
 
       setPhases(built)
       setScope(scopeText)
+      setEstimateUsedDB(!!data.usingDB)
     } catch {
       alert('Failed to build estimate — check your connection.')
     } finally {
@@ -802,6 +999,12 @@ export default function NewQuotePage() {
             : !phases.length
             ? <div className="empty-dashed"><div style={{ fontSize: 14, marginBottom: 6 }}>No phases yet</div><div style={{ fontSize: 12 }}>Select a job type to load a template, or click Add Phase.</div></div>
             : <>
+                {estimateUsedDB && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, marginBottom: 12, fontSize: 12, color: '#1d4ed8' }}>
+                    <span style={{ fontWeight: 700 }}>✓ Back Office rates applied</span>
+                    <span style={{ color: '#64748b' }}>— costs are based on your configured defaults, not generic AI estimates</span>
+                  </div>
+                )}
                 {/* ── Grouped main phases ── */}
                 {mainPhaseOrder.map(mainPhase => {
                   const subPhases = phases.filter(p => p.parentPhase === mainPhase)
@@ -840,6 +1043,7 @@ export default function NewQuotePage() {
                           onUpdatePhaseName={updatePhaseName}
                           onRemovePhase={removePhase}
                           onUpdatePhase={updatePhase}
+                          onSaveToBO={() => savePhaseRatesToBO(p)}
                         />
                       ))}
                     </div>
@@ -859,6 +1063,7 @@ export default function NewQuotePage() {
                     onUpdatePhaseName={updatePhaseName}
                     onRemovePhase={removePhase}
                     onUpdatePhase={updatePhase}
+                    onSaveToBO={() => savePhaseRatesToBO(p)}
                   />
                 ))}
               </>
@@ -983,10 +1188,12 @@ interface SubPhaseBlockProps {
   onUpdatePhaseName: (id: number, name: string) => void
   onRemovePhase: (id: number) => void
   onUpdatePhase: (updated: QuotePhase) => void
+  onSaveToBO: () => void
 }
 
-function SubPhaseBlock({ p, pi, markup, collapsed, onToggleCollapse, onUpdatePhaseName, onRemovePhase, onUpdatePhase }: SubPhaseBlockProps) {
+function SubPhaseBlock({ p, pi, markup, collapsed, onToggleCollapse, onUpdatePhaseName, onRemovePhase, onUpdatePhase, onSaveToBO }: SubPhaseBlockProps) {
   const subSell = calcPhaseSell(p, markup)
+  const hasEstimatorItems = (p.estimatorItems?.length ?? 0) > 0
 
   return (
     <div className="phase-block" style={{ borderRadius: p.parentPhase ? '0' : undefined, marginBottom: 2 }}>
@@ -1006,6 +1213,17 @@ function SubPhaseBlock({ p, pi, markup, collapsed, onToggleCollapse, onUpdatePha
         <span style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, minWidth: 16 }}>{pi + 1}.</span>
         <input value={p.phase} onChange={e => onUpdatePhaseName(p.id, e.target.value)} style={{ fontSize: 13 }} />
         <span className="mono" style={{ fontSize: 11, color: 'var(--slate)', fontWeight: 600, minWidth: 70, textAlign: 'right' }}>{fmt(subSell)}</span>
+        {hasEstimatorItems && (
+          <button
+            onClick={onSaveToBO}
+            title="Save these rates back to your Back Office defaults"
+            style={{
+              background: 'none', border: '1px solid #bfdbfe', borderRadius: 4,
+              color: '#3b82f6', fontSize: 10, padding: '1px 6px', cursor: 'pointer',
+              fontWeight: 600, whiteSpace: 'nowrap', lineHeight: 1.4,
+            }}
+          >💾 BO</button>
+        )}
         <button className="rm-btn" onClick={() => onRemovePhase(p.id)} title="Remove this sub-phase">×</button>
       </div>
 

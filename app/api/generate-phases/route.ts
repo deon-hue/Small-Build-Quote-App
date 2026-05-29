@@ -1,4 +1,64 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+
+// ── Fetch Back Office reference rates for the current user ─────────────────────
+
+async function fetchReferenceRates(userId: string): Promise<string> {
+  const sb = await createClient()
+
+  const { data: phases } = await sb
+    .from('bo_phases')
+    .select('id, name')
+    .eq('user_id', userId)
+    .eq('active', true)
+
+  const { data: subPhases } = await sb
+    .from('bo_sub_phases')
+    .select('id, name, phase_id')
+    .eq('user_id', userId)
+    .eq('active', true)
+
+  const { data: tasks } = await sb
+    .from('bo_tasks')
+    .select('name, unit, labour_cost, materials_cost, plant_cost, subcontract_cost, other_cost, phase_id, sub_phase_id')
+    .eq('user_id', userId)
+    .eq('active', true)
+    .order('display_order')
+
+  if (!tasks || tasks.length === 0) return ''
+
+  const phaseById = Object.fromEntries((phases ?? []).map(p => [p.id, p.name]))
+  const subPhaseById = Object.fromEntries((subPhases ?? []).map(sp => [sp.id, sp.name]))
+
+  // Group tasks by phase for readability
+  const grouped: Record<string, string[]> = {}
+  for (const t of tasks) {
+    const phaseName = t.sub_phase_id
+      ? (subPhaseById[t.sub_phase_id] ?? (t.phase_id ? phaseById[t.phase_id] : 'Other'))
+      : (t.phase_id ? phaseById[t.phase_id] : 'Other')
+
+    if (!grouped[phaseName]) grouped[phaseName] = []
+
+    const parts: string[] = []
+    if (t.labour_cost > 0) parts.push(`labour £${t.labour_cost}`)
+    if (t.materials_cost > 0) parts.push(`mats £${t.materials_cost}`)
+    if (t.plant_cost > 0) parts.push(`plant £${t.plant_cost}`)
+    if (t.subcontract_cost > 0) parts.push(`sub £${t.subcontract_cost}`)
+    if (t.other_cost > 0) parts.push(`other £${t.other_cost}`)
+
+    if (parts.length > 0) {
+      grouped[phaseName].push(`    ${t.name} (per ${t.unit}): ${parts.join(', ')}`)
+    }
+  }
+
+  const lines = Object.entries(grouped)
+    .map(([phase, taskLines]) => `  ${phase}:\n${taskLines.join('\n')}`)
+    .join('\n')
+
+  return lines ? `\n\nCONTRACTOR BACK OFFICE DEFAULT RATES (use these as your cost baseline — scale by area/quantity as needed):\n${lines}\n` : ''
+}
+
+// ── Route ──────────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY
@@ -11,6 +71,11 @@ export async function POST(req: NextRequest) {
   if (!scope?.trim()) {
     return NextResponse.json({ error: 'No scope provided' }, { status: 400 })
   }
+
+  // Fetch user's Back Office rates for cost grounding
+  const sb = await createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  const ratesBlock = user ? await fetchReferenceRates(user.id) : ''
 
   const system = `You are an expert UK quantity surveyor and building contractor. Convert a scope of works into a structured cost breakdown using UK industry standard build phases.
 
@@ -42,7 +107,9 @@ Return ONLY valid JSON — no markdown, no code blocks, no explanation:
 }
 
 Rules:
-- Use realistic UK 2024 contractor rates (all costs ex-VAT)
+- Use the contractor's Back Office rates where provided — these are the agreed pricing defaults
+- Where a Back Office rate is provided, derive totals by multiplying the per-unit rate by the required quantity
+- For tasks or phases NOT in the Back Office rates, use realistic UK 2024 contractor rates (all costs ex-VAT)
 - labour = direct labour cost for this sub-phase
 - materials = materials, components and supplies
 - plant = machinery hire: excavators, scaffolding, skips, mixers, access platforms — use 0 if none
@@ -71,7 +138,7 @@ DEMOLITION / STRIP OUT RULES — when the scope mentions any demolition, strip o
 - "skip" or "clear site" or "clear waste" → sub-phase: Waste & Clearance — include skip hire (other) and labour loading out (labour)
 - Always add a Waste & Clearance sub-phase when demolition is present: skip hire (other £310/skip), labour loading out (labour £300/day)
 - Flag asbestos risk in buildingRegsNotes for any pre-1985 property or where existing coatings are being removed
-- Always include a provisional sum for hazardous materials in older properties`
+- Always include a provisional sum for hazardous materials in older properties${ratesBlock}`
 
   const userMessage = `Job type: ${jobType || 'general building works'}
 Property: ${address || 'not specified'}
@@ -79,8 +146,7 @@ Property: ${address || 'not specified'}
 Scope of works:
 ${scope}
 
-Generate a full phase cost breakdown using UK industry standard phases for this job type.
-Group sub-phases under main phase headers. Include all five cost types per sub-phase.`
+Generate a full phase cost breakdown. Use the Back Office default rates provided in the system prompt as your pricing baseline, scaled to the quantities implied by the scope. Include all five cost types per sub-phase.`
 
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -134,7 +200,7 @@ Group sub-phases under main phase headers. Include all five cost types per sub-p
       return NextResponse.json({ error: 'Unexpected AI response structure' }, { status: 500 })
     }
 
-    return NextResponse.json({ phases: parsed.phases })
+    return NextResponse.json({ phases: parsed.phases, usingDB: !!ratesBlock })
   } catch (err) {
     console.error('Generate phases error:', err)
     return NextResponse.json({ error: 'Failed to generate phases' }, { status: 500 })

@@ -164,9 +164,31 @@ const LIGHT_VARS: Record<string, string> = {
   '--to-scrim':     'rgba(30,32,34,0.6)',
 }
 
-// ── localStorage key ──────────────────────────────────────────────────────────
-const LS_KEY = 'sbc_takeoff_project'
-const LS_THEME = 'sbc_takeoff_theme'
+// ── localStorage keys ─────────────────────────────────────────────────────────
+const LS_KEY      = 'sbc_takeoff_project'
+const LS_THEME    = 'sbc_takeoff_theme'
+const LS_RECOVERY = 'sbc_takeoff_recovery'
+
+// ── Recovery snapshot ─────────────────────────────────────────────────────────
+interface RecoverySnapshot {
+  id:          string
+  label:       string      // "Recovery Snapshot - [name] - [datetime]"
+  timestamp:   string      // ISO
+  projectName: string
+  project:     Omit<TakeoffProject, 'planImageUrl'>
+  planImageUrl?: string    // included so full restore is possible
+}
+
+function saveRecoverySnapshot(snap: RecoverySnapshot) {
+  try { localStorage.setItem(LS_RECOVERY, JSON.stringify(snap)) } catch {}
+}
+
+function loadRecoverySnapshot(): RecoverySnapshot | null {
+  try {
+    const raw = localStorage.getItem(LS_RECOVERY)
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
 
 function loadProject(): TakeoffProject | null {
   try {
@@ -374,6 +396,12 @@ export default function TakeoffPage() {
     setToast(msg)
     toastTimerRef.current = setTimeout(() => setToast(null), 2800)
   }
+
+  // Reset / recovery state
+  const [showClearModal, setShowClearModal]   = useState(false)
+  const [showResetModal, setShowResetModal]   = useState(false)
+  const [resetInProgress, setResetInProgress] = useState(false)
+  const [recoverySnap, setRecoverySnap]       = useState<RecoverySnapshot | null>(() => loadRecoverySnapshot())
 
   // Floor tool state
   const [floorDrawMode, setFloorDrawMode] = useState<'rect' | 'polygon'>('rect')
@@ -798,6 +826,110 @@ export default function TakeoffPage() {
       }
     }
     reader.readAsText(file)
+  }
+
+  // ── Reset system ────────────────────────────────────────────────────────────
+
+  /** 1. Reset View — viewport only, nothing else touched */
+  function resetView() {
+    setZoom(1)
+    setPanOffset({ x: 0, y: 0 })
+    showToast('View reset.')
+  }
+
+  /** 2. Create recovery snapshot — call BEFORE any destructive reset */
+  function createRecoverySnapshot(reason: 'clear' | 'reset'): RecoverySnapshot {
+    const now    = new Date()
+    const label  = `Recovery Snapshot — ${project.name} — ${now.toLocaleDateString('en-GB')} ${now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`
+    const { planImageUrl: _, ...projectData } = project
+    const snap: RecoverySnapshot = {
+      id:          uid(),
+      label,
+      timestamp:   now.toISOString(),
+      projectName: project.name,
+      project:     { ...projectData },
+      planImageUrl: planImage ?? undefined,
+    }
+    saveRecoverySnapshot(snap)
+    setRecoverySnap(snap)
+    return snap
+  }
+
+  /** 3. Restore last recovery snapshot */
+  function restoreRecoverySnapshot() {
+    const snap = recoverySnap
+    if (!snap) return
+    setProject({
+      ...snap.project,
+      updatedAt: new Date().toISOString(),
+    })
+    if (snap.planImageUrl) {
+      setPlanImage(snap.planImageUrl)
+      const img = new Image()
+      img.onload = () => setCanvasImgSize({ w: img.naturalWidth, h: img.naturalHeight })
+      img.src    = snap.planImageUrl
+    }
+    setSelectedId(null)
+    setEditingElement(null)
+    setEditingItem(null)
+    setDrawPoints([])
+    setIsDrawing(false)
+    setPanelMode('schedule')
+    showToast(`Restored: ${snap.label}`)
+  }
+
+  /** 4. Clear Drawings — removes elements + linked items, keeps project meta */
+  function clearDrawings() {
+    if (resetInProgress) return
+    setResetInProgress(true)
+    createRecoverySnapshot('clear')
+    // Keep items that are NOT linked to any element (manually-added, pricing-only rows)
+    const unlinkedItems = project.items.filter(it => !it.elementId)
+    setProject(p => ({
+      ...p,
+      elements: [],
+      items:    unlinkedItems,
+    }))
+    setSelectedId(null)
+    setEditingElement(null)
+    setEditingItem(null)
+    setDrawPoints([])
+    setIsDrawing(false)
+    setShowClearModal(false)
+    setTimeout(() => setResetInProgress(false), 600)
+    showToast('Drawings cleared. Recovery snapshot saved.')
+  }
+
+  /** 5. Reset Takeoff — full wipe, returns to blank project with same name/address */
+  function resetTakeoff() {
+    if (resetInProgress) return
+    setResetInProgress(true)
+    createRecoverySnapshot('reset')
+    const blank = blankProject()
+    // Preserve project identity and settings, wipe all drawing/measurement data
+    setProject({
+      ...blank,
+      id:          project.id,     // keep same ID so LS key stays stable
+      name:        project.name,
+      address:     project.address,
+      jobType:     project.jobType,
+      calibration: project.calibration,
+      createdAt:   project.createdAt,
+    })
+    setPlanImage(null)
+    setCanvasImgSize(null)
+    setSelectedId(null)
+    setEditingElement(null)
+    setEditingItem(null)
+    setDrawPoints([])
+    setIsDrawing(false)
+    setTool('select')
+    setPanelMode('schedule')
+    setZoom(1)
+    setPanOffset({ x: 0, y: 0 })
+    setShowResetModal(false)
+    setTimeout(() => setResetInProgress(false), 600)
+    showToast('Takeoff reset. Recovery snapshot saved.')
   }
 
   // ── New project ────────────────────────────────────────────────────────────
@@ -2497,12 +2629,55 @@ export default function TakeoffPage() {
     )
   }
 
+  // ── Recovery snapshot banner (reusable) ──────────────────────────────────────
+  function renderRecoveryBanner() {
+    if (!recoverySnap) return null
+    const snapTime = new Date(recoverySnap.timestamp)
+    const timeLabel = `${snapTime.toLocaleDateString('en-GB')} ${snapTime.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`
+    return (
+      <div style={{
+        background: darkMode ? '#1a2a1a' : '#f0fdf4',
+        border: `1px solid ${darkMode ? '#2d5a2d' : '#86efac'}`,
+        borderRadius: 6, margin: '8px 10px 0', padding: '8px 10px',
+        display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+      }}>
+        <span style={{ fontSize: 16 }}>💾</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: darkMode ? '#86efac' : '#166534' }}>
+            Recovery snapshot available
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--to-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {recoverySnap.projectName} · {timeLabel}
+          </div>
+        </div>
+        <button
+          onClick={restoreRecoverySnapshot}
+          style={{
+            padding: '4px 10px', fontSize: 11, fontWeight: 700, borderRadius: 4, cursor: 'pointer',
+            background: darkMode ? '#2d5a2d' : '#dcfce7', border: `1px solid ${darkMode ? '#3d7a3d' : '#86efac'}`,
+            color: darkMode ? '#86efac' : '#166534', whiteSpace: 'nowrap',
+          }}
+        >
+          ↩ Restore
+        </button>
+        <button
+          onClick={() => { localStorage.removeItem(LS_RECOVERY); setRecoverySnap(null) }}
+          style={{ padding: '4px 6px', fontSize: 11, borderRadius: 4, cursor: 'pointer', background: 'none', border: 'none', color: 'var(--to-muted)' }}
+          title="Dismiss snapshot"
+        >
+          ×
+        </button>
+      </div>
+    )
+  }
+
   // ── Render: schedule panel ─────────────────────────────────────────────────
   function renderSchedule() {
     if (project.items.length === 0) {
       return (
         <div style={{ padding: '24px 16px', color: 'var(--to-muted)', fontSize: 13, textAlign: 'center' }}>
-          <div style={{ fontSize: 28, marginBottom: 12 }}>📋</div>
+          {renderRecoveryBanner()}
+          <div style={{ fontSize: 28, marginTop: 20, marginBottom: 12 }}>📋</div>
           No items yet.
           <br /><br />
           Draw on the canvas or click <strong>+ Add Item</strong> to start your take-off schedule.
@@ -2512,6 +2687,7 @@ export default function TakeoffPage() {
 
     return (
       <div style={{ overflowY: 'auto', height: '100%' }}>
+        {renderRecoveryBanner()}
         {/* Item count summary */}
         <div style={{ padding: '10px 14px', background: 'var(--to-alt)', borderBottom: '1px solid var(--to-border)',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -2742,6 +2918,33 @@ export default function TakeoffPage() {
         </button>
         <button style={btnStyle} onClick={() => exportCSV(project)}>
           📊 CSV
+        </button>
+
+        <div style={{ width: 1, height: 28, background: 'var(--to-border)' }} />
+
+        {/* Reset cluster */}
+        <button
+          style={{ ...btnStyle, color: '#7ab533', borderColor: '#3a5a2a' }}
+          onClick={resetView}
+          title="Reset zoom and pan only — drawings are kept"
+        >
+          ⊡ View
+        </button>
+        <button
+          style={{ ...btnStyle, color: '#f39c12', borderColor: '#5a3a0a', opacity: resetInProgress ? 0.5 : 1 }}
+          onClick={() => setShowClearModal(true)}
+          disabled={resetInProgress}
+          title="Remove all drawings but keep phases, tasks and pricing"
+        >
+          🗑 Drawings
+        </button>
+        <button
+          style={{ ...btnStyle, color: '#e74c3c', borderColor: '#5a1a1a', opacity: resetInProgress ? 0.5 : 1 }}
+          onClick={() => setShowResetModal(true)}
+          disabled={resetInProgress}
+          title="Full reset — wipes everything and returns to a blank takeoff"
+        >
+          ↺ Takeoff
         </button>
 
         {/* Theme toggle */}
@@ -3197,6 +3400,111 @@ export default function TakeoffPage() {
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button style={btnStyle} onClick={() => { setShowCalib(false); setCalibDrawing(false); setCalibPts([]) }}>
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Clear Drawings confirmation modal ───────────────────────────────── */}
+      {showClearModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'var(--to-scrim)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100,
+        }}>
+          <div style={{
+            background: 'var(--to-panel)', border: '1px solid var(--to-border)',
+            borderRadius: 12, padding: 28, width: 420, maxWidth: '92vw',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.45)',
+          }}>
+            <div style={{ fontSize: 28, marginBottom: 12, textAlign: 'center' }}>🗑️</div>
+            <h3 style={{ margin: '0 0 10px', color: 'var(--to-text)', textAlign: 'center', fontSize: 17 }}>
+              Clear all traced drawings?
+            </h3>
+            <p style={{ margin: '0 0 20px', color: 'var(--to-muted)', fontSize: 13, lineHeight: 1.6, textAlign: 'center' }}>
+              This will remove all drawings and measurements, but your quote, scope of works, phases, tasks and pricing will remain.
+            </p>
+            <div style={{
+              background: darkMode ? '#1a2a1a' : '#f0fdf4',
+              border: `1px solid ${darkMode ? '#2d5a2d' : '#86efac'}`,
+              borderRadius: 6, padding: '8px 12px', marginBottom: 20, fontSize: 12, color: darkMode ? '#86efac' : '#166534',
+            }}>
+              💾 A recovery snapshot will be saved before clearing.
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setShowClearModal(false)}
+                style={{
+                  flex: 1, padding: '10px', border: '1px solid var(--to-border)', borderRadius: 7,
+                  background: 'var(--to-alt)', color: 'var(--to-text)', fontSize: 13, cursor: 'pointer', fontWeight: 600,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={clearDrawings}
+                disabled={resetInProgress}
+                style={{
+                  flex: 1, padding: '10px', border: 'none', borderRadius: 7,
+                  background: '#d97706', color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 700,
+                  opacity: resetInProgress ? 0.5 : 1,
+                }}
+              >
+                Clear Drawings
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Reset Takeoff confirmation modal ─────────────────────────────────── */}
+      {showResetModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'var(--to-scrim)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100,
+        }}>
+          <div style={{
+            background: 'var(--to-panel)', border: '1px solid #5a1a1a',
+            borderRadius: 12, padding: 28, width: 460, maxWidth: '92vw',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.55)',
+          }}>
+            <div style={{ fontSize: 28, marginBottom: 12, textAlign: 'center' }}>⚠️</div>
+            <h3 style={{ margin: '0 0 10px', color: '#e74c3c', textAlign: 'center', fontSize: 17 }}>
+              Reset entire takeoff?
+            </h3>
+            <p style={{ margin: '0 0 16px', color: 'var(--to-muted)', fontSize: 13, lineHeight: 1.6, textAlign: 'center' }}>
+              This will remove all drawings, measurements, quantities, quote links, scope items, AI-generated data and schedules connected to this takeoff.
+            </p>
+            <p style={{ margin: '0 0 20px', color: 'var(--to-muted)', fontSize: 13, lineHeight: 1.6, textAlign: 'center' }}>
+              A recovery snapshot will be created before the reset.
+            </p>
+            <div style={{
+              background: darkMode ? '#1a2a1a' : '#f0fdf4',
+              border: `1px solid ${darkMode ? '#2d5a2d' : '#86efac'}`,
+              borderRadius: 6, padding: '8px 12px', marginBottom: 20, fontSize: 12, color: darkMode ? '#86efac' : '#166534',
+            }}>
+              💾 Recovery snapshot saved automatically. Project name, address and calibration are preserved.
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setShowResetModal(false)}
+                style={{
+                  flex: 1, padding: '10px', border: '1px solid var(--to-border)', borderRadius: 7,
+                  background: 'var(--to-alt)', color: 'var(--to-text)', fontSize: 13, cursor: 'pointer', fontWeight: 600,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={resetTakeoff}
+                disabled={resetInProgress}
+                style={{
+                  flex: 1, padding: '10px', border: 'none', borderRadius: 7,
+                  background: '#c0392b', color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 700,
+                  opacity: resetInProgress ? 0.5 : 1,
+                }}
+              >
+                Reset Takeoff
               </button>
             </div>
           </div>
