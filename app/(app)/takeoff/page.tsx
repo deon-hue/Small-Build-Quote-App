@@ -20,6 +20,11 @@ import {
   calcPhaseTaskSellingPrice, PHASE_TASK_UNIT_LABELS,
   type PhaseSubphase, type PhaseTask, type PhaseTaskUnit,
 } from '@/lib/phase-tasks'
+import {
+  calcMaterialLines, recalcMaterial, sumByCategory,
+  WALL_CONSTRUCTION_LABELS, WALL_FINISH_LABELS,
+  type WallConstructionType, type WallFinishType, type CalculatedMaterial,
+} from '@/lib/material-recipes'
 
 // ── Smart Draw Mode: phase → default tool mapping ─────────────────────────────
 // When the user selects a phase, the draw tool auto-resets to this default.
@@ -170,7 +175,7 @@ const WALL_FILL_COLOR = '#FF8800'   // amber fill between the two leaves
 const WALL_CAVI_COLOR = '#FF1111'   // red cavity centre dashes
 
 const CAT_COLOR: Record<string, string> = {
-  labour: '#f39c12', materials: '#3498db', plant: '#9b59b6', other: '#95a5a6',
+  labour: '#f39c12', materials: '#3498db', plant: '#9b59b6', subcontractors: '#e74c3c', other: '#95a5a6',
 }
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
@@ -1276,6 +1281,348 @@ export default function TakeoffPage() {
         <polyline points={ptsStr} fill="none" stroke="#f1c40f" strokeWidth={2} strokeDasharray="4 3" />
         {pts.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={4} fill="#f1c40f" />)}
       </g>
+    )
+  }
+
+  // ── Internal Wall Measurement Engine ─────────────────────────────────────────
+  // Line-based: user draws a wall run → enters height, construction type, finish → openings deducted.
+  // calcMaterialLines() produces an editable per-m² breakdown; user confirms before quote export.
+  function renderWallMeasurementEngine(item: TakeoffItem) {
+    const accent2  = '#5d8aa8'
+    const bgCard   = darkMode ? `rgba(44,62,80,0.12)` : `rgba(44,62,80,0.06)`
+    const bdCard   = `rgba(44,62,80,0.25)`
+
+    const linkEl         = item.elementId ? project.elements.find(e => e.id === item.elementId) : null
+    const isLineBased    = linkEl?.type === 'line'
+    const wallLength     = item.length ?? 0
+    const wallHeight     = item.wallHeight ?? 2.4
+    const finishSidesVal = (item.finishSides ?? 2) as 1 | 2
+    const ctype          = (item.wallConstructionType ?? 'stud_metal_70') as WallConstructionType
+    const ftype          = (item.wallFinishType ?? 'board_skim') as WallFinishType
+    const openings       = item.openings ?? []
+    const mats           = item.calculatedMaterials ?? []
+    const confirmed      = item.materialsConfirmed ?? false
+
+    const grossArea    = +(wallLength * wallHeight).toFixed(3)
+    const openingsArea = +openings.reduce((s, o) => s + o.width * o.height, 0).toFixed(3)
+    const netArea      = +(Math.max(0, grossArea - openingsArea)).toFixed(3)
+    const finishArea   = +(netArea * finishSidesVal).toFixed(3)
+    const totals       = sumByCategory(mats)
+
+    function recalcAndSave(patch: Partial<TakeoffItem>) {
+      const merged   = { ...item, ...patch }
+      const h        = merged.wallHeight    ?? wallHeight
+      const sides    = (merged.finishSides  ?? finishSidesVal) as 1 | 2
+      const ops      = merged.openings      ?? openings
+      const ct       = (merged.wallConstructionType ?? ctype) as WallConstructionType
+      const ft       = (merged.wallFinishType ?? ftype) as WallFinishType
+      const newGross = +(wallLength * h).toFixed(3)
+      const newOpA   = +ops.reduce((s, o) => s + o.width * o.height, 0).toFixed(3)
+      const newNet   = +(Math.max(0, newGross - newOpA)).toFixed(3)
+      const newMats  = calcMaterialLines(ct, ft, sides, newNet, merged.calculatedMaterials)
+      saveItemEdit({ ...merged, area: newGross, qty: newNet, unit: 'm²', calculatedMaterials: newMats, materialsConfirmed: false })
+    }
+
+    function addOpening(type: WallOpeningType) {
+      const def = WALL_OPENING_DEFAULTS[type]
+      const op: WallOpening = { id: Math.random().toString(36).slice(2, 8), type, label: WALL_OPENING_LABELS[type], width: def.width, height: def.height }
+      recalcAndSave({ openings: [...openings, op] })
+    }
+    function updateOpening(id: string, changes: Partial<WallOpening>) {
+      recalcAndSave({ openings: openings.map(o => o.id === id ? { ...o, ...changes } : o) })
+    }
+    function removeOpening(id: string) {
+      recalcAndSave({ openings: openings.filter(o => o.id !== id) })
+    }
+    function updateMaterial(matId: string, patch: { qty?: number; unitRate?: number }) {
+      const updated = mats.map(m => m.id === matId ? recalcMaterial(m, patch) : m)
+      saveItemEdit({ ...item, calculatedMaterials: updated })
+    }
+    function toggleMaterial(matId: string, enabled: boolean) {
+      const updated = mats.map(m => m.id === matId ? { ...m, enabled } : m)
+      saveItemEdit({ ...item, calculatedMaterials: updated })
+    }
+
+    return (
+      <div style={{ padding: 14, fontSize: 13, overflowY: 'auto', height: '100%' }}>
+
+        {/* ── Metrics card ── */}
+        <div style={{ background: bgCard, borderRadius: 8, padding: '12px 14px', marginBottom: 12, border: `1px solid ${bdCard}` }}>
+          <div style={{ fontSize: 10, color: accent2, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
+            🏗 Internal Wall
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: isLineBased ? '1fr 1fr 1fr' : '1fr 1fr', gap: 8, marginBottom: 8 }}>
+            {isLineBased && (
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: accent2, fontFamily: 'monospace', lineHeight: 1 }}>{fmt2(wallLength)}</div>
+                <div style={{ fontSize: 10, color: '#6a8a6a', marginTop: 2 }}>m wall run</div>
+              </div>
+            )}
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: darkMode ? '#c8d8a8' : '#2b3a2b', fontFamily: 'monospace', lineHeight: 1 }}>{fmt2(grossArea)}</div>
+              <div style={{ fontSize: 10, color: '#6a8a6a', marginTop: 2 }}>m² gross{openingsArea > 0 ? ` (−${fmt2(openingsArea)})` : ''}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: accent2, fontFamily: 'monospace', lineHeight: 1 }}>{fmt2(netArea)}</div>
+              <div style={{ fontSize: 10, color: '#6a8a6a', marginTop: 2 }}>m² net</div>
+            </div>
+          </div>
+          <div style={{ background: darkMode ? '#1a1a20' : '#eef0f8', borderRadius: 6, padding: '8px 10px', border: `1px solid ${darkMode ? '#3a3a5a' : '#c5cae9'}` }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <span style={{ fontSize: 20, fontWeight: 700, color: '#7986cb', fontFamily: 'monospace' }}>{fmt2(finishArea)}</span>
+              <span style={{ fontSize: 11, color: darkMode ? '#7986cb' : '#3949ab' }}>m² finish area</span>
+              <span style={{ fontSize: 10, color: '#6a8a6a', marginLeft: 'auto' }}>{netArea} × {finishSidesVal} side{finishSidesVal > 1 ? 's' : ''}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Label ── */}
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle}>Drawing Label</label>
+          <input style={inputStyle} value={editingElement?.label ?? item.name}
+            onChange={e => { if (editingElement) saveElementEdit({ ...editingElement, label: e.target.value }); saveItemEdit({ ...item, name: e.target.value }) }} />
+        </div>
+
+        {/* ── Wall height ── */}
+        {isLineBased && (
+          <div style={{ marginBottom: 10 }}>
+            <label style={labelStyle}>Wall / Storey Height (m)</label>
+            <input type="number" step={0.05} min={0.1} max={10}
+              style={{ ...inputStyle, color: accent2 }}
+              value={wallHeight}
+              onChange={e => recalcAndSave({ wallHeight: Math.max(0.1, +e.target.value || 2.4) })} />
+          </div>
+        )}
+
+        {/* ── Construction type ── */}
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle}>Construction Type</label>
+          <select style={{ ...inputStyle, color: accent2 }} value={ctype}
+            onChange={e => recalcAndSave({ wallConstructionType: e.target.value as WallConstructionType })}>
+            {(Object.entries(WALL_CONSTRUCTION_LABELS) as [WallConstructionType, string][]).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* ── Finish type ── */}
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle}>Finish Type</label>
+          <select style={{ ...inputStyle, color: accent2 }} value={ftype}
+            onChange={e => recalcAndSave({ wallFinishType: e.target.value as WallFinishType })}>
+            {(Object.entries(WALL_FINISH_LABELS) as [WallFinishType, string][]).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* ── Finish sides ── */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={labelStyle}>Finish Sides</label>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {([1, 2] as const).map(n => (
+              <div key={n} onClick={() => recalcAndSave({ finishSides: n })}
+                style={{
+                  flex: 1, textAlign: 'center', padding: '7px 4px', borderRadius: 5, cursor: 'pointer', fontSize: 12,
+                  background: finishSidesVal === n ? (darkMode ? '#2a2a3a' : '#e8eaf6') : 'var(--to-alt)',
+                  border: `1px solid ${finishSidesVal === n ? '#7986cb' : 'var(--to-border)'}`,
+                  color: finishSidesVal === n ? '#7986cb' : 'var(--to-sub)', fontWeight: finishSidesVal === n ? 700 : 400,
+                }}>
+                {n === 1 ? '1 Side' : '2 Sides'}
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 10, color: '#6a8a6a', marginTop: 3 }}>
+            {finishSidesVal === 1 ? 'One face finished (e.g. against existing structure)' : 'Both faces finished (e.g. new stud partition — board & skim both sides)'}
+          </div>
+        </div>
+
+        {/* ── Openings ── */}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 10, color: '#6a8a6a', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>Openings &amp; Deductions</span>
+            {openingsArea > 0 && <span style={{ color: '#e67e22' }}>−{fmt2(openingsArea)} m²</span>}
+          </div>
+          {openings.map(op => (
+            <div key={op.id} style={{ background: darkMode ? '#1a1a0d' : '#fffde7', border: `1px solid ${darkMode ? '#3a3a1a' : '#fff176'}`, borderRadius: 5, padding: '6px 8px', marginBottom: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <select value={op.type}
+                  onChange={e => updateOpening(op.id, { type: e.target.value as WallOpeningType, label: WALL_OPENING_LABELS[e.target.value as WallOpeningType] })}
+                  style={{ ...inputStyle, flex: 1, fontSize: 11, padding: '3px 5px' }}>
+                  {(Object.keys(WALL_OPENING_LABELS) as WallOpeningType[]).map(k => (
+                    <option key={k} value={k}>{WALL_OPENING_LABELS[k]}</option>
+                  ))}
+                </select>
+                <button onClick={() => removeOpening(op.id)}
+                  style={{ background: 'transparent', border: 'none', color: '#e74c3c', cursor: 'pointer', fontSize: 14 }}>✕</button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                <div>
+                  <label style={{ ...labelStyle, fontSize: 9 }}>Width (m)</label>
+                  <input type="number" step={0.05} min={0.1} style={{ ...inputStyle, fontSize: 11 }}
+                    value={op.width} onChange={e => updateOpening(op.id, { width: Math.max(0.1, +e.target.value || 0.9) })} />
+                </div>
+                <div>
+                  <label style={{ ...labelStyle, fontSize: 9 }}>Height (m)</label>
+                  <input type="number" step={0.05} min={0.1} style={{ ...inputStyle, fontSize: 11 }}
+                    value={op.height} onChange={e => updateOpening(op.id, { height: Math.max(0.1, +e.target.value || 2.1) })} />
+                </div>
+              </div>
+              <div style={{ fontSize: 10, color: '#8a7a3a', marginTop: 3 }}>{fmt2(op.width * op.height)} m² deducted</div>
+            </div>
+          ))}
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+            {(['door', 'window', 'bifold', 'french_door', 'other'] as WallOpeningType[]).map(t => (
+              <button key={t} onClick={() => addOpening(t)}
+                style={{ ...btnStyle, fontSize: 10, padding: '4px 7px', background: 'transparent', borderColor: '#5a4a1a', color: '#c8a830' }}>
+                + {WALL_OPENING_LABELS[t]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Materials Breakdown ── */}
+        {mats.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 10, color: '#6a8a6a', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6, display: 'flex', justifyContent: 'space-between' }}>
+              <span>Materials Breakdown</span>
+              <span style={{ color: '#4a6a4a' }}>{mats.filter(m => m.enabled).length}/{mats.length} active</span>
+            </div>
+            {/* Column headers */}
+            <div style={{ display: 'grid', gridTemplateColumns: '14px 1fr 58px 52px 58px 8px', gap: 3, padding: '2px 4px', fontSize: 9, color: '#4a6a4a', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>
+              <span /><span>Item</span><span style={{ textAlign: 'right' }}>Qty</span><span style={{ textAlign: 'right' }}>£/unit</span><span style={{ textAlign: 'right' }}>Total</span><span />
+            </div>
+            {mats.map(m => (
+              <div key={m.id} style={{
+                display: 'grid', gridTemplateColumns: '14px 1fr 58px 52px 58px 8px',
+                gap: 3, alignItems: 'center', padding: '4px 4px', marginBottom: 2, borderRadius: 4,
+                background: m.enabled ? (darkMode ? '#0d1a0d' : '#f5f9f5') : (darkMode ? '#090f09' : '#f0f0f0'),
+                border: `1px solid ${m.enabled ? (darkMode ? '#1e2e1e' : '#c8ddc8') : (darkMode ? '#111' : '#ddd')}`,
+                opacity: m.enabled ? 1 : 0.5,
+              }}>
+                <input type="checkbox" checked={m.enabled}
+                  onChange={e => toggleMaterial(m.id, e.target.checked)}
+                  style={{ margin: 0, cursor: 'pointer' }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 10, color: m.enabled ? (darkMode ? '#c8d8a8' : '#2b3a2b') : '#6a8a6a', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {m.name}{m.isOverridden && <span style={{ fontSize: 8, color: '#e67e22', marginLeft: 4 }}>✏</span>}
+                  </div>
+                  <div style={{ fontSize: 9, color: '#6a8a6a' }}>{m.unit}{m.wastePercent > 0 ? ` +${m.wastePercent}%` : ''}</div>
+                </div>
+                <input type="number" step="any" min={0}
+                  style={{ width: '100%', background: darkMode ? '#162216' : '#f0f4f0', border: `1px solid ${darkMode ? '#2a3a2a' : '#c8d8c8'}`, borderRadius: 3, color: m.isOverridden ? '#e67e22' : (darkMode ? '#c8d8a8' : '#2b3a2b'), fontSize: 10, padding: '2px 3px', textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
+                  value={m.qty}
+                  onChange={e => updateMaterial(m.id, { qty: Math.max(0, +e.target.value || 0) })}
+                />
+                <input type="number" step="any" min={0}
+                  style={{ width: '100%', background: darkMode ? '#162216' : '#f0f4f0', border: `1px solid ${darkMode ? '#2a3a2a' : '#c8d8c8'}`, borderRadius: 3, color: m.isOverridden ? '#e67e22' : (darkMode ? '#c8d8a8' : '#2b3a2b'), fontSize: 10, padding: '2px 3px', textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
+                  value={m.unitRate}
+                  onChange={e => updateMaterial(m.id, { unitRate: Math.max(0, +e.target.value || 0) })}
+                />
+                <div style={{ fontSize: 10, fontFamily: 'monospace', color: m.enabled ? (darkMode ? '#c8d8a8' : '#2b3a2b') : '#4a6a4a', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  {m.enabled ? `£${m.totalCost.toFixed(2)}` : '—'}
+                </div>
+                <div style={{ width: 7, height: 7, borderRadius: '50%', background: CAT_COLOR[m.category] ?? '#95a5a6', flexShrink: 0, alignSelf: 'center' }} title={m.category} />
+              </div>
+            ))}
+
+            {/* Category totals */}
+            <div style={{ marginTop: 8, borderTop: `1px solid ${darkMode ? '#2a3a2a' : '#dde'}`, paddingTop: 8 }}>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+                {(['labour', 'materials', 'plant', 'subcontractors', 'other'] as const)
+                  .filter(cat => totals[cat] > 0)
+                  .map(cat => (
+                    <div key={cat} style={{ textAlign: 'center', padding: '5px 8px', background: darkMode ? '#0d1520' : '#f0f4ff', borderRadius: 4, border: `1px solid ${darkMode ? '#1a2a40' : '#c0d0ee'}`, flex: '1 1 auto', minWidth: 64 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: CAT_COLOR[cat], fontFamily: 'monospace' }}>£{totals[cat].toFixed(2)}</div>
+                      <div style={{ fontSize: 9, color: '#6a8a6a', marginTop: 1, textTransform: 'capitalize' }}>{cat}</div>
+                    </div>
+                  ))
+                }
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', background: darkMode ? '#0d1a20' : '#e0e8f0', borderRadius: 5, border: `1px solid ${darkMode ? '#1a3040' : '#b0c8e0'}` }}>
+                <span style={{ fontSize: 11, color: '#6a8a6a' }}>Total cost (excl. markup &amp; VAT)</span>
+                <span style={{ fontSize: 16, fontWeight: 700, color: accent2, fontFamily: 'monospace' }}>£{totals.total.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Confirm & Send to Quote ── */}
+        {!confirmed ? (
+          <div style={{ marginBottom: 12 }}>
+            <button
+              onClick={() => saveItemEdit({ ...item, materialsConfirmed: true })}
+              disabled={mats.length === 0}
+              style={{
+                width: '100%', padding: '10px', borderRadius: 6, cursor: mats.length > 0 ? 'pointer' : 'not-allowed',
+                background: darkMode ? '#1a3a1a' : '#dcfce7',
+                border: `1px solid ${darkMode ? '#3d7a3d' : '#86efac'}`,
+                color: darkMode ? '#86efac' : '#166534',
+                fontSize: 13, fontWeight: 700, opacity: mats.length > 0 ? 1 : 0.5,
+              }}
+            >
+              ✅ Confirm &amp; Send to Quote
+            </button>
+            <div style={{ fontSize: 10, color: '#6a8a6a', marginTop: 4, textAlign: 'center' }}>
+              Review quantities &amp; rates above, then confirm to enable export.
+            </div>
+          </div>
+        ) : (
+          <div style={{
+            marginBottom: 12, padding: '8px 12px', borderRadius: 6,
+            background: darkMode ? '#1a3a1a' : '#dcfce7',
+            border: `1px solid ${darkMode ? '#3d7a3d' : '#86efac'}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <span style={{ fontSize: 12, color: darkMode ? '#86efac' : '#166534', fontWeight: 700 }}>✅ Confirmed — will export to quote</span>
+            <button
+              onClick={() => saveItemEdit({ ...item, materialsConfirmed: false })}
+              style={{ background: 'none', border: 'none', color: '#6a8a6a', cursor: 'pointer', fontSize: 11 }}>Edit</button>
+          </div>
+        )}
+
+        {/* ── Client Description ── */}
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle}>Client Description (quote text)</label>
+          <textarea style={{ ...inputStyle, height: 60, resize: 'none', fontSize: 11, lineHeight: 1.5 }}
+            value={item.spec ?? ''}
+            onChange={e => saveItemEdit({ ...item, spec: e.target.value })} />
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+          <div>
+            <label style={labelStyle}>Drawing Ref</label>
+            <input style={inputStyle} value={item.drawingRef ?? ''} onChange={e => saveItemEdit({ ...item, drawingRef: e.target.value })} />
+          </div>
+          <div>
+            <label style={labelStyle}>Sub-Phase</label>
+            <input style={inputStyle} value={item.subPhase ?? ''} onChange={e => saveItemEdit({ ...item, subPhase: e.target.value })} />
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <label style={labelStyle}>Building Regs Notes</label>
+          <textarea style={{ ...inputStyle, height: 44, resize: 'none' }}
+            value={item.buildingRegsNotes ?? ''}
+            onChange={e => saveItemEdit({ ...item, buildingRegsNotes: e.target.value })} />
+        </div>
+
+        {/* ── Delete ── */}
+        <button
+          style={{ ...btnStyle, background: '#c0392b', borderColor: '#c0392b', marginTop: 4 }}
+          onClick={() => {
+            if (item.elementId) {
+              setProject(p => ({ ...p, elements: p.elements.filter(el2 => el2.id !== item.elementId), items: p.items.filter(it => it.id !== item.id) }))
+              setSelectedId(null)
+            } else {
+              setProject(p => ({ ...p, items: p.items.filter(it => it.id !== item.id) }))
+            }
+            setEditingItem(null); setEditingElement(null); setPanelMode('schedule')
+          }}
+        >
+          🗑 Delete Wall Item
+        </button>
+      </div>
     )
   }
 
@@ -2868,6 +3215,33 @@ export default function TakeoffPage() {
       }
 
       return renderPlasterProperties(_pItem)
+    }
+
+    // ── Internal Walls & Partitions: wall measurement engine (line-based only) ──
+    if (editingItem.phase === 'Internal Walls & Partitions' && _linkedEl?.type === 'line') {
+      let _wItem = { ...editingItem }
+      // Auto-initialise with defaults if this is a fresh line-based item
+      if (!_wItem.wallConstructionType) {
+        const _defH      = 2.4
+        const _defSides: 1 | 2 = 2
+        const _gross     = +( (_wItem.length ?? 0) * _defH).toFixed(3)
+        const _net       = _gross
+        const _initMats  = calcMaterialLines('stud_metal_70', 'board_skim', _defSides, _net)
+        _wItem = {
+          ..._wItem,
+          wallConstructionType: 'stud_metal_70' as WallConstructionType,
+          wallFinishType:       'board_skim'     as WallFinishType,
+          finishSides:          _defSides,
+          wallHeight:           _defH,
+          area:                 _gross,
+          qty:                  _net,
+          unit:                 'm²',
+          calculatedMaterials:  _initMats,
+          materialsConfirmed:   false,
+        }
+        saveItemEdit(_wItem)
+      }
+      return renderWallMeasurementEngine(_wItem)
     }
 
     // ── Other build-up phases (floors, foundations) — rect/polygon only ──

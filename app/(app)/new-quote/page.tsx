@@ -14,6 +14,7 @@ import type { TakeoffItem, TakeoffPhase } from '@/lib/takeoff-types'
 import { PHASE_TO_QUOTE_PARENT, ALL_MAKEUPS, calcLayerQty, WALL_OPENING_LABELS } from '@/lib/takeoff-types'
 import { DEFAULT_DEMO_SUBPHASES, calcDemoSellingPrice, DEMO_UNIT_LABELS, type DemoUnit } from '@/lib/demolition-data'
 import { ALL_PHASE_SUBPHASES, calcPhaseTaskSellingPrice } from '@/lib/phase-tasks'
+import { sumByCategory } from '@/lib/material-recipes'
 import { createClient } from '@/lib/supabase/client'
 
 let phaseCounter = 0
@@ -501,6 +502,34 @@ export default function NewQuotePage() {
                 { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: plant, subcontractors: 0, other: 0, notes: plant > 0 ? 'Plant/equipment' : '', itemType: 'plant' },
                 { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: subCost, other: 0, notes: '', itemType: 'subcontractors' },
                 { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other, notes: `Markup ${markupPct}% → sell £${selling.toFixed(2)}`, itemType: 'other' },
+              ],
+              parentPhase,
+            ))
+            continue
+          }
+
+          // ── Wall Measurement Engine item: pre-fill costs from confirmed recipe ──
+          if (item.calculatedMaterials && item.calculatedMaterials.length > 0 && item.materialsConfirmed) {
+            const matTotals  = sumByCategory(item.calculatedMaterials)
+            const refStr     = item.drawingRef ? ` [${item.drawingRef}]` : ''
+            const wallSummary = [
+              item.wallConstructionType ? `${item.wallConstructionType}` : '',
+              item.wallFinishType       ? `finish: ${item.wallFinishType}` : '',
+              item.finishSides          ? `${item.finishSides}-sided` : '',
+              item.area != null         ? `gross ${item.area.toFixed(2)}m²` : '',
+              item.qty  != null         ? `net ${item.qty.toFixed(2)}m²` : '',
+            ].filter(Boolean).join(' | ')
+            const wallDesc = `${item.qty?.toFixed(2) ?? '?'} m² — ${item.name}${refStr}`
+            const wallSubName = item.subPhase || item.phase
+
+            newPhases.push(makePhase(
+              wallSubName,
+              [
+                { desc: wallDesc, qty: item.qty ?? 1, unit: 'm²', labour: matTotals.labour, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: [wallSummary, notes].filter(Boolean).join(' | '), itemType: 'labour' },
+                { desc: '',       qty: item.qty ?? 1, unit: 'm²', labour: 0, materials: matTotals.materials, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials' },
+                { desc: '',       qty: item.qty ?? 1, unit: 'm²', labour: 0, materials: 0, plantHire: matTotals.plant, subcontractors: 0, other: 0, notes: matTotals.plant > 0 ? 'Plant/equipment' : '', itemType: 'plant' },
+                { desc: '',       qty: item.qty ?? 1, unit: 'm²', labour: 0, materials: 0, plantHire: 0, subcontractors: matTotals.subcontractors, other: 0, notes: '', itemType: 'subcontractors' },
+                { desc: '',       qty: item.qty ?? 1, unit: 'm²', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: matTotals.other, notes: matTotals.other > 0 ? 'Other costs' : '', itemType: 'other' },
               ],
               parentPhase,
             ))

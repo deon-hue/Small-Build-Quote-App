@@ -2,6 +2,8 @@
  * Types and constants for the Construction Take-off Tool.
  */
 
+import type { WallConstructionType, WallFinishType, CalculatedMaterial } from './material-recipes'
+
 // ── Drawing tools ─────────────────────────────────────────────────────────────
 
 export type DrawingTool = 'select' | 'line' | 'rect' | 'polygon' | 'floor'
@@ -167,6 +169,13 @@ export interface TakeoffItem {
 
   // Plastering-specific
   plasterFinishSides?: 1 | 2      // 1 = one face, 2 = both faces (boarding/skimming multiplier)
+
+  // Wall Measurement Engine (Internal Walls & Partitions)
+  wallConstructionType?: WallConstructionType  // block, stud, brick, drylining, existing
+  wallFinishType?:       WallFinishType         // dot-dab, board-skim, hardwall, sand-cement, etc.
+  finishSides?:          1 | 2                  // finish both faces (2 = full stud partition)
+  calculatedMaterials?:  CalculatedMaterial[]  // per-m² recipe, editable before quote export
+  materialsConfirmed?:   boolean               // user reviewed & confirmed → enabled for export
 
   // Demolition-specific
   demoSubphaseId?:     string     // e.g. 'structural'
