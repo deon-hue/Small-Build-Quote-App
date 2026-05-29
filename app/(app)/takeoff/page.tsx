@@ -21,6 +21,61 @@ import {
   type PhaseSubphase, type PhaseTask, type PhaseTaskUnit,
 } from '@/lib/phase-tasks'
 
+// ── Smart Draw Mode: phase → default tool mapping ─────────────────────────────
+// When the user selects a phase, the draw tool auto-resets to this default.
+// Prevents "floor tool still active while Demolition is selected" bugs.
+export const PHASE_DEFAULT_TOOL: Record<string, DrawingTool> = {
+  'Site Setup & Demolition':     'line',
+  'Foundations':                  'polygon',
+  'Structural Frame':             'line',
+  'External Walls':               'line',
+  'Roof':                         'polygon',
+  'Windows & Doors':              'rect',
+  'Internal Walls & Partitions':  'line',
+  'Floors & Screeds':             'floor',
+  'Drainage & Services':          'line',
+  'Electrics':                    'line',
+  'Plumbing & Heating':           'line',
+  'Plastering & Boarding':        'rect',
+  'Joinery & Fixtures':           'rect',
+  'Tiling & Finishes':            'rect',
+  'Decoration':                   'rect',
+  'External Works & Landscaping': 'polygon',
+  'Preliminaries':                'select',
+  'Other':                        'select',
+}
+
+// Human-readable measurement label per phase (shown in Active Draw Mode panel)
+const PHASE_MEASURE_LABEL: Record<string, string> = {
+  'Site Setup & Demolition':     'Linear / Area',
+  'Foundations':                  'Area (m²)',
+  'Structural Frame':             'Linear (m)',
+  'External Walls':               'Linear (m)',
+  'Roof':                         'Area (m²)',
+  'Windows & Doors':              'Count / Area',
+  'Internal Walls & Partitions':  'Linear (m)',
+  'Floors & Screeds':             'Area (m²)',
+  'Drainage & Services':          'Linear (m)',
+  'Electrics':                    'Linear / Count',
+  'Plumbing & Heating':           'Count / Linear',
+  'Plastering & Boarding':        'Area (m²)',
+  'Joinery & Fixtures':           'Count / Area',
+  'Tiling & Finishes':            'Area (m²)',
+  'Decoration':                   'Area (m²)',
+  'External Works & Landscaping': 'Area (m²)',
+  'Preliminaries':                'Sum / Count',
+  'Other':                        'Count (nr)',
+}
+
+// Display name for each draw tool
+const TOOL_DISPLAY: Record<DrawingTool, string> = {
+  select:  'Selection',
+  line:    'Line (Linear)',
+  rect:    'Rectangle (Area)',
+  polygon: 'Polygon (Area)',
+  floor:   'Floor Area',
+}
+
 // ── ID helpers ────────────────────────────────────────────────────────────────
 function uid() { return Math.random().toString(36).slice(2, 10) }
 
@@ -930,6 +985,25 @@ export default function TakeoffPage() {
     setShowResetModal(false)
     setTimeout(() => setResetInProgress(false), 600)
     showToast('Takeoff reset. Recovery snapshot saved.')
+  }
+
+  // ── Draw mode helpers ───────────────────────────────────────────────────────
+
+  /** Switch active phase AND auto-reset the draw tool to the phase default */
+  function selectPhase(ph: TakeoffPhase) {
+    setActivePhase(ph)
+    const defaultTool = PHASE_DEFAULT_TOOL[ph] ?? 'select'
+    setTool(defaultTool)
+    setDrawPoints([])
+    setIsDrawing(false)
+  }
+
+  /** Return cursor to selection mode without changing the active phase */
+  function resetDrawMode() {
+    setTool('select')
+    setDrawPoints([])
+    setIsDrawing(false)
+    showToast('Draw mode reset to Selection.')
   }
 
   // ── New project ────────────────────────────────────────────────────────────
@@ -2980,6 +3054,45 @@ export default function TakeoffPage() {
           display: 'flex', flexDirection: 'column', alignItems: 'stretch',
           padding: '8px 6px', gap: 0, flexShrink: 0, overflowY: 'auto',
         }}>
+          {/* ── Active Draw Mode panel ── */}
+          <div style={{
+            background: darkMode ? '#0d1a0d' : '#f0f7e8',
+            border: `1px solid ${darkMode ? '#2a4a2a' : '#b8d98d'}`,
+            borderRadius: 6, padding: '7px 8px', marginBottom: 8,
+          }}>
+            <div style={{ fontSize: 8, color: darkMode ? '#5a8a5a' : '#6a9a4a', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 5, fontWeight: 700 }}>
+              Active Tool
+            </div>
+            {/* Phase */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 3 }}>
+              <div style={{ width: 7, height: 7, borderRadius: 1, background: PHASE_COLORS[activePhase], flexShrink: 0 }} />
+              <span style={{ fontSize: 9, color: darkMode ? '#a0c080' : '#4a7a2a', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
+                {activePhase.replace('External Works & Landscaping', 'Ext. Works').replace('Internal Walls & Partitions', 'Int. Walls').replace('Site Setup & Demolition', 'Demolition').replace('Plastering & Boarding', 'Plastering').replace('Structural Frame', 'Struct. Frame').replace('Windows & Doors', 'Windows/Doors').replace('Plumbing & Heating', 'Plumbing').replace('Drainage & Services', 'Drainage').replace('Joinery & Fixtures', 'Joinery').replace('Tiling & Finishes', 'Tiling').replace('Floors & Screeds', 'Floors').replace('Preliminaries', 'Prelims')}
+              </span>
+            </div>
+            {/* Measurement */}
+            <div style={{ fontSize: 9, color: darkMode ? '#7a9a7a' : '#5a7a4a', marginBottom: 2 }}>
+              <span style={{ color: darkMode ? '#4a6a4a' : '#8aaa6a' }}>Measure: </span>
+              {PHASE_MEASURE_LABEL[activePhase] ?? '—'}
+            </div>
+            {/* Tool mode */}
+            <div style={{ fontSize: 9, color: darkMode ? '#7a9a7a' : '#5a7a4a', marginBottom: 2 }}>
+              <span style={{ color: darkMode ? '#4a6a4a' : '#8aaa6a' }}>Mode: </span>
+              {TOOL_DISPLAY[tool]}
+            </div>
+            {/* Status */}
+            <div style={{ fontSize: 9, fontWeight: 700, marginTop: 3 }}>
+              <span style={{
+                display: 'inline-block', padding: '1px 5px', borderRadius: 3,
+                background: isDrawing ? (darkMode ? '#2a1a00' : '#fff3cd') : (darkMode ? '#0a2a0a' : '#d4edda'),
+                color: isDrawing ? (darkMode ? '#f0a030' : '#856404') : (darkMode ? '#4aaa4a' : '#155724'),
+                border: `1px solid ${isDrawing ? (darkMode ? '#5a3a00' : '#ffc107') : (darkMode ? '#2a6a2a' : '#28a745')}`,
+              }}>
+                {isDrawing ? 'Drawing' : 'Ready'}
+              </span>
+            </div>
+          </div>
+
           {/* Section label */}
           <div style={{ fontSize: 9, color: 'var(--to-dim)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 5, paddingLeft: 4 }}>
             Tools
@@ -3085,6 +3198,26 @@ export default function TakeoffPage() {
             </div>
           )}
 
+          {/* Reset Draw Mode — always visible, resets tool to Select */}
+          <div
+            onClick={resetDrawMode}
+            title="Return to selection mode (does not change phase)"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7,
+              padding: '7px 8px', marginBottom: 3, borderRadius: 5, cursor: tool === 'select' && !isDrawing ? 'default' : 'pointer',
+              background: tool === 'select' && !isDrawing
+                ? (darkMode ? '#111' : '#f5f5f5')
+                : (darkMode ? '#1a1a2a' : '#e8eaf6'),
+              border: `1px solid ${tool === 'select' && !isDrawing ? 'var(--to-border)' : (darkMode ? '#3a3a7a' : '#9fa8da')}`,
+              color: tool === 'select' && !isDrawing ? 'var(--to-dim)' : (darkMode ? '#a0a0e0' : '#3949ab'),
+              fontSize: 12, fontFamily: 'inherit',
+              opacity: tool === 'select' && !isDrawing ? 0.45 : 1,
+            }}
+          >
+            <span style={{ fontSize: 13, lineHeight: 1, width: 16, textAlign: 'center', flexShrink: 0 }}>↩</span>
+            <span>Reset Mode</span>
+          </div>
+
           <div style={{ height: 1, background: 'var(--to-border)', margin: '8px 0' }} />
 
           {/* Add manual item */}
@@ -3113,7 +3246,7 @@ export default function TakeoffPage() {
             <div
               key={ph}
               title={ph}
-              onClick={() => setActivePhase(ph)}
+              onClick={() => selectPhase(ph)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 6,
                 padding: '5px 6px', marginBottom: 2, borderRadius: 4, cursor: 'pointer',
