@@ -165,6 +165,9 @@ export interface TakeoffItem {
   openings?:     WallOpening[]    // deducted openings (windows, doors, bifolds, etc.)
   wallBandPx?:   number           // half-width of wall band on canvas in pixels (default 9)
 
+  // Plastering-specific
+  plasterFinishSides?: 1 | 2      // 1 = one face, 2 = both faces (boarding/skimming multiplier)
+
   // Demolition-specific
   demoSubphaseId?:     string     // e.g. 'structural'
   demoTaskId?:         string     // e.g. 'structural-masonry'

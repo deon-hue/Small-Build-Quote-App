@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback, ChangeEvent } from 'react'
 import {
   TAKEOFF_PHASES, PHASE_COLORS, DEFAULT_MPP, SCALE_PRESETS,
-  FLOOR_MAKEUPS, WALL_MAKEUPS, PHASE_MAKEUPS, calcLayerQty,
+  FLOOR_MAKEUPS, WALL_MAKEUPS, PLASTER_MAKEUPS, PHASE_MAKEUPS, calcLayerQty,
   loadCustomWallTypes, saveCustomWallTypes,
   WALL_OPENING_LABELS, WALL_OPENING_DEFAULTS,
   type TakeoffPhase, type DrawingTool, type TakeoffPoint,
@@ -36,7 +36,7 @@ export const PHASE_DEFAULT_TOOL: Record<string, DrawingTool> = {
   'Drainage & Services':          'line',
   'Electrics':                    'line',
   'Plumbing & Heating':           'line',
-  'Plastering & Boarding':        'rect',
+  'Plastering & Boarding':        'line',
   'Joinery & Fixtures':           'rect',
   'Tiling & Finishes':            'rect',
   'Decoration':                   'rect',
@@ -58,7 +58,7 @@ const PHASE_MEASURE_LABEL: Record<string, string> = {
   'Drainage & Services':          'Linear (m)',
   'Electrics':                    'Linear / Count',
   'Plumbing & Heating':           'Count / Linear',
-  'Plastering & Boarding':        'Area (m²)',
+  'Plastering & Boarding':        'Linear (m) → Area',
   'Joinery & Fixtures':           'Count / Area',
   'Tiling & Finishes':            'Area (m²)',
   'Decoration':                   'Area (m²)',
@@ -1687,6 +1687,331 @@ export default function TakeoffPage() {
     )
   }
 
+  // ── Plastering & Boarding properties panel ───────────────────────────────────
+  // Line-based: user draws wall run → enters height → selects finish sides → openings deducted.
+  // boardingArea = netArea × finishSides — this is the area used for layer quantity calcs.
+  function renderPlasterProperties(item: TakeoffItem) {
+    const accentColor  = '#95a5a6'
+    const [r3, g3, b3] = [0x95, 0xa5, 0xa6]
+    const bgCard  = darkMode ? `rgba(${r3},${g3},${b3},0.07)` : `rgba(${r3},${g3},${b3},0.06)`
+    const bdCard  = `rgba(${r3},${g3},${b3},0.30)`
+
+    const linkEl     = item.elementId ? project.elements.find(e => e.id === item.elementId) : null
+    const isLineBased = linkEl?.type === 'line'
+
+    // Measurements
+    const wallLength   = item.length ?? 0
+    const wallHeight   = item.wallHeight ?? 2.4
+    const finishSides  = item.plasterFinishSides ?? 1
+    const grossArea    = +(wallLength * wallHeight).toFixed(3)
+    const openings     = item.openings ?? []
+    const openingsArea = +openings.reduce((s, o) => s + o.width * o.height, 0).toFixed(3)
+    const netArea      = +(Math.max(0, grossArea - openingsArea)).toFixed(3)
+    const boardingArea = +(netArea * finishSides).toFixed(3)
+
+    // For perimeter-based layers (metal stud track), use wall run as the perimeter
+    const perimeter = isLineBased ? wallLength : 0
+
+    const makeups   = PLASTER_MAKEUPS
+    const makeup    = makeups.find(m => m.id === item.floorMakeupId)
+    const toggles   = item.floorLayerToggles    ?? {}
+    const thicknesses = item.floorLayerThicknesses ?? {}
+
+    // Recalc & save quantities whenever dimensions change
+    function recalcAndSave(patch: Partial<TakeoffItem>) {
+      const merged   = { ...item, ...patch }
+      const h        = merged.wallHeight   ?? wallHeight
+      const sides    = merged.plasterFinishSides ?? finishSides
+      const ops      = merged.openings     ?? openings
+      const newGross = +(wallLength * h).toFixed(3)
+      const newOpA   = +ops.reduce((s, o) => s + o.width * o.height, 0).toFixed(3)
+      const newNet   = +(Math.max(0, newGross - newOpA)).toFixed(3)
+      const newBoard = +(newNet * sides).toFixed(3)
+      saveItemEdit({ ...merged, area: newGross, qty: newBoard, unit: 'm²' })
+    }
+
+    // Opening helpers
+    function addOpening(type: WallOpeningType) {
+      const def = WALL_OPENING_DEFAULTS[type]
+      const newOpening: WallOpening = {
+        id: Math.random().toString(36).slice(2, 8),
+        type, label: WALL_OPENING_LABELS[type],
+        width: def.width, height: def.height,
+      }
+      recalcAndSave({ openings: [...openings, newOpening] })
+    }
+    function updateOpening(id: string, changes: Partial<WallOpening>) {
+      recalcAndSave({ openings: openings.map(o => o.id === id ? { ...o, ...changes } : o) })
+    }
+    function removeOpening(id: string) {
+      recalcAndSave({ openings: openings.filter(o => o.id !== id) })
+    }
+
+    return (
+      <div style={{ padding: 14, fontSize: 13, overflowY: 'auto', height: '100%' }}>
+
+        {/* ── Key metrics ── */}
+        <div style={{ background: bgCard, borderRadius: 8, padding: '12px 14px', marginBottom: 12, border: `1px solid ${bdCard}` }}>
+          <div style={{ fontSize: 10, color: accentColor, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
+            🪣 Plastering & Boarding
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
+            {isLineBased && (
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: accentColor, fontFamily: 'monospace', lineHeight: 1 }}>{fmt2(wallLength)}</div>
+                <div style={{ fontSize: 10, color: '#6a8a6a', marginTop: 2 }}>m wall run</div>
+              </div>
+            )}
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: darkMode ? '#c8d8a8' : '#2b3a2b', fontFamily: 'monospace', lineHeight: 1 }}>{fmt2(grossArea)}</div>
+              <div style={{ fontSize: 10, color: '#6a8a6a', marginTop: 2 }}>m² gross{openingsArea > 0 ? ` (−${fmt2(openingsArea)})` : ''}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: '#7fb3a0', fontFamily: 'monospace', lineHeight: 1 }}>{fmt2(netArea)}</div>
+              <div style={{ fontSize: 10, color: '#6a8a6a', marginTop: 2 }}>m² net area</div>
+            </div>
+          </div>
+          {/* Boarding area highlight */}
+          <div style={{ background: darkMode ? '#1a1a20' : '#eef0f8', borderRadius: 6, padding: '8px 10px', border: `1px solid ${darkMode ? '#3a3a5a' : '#c5cae9'}` }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <span style={{ fontSize: 22, fontWeight: 700, color: '#7986cb', fontFamily: 'monospace' }}>{fmt2(boardingArea)}</span>
+              <span style={{ fontSize: 11, color: darkMode ? '#7986cb' : '#3949ab' }}>m² boarding / skimming area</span>
+              <span style={{ fontSize: 10, color: '#6a8a6a', marginLeft: 'auto' }}>
+                {netArea} × {finishSides} side{finishSides > 1 ? 's' : ''}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Label ── */}
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle}>Drawing Label</label>
+          <input style={inputStyle} value={editingElement?.label ?? item.name}
+            onChange={e => {
+              if (editingElement) saveElementEdit({ ...editingElement, label: e.target.value })
+              saveItemEdit({ ...item, name: e.target.value })
+            }} />
+        </div>
+
+        {/* ── Wall height ── */}
+        {isLineBased && (
+          <div style={{ marginBottom: 10 }}>
+            <label style={labelStyle}>Wall Height (m)</label>
+            <input
+              type="number" step={0.05} min={0.1} max={10}
+              style={{ ...inputStyle, color: accentColor }}
+              value={wallHeight}
+              onChange={e => recalcAndSave({ wallHeight: Math.max(0.1, +e.target.value || 2.4) })}
+            />
+          </div>
+        )}
+
+        {/* ── Finish sides ── */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={labelStyle}>Finish Sides</label>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {([1, 2] as const).map(n => (
+              <div
+                key={n}
+                onClick={() => recalcAndSave({ plasterFinishSides: n })}
+                style={{
+                  flex: 1, textAlign: 'center', padding: '7px 4px', borderRadius: 5, cursor: 'pointer', fontSize: 12,
+                  background: finishSides === n ? (darkMode ? '#2a2a3a' : '#e8eaf6') : 'var(--to-alt)',
+                  border: `1px solid ${finishSides === n ? '#7986cb' : 'var(--to-border)'}`,
+                  color: finishSides === n ? '#7986cb' : 'var(--to-sub)',
+                  fontWeight: finishSides === n ? 700 : 400,
+                }}
+              >
+                {n === 1 ? '1 Side' : '2 Sides'}
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 10, color: '#6a8a6a', marginTop: 3 }}>
+            {finishSides === 1 ? 'One face boarded / skimmed (e.g. masonry wall, one face only)' : 'Both faces boarded / skimmed (e.g. new stud partition)'}
+          </div>
+        </div>
+
+        {/* ── Openings ── */}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 10, color: '#6a8a6a', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>Door &amp; Window Openings</span>
+            {openingsArea > 0 && <span style={{ color: '#e67e22' }}>−{fmt2(openingsArea)} m²</span>}
+          </div>
+
+          {openings.map(op => (
+            <div key={op.id} style={{ background: darkMode ? '#1a1a0d' : '#fffde7', border: `1px solid ${darkMode ? '#3a3a1a' : '#fff176'}`, borderRadius: 5, padding: '6px 8px', marginBottom: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <select
+                  value={op.type}
+                  onChange={e => updateOpening(op.id, { type: e.target.value as WallOpeningType, label: WALL_OPENING_LABELS[e.target.value as WallOpeningType] })}
+                  style={{ ...inputStyle, flex: 1, fontSize: 11, padding: '3px 5px' }}
+                >
+                  {(Object.keys(WALL_OPENING_LABELS) as WallOpeningType[]).map(k => (
+                    <option key={k} value={k}>{WALL_OPENING_LABELS[k]}</option>
+                  ))}
+                </select>
+                <button onClick={() => removeOpening(op.id)}
+                  style={{ background: 'transparent', border: 'none', color: '#e74c3c', cursor: 'pointer', fontSize: 14, padding: '0 2px' }}>✕</button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                <div>
+                  <label style={{ ...labelStyle, fontSize: 9 }}>Width (m)</label>
+                  <input type="number" step={0.05} min={0.1}
+                    style={{ ...inputStyle, fontSize: 11, padding: '3px 6px' }}
+                    value={op.width}
+                    onChange={e => updateOpening(op.id, { width: Math.max(0.1, +e.target.value || 0.9) })} />
+                </div>
+                <div>
+                  <label style={{ ...labelStyle, fontSize: 9 }}>Height (m)</label>
+                  <input type="number" step={0.05} min={0.1}
+                    style={{ ...inputStyle, fontSize: 11, padding: '3px 6px' }}
+                    value={op.height}
+                    onChange={e => updateOpening(op.id, { height: Math.max(0.1, +e.target.value || 2.1) })} />
+                </div>
+              </div>
+              <div style={{ fontSize: 10, color: '#8a7a3a', marginTop: 3 }}>
+                {fmt2(op.width * op.height)} m² deducted
+              </div>
+            </div>
+          ))}
+
+          {/* Add opening buttons */}
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+            {(['door', 'window', 'bifold', 'french_door', 'other'] as WallOpeningType[]).map(t => (
+              <button key={t} onClick={() => addOpening(t)}
+                style={{ ...btnStyle, fontSize: 10, padding: '4px 7px', background: 'transparent', borderColor: '#5a4a1a', color: '#c8a830' }}>
+                + {WALL_OPENING_LABELS[t]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Finish type ── */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={labelStyle}>Finish Type</label>
+          <select
+            style={{ ...inputStyle, color: accentColor }}
+            value={item.floorMakeupId ?? ''}
+            onChange={e => {
+              const newM = makeups.find(m => m.id === e.target.value)
+              saveItemEdit({
+                ...item,
+                floorMakeupId: e.target.value,
+                spec: newM?.clientDescription ?? item.spec,
+                floorLayerToggles: {},
+                floorLayerThicknesses: {},
+              })
+            }}
+          >
+            {makeups.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+        </div>
+
+        {/* ── Layer Schedule — uses boardingArea for quantities ── */}
+        {makeup && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 10, color: '#6a8a6a', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6, display: 'flex', justifyContent: 'space-between' }}>
+              <span>Layer Schedule</span>
+              <span style={{ color: '#4a6a4a' }}>~{fmt2(boardingArea * makeup.labourHrsPerM2)} hrs labour</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '16px 1fr 64px 8px', gap: 4, padding: '3px 6px', marginBottom: 2, fontSize: 9, color: '#4a6a4a', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              <span /><span>Layer</span><span style={{ textAlign: 'right' }}>Qty</span><span />
+            </div>
+            {makeup.layers.map(layer => {
+              const enabled = toggles[layer.id] ?? layer.defaultEnabled
+              const thk = thicknesses[layer.id] ?? layer.thickness
+              const { qty, unit } = calcLayerQty(layer, boardingArea, perimeter, thk || undefined)
+              return (
+                <div key={layer.id} style={{
+                  display: 'grid', gridTemplateColumns: '16px 1fr 64px 8px',
+                  gap: 4, alignItems: 'center', padding: '5px 6px', marginBottom: 2, borderRadius: 4,
+                  background: enabled ? (darkMode ? '#0d1a0d' : '#f5f9f5') : (darkMode ? '#090f09' : '#f0f0f0'),
+                  border: `1px solid ${enabled ? (darkMode ? '#1e2e1e' : '#c8ddc8') : (darkMode ? '#111' : '#ddd')}`,
+                  opacity: enabled ? 1 : 0.5,
+                }}>
+                  <input type="checkbox" checked={enabled}
+                    onChange={ev => saveItemEdit({ ...item, floorLayerToggles: { ...toggles, [layer.id]: ev.target.checked } })}
+                    style={{ margin: 0, accentColor, cursor: 'pointer' }} />
+                  <div>
+                    <div style={{ fontSize: 11, color: enabled ? (darkMode ? '#c8d8a8' : '#2b3a2b') : '#6a8a6a', lineHeight: 1.2 }}>{layer.name}</div>
+                    {layer.thickness > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginTop: 2 }}>
+                        <input type="number" value={thk} min={0}
+                          onChange={ev => saveItemEdit({ ...item, floorLayerThicknesses: { ...thicknesses, [layer.id]: +ev.target.value } })}
+                          style={{ width: 38, background: darkMode ? '#162216' : '#f0f4f0', border: `1px solid ${darkMode ? '#2a3a2a' : '#c8d8c8'}`, borderRadius: 3, color: darkMode ? '#8aa' : '#4a6a4a', fontSize: 10, padding: '1px 3px', textAlign: 'right', outline: 'none' }} />
+                        <span style={{ fontSize: 9, color: '#4a6a4a' }}>mm</span>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 11, fontFamily: 'monospace', color: enabled ? (darkMode ? '#c8d8a8' : '#2b3a2b') : '#4a6a4a', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {enabled ? `${qty} ${unit}` : '—'}
+                  </div>
+                  <div style={{ width: 7, height: 7, borderRadius: '50%', background: CAT_COLOR[layer.category] ?? '#95a5a6', flexShrink: 0, alignSelf: 'center' }} title={layer.category} />
+                </div>
+              )
+            })}
+            <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+              {(['labour', 'materials', 'plant', 'other'] as const).map(cat => (
+                <span key={cat} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: '#6a8a6a' }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: CAT_COLOR[cat], display: 'inline-block' }} />
+                  {cat}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Client Description ── */}
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle}>Client Description (quote text)</label>
+          <textarea style={{ ...inputStyle, height: 70, resize: 'none', fontSize: 11, lineHeight: 1.5 }}
+            value={item.spec ?? ''}
+            onChange={e => saveItemEdit({ ...item, spec: e.target.value })} />
+        </div>
+
+        {/* ── Drawing ref / Sub-Phase ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+          <div>
+            <label style={labelStyle}>Drawing Ref</label>
+            <input style={inputStyle} value={item.drawingRef ?? ''} onChange={e => saveItemEdit({ ...item, drawingRef: e.target.value })} />
+          </div>
+          <div>
+            <label style={labelStyle}>Sub-Phase</label>
+            <input style={inputStyle} value={item.subPhase ?? ''} onChange={e => saveItemEdit({ ...item, subPhase: e.target.value })} />
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <label style={labelStyle}>Notes</label>
+          <textarea style={{ ...inputStyle, height: 52, resize: 'none' }}
+            value={item.notes ?? ''} onChange={e => saveItemEdit({ ...item, notes: e.target.value })} />
+        </div>
+
+        {/* ── Delete ── */}
+        <button
+          style={{ ...btnStyle, background: '#c0392b', borderColor: '#c0392b', marginTop: 4 }}
+          onClick={() => {
+            if (item.elementId) {
+              setProject(p => ({
+                ...p,
+                elements: p.elements.filter(el2 => el2.id !== item.elementId),
+                items: p.items.filter(it => it.id !== item.id),
+              }))
+              setSelectedId(null)
+            } else {
+              setProject(p => ({ ...p, items: p.items.filter(it => it.id !== item.id) }))
+            }
+            setEditingItem(null)
+            setEditingElement(null)
+            setPanelMode('schedule')
+          }}
+        >
+          🗑 Delete Plaster Item
+        </button>
+      </div>
+    )
+  }
+
   // ── Demolition properties panel ──────────────────────────────────────────────
   function renderDemolitionProperties(item: TakeoffItem) {
     const accentColor   = '#e74c3c'
@@ -2521,7 +2846,31 @@ export default function TakeoffPage() {
       return renderWallProperties(_wallItem)
     }
 
-    // ── Other build-up phases (floors, foundations, plastering) — rect/polygon only ──
+    // ── Plastering & Boarding: dedicated line-based wall measurement panel ──
+    if (editingItem.phase === 'Plastering & Boarding') {
+      let _pItem = { ...editingItem }
+
+      // Ensure a finish type is selected
+      if (!_pItem.floorMakeupId) {
+        _pItem = { ..._pItem, floorMakeupId: PLASTER_MAKEUPS[0].id, spec: PLASTER_MAKEUPS[0].clientDescription }
+        saveItemEdit(_pItem)
+      }
+
+      // Auto-init height + sides for new LINE items
+      if (_linkedEl?.type === 'line' && _pItem.wallHeight == null) {
+        const _len   = _pItem.length ?? 0
+        const _defH  = 2.4
+        const _sides = _pItem.plasterFinishSides ?? 1
+        const _gross = +(_len * _defH).toFixed(3)
+        const _board = +(_gross * _sides).toFixed(3)
+        _pItem = { ..._pItem, wallHeight: _defH, plasterFinishSides: _sides, area: _gross, qty: _board, unit: 'm²' }
+        saveItemEdit(_pItem)
+      }
+
+      return renderPlasterProperties(_pItem)
+    }
+
+    // ── Other build-up phases (floors, foundations) — rect/polygon only ──
     const _phaseMakeups = PHASE_MAKEUPS[editingItem.phase]
     const _isBuildupItem =
       !!editingItem.floorMakeupId ||
