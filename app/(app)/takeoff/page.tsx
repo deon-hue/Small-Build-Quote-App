@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback, ChangeEvent } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import { makeDebouncedSave, loadTakeoffFromSupabase } from '@/lib/takeoff-sync'
 import {
   TAKEOFF_PHASES, PHASE_COLORS, DEFAULT_MPP, SCALE_PRESETS,
   FLOOR_MAKEUPS, WALL_MAKEUPS, PLASTER_MAKEUPS, PHASE_MAKEUPS, calcLayerQty,
@@ -412,6 +414,11 @@ export default function TakeoffPage() {
   const [project, setProject] = useState<TakeoffProject>(() => loadProject() ?? blankProject())
   const [planImage, setPlanImage] = useState<string | null>(null)
 
+  // Supabase auth — userId loaded once on mount
+  const [userId, setUserId] = useState<string | null>(null)
+  // Debounced save function — stable ref, created once
+  const debouncedSaveRef = useRef(makeDebouncedSave(2000))
+
   // Canvas / drawing state
   const [tool, setTool] = useState<DrawingTool>('select')
   const [drawPoints, setDrawPoints] = useState<TakeoffPoint[]>([])
@@ -511,8 +518,41 @@ export default function TakeoffPage() {
   useEffect(() => {
     const p = { ...project, updatedAt: new Date().toISOString() }
     if (planImage) p.planImageUrl = planImage
+    // Tier 3 — synchronous write to localStorage (immediate cache + recovery)
     saveProject(p)
-  }, [project, planImage])
+    // Tier 3 — debounced async write to Supabase (system of record)
+    if (userId) {
+      const sb = createClient()
+      debouncedSaveRef.current(sb, p, userId)
+    }
+  }, [project, planImage, userId])
+
+  // ── Supabase auth + initial cloud sync ─────────────────────────────────────
+  // Step 1: get the current user on mount.
+  // Step 2: check if the cloud project is newer than localStorage and merge.
+  useEffect(() => {
+    const sb = createClient()
+    sb.auth.getUser().then(async ({ data }) => {
+      const uid = data.user?.id ?? null
+      setUserId(uid)
+      if (!uid) return
+
+      // Async cloud sync — merge if the Supabase record has a newer updatedAt
+      const local = loadProject()
+      if (!local?.id) return
+      const remote = await loadTakeoffFromSupabase(sb, local.id, uid)
+      if (!remote) return
+      const remoteTime = new Date(remote.updatedAt).getTime()
+      const localTime  = new Date(local.updatedAt ?? 0).getTime()
+      if (remoteTime > localTime) {
+        // Cloud is newer — restore remote data (keep planImageUrl from local)
+        setProject(prev => ({
+          ...remote,
+          planImageUrl: prev.planImageUrl,
+        }))
+      }
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Handle queued element (dblclick batching) ──────────────────────────────
   useEffect(() => {
