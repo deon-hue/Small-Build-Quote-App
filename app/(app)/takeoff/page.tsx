@@ -4888,8 +4888,12 @@ export default function TakeoffPage() {
               {/* Drawn elements */}
               {project.elements.map(renderElement)}
 
-              {/* Vertex handles — rendered above all elements when an element is selected */}
-              {selectedId && tool === 'select' && (() => {
+              {/* Vertex handles — rendered above all elements when an element is selected.
+                  Shown in ALL tool modes so the user can immediately adjust a just-drawn
+                  element without having to switch to select mode first.
+                  Both onMouseDown AND onClick stop propagation so clicks never leak to
+                  handleSvgClick (which would add a draw point in line/polygon mode). */}
+              {selectedId && (() => {
                 const el = project.elements.find(e => e.id === selectedId)
                 if (!el) return null
                 const handles = getElVertexHandles(el)
@@ -4919,6 +4923,7 @@ export default function TakeoffPage() {
                       }
                       setIsDraggingEl(true)
                     }}
+                    onClick={ev => ev.stopPropagation()}
                   />
                 ))
               })()}
