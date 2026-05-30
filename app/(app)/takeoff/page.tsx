@@ -3,7 +3,9 @@
 import { useState, useRef, useEffect, useCallback, ChangeEvent } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { makeDebouncedSave, loadTakeoffFromSupabase } from '@/lib/takeoff-sync'
-import { fetchWallTypesWithLayers, wallTypesToMakeups } from '@/lib/back-office-queries'
+import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchLabourTrades } from '@/lib/back-office-queries'
+import type { BOLabourTrade } from '@/lib/back-office-types'
+import LabourCostBuilder from './components/LabourCostBuilder'
 import {
   TAKEOFF_PHASES, PHASE_COLORS, DEFAULT_MPP, SCALE_PRESETS,
   FLOOR_MAKEUPS, WALL_MAKEUPS, PLASTER_MAKEUPS, PHASE_MAKEUPS, calcLayerQty,
@@ -12,6 +14,7 @@ import {
   type TakeoffPhase, type DrawingTool, type TakeoffPoint,
   type DrawnElement, type TakeoffItem, type TakeoffProject, type ScaleCalibration,
   type FloorLayer, type FloorMakeup, type WallOpeningType, type WallOpening,
+  type TakeoffLabourLine,
 } from '@/lib/takeoff-types'
 import {
   DEFAULT_DEMO_SUBPHASES, getAllDemoSubphases, loadCustomDemoSubphases,
@@ -485,6 +488,9 @@ export default function TakeoffPage() {
   // Computed: DB takes precedence; localStorage fallback when DB not loaded yet
   const allWallMakeups = dbWallTypes.length > 0 ? dbWallTypes : [...WALL_MAKEUPS, ...customWallTypes]
 
+  // Back Office labour trades — loaded once, used by LabourCostBuilder in every panel
+  const [labourTrades, setLabourTrades] = useState<BOLabourTrade[]>([])
+
   // Custom demolition subphases (loaded from localStorage on mount)
   const [customDemoSubphases, setCustomDemoSubphases] = useState<DemoSubphase[]>([])
   useEffect(() => { setCustomDemoSubphases(loadCustomDemoSubphases()) }, [])
@@ -549,6 +555,11 @@ export default function TakeoffPage() {
       fetchWallTypesWithLayers(sb, uid).then(types => {
         const makeups = wallTypesToMakeups(types)
         if (makeups.length > 0) setDbWallTypes(makeups)
+      })
+
+      // Load Back Office labour trades (for LabourCostBuilder in every panel)
+      fetchLabourTrades(sb, uid).then(trades => {
+        setLabourTrades(trades.filter(t => t.active))
       })
 
       // Async cloud sync — merge if the Supabase record has a newer updatedAt
@@ -4217,6 +4228,16 @@ export default function TakeoffPage() {
                 : 'No automated outputs for this phase'}
             </div>
           )}
+        </div>
+
+        {/* ════════════════ LABOUR ════════════════ */}
+        <div style={secHdr}><span>🔨</span><span>Labour Costing</span></div>
+        <div style={secBody}>
+          <LabourCostBuilder
+            labourLines={item.labourLines ?? []}
+            trades={labourTrades}
+            onChange={lines => saveItemEdit({ ...item, labourLines: lines })}
+          />
         </div>
 
         {/* ════════════════ FOOTER ════════════════ */}

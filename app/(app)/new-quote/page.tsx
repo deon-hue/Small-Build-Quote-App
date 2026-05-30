@@ -11,7 +11,7 @@ import QuotePreviewModal from '@/components/QuotePreviewModal'
 import ScopeChat from '@/components/ScopeChat'
 import EstimatorBreakdown from '@/components/EstimatorBreakdown'
 import type { TakeoffItem, TakeoffPhase } from '@/lib/takeoff-types'
-import { PHASE_TO_QUOTE_PARENT, ALL_MAKEUPS, calcLayerQty, WALL_OPENING_LABELS } from '@/lib/takeoff-types'
+import { PHASE_TO_QUOTE_PARENT, ALL_MAKEUPS, calcLayerQty, WALL_OPENING_LABELS, type TakeoffLabourLine } from '@/lib/takeoff-types'
 import { DEFAULT_DEMO_SUBPHASES, calcDemoSellingPrice, DEMO_UNIT_LABELS, type DemoUnit } from '@/lib/demolition-data'
 import { ALL_PHASE_SUBPHASES, calcPhaseTaskSellingPrice } from '@/lib/phase-tasks'
 import { sumByCategory } from '@/lib/material-recipes'
@@ -588,6 +588,31 @@ export default function NewQuotePage() {
               parentPhase,
             ))
           }
+        }
+
+        // ── Labour lines pass: add BO trade-labour sub-phases for any item
+        //    that has labourLines saved on it.  These are ADDITIVE to the
+        //    material/task rows already created above.
+        for (const item of data.items as TakeoffItem[]) {
+          if (!item.labourLines?.length) continue
+          const labTotal = item.labourLines.reduce((s, l) => s + l.total, 0)
+          if (labTotal <= 0) continue
+          const labParent = PHASE_TO_QUOTE_PARENT[item.phase as TakeoffPhase] || item.phase
+          const labDesc = item.labourLines
+            .map(l => `${l.tradeName} (${l.rateType}): ${l.quantity} × £${l.rate.toFixed(2)}${l.operatives > 1 ? ` × ${l.operatives} ops` : ''} = £${l.total.toFixed(2)}`)
+            .join(' | ')
+          const labSubPhase = `Labour — ${item.name || item.phase}`
+          newPhases.push(makePhase(
+            labSubPhase,
+            [
+              { desc: labDesc, qty: 1, unit: 'sum', labour: labTotal, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: labDesc, itemType: 'labour' },
+              { desc: '', qty: 1, unit: 'sum', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials' },
+              { desc: '', qty: 1, unit: 'sum', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'plant' },
+              { desc: '', qty: 1, unit: 'sum', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'subcontractors' },
+              { desc: '', qty: 1, unit: 'sum', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'other' },
+            ],
+            labParent,
+          ))
         }
 
         setPhases(newPhases)

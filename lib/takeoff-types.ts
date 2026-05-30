@@ -133,6 +133,23 @@ export interface WallOpening {
   height: number   // metres
 }
 
+// ── Labour cost lines (Back Office trade-rate based) ──────────────────────────
+
+export type LabourRateType = 'hourly' | 'half_day' | 'day'
+
+/** One trade/rate selection within a takeoff item's labour breakdown */
+export interface TakeoffLabourLine {
+  id:         string           // local uid
+  tradeId:    string           // BOLabourTrade.id (snapshot — line survives trade deletion)
+  tradeName:  string           // cached display name
+  rateType:   LabourRateType
+  rate:       number           // effective £ rate for the selected rateType
+  quantity:   number           // hours (hourly) / half-days / days
+  operatives: number           // number of people
+  total:      number           // rate × quantity × operatives
+  notes?:     string
+}
+
 // ── Take-off line item (attached to a drawn element or manually added) ─────────
 
 export interface TakeoffItem {
@@ -188,6 +205,11 @@ export interface TakeoffItem {
   demoWaste?:          number
   demoSubcontractor?:  number
   demoOther?:          number
+
+  // ── Back Office labour lines (available on every phase/tool) ─────────────────
+  // Each line is one trade × rate-type × qty × operatives selection.
+  // Stored as a snapshot so the line still shows if the trade is later deleted.
+  labourLines?: TakeoffLabourLine[]
 
   // Generic phase task fields (Plastering, Roof, Electrics, Plumbing, etc.)
   taskSubphaseId?:     string     // PhaseSubphase.id
