@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback, ChangeEvent } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { makeDebouncedSave, loadTakeoffFromSupabase } from '@/lib/takeoff-sync'
-import { fetchWallTypesWithLayers, wallTypesToMakeups } from '@/lib/back-office-queries'
+import { fetchWallTypesWithLayers, fetchTurfTypesWithLayers, wallTypesToMakeups } from '@/lib/back-office-queries'
 import {
   TAKEOFF_PHASES, PHASE_COLORS, DEFAULT_MPP, SCALE_PRESETS,
   FLOOR_MAKEUPS, WALL_MAKEUPS, PLASTER_MAKEUPS, TURF_MAKEUPS, PHASE_MAKEUPS, calcLayerQty,
@@ -482,9 +482,12 @@ export default function TakeoffPage() {
 
   // DB wall types — master source of truth from Back Office (Supabase)
   const [dbWallTypes, setDbWallTypes] = useState<FloorMakeup[]>([])
+  // DB turf types — master source of truth from Back Office (Supabase)
+  const [dbTurfTypes, setDbTurfTypes] = useState<FloorMakeup[]>([])
 
-  // Computed: DB takes precedence; localStorage fallback when DB not loaded yet
+  // Computed: DB takes precedence; hardcoded fallback when DB not loaded yet
   const allWallMakeups = dbWallTypes.length > 0 ? dbWallTypes : [...WALL_MAKEUPS, ...customWallTypes]
+  const allTurfMakeups = dbTurfTypes.length > 0 ? dbTurfTypes : TURF_MAKEUPS
 
   // Custom demolition subphases (loaded from localStorage on mount)
   const [customDemoSubphases, setCustomDemoSubphases] = useState<DemoSubphase[]>([])
@@ -550,6 +553,11 @@ export default function TakeoffPage() {
       fetchWallTypesWithLayers(sb, uid).then(types => {
         const makeups = wallTypesToMakeups(types)
         if (makeups.length > 0) setDbWallTypes(makeups)
+      })
+      // Load DB turf types (Back Office master source of truth)
+      fetchTurfTypesWithLayers(sb, uid).then(types => {
+        const makeups = wallTypesToMakeups(types)
+        if (makeups.length > 0) setDbTurfTypes(makeups)
       })
 
       // Async cloud sync — merge if the Supabase record has a newer updatedAt
@@ -3267,7 +3275,10 @@ export default function TakeoffPage() {
     }
 
     // Buildup (Floors, Foundations, rect/polygon External Walls, Plastering rect, Turfing polygon)
-    const _phaseMakeups = PHASE_MAKEUPS[item.phase]
+    // For External Works polygons: use DB turf types (allTurfMakeups) as the source.
+    const _phaseMakeups = item.phase === 'External Works & Landscaping'
+      ? allTurfMakeups   // DB-backed turf types take precedence over hardcoded TURF_MAKEUPS
+      : PHASE_MAKEUPS[item.phase]
     const _isBuildupItem = !!item.floorMakeupId || (!!_phaseMakeups && !!linkedEl && linkedEl.type !== 'line')
     // Guard: don't auto-convert to buildup if the item already has task data (e.g. existing
     // External Works paving items drawn as polygons before turfing was introduced).

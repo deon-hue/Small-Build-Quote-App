@@ -23,6 +23,7 @@ import SectionTakeoffMapping from './components/SectionTakeoffMapping'
 import SectionFormulaRules from './components/SectionFormulaRules'
 import SectionAIMapping from './components/SectionAIMapping'
 import SectionWallTypes from './components/SectionWallTypes'
+import SectionTurfTypes from './components/SectionTurfTypes'
 
 function deepClone<T>(v: T): T { return JSON.parse(JSON.stringify(v)) }
 
@@ -48,6 +49,7 @@ type SectionId =
   | 'formula-rules'
   | 'ai-mapping'
   | 'wall-types'
+  | 'turf-types'
 
 const SECTIONS: Array<{ id: SectionId; label: string; icon: string; badge?: string; group?: string }> = [
   { id: 'job-templates',    label: 'Job Templates',      icon: '📋', badge: 'DB',    group: 'Master Data' },
@@ -55,10 +57,11 @@ const SECTIONS: Array<{ id: SectionId; label: string; icon: string; badge?: stri
   { id: 'labour',           label: 'Labour & Trades',    icon: '👷', badge: 'DB',    group: 'Master Data' },
   { id: 'products',         label: 'Products',           icon: '📦', badge: 'DB',    group: 'Master Data' },
   { id: 'plant',            label: 'Plant & Equipment',  icon: '🚜', badge: 'DB',    group: 'Master Data' },
+  { id: 'wall-types',       label: 'Wall Types',         icon: '🧱', badge: 'DB',    group: 'Master Data' },
+  { id: 'turf-types',       label: 'Turfing Types',      icon: '🌱', badge: 'DB',    group: 'Master Data' },
   { id: 'takeoff-mapping',  label: 'Takeoff Mapping',    icon: '📐', badge: 'DB',    group: 'Tool Config' },
   { id: 'formula-rules',    label: 'Formula Rules',      icon: '∑',  badge: 'DB',    group: 'Tool Config' },
   { id: 'ai-mapping',       label: 'AI Scope Mapping',   icon: '🤖', badge: 'DB',    group: 'Tool Config' },
-  { id: 'wall-types',       label: 'Wall Types',         icon: '🧱', badge: 'DB',    group: 'Master Data' },
 ]
 
 // ── Estimator items editor (unchanged from original) ─────────────────────────
@@ -292,9 +295,10 @@ export default function BackOfficePage() {
         {activeSection === 'takeoff-mapping' && userId && <SectionTakeoffMapping userId={userId} />}
         {activeSection === 'formula-rules' && userId && <SectionFormulaRules userId={userId} />}
         {activeSection === 'ai-mapping' && userId && <SectionAIMapping userId={userId} />}
-        {activeSection === 'wall-types' && userId && <SectionWallTypes userId={userId} />}
+        {activeSection === 'wall-types' && userId && <SectionWallTypes userId={userId} key={syncKey} />}
+        {activeSection === 'turf-types' && userId && <SectionTurfTypes userId={userId} key={syncKey} />}
 
-        {!userId && ['labour','phases-tasks','products','plant','takeoff-mapping','formula-rules','ai-mapping','wall-types'].includes(activeSection) && (
+        {!userId && ['labour','phases-tasks','products','plant','takeoff-mapping','formula-rules','ai-mapping','wall-types','turf-types'].includes(activeSection) && (
           <div style={{ textAlign: 'center', padding: 48, color: '#64748b' }}>Loading…</div>
         )}
 
