@@ -701,6 +701,12 @@ export default function TakeoffPage() {
 
   function handleMouseUp() {
     if (dragRef.current) {
+      // Mark as "panned" so handleSvgClick ignores the synthetic click that fires
+      // after mouseup. When mousedown is on the vertex circle and mouseup lands on
+      // the SVG background, the browser fires a click on the SVG (lowest common
+      // ancestor), bypassing the circle's onClick stopPropagation. Without this,
+      // that click would add a draw point in line/polygon mode.
+      hasPannedRef.current = true
       dragRef.current = null
       setIsDraggingEl(false)
       // Recalculate measurements after move
