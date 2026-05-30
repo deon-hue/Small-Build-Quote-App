@@ -1,4 +1,4 @@
-// Back Office CRUD helpers + seed defaults
+// Back Office CRUD helpers + sync from product defaults
 // All functions take a Supabase browser client and userId.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -7,6 +7,10 @@ import type {
   BOProduct, BOPlantItem, BOTakeoffTool, BOTakeoffSubtype,
   BOToolTaskMapping, BOFormulaRule, BOAIScopeMapping,
 } from './back-office-types'
+import { TAKEOFF_PHASES } from './takeoff-types'
+import { CANONICAL_PHASE_IDS } from './product-config'
+import { ALL_PHASE_SUBPHASES } from './phase-tasks'
+import { DEFAULT_DEMO_SUBPHASES } from './demolition-data'
 
 // ── Labour Trades ─────────────────────────────────────────────────────────────
 
@@ -495,6 +499,227 @@ export async function seedBackOfficeDefaults(sb: SupabaseClient, userId: string)
           tool.subtypes.map((st, j) => ({ user_id: userId, tool_id: inserted.id, name: st.name, description: st.description, display_order: j }))
         )
       }
+    }
+  }
+}
+
+// ── Sync from Product Defaults ────────────────────────────────────────────────
+//
+// Called on every Back Office page load (not just first visit).
+// Reads directly from the product lib files so that any code change to
+// phases, sub-phases or tasks automatically propagates to the Back Office DB.
+//
+// Rules:
+//   • New phase / sub-phase / task in code  → INSERT with default rates
+//   • Existing item renamed in code          → UPDATE name only (preserve rates)
+//   • Item removed from code                 → left in DB untouched (may be customer data)
+//   • Customer-set rates / markup_pct        → NEVER overwritten
+//
+// Requires supabase/phase12.sql to have been run (adds canonical_id columns).
+
+export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: string): Promise<void> {
+
+  // ── 1. Phases ────────────────────────────────────────────────────────────────
+  const { data: dbPhases } = await sb
+    .from('bo_phases')
+    .select('id, canonical_id, name, display_order')
+    .eq('user_id', userId)
+
+  const phaseByCanon = new Map(
+    (dbPhases ?? []).filter(p => p.canonical_id).map(p => [p.canonical_id as string, p as { id: string; name: string; display_order: number }])
+  )
+  const phaseCanonToId = new Map<string, string>(
+    (dbPhases ?? []).filter(p => p.canonical_id).map(p => [p.canonical_id as string, p.id as string])
+  )
+
+  const desiredPhases = (TAKEOFF_PHASES as readonly string[]).map((name, i) => ({
+    canonical_id: CANONICAL_PHASE_IDS[name] ?? null,
+    name,
+    display_order: i,
+  })).filter(p => p.canonical_id !== null) as Array<{ canonical_id: string; name: string; display_order: number }>
+
+  // Insert new phases (batch)
+  const newPhases = desiredPhases.filter(p => !phaseByCanon.has(p.canonical_id))
+  if (newPhases.length > 0) {
+    const { data: inserted } = await sb.from('bo_phases').insert(
+      newPhases.map(p => ({ user_id: userId, canonical_id: p.canonical_id, name: p.name, display_order: p.display_order, active: true, job_types: [] }))
+    ).select('id, canonical_id')
+    ;(inserted ?? []).forEach(r => { if (r.canonical_id) phaseCanonToId.set(r.canonical_id as string, r.id as string) })
+  }
+
+  // Update phases whose name or order changed
+  for (const p of desiredPhases.filter(p => phaseByCanon.has(p.canonical_id))) {
+    const ex = phaseByCanon.get(p.canonical_id)!
+    if (ex.name !== p.name || ex.display_order !== p.display_order) {
+      await sb.from('bo_phases').update({ name: p.name, display_order: p.display_order }).eq('id', phaseCanonToId.get(p.canonical_id)!)
+    }
+  }
+
+  // ── 2. Sub-Phases ────────────────────────────────────────────────────────────
+  // Sources:
+  //   • ALL_PHASE_SUBPHASES (phase-tasks.ts) — canonical_id = subphase.id
+  //   • DEFAULT_DEMO_SUBPHASES (demolition-data.ts) — canonical_id = 'demo-' + subphase.id
+
+  const { data: dbSubs } = await sb
+    .from('bo_sub_phases')
+    .select('id, canonical_id, name, display_order')
+    .eq('user_id', userId)
+
+  const subByCanon = new Map(
+    (dbSubs ?? []).filter(s => s.canonical_id).map(s => [s.canonical_id as string, s as { id: string; name: string; display_order: number }])
+  )
+  const subCanonToId = new Map<string, string>(
+    (dbSubs ?? []).filter(s => s.canonical_id).map(s => [s.canonical_id as string, s.id as string])
+  )
+
+  interface SubRow { canonical_id: string; phase_canonical: string; name: string; display_order: number; markup_pct: number }
+  const desiredSubs: SubRow[] = []
+
+  ALL_PHASE_SUBPHASES.forEach((sub, i) => {
+    const pc = CANONICAL_PHASE_IDS[sub.phase]
+    if (pc) desiredSubs.push({ canonical_id: sub.id, phase_canonical: pc, name: sub.name, display_order: i, markup_pct: sub.markupPct })
+  })
+  DEFAULT_DEMO_SUBPHASES.forEach((sub, i) => {
+    const pc = CANONICAL_PHASE_IDS['Site Setup & Demolition']
+    if (pc) desiredSubs.push({ canonical_id: `demo-${sub.id}`, phase_canonical: pc, name: sub.name, display_order: i, markup_pct: sub.markupPct })
+  })
+
+  // Insert new sub-phases (batch by phase to keep FK resolution simple)
+  const newSubs = desiredSubs.filter(s => !subByCanon.has(s.canonical_id) && phaseCanonToId.has(s.phase_canonical))
+  if (newSubs.length > 0) {
+    const { data: inserted } = await sb.from('bo_sub_phases').insert(
+      newSubs.map(s => ({
+        user_id: userId,
+        canonical_id: s.canonical_id,
+        phase_id: phaseCanonToId.get(s.phase_canonical)!,
+        name: s.name,
+        display_order: s.display_order,
+        markup_pct: s.markup_pct,
+        active: true,
+      }))
+    ).select('id, canonical_id')
+    ;(inserted ?? []).forEach(r => { if (r.canonical_id) subCanonToId.set(r.canonical_id as string, r.id as string) })
+  }
+
+  // Update sub-phases whose name or order changed (preserve markup_pct)
+  for (const s of desiredSubs.filter(s => subByCanon.has(s.canonical_id))) {
+    const ex = subByCanon.get(s.canonical_id)!
+    if (ex.name !== s.name || ex.display_order !== s.display_order) {
+      await sb.from('bo_sub_phases').update({ name: s.name, display_order: s.display_order }).eq('id', subCanonToId.get(s.canonical_id)!)
+    }
+  }
+
+  // ── 3. Tasks ─────────────────────────────────────────────────────────────────
+  // Sources:
+  //   • PhaseSubphase.tasks (phase-tasks.ts)       — canonical_id = task.id
+  //   • DemoSubphase.tasks  (demolition-data.ts)   — canonical_id = 'demo-' + task.id
+
+  const { data: dbTasks } = await sb
+    .from('bo_tasks')
+    .select('id, canonical_id, name, unit')
+    .eq('user_id', userId)
+
+  const taskByCanon = new Map(
+    (dbTasks ?? []).filter(t => t.canonical_id).map(t => [t.canonical_id as string, t as { id: string; name: string; unit: string }])
+  )
+
+  interface TaskRow {
+    canonical_id:     string
+    sub_canonical:    string
+    phase_canonical:  string
+    name:             string
+    unit:             string
+    display_order:    number
+    description:      string
+    labour_cost:      number
+    materials_cost:   number
+    plant_cost:       number
+    subcontract_cost: number
+    waste_cost:       number
+    other_cost:       number
+  }
+  const desiredTasks: TaskRow[] = []
+
+  ALL_PHASE_SUBPHASES.forEach(sub => {
+    const pc = CANONICAL_PHASE_IDS[sub.phase]
+    sub.tasks.forEach((task, i) => {
+      desiredTasks.push({
+        canonical_id:     task.id,
+        sub_canonical:    sub.id,
+        phase_canonical:  pc ?? '',
+        name:             task.name,
+        unit:             task.unit,
+        display_order:    i,
+        description:      task.notes ?? '',
+        labour_cost:      task.labour,
+        materials_cost:   task.materials,
+        plant_cost:       task.plant,
+        subcontract_cost: task.subcontractor,
+        waste_cost:       0,
+        other_cost:       task.other,
+      })
+    })
+  })
+
+  DEFAULT_DEMO_SUBPHASES.forEach(sub => {
+    const pc = CANONICAL_PHASE_IDS['Site Setup & Demolition'] ?? ''
+    sub.tasks.forEach((task, i) => {
+      desiredTasks.push({
+        canonical_id:     `demo-${task.id}`,
+        sub_canonical:    `demo-${sub.id}`,
+        phase_canonical:  pc,
+        name:             task.name,
+        unit:             task.unit,
+        display_order:    i,
+        description:      task.clientDescription,
+        labour_cost:      task.labourCost,
+        materials_cost:   task.materialCost,
+        plant_cost:       task.plantCost,
+        subcontract_cost: task.subcontractorCost,
+        waste_cost:       task.wasteCost,
+        other_cost:       task.otherCost,
+      })
+    })
+  })
+
+  // Insert new tasks (batch)
+  const newTasks = desiredTasks.filter(t =>
+    !taskByCanon.has(t.canonical_id) &&
+    subCanonToId.has(t.sub_canonical)
+  )
+  if (newTasks.length > 0) {
+    // Insert in chunks of 100 to stay within Supabase payload limits
+    for (let i = 0; i < newTasks.length; i += 100) {
+      await sb.from('bo_tasks').insert(
+        newTasks.slice(i, i + 100).map(t => ({
+          user_id:          userId,
+          canonical_id:     t.canonical_id,
+          phase_id:         phaseCanonToId.get(t.phase_canonical) ?? null,
+          sub_phase_id:     subCanonToId.get(t.sub_canonical)!,
+          name:             t.name,
+          unit:             t.unit,
+          description:      t.description,
+          display_order:    t.display_order,
+          labour_cost:      t.labour_cost,
+          materials_cost:   t.materials_cost,
+          plant_cost:       t.plant_cost,
+          subcontract_cost: t.subcontract_cost,
+          waste_cost:       t.waste_cost,
+          other_cost:       t.other_cost,
+          from_takeoff:     true,
+          active:           true,
+        }))
+      )
+    }
+  }
+
+  // Update tasks whose name or unit changed (preserve all cost fields)
+  for (const t of desiredTasks.filter(t => taskByCanon.has(t.canonical_id))) {
+    const ex = taskByCanon.get(t.canonical_id)!
+    if (ex.name !== t.name || ex.unit !== t.unit) {
+      await sb.from('bo_tasks')
+        .update({ name: t.name, unit: t.unit, updated_at: new Date().toISOString() })
+        .eq('id', ex.id)
     }
   }
 }

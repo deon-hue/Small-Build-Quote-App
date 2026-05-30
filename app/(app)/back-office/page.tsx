@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { createClient } from '@/lib/supabase/client'
-import { seedBackOfficeDefaults } from '@/lib/back-office-queries'
+import { syncBackOfficeFromProduct } from '@/lib/back-office-queries'
 import { JOB_TYPES, JOB_TEMPLATES } from '@/lib/utils'
 import {
   WALL_MAKEUPS, loadCustomWallTypes, saveCustomWallTypes,
@@ -173,22 +173,24 @@ export default function BackOfficePage() {
   const { customTemplates, getTemplate, saveJobTypeTemplate, resetJobTypeTemplate, loading } = useApp()
   const [activeSection, setActiveSection] = useState<SectionId>('job-templates')
   const [userId, setUserId] = useState<string | null>(null)
-  const [seeded, setSeeded] = useState(false)
+  const [syncing, setSyncing] = useState(false)
 
-  // Get current user
+  // Get current user then sync product structure into Back Office DB.
+  // Runs on every page load — adds new phases/tasks from code, renames changed
+  // items, and preserves any customer-set rates. Safe to run repeatedly.
   useEffect(() => {
     const sb = createClient()
-    sb.auth.getUser().then(({ data }) => {
-      if (data.user) setUserId(data.user.id)
+    sb.auth.getUser().then(async ({ data }) => {
+      if (!data.user) return
+      setUserId(data.user.id)
+      setSyncing(true)
+      try {
+        await syncBackOfficeFromProduct(sb, data.user.id)
+      } finally {
+        setSyncing(false)
+      }
     })
   }, [])
-
-  // Seed defaults on first visit
-  useEffect(() => {
-    if (!userId || seeded) return
-    const sb = createClient()
-    seedBackOfficeDefaults(sb, userId).then(() => setSeeded(true))
-  }, [userId, seeded])
 
   // ── Job Templates state (unchanged) ─────────────────────────────────────────
   const [selectedJobType, setSelectedJobType] = useState<string>(JOB_TYPES[0])
