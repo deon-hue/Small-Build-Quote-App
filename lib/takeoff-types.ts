@@ -198,9 +198,6 @@ export interface TakeoffItem {
   taskPlant?:          number     // total plant cost
   taskSubcontractor?:  number     // total subcontractor cost
   taskOther?:          number     // total other cost
-
-  // Turfing & Soft Landscaping (External Works polygon items that use TURF_MAKEUPS)
-  turfExistingSurface?: 'bare_soil' | 'existing_grass' | 'hardcore' | 'patio_paving' | 'mixed'
 }
 
 // ── Calibration ───────────────────────────────────────────────────────────────
@@ -634,97 +631,6 @@ export const PLASTER_MAKEUPS: FloorMakeup[] = [
   },
 ]
 
-// ── Turfing & Soft Landscaping build-up types ─────────────────────────────────
-// Used for polygon/rect elements drawn in the External Works & Landscaping phase.
-// Layer quantities use the standard calcLayerQty() model:
-//   - qtyType 'area'   → m² (exact measured area; waste baked into unit rate)
-//   - qtyType 'volume' → m³ (area × thickness mm ÷ 1000)
-// The 'thickness' field doubles as a user-editable depth (mm) override in the panel.
-
-export const TURF_EXISTING_SURFACE_LABELS: Record<
-  NonNullable<TakeoffItem['turfExistingSurface']>, string
-> = {
-  bare_soil:       'Bare soil',
-  existing_grass:  'Existing grass',
-  hardcore:        'Hardcore / rubble',
-  patio_paving:    'Patio / paving',
-  mixed:           'Mixed',
-}
-
-export const TURF_MAKEUPS: FloorMakeup[] = [
-  // ── 1. New Turf ──────────────────────────────────────────────────────────────
-  {
-    id:   'turf_new',
-    name: 'New Turf',
-    clientDescription:
-      'Supply and lay new cultivated turf to prepared ground including ground preparation, screened topsoil to 100mm depth, pre-turf fertiliser and quality rolled turf, finished to a consistent level.',
-    labourHrsPerM2: 0.35,
-    wastePercent:   5,
-    layers: [
-      { id: 'tn_prep',       name: 'Ground preparation',                         thickness: 0,   unit: 'm²', qtyType: 'area',   description: 'Rotovate / hand dig, rake to level and remove debris',                   category: 'labour',    defaultEnabled: true  },
-      { id: 'tn_topsoil',    name: 'Topsoil supply & spread',                    thickness: 100, unit: 'm³', qtyType: 'volume', description: 'Screened topsoil supply and spread — depth editable (default 100mm)',    category: 'materials', defaultEnabled: true  },
-      { id: 'tn_fertiliser', name: 'Pre-turf fertiliser',                        thickness: 0,   unit: 'm²', qtyType: 'area',   description: 'Granular pre-turf fertiliser, raked in before laying',                  category: 'materials', defaultEnabled: true  },
-      { id: 'tn_turf',       name: 'Cultivated turf supply & lay (+5% waste)',   thickness: 0,   unit: 'm²', qtyType: 'area',   description: 'Rolawn or similar quality cultivated turf — unit rate includes 5% waste', category: 'materials', defaultEnabled: true  },
-      { id: 'tn_waste',      name: 'Waste disposal allowance',                   thickness: 0,   unit: 'm²', qtyType: 'area',   description: 'Skip / disposal allowance for excavation arisings if required',         category: 'other',     defaultEnabled: false },
-    ],
-  },
-
-  // ── 2. Turf Replacement ───────────────────────────────────────────────────────
-  {
-    id:   'turf_replacement',
-    name: 'Turf Replacement',
-    clientDescription:
-      'Strip and dispose of existing lawn, cultivate ground, supply and spread topsoil and lay new quality cultivated turf with pre-turf fertiliser.',
-    labourHrsPerM2: 0.60,
-    wastePercent:   5,
-    layers: [
-      { id: 'tr_strip',       name: 'Strip existing turf (labour)',              thickness: 0,   unit: 'm²', qtyType: 'area',   description: 'Strip existing lawn by hand or turf cutter — remove to skip',                  category: 'labour',    defaultEnabled: true  },
-      { id: 'tr_strip_waste', name: 'Existing turf disposal',                    thickness: 50,  unit: 'm³', qtyType: 'volume', description: 'Skip/disposal for stripped turf — volume at 50mm strip depth (editable)',      category: 'other',     defaultEnabled: true  },
-      { id: 'tr_prep',        name: 'Ground preparation',                        thickness: 0,   unit: 'm²', qtyType: 'area',   description: 'Rotovate / hand dig, rake to level',                                          category: 'labour',    defaultEnabled: true  },
-      { id: 'tr_topsoil',     name: 'Topsoil supply & spread',                   thickness: 100, unit: 'm³', qtyType: 'volume', description: 'Screened topsoil supply and spread — depth editable (default 100mm)',          category: 'materials', defaultEnabled: true  },
-      { id: 'tr_fertiliser',  name: 'Pre-turf fertiliser',                       thickness: 0,   unit: 'm²', qtyType: 'area',   description: 'Granular pre-turf fertiliser, raked in before laying',                        category: 'materials', defaultEnabled: true  },
-      { id: 'tr_turf',        name: 'Cultivated turf supply & lay (+5% waste)',  thickness: 0,   unit: 'm²', qtyType: 'area',   description: 'Rolawn or similar quality cultivated turf — unit rate includes 5% waste',      category: 'materials', defaultEnabled: true  },
-    ],
-  },
-
-  // ── 3. Seeded Lawn ────────────────────────────────────────────────────────────
-  {
-    id:   'turf_seeded',
-    name: 'Seeded Lawn',
-    clientDescription:
-      'Prepare ground, supply and spread screened topsoil and apply quality grass seed with pre-seeding fertiliser for a new domestic lawn.',
-    labourHrsPerM2: 0.25,
-    wastePercent:   0,
-    layers: [
-      { id: 'ts_prep',        name: 'Ground preparation',                        thickness: 0,   unit: 'm²', qtyType: 'area',   description: 'Rotovate / hand dig, rake to fine tilth',                                     category: 'labour',    defaultEnabled: true  },
-      { id: 'ts_topsoil',     name: 'Topsoil supply & spread',                   thickness: 100, unit: 'm³', qtyType: 'volume', description: 'Screened topsoil supply and spread — depth editable (default 100mm)',          category: 'materials', defaultEnabled: true  },
-      { id: 'ts_seed',        name: 'Grass seed supply & sow',                   thickness: 0,   unit: 'm²', qtyType: 'area',   description: 'Ryegrass/dwarf fescue domestic mix — hand or machine sow',                    category: 'materials', defaultEnabled: true  },
-      { id: 'ts_fertiliser',  name: 'Pre-seeding fertiliser',                    thickness: 0,   unit: 'm²', qtyType: 'area',   description: 'Granular pre-seeding fertiliser, raked in',                                   category: 'materials', defaultEnabled: true  },
-      { id: 'ts_watering',    name: 'Watering schedule allowance',               thickness: 0,   unit: 'm²', qtyType: 'area',   description: 'Watering schedule allowance for 3–4 weeks post seeding',                      category: 'other',     defaultEnabled: false },
-    ],
-  },
-
-  // ── 4. Artificial Grass ───────────────────────────────────────────────────────
-  {
-    id:   'turf_artificial',
-    name: 'Artificial Grass',
-    clientDescription:
-      'Supply and install artificial grass system including excavation, compacted MOT Type 1 sub-base, sharp sand/grano dust screed and quality artificial turf, professionally finished.',
-    labourHrsPerM2: 0.90,
-    wastePercent:   5,
-    layers: [
-      { id: 'ta_excavate',  name: 'Excavation & disposal',                       thickness: 75,  unit: 'm³', qtyType: 'volume', description: 'Excavate and remove to skip — total dig depth editable (default 75mm)',        category: 'plant',     defaultEnabled: true  },
-      { id: 'ta_mot',       name: 'MOT Type 1 sub-base supply & compact',        thickness: 50,  unit: 'm³', qtyType: 'volume', description: 'MOT Type 1 sub-base supply and compact — depth editable (default 50mm)',      category: 'materials', defaultEnabled: true  },
-      { id: 'ta_compact',   name: 'Wacker plate compaction',                     thickness: 0,   unit: 'm²', qtyType: 'area',   description: 'Wacker plate compaction of sub-base (plant hire)',                            category: 'plant',     defaultEnabled: true  },
-      { id: 'ta_sand',      name: 'Sharp sand / grano dust screed',              thickness: 25,  unit: 'm³', qtyType: 'volume', description: 'Sharp sand or grano dust screeded to level — depth editable (default 25mm)',   category: 'materials', defaultEnabled: true  },
-      { id: 'ta_weed',      name: 'Weed control membrane',                       thickness: 0,   unit: 'm²', qtyType: 'area',   description: 'Geotextile weed control membrane — allow 10% for laps in unit rate',          category: 'materials', defaultEnabled: false },
-      { id: 'ta_grass',     name: 'Artificial grass supply & lay (+5% waste)',   thickness: 0,   unit: 'm²', qtyType: 'area',   description: 'Quality artificial grass supply and lay — unit rate includes 5% cutting waste', category: 'materials', defaultEnabled: true  },
-      { id: 'ta_join',      name: 'Jointing tape & adhesive',                    thickness: 0,   unit: 'm²', qtyType: 'area',   description: 'Seam jointing tape and adhesive (toggle on if joins required)',                 category: 'materials', defaultEnabled: false },
-      { id: 'ta_labour',    name: 'Installation labour',                         thickness: 0,   unit: 'm²', qtyType: 'area',   description: 'Labour — cut, lay, trim and edge-fix artificial grass',                        category: 'labour',    defaultEnabled: true  },
-    ],
-  },
-]
-
 // ── Combined lookup ───────────────────────────────────────────────────────────
 
 /** All makeups from every phase combined — use for ID lookups (e.g. quote import) */
@@ -733,16 +639,14 @@ export const ALL_MAKEUPS: FloorMakeup[] = [
   ...WALL_MAKEUPS,
   ...FOUNDATION_MAKEUPS,
   ...PLASTER_MAKEUPS,
-  ...TURF_MAKEUPS,
 ]
 
 /** Maps TakeoffPhase → its array of build-up makeups (only phases that support them) */
 export const PHASE_MAKEUPS: Partial<Record<TakeoffPhase, FloorMakeup[]>> = {
-  'Floors & Screeds':              FLOOR_MAKEUPS,
-  'External Walls':                WALL_MAKEUPS,
-  'Foundations':                   FOUNDATION_MAKEUPS,
-  'Plastering & Boarding':         PLASTER_MAKEUPS,
-  'External Works & Landscaping':  TURF_MAKEUPS,
+  'Floors & Screeds':      FLOOR_MAKEUPS,
+  'External Walls':        WALL_MAKEUPS,
+  'Foundations':           FOUNDATION_MAKEUPS,
+  'Plastering & Boarding': PLASTER_MAKEUPS,
 }
 
 // ── Custom wall type storage (localStorage) ───────────────────────────────────

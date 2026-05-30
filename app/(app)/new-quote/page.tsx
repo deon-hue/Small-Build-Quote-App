@@ -11,7 +11,7 @@ import QuotePreviewModal from '@/components/QuotePreviewModal'
 import ScopeChat from '@/components/ScopeChat'
 import EstimatorBreakdown from '@/components/EstimatorBreakdown'
 import type { TakeoffItem, TakeoffPhase } from '@/lib/takeoff-types'
-import { PHASE_TO_QUOTE_PARENT, ALL_MAKEUPS, TURF_MAKEUPS, calcLayerQty, WALL_OPENING_LABELS } from '@/lib/takeoff-types'
+import { PHASE_TO_QUOTE_PARENT, ALL_MAKEUPS, calcLayerQty, WALL_OPENING_LABELS } from '@/lib/takeoff-types'
 import { DEFAULT_DEMO_SUBPHASES, calcDemoSellingPrice, DEMO_UNIT_LABELS, type DemoUnit } from '@/lib/demolition-data'
 import { ALL_PHASE_SUBPHASES, calcPhaseTaskSellingPrice } from '@/lib/phase-tasks'
 import { sumByCategory } from '@/lib/material-recipes'
@@ -440,12 +440,6 @@ export default function NewQuotePage() {
               const toggles = item.floorLayerToggles ?? {}
               const thicknesses = item.floorLayerThicknesses ?? {}
 
-              // Turfing items: sub-phase = "Turfing & Soft Landscaping — [location] — [type]"
-              const isTurfItem = TURF_MAKEUPS.some(m => m.id === item.floorMakeupId)
-              const turfSubPhaseName = isTurfItem
-                ? ['Turfing & Soft Landscaping', item.roomName, makeup.name].filter(Boolean).join(' — ')
-                : null
-
               for (const layer of makeup.layers) {
                 const enabled = toggles[layer.id] ?? layer.defaultEnabled
                 if (!enabled) continue
@@ -454,11 +448,11 @@ export default function NewQuotePage() {
                 const desc = `${layer.description} — ${qty} ${unit}`
 
                 newPhases.push(makePhase(
-                  turfSubPhaseName ?? layer.name,
+                  layer.name,
                   [
                     { desc: layer.category === 'labour' ? desc : '', qty, unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: layer.category === 'labour' ? notes : '', itemType: 'labour' },
                     { desc: layer.category === 'materials' ? desc : '', qty, unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials' },
-                    { desc: layer.category === 'plant' ? desc : '', qty, unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'plant' },
+                    { desc: '', qty, unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'plant' },
                     { desc: '', qty, unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'subcontractors' },
                     { desc: layer.category === 'other' ? desc : '', qty, unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'other' },
                   ],

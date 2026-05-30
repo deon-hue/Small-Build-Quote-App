@@ -8,7 +8,7 @@ import type {
   BOToolTaskMapping, BOFormulaRule, BOAIScopeMapping,
   BOWallType, BOWallLayer,
 } from './back-office-types'
-import { TAKEOFF_PHASES, WALL_MAKEUPS, TURF_MAKEUPS, type FloorMakeup, type LayerQtyType } from './takeoff-types'
+import { TAKEOFF_PHASES, WALL_MAKEUPS, type FloorMakeup, type LayerQtyType } from './takeoff-types'
 import { CANONICAL_PHASE_IDS } from './product-config'
 import { ALL_PHASE_SUBPHASES } from './phase-tasks'
 import { DEFAULT_DEMO_SUBPHASES } from './demolition-data'
@@ -203,41 +203,18 @@ export async function deleteAIScopeMapping(sb: SupabaseClient, id: string): Prom
  * Fetch all wall types with their layers for a user.
  * Returns types ordered by display_order, layers ordered within each type.
  */
-/** Internal helper: build layerMap from raw layer rows */
-function _buildLayerMap(layers: unknown[]): Map<string, BOWallLayer[]> {
-  const m = new Map<string, BOWallLayer[]>()
-  ;(layers ?? []).forEach((l: unknown) => {
-    const layer = l as BOWallLayer & { wall_type_id: string }
-    const arr = m.get(layer.wall_type_id) ?? []
-    arr.push(layer)
-    m.set(layer.wall_type_id, arr)
-  })
-  return m
-}
-
-/** Wall build-up types (EXCLUDES turf_* entries — those live in fetchTurfTypesWithLayers) */
 export async function fetchWallTypesWithLayers(sb: SupabaseClient, userId: string): Promise<BOWallType[]> {
   const [{ data: types }, { data: layers }] = await Promise.all([
     sb.from('bo_wall_types').select('*').eq('user_id', userId).eq('active', true).order('display_order'),
     sb.from('bo_wall_layers').select('*').eq('user_id', userId).order('display_order'),
   ])
-  const layerMap = _buildLayerMap(layers ?? [])
-  // Exclude turf-type entries so they don't appear in the External Walls dropdown
-  return (types ?? [])
-    .filter(t => !t.canonical_id?.startsWith('turf_'))
-    .map(t => ({ ...t, layers: layerMap.get(t.id) ?? [] } as BOWallType))
-}
-
-/** Turfing build-up types (turf_* canonical IDs stored in the same bo_wall_types table) */
-export async function fetchTurfTypesWithLayers(sb: SupabaseClient, userId: string): Promise<BOWallType[]> {
-  const [{ data: types }, { data: layers }] = await Promise.all([
-    sb.from('bo_wall_types').select('*').eq('user_id', userId).eq('active', true).order('display_order'),
-    sb.from('bo_wall_layers').select('*').eq('user_id', userId).order('display_order'),
-  ])
-  const layerMap = _buildLayerMap(layers ?? [])
-  return (types ?? [])
-    .filter(t => t.canonical_id?.startsWith('turf_'))
-    .map(t => ({ ...t, layers: layerMap.get(t.id) ?? [] } as BOWallType))
+  const layerMap = new Map<string, BOWallLayer[]>()
+  ;(layers ?? []).forEach(l => {
+    const arr = layerMap.get(l.wall_type_id) ?? []
+    arr.push(l as BOWallLayer)
+    layerMap.set(l.wall_type_id, arr)
+  })
+  return (types ?? []).map(t => ({ ...t, layers: layerMap.get(t.id) ?? [] } as BOWallType))
 }
 
 export async function upsertWallType(sb: SupabaseClient, wt: Partial<BOWallType> & { user_id: string }): Promise<BOWallType | null> {
@@ -900,82 +877,6 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
     // Update layer names that changed
     for (const l of wm.layers.filter(l => layerByCanon.has(l.id))) {
       const exL = layerByCanon.get(l.id)!
-      if (exL.name !== l.name) {
-        await sb.from('bo_wall_layers').update({ name: l.name, description: l.description }).eq('id', exL.id)
-      }
-    }
-  }
-
-  // ── 4b. Turf Types ────────────────────────────────────────────────────────────
-  // Sync TURF_MAKEUPS → bo_wall_types + bo_wall_layers (same table as wall types,
-  // distinguished by canonical_id prefix 'turf_').
-  // wallTypeByCanon already includes these rows if they exist (fetched above in step 4).
-
-  for (let i = 0; i < TURF_MAKEUPS.length; i++) {
-    const tm = TURF_MAKEUPS[i]
-    const existing = wallTypeByCanon.get(tm.id)
-
-    let turfTypeDbId: string
-
-    if (existing) {
-      if (existing.name !== tm.name) {
-        await sb.from('bo_wall_types').update({
-          name:               tm.name,
-          client_description: tm.clientDescription,
-          labour_hrs_per_m2:  tm.labourHrsPerM2,
-          waste_percent:      tm.wastePercent,
-          display_order:      WALL_MAKEUPS.length + i,
-          updated_at:         new Date().toISOString(),
-        }).eq('id', existing.id)
-      }
-      turfTypeDbId = existing.id
-    } else {
-      const { data: inserted } = await sb.from('bo_wall_types').insert({
-        user_id:            userId,
-        canonical_id:       tm.id,
-        name:               tm.name,
-        client_description: tm.clientDescription,
-        labour_hrs_per_m2:  tm.labourHrsPerM2,
-        waste_percent:      tm.wastePercent,
-        display_order:      WALL_MAKEUPS.length + i,
-        active:             true,
-      }).select('id').single()
-      if (!inserted?.id) continue
-      turfTypeDbId = inserted.id
-    }
-
-    // Sync layers for this turf type
-    const { data: dbTurfLayers } = await sb
-      .from('bo_wall_layers')
-      .select('id, canonical_id, name')
-      .eq('wall_type_id', turfTypeDbId)
-
-    const turfLayerByCanon = new Map(
-      (dbTurfLayers ?? []).filter(l => l.canonical_id).map(l => [l.canonical_id as string, l as { id: string; name: string }])
-    )
-
-    const newTurfLayers = tm.layers.filter(l => !turfLayerByCanon.has(l.id))
-    if (newTurfLayers.length > 0) {
-      await sb.from('bo_wall_layers').insert(
-        newTurfLayers.map((l, j) => ({
-          user_id:         userId,
-          wall_type_id:    turfTypeDbId,
-          canonical_id:    l.id,
-          name:            l.name,
-          thickness_mm:    l.thickness,
-          unit:            l.unit,
-          qty_type:        l.qtyType,
-          spacing_mm:      l.spacing ?? null,
-          description:     l.description,
-          category:        l.category,
-          default_enabled: l.defaultEnabled,
-          display_order:   (dbTurfLayers?.length ?? 0) + j,
-        }))
-      )
-    }
-
-    for (const l of tm.layers.filter(l => turfLayerByCanon.has(l.id))) {
-      const exL = turfLayerByCanon.get(l.id)!
       if (exL.name !== l.name) {
         await sb.from('bo_wall_layers').update({ name: l.name, description: l.description }).eq('id', exL.id)
       }

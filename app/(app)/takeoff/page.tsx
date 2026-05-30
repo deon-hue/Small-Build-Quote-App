@@ -3,11 +3,10 @@
 import { useState, useRef, useEffect, useCallback, ChangeEvent } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { makeDebouncedSave, loadTakeoffFromSupabase } from '@/lib/takeoff-sync'
-import { fetchWallTypesWithLayers, fetchTurfTypesWithLayers, wallTypesToMakeups } from '@/lib/back-office-queries'
+import { fetchWallTypesWithLayers, wallTypesToMakeups } from '@/lib/back-office-queries'
 import {
   TAKEOFF_PHASES, PHASE_COLORS, DEFAULT_MPP, SCALE_PRESETS,
-  FLOOR_MAKEUPS, WALL_MAKEUPS, PLASTER_MAKEUPS, TURF_MAKEUPS, PHASE_MAKEUPS, calcLayerQty,
-  TURF_EXISTING_SURFACE_LABELS,
+  FLOOR_MAKEUPS, WALL_MAKEUPS, PLASTER_MAKEUPS, PHASE_MAKEUPS, calcLayerQty,
   loadCustomWallTypes, saveCustomWallTypes,
   WALL_OPENING_LABELS, WALL_OPENING_DEFAULTS,
   type TakeoffPhase, type DrawingTool, type TakeoffPoint,
@@ -482,12 +481,9 @@ export default function TakeoffPage() {
 
   // DB wall types — master source of truth from Back Office (Supabase)
   const [dbWallTypes, setDbWallTypes] = useState<FloorMakeup[]>([])
-  // DB turf types — master source of truth from Back Office (Supabase)
-  const [dbTurfTypes, setDbTurfTypes] = useState<FloorMakeup[]>([])
 
-  // Computed: DB takes precedence; hardcoded fallback when DB not loaded yet
+  // Computed: DB takes precedence; localStorage fallback when DB not loaded yet
   const allWallMakeups = dbWallTypes.length > 0 ? dbWallTypes : [...WALL_MAKEUPS, ...customWallTypes]
-  const allTurfMakeups = dbTurfTypes.length > 0 ? dbTurfTypes : TURF_MAKEUPS
 
   // Custom demolition subphases (loaded from localStorage on mount)
   const [customDemoSubphases, setCustomDemoSubphases] = useState<DemoSubphase[]>([])
@@ -553,11 +549,6 @@ export default function TakeoffPage() {
       fetchWallTypesWithLayers(sb, uid).then(types => {
         const makeups = wallTypesToMakeups(types)
         if (makeups.length > 0) setDbWallTypes(makeups)
-      })
-      // Load DB turf types (Back Office master source of truth)
-      fetchTurfTypesWithLayers(sb, uid).then(types => {
-        const makeups = wallTypesToMakeups(types)
-        if (makeups.length > 0) setDbTurfTypes(makeups)
       })
 
       // Async cloud sync — merge if the Supabase record has a newer updatedAt
@@ -3274,15 +3265,10 @@ export default function TakeoffPage() {
       saveItemEdit(item)
     }
 
-    // Buildup (Floors, Foundations, rect/polygon External Walls, Plastering rect, Turfing polygon)
-    // For External Works polygons: use DB turf types (allTurfMakeups) as the source.
-    const _phaseMakeups = item.phase === 'External Works & Landscaping'
-      ? allTurfMakeups   // DB-backed turf types take precedence over hardcoded TURF_MAKEUPS
-      : PHASE_MAKEUPS[item.phase]
+    // Buildup (Floors, Foundations, rect/polygon External Walls, Plastering rect)
+    const _phaseMakeups = PHASE_MAKEUPS[item.phase]
     const _isBuildupItem = !!item.floorMakeupId || (!!_phaseMakeups && !!linkedEl && linkedEl.type !== 'line')
-    // Guard: don't auto-convert to buildup if the item already has task data (e.g. existing
-    // External Works paving items drawn as polygons before turfing was introduced).
-    if (_isBuildupItem && !item.floorMakeupId && !item.taskSubphaseId) {
+    if (_isBuildupItem && !item.floorMakeupId) {
       const _idx = item.phase === 'Floors & Screeds' ? 1 : 0
       const _dm  = (_phaseMakeups ?? FLOOR_MAKEUPS)[_idx]
       item = { ...item, floorMakeupId: _dm.id, spec: _dm.clientDescription }
@@ -3317,8 +3303,6 @@ export default function TakeoffPage() {
     const isIntWall   = item.phase === 'Internal Walls & Partitions' && isLineBased
     const isPlaster   = item.phase === 'Plastering & Boarding'
     const isBuildup   = _isBuildupItem
-    // Turfing: External Works polygon with a TURF_MAKEUPS floorMakeupId
-    const isTurf      = isBuildup && item.phase === 'External Works & Landscaping'
     const isTaskPhase = _phaseHasTasks && !isBuildup && !isExtWall && !isPlaster && !isIntWall && !isDemo
     const showWallLine = isLineBased && (isExtWall || isIntWall || isPlaster)
     const hasOpenings  = (isExtWall || isIntWall || isPlaster) && isLineBased
@@ -3606,7 +3590,7 @@ export default function TakeoffPage() {
           <div style={{ padding: '10px 14px 0' }}>
             <div style={{ background: darkMode ? `rgba(0,0,0,0.25)` : `rgba(0,0,0,0.04)`, borderRadius: 8, padding: '12px 14px', border: `1px solid ${accent}44` }}>
               <div style={{ fontSize: 10, color: accent, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
-                {isTurf ? '🌱 Turfing & Soft Landscaping' : item.phase}
+                {item.phase}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
@@ -3660,8 +3644,8 @@ export default function TakeoffPage() {
           </div>
 
           <div style={{ marginBottom: 10 }}>
-            <label style={labelStyle}>{isTurf ? 'Location / Area Label' : 'Room Name'}</label>
-            <input style={inputStyle} placeholder={isTurf ? 'e.g. Rear Garden, Front Garden' : 'e.g. Kitchen'} value={item.roomName ?? ''}
+            <label style={labelStyle}>Room Name</label>
+            <input style={inputStyle} placeholder="e.g. Kitchen" value={item.roomName ?? ''}
               onChange={e => saveItemEdit({ ...item, roomName: e.target.value })} />
           </div>
 
@@ -3953,14 +3937,13 @@ export default function TakeoffPage() {
             )
           })()}
 
-          {/* Buildup (Floors, Foundations, Turfing): makeup/turfing type + layer schedule.
-              Excluded from Ext Walls and Plastering which have their own dedicated sections. */}
-          {isBuildup && !isExtWall && !isPlaster && (() => {
+          {/* Buildup (Floors, Foundations): makeup type + layer schedule */}
+          {isBuildup && (() => {
             const _bm = _phaseMakeups ?? FLOOR_MAKEUPS
             return (
               <>
                 <div style={{ marginBottom: 10 }}>
-                  <label style={labelStyle}>{isTurf ? 'Turfing Type' : 'Build-Up Type'}</label>
+                  <label style={labelStyle}>Build-Up Type</label>
                   <select style={{ ...inputStyle, color: accent }} value={item.floorMakeupId ?? ''}
                     onChange={e => {
                       const nm = _bm.find(m => m.id === e.target.value)
@@ -3969,25 +3952,9 @@ export default function TakeoffPage() {
                     {_bm.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                   </select>
                 </div>
-
-                {/* Turfing-specific: existing surface */}
-                {isTurf && (
-                  <div style={{ marginBottom: 10 }}>
-                    <label style={labelStyle}>Existing Surface</label>
-                    <select style={inputStyle}
-                      value={item.turfExistingSurface ?? ''}
-                      onChange={e => saveItemEdit({ ...item, turfExistingSurface: e.target.value as TakeoffItem['turfExistingSurface'] })}>
-                      <option value="">— Not specified —</option>
-                      {(Object.entries(TURF_EXISTING_SURFACE_LABELS) as [NonNullable<TakeoffItem['turfExistingSurface']>, string][]).map(([k, v]) => (
-                        <option key={k} value={k}>{v}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
                 {bMakeup && (
                   <div style={{ marginBottom: 10 }}>
-                    <label style={labelStyle}>{isTurf ? 'Material Recipe' : 'Layers'}</label>
+                    <label style={labelStyle}>Layers</label>
                     {renderLayerSchedule(bMakeup, buildArea, buildPerim, layerToggles, layerThicknesses, item, accent)}
                   </div>
                 )}

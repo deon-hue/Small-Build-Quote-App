@@ -23,7 +23,6 @@ import SectionTakeoffMapping from './components/SectionTakeoffMapping'
 import SectionFormulaRules from './components/SectionFormulaRules'
 import SectionAIMapping from './components/SectionAIMapping'
 import SectionWallTypes from './components/SectionWallTypes'
-import SectionTurfTypes from './components/SectionTurfTypes'
 
 function deepClone<T>(v: T): T { return JSON.parse(JSON.stringify(v)) }
 
@@ -49,7 +48,6 @@ type SectionId =
   | 'formula-rules'
   | 'ai-mapping'
   | 'wall-types'
-  | 'turf-types'
 
 const SECTIONS: Array<{ id: SectionId; label: string; icon: string; badge?: string; group?: string }> = [
   { id: 'job-templates',    label: 'Job Templates',      icon: '📋', badge: 'DB',    group: 'Master Data' },
@@ -57,11 +55,10 @@ const SECTIONS: Array<{ id: SectionId; label: string; icon: string; badge?: stri
   { id: 'labour',           label: 'Labour & Trades',    icon: '👷', badge: 'DB',    group: 'Master Data' },
   { id: 'products',         label: 'Products',           icon: '📦', badge: 'DB',    group: 'Master Data' },
   { id: 'plant',            label: 'Plant & Equipment',  icon: '🚜', badge: 'DB',    group: 'Master Data' },
-  { id: 'wall-types',       label: 'Wall Types',         icon: '🧱', badge: 'DB',    group: 'Master Data' },
-  { id: 'turf-types',       label: 'Turfing Types',      icon: '🌱', badge: 'DB',    group: 'Master Data' },
   { id: 'takeoff-mapping',  label: 'Takeoff Mapping',    icon: '📐', badge: 'DB',    group: 'Tool Config' },
   { id: 'formula-rules',    label: 'Formula Rules',      icon: '∑',  badge: 'DB',    group: 'Tool Config' },
   { id: 'ai-mapping',       label: 'AI Scope Mapping',   icon: '🤖', badge: 'DB',    group: 'Tool Config' },
+  { id: 'wall-types',       label: 'Wall Types',         icon: '🧱', badge: 'DB',    group: 'Master Data' },
 ]
 
 // ── Estimator items editor (unchanged from original) ─────────────────────────
@@ -156,10 +153,6 @@ export default function BackOfficePage() {
   const [activeSection, setActiveSection] = useState<SectionId>('job-templates')
   const [userId, setUserId] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
-  // Incremented after every sync completes so DB-backed sections re-fetch
-  // with the latest data (fixes race where SectionPhasesTasks loaded before
-  // syncBackOfficeFromProduct finished inserting new rows).
-  const [syncKey, setSyncKey] = useState(0)
 
   // Get current user then sync product structure into Back Office DB.
   // Runs on every page load — adds new phases/tasks from code, renames changed
@@ -174,7 +167,6 @@ export default function BackOfficePage() {
         await syncBackOfficeFromProduct(sb, data.user.id)
       } finally {
         setSyncing(false)
-        setSyncKey(k => k + 1)   // signal DB-backed sections to reload
       }
     })
   }, [])
@@ -288,17 +280,16 @@ export default function BackOfficePage() {
       <div style={{ flex: 1, minWidth: 0, padding: '20px 24px', border: '1px solid #e2e8f0', borderLeft: 'none', borderRadius: '0 10px 10px 0', background: '#fff' }}>
 
         {/* ── DB-backed sections ── */}
-        {activeSection === 'labour' && userId && <SectionLabour userId={userId} key={syncKey} />}
-        {activeSection === 'phases-tasks' && userId && <SectionPhasesTasks userId={userId} key={syncKey} />}
+        {activeSection === 'labour' && userId && <SectionLabour userId={userId} />}
+        {activeSection === 'phases-tasks' && userId && <SectionPhasesTasks userId={userId} />}
         {activeSection === 'products' && userId && <SectionProducts userId={userId} />}
         {activeSection === 'plant' && userId && <SectionPlant userId={userId} />}
         {activeSection === 'takeoff-mapping' && userId && <SectionTakeoffMapping userId={userId} />}
         {activeSection === 'formula-rules' && userId && <SectionFormulaRules userId={userId} />}
         {activeSection === 'ai-mapping' && userId && <SectionAIMapping userId={userId} />}
-        {activeSection === 'wall-types' && userId && <SectionWallTypes userId={userId} key={syncKey} />}
-        {activeSection === 'turf-types' && userId && <SectionTurfTypes userId={userId} key={syncKey} />}
+        {activeSection === 'wall-types' && userId && <SectionWallTypes userId={userId} />}
 
-        {!userId && ['labour','phases-tasks','products','plant','takeoff-mapping','formula-rules','ai-mapping','wall-types','turf-types'].includes(activeSection) && (
+        {!userId && ['labour','phases-tasks','products','plant','takeoff-mapping','formula-rules','ai-mapping','wall-types'].includes(activeSection) && (
           <div style={{ textAlign: 'center', padding: 48, color: '#64748b' }}>Loading…</div>
         )}
 
