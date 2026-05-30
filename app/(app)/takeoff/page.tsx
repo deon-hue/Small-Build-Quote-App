@@ -518,6 +518,7 @@ export default function TakeoffPage() {
     startSvgX: number
     startSvgY: number
     origPoints: TakeoffPoint[]
+    vertexIndex?: number   // set = drag single vertex; undefined = drag whole shape
   } | null>(null)
   const [isDraggingEl, setIsDraggingEl] = useState(false)
 
@@ -642,18 +643,35 @@ export default function TakeoffPage() {
 
   // ── Mouse handlers ─────────────────────────────────────────────────────────
   function handleMouseMove(e: React.MouseEvent<SVGSVGElement>) {
-    // Element drag takes priority over everything
+    // Element / vertex drag takes priority over everything
     if (dragRef.current) {
       const pt = svgCoords(e)
       const dx = pt.x - dragRef.current.startSvgX
       const dy = pt.y - dragRef.current.startSvgY
       const id = dragRef.current.id
       const orig = dragRef.current.origPoints
+      const vi = dragRef.current.vertexIndex
       setProject(prev => ({
         ...prev,
-        elements: prev.elements.map(el =>
-          el.id === id ? { ...el, points: orig.map(p => ({ x: p.x + dx, y: p.y + dy })) } : el
-        ),
+        elements: prev.elements.map(el => {
+          if (el.id !== id) return el
+          if (vi === undefined) {
+            // Whole-shape drag (existing behaviour)
+            return { ...el, points: orig.map(p => ({ x: p.x + dx, y: p.y + dy })) }
+          }
+          // Single-vertex drag
+          if (el.type === 'rect') {
+            // Rect stores [p0, p1]. Virtual corners: 0=TL, 1=TR, 2=BR, 3=BL
+            const p0 = { ...orig[0] }, p1 = { ...orig[1] }
+            if      (vi === 0) { p0.x += dx; p0.y += dy }
+            else if (vi === 1) { p1.x += dx; p0.y += dy }
+            else if (vi === 2) { p1.x += dx; p1.y += dy }
+            else if (vi === 3) { p0.x += dx; p1.y += dy }
+            return { ...el, points: [p0, p1] }
+          }
+          // Line / polygon: move just the indexed point
+          return { ...el, points: orig.map((p, i) => i === vi ? { x: p.x + dx, y: p.y + dy } : p) }
+        }),
       }))
       return
     }
@@ -1146,6 +1164,21 @@ export default function TakeoffPage() {
   })
 
   // ── Render: SVG elements ───────────────────────────────────────────────────
+  // Returns screen-space handle positions for an element.
+  // Rect: 4 corners (derived from 2 stored points). Line/polygon: each stored point.
+  function getElVertexHandles(el: DrawnElement): TakeoffPoint[] {
+    if (el.type === 'rect' && el.points.length >= 2) {
+      const [p0, p1] = el.points
+      return [
+        { x: p0.x, y: p0.y }, // 0 TL
+        { x: p1.x, y: p0.y }, // 1 TR
+        { x: p1.x, y: p1.y }, // 2 BR
+        { x: p0.x, y: p1.y }, // 3 BL
+      ]
+    }
+    return el.points
+  }
+
   function renderElement(el: DrawnElement) {
     const sel = selectedId === el.id
     const isWall = el.phase === 'External Walls'
@@ -4854,6 +4887,41 @@ export default function TakeoffPage() {
 
               {/* Drawn elements */}
               {project.elements.map(renderElement)}
+
+              {/* Vertex handles — rendered above all elements when an element is selected */}
+              {selectedId && tool === 'select' && (() => {
+                const el = project.elements.find(e => e.id === selectedId)
+                if (!el) return null
+                const handles = getElVertexHandles(el)
+                const hr  = 5 / zoom    // handle radius — stays constant screen size
+                const hsw = 1.5 / zoom  // stroke width
+                return handles.map((h, i) => (
+                  <circle
+                    key={`vh-${el.id}-${i}`}
+                    cx={h.x}
+                    cy={h.y}
+                    r={hr}
+                    fill="#fff"
+                    stroke={el.color}
+                    strokeWidth={hsw}
+                    style={{ cursor: 'crosshair' }}
+                    onMouseDown={ev => {
+                      ev.stopPropagation()
+                      const svgRect = svgRef.current!.getBoundingClientRect()
+                      const ptX = (ev.clientX - svgRect.left - panOffset.x) / zoom
+                      const ptY = (ev.clientY - svgRect.top  - panOffset.y) / zoom
+                      dragRef.current = {
+                        id: el.id,
+                        startSvgX: ptX,
+                        startSvgY: ptY,
+                        origPoints: [...el.points],
+                        vertexIndex: i,
+                      }
+                      setIsDraggingEl(true)
+                    }}
+                  />
+                ))
+              })()}
 
               {/* In-progress ghost */}
               {renderGhost()}
