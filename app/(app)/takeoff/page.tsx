@@ -4078,6 +4078,15 @@ export default function TakeoffPage() {
         <div style={secHdr}><span>📊</span><span>Outputs</span></div>
         <div style={secBody}>
 
+          {/* Labour costing — always first, above materials */}
+          <div style={{ marginBottom: 14, paddingBottom: 12, borderBottom: '1px solid var(--to-border)' }}>
+            <LabourCostBuilder
+              labourLines={item.labourLines ?? []}
+              trades={labourTrades}
+              onChange={lines => saveItemEdit({ ...item, labourLines: lines })}
+            />
+          </div>
+
           {/* Int Wall: materials table + totals + confirm */}
           {isIntWall && (
             <>
@@ -4142,7 +4151,6 @@ export default function TakeoffPage() {
           {isDemo && demoSub && demoTask && (
             <>
               {([
-                { label: '🔨 Labour',       key: 'demoLabour'        as const, val: demoLabour  },
                 { label: '📦 Materials',     key: 'demoMaterials'     as const, val: demoMats    },
                 { label: '🚜 Plant',         key: 'demoPlant'         as const, val: demoPlant   },
                 { label: '🗑 Waste / Skips', key: 'demoWaste'         as const, val: demoWaste   },
@@ -4185,7 +4193,6 @@ export default function TakeoffPage() {
           {isTaskPhase && (
             <>
               {([
-                { key: 'taskLabour'        as const, label: '🔨 Labour',        color: CAT_COLOR.labour         },
                 { key: 'taskMaterials'     as const, label: '📦 Materials',      color: CAT_COLOR.materials      },
                 { key: 'taskPlant'         as const, label: '🚜 Plant',          color: CAT_COLOR.plant          },
                 { key: 'taskSubcontractor' as const, label: '👷 Subcontractor',  color: CAT_COLOR.subcontractors },
@@ -4228,16 +4235,6 @@ export default function TakeoffPage() {
                 : 'No automated outputs for this phase'}
             </div>
           )}
-        </div>
-
-        {/* ════════════════ LABOUR ════════════════ */}
-        <div style={secHdr}><span>🔨</span><span>Labour Costing</span></div>
-        <div style={secBody}>
-          <LabourCostBuilder
-            labourLines={item.labourLines ?? []}
-            trades={labourTrades}
-            onChange={lines => saveItemEdit({ ...item, labourLines: lines })}
-          />
         </div>
 
         {/* ════════════════ FOOTER ════════════════ */}
