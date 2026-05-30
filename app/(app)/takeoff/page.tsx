@@ -3849,28 +3849,23 @@ export default function TakeoffPage() {
             </>
           )}
 
-          {/* Ext Wall: build-up type + layer schedule */}
+          {/* Ext Wall: build-up type + layer schedule (inline — layers ARE the build-up) */}
           {isExtWall && (() => {
             const _allWT   = [...WALL_MAKEUPS, ...customWallTypes]
             const _wMakeup = _allWT.find(m => m.id === item.floorMakeupId)
             return (
-              <>
-                <div style={{ marginBottom: 10 }}>
-                  <label style={labelStyle}>Build-Up Type</label>
-                  <select style={{ ...inputStyle, color: accent }} value={item.floorMakeupId ?? ''}
-                    onChange={e => {
-                      const nm = _allWT.find(m => m.id === e.target.value)
-                      saveItemEdit({ ...item, floorMakeupId: e.target.value, spec: nm?.clientDescription ?? item.spec, floorLayerToggles: {}, floorLayerThicknesses: {} })
-                    }}>
-                    <optgroup label="Built-in">{WALL_MAKEUPS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</optgroup>
-                    {customWallTypes.length > 0 && <optgroup label="Custom">{customWallTypes.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</optgroup>}
-                  </select>
-                </div>
-                <div style={{ marginBottom: 10 }}>
-                  <label style={labelStyle}>Layers</label>
-                  {_wMakeup && renderLayerSchedule(_wMakeup, netArea, wallPerimeter, layerToggles, layerThicknesses, item, accent)}
-                </div>
-              </>
+              <div style={{ marginBottom: 10 }}>
+                <label style={labelStyle}>Build-Up Type</label>
+                <select style={{ ...inputStyle, color: accent }} value={item.floorMakeupId ?? ''}
+                  onChange={e => {
+                    const nm = _allWT.find(m => m.id === e.target.value)
+                    saveItemEdit({ ...item, floorMakeupId: e.target.value, spec: nm?.clientDescription ?? item.spec, floorLayerToggles: {}, floorLayerThicknesses: {} })
+                  }}>
+                  <optgroup label="Built-in">{WALL_MAKEUPS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</optgroup>
+                  {customWallTypes.length > 0 && <optgroup label="Custom">{customWallTypes.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</optgroup>}
+                </select>
+                {_wMakeup && <div style={{ marginTop: 8 }}>{renderLayerSchedule(_wMakeup, netArea, wallPerimeter, layerToggles, layerThicknesses, item, accent)}</div>}
+              </div>
             )
           })()}
 
