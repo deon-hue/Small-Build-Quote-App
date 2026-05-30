@@ -3122,6 +3122,1063 @@ export default function TakeoffPage() {
     )
   }
 
+  // ── Unified Properties Panel ────────────────────────────────────────────────
+  function renderUnifiedProperties(rawItem: TakeoffItem) {
+
+    // ── 1. Resolve linked element ──────────────────────────────────────────
+    const linkedEl = rawItem.elementId
+      ? project.elements.find(e => e.id === rawItem.elementId) ?? null
+      : null
+    let item = rawItem
+
+    // ── 2. Auto-init (same logic as old renderProperties waterfall) ────────
+
+    // Demo
+    if (item.phase === 'Site Setup & Demolition' && !item.demoSubphaseId) {
+      const _allSubs = getAllDemoSubphases(customDemoSubphases)
+      const _defSub  = _allSubs[0]
+      const _defTask = _defSub.tasks[0]
+      const _q = item.qty > 0 ? item.qty : _defTask.defaultQty
+      item = {
+        ...item,
+        name: _defTask.name, spec: _defTask.clientDescription,
+        demoSubphaseId: _defSub.id, demoTaskId: _defTask.id,
+        demoMarkupPct: _defSub.markupPct, subPhase: _defSub.name,
+        unit: _defTask.unit, qty: _q,
+        demoLabour:        +(_defTask.labourCost        * _q).toFixed(2),
+        demoMaterials:     +(_defTask.materialCost      * _q).toFixed(2),
+        demoPlant:         +(_defTask.plantCost         * _q).toFixed(2),
+        demoWaste:         +(_defTask.wasteCost         * _q).toFixed(2),
+        demoSubcontractor: +(_defTask.subcontractorCost * _q).toFixed(2),
+        demoOther:         +(_defTask.otherCost         * _q).toFixed(2),
+      }
+      saveItemEdit(item)
+    }
+
+    // External Walls
+    if (item.phase === 'External Walls') {
+      const _allWT = [...WALL_MAKEUPS, ...customWallTypes]
+      if (!item.floorMakeupId) {
+        item = { ...item, floorMakeupId: _allWT[0].id, spec: _allWT[0].clientDescription }
+        saveItemEdit(item)
+      }
+      if (linkedEl?.type === 'line' && item.wallHeight == null) {
+        const _gross = +((item.length ?? 0) * 2.7).toFixed(3)
+        item = { ...item, wallHeight: 2.7, area: _gross, qty: _gross, unit: 'm²' }
+        saveItemEdit(item)
+      }
+    }
+
+    // Plastering
+    if (item.phase === 'Plastering & Boarding') {
+      if (!item.floorMakeupId) {
+        item = { ...item, floorMakeupId: PLASTER_MAKEUPS[0].id, spec: PLASTER_MAKEUPS[0].clientDescription }
+        saveItemEdit(item)
+      }
+      if (linkedEl?.type === 'line' && item.wallHeight == null) {
+        const _sides = item.plasterFinishSides ?? 1
+        const _gross = +((item.length ?? 0) * 2.4).toFixed(3)
+        item = { ...item, wallHeight: 2.4, plasterFinishSides: _sides, area: _gross, qty: +(_gross * _sides).toFixed(3), unit: 'm²' }
+        saveItemEdit(item)
+      }
+    }
+
+    // Internal Walls
+    if (item.phase === 'Internal Walls & Partitions' && linkedEl?.type === 'line' && !item.wallConstructionType) {
+      const _defH: number = 2.4
+      const _defSides: 1 | 2 = 2
+      const _gross = +((item.length ?? 0) * _defH).toFixed(3)
+      item = {
+        ...item,
+        wallConstructionType: 'stud_metal_70' as WallConstructionType,
+        wallFinishType:       'board_skim'     as WallFinishType,
+        finishSides: _defSides, wallHeight: _defH,
+        area: _gross, qty: _gross, unit: 'm²',
+        calculatedMaterials: calcMaterialLines('stud_metal_70', 'board_skim', _defSides, _gross),
+        materialsConfirmed: false,
+      }
+      saveItemEdit(item)
+    }
+
+    // Buildup (Floors, Foundations, rect/polygon External Walls, Plastering rect)
+    const _phaseMakeups = PHASE_MAKEUPS[item.phase]
+    const _isBuildupItem = !!item.floorMakeupId || (!!_phaseMakeups && !!linkedEl && linkedEl.type !== 'line')
+    if (_isBuildupItem && !item.floorMakeupId) {
+      const _idx = item.phase === 'Floors & Screeds' ? 1 : 0
+      const _dm  = (_phaseMakeups ?? FLOOR_MAKEUPS)[_idx]
+      item = { ...item, floorMakeupId: _dm.id, spec: _dm.clientDescription }
+      saveItemEdit(item)
+    }
+
+    // Generic phase tasks
+    const _phaseHasTasks = ALL_PHASE_SUBPHASES.some(s => s.phase === item.phase)
+    if (_phaseHasTasks && !item.taskSubphaseId && !_isBuildupItem) {
+      const _subs = getAllSubphasesForPhase(item.phase)
+      const _ds = _subs[0]; const _dt = _ds?.tasks[0]
+      if (_ds && _dt) {
+        const _q = item.qty > 0 ? item.qty : _dt.defaultQty
+        item = {
+          ...item, name: _dt.name, spec: _dt.notes ?? '',
+          taskSubphaseId: _ds.id, taskId: _dt.id, taskMarkupPct: _ds.markupPct,
+          subPhase: _ds.name, unit: _dt.unit, qty: _q,
+          taskLabour:        +(_dt.labour        * _q).toFixed(2),
+          taskMaterials:     +(_dt.materials     * _q).toFixed(2),
+          taskPlant:         +(_dt.plant         * _q).toFixed(2),
+          taskSubcontractor: +(_dt.subcontractor * _q).toFixed(2),
+          taskOther:         +(_dt.other         * _q).toFixed(2),
+        }
+        saveItemEdit(item)
+      }
+    }
+
+    // ── 3. Phase flags ─────────────────────────────────────────────────────
+    const isLineBased = linkedEl?.type === 'line'
+    const isDemo      = item.phase === 'Site Setup & Demolition'
+    const isExtWall   = item.phase === 'External Walls'
+    const isIntWall   = item.phase === 'Internal Walls & Partitions' && isLineBased
+    const isPlaster   = item.phase === 'Plastering & Boarding'
+    const isBuildup   = _isBuildupItem
+    const isTaskPhase = _phaseHasTasks && !isBuildup && !isExtWall && !isPlaster && !isIntWall && !isDemo
+    const showWallLine = isLineBased && (isExtWall || isIntWall || isPlaster)
+    const hasOpenings  = (isExtWall || isIntWall || isPlaster) && isLineBased
+
+    // ── 4. Computed wall measurements ──────────────────────────────────────
+    const wallLength     = item.length ?? 0
+    const wallHeight     = item.wallHeight ?? (isExtWall ? 2.7 : 2.4)
+    const openings       = item.openings ?? []
+    const grossArea      = showWallLine ? +(wallLength * wallHeight).toFixed(3) : (item.area ?? 0)
+    const openingsArea   = +openings.reduce((s, o) => s + o.width * o.height, 0).toFixed(3)
+    const netArea        = +(Math.max(0, grossArea - openingsArea)).toFixed(3)
+    const finishSidesVal = (item.finishSides ?? 2) as 1 | 2
+    const plasterSides   = (item.plasterFinishSides ?? 1) as 1 | 2
+    const finishArea     = +(netArea * finishSidesVal).toFixed(3)
+    const wallPerimeter  = isLineBased ? wallLength
+      : (linkedEl?.type === 'rect'    ? rectPerimeter(linkedEl.points, project.calibration.mpp)
+        : linkedEl?.type === 'polygon' ? polyPerimeter(linkedEl.points, project.calibration.mpp)
+        : 0)
+
+    // ── 5. Wall helpers ────────────────────────────────────────────────────
+    function recalcWallAndSave(patch: Partial<TakeoffItem>) {
+      const merged = { ...item, ...patch }
+      const h    = merged.wallHeight    ?? wallHeight
+      const ops  = merged.openings      ?? openings
+      const newGross = +(wallLength * h).toFixed(3)
+      const newOpA   = +ops.reduce((s, o) => s + o.width * o.height, 0).toFixed(3)
+      const newNet   = +(Math.max(0, newGross - newOpA)).toFixed(3)
+      if (isIntWall) {
+        const sides = (merged.finishSides ?? finishSidesVal) as 1 | 2
+        const ct = (merged.wallConstructionType ?? item.wallConstructionType ?? 'stud_metal_70') as WallConstructionType
+        const ft = (merged.wallFinishType       ?? item.wallFinishType       ?? 'board_skim')    as WallFinishType
+        const newMats = calcMaterialLines(ct, ft, sides, newNet, merged.calculatedMaterials)
+        saveItemEdit({ ...merged, area: newGross, qty: newNet, unit: 'm²', calculatedMaterials: newMats, materialsConfirmed: false })
+      } else if (isPlaster) {
+        const sides = (merged.plasterFinishSides ?? plasterSides) as 1 | 2
+        saveItemEdit({ ...merged, area: newGross, qty: +(newNet * sides).toFixed(3), unit: 'm²' })
+      } else {
+        saveItemEdit({ ...merged, area: newGross, qty: newNet, unit: 'm²' })
+      }
+    }
+
+    function addOpening(type: WallOpeningType) {
+      const def = WALL_OPENING_DEFAULTS[type]
+      recalcWallAndSave({ openings: [...openings, { id: uid(), type, label: WALL_OPENING_LABELS[type], width: def.width, height: def.height }] })
+    }
+    function updateOpening(id: string, changes: Partial<WallOpening>) {
+      recalcWallAndSave({ openings: openings.map(o => o.id === id ? { ...o, ...changes } : o) })
+    }
+    function removeOpening(id: string) {
+      recalcWallAndSave({ openings: openings.filter(o => o.id !== id) })
+    }
+
+    // ── 6. Material engine helpers (Int Wall) ──────────────────────────────
+    const mats      = item.calculatedMaterials ?? []
+    const matTotals = sumByCategory(mats)
+    function updateMaterial(matId: string, patch: { qty?: number; unitRate?: number }) {
+      saveItemEdit({ ...item, calculatedMaterials: mats.map(m => m.id === matId ? recalcMaterial(m, patch) : m) })
+    }
+    function toggleMaterial(matId: string, enabled: boolean) {
+      saveItemEdit({ ...item, calculatedMaterials: mats.map(m => m.id === matId ? { ...m, enabled } : m) })
+    }
+
+    // ── 7. Demo data & helpers ─────────────────────────────────────────────
+    const allDemoSubs  = isDemo ? getAllDemoSubphases(customDemoSubphases) : []
+    const demoSub      = allDemoSubs.find(s => s.id === item.demoSubphaseId) ?? allDemoSubs[0]
+    const demoTask     = demoSub?.tasks.find(t => t.id === item.demoTaskId) ?? demoSub?.tasks[0]
+    const demoMarkup   = item.demoMarkupPct ?? demoSub?.markupPct ?? 20
+    const demoLabour   = item.demoLabour        ?? 0
+    const demoMats     = item.demoMaterials     ?? 0
+    const demoPlant    = item.demoPlant         ?? 0
+    const demoWaste    = item.demoWaste         ?? 0
+    const demoSubC     = item.demoSubcontractor ?? 0
+    const demoOtherV   = item.demoOther         ?? 0
+    const demoBase     = demoLabour + demoMats + demoPlant + demoWaste + demoSubC + demoOtherV
+    const demoSelling  = isDemo ? calcDemoSellingPrice(demoLabour, demoMats, demoPlant, demoWaste, demoSubC, demoOtherV, demoMarkup) : 0
+
+    function applyDemoTask(newSub: DemoSubphase, newTask: DemoTask) {
+      const q = item.qty > 0 ? item.qty : newTask.defaultQty
+      saveItemEdit({
+        ...item, name: newTask.name, spec: newTask.clientDescription,
+        demoSubphaseId: newSub.id, demoTaskId: newTask.id, demoMarkupPct: newSub.markupPct,
+        subPhase: newSub.name, unit: newTask.unit, qty: q,
+        demoLabour:        +(newTask.labourCost        * q).toFixed(2),
+        demoMaterials:     +(newTask.materialCost      * q).toFixed(2),
+        demoPlant:         +(newTask.plantCost         * q).toFixed(2),
+        demoWaste:         +(newTask.wasteCost         * q).toFixed(2),
+        demoSubcontractor: +(newTask.subcontractorCost * q).toFixed(2),
+        demoOther:         +(newTask.otherCost         * q).toFixed(2),
+      })
+    }
+
+    // ── 8. Task phase data & helpers ───────────────────────────────────────
+    const taskSubs    = isTaskPhase ? getAllSubphasesForPhase(item.phase) : []
+    const taskSelSub  = taskSubs.find(s => s.id === item.taskSubphaseId) ?? taskSubs[0]
+    const taskList    = taskSelSub ? getTasksForSubphase(taskSelSub.id) : []
+    const taskSelTask = taskList.find(t => t.id === item.taskId) ?? taskList[0]
+    const taskMarkup  = item.taskMarkupPct ?? taskSelSub?.markupPct ?? 20
+    const taskLabour  = item.taskLabour      ?? 0
+    const taskMats    = item.taskMaterials   ?? 0
+    const taskPlant   = item.taskPlant       ?? 0
+    const taskSubC    = item.taskSubcontractor ?? 0
+    const taskOtherV  = item.taskOther       ?? 0
+    const taskCost    = taskLabour + taskMats + taskPlant + taskSubC + taskOtherV
+    const taskSelling = isTaskPhase ? calcPhaseTaskSellingPrice(taskLabour, taskMats, taskPlant, taskSubC, taskOtherV, taskMarkup) : 0
+
+    function applyPhaseTask(subId: string, taskId: string) {
+      const sp = getAllSubphasesForPhase(item.phase).find(s => s.id === subId)
+      const tk = sp?.tasks.find(t => t.id === taskId)
+      if (!sp || !tk) return
+      const q = item.qty > 0 ? item.qty : tk.defaultQty
+      saveItemEdit({
+        ...item, name: tk.name, spec: tk.notes ?? '',
+        taskSubphaseId: subId, taskId, taskMarkupPct: sp.markupPct,
+        subPhase: sp.name, unit: tk.unit, qty: q,
+        taskLabour:        +(tk.labour        * q).toFixed(2),
+        taskMaterials:     +(tk.materials     * q).toFixed(2),
+        taskPlant:         +(tk.plant         * q).toFixed(2),
+        taskSubcontractor: +(tk.subcontractor * q).toFixed(2),
+        taskOther:         +(tk.other         * q).toFixed(2),
+      })
+    }
+
+    // ── 9. Buildup data ────────────────────────────────────────────────────
+    const bMakeups   = _phaseMakeups ?? FLOOR_MAKEUPS
+    const bMakeup    = isBuildup ? bMakeups.find(m => m.id === item.floorMakeupId) : undefined
+    const buildArea  = item.area ?? 0
+    const buildPerim = item.perimeter ??
+      (linkedEl?.type === 'rect'    ? rectPerimeter(linkedEl.points, project.calibration.mpp)
+        : linkedEl?.type === 'polygon' ? polyPerimeter(linkedEl.points, project.calibration.mpp)
+        : 0)
+    const layerToggles    = item.floorLayerToggles    ?? {}
+    const layerThicknesses = item.floorLayerThicknesses ?? {}
+
+    // ── 10. Accent colour ──────────────────────────────────────────────────
+    const phaseAccents: Partial<Record<string, string>> = {
+      'Site Setup & Demolition':     '#e74c3c',
+      'External Walls':               '#16a085',
+      'Internal Walls & Partitions':  '#5d8aa8',
+      'Plastering & Boarding':        '#95a5a6',
+      'Floors & Screeds':             '#f39c12',
+      'Foundations':                  '#8e44ad',
+      'Structural Frame':             '#2980b9',
+      'Roof':                         '#d35400',
+      'Windows & Doors':              '#27ae60',
+      'Electrics':                    '#f1c40f',
+      'Plumbing & Heating':           '#1abc9c',
+      'Joinery & Fixtures':           '#6d4c41',
+      'Tiling & Finishes':            '#ad1457',
+      'Decoration':                   '#4a148c',
+      'External Works & Landscaping': '#558b2f',
+      'Preliminaries':                '#0277bd',
+    }
+    const accent = phaseAccents[item.phase] ?? '#7ab533'
+
+    // ── 11. Delete helper ──────────────────────────────────────────────────
+    function deleteItem() {
+      if (item.elementId) {
+        setProject(p => ({
+          ...p,
+          elements: p.elements.filter(el => el.id !== item.elementId),
+          items:    p.items.filter(it => it.id !== item.id),
+        }))
+        setSelectedId(null)
+      } else {
+        setProject(p => ({ ...p, items: p.items.filter(it => it.id !== item.id) }))
+      }
+      setEditingItem(null)
+      setEditingElement(null)
+      setPanelMode('schedule')
+    }
+
+    // ── 12. Layer schedule helper (used by Ext Wall, Plaster, Floors, Found) ──
+    function renderLayerSchedule(
+      mk: FloorMakeup,
+      area: number,
+      perim: number,
+      tgls: Record<string, boolean>,
+      thks: Record<string, number>,
+      itm: TakeoffItem,
+      ac: string,
+    ) {
+      return (
+        <div style={{ marginBottom: 4 }}>
+          <div style={{ fontSize: 10, color: 'var(--to-muted)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 5, display: 'flex', justifyContent: 'space-between' }}>
+            <span>Layers ({mk.layers.length})</span>
+            {mk.labourHrsPerM2 > 0 && <span>~{fmt2(area * mk.labourHrsPerM2)} hrs labour</span>}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '16px 1fr 64px 8px', gap: 3, padding: '2px 4px', marginBottom: 1, fontSize: 9, color: 'var(--to-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <span /><span>Layer</span><span style={{ textAlign: 'right' }}>Qty</span><span />
+          </div>
+          {mk.layers.map(layer => {
+            const enabled = tgls[layer.id] ?? layer.defaultEnabled
+            const thk     = thks[layer.id] ?? layer.thickness
+            const { qty: lq, unit: lu } = calcLayerQty(layer, area, perim, thk || undefined)
+            return (
+              <div key={layer.id} style={{
+                display: 'grid', gridTemplateColumns: '16px 1fr 64px 8px',
+                gap: 3, alignItems: 'center', padding: '4px 4px', marginBottom: 2, borderRadius: 4,
+                background: enabled ? (darkMode ? '#0a180a' : '#f8faf8') : (darkMode ? '#060c06' : '#f5f5f5'),
+                border: `1px solid ${enabled ? (darkMode ? '#1a2e1a' : '#cce8cc') : (darkMode ? '#111' : '#eee')}`,
+                opacity: enabled ? 1 : 0.5,
+              }}>
+                <input type="checkbox" checked={enabled}
+                  onChange={ev => saveItemEdit({ ...itm, floorLayerToggles: { ...tgls, [layer.id]: ev.target.checked } })}
+                  style={{ margin: 0, cursor: 'pointer', accentColor: ac }}
+                />
+                <div>
+                  <div style={{ fontSize: 11, color: enabled ? 'var(--to-text)' : 'var(--to-muted)', lineHeight: 1.2 }}>{layer.name}</div>
+                  {layer.thickness > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginTop: 1 }}>
+                      <input type="number" value={thk} min={0}
+                        onChange={ev => saveItemEdit({ ...itm, floorLayerThicknesses: { ...thks, [layer.id]: +ev.target.value } })}
+                        style={{ width: 36, background: darkMode ? '#162216' : '#f0f8f0', border: '1px solid var(--to-input-bd)', borderRadius: 3, color: 'var(--to-sub)', fontSize: 10, padding: '1px 3px', textAlign: 'right', outline: 'none' }}
+                      />
+                      <span style={{ fontSize: 9, color: 'var(--to-muted)' }}>mm</span>
+                    </div>
+                  )}
+                </div>
+                <div style={{ fontSize: 11, fontFamily: 'monospace', color: enabled ? 'var(--to-textb)' : 'var(--to-muted)', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  {enabled ? `${lq} ${lu}` : '—'}
+                </div>
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: CAT_COLOR[layer.category] ?? '#95a5a6', flexShrink: 0 }} title={layer.category} />
+              </div>
+            )
+          })}
+          <div style={{ display: 'flex', gap: 8, marginTop: 5, flexWrap: 'wrap' }}>
+            {(['labour', 'materials', 'plant', 'other'] as const).map(cat => (
+              <span key={cat} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: 'var(--to-muted)' }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: CAT_COLOR[cat], display: 'inline-block' }} />
+                {cat}
+              </span>
+            ))}
+          </div>
+        </div>
+      )
+    }
+
+    // ── Shared section header style ────────────────────────────────────────
+    const secHdr: React.CSSProperties = {
+      display: 'flex', alignItems: 'center', gap: 6,
+      fontSize: 10, letterSpacing: 1, fontWeight: 700,
+      color: 'var(--to-muted)', textTransform: 'uppercase',
+      padding: '9px 14px 5px',
+      borderTop: '1px solid var(--to-border)',
+    }
+    const secBody: React.CSSProperties = { padding: '2px 14px 10px' }
+
+    // ── 13. JSX ────────────────────────────────────────────────────────────
+    return (
+      <div style={{ fontSize: 13, overflowY: 'auto', height: '100%' }}>
+
+        {/* ── Top metrics card (wall phases) ── */}
+        {showWallLine && (
+          <div style={{ padding: '10px 14px 0' }}>
+            <div style={{ background: darkMode ? `rgba(0,0,0,0.25)` : `rgba(0,0,0,0.04)`, borderRadius: 8, padding: '12px 14px', border: `1px solid ${accent}44` }}>
+              <div style={{ fontSize: 10, color: accent, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
+                {isExtWall ? '🧱 External Wall' : isIntWall ? '🏗 Internal Wall' : '🪣 Plastering'}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: isIntWall ? '1fr 1fr 1fr 1fr' : '1fr 1fr 1fr', gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 17, fontWeight: 700, color: accent, fontFamily: 'monospace', lineHeight: 1 }}>{fmt2(wallLength)}</div>
+                  <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 2 }}>m run</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--to-textb)', fontFamily: 'monospace', lineHeight: 1 }}>{fmt2(grossArea)}</div>
+                  <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 2 }}>m² gross{openingsArea > 0 ? ` (−${fmt2(openingsArea)})` : ''}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 17, fontWeight: 700, color: accent, fontFamily: 'monospace', lineHeight: 1 }}>{fmt2(netArea)}</div>
+                  <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 2 }}>m² net</div>
+                </div>
+                {isIntWall && (
+                  <div>
+                    <div style={{ fontSize: 17, fontWeight: 700, color: '#7986cb', fontFamily: 'monospace', lineHeight: 1 }}>{fmt2(finishArea)}</div>
+                    <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 2 }}>m² finish ({finishSidesVal} side{finishSidesVal > 1 ? 's' : ''})</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Top metrics card (buildup phases) ── */}
+        {isBuildup && (
+          <div style={{ padding: '10px 14px 0' }}>
+            <div style={{ background: darkMode ? `rgba(0,0,0,0.25)` : `rgba(0,0,0,0.04)`, borderRadius: 8, padding: '12px 14px', border: `1px solid ${accent}44` }}>
+              <div style={{ fontSize: 10, color: accent, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
+                {item.phase}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: accent, fontFamily: 'monospace', lineHeight: 1 }}>{fmt2(buildArea)}</div>
+                  <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 2 }}>m² area</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--to-textb)', fontFamily: 'monospace', lineHeight: 1 }}>{fmt2(buildPerim)}</div>
+                  <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 2 }}>lm perimeter</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Top metrics card (demo / task phases) ── */}
+        {(isDemo || isTaskPhase) && (
+          <div style={{ padding: '10px 14px 0' }}>
+            <div style={{ background: darkMode ? `rgba(0,0,0,0.25)` : `rgba(0,0,0,0.04)`, borderRadius: 8, padding: '10px 14px', border: `1px solid ${accent}44` }}>
+              <div style={{ fontSize: 10, color: accent, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>
+                {item.phase}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--to-text)', fontFamily: 'monospace' }}>
+                    {item.qty} {item.unit}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--to-muted)' }}>quantity</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: accent, fontFamily: 'monospace' }}>
+                    £{(isDemo ? demoSelling : taskSelling).toLocaleString('en-GB', { minimumFractionDigits: 2 })}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--to-muted)' }}>selling price</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ════════════════ GENERAL ════════════════ */}
+        <div style={secHdr}><span>📋</span><span>General</span></div>
+        <div style={secBody}>
+
+          <div style={{ marginBottom: 10 }}>
+            <label style={labelStyle}>Phase</label>
+            <select style={inputStyle} value={item.phase}
+              onChange={e => saveItemEdit({ ...item, phase: e.target.value as TakeoffPhase })}>
+              {TAKEOFF_PHASES.map(ph => <option key={ph} value={ph}>{ph}</option>)}
+            </select>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+            <div>
+              <label style={labelStyle}>Sub-Phase</label>
+              <input style={inputStyle} value={item.subPhase ?? ''}
+                onChange={e => saveItemEdit({ ...item, subPhase: e.target.value })} />
+            </div>
+            <div>
+              <label style={labelStyle}>Room Name</label>
+              <input style={inputStyle} placeholder="e.g. Kitchen" value={item.roomName ?? ''}
+                onChange={e => saveItemEdit({ ...item, roomName: e.target.value })} />
+            </div>
+          </div>
+
+          {linkedEl && (
+            <div style={{ marginBottom: 10 }}>
+              <label style={labelStyle}>Drawing Label</label>
+              <input style={inputStyle} value={linkedEl.label}
+                onChange={e => saveElementEdit({ ...linkedEl, label: e.target.value })} />
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+            <div>
+              <label style={labelStyle}>Item Name</label>
+              <input style={inputStyle} value={item.name}
+                onChange={e => saveItemEdit({ ...item, name: e.target.value })} />
+            </div>
+            <div>
+              <label style={labelStyle}>Drawing Ref</label>
+              <input style={inputStyle} value={item.drawingRef ?? ''}
+                onChange={e => saveItemEdit({ ...item, drawingRef: e.target.value })} />
+            </div>
+          </div>
+
+          <div>
+            <label style={labelStyle}>Notes</label>
+            <textarea style={{ ...inputStyle, height: 46, resize: 'none' }}
+              value={item.notes ?? ''}
+              onChange={e => saveItemEdit({ ...item, notes: e.target.value })}
+            />
+          </div>
+        </div>
+
+        {/* ════════════════ MEASUREMENT ════════════════ */}
+        <div style={secHdr}><span>📐</span><span>Measurement</span></div>
+        <div style={secBody}>
+
+          {/* Wall line: height + band + sides */}
+          {showWallLine && (
+            <>
+              <div style={{ marginBottom: 10 }}>
+                <label style={labelStyle}>Wall / Storey Height (m)</label>
+                <input type="number" step={0.05} min={0.1} max={12}
+                  style={{ ...inputStyle, color: accent }}
+                  value={wallHeight}
+                  onChange={e => recalcWallAndSave({ wallHeight: Math.max(0.1, +e.target.value || wallHeight) })}
+                />
+              </div>
+
+              {isExtWall && (
+                <div style={{ marginBottom: 10 }}>
+                  <label style={labelStyle}>Canvas Line Width (wall thickness on plan)</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <input type="range" min={4} max={30} step={1}
+                      style={{ flex: 1, accentColor: accent }}
+                      value={item.wallBandPx ?? 9}
+                      onChange={e => saveItemEdit({ ...item, wallBandPx: Number(e.target.value) })}
+                    />
+                    <span style={{ fontSize: 13, color: accent, fontWeight: 700, minWidth: 36, textAlign: 'right' }}>
+                      {(item.wallBandPx ?? 9) * 2}px
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {isIntWall && (
+                <div style={{ marginBottom: 10 }}>
+                  <label style={labelStyle}>Finish Sides</label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {([1, 2] as const).map(s => (
+                      <button key={s}
+                        style={{ ...btnStyle, flex: 1, justifyContent: 'center',
+                          background: finishSidesVal === s ? '#5d8aa8' : 'var(--to-hover)',
+                          color: finishSidesVal === s ? '#fff' : 'var(--to-text)',
+                          borderColor: finishSidesVal === s ? '#5d8aa8' : 'var(--to-btn-bd)',
+                        }}
+                        onClick={() => recalcWallAndSave({ finishSides: s })}>
+                        {s === 1 ? '1 face' : '2 faces'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {isPlaster && (
+                <div style={{ marginBottom: 10 }}>
+                  <label style={labelStyle}>Finish Sides</label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {([1, 2] as const).map(s => (
+                      <button key={s}
+                        style={{ ...btnStyle, flex: 1, justifyContent: 'center',
+                          background: plasterSides === s ? accent : 'var(--to-hover)',
+                          color: plasterSides === s ? '#fff' : 'var(--to-text)',
+                          borderColor: plasterSides === s ? accent : 'var(--to-btn-bd)',
+                        }}
+                        onClick={() => recalcWallAndSave({ plasterFinishSides: s, finishSides: s as 1 | 2 })}>
+                        {s === 1 ? '1 face' : '2 faces'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div>
+                  <label style={labelStyle}>Gross Area (m²)</label>
+                  <div style={{ ...inputStyle, color: 'var(--to-muted)', fontFamily: 'monospace' }}>{fmt2(grossArea)}</div>
+                </div>
+                <div>
+                  <label style={labelStyle}>Net Area (m²)</label>
+                  <div style={{ ...inputStyle, color: accent, fontWeight: 700, fontFamily: 'monospace' }}>{fmt2(netArea)}</div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Non-wall: canvas measurements + qty/unit */}
+          {!showWallLine && !isBuildup && (
+            <>
+              {(item.length != null || item.area != null || item.volume != null) && (
+                <div style={{ background: darkMode ? '#0d1a0d' : '#f0f4f0', borderRadius: 6, padding: '8px 10px', marginBottom: 10, fontSize: 12, border: '1px solid var(--to-border)' }}>
+                  <div style={{ fontSize: 10, color: 'var(--to-muted)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>From Canvas</div>
+                  {item.length != null && <div style={dimRow}><span>Length</span><span>{fmtM(item.length)}</span></div>}
+                  {item.width  != null && <div style={dimRow}><span>Width</span><span>{fmtM(item.width)}</span></div>}
+                  {item.height != null && <div style={dimRow}><span>Height</span><span>{fmtM(item.height)}</span></div>}
+                  {item.area   != null && <div style={dimRow}><span>Area</span><span>{fmt2(item.area)} m²</span></div>}
+                  {item.volume != null && <div style={dimRow}><span>Volume</span><span>{fmt2(item.volume)} m³</span></div>}
+                </div>
+              )}
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8 }}>
+                <div>
+                  <label style={labelStyle}>Qty</label>
+                  <input type="number" step="any" min={0} style={inputStyle} value={item.qty}
+                    onChange={e => {
+                      const q = +e.target.value
+                      if (isTaskPhase && taskSelTask) {
+                        saveItemEdit({ ...item, qty: q,
+                          taskLabour:        +(taskSelTask.labour        * q).toFixed(2),
+                          taskMaterials:     +(taskSelTask.materials     * q).toFixed(2),
+                          taskPlant:         +(taskSelTask.plant         * q).toFixed(2),
+                          taskSubcontractor: +(taskSelTask.subcontractor * q).toFixed(2),
+                          taskOther:         +(taskSelTask.other         * q).toFixed(2),
+                        })
+                      } else if (isDemo && demoTask) {
+                        saveItemEdit({ ...item, qty: q,
+                          demoLabour:        +(demoTask.labourCost        * q).toFixed(2),
+                          demoMaterials:     +(demoTask.materialCost      * q).toFixed(2),
+                          demoPlant:         +(demoTask.plantCost         * q).toFixed(2),
+                          demoWaste:         +(demoTask.wasteCost         * q).toFixed(2),
+                          demoSubcontractor: +(demoTask.subcontractorCost * q).toFixed(2),
+                          demoOther:         +(demoTask.otherCost         * q).toFixed(2),
+                        })
+                      } else {
+                        saveItemEdit({ ...item, qty: q })
+                      }
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>Unit</label>
+                  <select style={inputStyle} value={item.unit}
+                    onChange={e => saveItemEdit({ ...item, unit: e.target.value })}>
+                    {['m', 'm²', 'm³', 'nr', 'item', 'bag', 'tonne', 'kg', 'litre', 'hr', 'day'].map(u => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Buildup: area is read-only from canvas */}
+          {isBuildup && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div>
+                <label style={labelStyle}>Area (m²)</label>
+                <div style={{ ...inputStyle, color: accent, fontFamily: 'monospace', fontWeight: 700 }}>{fmt2(buildArea)}</div>
+              </div>
+              <div>
+                <label style={labelStyle}>Perimeter (lm)</label>
+                <div style={{ ...inputStyle, color: 'var(--to-textb)', fontFamily: 'monospace' }}>{fmt2(buildPerim)}</div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ════════════════ CONSTRUCTION ════════════════ */}
+        <div style={secHdr}><span>🔧</span><span>Construction</span></div>
+        <div style={secBody}>
+
+          {/* Demo: category + task selectors */}
+          {isDemo && demoSub && demoTask && (
+            <>
+              <div style={{ marginBottom: 10 }}>
+                <label style={labelStyle}>Construction Type</label>
+                <select style={{ ...inputStyle, color: accent }} value={demoSub.id}
+                  onChange={e => {
+                    const ns = allDemoSubs.find(s => s.id === e.target.value) ?? allDemoSubs[0]
+                    applyDemoTask(ns, ns.tasks[0])
+                  }}>
+                  {allDemoSubs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <label style={labelStyle}>Build-Up Type</label>
+                <select style={{ ...inputStyle, color: accent }} value={demoTask.id}
+                  onChange={e => {
+                    const t = demoSub.tasks.find(t => t.id === e.target.value) ?? demoSub.tasks[0]
+                    applyDemoTask(demoSub, t)
+                  }}>
+                  {demoSub.tasks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </div>
+              {[...(demoSub.warnings ?? []), ...(demoTask.warnings ?? [])].map((w, i) => (
+                <div key={i} style={{ fontSize: 11, padding: '6px 10px', borderRadius: 5, marginBottom: 8, background: darkMode ? '#1a1200' : '#fffbeb', border: '1px solid #f59e0b', color: darkMode ? '#fcd34d' : '#92400e' }}>
+                  ⚠️ {w}
+                </div>
+              ))}
+            </>
+          )}
+
+          {/* Ext Wall: construction type + layer schedule */}
+          {isExtWall && (() => {
+            const _allWT   = [...WALL_MAKEUPS, ...customWallTypes]
+            const _wMakeup = _allWT.find(m => m.id === item.floorMakeupId)
+            return (
+              <>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={labelStyle}>Construction Type</label>
+                  <select style={{ ...inputStyle, color: accent }} value={item.floorMakeupId ?? ''}
+                    onChange={e => {
+                      const nm = _allWT.find(m => m.id === e.target.value)
+                      saveItemEdit({ ...item, floorMakeupId: e.target.value, spec: nm?.clientDescription ?? item.spec, floorLayerToggles: {}, floorLayerThicknesses: {} })
+                    }}>
+                    <optgroup label="Built-in">{WALL_MAKEUPS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</optgroup>
+                    {customWallTypes.length > 0 && <optgroup label="Custom">{customWallTypes.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</optgroup>}
+                  </select>
+                </div>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={labelStyle}>Layers</label>
+                  {_wMakeup && renderLayerSchedule(_wMakeup, netArea, wallPerimeter, layerToggles, layerThicknesses, item, accent)}
+                </div>
+              </>
+            )
+          })()}
+
+          {/* Int Wall: construction type + finish type */}
+          {isIntWall && (
+            <>
+              <div style={{ marginBottom: 10 }}>
+                <label style={labelStyle}>Construction Type</label>
+                <select style={{ ...inputStyle, color: accent }}
+                  value={item.wallConstructionType ?? 'stud_metal_70'}
+                  onChange={e => recalcWallAndSave({ wallConstructionType: e.target.value as WallConstructionType })}>
+                  {(Object.entries(WALL_CONSTRUCTION_LABELS) as [WallConstructionType, string][]).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <label style={labelStyle}>Finish Type</label>
+                <select style={{ ...inputStyle, color: accent }}
+                  value={item.wallFinishType ?? 'board_skim'}
+                  onChange={e => recalcWallAndSave({ wallFinishType: e.target.value as WallFinishType })}>
+                  {(Object.entries(WALL_FINISH_LABELS) as [WallFinishType, string][]).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
+
+          {/* Plaster: finish type + layer schedule */}
+          {isPlaster && (() => {
+            const _pMakeup = PLASTER_MAKEUPS.find(m => m.id === item.floorMakeupId)
+            return (
+              <>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={labelStyle}>Finish Type</label>
+                  <select style={{ ...inputStyle, color: accent }} value={item.floorMakeupId ?? ''}
+                    onChange={e => {
+                      const nm = PLASTER_MAKEUPS.find(m => m.id === e.target.value)
+                      saveItemEdit({ ...item, floorMakeupId: e.target.value, spec: nm?.clientDescription ?? item.spec, floorLayerToggles: {}, floorLayerThicknesses: {} })
+                    }}>
+                    {PLASTER_MAKEUPS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                </div>
+                {_pMakeup && (
+                  <div style={{ marginBottom: 10 }}>
+                    <label style={labelStyle}>Layers</label>
+                    {renderLayerSchedule(_pMakeup, isLineBased ? netArea : buildArea, wallPerimeter, layerToggles, layerThicknesses, item, accent)}
+                  </div>
+                )}
+              </>
+            )
+          })()}
+
+          {/* Buildup (Floors, Foundations): makeup type + layer schedule */}
+          {isBuildup && (() => {
+            const _bm = _phaseMakeups ?? FLOOR_MAKEUPS
+            return (
+              <>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={labelStyle}>Build-Up Type</label>
+                  <select style={{ ...inputStyle, color: accent }} value={item.floorMakeupId ?? ''}
+                    onChange={e => {
+                      const nm = _bm.find(m => m.id === e.target.value)
+                      saveItemEdit({ ...item, floorMakeupId: e.target.value, spec: nm?.clientDescription ?? item.spec, floorLayerToggles: {}, floorLayerThicknesses: {} })
+                    }}>
+                    {_bm.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                </div>
+                {bMakeup && (
+                  <div style={{ marginBottom: 10 }}>
+                    <label style={labelStyle}>Layers</label>
+                    {renderLayerSchedule(bMakeup, buildArea, buildPerim, layerToggles, layerThicknesses, item, accent)}
+                  </div>
+                )}
+              </>
+            )
+          })()}
+
+          {/* Task phases: subphase + task selectors */}
+          {isTaskPhase && taskSelSub && (
+            <>
+              <div style={{ marginBottom: 10 }}>
+                <label style={labelStyle}>Construction Type</label>
+                <select style={{ ...inputStyle, color: accent }}
+                  value={item.taskSubphaseId ?? (taskSubs[0]?.id ?? '')}
+                  onChange={e => {
+                    const sp = getAllSubphasesForPhase(item.phase).find(s => s.id === e.target.value)
+                    if (sp?.tasks[0]) applyPhaseTask(sp.id, sp.tasks[0].id)
+                  }}>
+                  {taskSubs.map(sp => <option key={sp.id} value={sp.id}>{sp.name}</option>)}
+                </select>
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <label style={labelStyle}>Build-Up Type</label>
+                <select style={{ ...inputStyle, color: accent }}
+                  value={item.taskId ?? (taskList[0]?.id ?? '')}
+                  onChange={e => applyPhaseTask(item.taskSubphaseId ?? taskSubs[0]?.id ?? '', e.target.value)}>
+                  {taskList.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </div>
+              {taskSelSub?.ukWarning && (
+                <div style={{ fontSize: 11, padding: '7px 10px', borderRadius: 5, marginBottom: 10, background: darkMode ? '#2a1a00' : '#fffbe6', border: '1px solid #f59e0b', color: darkMode ? '#fcd34d' : '#92400e', lineHeight: 1.5 }}>
+                  ⚠️ {taskSelSub.ukWarning}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Client Description (all phases) */}
+          <div style={{ marginBottom: 8 }}>
+            <label style={labelStyle}>Client Description</label>
+            <textarea style={{ ...inputStyle, height: 60, resize: 'none', fontSize: 11, lineHeight: 1.5 }}
+              value={item.spec ?? ''}
+              onChange={e => saveItemEdit({ ...item, spec: e.target.value })}
+            />
+          </div>
+
+          <div>
+            <label style={labelStyle}>Building Regs Notes</label>
+            <textarea style={{ ...inputStyle, height: 38, resize: 'none' }}
+              value={item.buildingRegsNotes ?? ''}
+              onChange={e => saveItemEdit({ ...item, buildingRegsNotes: e.target.value })}
+            />
+          </div>
+        </div>
+
+        {/* ════════════════ OPENINGS ════════════════ */}
+        {hasOpenings && (
+          <>
+            <div style={secHdr}><span>🚪</span><span>Openings</span></div>
+            <div style={secBody}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 10 }}>
+                {(Object.keys(WALL_OPENING_LABELS) as WallOpeningType[]).map(type => (
+                  <button key={type} style={{ ...btnStyle, fontSize: 11, padding: '4px 8px' }}
+                    onClick={() => addOpening(type)}>
+                    + {WALL_OPENING_LABELS[type]}
+                  </button>
+                ))}
+              </div>
+              {openings.length === 0 ? (
+                <div style={{ fontSize: 11, color: 'var(--to-muted)', fontStyle: 'italic' }}>No openings — net area = gross area</div>
+              ) : (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 52px 12px 52px 28px', gap: 3, padding: '2px 0', marginBottom: 3, fontSize: 9, color: 'var(--to-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    <span>Label</span><span style={{ textAlign: 'center' }}>W (m)</span><span /><span style={{ textAlign: 'center' }}>H (m)</span><span />
+                  </div>
+                  {openings.map(op => (
+                    <div key={op.id} style={{
+                      display: 'grid', gridTemplateColumns: '1fr 52px 12px 52px 28px',
+                      gap: 3, alignItems: 'center', marginBottom: 4,
+                      padding: '5px 6px', borderRadius: 4,
+                      background: darkMode ? '#0d1a0d' : '#f8fafc',
+                      border: '1px solid var(--to-border)',
+                    }}>
+                      <div style={{ fontSize: 11, color: 'var(--to-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{op.label}</div>
+                      <input type="number" step={0.05} min={0.1}
+                        style={{ ...inputStyle, textAlign: 'center', padding: '3px 4px', fontSize: 11 }}
+                        value={op.width}
+                        onChange={e => updateOpening(op.id, { width: Math.max(0.1, +e.target.value || op.width) })}
+                      />
+                      <span style={{ fontSize: 10, color: 'var(--to-muted)', textAlign: 'center' }}>×</span>
+                      <input type="number" step={0.05} min={0.1}
+                        style={{ ...inputStyle, textAlign: 'center', padding: '3px 4px', fontSize: 11 }}
+                        value={op.height}
+                        onChange={e => updateOpening(op.id, { height: Math.max(0.1, +e.target.value || op.height) })}
+                      />
+                      <button style={{ ...btnStyle, padding: '3px 6px', fontSize: 12, color: '#e74c3c', borderColor: '#e74c3c', justifyContent: 'center' }}
+                        onClick={() => removeOpening(op.id)}>×</button>
+                    </div>
+                  ))}
+                  <div style={{ fontSize: 11, color: 'var(--to-muted)', textAlign: 'right', marginTop: 4 }}>
+                    Deductions: <strong style={{ color: '#e74c3c' }}>{fmt2(openingsArea)} m²</strong>
+                  </div>
+                </>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ════════════════ OUTPUTS ════════════════ */}
+        <div style={secHdr}><span>📊</span><span>Outputs</span></div>
+        <div style={secBody}>
+
+          {/* Int Wall: materials table + totals + confirm */}
+          {isIntWall && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 10 }}>
+                {([
+                  { label: 'Labour',    val: matTotals.labour,    color: CAT_COLOR.labour    },
+                  { label: 'Materials', val: matTotals.materials, color: CAT_COLOR.materials },
+                  { label: 'Plant',     val: matTotals.plant,     color: CAT_COLOR.plant     },
+                ] as { label: string; val: number; color: string }[]).map(({ label, val, color }) => (
+                  <div key={label} style={{ textAlign: 'center', background: darkMode ? '#0d1a0d' : '#f8fafc', borderRadius: 6, padding: '6px 4px', border: `1px solid ${color}44` }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color, fontFamily: 'monospace' }}>£{val.toFixed(0)}</div>
+                    <div style={{ fontSize: 9, color: 'var(--to-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '8px 1fr 52px 6px 46px 54px', gap: 3, padding: '2px 0', marginBottom: 2, fontSize: 9, color: 'var(--to-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  <span /><span>Material</span><span style={{ textAlign: 'right' }}>Qty</span><span /><span style={{ textAlign: 'right' }}>Rate</span><span style={{ textAlign: 'right' }}>Total</span>
+                </div>
+                {mats.map(mat => (
+                  <div key={mat.id} style={{
+                    display: 'grid', gridTemplateColumns: '8px 1fr 52px 6px 46px 54px',
+                    gap: 3, alignItems: 'center', padding: '4px 4px', marginBottom: 2, borderRadius: 3,
+                    background: mat.enabled ? (darkMode ? '#0a1a0a' : '#f8fafc') : (darkMode ? '#060c06' : '#f5f5f5'),
+                    border: `1px solid ${mat.enabled ? (CAT_COLOR[mat.category] ?? '#95a5a6') + '33' : 'var(--to-border)'}`,
+                    opacity: mat.enabled ? 1 : 0.5,
+                  }}>
+                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: CAT_COLOR[mat.category] ?? '#95a5a6', cursor: 'pointer' }}
+                      onClick={() => toggleMaterial(mat.id, !mat.enabled)} />
+                    <div style={{ fontSize: 10, color: mat.isOverridden ? '#f39c12' : 'var(--to-text)', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={mat.name}>{mat.name}</div>
+                    <input type="number" step="any" min={0}
+                      style={{ ...inputStyle, fontSize: 10, padding: '2px 4px', textAlign: 'right' }}
+                      value={+mat.qty.toFixed(3)}
+                      onChange={e => updateMaterial(mat.id, { qty: +e.target.value })}
+                    />
+                    <span style={{ fontSize: 9, color: 'var(--to-muted)', textAlign: 'center' }}>{mat.unit}</span>
+                    <input type="number" step="any" min={0}
+                      style={{ ...inputStyle, fontSize: 10, padding: '2px 4px', textAlign: 'right' }}
+                      value={+mat.unitRate.toFixed(2)}
+                      onChange={e => updateMaterial(mat.id, { unitRate: +e.target.value })}
+                    />
+                    <div style={{ fontSize: 10, color: 'var(--to-textb)', textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>£{mat.totalCost.toFixed(0)}</div>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                style={{
+                  ...btnStyle, width: '100%', justifyContent: 'center',
+                  background: item.materialsConfirmed ? (darkMode ? '#1a4a1a' : '#e8f5e8') : (darkMode ? '#2b3a2b' : 'rgba(122,181,51,0.1)'),
+                  borderColor: item.materialsConfirmed ? '#4a8a4a' : 'var(--to-active-bd)',
+                  color: item.materialsConfirmed ? '#6aca6a' : 'var(--to-text)',
+                }}
+                onClick={() => saveItemEdit({ ...item, materialsConfirmed: !item.materialsConfirmed })}>
+                {item.materialsConfirmed ? '✅ Confirmed — Ready for Quote' : '✓ Confirm & Send to Quote'}
+              </button>
+            </>
+          )}
+
+          {/* Demo: cost breakdown */}
+          {isDemo && demoSub && demoTask && (
+            <>
+              {([
+                { label: '🔨 Labour',       key: 'demoLabour'        as const, val: demoLabour  },
+                { label: '📦 Materials',     key: 'demoMaterials'     as const, val: demoMats    },
+                { label: '🚜 Plant',         key: 'demoPlant'         as const, val: demoPlant   },
+                { label: '🗑 Waste / Skips', key: 'demoWaste'         as const, val: demoWaste   },
+                { label: '👷 Subcontractor', key: 'demoSubcontractor' as const, val: demoSubC    },
+                { label: '📋 Other',         key: 'demoOther'         as const, val: demoOtherV  },
+              ] as { label: string; key: keyof TakeoffItem; val: number }[]).map(({ label, key, val }) => (
+                <div key={key as string} style={{ display: 'grid', gridTemplateColumns: '120px 1fr', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                  <span style={{ fontSize: 11, color: 'var(--to-sub)' }}>{label}</span>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--to-muted)' }}>£</span>
+                    <input type="number" min={0} step={1} style={{ ...inputStyle, paddingLeft: 18 }}
+                      value={val}
+                      onChange={e => saveItemEdit({ ...item, [key]: Math.max(0, +e.target.value || 0) })}
+                    />
+                  </div>
+                </div>
+              ))}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8, marginBottom: 4 }}>
+                <div>
+                  <label style={labelStyle}>Markup %</label>
+                  <input type="number" min={0} max={200} step={1} style={inputStyle}
+                    value={demoMarkup}
+                    onChange={e => saveItemEdit({ ...item, demoMarkupPct: Math.max(0, +e.target.value || 0) })}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>Selling Price</label>
+                  <div style={{ ...inputStyle, color: accent, fontWeight: 700, fontFamily: 'monospace' }}>
+                    £{demoSelling.toLocaleString('en-GB', { minimumFractionDigits: 2 })}
+                  </div>
+                </div>
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--to-muted)' }}>
+                Base: £{demoBase.toFixed(2)} + {demoMarkup}% markup = £{demoSelling.toFixed(2)}
+              </div>
+            </>
+          )}
+
+          {/* Task phases: cost breakdown */}
+          {isTaskPhase && (
+            <>
+              {([
+                { key: 'taskLabour'        as const, label: '🔨 Labour',        color: CAT_COLOR.labour         },
+                { key: 'taskMaterials'     as const, label: '📦 Materials',      color: CAT_COLOR.materials      },
+                { key: 'taskPlant'         as const, label: '🚜 Plant',          color: CAT_COLOR.plant          },
+                { key: 'taskSubcontractor' as const, label: '👷 Subcontractor',  color: CAT_COLOR.subcontractors },
+                { key: 'taskOther'         as const, label: '📋 Other',          color: CAT_COLOR.other          },
+              ] as { key: keyof TakeoffItem; label: string; color: string }[]).map(({ key, label, color }) => (
+                <div key={key as string} style={{ display: 'grid', gridTemplateColumns: '110px 1fr', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                  <span style={{ fontSize: 12, color, fontWeight: 600 }}>{label}</span>
+                  <input type="number" step="any" min={0} style={inputStyle}
+                    value={(item[key] as number | undefined) ?? 0}
+                    onChange={e => saveItemEdit({ ...item, [key]: +e.target.value })}
+                  />
+                </div>
+              ))}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8, borderTop: '1px solid var(--to-border)', paddingTop: 8 }}>
+                <div>
+                  <label style={labelStyle}>Markup %</label>
+                  <input type="number" min={0} max={200} style={inputStyle}
+                    value={taskMarkup}
+                    onChange={e => saveItemEdit({ ...item, taskMarkupPct: +e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>Selling Price</label>
+                  <div style={{ ...inputStyle, color: accent, fontWeight: 700, fontFamily: 'monospace' }}>
+                    £{taskSelling.toLocaleString('en-GB', { minimumFractionDigits: 2 })}
+                  </div>
+                </div>
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 4 }}>
+                Cost: £{taskCost.toFixed(2)} + {taskMarkup}% = £{taskSelling.toFixed(2)}
+              </div>
+            </>
+          )}
+
+          {/* All other phases: no automated output */}
+          {!isIntWall && !isDemo && !isTaskPhase && (
+            <div style={{ fontSize: 11, color: 'var(--to-muted)', fontStyle: 'italic', textAlign: 'center', padding: '6px 0' }}>
+              {isBuildup || isExtWall || isPlaster
+                ? 'Layer quantities shown in Construction above'
+                : 'No automated outputs for this phase'}
+            </div>
+          )}
+        </div>
+
+        {/* ════════════════ FOOTER ════════════════ */}
+        <div style={{ padding: '8px 14px 18px', borderTop: '1px solid var(--to-border)', marginTop: 2 }}>
+          <button
+            style={{ ...btnStyle, background: '#c0392b', borderColor: '#c0392b', width: '100%', justifyContent: 'center', color: '#fff' }}
+            onClick={deleteItem}>
+            🗑 Delete Item
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   // ── Properties panel ───────────────────────────────────────────────────────
   function renderProperties() {
     if (!editingItem) {
@@ -3134,296 +4191,7 @@ export default function TakeoffPage() {
         </div>
       )
     }
-
-    const _linkedEl = editingItem.elementId
-      ? project.elements.find(e => e.id === editingItem.elementId)
-      : null
-
-    // ── Demolition: dedicated demolition panel ──
-    if (editingItem.phase === 'Site Setup & Demolition') {
-      const allSubphases = getAllDemoSubphases(customDemoSubphases)
-      let _demoItem = { ...editingItem }
-      // Auto-initialise with first subphase/task defaults if not set
-      if (!_demoItem.demoSubphaseId) {
-        const defSub  = allSubphases[0]
-        const defTask = defSub.tasks[0]
-        _demoItem = {
-          ..._demoItem,
-          name:               defTask.name,
-          spec:               defTask.clientDescription,
-          demoSubphaseId:     defSub.id,
-          demoTaskId:         defTask.id,
-          demoMarkupPct:      defSub.markupPct,
-          subPhase:           defSub.name,
-          unit:               defTask.unit,
-          qty:                _demoItem.qty > 0 ? _demoItem.qty : defTask.defaultQty,
-          demoLabour:         +(defTask.labourCost        * (_demoItem.qty || defTask.defaultQty)).toFixed(2),
-          demoMaterials:      +(defTask.materialCost      * (_demoItem.qty || defTask.defaultQty)).toFixed(2),
-          demoPlant:          +(defTask.plantCost         * (_demoItem.qty || defTask.defaultQty)).toFixed(2),
-          demoWaste:          +(defTask.wasteCost         * (_demoItem.qty || defTask.defaultQty)).toFixed(2),
-          demoSubcontractor:  +(defTask.subcontractorCost * (_demoItem.qty || defTask.defaultQty)).toFixed(2),
-          demoOther:          +(defTask.otherCost         * (_demoItem.qty || defTask.defaultQty)).toFixed(2),
-        }
-        saveItemEdit(_demoItem)
-      }
-      return renderDemolitionProperties(_demoItem)
-    }
-
-    // ── External Walls: dedicated wall panel for ALL element types (line, rect, polygon) ──
-    if (editingItem.phase === 'External Walls') {
-      const _allWallTypes = [...WALL_MAKEUPS, ...customWallTypes]
-      const _defaultWall  = _allWallTypes[0] ?? WALL_MAKEUPS[0]
-      let _wallItem = { ...editingItem }
-
-      // Ensure a wall makeup type is selected
-      if (!_wallItem.floorMakeupId) {
-        _wallItem = { ..._wallItem, floorMakeupId: _defaultWall.id, spec: _defaultWall.clientDescription }
-        saveItemEdit(_wallItem)
-      }
-
-      // Auto-initialise wall height for new LINE items
-      if (_linkedEl?.type === 'line' && _wallItem.wallHeight == null) {
-        const _wallLen = _wallItem.length ?? 0
-        const _defH    = 2.7
-        const _gross   = +(_wallLen * _defH).toFixed(3)
-        _wallItem = { ..._wallItem, wallHeight: _defH, area: _gross, qty: _gross, unit: 'm²' }
-        saveItemEdit(_wallItem)
-      }
-
-      return renderWallProperties(_wallItem)
-    }
-
-    // ── Plastering & Boarding: dedicated line-based wall measurement panel ──
-    if (editingItem.phase === 'Plastering & Boarding') {
-      let _pItem = { ...editingItem }
-
-      // Ensure a finish type is selected
-      if (!_pItem.floorMakeupId) {
-        _pItem = { ..._pItem, floorMakeupId: PLASTER_MAKEUPS[0].id, spec: PLASTER_MAKEUPS[0].clientDescription }
-        saveItemEdit(_pItem)
-      }
-
-      // Auto-init height + sides for new LINE items
-      if (_linkedEl?.type === 'line' && _pItem.wallHeight == null) {
-        const _len   = _pItem.length ?? 0
-        const _defH  = 2.4
-        const _sides = _pItem.plasterFinishSides ?? 1
-        const _gross = +(_len * _defH).toFixed(3)
-        const _board = +(_gross * _sides).toFixed(3)
-        _pItem = { ..._pItem, wallHeight: _defH, plasterFinishSides: _sides, area: _gross, qty: _board, unit: 'm²' }
-        saveItemEdit(_pItem)
-      }
-
-      return renderPlasterProperties(_pItem)
-    }
-
-    // ── Internal Walls & Partitions: wall measurement engine (line-based only) ──
-    if (editingItem.phase === 'Internal Walls & Partitions' && _linkedEl?.type === 'line') {
-      let _wItem = { ...editingItem }
-      // Auto-initialise with defaults if this is a fresh line-based item
-      if (!_wItem.wallConstructionType) {
-        const _defH      = 2.4
-        const _defSides: 1 | 2 = 2
-        const _gross     = +( (_wItem.length ?? 0) * _defH).toFixed(3)
-        const _net       = _gross
-        const _initMats  = calcMaterialLines('stud_metal_70', 'board_skim', _defSides, _net)
-        _wItem = {
-          ..._wItem,
-          wallConstructionType: 'stud_metal_70' as WallConstructionType,
-          wallFinishType:       'board_skim'     as WallFinishType,
-          finishSides:          _defSides,
-          wallHeight:           _defH,
-          area:                 _gross,
-          qty:                  _net,
-          unit:                 'm²',
-          calculatedMaterials:  _initMats,
-          materialsConfirmed:   false,
-        }
-        saveItemEdit(_wItem)
-      }
-      return renderWallMeasurementEngine(_wItem)
-    }
-
-    // ── Other build-up phases (floors, foundations) — rect/polygon only ──
-    const _phaseMakeups = PHASE_MAKEUPS[editingItem.phase]
-    const _isBuildupItem =
-      !!editingItem.floorMakeupId ||
-      (!!_phaseMakeups && !!_linkedEl && _linkedEl.type !== 'line')
-
-    if (_isBuildupItem) {
-      // Default makeup: concrete slab for floors, first option for other phases
-      const _defaultMakeupIdx = editingItem.phase === 'Floors & Screeds' ? 1 : 0
-      const _defaultMakeup = (_phaseMakeups ?? FLOOR_MAKEUPS)[_defaultMakeupIdx]
-      const _buildupItem = editingItem.floorMakeupId
-        ? editingItem
-        : { ...editingItem, floorMakeupId: _defaultMakeup.id }
-      // Persist the default so it sticks on next click
-      if (!editingItem.floorMakeupId) {
-        saveItemEdit({ ..._buildupItem, spec: _defaultMakeup.clientDescription })
-      }
-      return renderBuildupProperties(_buildupItem)
-    }
-
-    // ── Generic phase task panel (Structural Frame, Roof, Windows & Doors, etc.) ──
-    const _phaseHasTasks = ALL_PHASE_SUBPHASES.some(s => s.phase === editingItem.phase)
-    if (_phaseHasTasks) {
-      let _taskItem = { ...editingItem }
-      // Auto-init with first subphase/task if not set
-      if (!_taskItem.taskSubphaseId) {
-        const _subphases = getAllSubphasesForPhase(_taskItem.phase)
-        const _defSub  = _subphases[0]
-        const _defTask = _defSub?.tasks[0]
-        if (_defSub && _defTask) {
-          const q = _taskItem.qty > 0 ? _taskItem.qty : _defTask.defaultQty
-          _taskItem = {
-            ..._taskItem,
-            name:               _defTask.name,
-            spec:               _defTask.notes ?? '',
-            taskSubphaseId:     _defSub.id,
-            taskId:             _defTask.id,
-            taskMarkupPct:      _defSub.markupPct,
-            subPhase:           _defSub.name,
-            unit:               _defTask.unit,
-            qty:                q,
-            taskLabour:         +(_defTask.labour        * q).toFixed(2),
-            taskMaterials:      +(_defTask.materials     * q).toFixed(2),
-            taskPlant:          +(_defTask.plant         * q).toFixed(2),
-            taskSubcontractor:  +(_defTask.subcontractor * q).toFixed(2),
-            taskOther:          +(_defTask.other         * q).toFixed(2),
-          }
-          saveItemEdit(_taskItem)
-        }
-      }
-      return renderPhaseTaskProperties(_taskItem)
-    }
-
-    const item = editingItem
-    const el = editingElement
-
-    return (
-      <div style={{ padding: 14, fontSize: 13, overflowY: 'auto', height: '100%' }}>
-        {/* Element label (if linked) */}
-        {el && (
-          <div style={{ marginBottom: 12 }}>
-            <label style={labelStyle}>Drawing Label</label>
-            <input
-              style={inputStyle}
-              value={el.label}
-              onChange={e => saveElementEdit({ ...el, label: e.target.value })}
-            />
-          </div>
-        )}
-
-        <div style={{ marginBottom: 12 }}>
-          <label style={labelStyle}>Item Name</label>
-          <input
-            style={inputStyle}
-            value={item.name}
-            onChange={e => saveItemEdit({ ...item, name: e.target.value })}
-          />
-        </div>
-
-        <div style={{ marginBottom: 12 }}>
-          <label style={labelStyle}>Phase</label>
-          <select
-            style={inputStyle}
-            value={item.phase}
-            onChange={e => saveItemEdit({ ...item, phase: e.target.value as TakeoffPhase })}
-          >
-            {TAKEOFF_PHASES.map(ph => <option key={ph} value={ph}>{ph}</option>)}
-          </select>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
-          <div>
-            <label style={labelStyle}>Qty</label>
-            <input type="number" style={inputStyle} value={item.qty}
-              onChange={e => saveItemEdit({ ...item, qty: +e.target.value })} />
-          </div>
-          <div>
-            <label style={labelStyle}>Unit</label>
-            <select style={inputStyle} value={item.unit}
-              onChange={e => saveItemEdit({ ...item, unit: e.target.value })}>
-              {['m', 'm²', 'm³', 'nr', 'item', 'bag', 'tonne', 'kg', 'litre', 'hr', 'day'].map(u =>
-                <option key={u} value={u}>{u}</option>)}
-            </select>
-          </div>
-        </div>
-
-        <div style={{ marginBottom: 12 }}>
-          <label style={labelStyle}>Spec / Description</label>
-          <textarea
-            style={{ ...inputStyle, height: 52, resize: 'none' }}
-            value={item.spec ?? ''}
-            onChange={e => saveItemEdit({ ...item, spec: e.target.value })}
-          />
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
-          <div>
-            <label style={labelStyle}>Drawing Ref</label>
-            <input style={inputStyle} value={item.drawingRef ?? ''}
-              onChange={e => saveItemEdit({ ...item, drawingRef: e.target.value })} />
-          </div>
-          <div>
-            <label style={labelStyle}>Sub-Phase</label>
-            <input style={inputStyle} value={item.subPhase ?? ''}
-              onChange={e => saveItemEdit({ ...item, subPhase: e.target.value })} />
-          </div>
-        </div>
-
-        <div style={{ marginBottom: 12 }}>
-          <label style={labelStyle}>Building Regs Notes</label>
-          <textarea style={{ ...inputStyle, height: 52, resize: 'none' }}
-            value={item.buildingRegsNotes ?? ''}
-            onChange={e => saveItemEdit({ ...item, buildingRegsNotes: e.target.value })}
-          />
-        </div>
-
-        <div style={{ marginBottom: 12 }}>
-          <label style={labelStyle}>Notes</label>
-          <textarea style={{ ...inputStyle, height: 52, resize: 'none' }}
-            value={item.notes ?? ''}
-            onChange={e => saveItemEdit({ ...item, notes: e.target.value })}
-          />
-        </div>
-
-        {/* Measurements (read-only if from canvas) */}
-        {(item.length || item.area || item.volume) && (
-          <div style={{ background: '#1a2a1a', borderRadius: 6, padding: '10px 12px', marginBottom: 12, fontSize: 12 }}>
-            <div style={{ fontSize: 11, color: '#8aa', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>
-              Measurements (from canvas)
-            </div>
-            {item.length  != null && <div style={dimRow}><span>Length</span><span>{fmtM(item.length)}</span></div>}
-            {item.width   != null && <div style={dimRow}><span>Width</span><span>{fmtM(item.width)}</span></div>}
-            {item.height  != null && <div style={dimRow}><span>Height</span><span>{fmtM(item.height)}</span></div>}
-            {item.area    != null && <div style={dimRow}><span>Area</span><span>{fmt2(item.area)} m²</span></div>}
-            {item.volume  != null && <div style={dimRow}><span>Volume</span><span>{fmt2(item.volume)} m³</span></div>}
-          </div>
-        )}
-
-        <button
-          style={{ ...btnStyle, background: '#c0392b', borderColor: '#c0392b', marginTop: 4 }}
-          onClick={() => {
-            if (item.elementId) {
-              setProject(p => ({
-                ...p,
-                elements: p.elements.filter(el => el.id !== item.elementId),
-                items: p.items.filter(it => it.id !== item.id),
-              }))
-              setSelectedId(null)
-            } else {
-              setProject(p => ({ ...p, items: p.items.filter(it => it.id !== item.id) }))
-            }
-            setEditingItem(null)
-            setEditingElement(null)
-            setPanelMode('schedule')
-          }}
-        >
-          🗑 Delete Item
-        </button>
-      </div>
-    )
+    return renderUnifiedProperties(editingItem)
   }
 
   // ── Recovery snapshot banner (reusable) ──────────────────────────────────────

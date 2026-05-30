@@ -143,6 +143,7 @@ export interface TakeoffItem {
   subPhase?:   string           // sub-category (optional)
   spec?:       string           // specification / product description
   drawingRef?: string           // drawing reference e.g. "SK-01"
+  roomName?:   string           // room / location name (e.g. "Kitchen", "Bedroom 1")
   buildingRegsNotes?: string
 
   // Dimensions (extracted from drawing)
