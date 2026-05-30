@@ -5,27 +5,13 @@ import { useApp } from '@/contexts/AppContext'
 import { createClient } from '@/lib/supabase/client'
 import { syncBackOfficeFromProduct } from '@/lib/back-office-queries'
 import { JOB_TYPES, JOB_TEMPLATES } from '@/lib/utils'
-import {
-  DEFAULT_DEMO_SUBPHASES, loadCustomDemoSubphases, saveCustomDemoSubphases,
-  DEMO_UNITS, DEMO_UNIT_LABELS, getAllDemoSubphases,
-  type DemoSubphase, type DemoTask, type DemoUnit,
-} from '@/lib/demolition-data'
-import {
-  ALL_PHASE_SUBPHASES, loadCustomPhaseSubphases, saveCustomPhaseSubphases,
-  PHASE_TASK_UNIT_LABELS,
-  type PhaseSubphase, type PhaseTask, type PhaseTaskUnit,
-} from '@/lib/phase-tasks'
 import type { TemplatePhaseData, QuoteItem } from '@/lib/types'
 import type { EstimatorItemTemplate, MeasurementType } from '@/lib/estimator'
 import { MEASUREMENT_LABELS } from '@/lib/estimator'
 import { getPhaseEstimatorDefaults } from '@/lib/estimatorDefaults'
 import { COST_CATEGORIES } from '@/lib/costCategories'
-import {
-  TRADE_TYPES, BUILT_IN_TRADE_RATES, loadTradeRates, saveTradeRatesToStorage,
-  getHourlyRate, getHalfDayRate,
-  type TradeRate, type TaskLabourLine,
-} from '@/lib/tradeRates'
-import { HardHat, RotateCcw } from 'lucide-react'
+import { type TaskLabourLine } from '@/lib/tradeRates'
+import { HardHat } from 'lucide-react'
 import TaskLabourLinesEditor from '@/components/TaskLabourLinesEditor'
 
 // New DB-backed section components
@@ -62,8 +48,6 @@ type SectionId =
   | 'formula-rules'
   | 'ai-mapping'
   | 'wall-types'
-  | 'demolition'
-  | 'phase-task-rates'
 
 const SECTIONS: Array<{ id: SectionId; label: string; icon: string; badge?: string; group?: string }> = [
   { id: 'job-templates',    label: 'Job Templates',      icon: '📋', badge: 'DB',    group: 'Master Data' },
@@ -75,8 +59,6 @@ const SECTIONS: Array<{ id: SectionId; label: string; icon: string; badge?: stri
   { id: 'formula-rules',    label: 'Formula Rules',      icon: '∑',  badge: 'DB',    group: 'Tool Config' },
   { id: 'ai-mapping',       label: 'AI Scope Mapping',   icon: '🤖', badge: 'DB',    group: 'Tool Config' },
   { id: 'wall-types',       label: 'Wall Types',         icon: '🧱', badge: 'DB',    group: 'Master Data' },
-  { id: 'demolition',       label: 'Demolition Tasks',   icon: '🔨', badge: 'Local', group: 'Legacy' },
-  { id: 'phase-task-rates', label: 'Phase Task Rates',   icon: '📊', badge: 'Local', group: 'Legacy' },
 ]
 
 // ── Estimator items editor (unchanged from original) ─────────────────────────
@@ -196,26 +178,6 @@ export default function BackOfficePage() {
   const [saving, setSaving] = useState(false)
   const [dupFrom, setDupFrom] = useState('')
 
-  // Trade rate defaults (localStorage — legacy)
-  const [tradeRates, setTradeRates] = useState<TradeRate[]>(BUILT_IN_TRADE_RATES)
-  const [tradeRatesDirty, setTradeRatesDirty] = useState(false)
-  useEffect(() => { setTradeRates(loadTradeRates()) }, [])
-
-  // Demolition admin (localStorage — legacy)
-  const [demoSubphases, setDemoSubphases] = useState<DemoSubphase[]>(() => {
-    try { const raw = loadCustomDemoSubphases(); return raw.length ? raw : DEFAULT_DEMO_SUBPHASES.map(s => ({ ...s })) } catch { return DEFAULT_DEMO_SUBPHASES.map(s => ({ ...s })) }
-  })
-  const [expandedDemoSub, setExpandedDemoSub] = useState<string | null>(null)
-  const [editingDemoTask, setEditingDemoTask] = useState<{ subphaseId: string; task: DemoTask } | null>(null)
-
-  // Phase task admin (localStorage — legacy)
-  const [phaseTaskSubs, setPhaseTaskSubs] = useState<PhaseSubphase[]>(() => {
-    try { const custom = loadCustomPhaseSubphases(); return ALL_PHASE_SUBPHASES.map(d => custom.find(c => c.id === d.id) ?? d) } catch { return ALL_PHASE_SUBPHASES.map(s => ({ ...s })) }
-  })
-  const [phaseTaskFilter, setPhaseTaskFilter] = useState<string>('Structural Frame')
-  const [expandedPhaseSub, setExpandedPhaseSub] = useState<string | null>(null)
-  const [editingPhaseTask, setEditingPhaseTask] = useState<{ subphaseId: string; task: PhaseTask } | null>(null)
-
   useEffect(() => {
     if (!loading) { setLocalTemplate(deepClone(getTemplate(selectedJobType))); setDirty(false); setDupFrom('') }
   }, [selectedJobType, loading]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -258,21 +220,6 @@ export default function BackOfficePage() {
   function addEstimatorItem(phaseIdx: number) { const newItem: EstimatorItemTemplate = { id: `custom-${Date.now()}`, name: 'New item', description: '', measurementType: 'quantity', unit: 'nr', labourRate: 0, materialsRate: 0, plantRate: 0, subRate: 0, otherRate: 0, wastePercent: 0 }; setLocalTemplate(prev => prev.map((p, i) => i !== phaseIdx ? p : { ...p, estimatorItems: [...(p.estimatorItems || []), newItem] })); setDirty(true) }
   function updateEstimatorItem(phaseIdx: number, updated: EstimatorItemTemplate) { setLocalTemplate(prev => prev.map((p, i) => i !== phaseIdx ? p : { ...p, estimatorItems: (p.estimatorItems || []).map(ei => ei.id === updated.id ? updated : ei) })); setDirty(true) }
   function removeEstimatorItem(phaseIdx: number, itemId: string) { setLocalTemplate(prev => prev.map((p, i) => i !== phaseIdx ? p : { ...p, estimatorItems: (p.estimatorItems || []).filter(ei => ei.id !== itemId) })); setDirty(true) }
-
-  // Demo helpers
-  function saveDemoSubphases(subs: DemoSubphase[]) { setDemoSubphases(subs); saveCustomDemoSubphases(subs) }
-  function updateDemoSubMarkup(id: string, pct: number) { saveDemoSubphases(demoSubphases.map(s => s.id === id ? { ...s, markupPct: pct } : s)) }
-  function toggleDemoTask(subId: string, taskId: string, field: 'showInTakeoff' | 'showInAiScope') { saveDemoSubphases(demoSubphases.map(s => s.id !== subId ? s : { ...s, tasks: s.tasks.map(t => t.id !== taskId ? t : { ...t, [field]: !t[field] }) })) }
-  function saveDemoTaskEdit() { if (!editingDemoTask) return; saveDemoSubphases(demoSubphases.map(s => s.id !== editingDemoTask.subphaseId ? s : { ...s, tasks: s.tasks.map(t => t.id === editingDemoTask.task.id ? editingDemoTask.task : t) })); setEditingDemoTask(null) }
-  function addCustomDemoTask(subId: string) { const newTask: DemoTask = { id: 'custom_' + Math.random().toString(36).slice(2, 8), name: 'New Custom Task', clientDescription: '', unit: 'item', defaultQty: 1, labourCost: 0, materialCost: 0, plantCost: 0, wasteCost: 0, subcontractorCost: 0, otherCost: 0, showInTakeoff: true, showInAiScope: false }; saveDemoSubphases(demoSubphases.map(s => s.id !== subId ? s : { ...s, tasks: [...s.tasks, newTask] })); setEditingDemoTask({ subphaseId: subId, task: newTask }) }
-  function deleteDemoTask(subId: string, taskId: string) { if (!confirm('Delete this task?')) return; saveDemoSubphases(demoSubphases.map(s => s.id !== subId ? s : { ...s, tasks: s.tasks.filter(t => t.id !== taskId) })) }
-
-  // Phase task helpers
-  function savePhaseTaskSubs(subs: PhaseSubphase[]) { setPhaseTaskSubs(subs); saveCustomPhaseSubphases(subs.filter(s => { const def = ALL_PHASE_SUBPHASES.find(d => d.id === s.id); return def ? JSON.stringify(s) !== JSON.stringify(def) : true })) }
-  function updatePhaseSubMarkup(id: string, pct: number) { savePhaseTaskSubs(phaseTaskSubs.map(s => s.id === id ? { ...s, markupPct: pct } : s)) }
-  function savePhaseTaskEdit() { if (!editingPhaseTask) return; savePhaseTaskSubs(phaseTaskSubs.map(s => s.id !== editingPhaseTask.subphaseId ? s : { ...s, tasks: s.tasks.map(t => t.id === editingPhaseTask.task.id ? editingPhaseTask.task : t) })); setEditingPhaseTask(null) }
-  function addCustomPhaseTask(subId: string) { const newTask: PhaseTask = { id: `custom-${Date.now()}`, name: 'New Task', unit: 'nr', defaultQty: 1, labour: 0, materials: 0, plant: 0, subcontractor: 0, other: 0, notes: '', visible: true }; savePhaseTaskSubs(phaseTaskSubs.map(s => s.id !== subId ? s : { ...s, tasks: [...s.tasks, newTask] })); setEditingPhaseTask({ subphaseId: subId, task: newTask }) }
-  function deletePhaseTask(subId: string, taskId: string) { if (!confirm('Delete this task?')) return; savePhaseTaskSubs(phaseTaskSubs.map(s => s.id !== subId ? s : { ...s, tasks: s.tasks.filter(t => t.id !== taskId) })) }
 
   // ── Sidebar ───────────────────────────────────────────────────────────────────
 
@@ -324,8 +271,7 @@ export default function BackOfficePage() {
         ))}
         <div style={{ padding: '10px 14px', borderTop: '1px solid #f1f5f9', marginTop: 8 }}>
           <div style={{ fontSize: 10, color: '#94a3b8', lineHeight: 1.4 }}>
-            <span style={{ background: '#dbeafe', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 3, padding: '1px 4px', fontWeight: 700, fontSize: 9 }}>DB</span> = Supabase (syncs everywhere)<br />
-            <span style={{ background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 3, padding: '1px 4px', fontWeight: 700, fontSize: 9, marginTop: 3, display: 'inline-block' }}>Local</span> = localStorage (this browser)
+            <span style={{ background: '#dbeafe', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 3, padding: '1px 4px', fontWeight: 700, fontSize: 9 }}>DB</span> = Supabase — syncs everywhere
           </div>
         </div>
       </div>
@@ -448,184 +394,6 @@ export default function BackOfficePage() {
           </>
         )}
 
-        {/* wall-types section is now handled by SectionWallTypes (DB-backed) above */}
-
-        {/* ── Demolition Admin (legacy localStorage) ── */}
-        {activeSection === 'demolition' && (
-          <>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
-              <div>
-                <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>🔨 Demolition / Strip Out</h2>
-                <p style={{ margin: '4px 0 0', fontSize: 13, color: '#64748b' }}>Default tasks, unit rates, markup and visibility for the demolition takeoff tool.</p>
-              </div>
-              <button style={{ padding: '7px 16px', background: '#e74c3c', border: 'none', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }} onClick={() => { if (confirm('Reset all demolition tasks to factory defaults?')) saveDemoSubphases(DEFAULT_DEMO_SUBPHASES.map(s => ({ ...s }))) }}>↺ Reset to Defaults</button>
-            </div>
-            {demoSubphases.map(sub => (
-              <div key={sub.id} style={{ border: '1px solid #e2e8f0', borderRadius: 8, marginBottom: 10, overflow: 'hidden' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#f8fafc', cursor: 'pointer', userSelect: 'none' }} onClick={() => setExpandedDemoSub(expandedDemoSub === sub.id ? null : sub.id)}>
-                  <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{expandedDemoSub === sub.id ? '▾' : '▸'} {sub.name}</span>
-                  <span style={{ fontSize: 11, color: '#64748b' }}>{sub.tasks.length} tasks</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={e => e.stopPropagation()}>
-                    <span style={{ fontSize: 11, color: '#64748b' }}>Markup</span>
-                    <input type="number" min={0} max={200} step={1} style={{ width: 58, padding: '3px 6px', border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 12, fontWeight: 700, color: '#e74c3c' }} value={sub.markupPct} onChange={e => updateDemoSubMarkup(sub.id, Math.max(0, +e.target.value || 0))} />
-                    <span style={{ fontSize: 11, color: '#64748b' }}>%</span>
-                  </div>
-                </div>
-                {expandedDemoSub === sub.id && (
-                  <div style={{ padding: '0 14px 12px' }}>
-                    {sub.warnings && sub.warnings.length > 0 && <div style={{ fontSize: 11, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '6px 10px', marginTop: 10, marginBottom: 8, lineHeight: 1.5 }}>{sub.warnings.map((w, i) => <div key={i}>⚠️ {w}</div>)}</div>}
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginTop: 8 }}>
-                      <thead><tr style={{ background: '#f1f5f9' }}><th style={{ textAlign: 'left', padding: '6px 8px', fontWeight: 600, color: '#475569' }}>Task</th><th style={{ textAlign: 'center', padding: '6px 6px', fontWeight: 600, color: '#475569', width: 56 }}>Unit</th><th style={{ textAlign: 'right', padding: '6px 6px', fontWeight: 600, color: '#475569', width: 68 }}>Labour/u</th><th style={{ textAlign: 'right', padding: '6px 6px', fontWeight: 600, color: '#475569', width: 68 }}>Plant/u</th><th style={{ textAlign: 'right', padding: '6px 6px', fontWeight: 600, color: '#475569', width: 68 }}>Waste/u</th><th style={{ textAlign: 'center', padding: '6px 4px', fontWeight: 600, color: '#475569', width: 44 }}>Takeoff</th><th style={{ textAlign: 'center', padding: '6px 4px', fontWeight: 600, color: '#475569', width: 44 }}>AI</th><th style={{ width: 60 }}></th></tr></thead>
-                      <tbody>
-                        {sub.tasks.map(task => (
-                          <tr key={task.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                            <td style={{ padding: '7px 8px', color: '#1e293b' }}>{task.name}</td>
-                            <td style={{ textAlign: 'center', padding: '7px 6px', color: '#64748b' }}>{DEMO_UNIT_LABELS[task.unit]}</td>
-                            <td style={{ textAlign: 'right', padding: '7px 6px', fontFamily: 'monospace', color: '#334155' }}>£{task.labourCost}</td>
-                            <td style={{ textAlign: 'right', padding: '7px 6px', fontFamily: 'monospace', color: '#334155' }}>£{task.plantCost}</td>
-                            <td style={{ textAlign: 'right', padding: '7px 6px', fontFamily: 'monospace', color: '#334155' }}>£{task.wasteCost}</td>
-                            <td style={{ textAlign: 'center', padding: '7px 4px' }}><input type="checkbox" checked={task.showInTakeoff} onChange={() => toggleDemoTask(sub.id, task.id, 'showInTakeoff')} /></td>
-                            <td style={{ textAlign: 'center', padding: '7px 4px' }}><input type="checkbox" checked={task.showInAiScope} onChange={() => toggleDemoTask(sub.id, task.id, 'showInAiScope')} /></td>
-                            <td style={{ padding: '4px 6px', textAlign: 'right' }}>
-                              <button onClick={() => setEditingDemoTask({ subphaseId: sub.id, task: { ...task } })} style={{ padding: '3px 8px', fontSize: 11, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 4, color: '#1d4ed8', cursor: 'pointer', marginRight: 4 }}>✏️</button>
-                              <button onClick={() => deleteDemoTask(sub.id, task.id)} style={{ padding: '3px 8px', fontSize: 11, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, color: '#dc2626', cursor: 'pointer' }}>×</button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <button onClick={() => addCustomDemoTask(sub.id)} style={{ marginTop: 8, padding: '5px 14px', fontSize: 12, background: '#fff', border: '1px dashed #cbd5e1', borderRadius: 6, color: '#64748b', cursor: 'pointer' }}>+ Add Task</button>
-                  </div>
-                )}
-              </div>
-            ))}
-            {editingDemoTask && (
-              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 20px', overflowY: 'auto' }}>
-                <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 700, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 22px', borderBottom: '1px solid #e2e8f0' }}>
-                    <div style={{ fontWeight: 700, fontSize: 16 }}>✏️ Edit Demolition Task</div>
-                    <button onClick={() => setEditingDemoTask(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8' }}>×</button>
-                  </div>
-                  <div style={{ padding: '18px 22px', display: 'grid', gap: 12 }}>
-                    <div><label style={lbl}>Task Name</label><input style={inp} value={editingDemoTask.task.name} onChange={e => setEditingDemoTask({ ...editingDemoTask, task: { ...editingDemoTask.task, name: e.target.value } })} /></div>
-                    <div><label style={lbl}>Client Description</label><textarea style={{ ...inp, resize: 'vertical', minHeight: 60 }} value={editingDemoTask.task.clientDescription} onChange={e => setEditingDemoTask({ ...editingDemoTask, task: { ...editingDemoTask.task, clientDescription: e.target.value } })} /></div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <div><label style={lbl}>Default Unit</label><select style={inp} value={editingDemoTask.task.unit} onChange={e => setEditingDemoTask({ ...editingDemoTask, task: { ...editingDemoTask.task, unit: e.target.value as DemoUnit } })}>{DEMO_UNITS.map(u => <option key={u} value={u}>{DEMO_UNIT_LABELS[u]} ({u})</option>)}</select></div>
-                      <div><label style={lbl}>Default Qty</label><input type="number" min={0} step={0.5} style={inp} value={editingDemoTask.task.defaultQty} onChange={e => setEditingDemoTask({ ...editingDemoTask, task: { ...editingDemoTask.task, defaultQty: +e.target.value || 1 } })} /></div>
-                    </div>
-                    <div>
-                      <label style={{ ...lbl, marginBottom: 8 }}>Default Costs (per unit, ex-VAT)</label>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                        {([['labourCost', '🔨 Labour'], ['materialCost', '📦 Materials'], ['plantCost', '🚜 Plant'], ['wasteCost', '🗑 Waste'], ['subcontractorCost', '👷 Subcontractor'], ['otherCost', '📋 Other']] as [keyof DemoTask, string][]).map(([key, label]) => (
-                          <div key={key}><label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 3 }}>{label}</label><div style={{ position: 'relative' }}><span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: '#94a3b8' }}>£</span><input type="number" min={0} step={1} style={{ width: '100%', padding: '5px 8px 5px 18px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 12, boxSizing: 'border-box' }} value={editingDemoTask.task[key] as number} onChange={e => setEditingDemoTask({ ...editingDemoTask, task: { ...editingDemoTask.task, [key]: Math.max(0, +e.target.value || 0) } })} /></div></div>
-                        ))}
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 24 }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}><input type="checkbox" checked={editingDemoTask.task.showInTakeoff} onChange={() => setEditingDemoTask({ ...editingDemoTask, task: { ...editingDemoTask.task, showInTakeoff: !editingDemoTask.task.showInTakeoff } })} />Show in Takeoff Tool</label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}><input type="checkbox" checked={editingDemoTask.task.showInAiScope} onChange={() => setEditingDemoTask({ ...editingDemoTask, task: { ...editingDemoTask.task, showInAiScope: !editingDemoTask.task.showInAiScope } })} />Show in AI Scope Writer</label>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '12px 22px', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
-                    <button onClick={() => setEditingDemoTask(null)} style={{ padding: '8px 18px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, background: '#fff', cursor: 'pointer' }}>Cancel</button>
-                    <button onClick={saveDemoTaskEdit} style={{ padding: '8px 22px', background: '#e74c3c', border: 'none', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Save Task</button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-
-        {/* ── Phase Task Rates (legacy localStorage) ── */}
-        {activeSection === 'phase-task-rates' && (
-          <>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
-              <div>
-                <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>📊 Phase Task Rates</h2>
-                <p style={{ margin: '4px 0 0', fontSize: 13, color: '#64748b' }}>Default tasks, UK 2024 rates, markup and visibility for each takeoff phase.</p>
-              </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <select value={phaseTaskFilter} onChange={e => { setPhaseTaskFilter(e.target.value); setExpandedPhaseSub(null) }} style={{ padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13 }}>
-                  {Array.from(new Set(ALL_PHASE_SUBPHASES.map(s => s.phase))).map(ph => <option key={ph} value={ph}>{ph}</option>)}
-                </select>
-                <button onClick={() => { if (!confirm(`Reset all ${phaseTaskFilter} tasks?`)) return; const defaults = ALL_PHASE_SUBPHASES.filter(s => s.phase === phaseTaskFilter).map(s => ({ ...s })); savePhaseTaskSubs(phaseTaskSubs.map(s => s.phase === phaseTaskFilter ? (defaults.find(d => d.id === s.id) ?? s) : s)) }} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 14px', border: '1px solid #e74c3c', borderRadius: 6, background: 'transparent', color: '#e74c3c', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
-                  <RotateCcw size={13} /> Reset Phase
-                </button>
-              </div>
-            </div>
-            {phaseTaskSubs.filter(s => s.phase === phaseTaskFilter).map(sub => (
-              <div key={sub.id} style={{ border: '1px solid #e2e8f0', borderRadius: 8, marginBottom: 10, overflow: 'hidden' }}>
-                <div onClick={() => setExpandedPhaseSub(expandedPhaseSub === sub.id ? null : sub.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: '#f8fafc', cursor: 'pointer', userSelect: 'none' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{sub.name}</span>
-                    <span style={{ fontSize: 11, background: '#e2e8f0', color: '#64748b', borderRadius: 99, padding: '1px 8px' }}>{sub.tasks.length} tasks</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <label style={{ fontSize: 12, color: '#64748b' }}>Markup:&nbsp;<input type="number" min={0} max={200} value={sub.markupPct} onClick={e => e.stopPropagation()} onChange={e => updatePhaseSubMarkup(sub.id, +e.target.value)} style={{ width: 55, padding: '2px 6px', border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 12 }} />%</label>
-                    <span style={{ fontSize: 18, color: '#94a3b8' }}>{expandedPhaseSub === sub.id ? '▲' : '▼'}</span>
-                  </div>
-                </div>
-                {expandedPhaseSub === sub.id && (
-                  <div style={{ padding: '0 16px 14px' }}>
-                    {sub.ukWarning && <div style={{ background: '#fffbe6', border: '1px solid #f59e0b', borderRadius: 6, padding: '6px 10px', marginTop: 10, fontSize: 11.5, color: '#92400e' }}>⚠️ {sub.ukWarning}</div>}
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginTop: 10 }}>
-                      <thead><tr style={{ color: '#64748b', borderBottom: '1px solid #e2e8f0' }}><th style={{ padding: '4px 6px', textAlign: 'left' }}>Task</th><th style={{ padding: '4px 6px', textAlign: 'center' }}>Unit</th><th style={{ padding: '4px 6px', textAlign: 'right' }}>Labour</th><th style={{ padding: '4px 6px', textAlign: 'right' }}>Materials</th><th style={{ padding: '4px 6px', textAlign: 'right' }}>Plant</th><th style={{ padding: '4px 6px', textAlign: 'right' }}>Sub</th><th style={{ padding: '4px 6px', textAlign: 'right' }}>Other</th><th style={{ padding: '4px 4px' }}></th></tr></thead>
-                      <tbody>
-                        {sub.tasks.map(task => (
-                          <tr key={task.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                            <td style={{ padding: '5px 6px' }}><div style={{ fontWeight: 600, color: '#1e293b' }}>{task.name}</div>{task.notes && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>{task.notes}</div>}</td>
-                            <td style={{ padding: '5px 6px', textAlign: 'center', color: '#64748b' }}>/{task.unit}</td>
-                            <td style={{ padding: '5px 6px', textAlign: 'right', color: task.labour > 0 ? '#f39c12' : '#cbd5e1' }}>£{task.labour.toFixed(0)}</td>
-                            <td style={{ padding: '5px 6px', textAlign: 'right', color: task.materials > 0 ? '#3498db' : '#cbd5e1' }}>£{task.materials.toFixed(0)}</td>
-                            <td style={{ padding: '5px 6px', textAlign: 'right', color: task.plant > 0 ? '#9b59b6' : '#cbd5e1' }}>£{task.plant.toFixed(0)}</td>
-                            <td style={{ padding: '5px 6px', textAlign: 'right', color: task.subcontractor > 0 ? '#e74c3c' : '#cbd5e1' }}>£{task.subcontractor.toFixed(0)}</td>
-                            <td style={{ padding: '5px 6px', textAlign: 'right', color: task.other > 0 ? '#95a5a6' : '#cbd5e1' }}>£{task.other.toFixed(0)}</td>
-                            <td style={{ padding: '5px 4px', textAlign: 'right' }}><button onClick={() => setEditingPhaseTask({ subphaseId: sub.id, task: { ...task } })} style={{ padding: '2px 8px', border: '1px solid #e2e8f0', borderRadius: 4, background: '#fff', fontSize: 11, cursor: 'pointer' }}>✏️</button></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <button onClick={() => addCustomPhaseTask(sub.id)} style={{ marginTop: 10, padding: '5px 14px', border: '1px solid #0277bd', borderRadius: 6, background: 'transparent', color: '#0277bd', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>+ Add Custom Task</button>
-                  </div>
-                )}
-              </div>
-            ))}
-            {editingPhaseTask && (
-              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 20px', overflowY: 'auto' }}>
-                <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 700, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 22px', borderBottom: '1px solid #e2e8f0' }}>
-                    <div style={{ fontWeight: 700, fontSize: 16 }}>✏️ Edit Phase Task</div>
-                    <button onClick={() => setEditingPhaseTask(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8' }}>×</button>
-                  </div>
-                  <div style={{ padding: '18px 22px', display: 'grid', gap: 12 }}>
-                    <div><label style={lbl}>Task Name</label><input style={inp} value={editingPhaseTask.task.name} onChange={e => setEditingPhaseTask({ ...editingPhaseTask, task: { ...editingPhaseTask.task, name: e.target.value } })} /></div>
-                    <div><label style={lbl}>Estimator Notes</label><textarea style={{ ...inp, resize: 'vertical', minHeight: 52 }} value={editingPhaseTask.task.notes ?? ''} onChange={e => setEditingPhaseTask({ ...editingPhaseTask, task: { ...editingPhaseTask.task, notes: e.target.value } })} /></div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <div><label style={lbl}>Unit</label><select style={inp} value={editingPhaseTask.task.unit} onChange={e => setEditingPhaseTask({ ...editingPhaseTask, task: { ...editingPhaseTask.task, unit: e.target.value as PhaseTaskUnit } })}>{(Object.entries(PHASE_TASK_UNIT_LABELS) as [PhaseTaskUnit, string][]).map(([u, l]) => <option key={u} value={u}>{l}</option>)}</select></div>
-                      <div><label style={lbl}>Default Qty</label><input type="number" min={0} step={0.5} style={inp} value={editingPhaseTask.task.defaultQty} onChange={e => setEditingPhaseTask({ ...editingPhaseTask, task: { ...editingPhaseTask.task, defaultQty: +e.target.value || 1 } })} /></div>
-                    </div>
-                    <div>
-                      <label style={{ ...lbl, marginBottom: 8 }}>Default Costs (per unit, ex-VAT)</label>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                        {([['labour', '🔨 Labour'], ['materials', '📦 Materials'], ['plant', '🚜 Plant'], ['subcontractor', '👷 Subcontractor'], ['other', '📋 Other']] as [keyof PhaseTask, string][]).map(([key, label]) => (
-                          <div key={key}><label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 3 }}>{label}</label><input type="number" min={0} step={1} style={{ width: '100%', padding: '5px 8px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 13 }} value={editingPhaseTask.task[key] as number ?? 0} onChange={e => setEditingPhaseTask({ ...editingPhaseTask, task: { ...editingPhaseTask.task, [key]: +e.target.value } })} /></div>
-                        ))}
-                      </div>
-                    </div>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}><input type="checkbox" checked={editingPhaseTask.task.visible !== false} onChange={() => setEditingPhaseTask({ ...editingPhaseTask, task: { ...editingPhaseTask.task, visible: !(editingPhaseTask.task.visible !== false) } })} />Show in Takeoff Tool</label>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '12px 22px', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
-                    <button onClick={() => { deletePhaseTask(editingPhaseTask.subphaseId, editingPhaseTask.task.id); setEditingPhaseTask(null) }} style={{ padding: '8px 14px', border: '1px solid #e74c3c', borderRadius: 6, fontSize: 13, background: '#fff', color: '#e74c3c', cursor: 'pointer' }}>🗑 Delete</button>
-                    <div style={{ display: 'flex', gap: 10 }}>
-                      <button onClick={() => setEditingPhaseTask(null)} style={{ padding: '8px 18px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, background: '#fff', cursor: 'pointer' }}>Cancel</button>
-                      <button onClick={savePhaseTaskEdit} style={{ padding: '8px 22px', background: '#0277bd', border: 'none', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Save Task</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </>
-        )}
       </div>
     </div>
   )
