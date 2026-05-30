@@ -37,7 +37,7 @@ import {
 // Prevents "floor tool still active while Demolition is selected" bugs.
 export const PHASE_DEFAULT_TOOL: Record<string, DrawingTool> = {
   'Site Setup & Demolition':     'line',
-  'Foundations':                  'polygon',
+  'Foundations':                  'line',
   'Structural Frame':             'line',
   'External Walls':               'line',
   'Roof':                         'polygon',
@@ -59,7 +59,7 @@ export const PHASE_DEFAULT_TOOL: Record<string, DrawingTool> = {
 // Human-readable measurement label per phase (shown in Active Draw Mode panel)
 const PHASE_MEASURE_LABEL: Record<string, string> = {
   'Site Setup & Demolition':     'Linear / Area',
-  'Foundations':                  'Area (m²)',
+  'Foundations':                  'Linear (m) → Volume (m³)',
   'Structural Frame':             'Linear (m)',
   'External Walls':               'Linear (m)',
   'Roof':                         'Area (m²)',
@@ -363,7 +363,7 @@ function recalcItemsForMpp(
     const el = elements.find(e => e.id === item.elementId)
     if (!el) return item
 
-    let length: number | undefined, area: number | undefined
+    let length: number | undefined, area: number | undefined, volume: number | undefined
     let qty = item.qty
     const unit = item.unit
 
@@ -374,6 +374,13 @@ function recalcItemsForMpp(
         area = +(length * item.wallHeight).toFixed(3)
         const openingsArea = (item.openings ?? []).reduce((s, o) => s + o.width * o.height, 0)
         qty = +(Math.max(0, area - openingsArea)).toFixed(3)
+      } else if (item.phase === 'Foundations' && item.foundationWidth != null) {
+        // Foundation line: qty = lm; area = footprint; volume = excavation/concrete
+        qty  = length
+        const _wM = (item.foundationWidth ?? 600) / 1000
+        const _dM = (item.foundationDepth ?? 1000) / 1000
+        area   = +(length * _wM).toFixed(3)
+        volume = +(length * _wM * _dM).toFixed(3)
       } else {
         qty = length
       }
@@ -405,7 +412,7 @@ function recalcItemsForMpp(
             : undefined)
       : undefined
 
-    return { ...item, qty: +(qty).toFixed(3), unit, length, area, perimeter }
+    return { ...item, qty: +(qty).toFixed(3), unit, length, area, perimeter, ...(volume !== undefined && { volume }) }
   })
 }
 
@@ -3276,6 +3283,22 @@ export default function TakeoffPage() {
       saveItemEdit(item)
     }
 
+    // Foundation line — auto-init dimensions on first open
+    if (item.phase === 'Foundations' && linkedEl?.type === 'line' && item.foundationWidth == null) {
+      const _len = item.length ?? 0
+      const _wM  = 0.6    // 600mm default
+      const _dM  = 1.0    // 1000mm default
+      item = {
+        ...item,
+        foundationWidth: 600, foundationDepth: 1000, foundationType: 'trench_fill',
+        unit:   'lm',
+        qty:    +_len.toFixed(3),
+        area:   +(_len * _wM).toFixed(3),
+        volume: +(_len * _wM * _dM).toFixed(3),
+      }
+      saveItemEdit(item)
+    }
+
     // Buildup (Floors, Foundations, rect/polygon External Walls, Plastering rect)
     const _phaseMakeups = PHASE_MAKEUPS[item.phase]
     const _isBuildupItem = !!item.floorMakeupId || (!!_phaseMakeups && !!linkedEl && linkedEl.type !== 'line')
@@ -3308,15 +3331,17 @@ export default function TakeoffPage() {
     }
 
     // ── 3. Phase flags ─────────────────────────────────────────────────────
-    const isLineBased = linkedEl?.type === 'line'
-    const isDemo      = item.phase === 'Site Setup & Demolition'
-    const isExtWall   = item.phase === 'External Walls'
-    const isIntWall   = item.phase === 'Internal Walls & Partitions' && isLineBased
-    const isPlaster   = item.phase === 'Plastering & Boarding'
-    const isBuildup   = _isBuildupItem
-    const isTaskPhase = _phaseHasTasks && !isBuildup && !isExtWall && !isPlaster && !isIntWall && !isDemo
-    const showWallLine = isLineBased && (isExtWall || isIntWall || isPlaster)
-    const hasOpenings  = (isExtWall || isIntWall || isPlaster) && isLineBased
+    const isLineBased      = linkedEl?.type === 'line'
+    const isDemo           = item.phase === 'Site Setup & Demolition'
+    const isExtWall        = item.phase === 'External Walls'
+    const isIntWall        = item.phase === 'Internal Walls & Partitions' && isLineBased
+    const isPlaster        = item.phase === 'Plastering & Boarding'
+    const isBuildup        = _isBuildupItem
+    const isFoundationLine = item.phase === 'Foundations' && isLineBased
+    const isTurf           = isBuildup && item.phase === 'External Works & Landscaping'
+    const isTaskPhase      = _phaseHasTasks && !isBuildup && !isExtWall && !isPlaster && !isIntWall && !isDemo && !isFoundationLine
+    const showWallLine     = isLineBased && (isExtWall || isIntWall || isPlaster)
+    const hasOpenings      = (isExtWall || isIntWall || isPlaster) && isLineBased
 
     // ── 4. Computed wall measurements ──────────────────────────────────────
     const wallLength     = item.length ?? 0
@@ -3332,6 +3357,36 @@ export default function TakeoffPage() {
       : (linkedEl?.type === 'rect'    ? rectPerimeter(linkedEl.points, project.calibration.mpp)
         : linkedEl?.type === 'polygon' ? polyPerimeter(linkedEl.points, project.calibration.mpp)
         : 0)
+
+    // ── 4b. Foundation line computed values ────────────────────────────────
+    const foundLength  = item.length ?? 0
+    const foundWidthMM = item.foundationWidth  ?? 600
+    const foundDepthMM = item.foundationDepth  ?? 1000
+    const foundWidthM  = foundWidthMM / 1000
+    const foundDepthM  = foundDepthMM / 1000
+    const foundArea    = +(foundLength * foundWidthM).toFixed(3)       // m² footprint
+    const foundVolume  = +(foundLength * foundWidthM * foundDepthM).toFixed(3) // m³ excavation/concrete
+
+    function recalcFoundationAndSave(patch: Partial<TakeoffItem>) {
+      const m   = { ...item, ...patch }
+      const len = foundLength
+      const wM  = (m.foundationWidth  ?? 600)  / 1000
+      const dM  = (m.foundationDepth  ?? 1000) / 1000
+      saveItemEdit({ ...m,
+        unit:   'lm',
+        qty:    +len.toFixed(3),
+        area:   +(len * wM).toFixed(3),
+        volume: +(len * wM * dM).toFixed(3),
+      })
+    }
+
+    const FOUNDATION_TYPE_OPTIONS = [
+      { value: 'trench_fill', label: 'Trench Fill' },
+      { value: 'strip',       label: 'Strip Footing' },
+      { value: 'pad_edge',    label: 'Pad / Edge Beam' },
+      { value: 'raft_edge',   label: 'Raft Edge Beam' },
+      { value: 'other',       label: 'Other' },
+    ]
 
     // ── 5. Wall helpers ────────────────────────────────────────────────────
     function recalcWallAndSave(patch: Partial<TakeoffItem>) {
@@ -3564,6 +3619,31 @@ export default function TakeoffPage() {
     // ── 13. JSX ────────────────────────────────────────────────────────────
     return (
       <div style={{ fontSize: 13, overflowY: 'auto', height: '100%' }}>
+
+        {/* ── Top metrics card (foundation line) ── */}
+        {isFoundationLine && (
+          <div style={{ padding: '10px 14px 0' }}>
+            <div style={{ background: darkMode ? 'rgba(0,0,0,0.25)' : 'rgba(0,0,0,0.04)', borderRadius: 8, padding: '12px 14px', border: `1px solid ${accent}44` }}>
+              <div style={{ fontSize: 10, color: accent, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
+                ⛏ Foundation
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 17, fontWeight: 700, color: accent, fontFamily: 'monospace', lineHeight: 1 }}>{fmt2(foundLength)}</div>
+                  <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 2 }}>m run</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--to-textb)', fontFamily: 'monospace', lineHeight: 1 }}>{fmt2(foundArea)}</div>
+                  <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 2 }}>m² footprint</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 17, fontWeight: 700, color: accent, fontFamily: 'monospace', lineHeight: 1 }}>{fmt2(foundVolume)}</div>
+                  <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 2 }}>m³ volume</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Top metrics card (wall phases) ── */}
         {showWallLine && (
@@ -3948,6 +4028,56 @@ export default function TakeoffPage() {
             )
           })()}
 
+          {/* Foundation line: type + width + depth */}
+          {isFoundationLine && (
+            <>
+              <div style={{ marginBottom: 10 }}>
+                <label style={labelStyle}>Foundation Type</label>
+                <select style={{ ...inputStyle, color: accent }}
+                  value={item.foundationType ?? 'trench_fill'}
+                  onChange={e => recalcFoundationAndSave({ foundationType: e.target.value })}>
+                  {FOUNDATION_TYPE_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+                <div>
+                  <label style={labelStyle}>Width (mm)</label>
+                  <input type="number" step={50} min={100} max={5000}
+                    style={{ ...inputStyle, color: accent }}
+                    value={foundWidthMM}
+                    onChange={e => recalcFoundationAndSave({ foundationWidth: Math.max(50, +e.target.value || 600) })}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>Depth (mm)</label>
+                  <input type="number" step={50} min={100} max={5000}
+                    style={{ ...inputStyle, color: accent }}
+                    value={foundDepthMM}
+                    onChange={e => recalcFoundationAndSave({ foundationDepth: Math.max(50, +e.target.value || 1000) })}
+                  />
+                </div>
+              </div>
+              {/* Calculated summary */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 6 }}>
+                {([
+                  { label: 'Length',    val: `${fmt2(foundLength)} m`    },
+                  { label: 'Footprint', val: `${fmt2(foundArea)} m²`     },
+                  { label: 'Volume',    val: `${fmt2(foundVolume)} m³`   },
+                ] as { label: string; val: string }[]).map(({ label, val }) => (
+                  <div key={label} style={{ textAlign: 'center', background: darkMode ? '#0d1a0d' : '#f8fafc', borderRadius: 5, padding: '5px 3px', border: `1px solid ${accent}33` }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: accent, fontFamily: 'monospace' }}>{val}</div>
+                    <div style={{ fontSize: 9, color: 'var(--to-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 2 }}>
+                {fmt2(foundLength)} m × {foundWidthMM}mm wide × {foundDepthMM}mm deep
+              </div>
+            </>
+          )}
+
           {/* Buildup (Floors, Foundations): makeup type + layer schedule */}
           {isBuildup && (() => {
             const _bm = _phaseMakeups ?? FLOOR_MAKEUPS
@@ -4227,8 +4357,25 @@ export default function TakeoffPage() {
             </>
           )}
 
+          {/* Foundation line outputs */}
+          {isFoundationLine && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 6 }}>
+              {([
+                { label: 'Length (lm)',   val: foundLength,  unit: 'm',  color: accent             },
+                { label: 'Footprint',     val: foundArea,    unit: 'm²', color: 'var(--to-textb)'  },
+                { label: 'Excavation vol',val: foundVolume,  unit: 'm³', color: accent             },
+              ] as { label: string; val: number; unit: string; color: string }[]).map(({ label, val, unit, color }) => (
+                <div key={label} style={{ textAlign: 'center', background: darkMode ? '#0d1a0d' : '#f8fafc', borderRadius: 6, padding: '7px 4px', border: `1px solid ${accent}33` }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color, fontFamily: 'monospace', lineHeight: 1 }}>{fmt2(val)}</div>
+                  <div style={{ fontSize: 9, color: 'var(--to-muted)', marginTop: 2 }}>{unit}</div>
+                  <div style={{ fontSize: 9, color: 'var(--to-dim)', letterSpacing: 0.3 }}>{label}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* All other phases: no automated output */}
-          {!isIntWall && !isDemo && !isTaskPhase && (
+          {!isIntWall && !isDemo && !isTaskPhase && !isFoundationLine && (
             <div style={{ fontSize: 11, color: 'var(--to-muted)', fontStyle: 'italic', textAlign: 'center', padding: '6px 0' }}>
               {isBuildup || isExtWall || isPlaster
                 ? 'Layer quantities shown in Construction above'

@@ -206,6 +206,11 @@ export interface TakeoffItem {
   demoSubcontractor?:  number
   demoOther?:          number
 
+  // Foundation line-specific (Foundations phase + line element)
+  foundationWidth?: number    // mm — trench/footing width (default 600)
+  foundationDepth?: number    // mm — excavation/concrete depth (default 1000)
+  foundationType?: string     // 'trench_fill' | 'strip' | 'pad_edge' | 'raft_edge' | 'other'
+
   // ── Back Office labour lines (available on every phase/tool) ─────────────────
   // Each line is one trade × rate-type × qty × operatives selection.
   // Stored as a snapshot so the line still shows if the trade is later deleted.
