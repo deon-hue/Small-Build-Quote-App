@@ -206,7 +206,7 @@ export default function LabourCostBuilder({ labourLines, trades, onChange }: Pro
 
               {/* Operatives */}
               <div>
-                <label style={lbl}>Ops</label>
+                <label style={lbl}>Workers</label>
                 <input type="number" min={1} max={99} step={1} style={inp}
                   value={line.operatives}
                   onChange={e => updateLine(line.id, { operatives: Math.max(1, +e.target.value || 1) })} />
@@ -239,7 +239,7 @@ export default function LabourCostBuilder({ labourLines, trades, onChange }: Pro
               <div style={{ fontSize: 10, color: 'var(--to-muted)', paddingTop: 2 }}>
                 {trade
                   ? `£${line.rate.toFixed(2)} / ${line.rateType === 'hourly' ? 'hr' : line.rateType === 'half_day' ? 'half-day' : 'day'}
-                     × ${line.quantity} × ${line.operatives} op${line.operatives > 1 ? 's' : ''}`
+                     × ${line.quantity} × ${line.operatives} worker${line.operatives > 1 ? 's' : ''}`
                   : `£${line.rate.toFixed(2)} (trade deleted)`
                 }
                 {trade && trade.markup_pct > 0 && (
