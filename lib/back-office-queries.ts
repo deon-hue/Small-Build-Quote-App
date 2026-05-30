@@ -6,8 +6,9 @@ import type {
   BOLabourTrade, BOPhase, BOSubPhase, BOTask,
   BOProduct, BOPlantItem, BOTakeoffTool, BOTakeoffSubtype,
   BOToolTaskMapping, BOFormulaRule, BOAIScopeMapping,
+  BOWallType, BOWallLayer,
 } from './back-office-types'
-import { TAKEOFF_PHASES } from './takeoff-types'
+import { TAKEOFF_PHASES, WALL_MAKEUPS, type FloorMakeup, type LayerQtyType } from './takeoff-types'
 import { CANONICAL_PHASE_IDS } from './product-config'
 import { ALL_PHASE_SUBPHASES } from './phase-tasks'
 import { DEFAULT_DEMO_SUBPHASES } from './demolition-data'
@@ -195,6 +196,77 @@ export async function deleteAIScopeMapping(sb: SupabaseClient, id: string): Prom
 
 // ── Seed Defaults ─────────────────────────────────────────────────────────────
 // Called on first Back Office visit. Inserts built-in defaults if tables are empty.
+
+// ── Wall Types ────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch all wall types with their layers for a user.
+ * Returns types ordered by display_order, layers ordered within each type.
+ */
+export async function fetchWallTypesWithLayers(sb: SupabaseClient, userId: string): Promise<BOWallType[]> {
+  const [{ data: types }, { data: layers }] = await Promise.all([
+    sb.from('bo_wall_types').select('*').eq('user_id', userId).eq('active', true).order('display_order'),
+    sb.from('bo_wall_layers').select('*').eq('user_id', userId).order('display_order'),
+  ])
+  const layerMap = new Map<string, BOWallLayer[]>()
+  ;(layers ?? []).forEach(l => {
+    const arr = layerMap.get(l.wall_type_id) ?? []
+    arr.push(l as BOWallLayer)
+    layerMap.set(l.wall_type_id, arr)
+  })
+  return (types ?? []).map(t => ({ ...t, layers: layerMap.get(t.id) ?? [] } as BOWallType))
+}
+
+export async function upsertWallType(sb: SupabaseClient, wt: Partial<BOWallType> & { user_id: string }): Promise<BOWallType | null> {
+  const { layers: _layers, ...row } = wt as BOWallType
+  const { data } = await sb.from('bo_wall_types').upsert({ ...row, updated_at: new Date().toISOString() }).select().single()
+  return data
+}
+
+export async function deleteWallType(sb: SupabaseClient, id: string): Promise<void> {
+  await sb.from('bo_wall_types').delete().eq('id', id)
+}
+
+export async function upsertWallLayer(sb: SupabaseClient, layer: Partial<BOWallLayer> & { user_id: string; wall_type_id: string }): Promise<BOWallLayer | null> {
+  const { data } = await sb.from('bo_wall_layers').upsert(layer).select().single()
+  return data
+}
+
+export async function deleteWallLayer(sb: SupabaseClient, id: string): Promise<void> {
+  await sb.from('bo_wall_layers').delete().eq('id', id)
+}
+
+/**
+ * Convert DB wall types (BOWallType[]) to FloorMakeup[] so the takeoff tool
+ * and quote import can use them with zero changes to their existing logic.
+ *
+ * ID strategy: FloorMakeup.id = canonical_id (if set) or UUID.
+ *   - canonical_id keeps backward compat with existing project data that
+ *     stored static string IDs like 'cav_wall_partial'.
+ *   - Custom (user-added) types have no canonical_id so their UUID is used.
+ */
+export function wallTypesToMakeups(types: BOWallType[]): FloorMakeup[] {
+  return types.map(t => ({
+    id:                t.canonical_id ?? t.id,
+    name:              t.name,
+    clientDescription: t.client_description,
+    labourHrsPerM2:    t.labour_hrs_per_m2,
+    wastePercent:      t.waste_percent,
+    layers: (t.layers ?? []).map(l => ({
+      id:             l.canonical_id ?? l.id,
+      name:           l.name,
+      thickness:      l.thickness_mm,
+      unit:           l.unit as FloorMakeup['layers'][0]['unit'],
+      qtyType:        l.qty_type as LayerQtyType,
+      spacing:        l.spacing_mm ?? undefined,
+      description:    l.description,
+      category:       l.category as 'labour' | 'materials' | 'plant' | 'other',
+      defaultEnabled: l.default_enabled,
+    })),
+  }))
+}
+
+// ── Seed Defaults ─────────────────────────────────────────────────────────────
 
 const DEFAULT_PHASES = [
   'Preliminaries', 'Demolition', 'Groundworks', 'Foundations', 'Drainage',
@@ -720,6 +792,94 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
       await sb.from('bo_tasks')
         .update({ name: t.name, unit: t.unit, updated_at: new Date().toISOString() })
         .eq('id', ex.id)
+    }
+  }
+
+  // ── 4. Wall Types ─────────────────────────────────────────────────────────────
+  // Sync WALL_MAKEUPS from takeoff-types.ts → bo_wall_types + bo_wall_layers.
+  // Rules: insert new types/layers; update names of existing ones; preserve nothing
+  // (there are no customer-set rate fields on wall types — they're structural specs).
+
+  const { data: dbWallTypes } = await sb
+    .from('bo_wall_types')
+    .select('id, canonical_id, name')
+    .eq('user_id', userId)
+
+  const wallTypeByCanon = new Map(
+    (dbWallTypes ?? []).filter(w => w.canonical_id).map(w => [w.canonical_id as string, w as { id: string; name: string }])
+  )
+
+  for (let i = 0; i < WALL_MAKEUPS.length; i++) {
+    const wm = WALL_MAKEUPS[i]
+    const existing = wallTypeByCanon.get(wm.id)
+
+    let wallTypeDbId: string
+
+    if (existing) {
+      // Update name if it changed
+      if (existing.name !== wm.name) {
+        await sb.from('bo_wall_types').update({
+          name: wm.name,
+          client_description: wm.clientDescription,
+          labour_hrs_per_m2: wm.labourHrsPerM2,
+          waste_percent: wm.wastePercent,
+          display_order: i,
+          updated_at: new Date().toISOString(),
+        }).eq('id', existing.id)
+      }
+      wallTypeDbId = existing.id
+    } else {
+      // Insert new wall type
+      const { data: inserted } = await sb.from('bo_wall_types').insert({
+        user_id: userId,
+        canonical_id: wm.id,
+        name: wm.name,
+        client_description: wm.clientDescription,
+        labour_hrs_per_m2: wm.labourHrsPerM2,
+        waste_percent: wm.wastePercent,
+        display_order: i,
+        active: true,
+      }).select('id').single()
+      if (!inserted?.id) continue
+      wallTypeDbId = inserted.id
+    }
+
+    // Sync layers for this wall type
+    const { data: dbLayers } = await sb
+      .from('bo_wall_layers')
+      .select('id, canonical_id, name')
+      .eq('wall_type_id', wallTypeDbId)
+
+    const layerByCanon = new Map(
+      (dbLayers ?? []).filter(l => l.canonical_id).map(l => [l.canonical_id as string, l as { id: string; name: string }])
+    )
+
+    const newLayers = wm.layers.filter(l => !layerByCanon.has(l.id))
+    if (newLayers.length > 0) {
+      await sb.from('bo_wall_layers').insert(
+        newLayers.map((l, j) => ({
+          user_id:         userId,
+          wall_type_id:    wallTypeDbId,
+          canonical_id:    l.id,
+          name:            l.name,
+          thickness_mm:    l.thickness,
+          unit:            l.unit,
+          qty_type:        l.qtyType,
+          spacing_mm:      l.spacing ?? null,
+          description:     l.description,
+          category:        l.category,
+          default_enabled: l.defaultEnabled,
+          display_order:   (dbLayers?.length ?? 0) + j,
+        }))
+      )
+    }
+
+    // Update layer names that changed
+    for (const l of wm.layers.filter(l => layerByCanon.has(l.id))) {
+      const exL = layerByCanon.get(l.id)!
+      if (exL.name !== l.name) {
+        await sb.from('bo_wall_layers').update({ name: l.name, description: l.description }).eq('id', exL.id)
+      }
     }
   }
 }

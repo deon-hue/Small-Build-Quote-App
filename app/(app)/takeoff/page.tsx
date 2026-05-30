@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback, ChangeEvent } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { makeDebouncedSave, loadTakeoffFromSupabase } from '@/lib/takeoff-sync'
+import { fetchWallTypesWithLayers, wallTypesToMakeups } from '@/lib/back-office-queries'
 import {
   TAKEOFF_PHASES, PHASE_COLORS, DEFAULT_MPP, SCALE_PRESETS,
   FLOOR_MAKEUPS, WALL_MAKEUPS, PLASTER_MAKEUPS, PHASE_MAKEUPS, calcLayerQty,
@@ -474,9 +475,15 @@ export default function TakeoffPage() {
   const [floorDrawMode, setFloorDrawMode] = useState<'rect' | 'polygon'>('rect')
   const [activeFloorMakeup, setActiveFloorMakeup] = useState<string>(FLOOR_MAKEUPS[1].id) // default: concrete slab
 
-  // Custom wall types (loaded from localStorage on mount)
+  // Custom wall types (localStorage — fallback when DB not available)
   const [customWallTypes, setCustomWallTypes] = useState<FloorMakeup[]>([])
   useEffect(() => { setCustomWallTypes(loadCustomWallTypes()) }, [])
+
+  // DB wall types — master source of truth from Back Office (Supabase)
+  const [dbWallTypes, setDbWallTypes] = useState<FloorMakeup[]>([])
+
+  // Computed: DB takes precedence; localStorage fallback when DB not loaded yet
+  const allWallMakeups = dbWallTypes.length > 0 ? dbWallTypes : [...WALL_MAKEUPS, ...customWallTypes]
 
   // Custom demolition subphases (loaded from localStorage on mount)
   const [customDemoSubphases, setCustomDemoSubphases] = useState<DemoSubphase[]>([])
@@ -536,6 +543,12 @@ export default function TakeoffPage() {
       const uid = data.user?.id ?? null
       setUserId(uid)
       if (!uid) return
+
+      // Load DB wall types (Back Office master source of truth)
+      fetchWallTypesWithLayers(sb, uid).then(types => {
+        const makeups = wallTypesToMakeups(types)
+        if (makeups.length > 0) setDbWallTypes(makeups)
+      })
 
       // Async cloud sync — merge if the Supabase record has a newer updatedAt
       const local = loadProject()
@@ -1668,7 +1681,7 @@ export default function TakeoffPage() {
 
   // ── External Wall properties panel ───────────────────────────────────────────
   function renderWallProperties(item: TakeoffItem) {
-    const allWallTypes: FloorMakeup[] = [...WALL_MAKEUPS, ...customWallTypes]
+    const allWallTypes: FloorMakeup[] = allWallMakeups
     const makeup = allWallTypes.find(m => m.id === item.floorMakeupId)
     const accentColor = '#16a085'   // External Walls teal
     const linkEl = item.elementId ? project.elements.find(e => e.id === item.elementId) : null
@@ -3197,7 +3210,7 @@ export default function TakeoffPage() {
 
     // External Walls
     if (item.phase === 'External Walls') {
-      const _allWT = [...WALL_MAKEUPS, ...customWallTypes]
+      const _allWT = allWallMakeups
       if (!item.floorMakeupId) {
         item = { ...item, floorMakeupId: _allWT[0].id, spec: _allWT[0].clientDescription }
         saveItemEdit(item)
@@ -3851,7 +3864,7 @@ export default function TakeoffPage() {
 
           {/* Ext Wall: build-up type + layer schedule (inline — layers ARE the build-up) */}
           {isExtWall && (() => {
-            const _allWT   = [...WALL_MAKEUPS, ...customWallTypes]
+            const _allWT   = allWallMakeups
             const _wMakeup = _allWT.find(m => m.id === item.floorMakeupId)
             return (
               <div style={{ marginBottom: 10 }}>
@@ -3861,8 +3874,7 @@ export default function TakeoffPage() {
                     const nm = _allWT.find(m => m.id === e.target.value)
                     saveItemEdit({ ...item, floorMakeupId: e.target.value, spec: nm?.clientDescription ?? item.spec, floorLayerToggles: {}, floorLayerThicknesses: {} })
                   }}>
-                  <optgroup label="Built-in">{WALL_MAKEUPS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</optgroup>
-                  {customWallTypes.length > 0 && <optgroup label="Custom">{customWallTypes.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</optgroup>}
+                  {_allWT.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
                 {_wMakeup && <div style={{ marginTop: 8 }}>{renderLayerSchedule(_wMakeup, netArea, wallPerimeter, layerToggles, layerThicknesses, item, accent)}</div>}
               </div>

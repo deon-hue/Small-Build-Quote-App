@@ -16,6 +16,8 @@ import { DEFAULT_DEMO_SUBPHASES, calcDemoSellingPrice, DEMO_UNIT_LABELS, type De
 import { ALL_PHASE_SUBPHASES, calcPhaseTaskSellingPrice } from '@/lib/phase-tasks'
 import { sumByCategory } from '@/lib/material-recipes'
 import { createClient } from '@/lib/supabase/client'
+import { fetchWallTypesWithLayers, wallTypesToMakeups } from '@/lib/back-office-queries'
+import type { FloorMakeup } from '@/lib/takeoff-types'
 
 let phaseCounter = 0
 let itemCounter = 0
@@ -107,6 +109,18 @@ export default function NewQuotePage() {
   const [collapsedPhases, setCollapsedPhases] = useState<Set<number>>(new Set())
   const photoInputRef = useRef<HTMLInputElement>(null)
   const takeoffInputRef = useRef<HTMLInputElement>(null)
+
+  // DB wall types — loaded from Back Office on mount for quote import lookups
+  const [dbWallTypes, setDbWallTypes] = useState<FloorMakeup[]>([])
+  useEffect(() => {
+    const sb = createClient()
+    sb.auth.getUser().then(async ({ data }) => {
+      if (!data.user) return
+      const types = await fetchWallTypesWithLayers(sb, data.user.id)
+      const makeups = wallTypesToMakeups(types)
+      if (makeups.length > 0) setDbWallTypes(makeups)
+    })
+  }, [])
 
   // ── Phase collapse helpers ────────────────────────────────────────────────
   function togglePhase(id: number) {
@@ -414,7 +428,8 @@ export default function NewQuotePage() {
 
           if (item.floorMakeupId) {
             // ── Build-up item: expand each layer into its own sub-phase ──
-            const makeup = ALL_MAKEUPS.find(m => m.id === item.floorMakeupId)
+            // DB wall types take precedence (Back Office master); ALL_MAKEUPS is the static fallback
+            const makeup = dbWallTypes.find(m => m.id === item.floorMakeupId) ?? ALL_MAKEUPS.find(m => m.id === item.floorMakeupId)
             if (makeup) {
               // For wall items: area = gross, qty = net (after openings); use net for layers
               const grossArea  = item.area ?? item.qty ?? 0

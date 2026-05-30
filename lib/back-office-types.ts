@@ -163,6 +163,57 @@ export interface BOAIScopeMapping {
   task?: BOTask
 }
 
+// ── Wall Types (bo_wall_types + bo_wall_layers) ───────────────────────────────
+
+export interface BOWallType {
+  id:                 string
+  user_id:            string
+  canonical_id:       string | null   // original string key for built-ins (e.g. 'cav_wall_partial')
+  name:               string
+  client_description: string
+  labour_hrs_per_m2:  number
+  waste_percent:      number
+  display_order:      number
+  active:             boolean
+  created_at?:        string
+  updated_at?:        string
+  // Joined — populated by fetchWallTypesWithLayers
+  layers?:            BOWallLayer[]
+}
+
+export interface BOWallLayer {
+  id:              string
+  user_id:         string
+  wall_type_id:    string
+  canonical_id:    string | null      // original string key for built-in layers
+  name:            string
+  thickness_mm:    number
+  unit:            string             // 'm²' | 'lm' | 'm³' | 'nr'
+  qty_type:        string             // LayerQtyType
+  spacing_mm:      number | null
+  description:     string
+  category:        string             // 'labour' | 'materials' | 'plant' | 'other'
+  default_enabled: boolean
+  display_order:   number
+  created_at?:     string
+}
+
+export const WALL_LAYER_CATEGORIES = [
+  { value: 'labour',    label: 'Labour' },
+  { value: 'materials', label: 'Materials' },
+  { value: 'plant',     label: 'Plant' },
+  { value: 'other',     label: 'Other' },
+] as const
+
+export const WALL_LAYER_QTY_TYPES = [
+  { value: 'area',      label: 'Area (m²)' },
+  { value: 'volume',    label: 'Volume (m³)' },
+  { value: 'perimeter', label: 'Perimeter (lm)' },
+  { value: 'count',     label: 'Count (nr)' },
+] as const
+
+export const WALL_LAYER_UNITS = ['m²', 'lm', 'm³', 'nr'] as const
+
 // ── Seed data types ──────────────────────────────────────────────────────────
 
 export const TASK_UNITS = [
