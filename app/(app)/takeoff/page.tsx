@@ -4384,13 +4384,32 @@ export default function TakeoffPage() {
             </div>
           )}
 
-          {/* All other phases: no automated output */}
-          {!isIntWall && !isDemo && !isTaskPhase && !isFoundationLine && (
-            <div style={{ fontSize: 11, color: 'var(--to-muted)', fontStyle: 'italic', textAlign: 'center', padding: '6px 0' }}>
-              {isBuildup || isExtWall || isPlaster
-                ? 'Layer quantities shown in Construction above'
-                : 'No automated outputs for this phase'}
-            </div>
+          {/* Manual cost breakdown — for foundation lines, buildup phases and all
+              other phases that don't have an automated task/demo cost breakdown.
+              Stored in taskMaterials/taskPlant/taskSubcontractor/taskOther so
+              they export to the quote the same way task-phase items do. */}
+          {!isIntWall && !isDemo && !isTaskPhase && (
+            <>
+              {(isBuildup || isExtWall || isPlaster) && (
+                <div style={{ fontSize: 10, color: 'var(--to-muted)', fontStyle: 'italic', marginBottom: 8 }}>
+                  Layer quantities shown in Construction above. Add costs below:
+                </div>
+              )}
+              {([
+                { key: 'taskMaterials'     as const, label: '📦 Materials',     color: CAT_COLOR.materials      },
+                { key: 'taskPlant'         as const, label: '🚜 Plant',         color: CAT_COLOR.plant          },
+                { key: 'taskSubcontractor' as const, label: '👷 Subcontractor', color: CAT_COLOR.subcontractors },
+                { key: 'taskOther'         as const, label: '📋 Other',         color: CAT_COLOR.other          },
+              ] as { key: keyof TakeoffItem; label: string; color: string }[]).map(({ key, label, color }) => (
+                <div key={key as string} style={{ display: 'grid', gridTemplateColumns: '120px 1fr', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                  <span style={{ fontSize: 12, color, fontWeight: 600 }}>{label}</span>
+                  <input type="number" step="any" min={0} style={inputStyle}
+                    value={(item[key] as number | undefined) ?? 0}
+                    onChange={e => saveItemEdit({ ...item, [key]: +e.target.value })}
+                  />
+                </div>
+              ))}
+            </>
           )}
         </div>
 
