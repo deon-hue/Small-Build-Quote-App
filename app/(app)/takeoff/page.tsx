@@ -1681,15 +1681,9 @@ export default function TakeoffPage() {
             onChange={e => saveItemEdit({ ...item, spec: e.target.value })} />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
-          <div>
-            <label style={labelStyle}>Drawing Ref</label>
-            <input style={inputStyle} value={item.drawingRef ?? ''} onChange={e => saveItemEdit({ ...item, drawingRef: e.target.value })} />
-          </div>
-          <div>
-            <label style={labelStyle}>Sub-Phase</label>
-            <input style={inputStyle} value={item.subPhase ?? ''} onChange={e => saveItemEdit({ ...item, subPhase: e.target.value })} />
-          </div>
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle}>Drawing Ref</label>
+          <input style={inputStyle} value={item.drawingRef ?? ''} onChange={e => saveItemEdit({ ...item, drawingRef: e.target.value })} />
         </div>
 
         <div style={{ marginBottom: 12 }}>
@@ -2073,17 +2067,10 @@ export default function TakeoffPage() {
         </div>
 
         {/* ── Drawing Ref ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
-          <div>
-            <label style={labelStyle}>Drawing Ref</label>
-            <input style={inputStyle} value={item.drawingRef ?? ''}
-              onChange={e => saveItemEdit({ ...item, drawingRef: e.target.value })} />
-          </div>
-          <div>
-            <label style={labelStyle}>Sub-Phase</label>
-            <input style={inputStyle} value={item.subPhase ?? ''}
-              onChange={e => saveItemEdit({ ...item, subPhase: e.target.value })} />
-          </div>
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle}>Drawing Ref</label>
+          <input style={inputStyle} value={item.drawingRef ?? ''}
+            onChange={e => saveItemEdit({ ...item, drawingRef: e.target.value })} />
         </div>
 
         {/* ── Building Regs Notes ── */}
@@ -2408,16 +2395,10 @@ export default function TakeoffPage() {
             onChange={e => saveItemEdit({ ...item, spec: e.target.value })} />
         </div>
 
-        {/* ── Drawing ref / Sub-Phase ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
-          <div>
-            <label style={labelStyle}>Drawing Ref</label>
-            <input style={inputStyle} value={item.drawingRef ?? ''} onChange={e => saveItemEdit({ ...item, drawingRef: e.target.value })} />
-          </div>
-          <div>
-            <label style={labelStyle}>Sub-Phase</label>
-            <input style={inputStyle} value={item.subPhase ?? ''} onChange={e => saveItemEdit({ ...item, subPhase: e.target.value })} />
-          </div>
+        {/* ── Drawing Ref ── */}
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle}>Drawing Ref</label>
+          <input style={inputStyle} value={item.drawingRef ?? ''} onChange={e => saveItemEdit({ ...item, drawingRef: e.target.value })} />
         </div>
 
         <div style={{ marginBottom: 12 }}>
@@ -2633,7 +2614,6 @@ export default function TakeoffPage() {
           />
         </div>
 
-        {/* Drawing Ref / Sub-Phase */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
           <div>
             <label style={labelStyle2}>Drawing Ref</label>
@@ -2882,18 +2862,11 @@ export default function TakeoffPage() {
           />
         </div>
 
-        {/* ── Drawing ref ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
-          <div>
-            <label style={labelStyle}>Drawing Ref</label>
-            <input style={inputStyle} value={item.drawingRef ?? ''}
-              onChange={e => saveItemEdit({ ...item, drawingRef: e.target.value })} />
-          </div>
-          <div>
-            <label style={labelStyle}>Sub-Phase</label>
-            <input style={inputStyle} value={item.subPhase ?? ''}
-              onChange={e => saveItemEdit({ ...item, subPhase: e.target.value })} />
-          </div>
+        {/* ── Drawing Ref ── */}
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle}>Drawing Ref</label>
+          <input style={inputStyle} value={item.drawingRef ?? ''}
+            onChange={e => saveItemEdit({ ...item, drawingRef: e.target.value })} />
         </div>
 
         {/* ── Building Regs Notes ── */}
@@ -3670,17 +3643,10 @@ export default function TakeoffPage() {
             </select>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
-            <div>
-              <label style={labelStyle}>Sub-Phase</label>
-              <input style={inputStyle} value={item.subPhase ?? ''}
-                onChange={e => saveItemEdit({ ...item, subPhase: e.target.value })} />
-            </div>
-            <div>
-              <label style={labelStyle}>Room Name</label>
-              <input style={inputStyle} placeholder="e.g. Kitchen" value={item.roomName ?? ''}
-                onChange={e => saveItemEdit({ ...item, roomName: e.target.value })} />
-            </div>
+          <div style={{ marginBottom: 10 }}>
+            <label style={labelStyle}>Room Name</label>
+            <input style={inputStyle} placeholder="e.g. Kitchen" value={item.roomName ?? ''}
+              onChange={e => saveItemEdit({ ...item, roomName: e.target.value })} />
           </div>
 
           {linkedEl && (
