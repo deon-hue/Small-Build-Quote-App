@@ -74,7 +74,12 @@ export async function fetchTasks(sb: SupabaseClient, userId: string, phaseId?: s
 }
 
 export async function upsertTask(sb: SupabaseClient, task: Partial<BOTask> & { user_id: string }): Promise<BOTask | null> {
-  const { data } = await sb.from('bo_tasks').upsert({ ...task, updated_at: new Date().toISOString() }).select().single()
+  // Strip empty/falsy id so Supabase generates a UUID for new rows.
+  // openNewTask sets id:'' on the stub task; sending that to Supabase causes a
+  // "invalid input syntax for type uuid" error and silently returns null.
+  const { id, ...rest } = task as BOTask
+  const row = id ? { id, ...rest } : rest
+  const { data } = await sb.from('bo_tasks').upsert({ ...row, updated_at: new Date().toISOString() }).select().single()
   return data
 }
 
