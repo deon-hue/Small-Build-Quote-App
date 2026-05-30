@@ -3853,8 +3853,49 @@ export default function TakeoffPage() {
             </>
           )}
 
+          {/* Foundation line: length (canvas) + editable width/depth */}
+          {isFoundationLine && (
+            <>
+              {/* Length — from canvas, read-only */}
+              <div style={{ background: darkMode ? '#0d1a0d' : '#f0f4f0', borderRadius: 6, padding: '8px 10px', marginBottom: 10, fontSize: 12, border: '1px solid var(--to-border)' }}>
+                <div style={{ fontSize: 10, color: 'var(--to-muted)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>From Canvas</div>
+                <div style={dimRow}><span>Length</span><span style={{ fontWeight: 700, color: accent }}>{fmtM(foundLength)}</span></div>
+              </div>
+              {/* Width + Depth — editable, drive the calculations */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+                <div>
+                  <label style={labelStyle}>Width (mm)</label>
+                  <input type="number" step={50} min={100} max={5000}
+                    style={{ ...inputStyle, color: accent, fontWeight: 600 }}
+                    value={foundWidthMM}
+                    onChange={e => recalcFoundationAndSave({ foundationWidth: Math.max(50, +e.target.value || 600) })}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>Depth (mm)</label>
+                  <input type="number" step={50} min={100} max={5000}
+                    style={{ ...inputStyle, color: accent, fontWeight: 600 }}
+                    value={foundDepthMM}
+                    onChange={e => recalcFoundationAndSave({ foundationDepth: Math.max(50, +e.target.value || 1000) })}
+                  />
+                </div>
+              </div>
+              {/* Calculated results */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div>
+                  <label style={labelStyle}>Footprint area</label>
+                  <div style={{ ...inputStyle, fontFamily: 'monospace', color: 'var(--to-textb)', fontWeight: 700 }}>{fmt2(foundArea)} m²</div>
+                </div>
+                <div>
+                  <label style={labelStyle}>Excavation volume</label>
+                  <div style={{ ...inputStyle, fontFamily: 'monospace', color: accent, fontWeight: 700 }}>{fmt2(foundVolume)} m³</div>
+                </div>
+              </div>
+            </>
+          )}
+
           {/* Non-wall: canvas measurements + qty/unit */}
-          {!showWallLine && !isBuildup && (
+          {!showWallLine && !isBuildup && !isFoundationLine && (
             <>
               {(item.length != null || item.area != null || item.volume != null) && (
                 <div style={{ background: darkMode ? '#0d1a0d' : '#f0f4f0', borderRadius: 6, padding: '8px 10px', marginBottom: 10, fontSize: 12, border: '1px solid var(--to-border)' }}>
@@ -4028,10 +4069,10 @@ export default function TakeoffPage() {
             )
           })()}
 
-          {/* Foundation line: type + width + depth */}
+          {/* Foundation line: type only (width/depth are in Measurement above) */}
           {isFoundationLine && (
             <>
-              <div style={{ marginBottom: 10 }}>
+              <div style={{ marginBottom: 8 }}>
                 <label style={labelStyle}>Foundation Type</label>
                 <select style={{ ...inputStyle, color: accent }}
                   value={item.foundationType ?? 'trench_fill'}
@@ -4041,39 +4082,8 @@ export default function TakeoffPage() {
                   ))}
                 </select>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
-                <div>
-                  <label style={labelStyle}>Width (mm)</label>
-                  <input type="number" step={50} min={100} max={5000}
-                    style={{ ...inputStyle, color: accent }}
-                    value={foundWidthMM}
-                    onChange={e => recalcFoundationAndSave({ foundationWidth: Math.max(50, +e.target.value || 600) })}
-                  />
-                </div>
-                <div>
-                  <label style={labelStyle}>Depth (mm)</label>
-                  <input type="number" step={50} min={100} max={5000}
-                    style={{ ...inputStyle, color: accent }}
-                    value={foundDepthMM}
-                    onChange={e => recalcFoundationAndSave({ foundationDepth: Math.max(50, +e.target.value || 1000) })}
-                  />
-                </div>
-              </div>
-              {/* Calculated summary */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 6 }}>
-                {([
-                  { label: 'Length',    val: `${fmt2(foundLength)} m`    },
-                  { label: 'Footprint', val: `${fmt2(foundArea)} m²`     },
-                  { label: 'Volume',    val: `${fmt2(foundVolume)} m³`   },
-                ] as { label: string; val: string }[]).map(({ label, val }) => (
-                  <div key={label} style={{ textAlign: 'center', background: darkMode ? '#0d1a0d' : '#f8fafc', borderRadius: 5, padding: '5px 3px', border: `1px solid ${accent}33` }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: accent, fontFamily: 'monospace' }}>{val}</div>
-                    <div style={{ fontSize: 9, color: 'var(--to-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 2 }}>
-                {fmt2(foundLength)} m × {foundWidthMM}mm wide × {foundDepthMM}mm deep
+              <div style={{ fontSize: 10, color: 'var(--to-muted)' }}>
+                {fmt2(foundLength)} m × {foundWidthMM}mm × {foundDepthMM}mm deep
               </div>
             </>
           )}
