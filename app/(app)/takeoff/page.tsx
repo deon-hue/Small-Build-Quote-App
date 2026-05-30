@@ -3849,14 +3849,14 @@ export default function TakeoffPage() {
             </>
           )}
 
-          {/* Ext Wall: construction type + layer schedule */}
+          {/* Ext Wall: build-up type + layer schedule */}
           {isExtWall && (() => {
             const _allWT   = [...WALL_MAKEUPS, ...customWallTypes]
             const _wMakeup = _allWT.find(m => m.id === item.floorMakeupId)
             return (
               <>
                 <div style={{ marginBottom: 10 }}>
-                  <label style={labelStyle}>Construction Type</label>
+                  <label style={labelStyle}>Build-Up Type</label>
                   <select style={{ ...inputStyle, color: accent }} value={item.floorMakeupId ?? ''}
                     onChange={e => {
                       const nm = _allWT.find(m => m.id === e.target.value)
