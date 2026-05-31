@@ -376,12 +376,9 @@ export default function NewQuotePage() {
 
   // Called from AIScopeWorkspace when user clicks "Build Estimate"
   async function handleBuildFromScope() {
-    // generatePhases() sets phases and calls setGeneratingPhases(false) in finally.
-    // We can't reliably check success here since setPhases is async.
-    // Simplest: patch generatePhases to accept an onSuccess callback.
-    // For now: always try to transition; if phases is empty the workspace shows the landing CTA.
-    await generatePhases()
-    setStep('workspace')
+    const ok = await generatePhases()
+    // Only transition to workspace if phases were actually generated
+    if (ok) setStep('workspace')
   }
 
   // Save as draft
@@ -406,9 +403,9 @@ export default function NewQuotePage() {
   }
 
   // AI generate phases from scope
-  async function generatePhases() {
-    if (!scope.trim()) { alert('Write a scope of works first — then click Generate Phases.'); return }
-    if (phases.length && !confirm('Replace current phases with AI-generated ones?')) return
+  async function generatePhases(): Promise<boolean> {
+    if (!scope.trim()) { alert('Write a scope of works first — then click Generate Phases.'); return false }
+    if (phases.length && !confirm('Replace current phases with AI-generated ones?')) return false
     setGeneratingPhases(true)
     try {
       const res = await fetch('/api/generate-phases', {
@@ -417,7 +414,7 @@ export default function NewQuotePage() {
         body: JSON.stringify({ scope, jobType, address: custAddr }),
       })
       const data = await res.json()
-      if (data.error) { alert('Could not generate phases: ' + data.error); return }
+      if (data.error) { alert('Could not generate phases: ' + data.error); return false }
       if (Array.isArray(data.phases) && data.phases.length) {
         setPhases(data.phases.map((p: {
           parentPhase?: string; phase: string
@@ -436,9 +433,12 @@ export default function NewQuotePage() {
           ], p.parentPhase)
           return { ...ph, source: 'ai' as const, itemStatus: 'ai' as const }
         }))
+        return true   // phases were set — safe to transition
       }
+      return false
     } catch {
       alert('Failed to generate phases — check your connection.')
+      return false
     } finally {
       setGeneratingPhases(false)
     }
@@ -1315,14 +1315,14 @@ export default function NewQuotePage() {
             />
           </div>}
 
-          {(buildingEstimate || loadingBO) ? (
+          {(buildingEstimate || loadingBO || generatingPhases) ? (
             <div className="empty-dashed" style={{ textAlign: 'center', padding: '40px 20px' }}>
               <div style={{ fontSize: 28, marginBottom: 10 }}>⏳</div>
               <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
-                {loadingBO ? 'Loading Back Office defaults…' : 'Building Estimate…'}
+                {loadingBO ? 'Loading Back Office defaults…' : generatingPhases ? 'Building Estimate…' : 'Building Estimate…'}
               </div>
               <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                {loadingBO ? 'Fetching phases, sub-phases and task rates from Back Office.' : 'Analysing scope and matching tasks from the library.'}
+                {loadingBO ? 'Fetching phases, sub-phases and task rates from Back Office.' : 'Analysing scope and generating phases. This takes a few seconds.'}
               </div>
             </div>
           ) : (
