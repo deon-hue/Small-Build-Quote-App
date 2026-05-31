@@ -22,7 +22,6 @@ import SectionPlant from './components/SectionPlant'
 import SectionTakeoffMapping from './components/SectionTakeoffMapping'
 import SectionFormulaRules from './components/SectionFormulaRules'
 import SectionAIMapping from './components/SectionAIMapping'
-import SectionWallTypes from './components/SectionWallTypes'
 
 function deepClone<T>(v: T): T { return JSON.parse(JSON.stringify(v)) }
 
@@ -47,7 +46,6 @@ type SectionId =
   | 'takeoff-mapping'
   | 'formula-rules'
   | 'ai-mapping'
-  | 'wall-types'
 
 const SECTIONS: Array<{ id: SectionId; label: string; icon: string; badge?: string; group?: string }> = [
   { id: 'job-templates',    label: 'Job Templates',      icon: '📋', badge: 'DB',    group: 'Master Data' },
@@ -58,7 +56,6 @@ const SECTIONS: Array<{ id: SectionId; label: string; icon: string; badge?: stri
   { id: 'takeoff-mapping',  label: 'Takeoff Mapping',    icon: '📐', badge: 'DB',    group: 'Tool Config' },
   { id: 'formula-rules',    label: 'Formula Rules',      icon: '∑',  badge: 'DB',    group: 'Tool Config' },
   { id: 'ai-mapping',       label: 'AI Scope Mapping',   icon: '🤖', badge: 'DB',    group: 'Tool Config' },
-  { id: 'wall-types',       label: 'Wall Types',         icon: '🧱', badge: 'DB',    group: 'Master Data' },
 ]
 
 // ── Estimator items editor (unchanged from original) ─────────────────────────
@@ -287,9 +284,8 @@ export default function BackOfficePage() {
         {activeSection === 'takeoff-mapping' && userId && <SectionTakeoffMapping userId={userId} />}
         {activeSection === 'formula-rules' && userId && <SectionFormulaRules userId={userId} />}
         {activeSection === 'ai-mapping' && userId && <SectionAIMapping userId={userId} />}
-        {activeSection === 'wall-types' && userId && <SectionWallTypes userId={userId} />}
 
-        {!userId && ['labour','phases-tasks','products','plant','takeoff-mapping','formula-rules','ai-mapping','wall-types'].includes(activeSection) && (
+        {!userId && ['labour','phases-tasks','products','plant','takeoff-mapping','formula-rules','ai-mapping'].includes(activeSection) && (
           <div style={{ textAlign: 'center', padding: 48, color: '#64748b' }}>Loading…</div>
         )}
 
