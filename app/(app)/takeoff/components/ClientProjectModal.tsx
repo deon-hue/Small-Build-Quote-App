@@ -83,19 +83,30 @@ export default function ClientProjectModal({ open, onClose, project, onSave, use
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState<string | null>(null)
 
-  // -- fetch clients
+  // -- fetch clients from both takeoff_clients and main clients tables
   useEffect(() => {
     if (!open) return
     setClientsLoading(true)
-    supabase
-      .from('takeoff_clients')
-      .select('*')
-      .eq('user_id', userId)
-      .order('name')
-      .then(({ data, error: err }) => {
-        setClientsLoading(false)
-        if (!err && data) setClients(data as ClientRow[])
-      })
+    Promise.all([
+      supabase.from('takeoff_clients').select('*').eq('user_id', userId).order('name'),
+      supabase.from('clients').select('id, name, email, phone, address, notes').eq('user_id', userId).order('name'),
+    ]).then(([takeoffRes, mainRes]) => {
+      setClientsLoading(false)
+      const takeoffClients: ClientRow[] = (takeoffRes.data ?? []) as ClientRow[]
+      // Merge main clients — adapt field names and skip duplicates by name
+      const takeoffNames = new Set(takeoffClients.map(c => c.name.toLowerCase()))
+      const mainClients: ClientRow[] = (mainRes.data ?? [])
+        .filter((c: {name: string}) => !takeoffNames.has(c.name.toLowerCase()))
+        .map((c: {id: string; name: string; email?: string|null; phone?: string|null; address?: string|null; notes?: string|null}) => ({
+          id:           c.id,
+          user_id:      userId,
+          name:         c.name,
+          email:        c.email ?? null,
+          phone:        c.phone ?? null,
+          address_line1:c.address ?? null,  // main clients store full address in one field
+        } as ClientRow))
+      setClients([...takeoffClients, ...mainClients])
+    })
   }, [open, userId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // -- pre-fill site address when selecting an existing client
@@ -132,7 +143,10 @@ export default function ClientProjectModal({ open, onClose, project, onSave, use
     let clientId: string | undefined
 
     if (mode === 'new') {
-      // Insert new client
+      const fullAddress = [newAddrLine1, newAddrLine2, newTown, newCounty, newPostcode]
+        .filter(Boolean).join(', ')
+
+      // Insert into takeoff_clients (takeoff-specific records)
       const { data: inserted, error: insertErr } = await supabase
         .from('takeoff_clients')
         .insert({
@@ -158,6 +172,22 @@ export default function ClientProjectModal({ open, onClose, project, onSave, use
 
       clientId = inserted.id
       clientSnapshot = clientRowToTakeoffClient(inserted as ClientRow)
+
+      // Also insert into the main clients table so the client appears
+      // in the Quote page client list and is reusable across the app.
+      const nameParts = newName.trim().split(' ')
+      await supabase.from('clients').insert({
+        user_id:    userId,
+        name:       newName.trim(),
+        first_name: nameParts.slice(0, -1).join(' ') || nameParts[0] || newName.trim(),
+        last_name:  nameParts.length > 1 ? nameParts[nameParts.length - 1] : '',
+        email:      newEmail.trim() || null,
+        phone:      newPhone.trim() || null,
+        address:    fullAddress || null,
+        notes:      newNotes.trim() || null,
+        added_from: 'takeoff',
+      })
+      // (error from main clients insert is non-blocking — takeoff still saves)
     } else if (selectedClientId) {
       const c = clients.find(c => c.id === selectedClientId)
       if (c) {
