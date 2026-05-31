@@ -20,8 +20,8 @@ import { DEFAULT_DEMO_SUBPHASES, calcDemoSellingPrice, DEMO_UNIT_LABELS, type De
 import { ALL_PHASE_SUBPHASES, calcPhaseTaskSellingPrice } from '@/lib/phase-tasks'
 import { sumByCategory } from '@/lib/material-recipes'
 import { createClient } from '@/lib/supabase/client'
-import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchQuoteDefaults, upsertTask, fetchLabourTrades } from '@/lib/back-office-queries'
-import type { BOLabourTrade } from '@/lib/back-office-types'
+import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchQuoteDefaults, upsertTask, fetchLabourTrades, fetchProducts } from '@/lib/back-office-queries'
+import type { BOLabourTrade, BOProduct } from '@/lib/back-office-types'
 import type { FloorMakeup } from '@/lib/takeoff-types'
 
 let phaseCounter = 0
@@ -120,6 +120,7 @@ export default function NewQuotePage() {
   const [clientSearch, setClientSearch] = useState('')
   const [collapsedPhases, setCollapsedPhases] = useState<Set<number>>(new Set())
   const [labourTrades, setLabourTrades] = useState<BOLabourTrade[]>([])
+  const [boProducts,   setBoProducts]   = useState<BOProduct[]>([])
   // 'breakdown' = structured visual view (after takeoff import); 'edit' = normal editable rows
   const [viewMode, setViewMode] = useState<'breakdown' | 'edit'>('edit')
   const hasTakeoffPhases = phases.some(p => p.meta?.importedFrom === 'takeoff')
@@ -141,10 +142,9 @@ export default function NewQuotePage() {
       const types = await fetchWallTypesWithLayers(sb, data.user.id)
       const makeups = wallTypesToMakeups(types)
       if (makeups.length > 0) setDbWallTypes(makeups)
-      // Load BO labour trades for the quote workspace cost rows
-      fetchLabourTrades(sb, data.user.id).then(trades => {
-        setLabourTrades(trades.filter(t => t.active))
-      })
+      // Load BO labour trades and products for the quote workspace
+      fetchLabourTrades(sb, data.user.id).then(trades => setLabourTrades(trades.filter(t => t.active)))
+      fetchProducts(sb, data.user.id).then(prods => setBoProducts(prods.filter(p => p.active)))
     })
   }, [])
 
@@ -1349,6 +1349,7 @@ export default function NewQuotePage() {
                 jobType={jobType}
                 onSaveToBO={handleSaveToBO}
                 labourTrades={labourTrades}
+                boProducts={boProducts}
                 quoteSource={quoteSource ?? undefined}
               />
             </>

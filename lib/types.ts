@@ -22,6 +22,22 @@ export interface QuoteItem {
   enabled?: boolean
 }
 
+/** A product/material line item within a quote sub-phase, sourced from Back Office products */
+export interface QuoteProduct {
+  id:           string     // local uid
+  boProductId?: string     // bo_products.id — set when added from BO picker
+  name:         string
+  unit:         string
+  qty:          number
+  costPrice:    number     // cost per unit (from BO or overridden)
+  sellPrice:    number     // sell price per unit (BO markup applied, or overridden)
+  supplier?:    string
+  category?:    string
+  notes?:       string
+  enabled?:     boolean    // toggle in/out of totals (default true)
+  wastePercent?:number     // extra waste allowance
+}
+
 /** Metadata stamped on phases that were imported from the Takeoff tool */
 export interface TakeoffPhaseMeta {
   importedFrom:  'takeoff'
@@ -69,6 +85,8 @@ export interface QuotePhase {
   /** AI-generated item that couldn't be matched to Back Office master data */
   needsReview?: boolean
   reviewNote?: string
+  /** Products/materials from Back Office product database */
+  products?: QuoteProduct[]
 }
 
 export interface QuoteCustomer {

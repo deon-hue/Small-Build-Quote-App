@@ -14,9 +14,10 @@
  */
 
 import { useState, useCallback } from 'react'
-import type { QuotePhase, QuoteItem } from '@/lib/types'
-import type { BOLabourTrade } from '@/lib/back-office-types'
+import type { QuotePhase, QuoteItem, QuoteProduct } from '@/lib/types'
+import type { BOLabourTrade, BOProduct } from '@/lib/back-office-types'
 import { fmt, calcPhase, calcPhaseSell } from '@/lib/utils'
+import ProductPicker from '@/components/ProductPicker'
 
 // ── IDs ────────────────────────────────────────────────────────────────────────
 let _id = Date.now()
@@ -79,8 +80,15 @@ function taskTotal(items: QuoteItem[], tg: string, markup: number): number {
   const cost = getItemsInTask(items, tg).reduce((s, i) => s + itemCost(i), 0)
   return +(cost * (1 + markup / 100)).toFixed(2)
 }
+function productLineSell(prod: QuoteProduct): number {
+  if (prod.enabled === false) return 0
+  return +(prod.sellPrice * prod.qty).toFixed(2)
+}
+
 function subPhaseTotalSell(p: QuotePhase, markup: number): number {
-  return phaseSell(p, markup)
+  const costRowsSell = phaseSell(p, markup)
+  const productsSell = (p.products ?? []).reduce((s, pr) => s + productLineSell(pr), 0)
+  return +(costRowsSell + productsSell).toFixed(2)
 }
 function roomTotalSell(phases: QuotePhase[], mainPhase: string, room: string, markup: number): number {
   return getSubPhases(phases, mainPhase, room).reduce((s, p) => s + phaseSell(p, markup), 0)
@@ -132,6 +140,7 @@ interface CostRowProps {
   onDuplicate: () => void
   isFirst: boolean
   labourTrades?: BOLabourTrade[]
+  boProducts?: BOProduct[]
 }
 
 function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst, labourTrades = [] }: CostRowProps) {
@@ -348,9 +357,10 @@ interface TaskGroupProps {
   onRenameTask: (oldName: string, newName: string) => void
   onDeleteTask: (tg: string) => void
   labourTrades?: BOLabourTrade[]
+  boProducts?: BOProduct[]
 }
 
-function TaskGroup({ tg, items, markup, isLocked, collapsed, colKey, toggle, onUpdateItem, onDeleteItem, onDuplicateItem, onAddRow, onRenameTask, onDeleteTask, labourTrades }: TaskGroupProps) {
+function TaskGroup({ tg, items, markup, isLocked, collapsed, colKey, toggle, onUpdateItem, onDeleteItem, onDuplicateItem, onAddRow, onRenameTask, onDeleteTask, labourTrades, boProducts }: TaskGroupProps) {
   const open  = !collapsed.has(colKey)
   const cost  = items.reduce((s, i) => s + itemCost(i), 0)
   const sell  = +(cost * (1 + markup / 100)).toFixed(2)
@@ -399,6 +409,7 @@ function TaskGroup({ tg, items, markup, isLocked, collapsed, colKey, toggle, onU
                   onDelete={() => onDeleteItem(item.id)}
                   onDuplicate={() => onDuplicateItem(item)}
                   labourTrades={labourTrades}
+                  boProducts={boProducts}
                 />
               ))}
             </tbody>
@@ -470,14 +481,32 @@ interface SubPhaseBlockProps {
   onAddTask: () => void
   onSaveToBO?: (p: QuotePhase) => void
   labourTrades?: BOLabourTrade[]
+  boProducts?: BOProduct[]
 }
 
-function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDelete, onDuplicate, onAddTask, onSaveToBO, labourTrades }: SubPhaseBlockProps) {
+function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDelete, onDuplicate, onAddTask, onSaveToBO, labourTrades, boProducts = [] }: SubPhaseBlockProps) {
   const colKey = `sp_${p.id}`
   const open   = !collapsed.has(colKey)
   const sell   = subPhaseTotalSell(p, markup)
   const tgs    = getTaskGroups(p.items)
   const m      = p.meta?.measurements
+
+  // Product picker state
+  const [showProductPicker, setShowProductPicker] = useState(false)
+
+  // Product CRUD
+  function addProduct(prod: QuoteProduct) {
+    onUpdate({ ...p, products: [...(p.products ?? []), prod] })
+  }
+  function updateProduct(prod: QuoteProduct) {
+    onUpdate({ ...p, products: (p.products ?? []).map(pr => pr.id === prod.id ? prod : pr) })
+  }
+  function removeProduct(id: string) {
+    onUpdate({ ...p, products: (p.products ?? []).filter(pr => pr.id !== id) })
+  }
+  function toggleProduct(id: string) {
+    onUpdate({ ...p, products: (p.products ?? []).map(pr => pr.id === id ? { ...pr, enabled: pr.enabled === false ? true : false } : pr) })
+  }
 
   // Mark phase as 'edited' when any cost field changes from a bo-default baseline
   function markEdited(updated: QuotePhase) {
@@ -575,6 +604,113 @@ function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDel
       {/* Sub-phase body */}
       {open && (
         <div style={{ padding: '6px 10px 8px' }}>
+
+          {/* ── Products / Materials section ── */}
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#3b82f6' }}>
+                📦 Products & Materials
+              </span>
+              {!isLocked && (
+                <button onClick={() => setShowProductPicker(true)}
+                  style={{ fontSize: 10, padding: '3px 8px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 5, color: '#1d4ed8', fontWeight: 600, cursor: 'pointer' }}>
+                  + Add Product
+                </button>
+              )}
+            </div>
+
+            {(p.products ?? []).length === 0 ? (
+              <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic', paddingLeft: 2 }}>
+                No products added — click <strong>+ Add Product</strong> to add from Back Office catalogue
+              </div>
+            ) : (
+              <>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #dbeafe' }}>
+                      <th style={{ width: 20 }} />
+                      <th style={{ padding: '3px 6px', textAlign: 'left', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Product</th>
+                      <th style={{ padding: '3px 4px', width: 50, textAlign: 'right', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Qty</th>
+                      <th style={{ padding: '3px 4px', width: 36, fontSize: 10, color: '#64748b', fontWeight: 600 }}>Unit</th>
+                      <th style={{ padding: '3px 6px', width: 68, textAlign: 'right', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Cost</th>
+                      <th style={{ padding: '3px 6px', width: 68, textAlign: 'right', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Sell</th>
+                      <th style={{ padding: '3px 4px', width: 70, fontSize: 10, color: '#64748b', fontWeight: 600 }}>Supplier</th>
+                      <th style={{ width: 36 }} />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(p.products ?? []).map(prod => {
+                      const en        = prod.enabled !== false
+                      const lineTotal = en ? +(prod.sellPrice * prod.qty).toFixed(2) : 0
+                      return (
+                        <tr key={prod.id} style={{ borderBottom: '1px solid #f0f9ff', opacity: en ? 1 : 0.45 }}>
+                          <td style={{ padding: '4px 4px', textAlign: 'center' }}>
+                            <button onClick={() => toggleProduct(prod.id)} disabled={isLocked}
+                              style={{ background: 'none', border: 'none', cursor: isLocked ? 'default' : 'pointer', fontSize: 12, color: en ? '#3b82f6' : '#cbd5e1', padding: 0, lineHeight: 1 }}>
+                              {en ? '●' : '○'}
+                            </button>
+                          </td>
+                          <td style={{ padding: '4px 6px' }}>
+                            <input value={prod.name} readOnly={isLocked}
+                              onChange={e => updateProduct({ ...prod, name: e.target.value })}
+                              style={{ ...fldStyle, fontSize: 12, fontWeight: 500 }} />
+                            {prod.category && <div style={{ fontSize: 10, color: '#94a3b8' }}>{prod.category}</div>}
+                          </td>
+                          <td style={{ padding: '4px 4px' }}>
+                            <input type="number" min={0} step={0.1} value={prod.qty} readOnly={isLocked}
+                              onChange={e => updateProduct({ ...prod, qty: Math.max(0, +e.target.value) })}
+                              style={{ ...cellInp, width: '100%' }} />
+                          </td>
+                          <td style={{ padding: '4px 4px' }}>
+                            <input value={prod.unit} readOnly={isLocked}
+                              onChange={e => updateProduct({ ...prod, unit: e.target.value })}
+                              style={{ ...fldStyle, fontSize: 11, color: '#64748b', textAlign: 'center' }} />
+                          </td>
+                          <td style={{ padding: '4px 6px' }}>
+                            <div style={{ position: 'relative' }}>
+                              <span style={{ position: 'absolute', left: 3, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: '#cbd5e1' }}>£</span>
+                              <input type="number" min={0} step={0.01} value={prod.costPrice} readOnly={isLocked}
+                                onChange={e => updateProduct({ ...prod, costPrice: Math.max(0, +e.target.value) })}
+                                style={{ ...cellInp, paddingLeft: 12, width: '100%' }} />
+                            </div>
+                          </td>
+                          <td style={{ padding: '4px 6px' }}>
+                            <div style={{ position: 'relative' }}>
+                              <span style={{ position: 'absolute', left: 3, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: '#cbd5e1' }}>£</span>
+                              <input type="number" min={0} step={0.01} value={prod.sellPrice} readOnly={isLocked}
+                                onChange={e => updateProduct({ ...prod, sellPrice: Math.max(0, +e.target.value) })}
+                                style={{ ...cellInp, paddingLeft: 12, fontWeight: en ? 600 : 400, width: '100%', color: en ? '#16a34a' : '#94a3b8' }} />
+                            </div>
+                          </td>
+                          <td style={{ padding: '4px 4px', fontSize: 10, color: '#94a3b8', overflow: 'hidden', maxWidth: 70, whiteSpace: 'nowrap', textOverflow: 'ellipsis' }} title={prod.supplier}>
+                            {prod.supplier || '—'}
+                          </td>
+                          <td style={{ padding: '4px 2px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            {!isLocked && (
+                              <button onClick={() => removeProduct(prod.id)} style={iconBtn('#e74c3c')} title="Remove">×</button>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+                {/* Products subtotal */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '4px 6px', borderTop: '1px solid #dbeafe', marginTop: 2 }}>
+                  <span style={{ fontSize: 11, color: '#64748b', marginRight: 8 }}>Products sell total:</span>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 12, color: '#16a34a' }}>
+                    £{(p.products ?? []).reduce((s, pr) => s + productLineSell(pr), 0).toFixed(2)}
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Divider before cost rows */}
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', marginBottom: 5, marginTop: 4 }}>
+            Labour · Plant · Subcontract · Other
+          </div>
+
           {/* Needs-review banner */}
           {p.needsReview && p.reviewNote && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', marginBottom: 8, background: '#fffbeb', border: '1px solid #f59e0b', borderRadius: 5, fontSize: 11, color: '#92400e' }}>
@@ -606,6 +742,7 @@ function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDel
               onRenameTask={renameTask}
               onDeleteTask={deleteTask}
               labourTrades={labourTrades}
+                  boProducts={boProducts}
             />
           ))}
           {p.items.length === 0 && (
@@ -624,6 +761,15 @@ function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDel
             </div>
           )}
         </div>
+      )}
+
+      {/* Product picker modal */}
+      {showProductPicker && (
+        <ProductPicker
+          products={boProducts}
+          onAdd={prod => { addProduct(prod); }}
+          onClose={() => setShowProductPicker(false)}
+        />
       )}
     </div>
   )
@@ -647,9 +793,10 @@ interface RoomBlockProps {
   onRenameRoom: (mainPhase: string, oldRoom: string, newRoom: string) => void
   onSaveToBO?: (p: QuotePhase) => void
   labourTrades?: BOLabourTrade[]
+  boProducts?: BOProduct[]
 }
 
-function RoomBlock({ mainPhase, room, phases, markup, isLocked, collapsed, toggle, onUpdatePhase, onDeletePhase, onDuplicatePhase, onAddSubPhase, onAddTask, onRenameRoom, onSaveToBO, labourTrades }: RoomBlockProps) {
+function RoomBlock({ mainPhase, room, phases, markup, isLocked, collapsed, toggle, onUpdatePhase, onDeletePhase, onDuplicatePhase, onAddSubPhase, onAddTask, onRenameRoom, onSaveToBO, labourTrades, boProducts }: RoomBlockProps) {
   const hasRoom = !!room
   const colKey  = `rm_${mainPhase}_${room}`
   const open    = !collapsed.has(colKey)
@@ -704,6 +851,7 @@ function RoomBlock({ mainPhase, room, phases, markup, isLocked, collapsed, toggl
               onAddTask={() => onAddTask(p.id)}
               onSaveToBO={onSaveToBO}
               labourTrades={labourTrades}
+                  boProducts={boProducts}
             />
           ))}
           {!isLocked && !hasRoom && (
@@ -738,9 +886,10 @@ interface PhaseBlockProps {
   onRenameRoom: (mainPhase: string, oldRoom: string, newRoom: string) => void
   onSaveToBO?: (p: QuotePhase) => void
   labourTrades?: BOLabourTrade[]
+  boProducts?: BOProduct[]
 }
 
-function PhaseBlock({ mainPhase, phases, markup, isLocked, collapsed, toggle, onUpdatePhase, onDeletePhase, onDuplicatePhase, onAddSubPhase, onAddRoom, onAddTask, onRenameMain, onDeleteMain, onRenameRoom, onSaveToBO, labourTrades }: PhaseBlockProps) {
+function PhaseBlock({ mainPhase, phases, markup, isLocked, collapsed, toggle, onUpdatePhase, onDeletePhase, onDuplicatePhase, onAddSubPhase, onAddRoom, onAddTask, onRenameMain, onDeleteMain, onRenameRoom, onSaveToBO, labourTrades, boProducts }: PhaseBlockProps) {
   const colKey = `mp_${mainPhase}`
   const open   = !collapsed.has(colKey)
   const total  = mainPhaseTotalSell(phases, mainPhase, markup)
@@ -798,6 +947,7 @@ function PhaseBlock({ mainPhase, phases, markup, isLocked, collapsed, toggle, on
               onRenameRoom={onRenameRoom}
               onSaveToBO={onSaveToBO}
               labourTrades={labourTrades}
+                  boProducts={boProducts}
             />
           ))}
         </div>
@@ -823,11 +973,13 @@ export interface QuoteWorkspaceProps {
   onSaveToBO?:       (phase: QuotePhase) => void
   /** Back Office labour trades — shown as a rate picker on Labour cost rows */
   labourTrades?:     BOLabourTrade[]
+  /** Back Office products — used in the product picker */
+  boProducts?:       BOProduct[]
   /** How the quote was created — drives empty-state messaging */
   quoteSource?:      'takeoff' | 'ai' | 'manual'
 }
 
-export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked = false, onChange, onImportTakeoff, onAIGenerate, aiGenerating, onLoadTemplate, jobType, onSaveToBO, labourTrades = [], quoteSource }: QuoteWorkspaceProps) {
+export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked = false, onChange, onImportTakeoff, onAIGenerate, aiGenerating, onLoadTemplate, jobType, onSaveToBO, labourTrades = [], boProducts = [], quoteSource }: QuoteWorkspaceProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [search,    setSearch]    = useState('')
 
@@ -1084,6 +1236,7 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
           onRenameRoom={renameRoom}
           onSaveToBO={onSaveToBO}
           labourTrades={labourTrades}
+                  boProducts={boProducts}
         />
       ))}
 
