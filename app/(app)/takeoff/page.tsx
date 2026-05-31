@@ -9,7 +9,7 @@ import LabourCostBuilder from './components/LabourCostBuilder'
 import ClientProjectModal from './components/ClientProjectModal'
 import {
   TAKEOFF_PHASES, PHASE_COLORS, DEFAULT_MPP, SCALE_PRESETS,
-  FLOOR_MAKEUPS, WALL_MAKEUPS, PLASTER_MAKEUPS, PHASE_MAKEUPS, calcLayerQty,
+  FLOOR_MAKEUPS, WALL_MAKEUPS, PLASTER_MAKEUPS, FOUNDATION_MAKEUPS, PHASE_MAKEUPS, calcLayerQty,
   loadCustomWallTypes, saveCustomWallTypes,
   WALL_OPENING_LABELS, WALL_OPENING_DEFAULTS,
   type TakeoffPhase, type DrawingTool, type TakeoffPoint,
@@ -3383,12 +3383,15 @@ export default function TakeoffPage() {
     }
 
     const FOUNDATION_TYPE_OPTIONS = [
-      { value: 'trench_fill', label: 'Trench Fill' },
-      { value: 'strip',       label: 'Strip Footing' },
-      { value: 'pad_edge',    label: 'Pad / Edge Beam' },
-      { value: 'raft_edge',   label: 'Raft Edge Beam' },
-      { value: 'other',       label: 'Other' },
+      { value: 'trench_fill', label: 'Trench Fill',      makeupId: 'trench_fill' },
+      { value: 'strip',       label: 'Strip Footing',    makeupId: 'strip_found' },
+      { value: 'pad_edge',    label: 'Pad / Edge Beam',  makeupId: 'pad_found'   },
+      { value: 'raft_edge',   label: 'Raft Edge Beam',   makeupId: 'raft_found'  },
+      { value: 'other',       label: 'Other',            makeupId: null          },
     ]
+    // Resolve the FOUNDATION_MAKEUPS entry for the current foundationType
+    const foundMakeupId = FOUNDATION_TYPE_OPTIONS.find(o => o.value === (item.foundationType ?? 'trench_fill'))?.makeupId ?? null
+    const foundMakeup   = foundMakeupId ? FOUNDATION_MAKEUPS.find(m => m.id === foundMakeupId) : null
 
     // ── 5. Wall helpers ────────────────────────────────────────────────────
     function recalcWallAndSave(patch: Partial<TakeoffItem>) {
@@ -4071,7 +4074,7 @@ export default function TakeoffPage() {
             )
           })()}
 
-          {/* Foundation line: type only (width/depth are in Measurement above) */}
+          {/* Foundation line: type + layer schedule */}
           {isFoundationLine && (
             <>
               <div style={{ marginBottom: 8 }}>
@@ -4084,9 +4087,29 @@ export default function TakeoffPage() {
                   ))}
                 </select>
               </div>
-              <div style={{ fontSize: 10, color: 'var(--to-muted)' }}>
+              <div style={{ fontSize: 10, color: 'var(--to-muted)', marginBottom: 10 }}>
                 {fmt2(foundLength)} m × {foundWidthMM}mm × {foundDepthMM}mm deep
               </div>
+              {/* Layer schedule — perimeter = foundLength (lm run), area = footprint */}
+              {foundMakeup && (
+                <div style={{ marginBottom: 4 }}>
+                  <label style={{ ...labelStyle, marginBottom: 6 }}>Build-up Layers</label>
+                  {renderLayerSchedule(
+                    foundMakeup,
+                    foundArea,       // m² footprint for area-type layers
+                    foundLength,     // lm run for perimeter-type layers
+                    layerToggles,
+                    layerThicknesses,
+                    item,
+                    accent,
+                  )}
+                </div>
+              )}
+              {!foundMakeup && (
+                <div style={{ fontSize: 11, color: 'var(--to-muted)', fontStyle: 'italic' }}>
+                  No layer schedule for "Other" — add layers manually in the Outputs section.
+                </div>
+              )}
             </>
           )}
 
