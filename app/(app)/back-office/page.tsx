@@ -151,6 +151,11 @@ export default function BackOfficePage() {
   const [userId, setUserId] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
 
+  // Incremented after every sync completes so DB-backed sections re-fetch
+  // with the latest data (fixes race where SectionPhasesTasks loaded before
+  // syncBackOfficeFromProduct finished inserting new rows).
+  const [syncKey, setSyncKey] = useState(0)
+
   // Get current user then sync product structure into Back Office DB.
   // Runs on every page load — adds new phases/tasks from code, renames changed
   // items, and preserves any customer-set rates. Safe to run repeatedly.
@@ -164,6 +169,7 @@ export default function BackOfficePage() {
         await syncBackOfficeFromProduct(sb, data.user.id)
       } finally {
         setSyncing(false)
+        setSyncKey(k => k + 1)
       }
     })
   }, [])
@@ -278,7 +284,7 @@ export default function BackOfficePage() {
 
         {/* ── DB-backed sections ── */}
         {activeSection === 'labour' && userId && <SectionLabour userId={userId} />}
-        {activeSection === 'phases-tasks' && userId && <SectionPhasesTasks userId={userId} />}
+        {activeSection === 'phases-tasks' && userId && <SectionPhasesTasks userId={userId} key={syncKey} />}
         {activeSection === 'products' && userId && <SectionProducts userId={userId} />}
         {activeSection === 'plant' && userId && <SectionPlant userId={userId} />}
         {activeSection === 'takeoff-mapping' && userId && <SectionTakeoffMapping userId={userId} />}
