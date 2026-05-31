@@ -37,6 +37,11 @@ interface Props {
   onClose: () => void
   /** When provided, shows a "Build Estimate" button that converts the scope into fully-populated quote phases */
   onBuildEstimate?: (scope: string) => void
+  /**
+   * When true, renders inline (no fixed modal overlay, no close button).
+   * Used inside the AIScopeWorkspace right panel.
+   */
+  embedded?: boolean
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -104,7 +109,7 @@ const MAX_TOTAL_BASE64 = 4 * 1024 * 1024        // 4MB total base64 payload ceil
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function ScopeChat({ quoteId, jobType, address, phases, onInsert, onClose, onBuildEstimate }: Props) {
+export default function ScopeChat({ quoteId, jobType, address, phases, onInsert, onClose, onBuildEstimate, embedded = false }: Props) {
   const supabase = createClient()
 
   const [messages, setMessages] = useState<Message[]>([])
@@ -352,33 +357,37 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
   const canSend = !loading && (input.trim().length > 0 || attachments.length > 0)
 
   // ── Render ─────────────────────────────────────────────────
-  return (
-    <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end', padding: 16 }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
-      onDragOver={e => e.preventDefault()}
-      onDrop={handleDrop}
-    >
-      <div style={{
-        background: '#fff', borderRadius: 14, width: '100%', maxWidth: 500,
-        height: 'min(90vh, 740px)', display: 'flex', flexDirection: 'column',
-        boxShadow: '0 24px 64px rgba(0,0,0,0.35)',
-        animation: 'slideUp 0.2s ease',
-      }}>
+
+  // Inner chat panel (shared between modal and embedded modes)
+  const chatPanel = (
+    <div style={{
+      background: '#fff',
+      borderRadius: embedded ? 12 : 14,
+      width: embedded ? '100%' : '100%',
+      maxWidth: embedded ? undefined : 500,
+      height: embedded ? '100%' : 'min(90vh, 740px)',
+      display: 'flex', flexDirection: 'column',
+      boxShadow: embedded ? 'none' : '0 24px 64px rgba(0,0,0,0.35)',
+      animation: embedded ? undefined : 'slideUp 0.2s ease',
+      border: embedded ? '1px solid #e2e8f0' : 'none',
+      overflow: 'hidden',
+    }}>
 
         {/* ── Header ── */}
-        <div style={{ background: 'var(--moss)', color: '#fff', padding: '14px 18px', borderRadius: '14px 14px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+        <div style={{ background: 'var(--moss)', color: '#fff', padding: embedded ? '10px 14px' : '14px 18px', borderRadius: embedded ? '10px 10px 0 0' : '14px 14px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 15 }}>✦ AI Scope Writer</div>
-            <div style={{ fontSize: 12, opacity: 0.8, marginTop: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: embedded ? 13 : 15 }}>✦ AI Scope Writer</div>
+            <div style={{ fontSize: 11, opacity: 0.8, marginTop: 1 }}>
               {jobType}{address ? ` · ${address}` : ''}
-              <span style={{ opacity: 0.65 }}> · Pre-estimate interview · 📎 attach plans</span>
+              <span style={{ opacity: 0.65 }}> · 🎤 voice · 📎 attach plans</span>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', width: 28, height: 28, borderRadius: '50%', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}
-          >×</button>
+          {!embedded && (
+            <button
+              onClick={onClose}
+              style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', width: 28, height: 28, borderRadius: '50%', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}
+            >×</button>
+          )}
         </div>
 
         {/* ── Messages ── */}
@@ -679,18 +688,37 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
             ↑
           </button>
         </div>
-      </div>
+    </div>
+  )   // end chatPanel
 
-      <style>{`
-        @keyframes slideUp {
-          from { transform: translateY(20px); opacity: 0; }
-          to   { transform: translateY(0);    opacity: 1; }
-        }
-        @keyframes micPulse {
-          0%, 100% { transform: scale(1);    opacity: 1; }
-          50%       { transform: scale(1.25); opacity: 0.4; }
-        }
-      `}</style>
+  const styles = (
+    <style>{`
+      @keyframes slideUp {
+        from { transform: translateY(20px); opacity: 0; }
+        to   { transform: translateY(0);    opacity: 1; }
+      }
+      @keyframes micPulse {
+        0%, 100% { transform: scale(1);    opacity: 1; }
+        50%       { transform: scale(1.25); opacity: 0.4; }
+      }
+    `}</style>
+  )
+
+  // Embedded: render inline without modal overlay
+  if (embedded) {
+    return <>{chatPanel}{styles}</>
+  }
+
+  // Modal: fixed overlay
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end', padding: 16 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      onDragOver={e => e.preventDefault()}
+      onDrop={handleDrop}
+    >
+      {chatPanel}
+      {styles}
     </div>
   )
 }

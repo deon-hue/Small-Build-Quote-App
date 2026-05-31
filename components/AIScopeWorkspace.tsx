@@ -10,7 +10,8 @@
  *   Right  — embedded AI interview panel
  */
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
+import ScopeChat from '@/components/ScopeChat'
 
 // ── Job type configuration ────────────────────────────────────────────────────
 
@@ -198,24 +199,13 @@ export default function AIScopeWorkspace({
   const [scopeTitle, setScopeTitle] = useState(config.scopeTitle)
   const [scopeText,  setScopeText]  = useState(config.defaultDescription)
 
-  // Interview panel
-  const [interviewOpen,    setInterviewOpen]    = useState(false)
-  const [currentQIdx,      setCurrentQIdx]      = useState(0)
-  const [answers,          setAnswers]           = useState<string[]>([])
-  const [currentAnswer,    setCurrentAnswer]     = useState('')
   const [generatingScope,  setGeneratingScope]   = useState(false)
-
-  const answerRef = useRef<HTMLInputElement>(null)
 
   // When job type changes
   function selectJobType(cfg: JobTypeConfig) {
     setConfig(cfg)
     setScopeTitle(cfg.scopeTitle)
     setScopeText(cfg.defaultDescription)
-    setAnswers([])
-    setCurrentQIdx(0)
-    setCurrentAnswer('')
-    setInterviewOpen(false)
     setPhase('editor')
     onJobTypeChange(cfg.id)
     onScopeChange(cfg.defaultDescription)
@@ -224,56 +214,17 @@ export default function AIScopeWorkspace({
   // Keep parent scope in sync
   useEffect(() => { onScopeChange(scopeText) }, [scopeText]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Interview: submit an answer
-  function submitAnswer() {
-    if (!currentAnswer.trim()) return
-    const next = [...answers, currentAnswer.trim()]
-    setAnswers(next)
-    setCurrentAnswer('')
-    if (currentQIdx < config.interviewQuestions.length - 1) {
-      setCurrentQIdx(i => i + 1)
-      setTimeout(() => answerRef.current?.focus(), 50)
-    } else {
-      // All questions answered — auto-generate
-      generateScopeFromAnswers(next)
-    }
-  }
-
-  async function generateScopeFromAnswers(ans: string[]) {
+  async function regenerateScope() {
     setGeneratingScope(true)
     try {
-      const body = {
-        jobType: config.id,
-        description: config.interviewQuestions.map((q, i) => `${q}\n${ans[i] ?? '—'}`).join('\n\n'),
-      }
       const res = await fetch('/api/generate-scope', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ jobType: config.id, description: config.defaultDescription }),
       })
       const data = await res.json()
-      if (data.scope) {
-        setScopeText(data.scope)
-        setInterviewOpen(false)
-      }
+      if (data.scope) { setScopeText(data.scope); onScopeChange(data.scope) }
     } catch { /* silent */ }
     finally { setGeneratingScope(false) }
-  }
-
-  async function regenerateScope() {
-    if (answers.length > 0) {
-      await generateScopeFromAnswers(answers)
-    } else {
-      setGeneratingScope(true)
-      try {
-        const res = await fetch('/api/generate-scope', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jobType: config.id, description: config.defaultDescription }),
-        })
-        const data = await res.json()
-        if (data.scope) setScopeText(data.scope)
-      } catch { /* silent */ }
-      finally { setGeneratingScope(false) }
-    }
   }
 
   // ── Phase 1: job type cards ─────────────────────────────────────────────────
@@ -418,120 +369,18 @@ export default function AIScopeWorkspace({
           </div>
         </div>
 
-        {/* ── RIGHT: AI interview panel ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 0, background: '#fff', border: `1px solid ${COLORS.border}`, borderRadius: 12, overflow: 'hidden' }}>
-
-          {/* Panel header */}
-          <div style={{ padding: '14px 16px', background: COLORS.purpleLight, borderBottom: `1px solid ${COLORS.purpleBorder}` }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 14, color: COLORS.purple }}>✦ AI Interview</div>
-                <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>Answer questions to build your scope</div>
-              </div>
-              {!interviewOpen && (
-                <button
-                  onClick={() => { setInterviewOpen(true); setCurrentQIdx(0); setCurrentAnswer(''); setTimeout(() => answerRef.current?.focus(), 50) }}
-                  style={{ ...btn(COLORS.purple, '#fff', { fontSize: 11, padding: '7px 12px' }) }}
-                >
-                  Start Interview
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Panel body */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-
-            {!interviewOpen && (
-              <div style={{ textAlign: 'center', padding: '24px 0', color: COLORS.muted, fontSize: 12 }}>
-                <div style={{ fontSize: 28, marginBottom: 8 }}>💬</div>
-                <div style={{ fontWeight: 600, marginBottom: 4 }}>Ready to interview</div>
-                <div style={{ lineHeight: 1.6 }}>
-                  Click <strong>Start Interview</strong> above and the AI will ask you {config.interviewQuestions.length} questions about this {config.label} project.
-                </div>
-                <div style={{ marginTop: 12, fontSize: 11, color: '#94a3b8' }}>
-                  Your answers update the scope draft automatically.
-                </div>
-              </div>
-            )}
-
-            {interviewOpen && (
-              <>
-                {/* Progress */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <div style={{ flex: 1, height: 4, background: COLORS.border, borderRadius: 2, overflow: 'hidden' }}>
-                    <div style={{ width: `${((currentQIdx) / config.interviewQuestions.length) * 100}%`, height: '100%', background: COLORS.purple, transition: 'width 0.3s' }} />
-                  </div>
-                  <span style={{ fontSize: 10, color: COLORS.muted, whiteSpace: 'nowrap' }}>
-                    {currentQIdx}/{config.interviewQuestions.length}
-                  </span>
-                </div>
-
-                {/* Previous answers */}
-                {answers.map((ans, i) => (
-                  <div key={i} style={{ fontSize: 11, borderRadius: 8, overflow: 'hidden' }}>
-                    <div style={{ padding: '7px 10px', background: COLORS.bg, color: COLORS.muted, lineHeight: 1.4 }}>
-                      {config.interviewQuestions[i]}
-                    </div>
-                    <div style={{ padding: '7px 10px', background: COLORS.purpleLight, color: '#4c1d95', fontWeight: 500 }}>
-                      {ans}
-                    </div>
-                  </div>
-                ))}
-
-                {/* Current question */}
-                {currentQIdx < config.interviewQuestions.length && !generatingScope && (
-                  <div style={{ borderRadius: 8, border: `1.5px solid ${COLORS.purpleBorder}`, overflow: 'hidden' }}>
-                    <div style={{ padding: '10px 12px', background: COLORS.purpleLight, fontSize: 12, fontWeight: 600, color: '#4c1d95', lineHeight: 1.5 }}>
-                      {config.interviewQuestions[currentQIdx]}
-                    </div>
-                    <div style={{ padding: '10px 12px' }}>
-                      <input
-                        ref={answerRef}
-                        value={currentAnswer}
-                        onChange={e => setCurrentAnswer(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && submitAnswer()}
-                        placeholder="Type your answer…"
-                        style={{ width: '100%', padding: '8px 10px', border: `1.5px solid ${COLORS.border}`, borderRadius: 6, fontSize: 12, boxSizing: 'border-box', outline: 'none' }}
-                        onFocus={e => (e.target.style.borderColor = COLORS.purple)}
-                        onBlur={e  => (e.target.style.borderColor = COLORS.border)}
-                        autoFocus
-                      />
-                      <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                        <button onClick={submitAnswer} disabled={!currentAnswer.trim()} style={{ ...btn(COLORS.purple, '#fff', { flex: 1, justifyContent: 'center', fontSize: 11, padding: '7px 0', opacity: currentAnswer.trim() ? 1 : 0.5 }) }}>
-                          {currentQIdx < config.interviewQuestions.length - 1 ? 'Next →' : '✦ Generate Scope'}
-                        </button>
-                        <button
-                          onClick={() => { setCurrentAnswer('—'); setTimeout(submitAnswer, 0) }}
-                          style={{ ...outlineBtn(COLORS.muted), fontSize: 10, padding: '7px 8px' }}
-                          title="Skip this question"
-                        >
-                          Skip
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {generatingScope && (
-                  <div style={{ textAlign: 'center', padding: '16px 0', color: COLORS.purple, fontSize: 13 }}>
-                    <div style={{ fontSize: 24, marginBottom: 6 }}>⏳</div>
-                    Building scope from your answers…
-                  </div>
-                )}
-
-                {!generatingScope && currentQIdx >= config.interviewQuestions.length && answers.length > 0 && (
-                  <div style={{ textAlign: 'center', padding: '12px 0' }}>
-                    <div style={{ fontSize: 20, marginBottom: 6 }}>✅</div>
-                    <div style={{ fontSize: 12, color: '#16a34a', fontWeight: 600, marginBottom: 8 }}>Scope generated from your answers</div>
-                    <button onClick={() => { setAnswers([]); setCurrentQIdx(0); setCurrentAnswer(''); }} style={{ ...outlineBtn(COLORS.muted), fontSize: 11 }}>
-                      ↺ Restart interview
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
+        {/* ── RIGHT: embedded AI chat with mic + file attach ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <ScopeChat
+            embedded
+            quoteId={null}
+            jobType={config.label}
+            address=""
+            phases={config.defaultPhases}
+            onInsert={text => { setScopeText(text); onScopeChange(text) }}
+            onClose={() => {/* no-op in embedded mode */}}
+            onBuildEstimate={text => { setScopeText(text); onScopeChange(text); onBuildEstimate() }}
+          />
         </div>
       </div>
     </div>
