@@ -112,6 +112,7 @@ export default function NewQuotePage() {
   const [generatingPhases, setGeneratingPhases] = useState(false)
   const [showScopeChat, setShowScopeChat] = useState(false)
   const [buildingEstimate, setBuildingEstimate] = useState(false)
+  const [loadingBO, setLoadingBO] = useState(false)   // true while fetching BO defaults for manual quotes
   const [estimateUsedDB, setEstimateUsedDB] = useState(false)
   const [showScopeHelp, setShowScopeHelp] = useState(false)
   const [clientDrop, setClientDrop] = useState(false)
@@ -175,13 +176,18 @@ export default function NewQuotePage() {
   // and builds QuotePhase[] with itemStatus:'bo-default' and boTaskId stamped.
   // Falls back to loadTemplate() if no BO data exists.
   async function loadFromBackOffice(type: string) {
+    setLoadingBO(true)
     try {
       const sb = createClient()
       const { data: { user } } = await sb.auth.getUser()
-      if (!user) { loadTemplate(type); return }
+      if (!user) { loadTemplateStamped(type); return }
 
       const defaults = await fetchQuoteDefaults(sb, user.id, type)
-      if (!defaults.length) { loadTemplate(type); return }
+      if (!defaults.length) {
+        console.warn('[loadFromBackOffice] No BO defaults found for', type, '— falling back to template')
+        loadTemplateStamped(type)
+        return
+      }
 
       const built: QuotePhase[] = []
       for (const row of defaults) {
@@ -199,10 +205,37 @@ export default function NewQuotePage() {
         const ph = makePhase(row.subPhaseName, items, row.phaseName)
         built.push({ ...ph, source: 'manual', itemStatus: 'bo-default', boSubPhaseId: row.subPhaseId })
       }
+      console.log('[loadFromBackOffice] Loaded', built.length, 'sub-phases from Back Office for', type)
       setPhases(built)
-    } catch {
-      loadTemplate(type)
+    } catch (err) {
+      console.error('[loadFromBackOffice] Error:', err)
+      loadTemplateStamped(type)
+    } finally {
+      setLoadingBO(false)
     }
+  }
+
+  /** Fallback: load hardcoded template but stamp itemStatus:'manual' so badges always show */
+  function loadTemplateStamped(type: string) {
+    const tpl = getTemplate(type)
+    setPhases(tpl.map(p => {
+      const estimatorItems = p.estimatorItems?.map(itemFromTemplate) ?? []
+      let typedItems: Omit<QuoteItem, 'id'>[] = p.items
+      if (estimatorItems.length > 0) {
+        const agg = estimatorAggregates(estimatorItems, [])
+        typedItems = p.items.map(qi => {
+          if (qi.itemType === 'labour')         return { ...qi, labour:         agg.labour }
+          if (qi.itemType === 'materials')      return { ...qi, materials:      agg.materials }
+          if (qi.itemType === 'plant')          return { ...qi, plantHire:      agg.plant }
+          if (qi.itemType === 'subcontractors') return { ...qi, subcontractors: agg.subcontractors }
+          if (qi.itemType === 'other')          return { ...qi, other:          agg.other }
+          return qi
+        })
+      }
+      const ph = makePhase(p.phase, typedItems, p.parentPhase || undefined, estimatorItems)
+      return { ...ph, source: 'manual' as const, itemStatus: 'manual' as const }
+    }))
+    setLoadingBO(false)
   }
 
   // ── Save a sub-phase's costs back to BO default tasks ────────────────────────
@@ -1287,11 +1320,15 @@ export default function NewQuotePage() {
             />
           </div>}
 
-          {buildingEstimate ? (
+          {(buildingEstimate || loadingBO) ? (
             <div className="empty-dashed" style={{ textAlign: 'center', padding: '40px 20px' }}>
               <div style={{ fontSize: 28, marginBottom: 10 }}>⏳</div>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Building Estimate…</div>
-              <div style={{ fontSize: 12, color: 'var(--muted)' }}>Analysing scope and matching tasks from the library.</div>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
+                {loadingBO ? 'Loading Back Office defaults…' : 'Building Estimate…'}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                {loadingBO ? 'Fetching phases, sub-phases and task rates from Back Office.' : 'Analysing scope and matching tasks from the library.'}
+              </div>
             </div>
           ) : (
             <>
