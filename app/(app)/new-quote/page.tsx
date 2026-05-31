@@ -41,6 +41,8 @@ function makePhase(
     estimatorItems: estimatorItems ?? [],
     useEstimator: true,
     ...(meta && { meta }),
+    // Auto-stamp source from meta so the workspace can show the badge
+    ...(meta?.importedFrom === 'takeoff' && { source: 'takeoff' as const }),
   }
 }
 
@@ -246,15 +248,16 @@ export default function NewQuotePage() {
           plant: number; plantNotes: string
           subcontractors?: number; subNotes?: string
           other?: number; otherNotes?: string
-        }) =>
-          makePhase(p.phase, [
-            { desc: '', qty: 1, unit: 'Item', labour: Number(p.labour) || 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: String(p.labourNotes || ''), itemType: 'labour' as const },
-            { desc: '', qty: 1, unit: 'Item', labour: 0, materials: Number(p.materials) || 0, plantHire: 0, subcontractors: 0, other: 0, notes: String(p.materialsNotes || ''), itemType: 'materials' as const },
-            { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: Number(p.plant) || 0, subcontractors: 0, other: 0, notes: String(p.plantNotes || ''), itemType: 'plant' as const },
-            { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: Number(p.subcontractors) || 0, other: 0, notes: String(p.subNotes || ''), itemType: 'subcontractors' as const },
-            { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: Number(p.other) || 0, notes: String(p.otherNotes || ''), itemType: 'other' as const },
+        }) => {
+          const ph = makePhase(p.phase, [
+            { desc: p.labourNotes    || 'Labour',        qty: 1, unit: 'Item', labour: Number(p.labour) || 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'labour'         as const },
+            { desc: p.materialsNotes || 'Materials',     qty: 1, unit: 'Item', labour: 0, materials: Number(p.materials) || 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials'      as const },
+            { desc: p.plantNotes     || 'Plant hire',    qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: Number(p.plant) || 0, subcontractors: 0, other: 0, notes: '', itemType: 'plant'          as const },
+            { desc: p.subNotes       || 'Subcontract',   qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: Number(p.subcontractors) || 0, other: 0, notes: '', itemType: 'subcontractors' as const },
+            { desc: p.otherNotes     || 'Other',         qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: Number(p.other) || 0, notes: '', itemType: 'other'          as const },
           ], p.parentPhase)
-        ))
+          return { ...ph, source: 'ai' as const }
+        }))
       }
     } catch {
       alert('Failed to generate phases — check your connection.')
@@ -414,8 +417,9 @@ export default function NewQuotePage() {
         const newPhases: QuotePhase[] = []
 
         for (const item of data.items as TakeoffItem[]) {
-          // parentPhase maps to the back-office main phase structure
-          const parentPhase = PHASE_TO_QUOTE_PARENT[item.phase as TakeoffPhase] || item.phase
+          // Use the original takeoff phase name as the parent so the hierarchy is clear
+          // (e.g. "External Walls" not "Phase 3 – Structural Shell")
+          const parentPhase = item.phase
           // sub-phase name = the take-off phase name (matches back-office template)
           const subPhaseName = item.phase
 
@@ -477,7 +481,7 @@ export default function NewQuotePage() {
               }
 
               if (layerRows.length > 0) {
-                const subPhaseName = `${item.phase} — ${makeup.name}`
+                // Sub-phase name = just the build-up type (no phase prefix)
                 const meta: TakeoffPhaseMeta = {
                   importedFrom: 'takeoff',
                   phaseName:    item.phase,
@@ -490,7 +494,8 @@ export default function NewQuotePage() {
                     height: item.wallHeight,
                   },
                 }
-                newPhases.push(makePhase(subPhaseName, layerRows, parentPhase, undefined, meta))
+                const p = makePhase(makeup.name, layerRows, parentPhase, undefined, meta)
+                newPhases.push({ ...p, source: 'takeoff' })
               }
               continue
             }
@@ -765,7 +770,22 @@ export default function NewQuotePage() {
           { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0,    plantHire: 0, subcontractors: 0, other: agg.other,                notes: '', itemType: 'other'          as const },
         ]
 
-        return makePhase(sp.phase, typedItems, sp.parentPhase || undefined, estimatorItems)
+        const hasExtraTasks = (sp.extraTasks ?? []).length > 0
+        const allTasksFound = (sp.selectedTasks ?? []).every(t => !!taskRates[t])
+        const ph = makePhase(sp.phase, typedItems, sp.parentPhase || undefined, estimatorItems)
+        return {
+          ...ph,
+          source: 'ai' as const,
+          // Flag if AI had to invent tasks (extraTasks) or couldn't find BO rates
+          ...(hasExtraTasks && {
+            needsReview: true,
+            reviewNote: `Contains ${(sp.extraTasks ?? []).length} task(s) not found in Back Office master data`,
+          }),
+          ...(!allTasksFound && !hasExtraTasks && {
+            needsReview: true,
+            reviewNote: 'Some tasks could not be matched to Back Office rates — verify costs',
+          }),
+        }
       })
 
       setPhases(built)

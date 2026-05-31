@@ -49,6 +49,11 @@ export interface QuotePhase {
   useEstimator?: boolean  // true = lump sums auto-computed from estimatorItems
   labourTrades?: LabourTrade[]  // explicit day-rate trade entries for this phase
   meta?: TakeoffPhaseMeta       // set when imported from the Takeoff tool
+  /** Where this sub-phase originated */
+  source?: 'takeoff' | 'ai' | 'manual'
+  /** AI-generated item that couldn't be matched to Back Office master data */
+  needsReview?: boolean
+  reviewNote?: string
 }
 
 export interface QuoteCustomer {

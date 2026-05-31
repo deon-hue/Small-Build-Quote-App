@@ -285,6 +285,22 @@ function TaskGroup({ tg, items, markup, isLocked, collapsed, colKey, toggle, onU
   )
 }
 
+// ── Source badge ──────────────────────────────────────────────────────────────
+
+function SourceBadge({ source }: { source?: string }) {
+  if (!source || source === 'manual') return null
+  const config = {
+    takeoff: { label: '📐 Takeoff', bg: '#eff6ff', text: '#1d4ed8' },
+    ai:      { label: '✦ AI',      bg: '#fdf4ff', text: '#7c3aed' },
+  }[source as 'takeoff' | 'ai']
+  if (!config) return null
+  return (
+    <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, background: config.bg, color: config.text, flexShrink: 0 }}>
+      {config.label}
+    </span>
+  )
+}
+
 // ── Sub-phase block (Level 3) ──────────────────────────────────────────────────
 
 interface SubPhaseBlockProps {
@@ -344,7 +360,12 @@ function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDel
     <div style={{ border: '1px solid #e2e8f0', borderRadius: 6, marginBottom: 6, overflow: 'hidden' }}>
       {/* Sub-phase header */}
       <div
-        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: '#f8fafc', cursor: 'pointer', userSelect: 'none' }}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
+          background: p.needsReview ? '#fffbeb' : '#f8fafc',
+          cursor: 'pointer', userSelect: 'none',
+          borderLeft: p.needsReview ? '3px solid #f59e0b' : 'none',
+        }}
         onClick={() => toggle(colKey)}
       >
         <span style={{ color: '#94a3b8', fontSize: 11, width: 12, flexShrink: 0 }}>{open ? '▾' : '▸'}</span>
@@ -359,6 +380,12 @@ function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDel
         {badges.map((b, i) => (
           <span key={i} style={{ fontSize: 9, padding: '1px 6px', borderRadius: 99, background: '#e0f2fe', color: '#0369a1', flexShrink: 0 }}>{b}</span>
         ))}
+        {p.needsReview && (
+          <span title={p.reviewNote ?? 'This item needs review'} style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, background: '#fef3c7', color: '#92400e', flexShrink: 0, cursor: 'help' }}>
+            ⚠️ Needs Review
+          </span>
+        )}
+        <SourceBadge source={p.source} />
         <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: '#7ab533', flexShrink: 0 }}>
           {sell > 0 ? fmt(sell) : '—'}
         </span>
@@ -374,6 +401,20 @@ function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDel
       {/* Sub-phase body */}
       {open && (
         <div style={{ padding: '6px 10px 8px' }}>
+          {/* Needs-review banner */}
+          {p.needsReview && p.reviewNote && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', marginBottom: 8, background: '#fffbeb', border: '1px solid #f59e0b', borderRadius: 5, fontSize: 11, color: '#92400e' }}>
+              <span>⚠️</span>
+              <span style={{ flex: 1 }}>{p.reviewNote}</span>
+              {!isLocked && (
+                <button
+                  onClick={() => onUpdate({ ...p, needsReview: false, reviewNote: undefined })}
+                  style={{ ...iconBtn('#92400e'), fontSize: 10, border: '1px solid #f59e0b', borderRadius: 3, padding: '1px 6px' }}>
+                  Mark reviewed
+                </button>
+              )}
+            </div>
+          )}
           {tgs.map(tg => (
             <TaskGroup
               key={tg}
