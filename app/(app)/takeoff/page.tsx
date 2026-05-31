@@ -424,7 +424,11 @@ type PanelMode = 'schedule' | 'properties'
 export default function TakeoffPage() {
   // Project state
   const [project, setProject] = useState<TakeoffProject>(() => loadProject() ?? blankProject())
-  const [planImage, setPlanImage] = useState<string | null>(null)
+  // Restore plan image from saved project on first load
+  const [planImage, setPlanImage] = useState<string | null>(() => {
+    const saved = loadProject()
+    return saved?.planImageUrl ?? null
+  })
 
   // Supabase auth — userId loaded once on mount
   const [userId, setUserId] = useState<string | null>(null)
@@ -526,6 +530,18 @@ export default function TakeoffPage() {
   const [canvasImgSize, setCanvasImgSize] = useState<{ w: number; h: number } | null>(null)
   const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 })
   const hasPannedRef = useRef(false)
+
+  // When the plan image is restored from localStorage on mount, measure its
+  // dimensions so the canvas fits correctly (same as after a fresh upload).
+  useEffect(() => {
+    const saved = loadProject()
+    if (!saved?.planImageUrl) return
+    const img = new Image()
+    img.onload = () => {
+      setCanvasImgSize({ w: img.naturalWidth, h: img.naturalHeight })
+    }
+    img.src = saved.planImageUrl
+  }, []) // run once on mount
 
   // Drag-to-move state
   const dragRef = useRef<{
