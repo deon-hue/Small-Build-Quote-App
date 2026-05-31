@@ -615,6 +615,21 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
     display_order: i,
   })).filter(p => p.canonical_id !== null) as Array<{ canonical_id: string; name: string; display_order: number }>
 
+  // ── Heal phases with null canonical_id by matching name ──────────────────────
+  const unmappedPhases = (dbPhases ?? []).filter(p => !p.canonical_id)
+  if (unmappedPhases.length > 0) {
+    for (const desired of desiredPhases) {
+      if (phaseCanonToId.has(desired.canonical_id)) continue
+      const match = unmappedPhases.find(p => p.name === desired.name)
+      if (match) {
+        await sb.from('bo_phases').update({ canonical_id: desired.canonical_id }).eq('id', match.id)
+        phaseCanonToId.set(desired.canonical_id, match.id)
+        phaseByCanon.set(desired.canonical_id, match as { id: string; name: string; display_order: number })
+        console.log('[sync] healed phase canonical_id:', desired.name, '→', desired.canonical_id)
+      }
+    }
+  }
+
   // Insert new phases (batch)
   const newPhases = desiredPhases.filter(p => !phaseByCanon.has(p.canonical_id))
   if (newPhases.length > 0) {
