@@ -1015,18 +1015,6 @@ export default function NewQuotePage() {
           </div>
 
           <div className="card">
-            <div className="card-hd">Job Type</div>
-            <div style={{ padding: '14px 16px' }}>
-              <div className="fg">
-                <label>Type</label>
-                <select value={jobType} onChange={e => onJobTypeChange(e.target.value)}>
-                  {JOB_TYPES.map(t => <option key={t}>{t}</option>)}
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div className="card">
             <div className="card-hd">Property Photo</div>
             <div style={{ padding: '14px 16px' }}>
               {photo
@@ -1044,24 +1032,6 @@ export default function NewQuotePage() {
                       onChange={e => { const f = e.target.files?.[0]; if (f) handlePhotoFile(f) }} />
                   </div>
               }
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-hd">
-              <span>Scope of Works</span>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <button
-                  className="btn-sm btn-outline"
-                  onClick={() => setShowScopeHelp(true)}
-                  title="How to use the AI Scope Writer"
-                  style={{ fontSize: 11, width: 24, height: 24, padding: 0, borderRadius: '50%', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}
-                >?</button>
-                <button className="btn-sm btn-sky" onClick={() => setShowScopeChat(true)} style={{ fontSize: 11 }}>✦ AI Chat</button>
-              </div>
-            </div>
-            <div style={{ padding: '14px 16px' }}>
-              <textarea value={scope} onChange={e => setScope(e.target.value)} rows={6} placeholder="Describe the works to be carried out…" />
             </div>
           </div>
 
@@ -1104,19 +1074,48 @@ export default function NewQuotePage() {
 
         {/* Right panel — Quote Workspace */}
         <div className="qb-right">
-          {/* Top action bar */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-            <div style={{ fontWeight: 700, fontSize: 15, flex: 1, minWidth: 120 }}>
-              Quote Workspace
+
+          {/* ── Workspace header: Job Type + Scope + Actions ── */}
+          <div style={{ background: 'var(--cream)', border: '1.5px solid var(--border)', borderRadius: 8, padding: '14px 16px', marginBottom: 16 }}>
+            {/* Row 1: Job type + action buttons */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+              <select
+                value={jobType}
+                onChange={e => onJobTypeChange(e.target.value)}
+                style={{ padding: '6px 10px', border: '1.5px solid var(--border)', borderRadius: 6, fontSize: 13, fontWeight: 600, background: 'white', minWidth: 180 }}
+              >
+                {JOB_TYPES.map(t => <option key={t}>{t}</option>)}
+              </select>
+
+              <div style={{ flex: 1 }} />
+
+              <button
+                className="btn-sm btn-outline"
+                onClick={() => setShowScopeHelp(true)}
+                title="How to use the AI Scope Writer"
+                style={{ fontSize: 11, width: 22, height: 22, padding: 0, borderRadius: '50%', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}
+              >?</button>
+              <button className="btn-sm btn-sky" onClick={() => setShowScopeChat(true)} style={{ fontSize: 11 }}>
+                ✦ AI Chat
+              </button>
+              <button className="btn-sm btn-sky" onClick={generatePhases} disabled={generatingPhases} style={{ fontSize: 11 }}>
+                {generatingPhases ? '⏳ Generating…' : '✦ Generate'}
+              </button>
+              <label className="btn-sm btn-outline" style={{ fontSize: 11, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                title="Import take-off from the Take-off tool">
+                📐 Import Take-off
+                <input ref={takeoffInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={importTakeoff} />
+              </label>
             </div>
-            <button className="btn-sm btn-sky" onClick={generatePhases} disabled={generatingPhases} style={{ fontSize: 11 }}>
-              {generatingPhases ? '⏳ Generating…' : '✦ AI Generate'}
-            </button>
-            <label className="btn-sm btn-outline" style={{ fontSize: 11, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-              title="Import take-off from the Take-off tool">
-              📐 Import Take-off
-              <input ref={takeoffInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={importTakeoff} />
-            </label>
+
+            {/* Row 2: Scope textarea */}
+            <textarea
+              value={scope}
+              onChange={e => setScope(e.target.value)}
+              rows={3}
+              placeholder="Describe the scope of works… (used by AI to generate the quote)"
+              style={{ width: '100%', resize: 'vertical', fontSize: 12, padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 6, boxSizing: 'border-box', fontFamily: 'inherit', color: 'var(--text)' }}
+            />
           </div>
 
           {buildingEstimate ? (
