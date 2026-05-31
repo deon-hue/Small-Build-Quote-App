@@ -638,6 +638,21 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
   }
   console.log('[sync] phaseCanonToId after heal:', phaseCanonToId.size)
 
+  // ── Cleanup: remove legacy phases with no canonical_id whose names are not
+  //    in TAKEOFF_PHASES. These are old seeded phases (e.g. 'First Fix Plumbing',
+  //    'Groundworks', 'Demolition') that pre-date the current phase structure.
+  //    Cascades to their sub-phases and tasks automatically.
+  const takeoffPhaseNames = new Set<string>(TAKEOFF_PHASES as readonly string[])
+  const legacyPhases = (dbPhases ?? []).filter(p =>
+    !p.canonical_id && !takeoffPhaseNames.has(p.name)
+  )
+  if (legacyPhases.length > 0) {
+    console.log('[sync] removing legacy phases:', legacyPhases.map(p => p.name))
+    for (const lp of legacyPhases) {
+      await sb.from('bo_phases').delete().eq('id', lp.id)
+    }
+  }
+
   // Insert new phases (batch)
   const newPhases = desiredPhases.filter(p => !phaseByCanon.has(p.canonical_id))
   if (newPhases.length > 0) {
