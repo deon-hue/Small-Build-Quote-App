@@ -16,6 +16,26 @@ export interface QuoteItem {
   notes: string
 }
 
+/** Metadata stamped on phases that were imported from the Takeoff tool */
+export interface TakeoffPhaseMeta {
+  importedFrom:  'takeoff'
+  phaseName:     string          // original takeoff phase e.g. "External Walls"
+  buildupType?:  string          // build-up name e.g. "Cavity Wall – Partial Fill"
+  taskType?:     string          // task sub-phase name e.g. "Demolition"
+  roomName?:     string          // location label e.g. "Rear Garden"
+  drawingLabel?: string          // drawing element label e.g. "South Wall"
+  measurements?: {
+    length?:  number   // m
+    area?:    number   // m²
+    volume?:  number   // m³
+    qty?:     number
+    unit?:    string
+    height?:  number   // m
+    width?:   number   // m (foundation/trench)
+    depth?:   number   // m (foundation/trench)
+  }
+}
+
 export interface QuotePhase {
   id: number
   phase: string          // Sub-phase / category name
@@ -24,6 +44,7 @@ export interface QuotePhase {
   estimatorItems?: EstimatorItem[]
   useEstimator?: boolean  // true = lump sums auto-computed from estimatorItems
   labourTrades?: LabourTrade[]  // explicit day-rate trade entries for this phase
+  meta?: TakeoffPhaseMeta       // set when imported from the Takeoff tool
 }
 
 export interface QuoteCustomer {

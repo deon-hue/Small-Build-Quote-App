@@ -3,13 +3,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { fmt, VAT, JOB_TYPES, calcPhase, calcPhaseSell } from '@/lib/utils'
-import type { QuotePhase, QuoteItem, Quote } from '@/lib/types'
+import type { QuotePhase, QuoteItem, Quote, TakeoffPhaseMeta } from '@/lib/types'
 import { itemFromTemplate, estimatorAggregates } from '@/lib/estimator'
 import type { EstimatorItem, EstimatorItemTemplate, MeasurementType } from '@/lib/estimator'
 import { getPhaseEstimatorDefaults } from '@/lib/estimatorDefaults'
 import QuotePreviewModal from '@/components/QuotePreviewModal'
 import ScopeChat from '@/components/ScopeChat'
 import EstimatorBreakdown from '@/components/EstimatorBreakdown'
+import TakeoffBreakdownView from '@/components/TakeoffBreakdownView'
 import type { TakeoffItem, TakeoffPhase } from '@/lib/takeoff-types'
 import { PHASE_TO_QUOTE_PARENT, ALL_MAKEUPS, calcLayerQty, WALL_OPENING_LABELS, type TakeoffLabourLine } from '@/lib/takeoff-types'
 import { DEFAULT_DEMO_SUBPHASES, calcDemoSellingPrice, DEMO_UNIT_LABELS, type DemoUnit } from '@/lib/demolition-data'
@@ -27,6 +28,7 @@ function makePhase(
   items: Omit<QuoteItem, 'id'>[],
   parentPhase?: string,
   estimatorItems?: EstimatorItem[],
+  meta?: TakeoffPhaseMeta,
 ): QuotePhase {
   return {
     id: ++phaseCounter,
@@ -35,6 +37,7 @@ function makePhase(
     items: items.map(i => ({ ...i, id: ++itemCounter })),
     estimatorItems: estimatorItems ?? [],
     useEstimator: true,
+    ...(meta && { meta }),
   }
 }
 
@@ -107,6 +110,9 @@ export default function NewQuotePage() {
   const [clientDrop, setClientDrop] = useState(false)
   const [clientSearch, setClientSearch] = useState('')
   const [collapsedPhases, setCollapsedPhases] = useState<Set<number>>(new Set())
+  // 'breakdown' = structured visual view (after takeoff import); 'edit' = normal editable rows
+  const [viewMode, setViewMode] = useState<'breakdown' | 'edit'>('edit')
+  const hasTakeoffPhases = phases.some(p => p.meta?.importedFrom === 'takeoff')
   const photoInputRef = useRef<HTMLInputElement>(null)
   const takeoffInputRef = useRef<HTMLInputElement>(null)
 
@@ -466,9 +472,20 @@ export default function NewQuotePage() {
               }
 
               if (layerRows.length > 0) {
-                // Sub-phase name: "Phase — Build-up Type" for clear hierarchy
                 const subPhaseName = `${item.phase} — ${makeup.name}`
-                newPhases.push(makePhase(subPhaseName, layerRows, parentPhase))
+                const meta: TakeoffPhaseMeta = {
+                  importedFrom: 'takeoff',
+                  phaseName:    item.phase,
+                  buildupType:  makeup.name,
+                  roomName:     item.roomName,
+                  drawingLabel: item.name,
+                  measurements: {
+                    length: item.length, area: item.area ?? (item.phase === 'External Walls' ? undefined : area),
+                    volume: item.volume, qty: item.qty, unit: item.unit,
+                    height: item.wallHeight,
+                  },
+                }
+                newPhases.push(makePhase(subPhaseName, layerRows, parentPhase, undefined, meta))
               }
               continue
             }
@@ -491,6 +508,12 @@ export default function NewQuotePage() {
             const refStr    = item.drawingRef ? ` [${item.drawingRef}]` : ''
             const demoPhaseName = demoSub?.name ?? item.subPhase ?? 'Demolition'
 
+            // Build meta for this takeoff item
+            const demoMeta: TakeoffPhaseMeta = {
+              importedFrom: 'takeoff', phaseName: item.phase, taskType: demoPhaseName,
+              roomName: item.roomName, drawingLabel: item.name,
+              measurements: { qty: item.qty, unit: item.unit, length: item.length, area: item.area },
+            }
             newPhases.push(makePhase(
               demoPhaseName,
               [
@@ -500,7 +523,7 @@ export default function NewQuotePage() {
                 { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: subCost, other: 0, notes: '', itemType: 'subcontractors' },
                 { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: waste + other, notes: `Waste £${waste.toFixed(0)} | Other £${other.toFixed(0)} | Markup ${markupPct}% → sell £${selling.toFixed(2)}`, itemType: 'other' },
               ],
-              parentPhase,
+              parentPhase, undefined, demoMeta,
             ))
             continue
           }
@@ -519,7 +542,11 @@ export default function NewQuotePage() {
             const taskDesc  = item.spec || phaseTask?.notes || item.name
             const refStr    = item.drawingRef ? ` [${item.drawingRef}]` : ''
             const taskSubName = phaseSub?.name ?? item.subPhase ?? item.phase
-
+            const taskMeta: TakeoffPhaseMeta = {
+              importedFrom: 'takeoff', phaseName: item.phase, taskType: taskSubName,
+              roomName: item.roomName, drawingLabel: item.name,
+              measurements: { qty: item.qty, unit: item.unit, length: item.length, area: item.area, volume: item.volume },
+            }
             newPhases.push(makePhase(
               taskSubName,
               [
@@ -529,7 +556,7 @@ export default function NewQuotePage() {
                 { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: subCost, other: 0, notes: '', itemType: 'subcontractors' },
                 { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other, notes: `Markup ${markupPct}% → sell £${selling.toFixed(2)}`, itemType: 'other' },
               ],
-              parentPhase,
+              parentPhase, undefined, taskMeta,
             ))
             continue
           }
@@ -547,7 +574,11 @@ export default function NewQuotePage() {
             ].filter(Boolean).join(' | ')
             const wallDesc = `${item.qty?.toFixed(2) ?? '?'} m² — ${item.name}${refStr}`
             const wallSubName = item.subPhase || item.phase
-
+            const wallMeta: TakeoffPhaseMeta = {
+              importedFrom: 'takeoff', phaseName: item.phase,
+              roomName: item.roomName, drawingLabel: item.name,
+              measurements: { area: item.area, qty: item.qty, unit: 'm²', height: item.wallHeight, length: item.length },
+            }
             newPhases.push(makePhase(
               wallSubName,
               [
@@ -557,7 +588,7 @@ export default function NewQuotePage() {
                 { desc: '',       qty: item.qty ?? 1, unit: 'm²', labour: 0, materials: 0, plantHire: 0, subcontractors: matTotals.subcontractors, other: 0, notes: '', itemType: 'subcontractors' },
                 { desc: '',       qty: item.qty ?? 1, unit: 'm²', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: matTotals.other, notes: matTotals.other > 0 ? 'Other costs' : '', itemType: 'other' },
               ],
-              parentPhase,
+              parentPhase, undefined, wallMeta,
             ))
             continue
           }
@@ -566,6 +597,11 @@ export default function NewQuotePage() {
           const refStr = item.drawingRef ? ` [${item.drawingRef}]` : ''
           const specStr = item.spec ? ` · ${item.spec}` : ''
           const desc = `${item.qty} ${item.unit}${specStr}${refStr}`
+          const regularMeta: TakeoffPhaseMeta = {
+            importedFrom: 'takeoff', phaseName: item.phase,
+            roomName: item.roomName, drawingLabel: item.name,
+            measurements: { qty: item.qty, unit: item.unit, length: item.length, area: item.area, volume: item.volume },
+          }
 
           const boTasksForPhase = boRates[item.phase] ?? []
 
@@ -582,7 +618,7 @@ export default function NewQuotePage() {
                   { desc: '', qty: item.qty, unit: boTask.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: +(item.qty * boTask.sub).toFixed(2), other: 0, notes: '', itemType: 'subcontractors' },
                   { desc: '', qty: item.qty, unit: boTask.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: +(item.qty * boTask.other).toFixed(2), notes: `Markup ${boTask.markup}%`, itemType: 'other' },
                 ],
-                parentPhase,
+                parentPhase, undefined, regularMeta,
               ))
             }
           } else {
@@ -596,7 +632,7 @@ export default function NewQuotePage() {
                 { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'subcontractors' },
                 { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'other' },
               ],
-              parentPhase,
+              parentPhase, undefined, regularMeta,
             ))
           }
         }
@@ -627,6 +663,7 @@ export default function NewQuotePage() {
         }
 
         setPhases(newPhases)
+        setViewMode('breakdown')  // switch to structured view after import
 
         // Prefill address / job type if blank
         if (!custAddr && data.address) setCustAddr(data.address)
@@ -1046,7 +1083,16 @@ export default function NewQuotePage() {
               Quote Lines — <span style={{ color: 'var(--muted)', fontWeight: 400 }}>{mainPhaseOrder.length} phase{mainPhaseOrder.length !== 1 ? 's' : ''}</span>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              {phases.length > 0 && (
+              {hasTakeoffPhases && (
+                <button
+                  className="btn-sm btn-outline"
+                  onClick={() => setViewMode(v => v === 'breakdown' ? 'edit' : 'breakdown')}
+                  style={{ fontSize: 11, background: viewMode === 'breakdown' ? '#eff6ff' : undefined, borderColor: viewMode === 'breakdown' ? '#bfdbfe' : undefined, color: viewMode === 'breakdown' ? '#1d4ed8' : undefined }}
+                >
+                  {viewMode === 'breakdown' ? '✏️ Edit Rates' : '📐 Builder View'}
+                </button>
+              )}
+              {phases.length > 0 && viewMode === 'edit' && (
                 <button
                   className="btn-sm btn-outline"
                   onClick={allCollapsed ? expandAllPhases : collapseAllPhases}
@@ -1085,67 +1131,49 @@ export default function NewQuotePage() {
                     <span style={{ color: '#64748b' }}>— costs are based on your configured defaults, not generic AI estimates</span>
                   </div>
                 )}
-                {/* ── Grouped main phases ── */}
-                {mainPhaseOrder.map(mainPhase => {
-                  const subPhases = phases.filter(p => p.parentPhase === mainPhase)
-                  const mainSell = mainPhaseTotal(mainPhase)
-                  return (
-                    <div key={mainPhase} style={{ marginBottom: 20 }}>
-                      {/* Main phase header */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#2c3e50', color: 'white', padding: '8px 14px', borderRadius: '6px 6px 0 0', fontSize: 13 }}>
-                        <input
-                          value={mainPhase}
-                          onChange={e => updateMainPhaseName(mainPhase, e.target.value)}
-                          style={{ flex: 1, background: 'transparent', border: 'none', color: 'white', fontSize: 13, fontWeight: 700, outline: 'none', minWidth: 0 }}
-                        />
-                        <span className="mono" style={{ fontSize: 12, color: '#7ab533', fontWeight: 700, whiteSpace: 'nowrap' }}>{fmt(mainSell)}</span>
-                        <button
-                          onClick={() => addSubPhase(mainPhase)}
-                          style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: 'white', fontSize: 11, borderRadius: 4, padding: '2px 8px', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                        >+ Sub-Phase</button>
-                        <button
-                          onClick={() => removeMainPhase(mainPhase)}
-                          style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: 16, cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}
-                          title="Remove this phase and all its sub-phases"
-                        >×</button>
-                      </div>
 
-                      {/* Sub-phases */}
-                      {subPhases.map((p, pi) => (
-                        <SubPhaseBlock
-                          key={p.id}
-                          p={p}
-                          pi={pi}
-                          markup={markup}
-                          vatOn={vatOn}
-                          collapsed={collapsedPhases.has(p.id)}
-                          onToggleCollapse={() => togglePhase(p.id)}
-                          onUpdatePhaseName={updatePhaseName}
-                          onRemovePhase={removePhase}
-                          onUpdatePhase={updatePhase}
-                          onSaveToBO={() => savePhaseRatesToBO(p)}
-                        />
-                      ))}
-                    </div>
-                  )
-                })}
-
-                {/* ── Orphan phases (no parentPhase) ── */}
-                {orphanPhases.map((p, pi) => (
-                  <SubPhaseBlock
-                    key={p.id}
-                    p={p}
-                    pi={pi}
+                {/* ── Takeoff breakdown view ── */}
+                {viewMode === 'breakdown' && hasTakeoffPhases && (
+                  <TakeoffBreakdownView
+                    phases={phases}
                     markup={markup}
-                    vatOn={vatOn}
-                    collapsed={collapsedPhases.has(p.id)}
-                    onToggleCollapse={() => togglePhase(p.id)}
-                    onUpdatePhaseName={updatePhaseName}
-                    onRemovePhase={removePhase}
-                    onUpdatePhase={updatePhase}
-                    onSaveToBO={() => savePhaseRatesToBO(p)}
+                    onEdit={() => setViewMode('edit')}
                   />
-                ))}
+                )}
+
+                {/* ── Normal edit view ── */}
+                {viewMode === 'edit' && <>
+                  {mainPhaseOrder.map(mainPhase => {
+                    const subPhases = phases.filter(p => p.parentPhase === mainPhase)
+                    const mainSell = mainPhaseTotal(mainPhase)
+                    return (
+                      <div key={mainPhase} style={{ marginBottom: 20 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#2c3e50', color: 'white', padding: '8px 14px', borderRadius: '6px 6px 0 0', fontSize: 13 }}>
+                          <input
+                            value={mainPhase}
+                            onChange={e => updateMainPhaseName(mainPhase, e.target.value)}
+                            style={{ flex: 1, background: 'transparent', border: 'none', color: 'white', fontSize: 13, fontWeight: 700, outline: 'none', minWidth: 0 }}
+                          />
+                          <span className="mono" style={{ fontSize: 12, color: '#7ab533', fontWeight: 700, whiteSpace: 'nowrap' }}>{fmt(mainSell)}</span>
+                          <button onClick={() => addSubPhase(mainPhase)} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: 'white', fontSize: 11, borderRadius: 4, padding: '2px 8px', cursor: 'pointer', whiteSpace: 'nowrap' }}>+ Sub-Phase</button>
+                          <button onClick={() => removeMainPhase(mainPhase)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: 16, cursor: 'pointer', padding: '0 2px', lineHeight: 1 }} title="Remove this phase and all its sub-phases">×</button>
+                        </div>
+                        {subPhases.map((p, pi) => (
+                          <SubPhaseBlock key={p.id} p={p} pi={pi} markup={markup} vatOn={vatOn}
+                            collapsed={collapsedPhases.has(p.id)} onToggleCollapse={() => togglePhase(p.id)}
+                            onUpdatePhaseName={updatePhaseName} onRemovePhase={removePhase}
+                            onUpdatePhase={updatePhase} onSaveToBO={() => savePhaseRatesToBO(p)} />
+                        ))}
+                      </div>
+                    )
+                  })}
+                  {orphanPhases.map((p, pi) => (
+                    <SubPhaseBlock key={p.id} p={p} pi={pi} markup={markup} vatOn={vatOn}
+                      collapsed={collapsedPhases.has(p.id)} onToggleCollapse={() => togglePhase(p.id)}
+                      onUpdatePhaseName={updatePhaseName} onRemovePhase={removePhase}
+                      onUpdatePhase={updatePhase} onSaveToBO={() => savePhaseRatesToBO(p)} />
+                  ))}
+                </>}
               </>
           }
 
