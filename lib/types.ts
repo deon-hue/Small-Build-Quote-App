@@ -18,6 +18,8 @@ export interface QuoteItem {
   taskGroup?: string
   /** Back Office task ID — set when the row originated from a bo_tasks row */
   boTaskId?: string
+  /** Whether this row is included in totals — default true when not set */
+  enabled?: boolean
 }
 
 /** Metadata stamped on phases that were imported from the Takeoff tool */

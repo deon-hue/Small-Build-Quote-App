@@ -39,6 +39,7 @@ const TYPE_COLOR: Record<ItemType, { bg: string; text: string }> = {
 }
 
 function itemCost(i: QuoteItem): number {
+  if (i.enabled === false) return 0
   return (i.labour ?? 0) + (i.materials ?? 0) + (i.plantHire ?? 0) + (i.subcontractors ?? 0) + (i.other ?? 0)
 }
 function phaseSell(p: QuotePhase, markup: number): number {
@@ -134,9 +135,11 @@ interface CostRowProps {
 }
 
 function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst, labourTrades = [] }: CostRowProps) {
-  const cat = (item.itemType ?? 'other') as ItemType
-  const cs  = TYPE_COLOR[cat]
-  const cost = itemCost(item)
+  const cat      = (item.itemType ?? 'other') as ItemType
+  const cs       = TYPE_COLOR[cat]
+  const enabled  = item.enabled !== false   // default true
+  const cost     = itemCost(item)           // returns 0 when disabled
+  const rawCost  = (item.labour ?? 0) + (item.materials ?? 0) + (item.plantHire ?? 0) + (item.subcontractors ?? 0) + (item.other ?? 0)
   const isLabour = cat === 'labour'
 
   // Labour picker state (local — doesn't need to persist)
@@ -168,14 +171,29 @@ function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst, lab
 
   return (
     <>
-    <tr style={{ borderBottom: showPicker ? 'none' : '1px solid #f1f5f9' }}>
+    <tr style={{ borderBottom: showPicker ? 'none' : '1px solid #f1f5f9', opacity: enabled ? 1 : 0.45 }}>
+
+      {/* Col 0: Toggle — 24px */}
+      <td style={{ padding: '5px 4px', width: 24, verticalAlign: 'top', paddingTop: 7 }}>
+        <button
+          onClick={() => setField('enabled', !enabled)}
+          disabled={isLocked}
+          title={enabled ? 'Exclude from total' : 'Include in total'}
+          style={{
+            background: 'none', border: 'none', cursor: isLocked ? 'default' : 'pointer',
+            fontSize: 13, lineHeight: 1, padding: 0, color: enabled ? '#22c55e' : '#cbd5e1',
+          }}
+        >
+          {enabled ? '●' : '○'}
+        </button>
+      </td>
 
       {/* Col 1: Category chip — fixed 76px */}
       <td style={{ padding: '5px 6px', width: 76, verticalAlign: 'top', paddingTop: 7 }}>
         <select value={cat} disabled={isLocked}
           onChange={e => setField('itemType', e.target.value as ItemType)}
           style={{ fontSize: 10, fontWeight: 700, padding: '2px 4px', borderRadius: 4,
-            border: 'none', cursor: 'pointer', background: cs.bg, color: cs.text,
+            border: 'none', cursor: 'pointer', background: enabled ? cs.bg : '#f1f5f9', color: enabled ? cs.text : '#94a3b8',
             width: '100%', outline: 'none' }}>
           {ITEM_TYPES.map(t => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}
         </select>
@@ -239,9 +257,12 @@ function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst, lab
 
       {/* Col 6: Total — 80px, right-aligned */}
       <td style={{ padding: '5px 6px', width: 80, textAlign: 'right', verticalAlign: 'top',
-        fontFamily: 'monospace', fontSize: 12, fontWeight: cost > 0 ? 700 : 400,
-        color: cost > 0 ? '#1e293b' : '#e2e8f0', whiteSpace: 'nowrap' }}>
-        {cost > 0 ? `£${fmt2(cost)}` : '—'}
+        fontFamily: 'monospace', fontSize: 12, whiteSpace: 'nowrap' }}>
+        {!enabled && rawCost > 0 ? (
+          <span style={{ textDecoration: 'line-through', color: '#cbd5e1' }}>£{fmt2(rawCost)}</span>
+        ) : cost > 0 ? (
+          <span style={{ fontWeight: 700, color: '#1e293b' }}>£{fmt2(cost)}</span>
+        ) : '—'}
       </td>
 
       {/* Col 7: Actions — 36px */}
@@ -256,7 +277,7 @@ function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst, lab
     {/* Labour rate picker — expands below the row when 🔨 is clicked */}
     {isLabour && showPicker && labourTrades.length > 0 && (
       <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-        <td colSpan={7} style={{ padding: '0 6px 8px 80px', background: '#fffbeb' }}>
+        <td colSpan={8} style={{ padding: '0 6px 8px 104px', background: '#fffbeb' }}>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, flexWrap: 'wrap', paddingTop: 6 }}>
             {/* Trade */}
             <div>
