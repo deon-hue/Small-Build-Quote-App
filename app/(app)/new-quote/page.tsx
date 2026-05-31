@@ -1199,7 +1199,6 @@ export default function NewQuotePage() {
               <label className="btn-sm btn-outline" style={{ fontSize: 11, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
                 title="Import take-off from the Take-off tool">
                 📐 Import Take-off
-                <input ref={takeoffInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={importTakeoff} />
               </label>
             </div>
 
@@ -1227,6 +1226,9 @@ export default function NewQuotePage() {
                   <span style={{ color: '#64748b' }}>— costs based on your configured defaults</span>
                 </div>
               )}
+              {/* Always-present hidden file input so takeoffInputRef.current?.click() works
+                  regardless of which route opened the workspace */}
+              <input ref={takeoffInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={importTakeoff} />
               <QuoteWorkspace
                 phases={phases}
                 markup={markup}
