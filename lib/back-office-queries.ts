@@ -773,6 +773,15 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
     !taskByCanon.has(t.canonical_id) &&
     subCanonToId.has(t.sub_canonical)
   )
+  console.log('[sync] desiredTasks:', desiredTasks.length,
+    '| newTasks:', newTasks.length,
+    '| taskByCanon size:', taskByCanon.size,
+    '| subCanonToId size:', subCanonToId.size)
+  // Log any tasks blocked because their sub-phase isn't in subCanonToId
+  const blockedTasks = desiredTasks.filter(t => !subCanonToId.has(t.sub_canonical))
+  if (blockedTasks.length > 0) {
+    console.warn('[sync] tasks blocked (sub not in DB):', [...new Set(blockedTasks.map(t => t.sub_canonical))])
+  }
   if (newTasks.length > 0) {
     // Insert in chunks of 100 to stay within Supabase payload limits
     for (let i = 0; i < newTasks.length; i += 100) {
