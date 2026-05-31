@@ -6,8 +6,9 @@ import {
   fetchPhases, upsertPhase, deletePhase,
   fetchSubPhases, upsertSubPhase, deleteSubPhase,
   fetchTasks, upsertTask, deleteTask,
+  fetchLabourTrades,
 } from '@/lib/back-office-queries'
-import type { BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
+import type { BOPhase, BOSubPhase, BOTask, BOLabourTrade } from '@/lib/back-office-types'
 import { TASK_UNITS } from '@/lib/back-office-types'
 import { JOB_TYPES } from '@/lib/utils'
 import { Plus, Trash2, ChevronRight, ChevronDown } from 'lucide-react'
@@ -36,17 +37,20 @@ export default function SectionPhasesTasks({ userId }: Props) {
   const [loading, setLoading] = useState(true)
   const [taskModal, setTaskModal] = useState<TaskModalState>(null)
   const [jobTypeFilter, setJobTypeFilter] = useState<string>('All')
+  const [labourTrades, setLabourTrades] = useState<BOLabourTrade[]>([])
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [p, sp, t] = await Promise.all([
+    const [p, sp, t, lt] = await Promise.all([
       fetchPhases(sb, userId),
       fetchSubPhases(sb, userId),
       fetchTasks(sb, userId),
+      fetchLabourTrades(sb, userId),
     ])
     setPhases(p)
     setSubPhases(sp)
     setTasks(t)
+    setLabourTrades(lt.filter(l => l.active))
     if (p.length > 0 && !selectedPhaseId) setSelectedPhaseId(p[0].id)
     setLoading(false)
   }, [userId]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -392,6 +396,7 @@ export default function SectionPhasesTasks({ userId }: Props) {
         <TaskModal
           task={taskModal.task}
           isNew={taskModal.isNew}
+          labourTrades={labourTrades}
           onChange={task => setTaskModal({ ...taskModal, task })}
           onSave={saveTaskModal}
           onCancel={() => setTaskModal(null)}
@@ -456,103 +461,250 @@ function TaskTable({ tasks, onEdit, onDelete, onDuplicate, onToggleActive }: {
 
 // ── Task editor modal ─────────────────────────────────────────────────────────
 
-function TaskModal({ task, isNew, onChange, onSave, onCancel }: {
-  task: BOTask; isNew: boolean
+// ── Labour rate helpers ────────────────────────────────────────────────────────
+type LabourRateType = 'hourly' | 'half_day' | 'day'
+
+function effectiveRate(trade: BOLabourTrade, rateType: LabourRateType): number {
+  if (rateType === 'day')      return trade.day_rate
+  if (rateType === 'half_day') return trade.half_day_rate_override ?? +(trade.day_rate / 2).toFixed(2)
+  return +(trade.day_rate / 8).toFixed(2)
+}
+
+const RATE_LABELS: Record<LabourRateType, string> = { hourly: 'Hourly', half_day: 'Half Day', day: 'Day' }
+const QTY_LABELS:  Record<LabourRateType, string> = { hourly: 'Hours', half_day: 'Half-days', day: 'Days' }
+
+// ── Task editor modal ─────────────────────────────────────────────────────────
+
+function TaskModal({ task, isNew, labourTrades, onChange, onSave, onCancel }: {
+  task: BOTask; isNew: boolean; labourTrades: BOLabourTrade[]
   onChange: (t: BOTask) => void; onSave: () => void; onCancel: () => void
 }) {
+  // Labour calculator local state
+  const [calcTradeId, setCalcTradeId]   = useState<string>(labourTrades[0]?.id ?? '')
+  const [calcRateType, setCalcRateType] = useState<LabourRateType>('day')
+  const [calcQty,      setCalcQty]      = useState(1)
+  const [calcWorkers,  setCalcWorkers]  = useState(1)
+  const [labourMode,   setLabourMode]   = useState<'calculator' | 'manual'>(
+    labourTrades.length > 0 ? 'calculator' : 'manual'
+  )
+
   function set<K extends keyof BOTask>(key: K, value: BOTask[K]) { onChange({ ...task, [key]: value }) }
 
-  const costFields: Array<{ key: keyof BOTask; label: string; color: string }> = [
-    { key: 'labour_cost', label: '🔨 Labour (per unit)', color: '#fef3c7' },
-    { key: 'materials_cost', label: '📦 Materials (per unit)', color: '#dbeafe' },
-    { key: 'plant_cost', label: '🚜 Plant (per unit)', color: '#ede9fe' },
-    { key: 'subcontract_cost', label: '👷 Subcontract (per unit)', color: '#fee2e2' },
-    { key: 'waste_cost', label: '🗑 Waste (per unit)', color: '#f1f5f9' },
-    { key: 'other_cost', label: '📋 Other (per unit)', color: '#f1f5f9' },
+  // Recalculate labour_cost whenever calculator inputs change
+  function applyCalc(tradeId: string, rateType: LabourRateType, qty: number, workers: number) {
+    const trade = labourTrades.find(t => t.id === tradeId)
+    if (!trade) return
+    const rate   = effectiveRate(trade, rateType)
+    const cost   = +(rate * qty * workers).toFixed(2)
+    onChange({ ...task, labour_cost: cost, trade_name: trade.name })
+  }
+
+  function onCalcTradeChange(id: string) {
+    setCalcTradeId(id)
+    applyCalc(id, calcRateType, calcQty, calcWorkers)
+  }
+  function onCalcRateTypeChange(rt: LabourRateType) {
+    setCalcRateType(rt)
+    applyCalc(calcTradeId, rt, calcQty, calcWorkers)
+  }
+  function onCalcQtyChange(q: number) {
+    setCalcQty(q)
+    applyCalc(calcTradeId, calcRateType, q, calcWorkers)
+  }
+  function onCalcWorkersChange(w: number) {
+    setCalcWorkers(w)
+    applyCalc(calcTradeId, calcRateType, calcQty, w)
+  }
+
+  const calcTrade = labourTrades.find(t => t.id === calcTradeId)
+  const calcRate  = calcTrade ? effectiveRate(calcTrade, calcRateType) : 0
+  const calcTotal = +(calcRate * calcQty * calcWorkers).toFixed(2)
+
+  const inp: React.CSSProperties = { width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' as const }
+  const lbl: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }
+
+  const otherCostFields: Array<{ key: keyof BOTask; label: string; color: string }> = [
+    { key: 'materials_cost',   label: '📦 Materials',   color: '#dbeafe' },
+    { key: 'plant_cost',       label: '🚜 Plant',       color: '#ede9fe' },
+    { key: 'subcontract_cost', label: '👷 Subcontract', color: '#fee2e2' },
+    { key: 'waste_cost',       label: '🗑 Waste',       color: '#f1f5f9' },
+    { key: 'other_cost',       label: '📋 Other',       color: '#f1f5f9' },
   ]
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 20px', overflowY: 'auto' }}>
-      <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 680, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+      <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 700, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+
+        {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 22px', borderBottom: '1px solid #e2e8f0' }}>
           <div style={{ fontWeight: 700, fontSize: 16 }}>{isNew ? '+ New Task' : '✏️ Edit Task'}</div>
           <button onClick={onCancel} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8' }}>×</button>
         </div>
+
         <div style={{ padding: '18px 22px', display: 'grid', gap: 14 }}>
+
+          {/* Name + Unit */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>Task Name</label>
-              <input value={task.name} onChange={e => set('name', e.target.value)}
-                style={{ width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, fontWeight: 600, boxSizing: 'border-box' }} />
+              <label style={lbl}>Task Name</label>
+              <input value={task.name} onChange={e => set('name', e.target.value)} style={{ ...inp, fontWeight: 600 }} />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>Unit</label>
-              <select value={task.unit} onChange={e => set('unit', e.target.value)}
-                style={{ width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13 }}>
+              <label style={lbl}>Unit</label>
+              <select value={task.unit} onChange={e => set('unit', e.target.value)} style={inp}>
                 {TASK_UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
               </select>
             </div>
           </div>
+
+          {/* Description */}
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>Description (internal)</label>
-            <input value={task.description} onChange={e => set('description', e.target.value)}
-              style={{ width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
+            <label style={lbl}>Description (internal)</label>
+            <input value={task.description} onChange={e => set('description', e.target.value)} style={inp} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>Client Description (quote text)</label>
+            <label style={lbl}>Client Description (quote text)</label>
             <textarea value={task.client_description} onChange={e => set('client_description', e.target.value)}
-              style={{ width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, resize: 'vertical', minHeight: 56, boxSizing: 'border-box' }} />
+              style={{ ...inp, resize: 'vertical', minHeight: 52, fontSize: 12 }} />
           </div>
+
+          {/* ── LABOUR ── */}
+          <div style={{ border: '1.5px solid #fef3c7', borderRadius: 8, overflow: 'hidden' }}>
+            {/* Labour header with mode toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#fefce8' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#92400e' }}>🔨 Labour Cost</span>
+              {labourTrades.length > 0 && (
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {(['calculator','manual'] as const).map(m => (
+                    <button key={m} onClick={() => setLabourMode(m)} style={{
+                      padding: '3px 10px', borderRadius: 4, border: '1px solid #f59e0b', fontSize: 11,
+                      background: labourMode === m ? '#f59e0b' : 'transparent',
+                      color: labourMode === m ? '#fff' : '#92400e', cursor: 'pointer', fontWeight: 600,
+                    }}>
+                      {m === 'calculator' ? '🔧 Calculator' : '✏️ Manual'}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ padding: '12px 12px' }}>
+              {labourMode === 'calculator' && labourTrades.length > 0 ? (
+                <>
+                  {/* Trade + Rate Type + Qty + Workers */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 72px 72px', gap: 8, marginBottom: 8 }}>
+                    <div>
+                      <label style={{ ...lbl, fontSize: 11 }}>Trade</label>
+                      <select value={calcTradeId} onChange={e => onCalcTradeChange(e.target.value)} style={{ ...inp, fontSize: 12 }}>
+                        {labourTrades.map(t => (
+                          <option key={t.id} value={t.id}>{t.name} — £{t.day_rate}/day</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ ...lbl, fontSize: 11 }}>Rate Type</label>
+                      <select value={calcRateType} onChange={e => onCalcRateTypeChange(e.target.value as LabourRateType)} style={{ ...inp, fontSize: 12 }}>
+                        {(Object.keys(RATE_LABELS) as LabourRateType[]).map(rt => (
+                          <option key={rt} value={rt}>{RATE_LABELS[rt]}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ ...lbl, fontSize: 11 }}>{QTY_LABELS[calcRateType]}</label>
+                      <input type="number" min={0} step={0.5} value={calcQty}
+                        onChange={e => onCalcQtyChange(Math.max(0, +e.target.value))}
+                        style={{ ...inp, fontSize: 12 }} />
+                    </div>
+                    <div>
+                      <label style={{ ...lbl, fontSize: 11 }}>Workers</label>
+                      <input type="number" min={1} step={1} value={calcWorkers}
+                        onChange={e => onCalcWorkersChange(Math.max(1, +e.target.value))}
+                        style={{ ...inp, fontSize: 12 }} />
+                    </div>
+                  </div>
+                  {/* Calculation summary */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', background: '#fef3c7', borderRadius: 6, fontSize: 12, color: '#92400e' }}>
+                    <span style={{ flex: 1 }}>
+                      {calcTrade?.name} · £{calcRate.toFixed(2)}/{calcRateType === 'hourly' ? 'hr' : calcRateType === 'half_day' ? 'half-day' : 'day'} × {calcQty} × {calcWorkers} worker{calcWorkers > 1 ? 's' : ''}
+                    </span>
+                    <span style={{ fontWeight: 800, fontSize: 15, fontFamily: 'monospace' }}>= £{calcTotal.toFixed(2)}</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {labourTrades.length === 0 && (
+                    <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 8, fontStyle: 'italic' }}>
+                      No labour trades set up. Add trades in Back Office → Labour &amp; Trades, or enter a cost manually.
+                    </div>
+                  )}
+                  <div>
+                    <label style={{ ...lbl, fontSize: 11 }}>Labour Cost (ex-VAT)</label>
+                    <div style={{ position: 'relative' }}>
+                      <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: '#94a3b8' }}>£</span>
+                      <input type="number" min={0} step={1} value={task.labour_cost}
+                        onChange={e => set('labour_cost', +e.target.value)}
+                        style={{ ...inp, paddingLeft: 18, background: '#fef3c7' }} />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Labour cost display / sync when using calculator */}
+              {labourMode === 'calculator' && (
+                <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 11, color: '#64748b' }}>Saved as labour cost:</span>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#92400e' }}>£{task.labour_cost.toFixed(2)}</span>
+                  <span style={{ fontSize: 10, color: '#94a3b8' }}>· Trade: {task.trade_name ?? '—'}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Other costs */}
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 8 }}>Default Costs (per unit, ex-VAT)</label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-              {costFields.map(({ key, label, color }) => (
+            <label style={{ ...lbl, marginBottom: 8 }}>Other Costs (per unit, ex-VAT)</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
+              {otherCostFields.map(({ key, label, color }) => (
                 <div key={key}>
-                  <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 3 }}>{label}</label>
+                  <label style={{ display: 'block', fontSize: 10, color: '#64748b', marginBottom: 3 }}>{label}</label>
                   <div style={{ position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: '#94a3b8' }}>£</span>
+                    <span style={{ position: 'absolute', left: 6, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: '#94a3b8' }}>£</span>
                     <input type="number" min={0} step={1}
                       value={task[key] as number}
                       onChange={e => set(key, +e.target.value)}
-                      style={{ width: '100%', padding: '5px 8px 5px 18px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 12, background: color, boxSizing: 'border-box' }} />
+                      style={{ width: '100%', padding: '5px 6px 5px 16px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 12, background: color, boxSizing: 'border-box' }} />
                   </div>
                 </div>
               ))}
             </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+
+          {/* Qty + Markup */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>Default Qty</label>
-              <input type="number" min={0} value={task.default_qty} onChange={e => set('default_qty', +e.target.value)}
-                style={{ width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
+              <label style={lbl}>Default Qty</label>
+              <input type="number" min={0} value={task.default_qty} onChange={e => set('default_qty', +e.target.value)} style={inp} />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>Markup %</label>
-              <input type="number" min={0} max={200} value={task.markup_pct} onChange={e => set('markup_pct', +e.target.value)}
-                style={{ width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>Trade</label>
-              <input value={task.trade_name ?? ''} onChange={e => set('trade_name', e.target.value || null)}
-                placeholder="e.g. Bricklayer"
-                style={{ width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
+              <label style={lbl}>Markup %</label>
+              <input type="number" min={0} max={200} value={task.markup_pct} onChange={e => set('markup_pct', +e.target.value)} style={inp} />
             </div>
           </div>
+
+          {/* Flags */}
           <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
-              <input type="checkbox" checked={task.from_takeoff} onChange={e => set('from_takeoff', e.target.checked)} />
-              Available in Takeoff Tool
+              <input type="checkbox" checked={task.from_takeoff} onChange={e => set('from_takeoff', e.target.checked)} /> Available in Takeoff Tool
             </label>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
-              <input type="checkbox" checked={task.from_ai} onChange={e => set('from_ai', e.target.checked)} />
-              Available in AI Scope Writer
+              <input type="checkbox" checked={task.from_ai} onChange={e => set('from_ai', e.target.checked)} /> Available in AI Scope Writer
             </label>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
-              <input type="checkbox" checked={task.active} onChange={e => set('active', e.target.checked)} />
-              Active
+              <input type="checkbox" checked={task.active} onChange={e => set('active', e.target.checked)} /> Active
             </label>
           </div>
         </div>
+
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '12px 22px', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
           <button onClick={onCancel} style={{ padding: '8px 18px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, background: '#fff', color: '#374151', cursor: 'pointer' }}>Cancel</button>
           <button onClick={onSave} style={{ padding: '8px 22px', background: '#4a90a4', border: 'none', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Save Task</button>
