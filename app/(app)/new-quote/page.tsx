@@ -1298,22 +1298,6 @@ export default function NewQuotePage() {
 
               <div style={{ flex: 1 }} />
 
-              <button
-                className="btn-sm btn-outline"
-                onClick={() => setShowScopeHelp(true)}
-                title="How to use the AI Scope Writer"
-                style={{ fontSize: 11, width: 22, height: 22, padding: 0, borderRadius: '50%', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}
-              >?</button>
-              <button className="btn-sm btn-sky" onClick={() => setShowScopeChat(true)} style={{ fontSize: 11 }}>
-                ✦ AI Chat
-              </button>
-              <button className="btn-sm btn-sky" onClick={generatePhases} disabled={generatingPhases} style={{ fontSize: 11 }}>
-                {generatingPhases ? '⏳ Generating…' : '✦ Generate'}
-              </button>
-              <label className="btn-sm btn-outline" style={{ fontSize: 11, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                title="Import take-off from the Take-off tool">
-                📐 Import Take-off
-              </label>
             </div>
 
             {/* Row 2: Scope textarea */}
