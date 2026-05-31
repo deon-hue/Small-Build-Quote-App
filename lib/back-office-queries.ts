@@ -637,9 +637,10 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
   //   • ALL_PHASE_SUBPHASES (phase-tasks.ts) — canonical_id = subphase.id
   //   • DEFAULT_DEMO_SUBPHASES (demolition-data.ts) — canonical_id = 'demo-' + subphase.id
 
+  // Fetch with phase_id so we can match by name+phase for rows missing canonical_id
   const { data: dbSubs } = await sb
     .from('bo_sub_phases')
-    .select('id, canonical_id, name, display_order')
+    .select('id, canonical_id, name, display_order, phase_id')
     .eq('user_id', userId)
 
   const subByCanon = new Map(
@@ -661,7 +662,24 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
     if (pc) desiredSubs.push({ canonical_id: `demo-${sub.id}`, phase_canonical: pc, name: sub.name, display_order: i, markup_pct: sub.markupPct })
   })
 
-  // Insert new sub-phases (batch by phase to keep FK resolution simple)
+  // ── Heal sub-phases that exist in DB but have no canonical_id ─────────────────
+  // Match by name + phase_id and write the canonical_id back so task insertion works.
+  const unmappedSubs = (dbSubs ?? []).filter(s => !s.canonical_id)
+  if (unmappedSubs.length > 0) {
+    for (const desired of desiredSubs) {
+      if (subCanonToId.has(desired.canonical_id)) continue   // already mapped
+      const phaseDbId = phaseCanonToId.get(desired.phase_canonical)
+      if (!phaseDbId) continue
+      const match = unmappedSubs.find(s => s.name === desired.name && s.phase_id === phaseDbId)
+      if (match) {
+        await sb.from('bo_sub_phases').update({ canonical_id: desired.canonical_id }).eq('id', match.id)
+        subCanonToId.set(desired.canonical_id, match.id)
+        subByCanon.set(desired.canonical_id, match as { id: string; name: string; display_order: number })
+      }
+    }
+  }
+
+  // Insert new sub-phases (those still not in DB after heal)
   const newSubs = desiredSubs.filter(s => !subByCanon.has(s.canonical_id) && phaseCanonToId.has(s.phase_canonical))
   if (newSubs.length > 0) {
     const { data: inserted } = await sb.from('bo_sub_phases').insert(
