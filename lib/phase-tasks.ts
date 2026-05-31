@@ -988,7 +988,6 @@ export const ALL_PHASE_SUBPHASES: PhaseSubphase[] = [
   ...externalSubphases,
   ...prelimSubphases,
   ...externalWallsSubphases,
-  ...externalWallConstructionSubphases,
 ]
 
 /** Return subphases for a specific takeoff phase */
