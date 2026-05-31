@@ -427,7 +427,7 @@ export default function NewQuotePage() {
           ].filter(Boolean).join(' | ')
 
           if (item.floorMakeupId) {
-            // ── Build-up item: expand each layer into its own sub-phase ──
+            // ── Build-up item: one sub-phase per build-up type, layers as rows ──
             // DB wall types take precedence (Back Office master); ALL_MAKEUPS is the static fallback
             const makeup = dbWallTypes.find(m => m.id === item.floorMakeupId) ?? ALL_MAKEUPS.find(m => m.id === item.floorMakeupId)
             if (makeup) {
@@ -437,27 +437,38 @@ export default function NewQuotePage() {
               const perimeter  = item.phase === 'External Walls'
                 ? (item.length ?? item.perimeter ?? 0)   // wall run for DPC/perimeter layers
                 : (item.perimeter ?? 0)
-              const toggles = item.floorLayerToggles ?? {}
+              const toggles    = item.floorLayerToggles    ?? {}
               const thicknesses = item.floorLayerThicknesses ?? {}
 
+              // Build one row per enabled layer — categorised by layer.category
+              const layerRows: Omit<QuoteItem, 'id'>[] = []
               for (const layer of makeup.layers) {
                 const enabled = toggles[layer.id] ?? layer.defaultEnabled
                 if (!enabled) continue
                 const thkOverride = thicknesses[layer.id]
                 const { qty, unit } = calcLayerQty(layer, area, perimeter, thkOverride)
-                const desc = `${layer.description} — ${qty} ${unit}`
+                const desc = `${layer.name} — ${qty} ${unit}`
+                layerRows.push({
+                  desc,
+                  qty,
+                  unit,
+                  labour:         0,
+                  materials:      0,
+                  plantHire:      0,
+                  subcontractors: 0,
+                  other:          0,
+                  notes:          layerRows.length === 0 ? notes : layer.description,
+                  itemType:       (layer.category === 'plant' ? 'plant'
+                                : layer.category === 'other'  ? 'other'
+                                : layer.category === 'labour' ? 'labour'
+                                : 'materials') as QuoteItem['itemType'],
+                })
+              }
 
-                newPhases.push(makePhase(
-                  layer.name,
-                  [
-                    { desc: layer.category === 'labour' ? desc : '', qty, unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: layer.category === 'labour' ? notes : '', itemType: 'labour' },
-                    { desc: layer.category === 'materials' ? desc : '', qty, unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials' },
-                    { desc: '', qty, unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'plant' },
-                    { desc: '', qty, unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'subcontractors' },
-                    { desc: layer.category === 'other' ? desc : '', qty, unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'other' },
-                  ],
-                  parentPhase,
-                ))
+              if (layerRows.length > 0) {
+                // Sub-phase name: "Phase — Build-up Type" for clear hierarchy
+                const subPhaseName = `${item.phase} — ${makeup.name}`
+                newPhases.push(makePhase(subPhaseName, layerRows, parentPhase))
               }
               continue
             }
