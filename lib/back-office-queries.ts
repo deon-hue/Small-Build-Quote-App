@@ -701,19 +701,22 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
   )
 
   interface TaskRow {
-    canonical_id:     string
-    sub_canonical:    string
-    phase_canonical:  string
-    name:             string
-    unit:             string
-    display_order:    number
-    description:      string
-    labour_cost:      number
-    materials_cost:   number
-    plant_cost:       number
-    subcontract_cost: number
-    waste_cost:       number
-    other_cost:       number
+    canonical_id:       string
+    sub_canonical:      string
+    phase_canonical:    string
+    name:               string
+    unit:               string
+    display_order:      number
+    description:        string
+    client_description: string
+    default_qty:        number
+    markup_pct:         number
+    labour_cost:        number
+    materials_cost:     number
+    plant_cost:         number
+    subcontract_cost:   number
+    waste_cost:         number
+    other_cost:         number
   }
   const desiredTasks: TaskRow[] = []
 
@@ -721,19 +724,22 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
     const pc = CANONICAL_PHASE_IDS[sub.phase]
     sub.tasks.forEach((task, i) => {
       desiredTasks.push({
-        canonical_id:     task.id,
-        sub_canonical:    sub.id,
-        phase_canonical:  pc ?? '',
-        name:             task.name,
-        unit:             task.unit,
-        display_order:    i,
-        description:      task.notes ?? '',
-        labour_cost:      task.labour,
-        materials_cost:   task.materials,
-        plant_cost:       task.plant,
-        subcontract_cost: task.subcontractor,
-        waste_cost:       0,
-        other_cost:       task.other,
+        canonical_id:       task.id,
+        sub_canonical:      sub.id,
+        phase_canonical:    pc ?? '',
+        name:               task.name,
+        unit:               task.unit,
+        display_order:      i,
+        description:        task.notes ?? '',
+        client_description: task.notes ?? '',
+        default_qty:        task.defaultQty,
+        markup_pct:         sub.markupPct,
+        labour_cost:        task.labour,
+        materials_cost:     task.materials,
+        plant_cost:         task.plant,
+        subcontract_cost:   task.subcontractor,
+        waste_cost:         0,
+        other_cost:         task.other,
       })
     })
   })
@@ -742,19 +748,22 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
     const pc = CANONICAL_PHASE_IDS['Site Setup & Demolition'] ?? ''
     sub.tasks.forEach((task, i) => {
       desiredTasks.push({
-        canonical_id:     `demo-${task.id}`,
-        sub_canonical:    `demo-${sub.id}`,
-        phase_canonical:  pc,
-        name:             task.name,
-        unit:             task.unit,
-        display_order:    i,
-        description:      task.clientDescription,
-        labour_cost:      task.labourCost,
-        materials_cost:   task.materialCost,
-        plant_cost:       task.plantCost,
-        subcontract_cost: task.subcontractorCost,
-        waste_cost:       task.wasteCost,
-        other_cost:       task.otherCost,
+        canonical_id:       `demo-${task.id}`,
+        sub_canonical:      `demo-${sub.id}`,
+        phase_canonical:    pc,
+        name:               task.name,
+        unit:               task.unit,
+        display_order:      i,
+        description:        task.clientDescription,
+        client_description: task.clientDescription,
+        default_qty:        task.defaultQty,
+        markup_pct:         sub.markupPct,
+        labour_cost:        task.labourCost,
+        materials_cost:     task.materialCost,
+        plant_cost:         task.plantCost,
+        subcontract_cost:   task.subcontractorCost,
+        waste_cost:         task.wasteCost,
+        other_cost:         task.otherCost,
       })
     })
   })
@@ -769,22 +778,26 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
     for (let i = 0; i < newTasks.length; i += 100) {
       await sb.from('bo_tasks').insert(
         newTasks.slice(i, i + 100).map(t => ({
-          user_id:          userId,
-          canonical_id:     t.canonical_id,
-          phase_id:         phaseCanonToId.get(t.phase_canonical) ?? null,
-          sub_phase_id:     subCanonToId.get(t.sub_canonical)!,
-          name:             t.name,
-          unit:             t.unit,
-          description:      t.description,
-          display_order:    t.display_order,
-          labour_cost:      t.labour_cost,
-          materials_cost:   t.materials_cost,
-          plant_cost:       t.plant_cost,
-          subcontract_cost: t.subcontract_cost,
-          waste_cost:       t.waste_cost,
-          other_cost:       t.other_cost,
-          from_takeoff:     true,
-          active:           true,
+          user_id:            userId,
+          canonical_id:       t.canonical_id,
+          phase_id:           phaseCanonToId.get(t.phase_canonical) ?? null,
+          sub_phase_id:       subCanonToId.get(t.sub_canonical)!,
+          name:               t.name,
+          unit:               t.unit,
+          description:        t.description,
+          client_description: t.client_description,
+          default_qty:        t.default_qty,
+          markup_pct:         t.markup_pct,
+          display_order:      t.display_order,
+          labour_cost:        t.labour_cost,
+          materials_cost:     t.materials_cost,
+          plant_cost:         t.plant_cost,
+          subcontract_cost:   t.subcontract_cost,
+          waste_cost:         t.waste_cost,
+          other_cost:         t.other_cost,
+          from_takeoff:       true,
+          from_ai:            false,
+          active:             true,
         }))
       )
     }
