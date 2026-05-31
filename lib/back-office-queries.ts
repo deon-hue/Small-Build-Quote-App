@@ -73,6 +73,63 @@ export async function fetchTasks(sb: SupabaseClient, userId: string, phaseId?: s
   return data ?? []
 }
 
+/**
+ * Fetch the Back Office default phases/sub-phases/tasks for a given job type,
+ * returned as a structured object ready to be converted into QuotePhase[].
+ *
+ * Phases are filtered to those with no job_types restriction OR those that
+ * explicitly include the requested jobType.
+ */
+export async function fetchQuoteDefaults(
+  sb: SupabaseClient,
+  userId: string,
+  jobType: string,
+): Promise<Array<{
+  phaseName:   string
+  phaseId:     string
+  subPhaseName:string
+  subPhaseId:  string
+  markupPct:   number
+  tasks: BOTask[]
+}>> {
+  const [{ data: phases }, { data: subPhases }, { data: tasks }] = await Promise.all([
+    sb.from('bo_phases').select('*').eq('user_id', userId).eq('active', true).order('display_order'),
+    sb.from('bo_sub_phases').select('*').eq('user_id', userId).eq('active', true).order('display_order'),
+    sb.from('bo_tasks').select('*').eq('user_id', userId).eq('active', true).order('display_order'),
+  ])
+
+  if (!phases?.length) return []
+
+  // Filter phases to those relevant to this job type (empty = all job types)
+  const relevant = (phases ?? []).filter(p =>
+    !p.job_types?.length || (p.job_types as string[]).includes(jobType)
+  )
+
+  const result: Array<{
+    phaseName: string; phaseId: string
+    subPhaseName: string; subPhaseId: string
+    markupPct: number; tasks: BOTask[]
+  }> = []
+
+  for (const phase of relevant) {
+    const phaseSubs = (subPhases ?? []).filter(sp => sp.phase_id === phase.id)
+    for (const sp of phaseSubs) {
+      const spTasks = (tasks ?? []).filter(t => t.sub_phase_id === sp.id)
+      if (!spTasks.length) continue
+      result.push({
+        phaseName:    phase.name,
+        phaseId:      phase.id,
+        subPhaseName: sp.name,
+        subPhaseId:   sp.id,
+        markupPct:    sp.markup_pct ?? 0,
+        tasks:        spTasks as BOTask[],
+      })
+    }
+  }
+
+  return result
+}
+
 export async function upsertTask(sb: SupabaseClient, task: Partial<BOTask> & { user_id: string }): Promise<BOTask | null> {
   // Strip empty/falsy id so Supabase generates a UUID for new rows.
   // openNewTask sets id:'' on the stub task; sending that to Supabase causes a

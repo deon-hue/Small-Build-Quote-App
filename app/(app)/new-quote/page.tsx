@@ -20,7 +20,7 @@ import { DEFAULT_DEMO_SUBPHASES, calcDemoSellingPrice, DEMO_UNIT_LABELS, type De
 import { ALL_PHASE_SUBPHASES, calcPhaseTaskSellingPrice } from '@/lib/phase-tasks'
 import { sumByCategory } from '@/lib/material-recipes'
 import { createClient } from '@/lib/supabase/client'
-import { fetchWallTypesWithLayers, wallTypesToMakeups } from '@/lib/back-office-queries'
+import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchQuoteDefaults, upsertTask } from '@/lib/back-office-queries'
 import type { FloorMakeup } from '@/lib/takeoff-types'
 
 let phaseCounter = 0
@@ -43,8 +43,8 @@ function makePhase(
     estimatorItems: estimatorItems ?? [],
     useEstimator: true,
     ...(meta && { meta }),
-    // Auto-stamp source from meta so the workspace can show the badge
-    ...(meta?.importedFrom === 'takeoff' && { source: 'takeoff' as const }),
+    // Auto-stamp source + itemStatus from meta so the workspace can show badges
+    ...(meta?.importedFrom === 'takeoff' && { source: 'takeoff' as const, itemStatus: 'takeoff' as const }),
   }
 }
 
@@ -170,6 +170,80 @@ export default function NewQuotePage() {
     setStep('landing')
   }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Load from Back Office (primary path for manual quotes) ───────────────────
+  // Fetches live bo_phases → bo_sub_phases → bo_tasks for the selected job type
+  // and builds QuotePhase[] with itemStatus:'bo-default' and boTaskId stamped.
+  // Falls back to loadTemplate() if no BO data exists.
+  async function loadFromBackOffice(type: string) {
+    try {
+      const sb = createClient()
+      const { data: { user } } = await sb.auth.getUser()
+      if (!user) { loadTemplate(type); return }
+
+      const defaults = await fetchQuoteDefaults(sb, user.id, type)
+      if (!defaults.length) { loadTemplate(type); return }
+
+      const built: QuotePhase[] = []
+      for (const row of defaults) {
+        const items: Omit<QuoteItem, 'id'>[] = []
+        for (const task of row.tasks) {
+          const tg = task.name
+          items.push(
+            { desc: task.description || task.name, qty: task.default_qty, unit: task.unit, labour: task.labour_cost, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: task.client_description || '', itemType: 'labour'         as const, taskGroup: tg, boTaskId: task.id },
+            { desc: '',                              qty: task.default_qty, unit: task.unit, labour: 0, materials: task.materials_cost,   plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials'      as const, taskGroup: tg, boTaskId: task.id },
+            { desc: '',                              qty: task.default_qty, unit: task.unit, labour: 0, materials: 0, plantHire: task.plant_cost,  subcontractors: 0, other: 0, notes: '', itemType: 'plant'          as const, taskGroup: tg, boTaskId: task.id },
+            { desc: '',                              qty: task.default_qty, unit: task.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: task.subcontract_cost, other: 0, notes: '', itemType: 'subcontractors' as const, taskGroup: tg, boTaskId: task.id },
+            { desc: '',                              qty: task.default_qty, unit: task.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: task.other_cost, notes: '', itemType: 'other'          as const, taskGroup: tg, boTaskId: task.id },
+          )
+        }
+        const ph = makePhase(row.subPhaseName, items, row.phaseName)
+        built.push({ ...ph, source: 'manual', itemStatus: 'bo-default', boSubPhaseId: row.subPhaseId })
+      }
+      setPhases(built)
+    } catch {
+      loadTemplate(type)
+    }
+  }
+
+  // ── Save a sub-phase's costs back to BO default tasks ────────────────────────
+  async function handleSaveToBO(phase: QuotePhase) {
+    const sb = createClient()
+    const { data: { user } } = await sb.auth.getUser()
+    if (!user) return
+
+    // Group items by boTaskId and upsert each
+    const byTaskId = new Map<string, QuoteItem[]>()
+    for (const item of phase.items) {
+      if (!item.boTaskId) continue
+      const arr = byTaskId.get(item.boTaskId) ?? []
+      arr.push(item)
+      byTaskId.set(item.boTaskId, arr)
+    }
+
+    for (const [taskId, items] of byTaskId.entries()) {
+      const labour        = items.find(i => i.itemType === 'labour')?.labour ?? 0
+      const materials     = items.find(i => i.itemType === 'materials')?.materials ?? 0
+      const plant         = items.find(i => i.itemType === 'plant')?.plantHire ?? 0
+      const subcontract   = items.find(i => i.itemType === 'subcontractors')?.subcontractors ?? 0
+      const other         = items.find(i => i.itemType === 'other')?.other ?? 0
+      const firstItem     = items[0]
+      await upsertTask(sb, {
+        id:               taskId,
+        user_id:          user.id,
+        labour_cost:      labour,
+        materials_cost:   materials,
+        plant_cost:       plant,
+        subcontract_cost: subcontract,
+        other_cost:       other,
+        default_qty:      firstItem.qty,
+        unit:             firstItem.unit,
+      })
+    }
+    // Mark the phase as bo-default again since it now matches BO
+    setPhases(prev => prev.map(p => p.id === phase.id ? { ...p, itemStatus: 'bo-default' as const } : p))
+    alert('Saved back to Back Office defaults.')
+  }
+
   function loadTemplate(type: string) {
     const tpl = getTemplate(type)
     setPhases(tpl.map(p => {
@@ -245,8 +319,8 @@ export default function NewQuotePage() {
       setStep('ai-scope')
     } else if (mode === 'manual' && selectedJobType) {
       setJobType(selectedJobType)
-      loadTemplate(selectedJobType)
       setStep('workspace')
+      loadFromBackOffice(selectedJobType)  // async — BO defaults first, template fallback
     } else if (mode === 'takeoff') {
       setStep('workspace')
       // Trigger file picker after workspace renders
@@ -316,7 +390,7 @@ export default function NewQuotePage() {
             { desc: p.subNotes       || 'Subcontract',   qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: Number(p.subcontractors) || 0, other: 0, notes: '', itemType: 'subcontractors' as const },
             { desc: p.otherNotes     || 'Other',         qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: Number(p.other) || 0, notes: '', itemType: 'other'          as const },
           ], p.parentPhase)
-          return { ...ph, source: 'ai' as const }
+          return { ...ph, source: 'ai' as const, itemStatus: 'ai' as const }
         }))
       }
     } catch {
@@ -836,6 +910,7 @@ export default function NewQuotePage() {
         return {
           ...ph,
           source: 'ai' as const,
+          itemStatus: 'ai' as const,
           // Flag if AI had to invent tasks (extraTasks) or couldn't find BO rates
           ...(hasExtraTasks && {
             needsReview: true,
@@ -1240,6 +1315,7 @@ export default function NewQuotePage() {
                 aiGenerating={generatingPhases}
                 onLoadTemplate={loadTemplate}
                 jobType={jobType}
+                onSaveToBO={handleSaveToBO}
               />
             </>
           )}

@@ -285,6 +285,27 @@ function TaskGroup({ tg, items, markup, isLocked, collapsed, colKey, toggle, onU
   )
 }
 
+// ── Item status badge ─────────────────────────────────────────────────────────
+
+const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
+  'bo-default': { label: '🏢 BO Default',  bg: '#f1f5f9', text: '#64748b' },
+  'edited':     { label: '✏️ Edited',       bg: '#fef3c7', text: '#92400e' },
+  'manual':     { label: '➕ Manual',       bg: '#dbeafe', text: '#1d4ed8' },
+  'takeoff':    { label: '📐 Takeoff',      bg: '#eff6ff', text: '#1d4ed8' },
+  'ai':         { label: '✦ AI',            bg: '#fdf4ff', text: '#7c3aed' },
+}
+
+function ItemStatusBadge({ status }: { status?: string }) {
+  if (!status) return null
+  const cfg = STATUS_CONFIG[status]
+  if (!cfg) return null
+  return (
+    <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, background: cfg.bg, color: cfg.text, flexShrink: 0 }}>
+      {cfg.label}
+    </span>
+  )
+}
+
 // ── Source badge ──────────────────────────────────────────────────────────────
 
 function SourceBadge({ source }: { source?: string }) {
@@ -313,17 +334,26 @@ interface SubPhaseBlockProps {
   onDelete: () => void
   onDuplicate: () => void
   onAddTask: () => void
+  onSaveToBO?: (p: QuotePhase) => void
 }
 
-function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDelete, onDuplicate, onAddTask }: SubPhaseBlockProps) {
+function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDelete, onDuplicate, onAddTask, onSaveToBO }: SubPhaseBlockProps) {
   const colKey = `sp_${p.id}`
   const open   = !collapsed.has(colKey)
   const sell   = subPhaseTotalSell(p, markup)
   const tgs    = getTaskGroups(p.items)
   const m      = p.meta?.measurements
 
+  // Mark phase as 'edited' when any cost field changes from a bo-default baseline
+  function markEdited(updated: QuotePhase) {
+    if (updated.itemStatus === 'bo-default') {
+      return { ...updated, itemStatus: 'edited' as const }
+    }
+    return updated
+  }
+
   function updateItem(item: QuoteItem) {
-    onUpdate({ ...p, items: p.items.map(i => i.id === item.id ? item : i) })
+    onUpdate(markEdited({ ...p, items: p.items.map(i => i.id === item.id ? item : i) }))
   }
   function deleteItem(id: number) {
     onUpdate({ ...p, items: p.items.filter(i => i.id !== id) })
@@ -385,7 +415,7 @@ function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDel
             ⚠️ Needs Review
           </span>
         )}
-        <SourceBadge source={p.source} />
+        <ItemStatusBadge status={p.itemStatus} />
         <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: '#7ab533', flexShrink: 0 }}>
           {sell > 0 ? fmt(sell) : '—'}
         </span>
@@ -393,6 +423,15 @@ function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDel
           <div style={{ display: 'flex', gap: 2, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
             <button style={iconBtn()} title="Add task" onClick={onAddTask}>+ Task</button>
             <button style={iconBtn()} title="Duplicate" onClick={onDuplicate}>⧉</button>
+            {onSaveToBO && (p.itemStatus === 'edited' || p.itemStatus === 'bo-default') && p.boSubPhaseId && (
+              <button
+                onClick={e => { e.stopPropagation(); onSaveToBO(p) }}
+                title="Save current rates back to Back Office defaults"
+                style={{ ...iconBtn('#16a34a'), fontSize: 10, border: '1px solid #86efac', borderRadius: 4, padding: '2px 6px' }}
+              >
+                ↑ BO
+              </button>
+            )}
             <button style={iconBtn('#e74c3c')} title="Delete" onClick={onDelete}>×</button>
           </div>
         )}
@@ -470,9 +509,10 @@ interface RoomBlockProps {
   onAddSubPhase: (mainPhase: string, room: string) => void
   onAddTask: (phaseId: number) => void
   onRenameRoom: (mainPhase: string, oldRoom: string, newRoom: string) => void
+  onSaveToBO?: (p: QuotePhase) => void
 }
 
-function RoomBlock({ mainPhase, room, phases, markup, isLocked, collapsed, toggle, onUpdatePhase, onDeletePhase, onDuplicatePhase, onAddSubPhase, onAddTask, onRenameRoom }: RoomBlockProps) {
+function RoomBlock({ mainPhase, room, phases, markup, isLocked, collapsed, toggle, onUpdatePhase, onDeletePhase, onDuplicatePhase, onAddSubPhase, onAddTask, onRenameRoom, onSaveToBO }: RoomBlockProps) {
   const hasRoom = !!room
   const colKey  = `rm_${mainPhase}_${room}`
   const open    = !collapsed.has(colKey)
@@ -525,6 +565,7 @@ function RoomBlock({ mainPhase, room, phases, markup, isLocked, collapsed, toggl
               onDelete={() => onDeletePhase(p.id)}
               onDuplicate={() => onDuplicatePhase(p)}
               onAddTask={() => onAddTask(p.id)}
+              onSaveToBO={onSaveToBO}
             />
           ))}
           {!isLocked && !hasRoom && (
@@ -557,9 +598,10 @@ interface PhaseBlockProps {
   onRenameMain: (oldName: string, newName: string) => void
   onDeleteMain: (name: string) => void
   onRenameRoom: (mainPhase: string, oldRoom: string, newRoom: string) => void
+  onSaveToBO?: (p: QuotePhase) => void
 }
 
-function PhaseBlock({ mainPhase, phases, markup, isLocked, collapsed, toggle, onUpdatePhase, onDeletePhase, onDuplicatePhase, onAddSubPhase, onAddRoom, onAddTask, onRenameMain, onDeleteMain, onRenameRoom }: PhaseBlockProps) {
+function PhaseBlock({ mainPhase, phases, markup, isLocked, collapsed, toggle, onUpdatePhase, onDeletePhase, onDuplicatePhase, onAddSubPhase, onAddRoom, onAddTask, onRenameMain, onDeleteMain, onRenameRoom, onSaveToBO }: PhaseBlockProps) {
   const colKey = `mp_${mainPhase}`
   const open   = !collapsed.has(colKey)
   const total  = mainPhaseTotalSell(phases, mainPhase, markup)
@@ -615,6 +657,7 @@ function PhaseBlock({ mainPhase, phases, markup, isLocked, collapsed, toggle, on
               onAddSubPhase={onAddSubPhase}
               onAddTask={onAddTask}
               onRenameRoom={onRenameRoom}
+              onSaveToBO={onSaveToBO}
             />
           ))}
         </div>
@@ -636,9 +679,11 @@ export interface QuoteWorkspaceProps {
   aiGenerating?:     boolean
   onLoadTemplate?:   (jobType: string) => void
   jobType?:          string
+  /** Called when user clicks "Save to BO" on a sub-phase */
+  onSaveToBO?:       (phase: QuotePhase) => void
 }
 
-export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked = false, onChange, onImportTakeoff, onAIGenerate, aiGenerating, onLoadTemplate, jobType }: QuoteWorkspaceProps) {
+export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked = false, onChange, onImportTakeoff, onAIGenerate, aiGenerating, onLoadTemplate, jobType, onSaveToBO }: QuoteWorkspaceProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [search,    setSearch]    = useState('')
 
@@ -683,6 +728,7 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
     const newPhase: QuotePhase = {
       id: uid(), phase: 'New Sub-Phase', parentPhase: mainPhase,
       roomLabel: room || undefined,
+      source: 'manual', itemStatus: 'manual',
       items: [
         { id: uid(), desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'labour' },
         { id: uid(), desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials' },
@@ -870,6 +916,7 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
           onRenameMain={renameMain}
           onDeleteMain={deleteMain}
           onRenameRoom={renameRoom}
+          onSaveToBO={onSaveToBO}
         />
       ))}
 
