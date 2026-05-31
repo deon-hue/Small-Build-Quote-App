@@ -815,6 +815,84 @@ const prelimSubphases: PhaseSubphase[] = [
   },
 ]
 
+// ── EXTERNAL WALL CONSTRUCTION ────────────────────────────────────────────────
+// Sub-phases mirror the WALL_MAKEUPS build-up types so every construction type
+// is editable in Back Office → Phases & Tasks with its own task/rate rows.
+// All rates start at £0 — edit in Back Office to set your defaults.
+
+const externalWallConstructionSubphases: PhaseSubphase[] = [
+  {
+    id: 'ewc-cav-partial',
+    phase: 'External Wall Construction',
+    name: 'Cavity Wall – Partial Fill',
+    markupPct: 20,
+    ukWarning: 'Cavity wall construction must comply with Part L (thermal) and Part C (moisture). Cavity insulation requires BBA certification. Stainless steel wall ties to BS EN 845-1.',
+    tasks: [
+      t('ewc-cp-labour',       'Brickwork & blockwork labour',         'm²', 20, 0, 0, 0, 0, 0, 'Labour – build outer brick leaf, cavity, inner block leaf'),
+      t('ewc-cp-outer-brick',  'Outer leaf facing brickwork 102.5mm',  'm²', 20, 0, 0, 0, 0, 0, 'Facing brickwork 102.5mm – client to specify brick type'),
+      t('ewc-cp-cavity-batt',  'Cavity insulation – partial fill 75mm','m²', 20, 0, 0, 0, 0, 0, 'Rockwool or Knauf partial-fill cavity batts 75mm (Part L compliant)'),
+      t('ewc-cp-wall-ties',    'Stainless steel wall ties',            'm²', 20, 0, 0, 0, 0, 0, 'SS double-triangle wall ties at 900×450mm centres'),
+      t('ewc-cp-inner-block',  'Inner leaf blockwork 100mm',           'm²', 20, 0, 0, 0, 0, 0, '7.3N/mm² medium-density concrete block 100mm'),
+      t('ewc-cp-dpc',          'DPC to base of wall',                  'lm', 20, 0, 0, 0, 0, 0, '112mm polythene DPC at base of cavity wall'),
+    ],
+  },
+  {
+    id: 'ewc-cav-full',
+    phase: 'External Wall Construction',
+    name: 'Cavity Wall – Full Fill',
+    markupPct: 20,
+    ukWarning: 'Full-fill mineral wool requires BBA-certified system. Check cavity width — minimum 75mm clear after insulation. Not suitable for exposed sites (NHBC Chapter 6.1).',
+    tasks: [
+      t('ewc-cf-labour',       'Brickwork & blockwork labour',         'm²', 20, 0, 0, 0, 0, 0, 'Labour – build outer brick, full-fill cavity, inner block'),
+      t('ewc-cf-outer-brick',  'Outer leaf facing brickwork 102.5mm',  'm²', 20, 0, 0, 0, 0, 0, 'Facing brickwork 102.5mm – client to specify brick type'),
+      t('ewc-cf-full-fill',    'Full-fill mineral wool batts 100mm',   'm²', 20, 0, 0, 0, 0, 0, 'Full-fill mineral wool cavity batts 100mm (Part L compliant)'),
+      t('ewc-cf-wall-ties',    'Stainless steel wall ties',            'm²', 20, 0, 0, 0, 0, 0, 'SS wall ties at 900×450mm centres'),
+      t('ewc-cf-inner-block',  'Inner leaf blockwork 100mm',           'm²', 20, 0, 0, 0, 0, 0, '7.3N/mm² medium-density concrete block 100mm'),
+      t('ewc-cf-dpc',          'DPC to base of wall',                  'lm', 20, 0, 0, 0, 0, 0, '112mm polythene DPC at base of cavity wall'),
+    ],
+  },
+  {
+    id: 'ewc-solid-brick',
+    phase: 'External Wall Construction',
+    name: 'Solid Brick 225mm',
+    markupPct: 20,
+    ukWarning: 'Solid brick walls require internal insulated dry-lining to meet Part L. Check condensation risk (interstitial condensation analysis recommended). Vapour control layer required.',
+    tasks: [
+      t('ewc-sb-labour',       'Brickwork labour',                     'm²', 20, 0, 0, 0, 0, 0, 'Labour – build 225mm solid brick wall'),
+      t('ewc-sb-brickwork',    'Solid brickwork 225mm',                'm²', 20, 0, 0, 0, 0, 0, 'Engineering or facing brick 225mm solid wall'),
+      t('ewc-sb-dpc',          'DPC to base of wall',                  'lm', 20, 0, 0, 0, 0, 0, 'Polythene DPC at base of wall'),
+      t('ewc-sb-dry-lining',   'Insulated dry-lining (internal) 72mm', 'm²', 20, 0, 0, 0, 0, 0, '50mm PIR insulated plasterboard dry-lining to internal face'),
+    ],
+  },
+  {
+    id: 'ewc-timber-frame',
+    phase: 'External Wall Construction',
+    name: 'Timber Frame Wall',
+    markupPct: 20,
+    ukWarning: 'Timber frame requires structural design and engineer sign-off. Vapour control layer on warm side. Breather membrane on cold side. Airtightness testing recommended (Part L).',
+    tasks: [
+      t('ewc-tf-labour',       'Frame erection labour',                'm²', 20, 0, 0, 0, 0, 0, 'Labour – erect stud frame, insulate, board and membrane'),
+      t('ewc-tf-sole-plate',   'Sole plate treated timber',            'lm', 20, 0, 0, 0, 0, 0, '75×50mm treated timber sole plate with DPC underneath'),
+      t('ewc-tf-studs',        'Timber studwork 140×38 C16',           'm²', 20, 0, 0, 0, 0, 0, '140×38mm C16 timber studs at 400mm or 600mm centres'),
+      t('ewc-tf-insulation',   'Mineral wool insulation 140mm',        'm²', 20, 0, 0, 0, 0, 0, '140mm mineral wool between studs (Part L compliant)'),
+      t('ewc-tf-osb',          'OSB structural sheathing 11mm',        'm²', 20, 0, 0, 0, 0, 0, '11mm OSB3 structural sheathing to external face'),
+      t('ewc-tf-vcl',          'Vapour control layer',                 'm²', 20, 0, 0, 0, 0, 0, '500g polythene VCL to warm side of insulation'),
+      t('ewc-tf-membrane',     'Breather membrane',                    'm²', 20, 0, 0, 0, 0, 0, 'Tyvek or similar breather membrane to external face'),
+    ],
+  },
+  {
+    id: 'ewc-blockwork-100',
+    phase: 'External Wall Construction',
+    name: 'Concrete Blockwork 100mm',
+    markupPct: 20,
+    tasks: [
+      t('ewc-bk-labour',       'Blockwork labour',                     'm²', 20, 0, 0, 0, 0, 0, 'Labour – build 100mm concrete blockwork wall'),
+      t('ewc-bk-blocks',       'Dense concrete blocks 100mm',          'm²', 20, 0, 0, 0, 0, 0, '7.3N/mm² dense concrete block 100mm, mortar-set'),
+      t('ewc-bk-dpc',          'DPC to base of wall',                  'lm', 20, 0, 0, 0, 0, 0, 'Polythene DPC at base of blockwork wall'),
+    ],
+  },
+]
+
 // ── Master export ─────────────────────────────────────────────────────────────
 
 export const ALL_PHASE_SUBPHASES: PhaseSubphase[] = [
@@ -831,6 +909,7 @@ export const ALL_PHASE_SUBPHASES: PhaseSubphase[] = [
   ...decorationSubphases,
   ...externalSubphases,
   ...prelimSubphases,
+  ...externalWallConstructionSubphases,
 ]
 
 /** Return subphases for a specific takeoff phase */
@@ -961,6 +1040,11 @@ export function matchPhaseTasksFromScope(
     [['carpet'],                            'deco-floor-finishes',  'deco-carpet'],
     [['lvt','vinyl plank'],                 'deco-floor-finishes',  'deco-lvt'],
     // External
+    [['cavity wall','partial fill'],         'ewc-cav-partial',      'ewc-cp-labour'],
+    [['full fill cavity','full fill wall'],  'ewc-cav-full',         'ewc-cf-labour'],
+    [['solid brick','225mm brick'],          'ewc-solid-brick',      'ewc-sb-labour'],
+    [['timber frame','stud frame wall'],     'ewc-timber-frame',     'ewc-tf-labour'],
+    [['blockwork 100','block wall 100'],     'ewc-blockwork-100',    'ewc-bk-labour'],
     [['block paving','driveway'],           'ext-paving-driveways', 'ext-block-paving'],
     [['indian stone','patio paving'],       'ext-paving-driveways', 'ext-indian-stone'],
     [['boundary wall','brick wall ext'],    'ext-retaining-boundary','ext-brick-wall'],

@@ -79,6 +79,7 @@ export const CANONICAL_PHASE_IDS: Record<string, string> = {
   'External Works & Landscaping': 'phase_external_works',
   'Preliminaries':                'phase_preliminaries',
   'Other':                        'phase_other',
+  'External Wall Construction':   'phase_ext_wall_construction',
 }
 
 // ── Business defaults interface (Tier 2) ──────────────────────────────────────

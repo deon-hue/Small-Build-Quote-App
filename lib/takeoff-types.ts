@@ -29,6 +29,7 @@ export const TAKEOFF_PHASES = [
   'External Works & Landscaping',
   'Preliminaries',
   'Other',
+  'External Wall Construction',
 ] as const
 
 export type TakeoffPhase = typeof TAKEOFF_PHASES[number]
@@ -52,6 +53,7 @@ export const PHASE_COLORS: Record<TakeoffPhase, string> = {
   'External Works & Landscaping': '#558b2f',
   'Preliminaries':                '#0277bd',
   'Other':                        '#546e7a',
+  'External Wall Construction':   '#1a7a5e',
 }
 
 /**
@@ -77,6 +79,7 @@ export const PHASE_TO_QUOTE_PARENT: Record<TakeoffPhase, string> = {
   'External Works & Landscaping': 'Phase 10 – External Works',
   'Preliminaries':                'Phase 1 – Site Setup & Demolition',
   'Other':                        'Phase 10 – External Works',
+  'External Wall Construction':   'Phase 3 – Structural Shell',
 }
 
 // ── Drawn element geometry ────────────────────────────────────────────────────

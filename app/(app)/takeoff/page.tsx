@@ -54,6 +54,7 @@ export const PHASE_DEFAULT_TOOL: Record<string, DrawingTool> = {
   'External Works & Landscaping': 'polygon',
   'Preliminaries':                'select',
   'Other':                        'select',
+  'External Wall Construction':   'line',
 }
 
 // Human-readable measurement label per phase (shown in Active Draw Mode panel)
@@ -76,6 +77,7 @@ const PHASE_MEASURE_LABEL: Record<string, string> = {
   'External Works & Landscaping': 'Area (m²)',
   'Preliminaries':                'Sum / Count',
   'Other':                        'Count (nr)',
+  'External Wall Construction':   'Linear (m) → Area (m²)',
 }
 
 // Display name for each draw tool
