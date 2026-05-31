@@ -20,7 +20,8 @@ import { DEFAULT_DEMO_SUBPHASES, calcDemoSellingPrice, DEMO_UNIT_LABELS, type De
 import { ALL_PHASE_SUBPHASES, calcPhaseTaskSellingPrice } from '@/lib/phase-tasks'
 import { sumByCategory } from '@/lib/material-recipes'
 import { createClient } from '@/lib/supabase/client'
-import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchQuoteDefaults, upsertTask } from '@/lib/back-office-queries'
+import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchQuoteDefaults, upsertTask, fetchLabourTrades } from '@/lib/back-office-queries'
+import type { BOLabourTrade } from '@/lib/back-office-types'
 import type { FloorMakeup } from '@/lib/takeoff-types'
 
 let phaseCounter = 0
@@ -118,6 +119,7 @@ export default function NewQuotePage() {
   const [clientDrop, setClientDrop] = useState(false)
   const [clientSearch, setClientSearch] = useState('')
   const [collapsedPhases, setCollapsedPhases] = useState<Set<number>>(new Set())
+  const [labourTrades, setLabourTrades] = useState<BOLabourTrade[]>([])
   // 'breakdown' = structured visual view (after takeoff import); 'edit' = normal editable rows
   const [viewMode, setViewMode] = useState<'breakdown' | 'edit'>('edit')
   const hasTakeoffPhases = phases.some(p => p.meta?.importedFrom === 'takeoff')
@@ -139,6 +141,10 @@ export default function NewQuotePage() {
       const types = await fetchWallTypesWithLayers(sb, data.user.id)
       const makeups = wallTypesToMakeups(types)
       if (makeups.length > 0) setDbWallTypes(makeups)
+      // Load BO labour trades for the quote workspace cost rows
+      fetchLabourTrades(sb, data.user.id).then(trades => {
+        setLabourTrades(trades.filter(t => t.active))
+      })
     })
   }, [])
 
@@ -1353,6 +1359,7 @@ export default function NewQuotePage() {
                 onLoadTemplate={loadTemplate}
                 jobType={jobType}
                 onSaveToBO={handleSaveToBO}
+                labourTrades={labourTrades}
               />
             </>
           )}

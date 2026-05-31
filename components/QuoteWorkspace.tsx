@@ -13,8 +13,9 @@
  * Works for all data sources: takeoff import, AI-generated, manual.
  */
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback } from 'react'
 import type { QuotePhase, QuoteItem } from '@/lib/types'
+import type { BOLabourTrade } from '@/lib/back-office-types'
 import { fmt, calcPhase, calcPhaseSell } from '@/lib/utils'
 
 // ── IDs ────────────────────────────────────────────────────────────────────────
@@ -111,6 +112,17 @@ const iconBtn = (color = '#64748b'): React.CSSProperties => ({
 
 // ── Cost row ──────────────────────────────────────────────────────────────────
 
+// ── Labour rate helpers (shared with BO task editor) ──────────────────────────
+type LabourRateType = 'hourly' | 'half_day' | 'day'
+const LABOUR_RATE_LABELS: Record<LabourRateType, string> = { hourly: 'Hourly', half_day: 'Half Day', day: 'Day' }
+const LABOUR_QTY_LABELS:  Record<LabourRateType, string> = { hourly: 'hrs', half_day: 'half-days', day: 'days' }
+
+function boLabourRate(trade: BOLabourTrade, rt: LabourRateType): number {
+  if (rt === 'day')      return trade.day_rate
+  if (rt === 'half_day') return trade.half_day_rate_override ?? +(trade.day_rate / 2).toFixed(2)
+  return +(trade.day_rate / 8).toFixed(2)
+}
+
 interface CostRowProps {
   item: QuoteItem
   isLocked: boolean
@@ -118,12 +130,31 @@ interface CostRowProps {
   onDelete: () => void
   onDuplicate: () => void
   isFirst: boolean
+  labourTrades?: BOLabourTrade[]
 }
 
-function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst }: CostRowProps) {
+function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst, labourTrades = [] }: CostRowProps) {
   const cat = (item.itemType ?? 'other') as ItemType
   const cs  = TYPE_COLOR[cat]
   const cost = itemCost(item)
+  const isLabour = cat === 'labour'
+
+  // Labour picker state (local — doesn't need to persist)
+  const [showPicker,  setShowPicker]  = useState(false)
+  const [pickTrade,   setPickTrade]   = useState(labourTrades[0]?.id ?? '')
+  const [pickRateType,setPickRateType]= useState<LabourRateType>('day')
+  const [pickQty,     setPickQty]     = useState(1)
+  const [pickWorkers, setPickWorkers] = useState(1)
+
+  const pickedTrade  = labourTrades.find(t => t.id === pickTrade)
+  const pickedRate   = pickedTrade ? boLabourRate(pickedTrade, pickRateType) : 0
+  const pickedTotal  = +(pickedRate * pickQty * pickWorkers).toFixed(2)
+
+  function applyPicker() {
+    if (!pickedTrade) return
+    onUpdate({ ...item, labour: pickedTotal, desc: item.desc || pickedTrade.name, notes: `${pickedTrade.name} · ${pickedRate.toFixed(2)}/${pickRateType === 'hourly' ? 'hr' : pickRateType === 'half_day' ? 'half-day' : 'day'} × ${pickQty} × ${pickWorkers}` })
+    setShowPicker(false)
+  }
 
   function setField<K extends keyof QuoteItem>(k: K, v: QuoteItem[K]) {
     onUpdate({ ...item, [k]: v })
@@ -136,45 +167,45 @@ function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst }: C
     cat === 'plant' ? 'plantHire' : cat as 'labour' | 'materials' | 'subcontractors' | 'other'
 
   return (
-    <tr style={{ borderBottom: '1px solid #f1f5f9', opacity: 1 }}>
+    <>
+    <tr style={{ borderBottom: showPicker ? 'none' : '1px solid #f1f5f9' }}>
       {/* Category chip */}
       <td style={{ padding: '4px 6px', width: 80 }}>
-        <select
-          value={cat}
-          disabled={isLocked}
+        <select value={cat} disabled={isLocked}
           onChange={e => setField('itemType', e.target.value as ItemType)}
-          style={{ ...fldStyle, fontSize: 10, fontWeight: 700,
-            padding: '2px 5px', borderRadius: 3, cursor: 'pointer',
-            background: cs.bg, color: cs.text, width: 'auto' }}>
+          style={{ ...fldStyle, fontSize: 10, fontWeight: 700, padding: '2px 5px', borderRadius: 3, cursor: 'pointer', background: cs.bg, color: cs.text, width: 'auto' }}>
           {ITEM_TYPES.map(t => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}
         </select>
       </td>
       {/* Description */}
       <td style={{ padding: '4px 6px', minWidth: 160 }}>
-        <input style={{ ...fldStyle, fontSize: 12 }}
-          value={item.desc} readOnly={isLocked}
-          onChange={e => setField('desc', e.target.value)}
-          placeholder="Description" />
+        <input style={{ ...fldStyle, fontSize: 12 }} value={item.desc} readOnly={isLocked}
+          onChange={e => setField('desc', e.target.value)} placeholder="Description" />
       </td>
       {/* Qty */}
       <td style={{ padding: '4px 6px', width: 64 }}>
-        <input type="number" style={{ ...cellInp }}
-          value={item.qty} readOnly={isLocked}
+        <input type="number" style={{ ...cellInp }} value={item.qty} readOnly={isLocked}
           onChange={e => setField('qty', +e.target.value || 0)} />
       </td>
       {/* Unit */}
       <td style={{ padding: '4px 6px', width: 46 }}>
-        <input style={{ ...fldStyle, fontSize: 11, textAlign: 'center' }}
-          value={item.unit} readOnly={isLocked}
+        <input style={{ ...fldStyle, fontSize: 11, textAlign: 'center' }} value={item.unit} readOnly={isLocked}
           onChange={e => setField('unit', e.target.value)} />
       </td>
-      {/* Rate (cost for this category) */}
+      {/* Rate — for labour rows show BO picker button */}
       <td style={{ padding: '4px 6px', width: 90 }}>
-        <div style={{ position: 'relative' }}>
-          <span style={{ position: 'absolute', left: 4, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: '#94a3b8' }}>£</span>
-          <input type="number" style={{ ...cellInp, paddingLeft: 16 }}
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 3 }}>
+          <span style={{ position: 'absolute', left: 4, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: '#94a3b8', pointerEvents: 'none' }}>£</span>
+          <input type="number" style={{ ...cellInp, paddingLeft: 16, flex: 1 }}
             value={item[catKey] ?? 0} readOnly={isLocked}
             onChange={e => setNum(catKey, e.target.value)} />
+          {isLabour && labourTrades.length > 0 && !isLocked && (
+            <button onClick={() => setShowPicker(p => !p)}
+              title="Set from Back Office labour rate"
+              style={{ ...iconBtn(showPicker ? '#f59e0b' : '#94a3b8'), fontSize: 11, flexShrink: 0, border: `1px solid ${showPicker ? '#f59e0b' : '#e2e8f0'}`, borderRadius: 3, padding: '1px 4px' }}>
+              🔨
+            </button>
+          )}
         </div>
       </td>
       {/* Total */}
@@ -183,10 +214,8 @@ function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst }: C
       </td>
       {/* Notes */}
       <td style={{ padding: '4px 6px', minWidth: 100 }}>
-        <input style={{ ...fldStyle, fontSize: 10, color: '#94a3b8' }}
-          value={item.notes} readOnly={isLocked}
-          onChange={e => setField('notes', e.target.value)}
-          placeholder="Notes" />
+        <input style={{ ...fldStyle, fontSize: 10, color: '#94a3b8' }} value={item.notes} readOnly={isLocked}
+          onChange={e => setField('notes', e.target.value)} placeholder="Notes" />
       </td>
       {/* Actions */}
       {!isLocked && (
@@ -196,6 +225,61 @@ function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst }: C
         </td>
       )}
     </tr>
+
+    {/* Labour rate picker — expands below the row when 🔨 is clicked */}
+    {isLabour && showPicker && labourTrades.length > 0 && (
+      <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+        <td colSpan={8} style={{ padding: '0 6px 8px 80px', background: '#fffbeb' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, flexWrap: 'wrap', paddingTop: 6 }}>
+            {/* Trade */}
+            <div>
+              <div style={{ fontSize: 9, color: '#92400e', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Trade</div>
+              <select value={pickTrade} onChange={e => setPickTrade(e.target.value)}
+                style={{ padding: '4px 7px', border: '1px solid #f59e0b', borderRadius: 5, fontSize: 12, background: '#fff', minWidth: 170 }}>
+                {labourTrades.map(t => (
+                  <option key={t.id} value={t.id}>{t.name} — £{t.day_rate}/day</option>
+                ))}
+              </select>
+            </div>
+            {/* Rate type */}
+            <div>
+              <div style={{ fontSize: 9, color: '#92400e', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Rate</div>
+              <select value={pickRateType} onChange={e => setPickRateType(e.target.value as LabourRateType)}
+                style={{ padding: '4px 7px', border: '1px solid #f59e0b', borderRadius: 5, fontSize: 12, background: '#fff' }}>
+                {(Object.keys(LABOUR_RATE_LABELS) as LabourRateType[]).map(rt => (
+                  <option key={rt} value={rt}>{LABOUR_RATE_LABELS[rt]} — £{boLabourRate(pickedTrade ?? labourTrades[0], rt).toFixed(2)}</option>
+                ))}
+              </select>
+            </div>
+            {/* Qty */}
+            <div>
+              <div style={{ fontSize: 9, color: '#92400e', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>{LABOUR_QTY_LABELS[pickRateType]}</div>
+              <input type="number" min={0} step={0.5} value={pickQty} onChange={e => setPickQty(Math.max(0, +e.target.value))}
+                style={{ width: 60, padding: '4px 7px', border: '1px solid #f59e0b', borderRadius: 5, fontSize: 12 }} />
+            </div>
+            {/* Workers */}
+            <div>
+              <div style={{ fontSize: 9, color: '#92400e', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Workers</div>
+              <input type="number" min={1} step={1} value={pickWorkers} onChange={e => setPickWorkers(Math.max(1, +e.target.value))}
+                style={{ width: 52, padding: '4px 7px', border: '1px solid #f59e0b', borderRadius: 5, fontSize: 12 }} />
+            </div>
+            {/* Total + Apply */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingBottom: 1 }}>
+              <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14, color: '#92400e' }}>= £{pickedTotal.toFixed(2)}</span>
+              <button onClick={applyPicker}
+                style={{ padding: '5px 12px', background: '#f59e0b', border: 'none', borderRadius: 5, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                Apply
+              </button>
+              <button onClick={() => setShowPicker(false)}
+                style={{ padding: '5px 8px', background: 'transparent', border: '1px solid #d1d5db', borderRadius: 5, fontSize: 12, cursor: 'pointer', color: '#6b7280' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </td>
+      </tr>
+    )}
+    </>
   )
 }
 
@@ -215,9 +299,10 @@ interface TaskGroupProps {
   onAddRow: (tg: string, type: ItemType) => void
   onRenameTask: (oldName: string, newName: string) => void
   onDeleteTask: (tg: string) => void
+  labourTrades?: BOLabourTrade[]
 }
 
-function TaskGroup({ tg, items, markup, isLocked, collapsed, colKey, toggle, onUpdateItem, onDeleteItem, onDuplicateItem, onAddRow, onRenameTask, onDeleteTask }: TaskGroupProps) {
+function TaskGroup({ tg, items, markup, isLocked, collapsed, colKey, toggle, onUpdateItem, onDeleteItem, onDuplicateItem, onAddRow, onRenameTask, onDeleteTask, labourTrades }: TaskGroupProps) {
   const open  = !collapsed.has(colKey)
   const cost  = items.reduce((s, i) => s + itemCost(i), 0)
   const sell  = +(cost * (1 + markup / 100)).toFixed(2)
@@ -265,6 +350,7 @@ function TaskGroup({ tg, items, markup, isLocked, collapsed, colKey, toggle, onU
                   onUpdate={onUpdateItem}
                   onDelete={() => onDeleteItem(item.id)}
                   onDuplicate={() => onDuplicateItem(item)}
+                  labourTrades={labourTrades}
                 />
               ))}
             </tbody>
@@ -335,9 +421,10 @@ interface SubPhaseBlockProps {
   onDuplicate: () => void
   onAddTask: () => void
   onSaveToBO?: (p: QuotePhase) => void
+  labourTrades?: BOLabourTrade[]
 }
 
-function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDelete, onDuplicate, onAddTask, onSaveToBO }: SubPhaseBlockProps) {
+function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDelete, onDuplicate, onAddTask, onSaveToBO, labourTrades }: SubPhaseBlockProps) {
   const colKey = `sp_${p.id}`
   const open   = !collapsed.has(colKey)
   const sell   = subPhaseTotalSell(p, markup)
@@ -470,6 +557,7 @@ function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDel
               onAddRow={addRow}
               onRenameTask={renameTask}
               onDeleteTask={deleteTask}
+              labourTrades={labourTrades}
             />
           ))}
           {p.items.length === 0 && (
@@ -510,9 +598,10 @@ interface RoomBlockProps {
   onAddTask: (phaseId: number) => void
   onRenameRoom: (mainPhase: string, oldRoom: string, newRoom: string) => void
   onSaveToBO?: (p: QuotePhase) => void
+  labourTrades?: BOLabourTrade[]
 }
 
-function RoomBlock({ mainPhase, room, phases, markup, isLocked, collapsed, toggle, onUpdatePhase, onDeletePhase, onDuplicatePhase, onAddSubPhase, onAddTask, onRenameRoom, onSaveToBO }: RoomBlockProps) {
+function RoomBlock({ mainPhase, room, phases, markup, isLocked, collapsed, toggle, onUpdatePhase, onDeletePhase, onDuplicatePhase, onAddSubPhase, onAddTask, onRenameRoom, onSaveToBO, labourTrades }: RoomBlockProps) {
   const hasRoom = !!room
   const colKey  = `rm_${mainPhase}_${room}`
   const open    = !collapsed.has(colKey)
@@ -566,6 +655,7 @@ function RoomBlock({ mainPhase, room, phases, markup, isLocked, collapsed, toggl
               onDuplicate={() => onDuplicatePhase(p)}
               onAddTask={() => onAddTask(p.id)}
               onSaveToBO={onSaveToBO}
+              labourTrades={labourTrades}
             />
           ))}
           {!isLocked && !hasRoom && (
@@ -599,9 +689,10 @@ interface PhaseBlockProps {
   onDeleteMain: (name: string) => void
   onRenameRoom: (mainPhase: string, oldRoom: string, newRoom: string) => void
   onSaveToBO?: (p: QuotePhase) => void
+  labourTrades?: BOLabourTrade[]
 }
 
-function PhaseBlock({ mainPhase, phases, markup, isLocked, collapsed, toggle, onUpdatePhase, onDeletePhase, onDuplicatePhase, onAddSubPhase, onAddRoom, onAddTask, onRenameMain, onDeleteMain, onRenameRoom, onSaveToBO }: PhaseBlockProps) {
+function PhaseBlock({ mainPhase, phases, markup, isLocked, collapsed, toggle, onUpdatePhase, onDeletePhase, onDuplicatePhase, onAddSubPhase, onAddRoom, onAddTask, onRenameMain, onDeleteMain, onRenameRoom, onSaveToBO, labourTrades }: PhaseBlockProps) {
   const colKey = `mp_${mainPhase}`
   const open   = !collapsed.has(colKey)
   const total  = mainPhaseTotalSell(phases, mainPhase, markup)
@@ -658,6 +749,7 @@ function PhaseBlock({ mainPhase, phases, markup, isLocked, collapsed, toggle, on
               onAddTask={onAddTask}
               onRenameRoom={onRenameRoom}
               onSaveToBO={onSaveToBO}
+              labourTrades={labourTrades}
             />
           ))}
         </div>
@@ -681,9 +773,11 @@ export interface QuoteWorkspaceProps {
   jobType?:          string
   /** Called when user clicks "Save to BO" on a sub-phase */
   onSaveToBO?:       (phase: QuotePhase) => void
+  /** Back Office labour trades — shown as a rate picker on Labour cost rows */
+  labourTrades?:     BOLabourTrade[]
 }
 
-export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked = false, onChange, onImportTakeoff, onAIGenerate, aiGenerating, onLoadTemplate, jobType, onSaveToBO }: QuoteWorkspaceProps) {
+export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked = false, onChange, onImportTakeoff, onAIGenerate, aiGenerating, onLoadTemplate, jobType, onSaveToBO, labourTrades = [] }: QuoteWorkspaceProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [search,    setSearch]    = useState('')
 
@@ -917,6 +1011,7 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
           onDeleteMain={deleteMain}
           onRenameRoom={renameRoom}
           onSaveToBO={onSaveToBO}
+          labourTrades={labourTrades}
         />
       ))}
 
