@@ -157,7 +157,8 @@ export default function NewQuotePage() {
       const q = quotes.find(x => x.id === editId)
       if (q) { loadQuoteForEdit(q); return }
     }
-    loadTemplate('Rear Extension')
+    // New quotes start empty — user chooses to import from Takeoff, AI, or template
+    setPhases([])
   }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function loadTemplate(type: string) {
@@ -1138,6 +1139,11 @@ export default function NewQuotePage() {
                 vatOn={vatOn}
                 isLocked={isLockedQuote}
                 onChange={setPhases}
+                onImportTakeoff={() => takeoffInputRef.current?.click()}
+                onAIGenerate={generatePhases}
+                aiGenerating={generatingPhases}
+                onLoadTemplate={loadTemplate}
+                jobType={jobType}
               />
             </>
           )}

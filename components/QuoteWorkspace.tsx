@@ -626,14 +626,19 @@ function PhaseBlock({ mainPhase, phases, markup, isLocked, collapsed, toggle, on
 // ── Main QuoteWorkspace ────────────────────────────────────────────────────────
 
 export interface QuoteWorkspaceProps {
-  phases:    QuotePhase[]
-  markup:    number
-  vatOn?:    boolean
-  isLocked?: boolean
-  onChange:  (phases: QuotePhase[]) => void
+  phases:            QuotePhase[]
+  markup:            number
+  vatOn?:            boolean
+  isLocked?:         boolean
+  onChange:          (phases: QuotePhase[]) => void
+  onImportTakeoff?:  () => void
+  onAIGenerate?:     () => void
+  aiGenerating?:     boolean
+  onLoadTemplate?:   (jobType: string) => void
+  jobType?:          string
 }
 
-export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked = false, onChange }: QuoteWorkspaceProps) {
+export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked = false, onChange, onImportTakeoff, onAIGenerate, aiGenerating, onLoadTemplate, jobType }: QuoteWorkspaceProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [search,    setSearch]    = useState('')
 
@@ -773,10 +778,76 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
         {!isLocked && <button style={{ ...addBtn, fontSize: 11, borderColor: '#7ab533', color: '#16a34a' }} onClick={addMainPhase}>+ Add Phase</button>}
       </div>
 
-      {/* Empty state */}
-      {mainPhases.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '48px 20px', border: '2px dashed #e2e8f0', borderRadius: 8, color: '#94a3b8' }}>
-          {search ? `No results for "${search}"` : 'No phases yet — click + Add Phase to start'}
+      {/* Empty / landing state */}
+      {mainPhases.length === 0 && !search && (
+        <div style={{ padding: '32px 20px', border: '2px dashed #e2e8f0', borderRadius: 12, textAlign: 'center' }}>
+          <div style={{ fontSize: 28, marginBottom: 10 }}>📋</div>
+          <div style={{ fontWeight: 700, fontSize: 16, color: '#1e293b', marginBottom: 6 }}>
+            Your quote workspace is empty
+          </div>
+          <div style={{ fontSize: 13, color: '#64748b', marginBottom: 28, maxWidth: 420, margin: '0 auto 28px' }}>
+            Start by importing from the Takeoff tool, generating from a scope of works, or loading a job template.
+          </div>
+
+          {/* Two primary CTAs */}
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 20 }}>
+            <button
+              onClick={onImportTakeoff}
+              disabled={!onImportTakeoff}
+              style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                padding: '18px 28px', background: '#eff6ff',
+                border: '2px solid #bfdbfe', borderRadius: 10,
+                cursor: 'pointer', minWidth: 160,
+                transition: 'border-color 0.15s',
+              }}
+            >
+              <span style={{ fontSize: 28 }}>📐</span>
+              <span style={{ fontWeight: 700, fontSize: 14, color: '#1d4ed8' }}>Import from Takeoff</span>
+              <span style={{ fontSize: 11, color: '#64748b', textAlign: 'center', lineHeight: 1.4 }}>
+                Upload a takeoff JSON file to bring in measured quantities and build-up recipes
+              </span>
+            </button>
+
+            <button
+              onClick={onAIGenerate}
+              disabled={aiGenerating || !onAIGenerate}
+              style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                padding: '18px 28px', background: '#fdf4ff',
+                border: '2px solid #e9d5ff', borderRadius: 10,
+                cursor: aiGenerating ? 'wait' : 'pointer', minWidth: 160,
+              }}
+            >
+              <span style={{ fontSize: 28 }}>{aiGenerating ? '⏳' : '✦'}</span>
+              <span style={{ fontWeight: 700, fontSize: 14, color: '#7c3aed' }}>
+                {aiGenerating ? 'Generating…' : 'Generate from Scope'}
+              </span>
+              <span style={{ fontSize: 11, color: '#64748b', textAlign: 'center', lineHeight: 1.4 }}>
+                Type your scope of works on the left, then click here to build the quote with AI
+              </span>
+            </button>
+          </div>
+
+          {/* Secondary: load template */}
+          {onLoadTemplate && (
+            <div style={{ fontSize: 12, color: '#94a3b8' }}>
+              Or{' '}
+              <button
+                onClick={() => onLoadTemplate(jobType ?? 'Rear Extension')}
+                style={{ background: 'none', border: 'none', color: '#4a90a4', cursor: 'pointer', fontSize: 12, textDecoration: 'underline', padding: 0 }}>
+                load a {jobType ?? 'Rear Extension'} template
+              </button>
+              {' '}to start with standard phases and edit manually.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Filtered empty state */}
+      {mainPhases.length === 0 && !!search && (
+        <div style={{ textAlign: 'center', padding: '40px 20px', border: '2px dashed #e2e8f0', borderRadius: 8, color: '#94a3b8' }}>
+          No results for &ldquo;{search}&rdquo;
         </div>
       )}
 
