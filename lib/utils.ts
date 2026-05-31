@@ -75,10 +75,28 @@ export const STAGE_LABEL: Record<string, string> = {
   planning: 'Planning', active: 'On Site', onhold: 'On Hold', complete: 'Complete',
 }
 export const Q_BADGE: Record<string, string> = {
-  pending: 'b-pending', sent: 'b-sent', accepted: 'b-accepted', declined: 'b-declined',
+  draft:        'b-draft',
+  pending:      'b-pending',
+  'in-progress':'b-pending',
+  review:       'b-sent',
+  sent:         'b-sent',
+  approved:     'b-accepted',
+  accepted:     'b-accepted',
+  rejected:     'b-declined',
+  declined:     'b-declined',
+  archived:     'b-declined',
 }
 export const Q_LABEL: Record<string, string> = {
-  pending: 'Pending', sent: 'Sent', accepted: 'Accepted', declined: 'Declined',
+  draft:        'Draft',
+  pending:      'Pending',
+  'in-progress':'In Progress',
+  review:       'For Review',
+  sent:         'Sent',
+  approved:     'Approved',
+  accepted:     'Approved',
+  rejected:     'Rejected',
+  declined:     'Rejected',
+  archived:     'Archived',
 }
 
 export const JOB_TYPES = [

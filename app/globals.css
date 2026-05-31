@@ -94,6 +94,7 @@ textarea{resize:vertical;min-height:56px}
 .b-accepted{background:rgba(122,181,51,0.12);color:#5e8f20}
 .b-declined{background:rgba(192,57,43,0.10);color:#a93226}
 .b-sent{background:rgba(74,144,164,0.12);color:#3a7a94}
+.b-draft{background:rgba(148,163,184,0.15);color:#64748b}
 
 /* ── Job rows ── */
 .job-row{display:flex;align-items:center;gap:14px;padding:16px 20px;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.1s}

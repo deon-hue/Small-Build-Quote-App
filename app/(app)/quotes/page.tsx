@@ -16,7 +16,7 @@ export default function SavedQuotesPage() {
 
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
 
-  const open = quotes.filter(q => q.status === 'pending' || q.status === 'sent')
+  const open = quotes.filter(q => ['draft','pending','in-progress','review','sent'].includes(q.status))
   const pipeline = open.reduce((s, q) => s + quoteTotal(q), 0)
 
   async function handleStatusChange(quote: Quote, status: Quote['status']) {

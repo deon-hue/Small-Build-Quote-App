@@ -12,6 +12,7 @@ import ScopeChat from '@/components/ScopeChat'
 import EstimatorBreakdown from '@/components/EstimatorBreakdown'
 import TakeoffBreakdownView from '@/components/TakeoffBreakdownView'
 import QuoteWorkspace from '@/components/QuoteWorkspace'
+import QuoteLandingWizard, { type QuoteCreationMode } from '@/components/QuoteLandingWizard'
 import type { TakeoffItem, TakeoffPhase } from '@/lib/takeoff-types'
 import { PHASE_TO_QUOTE_PARENT, ALL_MAKEUPS, calcLayerQty, WALL_OPENING_LABELS, type TakeoffLabourLine } from '@/lib/takeoff-types'
 import { DEFAULT_DEMO_SUBPHASES, calcDemoSellingPrice, DEMO_UNIT_LABELS, type DemoUnit } from '@/lib/demolition-data'
@@ -118,6 +119,9 @@ export default function NewQuotePage() {
   // 'breakdown' = structured visual view (after takeoff import); 'edit' = normal editable rows
   const [viewMode, setViewMode] = useState<'breakdown' | 'edit'>('edit')
   const hasTakeoffPhases = phases.some(p => p.meta?.importedFrom === 'takeoff')
+  // Landing wizard step: 'landing' → show 3-card selection; 'workspace' → show editor
+  const [step, setStep] = useState<'landing' | 'workspace'>('landing')
+  const [quoteSource, setQuoteSource] = useState<QuoteCreationMode | null>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
   const takeoffInputRef = useRef<HTMLInputElement>(null)
 
@@ -155,10 +159,11 @@ export default function NewQuotePage() {
     if (editId) {
       sessionStorage.removeItem('sbc_edit_quote')
       const q = quotes.find(x => x.id === editId)
-      if (q) { loadQuoteForEdit(q); return }
+      if (q) { loadQuoteForEdit(q); setStep('workspace'); return }
     }
-    // New quotes start empty — user chooses to import from Takeoff, AI, or template
+    // New quote — show landing wizard
     setPhases([])
+    setStep('landing')
   }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function loadTemplate(type: string) {
@@ -226,6 +231,41 @@ export default function NewQuotePage() {
     setJobType(type)
     if (phases.length && !confirm('Load the ' + type + ' template? This replaces current lines.')) return
     loadTemplate(type)
+  }
+
+  // ── Landing wizard selection ───────────────────────────────────────────────
+  function handleLandingSelect(mode: QuoteCreationMode, selectedJobType?: string) {
+    setQuoteSource(mode)
+    setStep('workspace')
+    if (mode === 'manual' && selectedJobType) {
+      setJobType(selectedJobType)
+      loadTemplate(selectedJobType)
+    } else if (mode === 'takeoff') {
+      // Trigger file picker after workspace renders
+      setTimeout(() => takeoffInputRef.current?.click(), 100)
+    }
+    // 'ai' mode: user types scope and clicks Generate — nothing extra needed
+  }
+
+  // Save as draft
+  async function handleSaveDraft() {
+    if (!custName && !confirm('No customer name — save draft anyway?')) return
+    setSaving(true)
+    try {
+      const customer = { name: custName, address: custAddr, email: custEmail, phone: custPhone }
+      const qData = { status: 'draft' as const, jobType, markup, vatIncluded: vatOn, scope, photo, convertedToJob: false, lastEdited: '', customer, phases: JSON.parse(JSON.stringify(phases)), quoteSource: quoteSource ?? undefined }
+      if (editingId) {
+        const existing = quotes.find(q => q.id === editingId)!
+        await updateQuote({ ...existing, ...qData })
+        alert('Draft updated.')
+      } else {
+        const newQuote = await addQuote(qData)
+        await upsertClientFromQuote(customer)
+        alert('Saved as draft — ref: ' + newQuote.ref)
+      }
+    } finally {
+      setSaving(false)
+    }
   }
 
   // AI generate phases from scope
@@ -847,7 +887,7 @@ export default function NewQuotePage() {
     setSaving(true)
     try {
       const customer = { name: custName, address: custAddr, email: custEmail, phone: custPhone }
-      const qData = { status: 'pending' as const, jobType, markup, vatIncluded: vatOn, scope, photo, convertedToJob: false, lastEdited: '', customer, phases: JSON.parse(JSON.stringify(phases)) }
+      const qData = { status: 'pending' as const, jobType, markup, vatIncluded: vatOn, scope, photo, convertedToJob: false, lastEdited: '', customer, phases: JSON.parse(JSON.stringify(phases)), quoteSource: quoteSource ?? undefined }
       if (editingId) {
         const existing = quotes.find(q => q.id === editingId)!
         await updateQuote({ ...existing, ...qData })
@@ -938,6 +978,11 @@ export default function NewQuotePage() {
 
 
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
+
+  // ── Landing wizard ─────────────────────────────────────────────────────────
+  if (step === 'landing') {
+    return <QuoteLandingWizard onSelect={handleLandingSelect} />
+  }
 
   return (
     <>
@@ -1062,12 +1107,17 @@ export default function NewQuotePage() {
             </label>
           </div>
 
-          <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
+          <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button className="btn btn-outline" onClick={() => setShowPreview(true)} style={{ flex: 1 }}>👁 Preview</button>
+            {!isLockedQuote && (
+              <button className="btn btn-outline" onClick={handleSaveDraft} disabled={saving} style={{ flex: 1 }}>
+                {saving ? 'Saving…' : '📝 Save Draft'}
+              </button>
+            )}
             <button className="btn btn-primary" onClick={handleSave} disabled={saving || isLockedQuote}
               style={{ flex: 1, opacity: isLockedQuote ? 0.45 : 1 }}
               title={isLockedQuote ? 'Accepted quotes are locked and cannot be modified' : undefined}>
-              {saving ? 'Saving…' : isLockedQuote ? '🔒 Locked' : editingId ? '💾 Update Quote' : '💾 Save Quote'}
+              {saving ? 'Saving…' : isLockedQuote ? '🔒 Locked' : editingId ? '💾 Update' : '💾 Save Quote'}
             </button>
           </div>
         </div>
@@ -1079,6 +1129,15 @@ export default function NewQuotePage() {
           <div style={{ background: 'var(--cream)', border: '1.5px solid var(--border)', borderRadius: 8, padding: '14px 16px', marginBottom: 16 }}>
             {/* Row 1: Job type + action buttons */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+              {/* Back to landing */}
+              {!editingId && (
+                <button
+                  onClick={() => { if (!phases.length || confirm('Go back to selection? Current lines will be cleared.')) { setPhases([]); setStep('landing'); setQuoteSource(null) } }}
+                  style={{ background: 'none', border: 'none', fontSize: 12, color: 'var(--muted)', cursor: 'pointer', padding: '0 4px', display: 'flex', alignItems: 'center', gap: 4 }}
+                >
+                  ← Change
+                </button>
+              )}
               <select
                 value={jobType}
                 onChange={e => onJobTypeChange(e.target.value)}

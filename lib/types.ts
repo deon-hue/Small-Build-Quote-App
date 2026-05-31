@@ -68,7 +68,19 @@ export interface Quote {
   ref: string
   savedDate: string
   lastEdited: string
-  status: 'pending' | 'sent' | 'accepted' | 'declined'
+  status:
+    | 'draft'        // saved but incomplete — not yet ready to send
+    | 'pending'      // ready, not yet sent (legacy)
+    | 'in-progress'  // actively being worked on
+    | 'review'       // ready for internal review
+    | 'sent'         // sent to client
+    | 'approved'     // client approved
+    | 'rejected'     // client rejected
+    | 'archived'     // closed / filed
+    | 'accepted'     // legacy alias for approved
+    | 'declined'     // legacy alias for rejected
+  /** How the quote was created */
+  quoteSource?: 'takeoff' | 'ai' | 'manual'
   jobType: string
   markup: number
   vatIncluded: boolean
