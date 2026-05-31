@@ -13,6 +13,7 @@ import EstimatorBreakdown from '@/components/EstimatorBreakdown'
 import TakeoffBreakdownView from '@/components/TakeoffBreakdownView'
 import QuoteWorkspace from '@/components/QuoteWorkspace'
 import QuoteLandingWizard, { type QuoteCreationMode } from '@/components/QuoteLandingWizard'
+import AIScopeWorkspace from '@/components/AIScopeWorkspace'
 import type { TakeoffItem, TakeoffPhase } from '@/lib/takeoff-types'
 import { PHASE_TO_QUOTE_PARENT, ALL_MAKEUPS, calcLayerQty, WALL_OPENING_LABELS, type TakeoffLabourLine } from '@/lib/takeoff-types'
 import { DEFAULT_DEMO_SUBPHASES, calcDemoSellingPrice, DEMO_UNIT_LABELS, type DemoUnit } from '@/lib/demolition-data'
@@ -119,8 +120,11 @@ export default function NewQuotePage() {
   // 'breakdown' = structured visual view (after takeoff import); 'edit' = normal editable rows
   const [viewMode, setViewMode] = useState<'breakdown' | 'edit'>('edit')
   const hasTakeoffPhases = phases.some(p => p.meta?.importedFrom === 'takeoff')
-  // Landing wizard step: 'landing' → show 3-card selection; 'workspace' → show editor
-  const [step, setStep] = useState<'landing' | 'workspace'>('landing')
+  // Landing wizard step:
+  //   'landing'   → 3-card selection
+  //   'ai-scope'  → dedicated AI scope writing screen
+  //   'workspace' → full quoting workspace
+  const [step, setStep] = useState<'landing' | 'ai-scope' | 'workspace'>('landing')
   const [quoteSource, setQuoteSource] = useState<QuoteCreationMode | null>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
   const takeoffInputRef = useRef<HTMLInputElement>(null)
@@ -236,15 +240,30 @@ export default function NewQuotePage() {
   // ── Landing wizard selection ───────────────────────────────────────────────
   function handleLandingSelect(mode: QuoteCreationMode, selectedJobType?: string) {
     setQuoteSource(mode)
-    setStep('workspace')
-    if (mode === 'manual' && selectedJobType) {
+    if (mode === 'ai') {
+      // Go to the dedicated AI Scope screen first
+      setStep('ai-scope')
+    } else if (mode === 'manual' && selectedJobType) {
       setJobType(selectedJobType)
       loadTemplate(selectedJobType)
+      setStep('workspace')
     } else if (mode === 'takeoff') {
+      setStep('workspace')
       // Trigger file picker after workspace renders
       setTimeout(() => takeoffInputRef.current?.click(), 100)
+    } else {
+      setStep('workspace')
     }
-    // 'ai' mode: user types scope and clicks Generate — nothing extra needed
+  }
+
+  // Called from AIScopeWorkspace when user clicks "Build Estimate"
+  async function handleBuildFromScope() {
+    // generatePhases() sets phases and calls setGeneratingPhases(false) in finally.
+    // We can't reliably check success here since setPhases is async.
+    // Simplest: patch generatePhases to accept an onSuccess callback.
+    // For now: always try to transition; if phases is empty the workspace shows the landing CTA.
+    await generatePhases()
+    setStep('workspace')
   }
 
   // Save as draft
@@ -982,6 +1001,37 @@ export default function NewQuotePage() {
   // ── Landing wizard ─────────────────────────────────────────────────────────
   if (step === 'landing') {
     return <QuoteLandingWizard onSelect={handleLandingSelect} />
+  }
+
+  // ── AI Scope Workspace ─────────────────────────────────────────────────────
+  if (step === 'ai-scope') {
+    return (
+      <>
+        <AIScopeWorkspace
+          scope={scope}
+          onScopeChange={setScope}
+          jobType={jobType}
+          onJobTypeChange={jt => { setJobType(jt) }}
+          jobTypes={JOB_TYPES}
+          onBuildEstimate={handleBuildFromScope}
+          onOpenChat={() => setShowScopeChat(true)}
+          generating={generatingPhases}
+          onBack={() => setStep('landing')}
+        />
+        {/* ScopeChat modal needs to be available on this screen */}
+        {showScopeChat && (
+          <ScopeChat
+            quoteId={editingId}
+            jobType={jobType}
+            address={custAddr}
+            phases={[]}
+            onInsert={text => setScope(text)}
+            onClose={() => setShowScopeChat(false)}
+            onBuildEstimate={handleBuildEstimate}
+          />
+        )}
+      </>
+    )
   }
 
   return (
