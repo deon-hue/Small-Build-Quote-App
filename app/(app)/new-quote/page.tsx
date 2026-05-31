@@ -359,7 +359,12 @@ export default function NewQuotePage() {
     } else if (mode === 'manual' && selectedJobType) {
       setJobType(selectedJobType)
       setStep('workspace')
-      loadFromBackOffice(selectedJobType)  // async — BO defaults first, template fallback
+      if (selectedJobType === 'Other') {
+        // "Other" starts blank — user builds from scratch
+        setPhases([])
+      } else {
+        loadFromBackOffice(selectedJobType)  // async — BO defaults first, template fallback
+      }
     } else if (mode === 'takeoff') {
       setStep('workspace')
       // Trigger file picker after workspace renders
@@ -1344,6 +1349,7 @@ export default function NewQuotePage() {
                 jobType={jobType}
                 onSaveToBO={handleSaveToBO}
                 labourTrades={labourTrades}
+                quoteSource={quoteSource ?? undefined}
               />
             </>
           )}

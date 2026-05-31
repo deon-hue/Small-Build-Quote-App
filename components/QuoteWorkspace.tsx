@@ -802,9 +802,11 @@ export interface QuoteWorkspaceProps {
   onSaveToBO?:       (phase: QuotePhase) => void
   /** Back Office labour trades — shown as a rate picker on Labour cost rows */
   labourTrades?:     BOLabourTrade[]
+  /** How the quote was created — drives empty-state messaging */
+  quoteSource?:      'takeoff' | 'ai' | 'manual'
 }
 
-export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked = false, onChange, onImportTakeoff, onAIGenerate, aiGenerating, onLoadTemplate, jobType, onSaveToBO, labourTrades = [] }: QuoteWorkspaceProps) {
+export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked = false, onChange, onImportTakeoff, onAIGenerate, aiGenerating, onLoadTemplate, jobType, onSaveToBO, labourTrades = [], quoteSource }: QuoteWorkspaceProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [search,    setSearch]    = useState('')
 
@@ -947,7 +949,27 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
 
       {/* Empty / landing state */}
       {mainPhases.length === 0 && !search && (
-        <div style={{ padding: '32px 20px', border: '2px dashed #e2e8f0', borderRadius: 12, textAlign: 'center' }}>
+        <div style={{ padding: '40px 20px', border: '2px dashed #e2e8f0', borderRadius: 12, textAlign: 'center' }}>
+
+          {/* Manual mode empty state */}
+          {quoteSource === 'manual' ? (
+            <>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>
+              <div style={{ fontWeight: 700, fontSize: 17, color: '#1e293b', marginBottom: 8 }}>
+                Select your phases to start the quote
+              </div>
+              <div style={{ fontSize: 13, color: '#64748b', marginBottom: 24, maxWidth: 360, margin: '0 auto 24px', lineHeight: 1.6 }}>
+                Click <strong>+ Add Phase</strong> in the search bar above to add your first phase, or use the search to filter once phases are added.
+              </div>
+              <button
+                onClick={addMainPhase}
+                style={{ padding: '10px 24px', background: '#1e293b', border: 'none', borderRadius: 8, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}
+              >
+                + Add Phase
+              </button>
+            </>
+          ) : (
+            <>
           <div style={{ fontSize: 28, marginBottom: 10 }}>📋</div>
           <div style={{ fontWeight: 700, fontSize: 16, color: '#1e293b', marginBottom: 6 }}>
             Your quote workspace is empty
@@ -1007,6 +1029,8 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
               </button>
               {' '}to start with standard phases and edit manually.
             </div>
+          )}
+            </> /* end non-manual empty state */
           )}
         </div>
       )}
