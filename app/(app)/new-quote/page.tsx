@@ -11,6 +11,7 @@ import QuotePreviewModal from '@/components/QuotePreviewModal'
 import ScopeChat from '@/components/ScopeChat'
 import EstimatorBreakdown from '@/components/EstimatorBreakdown'
 import TakeoffBreakdownView from '@/components/TakeoffBreakdownView'
+import QuoteWorkspace from '@/components/QuoteWorkspace'
 import type { TakeoffItem, TakeoffPhase } from '@/lib/takeoff-types'
 import { PHASE_TO_QUOTE_PARENT, ALL_MAKEUPS, calcLayerQty, WALL_OPENING_LABELS, type TakeoffLabourLine } from '@/lib/takeoff-types'
 import { DEFAULT_DEMO_SUBPHASES, calcDemoSellingPrice, DEMO_UNIT_LABELS, type DemoUnit } from '@/lib/demolition-data'
@@ -34,6 +35,8 @@ function makePhase(
     id: ++phaseCounter,
     phase,
     parentPhase,
+    // Derive roomLabel from meta if available
+    ...(meta?.roomName && { roomLabel: meta.roomName }),
     items: items.map(i => ({ ...i, id: ++itemCounter })),
     estimatorItems: estimatorItems ?? [],
     useEstimator: true,
@@ -468,6 +471,8 @@ export default function NewQuotePage() {
                                 : layer.category === 'other'  ? 'other'
                                 : layer.category === 'labour' ? 'labour'
                                 : 'materials') as QuoteItem['itemType'],
+                  // taskGroup = layer name so each layer is its own task group
+                  taskGroup: layer.name,
                 })
               }
 
@@ -1076,110 +1081,46 @@ export default function NewQuotePage() {
           </div>
         </div>
 
-        {/* Right panel — phases */}
+        {/* Right panel — Quote Workspace */}
         <div className="qb-right">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            <div style={{ fontWeight: 700, fontSize: 15 }}>
-              Quote Lines — <span style={{ color: 'var(--muted)', fontWeight: 400 }}>{mainPhaseOrder.length} phase{mainPhaseOrder.length !== 1 ? 's' : ''}</span>
+          {/* Top action bar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+            <div style={{ fontWeight: 700, fontSize: 15, flex: 1, minWidth: 120 }}>
+              Quote Workspace
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {hasTakeoffPhases && (
-                <button
-                  className="btn-sm btn-outline"
-                  onClick={() => setViewMode(v => v === 'breakdown' ? 'edit' : 'breakdown')}
-                  style={{ fontSize: 11, background: viewMode === 'breakdown' ? '#eff6ff' : undefined, borderColor: viewMode === 'breakdown' ? '#bfdbfe' : undefined, color: viewMode === 'breakdown' ? '#1d4ed8' : undefined }}
-                >
-                  {viewMode === 'breakdown' ? '✏️ Edit Rates' : '📐 Builder View'}
-                </button>
-              )}
-              {phases.length > 0 && viewMode === 'edit' && (
-                <button
-                  className="btn-sm btn-outline"
-                  onClick={allCollapsed ? expandAllPhases : collapseAllPhases}
-                  title={allCollapsed ? 'Expand all phases' : 'Collapse all phases'}
-                  style={{ fontSize: 11 }}
-                >
-                  {allCollapsed ? '▶▶ Expand All' : '▼▼ Collapse All'}
-                </button>
-              )}
-              <button className="btn-sm btn-sky" onClick={generatePhases} disabled={generatingPhases} style={{ fontSize: 11 }}>
-                {generatingPhases ? '⏳ Generating…' : '✦ Generate Phases'}
-              </button>
-              <label className="btn-sm btn-outline" style={{ fontSize: 11, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                title="Import take-off from the Take-off tool">
-                📐 Import Take-off
-                <input ref={takeoffInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={importTakeoff} />
-              </label>
-              <button className="btn-sm btn-primary" onClick={addMainPhase}>+ Add Phase</button>
-            </div>
+            <button className="btn-sm btn-sky" onClick={generatePhases} disabled={generatingPhases} style={{ fontSize: 11 }}>
+              {generatingPhases ? '⏳ Generating…' : '✦ AI Generate'}
+            </button>
+            <label className="btn-sm btn-outline" style={{ fontSize: 11, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              title="Import take-off from the Take-off tool">
+              📐 Import Take-off
+              <input ref={takeoffInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={importTakeoff} />
+            </label>
           </div>
 
-          {buildingEstimate
-            ? (
-              <div className="empty-dashed" style={{ textAlign: 'center', padding: '40px 20px' }}>
-                <div style={{ fontSize: 28, marginBottom: 10 }}>⏳</div>
-                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Building Estimate…</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)' }}>Analysing scope and matching tasks from the library. This takes a few seconds.</div>
-              </div>
-            )
-            : !phases.length
-            ? <div className="empty-dashed"><div style={{ fontSize: 14, marginBottom: 6 }}>No phases yet</div><div style={{ fontSize: 12 }}>Select a job type to load a template, or click Add Phase.</div></div>
-            : <>
-                {estimateUsedDB && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, marginBottom: 12, fontSize: 12, color: '#1d4ed8' }}>
-                    <span style={{ fontWeight: 700 }}>✓ Back Office rates applied</span>
-                    <span style={{ color: '#64748b' }}>— costs are based on your configured defaults, not generic AI estimates</span>
-                  </div>
-                )}
-
-                {/* ── Takeoff breakdown view ── */}
-                {viewMode === 'breakdown' && hasTakeoffPhases && (
-                  <TakeoffBreakdownView
-                    phases={phases}
-                    markup={markup}
-                    onEdit={() => setViewMode('edit')}
-                  />
-                )}
-
-                {/* ── Normal edit view ── */}
-                {viewMode === 'edit' && <>
-                  {mainPhaseOrder.map(mainPhase => {
-                    const subPhases = phases.filter(p => p.parentPhase === mainPhase)
-                    const mainSell = mainPhaseTotal(mainPhase)
-                    return (
-                      <div key={mainPhase} style={{ marginBottom: 20 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#2c3e50', color: 'white', padding: '8px 14px', borderRadius: '6px 6px 0 0', fontSize: 13 }}>
-                          <input
-                            value={mainPhase}
-                            onChange={e => updateMainPhaseName(mainPhase, e.target.value)}
-                            style={{ flex: 1, background: 'transparent', border: 'none', color: 'white', fontSize: 13, fontWeight: 700, outline: 'none', minWidth: 0 }}
-                          />
-                          <span className="mono" style={{ fontSize: 12, color: '#7ab533', fontWeight: 700, whiteSpace: 'nowrap' }}>{fmt(mainSell)}</span>
-                          <button onClick={() => addSubPhase(mainPhase)} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: 'white', fontSize: 11, borderRadius: 4, padding: '2px 8px', cursor: 'pointer', whiteSpace: 'nowrap' }}>+ Sub-Phase</button>
-                          <button onClick={() => removeMainPhase(mainPhase)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: 16, cursor: 'pointer', padding: '0 2px', lineHeight: 1 }} title="Remove this phase and all its sub-phases">×</button>
-                        </div>
-                        {subPhases.map((p, pi) => (
-                          <SubPhaseBlock key={p.id} p={p} pi={pi} markup={markup} vatOn={vatOn}
-                            collapsed={collapsedPhases.has(p.id)} onToggleCollapse={() => togglePhase(p.id)}
-                            onUpdatePhaseName={updatePhaseName} onRemovePhase={removePhase}
-                            onUpdatePhase={updatePhase} onSaveToBO={() => savePhaseRatesToBO(p)} />
-                        ))}
-                      </div>
-                    )
-                  })}
-                  {orphanPhases.map((p, pi) => (
-                    <SubPhaseBlock key={p.id} p={p} pi={pi} markup={markup} vatOn={vatOn}
-                      collapsed={collapsedPhases.has(p.id)} onToggleCollapse={() => togglePhase(p.id)}
-                      onUpdatePhaseName={updatePhaseName} onRemovePhase={removePhase}
-                      onUpdatePhase={updatePhase} onSaveToBO={() => savePhaseRatesToBO(p)} />
-                  ))}
-                </>}
-              </>
-          }
-
-          <div style={{ marginTop: 12 }}>
-            <button className="btn-sm btn-primary" onClick={addMainPhase}>+ Add Phase</button>
-          </div>
+          {buildingEstimate ? (
+            <div className="empty-dashed" style={{ textAlign: 'center', padding: '40px 20px' }}>
+              <div style={{ fontSize: 28, marginBottom: 10 }}>⏳</div>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Building Estimate…</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>Analysing scope and matching tasks from the library.</div>
+            </div>
+          ) : (
+            <>
+              {estimateUsedDB && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, marginBottom: 12, fontSize: 12, color: '#1d4ed8' }}>
+                  <span style={{ fontWeight: 700 }}>✓ Back Office rates applied</span>
+                  <span style={{ color: '#64748b' }}>— costs based on your configured defaults</span>
+                </div>
+              )}
+              <QuoteWorkspace
+                phases={phases}
+                markup={markup}
+                vatOn={vatOn}
+                isLocked={isLockedQuote}
+                onChange={setPhases}
+              />
+            </>
+          )}
         </div>
       </div>
 

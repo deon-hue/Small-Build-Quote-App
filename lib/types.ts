@@ -14,6 +14,8 @@ export interface QuoteItem {
   other?: number
   itemType?: 'labour' | 'materials' | 'plant' | 'subcontractors' | 'other'
   notes: string
+  /** Groups rows within a sub-phase into a named task (e.g. a layer name or task description) */
+  taskGroup?: string
 }
 
 /** Metadata stamped on phases that were imported from the Takeoff tool */
@@ -40,6 +42,8 @@ export interface QuotePhase {
   id: number
   phase: string          // Sub-phase / category name
   parentPhase?: string   // Main phase grouping header
+  /** Area / Room / Drawing-label grouping between Phase and Sub-phase */
+  roomLabel?: string
   items: QuoteItem[]
   estimatorItems?: EstimatorItem[]
   useEstimator?: boolean  // true = lump sums auto-computed from estimatorItems
