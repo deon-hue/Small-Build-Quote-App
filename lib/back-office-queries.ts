@@ -776,7 +776,7 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
   if (newTasks.length > 0) {
     // Insert in chunks of 100 to stay within Supabase payload limits
     for (let i = 0; i < newTasks.length; i += 100) {
-      await sb.from('bo_tasks').insert(
+      const { error: taskInsertError } = await sb.from('bo_tasks').insert(
         newTasks.slice(i, i + 100).map(t => ({
           user_id:            userId,
           canonical_id:       t.canonical_id,
@@ -800,6 +800,9 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
           active:             true,
         }))
       )
+      if (taskInsertError) {
+        console.error('[syncBackOfficeFromProduct] task insert failed:', taskInsertError.message, taskInsertError.details, taskInsertError.hint)
+      }
     }
   }
 
