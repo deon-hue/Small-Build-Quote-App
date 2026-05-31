@@ -22,6 +22,19 @@ export interface QuoteItem {
   enabled?: boolean
 }
 
+/** A plant/equipment hire line item within a quote sub-phase, sourced from Back Office plant */
+export interface QuotePlantItem {
+  id:           string
+  boPlantId?:   string     // bo_plant_items.id
+  name:         string
+  unit:         string
+  qty:          number
+  costPrice:    number
+  sellPrice:    number
+  notes?:       string
+  enabled?:     boolean
+}
+
 /** A product/material line item within a quote sub-phase, sourced from Back Office products */
 export interface QuoteProduct {
   id:           string     // local uid
@@ -87,6 +100,8 @@ export interface QuotePhase {
   reviewNote?: string
   /** Products/materials from Back Office product database */
   products?: QuoteProduct[]
+  /** Plant & equipment hire items from Back Office plant database */
+  plantItems?: QuotePlantItem[]
 }
 
 export interface QuoteCustomer {
