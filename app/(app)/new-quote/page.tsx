@@ -1008,28 +1008,14 @@ export default function NewQuotePage() {
     return (
       <>
         <AIScopeWorkspace
-          scope={scope}
           onScopeChange={setScope}
-          jobType={jobType}
-          onJobTypeChange={jt => { setJobType(jt) }}
-          jobTypes={JOB_TYPES}
+          onJobTypeChange={jt => setJobType(jt)}
           onBuildEstimate={handleBuildFromScope}
-          onOpenChat={() => setShowScopeChat(true)}
-          generating={generatingPhases}
           onBack={() => setStep('landing')}
+          generating={generatingPhases}
+          initialJobType={jobType !== 'Rear Extension' ? jobType : undefined}
         />
-        {/* ScopeChat modal needs to be available on this screen */}
-        {showScopeChat && (
-          <ScopeChat
-            quoteId={editingId}
-            jobType={jobType}
-            address={custAddr}
-            phases={[]}
-            onInsert={text => setScope(text)}
-            onClose={() => setShowScopeChat(false)}
-            onBuildEstimate={handleBuildEstimate}
-          />
-        )}
+        {/* Interview is now embedded in AIScopeWorkspace — no separate modal needed */}
       </>
     )
   }
