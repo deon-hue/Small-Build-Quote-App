@@ -576,7 +576,16 @@ export default function NewQuotePage() {
     const boRates = await fetchBOTakeoffRates()
     const hasBORates = Object.keys(boRates).length > 0
 
-    let data: { version: number; items: TakeoffItem[]; address?: string; jobType?: string }
+    let data: {
+      version:      number
+      items:        TakeoffItem[]
+      address?:     string
+      jobType?:     string
+      client?:      { name?: string; email?: string; phone?: string; addressLine1?: string; town?: string; postcode?: string }
+      siteAddress?: string
+      projectName?: string
+      takeoffRef?:  string
+    }
     try {
       const text = await file.text()
       data = JSON.parse(text)
@@ -856,8 +865,28 @@ export default function NewQuotePage() {
         setViewMode('breakdown')  // switch to structured view after import
 
         // Prefill address / job type if blank
-        if (!custAddr && data.address) setCustAddr(data.address)
+        const resolvedAddr = data.siteAddress
+          || (data.client && [data.client.addressLine1, data.client.town, data.client.postcode].filter(Boolean).join(', '))
+          || data.address
+          || ''
+        if (!custAddr && resolvedAddr) setCustAddr(resolvedAddr)
         if (data.jobType) setJobType(data.jobType)
+
+        // Prefill client fields if blank
+        if (!custName && data.client?.name)  setCustName(data.client.name)
+        if (!custEmail && data.client?.email) setCustEmail(data.client.email)
+        if (!custPhone && data.client?.phone) setCustPhone(data.client.phone)
+
+        // Prefill project name into scope if blank
+        if (data.projectName && !scope) setScope(data.projectName)
+
+        // Prepend takeoff ref to scope so it's visible in the quote
+        if (data.takeoffRef) {
+          setScope(prev => {
+            const prefix = `[Ref: ${data.takeoffRef}]`
+            return prev.startsWith(prefix) ? prev : `${prefix}${prev ? ' — ' + prev : ''}`
+          })
+        }
 
         const buildupCount = (data.items as TakeoffItem[]).filter((i: TakeoffItem) => i.floorMakeupId).length
         const ratesNote = hasBORates ? ' Back Office rates applied.' : ' Add your rates to complete the estimate.'

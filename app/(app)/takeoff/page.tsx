@@ -6,6 +6,7 @@ import { makeDebouncedSave, loadTakeoffFromSupabase } from '@/lib/takeoff-sync'
 import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchLabourTrades } from '@/lib/back-office-queries'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import LabourCostBuilder from './components/LabourCostBuilder'
+import ClientProjectModal from './components/ClientProjectModal'
 import {
   TAKEOFF_PHASES, PHASE_COLORS, DEFAULT_MPP, SCALE_PRESETS,
   FLOOR_MAKEUPS, WALL_MAKEUPS, PLASTER_MAKEUPS, PHASE_MAKEUPS, calcLayerQty,
@@ -454,6 +455,7 @@ export default function TakeoffPage() {
 
   // Header edit
   const [editingName, setEditingName] = useState(false)
+  const [showClientModal, setShowClientModal] = useState(false)
 
   // Theme
   const [darkMode, setDarkMode] = useState<boolean>(() => {
@@ -4635,6 +4637,32 @@ export default function TakeoffPage() {
           onChange={e => setProject(p => ({ ...p, address: e.target.value }))}
         />
 
+        {/* Client / project info */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 4px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--to-text)', lineHeight: 1.2, whiteSpace: 'nowrap', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {project.client?.name ?? 'No client assigned'}
+            </span>
+            {(project.siteAddress ?? project.client?.address ?? '') && (
+              <span style={{ fontSize: 10, color: 'var(--to-muted)', lineHeight: 1.2, whiteSpace: 'nowrap', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {project.siteAddress ?? project.client?.address ?? ''}
+              </span>
+            )}
+            {project.projectName && (
+              <span style={{ fontSize: 10, color: 'var(--to-dim)', lineHeight: 1.2, whiteSpace: 'nowrap', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {project.projectName}
+              </span>
+            )}
+          </div>
+          <button
+            style={{ ...btnStyle, fontSize: 11, padding: '4px 8px', whiteSpace: 'nowrap' }}
+            onClick={() => setShowClientModal(true)}
+            title="Edit client and project details"
+          >
+            Edit Client
+          </button>
+        </div>
+
         <div style={{ width: 1, height: 28, background: 'var(--to-border)', margin: '0 4px' }} />
 
         {/* Scale */}
@@ -5404,6 +5432,15 @@ export default function TakeoffPage() {
           </div>
         </div>
       )}
+
+      {/* ── Client / Project modal ─────────────────────────────────────────── */}
+      <ClientProjectModal
+        open={showClientModal}
+        onClose={() => setShowClientModal(false)}
+        project={project}
+        onSave={updated => { setProject(prev => ({ ...prev, ...updated })) }}
+        userId={userId ?? ''}
+      />
 
       {/* ── Toast notification ─────────────────────────────────────────────── */}
       {toast && (

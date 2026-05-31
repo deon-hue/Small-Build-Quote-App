@@ -252,6 +252,14 @@ export const DEFAULT_MPP = 0.0265  // 1:100 scale, A3, 96dpi
 
 // ── Top-level project state (persisted to localStorage) ──────────────────────
 
+export interface TakeoffClient {
+  id:          string
+  name:        string
+  email?:      string
+  phone?:      string
+  address?:    string
+}
+
 export interface TakeoffProject {
   id:           string
   name:         string
@@ -263,6 +271,12 @@ export interface TakeoffProject {
   items:        TakeoffItem[]
   createdAt:    string
   updatedAt:    string
+  // Optional enrichment fields
+  clientId?:     string
+  client?:       TakeoffClient   // snapshot at time of project creation/save
+  projectName?:  string
+  takeoffRef?:   string
+  siteAddress?:  string
 }
 
 // ── Export format ─────────────────────────────────────────────────────────────
