@@ -1161,8 +1161,8 @@ export default function NewQuotePage() {
         {/* Right panel — Quote Workspace */}
         <div className="qb-right">
 
-          {/* ── Workspace header: Job Type + Scope + Actions ── */}
-          <div style={{ background: 'var(--cream)', border: '1.5px solid var(--border)', borderRadius: 8, padding: '14px 16px', marginBottom: 16 }}>
+          {/* ── Workspace header: only shown for manual entry ── */}
+          {quoteSource === 'manual' && <div style={{ background: 'var(--cream)', border: '1.5px solid var(--border)', borderRadius: 8, padding: '14px 16px', marginBottom: 16 }}>
             {/* Row 1: Job type + action buttons */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
               {/* Back to landing */}
@@ -1211,7 +1211,7 @@ export default function NewQuotePage() {
               placeholder="Describe the scope of works… (used by AI to generate the quote)"
               style={{ width: '100%', resize: 'vertical', fontSize: 12, padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 6, boxSizing: 'border-box', fontFamily: 'inherit', color: 'var(--text)' }}
             />
-          </div>
+          </div>}
 
           {buildingEstimate ? (
             <div className="empty-dashed" style={{ textAlign: 'center', padding: '40px 20px' }}>
