@@ -4088,8 +4088,9 @@ export default function TakeoffPage() {
             </>
           )}
 
-          {/* Buildup (Floors, Foundations): makeup type + layer schedule */}
-          {isBuildup && (() => {
+          {/* Buildup (Floors, Foundations, Turfing): makeup type + layer schedule.
+              Ext Walls and Plastering have their own dedicated sections above. */}
+          {isBuildup && !isExtWall && !isPlaster && (() => {
             const _bm = _phaseMakeups ?? FLOOR_MAKEUPS
             return (
               <>
