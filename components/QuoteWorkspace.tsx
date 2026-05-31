@@ -169,67 +169,94 @@ function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst, lab
   return (
     <>
     <tr style={{ borderBottom: showPicker ? 'none' : '1px solid #f1f5f9' }}>
-      {/* Category chip */}
-      <td style={{ padding: '4px 6px', width: 80 }}>
+
+      {/* Col 1: Category chip — fixed 76px */}
+      <td style={{ padding: '5px 6px', width: 76, verticalAlign: 'top', paddingTop: 7 }}>
         <select value={cat} disabled={isLocked}
           onChange={e => setField('itemType', e.target.value as ItemType)}
-          style={{ ...fldStyle, fontSize: 10, fontWeight: 700, padding: '2px 5px', borderRadius: 3, cursor: 'pointer', background: cs.bg, color: cs.text, width: 'auto' }}>
+          style={{ fontSize: 10, fontWeight: 700, padding: '2px 4px', borderRadius: 4,
+            border: 'none', cursor: 'pointer', background: cs.bg, color: cs.text,
+            width: '100%', outline: 'none' }}>
           {ITEM_TYPES.map(t => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}
         </select>
       </td>
-      {/* Description */}
-      <td style={{ padding: '4px 6px', minWidth: 160 }}>
-        <input style={{ ...fldStyle, fontSize: 12 }} value={item.desc} readOnly={isLocked}
-          onChange={e => setField('desc', e.target.value)} placeholder="Description" />
+
+      {/* Col 2: Description + notes sub-line — flex grows */}
+      <td style={{ padding: '4px 8px', verticalAlign: 'top' }}>
+        <input
+          style={{ ...fldStyle, fontSize: 12, width: '100%', display: 'block' }}
+          value={item.desc} readOnly={isLocked}
+          onChange={e => setField('desc', e.target.value)}
+          placeholder="Description"
+          title={item.desc}
+        />
+        {/* Notes as subtle sub-line — avoids a whole extra column */}
+        {(item.notes || !isLocked) && (
+          <input
+            style={{ ...fldStyle, fontSize: 10, color: '#94a3b8', width: '100%', display: 'block', marginTop: 1 }}
+            value={item.notes} readOnly={isLocked}
+            onChange={e => setField('notes', e.target.value)}
+            placeholder={isLocked ? '' : 'Notes…'}
+          />
+        )}
       </td>
-      {/* Qty */}
-      <td style={{ padding: '4px 6px', width: 64 }}>
-        <input type="number" style={{ ...cellInp }} value={item.qty} readOnly={isLocked}
+
+      {/* Col 3: Qty — 52px */}
+      <td style={{ padding: '5px 4px', width: 52, verticalAlign: 'top' }}>
+        <input type="number"
+          style={{ ...cellInp, width: '100%' }}
+          value={item.qty} readOnly={isLocked}
           onChange={e => setField('qty', +e.target.value || 0)} />
       </td>
-      {/* Unit */}
-      <td style={{ padding: '4px 6px', width: 46 }}>
-        <input style={{ ...fldStyle, fontSize: 11, textAlign: 'center' }} value={item.unit} readOnly={isLocked}
+
+      {/* Col 4: Unit — 40px */}
+      <td style={{ padding: '5px 4px', width: 40, verticalAlign: 'top' }}>
+        <input
+          style={{ ...fldStyle, fontSize: 11, textAlign: 'center', color: '#64748b' }}
+          value={item.unit} readOnly={isLocked}
           onChange={e => setField('unit', e.target.value)} />
       </td>
-      {/* Rate — for labour rows show BO picker button */}
-      <td style={{ padding: '4px 6px', width: 90 }}>
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 3 }}>
-          <span style={{ position: 'absolute', left: 4, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: '#94a3b8', pointerEvents: 'none' }}>£</span>
-          <input type="number" style={{ ...cellInp, paddingLeft: 16, flex: 1 }}
-            value={item[catKey] ?? 0} readOnly={isLocked}
-            onChange={e => setNum(catKey, e.target.value)} />
+
+      {/* Col 5: Rate — 88px (+ 🔨 for labour) */}
+      <td style={{ padding: '5px 4px', width: 88, verticalAlign: 'top' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <div style={{ position: 'relative', flex: 1 }}>
+            <span style={{ position: 'absolute', left: 4, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: '#cbd5e1', pointerEvents: 'none' }}>£</span>
+            <input type="number"
+              style={{ ...cellInp, paddingLeft: 14, width: '100%' }}
+              value={item[catKey] ?? 0} readOnly={isLocked}
+              onChange={e => setNum(catKey, e.target.value)} />
+          </div>
           {isLabour && labourTrades.length > 0 && !isLocked && (
             <button onClick={() => setShowPicker(p => !p)}
-              title="Set from Back Office labour rate"
-              style={{ ...iconBtn(showPicker ? '#f59e0b' : '#94a3b8'), fontSize: 11, flexShrink: 0, border: `1px solid ${showPicker ? '#f59e0b' : '#e2e8f0'}`, borderRadius: 3, padding: '1px 4px' }}>
+              title="Use Back Office labour rate"
+              style={{ background: showPicker ? '#fef3c7' : 'transparent', border: `1px solid ${showPicker ? '#f59e0b' : '#e2e8f0'}`, borderRadius: 4, fontSize: 11, cursor: 'pointer', padding: '1px 3px', color: showPicker ? '#92400e' : '#94a3b8', flexShrink: 0, lineHeight: 1.4 }}>
               🔨
             </button>
           )}
         </div>
       </td>
-      {/* Total */}
-      <td style={{ padding: '4px 6px', width: 90, textAlign: 'right', fontFamily: 'monospace', fontSize: 12, fontWeight: cost > 0 ? 600 : 400, color: cost > 0 ? '#1e293b' : '#cbd5e1' }}>
+
+      {/* Col 6: Total — 80px, right-aligned */}
+      <td style={{ padding: '5px 6px', width: 80, textAlign: 'right', verticalAlign: 'top',
+        fontFamily: 'monospace', fontSize: 12, fontWeight: cost > 0 ? 700 : 400,
+        color: cost > 0 ? '#1e293b' : '#e2e8f0', whiteSpace: 'nowrap' }}>
         {cost > 0 ? `£${fmt2(cost)}` : '—'}
       </td>
-      {/* Notes */}
-      <td style={{ padding: '4px 6px', minWidth: 100 }}>
-        <input style={{ ...fldStyle, fontSize: 10, color: '#94a3b8' }} value={item.notes} readOnly={isLocked}
-          onChange={e => setField('notes', e.target.value)} placeholder="Notes" />
-      </td>
-      {/* Actions */}
-      {!isLocked && (
-        <td style={{ padding: '4px 2px', width: 50, textAlign: 'right', whiteSpace: 'nowrap' }}>
+
+      {/* Col 7: Actions — 36px */}
+      {!isLocked ? (
+        <td style={{ padding: '4px 2px', width: 36, textAlign: 'right', verticalAlign: 'top', whiteSpace: 'nowrap' }}>
           <button onClick={onDuplicate} style={iconBtn()} title="Duplicate">⧉</button>
           <button onClick={onDelete} style={iconBtn('#e74c3c')} title="Delete">×</button>
         </td>
-      )}
+      ) : <td />}
     </tr>
 
     {/* Labour rate picker — expands below the row when 🔨 is clicked */}
     {isLabour && showPicker && labourTrades.length > 0 && (
       <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-        <td colSpan={8} style={{ padding: '0 6px 8px 80px', background: '#fffbeb' }}>
+        <td colSpan={7} style={{ padding: '0 6px 8px 80px', background: '#fffbeb' }}>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, flexWrap: 'wrap', paddingTop: 6 }}>
             {/* Trade */}
             <div>
