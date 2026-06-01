@@ -3995,7 +3995,9 @@ export default function TakeoffPage() {
             </select>
           </div>
 
-          {/* Build-up Type: shown immediately under Phase for External Walls */}
+          {/* ── Type selector (phase-specific) — sits directly under Phase ── */}
+
+          {/* External Walls: Build-up Type */}
           {isExtWall && (() => {
             const _allWT   = allWallMakeups
             const _wMakeup = _allWT.find(m => m.id === item.floorMakeupId)
@@ -4026,6 +4028,143 @@ export default function TakeoffPage() {
               </div>
             )
           })()}
+
+          {/* Internal Walls: Construction Type + Finish Type */}
+          {isIntWall && (
+            <>
+              <div style={{ marginBottom: 10 }}>
+                <label style={labelStyle}>Construction Type</label>
+                <select style={{ ...inputStyle, color: accent }}
+                  value={item.wallConstructionType ?? 'stud_metal_70'}
+                  onChange={e => recalcWallAndSave({ wallConstructionType: e.target.value as WallConstructionType })}>
+                  {(Object.entries(WALL_CONSTRUCTION_LABELS) as [WallConstructionType, string][]).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <label style={labelStyle}>Finish Type</label>
+                <select style={{ ...inputStyle, color: accent }}
+                  value={item.wallFinishType ?? 'board_skim'}
+                  onChange={e => recalcWallAndSave({ wallFinishType: e.target.value as WallFinishType })}>
+                  {(Object.entries(WALL_FINISH_LABELS) as [WallFinishType, string][]).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
+
+          {/* Plastering: Finish Type */}
+          {isPlaster && (() => {
+            const _pMakeup = PLASTER_MAKEUPS.find(m => m.id === item.floorMakeupId)
+            return (
+              <div style={{ marginBottom: 10 }}>
+                <label style={labelStyle}>Finish Type</label>
+                <select style={{ ...inputStyle, color: accent }} value={item.floorMakeupId ?? ''}
+                  onChange={e => {
+                    const nm = PLASTER_MAKEUPS.find(m => m.id === e.target.value)
+                    saveItemEdit({ ...item, floorMakeupId: e.target.value, spec: nm?.clientDescription ?? item.spec, floorLayerToggles: {}, floorLayerThicknesses: {} })
+                  }}>
+                  {PLASTER_MAKEUPS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+                {_pMakeup && (
+                  <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 3, fontStyle: 'italic' }}>
+                    {_pMakeup.layers.length} layer{_pMakeup.layers.length !== 1 ? 's' : ''}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+
+          {/* Foundations (line): Foundation Type */}
+          {isFoundationLine && (
+            <div style={{ marginBottom: 10 }}>
+              <label style={labelStyle}>Foundation Type</label>
+              <select style={{ ...inputStyle, color: accent }}
+                value={item.foundationType ?? 'trench_fill'}
+                onChange={e => recalcFoundationAndSave({ foundationType: e.target.value })}>
+                {FOUNDATION_TYPE_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Buildup (Floors, Turfing, etc.): Build-Up Type */}
+          {isBuildup && !isExtWall && !isPlaster && !isFoundationLine && (() => {
+            const _bm = _phaseMakeups ?? FLOOR_MAKEUPS
+            const _bMakeup = _bm.find(m => m.id === item.floorMakeupId)
+            return (
+              <div style={{ marginBottom: 10 }}>
+                <label style={labelStyle}>Build-Up Type</label>
+                <select style={{ ...inputStyle, color: accent }} value={item.floorMakeupId ?? ''}
+                  onChange={e => {
+                    const nm = _bm.find(m => m.id === e.target.value)
+                    saveItemEdit({ ...item, floorMakeupId: e.target.value, spec: nm?.clientDescription ?? item.spec, floorLayerToggles: {}, floorLayerThicknesses: {} })
+                  }}>
+                  {_bm.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+                {_bMakeup && (
+                  <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 3, fontStyle: 'italic' }}>
+                    {_bMakeup.layers.length} layer{_bMakeup.layers.length !== 1 ? 's' : ''}
+                    {_bMakeup.labourHrsPerM2 > 0 && ` · ~${fmt2(buildArea * _bMakeup.labourHrsPerM2)} hrs labour`}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+
+          {/* Demo: Construction Type + Task */}
+          {isDemo && demoSub && demoTask && (
+            <>
+              <div style={{ marginBottom: 10 }}>
+                <label style={labelStyle}>Construction Type</label>
+                <select style={{ ...inputStyle, color: accent }} value={demoSub.id}
+                  onChange={e => {
+                    const ns = allDemoSubs.find(s => s.id === e.target.value) ?? allDemoSubs[0]
+                    applyDemoTask(ns, ns.tasks[0])
+                  }}>
+                  {allDemoSubs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <label style={labelStyle}>Task</label>
+                <select style={{ ...inputStyle, color: accent }} value={demoTask.id}
+                  onChange={e => {
+                    const t = demoSub.tasks.find(t => t.id === e.target.value) ?? demoSub.tasks[0]
+                    applyDemoTask(demoSub, t)
+                  }}>
+                  {demoSub.tasks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </div>
+            </>
+          )}
+
+          {/* Task phases: Sub-phase + Task */}
+          {isTaskPhase && taskSelSub && (
+            <>
+              <div style={{ marginBottom: 10 }}>
+                <label style={labelStyle}>Sub-Phase</label>
+                <select style={{ ...inputStyle, color: accent }}
+                  value={item.taskSubphaseId ?? (taskSubs[0]?.id ?? '')}
+                  onChange={e => {
+                    const sp = getAllSubphasesForPhase(item.phase).find(s => s.id === e.target.value)
+                    if (sp?.tasks[0]) applyPhaseTask(sp.id, sp.tasks[0].id)
+                  }}>
+                  {taskSubs.map(sp => <option key={sp.id} value={sp.id}>{sp.name}</option>)}
+                </select>
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <label style={labelStyle}>Task</label>
+                <select style={{ ...inputStyle, color: accent }}
+                  value={item.taskId ?? (taskList[0]?.id ?? '')}
+                  onChange={e => applyPhaseTask(item.taskSubphaseId ?? taskSubs[0]?.id ?? '', e.target.value)}>
+                  {taskList.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </div>
+            </>
+          )}
 
           <div style={{ marginBottom: 10 }}>
             <label style={labelStyle}>Room Name</label>
@@ -4264,29 +4403,9 @@ export default function TakeoffPage() {
         <div style={secHdr}><span>🔧</span><span>Construction</span></div>
         <div style={secBody}>
 
-          {/* Demo: category + task selectors */}
+          {/* Demo: warnings only (selectors moved to General) */}
           {isDemo && demoSub && demoTask && (
             <>
-              <div style={{ marginBottom: 10 }}>
-                <label style={labelStyle}>Construction Type</label>
-                <select style={{ ...inputStyle, color: accent }} value={demoSub.id}
-                  onChange={e => {
-                    const ns = allDemoSubs.find(s => s.id === e.target.value) ?? allDemoSubs[0]
-                    applyDemoTask(ns, ns.tasks[0])
-                  }}>
-                  {allDemoSubs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
-              <div style={{ marginBottom: 10 }}>
-                <label style={labelStyle}>Build-Up Type</label>
-                <select style={{ ...inputStyle, color: accent }} value={demoTask.id}
-                  onChange={e => {
-                    const t = demoSub.tasks.find(t => t.id === e.target.value) ?? demoSub.tasks[0]
-                    applyDemoTask(demoSub, t)
-                  }}>
-                  {demoSub.tasks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-              </div>
               {[...(demoSub.warnings ?? []), ...(demoTask.warnings ?? [])].map((w, i) => (
                 <div key={i} style={{ fontSize: 11, padding: '6px 10px', borderRadius: 5, marginBottom: 8, background: darkMode ? '#1a1200' : '#fffbeb', border: '1px solid #f59e0b', color: darkMode ? '#fcd34d' : '#92400e' }}>
                   ⚠️ {w}
@@ -4306,142 +4425,51 @@ export default function TakeoffPage() {
             ) : null
           })()}
 
-          {/* Int Wall: construction type + finish type */}
-          {isIntWall && (
-            <>
-              <div style={{ marginBottom: 10 }}>
-                <label style={labelStyle}>Construction Type</label>
-                <select style={{ ...inputStyle, color: accent }}
-                  value={item.wallConstructionType ?? 'stud_metal_70'}
-                  onChange={e => recalcWallAndSave({ wallConstructionType: e.target.value as WallConstructionType })}>
-                  {(Object.entries(WALL_CONSTRUCTION_LABELS) as [WallConstructionType, string][]).map(([k, v]) => (
-                    <option key={k} value={k}>{v}</option>
-                  ))}
-                </select>
-              </div>
-              <div style={{ marginBottom: 10 }}>
-                <label style={labelStyle}>Finish Type</label>
-                <select style={{ ...inputStyle, color: accent }}
-                  value={item.wallFinishType ?? 'board_skim'}
-                  onChange={e => recalcWallAndSave({ wallFinishType: e.target.value as WallFinishType })}>
-                  {(Object.entries(WALL_FINISH_LABELS) as [WallFinishType, string][]).map(([k, v]) => (
-                    <option key={k} value={k}>{v}</option>
-                  ))}
-                </select>
-              </div>
-            </>
-          )}
+          {/* Int Wall: selectors moved to General — nothing extra needed here */}
 
-          {/* Plaster: finish type + layer schedule */}
+          {/* Plaster: layer list only (Finish Type moved to General) */}
           {isPlaster && (() => {
             const _pMakeup = PLASTER_MAKEUPS.find(m => m.id === item.floorMakeupId)
-            return (
-              <>
-                <div style={{ marginBottom: 10 }}>
-                  <label style={labelStyle}>Finish Type</label>
-                  <select style={{ ...inputStyle, color: accent }} value={item.floorMakeupId ?? ''}
-                    onChange={e => {
-                      const nm = PLASTER_MAKEUPS.find(m => m.id === e.target.value)
-                      saveItemEdit({ ...item, floorMakeupId: e.target.value, spec: nm?.clientDescription ?? item.spec, floorLayerToggles: {}, floorLayerThicknesses: {} })
-                    }}>
-                    {PLASTER_MAKEUPS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                  </select>
-                </div>
-                {_pMakeup && (
-                  <div style={{ marginBottom: 10 }}>
-                    <label style={labelStyle}>Construction Layers</label>
-                    {renderLayerList(_pMakeup, isLineBased ? netArea : buildArea, wallPerimeter, layerToggles, layerThicknesses, item, accent)}
-                  </div>
-                )}
-              </>
-            )
+            return _pMakeup ? (
+              <div style={{ marginBottom: 10 }}>
+                <label style={labelStyle}>Construction Layers</label>
+                {renderLayerList(_pMakeup, isLineBased ? netArea : buildArea, wallPerimeter, layerToggles, layerThicknesses, item, accent)}
+              </div>
+            ) : null
           })()}
 
-          {/* Foundation line: type + layer schedule */}
+          {/* Foundation line: layer list only (Foundation Type moved to General) */}
           {isFoundationLine && (
             <>
-              <div style={{ marginBottom: 8 }}>
-                <label style={labelStyle}>Foundation Type</label>
-                <select style={{ ...inputStyle, color: accent }}
-                  value={item.foundationType ?? 'trench_fill'}
-                  onChange={e => recalcFoundationAndSave({ foundationType: e.target.value })}>
-                  {FOUNDATION_TYPE_OPTIONS.map(o => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              </div>
               <div style={{ fontSize: 10, color: 'var(--to-muted)', marginBottom: 10 }}>
                 {fmt2(foundLength)} m × {foundWidthMM}mm × {foundDepthMM}mm deep
               </div>
-              {/* Layer schedule — perimeter = foundLength (lm run), area = footprint */}
-              {foundMakeup && (
+              {foundMakeup ? (
                 <div style={{ marginBottom: 4 }}>
-                  <label style={{ ...labelStyle, marginBottom: 6 }}>Construction Layers</label>
+                  <label style={labelStyle}>Construction Layers</label>
                   {renderLayerList(foundMakeup, foundArea, foundLength, layerToggles, layerThicknesses, item, accent)}
                 </div>
-              )}
-              {!foundMakeup && (
+              ) : (
                 <div style={{ fontSize: 11, color: 'var(--to-muted)', fontStyle: 'italic' }}>
-                  No layer schedule for "Other" — add layers manually in the Outputs section.
+                  No layer schedule for "Other" — add costs manually in the Outputs section.
                 </div>
               )}
             </>
           )}
 
-          {/* Buildup (Floors, Foundations, Turfing): makeup type + layer schedule.
-              Ext Walls and Plastering have their own dedicated sections above. */}
-          {isBuildup && !isExtWall && !isPlaster && (() => {
-            const _bm = _phaseMakeups ?? FLOOR_MAKEUPS
-            return (
-              <>
-                <div style={{ marginBottom: 10 }}>
-                  <label style={labelStyle}>Build-Up Type</label>
-                  <select style={{ ...inputStyle, color: accent }} value={item.floorMakeupId ?? ''}
-                    onChange={e => {
-                      const nm = _bm.find(m => m.id === e.target.value)
-                      saveItemEdit({ ...item, floorMakeupId: e.target.value, spec: nm?.clientDescription ?? item.spec, floorLayerToggles: {}, floorLayerThicknesses: {} })
-                    }}>
-                    {_bm.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                  </select>
-                </div>
-                {bMakeup && (
-                  <div style={{ marginBottom: 10 }}>
-                    <label style={labelStyle}>Construction Layers</label>
-                    {renderLayerList(bMakeup, buildArea, buildPerim, layerToggles, layerThicknesses, item, accent)}
-                  </div>
-                )}
-              </>
-            )
-          })()}
+          {/* Buildup (Floors, Turfing, etc.): layer list only (Build-Up Type moved to General) */}
+          {isBuildup && !isExtWall && !isPlaster && !isFoundationLine && bMakeup && (
+            <div style={{ marginBottom: 10 }}>
+              <label style={labelStyle}>Construction Layers</label>
+              {renderLayerList(bMakeup, buildArea, buildPerim, layerToggles, layerThicknesses, item, accent)}
+            </div>
+          )}
 
-          {/* Task phases: subphase + task selectors */}
-          {isTaskPhase && taskSelSub && (
-            <>
-              <div style={{ marginBottom: 10 }}>
-                <label style={labelStyle}>Construction Type</label>
-                <select style={{ ...inputStyle, color: accent }}
-                  value={item.taskSubphaseId ?? (taskSubs[0]?.id ?? '')}
-                  onChange={e => {
-                    const sp = getAllSubphasesForPhase(item.phase).find(s => s.id === e.target.value)
-                    if (sp?.tasks[0]) applyPhaseTask(sp.id, sp.tasks[0].id)
-                  }}>
-                  {taskSubs.map(sp => <option key={sp.id} value={sp.id}>{sp.name}</option>)}
-                </select>
-              </div>
-              <div style={{ marginBottom: 10 }}>
-                <label style={labelStyle}>Build-Up Type</label>
-                <select style={{ ...inputStyle, color: accent }}
-                  value={item.taskId ?? (taskList[0]?.id ?? '')}
-                  onChange={e => applyPhaseTask(item.taskSubphaseId ?? taskSubs[0]?.id ?? '', e.target.value)}>
-                  {taskList.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-              </div>
-              {taskSelSub?.ukWarning && (
-                <div style={{ fontSize: 11, padding: '7px 10px', borderRadius: 5, marginBottom: 10, background: darkMode ? '#2a1a00' : '#fffbe6', border: '1px solid #f59e0b', color: darkMode ? '#fcd34d' : '#92400e', lineHeight: 1.5 }}>
-                  ⚠️ {taskSelSub.ukWarning}
-                </div>
-              )}
-            </>
+          {/* Task phases: warning only (selectors moved to General) */}
+          {isTaskPhase && taskSelSub?.ukWarning && (
+            <div style={{ fontSize: 11, padding: '7px 10px', borderRadius: 5, marginBottom: 10, background: darkMode ? '#2a1a00' : '#fffbe6', border: '1px solid #f59e0b', color: darkMode ? '#fcd34d' : '#92400e', lineHeight: 1.5 }}>
+              ⚠️ {taskSelSub.ukWarning}
+            </div>
           )}
 
           {/* Client Description (all phases) */}
