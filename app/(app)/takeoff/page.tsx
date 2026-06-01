@@ -153,23 +153,53 @@ function polyPerimeter(pts: TakeoffPoint[], mpp: number): number {
   return +(total * mpp).toFixed(3)
 }
 
-/** Offset a polyline by d pixels perpendicular to its path (left of travel direction when d > 0) */
+/**
+ * Offset a polyline by d pixels perpendicular to its path.
+ * Uses proper miter joins at interior vertices so the wall band stays
+ * an even thickness around corners instead of flaring or pinching.
+ * Miter length is clamped to 4× d to prevent spikes at very sharp angles.
+ */
 function offsetPoly(pts: TakeoffPoint[], d: number): TakeoffPoint[] {
+  const n = pts.length
+  if (n < 2) return pts
+
+  // Unit normal for each segment (perpendicular, left of travel)
+  const segNormals: TakeoffPoint[] = []
+  for (let i = 0; i < n - 1; i++) {
+    const dx = pts[i + 1].x - pts[i].x
+    const dy = pts[i + 1].y - pts[i].y
+    const len = Math.hypot(dx, dy)
+    segNormals.push(len > 0 ? { x: -dy / len, y: dx / len } : { x: 0, y: 0 })
+  }
+
   return pts.map((pt, i) => {
-    let nx = 0, ny = 0
-    if (i < pts.length - 1) {
-      const dx = pts[i + 1].x - pt.x, dy = pts[i + 1].y - pt.y
-      const len = Math.hypot(dx, dy)
-      if (len > 0) { nx += -dy / len; ny += dx / len }
+    if (i === 0) {
+      // Start: simple perpendicular offset from first segment
+      const sn = segNormals[0]
+      return { x: pt.x + sn.x * d, y: pt.y + sn.y * d }
     }
-    if (i > 0) {
-      const dx = pt.x - pts[i - 1].x, dy = pt.y - pts[i - 1].y
-      const len = Math.hypot(dx, dy)
-      if (len > 0) { nx += -dy / len; ny += dx / len }
+    if (i === n - 1) {
+      // End: simple perpendicular offset from last segment
+      const sn = segNormals[n - 2]
+      return { x: pt.x + sn.x * d, y: pt.y + sn.y * d }
     }
-    const len = Math.hypot(nx, ny)
-    if (len > 0) { nx /= len; ny /= len }
-    return { x: pt.x + nx * d, y: pt.y + ny * d }
+    // Interior vertex — miter join
+    const n1 = segNormals[i - 1]   // normal of incoming segment
+    const n2 = segNormals[i]       // normal of outgoing segment
+    // Bisector direction (sum of unit normals)
+    const bx = n1.x + n2.x, by = n1.y + n2.y
+    const bLen = Math.hypot(bx, by)
+    if (bLen < 0.001) {
+      // 180° turn (straight line) — just use either normal
+      return { x: pt.x + n1.x * d, y: pt.y + n1.y * d }
+    }
+    // Scale factor: d / dot(bisector_unit, n1)
+    // This keeps the wall face exactly d away from the centreline on both sides
+    const dot = (bx / bLen) * n1.x + (by / bLen) * n1.y
+    const scale = Math.abs(dot) > 0.1
+      ? Math.max(-4 * Math.abs(d), Math.min(4 * Math.abs(d), d / dot))
+      : Math.sign(d) * 4 * Math.abs(d)   // very sharp corner — clamp
+    return { x: pt.x + (bx / bLen) * scale, y: pt.y + (by / bLen) * scale }
   })
 }
 
