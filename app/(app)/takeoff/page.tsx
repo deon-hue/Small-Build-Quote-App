@@ -8,6 +8,7 @@ import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchLabourTrades } from 
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import LabourCostBuilder from './components/LabourCostBuilder'
 import ClientProjectModal from './components/ClientProjectModal'
+import ConstructionLayerModal, { saveLayerCostToBackOffice } from './components/ConstructionLayerModal'
 import {
   TAKEOFF_PHASES, PHASE_COLORS, DEFAULT_MPP, SCALE_PRESETS,
   FLOOR_MAKEUPS, WALL_MAKEUPS, ALL_WALL_MAKEUPS, PLASTER_MAKEUPS, FOUNDATION_MAKEUPS, PHASE_MAKEUPS, calcLayerQty,
@@ -16,7 +17,7 @@ import {
   type TakeoffPhase, type DrawingTool, type TakeoffPoint,
   type DrawnElement, type TakeoffItem, type TakeoffProject, type ScaleCalibration,
   type FloorLayer, type FloorMakeup, type WallOpeningType, type WallOpening,
-  type TakeoffLabourLine,
+  type TakeoffLabourLine, type LayerCostRecord,
 } from '@/lib/takeoff-types'
 import {
   DEFAULT_DEMO_SUBPHASES, getAllDemoSubphases, loadCustomDemoSubphases,
@@ -621,6 +622,16 @@ export default function TakeoffPage() {
     setToast(msg)
     toastTimerRef.current = setTimeout(() => setToast(null), 2800)
   }
+
+  // Construction Layer Editor modal
+  const [layerModal, setLayerModal] = useState<{
+    layer:   FloorLayer
+    makeup:  FloorMakeup
+    item:    TakeoffItem
+    area:    number
+    perim:   number
+    accent:  string
+  } | null>(null)
 
   // Reset / recovery state
   const [showClearModal, setShowClearModal]   = useState(false)
@@ -3790,6 +3801,61 @@ export default function TakeoffPage() {
       )
     }
 
+    // ── 12b. Compact layer list (sidebar) — click row to open full editor ─────
+    function renderLayerList(
+      mk: FloorMakeup,
+      area: number,
+      perim: number,
+      tgls: Record<string, boolean>,
+      thks: Record<string, number>,
+      itm: TakeoffItem,
+      ac: string,
+    ) {
+      const layerCosts = itm.layerCosts ?? {}
+      return (
+        <div>
+          {mk.layers.map(layer => {
+            const enabled = tgls[layer.id] ?? layer.defaultEnabled
+            const thk     = thks[layer.id] ?? layer.thickness
+            const { qty: lq, unit: lu } = calcLayerQty(layer, area, perim, thk || undefined)
+            const rec = layerCosts[layer.id]
+            const costTotal = rec
+              ? [...rec.labourItems, ...rec.materialItems, ...rec.plantItems, ...rec.subItems, ...rec.otherItems]
+                  .reduce((s, x) => s + x.total, 0)
+              : 0
+            const dotColor: Record<string, string> = { labour: '#e74c3c', materials: '#3498db', plant: '#f39c12', other: '#95a5a6' }
+            return (
+              <div key={layer.id}
+                onClick={() => setLayerModal({ layer, makeup: mk, item: itm, area, perim, accent: ac })}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 7, padding: '6px 8px', marginBottom: 3,
+                  borderRadius: 6, cursor: 'pointer',
+                  background: enabled ? (darkMode ? '#0a180a' : '#f8faf8') : (darkMode ? '#060c06' : '#f5f5f5'),
+                  border: `1px solid ${enabled ? (darkMode ? '#1a2e1a' : '#cce8cc') : (darkMode ? '#111' : '#eee')}`,
+                  opacity: enabled ? 1 : 0.55,
+                }}>
+                <input type="checkbox" checked={enabled}
+                  onClick={e => e.stopPropagation()}
+                  onChange={ev => saveItemEdit({ ...itm, floorLayerToggles: { ...tgls, [layer.id]: ev.target.checked } })}
+                  style={{ margin: 0, cursor: 'pointer', flexShrink: 0 }} />
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor[layer.category] ?? '#95a5a6', flexShrink: 0 }} />
+                <span style={{ flex: 1, fontSize: 12, color: enabled ? 'var(--to-text)' : 'var(--to-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {layer.name}{thk > 0 ? ` (${thk}mm)` : ''}
+                </span>
+                <span style={{ fontSize: 10, fontFamily: 'monospace', color: costTotal > 0 ? ac : 'var(--to-muted)', flexShrink: 0 }}>
+                  {costTotal > 0 ? `£${Math.round(costTotal)}` : `${lq} ${lu}`}
+                </span>
+                <span style={{ fontSize: 14, color: 'var(--to-muted)', flexShrink: 0, lineHeight: 1 }}>›</span>
+              </div>
+            )
+          })}
+          <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 5, fontStyle: 'italic' }}>
+            Click a layer to open the cost editor
+          </div>
+        </div>
+      )
+    }
+
     // ── Shared section header style ────────────────────────────────────────
     const secHdr: React.CSSProperties = {
       display: 'flex', alignItems: 'center', gap: 6,
@@ -4218,13 +4284,13 @@ export default function TakeoffPage() {
             </>
           )}
 
-          {/* Ext Wall: layer schedule (Build-up Type selector is in GENERAL section above) */}
+          {/* Ext Wall: compact layer list — click any row to open Construction Layer Editor */}
           {isExtWall && (() => {
             const _wMakeup = allWallMakeups.find(m => m.id === item.floorMakeupId)
             return _wMakeup ? (
               <div style={{ marginBottom: 10 }}>
-                <label style={labelStyle}>Layer Schedule</label>
-                {renderLayerSchedule(_wMakeup, netArea, wallPerimeter, layerToggles, layerThicknesses, item, accent)}
+                <label style={labelStyle}>Construction Layers</label>
+                {renderLayerList(_wMakeup, netArea, wallPerimeter, layerToggles, layerThicknesses, item, accent)}
               </div>
             ) : null
           })()}
@@ -4272,8 +4338,8 @@ export default function TakeoffPage() {
                 </div>
                 {_pMakeup && (
                   <div style={{ marginBottom: 10 }}>
-                    <label style={labelStyle}>Layers</label>
-                    {renderLayerSchedule(_pMakeup, isLineBased ? netArea : buildArea, wallPerimeter, layerToggles, layerThicknesses, item, accent)}
+                    <label style={labelStyle}>Construction Layers</label>
+                    {renderLayerList(_pMakeup, isLineBased ? netArea : buildArea, wallPerimeter, layerToggles, layerThicknesses, item, accent)}
                   </div>
                 )}
               </>
@@ -4299,16 +4365,8 @@ export default function TakeoffPage() {
               {/* Layer schedule — perimeter = foundLength (lm run), area = footprint */}
               {foundMakeup && (
                 <div style={{ marginBottom: 4 }}>
-                  <label style={{ ...labelStyle, marginBottom: 6 }}>Build-up Layers</label>
-                  {renderLayerSchedule(
-                    foundMakeup,
-                    foundArea,       // m² footprint for area-type layers
-                    foundLength,     // lm run for perimeter-type layers
-                    layerToggles,
-                    layerThicknesses,
-                    item,
-                    accent,
-                  )}
+                  <label style={{ ...labelStyle, marginBottom: 6 }}>Construction Layers</label>
+                  {renderLayerList(foundMakeup, foundArea, foundLength, layerToggles, layerThicknesses, item, accent)}
                 </div>
               )}
               {!foundMakeup && (
@@ -4337,8 +4395,8 @@ export default function TakeoffPage() {
                 </div>
                 {bMakeup && (
                   <div style={{ marginBottom: 10 }}>
-                    <label style={labelStyle}>Layers</label>
-                    {renderLayerSchedule(bMakeup, buildArea, buildPerim, layerToggles, layerThicknesses, item, accent)}
+                    <label style={labelStyle}>Construction Layers</label>
+                    {renderLayerList(bMakeup, buildArea, buildPerim, layerToggles, layerThicknesses, item, accent)}
                   </div>
                 )}
               </>
@@ -5642,6 +5700,43 @@ export default function TakeoffPage() {
           </div>
         </div>
       )}
+
+      {/* ── Construction Layer Editor modal ───────────────────────────────── */}
+      {layerModal && (() => {
+        const { layer, makeup, item: lmItem, area, perim, accent } = layerModal
+        const { qty: cq, unit: cu } = calcLayerQty(
+          layer, area, perim,
+          (lmItem.floorLayerThicknesses ?? {})[layer.id] || undefined,
+        )
+        return (
+          <ConstructionLayerModal
+            layer={layer}
+            makeup={makeup}
+            item={lmItem}
+            calcQty={cq}
+            calcUnit={cu}
+            darkMode={darkMode}
+            accentColor={accent}
+            labourTrades={labourTrades}
+            onSaveToTakeoff={(costs, toggleEnabled, thicknessMm) => {
+              const updItem: typeof lmItem = {
+                ...lmItem,
+                layerCosts: { ...(lmItem.layerCosts ?? {}), [layer.id]: costs },
+                ...(toggleEnabled  !== undefined && { floorLayerToggles:     { ...(lmItem.floorLayerToggles     ?? {}), [layer.id]: toggleEnabled  } }),
+                ...(thicknessMm    !== undefined && { floorLayerThicknesses:  { ...(lmItem.floorLayerThicknesses  ?? {}), [layer.id]: thicknessMm    } }),
+              }
+              saveItemEdit(updItem)
+              // keep modal open, update its reference item
+              setLayerModal(m => m ? { ...m, item: updItem } : m)
+            }}
+            onSaveToBO={async (costs) => {
+              if (!userId) throw new Error('Not signed in')
+              await saveLayerCostToBackOffice(userId, lmItem, layer, makeup, costs)
+            }}
+            onClose={() => setLayerModal(null)}
+          />
+        )
+      })()}
 
       {/* ── Client / Project modal ─────────────────────────────────────────── */}
       <ClientProjectModal

@@ -225,6 +225,73 @@ export interface TakeoffItem {
   taskPlant?:          number     // total plant cost
   taskSubcontractor?:  number     // total subcontractor cost
   taskOther?:          number     // total other cost
+
+  // Per-layer cost records — Construction Layer Editor
+  // Key = FloorLayer.id; stores the 5-category cost recipe for each layer
+  layerCosts?: Record<string, LayerCostRecord>
+}
+
+// ── Construction Layer Cost Records ──────────────────────────────────────────
+// Each FloorLayer can carry a full 5-category cost recipe stored on TakeoffItem.layerCosts
+
+export interface LayerLabourItem {
+  id:          string
+  trade:       string         // e.g. "Bricklayer", "Labourer"
+  description: string
+  qty:         number         // hours or days
+  unit:        'hr' | 'day'
+  rate:        number         // £ / hr or day
+  outputRate?: number         // informational — m²/hr etc.
+  total:       number         // qty × rate
+}
+
+export interface LayerMaterialItem {
+  id:          string
+  name:        string
+  unit:        string         // m², m³, nr, lm, bag, tonne, kg, etc.
+  qty:         number         // net quantity (before waste)
+  unitCost:    number         // £ per unit
+  wastePct:    number         // % waste allowance
+  supplier?:   string
+  description?: string
+  total:       number         // qty × (1 + wastePct/100) × unitCost
+}
+
+export interface LayerPlantItem {
+  id:        string
+  name:      string
+  unit:      string           // day | week | item | hr
+  qty:       number
+  hireRate:  number           // £ / unit
+  total:     number
+}
+
+export interface LayerSubItem {
+  id:          string
+  trade:       string
+  description: string
+  basis:       'fixed' | 'per_unit'
+  qty:         number
+  unit:        string
+  rate:        number
+  total:       number
+}
+
+export interface LayerOtherItem {
+  id:          string
+  description: string
+  unit:        string
+  qty:         number
+  unitCost:    number
+  total:       number
+}
+
+export interface LayerCostRecord {
+  labourItems:   LayerLabourItem[]
+  materialItems: LayerMaterialItem[]
+  plantItems:    LayerPlantItem[]
+  subItems:      LayerSubItem[]
+  otherItems:    LayerOtherItem[]
 }
 
 // ── Calibration ───────────────────────────────────────────────────────────────
