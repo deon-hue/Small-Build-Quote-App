@@ -574,6 +574,16 @@ export default function TakeoffPage() {
     img.src = saved.planImageUrl
   }, []) // run once on mount
 
+  // Phase layer visibility — phases in this set are hidden on the canvas
+  const [hiddenPhases, setHiddenPhases] = useState<Set<TakeoffPhase>>(new Set())
+  function togglePhaseVisibility(ph: TakeoffPhase) {
+    setHiddenPhases(prev => {
+      const next = new Set(prev)
+      next.has(ph) ? next.delete(ph) : next.add(ph)
+      return next
+    })
+  }
+
   // Drag-to-move state
   const dragRef = useRef<{
     id: string
@@ -5020,7 +5030,10 @@ export default function TakeoffPage() {
           </div>
 
           {/* Phase list */}
-          {TAKEOFF_PHASES.map(ph => (
+          {TAKEOFF_PHASES.map(ph => {
+            const hasElements = project.elements.some(el => el.phase === ph)
+            const isHidden    = hiddenPhases.has(ph)
+            return (
             <div key={ph}>
             <div
               title={ph}
@@ -5031,6 +5044,7 @@ export default function TakeoffPage() {
                 background: activePhase === ph ? 'var(--to-hover)' : 'transparent',
                 border: `1px solid ${activePhase === ph ? 'var(--to-btn-bd)' : 'transparent'}`,
                 transition: 'all 0.12s',
+                opacity: isHidden ? 0.4 : 1,
               }}
             >
               <div style={{
@@ -5040,14 +5054,30 @@ export default function TakeoffPage() {
               }} />
               <span style={{
                 fontSize: 11, color: activePhase === ph ? 'var(--to-text)' : 'var(--to-sub)',
-                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1,
               }}>
                 {ph.replace('External Works & Landscaping', 'Ext. Works').replace('Internal Walls & Partitions', 'Int. Walls').replace('Site Setup & Demolition', 'Demolition').replace('Plastering & Boarding', 'Plastering').replace('Structural Frame', 'Struct. Frame').replace('Windows & Doors', 'Windows/Doors').replace('Plumbing & Heating', 'Plumbing').replace('Drainage & Services', 'Drainage').replace('Joinery & Fixtures', 'Joinery').replace('Tiling & Finishes', 'Tiling').replace('Floors & Screeds', 'Floors').replace('Preliminaries', 'Prelims')}
               </span>
+              {/* Eye toggle — only shown when phase has drawn elements */}
+              {hasElements && (
+                <button
+                  title={isHidden ? `Show ${ph}` : `Hide ${ph}`}
+                  onClick={e => { e.stopPropagation(); togglePhaseVisibility(ph) }}
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer', padding: '0 1px',
+                    fontSize: 11, flexShrink: 0, lineHeight: 1,
+                    color: isHidden ? 'var(--to-muted)' : 'var(--to-dim)',
+                    opacity: isHidden ? 0.6 : 1,
+                  }}
+                >
+                  {isHidden ? '🙈' : '👁'}
+                </button>
+              )}
             </div>
 
             </div>
-          ))}
+            )
+          })}
         </div>
 
         {/* Centre: SVG canvas */}
@@ -5111,8 +5141,8 @@ export default function TakeoffPage() {
                 )
               })()}
 
-              {/* Drawn elements */}
-              {project.elements.map(renderElement)}
+              {/* Drawn elements — skip phases toggled hidden */}
+              {project.elements.filter(el => !hiddenPhases.has(el.phase)).map(renderElement)}
 
               {/* Vertex handles — rendered above all elements when an element is selected.
                   Shown in ALL tool modes so the user can immediately adjust a just-drawn
@@ -5122,6 +5152,7 @@ export default function TakeoffPage() {
               {selectedId && (() => {
                 const el = project.elements.find(e => e.id === selectedId)
                 if (!el) return null
+                if (hiddenPhases.has(el.phase)) return null   // hide handles when phase is toggled off
                 const handles = getElVertexHandles(el)
                 const hr  = 5 / zoom    // handle radius — stays constant screen size
                 const hsw = 1.5 / zoom  // stroke width
