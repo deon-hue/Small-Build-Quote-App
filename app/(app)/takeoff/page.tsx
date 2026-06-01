@@ -4056,16 +4056,19 @@ export default function TakeoffPage() {
                 </div>
               )}
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <div>
-                  <label style={labelStyle}>Gross Area (m²)</label>
-                  <div style={{ ...inputStyle, color: 'var(--to-muted)', fontFamily: 'monospace' }}>{fmt2(grossArea)}</div>
+              {/* Gross/net area read-only — hidden for Ext Wall (top card already shows them) */}
+              {!isExtWall && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <div>
+                    <label style={labelStyle}>Gross Area (m²)</label>
+                    <div style={{ ...inputStyle, color: 'var(--to-muted)', fontFamily: 'monospace' }}>{fmt2(grossArea)}</div>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Net Area (m²)</label>
+                    <div style={{ ...inputStyle, color: accent, fontWeight: 700, fontFamily: 'monospace' }}>{fmt2(netArea)}</div>
+                  </div>
                 </div>
-                <div>
-                  <label style={labelStyle}>Net Area (m²)</label>
-                  <div style={{ ...inputStyle, color: accent, fontWeight: 700, fontFamily: 'monospace' }}>{fmt2(netArea)}</div>
-                </div>
-              </div>
+              )}
             </>
           )}
 
@@ -4165,8 +4168,8 @@ export default function TakeoffPage() {
             </>
           )}
 
-          {/* Buildup: area is read-only from canvas */}
-          {isBuildup && (
+          {/* Buildup: area is read-only from canvas (hidden for Ext Wall — top card covers it) */}
+          {isBuildup && !isExtWall && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               <div>
                 <label style={labelStyle}>Area (m²)</label>
