@@ -3812,46 +3812,69 @@ export default function TakeoffPage() {
       ac: string,
     ) {
       const layerCosts = itm.layerCosts ?? {}
+      const catColor: Record<string, string> = { labour: '#e74c3c', materials: '#3498db', plant: '#f39c12', other: '#95a5a6' }
       return (
-        <div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {mk.layers.map(layer => {
-            const enabled = tgls[layer.id] ?? layer.defaultEnabled
-            const thk     = thks[layer.id] ?? layer.thickness
+            const enabled  = tgls[layer.id] ?? layer.defaultEnabled
+            const thk      = thks[layer.id] ?? layer.thickness
             const { qty: lq, unit: lu } = calcLayerQty(layer, area, perim, thk || undefined)
-            const rec = layerCosts[layer.id]
+            const rec      = layerCosts[layer.id]
             const costTotal = rec
               ? [...rec.labourItems, ...rec.materialItems, ...rec.plantItems, ...rec.subItems, ...rec.otherItems]
                   .reduce((s, x) => s + x.total, 0)
               : 0
-            const dotColor: Record<string, string> = { labour: '#e74c3c', materials: '#3498db', plant: '#f39c12', other: '#95a5a6' }
+            const color = catColor[layer.category] ?? '#95a5a6'
             return (
-              <div key={layer.id}
-                onClick={() => setLayerModal({ layer, makeup: mk, item: itm, area, perim, accent: ac })}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 7, padding: '6px 8px', marginBottom: 3,
-                  borderRadius: 6, cursor: 'pointer',
-                  background: enabled ? (darkMode ? '#0a180a' : '#f8faf8') : (darkMode ? '#060c06' : '#f5f5f5'),
-                  border: `1px solid ${enabled ? (darkMode ? '#1a2e1a' : '#cce8cc') : (darkMode ? '#111' : '#eee')}`,
-                  opacity: enabled ? 1 : 0.55,
-                }}>
-                <input type="checkbox" checked={enabled}
-                  onClick={e => e.stopPropagation()}
+              <div key={layer.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+
+                {/* Tick — outside the box, to the left */}
+                <input
+                  type="checkbox"
+                  checked={enabled}
                   onChange={ev => saveItemEdit({ ...itm, floorLayerToggles: { ...tgls, [layer.id]: ev.target.checked } })}
-                  style={{ margin: 0, cursor: 'pointer', flexShrink: 0 }} />
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor[layer.category] ?? '#95a5a6', flexShrink: 0 }} />
-                <span style={{ flex: 1, fontSize: 12, color: enabled ? 'var(--to-text)' : 'var(--to-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {layer.name}{thk > 0 ? ` (${thk}mm)` : ''}
-                </span>
-                <span style={{ fontSize: 10, fontFamily: 'monospace', color: costTotal > 0 ? ac : 'var(--to-muted)', flexShrink: 0 }}>
-                  {costTotal > 0 ? `£${Math.round(costTotal)}` : `${lq} ${lu}`}
-                </span>
-                <span style={{ fontSize: 14, color: 'var(--to-muted)', flexShrink: 0, lineHeight: 1 }}>›</span>
+                  style={{ margin: 0, cursor: 'pointer', flexShrink: 0, accentColor: ac }}
+                  title={enabled ? 'Disable layer' : 'Enable layer'}
+                />
+
+                {/* Named box — clicking opens the editor */}
+                <div
+                  onClick={() => setLayerModal({ layer, makeup: mk, item: itm, area, perim, accent: ac })}
+                  style={{
+                    flex: 1, cursor: 'pointer', borderRadius: 6,
+                    padding: '7px 10px',
+                    background: enabled ? (darkMode ? '#0a180a' : '#f8faf8') : (darkMode ? '#060c06' : '#f3f3f3'),
+                    border: `1px solid ${enabled ? color + '55' : (darkMode ? '#1a1a1a' : '#ddd')}`,
+                    opacity: enabled ? 1 : 0.5,
+                    transition: 'border-color 0.15s',
+                  }}>
+                  {/* Layer name row */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                    <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: enabled ? 'var(--to-text)' : 'var(--to-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {layer.name}{thk > 0 ? ` (${thk}mm)` : ''}
+                    </span>
+                    <span style={{ fontSize: 10, color: 'var(--to-muted)', lineHeight: 1 }}>›</span>
+                  </div>
+                  {/* Sub-row: qty + cost */}
+                  <div style={{ display: 'flex', gap: 8, marginTop: 3, paddingLeft: 14 }}>
+                    <span style={{ fontSize: 10, color: 'var(--to-muted)', fontFamily: 'monospace' }}>
+                      {lq} {lu}
+                    </span>
+                    {costTotal > 0 && (
+                      <span style={{ fontSize: 10, color: ac, fontFamily: 'monospace', fontWeight: 600 }}>
+                        £{Math.round(costTotal)}
+                      </span>
+                    )}
+                    <span style={{ fontSize: 10, color: 'var(--to-muted)', textTransform: 'capitalize', marginLeft: 'auto' }}>
+                      {layer.category}
+                    </span>
+                  </div>
+                </div>
+
               </div>
             )
           })}
-          <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 5, fontStyle: 'italic' }}>
-            Click a layer to open the cost editor
-          </div>
         </div>
       )
     }
