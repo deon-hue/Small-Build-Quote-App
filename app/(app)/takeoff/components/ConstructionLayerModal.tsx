@@ -17,60 +17,90 @@ function empty(): LayerCostRecord {
 }
 
 // ── fetch BO defaults for this layer/task ──────────────────────────────────────
+/** Result of a BO lookup — includes the source so the modal can show sync status */
+interface BOLookupResult {
+  recipe:  LayerCostRecord
+  source:  'recipe'        // full recipe saved from Layer Editor
+         | 'aggregate'     // aggregate costs only (no item breakdown yet)
+         | 'wall_layer'    // structure synced but no costs yet
+}
+
 async function fetchBOLayerDefaults(
   userId:    string,
   phaseName: string,
+  makeupName: string,
   layerName: string,
-): Promise<LayerCostRecord | null> {
+): Promise<BOLookupResult | null> {
   const sb = createClient()
 
+  // ── 1. Find matching bo_phase ──────────────────────────────────────────────
   const { data: boPhase } = await sb.from('bo_phases')
     .select('id').eq('user_id', userId).eq('name', phaseName).maybeSingle()
   if (!boPhase) return null
 
+  // ── 2. Check bo_tasks for a saved recipe or aggregate costs ────────────────
   const { data: boTask } = await sb.from('bo_tasks')
     .select('*').eq('user_id', userId).eq('phase_id', boPhase.id).eq('name', layerName)
     .maybeSingle()
-  if (!boTask) return null
 
-  // Use stored recipe if available
-  const stored = (boTask.recipe_items ?? null) as LayerCostRecord | null
-  if (stored?.labourItems) return stored
+  if (boTask) {
+    const stored = (boTask.recipe_items ?? null) as LayerCostRecord | null
+    if (stored?.labourItems) return { recipe: stored, source: 'recipe' }
 
-  // Build defaults from aggregate costs
-  const u = uid
-  const rec: LayerCostRecord = { labourItems: [], materialItems: [], plantItems: [], subItems: [], otherItems: [] }
-  const dq = Math.max(1, boTask.default_qty ?? 1)
+    // Build from aggregate costs
+    const u = uid
+    const rec: LayerCostRecord = { labourItems: [], materialItems: [], plantItems: [], subItems: [], otherItems: [] }
+    const dq = Math.max(1, boTask.default_qty ?? 1)
 
-  if ((boTask.labour_cost ?? 0) > 0)
-    rec.labourItems.push({
-      id: u(), trade: boTask.trade_name ?? 'Labour',
-      description: boTask.description ?? '', qty: dq, unit: 'hr',
-      rate: +((boTask.labour_cost) / dq).toFixed(2), total: boTask.labour_cost,
-    })
-  if ((boTask.materials_cost ?? 0) > 0)
-    rec.materialItems.push({
-      id: u(), name: 'Materials', unit: boTask.unit ?? 'm²',
-      qty: dq, unitCost: +((boTask.materials_cost) / dq).toFixed(2),
-      wastePct: 0, total: boTask.materials_cost,
-    })
-  if ((boTask.plant_cost ?? 0) > 0)
-    rec.plantItems.push({
-      id: u(), name: 'Plant / Equipment', unit: 'day',
-      qty: 1, hireRate: boTask.plant_cost, total: boTask.plant_cost,
-    })
-  if ((boTask.subcontract_cost ?? 0) > 0)
-    rec.subItems.push({
-      id: u(), trade: 'Subcontractor', description: boTask.client_description ?? '',
-      basis: 'fixed', qty: 1, unit: 'item', rate: boTask.subcontract_cost, total: boTask.subcontract_cost,
-    })
-  const ot = (boTask.other_cost ?? 0) + (boTask.waste_cost ?? 0)
-  if (ot > 0)
-    rec.otherItems.push({
-      id: u(), description: 'Other / waste', unit: 'item', qty: 1, unitCost: ot, total: ot,
-    })
+    if ((boTask.labour_cost ?? 0) > 0)
+      rec.labourItems.push({
+        id: u(), trade: boTask.trade_name ?? 'Labour',
+        description: boTask.description ?? '', qty: dq, unit: 'hr',
+        rate: +((boTask.labour_cost) / dq).toFixed(2), total: boTask.labour_cost,
+      })
+    if ((boTask.materials_cost ?? 0) > 0)
+      rec.materialItems.push({
+        id: u(), name: 'Materials', unit: boTask.unit ?? 'm²',
+        qty: dq, unitCost: +((boTask.materials_cost) / dq).toFixed(2),
+        wastePct: 0, total: boTask.materials_cost,
+      })
+    if ((boTask.plant_cost ?? 0) > 0)
+      rec.plantItems.push({
+        id: u(), name: 'Plant / Equipment', unit: 'day',
+        qty: 1, hireRate: boTask.plant_cost, total: boTask.plant_cost,
+      })
+    if ((boTask.subcontract_cost ?? 0) > 0)
+      rec.subItems.push({
+        id: u(), trade: 'Subcontractor', description: boTask.client_description ?? '',
+        basis: 'fixed', qty: 1, unit: 'item', rate: boTask.subcontract_cost, total: boTask.subcontract_cost,
+      })
+    const ot = (boTask.other_cost ?? 0) + (boTask.waste_cost ?? 0)
+    if (ot > 0)
+      rec.otherItems.push({
+        id: u(), description: 'Other / waste', unit: 'item', qty: 1, unitCost: ot, total: ot,
+      })
 
-  return rec
+    return { recipe: rec, source: 'aggregate' }
+  }
+
+  // ── 3. No bo_task — check bo_wall_layers (synced from WALL_MAKEUPS) ────────
+  // The layer structure is in BO but no cost recipe exists yet.
+  const { data: boWallType } = await sb.from('bo_wall_types')
+    .select('id').eq('user_id', userId).eq('name', makeupName).maybeSingle()
+
+  if (boWallType) {
+    const { data: boWallLayer } = await sb.from('bo_wall_layers')
+      .select('id, name, description, category')
+      .eq('user_id', userId).eq('wall_type_id', boWallType.id).eq('name', layerName)
+      .maybeSingle()
+
+    if (boWallLayer) {
+      // Layer is structurally synced — return an empty recipe so the user can fill costs
+      return { recipe: empty(), source: 'wall_layer' }
+    }
+  }
+
+  return null
 }
 
 type Tab = 'labour' | 'materials' | 'plant' | 'sub' | 'other'
@@ -119,6 +149,7 @@ export default function ConstructionLayerModal({
   const [saving,         setSaving]         = useState(false)
   const [savedMsg,       setSavedMsg]       = useState('')
   const [loadingBO,      setLoadingBO]      = useState(false)
+  const [boSyncStatus,   setBoSyncStatus]   = useState<'recipe' | 'aggregate' | 'wall_layer' | 'none' | 'loading'>('loading')
   const [boProducts,     setBoProducts]     = useState<BOProduct[]>([])
   const [boPlantItems,   setBoPlantItems]   = useState<BOPlantItem[]>([])
   const [pickerTab,      setPickerTab]      = useState<Tab | null>(null)
@@ -139,12 +170,18 @@ export default function ConstructionLayerModal({
       setBoProducts(prods ?? [])
       setBoPlantItems(plant ?? [])
 
-      // If no local recipe saved, pull BO defaults
+      // Pull BO defaults if no local recipe saved
       if (!item.layerCosts?.[layer.id]) {
         setLoadingBO(true)
-        const recipe = await fetchBOLayerDefaults(user.id, item.phase, layer.name).catch(() => null)
-        if (recipe) setCosts(recipe)
+        const result = await fetchBOLayerDefaults(user.id, item.phase, makeup.name, layer.name).catch(() => null)
+        if (result) { setCosts(result.recipe); setBoSyncStatus(result.source) }
+        else setBoSyncStatus('none')
         setLoadingBO(false)
+      } else {
+        // Check BO status even if we have local data
+        fetchBOLayerDefaults(user.id, item.phase, makeup.name, layer.name)
+          .then(r => setBoSyncStatus(r?.source ?? 'none'))
+          .catch(() => setBoSyncStatus('none'))
       }
     })()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -155,9 +192,9 @@ export default function ConstructionLayerModal({
       const sb  = createClient()
       const { data: { user } } = await sb.auth.getUser()
       if (!user) return
-      const recipe = await fetchBOLayerDefaults(user.id, item.phase, layer.name)
-      if (recipe) { setCosts(recipe); setSavedMsg('Reloaded from Back Office ✓') }
-      else setSavedMsg('No Back Office defaults found for this layer')
+      const result = await fetchBOLayerDefaults(user.id, item.phase, makeup.name, layer.name)
+      if (result) { setCosts(result.recipe); setBoSyncStatus(result.source); setSavedMsg('Reloaded from Back Office ✓') }
+      else { setBoSyncStatus('none'); setSavedMsg('No Back Office defaults found for this layer') }
     } finally {
       setLoadingBO(false)
       setTimeout(() => setSavedMsg(''), 3000)
@@ -229,6 +266,7 @@ export default function ConstructionLayerModal({
     setSaving(true)
     try {
       await onSaveToBO(costs)
+      setBoSyncStatus('recipe')
       setSavedMsg('Saved to Back Office ✓')
     } catch (e: unknown) {
       setSavedMsg('Save failed: ' + (e instanceof Error ? e.message : String(e)))
@@ -654,7 +692,18 @@ export default function ConstructionLayerModal({
               <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 10, background: `${CAT_COLOR[layer.category]}22`, color: CAT_COLOR[layer.category], fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 {layer.category}
               </span>
-              {loadingBO && <span style={{ fontSize: 10, color: muted }}>⟳ Loading Back Office defaults…</span>}
+              {loadingBO
+                ? <span style={{ fontSize: 10, color: muted }}>⟳ Checking Back Office…</span>
+                : boSyncStatus === 'recipe'
+                  ? <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 10, background: '#27ae6022', color: '#27ae60', fontWeight: 600 }}>✓ BO recipe synced</span>
+                  : boSyncStatus === 'aggregate'
+                    ? <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 10, background: '#f39c1222', color: '#f39c12', fontWeight: 600 }}>⚠ BO aggregate only — add item detail</span>
+                    : boSyncStatus === 'wall_layer'
+                      ? <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 10, background: '#3498db22', color: '#3498db', fontWeight: 600 }}>◌ Layer synced — no costs yet</span>
+                      : boSyncStatus === 'none'
+                        ? <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 10, background: '#e74c3c22', color: '#e74c3c', fontWeight: 600 }}>✕ Not in Back Office</span>
+                        : null
+              }
             </div>
             <div style={{ fontSize: 11, color: muted }}>{makeup.name} · {item.phase}{layer.description ? ` · ${layer.description}` : ''}</div>
           </div>
