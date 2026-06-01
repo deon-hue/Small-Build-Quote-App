@@ -9,6 +9,9 @@ import {
   fetchLabourTrades,
 } from '@/lib/back-office-queries'
 import type { BOPhase, BOSubPhase, BOTask, BOLabourTrade } from '@/lib/back-office-types'
+
+// Phases that use FloorMakeup build-ups — tasks under these are "Construction Layers"
+const BUILDUP_PHASES = new Set(['External Walls', 'Floors & Screeds', 'Foundations', 'Plastering & Boarding'])
 import { TASK_UNITS } from '@/lib/back-office-types'
 import { JOB_TYPES } from '@/lib/utils'
 import { Plus, Trash2, ChevronRight, ChevronDown } from 'lucide-react'
@@ -243,7 +246,7 @@ export default function SectionPhasesTasks({ userId }: Props) {
                   </span>
                 )}
               </div>
-              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>{spCount} sub · {tCount} tasks</div>
+              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>{spCount} sub · {tCount} {BUILDUP_PHASES.has(phase.name) ? 'layers' : 'tasks'}</div>
             </button>
           )
         })}
@@ -268,18 +271,25 @@ export default function SectionPhasesTasks({ userId }: Props) {
                 onChange={e => renamePhase(selectedPhase.id, e.target.value)}
                 style={{ fontSize: 18, fontWeight: 700, border: 'none', background: 'transparent', outline: 'none', flex: 1, color: '#1e293b' }}
               />
+              {BUILDUP_PHASES.has(selectedPhase.name) && (
+                <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: '#dbeafe', color: '#1d4ed8', fontWeight: 600 }}>
+                  🧱 Build-up Phase
+                </span>
+              )}
               <button
                 onClick={() => addSubPhase(selectedPhase.id)}
                 style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 6, color: '#166534', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}
               >
                 <Plus size={13} /> Sub-Phase
               </button>
-              <button
-                onClick={() => openNewTask(selectedPhase.id, null)}
-                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, color: '#1d4ed8', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}
-              >
-                <Plus size={13} /> Task
-              </button>
+              {!BUILDUP_PHASES.has(selectedPhase.name) && (
+                <button
+                  onClick={() => openNewTask(selectedPhase.id, null)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, color: '#1d4ed8', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}
+                >
+                  <Plus size={13} /> Task
+                </button>
+              )}
               <button
                 onClick={() => duplicatePhase(selectedPhase)}
                 title="Duplicate this phase (with all sub-phases and tasks)"
@@ -344,7 +354,9 @@ export default function SectionPhasesTasks({ userId }: Props) {
                       onChange={e => renameSubPhase(sp.id, e.target.value)}
                       style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 13, fontWeight: 600, color: '#1e293b', outline: 'none', minWidth: 0 }}
                     />
-                    <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>{spTasks.length} tasks</span>
+                    <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>
+                      {spTasks.length} {BUILDUP_PHASES.has(selectedPhase.name) ? 'layers' : 'tasks'}
+                    </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }} onClick={e => e.stopPropagation()}>
                       <span style={{ fontSize: 11, color: '#64748b' }}>Markup</span>
                       <input
@@ -358,7 +370,7 @@ export default function SectionPhasesTasks({ userId }: Props) {
                       onClick={e => { e.stopPropagation(); openNewTask(selectedPhase.id, sp.id) }}
                       style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '3px 8px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 4, color: '#1d4ed8', fontSize: 11, cursor: 'pointer', flexShrink: 0 }}
                     >
-                      <Plus size={11} /> Task
+                      <Plus size={11} /> {BUILDUP_PHASES.has(selectedPhase.name) ? 'Layer' : 'Task'}
                     </button>
                     <button
                       onClick={e => { e.stopPropagation(); removeSubPhase(sp.id) }}
@@ -373,7 +385,8 @@ export default function SectionPhasesTasks({ userId }: Props) {
                         <TaskTable tasks={spTasks} onEdit={openEditTask} onDelete={removeTask} onDuplicate={duplicateTask} onToggleActive={toggleTaskActive} />
                       ) : (
                         <div style={{ color: '#94a3b8', fontSize: 12, padding: '8px 0', textAlign: 'center' }}>
-                          No tasks yet — click <strong>+ Task</strong> to add one
+                          No {BUILDUP_PHASES.has(selectedPhase.name) ? 'construction layers' : 'tasks'} yet —
+                          click <strong>+ {BUILDUP_PHASES.has(selectedPhase.name) ? 'Layer' : 'Task'}</strong> to add one
                         </div>
                       )}
                     </div>

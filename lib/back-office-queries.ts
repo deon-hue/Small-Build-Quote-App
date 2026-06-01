@@ -8,7 +8,7 @@ import type {
   BOToolTaskMapping, BOFormulaRule, BOAIScopeMapping,
   BOWallType, BOWallLayer,
 } from './back-office-types'
-import { TAKEOFF_PHASES, WALL_MAKEUPS, DWARF_WALL_MAKEUPS, type FloorMakeup, type LayerQtyType } from './takeoff-types'
+import { TAKEOFF_PHASES, WALL_MAKEUPS, DWARF_WALL_MAKEUPS, PHASE_MAKEUPS, type FloorMakeup, type LayerQtyType } from './takeoff-types'
 import { CANONICAL_PHASE_IDS } from './product-config'
 import { ALL_PHASE_SUBPHASES } from './phase-tasks'
 import { DEFAULT_DEMO_SUBPHASES } from './demolition-data'
@@ -808,7 +808,7 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
 
   const { data: dbTasks } = await sb
     .from('bo_tasks')
-    .select('id, canonical_id, name, unit')
+    .select('id, canonical_id, name, unit, sub_phase_id')
     .eq('user_id', userId)
 
   const taskByCanon = new Map(
@@ -1078,6 +1078,106 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
       const exL = dwarfLayerByCanon.get(l.id)!
       if (exL.name !== l.name) {
         await sb.from('bo_wall_layers').update({ name: l.name, description: l.description }).eq('id', exL.id)
+      }
+    }
+  }
+
+  // ── 5. Buildup construction layers → bo_sub_phases + bo_tasks ────────────────
+  // For each phase in PHASE_MAKEUPS (External Walls, Floors, Foundations, Plastering):
+  //   FloorMakeup  → bo_sub_phase  (canonical_id = 'makeup_' + makeup.id)
+  //   FloorLayer   → bo_task       (canonical_id = 'layer_'  + makeup.id + '_' + layer.id)
+  //
+  // Rules: insert new; update name/description if changed; PRESERVE all cost fields.
+  // This ensures Back Office sub-phase shows Construction Layers, not generic tasks.
+
+  // Fresh sub-phase list for name-based matching (includes anything just inserted in step 2)
+  const { data: freshSubPhases } = await sb
+    .from('bo_sub_phases')
+    .select('id, canonical_id, name, phase_id')
+    .eq('user_id', userId)
+
+  for (const [phaseName, makeups] of Object.entries(PHASE_MAKEUPS)) {
+    const phaseCanon = CANONICAL_PHASE_IDS[phaseName as string]
+    if (!phaseCanon) continue
+    const phaseDbId = phaseCanonToId.get(phaseCanon)
+    if (!phaseDbId) continue
+
+    for (let mi = 0; mi < makeups.length; mi++) {
+      const makeup = makeups[mi]
+      const subCanonId = `makeup_${makeup.id}`
+
+      // Find matching sub-phase: first by canonical_id, then by name+phase
+      let subPhaseDbId: string | undefined =
+        (freshSubPhases ?? []).find(s => s.canonical_id === subCanonId)?.id ??
+        (freshSubPhases ?? []).find(s => s.phase_id === phaseDbId && s.name === makeup.name)?.id
+
+      if (!subPhaseDbId) {
+        // Create the sub-phase (shouldn't happen if ALL_PHASE_SUBPHASES is in sync)
+        const { data: ns } = await sb.from('bo_sub_phases').insert({
+          user_id: userId, canonical_id: subCanonId, phase_id: phaseDbId,
+          name: makeup.name, display_order: 200 + mi, markup_pct: 20, active: true,
+        }).select('id').single()
+        subPhaseDbId = ns?.id
+        console.log('[sync] created sub-phase for makeup:', makeup.name)
+      } else {
+        // Stamp canonical_id if missing (heals old rows)
+        const existing = (freshSubPhases ?? []).find(s => s.id === subPhaseDbId)
+        if (existing && !existing.canonical_id) {
+          await sb.from('bo_sub_phases').update({ canonical_id: subCanonId }).eq('id', subPhaseDbId)
+        }
+      }
+
+      if (!subPhaseDbId) continue
+
+      // Sync each FloorLayer as a bo_task under this sub-phase
+      for (let li = 0; li < makeup.layers.length; li++) {
+        const layer = makeup.layers[li]
+        const layerCanonId = `layer_${makeup.id}_${layer.id}`
+
+        if (taskByCanon.has(layerCanonId)) {
+          // Update name/description only — PRESERVE all cost fields
+          const ex = taskByCanon.get(layerCanonId)!
+          if (ex.name !== layer.name) {
+            await sb.from('bo_tasks')
+              .update({ name: layer.name, description: layer.description, updated_at: new Date().toISOString() })
+              .eq('id', ex.id)
+          }
+        } else {
+          // Check if a row exists by name + sub_phase_id (for healing rows without canonical_id)
+          const existByName = (dbTasks ?? []).find(
+            t => (t as { sub_phase_id?: string }).sub_phase_id === subPhaseDbId && t.name === layer.name && !t.canonical_id
+          )
+          if (existByName) {
+            await sb.from('bo_tasks').update({ canonical_id: layerCanonId }).eq('id', existByName.id)
+            taskByCanon.set(layerCanonId, existByName)
+          } else {
+            const { error } = await sb.from('bo_tasks').insert({
+              user_id:            userId,
+              canonical_id:       layerCanonId,
+              phase_id:           phaseDbId,
+              sub_phase_id:       subPhaseDbId,
+              name:               layer.name,
+              description:        layer.description,
+              client_description: layer.description,
+              unit:               layer.unit,
+              default_qty:        1,
+              display_order:      li,
+              labour_cost:        0,
+              materials_cost:     0,
+              plant_cost:         0,
+              subcontract_cost:   0,
+              waste_cost:         0,
+              other_cost:         0,
+              markup_pct:         20,
+              from_takeoff:       false,
+              from_ai:            false,
+              active:             layer.defaultEnabled,
+              trade_name:         null,
+              productivity_rate:  null,
+            })
+            if (error) console.error('[sync] layer task insert error:', layer.name, error.message)
+          }
+        }
       }
     }
   }

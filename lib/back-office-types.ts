@@ -28,6 +28,7 @@ export interface BOSubPhase {
   id: string
   user_id: string
   phase_id: string
+  canonical_id?: string | null   // stable key e.g. 'makeup_cav_wall_partial'
   name: string
   display_order: number
   markup_pct: number

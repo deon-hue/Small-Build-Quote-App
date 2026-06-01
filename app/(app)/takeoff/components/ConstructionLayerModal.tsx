@@ -38,9 +38,17 @@ async function fetchBOLayerDefaults(
     .select('id').eq('user_id', userId).eq('name', phaseName).maybeSingle()
   if (!boPhase) return null
 
-  // ── 2. Check bo_tasks for a saved recipe or aggregate costs ────────────────
+  // ── 2. Find bo_sub_phase by makeup name for precise task lookup ───────────
+  const { data: boSubPhase } = await sb.from('bo_sub_phases')
+    .select('id').eq('user_id', userId).eq('phase_id', boPhase.id).eq('name', makeupName)
+    .maybeSingle()
+
+  // ── 3. Check bo_tasks — prefer sub_phase_id match (most precise) ─────────
   const { data: boTask } = await sb.from('bo_tasks')
-    .select('*').eq('user_id', userId).eq('phase_id', boPhase.id).eq('name', layerName)
+    .select('*')
+    .eq('user_id', userId)
+    .eq(boSubPhase ? 'sub_phase_id' : 'phase_id', boSubPhase ? boSubPhase.id : boPhase.id)
+    .eq('name', layerName)
     .maybeSingle()
 
   if (boTask) {
@@ -83,8 +91,9 @@ async function fetchBOLayerDefaults(
     return { recipe: rec, source: 'aggregate' }
   }
 
-  // ── 3. No bo_task — check bo_wall_layers (synced from WALL_MAKEUPS) ────────
-  // The layer structure is in BO but no cost recipe exists yet.
+  // ── 4. No bo_task — check bo_wall_layers as last resort ────────────────────
+  // After the new sync (step 5 in syncBackOfficeFromProduct), layers should always
+  // be in bo_tasks. This fallback handles the brief window before first BO page load.
   const { data: boWallType } = await sb.from('bo_wall_types')
     .select('id').eq('user_id', userId).eq('name', makeupName).maybeSingle()
 
