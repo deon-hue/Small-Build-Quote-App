@@ -40,7 +40,6 @@ export interface BOTask {
   user_id: string
   phase_id: string | null
   sub_phase_id: string | null
-  canonical_id?: string | null   // original string key from phase-tasks.ts (e.g. 'ew-cp-labour')
   name: string
   description: string
   client_description: string
