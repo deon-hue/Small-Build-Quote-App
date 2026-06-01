@@ -1075,6 +1075,43 @@ const externalWallConstructionSubphases: PhaseSubphase[] = [
   },
 ]
 
+// ── DWARF LOAD-BEARING WALL ────────────────────────────────────────────────────
+// UK masonry dwarf wall supporting conservatories, garden rooms, timber frames,
+// glazed systems, porches, verandas and other load-bearing applications.
+// Measured in linear metres with height, thickness and foundation dimensions.
+
+const dwarfWallSubphases: PhaseSubphase[] = [
+  {
+    id: 'ew-dwarf-wall',
+    phase: 'External Walls',
+    name: 'Dwarf Load-Bearing Wall',
+    markupPct: 20,
+    ukWarning: 'Dwarf walls supporting structural loads require structural engineer sign-off. DPC must be at least 150mm above finished ground level (Part C). Cavity walls require cavity trays and weepholes.',
+    tasks: [
+      // ── Foundations ────────────────────────────────────────────────────
+      t('dw-set-out',          'Set out wall position',                    'lm', 10,  0,    0,    0,    0,    0,  'Set out and peg wall centre line — rate per lm'),
+      t('dw-excavate',         'Excavate strip/trench fill foundation',    'lm', 10,  0,    0,    0,    0,    0,  'Excavate foundation trench to required depth (rate per lm)'),
+      t('dw-spoil-disposal',   'Dispose of excavated spoil',               'nr',  1, 80,    0,    0,    0,  310,  'Skip hire and loading of excavated material'),
+      t('dw-hardcore',         'Hardcore bed where required',              'lm', 10,  0,    0,    0,    0,    0,  'MOT Type 1 hardcore bed compacted if required'),
+      t('dw-concrete',         'Pour concrete foundations',                'lm', 10,  0,    0,    0,    0,    0,  'C20/25 concrete strip or trench fill foundation (rate per lm)'),
+      // ── Substructure ───────────────────────────────────────────────────
+      t('dw-found-blockwork',  'Lay foundation blockwork',                 'lm', 10,  0,    0,    0,    0,    0,  'Dense concrete blockwork from foundation to DPC level'),
+      t('dw-masonry',          'Build dwarf wall masonry',                 'lm', 10,  0,    0,    0,    0,    0,  'Build dwarf wall to specified height and thickness (rate per lm)'),
+      t('dw-dpc',              'Install DPC',                              'lm', 10,  0,    0,    0,    0,    0,  'Polythene or engineering brick DPC at required level'),
+      t('dw-cavity',           'Form cavity where applicable',             'lm', 10,  0,    0,    0,    0,    0,  'Form cavity to cavity dwarf wall construction'),
+      t('dw-wall-ties',        'Install wall ties',                        'lm', 10,  0,    0,    0,    0,    0,  'Stainless steel wall ties at required centres'),
+      t('dw-insulation',       'Install cavity / wall insulation',         'lm', 10,  0,    0,    0,    0,    0,  'Partial or full fill cavity insulation where applicable'),
+      t('dw-facing-brick',     'Build facing brickwork outer leaf',        'lm', 10,  0,    0,    0,    0,    0,  'Facing or engineering brick outer leaf where applicable'),
+      t('dw-pointing',         'Point brickwork / blockwork',              'lm', 10,  0,    0,    0,    0,    0,  'Rake and point all exposed joints — flush or weathered finish'),
+      t('dw-coping',           'Install coping stones or capping',         'lm', 10,  0,    0,    0,    0,    0,  'Precast or natural stone coping / capping to top of wall'),
+      // ── Finishing ──────────────────────────────────────────────────────
+      t('dw-make-good',        'Make good surrounding ground',             'lm', 10,  0,    0,    0,    0,    0,  'Backfill, compact and reinstate ground adjacent to wall'),
+      t('dw-clean',            'Clean brickwork / blockwork',              'lm', 10,  0,    0,    0,    0,    0,  'Remove mortar splashes and clean all exposed faces'),
+      t('dw-inspection',       'Final inspection and snagging',            'nr',  1,  0,    0,    0,    0,    0,  'Final visual inspection, snagging and handover'),
+    ],
+  },
+]
+
 // ── Master export ─────────────────────────────────────────────────────────────
 
 export const ALL_PHASE_SUBPHASES: PhaseSubphase[] = [
@@ -1093,6 +1130,7 @@ export const ALL_PHASE_SUBPHASES: PhaseSubphase[] = [
   ...prelimSubphases,
   ...floorsScreedsSubphases,
   ...externalWallsSubphases,
+  ...dwarfWallSubphases,
 ]
 
 /** Return subphases for a specific takeoff phase */
@@ -1223,6 +1261,7 @@ export function matchPhaseTasksFromScope(
     [['carpet'],                            'deco-floor-finishes',  'deco-carpet'],
     [['lvt','vinyl plank'],                 'deco-floor-finishes',  'deco-lvt'],
     // External
+    [['dwarf wall','sleeper wall','load-bearing wall','conservatory wall','garden room wall','dwarf masonry'], 'ew-dwarf-wall', 'dw-masonry'],
     [['cavity wall','partial fill'],         'ewc-cav-partial',      'ewc-cp-labour'],
     [['full fill cavity','full fill wall'],  'ewc-cav-full',         'ewc-cf-labour'],
     [['solid brick','225mm brick'],          'ewc-solid-brick',      'ewc-sb-labour'],
