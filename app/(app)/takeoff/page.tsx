@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback, ChangeEvent } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { makeDebouncedSave, loadTakeoffFromSupabase } from '@/lib/takeoff-sync'
 import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchLabourTrades } from '@/lib/back-office-queries'
@@ -560,6 +561,8 @@ function LayersPanel({ drawnPhases, hiddenPhases, phaseColors, onToggle, onShowA
 }
 
 export default function TakeoffPage() {
+  const router = useRouter()
+
   // Project state
   const [project, setProject] = useState<TakeoffProject>(() => loadProject() ?? blankProject())
   // Restore plan image from saved project on first load
@@ -1327,6 +1330,14 @@ export default function TakeoffPage() {
     a.download = `takeoff-${project.name.replace(/\s+/g, '-')}.json`
     a.click()
     alert('Take-off exported. Use "📐 Import Take-off" in the New Quote page to import it.')
+  }
+
+  // ── Send directly to New Quote (no file download) ─────────────────────────
+  function sendToQuote() {
+    const { planImageUrl: _, ...rest } = project
+    const data = { version: 1, ...rest }
+    sessionStorage.setItem('sbc_takeoff_for_quote', JSON.stringify(data))
+    router.push('/new-quote')
   }
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
@@ -4748,15 +4759,18 @@ export default function TakeoffPage() {
           </div>
         ))}
 
-        {/* Export to quote button */}
-        <div style={{ padding: '14px', borderTop: '1px solid var(--to-border)', marginTop: 8 }}>
-          <button style={{ ...btnStyle, width: '100%', background: darkMode ? '#2b3a2b' : 'rgba(122,181,51,0.1)', justifyContent: 'center', borderColor: 'var(--to-active-bd)' }}
-            onClick={exportForQuote}>
-            📤 Export for Quote Import
+        {/* Send / Export to quote */}
+        <div style={{ padding: '14px', borderTop: '1px solid var(--to-border)', marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <button
+            style={{ ...btnStyle, width: '100%', justifyContent: 'center', background: '#2563eb', color: '#fff', borderColor: '#1d4ed8', fontWeight: 600 }}
+            onClick={sendToQuote}>
+            📋 Send to Quote
           </button>
-          <div style={{ fontSize: 11, color: 'var(--to-muted)', marginTop: 6, textAlign: 'center' }}>
-            Then use &ldquo;📐 Import Take-off&rdquo; in New Quote
-          </div>
+          <button
+            style={{ ...btnStyle, width: '100%', justifyContent: 'center', background: darkMode ? '#1e293b' : '#f1f5f9', fontSize: 11 }}
+            onClick={exportForQuote}>
+            📤 Export JSON
+          </button>
         </div>
       </div>
     )

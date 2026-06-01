@@ -168,12 +168,32 @@ export default function NewQuotePage() {
   // instead of the saved Back Office template with zeroed rates.
   useEffect(() => {
     if (loading) return
+
+    // Resume editing an existing saved quote
     const editId = sessionStorage.getItem('sbc_edit_quote')
     if (editId) {
       sessionStorage.removeItem('sbc_edit_quote')
       const q = quotes.find(x => x.id === editId)
       if (q) { loadQuoteForEdit(q); setStep('workspace'); return }
     }
+
+    // Sent directly from the Takeoff tool — auto-import without file dialog
+    const rawTakeoff = sessionStorage.getItem('sbc_takeoff_for_quote')
+    if (rawTakeoff) {
+      sessionStorage.removeItem('sbc_takeoff_for_quote')
+      ;(async () => {
+        try {
+          const data = JSON.parse(rawTakeoff)
+          await applyTakeoffData(data)
+          setStep('workspace')
+        } catch {
+          alert('Could not process takeoff data.')
+          setStep('landing')
+        }
+      })()
+      return
+    }
+
     // New quote — show landing wizard
     setPhases([])
     setStep('landing')
@@ -568,32 +588,20 @@ export default function NewQuotePage() {
   }
 
   // ── Import from Take-off tool ─────────────────────────────────────────────
-  async function importTakeoff(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-
+  // ── Core take-off processing (shared by file import + direct send) ──────────
+  async function applyTakeoffData(data: {
+    version:      number
+    items:        TakeoffItem[]
+    address?:     string
+    jobType?:     string
+    client?:      { name?: string; email?: string; phone?: string; addressLine1?: string; town?: string; postcode?: string }
+    siteAddress?: string
+    projectName?: string
+    takeoffRef?:  string
+  }) {
     // Fetch Back Office task rates (from_takeoff=true tasks, grouped by phase)
     const boRates = await fetchBOTakeoffRates()
     const hasBORates = Object.keys(boRates).length > 0
-
-    let data: {
-      version:      number
-      items:        TakeoffItem[]
-      address?:     string
-      jobType?:     string
-      client?:      { name?: string; email?: string; phone?: string; addressLine1?: string; town?: string; postcode?: string }
-      siteAddress?: string
-      projectName?: string
-      takeoffRef?:  string
-    }
-    try {
-      const text = await file.text()
-      data = JSON.parse(text)
-    } catch {
-      alert('Could not parse take-off file. Make sure it was exported from the Take-off tool.')
-      e.target.value = ''
-      return
-    }
 
     try {
         if (data.version !== 1 || !Array.isArray(data.items)) {
@@ -895,8 +903,20 @@ export default function NewQuotePage() {
           : `✓ Imported ${newPhases.length} sub-phases.${ratesNote}`
         alert(msg)
       } catch {
-        alert('Could not process take-off file. Make sure it was exported from the Take-off tool.')
+        alert('Could not process take-off data. Make sure it was exported from the Take-off tool.')
       }
+  }
+
+  async function importTakeoff(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text)
+      await applyTakeoffData(data)
+    } catch {
+      alert('Could not parse take-off file. Make sure it was exported from the Take-off tool.')
+    }
     e.target.value = ''
   }
 
