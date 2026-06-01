@@ -4547,15 +4547,6 @@ export default function TakeoffPage() {
         <div style={secHdr}><span>📊</span><span>Outputs</span></div>
         <div style={secBody}>
 
-          {/* Labour costing — always first, above materials */}
-          <div style={{ marginBottom: 14, paddingBottom: 12, borderBottom: '1px solid var(--to-border)' }}>
-            <LabourCostBuilder
-              labourLines={item.labourLines ?? []}
-              trades={labourTrades}
-              onChange={lines => saveItemEdit({ ...item, labourLines: lines })}
-            />
-          </div>
-
           {/* Int Wall: materials table + totals + confirm */}
           {isIntWall && (
             <>
