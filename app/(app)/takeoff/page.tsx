@@ -1260,6 +1260,9 @@ export default function TakeoffPage() {
 
     // Drag initiator — attached to every element <g>
     const elCursor = tool === 'select' ? (isDraggingEl && sel ? 'grabbing' : 'grab') : 'default'
+    // When not in select mode, pass all pointer events through to the SVG
+    // canvas so drawing tools work cleanly over existing elements.
+    const elPointerEvents = tool === 'select' ? undefined : 'none'
     function onElMouseDown(e: React.MouseEvent<SVGGElement>) {
       if (tool !== 'select') return
       e.stopPropagation()   // prevent canvas pan from starting
@@ -1284,7 +1287,7 @@ export default function TakeoffPage() {
       const fillC  = sel ? WALL_LINE_COLOR + '44' : WALL_FILL_COLOR + '28'
       const caviC  = sel ? '#ffffff' : WALL_CAVI_COLOR
       return (
-        <g key={el.id} onClick={() => selectElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor }}>
+        <g key={el.id} onClick={() => selectElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
           <polygon points={bodyPts} fill={fillC} stroke="none" />
           <polyline points={outerPts} fill="none" stroke={faceC} strokeWidth={sel ? 2.5 : 2} strokeLinecap="square" strokeLinejoin="miter" />
           <polyline points={innerPts} fill="none" stroke={faceC} strokeWidth={sel ? 2.5 : 2} strokeLinecap="square" strokeLinejoin="miter" />
@@ -1308,7 +1311,7 @@ export default function TakeoffPage() {
       const mid = centroid(el.points)
       const wallStroke = sel ? '#fff' : WALL_LINE_COLOR
       return (
-        <g key={el.id} onClick={() => selectElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor }}>
+        <g key={el.id} onClick={() => selectElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
           <rect x={x} y={y} width={w} height={h} fill={WALL_FILL_COLOR + '20'} stroke={wallStroke} strokeWidth={wallSw} />
           {sel && <rect x={x} y={y} width={w} height={h} fill="none" stroke="#fff" strokeWidth={1} strokeOpacity={0.5} strokeDasharray="5 3" />}
           <text x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : WALL_LINE_COLOR} fontFamily="monospace" fontWeight={700}>
@@ -1329,7 +1332,7 @@ export default function TakeoffPage() {
       const wallSw = (linkedItem?.wallBandPx ?? 9) * 2
       const wallStroke = sel ? '#fff' : WALL_LINE_COLOR
       return (
-        <g key={el.id} onClick={() => selectElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor }}>
+        <g key={el.id} onClick={() => selectElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
           <polygon points={pts} fill={WALL_FILL_COLOR + '20'} stroke={wallStroke} strokeWidth={wallSw} strokeLinejoin="miter" />
           {sel && <polygon points={pts} fill="none" stroke="#fff" strokeWidth={1} strokeOpacity={0.5} strokeDasharray="5 3" />}
           <text x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : WALL_LINE_COLOR} fontFamily="monospace" fontWeight={700}>
@@ -1347,7 +1350,7 @@ export default function TakeoffPage() {
       const pts = el.points.map(p => `${p.x},${p.y}`).join(' ')
       const mid = centroid(el.points)
       return (
-        <g key={el.id} onClick={() => selectElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor }}>
+        <g key={el.id} onClick={() => selectElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
           <polyline points={pts} fill="none" stroke={stroke} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
           {sel && <polyline points={pts} fill="none" stroke="#fff" strokeWidth={1} strokeOpacity={0.4} strokeDasharray="4 3" />}
           <text x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : el.color} fontFamily="monospace" fontWeight={600}>
@@ -1363,7 +1366,7 @@ export default function TakeoffPage() {
     if (el.type === 'rect') {
       const { x, y, width: w, height: h } = rectAttrs(el.points)
       return (
-        <g key={el.id} onClick={() => selectElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor }}>
+        <g key={el.id} onClick={() => selectElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
           <rect x={x} y={y} width={w} height={h} fill={fill} stroke={stroke} strokeWidth={sw} />
           <text x={x + w / 2} y={y + h / 2 - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : el.color} fontFamily="monospace" fontWeight={600}>
             {el.label}
@@ -1379,7 +1382,7 @@ export default function TakeoffPage() {
       const pts = el.points.map(p => `${p.x},${p.y}`).join(' ')
       const mid = centroid(el.points)
       return (
-        <g key={el.id} onClick={() => selectElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor }}>
+        <g key={el.id} onClick={() => selectElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
           <polygon points={pts} fill={fill} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
           <text x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : el.color} fontFamily="monospace" fontWeight={600}>
             {el.label}
@@ -5172,8 +5175,9 @@ export default function TakeoffPage() {
                     fill="#fff"
                     stroke={el.color}
                     strokeWidth={hsw}
-                    style={{ cursor: 'crosshair' }}
+                    style={{ cursor: tool === 'select' ? 'crosshair' : 'default', pointerEvents: tool === 'select' ? undefined : 'none' }}
                     onMouseDown={ev => {
+                      if (tool !== 'select') return   // don't intercept during drawing
                       ev.stopPropagation()
                       const svgRect = svgRef.current!.getBoundingClientRect()
                       const ptX = (ev.clientX - svgRect.left - panOffset.x) / zoom
@@ -5187,7 +5191,7 @@ export default function TakeoffPage() {
                       }
                       setIsDraggingEl(true)
                     }}
-                    onClick={ev => ev.stopPropagation()}
+                    onClick={ev => { if (tool === 'select') ev.stopPropagation() }}
                   />
                 ))
               })()}
