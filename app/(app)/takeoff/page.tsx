@@ -3814,7 +3814,7 @@ export default function TakeoffPage() {
       const layerCosts = itm.layerCosts ?? {}
       const catColor: Record<string, string> = { labour: '#e74c3c', materials: '#3498db', plant: '#f39c12', other: '#95a5a6' }
       return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div>
           {mk.layers.map(layer => {
             const enabled  = tgls[layer.id] ?? layer.defaultEnabled
             const thk      = thks[layer.id] ?? layer.thickness
@@ -3826,14 +3826,14 @@ export default function TakeoffPage() {
               : 0
             const color = catColor[layer.category] ?? '#95a5a6'
             return (
-              <div key={layer.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div key={layer.id} style={{ display: 'grid', gridTemplateColumns: '20px 1fr', gap: 8, marginBottom: 5, alignItems: 'center' }}>
 
                 {/* Tick — outside the box, to the left */}
                 <input
                   type="checkbox"
                   checked={enabled}
                   onChange={ev => saveItemEdit({ ...itm, floorLayerToggles: { ...tgls, [layer.id]: ev.target.checked } })}
-                  style={{ margin: 0, cursor: 'pointer', flexShrink: 0, accentColor: ac }}
+                  style={{ margin: 0, cursor: 'pointer', width: 16, height: 16, accentColor: ac }}
                   title={enabled ? 'Disable layer' : 'Enable layer'}
                 />
 
@@ -3841,34 +3841,22 @@ export default function TakeoffPage() {
                 <div
                   onClick={() => setLayerModal({ layer, makeup: mk, item: itm, area, perim, accent: ac })}
                   style={{
-                    flex: 1, cursor: 'pointer', borderRadius: 6,
-                    padding: '7px 10px',
+                    cursor: 'pointer', borderRadius: 6, padding: '7px 10px', minWidth: 0,
                     background: enabled ? (darkMode ? '#0a180a' : '#f8faf8') : (darkMode ? '#060c06' : '#f3f3f3'),
                     border: `1px solid ${enabled ? color + '55' : (darkMode ? '#1a1a1a' : '#ddd')}`,
                     opacity: enabled ? 1 : 0.5,
-                    transition: 'border-color 0.15s',
                   }}>
-                  {/* Layer name row */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                    <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: enabled ? 'var(--to-text)' : 'var(--to-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: enabled ? 'var(--to-text)' : 'var(--to-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
                       {layer.name}{thk > 0 ? ` (${thk}mm)` : ''}
                     </span>
-                    <span style={{ fontSize: 10, color: 'var(--to-muted)', lineHeight: 1 }}>›</span>
+                    <span style={{ fontSize: 11, color: 'var(--to-muted)', flexShrink: 0 }}>›</span>
                   </div>
-                  {/* Sub-row: qty + cost */}
                   <div style={{ display: 'flex', gap: 8, marginTop: 3, paddingLeft: 14 }}>
-                    <span style={{ fontSize: 10, color: 'var(--to-muted)', fontFamily: 'monospace' }}>
-                      {lq} {lu}
-                    </span>
-                    {costTotal > 0 && (
-                      <span style={{ fontSize: 10, color: ac, fontFamily: 'monospace', fontWeight: 600 }}>
-                        £{Math.round(costTotal)}
-                      </span>
-                    )}
-                    <span style={{ fontSize: 10, color: 'var(--to-muted)', textTransform: 'capitalize', marginLeft: 'auto' }}>
-                      {layer.category}
-                    </span>
+                    <span style={{ fontSize: 10, color: 'var(--to-muted)', fontFamily: 'monospace' }}>{lq} {lu}</span>
+                    {costTotal > 0 && <span style={{ fontSize: 10, color: ac, fontFamily: 'monospace', fontWeight: 600 }}>£{Math.round(costTotal)}</span>}
+                    <span style={{ fontSize: 10, color: 'var(--to-muted)', textTransform: 'capitalize', marginLeft: 'auto' }}>{layer.category}</span>
                   </div>
                 </div>
 
