@@ -9,7 +9,7 @@ import LabourCostBuilder from './components/LabourCostBuilder'
 import ClientProjectModal from './components/ClientProjectModal'
 import {
   TAKEOFF_PHASES, PHASE_COLORS, DEFAULT_MPP, SCALE_PRESETS,
-  FLOOR_MAKEUPS, WALL_MAKEUPS, PLASTER_MAKEUPS, FOUNDATION_MAKEUPS, PHASE_MAKEUPS, calcLayerQty,
+  FLOOR_MAKEUPS, WALL_MAKEUPS, ALL_WALL_MAKEUPS, PLASTER_MAKEUPS, FOUNDATION_MAKEUPS, PHASE_MAKEUPS, calcLayerQty,
   loadCustomWallTypes, saveCustomWallTypes,
   WALL_OPENING_LABELS, WALL_OPENING_DEFAULTS,
   type TakeoffPhase, type DrawingTool, type TakeoffPoint,
@@ -529,7 +529,8 @@ export default function TakeoffPage() {
   const [dbWallTypes, setDbWallTypes] = useState<FloorMakeup[]>([])
 
   // Computed: DB takes precedence; localStorage fallback when DB not loaded yet
-  const allWallMakeups = dbWallTypes.length > 0 ? dbWallTypes : [...WALL_MAKEUPS, ...customWallTypes]
+  // ALL_WALL_MAKEUPS = WALL_MAKEUPS + DWARF_WALL_MAKEUPS; DB takes precedence when loaded
+  const allWallMakeups = dbWallTypes.length > 0 ? dbWallTypes : [...ALL_WALL_MAKEUPS, ...customWallTypes]
 
   // Back Office labour trades — loaded once, used by LabourCostBuilder in every panel
   const [labourTrades, setLabourTrades] = useState<BOLabourTrade[]>([])
