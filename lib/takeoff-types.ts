@@ -672,20 +672,97 @@ export const PLASTER_MAKEUPS: FloorMakeup[] = [
   },
 ]
 
+// ── Dwarf Load-Bearing Wall build-ups ─────────────────────────────────────────
+// All layers use qtyType:'perimeter' so quantities are calculated from the
+// drawn wall length (linear metres).  Toggleable items default to false so
+// the user only pays for what they select.
+
+export const DWARF_WALL_MAKEUPS: FloorMakeup[] = [
+  {
+    id:   'dwarf_block100',
+    name: 'Dwarf Wall – 100mm Blockwork',
+    clientDescription: 'Supply and build 100mm concrete blockwork dwarf wall including strip foundation, DPC, pointing and coping, ready to receive structure above.',
+    labourHrsPerM2: 0, wastePercent: 10,
+    layers: [
+      { id: 'dw100_setout',    name: 'Set out & excavate foundation',       thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'Set out wall line, excavate strip foundation trench',           category: 'labour',    defaultEnabled: true  },
+      { id: 'dw100_concrete',  name: 'Concrete strip foundation',           thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'C20/25 concrete foundation (rate per lm)',                       category: 'materials', defaultEnabled: true  },
+      { id: 'dw100_fnd_block', name: 'Foundation blockwork to DPC',         thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'Dense concrete blockwork from foundation to DPC level',          category: 'materials', defaultEnabled: true  },
+      { id: 'dw100_dpc',       name: 'DPC course',                          thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'Polythene or engineering brick DPC at required level',            category: 'materials', defaultEnabled: true  },
+      { id: 'dw100_masonry',   name: '100mm blockwork dwarf wall',          thickness: 0, unit: 'lm', qtyType: 'perimeter', description: '100mm concrete blockwork courses to specified height',            category: 'materials', defaultEnabled: true  },
+      { id: 'dw100_labour',    name: 'Bricklaying / blockwork labour',      thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'Labour to build dwarf wall including pointing and finishing',     category: 'labour',    defaultEnabled: true  },
+      { id: 'dw100_coping',    name: 'Coping stones / capping',             thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'Precast concrete or natural stone coping to top of wall',        category: 'materials', defaultEnabled: false },
+    ],
+  },
+  {
+    id:   'dwarf_block215',
+    name: 'Dwarf Wall – 215mm Blockwork',
+    clientDescription: 'Supply and build 215mm solid concrete blockwork dwarf wall including strip foundation, DPC, pointing and coping.',
+    labourHrsPerM2: 0, wastePercent: 10,
+    layers: [
+      { id: 'dw215_setout',    name: 'Set out & excavate foundation',       thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'Set out wall line, excavate strip foundation trench',           category: 'labour',    defaultEnabled: true  },
+      { id: 'dw215_concrete',  name: 'Concrete strip foundation',           thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'C20/25 concrete foundation (rate per lm)',                       category: 'materials', defaultEnabled: true  },
+      { id: 'dw215_fnd_block', name: 'Foundation blockwork to DPC',         thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'Dense concrete blockwork from foundation to DPC level',          category: 'materials', defaultEnabled: true  },
+      { id: 'dw215_dpc',       name: 'DPC course',                          thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'Polythene or engineering brick DPC at required level',            category: 'materials', defaultEnabled: true  },
+      { id: 'dw215_masonry',   name: '215mm blockwork dwarf wall',          thickness: 0, unit: 'lm', qtyType: 'perimeter', description: '215mm solid blockwork courses to specified height',               category: 'materials', defaultEnabled: true  },
+      { id: 'dw215_labour',    name: 'Bricklaying / blockwork labour',      thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'Labour to build dwarf wall including pointing and finishing',     category: 'labour',    defaultEnabled: true  },
+      { id: 'dw215_coping',    name: 'Coping stones / capping',             thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'Precast concrete or natural stone coping to top of wall',        category: 'materials', defaultEnabled: false },
+    ],
+  },
+  {
+    id:   'dwarf_brick_block',
+    name: 'Dwarf Wall – Brick Outer / Block Inner (Cavity)',
+    clientDescription: 'Supply and build cavity dwarf wall with facing brick outer leaf, blockwork inner leaf, wall ties, cavity insulation and DPC.',
+    labourHrsPerM2: 0, wastePercent: 12,
+    layers: [
+      { id: 'dwbb_setout',     name: 'Set out & excavate foundation',       thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'Set out wall line, excavate strip foundation trench',           category: 'labour',    defaultEnabled: true  },
+      { id: 'dwbb_concrete',   name: 'Concrete strip foundation',           thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'C20/25 concrete foundation (rate per lm)',                       category: 'materials', defaultEnabled: true  },
+      { id: 'dwbb_fnd_block',  name: 'Foundation blockwork to DPC',         thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'Dense concrete blockwork from foundation to DPC level',          category: 'materials', defaultEnabled: true  },
+      { id: 'dwbb_dpc',        name: 'DPC course',                          thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'Polythene DPC at required level — both leaves',                  category: 'materials', defaultEnabled: true  },
+      { id: 'dwbb_inner_block','name': 'Inner leaf 100mm blockwork',        thickness: 0, unit: 'lm', qtyType: 'perimeter', description: '100mm concrete blockwork inner leaf',                            category: 'materials', defaultEnabled: true  },
+      { id: 'dwbb_ties',       name: 'Stainless steel wall ties',           thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'SS wall ties at 900×450mm centres',                              category: 'materials', defaultEnabled: true  },
+      { id: 'dwbb_insulation', name: 'Cavity insulation',                   thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'Partial fill mineral wool cavity batts',                         category: 'materials', defaultEnabled: false },
+      { id: 'dwbb_brick',      name: 'Facing brick outer leaf',             thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'Facing brickwork outer leaf 102.5mm (client to select brick)',   category: 'materials', defaultEnabled: true  },
+      { id: 'dwbb_labour',     name: 'Bricklaying labour',                  thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'Labour to build cavity dwarf wall and point all faces',          category: 'labour',    defaultEnabled: true  },
+      { id: 'dwbb_coping',     name: 'Coping stones / capping',             thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'Precast concrete or natural stone coping to top of wall',        category: 'materials', defaultEnabled: false },
+    ],
+  },
+  {
+    id:   'dwarf_engineering_brick',
+    name: 'Dwarf Wall – Engineering Brick',
+    clientDescription: 'Supply and build engineering brick dwarf wall including strip foundation, DPC and pointing, suitable for high-exposure or below-ground applications.',
+    labourHrsPerM2: 0, wastePercent: 10,
+    layers: [
+      { id: 'dweb_setout',     name: 'Set out & excavate foundation',       thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'Set out wall line, excavate strip foundation trench',           category: 'labour',    defaultEnabled: true  },
+      { id: 'dweb_concrete',   name: 'Concrete strip foundation',           thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'C20/25 concrete foundation (rate per lm)',                       category: 'materials', defaultEnabled: true  },
+      { id: 'dweb_dpc',        name: 'DPC course',                          thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'Engineering brick DPC course or polythene strip',                category: 'materials', defaultEnabled: true  },
+      { id: 'dweb_masonry',    name: 'Engineering brick dwarf wall',        thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'Class B engineering brick dwarf wall — frost resistant',         category: 'materials', defaultEnabled: true  },
+      { id: 'dweb_labour',     name: 'Bricklaying labour',                  thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'Labour to build engineering brick wall, rake and point joints',  category: 'labour',    defaultEnabled: true  },
+      { id: 'dweb_coping',     name: 'Coping / weathered cap',              thickness: 0, unit: 'lm', qtyType: 'perimeter', description: 'Engineering brick or natural stone coping to top of wall',       category: 'materials', defaultEnabled: false },
+    ],
+  },
+]
+
 // ── Combined lookup ───────────────────────────────────────────────────────────
 
 /** All makeups from every phase combined — use for ID lookups (e.g. quote import) */
 export const ALL_MAKEUPS: FloorMakeup[] = [
   ...FLOOR_MAKEUPS,
   ...WALL_MAKEUPS,
+  ...DWARF_WALL_MAKEUPS,
   ...FOUNDATION_MAKEUPS,
   ...PLASTER_MAKEUPS,
+]
+
+/** External Walls makeups: standard wall types + dwarf wall types */
+export const ALL_WALL_MAKEUPS: FloorMakeup[] = [
+  ...WALL_MAKEUPS,
+  ...DWARF_WALL_MAKEUPS,
 ]
 
 /** Maps TakeoffPhase → its array of build-up makeups (only phases that support them) */
 export const PHASE_MAKEUPS: Partial<Record<TakeoffPhase, FloorMakeup[]>> = {
   'Floors & Screeds':      FLOOR_MAKEUPS,
-  'External Walls':        WALL_MAKEUPS,
+  'External Walls':        ALL_WALL_MAKEUPS,
   'Foundations':           FOUNDATION_MAKEUPS,
   'Plastering & Boarding': PLASTER_MAKEUPS,
 }

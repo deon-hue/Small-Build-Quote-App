@@ -8,7 +8,7 @@ import type {
   BOToolTaskMapping, BOFormulaRule, BOAIScopeMapping,
   BOWallType, BOWallLayer,
 } from './back-office-types'
-import { TAKEOFF_PHASES, WALL_MAKEUPS, type FloorMakeup, type LayerQtyType } from './takeoff-types'
+import { TAKEOFF_PHASES, WALL_MAKEUPS, DWARF_WALL_MAKEUPS, type FloorMakeup, type LayerQtyType } from './takeoff-types'
 import { CANONICAL_PHASE_IDS } from './product-config'
 import { ALL_PHASE_SUBPHASES } from './phase-tasks'
 import { DEFAULT_DEMO_SUBPHASES } from './demolition-data'
@@ -1022,6 +1022,60 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
     // Update layer names that changed
     for (const l of wm.layers.filter(l => layerByCanon.has(l.id))) {
       const exL = layerByCanon.get(l.id)!
+      if (exL.name !== l.name) {
+        await sb.from('bo_wall_layers').update({ name: l.name, description: l.description }).eq('id', exL.id)
+      }
+    }
+  }
+
+  // ── 4c. Dwarf Wall Types ──────────────────────────────────────────────────────
+  // Sync DWARF_WALL_MAKEUPS → bo_wall_types + bo_wall_layers (canonical_id prefix 'dwarf_').
+
+  for (let i = 0; i < DWARF_WALL_MAKEUPS.length; i++) {
+    const dm = DWARF_WALL_MAKEUPS[i]
+    const existing = wallTypeByCanon.get(dm.id)
+    let dwarfTypeDbId: string
+
+    if (existing) {
+      if (existing.name !== dm.name) {
+        await sb.from('bo_wall_types').update({
+          name: dm.name, client_description: dm.clientDescription,
+          labour_hrs_per_m2: dm.labourHrsPerM2, waste_percent: dm.wastePercent,
+          display_order: WALL_MAKEUPS.length + 10 + i,   // after WALL_MAKEUPS and any turf types
+          updated_at: new Date().toISOString(),
+        }).eq('id', existing.id)
+      }
+      dwarfTypeDbId = existing.id
+    } else {
+      const { data: inserted } = await sb.from('bo_wall_types').insert({
+        user_id: userId, canonical_id: dm.id, name: dm.name,
+        client_description: dm.clientDescription,
+        labour_hrs_per_m2: dm.labourHrsPerM2, waste_percent: dm.wastePercent,
+        display_order: WALL_MAKEUPS.length + 10 + i, active: true,
+      }).select('id').single()
+      if (!inserted?.id) continue
+      dwarfTypeDbId = inserted.id
+    }
+
+    const { data: dbDwarfLayers } = await sb
+      .from('bo_wall_layers').select('id, canonical_id, name').eq('wall_type_id', dwarfTypeDbId)
+    const dwarfLayerByCanon = new Map(
+      (dbDwarfLayers ?? []).filter(l => l.canonical_id).map(l => [l.canonical_id as string, l as { id: string; name: string }])
+    )
+    const newDwarfLayers = dm.layers.filter(l => !dwarfLayerByCanon.has(l.id))
+    if (newDwarfLayers.length > 0) {
+      await sb.from('bo_wall_layers').insert(
+        newDwarfLayers.map((l, j) => ({
+          user_id: userId, wall_type_id: dwarfTypeDbId, canonical_id: l.id,
+          name: l.name, thickness_mm: l.thickness, unit: l.unit, qty_type: l.qtyType,
+          spacing_mm: l.spacing ?? null, description: l.description,
+          category: l.category, default_enabled: l.defaultEnabled,
+          display_order: (dbDwarfLayers?.length ?? 0) + j,
+        }))
+      )
+    }
+    for (const l of dm.layers.filter(l => dwarfLayerByCanon.has(l.id))) {
+      const exL = dwarfLayerByCanon.get(l.id)!
       if (exL.name !== l.name) {
         await sb.from('bo_wall_layers').update({ name: l.name, description: l.description }).eq('id', exL.id)
       }
