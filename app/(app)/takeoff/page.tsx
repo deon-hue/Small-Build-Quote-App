@@ -451,6 +451,114 @@ function recalcItemsForMpp(
 type PanelMode = 'schedule' | 'properties'
 
 // ── Component ─────────────────────────────────────────────────────────────────
+// ── Layers panel component ────────────────────────────────────────────────────
+
+interface LayersPanelProps {
+  drawnPhases:  readonly string[]
+  hiddenPhases: Set<string>
+  phaseColors:  Record<string, string>
+  onToggle:     (ph: TakeoffPhase) => void
+  onShowAll:    () => void
+  onHideAll:    () => void
+  darkMode:     boolean
+  hiddenCount:  number
+}
+
+function LayersPanel({ drawnPhases, hiddenPhases, phaseColors, onToggle, onShowAll, onHideAll, darkMode, hiddenCount }: LayersPanelProps) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 20 }}>
+      {/* Trigger button */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600,
+          background: open ? 'var(--to-panel)' : 'var(--to-alt)',
+          border: `1px solid ${open ? 'var(--to-active-bd)' : 'var(--to-border)'}`,
+          color: 'var(--to-text)', boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+          transition: 'all 0.12s',
+        }}
+        title="Toggle phase layer visibility"
+      >
+        <span>🗂</span>
+        <span>Layers</span>
+        {hiddenCount > 0 && (
+          <span style={{ background: '#e74c3c', color: '#fff', borderRadius: 9, fontSize: 9, padding: '0 5px', fontWeight: 700 }}>
+            {hiddenCount}
+          </span>
+        )}
+        <span style={{ fontSize: 9, color: 'var(--to-muted)' }}>{open ? '▲' : '▼'}</span>
+      </button>
+
+      {/* Dropdown panel */}
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, marginTop: 4, minWidth: 200,
+          background: 'var(--to-panel)', border: '1px solid var(--to-border)', borderRadius: 8,
+          boxShadow: '0 6px 24px rgba(0,0,0,0.28)', padding: '8px 0', zIndex: 30,
+        }}>
+          {/* Show all / Hide all */}
+          <div style={{ display: 'flex', gap: 4, padding: '4px 10px 8px', borderBottom: '1px solid var(--to-border)' }}>
+            <button onClick={onShowAll} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '1px solid var(--to-border)', borderRadius: 4, background: 'transparent', color: 'var(--to-accent)', cursor: 'pointer', fontWeight: 600 }}>
+              Show All
+            </button>
+            <button onClick={onHideAll} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '1px solid var(--to-border)', borderRadius: 4, background: 'transparent', color: 'var(--to-muted)', cursor: 'pointer' }}>
+              Hide All
+            </button>
+          </div>
+
+          {/* Per-phase toggles */}
+          {drawnPhases.map(ph => {
+            const hidden = hiddenPhases.has(ph)
+            return (
+              <div
+                key={ph}
+                onClick={() => onToggle(ph as TakeoffPhase)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '6px 10px', cursor: 'pointer',
+                  background: 'transparent', transition: 'background 0.1s',
+                  opacity: hidden ? 0.5 : 1,
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--to-hover)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              >
+                {/* Colour swatch */}
+                <div style={{
+                  width: 10, height: 10, borderRadius: 2, flexShrink: 0,
+                  background: phaseColors[ph] ?? '#888',
+                  opacity: hidden ? 0.4 : 1,
+                }} />
+                {/* Phase name */}
+                <span style={{ fontSize: 11, flex: 1, color: 'var(--to-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {ph.replace('External Works & Landscaping', 'Ext. Works')
+                     .replace('Internal Walls & Partitions', 'Int. Walls')
+                     .replace('Site Setup & Demolition', 'Demolition')
+                     .replace('Plastering & Boarding', 'Plastering')
+                     .replace('Structural Frame', 'Struct. Frame')
+                     .replace('Windows & Doors', 'Windows/Doors')
+                     .replace('Plumbing & Heating', 'Plumbing')
+                     .replace('Drainage & Services', 'Drainage')
+                     .replace('Joinery & Fixtures', 'Joinery')
+                     .replace('Tiling & Finishes', 'Tiling')
+                     .replace('Floors & Screeds', 'Floors')
+                     .replace('Preliminaries', 'Prelims')}
+                </span>
+                {/* Toggle indicator */}
+                <span style={{ fontSize: 13, flexShrink: 0, color: hidden ? 'var(--to-muted)' : 'var(--to-accent)' }}>
+                  {hidden ? '○' : '●'}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function TakeoffPage() {
   // Project state
   const [project, setProject] = useState<TakeoffProject>(() => loadProject() ?? blankProject())
@@ -5030,10 +5138,7 @@ export default function TakeoffPage() {
           </div>
 
           {/* Phase list */}
-          {TAKEOFF_PHASES.map(ph => {
-            const hasElements = project.elements.some(el => el.phase === ph)
-            const isHidden    = hiddenPhases.has(ph)
-            return (
+          {TAKEOFF_PHASES.map(ph => (
             <div key={ph}>
             <div
               title={ph}
@@ -5044,7 +5149,6 @@ export default function TakeoffPage() {
                 background: activePhase === ph ? 'var(--to-hover)' : 'transparent',
                 border: `1px solid ${activePhase === ph ? 'var(--to-btn-bd)' : 'transparent'}`,
                 transition: 'all 0.12s',
-                opacity: isHidden ? 0.4 : 1,
               }}
             >
               <div style={{
@@ -5054,30 +5158,13 @@ export default function TakeoffPage() {
               }} />
               <span style={{
                 fontSize: 11, color: activePhase === ph ? 'var(--to-text)' : 'var(--to-sub)',
-                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1,
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
               }}>
                 {ph.replace('External Works & Landscaping', 'Ext. Works').replace('Internal Walls & Partitions', 'Int. Walls').replace('Site Setup & Demolition', 'Demolition').replace('Plastering & Boarding', 'Plastering').replace('Structural Frame', 'Struct. Frame').replace('Windows & Doors', 'Windows/Doors').replace('Plumbing & Heating', 'Plumbing').replace('Drainage & Services', 'Drainage').replace('Joinery & Fixtures', 'Joinery').replace('Tiling & Finishes', 'Tiling').replace('Floors & Screeds', 'Floors').replace('Preliminaries', 'Prelims')}
               </span>
-              {/* Eye toggle — only shown when phase has drawn elements */}
-              {hasElements && (
-                <button
-                  title={isHidden ? `Show ${ph}` : `Hide ${ph}`}
-                  onClick={e => { e.stopPropagation(); togglePhaseVisibility(ph) }}
-                  style={{
-                    background: 'none', border: 'none', cursor: 'pointer', padding: '0 1px',
-                    fontSize: 11, flexShrink: 0, lineHeight: 1,
-                    color: isHidden ? 'var(--to-muted)' : 'var(--to-dim)',
-                    opacity: isHidden ? 0.6 : 1,
-                  }}
-                >
-                  {isHidden ? '🙈' : '👁'}
-                </button>
-              )}
             </div>
-
             </div>
-            )
-          })}
+          ))}
         </div>
 
         {/* Centre: SVG canvas */}
@@ -5215,6 +5302,25 @@ export default function TakeoffPage() {
               )
             })()}
           </svg>
+
+          {/* ── Layers panel — top of canvas, only shown when there are drawn elements ── */}
+          {(() => {
+            const drawnPhases = TAKEOFF_PHASES.filter(ph => project.elements.some(el => el.phase === ph))
+            if (drawnPhases.length === 0) return null
+            const hiddenCount = drawnPhases.filter(ph => hiddenPhases.has(ph)).length
+            return (
+              <LayersPanel
+                drawnPhases={drawnPhases}
+                hiddenPhases={hiddenPhases}
+                phaseColors={PHASE_COLORS}
+                onToggle={togglePhaseVisibility}
+                onShowAll={() => setHiddenPhases(new Set())}
+                onHideAll={() => setHiddenPhases(new Set(drawnPhases))}
+                darkMode={darkMode}
+                hiddenCount={hiddenCount}
+              />
+            )
+          })()}
 
           {/* Calibration overlay hint */}
           {calibDrawing && !showCalib && (
