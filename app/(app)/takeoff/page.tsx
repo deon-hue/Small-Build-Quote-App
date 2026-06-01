@@ -3,8 +3,8 @@
 import { useState, useRef, useEffect, useCallback, ChangeEvent } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { makeDebouncedSave, loadTakeoffFromSupabase } from '@/lib/takeoff-sync'
-import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchLabourTrades } from '@/lib/back-office-queries'
-import type { BOLabourTrade } from '@/lib/back-office-types'
+import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchLabourTrades, fetchSubPhases, fetchTasks } from '@/lib/back-office-queries'
+import type { BOLabourTrade, BOSubPhase, BOTask } from '@/lib/back-office-types'
 import LabourCostBuilder from './components/LabourCostBuilder'
 import ClientProjectModal from './components/ClientProjectModal'
 import {
@@ -642,6 +642,26 @@ export default function TakeoffPage() {
 
   // Back Office labour trades — loaded once, used by LabourCostBuilder in every panel
   const [labourTrades, setLabourTrades] = useState<BOLabourTrade[]>([])
+  // Back Office sub-phases and tasks — for Phase → Sub-Phase → Task hierarchy in properties
+  const [boSubPhases, setBoSubPhases] = useState<BOSubPhase[]>([])
+  const [boTasksAll,  setBoTasksAll]  = useState<BOTask[]>([])
+  // Maps for fast lookup: BO phase name → sub-phases; sub-phase UUID → tasks
+  const boSubsByPhase = new Map<string, BOSubPhase[]>()
+  boSubPhases.forEach(sp => {
+    // We need the parent phase name — stored on sp.phase_id, so also build an id→name map
+  })
+  // Simple approach: group sub-phases by phase_id, resolve via a phases-name lookup.
+  // We'll match using canonical phase names stored on each sub-phase via the sync.
+  // Since fetchSubPhases doesn't include phase name, we rely on ALL_PHASE_SUBPHASES for the name→id mapping
+  // and use the existing getAllSubphasesForPhase as a fallback.
+  // Live BO data: group by phase_id — matched to item.phase via canonicalId → name
+  const boTasksBySub = new Map<string, BOTask[]>()
+  boTasksAll.forEach(t => {
+    if (!t.sub_phase_id) return
+    const arr = boTasksBySub.get(t.sub_phase_id) ?? []
+    arr.push(t)
+    boTasksBySub.set(t.sub_phase_id, arr)
+  })
 
   // Custom demolition subphases (loaded from localStorage on mount)
   const [customDemoSubphases, setCustomDemoSubphases] = useState<DemoSubphase[]>([])
@@ -734,6 +754,15 @@ export default function TakeoffPage() {
       // Load Back Office labour trades (for LabourCostBuilder in every panel)
       fetchLabourTrades(sb, uid).then(trades => {
         setLabourTrades(trades.filter(t => t.active))
+      })
+
+      // Load Back Office sub-phases and tasks for Phase→Sub→Task hierarchy
+      Promise.all([
+        fetchSubPhases(sb, uid),
+        fetchTasks(sb, uid),
+      ]).then(([sps, tks]) => {
+        setBoSubPhases(sps.filter(s => s.active))
+        setBoTasksAll(tks.filter(t => t.active))
       })
 
       // Async cloud sync — merge if the Supabase record has a newer updatedAt
@@ -3899,12 +3928,131 @@ export default function TakeoffPage() {
         <div style={secHdr}><span>📋</span><span>General</span></div>
         <div style={secBody}>
 
-          <div style={{ marginBottom: 10 }}>
-            <label style={labelStyle}>Phase</label>
-            <select style={inputStyle} value={item.phase}
-              onChange={e => saveItemEdit({ ...item, phase: e.target.value as TakeoffPhase })}>
-              {TAKEOFF_PHASES.map(ph => <option key={ph} value={ph}>{ph}</option>)}
-            </select>
+          {/* ── Phase → Sub-Phase → Task hierarchy ─────────────────────────── */}
+          <div style={{ background: darkMode ? 'rgba(0,0,0,0.2)' : '#f8fafc', borderRadius: 8, padding: '10px 12px', marginBottom: 10, border: '1px solid var(--to-border)' }}>
+
+            {/* Phase */}
+            <div style={{ marginBottom: 8 }}>
+              <label style={{ ...labelStyle, fontSize: 9, textTransform: 'uppercase' as const, letterSpacing: 1, color: accent }}>Phase</label>
+              <select style={{ ...inputStyle, fontWeight: 600 }} value={item.phase}
+                onChange={e => saveItemEdit({ ...item, phase: e.target.value as TakeoffPhase, taskSubphaseId: undefined, taskId: undefined, subPhase: undefined })}>
+                {TAKEOFF_PHASES.map(ph => <option key={ph} value={ph}>{ph}</option>)}
+              </select>
+            </div>
+
+            {/* Sub-Phase — loaded from BO, falls back to phase-tasks.ts */}
+            {(() => {
+              const fallbackSubs = getAllSubphasesForPhase(item.phase)
+              // Match BO sub-phases to this phase using canonical task IDs
+              const subPhasesForPhase = boSubPhases.filter(sp => {
+                const spTasks = boTasksBySub.get(sp.id) ?? []
+                const phTaskIds = new Set(fallbackSubs.flatMap(s => s.tasks.map(t => t.id)))
+                return spTasks.some(bt => bt.canonical_id && phTaskIds.has(bt.canonical_id))
+              })
+              const useBO = subPhasesForPhase.length > 0
+              const subOptions = useBO ? subPhasesForPhase : fallbackSubs
+              if (subOptions.length === 0) return null
+              const selectedSubId = item.taskSubphaseId
+              const tasksForSub  = useBO
+                ? (selectedSubId ? boTasksBySub.get(selectedSubId) ?? [] : [])
+                : (fallbackSubs.find(s => s.id === selectedSubId)?.tasks ?? [])
+
+              return (
+                <>
+                  <div style={{ marginBottom: 8 }}>
+                    <label style={{ ...labelStyle, fontSize: 9, textTransform: 'uppercase' as const, letterSpacing: 1, color: 'var(--to-muted)', display: 'flex', alignItems: 'center', gap: 3 }}>
+                      <span>└</span><span style={{ color: accent }}>Sub-Phase</span>
+                    </label>
+                    <select style={{ ...inputStyle, color: accent }} value={selectedSubId ?? ''}
+                      onChange={e => {
+                        const spId = e.target.value
+                        const firstName = useBO
+                          ? subPhasesForPhase.find(sp => sp.id === spId)?.name
+                          : fallbackSubs.find(s => s.id === spId)?.name
+                        const firstTask = useBO
+                          ? (boTasksBySub.get(spId) ?? [])[0]
+                          : fallbackSubs.find(s => s.id === spId)?.tasks[0]
+                        const q = item.qty > 0 ? item.qty : firstTask ? ((firstTask as {defaultQty?: number}).defaultQty ?? 1) : 1
+                        saveItemEdit({
+                          ...item,
+                          taskSubphaseId: spId || undefined,
+                          subPhase: firstName,
+                          taskId:   firstTask?.id,
+                          name:     firstTask?.name ?? item.name,
+                          unit:     (firstTask as {unit?: string} | undefined)?.unit ?? item.unit,
+                          taskLabour:        +((firstTask as {labour?: number} | undefined)?.labour ?? (useBO ? ((boTasksBySub.get(spId) ?? [])[0] as BOTask | undefined)?.labour_cost : 0) ?? 0) * q,
+                          taskMaterials:     0, taskPlant: 0, taskSubcontractor: 0, taskOther: 0,
+                          taskMarkupPct:     subOptions.find(s => s.id === spId) ? (subOptions as {markupPct?: number; markup_pct?: number}[])[0]?.markupPct ?? (subOptions as {markup_pct?: number}[]).find(s => (s as {id: string}).id === spId)?.markup_pct ?? 20 : 20,
+                        })
+                      }}>
+                      <option value="">— Select sub-phase —</option>
+                      {subOptions.map(sp => (
+                        <option key={sp.id} value={sp.id}>{sp.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Task */}
+                  {(tasksForSub.length > 0 || selectedSubId) && (
+                    <div>
+                      <label style={{ ...labelStyle, fontSize: 9, textTransform: 'uppercase' as const, letterSpacing: 1, color: 'var(--to-muted)', display: 'flex', alignItems: 'center', gap: 3 }}>
+                        <span style={{ paddingLeft: 6 }}>└</span><span style={{ color: accent }}>Task / Build-up</span>
+                      </label>
+                      <select style={{ ...inputStyle, color: accent }} value={item.taskId ?? ''}
+                        onChange={e => {
+                          const tId = e.target.value
+                          if (useBO) {
+                            const bt = (boTasksBySub.get(selectedSubId ?? '') ?? []).find(t => t.id === tId)
+                            if (!bt) return
+                            const q = item.qty > 0 ? item.qty : bt.default_qty
+                            saveItemEdit({
+                              ...item, taskId: tId, name: bt.name,
+                              spec: bt.client_description || bt.description || '',
+                              unit: bt.unit, qty: q,
+                              taskLabour:        +(bt.labour_cost * q).toFixed(2),
+                              taskMaterials:     +(bt.materials_cost * q).toFixed(2),
+                              taskPlant:         +(bt.plant_cost * q).toFixed(2),
+                              taskSubcontractor: +(bt.subcontract_cost * q).toFixed(2),
+                              taskOther:         +(bt.other_cost * q).toFixed(2),
+                              taskMarkupPct:     bt.markup_pct,
+                            })
+                          } else {
+                            const sub = fallbackSubs.find(s => s.id === selectedSubId)
+                            const ft  = sub?.tasks.find(t => t.id === tId)
+                            if (!ft) return
+                            const q = item.qty > 0 ? item.qty : ft.defaultQty
+                            saveItemEdit({
+                              ...item, taskId: tId, name: ft.name, unit: ft.unit, qty: q,
+                              taskLabour:        +(ft.labour * q).toFixed(2),
+                              taskMaterials:     +(ft.materials * q).toFixed(2),
+                              taskPlant:         +(ft.plant * q).toFixed(2),
+                              taskSubcontractor: +(ft.subcontractor * q).toFixed(2),
+                              taskOther:         +(ft.other * q).toFixed(2),
+                              taskMarkupPct:     sub?.markupPct ?? 20,
+                            })
+                          }
+                        }}>
+                        <option value="">— Select task —</option>
+                        {tasksForSub.map(t => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Breadcrumb summary */}
+                  {selectedSubId && item.taskId && (
+                    <div style={{ marginTop: 8, fontSize: 10, color: 'var(--to-muted)', borderTop: '1px solid var(--to-border)', paddingTop: 6, lineHeight: 1.8 }}>
+                      <span style={{ opacity: 0.7 }}>{item.phase}</span>
+                      <span style={{ margin: '0 4px', opacity: 0.5 }}>›</span>
+                      <span style={{ color: accent }}>{item.subPhase ?? ''}</span>
+                      <span style={{ margin: '0 4px', opacity: 0.5 }}>›</span>
+                      <span style={{ color: accent, fontWeight: 600 }}>{item.name}</span>
+                    </div>
+                  )}
+                </>
+              )
+            })()}
           </div>
 
           <div style={{ marginBottom: 10 }}>
