@@ -3918,6 +3918,38 @@ export default function TakeoffPage() {
             </select>
           </div>
 
+          {/* Build-up Type: shown immediately under Phase for External Walls */}
+          {isExtWall && (() => {
+            const _allWT   = allWallMakeups
+            const _wMakeup = _allWT.find(m => m.id === item.floorMakeupId)
+            const _builtIn = new Set(WALL_MAKEUPS.map(m => m.id))
+            return (
+              <div style={{ marginBottom: 10 }}>
+                <label style={labelStyle}>Build-up Type</label>
+                <select style={{ ...inputStyle, color: accent }} value={item.floorMakeupId ?? ''}
+                  onChange={e => {
+                    const nm = _allWT.find(m => m.id === e.target.value)
+                    saveItemEdit({ ...item, floorMakeupId: e.target.value, spec: nm?.clientDescription ?? item.spec, floorLayerToggles: {}, floorLayerThicknesses: {} })
+                  }}>
+                  <optgroup label="── Built-in Wall Types">
+                    {WALL_MAKEUPS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </optgroup>
+                  {customWallTypes.length > 0 && (
+                    <optgroup label="── Custom Wall Types">
+                      {customWallTypes.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    </optgroup>
+                  )}
+                </select>
+                {_wMakeup && (
+                  <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 3, fontStyle: 'italic' }}>
+                    {_builtIn.has(item.floorMakeupId ?? '') ? 'Built-in' : '★ Custom'} · {_wMakeup.layers.length} layer{_wMakeup.layers.length !== 1 ? 's' : ''}
+                    {_wMakeup.labourHrsPerM2 > 0 && ` · ~${fmt2(netArea * _wMakeup.labourHrsPerM2)} hrs labour`}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+
           <div style={{ marginBottom: 10 }}>
             <label style={labelStyle}>Room Name</label>
             <input style={inputStyle} placeholder="e.g. Kitchen" value={item.roomName ?? ''}
@@ -4183,23 +4215,15 @@ export default function TakeoffPage() {
             </>
           )}
 
-          {/* Ext Wall: build-up type + layer schedule (inline — layers ARE the build-up) */}
+          {/* Ext Wall: layer schedule (Build-up Type selector is in GENERAL section above) */}
           {isExtWall && (() => {
-            const _allWT   = allWallMakeups
-            const _wMakeup = _allWT.find(m => m.id === item.floorMakeupId)
-            return (
+            const _wMakeup = allWallMakeups.find(m => m.id === item.floorMakeupId)
+            return _wMakeup ? (
               <div style={{ marginBottom: 10 }}>
-                <label style={labelStyle}>Build-Up Type</label>
-                <select style={{ ...inputStyle, color: accent }} value={item.floorMakeupId ?? ''}
-                  onChange={e => {
-                    const nm = _allWT.find(m => m.id === e.target.value)
-                    saveItemEdit({ ...item, floorMakeupId: e.target.value, spec: nm?.clientDescription ?? item.spec, floorLayerToggles: {}, floorLayerThicknesses: {} })
-                  }}>
-                  {_allWT.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                </select>
-                {_wMakeup && <div style={{ marginTop: 8 }}>{renderLayerSchedule(_wMakeup, netArea, wallPerimeter, layerToggles, layerThicknesses, item, accent)}</div>}
+                <label style={labelStyle}>Layer Schedule</label>
+                {renderLayerSchedule(_wMakeup, netArea, wallPerimeter, layerToggles, layerThicknesses, item, accent)}
               </div>
-            )
+            ) : null
           })()}
 
           {/* Int Wall: construction type + finish type */}
