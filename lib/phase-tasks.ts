@@ -815,6 +815,110 @@ const prelimSubphases: PhaseSubphase[] = [
   },
 ]
 
+// ── FLOORS & SCREEDS — build-up sub-phases ───────────────────────────────────
+// Each FLOOR_MAKEUPS build-up type becomes a sub-phase under 'Floors & Screeds'.
+// Layers become tasks. Rates start at £0 — edit in Back Office → Phases & Tasks.
+
+const floorsScreedsSubphases: PhaseSubphase[] = [
+  {
+    id: 'fs-block-beam',
+    phase: 'Floors & Screeds',
+    name: 'Block and Beam Floor',
+    markupPct: 18,
+    tasks: [
+      t('fs-bb-hardcore',   'Hardcore sub-base (MOT Type 1)',   'm³', 10, 0, 0, 8.5, 0, 0, 'Compacted MOT Type 1 hardcore 200mm'),
+      t('fs-bb-sand-blind', 'Sand blinding',                    'm²', 20, 0, 0, 0, 0, 0,   'Sand blinding layer to hardcore'),
+      t('fs-bb-dpm',        'DPC / DPM (1200g polythene)',      'm²', 20, 0, 0, 0, 0, 0,   '1200g polythene DPM'),
+      t('fs-bb-beam-block', 'Beam and block structure',         'm²', 20, 0, 0, 0, 0, 0,   'Pre-stressed T-beams with dense concrete block infill'),
+      t('fs-bb-insulation', 'PIR insulation 100mm',             'm²', 20, 0, 0, 0, 0, 0,   '100mm rigid PIR boards (Part L compliant)'),
+      t('fs-bb-screed',     'Sand:cement screed 65mm',          'm²', 20, 0, 0, 0, 0, 0,   '65mm sand:cement floor screed'),
+      t('fs-bb-finish',     'Floor finish allowance (PC sum)',  'm²', 20, 0, 0, 0, 0, 0,   'PC sum — client to specify floor finish'),
+    ],
+  },
+  {
+    id: 'fs-concrete-slab',
+    phase: 'Floors & Screeds',
+    name: 'Concrete Slab Floor',
+    markupPct: 18,
+    tasks: [
+      t('fs-cs-hardcore',   'Hardcore sub-base (MOT Type 1)',   'm³', 10, 0, 0, 8.5, 0, 0, 'Compacted MOT Type 1 hardcore 150mm'),
+      t('fs-cs-sand-blind', 'Sand blinding',                    'm²', 20, 0, 0, 0, 0, 0,   'Sand blinding layer'),
+      t('fs-cs-dpm',        'DPC / DPM (1200g polythene)',      'm²', 20, 0, 0, 0, 0, 0,   '1200g polythene DPM'),
+      t('fs-cs-insulation', 'PIR insulation 100mm',             'm²', 20, 0, 0, 0, 0, 0,   '100mm rigid PIR boards (Part L compliant)'),
+      t('fs-cs-concrete',   'Concrete slab C25/30',             'm³',  5, 0, 0, 0, 0, 0,   'C25/30 reinforced concrete slab with A142 mesh'),
+      t('fs-cs-screed',     'Sand:cement screed 65mm',          'm²', 20, 0, 0, 0, 0, 0,   '65mm sand:cement floor screed'),
+      t('fs-cs-finish',     'Floor finish allowance (PC sum)',  'm²', 20, 0, 0, 0, 0, 0,   'PC sum — client to specify floor finish'),
+    ],
+  },
+  {
+    id: 'fs-suspended-timber',
+    phase: 'Floors & Screeds',
+    name: 'Suspended Timber Floor',
+    markupPct: 18,
+    tasks: [
+      t('fs-st-sleepers',   'Honeycomb sleeper walls',          'lm', 10, 0, 0, 0, 0, 0,   'Half-brick honeycomb sleeper walls at DPC level'),
+      t('fs-st-dpc',        'DPC to sleeper walls',             'lm', 10, 0, 0, 0, 0, 0,   'DPC strip to all sleeper walls'),
+      t('fs-st-joists',     'Timber floor joists C16',          'm²', 20, 0, 0, 0, 0, 0,   '50×200 C16 joists at 400mm centres'),
+      t('fs-st-insulation', 'Mineral wool insulation 200mm',    'm²', 20, 0, 0, 0, 0, 0,   '200mm mineral wool between joists (Part L)'),
+      t('fs-st-vcl',        'Vapour control layer',             'm²', 20, 0, 0, 0, 0, 0,   'Polythene VCL over joists'),
+      t('fs-st-chipboard',  'T&G chipboard deck 22mm',          'm²', 20, 0, 0, 0, 0, 0,   '22mm T&G moisture-resistant P5 chipboard'),
+      t('fs-st-finish',     'Floor finish allowance (PC sum)',  'm²', 20, 0, 0, 0, 0, 0,   'PC sum — client to specify floor finish'),
+    ],
+  },
+  {
+    id: 'fs-insulated-concrete',
+    phase: 'Floors & Screeds',
+    name: 'Insulated Concrete Floor',
+    markupPct: 18,
+    tasks: [
+      t('fs-ic-hardcore',   'Hardcore sub-base (MOT Type 1)',   'm³', 10, 0, 0, 8.5, 0, 0, 'Compacted MOT Type 1 hardcore 150mm'),
+      t('fs-ic-sand-blind', 'Sand blinding',                    'm²', 20, 0, 0, 0, 0, 0,   'Sand blinding layer'),
+      t('fs-ic-dpm',        'DPC / DPM (1200g polythene)',      'm²', 20, 0, 0, 0, 0, 0,   '1200g polythene DPM'),
+      t('fs-ic-insulation', 'PIR insulation 150mm (enhanced)',  'm²', 20, 0, 0, 0, 0, 0,   '150mm rigid PIR — enhanced Part L compliance'),
+      t('fs-ic-concrete',   'Concrete slab C25',                'm³',  5, 0, 0, 0, 0, 0,   'C25 concrete slab on insulation'),
+      t('fs-ic-screed',     'Sand:cement screed 65mm',          'm²', 20, 0, 0, 0, 0, 0,   '65mm sand:cement floor screed'),
+      t('fs-ic-finish',     'Floor finish allowance (PC sum)',  'm²', 20, 0, 0, 0, 0, 0,   'PC sum — client to specify floor finish'),
+    ],
+  },
+  {
+    id: 'fs-screeded-floor',
+    phase: 'Floors & Screeds',
+    name: 'Screeded Floor',
+    markupPct: 18,
+    tasks: [
+      t('fs-sf-prep',       'Surface preparation & priming',    'm²', 20, 0, 0, 0, 0, 0,   'Clean, prime and prepare existing floor surface'),
+      t('fs-sf-bonding',    'Bonding agent (SBR)',               'm²', 20, 0, 0, 0, 0, 0,   'SBR bonding agent to existing slab'),
+      t('fs-sf-screed',     'Sand:cement screed 65mm',          'm²', 20, 0, 0, 0, 0, 0,   '65mm sand:cement screed (1:3.5 mix)'),
+      t('fs-sf-finish',     'Floor finish allowance (PC sum)',  'm²', 20, 0, 0, 0, 0, 0,   'PC sum — client to specify floor finish'),
+    ],
+  },
+  {
+    id: 'fs-ufh-screed',
+    phase: 'Floors & Screeds',
+    name: 'Screed with Underfloor Heating',
+    markupPct: 20,
+    tasks: [
+      t('fs-ufh-prep',      'Surface preparation',              'm²', 20, 0, 0, 0, 0, 0,   'Clean and prepare existing floor surface'),
+      t('fs-ufh-edge-strip','Edge insulation strip 10mm',       'lm', 10, 0, 0, 0, 0, 0,   '10mm perimeter edge insulation strip'),
+      t('fs-ufh-pipe',      'UFH pipework (16mm PERT-AL-PERT)', 'lm',100, 0, 0, 0, 0, 0,   '16mm PERT-AL-PERT UFH pipe at 200mm centres'),
+      t('fs-ufh-manifold',  'UFH manifold & controls',          'nr',  1, 0, 0, 0, 0, 0,   'Stainless manifold, actuators, thermostat & controls'),
+      t('fs-ufh-screed',    'Liquid screed 75mm (UFH grade)',   'm²', 20, 0, 0, 0, 0, 0,   '75mm calcium sulphate liquid screed'),
+      t('fs-ufh-finish',    'Floor finish allowance (PC sum)',  'm²', 20, 0, 0, 0, 0, 0,   'PC sum — client to specify floor finish'),
+    ],
+  },
+  {
+    id: 'fs-floor-overlay',
+    phase: 'Floors & Screeds',
+    name: 'Existing Floor Overlay',
+    markupPct: 18,
+    tasks: [
+      t('fs-fo-prep',       'Surface preparation & priming',    'm²', 20, 0, 0, 0, 0, 0,   'Clean, prime and prepare existing floor'),
+      t('fs-fo-self-level', 'Self-levelling compound 10mm',     'm²', 20, 0, 0, 0, 0, 0,   '10mm self-levelling compound (Ardex or similar)'),
+      t('fs-fo-finish',     'Floor finish allowance (PC sum)',  'm²', 20, 0, 0, 0, 0, 0,   'PC sum — client to specify floor finish'),
+    ],
+  },
+]
+
 // ── EXTERNAL WALLS — build-up sub-phases ─────────────────────────────────────
 // Each wall construction type from WALL_MAKEUPS becomes a sub-phase under
 // 'External Walls' so it appears in Back Office → Phases & Tasks → External Walls.
@@ -987,6 +1091,7 @@ export const ALL_PHASE_SUBPHASES: PhaseSubphase[] = [
   ...decorationSubphases,
   ...externalSubphases,
   ...prelimSubphases,
+  ...floorsScreedsSubphases,
   ...externalWallsSubphases,
 ]
 
