@@ -14,7 +14,7 @@ import TakeoffBreakdownView from '@/components/TakeoffBreakdownView'
 import QuoteWorkspace from '@/components/QuoteWorkspace'
 import QuoteLandingWizard, { type QuoteCreationMode } from '@/components/QuoteLandingWizard'
 import AIScopeWorkspace from '@/components/AIScopeWorkspace'
-import type { TakeoffItem, TakeoffPhase } from '@/lib/takeoff-types'
+import type { TakeoffItem, TakeoffPhase, LayerCostRecord } from '@/lib/takeoff-types'
 import { PHASE_TO_QUOTE_PARENT, ALL_MAKEUPS, calcLayerQty, WALL_OPENING_LABELS, type TakeoffLabourLine } from '@/lib/takeoff-types'
 import { DEFAULT_DEMO_SUBPHASES, calcDemoSellingPrice, DEMO_UNIT_LABELS, type DemoUnit } from '@/lib/demolition-data'
 import { ALL_PHASE_SUBPHASES, calcPhaseTaskSellingPrice } from '@/lib/phase-tasks'
@@ -658,21 +658,28 @@ export default function NewQuotePage() {
                 const thkOverride = thicknesses[layer.id]
                 const { qty, unit } = calcLayerQty(layer, area, perimeter, thkOverride)
                 const desc = `${layer.name} — ${qty} ${unit}`
+                // Use layerCosts from the Construction Layer Editor if available
+                const lc = (item.layerCosts ?? {})[layer.id] as LayerCostRecord | undefined
+                const lcLabour    = lc ? lc.labourItems.reduce((s, x) => s + x.total, 0)    : 0
+                const lcMaterials = lc ? lc.materialItems.reduce((s, x) => s + x.total, 0)  : 0
+                const lcPlant     = lc ? lc.plantItems.reduce((s, x) => s + x.total, 0)     : 0
+                const lcSub       = lc ? lc.subItems.reduce((s, x) => s + x.total, 0)       : 0
+                const lcOther     = lc ? lc.otherItems.reduce((s, x) => s + x.total, 0)     : 0
+
                 layerRows.push({
                   desc,
                   qty,
                   unit,
-                  labour:         0,
-                  materials:      0,
-                  plantHire:      0,
-                  subcontractors: 0,
-                  other:          0,
+                  labour:         lcLabour,
+                  materials:      lcMaterials,
+                  plantHire:      lcPlant,
+                  subcontractors: lcSub,
+                  other:          lcOther,
                   notes:          layerRows.length === 0 ? notes : layer.description,
                   itemType:       (layer.category === 'plant' ? 'plant'
                                 : layer.category === 'other'  ? 'other'
                                 : layer.category === 'labour' ? 'labour'
                                 : 'materials') as QuoteItem['itemType'],
-                  // taskGroup = layer name so each layer is its own task group
                   taskGroup: layer.name,
                 })
               }

@@ -60,6 +60,8 @@ export interface BOTask {
   display_order: number
   created_at?: string
   updated_at?: string
+  // phase15: 5-category cost recipe (LayerCostRecord JSON)
+  recipe_items?: Record<string, unknown> | null
 }
 
 export interface BOProduct {
