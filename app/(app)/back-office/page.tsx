@@ -343,6 +343,20 @@ export default function BackOfficePage() {
                   </div>
                   {dirty && <div style={{ marginTop: 8, fontSize: 12, color: '#b85c00', fontWeight: 500 }}>● Unsaved changes — click Save Template to apply</div>}
                 </div>
+                {!loading && localTemplate.length > 0 && (
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                    <button
+                      onClick={() => setCollapsedTplPhases(new Set())}
+                      style={{ padding: '5px 12px', border: '1px solid #d1d5db', borderRadius: 6, background: '#fff', color: '#374151', fontSize: 12, cursor: 'pointer' }}>
+                      ▾▾ Expand All
+                    </button>
+                    <button
+                      onClick={() => setCollapsedTplPhases(new Set(isFlatTemplate ? localTemplate.map((_, i) => `flat-${i}`) : mainPhaseOrder))}
+                      style={{ padding: '5px 12px', border: '1px solid #d1d5db', borderRadius: 6, background: '#fff', color: '#374151', fontSize: 12, cursor: 'pointer' }}>
+                      ▸▸ Collapse All
+                    </button>
+                  </div>
+                )}
                 {loading ? <div className="card" style={{ textAlign: 'center', color: '#64748b', padding: 48 }}>Loading templates…</div>
                   : mainPhaseOrder.length === 0 ? (
                     <div className="card" style={{ textAlign: 'center', color: '#64748b', padding: 48 }}>
