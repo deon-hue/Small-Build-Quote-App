@@ -1567,7 +1567,39 @@ export default function TakeoffPage() {
     }
 
     const pts = allPts.map(p => `${p.x},${p.y}`).join(' ')
-    return <polyline points={pts} fill="none" stroke={color} strokeWidth={2} strokeDasharray="5 3" strokeLinecap="round" />
+    const mpp = project.calibration.mpp
+    const total = polylineLength(allPts, mpp)
+    return (
+      <g style={{ pointerEvents: 'none' }}>
+        <polyline points={pts} fill="none" stroke={color} strokeWidth={2} strokeDasharray="5 3" strokeLinecap="round" />
+        {/* Per-segment length labels */}
+        {allPts.slice(1).map((p, i) => {
+          const a = allPts[i]
+          const dx = p.x - a.x
+          const dy = p.y - a.y
+          const segLen = Math.sqrt(dx * dx + dy * dy)
+          if (segLen < 18) return null   // skip tiny segments to avoid clutter
+          const mx = (a.x + p.x) / 2
+          const my = (a.y + p.y) / 2
+          // offset the label perpendicular to the segment so it sits beside the line
+          const nx = segLen ? -dy / segLen : 0
+          const ny = segLen ?  dx / segLen : 0
+          return (
+            <text key={i} x={mx + nx * 12} y={my + ny * 12} textAnchor="middle" dominantBaseline="middle"
+              fontSize={11} fill={color} fontFamily="monospace" fontWeight={700}>
+              {fmtM(+(segLen * mpp).toFixed(3))}
+            </text>
+          )
+        })}
+        {/* Running total near the cursor */}
+        {total > 0 && (
+          <text x={mousePos.x + 14} y={mousePos.y - 10} textAnchor="start"
+            fontSize={12} fill={color} fontFamily="monospace" fontWeight={700}>
+            Σ {fmtM(total)}
+          </text>
+        )}
+      </g>
+    )
   }
 
   // ── Render: calibration ghost ──────────────────────────────────────────────

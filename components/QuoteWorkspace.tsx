@@ -40,6 +40,15 @@ const TYPE_COLOR: Record<ItemType, { bg: string; text: string }> = {
   other:          { bg: '#f1f5f9', text: '#475569' },
 }
 
+// Card-style presentation for each cost category (accordion tiles)
+const CARD_META: Record<ItemType, { icon: string; label: string; accent: string; bg: string; border: string }> = {
+  labour:         { icon: '🔨', label: 'Labour',          accent: '#92400e', bg: '#fffbeb', border: '#fde68a' },
+  materials:      { icon: '📦', label: 'Materials',       accent: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe' },
+  plant:          { icon: '🚜', label: 'Plant',           accent: '#7c3aed', bg: '#faf5ff', border: '#e9d5ff' },
+  subcontractors: { icon: '👷', label: 'Subcontractors',  accent: '#991b1b', bg: '#fef2f2', border: '#fecaca' },
+  other:          { icon: '📋', label: 'Other',           accent: '#475569', bg: '#f8fafc', border: '#e2e8f0' },
+}
+
 function itemCost(i: QuoteItem): number {
   if (i.enabled === false) return 0
   return (i.labour ?? 0) + (i.materials ?? 0) + (i.plantHire ?? 0) + (i.subcontractors ?? 0) + (i.other ?? 0)
@@ -149,9 +158,11 @@ interface CostRowProps {
   labourTrades?: BOLabourTrade[]
   boProducts?: BOProduct[]
   boPlantItems?: BOPlantItem[]
+  /** When set, the row's category is fixed by the parent card — hides the category dropdown. */
+  lockCategory?: boolean
 }
 
-function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst, labourTrades = [] }: CostRowProps) {
+function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst, labourTrades = [], lockCategory = false }: CostRowProps) {
   const cat      = (item.itemType ?? 'other') as ItemType
   const cs       = TYPE_COLOR[cat]
   const enabled  = item.enabled !== false   // default true
@@ -205,16 +216,18 @@ function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst, lab
         </button>
       </td>
 
-      {/* Col 1: Category chip — fixed 76px */}
-      <td style={{ padding: '5px 6px', width: 76, verticalAlign: 'top', paddingTop: 7 }}>
-        <select value={cat} disabled={isLocked}
-          onChange={e => setField('itemType', e.target.value as ItemType)}
-          style={{ fontSize: 10, fontWeight: 700, padding: '2px 4px', borderRadius: 4,
-            border: 'none', cursor: 'pointer', background: enabled ? cs.bg : '#f1f5f9', color: enabled ? cs.text : '#94a3b8',
-            width: '100%', outline: 'none' }}>
-          {ITEM_TYPES.map(t => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}
-        </select>
-      </td>
+      {/* Col 1: Category chip — fixed 76px (hidden when the card already fixes the category) */}
+      {!lockCategory && (
+        <td style={{ padding: '5px 6px', width: 76, verticalAlign: 'top', paddingTop: 7 }}>
+          <select value={cat} disabled={isLocked}
+            onChange={e => setField('itemType', e.target.value as ItemType)}
+            style={{ fontSize: 10, fontWeight: 700, padding: '2px 4px', borderRadius: 4,
+              border: 'none', cursor: 'pointer', background: enabled ? cs.bg : '#f1f5f9', color: enabled ? cs.text : '#94a3b8',
+              width: '100%', outline: 'none' }}>
+            {ITEM_TYPES.map(t => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}
+          </select>
+        </td>
+      )}
 
       {/* Col 2: Description + notes sub-line — flex grows */}
       <td style={{ padding: '4px 8px', verticalAlign: 'top' }}>
@@ -367,9 +380,11 @@ interface TaskGroupProps {
   labourTrades?: BOLabourTrade[]
   boProducts?: BOProduct[]
   boPlantItems?: BOPlantItem[]
+  /** When set, all rows in this task are one fixed category (hides the per-row dropdown & limits add buttons). */
+  lockCategory?: ItemType
 }
 
-function TaskGroup({ tg, items, markup, isLocked, collapsed, colKey, toggle, onUpdateItem, onDeleteItem, onDuplicateItem, onAddRow, onRenameTask, onDeleteTask, labourTrades, boProducts, boPlantItems }: TaskGroupProps) {
+function TaskGroup({ tg, items, markup, isLocked, collapsed, colKey, toggle, onUpdateItem, onDeleteItem, onDuplicateItem, onAddRow, onRenameTask, onDeleteTask, labourTrades, boProducts, boPlantItems, lockCategory }: TaskGroupProps) {
   const open  = !collapsed.has(colKey)
   const cost  = items.reduce((s, i) => s + itemCost(i), 0)
   const sell  = +(cost * (1 + markup / 100)).toFixed(2)
@@ -420,20 +435,31 @@ function TaskGroup({ tg, items, markup, isLocked, collapsed, colKey, toggle, onU
                   labourTrades={labourTrades}
                   boProducts={boProducts}
                   boPlantItems={boPlantItems}
+                  lockCategory={!!lockCategory}
                 />
               ))}
             </tbody>
           </table>
-          {!isLocked && (
-            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', padding: '4px 0 2px' }}>
-              {ITEM_TYPES.map(t => (
-                <button key={t} style={{ ...addBtn, fontSize: 10 }}
-                  onClick={() => onAddRow(tg, t)}>
-                  + {TYPE_LABEL[t]}
-                </button>
-              ))}
-            </div>
-          )}
+          {/* Add buttons. When the parent card fixes the category, only show a single
+              "+ line" — and only for NAMED tasks (the card itself owns the ungrouped add). */}
+          {!isLocked && (lockCategory
+            ? hasName && (
+                <div style={{ padding: '4px 0 2px' }}>
+                  <button style={{ ...addBtn, fontSize: 10 }} onClick={() => onAddRow(tg, lockCategory)}>
+                    + Line
+                  </button>
+                </div>
+              )
+            : (
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', padding: '4px 0 2px' }}>
+                {ITEM_TYPES.map(t => (
+                  <button key={t} style={{ ...addBtn, fontSize: 10 }}
+                    onClick={() => onAddRow(tg, t)}>
+                    + {TYPE_LABEL[t]}
+                  </button>
+                ))}
+              </div>
+            ))}
         </div>
       )}
     </div>
@@ -499,12 +525,13 @@ function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDel
   const colKey = `sp_${p.id}`
   const open   = !collapsed.has(colKey)
   const sell   = subPhaseTotalSell(p, markup)
-  const tgs    = getTaskGroups(p.items)
   const m      = p.meta?.measurements
 
   // Picker state
   const [showProductPicker, setShowProductPicker] = useState(false)
   const [showPlantPicker,   setShowPlantPicker]   = useState(false)
+  // Accordion: which cost card is currently open (one at a time)
+  const [openCard, setOpenCard] = useState<ItemType | null>(null)
 
   // Product CRUD
   function addProduct(prod: QuoteProduct) {
@@ -576,6 +603,282 @@ function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDel
   if (m?.area)    badges.push(`${m.area?.toFixed(2)} m²`)
   if (m?.volume)  badges.push(`${m.volume?.toFixed(3)} m³`)
 
+  // ── Per-category cost roll-up (company cost, before markup) ──────────────────
+  const itemsOfType   = (t: ItemType) => p.items.filter(i => (i.itemType ?? 'other') === t)
+  const typeItemsCost = (t: ItemType) => itemsOfType(t).reduce((s, i) => s + itemCost(i), 0)
+  const productsCost  = (p.products   ?? []).reduce((s, pr) => s + (pr.enabled === false ? 0 : pr.costPrice * pr.qty), 0)
+  const plantCost     = (p.plantItems ?? []).reduce((s, pl) => s + (pl.enabled === false ? 0 : pl.costPrice * pl.qty), 0)
+  const cardCost: Record<ItemType, number> = {
+    labour:         typeItemsCost('labour'),
+    materials:      typeItemsCost('materials') + productsCost,
+    plant:          typeItemsCost('plant') + plantCost,
+    subcontractors: typeItemsCost('subcontractors'),
+    other:          typeItemsCost('other'),
+  }
+  const cardCount: Record<ItemType, number> = {
+    labour:         itemsOfType('labour').length,
+    materials:      itemsOfType('materials').length + (p.products   ?? []).length,
+    plant:          itemsOfType('plant').length      + (p.plantItems ?? []).length,
+    subcontractors: itemsOfType('subcontractors').length,
+    other:          itemsOfType('other').length,
+  }
+  const totalCost = ITEM_TYPES.reduce((s, t) => s + cardCost[t], 0)
+  const totalSell = sell
+  const margin    = +(totalSell - totalCost).toFixed(2)
+
+  // Add a uniquely-named task seeded with one line of the given category
+  function addCardTask(type: ItemType) {
+    const existing = new Set(p.items.map(i => i.taskGroup || ''))
+    let n = 1
+    while (existing.has(`Task ${n}`)) n++
+    addRow(`Task ${n}`, type)
+  }
+
+  // Catalogue button shared by the Materials / Plant cards
+  function catalogueBtn(label: string, onClick: () => void, accent: string, bg: string, border: string) {
+    return (
+      <button onClick={onClick}
+        style={{ fontSize: 11, padding: '4px 10px', background: bg, border: `1px solid ${border}`, borderRadius: 6, color: accent, fontWeight: 600, cursor: 'pointer' }}>
+        {label}
+      </button>
+    )
+  }
+
+  // ── Editable body for an items-based card (Labour / Subcontractors / Other) ──
+  function renderItemsCardBody(type: ItemType) {
+    const typeItems = itemsOfType(type)
+    const tgs = getTaskGroups(typeItems)
+    return (
+      <>
+        {tgs.map(tg => (
+          <TaskGroup
+            key={tg || '__ungrouped'}
+            tg={tg}
+            items={getItemsInTask(typeItems, tg)}
+            markup={markup}
+            isLocked={isLocked}
+            collapsed={collapsed}
+            colKey={`tk_${p.id}_${type}_${tg}`}
+            toggle={toggle}
+            onUpdateItem={updateItem}
+            onDeleteItem={deleteItem}
+            onDuplicateItem={duplicateItem}
+            onAddRow={addRow}
+            onRenameTask={renameTask}
+            onDeleteTask={deleteTask}
+            labourTrades={labourTrades}
+            boProducts={boProducts}
+            boPlantItems={boPlantItems}
+            lockCategory={type}
+          />
+        ))}
+        {typeItems.length === 0 && (
+          <div style={{ color: '#94a3b8', fontSize: 12, fontStyle: 'italic', padding: '2px 0 6px' }}>
+            No {CARD_META[type].label.toLowerCase()} lines yet.
+          </div>
+        )}
+        {!isLocked && (
+          <div style={{ marginTop: 4, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <button style={{ ...addBtn, fontSize: 10 }} onClick={() => addRow('', type)}>+ Add line</button>
+            <button style={{ ...addBtn, fontSize: 10 }} onClick={() => addCardTask(type)}>+ Add task</button>
+          </div>
+        )}
+      </>
+    )
+  }
+
+  // ── Materials catalogue table (Back Office products) ──
+  function renderProductsTable() {
+    if ((p.products ?? []).length === 0) return null
+    return (
+      <>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid #dbeafe' }}>
+              <th style={{ width: 20 }} />
+              <th style={{ padding: '3px 6px', textAlign: 'left', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Product</th>
+              <th style={{ padding: '3px 4px', width: 50, textAlign: 'right', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Qty</th>
+              <th style={{ padding: '3px 4px', width: 36, fontSize: 10, color: '#64748b', fontWeight: 600 }}>Unit</th>
+              <th style={{ padding: '3px 6px', width: 68, textAlign: 'right', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Cost</th>
+              <th style={{ padding: '3px 6px', width: 68, textAlign: 'right', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Sell</th>
+              <th style={{ padding: '3px 4px', width: 70, fontSize: 10, color: '#64748b', fontWeight: 600 }}>Supplier</th>
+              <th style={{ width: 36 }} />
+            </tr>
+          </thead>
+          <tbody>
+            {(p.products ?? []).map(prod => {
+              const en = prod.enabled !== false
+              return (
+                <tr key={prod.id} style={{ borderBottom: '1px solid #f0f9ff', opacity: en ? 1 : 0.45 }}>
+                  <td style={{ padding: '4px 4px', textAlign: 'center' }}>
+                    <button onClick={() => toggleProduct(prod.id)} disabled={isLocked}
+                      style={{ background: 'none', border: 'none', cursor: isLocked ? 'default' : 'pointer', fontSize: 12, color: en ? '#3b82f6' : '#cbd5e1', padding: 0, lineHeight: 1 }}>
+                      {en ? '●' : '○'}
+                    </button>
+                  </td>
+                  <td style={{ padding: '4px 6px' }}>
+                    <input value={prod.name} readOnly={isLocked}
+                      onChange={e => updateProduct({ ...prod, name: e.target.value })}
+                      style={{ ...fldStyle, fontSize: 12, fontWeight: 500 }} />
+                    {prod.category && <div style={{ fontSize: 10, color: '#94a3b8' }}>{prod.category}</div>}
+                  </td>
+                  <td style={{ padding: '4px 4px' }}>
+                    <input type="number" min={0} step={0.1} value={prod.qty} readOnly={isLocked}
+                      onChange={e => updateProduct({ ...prod, qty: Math.max(0, +e.target.value) })}
+                      style={{ ...cellInp, width: '100%' }} />
+                  </td>
+                  <td style={{ padding: '4px 4px' }}>
+                    <input value={prod.unit} readOnly={isLocked}
+                      onChange={e => updateProduct({ ...prod, unit: e.target.value })}
+                      style={{ ...fldStyle, fontSize: 11, color: '#64748b', textAlign: 'center' }} />
+                  </td>
+                  <td style={{ padding: '4px 6px' }}>
+                    <div style={{ position: 'relative' }}>
+                      <span style={{ position: 'absolute', left: 3, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: '#cbd5e1' }}>£</span>
+                      <input type="number" min={0} step={0.01} value={prod.costPrice} readOnly={isLocked}
+                        onChange={e => updateProduct({ ...prod, costPrice: Math.max(0, +e.target.value) })}
+                        style={{ ...cellInp, paddingLeft: 12, width: '100%' }} />
+                    </div>
+                  </td>
+                  <td style={{ padding: '4px 6px' }}>
+                    <div style={{ position: 'relative' }}>
+                      <span style={{ position: 'absolute', left: 3, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: '#cbd5e1' }}>£</span>
+                      <input type="number" min={0} step={0.01} value={prod.sellPrice} readOnly={isLocked}
+                        onChange={e => updateProduct({ ...prod, sellPrice: Math.max(0, +e.target.value) })}
+                        style={{ ...cellInp, paddingLeft: 12, fontWeight: en ? 600 : 400, width: '100%', color: en ? '#16a34a' : '#94a3b8' }} />
+                    </div>
+                  </td>
+                  <td style={{ padding: '4px 4px', fontSize: 10, color: '#94a3b8', overflow: 'hidden', maxWidth: 70, whiteSpace: 'nowrap', textOverflow: 'ellipsis' }} title={prod.supplier}>
+                    {prod.supplier || '—'}
+                  </td>
+                  <td style={{ padding: '4px 2px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {!isLocked && (
+                      <button onClick={() => removeProduct(prod.id)} style={iconBtn('#e74c3c')} title="Remove">×</button>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '4px 6px', borderTop: '1px solid #dbeafe', marginTop: 2 }}>
+          <span style={{ fontSize: 11, color: '#64748b', marginRight: 8 }}>Catalogue sell total:</span>
+          <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 12, color: '#16a34a' }}>
+            £{(p.products ?? []).reduce((s, pr) => s + productLineSell(pr), 0).toFixed(2)}
+          </span>
+        </div>
+      </>
+    )
+  }
+
+  // ── Plant catalogue table (Back Office plant items) ──
+  function renderPlantTable() {
+    if ((p.plantItems ?? []).length === 0) return null
+    return (
+      <>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid #e9d5ff' }}>
+              <th style={{ width: 20 }} />
+              <th style={{ padding: '3px 6px', textAlign: 'left', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Item</th>
+              <th style={{ padding: '3px 4px', width: 50, textAlign: 'right', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Qty</th>
+              <th style={{ padding: '3px 4px', width: 36, fontSize: 10, color: '#64748b', fontWeight: 600 }}>Unit</th>
+              <th style={{ padding: '3px 6px', width: 68, textAlign: 'right', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Cost</th>
+              <th style={{ padding: '3px 6px', width: 68, textAlign: 'right', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Sell</th>
+              <th style={{ width: 24 }} />
+            </tr>
+          </thead>
+          <tbody>
+            {(p.plantItems ?? []).map(pl => {
+              const en = pl.enabled !== false
+              return (
+                <tr key={pl.id} style={{ borderBottom: '1px solid #faf5ff', opacity: en ? 1 : 0.45 }}>
+                  <td style={{ padding: '4px 4px', textAlign: 'center' }}>
+                    <button onClick={() => togglePlant(pl.id)} disabled={isLocked}
+                      style={{ background: 'none', border: 'none', cursor: isLocked ? 'default' : 'pointer', fontSize: 12, color: en ? '#7c3aed' : '#cbd5e1', padding: 0, lineHeight: 1 }}>
+                      {en ? '●' : '○'}
+                    </button>
+                  </td>
+                  <td style={{ padding: '4px 6px' }}>
+                    <input value={pl.name} readOnly={isLocked}
+                      onChange={e => updatePlant({ ...pl, name: e.target.value })}
+                      style={{ ...fldStyle, fontSize: 12, fontWeight: 500 }} />
+                  </td>
+                  <td style={{ padding: '4px 4px' }}>
+                    <input type="number" min={0} step={0.5} value={pl.qty} readOnly={isLocked}
+                      onChange={e => updatePlant({ ...pl, qty: Math.max(0, +e.target.value) })}
+                      style={{ ...cellInp, width: '100%' }} />
+                  </td>
+                  <td style={{ padding: '4px 4px' }}>
+                    <input value={pl.unit} readOnly={isLocked}
+                      onChange={e => updatePlant({ ...pl, unit: e.target.value })}
+                      style={{ ...fldStyle, fontSize: 11, color: '#64748b', textAlign: 'center' }} />
+                  </td>
+                  <td style={{ padding: '4px 6px' }}>
+                    <div style={{ position: 'relative' }}>
+                      <span style={{ position: 'absolute', left: 3, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: '#cbd5e1' }}>£</span>
+                      <input type="number" min={0} step={0.01} value={pl.costPrice} readOnly={isLocked}
+                        onChange={e => updatePlant({ ...pl, costPrice: Math.max(0, +e.target.value) })}
+                        style={{ ...cellInp, paddingLeft: 12, width: '100%' }} />
+                    </div>
+                  </td>
+                  <td style={{ padding: '4px 6px' }}>
+                    <div style={{ position: 'relative' }}>
+                      <span style={{ position: 'absolute', left: 3, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: '#cbd5e1' }}>£</span>
+                      <input type="number" min={0} step={0.01} value={pl.sellPrice} readOnly={isLocked}
+                        onChange={e => updatePlant({ ...pl, sellPrice: Math.max(0, +e.target.value) })}
+                        style={{ ...cellInp, paddingLeft: 12, fontWeight: en ? 600 : 400, width: '100%', color: en ? '#7c3aed' : '#94a3b8' }} />
+                    </div>
+                  </td>
+                  <td style={{ padding: '4px 2px', textAlign: 'right' }}>
+                    {!isLocked && <button onClick={() => removePlant(pl.id)} style={iconBtn('#e74c3c')} title="Remove">×</button>}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '4px 6px', borderTop: '1px solid #e9d5ff', marginTop: 2 }}>
+          <span style={{ fontSize: 11, color: '#64748b', marginRight: 8 }}>Catalogue sell total:</span>
+          <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 12, color: '#7c3aed' }}>
+            £{(p.plantItems ?? []).reduce((s, pl) => s + plantLineSell(pl), 0).toFixed(2)}
+          </span>
+        </div>
+      </>
+    )
+  }
+
+  // ── Dispatch: editable body for the open card ──
+  function renderCardBody(type: ItemType) {
+    if (type === 'materials') {
+      return (
+        <>
+          {renderProductsTable()}
+          {!isLocked && (
+            <div style={{ margin: '6px 0 8px' }}>
+              {catalogueBtn('+ From Back Office catalogue', () => setShowProductPicker(true), '#1d4ed8', '#eff6ff', '#bfdbfe')}
+            </div>
+          )}
+          {renderItemsCardBody('materials')}
+        </>
+      )
+    }
+    if (type === 'plant') {
+      return (
+        <>
+          {renderPlantTable()}
+          {!isLocked && (
+            <div style={{ margin: '6px 0 8px' }}>
+              {catalogueBtn('+ From Back Office catalogue', () => setShowPlantPicker(true), '#7c3aed', '#faf5ff', '#e9d5ff')}
+            </div>
+          )}
+          {renderItemsCardBody('plant')}
+        </>
+      )
+    }
+    return renderItemsCardBody(type)
+  }
+
   return (
     <div style={{ border: '1px solid #e2e8f0', borderRadius: 6, marginBottom: 6, overflow: 'hidden' }}>
       {/* Sub-phase header */}
@@ -627,206 +930,9 @@ function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDel
         )}
       </div>
 
-      {/* Sub-phase body */}
+      {/* Sub-phase body — card-style cost breakdown */}
       {open && (
-        <div style={{ padding: '6px 10px 8px' }}>
-
-          {/* ── Products / Materials section ── */}
-          <div style={{ marginBottom: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#3b82f6' }}>
-                📦 Products & Materials
-              </span>
-              {!isLocked && (
-                <button onClick={() => setShowProductPicker(true)}
-                  style={{ fontSize: 10, padding: '3px 8px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 5, color: '#1d4ed8', fontWeight: 600, cursor: 'pointer' }}>
-                  + Add Product
-                </button>
-              )}
-            </div>
-
-            {(p.products ?? []).length === 0 ? (
-              <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic', paddingLeft: 2 }}>
-                No products added — click <strong>+ Add Product</strong> to add from Back Office catalogue
-              </div>
-            ) : (
-              <>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid #dbeafe' }}>
-                      <th style={{ width: 20 }} />
-                      <th style={{ padding: '3px 6px', textAlign: 'left', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Product</th>
-                      <th style={{ padding: '3px 4px', width: 50, textAlign: 'right', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Qty</th>
-                      <th style={{ padding: '3px 4px', width: 36, fontSize: 10, color: '#64748b', fontWeight: 600 }}>Unit</th>
-                      <th style={{ padding: '3px 6px', width: 68, textAlign: 'right', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Cost</th>
-                      <th style={{ padding: '3px 6px', width: 68, textAlign: 'right', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Sell</th>
-                      <th style={{ padding: '3px 4px', width: 70, fontSize: 10, color: '#64748b', fontWeight: 600 }}>Supplier</th>
-                      <th style={{ width: 36 }} />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(p.products ?? []).map(prod => {
-                      const en        = prod.enabled !== false
-                      const lineTotal = en ? +(prod.sellPrice * prod.qty).toFixed(2) : 0
-                      return (
-                        <tr key={prod.id} style={{ borderBottom: '1px solid #f0f9ff', opacity: en ? 1 : 0.45 }}>
-                          <td style={{ padding: '4px 4px', textAlign: 'center' }}>
-                            <button onClick={() => toggleProduct(prod.id)} disabled={isLocked}
-                              style={{ background: 'none', border: 'none', cursor: isLocked ? 'default' : 'pointer', fontSize: 12, color: en ? '#3b82f6' : '#cbd5e1', padding: 0, lineHeight: 1 }}>
-                              {en ? '●' : '○'}
-                            </button>
-                          </td>
-                          <td style={{ padding: '4px 6px' }}>
-                            <input value={prod.name} readOnly={isLocked}
-                              onChange={e => updateProduct({ ...prod, name: e.target.value })}
-                              style={{ ...fldStyle, fontSize: 12, fontWeight: 500 }} />
-                            {prod.category && <div style={{ fontSize: 10, color: '#94a3b8' }}>{prod.category}</div>}
-                          </td>
-                          <td style={{ padding: '4px 4px' }}>
-                            <input type="number" min={0} step={0.1} value={prod.qty} readOnly={isLocked}
-                              onChange={e => updateProduct({ ...prod, qty: Math.max(0, +e.target.value) })}
-                              style={{ ...cellInp, width: '100%' }} />
-                          </td>
-                          <td style={{ padding: '4px 4px' }}>
-                            <input value={prod.unit} readOnly={isLocked}
-                              onChange={e => updateProduct({ ...prod, unit: e.target.value })}
-                              style={{ ...fldStyle, fontSize: 11, color: '#64748b', textAlign: 'center' }} />
-                          </td>
-                          <td style={{ padding: '4px 6px' }}>
-                            <div style={{ position: 'relative' }}>
-                              <span style={{ position: 'absolute', left: 3, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: '#cbd5e1' }}>£</span>
-                              <input type="number" min={0} step={0.01} value={prod.costPrice} readOnly={isLocked}
-                                onChange={e => updateProduct({ ...prod, costPrice: Math.max(0, +e.target.value) })}
-                                style={{ ...cellInp, paddingLeft: 12, width: '100%' }} />
-                            </div>
-                          </td>
-                          <td style={{ padding: '4px 6px' }}>
-                            <div style={{ position: 'relative' }}>
-                              <span style={{ position: 'absolute', left: 3, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: '#cbd5e1' }}>£</span>
-                              <input type="number" min={0} step={0.01} value={prod.sellPrice} readOnly={isLocked}
-                                onChange={e => updateProduct({ ...prod, sellPrice: Math.max(0, +e.target.value) })}
-                                style={{ ...cellInp, paddingLeft: 12, fontWeight: en ? 600 : 400, width: '100%', color: en ? '#16a34a' : '#94a3b8' }} />
-                            </div>
-                          </td>
-                          <td style={{ padding: '4px 4px', fontSize: 10, color: '#94a3b8', overflow: 'hidden', maxWidth: 70, whiteSpace: 'nowrap', textOverflow: 'ellipsis' }} title={prod.supplier}>
-                            {prod.supplier || '—'}
-                          </td>
-                          <td style={{ padding: '4px 2px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                            {!isLocked && (
-                              <button onClick={() => removeProduct(prod.id)} style={iconBtn('#e74c3c')} title="Remove">×</button>
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-                {/* Products subtotal */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '4px 6px', borderTop: '1px solid #dbeafe', marginTop: 2 }}>
-                  <span style={{ fontSize: 11, color: '#64748b', marginRight: 8 }}>Products sell total:</span>
-                  <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 12, color: '#16a34a' }}>
-                    £{(p.products ?? []).reduce((s, pr) => s + productLineSell(pr), 0).toFixed(2)}
-                  </span>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* ── Plant & Equipment section ── */}
-          <div style={{ marginBottom: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#7c3aed' }}>
-                🚜 Plant & Equipment
-              </span>
-              {!isLocked && (
-                <button onClick={() => setShowPlantPicker(true)}
-                  style={{ fontSize: 10, padding: '3px 8px', background: '#fdf4ff', border: '1px solid #e9d5ff', borderRadius: 5, color: '#7c3aed', fontWeight: 600, cursor: 'pointer' }}>
-                  + Add Plant Item
-                </button>
-              )}
-            </div>
-            {(p.plantItems ?? []).length === 0 ? (
-              <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic', paddingLeft: 2 }}>
-                No plant items — click <strong>+ Add Plant Item</strong> to add from Back Office catalogue
-              </div>
-            ) : (
-              <>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid #e9d5ff' }}>
-                      <th style={{ width: 20 }} />
-                      <th style={{ padding: '3px 6px', textAlign: 'left', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Item</th>
-                      <th style={{ padding: '3px 4px', width: 50, textAlign: 'right', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Qty</th>
-                      <th style={{ padding: '3px 4px', width: 36, fontSize: 10, color: '#64748b', fontWeight: 600 }}>Unit</th>
-                      <th style={{ padding: '3px 6px', width: 68, textAlign: 'right', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Cost</th>
-                      <th style={{ padding: '3px 6px', width: 68, textAlign: 'right', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Sell</th>
-                      <th style={{ width: 24 }} />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(p.plantItems ?? []).map(pl => {
-                      const en = pl.enabled !== false
-                      return (
-                        <tr key={pl.id} style={{ borderBottom: '1px solid #faf5ff', opacity: en ? 1 : 0.45 }}>
-                          <td style={{ padding: '4px 4px', textAlign: 'center' }}>
-                            <button onClick={() => togglePlant(pl.id)} disabled={isLocked}
-                              style={{ background: 'none', border: 'none', cursor: isLocked ? 'default' : 'pointer', fontSize: 12, color: en ? '#7c3aed' : '#cbd5e1', padding: 0, lineHeight: 1 }}>
-                              {en ? '●' : '○'}
-                            </button>
-                          </td>
-                          <td style={{ padding: '4px 6px' }}>
-                            <input value={pl.name} readOnly={isLocked}
-                              onChange={e => updatePlant({ ...pl, name: e.target.value })}
-                              style={{ ...fldStyle, fontSize: 12, fontWeight: 500 }} />
-                          </td>
-                          <td style={{ padding: '4px 4px' }}>
-                            <input type="number" min={0} step={0.5} value={pl.qty} readOnly={isLocked}
-                              onChange={e => updatePlant({ ...pl, qty: Math.max(0, +e.target.value) })}
-                              style={{ ...cellInp, width: '100%' }} />
-                          </td>
-                          <td style={{ padding: '4px 4px' }}>
-                            <input value={pl.unit} readOnly={isLocked}
-                              onChange={e => updatePlant({ ...pl, unit: e.target.value })}
-                              style={{ ...fldStyle, fontSize: 11, color: '#64748b', textAlign: 'center' }} />
-                          </td>
-                          <td style={{ padding: '4px 6px' }}>
-                            <div style={{ position: 'relative' }}>
-                              <span style={{ position: 'absolute', left: 3, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: '#cbd5e1' }}>£</span>
-                              <input type="number" min={0} step={0.01} value={pl.costPrice} readOnly={isLocked}
-                                onChange={e => updatePlant({ ...pl, costPrice: Math.max(0, +e.target.value) })}
-                                style={{ ...cellInp, paddingLeft: 12, width: '100%' }} />
-                            </div>
-                          </td>
-                          <td style={{ padding: '4px 6px' }}>
-                            <div style={{ position: 'relative' }}>
-                              <span style={{ position: 'absolute', left: 3, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: '#cbd5e1' }}>£</span>
-                              <input type="number" min={0} step={0.01} value={pl.sellPrice} readOnly={isLocked}
-                                onChange={e => updatePlant({ ...pl, sellPrice: Math.max(0, +e.target.value) })}
-                                style={{ ...cellInp, paddingLeft: 12, fontWeight: en ? 600 : 400, width: '100%', color: en ? '#7c3aed' : '#94a3b8' }} />
-                            </div>
-                          </td>
-                          <td style={{ padding: '4px 2px', textAlign: 'right' }}>
-                            {!isLocked && <button onClick={() => removePlant(pl.id)} style={iconBtn('#e74c3c')} title="Remove">×</button>}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '4px 6px', borderTop: '1px solid #e9d5ff', marginTop: 2 }}>
-                  <span style={{ fontSize: 11, color: '#64748b', marginRight: 8 }}>Plant sell total:</span>
-                  <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 12, color: '#7c3aed' }}>
-                    £{(p.plantItems ?? []).reduce((s, pl) => s + plantLineSell(pl), 0).toFixed(2)}
-                  </span>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Divider before cost rows */}
-          <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', marginBottom: 5, marginTop: 4 }}>
-            Labour · Subcontract · Other
-          </div>
+        <div style={{ padding: '8px 10px 10px' }}>
 
           {/* Needs-review banner */}
           {p.needsReview && p.reviewNote && (
@@ -842,42 +948,66 @@ function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDel
               )}
             </div>
           )}
-          {tgs.map(tg => (
-            <TaskGroup
-              key={tg}
-              tg={tg}
-              items={getItemsInTask(p.items, tg)}
-              markup={markup}
-              isLocked={isLocked}
-              collapsed={collapsed}
-              colKey={`tk_${p.id}_${tg}`}
-              toggle={toggle}
-              onUpdateItem={updateItem}
-              onDeleteItem={deleteItem}
-              onDuplicateItem={duplicateItem}
-              onAddRow={addRow}
-              onRenameTask={renameTask}
-              onDeleteTask={deleteTask}
-              labourTrades={labourTrades}
-                  boProducts={boProducts}
-                  boPlantItems={boPlantItems}
-            />
-          ))}
-          {p.items.length === 0 && (
-            <div style={{ color: '#94a3b8', fontSize: 12, fontStyle: 'italic', padding: '4px 0' }}>
-              No rows yet — add a task or cost row below
-            </div>
-          )}
-          {!isLocked && (
-            <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {ITEM_TYPES.map(t => (
-                <button key={t} style={{ ...addBtn, fontSize: 10 }}
-                  onClick={() => addRow('', t)}>
-                  + {TYPE_LABEL[t]}
+
+          {/* Cost-category cards — accordion, one open at a time */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {ITEM_TYPES.map(t => {
+              const meta   = CARD_META[t]
+              const active = openCard === t
+              return (
+                <button key={t} type="button" onClick={() => setOpenCard(active ? null : t)}
+                  style={{
+                    flex: '1 1 110px', minWidth: 96, textAlign: 'left', cursor: 'pointer',
+                    border: `1px solid ${active ? meta.accent : meta.border}`,
+                    background: active ? meta.bg : '#fff', borderRadius: 8, padding: '8px 10px',
+                    boxShadow: active ? `inset 0 0 0 1px ${meta.accent}` : 'none', outline: 'none',
+                  }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: meta.accent }}>{meta.icon} {meta.label}</span>
+                    <span style={{ fontSize: 10, color: '#94a3b8' }}>{active ? '▾' : '▸'}</span>
+                  </div>
+                  <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14, color: '#1e293b', marginTop: 4 }}>
+                    {cardCost[t] > 0 ? `£${cardCost[t].toFixed(2)}` : '—'}
+                  </div>
+                  <div style={{ fontSize: 10, color: '#94a3b8' }}>
+                    {cardCount[t]} line{cardCount[t] === 1 ? '' : 's'}
+                  </div>
                 </button>
-              ))}
+              )
+            })}
+          </div>
+
+          {/* Expanded editor for the open card */}
+          {openCard && (
+            <div style={{ marginTop: 8, border: `1px solid ${CARD_META[openCard].border}`, borderRadius: 8, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: CARD_META[openCard].bg }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: CARD_META[openCard].accent }}>
+                  {CARD_META[openCard].icon} {CARD_META[openCard].label}
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13, color: CARD_META[openCard].accent }}>
+                    £{cardCost[openCard].toFixed(2)}
+                  </span>
+                  <button type="button" onClick={() => setOpenCard(null)} style={iconBtn(CARD_META[openCard].accent)} title="Close">✕</button>
+                </span>
+              </div>
+              <div style={{ padding: '8px 10px' }}>
+                {renderCardBody(openCard)}
+              </div>
             </div>
           )}
+
+          {/* Sub-phase totals box — sums every card */}
+          <div style={{ marginTop: 10, border: '1px solid #cbd5e1', borderRadius: 8, background: '#f8fafc', padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b' }}>
+              Sub-phase totals
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 16, fontFamily: 'monospace', fontSize: 12 }}>
+              <span style={{ color: '#64748b' }}>Cost <strong style={{ color: '#1e293b', fontSize: 13 }}>£{totalCost.toFixed(2)}</strong></span>
+              <span style={{ color: '#64748b' }}>Margin <strong style={{ color: margin >= 0 ? '#16a34a' : '#dc2626', fontSize: 13 }}>£{margin.toFixed(2)}</strong></span>
+              <span style={{ color: '#64748b' }}>Sell <strong style={{ color: '#7ab533', fontSize: 15 }}>£{totalSell.toFixed(2)}</strong></span>
+            </span>
+          </div>
         </div>
       )}
 
@@ -926,8 +1056,6 @@ interface RoomBlockProps {
 
 function RoomBlock({ mainPhase, room, phases, markup, isLocked, collapsed, toggle, onUpdatePhase, onDeletePhase, onDuplicatePhase, onAddSubPhase, onAddTask, onRenameRoom, onSaveToBO, labourTrades, boProducts, boPlantItems }: RoomBlockProps) {
   const hasRoom = !!room
-  const colKey  = `rm_${mainPhase}_${room}`
-  const open    = !collapsed.has(colKey)
   const total   = roomTotalSell(phases, mainPhase, room, markup)
   const subPhs  = getSubPhases(phases, mainPhase, room)
 
@@ -936,15 +1064,12 @@ function RoomBlock({ mainPhase, room, phases, markup, isLocked, collapsed, toggl
       {/* Room header — only show if there IS a room label */}
       {hasRoom && (
         <div
-          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', background: '#f0f9f0', borderRadius: 5, cursor: 'pointer', userSelect: 'none', marginBottom: 4 }}
-          onClick={() => toggle(colKey)}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', background: '#f0f9f0', borderRadius: 5, marginBottom: 4 }}
         >
-          <span style={{ color: '#94a3b8', fontSize: 11, width: 12 }}>{open ? '▾' : '▸'}</span>
           <span style={{ fontSize: 11 }}>📍</span>
           <input
             value={room}
             readOnly={isLocked}
-            onClick={e => e.stopPropagation()}
             onChange={e => onRenameRoom(mainPhase, room, e.target.value)}
             style={{ ...fldStyle, fontWeight: 600, fontSize: 13, color: '#166534', flex: 1 }}
             placeholder="Area / Room label"
@@ -962,9 +1087,8 @@ function RoomBlock({ mainPhase, room, phases, markup, isLocked, collapsed, toggl
         </div>
       )}
 
-      {/* Sub-phases inside this room */}
-      {(!hasRoom || open) && (
-        <div style={{ paddingLeft: hasRoom ? 16 : 0 }}>
+      {/* Sub-phases inside this room — always visible (room name is info only) */}
+      <div style={{ paddingLeft: hasRoom ? 16 : 0 }}>
           {subPhs.map(p => (
             <SubPhaseBlock
               key={p.id}
@@ -990,7 +1114,6 @@ function RoomBlock({ mainPhase, room, phases, markup, isLocked, collapsed, toggl
             </button>
           )}
         </div>
-      )}
     </div>
   )
 }
