@@ -148,6 +148,11 @@ function EstimatorEditor({ phase, onLoad, onAdd, onUpdate, onRemove }: Estimator
 export default function BackOfficePage() {
   const { customTemplates, getTemplate, saveJobTypeTemplate, resetJobTypeTemplate, loading } = useApp()
   const [activeSection, setActiveSection] = useState<SectionId>('job-templates')
+  // Collapsed main-phase headers in the Job Templates editor (keyed by phase name)
+  const [collapsedTplPhases, setCollapsedTplPhases] = useState<Set<string>>(new Set())
+  const toggleTplPhase = (pp: string) => setCollapsedTplPhases(prev => {
+    const n = new Set(prev); n.has(pp) ? n.delete(pp) : n.add(pp); return n
+  })
   const [userId, setUserId] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
 
@@ -346,19 +351,26 @@ export default function BackOfficePage() {
                     </div>
                   ) : isFlatTemplate ? (
                     <>
-                      {localTemplate.map((sp, idx) => (
+                      {localTemplate.map((sp, idx) => {
+                        const fkey = `flat-${idx}`
+                        const collapsed = collapsedTplPhases.has(fkey)
+                        return (
                         <div key={idx} style={{ border: '1px solid #e2e8f0', borderRadius: 8, background: '#fff', marginBottom: 10, overflow: 'hidden' }}>
-                          <div style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, minWidth: 24 }}>{idx + 1}.</span>
+                          <div style={{ background: '#f8fafc', borderBottom: collapsed ? 'none' : '1px solid #e2e8f0', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <button onClick={() => toggleTplPhase(fkey)} title={collapsed ? 'Expand' : 'Collapse'} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 12, padding: 0, width: 14, flexShrink: 0, lineHeight: 1 }}>{collapsed ? '▸' : '▾'}</button>
+                            <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, minWidth: 20 }}>{idx + 1}.</span>
                             <input value={sp.phase} onChange={e => renameSubPhase(idx, e.target.value)} style={{ flex: 1, padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: 5, fontSize: 13, fontWeight: 600 }} />
                             <span style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap' }}>{(sp.estimatorItems?.length || 0)} items</span>
                             <button onClick={() => removeSubPhase(idx)} style={{ padding: '3px 8px', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 4, color: '#dc2626', fontSize: 11, cursor: 'pointer' }}>Remove</button>
                           </div>
+                          {!collapsed && (
                           <div style={{ padding: '10px 14px' }}>
                             <EstimatorEditor phase={sp} phaseIdx={idx} onLoad={() => loadEstimatorDefaults(idx, sp.phase)} onAdd={() => addEstimatorItem(idx)} onUpdate={item => updateEstimatorItem(idx, item)} onRemove={id => removeEstimatorItem(idx, id)} />
                           </div>
+                          )}
                         </div>
-                      ))}
+                        )
+                      })}
                       <button onClick={() => { setLocalTemplate(prev => [...prev, { parentPhase: '', phase: 'New Phase', items: defaultItems(), estimatorItems: [] }]); setDirty(true) }} style={{ width: '100%', padding: '12px 20px', border: '2px dashed #cbd5e1', borderRadius: 8, background: 'transparent', color: '#64748b', fontSize: 13, cursor: 'pointer', marginTop: 4 }}>+ Add Phase</button>
                     </>
                   ) : (
@@ -366,13 +378,17 @@ export default function BackOfficePage() {
                       {mainPhaseOrder.map(pp => {
                         type Indexed = { tpl: TemplatePhaseData; idx: number }
                         const subPhases: Indexed[] = localTemplate.reduce<Indexed[]>((acc, p, i) => { if (p.parentPhase === pp) acc.push({ tpl: p, idx: i }); return acc }, [])
+                        const collapsed = collapsedTplPhases.has(pp)
                         return (
                           <div key={pp} style={{ marginBottom: 14 }}>
-                            <div style={{ background: '#2c3e50', color: '#ecf0f1', padding: '9px 14px', borderRadius: '8px 8px 0 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ background: '#2c3e50', color: '#ecf0f1', padding: '9px 14px', borderRadius: collapsed ? 8 : '8px 8px 0 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <button onClick={() => toggleTplPhase(pp)} title={collapsed ? 'Expand' : 'Collapse'} style={{ background: 'none', border: 'none', color: '#ecf0f1', cursor: 'pointer', fontSize: 12, padding: 0, width: 14, flexShrink: 0, lineHeight: 1 }}>{collapsed ? '▸' : '▾'}</button>
                               <input value={pp} onChange={e => renameMainPhase(pp, e.target.value)} style={{ flex: 1, background: 'transparent', border: 'none', color: '#ecf0f1', fontWeight: 600, fontSize: 13, outline: 'none', minWidth: 0 }} />
+                              {collapsed && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap', flexShrink: 0 }}>{subPhases.length} sub-phase{subPhases.length !== 1 ? 's' : ''}</span>}
                               <button onClick={() => addSubPhase(pp)} style={{ padding: '3px 10px', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 4, color: '#e2e8f0', fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>+ Sub-Phase</button>
                               <button onClick={() => removeMainPhase(pp)} style={{ padding: '3px 9px', background: 'rgba(220,50,50,0.25)', border: '1px solid rgba(220,50,50,0.45)', borderRadius: 4, color: '#fca5a5', fontSize: 15, cursor: 'pointer', flexShrink: 0 }}>×</button>
                             </div>
+                            {!collapsed && (
                             <div style={{ border: '1px solid #e2e8f0', borderTop: 'none', borderRadius: '0 0 8px 8px', overflow: 'hidden', background: '#fff' }}>
                               {subPhases.map(({ tpl: sp, idx: globalIdx }, spLocalIdx) => (
                                 <div key={globalIdx} style={{ borderBottom: spLocalIdx < subPhases.length - 1 ? '1px solid #e2e8f0' : 'none', padding: '12px 14px' }}>
@@ -385,6 +401,7 @@ export default function BackOfficePage() {
                                 </div>
                               ))}
                             </div>
+                            )}
                           </div>
                         )
                       })}
