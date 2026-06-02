@@ -6,9 +6,9 @@ import {
   fetchPhases, upsertPhase, deletePhase,
   fetchSubPhases, upsertSubPhase, deleteSubPhase,
   fetchTasks, upsertTask, deleteTask,
-  fetchLabourTrades,
+  fetchLabourTrades, fetchProducts, fetchPlantItems,
 } from '@/lib/back-office-queries'
-import type { BOPhase, BOSubPhase, BOTask, BOLabourTrade } from '@/lib/back-office-types'
+import type { BOPhase, BOSubPhase, BOTask, BOLabourTrade, BOProduct, BOPlantItem } from '@/lib/back-office-types'
 
 // Phases that use FloorMakeup build-ups — tasks under these are "Construction Layers"
 const BUILDUP_PHASES = new Set(['External Walls', 'Floors & Screeds', 'Foundations', 'Plastering & Boarding'])
@@ -41,19 +41,25 @@ export default function SectionPhasesTasks({ userId }: Props) {
   const [taskModal, setTaskModal] = useState<TaskModalState>(null)
   const [jobTypeFilter, setJobTypeFilter] = useState<string>('All')
   const [labourTrades, setLabourTrades] = useState<BOLabourTrade[]>([])
+  const [products, setProducts] = useState<BOProduct[]>([])
+  const [plantItems, setPlantItems] = useState<BOPlantItem[]>([])
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [p, sp, t, lt] = await Promise.all([
+    const [p, sp, t, lt, prods, pl] = await Promise.all([
       fetchPhases(sb, userId),
       fetchSubPhases(sb, userId),
       fetchTasks(sb, userId),
       fetchLabourTrades(sb, userId),
+      fetchProducts(sb, userId),
+      fetchPlantItems(sb, userId),
     ])
     setPhases(p)
     setSubPhases(sp)
     setTasks(t)
     setLabourTrades(lt.filter(l => l.active))
+    setProducts(prods.filter(x => x.active))
+    setPlantItems(pl.filter(x => x.active))
     if (p.length > 0 && !selectedPhaseId) setSelectedPhaseId(p[0].id)
     setLoading(false)
   }, [userId]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -160,6 +166,12 @@ export default function SectionPhasesTasks({ userId }: Props) {
     if (!confirm('Delete this task?')) return
     await deleteTask(sb, id)
     setTasks(prev => prev.filter(t => t.id !== id))
+  }
+
+  // Persist a single task (used by the inline per-category cost editors)
+  async function patchTask(task: BOTask) {
+    setTasks(prev => prev.map(t => t.id === task.id ? task : t))
+    await upsertTask(sb, { ...task, user_id: userId })
   }
 
   async function duplicateTask(task: BOTask) {
@@ -336,7 +348,7 @@ export default function SectionPhasesTasks({ userId }: Props) {
             {directTasks.length > 0 && (
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Direct Tasks</div>
-                <TaskTable tasks={directTasks} onEdit={openEditTask} onDelete={removeTask} onDuplicate={duplicateTask} onToggleActive={toggleTaskActive} />
+                <TaskTable tasks={directTasks} onEdit={openEditTask} onDelete={removeTask} onDuplicate={duplicateTask} onToggleActive={toggleTaskActive} onUpdate={patchTask} labourTrades={labourTrades} products={products} plantItems={plantItems} />
               </div>
             )}
 
@@ -382,7 +394,7 @@ export default function SectionPhasesTasks({ userId }: Props) {
                   {isOpen && (
                     <div style={{ padding: '8px 14px 12px' }}>
                       {spTasks.length > 0 ? (
-                        <TaskTable tasks={spTasks} onEdit={openEditTask} onDelete={removeTask} onDuplicate={duplicateTask} onToggleActive={toggleTaskActive} />
+                        <TaskTable tasks={spTasks} onEdit={openEditTask} onDelete={removeTask} onDuplicate={duplicateTask} onToggleActive={toggleTaskActive} onUpdate={patchTask} labourTrades={labourTrades} products={products} plantItems={plantItems} />
                       ) : (
                         <div style={{ color: '#94a3b8', fontSize: 12, padding: '8px 0', textAlign: 'center' }}>
                           No {BUILDUP_PHASES.has(selectedPhase.name) ? 'construction layers' : 'tasks'} yet —
@@ -419,56 +431,274 @@ export default function SectionPhasesTasks({ userId }: Props) {
   )
 }
 
-// ── Task table ────────────────────────────────────────────────────────────────
+// ── Cost-category cards (shared palette with the quote workspace) ─────────────
 
-function TaskTable({ tasks, onEdit, onDelete, onDuplicate, onToggleActive }: {
+const COST_META = {
+  labour:      { icon: '🔨', label: 'Labour',         bg: '#fffbeb', border: '#fde68a', accent: '#92400e' },
+  materials:   { icon: '📦', label: 'Materials',      bg: '#eff6ff', border: '#bfdbfe', accent: '#1d4ed8' },
+  plant:       { icon: '🚜', label: 'Plant',          bg: '#faf5ff', border: '#e9d5ff', accent: '#7c3aed' },
+  subcontract: { icon: '👷', label: 'Subcontractors', bg: '#fef2f2', border: '#fecaca', accent: '#991b1b' },
+  waste:       { icon: '🗑', label: 'Waste',          bg: '#f8fafc', border: '#e2e8f0', accent: '#64748b' },
+  other:       { icon: '📋', label: 'Other',          bg: '#f8fafc', border: '#e2e8f0', accent: '#475569' },
+} as const
+
+type CostCat = keyof typeof COST_META
+type RowCat  = Exclude<CostCat, 'waste'>
+
+function IconChip({ m, size = 24 }: { m: { icon: string; border: string }; size?: number }) {
+  return (
+    <span style={{ width: size, height: size, borderRadius: 7, background: '#fff', border: `1px solid ${m.border}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.55 }}>
+      {m.icon}
+    </span>
+  )
+}
+
+// Row buttons shown per task (Labour / Materials / Plant / Subcontractors / Other)
+const ROW_CATS: Array<{ cat: RowCat; field: keyof BOTask }> = [
+  { cat: 'labour',      field: 'labour_cost' },
+  { cat: 'materials',   field: 'materials_cost' },
+  { cat: 'plant',       field: 'plant_cost' },
+  { cat: 'subcontract', field: 'subcontract_cost' },
+  { cat: 'other',       field: 'other_cost' },
+]
+
+// ── Task list (rows: name left, cost-category card-buttons right) ─────────────
+
+function TaskTable({ tasks, onEdit, onDelete, onDuplicate, onToggleActive, onUpdate, labourTrades, products, plantItems }: {
   tasks: BOTask[]
   onEdit: (t: BOTask) => void
   onDelete: (id: string) => void
   onDuplicate: (t: BOTask) => void
   onToggleActive: (t: BOTask) => void
+  onUpdate: (t: BOTask) => void
+  labourTrades: BOLabourTrade[]
+  products: BOProduct[]
+  plantItems: BOPlantItem[]
 }) {
+  const [editing, setEditing] = useState<{ taskId: string; cat: RowCat } | null>(null)
+  const editingTask = editing ? tasks.find(t => t.id === editing.taskId) ?? null : null
+
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-      <thead>
-        <tr style={{ borderBottom: '1px solid #e2e8f0', color: '#64748b' }}>
-          <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 600 }}>Task</th>
-          <th style={{ padding: '4px 6px', textAlign: 'center', fontWeight: 600, width: 55 }}>Unit</th>
-          <th style={{ padding: '4px 6px', textAlign: 'right', fontWeight: 600, width: 72 }}>Labour</th>
-          <th style={{ padding: '4px 6px', textAlign: 'right', fontWeight: 600, width: 72 }}>Materials</th>
-          <th style={{ padding: '4px 6px', textAlign: 'right', fontWeight: 600, width: 60 }}>Plant</th>
-          <th style={{ padding: '4px 6px', textAlign: 'right', fontWeight: 600, width: 60 }}>Sub</th>
-          <th style={{ padding: '4px 6px', textAlign: 'right', fontWeight: 600, width: 55 }}>Waste</th>
-          <th style={{ width: 80 }} />
-        </tr>
-      </thead>
-      <tbody>
-        {tasks.map(task => (
-          <tr key={task.id} style={{ borderBottom: '1px solid #f8fafc', opacity: task.active ? 1 : 0.45 }}>
-            <td style={{ padding: '6px 6px', color: '#1e293b', fontWeight: 500 }}>
-              <span>{task.name}</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {tasks.map(task => (
+        <div key={task.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 8, background: '#fff', opacity: task.active ? 1 : 0.5, flexWrap: 'wrap' }}>
+          {/* Left: task name */}
+          <div style={{ flex: 1, minWidth: 130 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>
+              {task.name}
               {!task.active && <span style={{ marginLeft: 6, fontSize: 10, color: '#94a3b8', fontStyle: 'italic' }}>inactive</span>}
-            </td>
-            <td style={{ padding: '6px 6px', textAlign: 'center', color: '#64748b' }}>/{task.unit}</td>
-            <td style={{ padding: '6px 6px', textAlign: 'right', color: task.labour_cost > 0 ? '#f59e0b' : '#cbd5e1', fontFamily: 'monospace' }}>£{task.labour_cost}</td>
-            <td style={{ padding: '6px 6px', textAlign: 'right', color: task.materials_cost > 0 ? '#3b82f6' : '#cbd5e1', fontFamily: 'monospace' }}>£{task.materials_cost}</td>
-            <td style={{ padding: '6px 6px', textAlign: 'right', color: task.plant_cost > 0 ? '#8b5cf6' : '#cbd5e1', fontFamily: 'monospace' }}>£{task.plant_cost}</td>
-            <td style={{ padding: '6px 6px', textAlign: 'right', color: task.subcontract_cost > 0 ? '#ef4444' : '#cbd5e1', fontFamily: 'monospace' }}>£{task.subcontract_cost}</td>
-            <td style={{ padding: '6px 6px', textAlign: 'right', color: task.waste_cost > 0 ? '#94a3b8' : '#cbd5e1', fontFamily: 'monospace' }}>£{task.waste_cost}</td>
-            <td style={{ padding: '4px 4px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-              <button
-                onClick={() => onToggleActive(task)}
-                title={task.active ? 'Deactivate' : 'Activate'}
-                style={{ padding: '2px 5px', border: `1px solid ${task.active ? '#bbf7d0' : '#e2e8f0'}`, borderRadius: 4, background: task.active ? '#f0fdf4' : '#f8fafc', color: task.active ? '#16a34a' : '#94a3b8', fontSize: 10, cursor: 'pointer', marginRight: 2 }}
-              >{task.active ? '●' : '○'}</button>
-              <button onClick={() => onDuplicate(task)} title="Duplicate task" style={{ padding: '2px 5px', border: '1px solid #e2e8f0', borderRadius: 4, background: '#fff', fontSize: 11, cursor: 'pointer', marginRight: 2 }}>⧉</button>
-              <button onClick={() => onEdit(task)} style={{ padding: '2px 7px', border: '1px solid #e2e8f0', borderRadius: 4, background: '#fff', fontSize: 11, cursor: 'pointer', marginRight: 2 }}>✏️</button>
-              <button onClick={() => onDelete(task.id)} style={{ padding: '2px 7px', border: '1px solid #fecaca', borderRadius: 4, background: '#fef2f2', color: '#dc2626', fontSize: 11, cursor: 'pointer' }}>×</button>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+            </div>
+            <div style={{ fontSize: 10, color: '#94a3b8' }}>per {task.unit}</div>
+          </div>
+
+          {/* Right: cost-category card-buttons */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {ROW_CATS.map(({ cat, field }) => {
+              const m   = COST_META[cat]
+              const val = task[field] as number
+              const on  = val > 0
+              return (
+                <button key={cat} type="button" onClick={() => setEditing({ taskId: task.id, cat })}
+                  title={`Edit ${m.label}`}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6, padding: '5px 9px', cursor: 'pointer',
+                    border: `1px solid ${on ? m.border : '#e2e8f0'}`, borderRadius: 8,
+                    background: on ? m.bg : '#fff', minWidth: 96,
+                  }}>
+                  <span style={{ fontSize: 14 }}>{m.icon}</span>
+                  <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.15 }}>
+                    <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em', color: on ? m.accent : '#94a3b8' }}>{m.label}</span>
+                    <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: on ? '#0f172a' : '#cbd5e1' }}>£{val}</span>
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Far right: actions */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+            <button onClick={() => onToggleActive(task)} title={task.active ? 'Deactivate' : 'Activate'} style={{ padding: '2px 5px', border: `1px solid ${task.active ? '#bbf7d0' : '#e2e8f0'}`, borderRadius: 4, background: task.active ? '#f0fdf4' : '#f8fafc', color: task.active ? '#16a34a' : '#94a3b8', fontSize: 10, cursor: 'pointer' }}>{task.active ? '●' : '○'}</button>
+            <button onClick={() => onDuplicate(task)} title="Duplicate task" style={{ padding: '2px 5px', border: '1px solid #e2e8f0', borderRadius: 4, background: '#fff', fontSize: 11, cursor: 'pointer' }}>⧉</button>
+            <button onClick={() => onEdit(task)} title="Edit details (name, unit, description, markup)" style={{ padding: '2px 7px', border: '1px solid #e2e8f0', borderRadius: 4, background: '#fff', fontSize: 11, cursor: 'pointer' }}>✏️</button>
+            <button onClick={() => onDelete(task.id)} title="Delete" style={{ padding: '2px 7px', border: '1px solid #fecaca', borderRadius: 4, background: '#fef2f2', color: '#dc2626', fontSize: 11, cursor: 'pointer' }}>×</button>
+          </div>
+        </div>
+      ))}
+
+      {editing && editingTask && (
+        <CategoryEditPopover
+          task={editingTask}
+          cat={editing.cat}
+          labourTrades={labourTrades}
+          products={products}
+          plantItems={plantItems}
+          onSave={t => { onUpdate(t); setEditing(null) }}
+          onClose={() => setEditing(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── Per-category cost editor popup ────────────────────────────────────────────
+
+function CategoryEditPopover({ task, cat, labourTrades, products, plantItems, onSave, onClose }: {
+  task: BOTask; cat: RowCat
+  labourTrades: BOLabourTrade[]; products: BOProduct[]; plantItems: BOPlantItem[]
+  onSave: (t: BOTask) => void; onClose: () => void
+}) {
+  const m = COST_META[cat]
+  const [draft, setDraft] = useState<BOTask>({ ...task })
+  const setField = <K extends keyof BOTask>(k: K, v: BOTask[K]) => setDraft(d => ({ ...d, [k]: v }))
+
+  // Labour calculator state
+  const [tradeId, setTradeId]   = useState(labourTrades[0]?.id ?? '')
+  const [rateType, setRateType] = useState<LabourRateType>('day')
+  const [qty, setQty]           = useState(1)
+  const [workers, setWorkers]   = useState(1)
+  const trade     = labourTrades.find(t => t.id === tradeId)
+  const rate      = trade ? effectiveRate(trade, rateType) : 0
+  const calcTotal = +(rate * qty * workers).toFixed(2)
+
+  const inp: React.CSSProperties = { width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }
+  const lbl: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 600, color: '#475569', marginBottom: 4 }
+
+  function money(field: keyof BOTask, label: string) {
+    return (
+      <div>
+        <label style={lbl}>{label}</label>
+        <div style={{ position: 'relative' }}>
+          <span style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: '#94a3b8' }}>£</span>
+          <input type="number" min={0} step={1} value={draft[field] as number}
+            onChange={e => setField(field, +e.target.value as never)}
+            style={{ ...inp, paddingLeft: 20, fontFamily: 'monospace', fontWeight: 600 }} autoFocus />
+        </div>
+      </div>
+    )
+  }
+
+  let bodyEl: React.ReactNode = null
+  if (cat === 'labour') {
+    bodyEl = (
+      <>
+        {labourTrades.length > 0 ? (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 96px 64px 64px', gap: 8 }}>
+              <div>
+                <label style={lbl}>Trade</label>
+                <select value={tradeId} onChange={e => setTradeId(e.target.value)} style={{ ...inp, fontSize: 12 }}>
+                  {labourTrades.map(t => <option key={t.id} value={t.id}>{t.name} — £{t.day_rate}/day</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={lbl}>Rate</label>
+                <select value={rateType} onChange={e => setRateType(e.target.value as LabourRateType)} style={{ ...inp, fontSize: 12 }}>
+                  {(Object.keys(RATE_LABELS) as LabourRateType[]).map(rt => <option key={rt} value={rt}>{RATE_LABELS[rt]}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={lbl}>{QTY_LABELS[rateType]}</label>
+                <input type="number" min={0} step={0.5} value={qty} onChange={e => setQty(Math.max(0, +e.target.value))} style={{ ...inp, fontSize: 12 }} />
+              </div>
+              <div>
+                <label style={lbl}>Workers</label>
+                <input type="number" min={1} step={1} value={workers} onChange={e => setWorkers(Math.max(1, +e.target.value))} style={{ ...inp, fontSize: 12 }} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: m.bg, borderRadius: 6, fontSize: 12, color: m.accent }}>
+              <span style={{ flex: 1 }}>{trade?.name} · £{rate.toFixed(2)}/{rateType === 'hourly' ? 'hr' : rateType === 'half_day' ? 'half-day' : 'day'} × {qty} × {workers}</span>
+              <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: 14 }}>= £{calcTotal.toFixed(2)}</span>
+              <button type="button" onClick={() => setDraft(d => ({ ...d, labour_cost: calcTotal, trade_name: trade?.name ?? d.trade_name }))}
+                style={{ padding: '5px 12px', background: '#f59e0b', border: 'none', borderRadius: 5, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                Apply
+              </button>
+            </div>
+          </>
+        ) : (
+          <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
+            No labour trades set up — add them in Back Office → Labour &amp; Trades, or enter a cost manually.
+          </div>
+        )}
+        {money('labour_cost', 'Labour cost (per unit, ex-VAT)')}
+      </>
+    )
+  } else if (cat === 'materials') {
+    bodyEl = (
+      <>
+        <div>
+          <label style={lbl}>Pick from Products (master data)</label>
+          {products.length > 0 ? (
+            <select value="" onChange={e => {
+              const prod = products.find(p => p.id === e.target.value)
+              if (prod) setDraft(d => ({ ...d, materials_cost: prod.default_cost }))
+            }} style={{ ...inp, fontSize: 12 }}>
+              <option value="">Select a product…</option>
+              {products.map(p => <option key={p.id} value={p.id}>{p.name} — £{p.default_cost}/{p.unit}{p.supplier ? ` · ${p.supplier}` : ''}</option>)}
+            </select>
+          ) : (
+            <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
+              No products in master data — add them in Back Office → Products, or enter a cost manually.
+            </div>
+          )}
+        </div>
+        {money('materials_cost', 'Materials cost (per unit, ex-VAT)')}
+      </>
+    )
+  } else if (cat === 'plant') {
+    bodyEl = (
+      <>
+        <div>
+          <label style={lbl}>Pick from Plant &amp; Equipment (master data)</label>
+          {plantItems.length > 0 ? (
+            <select value="" onChange={e => {
+              const pl = plantItems.find(p => p.id === e.target.value)
+              if (pl) setDraft(d => ({ ...d, plant_cost: pl.default_cost }))
+            }} style={{ ...inp, fontSize: 12 }}>
+              <option value="">Select a plant item…</option>
+              {plantItems.map(p => <option key={p.id} value={p.id}>{p.name} — £{p.default_cost}/{p.unit}</option>)}
+            </select>
+          ) : (
+            <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
+              No plant items in master data — add them in Back Office → Plant &amp; Equipment, or enter a cost manually.
+            </div>
+          )}
+        </div>
+        {money('plant_cost', 'Plant cost (per unit, ex-VAT)')}
+      </>
+    )
+  } else if (cat === 'subcontract') {
+    bodyEl = money('subcontract_cost', 'Subcontractor cost (per unit, ex-VAT)')
+  } else {
+    bodyEl = (
+      <>
+        {money('other_cost', 'Other cost (per unit, ex-VAT)')}
+        {money('waste_cost', '🗑 Waste cost (per unit, ex-VAT)')}
+      </>
+    )
+  }
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 440, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', overflow: 'hidden' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: m.bg, borderBottom: `1px solid ${m.border}` }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <IconChip m={m} />
+            <span style={{ fontSize: 13, fontWeight: 800, color: m.accent, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{m.label}</span>
+          </span>
+          <span style={{ fontSize: 11, color: '#64748b' }}>{task.name}</span>
+        </div>
+        {/* Body */}
+        <div style={{ padding: '16px', display: 'grid', gap: 12 }}>
+          {bodyEl}
+        </div>
+        {/* Footer */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '12px 16px', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
+          <button onClick={onClose} style={{ padding: '7px 16px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, background: '#fff', color: '#374151', cursor: 'pointer' }}>Cancel</button>
+          <button onClick={() => onSave(draft)} style={{ padding: '7px 20px', background: m.accent, border: 'none', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Save</button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -536,12 +766,12 @@ function TaskModal({ task, isNew, labourTrades, onChange, onSave, onCancel }: {
   const inp: React.CSSProperties = { width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' as const }
   const lbl: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }
 
-  const otherCostFields: Array<{ key: keyof BOTask; label: string; color: string }> = [
-    { key: 'materials_cost',   label: '📦 Materials',   color: '#dbeafe' },
-    { key: 'plant_cost',       label: '🚜 Plant',       color: '#ede9fe' },
-    { key: 'subcontract_cost', label: '👷 Subcontract', color: '#fee2e2' },
-    { key: 'waste_cost',       label: '🗑 Waste',       color: '#f1f5f9' },
-    { key: 'other_cost',       label: '📋 Other',       color: '#f1f5f9' },
+  const simpleCards: Array<{ key: keyof BOTask; meta: typeof COST_META[keyof typeof COST_META] }> = [
+    { key: 'materials_cost',   meta: COST_META.materials },
+    { key: 'plant_cost',       meta: COST_META.plant },
+    { key: 'subcontract_cost', meta: COST_META.subcontract },
+    { key: 'waste_cost',       meta: COST_META.waste },
+    { key: 'other_cost',       meta: COST_META.other },
   ]
 
   return (
@@ -581,11 +811,17 @@ function TaskModal({ task, isNew, labourTrades, onChange, onSave, onCancel }: {
               style={{ ...inp, resize: 'vertical', minHeight: 52, fontSize: 12 }} />
           </div>
 
-          {/* ── LABOUR ── */}
-          <div style={{ border: '1.5px solid #fef3c7', borderRadius: 8, overflow: 'hidden' }}>
+          {/* ── COSTS (card layout — matches quote workspace) ── */}
+          <label style={{ ...lbl, marginBottom: 8 }}>Costs (per unit, ex-VAT)</label>
+
+          {/* ── LABOUR card ── */}
+          <div style={{ border: `1.5px solid ${COST_META.labour.border}`, borderRadius: 10, overflow: 'hidden', background: COST_META.labour.bg }}>
             {/* Labour header with mode toggle */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#fefce8' }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#92400e' }}>🔨 Labour Cost</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: COST_META.labour.bg, borderBottom: `1px solid ${COST_META.labour.border}` }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <IconChip m={COST_META.labour} />
+                <span style={{ fontSize: 11, fontWeight: 800, color: COST_META.labour.accent, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Labour</span>
+              </span>
               {labourTrades.length > 0 && (
                 <div style={{ display: 'flex', gap: 4 }}>
                   {(['calculator','manual'] as const).map(m => (
@@ -601,7 +837,7 @@ function TaskModal({ task, isNew, labourTrades, onChange, onSave, onCancel }: {
               )}
             </div>
 
-            <div style={{ padding: '12px 12px' }}>
+            <div style={{ padding: '12px 12px', background: '#fff' }}>
               {labourMode === 'calculator' && labourTrades.length > 0 ? (
                 <>
                   {/* Trade + Rate Type + Qty + Workers */}
@@ -673,23 +909,23 @@ function TaskModal({ task, isNew, labourTrades, onChange, onSave, onCancel }: {
             </div>
           </div>
 
-          {/* Other costs */}
-          <div>
-            <label style={{ ...lbl, marginBottom: 8 }}>Other Costs (per unit, ex-VAT)</label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
-              {otherCostFields.map(({ key, label, color }) => (
-                <div key={key}>
-                  <label style={{ display: 'block', fontSize: 10, color: '#64748b', marginBottom: 3 }}>{label}</label>
-                  <div style={{ position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: 6, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: '#94a3b8' }}>£</span>
-                    <input type="number" min={0} step={1}
-                      value={task[key] as number}
-                      onChange={e => set(key, +e.target.value)}
-                      style={{ width: '100%', padding: '5px 6px 5px 16px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 12, background: color, boxSizing: 'border-box' }} />
-                  </div>
+          {/* Other cost cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(118px, 1fr))', gap: 8 }}>
+            {simpleCards.map(({ key, meta }) => (
+              <div key={key} style={{ background: meta.bg, border: `1px solid ${meta.border}`, borderRadius: 10, padding: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                  <IconChip m={meta} />
+                  <span style={{ fontSize: 10, fontWeight: 800, color: meta.accent, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{meta.label}</span>
                 </div>
-              ))}
-            </div>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: meta.accent, opacity: 0.6 }}>£</span>
+                  <input type="number" min={0} step={1}
+                    value={task[key] as number}
+                    onChange={e => set(key, +e.target.value)}
+                    style={{ width: '100%', padding: '6px 6px 6px 18px', border: `1px solid ${meta.border}`, borderRadius: 6, fontSize: 13, background: '#fff', boxSizing: 'border-box', color: '#0f172a', fontFamily: 'monospace', fontWeight: 600 }} />
+                </div>
+              </div>
+            ))}
           </div>
 
           {/* Qty + Markup */}
