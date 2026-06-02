@@ -187,7 +187,14 @@ export default function BackOfficePage() {
   const [dupFrom, setDupFrom] = useState('')
 
   useEffect(() => {
-    if (!loading) { setLocalTemplate(deepClone(getTemplate(selectedJobType))); setDirty(false); setDupFrom('') }
+    if (!loading) {
+      const tpl = deepClone(getTemplate(selectedJobType))
+      setLocalTemplate(tpl); setDirty(false); setDupFrom('')
+      // Default every phase to collapsed when a job type is opened
+      const order = tpl.reduce<string[]>((acc: string[], p: TemplatePhaseData) => { if (!acc.includes(p.parentPhase)) acc.push(p.parentPhase); return acc }, [])
+      const flat = order.length === 1 && order[0] === ''
+      setCollapsedTplPhases(new Set(flat ? tpl.map((_: TemplatePhaseData, i: number) => `flat-${i}`) : order))
+    }
   }, [selectedJobType, loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const mainPhaseOrder = localTemplate.reduce<string[]>((acc, p) => { if (!acc.includes(p.parentPhase)) acc.push(p.parentPhase); return acc }, [])
