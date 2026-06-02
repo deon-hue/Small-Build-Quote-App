@@ -957,19 +957,30 @@ function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDel
               return (
                 <button key={t} type="button" onClick={() => setOpenCard(active ? null : t)}
                   style={{
-                    flex: '1 1 110px', minWidth: 96, textAlign: 'left', cursor: 'pointer',
-                    border: `1px solid ${active ? meta.accent : meta.border}`,
-                    background: active ? meta.bg : '#fff', borderRadius: 8, padding: '8px 10px',
-                    boxShadow: active ? `inset 0 0 0 1px ${meta.accent}` : 'none', outline: 'none',
+                    flex: '1 1 130px', minWidth: 112, textAlign: 'left', cursor: 'pointer',
+                    border: `1.5px solid ${active ? meta.accent : meta.border}`,
+                    background: meta.bg, borderRadius: 12, padding: '10px 12px',
+                    boxShadow: active ? `0 4px 14px ${meta.accent}33` : 'none',
+                    transition: 'box-shadow 0.15s, border-color 0.15s', outline: 'none',
                   }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: meta.accent }}>{meta.icon} {meta.label}</span>
-                    <span style={{ fontSize: 10, color: '#94a3b8' }}>{active ? '▾' : '▸'}</span>
+                  {/* Icon chip + expand caret */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span style={{
+                      width: 30, height: 30, borderRadius: 9, background: '#fff',
+                      border: `1px solid ${meta.border}`, display: 'inline-flex',
+                      alignItems: 'center', justifyContent: 'center', fontSize: 16,
+                    }}>
+                      {meta.icon}
+                    </span>
+                    <span style={{ fontSize: 11, color: meta.accent }}>{active ? '▾' : '▸'}</span>
                   </div>
-                  <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14, color: '#1e293b', marginTop: 4 }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: meta.accent, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    {meta.label}
+                  </div>
+                  <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 15, color: '#0f172a', marginTop: 2 }}>
                     {cardCost[t] > 0 ? `£${cardCost[t].toFixed(2)}` : '—'}
                   </div>
-                  <div style={{ fontSize: 10, color: '#94a3b8' }}>
+                  <div style={{ fontSize: 10, color: meta.accent, opacity: 0.7 }}>
                     {cardCount[t]} line{cardCount[t] === 1 ? '' : 's'}
                   </div>
                 </button>
@@ -981,8 +992,17 @@ function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDel
           {openCard && (
             <div style={{ marginTop: 8, border: `1px solid ${CARD_META[openCard].border}`, borderRadius: 8, overflow: 'hidden' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: CARD_META[openCard].bg }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: CARD_META[openCard].accent }}>
-                  {CARD_META[openCard].icon} {CARD_META[openCard].label}
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{
+                    width: 26, height: 26, borderRadius: 8, background: '#fff',
+                    border: `1px solid ${CARD_META[openCard].border}`, display: 'inline-flex',
+                    alignItems: 'center', justifyContent: 'center', fontSize: 14,
+                  }}>
+                    {CARD_META[openCard].icon}
+                  </span>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: CARD_META[openCard].accent, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    {CARD_META[openCard].label}
+                  </span>
                 </span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13, color: CARD_META[openCard].accent }}>
