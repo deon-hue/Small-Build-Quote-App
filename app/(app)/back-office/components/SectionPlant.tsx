@@ -26,6 +26,8 @@ export default function SectionPlant({ userId }: Props) {
   const [editing, setEditing] = useState<BOPlantItem | null>(null)
   const [isNew, setIsNew] = useState(false)
   const [categoryFilter, setCategoryFilter] = useState<string>('All')
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const toggleCat = (c: string) => setCollapsed(prev => { const n = new Set(prev); n.has(c) ? n.delete(c) : n.add(c); return n })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -113,8 +115,8 @@ export default function SectionPlant({ userId }: Props) {
         </div>
       </div>
 
-      {/* Category filter */}
-      <div style={{ marginBottom: 14 }}>
+      {/* Category filter + expand/collapse */}
+      <div style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}
           style={{ padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, color: '#374151', background: categoryFilter !== 'All' ? '#e8f4f8' : '#fff' }}>
           <option value="All">All categories ({items.length})</option>
@@ -123,6 +125,18 @@ export default function SectionPlant({ userId }: Props) {
             return <option key={c} value={c}>{c} ({n})</option>
           })}
         </select>
+        {grouped.length > 0 && (
+          <>
+            <button onClick={() => setCollapsed(new Set())}
+              style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: 6, background: '#fff', color: '#374151', fontSize: 12, cursor: 'pointer' }}>
+              ▾▾ Expand All
+            </button>
+            <button onClick={() => setCollapsed(new Set(grouped.map(([c]) => c)))}
+              style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: 6, background: '#fff', color: '#374151', fontSize: 12, cursor: 'pointer' }}>
+              ▸▸ Collapse All
+            </button>
+          </>
+        )}
       </div>
 
       {items.length === 0 ? (
@@ -131,12 +145,16 @@ export default function SectionPlant({ userId }: Props) {
         </div>
       ) : grouped.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '32px', color: '#94a3b8', fontSize: 13 }}>No plant items in this category.</div>
-      ) : grouped.map(([category, list]) => (
+      ) : grouped.map(([category, list]) => {
+        const isOpen = !collapsed.has(category)
+        return (
         <div key={category} style={{ marginBottom: 18 }}>
-          <div style={{ background: '#2c3e50', color: '#ecf0f1', padding: '7px 14px', borderRadius: '8px 8px 0 0', fontWeight: 600, fontSize: 13, display: 'flex', justifyContent: 'space-between' }}>
-            <span>{category}</span>
+          <div onClick={() => toggleCat(category)} title={isOpen ? 'Collapse' : 'Expand'} style={{ background: '#2c3e50', color: '#ecf0f1', padding: '7px 14px', borderRadius: isOpen ? '8px 8px 0 0' : 8, fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+            <span style={{ width: 12, flexShrink: 0, lineHeight: 1 }}>{isOpen ? '▾' : '▸'}</span>
+            <span style={{ flex: 1 }}>{category}</span>
             <span style={{ color: 'rgba(255,255,255,0.6)', fontWeight: 400 }}>{list.length} item{list.length !== 1 ? 's' : ''}</span>
           </div>
+          {isOpen && (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, border: '1px solid #e2e8f0', borderTop: 'none' }}>
             <thead>
               <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
@@ -171,8 +189,10 @@ export default function SectionPlant({ userId }: Props) {
               ))}
             </tbody>
           </table>
+          )}
         </div>
-      ))}
+        )
+      })}
 
       {editing && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 20px', overflowY: 'auto' }}>
