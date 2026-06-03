@@ -192,6 +192,18 @@ export interface JobCost {
   createdAt?: string
 }
 
+export interface InboxDocument {
+  id: string
+  jobId?: string
+  fileName: string
+  storagePath: string
+  mimeType: string
+  fileSize: number
+  status: 'unallocated' | 'allocated' | 'error'
+  extraction?: Record<string, unknown> | null   // raw_extraction snapshot
+  createdAt?: string
+}
+
 export type PortalStatus = 'no_email' | 'not_invited' | 'invited' | 'active'
 
 export interface Client {

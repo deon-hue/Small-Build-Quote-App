@@ -2,7 +2,8 @@
 // Uses the browser Supabase client (RLS scopes everything to the user).
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { JobCost, JobDocument, JobCostCategory } from './types'
+import type { JobCost, JobDocument, JobCostCategory, InboxDocument } from './types'
+import type { ExtractedCostLine } from './doc-extract/types'
 
 const BUCKET = 'job-documents'
 
@@ -93,6 +94,78 @@ export async function uploadJobDocumentFile(sb: SupabaseClient, userId: string, 
 export async function signedDocUrl(sb: SupabaseClient, storagePath: string, seconds = 300): Promise<string | null> {
   const { data } = await sb.storage.from(BUCKET).createSignedUrl(storagePath, seconds)
   return data?.signedUrl ?? null
+}
+
+// ── Document inbox ────────────────────────────────────────────────────────────
+function rowToDoc(r: Record<string, unknown>): InboxDocument {
+  const status = r.status === 'allocated' ? 'allocated' : r.status === 'error' ? 'error' : 'unallocated'
+  return {
+    id: r.id as string,
+    jobId: (r.job_id as string) || undefined,
+    fileName: (r.file_name as string) ?? '',
+    storagePath: (r.storage_path as string) ?? '',
+    mimeType: (r.mime_type as string) ?? '',
+    fileSize: Number(r.file_size) || 0,
+    status,
+    extraction: (r.raw_extraction as Record<string, unknown>) ?? null,
+    createdAt: r.created_at as string | undefined,
+  }
+}
+
+/** Upload a file to the inbox (no job yet). Returns storage path. */
+export async function uploadInboxFile(sb: SupabaseClient, userId: string, file: File | Blob, fileName: string): Promise<string | null> {
+  const safe = fileName.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const path = `${userId}/inbox/${stamp()}-${safe}`
+  const { data, error } = await sb.storage.from(BUCKET).upload(path, file, {
+    contentType: file instanceof File ? file.type : undefined,
+  })
+  if (error) { console.error('inbox upload error', error); return null }
+  return data?.path ?? null
+}
+
+export async function fetchDocuments(sb: SupabaseClient, userId: string): Promise<InboxDocument[]> {
+  const { data } = await sb.from('job_documents').select('*').eq('user_id', userId).order('created_at', { ascending: false })
+  return (data ?? []).map(rowToDoc)
+}
+
+export async function createInboxDocument(sb: SupabaseClient, userId: string, doc: {
+  fileName: string; storagePath: string; mimeType: string; fileSize: number; rawExtraction?: unknown
+}): Promise<InboxDocument | null> {
+  const { data } = await sb.from('job_documents').insert({
+    user_id: userId, job_id: null, file_name: doc.fileName, storage_path: doc.storagePath,
+    mime_type: doc.mimeType, file_size: doc.fileSize, status: 'unallocated', raw_extraction: doc.rawExtraction ?? null,
+  }).select().single()
+  return data ? rowToDoc(data) : null
+}
+
+export async function deleteDocument(sb: SupabaseClient, doc: InboxDocument): Promise<void> {
+  if (doc.storagePath) await sb.storage.from(BUCKET).remove([doc.storagePath])
+  await sb.from('job_documents').delete().eq('id', doc.id)
+}
+
+/** Allocate (or re-allocate) a document to a job: replaces its cost lines and flips status. */
+export async function allocateDocument(
+  sb: SupabaseClient, userId: string, doc: InboxDocument, jobId: string,
+  meta: { supplier: string; docDate: string; docNumber: string; paymentStatus: JobCost['paymentStatus'] },
+  lines: ExtractedCostLine[],
+): Promise<JobCost[]> {
+  // Clear any costs previously created from this document (supports re-allocation).
+  await sb.from('job_costs').delete().eq('document_id', doc.id)
+  const created: JobCost[] = []
+  for (const ln of lines) {
+    const c = await insertJobCost(sb, userId, {
+      jobId, documentId: doc.id, supplier: meta.supplier, docDate: meta.docDate, docNumber: meta.docNumber,
+      description: ln.description, costCategory: ln.costCategory,
+      netAmount: ln.netAmount, vatAmount: ln.vatAmount, grossAmount: ln.grossAmount,
+      paymentStatus: meta.paymentStatus, source: 'document',
+    })
+    if (c) created.push(c)
+  }
+  await sb.from('job_documents').update({
+    job_id: jobId, status: 'allocated', updated_at: new Date().toISOString(),
+    raw_extraction: { ...meta, lines, grossAmount: lines.reduce((s, l) => s + l.grossAmount, 0) },
+  }).eq('id', doc.id)
+  return created
 }
 
 // A timestamp that doesn't rely on Date.now in restricted contexts is fine here
