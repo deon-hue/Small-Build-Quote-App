@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import type { Settings } from '@/lib/types'
+import XeroConnectionCard from '@/components/XeroConnectionCard'
 
 export default function SettingsPage() {
   const { settings, saveSettings, loading } = useApp()
@@ -104,6 +105,11 @@ export default function SettingsPage() {
           {saving ? 'Saving…' : '💾 Save Settings'}
         </button>
         {saved && <span style={{ fontSize: 13, color: 'var(--moss)', fontWeight: 500 }}>✓ Saved</span>}
+      </div>
+
+      {/* Xero accounting integration */}
+      <div style={{ marginTop: 16 }}>
+        <XeroConnectionCard />
       </div>
     </div>
   )
