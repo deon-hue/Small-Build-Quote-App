@@ -5,10 +5,14 @@ import { redirectUri, authorizeUrl } from '@/lib/xero'
 // Xero so we can compare them to what's registered. Exposes no secrets.
 export async function GET(req: NextRequest) {
   const origin = req.nextUrl.origin
+  const built = authorizeUrl(origin, 'debug-state')
+  // What NextResponse.redirect would actually emit as the Location header:
+  const viaRedirectLocation = NextResponse.redirect(built).headers.get('location')
   return NextResponse.json({
     requestOrigin: origin,
     effectiveRedirectUri: redirectUri(origin),
-    authorizeUrl: authorizeUrl(origin, 'debug-state'),
+    authorizeUrl: built,
+    viaRedirectLocation,
     clientIdSet: !!process.env.XERO_CLIENT_ID,
     clientSecretSet: !!process.env.XERO_CLIENT_SECRET,
   })

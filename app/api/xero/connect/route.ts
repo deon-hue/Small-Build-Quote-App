@@ -11,7 +11,9 @@ export async function GET(req: NextRequest) {
 
   // CSRF state — random token echoed back and verified in the callback.
   const state = crypto.randomUUID()
-  const res = NextResponse.redirect(authorizeUrl(origin, state))
+  // Set the Location header verbatim so the already-encoded scope (%20) is not
+  // re-encoded by NextResponse.redirect's URL normalisation.
+  const res = new NextResponse(null, { status: 302, headers: { Location: authorizeUrl(origin, state) } })
   res.cookies.set('xero_oauth_state', state, { httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 600 })
   return res
 }
