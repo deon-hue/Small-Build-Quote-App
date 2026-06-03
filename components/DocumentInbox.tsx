@@ -47,11 +47,11 @@ export default function DocumentInbox({ jobs }: Props) {
 
   useEffect(() => { load() }, [load])
 
-  async function handleFiles(files: FileList) {
+  async function handleFiles(files: File[]) {
     setError('')
     const { data: { user } } = await sb.auth.getUser()
-    if (!user) return
-    for (const file of Array.from(files)) {
+    if (!user) { setError('Not signed in — please refresh and try again.'); return }
+    for (const file of files) {
       const isImage = file.type.startsWith('image/')
       const isPdf = file.type === 'application/pdf'
       if (!isImage && !isPdf) { setError(`${file.name}: unsupported type (image or PDF only).`); continue }
@@ -107,7 +107,7 @@ export default function DocumentInbox({ jobs }: Props) {
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
           <input ref={fileRef} type="file" accept="image/*,application/pdf" multiple style={{ display: 'none' }}
-            onChange={e => { if (e.target.files?.length) handleFiles(e.target.files); e.target.value = '' }} />
+            onChange={e => { const fs = e.target.files ? Array.from(e.target.files) : []; e.target.value = ''; if (fs.length) handleFiles(fs) }} />
           <button className="btn btn-primary" onClick={() => fileRef.current?.click()} disabled={uploading > 0}>
             {uploading > 0 ? `Uploading ${uploading}…` : '📷 Scan / Upload'}
           </button>
