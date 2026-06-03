@@ -60,7 +60,7 @@ export default function DocumentInbox({ jobs }: Props) {
       setUploading(n => n + 1)
       try {
         const path = await uploadInboxFile(sb, user.id, file, file.name)
-        if (!path) { setError(`${file.name}: upload failed.`); continue }
+        if (!path) { setError(`${file.name}: upload failed — check the "job-documents" storage bucket exists (run supabase/phase17.sql).`); continue }
 
         let extraction: unknown = null
         try {
@@ -79,6 +79,7 @@ export default function DocumentInbox({ jobs }: Props) {
           fileName: file.name, storagePath: path, mimeType: file.type, fileSize: file.size, rawExtraction: extraction,
         })
         if (doc) setDocs(prev => [doc, ...prev])
+        else setError(`${file.name}: file uploaded but couldn't be saved to the inbox — has supabase/phase17.sql been run?`)
       } finally {
         setUploading(n => n - 1)
       }
