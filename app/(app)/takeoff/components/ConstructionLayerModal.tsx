@@ -314,11 +314,11 @@ export default function ConstructionLayerModal({
   // ── BO product picker ──────────────────────────────────────────────────────
   function BOPicker({ forTab }: { forTab: Tab }) {
     const open = pickerTab === forTab
-    const items: { id: string; name: string; unit: string; cost: number; supplier?: string; wastePct?: number }[] =
+    const items: { id: string; name: string; unit: string; cost: number; supplier?: string; wastePct?: number; operator?: boolean }[] =
       forTab === 'materials'
         ? boProducts.map(p => ({ id: p.id, name: p.name, unit: p.unit, cost: p.default_cost, supplier: p.supplier, wastePct: p.waste_pct }))
         : forTab === 'plant'
-          ? boPlantItems.map(p => ({ id: p.id, name: p.name, unit: p.unit, cost: p.default_cost }))
+          ? boPlantItems.map(p => ({ id: p.id, name: p.name, unit: p.unit, cost: p.default_cost, supplier: p.supplier, operator: p.operator_required }))
           : []
 
     if (items.length === 0 && !open) return null
@@ -360,7 +360,7 @@ export default function ConstructionLayerModal({
                 <div key={x.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderBottom: `1px solid ${bd}`, background: bg }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 600, color: txt, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.name}</div>
-                    <div style={{ fontSize: 10, color: muted }}>{x.unit} · £{x.cost}{x.wastePct ? ` · ${x.wastePct}% waste` : ''}{x.supplier ? ` · ${x.supplier}` : ''}</div>
+                    <div style={{ fontSize: 10, color: muted }}>{x.unit} · £{x.cost}{x.wastePct ? ` · ${x.wastePct}% waste` : ''}{x.supplier ? ` · ${x.supplier}` : ''}{x.operator ? ' · 👷 operator' : ''}</div>
                   </div>
                   <button style={{ ...btn, padding: '3px 10px', fontSize: 11, background: accentColor, color: '#fff', border: 'none', flexShrink: 0 }}
                     onClick={() => addFromBO(x)}>
