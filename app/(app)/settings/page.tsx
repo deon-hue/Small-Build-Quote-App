@@ -3,10 +3,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import type { Settings } from '@/lib/types'
-import DocumentInbox from '@/components/DocumentInbox'
 
 export default function SettingsPage() {
-  const { settings, saveSettings, loading, jobs } = useApp()
+  const { settings, saveSettings, loading } = useApp()
   const [form, setForm] = useState<Settings>(settings)
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -43,9 +42,6 @@ export default function SettingsPage() {
 
   return (
     <div style={{ maxWidth: 720 }}>
-      {/* Document inbox */}
-      <DocumentInbox jobs={jobs} />
-
       {/* Company logo */}
       <div className="card">
         <div className="card-hd">Company Logo</div>
