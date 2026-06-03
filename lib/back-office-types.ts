@@ -84,10 +84,19 @@ export interface BOProduct {
 export interface BOPlantItem {
   id: string
   user_id: string
+  category: string
   name: string
+  description: string
   unit: string
-  default_cost: number
+  default_cost: number        // cost rate — what the plant costs us
+  charge_rate: number         // charge rate — what we bill the client
   markup_pct: number
+  supplier: string
+  operator_required: boolean
+  notes: string
+  ownership: string           // 'hired' | 'owned' (reserved for future use)
+  transport_cost: number      // reserved for future use
+  fuel_cost_per_unit: number  // reserved for future use
   phase_id: string | null
   active: boolean
   display_order: number
@@ -247,8 +256,30 @@ export const PRODUCT_CATEGORIES = [
 ] as const
 
 export const PLANT_UNITS = [
+  { value: 'hr', label: 'Hour' },
   { value: 'day', label: 'Day' },
   { value: 'week', label: 'Week' },
-  { value: 'item', label: 'Item (one-off)' },
-  { value: 'hr', label: 'Hour' },
+  { value: 'item', label: 'Item' },
+] as const
+
+// Plant & Equipment categories — the single source of truth for grouping plant.
+export const PLANT_CATEGORIES = [
+  'Site Setup & Welfare',
+  'Excavation & Groundworks',
+  'Concrete & Foundations',
+  'Brickwork & Masonry',
+  'Structural Steel Installation',
+  'Carpentry & Joinery',
+  'Roofing',
+  'Plastering & Drylining',
+  'Plumbing & Heating',
+  'Electrical',
+  'Landscaping & External Works',
+  'Demolition',
+  'Access Equipment',
+  'Lifting Equipment',
+  'Cleaning & Finishing',
+  'Transport',
+  'Temporary Protection',
+  'General',
 ] as const

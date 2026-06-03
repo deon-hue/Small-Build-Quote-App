@@ -12,6 +12,7 @@ import { TAKEOFF_PHASES, WALL_MAKEUPS, DWARF_WALL_MAKEUPS, PHASE_MAKEUPS, type F
 import { CANONICAL_PHASE_IDS } from './product-config'
 import { ALL_PHASE_SUBPHASES } from './phase-tasks'
 import { DEFAULT_DEMO_SUBPHASES } from './demolition-data'
+import { PLANT_LIBRARY } from './plant-library'
 
 // ── Labour Trades ─────────────────────────────────────────────────────────────
 
@@ -174,6 +175,43 @@ export async function upsertPlantItem(sb: SupabaseClient, item: Partial<BOPlantI
 
 export async function deletePlantItem(sb: SupabaseClient, id: string): Promise<void> {
   await sb.from('bo_plant_items').delete().eq('id', id)
+}
+
+// Seed the standard UK plant library into a user's bo_plant_items.
+// Skips items whose name already exists (case-insensitive) so it is safe to
+// re-run and never overwrites or duplicates the user's edited rows.
+export async function seedPlantLibrary(sb: SupabaseClient, userId: string, existing: BOPlantItem[]): Promise<BOPlantItem[]> {
+  const existingNames = new Set(existing.map(i => i.name.trim().toLowerCase()))
+  let order = existing.reduce((m, i) => Math.max(m, i.display_order), -1) + 1
+  const rows: Array<Partial<BOPlantItem> & { user_id: string }> = []
+  for (const [category, items] of Object.entries(PLANT_LIBRARY)) {
+    for (const it of items) {
+      if (existingNames.has(it.name.trim().toLowerCase())) continue
+      const markup = it.markup ?? 25
+      rows.push({
+        user_id: userId,
+        category,
+        name: it.name,
+        description: it.description,
+        unit: it.unit,
+        default_cost: it.cost,
+        charge_rate: Math.round(it.cost * (1 + markup / 100)),
+        markup_pct: markup,
+        supplier: '',
+        operator_required: !!it.operator,
+        notes: '',
+        ownership: 'hired',
+        transport_cost: 0,
+        fuel_cost_per_unit: 0,
+        phase_id: null,
+        active: true,
+        display_order: order++,
+      })
+    }
+  }
+  if (rows.length === 0) return []
+  const { data } = await sb.from('bo_plant_items').insert(rows).select()
+  return data ?? []
 }
 
 // ── Takeoff Tools ─────────────────────────────────────────────────────────────
