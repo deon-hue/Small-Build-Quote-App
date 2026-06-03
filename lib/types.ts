@@ -77,6 +77,8 @@ export interface QuotePhase {
   parentPhase?: string   // Main phase grouping header
   /** Area / Room / Drawing-label grouping between Phase and Sub-phase */
   roomLabel?: string
+  /** Free-text task name / description shown in the quote builder to explain what this sub-phase covers */
+  taskName?: string
   items: QuoteItem[]
   estimatorItems?: EstimatorItem[]
   useEstimator?: boolean  // true = lump sums auto-computed from estimatorItems

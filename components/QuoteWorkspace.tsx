@@ -900,6 +900,9 @@ function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDel
           style={{ ...fldStyle, fontWeight: 700, fontSize: 13, color: '#1e293b', flex: 1 }}
           placeholder="Sub-phase name"
         />
+        {!open && p.taskName && (
+          <span title={p.taskName} style={{ fontSize: 11, color: '#94a3b8', minWidth: 0, flexShrink: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>— {p.taskName}</span>
+        )}
         {badges.map((b, i) => (
           <span key={i} style={{ fontSize: 9, padding: '1px 6px', borderRadius: 99, background: '#e0f2fe', color: '#0369a1', flexShrink: 0 }}>{b}</span>
         ))}
@@ -933,6 +936,18 @@ function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDel
       {/* Sub-phase body — card-style cost breakdown */}
       {open && (
         <div style={{ padding: '8px 10px 10px' }}>
+
+          {/* Task name / description — explains what this sub-phase covers */}
+          <div style={{ marginBottom: 8 }}>
+            <label style={{ display: 'block', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#94a3b8', marginBottom: 3 }}>Task</label>
+            <input
+              value={p.taskName ?? ''}
+              readOnly={isLocked}
+              onChange={e => onUpdate({ ...p, taskName: e.target.value || undefined })}
+              placeholder="Task name / what this work covers…"
+              style={{ width: '100%', fontSize: 12, color: '#475569', background: isLocked ? '#f8fafc' : '#fff', border: '1px solid #e2e8f0', borderRadius: 5, padding: '6px 9px', boxSizing: 'border-box', outline: 'none' }}
+            />
+          </div>
 
           {/* Needs-review banner */}
           {p.needsReview && p.reviewNote && (
