@@ -14,6 +14,8 @@ import type { BOPhase, BOSubPhase, BOTask, BOLabourTrade, BOProduct, BOPlantItem
 const BUILDUP_PHASES = new Set(['External Walls', 'Floors & Screeds', 'Foundations', 'Plastering & Boarding'])
 import { TASK_UNITS } from '@/lib/back-office-types'
 import { JOB_TYPES } from '@/lib/utils'
+import { buildTaskRecipe, uid, plantListTotal } from '@/lib/layer-recipe'
+import type { LayerCostRecord, LayerPlantItem } from '@/lib/takeoff-types'
 import { Plus, Trash2, ChevronRight, ChevronDown } from 'lucide-react'
 
 interface Props { userId: string }
@@ -151,7 +153,8 @@ export default function SectionPhasesTasks({ userId }: Props) {
 
   async function saveTaskModal() {
     if (!taskModal) return
-    const saved = await upsertTask(sb, { ...taskModal.task, user_id: userId })
+    const taskWithRecipe = { ...taskModal.task, recipe_items: buildTaskRecipe(taskModal.task) as unknown as Record<string, unknown> }
+    const saved = await upsertTask(sb, { ...taskWithRecipe, user_id: userId })
     if (saved) {
       if (taskModal.isNew) {
         setTasks(prev => [...prev, saved])
@@ -168,10 +171,13 @@ export default function SectionPhasesTasks({ userId }: Props) {
     setTasks(prev => prev.filter(t => t.id !== id))
   }
 
-  // Persist a single task (used by the inline per-category cost editors)
+  // Persist a single task (used by the inline per-category cost editors).
+  // Rebuild recipe_items from the task so the plant list + aggregates stay in
+  // sync and the Takeoff layer editor reads the same numbers.
   async function patchTask(task: BOTask) {
-    setTasks(prev => prev.map(t => t.id === task.id ? task : t))
-    await upsertTask(sb, { ...task, user_id: userId })
+    const withRecipe = { ...task, recipe_items: buildTaskRecipe(task) as unknown as Record<string, unknown> }
+    setTasks(prev => prev.map(t => t.id === task.id ? withRecipe : t))
+    await upsertTask(sb, { ...withRecipe, user_id: userId })
   }
 
   async function duplicateTask(task: BOTask) {
@@ -551,6 +557,25 @@ function CategoryEditPopover({ task, cat, labourTrades, products, plantItems, on
   const [draft, setDraft] = useState<BOTask>({ ...task })
   const setField = <K extends keyof BOTask>(k: K, v: BOTask[K]) => setDraft(d => ({ ...d, [k]: v }))
 
+  // Plant list (stored in recipe_items.plantItems; plant_cost kept as the sum)
+  const plantList: LayerPlantItem[] = ((draft.recipe_items as unknown as LayerCostRecord | null)?.plantItems) ?? []
+  function setPlantList(next: LayerPlantItem[]) {
+    setDraft(d => {
+      const rec = (d.recipe_items as unknown as LayerCostRecord | null) ?? { labourItems: [], materialItems: [], plantItems: [], subItems: [], otherItems: [] }
+      return { ...d, recipe_items: { ...rec, plantItems: next } as unknown as Record<string, unknown>, plant_cost: plantListTotal(next) }
+    })
+  }
+  function addPlantFromMaster(id: string) {
+    const pl = plantItems.find(p => p.id === id); if (!pl) return
+    setPlantList([...plantList, { id: uid(), name: pl.name, unit: pl.unit, qty: 1, hireRate: pl.default_cost, total: pl.default_cost }])
+  }
+  function updatePlantRow(i: number, patch: Partial<LayerPlantItem>) {
+    const next = plantList.map((p, idx) => idx === i ? { ...p, ...patch } : p)
+    next[i].total = +((next[i].qty || 0) * (next[i].hireRate || 0)).toFixed(2)
+    setPlantList(next)
+  }
+  function removePlantRow(i: number) { setPlantList(plantList.filter((_, idx) => idx !== i)) }
+
   // Labour calculator state
   const [tradeId, setTradeId]   = useState(labourTrades[0]?.id ?? '')
   const [rateType, setRateType] = useState<LabourRateType>('day')
@@ -648,22 +673,40 @@ function CategoryEditPopover({ task, cat, labourTrades, products, plantItems, on
     bodyEl = (
       <>
         <div>
-          <label style={lbl}>Pick from Plant &amp; Equipment (master data)</label>
+          <label style={lbl}>Add from Plant &amp; Equipment library</label>
           {plantItems.length > 0 ? (
-            <select value="" onChange={e => {
-              const pl = plantItems.find(p => p.id === e.target.value)
-              if (pl) setDraft(d => ({ ...d, plant_cost: pl.default_cost }))
-            }} style={{ ...inp, fontSize: 12 }}>
-              <option value="">Select a plant item…</option>
+            <select value="" onChange={e => { if (e.target.value) addPlantFromMaster(e.target.value) }} style={{ ...inp, fontSize: 12 }}>
+              <option value="">Select a plant item to add…</option>
               {plantItems.map(p => <option key={p.id} value={p.id}>{p.name} — £{p.default_cost}/{p.unit}</option>)}
             </select>
           ) : (
             <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
-              No plant items in master data — add them in Back Office → Plant &amp; Equipment, or enter a cost manually.
+              No plant items in master data — add them in Back Office → Plant &amp; Equipment, or enter a cost manually below.
             </div>
           )}
         </div>
-        {money('plant_cost', 'Plant cost (per unit, ex-VAT)')}
+        {plantList.length > 0 ? (
+          <div style={{ display: 'grid', gap: 6 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 52px 70px 64px 22px', gap: 6, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em', color: '#94a3b8' }}>
+              <span>Item</span><span style={{ textAlign: 'center' }}>Qty</span><span style={{ textAlign: 'center' }}>£/unit</span><span style={{ textAlign: 'right' }}>Total</span><span />
+            </div>
+            {plantList.map((p, i) => (
+              <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '1fr 52px 70px 64px 22px', gap: 6, alignItems: 'center' }}>
+                <span style={{ fontSize: 12, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${p.name} (per ${p.unit})`}>{p.name}</span>
+                <input type="number" min={0} step={0.5} value={p.qty} onChange={e => updatePlantRow(i, { qty: Math.max(0, +e.target.value) })} style={{ ...inp, fontSize: 12, padding: '5px 6px', textAlign: 'center' }} />
+                <input type="number" min={0} step={1} value={p.hireRate} onChange={e => updatePlantRow(i, { hireRate: Math.max(0, +e.target.value) })} style={{ ...inp, fontSize: 12, padding: '5px 6px', textAlign: 'right' }} />
+                <span style={{ fontFamily: 'monospace', fontSize: 12, textAlign: 'right', color: '#0f172a' }}>£{p.total.toFixed(2)}</span>
+                <button onClick={() => removePlantRow(i)} title="Remove" style={{ border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 15, padding: 0 }}>×</button>
+              </div>
+            ))}
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', paddingTop: 6, fontSize: 12, fontWeight: 700, color: m.accent }}>
+              <span>Plant total (per task unit)</span>
+              <span style={{ fontFamily: 'monospace' }}>£{plantListTotal(plantList).toFixed(2)}</span>
+            </div>
+          </div>
+        ) : (
+          money('plant_cost', 'Plant cost (per unit, ex-VAT)')
+        )}
       </>
     )
   } else if (cat === 'subcontract') {
