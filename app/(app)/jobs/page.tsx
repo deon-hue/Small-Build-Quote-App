@@ -6,6 +6,7 @@ import { fmt, jobColor, STAGE_BADGE, STAGE_LABEL, JOB_TYPES } from '@/lib/utils'
 import type { Job } from '@/lib/types'
 import GanttModal from '@/components/GanttModal'
 import VariationModal from '@/components/VariationModal'
+import JobDocumentsModal from '@/components/JobDocumentsModal'
 
 const BLANK_JOB: Omit<Job, 'id'> = {
   client: '', type: 'Rear Extension', address: '', value: 0,
@@ -23,6 +24,7 @@ export default function JobsPage() {
   const [variationJob, setVariationJob] = useState<Job | null>(null)
   const [saving, setSaving] = useState(false)
   const [notesJob, setNotesJob] = useState<Job | null>(null)
+  const [docsJob, setDocsJob] = useState<Job | null>(null)
   const [newNote, setNewNote] = useState('')
   const [addingNote, setAddingNote] = useState(false)
 
@@ -156,6 +158,7 @@ export default function JobsPage() {
                       ±&nbsp;Variations{jobVars.length > 0 ? ` (${jobVars.length})` : ''}
                       {sentVarCount > 0 ? ` · ${sentVarCount} pending` : ''}
                     </button>
+                    <button className="btn-sm btn-outline" onClick={() => setDocsJob(j)} title="Scan/upload supplier docs and track costs">💷 Costs</button>
                     <button className="btn-sm btn-outline" onClick={() => openEdit(j)}>Edit</button>
                     <button className="btn-sm btn-danger" onClick={() => handleDelete(j)}>✕</button>
                   </div>
@@ -309,6 +312,15 @@ export default function JobsPage() {
             return qn === jn || qn.includes(jn) || jn.includes(qn)
           })}
           onClose={() => setGanttJob(null)}
+        />
+      )}
+
+      {/* Documents & Costs modal */}
+      {docsJob && (
+        <JobDocumentsModal
+          jobId={docsJob.id}
+          jobLabel={`${docsJob.type} — ${docsJob.client}`}
+          onClose={() => setDocsJob(null)}
         />
       )}
     </>

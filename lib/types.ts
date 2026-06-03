@@ -157,6 +157,41 @@ export interface Job {
   quoteId?: string
 }
 
+// ── Job documents & cost ledger (doc-scan feature) ────────────────────────────
+
+export type JobCostCategory = 'labour' | 'materials' | 'plant' | 'subcontractors' | 'other'
+export type PaymentStatus = 'unknown' | 'unpaid' | 'partial' | 'paid'
+
+export interface JobDocument {
+  id: string
+  jobId?: string
+  quoteId?: string
+  fileName: string
+  storagePath: string
+  mimeType: string
+  fileSize: number
+  status: 'uploaded' | 'extracted' | 'reviewed' | 'error'
+  createdAt?: string
+}
+
+export interface JobCost {
+  id: string
+  jobId?: string
+  quoteId?: string
+  documentId?: string
+  supplier: string
+  docDate: string        // YYYY-MM-DD or ''
+  docNumber: string
+  description: string
+  costCategory: JobCostCategory
+  netAmount: number
+  vatAmount: number
+  grossAmount: number
+  paymentStatus: PaymentStatus
+  source: 'document' | 'manual'
+  createdAt?: string
+}
+
 export type PortalStatus = 'no_email' | 'not_invited' | 'invited' | 'active'
 
 export interface Client {
