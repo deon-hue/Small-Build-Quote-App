@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Job, Quote, Client, Settings, GanttState, Invoice, JobNote, PortalStatus, TemplatePhaseData, Variation, VariationStatus, TeamMember, TeamMemberRole, UserPermissions } from '@/lib/types'
+import type { Job, Quote, Client, Supplier, Settings, GanttState, Invoice, JobNote, PortalStatus, TemplatePhaseData, Variation, VariationStatus, TeamMember, TeamMemberRole, UserPermissions } from '@/lib/types'
 import { FULL_PERMISSIONS } from '@/lib/types'
 import { uid, JOB_TEMPLATES } from '@/lib/utils'
 
@@ -37,6 +37,11 @@ interface AppContextType {
   deleteClient: (id: string) => Promise<void>
   upsertClientFromQuote: (customer: Quote['customer']) => Promise<void>
   markPortalInvite: (clientId: string) => Promise<void>
+
+  suppliers: Supplier[]
+  addSupplier: (supplier: Omit<Supplier, 'id'>) => Promise<void>
+  updateSupplier: (supplier: Supplier) => Promise<void>
+  deleteSupplier: (id: string) => Promise<void>
 
   saveSettings: (s: Settings) => Promise<void>
   saveGanttState: (jobId: string, state: GanttState) => Promise<boolean>
@@ -107,6 +112,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [jobs, setJobs] = useState<Job[]>([])
   const [quotes, setQuotes] = useState<Quote[]>([])
   const [clients, setClients] = useState<Client[]>([])
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
   const [ganttStates, setGanttStates] = useState<Record<string, GanttState>>({})
   const [invoices, setInvoices] = useState<Invoice[]>([])
@@ -161,7 +167,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       } catch { /* phase10.sql not run yet — single-user mode */ }
 
-      const [jobsRes, quotesRes, clientsRes, settingsRes, ganttRes, invoicesRes, notesRes, variationsRes] = await Promise.all([
+      const [jobsRes, quotesRes, clientsRes, settingsRes, ganttRes, invoicesRes, notesRes, variationsRes, suppliersRes] = await Promise.all([
         supabase.from('jobs').select('*').order('created_at', { ascending: true }),
         supabase.from('quotes').select('*').order('created_at', { ascending: true }),
         supabase.from('clients').select('*').order('created_at', { ascending: true }),
@@ -170,6 +176,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         supabase.from('invoices').select('*').order('created_at', { ascending: false }),
         supabase.from('job_notes').select('*').order('created_at', { ascending: true }),
         supabase.from('variations').select('*').order('created_at', { ascending: true }),
+        supabase.from('suppliers').select('*').order('created_at', { ascending: true }),
       ])
 
       // Separately try to get portal status — only available after phase5.sql is run
@@ -210,6 +217,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
           portalInvitedAt: portalStatusMap[r.id]?.portal_invited_at || null,
           portalStatus: (portalStatusMap[r.id]?.portal_status || (r.email ? 'not_invited' : 'no_email')) as PortalStatus,
           portalLastLogin: portalStatusMap[r.id]?.portal_last_login || null,
+        })))
+      }
+
+      if (suppliersRes.data) {
+        setSuppliers(suppliersRes.data.map(r => ({
+          id: r.id, name: r.name || '', contactName: r.contact_name || '',
+          phone: r.phone || '', email: r.email || '', address: r.address || '',
+          notes: r.notes || '', accountNumber: r.account_number || '', addedFrom: r.added_from || '',
+          xeroContactId: r.xero_contact_id || null,
         })))
       }
 
@@ -429,6 +445,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
       })
     }
   }, [clients, addClient, updateClient])
+
+  // ── Suppliers ────────────────────────────────────────────────
+  const addSupplier = useCallback(async (s: Omit<Supplier, 'id'>) => {
+    const { data: { user } } = await supabase.auth.getUser()
+    const ownerId = dataOwnerIdRef.current || user!.id
+    const { data, error } = await supabase.from('suppliers').insert({
+      user_id: ownerId, name: s.name, contact_name: s.contactName, phone: s.phone,
+      email: s.email, address: s.address, notes: s.notes, account_number: s.accountNumber,
+      added_from: s.addedFrom,
+    }).select().single()
+    if (error) throw error
+    setSuppliers(prev => [...prev, {
+      id: data.id, name: data.name || '', contactName: data.contact_name || '',
+      phone: data.phone || '', email: data.email || '', address: data.address || '',
+      notes: data.notes || '', accountNumber: data.account_number || '', addedFrom: data.added_from || '',
+      xeroContactId: data.xero_contact_id || null,
+    }])
+  }, [supabase])
+
+  const updateSupplier = useCallback(async (s: Supplier) => {
+    await supabase.from('suppliers').update({
+      name: s.name, contact_name: s.contactName, phone: s.phone, email: s.email,
+      address: s.address, notes: s.notes, account_number: s.accountNumber,
+      updated_at: new Date().toISOString(),
+    }).eq('id', s.id)
+    setSuppliers(prev => prev.map(x => x.id === s.id ? s : x))
+  }, [supabase])
+
+  const deleteSupplier = useCallback(async (id: string) => {
+    await supabase.from('suppliers').delete().eq('id', id)
+    setSuppliers(prev => prev.filter(s => s.id !== id))
+  }, [supabase])
 
   // ── Settings ─────────────────────────────────────────────────
   const saveSettings = useCallback(async (s: Settings) => {
@@ -669,6 +717,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addJob, updateJob, deleteJob,
       addQuote, updateQuote, deleteQuote,
       addClient, updateClient, deleteClient, upsertClientFromQuote, markPortalInvite,
+      suppliers, addSupplier, updateSupplier, deleteSupplier,
       saveSettings,
       saveGanttState, getGanttState,
       addInvoice, updateInvoice, deleteInvoice,

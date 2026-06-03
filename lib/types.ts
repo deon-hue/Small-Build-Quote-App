@@ -204,6 +204,19 @@ export interface InboxDocument {
   createdAt?: string
 }
 
+export interface Supplier {
+  id: string
+  name: string
+  contactName: string
+  phone: string
+  email: string
+  address: string
+  notes: string
+  accountNumber: string
+  addedFrom: string
+  xeroContactId?: string | null   // reserved for Xero sync
+}
+
 export type PortalStatus = 'no_email' | 'not_invited' | 'invited' | 'active'
 
 export interface Client {
