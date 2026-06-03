@@ -26,14 +26,17 @@ export function redirectUri(origin: string): string {
 }
 
 export function authorizeUrl(origin: string, state: string): string {
-  const q = new URLSearchParams({
-    response_type: 'code',
-    client_id: process.env.XERO_CLIENT_ID || '',
-    redirect_uri: redirectUri(origin),
-    scope: XERO_SCOPES,
-    state,
-  })
-  return `${AUTHORIZE_URL}?${q.toString()}`
+  // Build manually with encodeURIComponent so spaces in `scope` become %20,
+  // not '+'. Xero rejects '+'-separated scopes with invalid_scope.
+  const params: [string, string][] = [
+    ['response_type', 'code'],
+    ['client_id', process.env.XERO_CLIENT_ID || ''],
+    ['redirect_uri', redirectUri(origin)],
+    ['scope', XERO_SCOPES],
+    ['state', state],
+  ]
+  const query = params.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&')
+  return `${AUTHORIZE_URL}?${query}`
 }
 
 function basicAuth(): string {
