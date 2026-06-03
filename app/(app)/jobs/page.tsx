@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { fmt, jobColor, STAGE_BADGE, STAGE_LABEL, JOB_TYPES } from '@/lib/utils'
 import type { Job } from '@/lib/types'
+import { quoteBudget } from '@/lib/job-costs'
 import GanttModal from '@/components/GanttModal'
 import VariationModal from '@/components/VariationModal'
 import JobDocumentsModal from '@/components/JobDocumentsModal'
@@ -316,13 +317,22 @@ export default function JobsPage() {
       )}
 
       {/* Documents & Costs modal */}
-      {docsJob && (
-        <JobDocumentsModal
-          jobId={docsJob.id}
-          jobLabel={`${docsJob.type} — ${docsJob.client}`}
-          onClose={() => setDocsJob(null)}
-        />
-      )}
+      {docsJob && (() => {
+        const phases = getLinkedQuotePhases(docsJob)
+        const budget = phases.length ? quoteBudget(phases) : null
+        const approved = variations
+          .filter(v => v.jobId === docsJob.id && (v.status === 'approved' || v.status === 'invoiced' || v.status === 'paid'))
+          .reduce((s, v) => s + v.total, 0)
+        return (
+          <JobDocumentsModal
+            jobId={docsJob.id}
+            jobLabel={`${docsJob.type} — ${docsJob.client}`}
+            budget={budget}
+            revenue={docsJob.value + approved}
+            onClose={() => setDocsJob(null)}
+          />
+        )
+      })()}
     </>
   )
 }

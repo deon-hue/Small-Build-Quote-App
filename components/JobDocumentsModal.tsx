@@ -3,10 +3,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { fetchJobCosts, insertJobCost, deleteJobCost } from '@/lib/job-costs'
+import type { CategoryBudget } from '@/lib/job-costs'
 import type { JobCost, JobCostCategory, PaymentStatus } from '@/lib/types'
 import type { ExtractedCostLine } from '@/lib/doc-extract/types'
 
-interface Props { jobId: string; jobLabel: string; onClose: () => void }
+interface Props { jobId: string; jobLabel: string; budget?: CategoryBudget | null; revenue?: number; onClose: () => void }
 
 const CATS: { value: JobCostCategory; label: string; emoji: string; color: string; bg: string }[] = [
   { value: 'labour',         label: 'Labour',         emoji: '🔨', color: '#1d4ed8', bg: '#eff6ff' },
@@ -31,7 +32,7 @@ const blankManual = (): ManualState => ({
   lines: [{ description: '', costCategory: 'materials', netAmount: 0, vatAmount: 0, grossAmount: 0 }],
 })
 
-export default function JobDocumentsModal({ jobId, jobLabel, onClose }: Props) {
+export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, onClose }: Props) {
   const sb = createClient()
   const [userId, setUserId] = useState<string | null>(null)
   const [costs, setCosts] = useState<JobCost[]>([])
@@ -94,6 +95,12 @@ export default function JobDocumentsModal({ jobId, jobLabel, onClose }: Props) {
   const byCat = CATS.map(cat => ({ cat, total: costs.filter(c => c.costCategory === cat.value).reduce((s, c) => s + c.grossAmount, 0) })).filter(x => x.total > 0)
   const manualTotal = manual ? manual.lines.reduce((s, l) => s + l.grossAmount, 0) : 0
 
+  // Budget vs actual (net, ex-VAT — matches the quote's cost basis)
+  const actualNetByCat = (cat: JobCostCategory) => costs.filter(c => c.costCategory === cat).reduce((s, c) => s + c.netAmount, 0)
+  const budgetFor = (cat: JobCostCategory) => budget ? (budget as unknown as Record<string, number>)[cat] ?? 0 : 0
+  const margin = revenue !== undefined ? +(revenue - totalNet).toFixed(2) : null
+  const marginPct = revenue ? Math.round((margin! / revenue) * 100) : null
+
   return (
     <div style={overlay} onClick={onClose}>
       <div style={panel} onClick={e => e.stopPropagation()}>
@@ -146,6 +153,52 @@ export default function JobDocumentsModal({ jobId, jobLabel, onClose }: Props) {
                 <button onClick={() => setManual(null)} style={btn}>Cancel</button>
                 <button onClick={saveManual} disabled={saving} style={{ ...btn, background: '#16a34a', color: '#fff', border: 'none' }}>{saving ? 'Saving…' : 'Save'}</button>
               </div>
+            </div>
+          )}
+
+          {/* Budget vs actual */}
+          {budget && !loading && (
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 14, marginBottom: 16, background: '#fbfdff' }}>
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10 }}>Quoted vs Actual <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 400 }}>(ex-VAT)</span></div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
+                    <th style={{ textAlign: 'left', padding: '4px 6px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Category</th>
+                    <th style={{ textAlign: 'right', padding: '4px 6px', fontSize: 10, textTransform: 'uppercase' }}>Quoted</th>
+                    <th style={{ textAlign: 'right', padding: '4px 6px', fontSize: 10, textTransform: 'uppercase' }}>Actual</th>
+                    <th style={{ textAlign: 'right', padding: '4px 6px', fontSize: 10, textTransform: 'uppercase' }}>Variance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {CATS.map(cat => {
+                    const q = budgetFor(cat.value), a = actualNetByCat(cat.value), v = +(a - q).toFixed(2)
+                    if (q === 0 && a === 0) return null
+                    return (
+                      <tr key={cat.value} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '5px 6px' }}><span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 99, background: cat.bg, color: cat.color, fontWeight: 600 }}>{cat.emoji} {cat.label}</span></td>
+                        <td style={{ padding: '5px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(q)}</td>
+                        <td style={{ padding: '5px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(a)}</td>
+                        <td style={{ padding: '5px 6px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, color: v > 0 ? '#dc2626' : '#16a34a' }}>{v > 0 ? '+' : ''}{fmt(v)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr style={{ borderTop: '2px solid #e2e8f0', fontWeight: 700 }}>
+                    <td style={{ padding: '6px' }}>Total cost</td>
+                    <td style={{ padding: '6px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(budget.total)}</td>
+                    <td style={{ padding: '6px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(totalNet)}</td>
+                    <td style={{ padding: '6px', textAlign: 'right', fontFamily: 'monospace', color: totalNet - budget.total > 0 ? '#dc2626' : '#16a34a' }}>{totalNet - budget.total > 0 ? '+' : ''}{fmt(+(totalNet - budget.total).toFixed(2))}</td>
+                  </tr>
+                </tfoot>
+              </table>
+              {margin !== null && (
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 12, paddingTop: 10, borderTop: '1px solid #e2e8f0', fontSize: 13 }}>
+                  <span>Revenue: <strong style={{ fontFamily: 'monospace' }}>{fmt(revenue!)}</strong></span>
+                  <span>Actual cost: <strong style={{ fontFamily: 'monospace' }}>{fmt(totalNet)}</strong></span>
+                  <span>Margin: <strong style={{ fontFamily: 'monospace', color: margin >= 0 ? '#16a34a' : '#dc2626' }}>{fmt(margin)}{marginPct !== null ? ` (${marginPct}%)` : ''}</strong></span>
+                </div>
+              )}
             </div>
           )}
 

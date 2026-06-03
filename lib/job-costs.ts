@@ -2,10 +2,32 @@
 // Uses the browser Supabase client (RLS scopes everything to the user).
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { JobCost, JobDocument, JobCostCategory, InboxDocument } from './types'
+import type { JobCost, JobDocument, JobCostCategory, InboxDocument, QuotePhase } from './types'
 import type { ExtractedCostLine } from './doc-extract/types'
 
 const BUCKET = 'job-documents'
+
+// ── Quoted budget (per cost category) from a quote's phases ───────────────────
+export interface CategoryBudget { labour: number; materials: number; plant: number; subcontractors: number; other: number; total: number }
+
+/** Cost budget (ex-markup, ex-VAT) per category, mirroring how the app totals a quote. */
+export function quoteBudget(phases: QuotePhase[]): CategoryBudget {
+  const b: CategoryBudget = { labour: 0, materials: 0, plant: 0, subcontractors: 0, other: 0, total: 0 }
+  for (const p of phases) {
+    for (const i of p.items) {
+      if (i.enabled === false) continue
+      b.labour += i.labour ?? 0
+      b.materials += i.materials ?? 0
+      b.plant += i.plantHire ?? 0
+      b.subcontractors += i.subcontractors ?? 0
+      b.other += i.other ?? 0
+    }
+    for (const pr of p.products ?? []) if (pr.enabled !== false) b.materials += (pr.costPrice || 0) * (pr.qty || 0)
+    for (const pl of p.plantItems ?? []) if (pl.enabled !== false) b.plant += (pl.costPrice || 0) * (pl.qty || 0)
+  }
+  b.total = +(b.labour + b.materials + b.plant + b.subcontractors + b.other).toFixed(2)
+  return b
+}
 
 // ── Row <-> model mapping ─────────────────────────────────────────────────────
 function rowToCost(r: Record<string, unknown>): JobCost {
