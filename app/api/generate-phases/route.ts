@@ -3,51 +3,67 @@ import { createClient } from '@/lib/supabase/server'
 
 // ── Fetch Back Office reference rates for the current user ─────────────────────
 
-async function fetchReferenceRates(userId: string): Promise<string> {
+interface PlantDefault { names: string[]; total: number }
+
+// Normalise a phase/sub-phase/task name into a stable lookup key.
+function normKey(s: string): string {
+  return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+async function fetchReferenceRates(userId: string): Promise<{ block: string; plantByKey: Record<string, PlantDefault> }> {
   const sb = await createClient()
 
-  const { data: phases } = await sb
-    .from('bo_phases')
-    .select('id, name')
-    .eq('user_id', userId)
-    .eq('active', true)
+  const [{ data: phases }, { data: subPhases }, { data: tasks }] = await Promise.all([
+    sb.from('bo_phases').select('id, name').eq('user_id', userId).eq('active', true),
+    sb.from('bo_sub_phases').select('id, name, phase_id').eq('user_id', userId).eq('active', true),
+    sb.from('bo_tasks')
+      .select('name, unit, labour_cost, materials_cost, plant_cost, subcontract_cost, other_cost, phase_id, sub_phase_id, recipe_items')
+      .eq('user_id', userId).eq('active', true).order('display_order'),
+  ])
 
-  const { data: subPhases } = await sb
-    .from('bo_sub_phases')
-    .select('id, name, phase_id')
-    .eq('user_id', userId)
-    .eq('active', true)
-
-  const { data: tasks } = await sb
-    .from('bo_tasks')
-    .select('name, unit, labour_cost, materials_cost, plant_cost, subcontract_cost, other_cost, phase_id, sub_phase_id')
-    .eq('user_id', userId)
-    .eq('active', true)
-    .order('display_order')
-
-  if (!tasks || tasks.length === 0) return ''
+  if (!tasks || tasks.length === 0) return { block: '', plantByKey: {} }
 
   const phaseById = Object.fromEntries((phases ?? []).map(p => [p.id, p.name]))
   const subPhaseById = Object.fromEntries((subPhases ?? []).map(sp => [sp.id, sp.name]))
 
+  // Default plant items per sub-phase / task name (from the layer plant list).
+  const plantByKey: Record<string, PlantDefault> = {}
+  const addPlant = (key: string, names: string[], total: number) => {
+    if (!key || (names.length === 0 && total <= 0)) return
+    const cur = plantByKey[key] ?? { names: [], total: 0 }
+    for (const n of names) if (!cur.names.includes(n)) cur.names.push(n)
+    cur.total = +(cur.total + total).toFixed(2)
+    plantByKey[key] = cur
+  }
+
   // Group tasks by phase for readability
   const grouped: Record<string, string[]> = {}
   for (const t of tasks) {
-    const phaseName = t.sub_phase_id
-      ? (subPhaseById[t.sub_phase_id] ?? (t.phase_id ? phaseById[t.phase_id] : 'Other'))
-      : (t.phase_id ? phaseById[t.phase_id] : 'Other')
-
+    const subName = t.sub_phase_id ? subPhaseById[t.sub_phase_id] : undefined
+    const phaseName = subName ?? (t.phase_id ? phaseById[t.phase_id] : 'Other')
     if (!grouped[phaseName]) grouped[phaseName] = []
+
+    // Plant item names + total: prefer the explicit recipe plant list.
+    let plantNames: string[] = []
+    let plantTotal = t.plant_cost || 0
+    const rec = t.recipe_items as { plantItems?: Array<{ name: string; total: number }> } | null
+    if (rec?.plantItems?.length) {
+      plantNames = rec.plantItems.map(p => p.name)
+      plantTotal = +rec.plantItems.reduce((s, p) => s + (p.total || 0), 0).toFixed(2)
+    }
+    if (subName) addPlant(normKey(subName), plantNames, plantTotal)
+    addPlant(normKey(t.name), plantNames, plantTotal)
 
     const parts: string[] = []
     if (t.labour_cost > 0) parts.push(`labour £${t.labour_cost}`)
     if (t.materials_cost > 0) parts.push(`mats £${t.materials_cost}`)
-    if (t.plant_cost > 0) parts.push(`plant £${t.plant_cost}`)
+    if (plantTotal > 0) parts.push(`plant £${plantTotal}`)
     if (t.subcontract_cost > 0) parts.push(`sub £${t.subcontract_cost}`)
     if (t.other_cost > 0) parts.push(`other £${t.other_cost}`)
 
     if (parts.length > 0) {
-      grouped[phaseName].push(`    ${t.name} (per ${t.unit}): ${parts.join(', ')}`)
+      const plantStr = plantNames.length ? `  [plant: ${plantNames.join(', ')}]` : ''
+      grouped[phaseName].push(`    ${t.name} (per ${t.unit}): ${parts.join(', ')}${plantStr}`)
     }
   }
 
@@ -55,7 +71,10 @@ async function fetchReferenceRates(userId: string): Promise<string> {
     .map(([phase, taskLines]) => `  ${phase}:\n${taskLines.join('\n')}`)
     .join('\n')
 
-  return lines ? `\n\nCONTRACTOR BACK OFFICE DEFAULT RATES (use these as your cost baseline — scale by area/quantity as needed):\n${lines}\n` : ''
+  const block = lines
+    ? `\n\nCONTRACTOR BACK OFFICE DEFAULT RATES (use these as your cost baseline — scale by area/quantity as needed). Where a sub-phase lists [plant: …], name those exact plant items in plantNotes:\n${lines}\n`
+    : ''
+  return { block, plantByKey }
 }
 
 // ── Route ──────────────────────────────────────────────────────────────────────
@@ -75,7 +94,7 @@ export async function POST(req: NextRequest) {
   // Fetch user's Back Office rates for cost grounding
   const sb = await createClient()
   const { data: { user } } = await sb.auth.getUser()
-  const ratesBlock = user ? await fetchReferenceRates(user.id) : ''
+  const { block: ratesBlock, plantByKey } = user ? await fetchReferenceRates(user.id) : { block: '', plantByKey: {} as Record<string, PlantDefault> }
 
   const system = `You are an expert UK quantity surveyor and building contractor. Convert a scope of works into a structured cost breakdown using UK industry standard build phases.
 
@@ -200,7 +219,22 @@ Generate a full phase cost breakdown. Use the Back Office default rates provided
       return NextResponse.json({ error: 'Unexpected AI response structure' }, { status: 500 })
     }
 
-    return NextResponse.json({ phases: parsed.phases, usingDB: !!ratesBlock })
+    // Deterministically attach Back Office default plant items to each sub-phase,
+    // matching on sub-phase name (falling back to the main phase name). This
+    // guarantees e.g. "Excavation" carries Mini Excavator / Tracked Dumper / etc.
+    // regardless of what the model wrote.
+    let plantDefaultsAttached = 0
+    for (const ph of parsed.phases) {
+      const def = plantByKey[normKey(ph.phase)] ?? plantByKey[normKey(ph.parentPhase)]
+      if (def && def.names.length) {
+        ph.plantItems = def.names
+        ph.plantNotes = def.names.join(', ')
+        if (!ph.plant || Number(ph.plant) === 0) ph.plant = def.total
+        plantDefaultsAttached++
+      }
+    }
+
+    return NextResponse.json({ phases: parsed.phases, usingDB: !!ratesBlock, plantDefaultsAttached })
   } catch (err) {
     console.error('Generate phases error:', err)
     return NextResponse.json({ error: 'Failed to generate phases' }, { status: 500 })
