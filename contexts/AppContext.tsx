@@ -398,6 +398,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await supabase.from('clients').update({
       name: c.name, first_name: c.first, last_name: c.last,
       phone: c.phone, email: c.email, address: c.address, notes: c.notes,
+      updated_at: new Date().toISOString(),
     }).eq('id', c.id)
     setClients(prev => prev.map(x => x.id === c.id ? c : x))
   }, [supabase])

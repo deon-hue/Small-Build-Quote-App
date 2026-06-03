@@ -17,6 +17,21 @@ export default function XeroConnectionCard() {
   const [status, setStatus] = useState<Status | null>(null)
   const [busy, setBusy] = useState(false)
   const [flash, setFlash] = useState<string | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [syncMsg, setSyncMsg] = useState<string | null>(null)
+
+  async function syncContacts() {
+    setSyncing(true); setSyncMsg(null)
+    try {
+      const res = await fetch('/api/xero/sync-contacts', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) { setSyncMsg(`Sync failed: ${data.error || 'error'}`); return }
+      const s = data.summary
+      setSyncMsg(`Synced ✓ — clients: +${s.clientsCreatedLocal} new, ${s.clientsUpdatedLocal} updated, ${s.clientsPushed} sent to Xero · suppliers: +${s.suppliersCreatedLocal} new, ${s.suppliersUpdatedLocal} updated, ${s.suppliersPushed} sent.${s.errors?.length ? ` (${s.errors.length} issue(s))` : ''}`)
+    } catch {
+      setSyncMsg('Sync failed — please try again.')
+    } finally { setSyncing(false) }
+  }
 
   async function load() {
     try { setStatus(await (await fetch('/api/xero/status')).json()) } catch { /* ignore */ }
@@ -48,12 +63,19 @@ export default function XeroConnectionCard() {
         {!status ? (
           <div style={{ color: 'var(--muted)', fontSize: 13 }}>Checking…</div>
         ) : status.connected ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: '#dcfce7', color: '#166534' }}>● Connected</span>
-            <span style={{ fontSize: 14, fontWeight: 600 }}>{status.tenantName}</span>
-            <div style={{ flex: 1 }} />
-            <button className="btn-sm btn-danger" onClick={disconnect} disabled={busy}>{busy ? 'Disconnecting…' : 'Disconnect'}</button>
-          </div>
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: '#dcfce7', color: '#166534' }}>● Connected</span>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>{status.tenantName}</span>
+              <div style={{ flex: 1 }} />
+              <button className="btn-sm btn-outline" onClick={syncContacts} disabled={syncing}>{syncing ? 'Syncing…' : '↻ Sync contacts'}</button>
+              <button className="btn-sm btn-danger" onClick={disconnect} disabled={busy}>{busy ? 'Disconnecting…' : 'Disconnect'}</button>
+            </div>
+            <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--muted)' }}>
+              Sync pushes your clients &amp; suppliers to Xero and pulls Xero contacts back in. If a contact was edited both sides, the most recently changed version wins.
+            </p>
+            {syncMsg && <div style={{ marginTop: 8, fontSize: 12, color: '#0f172a', background: '#f1f5f9', borderRadius: 6, padding: '8px 10px' }}>{syncMsg}</div>}
+          </>
         ) : (
           <div>
             <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--muted)' }}>
