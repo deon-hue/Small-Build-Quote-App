@@ -17,19 +17,41 @@ const EMPTY: Omit<BOProduct, 'id' | 'created_at' | 'updated_at'> = {
 export default function SectionProducts({ userId }: Props) {
   const sb = createClient()
   const [products, setProducts] = useState<BOProduct[]>([])
-  const [loading, setLoading] = useState(true)
-  const [editing, setEditing] = useState<BOProduct | null>(null)
-  const [isNew, setIsNew] = useState(false)
-  const [search, setSearch] = useState('')
-  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set(['All']))
+  const [loading,         setLoading]         = useState(true)
+  const [editing,         setEditing]         = useState<BOProduct | null>(null)
+  const [isNew,           setIsNew]           = useState(false)
+  const [search,          setSearch]          = useState('')
+  const [expandedCats,    setExpandedCats]    = useState<Set<string>>(new Set())
+  const [customCategories,setCustomCategories]= useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('bo_product_categories') ?? '[]') } catch { return [] }
+  })
+  const [newCatInput,     setNewCatInput]     = useState('')
+  const [addingCat,       setAddingCat]       = useState(false)
 
   function toggleCat(cat: string) {
     setExpandedCats(prev => {
       const next = new Set(prev)
-      if (next.has(cat)) next.delete(cat)
-      else next.add(cat)
+      if (next.has(cat)) next.delete(cat); else next.add(cat)
       return next
     })
+  }
+
+  function addCustomCategory() {
+    const name = newCatInput.trim()
+    if (!name) return
+    const updated = [...customCategories.filter(c => c !== name), name]
+    setCustomCategories(updated)
+    localStorage.setItem('bo_product_categories', JSON.stringify(updated))
+    setExpandedCats(prev => new Set([...prev, name]))
+    setNewCatInput('')
+    setAddingCat(false)
+  }
+
+  function removeCustomCategory(cat: string) {
+    if (products.some(p => p.category === cat)) return  // has products — don't remove
+    const updated = customCategories.filter(c => c !== cat)
+    setCustomCategories(updated)
+    localStorage.setItem('bo_product_categories', JSON.stringify(updated))
   }
 
   const load = useCallback(async () => {
@@ -76,9 +98,14 @@ export default function SectionProducts({ userId }: Props) {
     await upsertProduct(sb, updated)
   }
 
-  // Group by category, respecting search filter
+  // All available categories: defaults + from existing products + user-added custom
   const searchLower = search.toLowerCase()
-  const allCats = Array.from(new Set([...PRODUCT_CATEGORIES, ...products.map(p => p.category)])).sort()
+  const allCats = Array.from(new Set([
+    ...PRODUCT_CATEGORIES,
+    ...customCategories,
+    ...products.map(p => p.category),
+  ])).sort()
+
   const groupedCats = allCats
     .map(cat => ({
       cat,
@@ -86,10 +113,13 @@ export default function SectionProducts({ userId }: Props) {
         p.category === cat &&
         (!search || p.name.toLowerCase().includes(searchLower) || p.supplier?.toLowerCase().includes(searchLower))
       ),
+      isEmpty: !products.some(p => p.category === cat),
     }))
-    .filter(g => g.items.length > 0)
+    // Show all custom categories (even empty), hide empty defaults unless searching
+    .filter(g => g.items.length > 0 || (customCategories.includes(g.cat) && !search))
 
   const totalFiltered = groupedCats.reduce((s, g) => s + g.items.length, 0)
+  const totalProducts = products.length
 
   // Auto-expand all categories when searching
   const effectiveExpanded = search
@@ -106,7 +136,7 @@ export default function SectionProducts({ userId }: Props) {
           <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Products / Materials</h2>
           <p style={{ margin: '4px 0 0', fontSize: 13, color: '#64748b' }}>Default material costs, waste allowances and markup for use in estimates.</p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <button
             onClick={() => setExpandedCats(new Set(allCats))}
             style={{ padding: '6px 12px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#f8fafc', color: '#64748b', fontSize: 12, cursor: 'pointer' }}>
@@ -117,6 +147,27 @@ export default function SectionProducts({ userId }: Props) {
             style={{ padding: '6px 12px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#f8fafc', color: '#64748b', fontSize: 12, cursor: 'pointer' }}>
             Collapse All
           </button>
+          {/* New Category */}
+          {addingCat ? (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input
+                autoFocus
+                value={newCatInput}
+                onChange={e => setNewCatInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') addCustomCategory(); if (e.key === 'Escape') setAddingCat(false) }}
+                placeholder="Category name…"
+                style={{ padding: '6px 10px', border: '1px solid #93c5fd', borderRadius: 6, fontSize: 13, outline: 'none', width: 180 }}
+              />
+              <button onClick={addCustomCategory} style={{ padding: '6px 12px', background: '#2563eb', border: 'none', borderRadius: 6, color: '#fff', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>Add</button>
+              <button onClick={() => setAddingCat(false)} style={{ padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff', fontSize: 12, cursor: 'pointer', color: '#64748b' }}>✕</button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setAddingCat(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 6, color: '#166534', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
+              <Plus size={13} /> New Category
+            </button>
+          )}
           <button onClick={openNew} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: '#4a90a4', border: 'none', borderRadius: 7, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
             <Plus size={14} /> Add Product
           </button>
@@ -137,7 +188,7 @@ export default function SectionProducts({ userId }: Props) {
         </div>
       )}
 
-      {groupedCats.map(({ cat, items }) => {
+      {groupedCats.map(({ cat, items, isEmpty }) => {
         const isOpen = effectiveExpanded.has(cat)
         return (
           <div key={cat} style={{ border: '1px solid #e2e8f0', borderRadius: 8, marginBottom: 10, overflow: 'hidden' }}>
@@ -150,12 +201,22 @@ export default function SectionProducts({ userId }: Props) {
                 : <ChevronRight size={15} style={{ color: '#94a3b8', flexShrink: 0 }} />
               }
               <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{cat}</span>
-              <span style={{ fontSize: 11, color: '#94a3b8' }}>{items.length} product{items.length !== 1 ? 's' : ''}</span>
+              <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                {isEmpty ? 'empty' : `${items.length} product${items.length !== 1 ? 's' : ''}`}
+              </span>
               <button
                 onClick={e => { e.stopPropagation(); setEditing({ ...EMPTY, user_id: userId, id: '', created_at: '', updated_at: '', category: cat } as BOProduct); setIsNew(true) }}
                 style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '3px 8px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 4, color: '#1d4ed8', fontSize: 11, cursor: 'pointer', flexShrink: 0 }}>
                 <Plus size={11} /> Add
               </button>
+              {isEmpty && customCategories.includes(cat) && (
+                <button
+                  onClick={e => { e.stopPropagation(); removeCustomCategory(cat) }}
+                  title="Remove empty category"
+                  style={{ padding: '3px 6px', background: 'none', border: '1px solid #fecaca', borderRadius: 4, color: '#dc2626', fontSize: 11, cursor: 'pointer', flexShrink: 0 }}>
+                  ✕
+                </button>
+              )}
             </div>
 
             {/* Products table */}
@@ -199,7 +260,7 @@ export default function SectionProducts({ userId }: Props) {
         )
       })}
 
-      <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8' }}>{totalFiltered} of {products.length} products</div>
+      <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8' }}>{totalFiltered} of {totalProducts} products · {groupedCats.length} categories</div>
 
       {/* Edit modal */}
       {editing && (
@@ -217,9 +278,19 @@ export default function SectionProducts({ userId }: Props) {
                 </div>
                 <div>
                   <label style={lbl}>Category</label>
-                  <select value={editing.category} onChange={e => setEditing({ ...editing, category: e.target.value })} style={inp}>
-                    {PRODUCT_CATEGORIES.map(c => <option key={c}>{c}</option>)}
-                  </select>
+                  <input
+                    list="product-cat-list"
+                    value={editing.category}
+                    onChange={e => setEditing({ ...editing, category: e.target.value })}
+                    placeholder="Select or type a category…"
+                    style={inp}
+                  />
+                  <datalist id="product-cat-list">
+                    {allCats.map(c => <option key={c} value={c} />)}
+                  </datalist>
+                  <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 3 }}>
+                    Choose from the list or type a new category name
+                  </div>
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
