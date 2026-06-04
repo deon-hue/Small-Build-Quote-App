@@ -37,6 +37,12 @@ const phone = (c: XeroContact) => c.Phones?.find(p => p.PhoneNumber)?.PhoneNumbe
 const addr  = (c: XeroContact) => c.Addresses?.find(a => a.AddressLine1)?.AddressLine1 ?? ''
 const norm  = (s?: string) => (s || '').trim().toLowerCase()
 
+// Strip common UK/US legal suffixes so "Smith Ltd" matches "Smith Limited" etc.
+const COMPANY_SUFFIXES = /\s*\b(limited|ltd\.?|llc\.?|inc\.?|incorporated|plc|co\.?|company|group|holdings?|services?|solutions?|trading|enterprises?|associates?)\b\.?\s*$/gi
+function normCompany(s?: string): string {
+  return (s || '').trim().toLowerCase().replace(COMPANY_SUFFIXES, '').replace(/\s+/g, ' ').trim()
+}
+
 async function fetchAllContacts(conn: XeroConn): Promise<XeroContact[]> {
   const out: XeroContact[] = []
   for (let page = 1; page <= 20; page++) {
@@ -73,20 +79,26 @@ export async function syncContacts(sb: SupabaseClient, userId: string): Promise<
   const clientRows = clients ?? []
   const supplierRows = suppliers ?? []
 
-  // Index app rows
-  const cById = new Map<string, Record<string, unknown>>()
-  const cByKey = new Map<string, Record<string, unknown>>()
+  // Index app rows — exact key + fuzzy company-name key
+  const cById   = new Map<string, Record<string, unknown>>()
+  const cByKey  = new Map<string, Record<string, unknown>>()
+  const cByComp = new Map<string, Record<string, unknown>>()
   for (const c of clientRows) {
     if (c.xero_contact_id) cById.set(c.xero_contact_id, c)
-    const key = norm(c.email as string) || norm(c.name as string)
-    if (key) cByKey.set(key, c)
+    const key  = norm(c.email as string) || norm(c.name as string)
+    const comp = normCompany(c.name as string)
+    if (key)  cByKey.set(key, c)
+    if (comp) cByComp.set(comp, c)
   }
-  const sById = new Map<string, Record<string, unknown>>()
-  const sByKey = new Map<string, Record<string, unknown>>()
+  const sById   = new Map<string, Record<string, unknown>>()
+  const sByKey  = new Map<string, Record<string, unknown>>()
+  const sByComp = new Map<string, Record<string, unknown>>()
   for (const s of supplierRows) {
     if (s.xero_contact_id) sById.set(s.xero_contact_id, s)
-    const key = norm(s.email as string) || norm(s.name as string)
-    if (key) sByKey.set(key, s)
+    const key  = norm(s.email as string) || norm(s.name as string)
+    const comp = normCompany(s.name as string)
+    if (key)  sByKey.set(key, s)
+    if (comp) sByComp.set(comp, s)
   }
 
   const now = () => new Date().toISOString()
@@ -99,7 +111,9 @@ export async function syncContacts(sb: SupabaseClient, userId: string): Promise<
     const xUpdated = parseXeroDate(xc.UpdatedDateUTC)
 
     if (isCustomer) {
-      const match = cById.get(xc.ContactID) || cByKey.get(norm(xc.EmailAddress) || norm(xc.Name))
+      const match = cById.get(xc.ContactID)
+        || cByKey.get(norm(xc.EmailAddress) || norm(xc.Name))
+        || cByComp.get(normCompany(xc.Name))
       if (!match) {
         const { error } = await sb.from('clients').insert({
           user_id: userId, name: xc.Name, first_name: xc.FirstName ?? '', last_name: xc.LastName ?? '',
@@ -121,7 +135,9 @@ export async function syncContacts(sb: SupabaseClient, userId: string): Promise<
     }
 
     if (isSupplier) {
-      const match = sById.get(xc.ContactID) || sByKey.get(norm(xc.EmailAddress) || norm(xc.Name))
+      const match = sById.get(xc.ContactID)
+        || sByKey.get(norm(xc.EmailAddress) || norm(xc.Name))
+        || sByComp.get(normCompany(xc.Name))
       if (!match) {
         const { error } = await sb.from('suppliers').insert({
           user_id: userId, name: xc.Name, contact_name: [xc.FirstName, xc.LastName].filter(Boolean).join(' '),
@@ -145,10 +161,20 @@ export async function syncContacts(sb: SupabaseClient, userId: string): Promise<
   }
 
   // ── PUSH (app → Xero) — app records not yet linked to a Xero contact ─────────
-  const xByKey = new Map<string, XeroContact>()
-  for (const xc of xeroContacts) { const k = norm(xc.EmailAddress) || norm(xc.Name); if (k) xByKey.set(k, xc) }
+  const xByKey  = new Map<string, XeroContact>()
+  const xByComp = new Map<string, XeroContact>()
+  for (const xc of xeroContacts) {
+    const k = norm(xc.EmailAddress) || norm(xc.Name)
+    if (k) xByKey.set(k, xc)
+    const comp = normCompany(xc.Name)
+    if (comp) xByComp.set(comp, xc)
+  }
 
-  const clientsToPush = clientRows.filter(c => !c.xero_contact_id && !xByKey.get(norm(c.email as string) || norm(c.name as string)))
+  const clientsToPush = clientRows.filter(c =>
+    !c.xero_contact_id &&
+    !xByKey.get(norm(c.email as string) || norm(c.name as string)) &&
+    !xByComp.get(normCompany(c.name as string))
+  )
     .map(c => ({
       Name: (c.name as string) || [c.first_name, c.last_name].filter(Boolean).join(' '),
       FirstName: (c.first_name as string) || undefined, LastName: (c.last_name as string) || undefined,
@@ -158,7 +184,11 @@ export async function syncContacts(sb: SupabaseClient, userId: string): Promise<
       _localId: c.id as string,
     })).filter(x => x.Name)
 
-  const suppliersToPush = supplierRows.filter(s => !s.xero_contact_id && !xByKey.get(norm(s.email as string) || norm(s.name as string)))
+  const suppliersToPush = supplierRows.filter(s =>
+    !s.xero_contact_id &&
+    !xByKey.get(norm(s.email as string) || norm(s.name as string)) &&
+    !xByComp.get(normCompany(s.name as string))
+  )
     .map(s => ({
       Name: s.name as string, EmailAddress: (s.email as string) || undefined, IsSupplier: true,
       AccountNumber: (s.account_number as string) || undefined,

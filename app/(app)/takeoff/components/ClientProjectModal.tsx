@@ -186,6 +186,7 @@ export default function ClientProjectModal({ open, onClose, project, onSave, use
         address:    fullAddress || null,
         notes:      newNotes.trim() || null,
         added_from: 'takeoff',
+        updated_at: new Date().toISOString(),
       })
       // (error from main clients insert is non-blocking — takeoff still saves)
     } else if (selectedClientId) {

@@ -13,33 +13,52 @@ const MESSAGES: Record<string, { text: string; ok: boolean }> = {
   error:          { text: 'Something went wrong connecting to Xero.', ok: false },
 }
 
-export default function XeroConnectionCard() {
-  const [status, setStatus] = useState<Status | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [flash, setFlash] = useState<string | null>(null)
-  const [syncing, setSyncing] = useState(false)
-  const [syncMsg, setSyncMsg] = useState<string | null>(null)
+const LS_KEY = 'xero_last_sync'
+const AUTO_SYNC_HOURS = 4   // auto-sync if last run was > 4 hours ago
 
-  async function syncContacts() {
-    setSyncing(true); setSyncMsg(null)
+export default function XeroConnectionCard() {
+  const [status,      setStatus]      = useState<Status | null>(null)
+  const [busy,        setBusy]        = useState(false)
+  const [flash,       setFlash]       = useState<string | null>(null)
+  const [syncing,     setSyncing]     = useState(false)
+  const [syncMsg,     setSyncMsg]     = useState<string | null>(null)
+  const [lastSyncedAt,setLastSyncedAt]= useState<string | null>(null)
+
+  async function runSync(silent = false) {
+    setSyncing(true); if (!silent) setSyncMsg(null)
     try {
-      const res = await fetch('/api/xero/sync-contacts', { method: 'POST' })
+      const res  = await fetch('/api/xero/sync-contacts', { method: 'POST' })
       const data = await res.json()
-      if (!res.ok) { setSyncMsg(`Sync failed: ${data.error || 'error'}`); return }
+      const ts   = new Date().toISOString()
+      localStorage.setItem(LS_KEY, ts)
+      setLastSyncedAt(ts)
+      if (!res.ok) { if (!silent) setSyncMsg(`Sync failed: ${data.error || 'error'}`); return }
       const s = data.summary
-      setSyncMsg(`Synced ✓ — clients: +${s.clientsCreatedLocal} new, ${s.clientsUpdatedLocal} updated, ${s.clientsPushed} sent to Xero · suppliers: +${s.suppliersCreatedLocal} new, ${s.suppliersUpdatedLocal} updated, ${s.suppliersPushed} sent.${s.errors?.length ? ` (${s.errors.length} issue(s))` : ''}`)
+      if (!silent)
+        setSyncMsg(`Synced ✓ — clients: +${s.clientsCreatedLocal} new, ${s.clientsUpdatedLocal} updated, ${s.clientsPushed} sent · suppliers: +${s.suppliersCreatedLocal} new, ${s.suppliersUpdatedLocal} updated, ${s.suppliersPushed} sent.${s.errors?.length ? ` (${s.errors.length} error(s))` : ''}`)
     } catch {
-      setSyncMsg('Sync failed — please try again.')
+      if (!silent) setSyncMsg('Sync failed — please try again.')
     } finally { setSyncing(false) }
   }
 
   async function load() {
-    try { setStatus(await (await fetch('/api/xero/status')).json()) } catch { /* ignore */ }
+    try {
+      const s = await (await fetch('/api/xero/status')).json() as Status
+      setStatus(s)
+      // Auto-sync if connected and last sync was > AUTO_SYNC_HOURS ago
+      if (s.connected) {
+        const last = localStorage.getItem(LS_KEY)
+        setLastSyncedAt(last)
+        const ageHrs = last ? (Date.now() - new Date(last).getTime()) / 3_600_000 : Infinity
+        if (ageHrs > AUTO_SYNC_HOURS) runSync(true)
+      }
+    } catch { /* ignore */ }
   }
+
   useEffect(() => {
     load()
     try { setFlash(new URLSearchParams(window.location.search).get('xero')) } catch { /* ignore */ }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function disconnect() {
     if (!confirm('Disconnect Xero? You can reconnect anytime.')) return
@@ -68,11 +87,16 @@ export default function XeroConnectionCard() {
               <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: '#dcfce7', color: '#166534' }}>● Connected</span>
               <span style={{ fontSize: 14, fontWeight: 600 }}>{status.tenantName}</span>
               <div style={{ flex: 1 }} />
-              <button className="btn-sm btn-outline" onClick={syncContacts} disabled={syncing}>{syncing ? 'Syncing…' : '↻ Sync contacts'}</button>
+              <button className="btn-sm btn-outline" onClick={() => runSync(false)} disabled={syncing}>{syncing ? 'Syncing…' : '↻ Sync contacts'}</button>
               <button className="btn-sm btn-danger" onClick={disconnect} disabled={busy}>{busy ? 'Disconnecting…' : 'Disconnect'}</button>
             </div>
             <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--muted)' }}>
-              Sync pushes your clients &amp; suppliers to Xero and pulls Xero contacts back in. If a contact was edited both sides, the most recently changed version wins.
+              Auto-syncs every {AUTO_SYNC_HOURS} hours. Pushes clients &amp; suppliers to Xero and pulls Xero contacts back in. Most-recently-edited version wins on conflict.
+              {lastSyncedAt && (
+                <span style={{ display: 'block', marginTop: 3, color: '#94a3b8' }}>
+                  Last synced: {new Date(lastSyncedAt).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}
+                </span>
+              )}
             </p>
             {syncMsg && <div style={{ marginTop: 8, fontSize: 12, color: '#0f172a', background: '#f1f5f9', borderRadius: 6, padding: '8px 10px' }}>{syncMsg}</div>}
           </>

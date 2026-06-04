@@ -384,6 +384,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       user_id: ownerId, name: c.name, first_name: c.first, last_name: c.last,
       phone: c.phone, email: c.email, address: c.address,
       notes: c.notes, added_from: c.addedFrom,
+      updated_at: new Date().toISOString(),
     }).select().single()
     if (error) throw error
     setClients(prev => [...prev, {
@@ -455,6 +456,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       user_id: ownerId, name: s.name, contact_name: s.contactName, phone: s.phone,
       email: s.email, address: s.address, notes: s.notes, account_number: s.accountNumber,
       added_from: s.addedFrom,
+      updated_at: new Date().toISOString(),
     }).select().single()
     if (error) throw error
     setSuppliers(prev => [...prev, {
