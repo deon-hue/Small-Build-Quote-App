@@ -158,11 +158,18 @@ export async function fetchProducts(sb: SupabaseClient, userId: string): Promise
   return data ?? []
 }
 
-export async function upsertProduct(sb: SupabaseClient, product: Partial<BOProduct> & { user_id: string }): Promise<BOProduct | null> {
-  const { id, ...rest } = product
-  const payload = id ? { id, ...rest } : rest   // omit id when empty so DB generates a UUID
-  const { data } = await sb.from('bo_products').upsert({ ...payload, updated_at: new Date().toISOString() }).select().single()
-  return data
+export async function upsertProduct(sb: SupabaseClient, product: Partial<BOProduct> & { user_id: string }): Promise<{ data: BOProduct | null; error: string | null }> {
+  // Strip empty-string id (causes "invalid uuid" error) and empty timestamp fields
+  // (empty string is invalid for TIMESTAMPTZ columns in Postgres).
+  const { id, created_at, updated_at: _u, ...rest } = product as BOProduct
+  const payload: Record<string, unknown> = { ...rest, updated_at: new Date().toISOString() }
+  if (id)         payload.id         = id
+  if (created_at) payload.created_at = created_at
+
+  const { data, error } = await sb.from('bo_products')
+    .upsert(payload).select().single()
+  if (error) console.error('[upsertProduct]', error.message, error.details)
+  return { data, error: error?.message ?? null }
 }
 
 export async function deleteProduct(sb: SupabaseClient, id: string): Promise<void> {

@@ -20,6 +20,8 @@ export default function SectionProducts({ userId }: Props) {
   const [loading,         setLoading]         = useState(true)
   const [editing,         setEditing]         = useState<BOProduct | null>(null)
   const [isNew,           setIsNew]           = useState(false)
+  const [saveError,       setSaveError]       = useState<string | null>(null)
+  const [saving,          setSaving]          = useState(false)
   const [search,          setSearch]          = useState('')
   const [expandedCats,    setExpandedCats]    = useState<Set<string>>(new Set())
   const [customCategories,setCustomCategories]= useState<string[]>(() => {
@@ -71,12 +73,21 @@ export default function SectionProducts({ userId }: Props) {
 
   async function save() {
     if (!editing) return
-    const saved = await upsertProduct(sb, { ...editing, user_id: userId })
-    if (saved) {
+    setSaving(true); setSaveError(null)
+    try {
+      const { data: saved, error } = await upsertProduct(sb, { ...editing, user_id: userId })
+      if (error || !saved) {
+        setSaveError(error ?? 'Save failed — please try again.')
+        return
+      }
       if (isNew) setProducts(prev => [...prev, saved])
       else setProducts(prev => prev.map(p => p.id === saved.id ? saved : p))
+      setEditing(null)
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setSaving(false)
     }
-    setEditing(null)
   }
 
   async function remove(id: string) {
@@ -88,7 +99,7 @@ export default function SectionProducts({ userId }: Props) {
   async function duplicate(product: BOProduct) {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { id: _id, created_at: _c, updated_at: _u, ...row } = product as BOProduct & { created_at?: string; updated_at?: string }
-    const saved = await upsertProduct(sb, { ...row, user_id: userId, name: `${product.name} (copy)` })
+    const { data: saved } = await upsertProduct(sb, { ...row, user_id: userId, name: `${product.name} (copy)` })
     if (saved) setProducts(prev => [...prev, saved])
   }
 
@@ -324,9 +335,16 @@ export default function SectionProducts({ userId }: Props) {
                 Active
               </label>
             </div>
+            {saveError && (
+              <div style={{ margin: '0 22px 10px', padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, fontSize: 12, color: '#dc2626' }}>
+                ⚠️ {saveError}
+              </div>
+            )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '12px 22px', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
-              <button onClick={() => setEditing(null)} style={{ padding: '8px 18px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, background: '#fff', cursor: 'pointer' }}>Cancel</button>
-              <button onClick={save} style={{ padding: '8px 22px', background: '#4a90a4', border: 'none', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Save</button>
+              <button onClick={() => { setEditing(null); setSaveError(null) }} style={{ padding: '8px 18px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, background: '#fff', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={save} disabled={saving} style={{ padding: '8px 22px', background: saving ? '#94a3b8' : '#4a90a4', border: 'none', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 700, cursor: saving ? 'wait' : 'pointer' }}>
+                {saving ? 'Saving…' : 'Save'}
+              </button>
             </div>
           </div>
         </div>
