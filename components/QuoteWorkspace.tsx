@@ -1389,7 +1389,6 @@ export interface QuoteWorkspaceProps {
   vatOn?:            boolean
   isLocked?:         boolean
   onChange:          (phases: QuotePhase[]) => void
-  onImportTakeoff?:  () => void
   onAIGenerate?:     () => void
   aiGenerating?:     boolean
   onLoadTemplate?:   (jobType: string) => void
@@ -1406,7 +1405,7 @@ export interface QuoteWorkspaceProps {
   quoteSource?:      'takeoff' | 'ai' | 'manual'
 }
 
-export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked = false, onChange, onImportTakeoff, onAIGenerate, aiGenerating, onLoadTemplate, jobType, onSaveToBO, labourTrades = [], boProducts = [], boPlantItems = [], quoteSource }: QuoteWorkspaceProps) {
+export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked = false, onChange, onAIGenerate, aiGenerating, onLoadTemplate, jobType, onSaveToBO, labourTrades = [], boProducts = [], boPlantItems = [], quoteSource }: QuoteWorkspaceProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [search,    setSearch]    = useState('')
 
@@ -1578,26 +1577,8 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
             Start by importing from the Takeoff tool, generating from a scope of works, or loading a job template.
           </div>
 
-          {/* Two primary CTAs */}
+          {/* Primary CTAs */}
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 20 }}>
-            <button
-              onClick={onImportTakeoff}
-              disabled={!onImportTakeoff}
-              style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
-                padding: '18px 28px', background: '#eff6ff',
-                border: '2px solid #bfdbfe', borderRadius: 10,
-                cursor: 'pointer', minWidth: 160,
-                transition: 'border-color 0.15s',
-              }}
-            >
-              <span style={{ fontSize: 28 }}>📐</span>
-              <span style={{ fontWeight: 700, fontSize: 14, color: '#1d4ed8' }}>Import from Takeoff</span>
-              <span style={{ fontSize: 11, color: '#64748b', textAlign: 'center', lineHeight: 1.4 }}>
-                Upload a takeoff JSON file to bring in measured quantities and build-up recipes
-              </span>
-            </button>
-
             <button
               onClick={onAIGenerate}
               disabled={aiGenerating || !onAIGenerate}

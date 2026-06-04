@@ -1405,16 +1405,12 @@ export default function NewQuotePage() {
                   <span style={{ color: '#64748b' }}>— costs based on your configured defaults</span>
                 </div>
               )}
-              {/* Always-present hidden file input so takeoffInputRef.current?.click() works
-                  regardless of which route opened the workspace */}
-              <input ref={takeoffInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={importTakeoff} />
               <QuoteWorkspace
                 phases={phases}
                 markup={markup}
                 vatOn={vatOn}
                 isLocked={isLockedQuote}
                 onChange={setPhases}
-                onImportTakeoff={() => takeoffInputRef.current?.click()}
                 onAIGenerate={generatePhases}
                 aiGenerating={generatingPhases}
                 onLoadTemplate={loadTemplate}
