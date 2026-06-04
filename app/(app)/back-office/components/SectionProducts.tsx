@@ -174,7 +174,7 @@ export default function SectionProducts({ userId }: Props) {
       const name = get('name'); if (!name) continue
       const prod: BOProduct = {
         ...EMPTY, user_id: userId, id: '', created_at: '', updated_at: '',
-        name, category: get('category') || 'General', unit: get('unit') || 'item',
+        name, category: get('category') || aiCategory || 'General', unit: get('unit') || 'item',
         default_cost: parseFloat(get('default_cost').replace(/[£,]/g, '')) || 0,
         waste_pct:    parseFloat(get('waste_pct'))   || 10,
         markup_pct:   parseFloat(get('markup_pct'))  || 20,
@@ -293,16 +293,6 @@ export default function SectionProducts({ userId }: Props) {
             style={{ padding: '6px 12px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#f8fafc', color: '#64748b', fontSize: 12, cursor: 'pointer' }}>
             Collapse All
           </button>
-          <button
-            onClick={() => { setShowAIImport(true); setAIProducts([]); setAIError(''); setAIUrl('') }}
-            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: '#faf5ff', border: '1px solid #ddd6fe', borderRadius: 6, color: '#7c3aed', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
-            ✦ AI Import
-          </button>
-          <button
-            onClick={() => csvInputRef.current?.click()}
-            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 6, color: '#166534', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
-            📊 Import CSV
-          </button>
           {/* New Category */}
           {addingCat ? (
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -360,11 +350,26 @@ export default function SectionProducts({ userId }: Props) {
               <span style={{ fontSize: 11, color: '#94a3b8' }}>
                 {isEmpty ? 'empty' : `${items.length} product${items.length !== 1 ? 's' : ''}`}
               </span>
-              <button
-                onClick={e => { e.stopPropagation(); setEditing({ ...EMPTY, user_id: userId, id: '', created_at: '', updated_at: '', category: cat } as BOProduct); setIsNew(true) }}
-                style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '3px 8px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 4, color: '#1d4ed8', fontSize: 11, cursor: 'pointer', flexShrink: 0 }}>
-                <Plus size={11} /> Add
-              </button>
+              {/* Per-category action buttons */}
+              <div style={{ display: 'flex', gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                <button
+                  onClick={() => { setEditing({ ...EMPTY, user_id: userId, id: '', created_at: '', updated_at: '', category: cat } as BOProduct); setIsNew(true) }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '3px 8px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 4, color: '#1d4ed8', fontSize: 11, cursor: 'pointer' }}>
+                  <Plus size={11} /> Add
+                </button>
+                <button
+                  onClick={() => { setShowAIImport(true); setAIProducts([]); setAIError(''); setAIUrl(''); setAICategory(cat) }}
+                  title={`AI Import into "${cat}"`}
+                  style={{ padding: '3px 8px', background: '#faf5ff', border: '1px solid #ddd6fe', borderRadius: 4, color: '#7c3aed', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
+                  ✦ AI
+                </button>
+                <button
+                  onClick={() => { setAICategory(cat); csvInputRef.current?.click() }}
+                  title={`Import CSV into "${cat}"`}
+                  style={{ padding: '3px 8px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 4, color: '#166534', fontSize: 11, cursor: 'pointer' }}>
+                  📊 CSV
+                </button>
+              </div>
               {isEmpty && customCategories.includes(cat) && (
                 <button
                   onClick={e => { e.stopPropagation(); removeCustomCategory(cat) }}
