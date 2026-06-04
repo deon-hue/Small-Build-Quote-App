@@ -2,12 +2,14 @@
 
 /**
  * ProductPicker — searchable modal to select products from Back Office.
- * Returns a QuoteProduct ready to be added to a sub-phase.
+ * Includes an inline "+ New Product" form that saves to BO and adds to the quote.
  */
 
 import { useState, useMemo } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import type { BOProduct } from '@/lib/back-office-types'
 import type { QuoteProduct } from '@/lib/types'
+import { PRODUCT_CATEGORIES, TASK_UNITS } from '@/lib/back-office-types'
 
 function uid() { return Math.random().toString(36).slice(2, 10) }
 
@@ -18,18 +20,28 @@ interface Props {
 }
 
 export default function ProductPicker({ products, onAdd, onClose }: Props) {
-  const [search, setSearch]         = useState('')
-  const [catFilter, setCatFilter]   = useState('All')
-  const [qty, setQty]               = useState<Record<string, number>>({})
+  const [search,     setSearch]     = useState('')
+  const [catFilter,  setCatFilter]  = useState('All')
+  const [qty,        setQty]        = useState<Record<string, number>>({})
+  const [localProds, setLocalProds] = useState<BOProduct[]>(products)
+
+  // ── Quick-add form state ─────────────────────────────────────────────────────
+  const [adding,     setAdding]     = useState(false)
+  const [saving,     setSaving]     = useState(false)
+  const [saveErr,    setSaveErr]    = useState('')
+  const [form, setForm] = useState({
+    name: '', category: 'General', unit: 'm²',
+    default_cost: 0, markup_pct: 20, waste_pct: 10, supplier: '',
+  })
 
   const categories = useMemo(() => {
-    const cats = [...new Set(products.map(p => p.category).filter(Boolean))]
+    const cats = [...new Set([...PRODUCT_CATEGORIES, ...localProds.map(p => p.category)].filter(Boolean))]
     return ['All', ...cats.sort()]
-  }, [products])
+  }, [localProds])
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim()
-    return products.filter(p => {
+    return localProds.filter(p => {
       if (!p.active) return false
       if (catFilter !== 'All' && p.category !== catFilter) return false
       if (!q) return true
@@ -39,40 +51,125 @@ export default function ProductPicker({ products, onAdd, onClose }: Props) {
         (p.supplier  ?? '').toLowerCase().includes(q)
       )
     })
-  }, [products, search, catFilter])
+  }, [localProds, search, catFilter])
 
   function handleAdd(p: BOProduct) {
-    const itemQty     = qty[p.id] || 1
-    const costPrice   = p.default_cost
-    const sellPrice   = +(costPrice * (1 + (p.markup_pct ?? 0) / 100)).toFixed(2)
-    const product: QuoteProduct = {
-      id:          uid(),
-      boProductId: p.id,
-      name:        p.name,
-      unit:        p.unit,
-      qty:         itemQty,
-      costPrice,
-      sellPrice,
-      supplier:    p.supplier || undefined,
-      category:    p.category || undefined,
-      wastePercent:p.waste_pct || undefined,
-      enabled:     true,
-    }
-    onAdd(product)
+    const itemQty   = qty[p.id] || 1
+    const costPrice = p.default_cost
+    const sellPrice = +(costPrice * (1 + (p.markup_pct ?? 0) / 100)).toFixed(2)
+    onAdd({
+      id: uid(), boProductId: p.id, name: p.name, unit: p.unit,
+      qty: itemQty, costPrice, sellPrice,
+      supplier: p.supplier || undefined, category: p.category || undefined,
+      wastePercent: p.waste_pct || undefined, enabled: true,
+    })
+  }
+
+  async function saveNew() {
+    if (!form.name.trim()) return
+    setSaving(true); setSaveErr('')
+    try {
+      const sb = createClient()
+      const { data: { user } } = await sb.auth.getUser()
+      if (!user) { setSaveErr('Not signed in'); return }
+
+      const { id: _id, created_at: _c, updated_at: _u, ...payload } = {
+        user_id: user.id, name: form.name.trim(), category: form.category,
+        unit: form.unit, default_cost: form.default_cost, markup_pct: form.markup_pct,
+        waste_pct: form.waste_pct, supplier: form.supplier,
+        phase_id: null, active: true,
+        id: '', created_at: '', updated_at: '',
+      } as BOProduct
+      void _id; void _c; void _u
+
+      const { data, error } = await sb.from('bo_products')
+        .insert({ ...payload, updated_at: new Date().toISOString() })
+        .select().single()
+
+      if (error || !data) { setSaveErr(error?.message ?? 'Save failed'); return }
+
+      const newProd = data as BOProduct
+      setLocalProds(prev => [...prev, newProd])
+      handleAdd(newProd)
+      setAdding(false)
+      setForm({ name: '', category: 'General', unit: 'm²', default_cost: 0, markup_pct: 20, waste_pct: 10, supplier: '' })
+    } catch (e) {
+      setSaveErr(e instanceof Error ? e.message : 'Save failed')
+    } finally { setSaving(false) }
   }
 
   const inp: React.CSSProperties = { padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, outline: 'none', boxSizing: 'border-box' as const }
+  const fInp: React.CSSProperties = { padding: '5px 8px', border: '1px solid #bfdbfe', borderRadius: 5, fontSize: 12, outline: 'none', boxSizing: 'border-box' as const, width: '100%' }
+  const fLbl: React.CSSProperties = { display: 'block', fontSize: 10, fontWeight: 600, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 3 }
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 740, maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+      <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 760, maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
 
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 18px', borderBottom: '1px solid #e2e8f0' }}>
           <div style={{ fontWeight: 700, fontSize: 16 }}>📦 Add Product</div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8' }}>×</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => { setAdding(a => !a); setSaveErr('') }}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: adding ? '#eff6ff' : '#f0fdf4', border: `1px solid ${adding ? '#bfdbfe' : '#86efac'}`, borderRadius: 6, color: adding ? '#1d4ed8' : '#166534', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              {adding ? '✕ Cancel' : '+ New Product'}
+            </button>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8' }}>×</button>
+          </div>
         </div>
+
+        {/* Quick-add form */}
+        {adding && (
+          <div style={{ padding: '14px 18px', background: '#eff6ff', borderBottom: '2px solid #bfdbfe' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#1d4ed8', marginBottom: 10 }}>New Product — saves to Back Office and adds to quote</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+              <div>
+                <label style={fLbl}>Product Name *</label>
+                <input autoFocus value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                  onKeyDown={e => e.key === 'Enter' && saveNew()}
+                  placeholder="e.g. Dense concrete block 100mm" style={fInp} />
+              </div>
+              <div>
+                <label style={fLbl}>Category</label>
+                <input list="pp-cats" value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} style={fInp} />
+                <datalist id="pp-cats">{categories.filter(c => c !== 'All').map(c => <option key={c} value={c} />)}</datalist>
+              </div>
+              <div>
+                <label style={fLbl}>Unit</label>
+                <select value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))} style={fInp}>
+                  {TASK_UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+              <div>
+                <label style={fLbl}>Cost price (£)</label>
+                <input type="number" min={0} step={0.01} value={form.default_cost} onChange={e => setForm(f => ({ ...f, default_cost: +e.target.value }))} style={fInp} />
+              </div>
+              <div>
+                <label style={fLbl}>Markup %</label>
+                <input type="number" min={0} max={200} step={1} value={form.markup_pct} onChange={e => setForm(f => ({ ...f, markup_pct: +e.target.value }))} style={fInp} />
+              </div>
+              <div>
+                <label style={fLbl}>Waste %</label>
+                <input type="number" min={0} max={50} step={1} value={form.waste_pct} onChange={e => setForm(f => ({ ...f, waste_pct: +e.target.value }))} style={fInp} />
+              </div>
+              <div>
+                <label style={fLbl}>Supplier</label>
+                <input value={form.supplier} onChange={e => setForm(f => ({ ...f, supplier: e.target.value }))} placeholder="Optional" style={fInp} />
+              </div>
+            </div>
+            {saveErr && <div style={{ fontSize: 11, color: '#dc2626', marginBottom: 8 }}>⚠️ {saveErr}</div>}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <button onClick={saveNew} disabled={saving || !form.name.trim()}
+                style={{ padding: '7px 18px', background: saving ? '#94a3b8' : '#1d4ed8', border: 'none', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 700, cursor: saving ? 'wait' : 'pointer' }}>
+                {saving ? 'Saving…' : '💾 Save to Back Office & Add to Quote'}
+              </button>
+              <span style={{ fontSize: 11, color: '#64748b' }}>Sell: £{(form.default_cost * (1 + form.markup_pct / 100)).toFixed(2)}</span>
+            </div>
+          </div>
+        )}
 
         {/* Filters */}
         <div style={{ display: 'flex', gap: 8, padding: '12px 18px', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
@@ -81,10 +178,9 @@ export default function ProductPicker({ products, onAdd, onClose }: Props) {
             <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search products…"
               style={{ ...inp, width: '100%', paddingLeft: 30 }}
-              autoFocus />
+              autoFocus={!adding} />
           </div>
-          <select value={catFilter} onChange={e => setCatFilter(e.target.value)}
-            style={{ ...inp, minWidth: 140 }}>
+          <select value={catFilter} onChange={e => setCatFilter(e.target.value)} style={{ ...inp, minWidth: 140 }}>
             {categories.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
@@ -93,8 +189,8 @@ export default function ProductPicker({ products, onAdd, onClose }: Props) {
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {filtered.length === 0 ? (
             <div style={{ padding: '32px 18px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
-              {products.filter(p => p.active).length === 0
-                ? 'No products in Back Office yet. Add products in Back Office → Products.'
+              {localProds.filter(p => p.active).length === 0
+                ? 'No products in Back Office yet — use "+ New Product" above to create one.'
                 : 'No products match your search.'}
             </div>
           ) : (
@@ -108,7 +204,7 @@ export default function ProductPicker({ products, onAdd, onClose }: Props) {
               </thead>
               <tbody>
                 {filtered.map(p => {
-                  const sell = +(p.default_cost * (1 + (p.markup_pct ?? 0) / 100)).toFixed(2)
+                  const sell    = +(p.default_cost * (1 + (p.markup_pct ?? 0) / 100)).toFixed(2)
                   const itemQty = qty[p.id] ?? 1
                   return (
                     <tr key={p.id} style={{ borderBottom: '1px solid #f8fafc' }}
