@@ -91,8 +91,10 @@ export default function SectionProducts({ userId }: Props) {
       const prods = (data.products ?? []).map((p: { name: string; category: string; unit: string; default_cost: number; waste_pct: number; markup_pct: number; supplier: string }) => ({
         ...EMPTY, user_id: userId, id: '', created_at: '', updated_at: '',
         name: p.name, category: p.category || aiCategory,
-        unit: p.unit, default_cost: p.default_cost,
-        waste_pct: p.waste_pct ?? 10, markup_pct: p.markup_pct ?? 20,
+        unit: p.unit,
+        default_cost: +(p.default_cost ?? 0),
+        waste_pct:    +(p.waste_pct  ?? 10),
+        markup_pct:   +(p.markup_pct ?? 20),
         supplier: p.supplier ?? '',
       })) as BOProduct[]
       setAIProducts(prods)
@@ -108,7 +110,12 @@ export default function SectionProducts({ userId }: Props) {
     for (const i of Array.from(aiSelected)) {
       const p = aiProducts[i]
       if (!p) continue
-      const { data: saved } = await upsertProduct(sb, { ...p, user_id: userId })
+      const { data: saved } = await upsertProduct(sb, {
+      ...p, user_id: userId,
+      default_cost: +(p.default_cost ?? 0),
+      waste_pct:    +(p.waste_pct    ?? 10),
+      markup_pct:   +(p.markup_pct   ?? 20),
+    })
       if (saved) { setProducts(prev => [...prev, saved]); count++ }
     }
     setShowAIImport(false); setAIProducts([]); setAICategory(''); setAIContext('')
