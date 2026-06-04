@@ -1005,7 +1005,10 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
           </span>
         )}
         <ItemStatusBadge status={p.itemStatus} />
-        {p.aiReviewed && (
+        {p.phaseImage && (
+          <span title="AI reviewed — visual assigned" style={{ fontSize: 14, flexShrink: 0, lineHeight: 1 }}>{p.phaseImage.emoji}</span>
+        )}
+        {p.aiReviewed && !p.phaseImage && (
           <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 99, background: '#f0fdf4', color: '#16a34a', fontWeight: 700, flexShrink: 0 }}>✓ Reviewed</span>
         )}
         <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: '#7ab533', flexShrink: 0 }}>
@@ -1184,11 +1187,10 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
             const newItem: QuoteItem = { ...item, id: uid() }
             onUpdate({ ...p, items: [...p.items, newItem] })
           }}
-          onComplete={() => {
-            onUpdate({ ...p, aiReviewed: true })
+          onComplete={image => {
+            onUpdate({ ...p, aiReviewed: true, phaseImage: image })
             setShowReview(false)
-            // Collapse the phase after completing
-            toggle(colKey)
+            toggle(colKey)  // collapse phase after completing
           }}
           onClose={() => setShowReview(false)}
         />

@@ -1,6 +1,7 @@
 import type { Quote } from './types'
 import type { Settings } from './types'
 import { VAT, calcPhase, calcItemSell, calcPhaseSell } from './utils'
+import { getPhaseVisual } from './phase-visuals'
 
 function esc(s: string): string {
   return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
@@ -87,14 +88,33 @@ export function buildHtmlClientView(q: Quote, settings: Settings): string {
   const qVat = q.vatIncluded
   const now = new Date()
 
+  // Deduplicate phases — group by parentPhase, use first occurrence for visual
   const phaseRows = q.phases.map(p => {
-    const sell = calcPhaseSell(p, qMkp)
-    const vat = qVat ? sell * VAT : 0
-    return `<tr>
-      <td style="padding:10px 12px;border-bottom:1px solid #e8e0d0;font-weight:500">${esc(p.phase)}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid #e8e0d0;text-align:right;font-weight:600">£${sell.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</td>
-      ${qVat ? `<td style="padding:10px 12px;border-bottom:1px solid #e8e0d0;text-align:right;color:#4a90a4">£${vat.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</td>` : ''}
-    </tr>`
+    const sell    = calcPhaseSell(p, qMkp)
+    const vatAmt  = qVat ? sell * VAT : 0
+    // Use AI-assigned image if available; fall back to the static mapping
+    const img     = p.phaseImage ?? { ...getPhaseVisual(p.phase), photoUrl: undefined }
+    const emoji   = img.emoji
+    const color   = img.color
+    const photo   = img.photoUrl
+
+    const photoHtml = photo
+      ? `<div style="width:72px;height:52px;border-radius:6px;overflow:hidden;flex-shrink:0;margin-right:14px">
+           <img src="${photo}" alt="${esc(p.phase)}" style="width:100%;height:100%;object-fit:cover">
+         </div>`
+      : `<div style="width:52px;height:52px;border-radius:6px;background:${color}18;border:1px solid ${color}44;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;margin-right:14px">${emoji}</div>`
+
+    return `<div style="display:flex;align-items:center;padding:12px 14px;border-bottom:1px solid #e8e0d0;border-left:4px solid ${color}">
+      ${photoHtml}
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:13px;color:#1a1612">${esc(p.phase)}</div>
+        ${p.taskName ? `<div style="font-size:11px;color:#7a7268;margin-top:2px">${esc(p.taskName)}</div>` : ''}
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-weight:700;font-size:14px;color:#2b2f33">£${sell.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>
+        ${qVat ? `<div style="font-size:11px;color:#4a90a4">+£${vatAmt.toLocaleString('en-GB', { minimumFractionDigits: 2 })} VAT</div>` : ''}
+      </div>
+    </div>`
   }).join('')
 
   const sub = q.phases.reduce((s, p) => s + calcPhaseSell(p, qMkp), 0)
@@ -140,7 +160,7 @@ ${q.photo ? `<div style="margin-bottom:24px;text-align:center"><img src="${q.pho
   <dl class="dl"><dt>Prepared For</dt><dd>${esc(q.customer.name || '—')}</dd><dt>Property</dt><dd>${esc(q.customer.address || '—')}</dd><dt>Job Type</dt><dd>${esc(q.jobType)}</dd></dl>
 </div>
 <h3>Summary of Works — ${esc(q.jobType)}</h3>
-<table><thead><tr><th>Phase / Stage of Works</th><th style="width:110px;text-align:right">Price (ex-VAT)</th>${qVat ? '<th style="width:90px;text-align:right">VAT (20%)</th>' : ''}</tr></thead><tbody>${phaseRows}</tbody></table>
+<div style="border:1px solid #e8e0d0;border-radius:6px;overflow:hidden;margin-bottom:20px">${phaseRows}</div>
 <div class="tots"><table>
   <tr><td>Subtotal (ex-VAT)</td><td style="text-align:right">£${sub.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</td></tr>
   ${qVat ? `<tr><td>VAT (20%)</td><td style="text-align:right">£${vat.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</td></tr>` : '<tr><td colspan="2" style="font-size:10px;color:#8a8278">*VAT not included</td></tr>'}

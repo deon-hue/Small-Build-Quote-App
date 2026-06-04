@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import type { QuotePhase, QuoteItem } from '@/lib/types'
 import type { PhaseReviewResult, ReviewSuggestion } from '@/app/api/phase-review/route'
+import { getPhaseVisual } from '@/lib/phase-visuals'
+import type { PhaseImage } from '@/lib/phase-visuals'
 
 function uid() { return Math.random().toString(36).slice(2, 10) }
 
@@ -18,7 +20,7 @@ interface Props {
   jobType:    string
   markup:     number
   onAddItem:  (item: Omit<QuoteItem, 'id'>) => void
-  onComplete: () => void
+  onComplete: (image: PhaseImage) => void
   onClose:    () => void
 }
 
@@ -27,6 +29,8 @@ export default function PhaseReviewModal({ phase, jobType, markup, onAddItem, on
   const [result,     setResult]     = useState<PhaseReviewResult | null>(null)
   const [hasHistory, setHasHistory] = useState(false)
   const [error,      setError]      = useState('')
+  const [completing, setCompleting] = useState(false)
+  const visual = getPhaseVisual(phase.phase)
   const [added,      setAdded]      = useState<Set<string>>(new Set())
 
   useEffect(() => {
@@ -202,9 +206,25 @@ export default function PhaseReviewModal({ phase, jobType, markup, onAddItem, on
             style={{ padding: '8px 18px', border: '1px solid #d1d5db', borderRadius: 7, fontSize: 13, background: '#fff', cursor: 'pointer', color: '#374151' }}>
             Keep Editing
           </button>
-          <button onClick={onComplete}
-            style={{ padding: '8px 22px', background: '#16a34a', border: 'none', borderRadius: 7, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-            ✓ Complete Phase
+          <button
+            disabled={completing}
+            onClick={async () => {
+              setCompleting(true)
+              try {
+                // Fetch a relevant photo from Unsplash (graceful fallback if no key)
+                let photoUrl: string | undefined
+                try {
+                  const r = await fetch(`/api/phase-image?query=${encodeURIComponent(visual.keywords)}`)
+                  const d = await r.json()
+                  photoUrl = d.photoUrl ?? undefined
+                } catch { /* no photo — use emoji only */ }
+                onComplete({ emoji: visual.emoji, color: visual.color, photoUrl })
+              } finally {
+                setCompleting(false)
+              }
+            }}
+            style={{ padding: '8px 22px', background: completing ? '#94a3b8' : '#16a34a', border: 'none', borderRadius: 7, color: '#fff', fontSize: 13, fontWeight: 700, cursor: completing ? 'wait' : 'pointer' }}>
+            {completing ? `${visual.emoji} Adding visual…` : '✓ Complete Phase'}
           </button>
         </div>
       </div>

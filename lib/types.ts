@@ -106,6 +106,8 @@ export interface QuotePhase {
   plantItems?: QuotePlantItem[]
   /** Set true when the AI phase-review has been run and "Complete Phase" clicked */
   aiReviewed?: boolean
+  /** Visual assigned during AI phase review — shown in workspace + client quote */
+  phaseImage?: { emoji: string; color: string; photoUrl?: string }
 }
 
 export interface QuoteCustomer {
