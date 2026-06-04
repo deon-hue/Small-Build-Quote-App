@@ -41,18 +41,49 @@ export async function POST(req: NextRequest) {
     try {
       const resp = await fetch(url.trim(), {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; product-import-bot/1.0)',
-          'Accept': 'text/html',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-GB,en;q=0.9',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
         },
-        signal: AbortSignal.timeout(10_000),
+        redirect: 'follow',
+        signal: AbortSignal.timeout(12_000),
       })
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+
+      if (resp.status === 404) {
+        return NextResponse.json({
+          error: 'Page not found (404) — check the URL is correct, or try copying the URL directly from your browser address bar.',
+        }, { status: 400 })
+      }
+      if (resp.status === 403 || resp.status === 401) {
+        return NextResponse.json({
+          error: `This site requires login or blocks automated access (${resp.status}). Try exporting a CSV from the supplier instead, then use the 📊 CSV button.`,
+        }, { status: 400 })
+      }
+      if (!resp.ok) {
+        return NextResponse.json({
+          error: `Could not load the page (HTTP ${resp.status}). The site may be blocking automated access — try the 📊 CSV import instead.`,
+        }, { status: 400 })
+      }
+
       const html = await resp.text()
+      if (!html || html.trim().length < 100) {
+        return NextResponse.json({
+          error: 'The page returned empty content. The site may require JavaScript to load products — try the 📊 CSV import instead.',
+        }, { status: 400 })
+      }
+
       pageContent = extractText(html)
       // Try to extract supplier name from URL hostname
       try { sourceSupplier = new URL(url.trim()).hostname.replace('www.', '').split('.')[0] } catch { /* ignore */ }
     } catch (e) {
-      return NextResponse.json({ error: `Could not fetch URL: ${e instanceof Error ? e.message : 'failed'}` }, { status: 400 })
+      const msg = e instanceof Error ? e.message : 'failed'
+      const hint = msg.includes('timeout') || msg.includes('abort')
+        ? 'The site took too long to respond. Try again or use 📊 CSV import.'
+        : `Could not reach the URL. Check the address is correct and accessible.`
+      return NextResponse.json({ error: hint }, { status: 400 })
     }
   }
 
