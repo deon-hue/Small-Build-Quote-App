@@ -33,6 +33,7 @@ export default function ProductPicker({ products, onAdd, onClose }: Props) {
     name: '', category: 'General', unit: 'm²',
     default_cost: 0, markup_pct: 20, waste_pct: 10, supplier: '',
   })
+  const [customCat, setCustomCat]   = useState('')
 
   const categories = useMemo(() => {
     const cats = [...new Set([...PRODUCT_CATEGORIES, ...localProds.map(p => p.category)].filter(Boolean))]
@@ -132,8 +133,30 @@ export default function ProductPicker({ products, onAdd, onClose }: Props) {
               </div>
               <div>
                 <label style={fLbl}>Category</label>
-                <input list="pp-cats" value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} style={fInp} />
-                <datalist id="pp-cats">{categories.filter(c => c !== 'All').map(c => <option key={c} value={c} />)}</datalist>
+                <select
+                  value={form.category === customCat && customCat ? '__other__' : form.category}
+                  onChange={e => {
+                    if (e.target.value === '__other__') {
+                      setCustomCat('')
+                      setForm(f => ({ ...f, category: '' }))
+                    } else {
+                      setCustomCat('')
+                      setForm(f => ({ ...f, category: e.target.value }))
+                    }
+                  }}
+                  style={fInp}>
+                  {categories.filter(c => c !== 'All').map(c => <option key={c} value={c}>{c}</option>)}
+                  <option value="__other__">+ New category…</option>
+                </select>
+                {(form.category === '' || (form.category === customCat && customCat !== '')) && (
+                  <input
+                    autoFocus
+                    value={customCat}
+                    onChange={e => { setCustomCat(e.target.value); setForm(f => ({ ...f, category: e.target.value })) }}
+                    placeholder="Type new category name"
+                    style={{ ...fInp, marginTop: 4 }}
+                  />
+                )}
               </div>
               <div>
                 <label style={fLbl}>Unit</label>
