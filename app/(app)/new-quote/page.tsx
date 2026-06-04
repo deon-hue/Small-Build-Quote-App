@@ -1266,6 +1266,16 @@ export default function NewQuotePage() {
                 <label>Phone</label>
                 <input value={custPhone} onChange={e => setCustPhone(e.target.value)} placeholder="07700 900000" />
               </div>
+              <div className="fg">
+                <label>Job Type</label>
+                <select
+                  value={jobType}
+                  onChange={e => setJobType(e.target.value)}
+                  style={{ width: '100%', padding: '7px 10px', border: '1.5px solid var(--border)', borderRadius: 6, fontSize: 13, fontWeight: 600, background: 'white' }}
+                >
+                  {JOB_TYPES.map(t => <option key={t}>{t}</option>)}
+                </select>
+              </div>
               {custAddr && (
                 <a href={`https://www.google.com/maps/search/${encodeURIComponent(custAddr)}`}
                   target="_blank" rel="noreferrer"
