@@ -550,7 +550,6 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string }>
   'bo-default': { label: '🏢 BO Default',  bg: '#f1f5f9', text: '#64748b' },
   'edited':     { label: '✏️ Edited',       bg: '#fef3c7', text: '#92400e' },
   'manual':     { label: '➕ Manual',       bg: '#dbeafe', text: '#1d4ed8' },
-  'takeoff':    { label: '📐 Takeoff',      bg: '#eff6ff', text: '#1d4ed8' },
   'ai':         { label: '✦ AI',            bg: '#fdf4ff', text: '#7c3aed' },
 }
 
