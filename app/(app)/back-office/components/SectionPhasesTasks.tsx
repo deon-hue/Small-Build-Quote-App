@@ -39,6 +39,8 @@ export default function SectionPhasesTasks({ userId }: Props) {
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null)
   const [selectedSubPhaseId, setSelectedSubPhaseId] = useState<string | null>(null)
   const [expandedSubPhases, setExpandedSubPhases] = useState<Set<string>>(new Set())
+  const [editingSubPhaseId, setEditingSubPhaseId] = useState<string | null>(null)
+  const [editingSubPhaseName, setEditingSubPhaseName] = useState('')
   const [loading, setLoading] = useState(true)
   const [taskModal, setTaskModal] = useState<TaskModalState>(null)
   const [jobTypeFilter, setJobTypeFilter] = useState<string>('All')
@@ -366,12 +368,35 @@ export default function SectionPhasesTasks({ userId }: Props) {
                 <div key={sp.id} style={{ border: '1px solid #e2e8f0', borderRadius: 8, marginBottom: 10, overflow: 'hidden' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#f8fafc', cursor: 'pointer' }} onClick={() => toggleSubPhase(sp.id)}>
                     {isOpen ? <ChevronDown size={15} style={{ color: '#94a3b8', flexShrink: 0 }} /> : <ChevronRight size={15} style={{ color: '#94a3b8', flexShrink: 0 }} />}
-                    <input
-                      value={sp.name}
-                      onClick={e => e.stopPropagation()}
-                      onChange={e => renameSubPhase(sp.id, e.target.value)}
-                      style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 13, fontWeight: 600, color: '#1e293b', outline: 'none', minWidth: 0 }}
-                    />
+
+                    {/* Sub-phase name — read-only with ✎ edit button */}
+                    {editingSubPhaseId === sp.id ? (
+                      <input
+                        autoFocus
+                        value={editingSubPhaseName}
+                        onClick={e => e.stopPropagation()}
+                        onChange={e => setEditingSubPhaseName(e.target.value)}
+                        onBlur={() => {
+                          if (editingSubPhaseName.trim()) renameSubPhase(sp.id, editingSubPhaseName.trim())
+                          setEditingSubPhaseId(null)
+                        }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') { e.currentTarget.blur() }
+                          if (e.key === 'Escape') { setEditingSubPhaseId(null) }
+                        }}
+                        style={{ flex: 1, border: '1.5px solid #4a90a4', borderRadius: 5, background: '#fff', fontSize: 13, fontWeight: 600, color: '#1e293b', outline: 'none', padding: '3px 8px', minWidth: 0 }}
+                      />
+                    ) : (
+                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }} onClick={e => e.stopPropagation()}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sp.name}</span>
+                        <button
+                          onClick={e => { e.stopPropagation(); setEditingSubPhaseId(sp.id); setEditingSubPhaseName(sp.name) }}
+                          title="Rename sub-phase"
+                          style={{ padding: '2px 6px', border: '1px solid #e2e8f0', borderRadius: 4, background: '#fff', fontSize: 11, cursor: 'pointer', color: '#64748b', flexShrink: 0, lineHeight: 1 }}>
+                          ✎
+                        </button>
+                      </div>
+                    )}
                     <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>
                       {spTasks.length} {BUILDUP_PHASES.has(selectedPhase.name) ? 'layers' : 'tasks'}
                     </span>
