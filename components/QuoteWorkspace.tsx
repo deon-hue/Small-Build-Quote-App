@@ -952,7 +952,7 @@ function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDel
           {/* Task description — tells the estimator what work this sub-phase covers */}
           <div style={{ marginBottom: 8 }}>
             <label style={{ display: 'block', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#94a3b8', marginBottom: 3 }}>
-              Work Description
+              Task Name
             </label>
             <input
               value={derivedTaskName}
