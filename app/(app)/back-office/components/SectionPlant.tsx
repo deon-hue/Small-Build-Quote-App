@@ -26,8 +26,8 @@ export default function SectionPlant({ userId }: Props) {
   const [editing, setEditing] = useState<BOPlantItem | null>(null)
   const [isNew, setIsNew] = useState(false)
   const [categoryFilter, setCategoryFilter] = useState<string>('All')
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
-  const toggleCat = (c: string) => setCollapsed(prev => { const n = new Set(prev); n.has(c) ? n.delete(c) : n.add(c); return n })
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())   // empty = all collapsed
+  const toggleCat = (c: string) => setExpanded(prev => { const n = new Set(prev); n.has(c) ? n.delete(c) : n.add(c); return n })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -127,11 +127,11 @@ export default function SectionPlant({ userId }: Props) {
         </select>
         {grouped.length > 0 && (
           <>
-            <button onClick={() => setCollapsed(new Set())}
+            <button onClick={() => setExpanded(new Set(grouped.map(([c]) => c)))}
               style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: 6, background: '#fff', color: '#374151', fontSize: 12, cursor: 'pointer' }}>
               ▾▾ Expand All
             </button>
-            <button onClick={() => setCollapsed(new Set(grouped.map(([c]) => c)))}
+            <button onClick={() => setExpanded(new Set())}
               style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: 6, background: '#fff', color: '#374151', fontSize: 12, cursor: 'pointer' }}>
               ▸▸ Collapse All
             </button>
@@ -146,7 +146,7 @@ export default function SectionPlant({ userId }: Props) {
       ) : grouped.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '32px', color: '#94a3b8', fontSize: 13 }}>No plant items in this category.</div>
       ) : grouped.map(([category, list]) => {
-        const isOpen = !collapsed.has(category)
+        const isOpen = expanded.has(category)
         return (
         <div key={category} style={{ marginBottom: 18 }}>
           <div onClick={() => toggleCat(category)} title={isOpen ? 'Collapse' : 'Expand'} style={{ background: '#2c3e50', color: '#ecf0f1', padding: '7px 14px', borderRadius: isOpen ? '8px 8px 0 0' : 8, fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
