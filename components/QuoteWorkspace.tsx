@@ -527,10 +527,17 @@ function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDel
   const sell   = subPhaseTotalSell(p, markup)
   const m      = p.meta?.measurements
 
-  // Task name shown to the user. Falls back to the chosen Back Office task name(s)
-  // captured on the cost rows (taskGroup) so existing quotes show it without a
-  // data migration. The explicit p.taskName takes precedence once edited.
-  const derivedTaskName = p.taskName ?? getTaskGroups(p.items).filter(Boolean).join(', ')
+  // Task name shown to the user — priority order:
+  //   1. Explicit p.taskName (user-edited or BO description)
+  //   2. taskGroup values from cost rows (e.g. "Blockwork, DPC")
+  //   3. desc from the first labour row (the most descriptive line)
+  //   4. desc from any non-empty row
+  const derivedTaskName =
+    p.taskName?.trim() ||
+    getTaskGroups(p.items).filter(Boolean).join(', ') ||
+    p.items.find(i => i.itemType === 'labour' && i.desc?.trim())?.desc?.trim() ||
+    p.items.find(i => i.desc?.trim())?.desc?.trim() ||
+    ''
 
   // Picker state
   const [showProductPicker, setShowProductPicker] = useState(false)
@@ -942,15 +949,23 @@ function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDel
       {open && (
         <div style={{ padding: '8px 10px 10px' }}>
 
-          {/* Task name / description — explains what this sub-phase covers */}
+          {/* Task description — tells the estimator what work this sub-phase covers */}
           <div style={{ marginBottom: 8 }}>
-            <label style={{ display: 'block', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#94a3b8', marginBottom: 3 }}>Task</label>
+            <label style={{ display: 'block', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#94a3b8', marginBottom: 3 }}>
+              Work Description
+            </label>
             <input
               value={derivedTaskName}
               readOnly={isLocked}
               onChange={e => onUpdate({ ...p, taskName: e.target.value || undefined })}
-              placeholder="Task name / what this work covers…"
-              style={{ width: '100%', fontSize: 12, color: '#475569', background: isLocked ? '#f8fafc' : '#fff', border: '1px solid #e2e8f0', borderRadius: 5, padding: '6px 9px', boxSizing: 'border-box', outline: 'none' }}
+              placeholder="Describe the work covered by this sub-phase…"
+              style={{
+                width: '100%', fontSize: 13, fontWeight: derivedTaskName ? 500 : 400,
+                color: derivedTaskName ? '#1e293b' : '#94a3b8',
+                background: isLocked ? '#f8fafc' : '#fff',
+                border: `1px solid ${derivedTaskName ? '#cbd5e1' : '#e2e8f0'}`,
+                borderRadius: 5, padding: '7px 9px', boxSizing: 'border-box', outline: 'none',
+              }}
             />
           </div>
 

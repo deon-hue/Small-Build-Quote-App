@@ -231,10 +231,11 @@ export default function NewQuotePage() {
           )
         }
         const ph = makePhase(row.subPhaseName, items, row.phaseName)
-        // Auto-fill the task name from the chosen Back Office task(s) so the user
-        // can see what they selected.
-        const taskNames = Array.from(new Set(row.tasks.map(t => t.name).filter(Boolean)))
-        built.push({ ...ph, source: 'manual', itemStatus: 'bo-default', boSubPhaseId: row.subPhaseId, taskName: taskNames.join(', ') || undefined })
+        // Use task description (preferred — more human-readable) then name as fallback
+        const taskNames = Array.from(new Set(
+          row.tasks.map(t => (t.description?.trim() || t.client_description?.trim() || t.name)?.trim()).filter(Boolean)
+        ))
+        built.push({ ...ph, source: 'manual', itemStatus: 'bo-default', boSubPhaseId: row.subPhaseId, taskName: taskNames.join(' · ') || undefined })
       }
       console.log('[loadFromBackOffice] Loaded', built.length, 'sub-phases from Back Office for', type)
       setPhases(built)
