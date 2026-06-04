@@ -11,15 +11,83 @@ export interface ImportedProduct {
   description?: string
 }
 
+// Strip HTML tags and collapse whitespace to get readable text from a page
+function extractText(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&pound;/g, '£')
+    .replace(/&#163;/g, '£')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+    .slice(0, 12000)  // cap at ~12k chars to stay within context
+}
+
 export async function POST(req: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return NextResponse.json({ error: 'ANTHROPIC_API_KEY not set' }, { status: 500 })
 
-  const { category, context } = await req.json()
+  const { category, context, url } = await req.json()
+
+  // ── URL mode: fetch page and extract products from it ─────────────────────
+  let pageContent = ''
+  let sourceSupplier = ''
+  if (url?.trim()) {
+    try {
+      const resp = await fetch(url.trim(), {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; product-import-bot/1.0)',
+          'Accept': 'text/html',
+        },
+        signal: AbortSignal.timeout(10_000),
+      })
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      const html = await resp.text()
+      pageContent = extractText(html)
+      // Try to extract supplier name from URL hostname
+      try { sourceSupplier = new URL(url.trim()).hostname.replace('www.', '').split('.')[0] } catch { /* ignore */ }
+    } catch (e) {
+      return NextResponse.json({ error: `Could not fetch URL: ${e instanceof Error ? e.message : 'failed'}` }, { status: 400 })
+    }
+  }
 
   const system = `You are a UK construction materials expert with detailed knowledge of trade prices, product specifications and supplier ranges. Generate accurate, realistic product lists for UK small builders and contractors. Use current 2024 UK trade prices ex-VAT. Be specific with product names and sizes.`
 
-  const user_msg = `Generate a comprehensive list of common UK construction products for the category: "${category}"${context ? `\nExtra context: ${context}` : ''}
+  const user_msg = url?.trim() ? (
+    // URL mode — extract from page content
+    `Extract all construction products and materials from the following supplier web page content.
+${sourceSupplier ? `Supplier: ${sourceSupplier}` : ''}
+${category ? `Focus on category: ${category}` : ''}
+${context ? `Extra focus: ${context}` : ''}
+
+PAGE CONTENT:
+${pageContent}
+
+Extract every product you can find with its price, unit and any other details. If exact prices aren't visible, use realistic 2024 UK trade prices.
+
+Return JSON only:
+{
+  "products": [
+    {
+      "name": "Product name with size/spec",
+      "category": "Concrete & Masonry",
+      "unit": "nr",
+      "default_cost": 0.95,
+      "waste_pct": 5,
+      "markup_pct": 20,
+      "supplier": "${sourceSupplier || ''}",
+      "description": "Brief spec"
+    }
+  ]
+}`
+  ) : (
+    // Standard category generation mode
+    `Generate a comprehensive list of common UK construction products for the category: "${category}"${context ? `\nNarrow down to: ${context}` : ''}
 
 Include 15-25 products covering the full typical range a UK builder would need. Be specific about sizes (e.g. "Engineering Brick 215x102x65mm Class A" not just "Engineering Brick"). Include realistic 2024 UK trade prices ex-VAT.
 
@@ -41,6 +109,7 @@ Return JSON only:
 
 Units must be one of: nr, m², m³, lm, bag, tonne, kg, item, m, hr, day, week.
 Waste % should reflect realistic ordering waste (5-15% typical).`
+  )
 
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {

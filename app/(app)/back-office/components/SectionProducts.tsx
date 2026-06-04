@@ -34,6 +34,7 @@ export default function SectionProducts({ userId }: Props) {
   const [showAIImport,    setShowAIImport]    = useState(false)
   const [aiCategory,      setAICategory]      = useState('')
   const [aiContext,       setAIContext]        = useState('')
+  const [aiUrl,           setAIUrl]           = useState('')
   const [aiLoading,       setAILoading]       = useState(false)
   const [aiProducts,      setAIProducts]      = useState<BOProduct[]>([])
   const [aiSelected,      setAISelected]      = useState<Set<number>>(new Set())
@@ -83,7 +84,7 @@ export default function SectionProducts({ userId }: Props) {
       const res = await fetch('/api/import-products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category: aiCategory, context: aiContext }),
+        body: JSON.stringify({ category: aiCategory, context: aiContext, url: aiUrl }),
       })
       const data = await res.json()
       if (!res.ok || data.error) { setAIError(data.error ?? 'AI import failed'); return }
@@ -293,7 +294,7 @@ export default function SectionProducts({ userId }: Props) {
             Collapse All
           </button>
           <button
-            onClick={() => { setShowAIImport(true); setAIProducts([]); setAIError('') }}
+            onClick={() => { setShowAIImport(true); setAIProducts([]); setAIError(''); setAIUrl('') }}
             style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: '#faf5ff', border: '1px solid #ddd6fe', borderRadius: 6, color: '#7c3aed', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
             ✦ AI Import
           </button>
@@ -504,13 +505,26 @@ export default function SectionProducts({ userId }: Props) {
               <button onClick={() => setShowAIImport(false)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8' }}>×</button>
             </div>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid #e2e8f0' }}>
+              {/* URL import row */}
+              <div style={{ marginBottom: 12 }}>
+                <label style={lbl}>Supplier Website URL (optional)</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input value={aiUrl} onChange={e => setAIUrl(e.target.value)}
+                    placeholder="Paste a supplier product page URL — e.g. https://www.travisperkins.co.uk/bricks"
+                    style={{ ...inp, flex: 1 }} />
+                  {aiUrl && <button onClick={() => setAIUrl('')} style={{ padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, cursor: 'pointer', color: '#94a3b8', background: '#fff', flexShrink: 0 }}>✕ Clear</button>}
+                </div>
+                <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 3 }}>
+                  {aiUrl ? '✦ AI will read this page and extract products from it' : 'Or leave blank and AI generates a standard product list from the category below'}
+                </div>
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
                 <div>
-                  <label style={lbl}>Product Category *</label>
+                  <label style={lbl}>{aiUrl ? 'Category (for labelling)' : 'Product Category *'}</label>
                   <input value={aiCategory} onChange={e => setAICategory(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && runAIImport()}
-                    placeholder="e.g. Bricks and Blocks, Timber, Roofing Materials"
-                    style={inp} autoFocus />
+                    placeholder={aiUrl ? 'e.g. Bricks and Blocks' : 'e.g. Bricks and Blocks, Timber, Roofing Materials'}
+                    style={inp} autoFocus={!aiUrl} />
                 </div>
                 <div>
                   <label style={lbl}>Narrow it down (optional)</label>
@@ -518,14 +532,14 @@ export default function SectionProducts({ userId }: Props) {
                     placeholder="e.g. facing bricks only, or lightweight blocks, or Forterra range"
                     style={inp} />
                   <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 3 }}>
-                    Use this to focus the results — e.g. a specific product range, size or use case
+                    Focus on a specific product type, size or range
                   </div>
                 </div>
               </div>
               {aiError && <div style={{ fontSize: 12, color: '#dc2626', marginBottom: 8 }}>⚠️ {aiError}</div>}
-              <button onClick={runAIImport} disabled={aiLoading || !aiCategory.trim()}
+              <button onClick={runAIImport} disabled={aiLoading || (!aiCategory.trim() && !aiUrl.trim())}
                 style={{ padding: '8px 20px', background: aiLoading ? '#94a3b8' : '#7c3aed', border: 'none', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 700, cursor: aiLoading ? 'wait' : 'pointer' }}>
-                {aiLoading ? '✦ Generating…' : '✦ Generate Products'}
+                {aiLoading ? (aiUrl ? '✦ Reading page…' : '✦ Generating…') : aiUrl ? '✦ Read Page & Import' : '✦ Generate Products'}
               </button>
             </div>
             {aiProducts.length > 0 && (
