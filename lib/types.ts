@@ -104,6 +104,8 @@ export interface QuotePhase {
   products?: QuoteProduct[]
   /** Plant & equipment hire items from Back Office plant database */
   plantItems?: QuotePlantItem[]
+  /** Set true when the AI phase-review has been run and "Complete Phase" clicked */
+  aiReviewed?: boolean
 }
 
 export interface QuoteCustomer {

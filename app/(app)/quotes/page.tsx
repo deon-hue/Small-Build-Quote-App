@@ -8,6 +8,8 @@ import { buildGanttFromQuote } from '@/lib/gantt-utils'
 import type { Quote } from '@/lib/types'
 import QuotePreviewModal from '@/components/QuotePreviewModal'
 import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
+import { extractQuoteIntelligence } from '@/lib/quote-intelligence'
 
 export default function SavedQuotesPage() {
   const { quotes, jobs, settings, updateQuote, deleteQuote, deleteJob, addJob, saveGanttState, loading } = useApp()
@@ -21,6 +23,23 @@ export default function SavedQuotesPage() {
 
   async function handleStatusChange(quote: Quote, status: Quote['status']) {
     await updateQuote({ ...quote, status })
+    // When a quote is accepted/won, extract phase patterns into the intelligence store
+    // so future AI reviews can reference real past data.
+    if (status === 'accepted') {
+      try {
+        const sb = createClient()
+        const { data: { user } } = await sb.auth.getUser()
+        if (user) {
+          await extractQuoteIntelligence(
+            sb, user.id, quote.phases ?? [],
+            quote.jobType ?? '', quote.ref ?? quote.id,
+            quote.markup ?? 20, 'won',
+          )
+        }
+      } catch (e) {
+        console.warn('[quote-intelligence] extraction failed:', e)
+      }
+    }
   }
 
   async function handleDelete(q: Quote) {

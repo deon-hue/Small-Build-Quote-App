@@ -17,8 +17,9 @@ import { useState, useCallback } from 'react'
 import type { QuotePhase, QuoteItem, QuoteProduct, QuotePlantItem } from '@/lib/types'
 import type { BOLabourTrade, BOProduct, BOPlantItem } from '@/lib/back-office-types'
 import { fmt, calcPhase, calcPhaseSell } from '@/lib/utils'
-import ProductPicker from '@/components/ProductPicker'
-import PlantPicker   from '@/components/PlantPicker'
+import ProductPicker      from '@/components/ProductPicker'
+import PlantPicker        from '@/components/PlantPicker'
+import PhaseReviewModal   from '@/components/PhaseReviewModal'
 
 // ── IDs ────────────────────────────────────────────────────────────────────────
 let _id = Date.now()
@@ -171,15 +172,50 @@ function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst, lab
   const isLabour = cat === 'labour'
 
   // Labour picker state (local — doesn't need to persist)
-  const [showPicker,  setShowPicker]  = useState(false)
-  const [pickTrade,   setPickTrade]   = useState(labourTrades[0]?.id ?? '')
-  const [pickRateType,setPickRateType]= useState<LabourRateType>('day')
-  const [pickQty,     setPickQty]     = useState(1)
-  const [pickWorkers, setPickWorkers] = useState(1)
+  const [showPicker,   setShowPicker]   = useState(false)
+  const [pickTrade,    setPickTrade]    = useState(labourTrades[0]?.id ?? '')
+  const [pickRateType, setPickRateType] = useState<LabourRateType>('day')
+  const [pickQty,      setPickQty]      = useState(1)
+  const [pickWorkers,  setPickWorkers]  = useState(1)
 
-  const pickedTrade  = labourTrades.find(t => t.id === pickTrade)
+  // Local trade list — starts from prop, grows when user adds a new trade inline
+  const [localTrades,  setLocalTrades]  = useState<typeof labourTrades>(labourTrades)
+  // New-trade inline form
+  const [addingTrade,  setAddingTrade]  = useState(false)
+  const [newTradeName, setNewTradeName] = useState('')
+  const [newTradeRate, setNewTradeRate] = useState<number>(200)
+  const [savingTrade,  setSavingTrade]  = useState(false)
+
+  const pickedTrade  = localTrades.find(t => t.id === pickTrade)
   const pickedRate   = pickedTrade ? boLabourRate(pickedTrade, pickRateType) : 0
   const pickedTotal  = +(pickedRate * pickQty * pickWorkers).toFixed(2)
+
+  async function saveNewTrade() {
+    if (!newTradeName.trim()) return
+    setSavingTrade(true)
+    try {
+      const { createClient } = await import('@/lib/supabase/client')
+      const sb = createClient()
+      const { data: { user } } = await sb.auth.getUser()
+      if (!user) return
+      const { data, error } = await sb.from('bo_labour_trades').insert({
+        user_id: user.id,
+        name: newTradeName.trim(),
+        day_rate: newTradeRate,
+        half_day_rate_override: null,
+        markup_pct: 20,
+        active: true,
+        display_order: 999,
+      }).select().single()
+      if (error || !data) return
+      const newTrade = data as typeof labourTrades[0]
+      setLocalTrades(prev => [...prev, newTrade])
+      setPickTrade(newTrade.id)
+      setAddingTrade(false)
+      setNewTradeName('')
+      setNewTradeRate(200)
+    } finally { setSavingTrade(false) }
+  }
 
   function applyPicker() {
     if (!pickedTrade) return
@@ -275,7 +311,7 @@ function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst, lab
               value={item[catKey] ?? 0} readOnly={isLocked}
               onChange={e => setNum(catKey, e.target.value)} />
           </div>
-          {isLabour && labourTrades.length > 0 && !isLocked && (
+          {isLabour && !isLocked && (
             <button onClick={() => setShowPicker(p => !p)}
               title="Use Back Office labour rate"
               style={{ background: showPicker ? '#fef3c7' : 'transparent', border: `1px solid ${showPicker ? '#f59e0b' : '#e2e8f0'}`, borderRadius: 4, fontSize: 11, cursor: 'pointer', padding: '1px 3px', color: showPicker ? '#92400e' : '#94a3b8', flexShrink: 0, lineHeight: 1.4 }}>
@@ -305,19 +341,61 @@ function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst, lab
     </tr>
 
     {/* Labour rate picker — expands below the row when 🔨 is clicked */}
-    {isLabour && showPicker && labourTrades.length > 0 && (
+    {isLabour && showPicker && (
       <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
         <td colSpan={8} style={{ padding: '0 6px 8px 104px', background: '#fffbeb' }}>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, flexWrap: 'wrap', paddingTop: 6 }}>
-            {/* Trade */}
+            {/* Trade selector + new trade */}
             <div>
               <div style={{ fontSize: 9, color: '#92400e', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Trade</div>
-              <select value={pickTrade} onChange={e => setPickTrade(e.target.value)}
-                style={{ padding: '4px 7px', border: '1px solid #f59e0b', borderRadius: 5, fontSize: 12, background: '#fff', minWidth: 170 }}>
-                {labourTrades.map(t => (
-                  <option key={t.id} value={t.id}>{t.name} — £{t.day_rate}/day</option>
-                ))}
-              </select>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <select value={pickTrade} onChange={e => setPickTrade(e.target.value)}
+                  style={{ padding: '4px 7px', border: '1px solid #f59e0b', borderRadius: 5, fontSize: 12, background: '#fff', minWidth: 170 }}>
+                  {localTrades.map(t => (
+                    <option key={t.id} value={t.id}>{t.name} — £{t.day_rate}/day</option>
+                  ))}
+                </select>
+                <button
+                  title="Add new labour trade to Back Office"
+                  onClick={() => setAddingTrade(a => !a)}
+                  style={{ padding: '4px 8px', border: '1px solid #f59e0b', borderRadius: 5, background: addingTrade ? '#fef3c7' : '#fff', fontSize: 11, cursor: 'pointer', color: '#92400e', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  + New Trade
+                </button>
+              </div>
+              {/* Inline new-trade form */}
+              {addingTrade && (
+                <div style={{ marginTop: 6, padding: '8px 10px', background: '#fff', border: '1px solid #f59e0b', borderRadius: 6, display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={{ fontSize: 9, color: '#92400e', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Trade Name</div>
+                    <input
+                      autoFocus
+                      value={newTradeName}
+                      onChange={e => setNewTradeName(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') saveNewTrade(); if (e.key === 'Escape') setAddingTrade(false) }}
+                      placeholder="e.g. Bricklayer"
+                      style={{ padding: '4px 7px', border: '1px solid #f59e0b', borderRadius: 5, fontSize: 12, width: 140, outline: 'none' }}
+                    />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 9, color: '#92400e', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Day Rate (£)</div>
+                    <input
+                      type="number" min={0} step={10}
+                      value={newTradeRate}
+                      onChange={e => setNewTradeRate(+e.target.value)}
+                      style={{ padding: '4px 7px', border: '1px solid #f59e0b', borderRadius: 5, fontSize: 12, width: 80, outline: 'none' }}
+                    />
+                  </div>
+                  <button
+                    onClick={saveNewTrade} disabled={savingTrade || !newTradeName.trim()}
+                    style={{ padding: '5px 12px', background: '#f59e0b', border: 'none', borderRadius: 5, color: '#fff', fontSize: 12, fontWeight: 700, cursor: savingTrade ? 'wait' : 'pointer' }}>
+                    {savingTrade ? 'Saving…' : 'Save Trade'}
+                  </button>
+                  <button onClick={() => setAddingTrade(false)}
+                    style={{ padding: '5px 8px', background: 'transparent', border: '1px solid #d1d5db', borderRadius: 5, fontSize: 12, cursor: 'pointer', color: '#6b7280' }}>
+                    Cancel
+                  </button>
+                </div>
+              )}
             </div>
             {/* Rate type */}
             <div>
@@ -508,6 +586,7 @@ function SourceBadge({ source }: { source?: string }) {
 interface SubPhaseBlockProps {
   p: QuotePhase
   markup: number
+  jobType?: string
   isLocked: boolean
   collapsed: Set<string>
   toggle: (k: string) => void
@@ -521,7 +600,7 @@ interface SubPhaseBlockProps {
   boPlantItems?: BOPlantItem[]
 }
 
-function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDelete, onDuplicate, onAddTask, onSaveToBO, labourTrades, boProducts = [], boPlantItems = [] }: SubPhaseBlockProps) {
+function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, onUpdate, onDelete, onDuplicate, onAddTask, onSaveToBO, labourTrades, boProducts = [], boPlantItems = [] }: SubPhaseBlockProps) {
   const colKey = `sp_${p.id}`
   const open   = !collapsed.has(colKey)
   const sell   = subPhaseTotalSell(p, markup)
@@ -542,6 +621,8 @@ function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDel
   // Picker state
   const [showProductPicker, setShowProductPicker] = useState(false)
   const [showPlantPicker,   setShowPlantPicker]   = useState(false)
+  // AI Review modal
+  const [showReview,        setShowReview]        = useState(false)
   // Accordion: which cost card is currently open (one at a time)
   const [openCard, setOpenCard] = useState<ItemType | null>(null)
 
@@ -924,6 +1005,9 @@ function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDel
           </span>
         )}
         <ItemStatusBadge status={p.itemStatus} />
+        {p.aiReviewed && (
+          <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 99, background: '#f0fdf4', color: '#16a34a', fontWeight: 700, flexShrink: 0 }}>✓ Reviewed</span>
+        )}
         <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: '#7ab533', flexShrink: 0 }}>
           {sell > 0 ? fmt(sell) : '—'}
         </span>
@@ -931,6 +1015,12 @@ function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDel
           <div style={{ display: 'flex', gap: 2, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
             <button style={iconBtn()} title="Add task" onClick={onAddTask}>+ Task</button>
             <button style={iconBtn()} title="Duplicate" onClick={onDuplicate}>⧉</button>
+            <button
+              onClick={e => { e.stopPropagation(); setShowReview(true) }}
+              title="AI Phase Review — check for missing items before completing"
+              style={{ ...iconBtn('#7c3aed'), fontSize: 11, border: '1px solid #ddd6fe', borderRadius: 4, padding: '2px 6px', background: p.aiReviewed ? '#f0fdf4' : undefined }}>
+              🤖
+            </button>
             {onSaveToBO && (p.itemStatus === 'edited' || p.itemStatus === 'bo-default') && p.boSubPhaseId && (
               <button
                 onClick={e => { e.stopPropagation(); onSaveToBO(p) }}
@@ -1083,6 +1173,26 @@ function SubPhaseBlock({ p, markup, isLocked, collapsed, toggle, onUpdate, onDel
           onClose={() => setShowPlantPicker(false)}
         />
       )}
+
+      {/* AI Phase Review modal */}
+      {showReview && (
+        <PhaseReviewModal
+          phase={p}
+          jobType={jobType}
+          markup={markup}
+          onAddItem={item => {
+            const newItem: QuoteItem = { ...item, id: uid() }
+            onUpdate({ ...p, items: [...p.items, newItem] })
+          }}
+          onComplete={() => {
+            onUpdate({ ...p, aiReviewed: true })
+            setShowReview(false)
+            // Collapse the phase after completing
+            toggle(colKey)
+          }}
+          onClose={() => setShowReview(false)}
+        />
+      )}
     </div>
   )
 }
@@ -1094,6 +1204,7 @@ interface RoomBlockProps {
   room: string
   phases: QuotePhase[]
   markup: number
+  jobType?: string
   isLocked: boolean
   collapsed: Set<string>
   toggle: (k: string) => void
@@ -1109,7 +1220,7 @@ interface RoomBlockProps {
   boPlantItems?: BOPlantItem[]
 }
 
-function RoomBlock({ mainPhase, room, phases, markup, isLocked, collapsed, toggle, onUpdatePhase, onDeletePhase, onDuplicatePhase, onAddSubPhase, onAddTask, onRenameRoom, onSaveToBO, labourTrades, boProducts, boPlantItems }: RoomBlockProps) {
+function RoomBlock({ mainPhase, room, phases, markup, jobType, isLocked, collapsed, toggle, onUpdatePhase, onDeletePhase, onDuplicatePhase, onAddSubPhase, onAddTask, onRenameRoom, onSaveToBO, labourTrades, boProducts, boPlantItems }: RoomBlockProps) {
   const hasRoom = !!room
   const total   = roomTotalSell(phases, mainPhase, room, markup)
   const subPhs  = getSubPhases(phases, mainPhase, room)
@@ -1149,6 +1260,7 @@ function RoomBlock({ mainPhase, room, phases, markup, isLocked, collapsed, toggl
               key={p.id}
               p={p}
               markup={markup}
+              jobType={jobType}
               isLocked={isLocked}
               collapsed={collapsed}
               toggle={toggle}
@@ -1158,8 +1270,8 @@ function RoomBlock({ mainPhase, room, phases, markup, isLocked, collapsed, toggl
               onAddTask={() => onAddTask(p.id)}
               onSaveToBO={onSaveToBO}
               labourTrades={labourTrades}
-                  boProducts={boProducts}
-                  boPlantItems={boPlantItems}
+              boProducts={boProducts}
+              boPlantItems={boPlantItems}
             />
           ))}
           {!isLocked && !hasRoom && (
@@ -1179,6 +1291,7 @@ interface PhaseBlockProps {
   mainPhase: string
   phases: QuotePhase[]
   markup: number
+  jobType?: string
   isLocked: boolean
   collapsed: Set<string>
   toggle: (k: string) => void
@@ -1197,7 +1310,7 @@ interface PhaseBlockProps {
   boPlantItems?: BOPlantItem[]
 }
 
-function PhaseBlock({ mainPhase, phases, markup, isLocked, collapsed, toggle, onUpdatePhase, onDeletePhase, onDuplicatePhase, onAddSubPhase, onAddRoom, onAddTask, onRenameMain, onDeleteMain, onRenameRoom, onSaveToBO, labourTrades, boProducts, boPlantItems }: PhaseBlockProps) {
+function PhaseBlock({ mainPhase, phases, markup, jobType, isLocked, collapsed, toggle, onUpdatePhase, onDeletePhase, onDuplicatePhase, onAddSubPhase, onAddRoom, onAddTask, onRenameMain, onDeleteMain, onRenameRoom, onSaveToBO, labourTrades, boProducts, boPlantItems }: PhaseBlockProps) {
   const colKey = `mp_${mainPhase}`
   const open   = !collapsed.has(colKey)
   const total  = mainPhaseTotalSell(phases, mainPhase, markup)
@@ -1244,6 +1357,7 @@ function PhaseBlock({ mainPhase, phases, markup, isLocked, collapsed, toggle, on
               room={room}
               phases={phases}
               markup={markup}
+              jobType={jobType}
               isLocked={isLocked}
               collapsed={collapsed}
               toggle={toggle}
@@ -1255,8 +1369,8 @@ function PhaseBlock({ mainPhase, phases, markup, isLocked, collapsed, toggle, on
               onRenameRoom={onRenameRoom}
               onSaveToBO={onSaveToBO}
               labourTrades={labourTrades}
-                  boProducts={boProducts}
-                  boPlantItems={boPlantItems}
+              boProducts={boProducts}
+              boPlantItems={boPlantItems}
             />
           ))}
         </div>
@@ -1533,6 +1647,7 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
           mainPhase={mp}
           phases={visiblePhases}
           markup={markup}
+          jobType={jobType}
           isLocked={isLocked}
           collapsed={collapsed}
           toggle={toggle}
