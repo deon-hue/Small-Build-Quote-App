@@ -513,10 +513,13 @@ export default function SectionProducts({ userId }: Props) {
                     style={inp} autoFocus />
                 </div>
                 <div>
-                  <label style={lbl}>Extra Context (optional)</label>
+                  <label style={lbl}>Narrow it down (optional)</label>
                   <input value={aiContext} onChange={e => setAIContext(e.target.value)}
-                    placeholder="e.g. South East England, Taylor Wimpey spec"
+                    placeholder="e.g. facing bricks only, or lightweight blocks, or Forterra range"
                     style={inp} />
+                  <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 3 }}>
+                    Use this to focus the results — e.g. a specific product range, size or use case
+                  </div>
                 </div>
               </div>
               {aiError && <div style={{ fontSize: 12, color: '#dc2626', marginBottom: 8 }}>⚠️ {aiError}</div>}
