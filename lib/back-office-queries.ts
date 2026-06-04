@@ -22,7 +22,9 @@ export async function fetchLabourTrades(sb: SupabaseClient, userId: string): Pro
 }
 
 export async function upsertLabourTrade(sb: SupabaseClient, trade: Partial<BOLabourTrade> & { user_id: string }): Promise<BOLabourTrade | null> {
-  const { data } = await sb.from('bo_labour_trades').upsert({ ...trade, updated_at: new Date().toISOString() }).select().single()
+  const { id, ...rest } = trade as BOLabourTrade
+  const row = id ? { id, ...rest } : rest
+  const { data } = await sb.from('bo_labour_trades').upsert({ ...row, updated_at: new Date().toISOString() }).select().single()
   return data
 }
 
@@ -38,7 +40,9 @@ export async function fetchPhases(sb: SupabaseClient, userId: string): Promise<B
 }
 
 export async function upsertPhase(sb: SupabaseClient, phase: Partial<BOPhase> & { user_id: string }): Promise<BOPhase | null> {
-  const { data } = await sb.from('bo_phases').upsert(phase).select().single()
+  const { id, ...rest } = phase as BOPhase
+  const row = id ? { id, ...rest } : rest
+  const { data } = await sb.from('bo_phases').upsert(row).select().single()
   return data
 }
 
@@ -56,7 +60,9 @@ export async function fetchSubPhases(sb: SupabaseClient, userId: string, phaseId
 }
 
 export async function upsertSubPhase(sb: SupabaseClient, sp: Partial<BOSubPhase> & { user_id: string }): Promise<BOSubPhase | null> {
-  const { data } = await sb.from('bo_sub_phases').upsert(sp).select().single()
+  const { id, ...rest } = sp as BOSubPhase
+  const row = id ? { id, ...rest } : rest
+  const { data } = await sb.from('bo_sub_phases').upsert(row).select().single()
   return data
 }
 
@@ -153,7 +159,9 @@ export async function fetchProducts(sb: SupabaseClient, userId: string): Promise
 }
 
 export async function upsertProduct(sb: SupabaseClient, product: Partial<BOProduct> & { user_id: string }): Promise<BOProduct | null> {
-  const { data } = await sb.from('bo_products').upsert({ ...product, updated_at: new Date().toISOString() }).select().single()
+  const { id, ...rest } = product
+  const payload = id ? { id, ...rest } : rest   // omit id when empty so DB generates a UUID
+  const { data } = await sb.from('bo_products').upsert({ ...payload, updated_at: new Date().toISOString() }).select().single()
   return data
 }
 
@@ -169,7 +177,9 @@ export async function fetchPlantItems(sb: SupabaseClient, userId: string): Promi
 }
 
 export async function upsertPlantItem(sb: SupabaseClient, item: Partial<BOPlantItem> & { user_id: string }): Promise<BOPlantItem | null> {
-  const { data } = await sb.from('bo_plant_items').upsert({ ...item, updated_at: new Date().toISOString() }).select().single()
+  const { id, ...rest } = item as BOPlantItem
+  const row = id ? { id, ...rest } : rest
+  const { data } = await sb.from('bo_plant_items').upsert({ ...row, updated_at: new Date().toISOString() }).select().single()
   return data
 }
 
