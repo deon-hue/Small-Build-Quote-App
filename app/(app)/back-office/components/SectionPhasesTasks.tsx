@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   fetchPhases, upsertPhase, deletePhase,
@@ -599,8 +599,36 @@ function CategoryEditPopover({ task, cat, labourTrades, products, plantItems, on
   onSave: (t: BOTask) => void; onClose: () => void
 }) {
   const m = COST_META[cat]
-  const [draft, setDraft] = useState<BOTask>({ ...task })
-  const setField = <K extends keyof BOTask>(k: K, v: BOTask[K]) => setDraft(d => ({ ...d, [k]: v }))
+  const [draft, setDraftRaw] = useState<BOTask>({ ...task })
+  const draftRef = useRef<BOTask>(draft)
+
+  // Auto-save timer — number inputs debounce 600ms, everything else saves immediately
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function setDraft(updater: BOTask | ((prev: BOTask) => BOTask), debounceMs = 0) {
+    setDraftRaw(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater
+      draftRef.current = next
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      if (debounceMs > 0) {
+        saveTimer.current = setTimeout(() => onSave(next), debounceMs)
+      } else {
+        onSave(next)
+      }
+      return next
+    })
+  }
+
+  // Save immediately on unmount (catches navigation-away without closing popover)
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      onSave(draftRef.current)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const setField = <K extends keyof BOTask>(k: K, v: BOTask[K], debounce = 600) =>
+    setDraft(d => ({ ...d, [k]: v }), typeof v === 'number' ? debounce : 0)
 
   // Local plant library — starts from prop, grows when user adds new items in this session
   const [localPlantItems, setLocalPlantItems] = useState<BOPlantItem[]>(plantItems)
@@ -616,7 +644,7 @@ function CategoryEditPopover({ task, cat, labourTrades, products, plantItems, on
     setDraft(d => {
       const rec = (d.recipe_items as unknown as LayerCostRecord | null) ?? { labourItems: [], materialItems: [], plantItems: [], subItems: [], otherItems: [] }
       return { ...d, recipe_items: { ...rec, plantItems: next } as unknown as Record<string, unknown>, plant_cost: plantListTotal(next) }
-    })
+    }, 0)  // save immediately when plant list changes
   }
   function addPlantFromMaster(id: string) {
     const pl = localPlantItems.find(p => p.id === id); if (!pl) return
@@ -695,7 +723,7 @@ function CategoryEditPopover({ task, cat, labourTrades, products, plantItems, on
     setDraft(d => {
       const rec = (d.recipe_items as unknown as { labourItems?: unknown[]; materialItems?: unknown[]; plantItems?: unknown[]; subItems?: unknown[]; otherItems?: unknown[] } | null) ?? { labourItems: [], materialItems: [], plantItems: [], subItems: [], otherItems: [] }
       return { ...d, labour_cost: total, trade_name: firstName, recipe_items: { ...rec, labourItems } as unknown as Record<string, unknown> }
-    })
+    }, 0)  // save immediately when labour lines change
   }
 
   function addLabourLine() {
@@ -934,10 +962,10 @@ function CategoryEditPopover({ task, cat, labourTrades, products, plantItems, on
         <div style={{ padding: '16px', display: 'grid', gap: 12 }}>
           {bodyEl}
         </div>
-        {/* Footer */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '12px 16px', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
-          <button onClick={onClose} style={{ padding: '7px 16px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, background: '#fff', color: '#374151', cursor: 'pointer' }}>Cancel</button>
-          <button onClick={() => onSave(draft)} style={{ padding: '7px 20px', background: m.accent, border: 'none', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Save</button>
+        {/* Footer — changes auto-save, Close just dismisses */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '10px 16px', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
+          <span style={{ fontSize: 11, color: '#94a3b8' }}>Changes save automatically</span>
+          <button onClick={onClose} style={{ padding: '7px 18px', background: m.accent, border: 'none', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Close</button>
         </div>
       </div>
     </div>
