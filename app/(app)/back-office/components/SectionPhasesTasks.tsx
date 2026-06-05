@@ -93,20 +93,53 @@ export default function SectionPhasesTasks({ userId }: Props) {
   }
 
   async function duplicatePhase(phase: BOPhase) {
-    const copy = await upsertPhase(sb, { user_id: userId, name: `${phase.name} (copy)`, display_order: phases.length, active: phase.active })
-    if (!copy) return
-    // Copy sub-phases and tasks
+    // Insert a fresh phase — use insert (not upsert) so a new row is always created
+    const { data: copy, error: phaseErr } = await sb.from('bo_phases').insert({
+      user_id: userId,
+      name: `${phase.name} (copy)`,
+      display_order: phases.length,
+      active: phase.active,
+      job_types: phase.job_types ?? [],
+      canonical_id: null,
+    }).select().single()
+
+    if (phaseErr || !copy) {
+      console.error('[duplicatePhase] phase insert failed:', phaseErr?.message)
+      return
+    }
+
+    // Duplicate sub-phases — insert fresh rows (canonical_id: null so sync won't touch them)
     const phaseSubs = subPhases.filter(sp => sp.phase_id === phase.id)
     const subIdMap: Record<string, string> = {}
     for (const sp of phaseSubs) {
-      const newSp = await upsertSubPhase(sb, { user_id: userId, phase_id: copy.id, name: sp.name, display_order: sp.display_order, markup_pct: sp.markup_pct, active: sp.active })
-      if (newSp) subIdMap[sp.id] = newSp.id
+      const { data: newSp, error: spErr } = await sb.from('bo_sub_phases').insert({
+        user_id: userId,
+        phase_id: copy.id,
+        name: sp.name,
+        display_order: sp.display_order,
+        markup_pct: sp.markup_pct,
+        active: sp.active,
+        canonical_id: null,
+      }).select().single()
+      if (spErr) console.error('[duplicatePhase] sub-phase insert failed:', spErr.message)
+      else if (newSp) subIdMap[sp.id] = newSp.id
     }
+
+    // Duplicate tasks — strip id/timestamps, remap phase_id and sub_phase_id
     const phaseTasks = tasks.filter(t => t.phase_id === phase.id)
     for (const t of phaseTasks) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { id: _id, created_at: _c, updated_at: _u, ...row } = t as BOTask & { created_at: string; updated_at: string }
-      await upsertTask(sb, { ...row, user_id: userId, phase_id: copy.id, sub_phase_id: t.sub_phase_id ? (subIdMap[t.sub_phase_id] ?? null) : null })
+      const { error: taskErr } = await sb.from('bo_tasks').insert({
+        ...row,
+        user_id: userId,
+        phase_id: copy.id,
+        sub_phase_id: t.sub_phase_id ? (subIdMap[t.sub_phase_id] ?? null) : null,
+        canonical_id: null,
+      })
+      if (taskErr) console.error('[duplicatePhase] task insert failed:', taskErr.message)
     }
+
     await load()
     setSelectedPhaseId(copy.id)
   }
