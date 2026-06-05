@@ -616,6 +616,9 @@ function CategoryEditPopover({ task, cat, labourTrades, products, plantItems, on
   }
   function removePlantRow(i: number) { setPlantList(plantList.filter((_, idx) => idx !== i)) }
 
+  // Plant search state (used in plant picker)
+  const [plantSearch, setPlantSearch] = useState('')
+
   // ── Multi-trade labour lines ───────────────────────────────────────────────
   interface LabourEditorLine { id: string; tradeId: string; rateType: LabourRateType; qty: number }
 
@@ -778,15 +781,39 @@ function CategoryEditPopover({ task, cat, labourTrades, products, plantItems, on
       <>
         <div>
           <label style={lbl}>Add from Plant &amp; Equipment library</label>
-          {plantItems.length > 0 ? (
-            <select value="" onChange={e => { if (e.target.value) addPlantFromMaster(e.target.value) }} style={{ ...inp, fontSize: 12 }}>
-              <option value="">Select a plant item to add…</option>
-              {plantItems.map(p => <option key={p.id} value={p.id}>{p.name} — £{p.default_cost}/{p.unit}</option>)}
-            </select>
-          ) : (
+          {plantItems.length === 0 ? (
             <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
               No plant items in master data — add them in Back Office → Plant &amp; Equipment, or enter a cost manually below.
             </div>
+          ) : (
+            <>
+              <input
+                value={plantSearch}
+                onChange={e => setPlantSearch(e.target.value)}
+                placeholder="Search plant &amp; equipment…"
+                style={{ ...inp, fontSize: 12, marginBottom: 4 }}
+              />
+              {plantSearch.trim() && (() => {
+                const q = plantSearch.trim().toLowerCase()
+                const hits = plantItems.filter(p => p.name.toLowerCase().includes(q))
+                return hits.length === 0 ? (
+                  <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic', padding: '4px 2px' }}>No matches</div>
+                ) : (
+                  <div style={{ border: '1px solid #e2e8f0', borderRadius: 6, maxHeight: 160, overflowY: 'auto' }}>
+                    {hits.map(p => (
+                      <div key={p.id}
+                        onClick={() => { addPlantFromMaster(p.id); setPlantSearch('') }}
+                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', fontSize: 12 }}
+                        onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                        <span style={{ fontWeight: 500, color: '#1e293b' }}>{p.name}</span>
+                        <span style={{ color: '#64748b', flexShrink: 0, marginLeft: 8 }}>£{p.default_cost}/{p.unit}</span>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+            </>
           )}
         </div>
         {plantList.length > 0 ? (
