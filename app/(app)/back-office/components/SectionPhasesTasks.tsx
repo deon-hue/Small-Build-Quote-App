@@ -601,22 +601,58 @@ function CategoryEditPopover({ task, cat, labourTrades, products, plantItems, on
   }
   function removePlantRow(i: number) { setPlantList(plantList.filter((_, idx) => idx !== i)) }
 
-  // Labour calculator state — pre-filled from task defaults
-  const matchedTrade = task.trade_name ? labourTrades.find(t => t.name === task.trade_name) : null
-  const [tradeId, setTradeId]   = useState(matchedTrade?.id ?? labourTrades[0]?.id ?? '')
-  const [rateType, setRateType] = useState<LabourRateType>('day')
-  const [qty, setQty]           = useState(task.default_qty && task.default_qty > 0 ? task.default_qty : 1)
-  const [workers, setWorkers]   = useState(1)
-  const trade     = labourTrades.find(t => t.id === tradeId)
-  const rate      = trade ? effectiveRate(trade, rateType) : 0
-  const calcTotal = +(rate * qty * workers).toFixed(2)
+  // ── Multi-trade labour lines ───────────────────────────────────────────────
+  interface LabourEditorLine { id: string; tradeId: string; rateType: LabourRateType; qty: number }
 
-  // Auto-apply whenever the calculator changes — no manual "Apply" click needed
-  function autoApply(newTradeId: string, newRateType: LabourRateType, newQty: number, newWorkers: number) {
-    const t = labourTrades.find(x => x.id === newTradeId)
-    if (!t) return
-    const newTotal = +(effectiveRate(t, newRateType) * newQty * newWorkers).toFixed(2)
-    setDraft(d => ({ ...d, labour_cost: newTotal, trade_name: t.name }))
+  function lineTotal(l: LabourEditorLine): number {
+    const t = labourTrades.find(x => x.id === l.tradeId)
+    return t ? +(effectiveRate(t, l.rateType) * l.qty).toFixed(2) : 0
+  }
+
+  // Build initial lines from saved recipe_items.labourItems or from trade_name/labour_cost fallback
+  function buildInitialLines(): LabourEditorLine[] {
+    const saved = (task.recipe_items as unknown as { labourItems?: { id: string; trade: string; qty: number; unit: string; rate: number; total: number }[] } | null)?.labourItems
+    if (saved?.length) {
+      return saved.map(item => {
+        const t = labourTrades.find(x => x.name === item.trade)
+        return { id: item.id, tradeId: t?.id ?? labourTrades[0]?.id ?? '', rateType: (item.unit === 'hr' ? 'hourly' : 'day') as LabourRateType, qty: item.qty }
+      })
+    }
+    if (task.trade_name && labourTrades.length > 0) {
+      const t = labourTrades.find(x => x.name === task.trade_name) ?? labourTrades[0]
+      return [{ id: uid(), tradeId: t.id, rateType: 'day', qty: task.default_qty > 0 ? task.default_qty : 1 }]
+    }
+    if (labourTrades.length > 0) {
+      return [{ id: uid(), tradeId: labourTrades[0].id, rateType: 'day', qty: task.default_qty > 0 ? task.default_qty : 1 }]
+    }
+    return []
+  }
+
+  const [labourLines, setLabourLines] = useState<LabourEditorLine[]>(buildInitialLines)
+
+  function applyLabourLines(next: LabourEditorLine[]) {
+    setLabourLines(next)
+    const total = +next.reduce((s, l) => s + lineTotal(l), 0).toFixed(2)
+    const firstName = labourTrades.find(t => t.id === next[0]?.tradeId)?.name ?? null
+    // Also save individual lines into recipe_items.labourItems
+    const labourItems = next.map(l => {
+      const t = labourTrades.find(x => x.id === l.tradeId)
+      return { id: l.id, trade: t?.name ?? '', description: '', qty: l.qty, unit: l.rateType === 'hourly' ? 'hr' : 'day', rate: t ? effectiveRate(t, l.rateType) : 0, total: lineTotal(l) }
+    })
+    setDraft(d => {
+      const rec = (d.recipe_items as unknown as { labourItems?: unknown[]; materialItems?: unknown[]; plantItems?: unknown[]; subItems?: unknown[]; otherItems?: unknown[] } | null) ?? { labourItems: [], materialItems: [], plantItems: [], subItems: [], otherItems: [] }
+      return { ...d, labour_cost: total, trade_name: firstName, recipe_items: { ...rec, labourItems } as unknown as Record<string, unknown> }
+    })
+  }
+
+  function addLabourLine() {
+    applyLabourLines([...labourLines, { id: uid(), tradeId: labourTrades[0]?.id ?? '', rateType: 'day', qty: 1 }])
+  }
+  function updateLabourLine(i: number, patch: Partial<LabourEditorLine>) {
+    applyLabourLines(labourLines.map((l, idx) => idx === i ? { ...l, ...patch } : l))
+  }
+  function removeLabourLine(i: number) {
+    applyLabourLines(labourLines.filter((_, idx) => idx !== i))
   }
 
   const inp: React.CSSProperties = { width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }
@@ -636,44 +672,66 @@ function CategoryEditPopover({ task, cat, labourTrades, products, plantItems, on
     )
   }
 
+  const labourTotal = +labourLines.reduce((s, l) => s + lineTotal(l), 0).toFixed(2)
+
   let bodyEl: React.ReactNode = null
   if (cat === 'labour') {
     bodyEl = (
       <>
-        {labourTrades.length > 0 ? (
+        {labourTrades.length === 0 ? (
+          <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic', marginBottom: 8 }}>
+            No labour trades set up — add them in Back Office → Labour &amp; Trades, or enter a cost manually below.
+          </div>
+        ) : (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 96px 64px 64px', gap: 8 }}>
-              <div>
-                <label style={lbl}>Trade</label>
-                <select value={tradeId} onChange={e => { setTradeId(e.target.value); autoApply(e.target.value, rateType, qty, workers) }} style={{ ...inp, fontSize: 12 }}>
-                  {labourTrades.map(t => <option key={t.id} value={t.id}>{t.name} — £{t.day_rate}/day</option>)}
-                </select>
+            {/* Trade lines */}
+            {labourLines.length > 0 && (
+              <div style={{ marginBottom: 8 }}>
+                {/* Column headers */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 88px 72px 64px 20px', gap: 6, marginBottom: 4 }}>
+                  {['Trade', 'Rate', 'Qty', 'Total', ''].map(h => (
+                    <div key={h} style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</div>
+                  ))}
+                </div>
+                {labourLines.map((line, i) => {
+                  const t = labourTrades.find(x => x.id === line.tradeId)
+                  const r = t ? effectiveRate(t, line.rateType) : 0
+                  return (
+                    <div key={line.id} style={{ display: 'grid', gridTemplateColumns: '1fr 88px 72px 64px 20px', gap: 6, marginBottom: 5, alignItems: 'center' }}>
+                      <select value={line.tradeId} onChange={e => updateLabourLine(i, { tradeId: e.target.value })} style={{ ...inp, fontSize: 12, padding: '5px 6px' }}>
+                        {labourTrades.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      </select>
+                      <select value={line.rateType} onChange={e => updateLabourLine(i, { rateType: e.target.value as LabourRateType })} style={{ ...inp, fontSize: 11, padding: '5px 6px' }}>
+                        {(Object.keys(RATE_LABELS) as LabourRateType[]).map(rt => (
+                          <option key={rt} value={rt}>{RATE_LABELS[rt]} £{effectiveRate(t ?? labourTrades[0], rt).toFixed(0)}</option>
+                        ))}
+                      </select>
+                      <input type="number" min={0} step={0.5} value={line.qty}
+                        onChange={e => updateLabourLine(i, { qty: Math.max(0, +e.target.value) })}
+                        style={{ ...inp, fontSize: 12, padding: '5px 6px', textAlign: 'right' }} />
+                      <div style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 700, color: m.accent, textAlign: 'right' }}>
+                        £{(r * line.qty).toFixed(2)}
+                      </div>
+                      <button onClick={() => removeLabourLine(i)} style={{ background: 'none', border: 'none', color: '#e74c3c', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                    </div>
+                  )
+                })}
               </div>
-              <div>
-                <label style={lbl}>Rate</label>
-                <select value={rateType} onChange={e => { const rt = e.target.value as LabourRateType; setRateType(rt); autoApply(tradeId, rt, qty, workers) }} style={{ ...inp, fontSize: 12 }}>
-                  {(Object.keys(RATE_LABELS) as LabourRateType[]).map(rt => <option key={rt} value={rt}>{RATE_LABELS[rt]}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={lbl}>{QTY_LABELS[rateType]}</label>
-                <input type="number" min={0} step={0.5} value={qty} onChange={e => { const q = Math.max(0, +e.target.value); setQty(q); autoApply(tradeId, rateType, q, workers) }} style={{ ...inp, fontSize: 12 }} />
-              </div>
-              <div>
-                <label style={lbl}>Workers</label>
-                <input type="number" min={1} step={1} value={workers} onChange={e => { const w = Math.max(1, +e.target.value); setWorkers(w); autoApply(tradeId, rateType, qty, w) }} style={{ ...inp, fontSize: 12 }} />
-              </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: m.bg, borderRadius: 6, fontSize: 12, color: m.accent }}>
-              <span style={{ flex: 1 }}>{trade?.name} · £{rate.toFixed(2)}/{rateType === 'hourly' ? 'hr' : rateType === 'half_day' ? 'half-day' : 'day'} × {qty} × {workers} = </span>
-              <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: 14 }}>£{calcTotal.toFixed(2)}</span>
-              <span style={{ fontSize: 10, color: m.accent, opacity: 0.7 }}>auto-applied ✓</span>
+            )}
+            {/* Add trade button + running total */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button type="button" onClick={addLabourLine}
+                style={{ padding: '5px 12px', border: '1px solid #f59e0b', borderRadius: 5, background: '#fffbeb', color: '#92400e', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                + Add Trade
+              </button>
+              {labourLines.length > 0 && (
+                <div style={{ marginLeft: 'auto', fontSize: 12, color: m.accent }}>
+                  Total: <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: 14 }}>£{labourTotal.toFixed(2)}</span>
+                  <span style={{ fontSize: 10, marginLeft: 6, opacity: 0.7 }}>auto-applied ✓</span>
+                </div>
+              )}
             </div>
           </>
-        ) : (
-          <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
-            No labour trades set up — add them in Back Office → Labour &amp; Trades, or enter a cost manually.
-          </div>
         )}
         {money('labour_cost', 'Labour cost (per unit, ex-VAT)')}
       </>
@@ -796,47 +854,54 @@ function TaskModal({ task, isNew, labourTrades, onChange, onSave, onCancel }: {
   task: BOTask; isNew: boolean; labourTrades: BOLabourTrade[]
   onChange: (t: BOTask) => void; onSave: () => void; onCancel: () => void
 }) {
-  // Labour calculator local state — pre-filled from task defaults
-  const modalMatchedTrade = task.trade_name ? labourTrades.find(t => t.name === task.trade_name) : null
-  const [calcTradeId, setCalcTradeId]   = useState<string>(modalMatchedTrade?.id ?? labourTrades[0]?.id ?? '')
-  const [calcRateType, setCalcRateType] = useState<LabourRateType>('day')
-  const [calcQty,      setCalcQty]      = useState(task.default_qty && task.default_qty > 0 ? task.default_qty : 1)
-  const [calcWorkers,  setCalcWorkers]  = useState(1)
-  const [labourMode,   setLabourMode]   = useState<'calculator' | 'manual'>(
-    labourTrades.length > 0 ? 'calculator' : 'manual'
-  )
-
   function set<K extends keyof BOTask>(key: K, value: BOTask[K]) { onChange({ ...task, [key]: value }) }
 
-  // Recalculate labour_cost whenever calculator inputs change
-  function applyCalc(tradeId: string, rateType: LabourRateType, qty: number, workers: number) {
-    const trade = labourTrades.find(t => t.id === tradeId)
-    if (!trade) return
-    const rate   = effectiveRate(trade, rateType)
-    const cost   = +(rate * qty * workers).toFixed(2)
-    onChange({ ...task, labour_cost: cost, trade_name: trade.name })
+  // ── Multi-trade labour lines (TaskModal) ───────────────────────────────────
+  interface ModalLabourLine { id: string; tradeId: string; rateType: LabourRateType; qty: number }
+
+  function modalLineTotal(l: ModalLabourLine): number {
+    const t = labourTrades.find(x => x.id === l.tradeId)
+    return t ? +(effectiveRate(t, l.rateType) * l.qty).toFixed(2) : 0
   }
 
-  function onCalcTradeChange(id: string) {
-    setCalcTradeId(id)
-    applyCalc(id, calcRateType, calcQty, calcWorkers)
-  }
-  function onCalcRateTypeChange(rt: LabourRateType) {
-    setCalcRateType(rt)
-    applyCalc(calcTradeId, rt, calcQty, calcWorkers)
-  }
-  function onCalcQtyChange(q: number) {
-    setCalcQty(q)
-    applyCalc(calcTradeId, calcRateType, q, calcWorkers)
-  }
-  function onCalcWorkersChange(w: number) {
-    setCalcWorkers(w)
-    applyCalc(calcTradeId, calcRateType, calcQty, w)
+  function buildModalInitialLines(): ModalLabourLine[] {
+    const saved = (task.recipe_items as unknown as { labourItems?: { id: string; trade: string; qty: number; unit: string }[] } | null)?.labourItems
+    if (saved?.length) {
+      return saved.map(item => {
+        const t = labourTrades.find(x => x.name === item.trade)
+        return { id: item.id, tradeId: t?.id ?? labourTrades[0]?.id ?? '', rateType: (item.unit === 'hr' ? 'hourly' : 'day') as LabourRateType, qty: item.qty }
+      })
+    }
+    if (labourTrades.length === 0) return []
+    const matchTrade = task.trade_name ? labourTrades.find(x => x.name === task.trade_name) : labourTrades[0]
+    return [{ id: uid(), tradeId: matchTrade?.id ?? labourTrades[0].id, rateType: 'day', qty: task.default_qty > 0 ? task.default_qty : 1 }]
   }
 
-  const calcTrade = labourTrades.find(t => t.id === calcTradeId)
-  const calcRate  = calcTrade ? effectiveRate(calcTrade, calcRateType) : 0
-  const calcTotal = +(calcRate * calcQty * calcWorkers).toFixed(2)
+  const [modalLabourLines, setModalLabourLines] = useState<ModalLabourLine[]>(buildModalInitialLines)
+  const [labourMode, setLabourMode] = useState<'calculator' | 'manual'>(labourTrades.length > 0 ? 'calculator' : 'manual')
+
+  function applyModalLabourLines(next: ModalLabourLine[]) {
+    setModalLabourLines(next)
+    const total = +next.reduce((s, l) => s + modalLineTotal(l), 0).toFixed(2)
+    const firstName = labourTrades.find(t => t.id === next[0]?.tradeId)?.name ?? null
+    const labourItems = next.map(l => {
+      const t = labourTrades.find(x => x.id === l.tradeId)
+      return { id: l.id, trade: t?.name ?? '', description: '', qty: l.qty, unit: l.rateType === 'hourly' ? 'hr' : 'day', rate: t ? effectiveRate(t, l.rateType) : 0, total: modalLineTotal(l) }
+    })
+    const rec = (task.recipe_items as unknown as { labourItems?: unknown[]; materialItems?: unknown[]; plantItems?: unknown[]; subItems?: unknown[]; otherItems?: unknown[] } | null) ?? { labourItems: [], materialItems: [], plantItems: [], subItems: [], otherItems: [] }
+    onChange({ ...task, labour_cost: total, trade_name: firstName, recipe_items: { ...rec, labourItems } as unknown as Record<string, unknown> })
+  }
+
+  function addModalLabourLine() {
+    applyModalLabourLines([...modalLabourLines, { id: uid(), tradeId: labourTrades[0]?.id ?? '', rateType: 'day', qty: 1 }])
+  }
+  function updateModalLabourLine(i: number, patch: Partial<ModalLabourLine>) {
+    applyModalLabourLines(modalLabourLines.map((l, idx) => idx === i ? { ...l, ...patch } : l))
+  }
+  function removeModalLabourLine(i: number) {
+    applyModalLabourLines(modalLabourLines.filter((_, idx) => idx !== i))
+  }
+  const modalLabourTotal = +modalLabourLines.reduce((s, l) => s + modalLineTotal(l), 0).toFixed(2)
 
   const inp: React.CSSProperties = { width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' as const }
   const lbl: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }
@@ -915,43 +980,50 @@ function TaskModal({ task, isNew, labourTrades, onChange, onSave, onCancel }: {
             <div style={{ padding: '12px 12px', background: '#fff' }}>
               {labourMode === 'calculator' && labourTrades.length > 0 ? (
                 <>
-                  {/* Trade + Rate Type + Qty + Workers */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 72px 72px', gap: 8, marginBottom: 8 }}>
-                    <div>
-                      <label style={{ ...lbl, fontSize: 11 }}>Trade</label>
-                      <select value={calcTradeId} onChange={e => onCalcTradeChange(e.target.value)} style={{ ...inp, fontSize: 12 }}>
-                        {labourTrades.map(t => (
-                          <option key={t.id} value={t.id}>{t.name} — £{t.day_rate}/day</option>
-                        ))}
-                      </select>
+                  {/* Column headers */}
+                  {modalLabourLines.length > 0 && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 80px 72px 24px', gap: 6, marginBottom: 4 }}>
+                      {['Trade', 'Rate', 'Qty', 'Total', ''].map(h => (
+                        <div key={h} style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</div>
+                      ))}
                     </div>
-                    <div>
-                      <label style={{ ...lbl, fontSize: 11 }}>Rate Type</label>
-                      <select value={calcRateType} onChange={e => onCalcRateTypeChange(e.target.value as LabourRateType)} style={{ ...inp, fontSize: 12 }}>
-                        {(Object.keys(RATE_LABELS) as LabourRateType[]).map(rt => (
-                          <option key={rt} value={rt}>{RATE_LABELS[rt]}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label style={{ ...lbl, fontSize: 11 }}>{QTY_LABELS[calcRateType]}</label>
-                      <input type="number" min={0} step={0.5} value={calcQty}
-                        onChange={e => onCalcQtyChange(Math.max(0, +e.target.value))}
-                        style={{ ...inp, fontSize: 12 }} />
-                    </div>
-                    <div>
-                      <label style={{ ...lbl, fontSize: 11 }}>Workers</label>
-                      <input type="number" min={1} step={1} value={calcWorkers}
-                        onChange={e => onCalcWorkersChange(Math.max(1, +e.target.value))}
-                        style={{ ...inp, fontSize: 12 }} />
-                    </div>
-                  </div>
-                  {/* Calculation summary */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', background: '#fef3c7', borderRadius: 6, fontSize: 12, color: '#92400e' }}>
-                    <span style={{ flex: 1 }}>
-                      {calcTrade?.name} · £{calcRate.toFixed(2)}/{calcRateType === 'hourly' ? 'hr' : calcRateType === 'half_day' ? 'half-day' : 'day'} × {calcQty} × {calcWorkers} worker{calcWorkers > 1 ? 's' : ''}
-                    </span>
-                    <span style={{ fontWeight: 800, fontSize: 15, fontFamily: 'monospace' }}>= £{calcTotal.toFixed(2)}</span>
+                  )}
+                  {/* Trade lines */}
+                  {modalLabourLines.map((line, i) => {
+                    const t = labourTrades.find(x => x.id === line.tradeId)
+                    return (
+                      <div key={line.id} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 80px 72px 24px', gap: 6, marginBottom: 6, alignItems: 'center' }}>
+                        <select value={line.tradeId} onChange={e => updateModalLabourLine(i, { tradeId: e.target.value })} style={{ ...inp, fontSize: 12, padding: '6px 8px' }}>
+                          {labourTrades.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
+                        <select value={line.rateType} onChange={e => updateModalLabourLine(i, { rateType: e.target.value as LabourRateType })} style={{ ...inp, fontSize: 12, padding: '6px 8px' }}>
+                          {(Object.keys(RATE_LABELS) as LabourRateType[]).map(rt => (
+                            <option key={rt} value={rt}>{RATE_LABELS[rt]} £{effectiveRate(t ?? labourTrades[0], rt).toFixed(0)}</option>
+                          ))}
+                        </select>
+                        <input type="number" min={0} step={0.5} value={line.qty}
+                          onChange={e => updateModalLabourLine(i, { qty: Math.max(0, +e.target.value) })}
+                          style={{ ...inp, fontSize: 12, padding: '6px 8px', textAlign: 'right' }} />
+                        <div style={{ fontSize: 13, fontFamily: 'monospace', fontWeight: 700, color: '#92400e', textAlign: 'right' }}>
+                          £{modalLineTotal(line).toFixed(2)}
+                        </div>
+                        <button onClick={() => removeModalLabourLine(i)} style={{ background: 'none', border: 'none', color: '#e74c3c', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
+                      </div>
+                    )
+                  })}
+                  {/* Add trade + total */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+                    <button type="button" onClick={addModalLabourLine}
+                      style={{ padding: '5px 14px', border: '1px solid #f59e0b', borderRadius: 5, background: '#fffbeb', color: '#92400e', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                      + Add Trade
+                    </button>
+                    {modalLabourLines.length > 0 && (
+                      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: '#fef3c7', borderRadius: 6, fontSize: 12, color: '#92400e' }}>
+                        <span>Labour total:</span>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: 15 }}>£{modalLabourTotal.toFixed(2)}</span>
+                        <span style={{ fontSize: 10, opacity: 0.7 }}>auto-applied ✓</span>
+                      </div>
+                    )}
                   </div>
                 </>
               ) : (
@@ -971,15 +1043,6 @@ function TaskModal({ task, isNew, labourTrades, onChange, onSave, onCancel }: {
                     </div>
                   </div>
                 </>
-              )}
-
-              {/* Labour cost display / sync when using calculator */}
-              {labourMode === 'calculator' && (
-                <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 11, color: '#64748b' }}>Saved as labour cost:</span>
-                  <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#92400e' }}>£{task.labour_cost.toFixed(2)}</span>
-                  <span style={{ fontSize: 10, color: '#94a3b8' }}>· Trade: {task.trade_name ?? '—'}</span>
-                </div>
               )}
             </div>
           </div>
