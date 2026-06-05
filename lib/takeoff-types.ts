@@ -812,12 +812,68 @@ export const DWARF_WALL_MAKEUPS: FloorMakeup[] = [
 // ── Combined lookup ───────────────────────────────────────────────────────────
 
 /** All makeups from every phase combined — use for ID lookups (e.g. quote import) */
+// ── Roof build-up types ──────────────────────────────────────────────────────
+
+export const ROOF_MAKEUPS: FloorMakeup[] = [
+  {
+    id: 'cold_flat_roof',
+    name: 'Cold Flat Roof (EPDM)',
+    clientDescription:
+      'Supply and construct cold flat roof including structural timber deck, vapour control layer, mineral wool insulation between joists, breathable underlay, EPDM single-ply membrane, edge trims and all associated upstands and flashings.',
+    labourHrsPerM2: 1.8,
+    wastePercent: 10,
+    layers: [
+      // ── Core build-up (always included) ─────────────────────────────────
+      { id: 'cfr_firrings',    name: 'Timber firrings (falls)',          thickness: 0,   unit: 'm²',  qtyType: 'area',      description: 'Sawn timber firrings to form 1:80 falls min',                          category: 'materials', defaultEnabled: true  },
+      { id: 'cfr_deck',        name: 'Structural deck – 18mm WBP ply',   thickness: 18,  unit: 'm²',  qtyType: 'area',      description: '18mm WBP plywood structural deck, fixed to joists',                    category: 'materials', defaultEnabled: true  },
+      { id: 'cfr_vcl',         name: 'Vapour control layer',             thickness: 0,   unit: 'm²',  qtyType: 'area',      description: '500g polythene VCL, laps taped',                                       category: 'materials', defaultEnabled: true  },
+      { id: 'cfr_insulation',  name: 'Mineral wool insulation 100mm',    thickness: 100, unit: 'm²',  qtyType: 'area',      description: '100mm mineral wool between joists (cold deck spec)',                   category: 'materials', defaultEnabled: true  },
+      { id: 'cfr_underlay',    name: 'Breathable underlay',              thickness: 0,   unit: 'm²',  qtyType: 'area',      description: 'Breathable sarking felt over deck',                                    category: 'materials', defaultEnabled: true  },
+      { id: 'cfr_epdm',        name: 'EPDM membrane (1.2mm)',            thickness: 0,   unit: 'm²',  qtyType: 'area',      description: '1.2mm EPDM single-ply fully adhered membrane',                        category: 'materials', defaultEnabled: true  },
+      { id: 'cfr_upstand',     name: 'EPDM upstand to abutments',        thickness: 0,   unit: 'lm',  qtyType: 'perimeter', description: 'EPDM turn-up min 150mm to all abutments and kerbs',                    category: 'materials', defaultEnabled: true  },
+      { id: 'cfr_edge_trim',   name: 'Aluminium edge trim / drip',       thickness: 0,   unit: 'lm',  qtyType: 'perimeter', description: 'Pre-formed aluminium drip trim to all exposed edges',                  category: 'materials', defaultEnabled: true  },
+      { id: 'cfr_labour',      name: 'Carpentry & roofing labour',       thickness: 0,   unit: 'm²',  qtyType: 'area',      description: 'Carpenter/flat roofer to form deck, lay membrane and trim',            category: 'labour',    defaultEnabled: true  },
+      // ── Drainage (enabled by default) ────────────────────────────────────
+      { id: 'cfr_gutter',      name: 'PVC guttering & downpipes',        thickness: 0,   unit: 'lm',  qtyType: 'perimeter', description: 'Half-round 112mm PVC guttering, brackets and downpipes',               category: 'materials', defaultEnabled: true  },
+      // ── Optional extras (disabled by default — tick to include) ──────────
+      { id: 'cfr_rooflight',   name: 'Rooflight (Velux or similar)',     thickness: 0,   unit: 'nr',  qtyType: 'count',     description: 'Fixed or openable rooflight inc. kerb, flashing and labour',           category: 'materials', defaultEnabled: false },
+      { id: 'cfr_access',      name: 'Roof access hatch',                thickness: 0,   unit: 'nr',  qtyType: 'count',     description: 'Insulated roof access hatch with ladder',                              category: 'materials', defaultEnabled: false },
+      { id: 'cfr_lead',        name: 'Lead soaker / stepped flashing',   thickness: 0,   unit: 'lm',  qtyType: 'perimeter', description: 'Code 4 lead flashing to brickwork abutments',                          category: 'materials', defaultEnabled: false },
+      { id: 'cfr_solar_prep',  name: 'Solar panel prep / zone',          thickness: 0,   unit: 'nr',  qtyType: 'count',     description: 'Structural zone and conduit provision for future solar panels',        category: 'other',     defaultEnabled: false },
+    ],
+  },
+  {
+    id: 'warm_flat_roof',
+    name: 'Warm Flat Roof (PIR)',
+    clientDescription:
+      'Supply and construct warm flat roof with PIR insulation above structural deck, single-ply waterproof membrane, edge trims and drainage.',
+    labourHrsPerM2: 1.6,
+    wastePercent: 10,
+    layers: [
+      { id: 'wfr_firrings',   name: 'Timber firrings (falls)',           thickness: 0,   unit: 'm²',  qtyType: 'area',      description: 'Sawn timber firrings to form 1:80 falls min',                         category: 'materials', defaultEnabled: true  },
+      { id: 'wfr_deck',       name: 'Structural deck – 18mm WBP ply',    thickness: 18,  unit: 'm²',  qtyType: 'area',      description: '18mm WBP plywood structural deck',                                    category: 'materials', defaultEnabled: true  },
+      { id: 'wfr_vcl',        name: 'Vapour control layer',              thickness: 0,   unit: 'm²',  qtyType: 'area',      description: 'Vapour control layer bonded to deck',                                 category: 'materials', defaultEnabled: true  },
+      { id: 'wfr_pir',        name: 'PIR insulation 120mm',              thickness: 120, unit: 'm²',  qtyType: 'area',      description: '120mm PIR foam insulation board above deck (warm deck spec)',          category: 'materials', defaultEnabled: true  },
+      { id: 'wfr_membrane',   name: 'Single-ply membrane (GRP/TPO)',     thickness: 0,   unit: 'm²',  qtyType: 'area',      description: 'GRP fibreglass or TPO single-ply waterproof membrane',                category: 'materials', defaultEnabled: true  },
+      { id: 'wfr_edge_trim',  name: 'Aluminium edge trim / drip',        thickness: 0,   unit: 'lm',  qtyType: 'perimeter', description: 'Pre-formed aluminium drip trim to all exposed edges',                 category: 'materials', defaultEnabled: true  },
+      { id: 'wfr_upstand',    name: 'Membrane upstand to abutments',     thickness: 0,   unit: 'lm',  qtyType: 'perimeter', description: 'Membrane turn-up min 150mm to all abutments',                         category: 'materials', defaultEnabled: true  },
+      { id: 'wfr_labour',     name: 'Carpentry & roofing labour',        thickness: 0,   unit: 'm²',  qtyType: 'area',      description: 'Carpenter/flat roofer to form deck, insulate and lay membrane',      category: 'labour',    defaultEnabled: true  },
+      { id: 'wfr_gutter',     name: 'PVC guttering & downpipes',         thickness: 0,   unit: 'lm',  qtyType: 'perimeter', description: 'Half-round 112mm PVC guttering, brackets and downpipes',              category: 'materials', defaultEnabled: true  },
+      { id: 'wfr_rooflight',  name: 'Rooflight (Velux or similar)',      thickness: 0,   unit: 'nr',  qtyType: 'count',     description: 'Fixed or openable rooflight inc. kerb, upstand flashing and labour', category: 'materials', defaultEnabled: false },
+      { id: 'wfr_access',     name: 'Roof access hatch',                 thickness: 0,   unit: 'nr',  qtyType: 'count',     description: 'Insulated roof access hatch',                                         category: 'materials', defaultEnabled: false },
+      { id: 'wfr_lead',       name: 'Lead soaker / stepped flashing',    thickness: 0,   unit: 'lm',  qtyType: 'perimeter', description: 'Code 4 lead flashing to brickwork abutments',                         category: 'materials', defaultEnabled: false },
+      { id: 'wfr_green',      name: 'Green / sedum roof system',         thickness: 0,   unit: 'm²',  qtyType: 'area',      description: 'Drainage layer, filter fleece and sedum blanket over membrane',       category: 'materials', defaultEnabled: false },
+    ],
+  },
+]
+
 export const ALL_MAKEUPS: FloorMakeup[] = [
   ...FLOOR_MAKEUPS,
   ...WALL_MAKEUPS,
   ...DWARF_WALL_MAKEUPS,
   ...FOUNDATION_MAKEUPS,
   ...PLASTER_MAKEUPS,
+  ...ROOF_MAKEUPS,
 ]
 
 /** External Walls makeups: standard wall types + dwarf wall types */
@@ -832,6 +888,7 @@ export const PHASE_MAKEUPS: Partial<Record<TakeoffPhase, FloorMakeup[]>> = {
   'External Walls':        ALL_WALL_MAKEUPS,
   'Foundations':           FOUNDATION_MAKEUPS,
   'Plastering & Boarding': PLASTER_MAKEUPS,
+  'Roof':                  ROOF_MAKEUPS,
 }
 
 // ── Custom wall type storage (localStorage) ───────────────────────────────────

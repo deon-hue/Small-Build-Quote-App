@@ -11,7 +11,7 @@ import {
 import type { BOPhase, BOSubPhase, BOTask, BOLabourTrade, BOProduct, BOPlantItem } from '@/lib/back-office-types'
 
 // Phases that use FloorMakeup build-ups — tasks under these are "Construction Layers"
-const BUILDUP_PHASES = new Set(['External Walls', 'Floors & Screeds', 'Foundations', 'Plastering & Boarding'])
+const BUILDUP_PHASES = new Set(['External Walls', 'Floors & Screeds', 'Foundations', 'Plastering & Boarding', 'Roof'])
 import { TASK_UNITS } from '@/lib/back-office-types'
 import { JOB_TYPES } from '@/lib/utils'
 import { buildTaskRecipe, uid, plantListTotal } from '@/lib/layer-recipe'
