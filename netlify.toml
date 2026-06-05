@@ -2,8 +2,13 @@
   command = "npm run build"
   publish = ".next"
 
+# Disable Netlify's asset post-processing entirely.
+# Next.js already handles minification/bundling — Netlify's pass just times out
+# on large App Router builds with many chunks.
+[build.processing]
+  skip_processing = true
+
 [build.environment]
-  NETLIFY_SKIP_POSTPROCESSING = "true"
   NODE_VERSION = "20"
 
 [[plugins]]
