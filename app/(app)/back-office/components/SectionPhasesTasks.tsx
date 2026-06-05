@@ -244,32 +244,37 @@ export default function SectionPhasesTasks({ userId }: Props) {
         </div>
         {filteredPhases.map(phase => {
           const spCount = subPhases.filter(sp => sp.phase_id === phase.id).length
-          const tCount = tasks.filter(t => t.phase_id === phase.id).length
-          const active = phase.id === selectedPhaseId
-          const tagged = phase.job_types?.length > 0
+          const tCount  = tasks.filter(t => t.phase_id === phase.id).length
+          const active  = phase.id === selectedPhaseId
+          const tagged  = phase.job_types?.length > 0
+          const isBuildup = BUILDUP_PHASES.has(phase.name)
           return (
-            <button
+            <div
               key={phase.id}
               onClick={() => { setSelectedPhaseId(phase.id); setSelectedSubPhaseId(null) }}
               style={{
-                display: 'block', width: '100%', padding: '9px 14px', border: 'none', textAlign: 'left',
-                cursor: 'pointer', fontSize: 13,
-                fontWeight: active ? 600 : 400,
-                background: active ? '#e8f4f8' : 'transparent',
-                color: active ? '#2a7090' : '#374151',
-                borderLeft: active ? '3px solid #4a90a4' : '3px solid transparent',
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '10px 14px', marginBottom: 2, cursor: 'pointer', userSelect: 'none',
+                background: active ? '#e8f4f8' : '#f8fafc',
+                borderLeft: `3px solid ${active ? '#4a90a4' : 'transparent'}`,
+                borderBottom: '1px solid #f1f5f9',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{phase.name}</span>
-                {tagged && (
-                  <span title={phase.job_types.join(', ')} style={{ fontSize: 9, background: '#dbeafe', color: '#1d4ed8', borderRadius: 3, padding: '1px 4px', flexShrink: 0 }}>
-                    {phase.job_types.length}JT
+              {active
+                ? <ChevronDown size={14} style={{ color: '#4a90a4', flexShrink: 0 }} />
+                : <ChevronRight size={14} style={{ color: '#94a3b8', flexShrink: 0 }} />
+              }
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ fontSize: 13, fontWeight: active ? 700 : 500, color: active ? '#1a5f7a' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {phase.name}
                   </span>
-                )}
+                  {isBuildup && <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 99, background: '#dbeafe', color: '#1d4ed8', fontWeight: 600, flexShrink: 0 }}>build-up</span>}
+                  {tagged && <span title={phase.job_types.join(', ')} style={{ fontSize: 9, background: '#f1f5f9', color: '#64748b', borderRadius: 3, padding: '1px 4px', flexShrink: 0 }}>{phase.job_types.length}JT</span>}
+                </div>
+                <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>{spCount} sub · {tCount} {isBuildup ? 'layers' : 'tasks'}</div>
               </div>
-              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>{spCount} sub · {tCount} {BUILDUP_PHASES.has(phase.name) ? 'layers' : 'tasks'}</div>
-            </button>
+            </div>
           )
         })}
         {filteredPhases.length === 0 && (
