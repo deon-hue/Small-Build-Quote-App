@@ -616,7 +616,7 @@ function TaskTable({ tasks, onEdit, onDelete, onDuplicate, onToggleActive, onUpd
           labourTrades={labourTrades}
           products={products}
           plantItems={plantItems}
-          onSave={t => { onUpdate(t); setEditing(null) }}
+          onSave={t => { onUpdate(t) }}
           onClose={() => setEditing(null)}
         />
       )}
