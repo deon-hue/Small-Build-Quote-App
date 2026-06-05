@@ -633,7 +633,8 @@ function CategoryEditPopover({ task, cat, labourTrades, products, plantItems, on
 }) {
   const m = COST_META[cat]
   const [draft, setDraftRaw] = useState<BOTask>({ ...task })
-  const draftRef = useRef<BOTask>(draft)
+  const draftRef   = useRef<BOTask>(draft)
+  const isDirtyRef = useRef(false)
 
   // Auto-save timer — number inputs debounce 600ms, everything else saves immediately
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -642,21 +643,34 @@ function CategoryEditPopover({ task, cat, labourTrades, products, plantItems, on
     setDraftRaw(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater
       draftRef.current = next
+      isDirtyRef.current = true
       if (saveTimer.current) clearTimeout(saveTimer.current)
       if (debounceMs > 0) {
         saveTimer.current = setTimeout(() => onSave(next), debounceMs)
       } else {
-        onSave(next)
+        // Schedule immediately so it doesn't run inside React's updater
+        setTimeout(() => onSave(next), 0)
       }
       return next
     })
   }
 
-  // Save immediately on unmount (catches navigation-away without closing popover)
+  // On unmount: flush any pending debounce and write directly to DB.
+  // We bypass React state (setTasks etc.) here because the parent may already
+  // be unmounting, which would silently drop state updates.
   useEffect(() => {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current)
-      onSave(draftRef.current)
+      if (!isDirtyRef.current || !draftRef.current.id) return
+      const taskToSave = draftRef.current
+      const sb2 = createClient()
+      import('@/lib/layer-recipe').then(({ buildTaskRecipe }) => {
+        void sb2.from('bo_tasks').upsert({
+          ...taskToSave,
+          recipe_items: buildTaskRecipe(taskToSave) as unknown as Record<string, unknown>,
+          updated_at: new Date().toISOString(),
+        })
+      })
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
