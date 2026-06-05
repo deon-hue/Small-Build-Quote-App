@@ -597,6 +597,14 @@ function CategoryEditPopover({ task, cat, labourTrades, products, plantItems, on
   const [draft, setDraft] = useState<BOTask>({ ...task })
   const setField = <K extends keyof BOTask>(k: K, v: BOTask[K]) => setDraft(d => ({ ...d, [k]: v }))
 
+  // Local plant library — starts from prop, grows when user adds new items in this session
+  const [localPlantItems, setLocalPlantItems] = useState<BOPlantItem[]>(plantItems)
+  const [addingPlant,    setAddingPlant]    = useState(false)
+  const [newPlantName,   setNewPlantName]   = useState('')
+  const [newPlantUnit,   setNewPlantUnit]   = useState('day')
+  const [newPlantRate,   setNewPlantRate]   = useState<number>(0)
+  const [savingPlant,    setSavingPlant]    = useState(false)
+
   // Plant list (stored in recipe_items.plantItems; plant_cost kept as the sum)
   const plantList: LayerPlantItem[] = ((draft.recipe_items as unknown as LayerCostRecord | null)?.plantItems) ?? []
   function setPlantList(next: LayerPlantItem[]) {
@@ -606,7 +614,7 @@ function CategoryEditPopover({ task, cat, labourTrades, products, plantItems, on
     })
   }
   function addPlantFromMaster(id: string) {
-    const pl = plantItems.find(p => p.id === id); if (!pl) return
+    const pl = localPlantItems.find(p => p.id === id); if (!pl) return
     setPlantList([...plantList, { id: uid(), name: pl.name, unit: pl.unit, qty: 1, hireRate: pl.default_cost, total: pl.default_cost }])
   }
   function updatePlantRow(i: number, patch: Partial<LayerPlantItem>) {
@@ -616,8 +624,30 @@ function CategoryEditPopover({ task, cat, labourTrades, products, plantItems, on
   }
   function removePlantRow(i: number) { setPlantList(plantList.filter((_, idx) => idx !== i)) }
 
-  // Plant search state (used in plant picker)
+  // Plant search state
   const [plantSearch, setPlantSearch] = useState('')
+
+  async function saveNewPlant() {
+    if (!newPlantName.trim()) return
+    setSavingPlant(true)
+    try {
+      const sb2 = createClient()
+      const { data: { user } } = await sb2.auth.getUser()
+      if (!user) return
+      const { data, error } = await sb2.from('bo_plant_items').insert({
+        user_id: user.id, name: newPlantName.trim(), unit: newPlantUnit,
+        default_cost: newPlantRate, markup_pct: 20, active: true, display_order: 999,
+        updated_at: new Date().toISOString(),
+      }).select().single()
+      if (error || !data) return
+      const newItem = data as BOPlantItem
+      setLocalPlantItems(prev => [...prev, newItem])
+      addPlantFromMaster(newItem.id)
+      setAddingPlant(false)
+      setNewPlantName(''); setNewPlantRate(0)
+      setPlantSearch('')
+    } finally { setSavingPlant(false) }
+  }
 
   // ── Multi-trade labour lines ───────────────────────────────────────────────
   interface LabourEditorLine { id: string; tradeId: string; rateType: LabourRateType; qty: number }
@@ -781,40 +811,73 @@ function CategoryEditPopover({ task, cat, labourTrades, products, plantItems, on
       <>
         <div>
           <label style={lbl}>Add from Plant &amp; Equipment library</label>
-          {plantItems.length === 0 ? (
-            <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
-              No plant items in master data — add them in Back Office → Plant &amp; Equipment, or enter a cost manually below.
-            </div>
-          ) : (
-            <>
-              <input
-                value={plantSearch}
-                onChange={e => setPlantSearch(e.target.value)}
-                placeholder="Search plant &amp; equipment…"
-                style={{ ...inp, fontSize: 12, marginBottom: 4 }}
-              />
-              {plantSearch.trim() && (() => {
-                const q = plantSearch.trim().toLowerCase()
-                const hits = plantItems.filter(p => p.name.toLowerCase().includes(q))
-                return hits.length === 0 ? (
-                  <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic', padding: '4px 2px' }}>No matches</div>
-                ) : (
-                  <div style={{ border: '1px solid #e2e8f0', borderRadius: 6, maxHeight: 160, overflowY: 'auto' }}>
-                    {hits.map(p => (
-                      <div key={p.id}
-                        onClick={() => { addPlantFromMaster(p.id); setPlantSearch('') }}
-                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', fontSize: 12 }}
-                        onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
-                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                        <span style={{ fontWeight: 500, color: '#1e293b' }}>{p.name}</span>
-                        <span style={{ color: '#64748b', flexShrink: 0, marginLeft: 8 }}>£{p.default_cost}/{p.unit}</span>
-                      </div>
-                    ))}
+          <input
+            value={plantSearch}
+            onChange={e => { setPlantSearch(e.target.value); setAddingPlant(false) }}
+            placeholder="Search plant &amp; equipment…"
+            style={{ ...inp, fontSize: 12, marginBottom: 4 }}
+          />
+          {plantSearch.trim() && (() => {
+            const q = plantSearch.trim().toLowerCase()
+            const hits = localPlantItems.filter(p => p.name.toLowerCase().includes(q))
+            return (
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden', marginBottom: 4 }}>
+                {hits.map(p => (
+                  <div key={p.id}
+                    onClick={() => { addPlantFromMaster(p.id); setPlantSearch('') }}
+                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', fontSize: 12 }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                    <span style={{ fontWeight: 500, color: '#1e293b' }}>{p.name}</span>
+                    <span style={{ color: '#64748b', flexShrink: 0, marginLeft: 8 }}>£{p.default_cost}/{p.unit}</span>
                   </div>
-                )
-              })()}
-            </>
-          )}
+                ))}
+                {/* Add Plant button — always shown at bottom of results */}
+                {!addingPlant ? (
+                  <div
+                    onClick={() => { setAddingPlant(true); setNewPlantName(plantSearch.trim()) }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', cursor: 'pointer', background: '#f0fdf4', fontSize: 12, color: '#166534', fontWeight: 600 }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#dcfce7')}
+                    onMouseLeave={e => (e.currentTarget.style.background = '#f0fdf4')}>
+                    <span>+</span>
+                    <span>{hits.length === 0 ? `Add "${plantSearch.trim()}" as new plant item` : 'Add new plant item…'}</span>
+                  </div>
+                ) : (
+                  <div style={{ padding: '8px 10px', background: '#f0fdf4', borderTop: '1px solid #bbf7d0' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 70px', gap: 6, marginBottom: 6 }}>
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 600, color: '#166534', marginBottom: 2, textTransform: 'uppercase' }}>Name</div>
+                        <input autoFocus value={newPlantName} onChange={e => setNewPlantName(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && saveNewPlant()}
+                          style={{ ...inp, fontSize: 12, padding: '4px 7px' }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 600, color: '#166534', marginBottom: 2, textTransform: 'uppercase' }}>Unit</div>
+                        <select value={newPlantUnit} onChange={e => setNewPlantUnit(e.target.value)} style={{ ...inp, fontSize: 12, padding: '4px 6px' }}>
+                          {['day','week','hr','item'].map(u => <option key={u} value={u}>{u}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 600, color: '#166534', marginBottom: 2, textTransform: 'uppercase' }}>Rate £</div>
+                        <input type="number" min={0} step={1} value={newPlantRate} onChange={e => setNewPlantRate(+e.target.value)}
+                          style={{ ...inp, fontSize: 12, padding: '4px 7px' }} />
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={saveNewPlant} disabled={savingPlant || !newPlantName.trim()}
+                        style={{ padding: '4px 12px', background: savingPlant ? '#94a3b8' : '#16a34a', border: 'none', borderRadius: 5, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                        {savingPlant ? 'Saving…' : 'Save & Add'}
+                      </button>
+                      <button onClick={() => setAddingPlant(false)}
+                        style={{ padding: '4px 10px', border: '1px solid #e2e8f0', borderRadius: 5, background: '#fff', fontSize: 12, cursor: 'pointer', color: '#64748b' }}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
         </div>
         {plantList.length > 0 ? (
           <div style={{ display: 'grid', gap: 6 }}>
