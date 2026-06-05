@@ -601,14 +601,23 @@ function CategoryEditPopover({ task, cat, labourTrades, products, plantItems, on
   }
   function removePlantRow(i: number) { setPlantList(plantList.filter((_, idx) => idx !== i)) }
 
-  // Labour calculator state
-  const [tradeId, setTradeId]   = useState(labourTrades[0]?.id ?? '')
+  // Labour calculator state — pre-filled from task defaults
+  const matchedTrade = task.trade_name ? labourTrades.find(t => t.name === task.trade_name) : null
+  const [tradeId, setTradeId]   = useState(matchedTrade?.id ?? labourTrades[0]?.id ?? '')
   const [rateType, setRateType] = useState<LabourRateType>('day')
-  const [qty, setQty]           = useState(1)
+  const [qty, setQty]           = useState(task.default_qty && task.default_qty > 0 ? task.default_qty : 1)
   const [workers, setWorkers]   = useState(1)
   const trade     = labourTrades.find(t => t.id === tradeId)
   const rate      = trade ? effectiveRate(trade, rateType) : 0
   const calcTotal = +(rate * qty * workers).toFixed(2)
+
+  // Auto-apply whenever the calculator changes — no manual "Apply" click needed
+  function autoApply(newTradeId: string, newRateType: LabourRateType, newQty: number, newWorkers: number) {
+    const t = labourTrades.find(x => x.id === newTradeId)
+    if (!t) return
+    const newTotal = +(effectiveRate(t, newRateType) * newQty * newWorkers).toFixed(2)
+    setDraft(d => ({ ...d, labour_cost: newTotal, trade_name: t.name }))
+  }
 
   const inp: React.CSSProperties = { width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }
   const lbl: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 600, color: '#475569', marginBottom: 4 }
@@ -636,32 +645,29 @@ function CategoryEditPopover({ task, cat, labourTrades, products, plantItems, on
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 96px 64px 64px', gap: 8 }}>
               <div>
                 <label style={lbl}>Trade</label>
-                <select value={tradeId} onChange={e => setTradeId(e.target.value)} style={{ ...inp, fontSize: 12 }}>
+                <select value={tradeId} onChange={e => { setTradeId(e.target.value); autoApply(e.target.value, rateType, qty, workers) }} style={{ ...inp, fontSize: 12 }}>
                   {labourTrades.map(t => <option key={t.id} value={t.id}>{t.name} — £{t.day_rate}/day</option>)}
                 </select>
               </div>
               <div>
                 <label style={lbl}>Rate</label>
-                <select value={rateType} onChange={e => setRateType(e.target.value as LabourRateType)} style={{ ...inp, fontSize: 12 }}>
+                <select value={rateType} onChange={e => { const rt = e.target.value as LabourRateType; setRateType(rt); autoApply(tradeId, rt, qty, workers) }} style={{ ...inp, fontSize: 12 }}>
                   {(Object.keys(RATE_LABELS) as LabourRateType[]).map(rt => <option key={rt} value={rt}>{RATE_LABELS[rt]}</option>)}
                 </select>
               </div>
               <div>
                 <label style={lbl}>{QTY_LABELS[rateType]}</label>
-                <input type="number" min={0} step={0.5} value={qty} onChange={e => setQty(Math.max(0, +e.target.value))} style={{ ...inp, fontSize: 12 }} />
+                <input type="number" min={0} step={0.5} value={qty} onChange={e => { const q = Math.max(0, +e.target.value); setQty(q); autoApply(tradeId, rateType, q, workers) }} style={{ ...inp, fontSize: 12 }} />
               </div>
               <div>
                 <label style={lbl}>Workers</label>
-                <input type="number" min={1} step={1} value={workers} onChange={e => setWorkers(Math.max(1, +e.target.value))} style={{ ...inp, fontSize: 12 }} />
+                <input type="number" min={1} step={1} value={workers} onChange={e => { const w = Math.max(1, +e.target.value); setWorkers(w); autoApply(tradeId, rateType, qty, w) }} style={{ ...inp, fontSize: 12 }} />
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: m.bg, borderRadius: 6, fontSize: 12, color: m.accent }}>
-              <span style={{ flex: 1 }}>{trade?.name} · £{rate.toFixed(2)}/{rateType === 'hourly' ? 'hr' : rateType === 'half_day' ? 'half-day' : 'day'} × {qty} × {workers}</span>
-              <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: 14 }}>= £{calcTotal.toFixed(2)}</span>
-              <button type="button" onClick={() => setDraft(d => ({ ...d, labour_cost: calcTotal, trade_name: trade?.name ?? d.trade_name }))}
-                style={{ padding: '5px 12px', background: '#f59e0b', border: 'none', borderRadius: 5, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                Apply
-              </button>
+              <span style={{ flex: 1 }}>{trade?.name} · £{rate.toFixed(2)}/{rateType === 'hourly' ? 'hr' : rateType === 'half_day' ? 'half-day' : 'day'} × {qty} × {workers} = </span>
+              <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: 14 }}>£{calcTotal.toFixed(2)}</span>
+              <span style={{ fontSize: 10, color: m.accent, opacity: 0.7 }}>auto-applied ✓</span>
             </div>
           </>
         ) : (
@@ -790,10 +796,11 @@ function TaskModal({ task, isNew, labourTrades, onChange, onSave, onCancel }: {
   task: BOTask; isNew: boolean; labourTrades: BOLabourTrade[]
   onChange: (t: BOTask) => void; onSave: () => void; onCancel: () => void
 }) {
-  // Labour calculator local state
-  const [calcTradeId, setCalcTradeId]   = useState<string>(labourTrades[0]?.id ?? '')
+  // Labour calculator local state — pre-filled from task defaults
+  const modalMatchedTrade = task.trade_name ? labourTrades.find(t => t.name === task.trade_name) : null
+  const [calcTradeId, setCalcTradeId]   = useState<string>(modalMatchedTrade?.id ?? labourTrades[0]?.id ?? '')
   const [calcRateType, setCalcRateType] = useState<LabourRateType>('day')
-  const [calcQty,      setCalcQty]      = useState(1)
+  const [calcQty,      setCalcQty]      = useState(task.default_qty && task.default_qty > 0 ? task.default_qty : 1)
   const [calcWorkers,  setCalcWorkers]  = useState(1)
   const [labourMode,   setLabourMode]   = useState<'calculator' | 'manual'>(
     labourTrades.length > 0 ? 'calculator' : 'manual'
