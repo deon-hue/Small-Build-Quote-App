@@ -1,10 +1,10 @@
 // Shared helper: build a full LayerCostRecord from a Back Office task's
-// aggregate costs, preserving an explicit plant-item list when one is present.
+// aggregate costs, preserving explicit item lists when they are present.
 //
 // This keeps bo_tasks.recipe_items consistent with the aggregate *_cost fields
 // so the Takeoff Construction Layer Editor (which prefers recipe_items) always
-// shows the same numbers as the Back Office editor — while allowing a layer to
-// carry a real LIST of plant items selected from the master library.
+// shows the same numbers as the Back Office editor — while allowing tasks to
+// carry real lists of labour trades, plant items etc. selected by the user.
 
 import type { BOTask } from './back-office-types'
 import type { LayerCostRecord, LayerPlantItem } from './takeoff-types'
@@ -24,11 +24,18 @@ export function buildTaskRecipe(task: BOTask): LayerCostRecord {
   const dq = Math.max(1, task.default_qty || 1)
   const rec: LayerCostRecord = { labourItems: [], materialItems: [], plantItems: [], subItems: [], otherItems: [] }
 
-  if ((task.labour_cost ?? 0) > 0)
+  // Labour: prefer the explicit multi-trade list when its total matches labour_cost.
+  // This preserves e.g. "Builder 1 day + Labourer 2 days" set up in the editor.
+  const existingLabour = existing?.labourItems ?? []
+  const labourListTotal = +existingLabour.reduce((s, l) => s + (l.total || 0), 0).toFixed(2)
+  if (existingLabour.length && Math.abs(labourListTotal - (task.labour_cost ?? 0)) < 0.5) {
+    rec.labourItems = existingLabour
+  } else if ((task.labour_cost ?? 0) > 0) {
     rec.labourItems.push({
       id: uid(), trade: task.trade_name ?? 'Labour', description: task.description ?? '',
       qty: dq, unit: 'hr', rate: +((task.labour_cost) / dq).toFixed(2), total: task.labour_cost,
     })
+  }
 
   if ((task.materials_cost ?? 0) > 0)
     rec.materialItems.push({
