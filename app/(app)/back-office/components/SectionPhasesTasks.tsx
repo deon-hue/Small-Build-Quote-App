@@ -179,6 +179,8 @@ export default function SectionPhasesTasks({ userId }: Props) {
   async function patchTask(task: BOTask) {
     const withRecipe = { ...task, recipe_items: buildTaskRecipe(task) as unknown as Record<string, unknown> }
     setTasks(prev => prev.map(t => t.id === task.id ? withRecipe : t))
+    // If the task modal is currently open for this task, keep it in sync too
+    setTaskModal(prev => prev && prev.task.id === task.id ? { ...prev, task: withRecipe } : prev)
     await upsertTask(sb, { ...withRecipe, user_id: userId })
   }
 
@@ -453,9 +455,22 @@ export default function SectionPhasesTasks({ userId }: Props) {
           task={taskModal.task}
           isNew={taskModal.isNew}
           labourTrades={labourTrades}
-          onChange={task => setTaskModal({ ...taskModal, task })}
+          onChange={updatedTask => {
+            // Sync modal state
+            setTaskModal(prev => prev ? { ...prev, task: updatedTask } : null)
+            // Live-sync to main tasks array so inline boxes reflect changes immediately
+            if (!taskModal.isNew && updatedTask.id) {
+              setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t))
+            }
+          }}
           onSave={saveTaskModal}
-          onCancel={() => setTaskModal(null)}
+          onCancel={() => {
+            // On cancel, reload from DB to revert any unsaved local changes
+            if (!taskModal.isNew) {
+              fetchTasks(sb, userId).then(fresh => setTasks(fresh))
+            }
+            setTaskModal(null)
+          }}
         />
       )}
     </div>
@@ -1093,8 +1108,8 @@ function TaskModal({ task, isNew, labourTrades, onChange, onSave, onCancel }: {
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '12px 22px', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
-          <button onClick={onCancel} style={{ padding: '8px 18px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, background: '#fff', color: '#374151', cursor: 'pointer' }}>Cancel</button>
-          <button onClick={onSave} style={{ padding: '8px 22px', background: '#4a90a4', border: 'none', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Save Task</button>
+          <button onClick={onCancel} style={{ padding: '8px 18px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, background: '#fff', color: '#374151', cursor: 'pointer' }} title="Discard unsaved changes">↩ Revert</button>
+          <button onClick={onSave} style={{ padding: '8px 22px', background: '#4a90a4', border: 'none', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }} title="Save changes to Back Office database">💾 Save to Back Office</button>
         </div>
       </div>
     </div>
