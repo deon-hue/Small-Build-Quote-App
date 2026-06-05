@@ -11,7 +11,7 @@ import { MEASUREMENT_LABELS } from '@/lib/estimator'
 import { getPhaseEstimatorDefaults } from '@/lib/estimatorDefaults'
 import { COST_CATEGORIES } from '@/lib/costCategories'
 import { type TaskLabourLine } from '@/lib/tradeRates'
-import { HardHat } from 'lucide-react'
+import { HardHat, ChevronDown, ChevronRight } from 'lucide-react'
 import TaskLabourLinesEditor from '@/components/TaskLabourLinesEditor'
 
 // New DB-backed section components
@@ -318,10 +318,25 @@ export default function BackOfficePage() {
                   {JOB_TYPES.map(jt => {
                     const active = jt === selectedJobType
                     return (
-                      <button key={jt} onClick={() => handleSelectJobType(jt)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '9px 14px', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: 13, fontWeight: active ? 600 : 400, background: active ? '#e8f4f8' : 'transparent', color: active ? '#2a7090' : '#374151', borderLeft: active ? '3px solid #4a90a4' : '3px solid transparent' }}>
-                        <span>{jt}</span>
-                        {!!customTemplates[jt] && <span title="Custom" style={{ color: '#7ab533', fontSize: 9 }}>●</span>}
-                      </button>
+                      <div key={jt} onClick={() => handleSelectJobType(jt)}
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          width: '100%', padding: '9px 14px', cursor: 'pointer', fontSize: 13,
+                          fontWeight: active ? 700 : 500,
+                          background: active ? '#e8f4f8' : '#ffffff',
+                          border: `1px solid ${active ? '#4a90a4' : '#e2e8f0'}`,
+                          borderRadius: 7, marginBottom: 4, boxSizing: 'border-box' as const,
+                          color: active ? '#1a5f7a' : '#1e293b',
+                        }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {active
+                            ? <ChevronDown size={13} style={{ color: '#4a90a4', flexShrink: 0 }} />
+                            : <ChevronRight size={13} style={{ color: '#94a3b8', flexShrink: 0 }} />
+                          }
+                          <span>{jt}</span>
+                        </div>
+                        {!!customTemplates[jt] && <span title="Custom template" style={{ fontSize: 9, padding: '1px 5px', borderRadius: 99, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>custom</span>}
+                      </div>
                     )
                   })}
                 </div>
@@ -402,12 +417,12 @@ export default function BackOfficePage() {
                         const collapsed = collapsedTplPhases.has(pp)
                         return (
                           <div key={pp} style={{ marginBottom: 14 }}>
-                            <div style={{ background: '#2c3e50', color: '#ecf0f1', padding: '9px 14px', borderRadius: collapsed ? 8 : '8px 8px 0 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <button onClick={() => toggleTplPhase(pp)} title={collapsed ? 'Expand' : 'Collapse'} style={{ background: 'none', border: 'none', color: '#ecf0f1', cursor: 'pointer', fontSize: 12, padding: 0, width: 14, flexShrink: 0, lineHeight: 1 }}>{collapsed ? '▸' : '▾'}</button>
-                              <input value={pp} onChange={e => renameMainPhase(pp, e.target.value)} style={{ flex: 1, background: 'transparent', border: 'none', color: '#ecf0f1', fontWeight: 600, fontSize: 13, outline: 'none', minWidth: 0 }} />
-                              {collapsed && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap', flexShrink: 0 }}>{subPhases.length} sub-phase{subPhases.length !== 1 ? 's' : ''}</span>}
-                              <button onClick={() => addSubPhase(pp)} style={{ padding: '3px 10px', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 4, color: '#e2e8f0', fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>+ Sub-Phase</button>
-                              <button onClick={() => removeMainPhase(pp)} style={{ padding: '3px 9px', background: 'rgba(220,50,50,0.25)', border: '1px solid rgba(220,50,50,0.45)', borderRadius: 4, color: '#fca5a5', fontSize: 15, cursor: 'pointer', flexShrink: 0 }}>×</button>
+                            <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: collapsed ? 8 : '8px 8px 0 0', padding: '9px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <button onClick={() => toggleTplPhase(pp)} title={collapsed ? 'Expand' : 'Collapse'} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 12, padding: 0, width: 14, flexShrink: 0, lineHeight: 1 }}>{collapsed ? '▸' : '▾'}</button>
+                              <input value={pp} onChange={e => renameMainPhase(pp, e.target.value)} style={{ flex: 1, background: 'transparent', border: 'none', color: '#1e293b', fontWeight: 700, fontSize: 13, outline: 'none', minWidth: 0 }} />
+                              {collapsed && <span style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap', flexShrink: 0 }}>{subPhases.length} sub-phase{subPhases.length !== 1 ? 's' : ''}</span>}
+                              <button onClick={() => addSubPhase(pp)} style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '3px 10px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 4, color: '#166534', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>+ Sub-Phase</button>
+                              <button onClick={() => removeMainPhase(pp)} style={{ padding: '3px 9px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, color: '#dc2626', fontSize: 15, cursor: 'pointer', flexShrink: 0 }}>×</button>
                             </div>
                             {!collapsed && (
                             <div style={{ border: '1px solid #e2e8f0', borderTop: 'none', borderRadius: '0 0 8px 8px', overflow: 'hidden', background: '#fff' }}>
