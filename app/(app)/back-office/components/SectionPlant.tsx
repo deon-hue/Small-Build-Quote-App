@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { fetchPlantItems, upsertPlantItem, deletePlantItem, seedPlantLibrary } from '@/lib/back-office-queries'
 import type { BOPlantItem } from '@/lib/back-office-types'
 import { PLANT_UNITS, PLANT_CATEGORIES } from '@/lib/back-office-types'
-import { Plus } from 'lucide-react'
+import { Plus, ChevronDown, ChevronRight } from 'lucide-react'
 
 interface Props { userId: string }
 
@@ -148,14 +148,17 @@ export default function SectionPlant({ userId }: Props) {
       ) : grouped.map(([category, list]) => {
         const isOpen = expanded.has(category)
         return (
-        <div key={category} style={{ marginBottom: 18 }}>
-          <div onClick={() => toggleCat(category)} title={isOpen ? 'Collapse' : 'Expand'} style={{ background: '#2c3e50', color: '#ecf0f1', padding: '7px 14px', borderRadius: isOpen ? '8px 8px 0 0' : 8, fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-            <span style={{ width: 12, flexShrink: 0, lineHeight: 1 }}>{isOpen ? '▾' : '▸'}</span>
-            <span style={{ flex: 1 }}>{category}</span>
-            <span style={{ color: 'rgba(255,255,255,0.6)', fontWeight: 400 }}>{list.length} item{list.length !== 1 ? 's' : ''}</span>
+        <div key={category} style={{ marginBottom: 10, border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
+          <div onClick={() => toggleCat(category)} style={{ background: '#ffffff', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+            {isOpen
+              ? <ChevronDown size={15} style={{ color: '#94a3b8', flexShrink: 0 }} />
+              : <ChevronRight size={15} style={{ color: '#94a3b8', flexShrink: 0 }} />
+            }
+            <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{category}</span>
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>{list.length} item{list.length !== 1 ? 's' : ''}</span>
           </div>
           {isOpen && (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, border: '1px solid #e2e8f0', borderTop: 'none' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, borderTop: '1px solid #e2e8f0' }}>
             <thead>
               <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                 {['Plant / Equipment', 'Unit', 'Cost Rate', 'Charge Rate', 'Markup', 'Supplier', 'Operator', 'Active', ''].map(h => (
