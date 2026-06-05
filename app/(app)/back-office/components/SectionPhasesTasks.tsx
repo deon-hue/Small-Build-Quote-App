@@ -255,24 +255,24 @@ export default function SectionPhasesTasks({ userId }: Props) {
               style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 padding: '10px 14px', marginBottom: 4, cursor: 'pointer', userSelect: 'none',
-                background: active ? '#3d5166' : '#2c3e50',
-                borderRadius: 6,
-                borderLeft: `3px solid ${active ? '#4a90a4' : 'transparent'}`,
+                background: active ? '#e8f4f8' : '#ffffff',
+                border: `1px solid ${active ? '#4a90a4' : '#e2e8f0'}`,
+                borderRadius: 8,
               }}
             >
               {active
-                ? <ChevronDown size={14} style={{ color: '#ecf0f1', flexShrink: 0 }} />
-                : <ChevronRight size={14} style={{ color: 'rgba(255,255,255,0.5)', flexShrink: 0 }} />
+                ? <ChevronDown size={15} style={{ color: '#4a90a4', flexShrink: 0 }} />
+                : <ChevronRight size={15} style={{ color: '#94a3b8', flexShrink: 0 }} />
               }
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#ecf0f1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {phase.name}
                   </span>
-                  {isBuildup && <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 99, background: 'rgba(255,255,255,0.15)', color: '#ecf0f1', fontWeight: 600, flexShrink: 0 }}>build-up</span>}
-                  {tagged && <span title={phase.job_types.join(', ')} style={{ fontSize: 9, background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)', borderRadius: 3, padding: '1px 4px', flexShrink: 0 }}>{phase.job_types.length}JT</span>}
+                  {isBuildup && <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 99, background: '#dbeafe', color: '#1d4ed8', fontWeight: 600, flexShrink: 0 }}>build-up</span>}
+                  {tagged && <span title={phase.job_types.join(', ')} style={{ fontSize: 9, background: '#f1f5f9', color: '#64748b', borderRadius: 3, padding: '1px 4px', flexShrink: 0 }}>{phase.job_types.length}JT</span>}
                 </div>
-                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', marginTop: 2 }}>{spCount} sub · {tCount} {isBuildup ? 'layers' : 'tasks'}</div>
+                <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>{spCount} sub · {tCount} {isBuildup ? 'layers' : 'tasks'}</div>
               </div>
             </div>
           )
