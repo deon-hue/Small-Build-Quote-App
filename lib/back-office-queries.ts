@@ -137,6 +137,35 @@ export async function fetchQuoteDefaults(
   return result
 }
 
+/** Same as fetchQuoteDefaults but returns ALL sub-phases regardless of job type */
+export async function fetchAllQuoteDefaults(
+  sb: SupabaseClient,
+  userId: string,
+): Promise<Array<{
+  phaseName:   string
+  phaseId:     string
+  subPhaseName:string
+  subPhaseId:  string
+  markupPct:   number
+  tasks: BOTask[]
+}>> {
+  const [{ data: phases }, { data: subPhases }, { data: tasks }] = await Promise.all([
+    sb.from('bo_phases').select('*').eq('user_id', userId).eq('active', true).order('display_order'),
+    sb.from('bo_sub_phases').select('*').eq('user_id', userId).eq('active', true).order('display_order'),
+    sb.from('bo_tasks').select('*').eq('user_id', userId).eq('active', true).order('display_order'),
+  ])
+  if (!phases?.length) return []
+  const result: Array<{ phaseName: string; phaseId: string; subPhaseName: string; subPhaseId: string; markupPct: number; tasks: BOTask[] }> = []
+  for (const phase of phases ?? []) {
+    const phaseSubs = (subPhases ?? []).filter(sp => sp.phase_id === phase.id)
+    for (const sp of phaseSubs) {
+      const spTasks = (tasks ?? []).filter(t => t.sub_phase_id === sp.id)
+      result.push({ phaseName: phase.name, phaseId: phase.id, subPhaseName: sp.name, subPhaseId: sp.id, markupPct: sp.markup_pct ?? 0, tasks: spTasks as BOTask[] })
+    }
+  }
+  return result
+}
+
 export async function upsertTask(sb: SupabaseClient, task: Partial<BOTask> & { user_id: string }): Promise<BOTask | null> {
   const { data } = await upsertTaskWithError(sb, task)
   return data

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { fmt, VAT, JOB_TYPES, calcPhase, calcPhaseSell } from '@/lib/utils'
 import type { QuotePhase, QuoteItem, Quote, TakeoffPhaseMeta } from '@/lib/types'
@@ -20,7 +20,7 @@ import { DEFAULT_DEMO_SUBPHASES, calcDemoSellingPrice, DEMO_UNIT_LABELS, type De
 import { ALL_PHASE_SUBPHASES, calcPhaseTaskSellingPrice } from '@/lib/phase-tasks'
 import { sumByCategory } from '@/lib/material-recipes'
 import { createClient } from '@/lib/supabase/client'
-import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchQuoteDefaults, upsertTask, fetchLabourTrades, fetchProducts, fetchPlantItems } from '@/lib/back-office-queries'
+import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchQuoteDefaults, fetchAllQuoteDefaults, upsertTask, fetchLabourTrades, fetchProducts, fetchPlantItems } from '@/lib/back-office-queries'
 import type { BOLabourTrade, BOProduct, BOPlantItem } from '@/lib/back-office-types'
 import type { FloorMakeup } from '@/lib/takeoff-types'
 
@@ -125,6 +125,9 @@ export default function NewQuotePage() {
   const [labourTrades,  setLabourTrades]  = useState<BOLabourTrade[]>([])
   const [boProducts,    setBoProducts]    = useState<BOProduct[]>([])
   const [boPlantItems,  setBoPlantItems]  = useState<BOPlantItem[]>([])
+  const [showLibrary,   setShowLibrary]   = useState(false)
+  const [libraryData,   setLibraryData]   = useState<Awaited<ReturnType<typeof fetchAllQuoteDefaults>>>([])
+  const [libraryLoading, setLibraryLoading] = useState(false)
   // 'breakdown' = structured visual view (after takeoff import); 'edit' = normal editable rows
   const [viewMode, setViewMode] = useState<'breakdown' | 'edit'>('edit')
   const hasTakeoffPhases = phases.some(p => p.meta?.importedFrom === 'takeoff')
@@ -278,6 +281,50 @@ export default function NewQuotePage() {
     } finally {
       setLoadingBO(false)
     }
+  }
+
+  async function openLibrary() {
+    setShowLibrary(true)
+    if (libraryData.length) return  // already loaded
+    setLibraryLoading(true)
+    try {
+      const sb = createClient()
+      const { data: { user } } = await sb.auth.getUser()
+      if (!user) return
+      const data = await fetchAllQuoteDefaults(sb, user.id)
+      setLibraryData(data)
+    } finally {
+      setLibraryLoading(false)
+    }
+  }
+
+  function addFromLibrary(selectedSubPhaseIds: string[]) {
+    const toAdd = libraryData.filter(row => selectedSubPhaseIds.includes(row.subPhaseId))
+    const newPhases: QuotePhase[] = toAdd.map(row => {
+      const items: Omit<QuoteItem, 'id'>[] = []
+      for (const task of row.tasks) {
+        const tg = task.name
+        items.push(
+          { desc: task.description || task.name, qty: task.default_qty, unit: task.unit, labour: task.labour_cost, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: task.client_description || '', itemType: 'labour'         as const, taskGroup: tg, boTaskId: task.id },
+          { desc: '',                              qty: task.default_qty, unit: task.unit, labour: 0, materials: task.materials_cost,   plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials'      as const, taskGroup: tg, boTaskId: task.id },
+          { desc: '',                              qty: task.default_qty, unit: task.unit, labour: 0, materials: 0, plantHire: task.plant_cost,  subcontractors: 0, other: 0, notes: '', itemType: 'plant'          as const, taskGroup: tg, boTaskId: task.id },
+          { desc: '',                              qty: task.default_qty, unit: task.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: task.subcontract_cost, other: 0, notes: '', itemType: 'subcontractors' as const, taskGroup: tg, boTaskId: task.id },
+          { desc: '',                              qty: task.default_qty, unit: task.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: task.other_cost, notes: '', itemType: 'other'          as const, taskGroup: tg, boTaskId: task.id },
+        )
+      }
+      if (!items.length) {
+        items.push(
+          { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'labour'         as const },
+          { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials'      as const },
+          { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'plant'          as const },
+          { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'subcontractors' as const },
+          { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'other'          as const },
+        )
+      }
+      return makePhase(row.subPhaseName, items, row.phaseName) as QuotePhase
+    })
+    setPhases(prev => [...prev, ...newPhases])
+    setShowLibrary(false)
   }
 
   /** Fallback: load hardcoded template but stamp itemStatus:'manual' so badges always show */
@@ -1463,6 +1510,7 @@ export default function NewQuotePage() {
                 boProducts={boProducts}
                 boPlantItems={boPlantItems}
                 quoteSource={quoteSource ?? undefined}
+                onOpenLibrary={openLibrary}
               />
             </>
           )}
@@ -1471,6 +1519,15 @@ export default function NewQuotePage() {
 
       {showPreview && (
         <QuotePreviewModal quote={previewQuote} onClose={() => setShowPreview(false)} />
+      )}
+
+      {showLibrary && (
+        <BOLibraryModal
+          data={libraryData}
+          loading={libraryLoading}
+          onAdd={addFromLibrary}
+          onClose={() => setShowLibrary(false)}
+        />
       )}
 
       {/* ── Scope of Works AI help modal ── */}
@@ -1568,6 +1625,117 @@ export default function NewQuotePage() {
         />
       )}
     </>
+  )
+}
+
+// ── BO Library picker modal ───────────────────────────────────────────────────
+function BOLibraryModal({
+  data, loading, onAdd, onClose,
+}: {
+  data: Array<{ phaseName: string; phaseId: string; subPhaseName: string; subPhaseId: string; tasks: { id: string }[] }>
+  loading: boolean
+  onAdd: (ids: string[]) => void
+  onClose: () => void
+}) {
+  const [selected, setSelected] = React.useState<Set<string>>(new Set())
+  const [openPhase, setOpenPhase] = React.useState<string | null>(null)
+
+  // Group sub-phases by main phase
+  const grouped = React.useMemo(() => {
+    const map = new Map<string, typeof data>()
+    for (const row of data) {
+      if (!map.has(row.phaseName)) map.set(row.phaseName, [])
+      map.get(row.phaseName)!.push(row)
+    }
+    return map
+  }, [data])
+
+  function toggleSub(id: string) {
+    setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+
+  function toggleAll(phaseSubIds: string[]) {
+    const allOn = phaseSubIds.every(id => selected.has(id))
+    setSelected(prev => {
+      const n = new Set(prev)
+      phaseSubIds.forEach(id => allOn ? n.delete(id) : n.add(id))
+      return n
+    })
+  }
+
+  return (
+    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal-box" style={{ width: 'min(560px,96vw)', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
+        <div className="modal-hd">
+          <div>
+            <div style={{ fontWeight: 700 }}>📚 Add from Back Office Library</div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>Select sub-phases to add to this quote</div>
+          </div>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
+          {loading && <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>⏳ Loading library…</div>}
+          {!loading && grouped.size === 0 && (
+            <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
+              No phases found in Back Office.<br/>Add phases in <strong>Back Office → Phases & Tasks</strong> first.
+            </div>
+          )}
+          {!loading && Array.from(grouped.entries()).map(([phaseName, subs]) => {
+            const subIds = subs.map(s => s.subPhaseId)
+            const allChecked = subIds.every(id => selected.has(id))
+            const someChecked = subIds.some(id => selected.has(id))
+            const isOpen = openPhase === phaseName
+            return (
+              <div key={phaseName} style={{ marginBottom: 8, border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
+                <div
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', background: '#1e293b', cursor: 'pointer' }}
+                  onClick={() => setOpenPhase(isOpen ? null : phaseName)}
+                >
+                  <input
+                    type="checkbox"
+                    checked={allChecked}
+                    ref={el => { if (el) el.indeterminate = someChecked && !allChecked }}
+                    onClick={e => e.stopPropagation()}
+                    onChange={() => toggleAll(subIds)}
+                    style={{ flexShrink: 0 }}
+                  />
+                  <span style={{ flex: 1, fontWeight: 700, fontSize: 13, color: '#fff' }}>{phaseName}</span>
+                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)' }}>{subs.length} sub-phases</span>
+                  <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>{isOpen ? '▾' : '▸'}</span>
+                </div>
+                {isOpen && (
+                  <div style={{ background: '#fafafa' }}>
+                    {subs.map(sub => (
+                      <label key={sub.subPhaseId} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', cursor: 'pointer', borderTop: '1px solid #f0f0f0' }}>
+                        <input type="checkbox" checked={selected.has(sub.subPhaseId)} onChange={() => toggleSub(sub.subPhaseId)} />
+                        <span style={{ flex: 1, fontSize: 13, color: '#1e293b' }}>{sub.subPhaseName}</span>
+                        <span style={{ fontSize: 11, color: '#94a3b8' }}>{sub.tasks.length} tasks</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 12, color: 'var(--muted)' }}>{selected.size} sub-phase{selected.size !== 1 ? 's' : ''} selected</span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn-sm btn-outline" onClick={onClose}>Cancel</button>
+            <button
+              className="btn-sm btn-primary"
+              disabled={selected.size === 0}
+              onClick={() => onAdd(Array.from(selected))}
+              style={{ opacity: selected.size === 0 ? 0.5 : 1 }}
+            >
+              + Add {selected.size > 0 ? selected.size : ''} to Quote
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 

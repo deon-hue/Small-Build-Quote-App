@@ -1598,9 +1598,11 @@ export interface QuoteWorkspaceProps {
   boPlantItems?:     BOPlantItem[]
   /** How the quote was created — drives empty-state messaging */
   quoteSource?:      'takeoff' | 'ai' | 'manual'
+  /** Opens the BO library picker modal */
+  onOpenLibrary?:    () => void
 }
 
-export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked = false, onChange, onAIGenerate, aiGenerating, onLoadTemplate, jobType, onSaveToBO, labourTrades = [], boProducts = [], boPlantItems = [], quoteSource }: QuoteWorkspaceProps) {
+export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked = false, onChange, onAIGenerate, aiGenerating, onLoadTemplate, jobType, onSaveToBO, labourTrades = [], boProducts = [], boPlantItems = [], quoteSource, onOpenLibrary }: QuoteWorkspaceProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [search,    setSearch]    = useState('')
 
@@ -1739,6 +1741,7 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
         <button style={{ ...addBtn, fontSize: 11 }} onClick={expandAll}>▼▼ Expand All</button>
         <button style={{ ...addBtn, fontSize: 11 }} onClick={collapseAll}>▶▶ Collapse All</button>
         {!isLocked && <button style={{ ...addBtn, fontSize: 11, borderColor: '#7ab533', color: '#16a34a' }} onClick={addMainPhase}>+ Add Phase</button>}
+        {!isLocked && onOpenLibrary && <button style={{ ...addBtn, fontSize: 11, borderColor: '#4a90a4', color: '#1d6a8a' }} onClick={onOpenLibrary}>📚 From Library</button>}
       </div>
 
       {/* Empty / landing state */}
