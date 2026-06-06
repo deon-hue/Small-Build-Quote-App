@@ -1099,7 +1099,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
                     }}>
                       {meta.icon}
                     </span>
-                    <span style={{ fontSize: 11, color: meta.accent }}>{active ? '▾' : '▸'}</span>
+                    <span style={{ fontSize: 11, color: meta.accent, opacity: 0.6 }}>↗</span>
                   </div>
                   <div style={{ fontSize: 11, fontWeight: 800, color: meta.accent, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                     {meta.label}
@@ -1115,31 +1115,33 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
             })}
           </div>
 
-          {/* Expanded editor for the open card */}
+          {/* Cost-category popup modal */}
           {openCard && (
-            <div style={{ marginTop: 8, border: `1px solid ${CARD_META[openCard].border}`, borderRadius: 8, overflow: 'hidden' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: CARD_META[openCard].bg }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{
-                    width: 26, height: 26, borderRadius: 8, background: '#fff',
-                    border: `1px solid ${CARD_META[openCard].border}`, display: 'inline-flex',
-                    alignItems: 'center', justifyContent: 'center', fontSize: 14,
-                  }}>
-                    {CARD_META[openCard].icon}
+            <div
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+              onClick={e => { if (e.target === e.currentTarget) setOpenCard(null) }}>
+              <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 680, maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(0,0,0,0.3)' }}>
+                {/* Modal header */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', background: CARD_META[openCard].bg, borderBottom: `1px solid ${CARD_META[openCard].border}`, borderRadius: '12px 12px 0 0' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ width: 32, height: 32, borderRadius: 10, background: '#fff', border: `1px solid ${CARD_META[openCard].border}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
+                      {CARD_META[openCard].icon}
+                    </span>
+                    <span style={{ fontSize: 14, fontWeight: 800, color: CARD_META[openCard].accent, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      {CARD_META[openCard].label}
+                    </span>
+                    <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14, color: CARD_META[openCard].accent, opacity: 0.8 }}>
+                      {cardCost[openCard] > 0 ? `£${cardCost[openCard].toFixed(2)}` : '—'}
+                    </span>
                   </span>
-                  <span style={{ fontSize: 12, fontWeight: 800, color: CARD_META[openCard].accent, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    {CARD_META[openCard].label}
-                  </span>
-                </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13, color: CARD_META[openCard].accent }}>
-                    £{cardCost[openCard].toFixed(2)}
-                  </span>
-                  <button type="button" onClick={() => setOpenCard(null)} style={iconBtn(CARD_META[openCard].accent)} title="Close">✕</button>
-                </span>
-              </div>
-              <div style={{ padding: '8px 10px' }}>
-                {renderCardBody(openCard)}
+                  <button type="button" onClick={() => setOpenCard(null)}
+                    style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: CARD_META[openCard].accent, lineHeight: 1, padding: 0, opacity: 0.7 }}
+                    title="Close">×</button>
+                </div>
+                {/* Modal body */}
+                <div style={{ flex: 1, overflowY: 'auto', padding: '12px 18px' }}>
+                  {renderCardBody(openCard)}
+                </div>
               </div>
             </div>
           )}
