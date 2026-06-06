@@ -1167,6 +1167,15 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
       {open && (
         <div style={{ padding: '8px 10px 10px' }}>
 
+          {/* Totals — shown at the top right, above the task name */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontFamily: 'monospace', fontSize: 12, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 7, padding: '5px 12px' }}>
+              <span style={{ color: '#64748b' }}>Cost <strong style={{ color: '#1e293b' }}>£{totalCost.toFixed(2)}</strong></span>
+              <span style={{ color: '#64748b' }}>Margin <strong style={{ color: margin >= 0 ? '#16a34a' : '#dc2626' }}>£{margin.toFixed(2)}</strong></span>
+              <span style={{ color: '#64748b' }}>Sell <strong style={{ color: '#7ab533', fontSize: 14 }}>£{totalSell.toFixed(2)}</strong></span>
+            </div>
+          </div>
+
           {/* Task description — tells the estimator what work this sub-phase covers */}
           <div style={{ marginBottom: 8 }}>
             <label style={{ display: 'block', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#94a3b8', marginBottom: 3 }}>
@@ -1272,17 +1281,6 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
             </div>
           )}
 
-          {/* Sub-phase totals box — sums every card */}
-          <div style={{ marginTop: 10, border: '1px solid #cbd5e1', borderRadius: 8, background: '#f8fafc', padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b' }}>
-              Sub-phase totals
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 16, fontFamily: 'monospace', fontSize: 12 }}>
-              <span style={{ color: '#64748b' }}>Cost <strong style={{ color: '#1e293b', fontSize: 13 }}>£{totalCost.toFixed(2)}</strong></span>
-              <span style={{ color: '#64748b' }}>Margin <strong style={{ color: margin >= 0 ? '#16a34a' : '#dc2626', fontSize: 13 }}>£{margin.toFixed(2)}</strong></span>
-              <span style={{ color: '#64748b' }}>Sell <strong style={{ color: '#7ab533', fontSize: 15 }}>£{totalSell.toFixed(2)}</strong></span>
-            </span>
-          </div>
         </div>
       )}
 
