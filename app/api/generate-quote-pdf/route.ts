@@ -10,7 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import React from 'react'
-import ReactPDF, { type DocumentProps } from '@react-pdf/renderer'
+import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer'
 import { QuotePdfDocument } from '@/lib/quotePdf'
 import type { Quote, Settings } from '@/lib/types'
 
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
 
     // Render to Buffer server-side
     const element = React.createElement(QuotePdfDocument, { quote, settings }) as React.ReactElement<DocumentProps>
-    const buffer = await ReactPDF.renderToBuffer(element)
+    const buffer = await renderToBuffer(element)
 
     const base64 = buffer.toString('base64')
 
