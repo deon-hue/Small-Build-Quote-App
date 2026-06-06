@@ -1638,7 +1638,6 @@ function BOLibraryModal({
   onClose: () => void
 }) {
   const [selected, setSelected] = React.useState<Set<string>>(new Set())
-  const [openPhase, setOpenPhase] = React.useState<string | null>(null)
 
   // Group sub-phases by main phase
   const grouped = React.useMemo(() => {
@@ -1665,7 +1664,7 @@ function BOLibraryModal({
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="modal-box" style={{ width: 'min(560px,96vw)', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
+      <div className="modal-box" style={{ width: 'min(580px,96vw)', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
         <div className="modal-hd">
           <div>
             <div style={{ fontWeight: 700 }}>📚 Add from Back Office Library</div>
@@ -1674,53 +1673,59 @@ function BOLibraryModal({
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
+        <div style={{ flex: 1, overflowY: 'auto' }}>
           {loading && <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>⏳ Loading library…</div>}
           {!loading && grouped.size === 0 && (
             <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
-              No phases found in Back Office.<br/>Add phases in <strong>Back Office → Phases & Tasks</strong> first.
+              No phases found in Back Office.<br/>Add phases in <strong>Back Office → Phases &amp; Tasks</strong> first.
             </div>
           )}
           {!loading && Array.from(grouped.entries()).map(([phaseName, subs]) => {
             const subIds = subs.map(s => s.subPhaseId)
             const allChecked = subIds.every(id => selected.has(id))
             const someChecked = subIds.some(id => selected.has(id))
-            const isOpen = openPhase === phaseName
             return (
-              <div key={phaseName} style={{ marginBottom: 8, border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
-                <div
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', background: '#1e293b', cursor: 'pointer' }}
-                  onClick={() => setOpenPhase(isOpen ? null : phaseName)}
-                >
+              <div key={phaseName} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                {/* Main phase header — always visible, not collapsible */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px', background: '#1e293b' }}>
                   <input
                     type="checkbox"
                     checked={allChecked}
                     ref={el => { if (el) el.indeterminate = someChecked && !allChecked }}
-                    onClick={e => e.stopPropagation()}
                     onChange={() => toggleAll(subIds)}
-                    style={{ flexShrink: 0 }}
+                    style={{ flexShrink: 0, width: 15, height: 15, cursor: 'pointer' }}
                   />
-                  <span style={{ flex: 1, fontWeight: 700, fontSize: 13, color: '#fff' }}>{phaseName}</span>
-                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)' }}>{subs.length} sub-phases</span>
-                  <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>{isOpen ? '▾' : '▸'}</span>
+                  <span style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 13, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {phaseName}
+                  </span>
+                  <span style={{ flexShrink: 0, fontSize: 11, color: 'rgba(255,255,255,0.45)', marginLeft: 6 }}>
+                    {subs.length} sub-phase{subs.length !== 1 ? 's' : ''}
+                  </span>
                 </div>
-                {isOpen && (
-                  <div style={{ background: '#fafafa' }}>
-                    {subs.map(sub => (
-                      <label key={sub.subPhaseId} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', cursor: 'pointer', borderTop: '1px solid #f0f0f0' }}>
-                        <input type="checkbox" checked={selected.has(sub.subPhaseId)} onChange={() => toggleSub(sub.subPhaseId)} />
-                        <span style={{ flex: 1, fontSize: 13, color: '#1e293b' }}>{sub.subPhaseName}</span>
-                        <span style={{ fontSize: 11, color: '#94a3b8' }}>{sub.tasks.length} tasks</span>
-                      </label>
-                    ))}
-                  </div>
-                )}
+                {/* Sub-phases — always shown */}
+                {subs.map(sub => (
+                  <label
+                    key={sub.subPhaseId}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 16px 7px 38px', cursor: 'pointer', borderTop: '1px solid #f0f4f8', background: '#fff' }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected.has(sub.subPhaseId)}
+                      onChange={() => toggleSub(sub.subPhaseId)}
+                      style={{ flexShrink: 0, width: 15, height: 15 }}
+                    />
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: '#1e293b' }}>{sub.subPhaseName}</span>
+                    {sub.tasks.length > 0 && (
+                      <span style={{ flexShrink: 0, fontSize: 11, color: '#94a3b8' }}>{sub.tasks.length} task{sub.tasks.length !== 1 ? 's' : ''}</span>
+                    )}
+                  </label>
+                ))}
               </div>
             )
           })}
         </div>
 
-        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
           <span style={{ fontSize: 12, color: 'var(--muted)' }}>{selected.size} sub-phase{selected.size !== 1 ? 's' : ''} selected</span>
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn-sm btn-outline" onClick={onClose}>Cancel</button>
