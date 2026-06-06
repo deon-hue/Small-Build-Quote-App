@@ -12,8 +12,8 @@
 import { useState } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import type { Quote } from '@/lib/types'
+import type { NotifyClientPayload } from '@/app/api/notify-client/route'
 import { quoteTotal } from '@/lib/utils'
-import { notifyClient } from '@/lib/notify'
 
 interface Props {
   quote: Quote
@@ -53,10 +53,10 @@ export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
       const { pdf: pdfBase64 } = await pdfRes.json()
       setBusy('sending')
 
-      // 2. Send via Resend
+      // 2. Send via Resend — call directly so we can check the result
       const filename = `Quote-${quote.ref || 'Draft'}-${(quote.customer.name || 'Client').replace(/[^a-z0-9]/gi, '_')}.pdf`
 
-      await notifyClient({
+      const payload: NotifyClientPayload = {
         type:         'quote_sent',
         clientName:   quote.customer.name || 'Customer',
         clientEmail:  toEmail.trim(),
@@ -71,7 +71,34 @@ export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
         companyEmail: settings.email,
         pdfBase64,
         pdfFilename:  filename,
+      }
+
+      const notifyRes = await fetch('/api/notify-client', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload),
       })
+
+      const notifyData = await notifyRes.json().catch(() => ({}))
+      const result = notifyData?.sent as { email: boolean; errors?: string[] } | undefined
+
+      // Check if email was actually delivered
+      if (!result?.email) {
+        const errs: string[] = result?.errors ?? []
+        // Identify the most likely cause and show a clear message
+        if (errs.some(e => /api.?key|unauthorized|forbidden/i.test(e))) {
+          throw new Error('Resend API key is missing or invalid. Set RESEND_API_KEY in Netlify environment variables.')
+        }
+        if (errs.some(e => /domain|sender|from|verified/i.test(e))) {
+          throw new Error(`Sender email not verified. Set NOTIFY_FROM_EMAIL to an address on a domain you've verified in Resend (resend.com).`)
+        }
+        if (errs.some(e => /test|sandbox/i.test(e))) {
+          throw new Error('Resend test mode: you can only send to the Resend account owner\'s email address. Add a verified domain to send to any address.')
+        }
+        // Generic fallback with raw errors
+        const detail = errs.length ? ` Details: ${errs.join('; ')}` : ' Check that RESEND_API_KEY and NOTIFY_FROM_EMAIL are set in Netlify.'
+        throw new Error(`Email was not delivered.${detail}`)
+      }
 
       setSent(true)
       onSent?.()
