@@ -991,15 +991,21 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ fontSize: 13, fontFamily: 'monospace', fontWeight: 700, color: '#92400e' }}>= £{total.toFixed(2)}</span>
                 <button onClick={() => {
-                  if (!selTrade) return
+                  if (!selTrade || total <= 0) return
                   const desc = `${selTrade.name} × ${boLabourQty} ${boLabourRate === 'hourly' ? 'hr' : boLabourRate === 'half_day' ? 'half-day' : 'day'}`
-                  addRow('', 'labour')
-                  // Apply costs to the newly added row
-                  const newItems = [...p.items]
-                  const last = newItems[newItems.length - 1]
-                  if (last) {
-                    onUpdate({ ...p, items: newItems.map(i => i.id === last.id ? { ...i, labour: total, desc, notes: desc } : i) })
+                  // Create the fully-populated item in one onUpdate call
+                  // (calling addRow then patching doesn't work — React state isn't updated yet)
+                  const newItem = {
+                    id: uid(),
+                    desc,
+                    qty: boLabourQty,
+                    unit: boLabourRate === 'hourly' ? 'hr' : 'day',
+                    labour: total,
+                    materials: 0, plantHire: 0, subcontractors: 0, other: 0,
+                    notes: `${selTrade.name} · £${rate.toFixed(2)}/${boLabourRate === 'hourly' ? 'hr' : boLabourRate === 'half_day' ? 'half-day' : 'day'}`,
+                    itemType: 'labour' as const,
                   }
+                  onUpdate(markEdited({ ...p, items: [...p.items, newItem] }))
                 }}
                   style={{ padding: '5px 14px', background: '#f59e0b', border: 'none', borderRadius: 5, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
                   + Add to Quote
