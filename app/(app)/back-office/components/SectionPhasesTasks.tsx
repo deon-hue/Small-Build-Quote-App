@@ -43,6 +43,8 @@ export default function SectionPhasesTasks({ userId }: Props) {
   const [editingSubPhaseName, setEditingSubPhaseName] = useState('')
   const [movingSubPhaseId, setMovingSubPhaseId] = useState<string | null>(null)
   const [phaseNameFocused, setPhaseNameFocused] = useState(false)
+  const [editingPhaseId, setEditingPhaseId] = useState<string | null>(null)
+  const [editingPhaseName, setEditingPhaseName] = useState('')
   const [loading, setLoading] = useState(true)
   const [taskModal, setTaskModal] = useState<TaskModalState>(null)
   const [jobTypeFilter, setJobTypeFilter] = useState<string>('All')
@@ -302,10 +304,10 @@ export default function SectionPhasesTasks({ userId }: Props) {
           return (
             <div
               key={phase.id}
-              onClick={() => { setSelectedPhaseId(phase.id); setSelectedSubPhaseId(null) }}
+              onClick={() => { if (editingPhaseId !== phase.id) { setSelectedPhaseId(phase.id); setSelectedSubPhaseId(null) } }}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8,
-                padding: '10px 14px', marginBottom: 4, cursor: 'pointer', userSelect: 'none',
+                padding: '10px 14px', marginBottom: 4, cursor: 'pointer',
                 background: active ? '#e8f4f8' : '#ffffff',
                 border: `1px solid ${active ? '#4a90a4' : '#e2e8f0'}`,
                 borderRadius: 8,
@@ -317,12 +319,37 @@ export default function SectionPhasesTasks({ userId }: Props) {
               }
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {phase.name}
-                  </span>
-                  {active && <span style={{ fontSize: 10, color: '#94a3b8', flexShrink: 0 }} title="Click the name on the right to rename">✎</span>}
-                  {isBuildup && <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 99, background: '#dbeafe', color: '#1d4ed8', fontWeight: 600, flexShrink: 0 }}>build-up</span>}
-                  {tagged && <span title={phase.job_types.join(', ')} style={{ fontSize: 9, background: '#f1f5f9', color: '#64748b', borderRadius: 3, padding: '1px 4px', flexShrink: 0 }}>{phase.job_types.length}JT</span>}
+                  {editingPhaseId === phase.id ? (
+                    <input
+                      autoFocus
+                      value={editingPhaseName}
+                      onClick={e => e.stopPropagation()}
+                      onChange={e => setEditingPhaseName(e.target.value)}
+                      onBlur={() => {
+                        if (editingPhaseName.trim()) renamePhase(phase.id, editingPhaseName.trim())
+                        setEditingPhaseId(null)
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') e.currentTarget.blur()
+                        if (e.key === 'Escape') setEditingPhaseId(null)
+                      }}
+                      style={{ flex: 1, border: '1.5px solid #4a90a4', borderRadius: 5, background: '#fff', fontSize: 13, fontWeight: 700, color: '#1e293b', outline: 'none', padding: '3px 8px', minWidth: 0 }}
+                    />
+                  ) : (
+                    <>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {phase.name}
+                      </span>
+                      <button
+                        onClick={e => { e.stopPropagation(); setSelectedPhaseId(phase.id); setEditingPhaseId(phase.id); setEditingPhaseName(phase.name) }}
+                        title="Rename phase"
+                        style={{ padding: '2px 6px', border: '1px solid #e2e8f0', borderRadius: 4, background: '#fff', fontSize: 11, cursor: 'pointer', color: '#64748b', flexShrink: 0, lineHeight: 1 }}>
+                        ✎
+                      </button>
+                      {isBuildup && <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 99, background: '#dbeafe', color: '#1d4ed8', fontWeight: 600, flexShrink: 0 }}>build-up</span>}
+                      {tagged && <span title={phase.job_types.join(', ')} style={{ fontSize: 9, background: '#f1f5f9', color: '#64748b', borderRadius: 3, padding: '1px 4px', flexShrink: 0 }}>{phase.job_types.length}JT</span>}
+                    </>
+                  )}
                 </div>
                 <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>{spCount} sub · {tCount} {isBuildup ? 'layers' : 'tasks'}</div>
               </div>
