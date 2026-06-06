@@ -4,7 +4,6 @@
  * Only imported by /api/generate-quote-pdf (server route).
  */
 
-import 'server-only'
 import React from 'react'
 import {
   Document,
