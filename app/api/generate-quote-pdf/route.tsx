@@ -9,8 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import React from 'react'
-import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer'
+import { renderToBuffer } from '@react-pdf/renderer'
 import { QuotePdfDocument } from '@/lib/quotePdf'
 import type { Quote, Settings } from '@/lib/types'
 
@@ -23,13 +22,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing quote or settings' }, { status: 400 })
     }
 
-    // Render to Buffer server-side
-    const element = React.createElement(QuotePdfDocument, { quote, settings }) as React.ReactElement<DocumentProps>
-    const buffer = await renderToBuffer(element)
+    // Use JSX directly — the recommended react-pdf pattern
+    const buffer = await renderToBuffer(
+      <QuotePdfDocument quote={quote} settings={settings} />
+    )
 
     const base64 = buffer.toString('base64')
-
     return NextResponse.json({ pdf: base64 })
+
   } catch (err) {
     console.error('[generate-quote-pdf] error:', err)
     return NextResponse.json(

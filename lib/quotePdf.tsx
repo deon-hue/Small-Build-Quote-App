@@ -1,9 +1,10 @@
 /**
- * quotePdf.tsx
+ * quotePdf.tsx  — SERVER ONLY
  * React PDF document for generating a professional quote PDF.
- * Used by /api/generate-quote-pdf to produce a Buffer for Resend attachment.
+ * Only imported by /api/generate-quote-pdf (server route).
  */
 
+import 'server-only'
 import React from 'react'
 import {
   Document,
@@ -11,14 +12,13 @@ import {
   Text,
   View,
   StyleSheet,
-  Font,
 } from '@react-pdf/renderer'
 import type { Quote, Settings } from './types'
 import { calcPhaseSell, VAT } from './utils'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-function fmt(n: number): string {
+function fmtGBP(n: number): string {
   return '£' + n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
@@ -35,7 +35,7 @@ const S = StyleSheet.create({
     color: '#2b2f33',
     backgroundColor: '#ffffff',
     paddingTop: 0,
-    paddingBottom: 32,
+    paddingBottom: 40,
     paddingHorizontal: 0,
   },
 
@@ -46,13 +46,12 @@ const S = StyleSheet.create({
     paddingVertical: 24,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
   },
   headerLeft: { flex: 1 },
   coName: { color: '#ffffff', fontSize: 18, fontFamily: 'Helvetica-Bold', marginBottom: 2 },
-  coTagline: { color: '#c8d8a8', fontSize: 8, letterSpacing: 1, textTransform: 'uppercase' },
+  coTagline: { color: '#c8d8a8', fontSize: 8, letterSpacing: 1 },
   headerRight: { alignItems: 'flex-end' },
-  quoteLabel: { color: '#c8d8a8', fontSize: 8, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 3 },
+  quoteLabel: { color: '#c8d8a8', fontSize: 8, letterSpacing: 1, marginBottom: 3 },
   quoteRef: { color: '#ffffff', fontSize: 16, fontFamily: 'Helvetica-Bold' },
 
   // Body
@@ -71,12 +70,19 @@ const S = StyleSheet.create({
   infoLabel: {
     fontSize: 7,
     fontFamily: 'Helvetica-Bold',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    color: '#8a8278',
+    marginBottom: 2,
+    marginTop: 6,
+  },
+  infoLabelFirst: {
+    fontSize: 7,
+    fontFamily: 'Helvetica-Bold',
+    letterSpacing: 0.8,
     color: '#8a8278',
     marginBottom: 2,
   },
-  infoValue: { fontSize: 9, color: '#1a1612', marginBottom: 6 },
+  infoValue: { fontSize: 9, color: '#1a1612' },
 
   // Scope block
   scopeBox: {
@@ -91,8 +97,7 @@ const S = StyleSheet.create({
   scopeLabel: {
     fontSize: 7,
     fontFamily: 'Helvetica-Bold',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    letterSpacing: 0.8,
     color: '#5a8a20',
     marginBottom: 4,
   },
@@ -102,8 +107,7 @@ const S = StyleSheet.create({
   sectionHeading: {
     fontSize: 8,
     fontFamily: 'Helvetica-Bold',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    letterSpacing: 0.8,
     color: '#2b2f33',
     marginBottom: 8,
     paddingBottom: 5,
@@ -118,7 +122,6 @@ const S = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 5,
     borderRadius: 2,
-    marginBottom: 0,
   },
   tableHeaderText: { color: '#ffffff', fontSize: 7.5, fontFamily: 'Helvetica-Bold' },
   tableRow: {
@@ -187,8 +190,7 @@ const S = StyleSheet.create({
   termsHeading: {
     fontSize: 7,
     fontFamily: 'Helvetica-Bold',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    letterSpacing: 0.8,
     color: '#8a8278',
     marginBottom: 5,
   },
@@ -196,7 +198,6 @@ const S = StyleSheet.create({
 
   // Contact line
   contactLine: { fontSize: 8.5, color: '#444', lineHeight: 1.6, marginTop: 8 },
-  contactBold: { fontFamily: 'Helvetica-Bold', color: '#2b2f33' },
 
   // Footer bar
   footer: {
@@ -228,15 +229,23 @@ export function QuotePdfDocument({ quote, settings }: Props) {
   const qVat = quote.vatIncluded
   const now = new Date()
 
-  // Compute totals
   const net = quote.phases.reduce((s, p) => s + calcPhaseSell(p, qMkp), 0)
   const vat = qVat ? net * VAT : 0
   const total = net + vat
 
   const validUntil = new Date(now.getTime() + 30 * 864e5)
 
+  // Build contact line as a plain string — avoids mixing React elements with strings inside <Text>
+  const contactParts = [co.contact || co.name || '']
+  if (co.phone) contactParts.push(co.phone)
+  if (co.email) contactParts.push(co.email)
+  const contactStr = `To accept this quotation or to discuss the works, please contact us:\n${contactParts.join('  ·  ')}`
+
   return (
-    <Document title={`Quote ${quote.ref || ''} — ${quote.customer.name || ''}`} author={co.name || 'Small Build Company'}>
+    <Document
+      title={`Quote ${quote.ref || ''} — ${quote.customer.name || ''}`}
+      author={co.name || 'Small Build Company'}
+    >
       <Page size="A4" style={S.page}>
 
         {/* ── Header ── */}
@@ -253,30 +262,37 @@ export function QuotePdfDocument({ quote, settings }: Props) {
 
         <View style={S.body}>
 
-          {/* ── Info grid ── */}
+          {/* ── Info grid — NO fragments, each conditional is its own expression ── */}
           <View style={S.infoRow}>
+
             <View style={S.infoBlock}>
-              <Text style={S.infoLabel}>Quote Reference</Text>
+              <Text style={S.infoLabelFirst}>Quote Reference</Text>
               <Text style={S.infoValue}>{quote.ref || '—'}</Text>
               <Text style={S.infoLabel}>Date Issued</Text>
               <Text style={S.infoValue}>{dateStr(now)}</Text>
               <Text style={S.infoLabel}>Valid Until</Text>
               <Text style={S.infoValue}>{dateStr(validUntil)}</Text>
             </View>
+
             <View style={S.infoBlock}>
-              <Text style={S.infoLabel}>Prepared For</Text>
+              <Text style={S.infoLabelFirst}>Prepared For</Text>
               <Text style={S.infoValue}>{quote.customer.name || '—'}</Text>
               <Text style={S.infoLabel}>Property</Text>
               <Text style={S.infoValue}>{quote.customer.address || '—'}</Text>
               <Text style={S.infoLabel}>Job Type</Text>
               <Text style={S.infoValue}>{quote.jobType}</Text>
             </View>
+
             <View style={S.infoBlock}>
-              <Text style={S.infoLabel}>Company</Text>
+              <Text style={S.infoLabelFirst}>Company</Text>
               <Text style={S.infoValue}>{co.name || '—'}</Text>
-              {co.phone ? <><Text style={S.infoLabel}>Phone</Text><Text style={S.infoValue}>{co.phone}</Text></> : null}
-              {co.email ? <><Text style={S.infoLabel}>Email</Text><Text style={S.infoValue}>{co.email}</Text></> : null}
+              {/* No fragments — separate conditionals for label and value */}
+              {co.phone ? <Text style={S.infoLabel}>Phone</Text> : null}
+              {co.phone ? <Text style={S.infoValue}>{co.phone}</Text> : null}
+              {co.email ? <Text style={S.infoLabel}>Email</Text> : null}
+              {co.email ? <Text style={S.infoValue}>{co.email}</Text> : null}
             </View>
+
           </View>
 
           {/* ── Scope ── */}
@@ -288,7 +304,7 @@ export function QuotePdfDocument({ quote, settings }: Props) {
           ) : null}
 
           {/* ── Items table ── */}
-          <Text style={S.sectionHeading}>Itemised Estimate — {quote.jobType}</Text>
+          <Text style={S.sectionHeading}>{`Itemised Estimate — ${quote.jobType}`}</Text>
 
           {/* Table header */}
           <View style={S.tableHeader}>
@@ -303,33 +319,34 @@ export function QuotePdfDocument({ quote, settings }: Props) {
           {quote.phases.map((p, pi) => {
             const phaseSell = calcPhaseSell(p, qMkp)
             const phaseVat = qVat ? phaseSell * VAT : 0
+            const phaseLabel = p.parentPhase ? `${p.parentPhase} — ${p.phase}` : p.phase
             return (
               <View key={pi}>
-                {/* Phase header */}
+                {/* Phase header row */}
                 <View style={S.phaseRow}>
-                  <Text style={S.phaseText}>{p.parentPhase ? `${p.parentPhase} — ` : ''}{p.phase}</Text>
+                  <Text style={S.phaseText}>{phaseLabel}</Text>
                   <Text style={S.phaseTotalLabel}>Phase total</Text>
-                  <Text style={S.phaseTotalVal}>{fmt(phaseSell)}</Text>
-                  {qVat ? <Text style={[S.phaseTotalVal, { width: 72 }]}>{fmt(phaseVat)}</Text> : null}
+                  <Text style={S.phaseTotalVal}>{fmtGBP(phaseSell)}</Text>
+                  {qVat ? <Text style={[S.phaseTotalVal, { width: 72 }]}>{fmtGBP(phaseVat)}</Text> : null}
                 </View>
 
-                {/* Item rows */}
+                {/* Item rows — only show labour/materials rows (not subcontractors/plant overhead rows) */}
                 {p.items
                   .filter(i => i.enabled !== false && (i.itemType === 'labour' || i.itemType === 'materials' || !i.itemType))
                   .map((item, ii) => {
                     const itemCost = (Number(item.labour) || 0) + (Number(item.materials) || 0)
                     const itemSell = itemCost * (1 + qMkp / 100)
-                    const itemVat = qVat ? itemSell * VAT : 0
+                    const itemVat  = qVat ? itemSell * VAT : 0
                     return (
                       <View key={ii} style={[S.tableRow, ii % 2 === 1 ? S.tableRowAlt : {}]}>
                         <View style={S.colDesc}>
                           <Text style={S.cellText}>{item.desc || '—'}</Text>
                           {item.notes ? <Text style={S.cellNote}>{item.notes}</Text> : null}
                         </View>
-                        <Text style={[S.cellText, S.colQty]}>{item.qty || ''}</Text>
+                        <Text style={[S.cellText, S.colQty]}>{String(item.qty ?? '')}</Text>
                         <Text style={[S.cellText, S.colUnit]}>{item.unit || ''}</Text>
-                        <Text style={[S.cellText, S.colAmt]}>{fmt(itemSell)}</Text>
-                        {qVat ? <Text style={[S.cellText, S.colVat]}>{fmt(itemVat)}</Text> : null}
+                        <Text style={[S.cellText, S.colAmt]}>{fmtGBP(itemSell)}</Text>
+                        {qVat ? <Text style={[S.cellText, S.colVat]}>{fmtGBP(itemVat)}</Text> : null}
                       </View>
                     )
                   })}
@@ -341,46 +358,44 @@ export function QuotePdfDocument({ quote, settings }: Props) {
           <View style={S.totalsBox}>
             <View style={S.totalsRow}>
               <Text style={S.totalsLabel}>Subtotal (ex-VAT)</Text>
-              <Text style={S.totalsValue}>{fmt(net)}</Text>
+              <Text style={S.totalsValue}>{fmtGBP(net)}</Text>
             </View>
             {qVat ? (
               <View style={S.totalsRow}>
                 <Text style={S.totalsLabel}>VAT (20%)</Text>
-                <Text style={S.totalsValue}>{fmt(vat)}</Text>
+                <Text style={S.totalsValue}>{fmtGBP(vat)}</Text>
               </View>
             ) : (
               <Text style={S.vatNote}>* VAT not included</Text>
             )}
             <View style={S.totalsRowFinal}>
               <Text style={S.totalsFinalLabel}>TOTAL</Text>
-              <Text style={S.totalsFinalValue}>{fmt(total)}</Text>
+              <Text style={S.totalsFinalValue}>{fmtGBP(total)}</Text>
             </View>
           </View>
 
           {/* ── Terms ── */}
-          {(co.terms || co.extra) ? (
+          {co.terms ? (
             <View style={S.termsBox}>
               <Text style={S.termsHeading}>Payment Terms & Conditions</Text>
-              {co.terms ? <Text style={S.termsText}>{co.terms}</Text> : null}
+              <Text style={S.termsText}>{co.terms}</Text>
               {co.extra ? <Text style={[S.termsText, { marginTop: 4 }]}>{co.extra}</Text> : null}
             </View>
           ) : null}
 
-          {/* ── Contact ── */}
-          <Text style={S.contactLine}>
-            To accept this quotation or to discuss the works, please contact us:{'\n'}
-            <Text style={S.contactBold}>{co.contact || co.name || ''}</Text>
-            {co.phone ? `  ·  ${co.phone}` : ''}
-            {co.email ? `  ·  ${co.email}` : ''}
-          </Text>
+          {/* ── Contact — pure string, no nested React elements in Text ── */}
+          <Text style={S.contactLine}>{contactStr}</Text>
 
         </View>
 
         {/* ── Footer ── */}
         <View style={S.footer} fixed>
           <Text style={S.footerText}>{co.name || 'Small Build Company Ltd'}</Text>
-          <Text style={S.footerText}>{co.address || ''} · Registered in England & Wales</Text>
-          <Text style={S.footerText} render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
+          <Text style={S.footerText}>{`${co.address || ''} · Registered in England & Wales`}</Text>
+          <Text
+            style={S.footerText}
+            render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
+          />
         </View>
 
       </Page>
