@@ -13,7 +13,7 @@
  * Works for all data sources: takeoff import, AI-generated, manual.
  */
 
-import { useState, useCallback } from 'react'
+import React, { useState, useCallback } from 'react'
 import type { QuotePhase, QuoteItem, QuoteProduct, QuotePlantItem } from '@/lib/types'
 import type { BOLabourTrade, BOProduct, BOPlantItem } from '@/lib/back-office-types'
 import { fmt, calcPhase, calcPhaseSell } from '@/lib/utils'
@@ -604,6 +604,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
   const open   = !collapsed.has(colKey)
   const sell   = subPhaseTotalSell(p, markup)
   const m      = p.meta?.measurements
+  const [nameFocused, setNameFocused] = React.useState(false)
 
   // Task name shown to the user — priority order:
   //   1. Explicit p.taskName (user-edited or BO description)
@@ -1121,10 +1122,18 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
           readOnly={isLocked}
           onClick={e => e.stopPropagation()}
           onChange={e => onUpdate({ ...p, phase: e.target.value })}
-          style={{ ...fldStyle, fontWeight: 700, fontSize: 13, color: '#1e293b', flex: 1, cursor: isLocked ? 'default' : 'text' }}
+          onFocus={() => setNameFocused(true)}
+          onBlur={() => setNameFocused(false)}
+          style={{
+            ...fldStyle, fontWeight: 700, fontSize: 13, color: '#1e293b', flex: 1,
+            cursor: isLocked ? 'default' : 'text',
+            borderBottom: !isLocked && nameFocused ? '2px solid #7ab533' : '2px solid transparent',
+            paddingBottom: 1,
+          }}
           placeholder="Sub-phase name"
           title={isLocked ? undefined : 'Click to rename'}
         />
+        {!isLocked && !nameFocused && <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0, pointerEvents: 'none' }}>✎</span>}
         {!open && derivedTaskName && (
           <span title={derivedTaskName} style={{ fontSize: 11, color: '#94a3b8', minWidth: 0, flexShrink: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>— {derivedTaskName}</span>
         )}
@@ -1493,6 +1502,7 @@ function PhaseBlock({ mainPhase, phases, markup, jobType, isLocked, collapsed, t
   const open   = !collapsed.has(colKey)
   const total  = mainPhaseTotalSell(phases, mainPhase, markup)
   const rooms  = getRoomLabels(phases, mainPhase)
+  const [nameFocused, setNameFocused] = React.useState(false)
 
   return (
     <div style={{ marginBottom: 16 }}>
@@ -1507,11 +1517,18 @@ function PhaseBlock({ mainPhase, phases, markup, jobType, isLocked, collapsed, t
           readOnly={isLocked}
           onClick={e => e.stopPropagation()}
           onChange={e => onRenameMain(mainPhase, e.target.value)}
-          style={{ ...fldStyle, fontWeight: 700, fontSize: 14, color: '#fff', flex: 1, cursor: isLocked ? 'default' : 'text' }}
+          onFocus={() => setNameFocused(true)}
+          onBlur={() => setNameFocused(false)}
+          style={{
+            ...fldStyle, fontWeight: 700, fontSize: 14, color: '#fff', flex: 1,
+            cursor: isLocked ? 'default' : 'text',
+            borderBottom: !isLocked && nameFocused ? '2px solid #7ab533' : '2px solid transparent',
+            paddingBottom: 1,
+          }}
           placeholder="Phase name"
           title={isLocked ? undefined : 'Click to rename'}
         />
-        {!isLocked && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', flexShrink: 0, pointerEvents: 'none' }}>✎</span>}
+        {!isLocked && !nameFocused && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', flexShrink: 0, pointerEvents: 'none' }}>✎</span>}
         <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 700, color: '#7ab533', flexShrink: 0 }}>
           {total > 0 ? fmt(total) : '—'}
         </span>
