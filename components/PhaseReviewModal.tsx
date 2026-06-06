@@ -32,6 +32,7 @@ export default function PhaseReviewModal({ phase, jobType, markup, onAddItem, on
   const [completing, setCompleting] = useState(false)
   const visual = getPhaseVisual(phase.phase)
   const [added,      setAdded]      = useState<Set<string>>(new Set())
+  const [dismissed,  setDismissed]  = useState<Set<string>>(new Set())
 
   useEffect(() => {
     let cancelled = false
@@ -74,7 +75,11 @@ export default function PhaseReviewModal({ phase, jobType, markup, onAddItem, on
   }
 
   function SuggestionCard({ s, keyId, accent }: { s: ReviewSuggestion; keyId: string; accent: string }) {
-    const done = added.has(keyId)
+    const done    = added.has(keyId)
+    const skipped = dismissed.has(keyId)
+
+    if (skipped) return null  // hidden once dismissed
+
     return (
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px', borderRadius: 8, marginBottom: 6, background: done ? '#f0fdf4' : '#f8fafc', border: `1px solid ${done ? '#86efac' : '#e2e8f0'}` }}>
         <div style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>{CAT_EMOJI[s.category] ?? '📋'}</div>
@@ -88,12 +93,22 @@ export default function PhaseReviewModal({ phase, jobType, markup, onAddItem, on
             <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, fontStyle: 'italic' }}>Row: &quot;{s.desc}&quot;</div>
           )}
         </div>
-        <button
-          onClick={() => addSuggestion(s, keyId)}
-          disabled={done}
-          style={{ flexShrink: 0, padding: '5px 12px', background: done ? '#16a34a' : accent, border: 'none', borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 700, cursor: done ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
-          {done ? '✓ Added' : '+ Add'}
-        </button>
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          {!done && (
+            <button
+              onClick={() => setDismissed(prev => new Set([...prev, keyId]))}
+              title="Not needed — dismiss this suggestion"
+              style={{ padding: '5px 10px', background: 'transparent', border: '1px solid #e2e8f0', borderRadius: 6, color: '#94a3b8', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              Not needed
+            </button>
+          )}
+          <button
+            onClick={() => addSuggestion(s, keyId)}
+            disabled={done}
+            style={{ padding: '5px 12px', background: done ? '#16a34a' : accent, border: 'none', borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 700, cursor: done ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
+            {done ? '✓ Added' : '+ Add'}
+          </button>
+        </div>
       </div>
     )
   }
