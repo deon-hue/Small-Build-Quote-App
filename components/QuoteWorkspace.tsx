@@ -1121,8 +1121,9 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
           readOnly={isLocked}
           onClick={e => e.stopPropagation()}
           onChange={e => onUpdate({ ...p, phase: e.target.value })}
-          style={{ ...fldStyle, fontWeight: 700, fontSize: 13, color: '#1e293b', flex: 1 }}
+          style={{ ...fldStyle, fontWeight: 700, fontSize: 13, color: '#1e293b', flex: 1, cursor: isLocked ? 'default' : 'text' }}
           placeholder="Sub-phase name"
+          title={isLocked ? undefined : 'Click to rename'}
         />
         {!open && derivedTaskName && (
           <span title={derivedTaskName} style={{ fontSize: 11, color: '#94a3b8', minWidth: 0, flexShrink: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>— {derivedTaskName}</span>
@@ -1506,9 +1507,11 @@ function PhaseBlock({ mainPhase, phases, markup, jobType, isLocked, collapsed, t
           readOnly={isLocked}
           onClick={e => e.stopPropagation()}
           onChange={e => onRenameMain(mainPhase, e.target.value)}
-          style={{ ...fldStyle, fontWeight: 700, fontSize: 14, color: '#fff', flex: 1 }}
+          style={{ ...fldStyle, fontWeight: 700, fontSize: 14, color: '#fff', flex: 1, cursor: isLocked ? 'default' : 'text' }}
           placeholder="Phase name"
+          title={isLocked ? undefined : 'Click to rename'}
         />
+        {!isLocked && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', flexShrink: 0, pointerEvents: 'none' }}>✎</span>}
         <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 700, color: '#7ab533', flexShrink: 0 }}>
           {total > 0 ? fmt(total) : '—'}
         </span>
