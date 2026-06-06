@@ -109,6 +109,9 @@ export default function NewQuotePage() {
   const [isLockedQuote, setIsLockedQuote] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [autoSaving,  setAutoSaving]  = useState(false)
+  const [lastSaved,   setLastSaved]   = useState<Date | null>(null)
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [generatingScope, setGeneratingScope] = useState(false)
   const [generatingPhases, setGeneratingPhases] = useState(false)
   const [showScopeChat, setShowScopeChat] = useState(false)
@@ -198,6 +201,36 @@ export default function NewQuotePage() {
     setPhases([])
     setStep('landing')
   }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Auto-save when editing an existing saved quote ───────────────────────────
+  // Debounced 2s — fires silently on any change to phases, customer data or settings.
+  // Does NOT fire for new unsaved quotes, locked quotes, or during initial load.
+  useEffect(() => {
+    if (!editingId || isLockedQuote || loading) return
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
+    autoSaveTimer.current = setTimeout(async () => {
+      const existing = quotes.find(q => q.id === editingId)
+      if (!existing) return
+      setAutoSaving(true)
+      try {
+        const customer = { name: custName, address: custAddr, email: custEmail, phone: custPhone }
+        const qData = {
+          status: existing.status,
+          jobType, markup, vatIncluded: vatOn, scope, photo,
+          convertedToJob: existing.convertedToJob ?? false,
+          lastEdited: new Date().toISOString(),
+          customer,
+          phases: JSON.parse(JSON.stringify(phases)),
+          quoteSource: quoteSource ?? undefined,
+        }
+        await updateQuote({ ...existing, ...qData })
+        setLastSaved(new Date())
+      } catch { /* silent — user can still save manually */ }
+      finally { setAutoSaving(false) }
+    }, 2000)
+    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phases, custName, custAddr, custEmail, custPhone, jobType, markup, vatOn, scope, photo, editingId])
 
   // ── Load from Back Office (primary path for manual quotes) ───────────────────
   // Fetches live bo_phases → bo_sub_phases → bo_tasks for the selected job type
@@ -1216,7 +1249,17 @@ export default function NewQuotePage() {
       )}
       {editingId && !isLockedQuote && (
         <div style={{ background: 'rgba(74,144,164,0.1)', border: '1px solid #4a90a4', borderRadius: 6, padding: '10px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13 }}>
-          <span>✎ Editing saved quote: <strong>{quotes.find(q => q.id === editingId)?.ref || editingId}</strong></span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span>✎ Editing: <strong>{quotes.find(q => q.id === editingId)?.ref || editingId}</strong></span>
+            {autoSaving && (
+              <span style={{ fontSize: 11, color: '#4a90a4' }}>⟳ Saving…</span>
+            )}
+            {!autoSaving && lastSaved && (
+              <span style={{ fontSize: 11, color: '#64748b' }}>
+                ✓ Saved {Math.round((Date.now() - lastSaved.getTime()) / 1000)}s ago
+              </span>
+            )}
+          </div>
           <button className="btn-sm btn-outline" onClick={cancelEdit}>Cancel Edit</button>
         </div>
       )}
