@@ -442,6 +442,7 @@ export default function NewQuotePage() {
     setVatOn(q.vatIncluded !== false)
     setScope(q.scope || '')
     setPhoto(q.photo || '')
+    setQuoteSource(q.quoteSource ?? 'manual')
     setPhases(JSON.parse(JSON.stringify(q.phases)).map((p: QuotePhase) => ({
       ...p, id: ++phaseCounter,
       items: toTypedItems(p.items).map((i: Omit<QuoteItem,'id'>) => ({ ...i, id: ++itemCounter })),
