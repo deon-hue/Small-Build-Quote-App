@@ -138,12 +138,15 @@ export async function fetchQuoteDefaults(
 }
 
 export async function upsertTask(sb: SupabaseClient, task: Partial<BOTask> & { user_id: string }): Promise<BOTask | null> {
-  // Strip empty/falsy id so Supabase generates a UUID for new rows.
-  // openNewTask sets id:'' on the stub task; sending that to Supabase causes a
-  // "invalid input syntax for type uuid" error and silently returns null.
-  const { id, ...rest } = task as BOTask
-  const row = id ? { id, ...rest } : rest
-  const { data } = await sb.from('bo_tasks').upsert({ ...row, updated_at: new Date().toISOString() }).select().single()
+  // Strip empty id (causes "invalid uuid" error) and empty timestamp strings
+  // (empty string is invalid for TIMESTAMPTZ — same root cause as the product save bug).
+  const { id, created_at, updated_at: _u, ...rest } = task as BOTask & { created_at?: string; updated_at?: string }
+  const payload: Record<string, unknown> = { ...rest, updated_at: new Date().toISOString() }
+  if (id)         payload.id         = id
+  if (created_at) payload.created_at = created_at
+
+  const { data, error } = await sb.from('bo_tasks').upsert(payload).select().single()
+  if (error) console.error('[upsertTask]', error.message, error.details)
   return data
 }
 
