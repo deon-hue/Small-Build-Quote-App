@@ -29,8 +29,11 @@ export default function SectionProducts({ userId }: Props) {
   })
   const [newCatInput,     setNewCatInput]     = useState('')
   const [addingCat,       setAddingCat]       = useState(false)
-  const [editingCat,      setEditingCat]      = useState<string | null>(null)   // category being renamed
+  const [editingCat,      setEditingCat]      = useState<string | null>(null)
   const [editingCatName,  setEditingCatName]  = useState('')
+  const [selectedIds,     setSelectedIds]     = useState<Set<string>>(new Set())
+  const [bulkMoveCat,     setBulkMoveCat]     = useState('')
+  const [bulkWorking,     setBulkWorking]     = useState(false)
   const [renamingSaving,  setRenamingSaving]  = useState(false)
 
   // ── AI Import ──────────────────────────────────────────────────────────────
@@ -98,6 +101,41 @@ export default function SectionProducts({ userId }: Props) {
       }
       setExpandedCats(prev => { const n = new Set(prev); n.delete(oldName); n.add(trimmed); return n })
     } finally { setRenamingSaving(false); setEditingCat(null) }
+  }
+
+  // ── Bulk selection helpers ────────────────────────────────────────────────
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+  function selectAll(ids: string[]) {
+    setSelectedIds(prev => {
+      const allSelected = ids.every(id => prev.has(id))
+      const n = new Set(prev)
+      allSelected ? ids.forEach(id => n.delete(id)) : ids.forEach(id => n.add(id))
+      return n
+    })
+  }
+
+  async function bulkMove(targetCat: string) {
+    if (!targetCat || !selectedIds.size) return
+    setBulkWorking(true)
+    for (const id of Array.from(selectedIds)) {
+      const p = products.find(x => x.id === id); if (!p) continue
+      const { data: saved } = await upsertProduct(sb, { ...p, user_id: userId, category: targetCat })
+      if (saved) setProducts(prev => prev.map(x => x.id === saved.id ? saved : x))
+    }
+    setSelectedIds(new Set()); setBulkMoveCat(''); setBulkWorking(false)
+  }
+
+  async function bulkDelete() {
+    if (!selectedIds.size) return
+    if (!confirm(`Delete ${selectedIds.size} product${selectedIds.size !== 1 ? 's' : ''}? This cannot be undone.`)) return
+    setBulkWorking(true)
+    for (const id of Array.from(selectedIds)) {
+      await deleteProduct(sb, id)
+    }
+    setProducts(prev => prev.filter(p => !selectedIds.has(p.id)))
+    setSelectedIds(new Set()); setBulkWorking(false)
   }
 
   // ── AI Import ─────────────────────────────────────────────────────────────
@@ -351,6 +389,32 @@ export default function SectionProducts({ userId }: Props) {
         </div>
       </div>
 
+      {/* Bulk action bar — appears when items are selected */}
+      {selectedIds.size > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#1d4ed8' }}>{selectedIds.size} product{selectedIds.size !== 1 ? 's' : ''} selected</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto', flexWrap: 'wrap' }}>
+            <select value={bulkMoveCat} onChange={e => setBulkMoveCat(e.target.value)}
+              style={{ padding: '5px 10px', border: '1px solid #bfdbfe', borderRadius: 6, fontSize: 12, color: '#1d4ed8', background: '#fff' }}>
+              <option value="">Move to category…</option>
+              {allCats.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <button onClick={() => bulkMove(bulkMoveCat)} disabled={!bulkMoveCat || bulkWorking}
+              style={{ padding: '5px 14px', background: bulkMoveCat ? '#1d4ed8' : '#94a3b8', border: 'none', borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 700, cursor: bulkMoveCat ? 'pointer' : 'default' }}>
+              {bulkWorking ? 'Moving…' : '↪ Move'}
+            </button>
+            <button onClick={bulkDelete} disabled={bulkWorking}
+              style={{ padding: '5px 14px', background: '#dc2626', border: 'none', borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+              {bulkWorking ? '…' : '🗑 Delete'}
+            </button>
+            <button onClick={() => setSelectedIds(new Set())}
+              style={{ padding: '5px 10px', border: '1px solid #bfdbfe', borderRadius: 6, background: '#fff', fontSize: 12, cursor: 'pointer', color: '#64748b' }}>
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Search */}
       <div style={{ position: 'relative', marginBottom: 16, maxWidth: 320 }}>
         <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
@@ -446,6 +510,13 @@ export default function SectionProducts({ userId }: Props) {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <th style={{ padding: '5px 8px', width: 28 }}>
+                        <input type="checkbox"
+                          checked={items.every(p => selectedIds.has(p.id))}
+                          onChange={() => selectAll(items.map(p => p.id))}
+                          style={{ cursor: 'pointer' }}
+                          title="Select all in this category" />
+                      </th>
                       {['Product', 'Unit', 'Cost', 'Waste %', 'Markup %', 'Supplier', 'Active', ''].map(h => (
                         <th key={h} style={{ padding: '5px 12px', textAlign: h === 'Cost' || h === 'Waste %' || h === 'Markup %' ? 'right' : 'left', fontWeight: 600, color: '#94a3b8', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
                       ))}
@@ -453,7 +524,10 @@ export default function SectionProducts({ userId }: Props) {
                   </thead>
                   <tbody>
                     {items.map(p => (
-                      <tr key={p.id} style={{ borderBottom: '1px solid #f8fafc' }}>
+                      <tr key={p.id} style={{ borderBottom: '1px solid #f8fafc', background: selectedIds.has(p.id) ? '#eff6ff' : 'transparent' }}>
+                        <td style={{ padding: '5px 8px', textAlign: 'center' }}>
+                          <input type="checkbox" checked={selectedIds.has(p.id)} onChange={() => toggleSelect(p.id)} style={{ cursor: 'pointer' }} />
+                        </td>
                         <td style={{ padding: '7px 12px', fontWeight: 500, color: p.active ? '#1e293b' : '#94a3b8' }}>{p.name}</td>
                         <td style={{ padding: '7px 12px', color: '#64748b' }}>{p.unit}</td>
                         <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: 'monospace', color: '#1e293b' }}>£{p.default_cost.toFixed(2)}</td>
