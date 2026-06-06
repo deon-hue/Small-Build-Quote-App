@@ -2,15 +2,14 @@
  * POST /api/generate-quote-pdf
  *
  * Generates a PDF for a quote and returns it as a base64 string.
- * Used by SendQuoteModal to produce an attachment for Resend.
+ * Uses pdf-lib (pure JS, zero React dependency).
  *
  * Body: { quote: Quote, settings: Settings }
  * Response: { pdf: string } — base64-encoded PDF bytes
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { renderToBuffer } from '@react-pdf/renderer'
-import { QuotePdfDocument } from '@/lib/quotePdf'
+import { buildQuotePdf } from '@/lib/quotePdf'
 import type { Quote, Settings } from '@/lib/types'
 
 export async function POST(req: NextRequest) {
@@ -22,12 +21,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing quote or settings' }, { status: 400 })
     }
 
-    // Use JSX directly — the recommended react-pdf pattern
-    const buffer = await renderToBuffer(
-      <QuotePdfDocument quote={quote} settings={settings} />
-    )
-
+    const buffer = await buildQuotePdf(quote, settings)
     const base64 = buffer.toString('base64')
+
     return NextResponse.json({ pdf: base64 })
 
   } catch (err) {
