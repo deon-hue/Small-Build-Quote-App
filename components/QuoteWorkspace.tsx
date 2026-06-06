@@ -1250,6 +1250,50 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
             })}
           </div>
 
+          {/* Summary of what's been added across all cost categories */}
+          {(() => {
+            const lines: { icon: string; color: string; text: string }[] = []
+
+            // Labour — from cost rows
+            const labourDescs = p.items
+              .filter(i => (i.itemType === 'labour' || !i.itemType) && i.enabled !== false && i.desc?.trim())
+              .map(i => i.desc.trim())
+            if (labourDescs.length) lines.push({ icon: CARD_META.labour.icon, color: CARD_META.labour.accent, text: labourDescs.join('  ·  ') })
+
+            // Materials — BO catalogue products + cost rows
+            const matDescs: string[] = [
+              ...(p.products ?? []).filter(pr => pr.enabled !== false).map(pr => pr.name),
+              ...p.items.filter(i => i.itemType === 'materials' && i.enabled !== false && i.desc?.trim()).map(i => i.desc.trim()),
+            ]
+            if (matDescs.length) lines.push({ icon: CARD_META.materials.icon, color: CARD_META.materials.accent, text: matDescs.join('  ·  ') })
+
+            // Plant — BO catalogue + cost rows
+            const plantDescs: string[] = [
+              ...(p.plantItems ?? []).filter(pl => pl.enabled !== false).map(pl => pl.name),
+              ...p.items.filter(i => i.itemType === 'plant' && i.enabled !== false && i.desc?.trim()).map(i => i.desc.trim()),
+            ]
+            if (plantDescs.length) lines.push({ icon: CARD_META.plant.icon, color: CARD_META.plant.accent, text: plantDescs.join('  ·  ') })
+
+            // Subcontractors + Other
+            const subDescs = p.items.filter(i => i.itemType === 'subcontractors' && i.enabled !== false && i.desc?.trim()).map(i => i.desc.trim())
+            if (subDescs.length) lines.push({ icon: CARD_META.subcontractors.icon, color: CARD_META.subcontractors.accent, text: subDescs.join('  ·  ') })
+
+            const otherDescs = p.items.filter(i => i.itemType === 'other' && i.enabled !== false && i.desc?.trim()).map(i => i.desc.trim())
+            if (otherDescs.length) lines.push({ icon: CARD_META.other.icon, color: CARD_META.other.accent, text: otherDescs.join('  ·  ') })
+
+            if (!lines.length) return null
+            return (
+              <div style={{ marginTop: 8, padding: '8px 10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 7, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {lines.map((l, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontSize: 11 }}>
+                    <span style={{ fontSize: 12, flexShrink: 0 }}>{l.icon}</span>
+                    <span style={{ color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.text}</span>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
+
           {/* Cost-category popup modal */}
           {openCard && (
             <div
