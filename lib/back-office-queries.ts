@@ -138,6 +138,11 @@ export async function fetchQuoteDefaults(
 }
 
 export async function upsertTask(sb: SupabaseClient, task: Partial<BOTask> & { user_id: string }): Promise<BOTask | null> {
+  const { data } = await upsertTaskWithError(sb, task)
+  return data
+}
+
+export async function upsertTaskWithError(sb: SupabaseClient, task: Partial<BOTask> & { user_id: string }): Promise<{ data: BOTask | null; error: string | null }> {
   // Strip empty id (causes "invalid uuid" error) and empty timestamp strings
   // (empty string is invalid for TIMESTAMPTZ — same root cause as the product save bug).
   const { id, created_at, updated_at: _u, ...rest } = task as BOTask & { created_at?: string; updated_at?: string }
@@ -147,7 +152,7 @@ export async function upsertTask(sb: SupabaseClient, task: Partial<BOTask> & { u
 
   const { data, error } = await sb.from('bo_tasks').upsert(payload).select().single()
   if (error) console.error('[upsertTask]', error.message, error.details)
-  return data
+  return { data, error: error ? (error.message || 'Database error') : null }
 }
 
 export async function deleteTask(sb: SupabaseClient, id: string): Promise<void> {

@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import {
   fetchPhases, upsertPhase, deletePhase,
   fetchSubPhases, upsertSubPhase, deleteSubPhase,
-  fetchTasks, upsertTask, deleteTask,
+  fetchTasks, upsertTask, upsertTaskWithError, deleteTask,
   fetchLabourTrades, fetchProducts, fetchPlantItems,
 } from '@/lib/back-office-queries'
 import type { BOPhase, BOSubPhase, BOTask, BOLabourTrade, BOProduct, BOPlantItem } from '@/lib/back-office-types'
@@ -47,6 +47,8 @@ export default function SectionPhasesTasks({ userId }: Props) {
   const [editingPhaseName, setEditingPhaseName] = useState('')
   const [loading, setLoading] = useState(true)
   const [taskModal, setTaskModal] = useState<TaskModalState>(null)
+  const [taskSaving, setTaskSaving] = useState(false)
+  const [taskSaveError, setTaskSaveError] = useState('')
   const [jobTypeFilter, setJobTypeFilter] = useState<string>('All')
   const [labourTrades, setLabourTrades] = useState<BOLabourTrade[]>([])
   const [products, setProducts] = useState<BOProduct[]>([])
@@ -208,16 +210,24 @@ export default function SectionPhasesTasks({ userId }: Props) {
 
   async function saveTaskModal() {
     if (!taskModal) return
-    const taskWithRecipe = { ...taskModal.task, recipe_items: buildTaskRecipe(taskModal.task) as unknown as Record<string, unknown> }
-    const saved = await upsertTask(sb, { ...taskWithRecipe, user_id: userId })
-    if (saved) {
+    setTaskSaving(true)
+    setTaskSaveError('')
+    try {
+      const taskWithRecipe = { ...taskModal.task, recipe_items: buildTaskRecipe(taskModal.task) as unknown as Record<string, unknown> }
+      const { data: saved, error } = await upsertTaskWithError(sb, { ...taskWithRecipe, user_id: userId })
+      if (error || !saved) {
+        setTaskSaveError(error || 'Save failed — please try again.')
+        return
+      }
       if (taskModal.isNew) {
         setTasks(prev => [...prev, saved])
       } else {
         setTasks(prev => prev.map(t => t.id === saved.id ? saved : t))
       }
+      setTaskModal(null)
+    } finally {
+      setTaskSaving(false)
     }
-    setTaskModal(null)
   }
 
   async function removeTask(id: string) {
@@ -585,7 +595,10 @@ export default function SectionPhasesTasks({ userId }: Props) {
             }
           }}
           onSave={saveTaskModal}
+          saving={taskSaving}
+          saveError={taskSaveError}
           onCancel={() => {
+            setTaskSaveError('')
             // On cancel, reload from DB to revert any unsaved local changes
             if (!taskModal.isNew) {
               fetchTasks(sb, userId).then(fresh => setTasks(fresh))
@@ -1118,9 +1131,11 @@ const QTY_LABELS:  Record<LabourRateType, string> = { hourly: 'Hours', half_day:
 
 // ── Task editor modal ─────────────────────────────────────────────────────────
 
-function TaskModal({ task, isNew, labourTrades, onChange, onSave, onCancel }: {
+function TaskModal({ task, isNew, labourTrades, onChange, onSave, saving, saveError, onCancel }: {
   task: BOTask; isNew: boolean; labourTrades: BOLabourTrade[]
-  onChange: (t: BOTask) => void; onSave: () => void; onCancel: () => void
+  onChange: (t: BOTask) => void; onSave: () => void
+  saving?: boolean; saveError?: string
+  onCancel: () => void
 }) {
   function set<K extends keyof BOTask>(key: K, value: BOTask[K]) { onChange({ ...task, [key]: value }) }
 
@@ -1360,9 +1375,16 @@ function TaskModal({ task, isNew, labourTrades, onChange, onSave, onCancel }: {
           </div>
         </div>
 
+        {saveError && (
+          <div style={{ margin: '0 22px 0', padding: '10px 14px', background: '#fff0f0', border: '1px solid #ffb0b0', borderRadius: 6, fontSize: 12, color: '#c00' }}>
+            ⚠ {saveError}
+          </div>
+        )}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '12px 22px', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
-          <button onClick={onCancel} style={{ padding: '8px 18px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, background: '#fff', color: '#374151', cursor: 'pointer' }} title="Discard unsaved changes">↩ Revert</button>
-          <button onClick={onSave} style={{ padding: '8px 22px', background: '#4a90a4', border: 'none', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }} title="Save changes to Back Office database">💾 Save to Back Office</button>
+          <button onClick={onCancel} disabled={saving} style={{ padding: '8px 18px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, background: '#fff', color: '#374151', cursor: 'pointer' }} title="Discard unsaved changes">↩ Revert</button>
+          <button onClick={onSave} disabled={saving} style={{ padding: '8px 22px', background: saving ? '#aaa' : '#4a90a4', border: 'none', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer' }} title="Save changes to Back Office database">
+            {saving ? '⏳ Saving…' : '💾 Save to Back Office'}
+          </button>
         </div>
       </div>
     </div>
