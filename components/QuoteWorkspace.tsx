@@ -622,8 +622,14 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
   const [showPlantPicker,   setShowPlantPicker]   = useState(false)
   // AI Review modal
   const [showReview,        setShowReview]        = useState(false)
-  // Accordion: which cost card is currently open (one at a time)
+  // Cost card modal
   const [openCard, setOpenCard] = useState<ItemType | null>(null)
+  // Inline BO pickers inside the modal
+  const [boMatSearch,   setBoMatSearch]   = useState('')
+  const [boPlantSearch, setBoPlantSearch] = useState('')
+  const [boLabourTrade, setBoLabourTrade] = useState('')
+  const [boLabourRate,  setBoLabourRate]  = useState<'day' | 'half_day' | 'hourly'>('day')
+  const [boLabourQty,   setBoLabourQty]   = useState(1)
 
   // Product CRUD
   function addProduct(prod: QuoteProduct) {
@@ -942,32 +948,152 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
 
   // ── Dispatch: editable body for the open card ──
   function renderCardBody(type: ItemType) {
-    if (type === 'materials') {
+
+    // ── Labour: show BO trades at the top ─────────────────────────────────────
+    if (type === 'labour') {
+      const trades = labourTrades ?? []
+      const selTrade = trades.find(t => t.id === (boLabourTrade || trades[0]?.id))
+      const rate = selTrade
+        ? boLabourRate === 'day'      ? selTrade.day_rate
+          : boLabourRate === 'half_day' ? (selTrade.half_day_rate_override ?? +(selTrade.day_rate / 2).toFixed(2))
+          : +(selTrade.day_rate / 8).toFixed(2)
+        : 0
+      const total = +(rate * boLabourQty).toFixed(2)
+
       return (
         <>
-          {renderProductsTable()}
-          {!isLocked && (
-            <div style={{ margin: '6px 0 8px' }}>
-              {catalogueBtn('+ From Back Office catalogue', () => setShowProductPicker(true), '#1d4ed8', '#eff6ff', '#bfdbfe')}
+          {trades.length > 0 && !isLocked && (
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 12px', marginBottom: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Labour Rates — Back Office</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 80px', gap: 8, marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontSize: 10, color: '#92400e', marginBottom: 3 }}>Trade</div>
+                  <select value={boLabourTrade || trades[0]?.id || ''} onChange={e => setBoLabourTrade(e.target.value)}
+                    style={{ width: '100%', padding: '5px 8px', border: '1px solid #fde68a', borderRadius: 5, fontSize: 12 }}>
+                    {trades.map(t => <option key={t.id} value={t.id}>{t.name} — £{t.day_rate}/day</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: '#92400e', marginBottom: 3 }}>Rate</div>
+                  <select value={boLabourRate} onChange={e => setBoLabourRate(e.target.value as typeof boLabourRate)}
+                    style={{ width: '100%', padding: '5px 8px', border: '1px solid #fde68a', borderRadius: 5, fontSize: 12 }}>
+                    <option value="day">Day £{selTrade?.day_rate ?? 0}</option>
+                    <option value="half_day">Half day £{selTrade ? (selTrade.half_day_rate_override ?? +(selTrade.day_rate / 2).toFixed(2)) : 0}</option>
+                    <option value="hourly">Hourly £{selTrade ? +(selTrade.day_rate / 8).toFixed(2) : 0}</option>
+                  </select>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: '#92400e', marginBottom: 3 }}>Qty</div>
+                  <input type="number" min={0} step={0.5} value={boLabourQty} onChange={e => setBoLabourQty(Math.max(0, +e.target.value))}
+                    style={{ width: '100%', padding: '5px 8px', border: '1px solid #fde68a', borderRadius: 5, fontSize: 12, textAlign: 'right' }} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 13, fontFamily: 'monospace', fontWeight: 700, color: '#92400e' }}>= £{total.toFixed(2)}</span>
+                <button onClick={() => {
+                  if (!selTrade) return
+                  const desc = `${selTrade.name} × ${boLabourQty} ${boLabourRate === 'hourly' ? 'hr' : boLabourRate === 'half_day' ? 'half-day' : 'day'}`
+                  addRow('', 'labour')
+                  // Apply costs to the newly added row
+                  const newItems = [...p.items]
+                  const last = newItems[newItems.length - 1]
+                  if (last) {
+                    onUpdate({ ...p, items: newItems.map(i => i.id === last.id ? { ...i, labour: total, desc, notes: desc } : i) })
+                  }
+                }}
+                  style={{ padding: '5px 14px', background: '#f59e0b', border: 'none', borderRadius: 5, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                  + Add to Quote
+                </button>
+              </div>
             </div>
           )}
+          {renderItemsCardBody('labour')}
+        </>
+      )
+    }
+
+    // ── Materials: BO products inline ─────────────────────────────────────────
+    if (type === 'materials') {
+      const filtered = boProducts.filter(pr => pr.active && (!boMatSearch || pr.name.toLowerCase().includes(boMatSearch.toLowerCase()) || (pr.category ?? '').toLowerCase().includes(boMatSearch.toLowerCase())))
+      return (
+        <>
+          {boProducts.length > 0 && (
+            <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 12px', marginBottom: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Products — Back Office</div>
+              <input value={boMatSearch} onChange={e => setBoMatSearch(e.target.value)} placeholder="Search products…"
+                style={{ width: '100%', padding: '6px 10px', border: '1px solid #bfdbfe', borderRadius: 6, fontSize: 12, marginBottom: 8, boxSizing: 'border-box' }} />
+              <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid #bfdbfe', borderRadius: 6 }}>
+                {filtered.length === 0
+                  ? <div style={{ padding: '10px', fontSize: 11, color: '#64748b', textAlign: 'center' }}>No matches</div>
+                  : filtered.map(pr => {
+                    const sell = +(pr.default_cost * (1 + (pr.markup_pct ?? 0) / 100)).toFixed(2)
+                    return (
+                      <div key={pr.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid #e0f2fe', fontSize: 12 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pr.name}</div>
+                          <div style={{ fontSize: 10, color: '#64748b' }}>{pr.unit} · £{pr.default_cost}{pr.waste_pct > 0 ? ` · ${pr.waste_pct}% waste` : ''}</div>
+                        </div>
+                        <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 600, color: '#16a34a', flexShrink: 0 }}>£{sell}</span>
+                        {!isLocked && (
+                          <button onClick={() => addProduct({ id: `${Date.now()}`, boProductId: pr.id, name: pr.name, unit: pr.unit, qty: 1, costPrice: pr.default_cost, sellPrice: sell, supplier: pr.supplier || undefined, category: pr.category || undefined, wastePercent: pr.waste_pct || undefined, enabled: true })}
+                            style={{ padding: '3px 10px', background: '#1d4ed8', border: 'none', borderRadius: 5, color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+                            + Add
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })
+                }
+              </div>
+            </div>
+          )}
+          {renderProductsTable()}
           {renderItemsCardBody('materials')}
         </>
       )
     }
+
+    // ── Plant: BO plant items inline ──────────────────────────────────────────
     if (type === 'plant') {
+      const filtered = boPlantItems.filter(pl => pl.active && (!boPlantSearch || pl.name.toLowerCase().includes(boPlantSearch.toLowerCase())))
       return (
         <>
-          {renderPlantTable()}
-          {!isLocked && (
-            <div style={{ margin: '6px 0 8px' }}>
-              {catalogueBtn('+ From Back Office catalogue', () => setShowPlantPicker(true), '#7c3aed', '#faf5ff', '#e9d5ff')}
+          {boPlantItems.length > 0 && (
+            <div style={{ background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 8, padding: '10px 12px', marginBottom: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Plant & Equipment — Back Office</div>
+              <input value={boPlantSearch} onChange={e => setBoPlantSearch(e.target.value)} placeholder="Search plant & equipment…"
+                style={{ width: '100%', padding: '6px 10px', border: '1px solid #e9d5ff', borderRadius: 6, fontSize: 12, marginBottom: 8, boxSizing: 'border-box' }} />
+              <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid #e9d5ff', borderRadius: 6 }}>
+                {filtered.length === 0
+                  ? <div style={{ padding: '10px', fontSize: 11, color: '#64748b', textAlign: 'center' }}>No matches</div>
+                  : filtered.map(pl => {
+                    const sell = +(pl.default_cost * (1 + (pl.markup_pct ?? 0) / 100)).toFixed(2)
+                    return (
+                      <div key={pl.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid #f3e8ff', fontSize: 12 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pl.name}</div>
+                          <div style={{ fontSize: 10, color: '#64748b' }}>{pl.unit} · £{pl.default_cost}/unit</div>
+                        </div>
+                        <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 600, color: '#16a34a', flexShrink: 0 }}>£{sell}</span>
+                        {!isLocked && (
+                          <button onClick={() => addPlant({ id: `${Date.now()}`, boPlantId: pl.id, name: pl.name, unit: pl.unit, qty: 1, costPrice: pl.default_cost, sellPrice: sell, enabled: true })}
+                            style={{ padding: '3px 10px', background: '#7c3aed', border: 'none', borderRadius: 5, color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+                            + Add
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })
+                }
+              </div>
             </div>
           )}
+          {renderPlantTable()}
           {renderItemsCardBody('plant')}
         </>
       )
     }
+
     return renderItemsCardBody(type)
   }
 
