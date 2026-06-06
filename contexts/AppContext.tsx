@@ -82,7 +82,7 @@ export function useApp() {
 }
 
 const DEFAULT_SETTINGS: Settings = {
-  name: 'Small Build Company Ltd',
+  name: 'Buildospro',
   tagline: 'Building Extensions & Renovations',
   contact: '', phone: '', email: '', address: '',
   terms: 'A deposit of 25% is required prior to commencement of works. Stage payments are then due at agreed milestones throughout the project. Final payment is due upon practical completion.',

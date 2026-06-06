@@ -51,7 +51,7 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
       {open && <div className="sidebar-overlay" onClick={onClose} />}
       <aside className={`sidebar${open ? ' open' : ''}`}>
         <div className="sidebar-logo">
-          <div className="logo-name">{settings.name || 'Small Build Company Ltd'}</div>
+          <div className="logo-name">{settings.name || 'Buildospro'}</div>
           <div className="logo-sub">
             {currentMember
               ? <span style={{ fontSize: 11, opacity: 0.75 }}>{currentMember.name || currentMember.email}</span>

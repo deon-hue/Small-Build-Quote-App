@@ -89,8 +89,8 @@ export async function buildQuotePdf(quote: Quote, settings: Settings): Promise<B
   // ── Create document and embed fonts ──────────────────────────────────────
   const pdfDoc = await PDFDocument.create()
   pdfDoc.setTitle(`Quote ${quote.ref || ''} — ${quote.customer.name || ''}`)
-  pdfDoc.setAuthor(co.name || 'Small Build Company')
-  pdfDoc.setCreator('Small Build Company Quote Builder')
+  pdfDoc.setAuthor(co.name || 'Buildospro')
+  pdfDoc.setCreator('Buildospro Quote Builder')
 
   const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica)
   const fontBold    = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
@@ -153,7 +153,7 @@ export async function buildQuotePdf(quote: Quote, settings: Settings): Promise<B
   y = A4_H - HEADER_H
 
   // Company name + tagline
-  drawText(page, safe(co.name || 'Small Build Company Ltd'), MARGIN, y + 40, 18, fontBold, C.white)
+  drawText(page, safe(co.name || 'Buildospro Ltd'), MARGIN, y + 40, 18, fontBold, C.white)
   drawText(page, safe(co.tagline || 'Building Extensions & Renovations').toUpperCase(), MARGIN, y + 22, 7.5, fontRegular, C.lightGreen)
 
   // Quote ref (right side)
@@ -371,7 +371,7 @@ export async function buildQuotePdf(quote: Quote, settings: Settings): Promise<B
   // ── Footer helper ──────────────────────────────────────────────────────────
   function drawFooter(pg: PDFPage) {
     drawRect(pg, 0, 0, A4_W, 36, C.charcoal)
-    drawText(pg, safe(co.name || 'Small Build Company Ltd'), MARGIN, 13, 7.5, fontRegular, C.footerText)
+    drawText(pg, safe(co.name || 'Buildospro Ltd'), MARGIN, 13, 7.5, fontRegular, C.footerText)
     const footerRight = safe(`${co.address || ''} · Registered in England & Wales`)
     const frW = fontRegular.widthOfTextAtSize(footerRight, 7.5)
     drawText(pg, footerRight, A4_W - MARGIN - frW - 80, 13, 7.5, fontRegular, C.footerText)

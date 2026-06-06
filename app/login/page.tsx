@@ -51,7 +51,7 @@ export default function LoginPage() {
       <div className="login-page">
         <div className="login-box">
           <div style={{ marginBottom: 28, textAlign: 'center' }}>
-            <div className="logo-name" style={{ fontSize: 22, marginBottom: 4 }}>Small Build Company Ltd</div>
+            <div className="logo-name" style={{ fontSize: 22, marginBottom: 4 }}>Buildospro</div>
             <div className="logo-sub" style={{ color: 'var(--muted)' }}>Reset Password</div>
           </div>
 
@@ -98,7 +98,7 @@ export default function LoginPage() {
       <div className="login-box">
         <div style={{ marginBottom: 28, textAlign: 'center' }}>
           <div className="logo-name" style={{ fontSize: 22, marginBottom: 4 }}>
-            Small Build Company Ltd
+            Buildospro
           </div>
           <div className="logo-sub" style={{ color: 'var(--muted)' }}>Management System</div>
         </div>

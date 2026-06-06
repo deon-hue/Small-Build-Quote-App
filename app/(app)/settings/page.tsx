@@ -73,7 +73,7 @@ export default function SettingsPage() {
         <div className="card-hd">Company Details</div>
         <div style={{ padding: '18px 20px' }}>
           <div className="row2">
-            <div className="fg"><label>Company Name</label><input {...f('name')} placeholder="Small Build Company Ltd" /></div>
+            <div className="fg"><label>Company Name</label><input {...f('name')} placeholder="Buildospro" /></div>
             <div className="fg"><label>Tagline</label><input {...f('tagline')} placeholder="Building Extensions & Renovations" /></div>
           </div>
           <div className="row2">

@@ -57,7 +57,7 @@ small{font-size:10px;color:#8a8278}
 </style></head><body><div class="w">
 <div class="hd" style="display:flex;align-items:center;gap:24px">
   ${co.logo ? `<div style="flex-shrink:0"><img src="${co.logo}" alt="Logo" style="height:60px;max-width:160px;object-fit:contain;filter:brightness(0) invert(1)"></div>` : ''}
-  <div><div class="co">${esc(co.name || 'Small Build Company Ltd')}</div><div class="tag">${esc(co.tagline || 'Building Extensions & Renovations')}</div></div>
+  <div><div class="co">${esc(co.name || 'Buildospro')}</div><div class="tag">${esc(co.tagline || 'Building Extensions & Renovations')}</div></div>
 </div>
 <div class="bd">
 <div class="intro">Dear ${esc(q.customer.name || 'Customer')},<br><br>Thank you for the opportunity to quote for the works at <strong>${esc(q.customer.address || 'your property')}</strong>. Please find below our detailed estimate for the ${esc(q.jobType)} works as discussed. This quotation is valid for 30 days from the date of issue.</div>
@@ -78,7 +78,7 @@ ${q.photo ? `<div style="margin-bottom:24px;text-align:center"><img src="${q.pho
 <div class="terms"><h4>Payment Terms &amp; Conditions</h4><p>${co.terms || ''}</p><p>${co.extra || ''}</p></div>
 <p style="margin-top:20px;font-size:13px;color:#444">To accept this quotation or to discuss any aspect of the works:<br><strong>${esc(co.contact || '')}</strong> &nbsp;·&nbsp; ${esc(co.email || '')} &nbsp;·&nbsp; ${esc(co.phone || '')}</p>
 </div>
-<div class="ft">${esc(co.name || 'Small Build Company Ltd')} · ${esc(co.address || '')} · Registered in England &amp; Wales</div>
+<div class="ft">${esc(co.name || 'Buildospro')} · ${esc(co.address || '')} · Registered in England &amp; Wales</div>
 </div></body></html>`
 }
 
@@ -149,7 +149,7 @@ th{background:#2b2f33;color:white;padding:9px 12px;text-align:left;font-weight:6
 </style></head><body><div class="w">
 <div class="hd" style="display:flex;align-items:center;gap:24px">
   ${co.logo ? `<div style="flex-shrink:0"><img src="${co.logo}" alt="Logo" style="height:60px;max-width:160px;object-fit:contain;filter:brightness(0) invert(1)"></div>` : ''}
-  <div><div class="co">${esc(co.name || 'Small Build Company Ltd')}</div><div class="tag">${esc(co.tagline || 'Building Extensions & Renovations')}</div></div>
+  <div><div class="co">${esc(co.name || 'Buildospro')}</div><div class="tag">${esc(co.tagline || 'Building Extensions & Renovations')}</div></div>
 </div>
 <div class="bd">
 <div class="intro">Dear ${esc(q.customer.name || 'Customer')},<br><br>Thank you for the opportunity to quote for the works at <strong>${esc(q.customer.address || 'your property')}</strong>. Please find below our quotation for the ${esc(q.jobType)} works as discussed. This quotation is valid for 30 days from the date of issue.</div>
@@ -170,6 +170,6 @@ ${q.photo ? `<div style="margin-bottom:24px;text-align:center"><img src="${q.pho
 <div class="terms"><h4>Payment Terms &amp; Conditions</h4><p>${co.terms || ''}</p><p>${co.extra || ''}</p></div>
 <p style="margin-top:20px;font-size:13px;color:#444">To accept this quotation or to discuss any aspect of the works, please contact us:<br><strong>${esc(co.contact || '')}</strong> &nbsp;·&nbsp; ${esc(co.email || '')} &nbsp;·&nbsp; ${esc(co.phone || '')}</p>
 </div>
-<div class="ft">${esc(co.name || 'Small Build Company Ltd')} · ${esc(co.address || '')} · Registered in England &amp; Wales</div>
+<div class="ft">${esc(co.name || 'Buildospro')} · ${esc(co.address || '')} · Registered in England &amp; Wales</div>
 </div></body></html>`
 }

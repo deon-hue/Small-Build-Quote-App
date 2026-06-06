@@ -52,7 +52,7 @@
  */
 
 export const PRODUCT_VERSION = '1.0.0'
-export const PRODUCT_NAME    = 'Small Build Company Pro'
+export const PRODUCT_NAME    = 'Buildospro'
 
 // ── Canonical phase IDs ───────────────────────────────────────────────────────
 // Stable short IDs for each takeoff phase.
