@@ -29,6 +29,9 @@ export default function SectionProducts({ userId }: Props) {
   })
   const [newCatInput,     setNewCatInput]     = useState('')
   const [addingCat,       setAddingCat]       = useState(false)
+  const [editingCat,      setEditingCat]      = useState<string | null>(null)   // category being renamed
+  const [editingCatName,  setEditingCatName]  = useState('')
+  const [renamingSaving,  setRenamingSaving]  = useState(false)
 
   // ── AI Import ──────────────────────────────────────────────────────────────
   const [showAIImport,    setShowAIImport]    = useState(false)
@@ -74,6 +77,27 @@ export default function SectionProducts({ userId }: Props) {
     const updated = customCategories.filter(c => c !== cat)
     setCustomCategories(updated)
     localStorage.setItem('bo_product_categories', JSON.stringify(updated))
+  }
+
+  async function renameCategory(oldName: string, newName: string) {
+    const trimmed = newName.trim()
+    if (!trimmed || trimmed === oldName) { setEditingCat(null); return }
+    setRenamingSaving(true)
+    try {
+      // Update every product in this category
+      const toUpdate = products.filter(p => p.category === oldName)
+      for (const p of toUpdate) {
+        const { data: saved } = await upsertProduct(sb, { ...p, user_id: userId, category: trimmed })
+        if (saved) setProducts(prev => prev.map(x => x.id === saved.id ? saved : x))
+      }
+      // Rename in custom categories localStorage if applicable
+      if (customCategories.includes(oldName)) {
+        const updated = customCategories.map(c => c === oldName ? trimmed : c)
+        setCustomCategories(updated)
+        localStorage.setItem('bo_product_categories', JSON.stringify(updated))
+      }
+      setExpandedCats(prev => { const n = new Set(prev); n.delete(oldName); n.add(trimmed); return n })
+    } finally { setRenamingSaving(false); setEditingCat(null) }
   }
 
   // ── AI Import ─────────────────────────────────────────────────────────────
@@ -353,7 +377,36 @@ export default function SectionProducts({ userId }: Props) {
                 ? <ChevronDown size={15} style={{ color: '#94a3b8', flexShrink: 0 }} />
                 : <ChevronRight size={15} style={{ color: '#94a3b8', flexShrink: 0 }} />
               }
-              <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{cat}</span>
+              {/* Category name — inline rename on ✎ click */}
+              {editingCat === cat ? (
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }} onClick={e => e.stopPropagation()}>
+                  <input
+                    autoFocus
+                    value={editingCatName}
+                    onChange={e => setEditingCatName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') renameCategory(cat, editingCatName); if (e.key === 'Escape') setEditingCat(null) }}
+                    style={{ flex: 1, padding: '3px 8px', border: '1.5px solid #4a90a4', borderRadius: 5, fontSize: 13, fontWeight: 600, outline: 'none', minWidth: 0 }}
+                  />
+                  <button onClick={() => renameCategory(cat, editingCatName)} disabled={renamingSaving}
+                    style={{ padding: '3px 10px', background: renamingSaving ? '#94a3b8' : '#4a90a4', border: 'none', borderRadius: 5, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+                    {renamingSaving ? '…' : '✓'}
+                  </button>
+                  <button onClick={() => setEditingCat(null)}
+                    style={{ padding: '3px 8px', border: '1px solid #e2e8f0', borderRadius: 5, background: '#fff', fontSize: 12, cursor: 'pointer', color: '#64748b', flexShrink: 0 }}>
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }} onClick={e => e.stopPropagation()}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat}</span>
+                  <button
+                    onClick={e => { e.stopPropagation(); setEditingCat(cat); setEditingCatName(cat) }}
+                    title="Rename category"
+                    style={{ padding: '2px 6px', border: '1px solid #e2e8f0', borderRadius: 4, background: '#fff', fontSize: 11, cursor: 'pointer', color: '#64748b', flexShrink: 0, lineHeight: 1 }}>
+                    ✎
+                  </button>
+                </div>
+              )}
               <span style={{ fontSize: 11, color: '#94a3b8' }}>
                 {isEmpty ? 'empty' : `${items.length} product${items.length !== 1 ? 's' : ''}`}
               </span>
