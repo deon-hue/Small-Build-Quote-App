@@ -42,6 +42,7 @@ export default function SectionPhasesTasks({ userId }: Props) {
   const [editingSubPhaseId, setEditingSubPhaseId] = useState<string | null>(null)
   const [editingSubPhaseName, setEditingSubPhaseName] = useState('')
   const [movingSubPhaseId, setMovingSubPhaseId] = useState<string | null>(null)
+  const [phaseNameFocused, setPhaseNameFocused] = useState(false)
   const [loading, setLoading] = useState(true)
   const [taskModal, setTaskModal] = useState<TaskModalState>(null)
   const [jobTypeFilter, setJobTypeFilter] = useState<string>('All')
@@ -319,6 +320,7 @@ export default function SectionPhasesTasks({ userId }: Props) {
                   <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {phase.name}
                   </span>
+                  {active && <span style={{ fontSize: 10, color: '#94a3b8', flexShrink: 0 }} title="Click the name on the right to rename">✎</span>}
                   {isBuildup && <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 99, background: '#dbeafe', color: '#1d4ed8', fontWeight: 600, flexShrink: 0 }}>build-up</span>}
                   {tagged && <span title={phase.job_types.join(', ')} style={{ fontSize: 9, background: '#f1f5f9', color: '#64748b', borderRadius: 3, padding: '1px 4px', flexShrink: 0 }}>{phase.job_types.length}JT</span>}
                 </div>
@@ -346,8 +348,16 @@ export default function SectionPhasesTasks({ userId }: Props) {
               <input
                 value={selectedPhase.name}
                 onChange={e => renamePhase(selectedPhase.id, e.target.value)}
-                style={{ fontSize: 18, fontWeight: 700, border: 'none', background: 'transparent', outline: 'none', flex: 1, color: '#1e293b' }}
+                onFocus={() => setPhaseNameFocused(true)}
+                onBlur={() => setPhaseNameFocused(false)}
+                title="Click to rename phase"
+                style={{
+                  fontSize: 18, fontWeight: 700, border: 'none', background: 'transparent', outline: 'none', flex: 1, color: '#1e293b',
+                  borderBottom: phaseNameFocused ? '2px solid #4a90a4' : '2px solid transparent',
+                  paddingBottom: 1, cursor: 'text',
+                }}
               />
+              {!phaseNameFocused && <span style={{ fontSize: 12, color: '#94a3b8', flexShrink: 0, pointerEvents: 'none' }} title="Click name to rename">✎</span>}
               {BUILDUP_PHASES.has(selectedPhase.name) && (
                 <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: '#dbeafe', color: '#1d4ed8', fontWeight: 600 }}>
                   🧱 Build-up Phase
