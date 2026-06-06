@@ -1114,7 +1114,44 @@ const dwarfWallSubphases: PhaseSubphase[] = [
 
 // ── Master export ─────────────────────────────────────────────────────────────
 
+// ── Site Setup subphases ───────────────────────────────────────────────────────
+const siteSetupSubphases: PhaseSubphase[] = [
+  {
+    id: 'site_scaffold', phase: 'Site Setup', name: 'Scaffolding', markupPct: 20,
+    tasks: [
+      { id: 'scaffold_erect',  name: 'Scaffold erection & dismantling', unit: 'sum', defaultQty: 1, labour: 0, materials: 0, plant: 0, subcontractor: 2400, other: 0 },
+      { id: 'scaffold_weekly', name: 'Scaffold weekly hire',            unit: 'wk',  defaultQty: 8, labour: 0, materials: 0, plant: 180, subcontractor: 0,    other: 0 },
+    ],
+  },
+  {
+    id: 'site_hoarding', phase: 'Site Setup', name: 'Site Hoarding & Security', markupPct: 20,
+    tasks: [
+      { id: 'heras_fence',   name: 'Heras fencing (supply & erect)',  unit: 'lm',  defaultQty: 20, labour: 8,   materials: 12, plant: 0, subcontractor: 0, other: 0 },
+      { id: 'hoarding_erect',name: 'Timber hoarding panels',          unit: 'lm',  defaultQty: 10, labour: 15,  materials: 35, plant: 0, subcontractor: 0, other: 0 },
+      { id: 'site_security', name: 'Site security & signage',         unit: 'sum', defaultQty: 1,  labour: 0,   materials: 150, plant: 0, subcontractor: 0, other: 0 },
+    ],
+  },
+  {
+    id: 'site_welfare', phase: 'Site Setup', name: 'Welfare & Temporary Services', markupPct: 20,
+    tasks: [
+      { id: 'welfare_unit',   name: 'Welfare unit hire (portable)',     unit: 'wk',  defaultQty: 8, labour: 0, materials: 0, plant: 65, subcontractor: 0, other: 0 },
+      { id: 'temp_electric',  name: 'Temporary electrical supply',      unit: 'sum', defaultQty: 1, labour: 80, materials: 120, plant: 0, subcontractor: 0, other: 0 },
+      { id: 'temp_water',     name: 'Temporary water connection',       unit: 'sum', defaultQty: 1, labour: 60, materials: 80,  plant: 0, subcontractor: 0, other: 0 },
+      { id: 'site_clearance', name: 'Initial site clearance',           unit: 'day', defaultQty: 1, labour: 280, materials: 0, plant: 120, subcontractor: 0, other: 80 },
+    ],
+  },
+  {
+    id: 'site_access', phase: 'Site Setup', name: 'Access & Protection', markupPct: 20,
+    tasks: [
+      { id: 'skip_setup',     name: 'Skip hire (general)',              unit: 'nr',  defaultQty: 2, labour: 0, materials: 0, plant: 260, subcontractor: 0, other: 0 },
+      { id: 'floor_protect',  name: 'Floor & surface protection',       unit: 'm²',  defaultQty: 30, labour: 4, materials: 6, plant: 0, subcontractor: 0, other: 0 },
+      { id: 'temp_road',      name: 'Temporary access road / tracking', unit: 'sum', defaultQty: 1, labour: 120, materials: 200, plant: 80, subcontractor: 0, other: 0 },
+    ],
+  },
+]
+
 export const ALL_PHASE_SUBPHASES: PhaseSubphase[] = [
+  ...siteSetupSubphases,
   ...plasterSubphases,
   ...structuralFrameSubphases,
   ...roofSubphases,

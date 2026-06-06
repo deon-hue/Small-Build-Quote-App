@@ -11,7 +11,8 @@ export type DrawingTool = 'select' | 'line' | 'rect' | 'polygon' | 'floor'
 // ── Measurement categories (match quote parentPhase names) ────────────────────
 
 export const TAKEOFF_PHASES = [
-  'Site Setup & Demolition',
+  'Site Setup',
+  'Demolition',
   'Foundations',
   'Structural Frame',
   'External Walls',
@@ -34,7 +35,8 @@ export const TAKEOFF_PHASES = [
 export type TakeoffPhase = typeof TAKEOFF_PHASES[number]
 
 export const PHASE_COLORS: Record<TakeoffPhase, string> = {
-  'Site Setup & Demolition':     '#e74c3c',
+  'Site Setup':                  '#f59e0b',
+  'Demolition':                  '#e74c3c',
   'Foundations':                  '#8e44ad',
   'Structural Frame':             '#2980b9',
   'External Walls':               '#16a085',
@@ -59,7 +61,8 @@ export const PHASE_COLORS: Record<TakeoffPhase, string> = {
  * Used when importing take-off items into the New Quote page.
  */
 export const PHASE_TO_QUOTE_PARENT: Record<TakeoffPhase, string> = {
-  'Site Setup & Demolition':     'Phase 1 – Site Setup & Demolition',
+  'Site Setup':                  'Phase 1 – Site Setup',
+  'Demolition':                  'Phase 1 – Demolition',
   'Foundations':                  'Phase 2 – Foundations & Groundworks',
   'Structural Frame':             'Phase 3 – Structural Shell',
   'External Walls':               'Phase 3 – Structural Shell',

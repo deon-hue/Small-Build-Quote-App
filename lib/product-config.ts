@@ -61,7 +61,9 @@ export const PRODUCT_NAME    = 'Small Build Company Pro'
 // existing records. Only add new entries; never remove or rename.
 
 export const CANONICAL_PHASE_IDS: Record<string, string> = {
-  'Site Setup & Demolition':     'phase_site_setup',
+  'Site Setup & Demolition':     'phase_site_setup',   // legacy — kept for DB backward compat
+  'Site Setup':                  'phase_site_setup',   // maps to same DB row (renamed phase)
+  'Demolition':                  'phase_demolition',
   'Foundations':                  'phase_foundations',
   'Structural Frame':             'phase_structural_frame',
   'External Walls':               'phase_external_walls',

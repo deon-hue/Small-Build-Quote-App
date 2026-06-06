@@ -810,7 +810,8 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
     if (pc) desiredSubs.push({ canonical_id: sub.id, phase_canonical: pc, name: sub.name, display_order: i, markup_pct: sub.markupPct })
   })
   DEFAULT_DEMO_SUBPHASES.forEach((sub, i) => {
-    const pc = CANONICAL_PHASE_IDS['Site Setup & Demolition']
+    // Use 'Demolition' canonical ID (new split phase). Falls back to legacy 'Site Setup & Demolition' ID.
+    const pc = CANONICAL_PHASE_IDS['Demolition'] ?? CANONICAL_PHASE_IDS['Site Setup & Demolition']
     if (pc) desiredSubs.push({ canonical_id: `demo-${sub.id}`, phase_canonical: pc, name: sub.name, display_order: i, markup_pct: sub.markupPct })
   })
 
@@ -915,7 +916,7 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
   })
 
   DEFAULT_DEMO_SUBPHASES.forEach(sub => {
-    const pc = CANONICAL_PHASE_IDS['Site Setup & Demolition'] ?? ''
+    const pc = CANONICAL_PHASE_IDS['Demolition'] ?? CANONICAL_PHASE_IDS['Site Setup & Demolition'] ?? ''
     sub.tasks.forEach((task, i) => {
       desiredTasks.push({
         canonical_id:       `demo-${task.id}`,

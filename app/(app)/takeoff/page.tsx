@@ -39,7 +39,9 @@ import {
 // When the user selects a phase, the draw tool auto-resets to this default.
 // Prevents "floor tool still active while Demolition is selected" bugs.
 export const PHASE_DEFAULT_TOOL: Record<string, DrawingTool> = {
-  'Site Setup & Demolition':     'line',
+  'Site Setup':                  'select',
+  'Demolition':                  'line',
+  'Site Setup & Demolition':     'line',  // legacy compat
   'Foundations':                  'line',
   'Structural Frame':             'line',
   'External Walls':               'line',
@@ -61,7 +63,9 @@ export const PHASE_DEFAULT_TOOL: Record<string, DrawingTool> = {
 
 // Human-readable measurement label per phase (shown in Active Draw Mode panel)
 const PHASE_MEASURE_LABEL: Record<string, string> = {
-  'Site Setup & Demolition':     'Linear / Area',
+  'Site Setup':                  'Items / Lump Sum',
+  'Demolition':                  'Linear / Area',
+  'Site Setup & Demolition':     'Linear / Area',  // legacy compat
   'Foundations':                  'Linear (m) → Volume (m³)',
   'Structural Frame':             'Linear (m)',
   'External Walls':               'Linear (m)',
@@ -537,7 +541,7 @@ function LayersPanel({ drawnPhases, hiddenPhases, phaseColors, onToggle, onShowA
                 <span style={{ fontSize: 11, flex: 1, color: 'var(--to-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {ph.replace('External Works & Landscaping', 'Ext. Works')
                      .replace('Internal Walls & Partitions', 'Int. Walls')
-                     .replace('Site Setup & Demolition', 'Demolition')
+                     .replace('Site Setup & Demolition', 'Demolition')  // legacy compat
                      .replace('Plastering & Boarding', 'Plastering')
                      .replace('Structural Frame', 'Struct. Frame')
                      .replace('Windows & Doors', 'Windows/Doors')
@@ -3441,7 +3445,7 @@ export default function TakeoffPage() {
     // ── 2. Auto-init (same logic as old renderProperties waterfall) ────────
 
     // Demo
-    if (item.phase === 'Site Setup & Demolition' && !item.demoSubphaseId) {
+    if ((item.phase === 'Demolition' || (item.phase as string) === 'Site Setup & Demolition') && !item.demoSubphaseId) {
       const _allSubs = getAllDemoSubphases(customDemoSubphases)
       const _defSub  = _allSubs[0]
       const _defTask = _defSub.tasks[0]
@@ -3556,7 +3560,7 @@ export default function TakeoffPage() {
 
     // ── 3. Phase flags ─────────────────────────────────────────────────────
     const isLineBased      = linkedEl?.type === 'line'
-    const isDemo           = item.phase === 'Site Setup & Demolition'
+    const isDemo           = item.phase === 'Demolition' || (item.phase as string) === 'Site Setup & Demolition'
     const isExtWall        = item.phase === 'External Walls'
     const isIntWall        = item.phase === 'Internal Walls & Partitions' && isLineBased
     const isPlaster        = item.phase === 'Plastering & Boarding'
@@ -3731,7 +3735,9 @@ export default function TakeoffPage() {
 
     // ── 10. Accent colour ──────────────────────────────────────────────────
     const phaseAccents: Partial<Record<string, string>> = {
-      'Site Setup & Demolition':     '#e74c3c',
+      'Site Setup':                  '#f59e0b',
+      'Demolition':                  '#e74c3c',
+      'Site Setup & Demolition':     '#e74c3c',  // legacy compat
       'External Walls':               '#16a085',
       'Internal Walls & Partitions':  '#5d8aa8',
       'Plastering & Boarding':        '#95a5a6',

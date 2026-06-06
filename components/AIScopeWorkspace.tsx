@@ -34,7 +34,7 @@ const JOB_TYPE_CONFIGS: JobTypeConfig[] = [
     tagline: 'Single or double-storey addition to the rear of a property',
     scopeTitle: 'Rear Extension — Scope of Works',
     defaultDescription: 'Supply all labour, materials, plant and equipment to design and construct a new rear extension including demolition of existing rear elevation, new foundations, structural frame, external walls, roof structure, weatherproofing, windows and doors, internal finishes, and connection to all services.',
-    defaultPhases: ['Site Setup & Demolition','Foundations','Structural Frame','External Walls','Roof','Windows & Doors','Internal Walls','Floors & Screeds','First Fix','Plastering','Second Fix','Decoration'],
+    defaultPhases: ['Site Setup','Demolition','Foundations','Structural Frame','External Walls','Roof','Windows & Doors','Internal Walls','Floors & Screeds','First Fix','Plastering','Second Fix','Decoration'],
     interviewQuestions: [
       'What are the approximate dimensions? (e.g. 4m wide × 5m deep)',
       'Single or double storey?',

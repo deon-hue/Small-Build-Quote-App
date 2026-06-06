@@ -18,7 +18,9 @@ export interface PhaseImage {
 }
 
 export const PHASE_VISUALS: Record<string, PhaseVisual> = {
-  'Site Setup & Demolition':      { emoji: '🔨', color: '#e74c3c', keywords: 'construction site demolition excavator' },
+  'Site Setup':                   { emoji: '🏗️', color: '#f59e0b', keywords: 'construction site setup scaffold hoarding' },
+  'Demolition':                   { emoji: '🔨', color: '#e74c3c', keywords: 'demolition construction site excavator strip out' },
+  'Site Setup & Demolition':      { emoji: '🔨', color: '#e74c3c', keywords: 'construction site demolition excavator' },  // legacy
   'Foundations':                  { emoji: '⛏️', color: '#8e44ad', keywords: 'concrete foundations construction trench' },
   'Structural Frame':             { emoji: '🏗️', color: '#2c3e50', keywords: 'steel frame structural construction building' },
   'External Walls':               { emoji: '🧱', color: '#e67e22', keywords: 'brick wall construction masonry exterior' },
