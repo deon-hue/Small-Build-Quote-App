@@ -7,13 +7,15 @@ import { buildHtmlClientView } from '@/lib/quoteHtml'
 import { buildGanttFromQuote } from '@/lib/gantt-utils'
 import type { Quote } from '@/lib/types'
 import QuotePreviewModal from '@/components/QuotePreviewModal'
+import SendQuoteModal from '@/components/SendQuoteModal'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { extractQuoteIntelligence } from '@/lib/quote-intelligence'
 
 export default function SavedQuotesPage() {
   const { quotes, jobs, settings, updateQuote, deleteQuote, deleteJob, addJob, saveGanttState, loading } = useApp()
-  const [previewQuote, setPreviewQuote] = useState<Quote | null>(null)
+  const [previewQuote, setPreviewQuote]   = useState<Quote | null>(null)
+  const [emailingQuote, setEmailingQuote] = useState<Quote | null>(null)
   const router = useRouter()
 
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
@@ -23,8 +25,6 @@ export default function SavedQuotesPage() {
 
   async function handleStatusChange(quote: Quote, status: Quote['status']) {
     await updateQuote({ ...quote, status })
-    // When a quote is accepted/won, extract phase patterns into the intelligence store
-    // so future AI reviews can reference real past data.
     if (status === 'accepted') {
       try {
         const sb = createClient()
@@ -85,14 +85,12 @@ export default function SavedQuotesPage() {
       notes: `Converted from quote ${q.ref}. ${q.phases.length} phases.`,
       quoteId: q.id,
     })
-    // Auto-generate Gantt from quote phases
     if (newJob?.id) {
       try {
         const ganttState = buildGanttFromQuote(q.phases, estWeeks)
         await saveGanttState(newJob.id, ganttState)
       } catch (err) {
         console.warn('Could not auto-generate Gantt chart:', err)
-        // Non-fatal — job was still created successfully
       }
     }
     await updateQuote({ ...q, convertedToJob: true })
@@ -125,32 +123,6 @@ export default function SavedQuotesPage() {
     const d = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]))
     d.setDate(d.getDate() + 30)
     return d < new Date()
-  }
-
-  function emailQuote(q: Quote) {
-    const co = settings
-    const net = q.phases.reduce((s, p) => s + p.items.reduce((ps, i) => ps + (Number(i.labour) || 0) + (Number(i.materials) || 0), 0), 0)
-    const sub = net * (1 + (q.markup || 0) / 100)
-    const vat = q.vatIncluded ? sub * 0.2 : 0
-    const total = sub + vat
-    const validDate = new Date(Date.now() + 30 * 864e5).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
-
-    let body = `Dear ${q.customer.name || ''},\n\n`
-    body += `Please find attached our quotation for the ${q.jobType} works`
-    body += q.customer.address ? ` at ${q.customer.address}.` : '.'
-    body += `\n\nThis quotation is valid for 30 days (${validDate}).\n\n`
-    if (q.scope) body += `SCOPE OF WORKS\n────────────────────────\n${q.scope}\n\n`
-    body += `QUOTE SUMMARY\n─────��──────────────────\n`
-    body += `Reference: ${q.ref || '—'}\nJob Type: ${q.jobType}\n`
-    body += `Property: ${q.customer.address || '—'}\n\n`
-    body += `Subtotal: £${sub.toLocaleString('en-GB', { minimumFractionDigits: 2 })}\n`
-    if (q.vatIncluded) body += `VAT (20%): £${vat.toLocaleString('en-GB', { minimumFractionDigits: 2 })}\n`
-    body += `TOTAL: £${total.toLocaleString('en-GB', { minimumFractionDigits: 2 })}\n\n`
-    body += `Please do not hesitate to contact us if you have any questions.\n\nKind regards`
-
-    const subject = encodeURIComponent(`Quotation ${q.ref || ''} — ${q.jobType}${q.customer.address ? ' at ' + q.customer.address : ''}`)
-    const to = encodeURIComponent(q.customer.email || '')
-    window.location.href = `mailto:${to}?subject=${subject}&body=${encodeURIComponent(body)}`
   }
 
   return (
@@ -214,10 +186,13 @@ export default function SavedQuotesPage() {
                       }}>✎ Edit</button>
                     )}
                     <button className="btn-sm btn-outline" onClick={() => setPreviewQuote(q)}>View</button>
-                    <button className="btn-sm btn-outline" onClick={() => downloadQuote(q)}>⬇ PDF</button>
-                    <button className="btn-sm" style={{ background: '#0078d4', color: 'white', border: 'none', borderRadius: 4, padding: '5px 12px', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500 }}
-                      onClick={() => emailQuote(q)}>
-                      ✉ Email
+                    <button className="btn-sm btn-outline" onClick={() => downloadQuote(q)}>⬇ HTML</button>
+                    <button
+                      className="btn-sm"
+                      style={{ background: '#2b3a2b', color: 'white', border: 'none', borderRadius: 4, padding: '5px 12px', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500 }}
+                      onClick={() => setEmailingQuote(q)}
+                    >
+                      ✉ Email + PDF
                     </button>
                     {q.status === 'accepted' && !alreadyJob && (
                       <button className="btn-sm btn-gold" onClick={() => handleConvert(q)} style={{ whiteSpace: 'nowrap' }}>
@@ -248,7 +223,14 @@ export default function SavedQuotesPage() {
       {previewQuote && (
         <QuotePreviewModal quote={previewQuote} onClose={() => setPreviewQuote(null)} />
       )}
+
+      {emailingQuote && (
+        <SendQuoteModal
+          quote={emailingQuote}
+          onClose={() => setEmailingQuote(null)}
+          onSent={() => updateQuote({ ...emailingQuote, status: 'sent' })}
+        />
+      )}
     </>
   )
 }
-

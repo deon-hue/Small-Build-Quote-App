@@ -36,7 +36,7 @@ import { NextRequest, NextResponse } from 'next/server'
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface NotifyClientPayload {
-  type: 'variation_sent' | 'schedule_updated'
+  type: 'variation_sent' | 'schedule_updated' | 'quote_sent'
 
   // Recipient
   clientName:   string
@@ -53,6 +53,11 @@ export interface NotifyClientPayload {
   variationTotal?: number
   vatIncluded?:    boolean
 
+  // quote_sent fields
+  quoteRef?:   string
+  quoteTotal?: number
+  message?:    string   // optional personal message from the builder
+
   // Company branding (passed from settings)
   companyName?:  string
   companyPhone?: string
@@ -60,6 +65,10 @@ export interface NotifyClientPayload {
 
   // Where to send the client
   portalUrl?: string
+
+  // Optional PDF attachment — base64-encoded bytes
+  pdfBase64?:   string
+  pdfFilename?: string
 }
 
 // ── Phone normalisation ───────────────────────────────────────────────────────
@@ -143,6 +152,54 @@ function buildEmailHtml(payload: NotifyClientPayload, portalUrl: string): string
   const company = payload.companyName || 'Your Builder'
   const firstName = payload.clientName.split(' ')[0] || payload.clientName
 
+  if (payload.type === 'quote_sent') {
+    const total = payload.quoteTotal != null
+      ? `£${payload.quoteTotal.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${payload.vatIncluded ? ' inc. VAT' : ''}`
+      : ''
+    return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f4f0;font-family:Georgia,serif">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
+    <div style="background:#2b3a2b;padding:28px 32px;display:flex;justify-content:space-between;align-items:flex-end">
+      <div>
+        <div style="color:#c8d8a8;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px">${company}</div>
+        <div style="color:#fff;font-size:22px;font-weight:700">Your Quotation</div>
+      </div>
+      ${payload.quoteRef ? `<div style="color:#c8d8a8;font-size:14px;font-weight:600">${payload.quoteRef}</div>` : ''}
+    </div>
+    <div style="padding:28px 32px">
+      <p style="margin:0 0 16px;font-size:15px;color:#2b2f33">Dear ${firstName},</p>
+      <p style="margin:0 0 20px;font-size:15px;color:#2b2f33;line-height:1.6">
+        Thank you for the opportunity to quote for the works${payload.jobAddress ? ` at <strong>${payload.jobAddress}</strong>` : ''}.
+        Please find attached our detailed quotation for the <strong>${payload.jobType}</strong> works.
+      </p>
+      ${payload.message ? `<div style="background:#f8faf2;border-left:3px solid #7ab533;padding:12px 16px;margin-bottom:20px;border-radius:0 4px 4px 0"><p style="margin:0;font-size:14px;color:#2b2f33;line-height:1.6">${payload.message.replace(/\n/g, '<br>')}</p></div>` : ''}
+      <div style="background:#f8fafc;border:1px solid #dde1e5;border-radius:8px;padding:18px 20px;margin-bottom:24px">
+        ${payload.quoteRef ? `<div style="font-size:11px;color:#6b7580;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">${payload.quoteRef}</div>` : ''}
+        <div style="font-weight:700;font-size:16px;color:#1e2022;margin-bottom:6px">${payload.jobType}</div>
+        <div style="font-size:13px;color:#6b7580">${payload.jobAddress || ''}</div>
+        ${total ? `<div style="font-size:22px;font-weight:700;color:#2b3a2b;margin-top:12px;font-family:'DM Mono',monospace">${total}</div>` : ''}
+      </div>
+      <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:12px 16px;margin-bottom:24px">
+        <p style="margin:0;font-size:13px;color:#5d4037;">
+          📎 <strong>Your quotation PDF is attached</strong> to this email. Please open the attachment to view the full breakdown.
+        </p>
+      </div>
+      <p style="margin:0;font-size:13px;color:#6b7580;line-height:1.6">
+        This quotation is valid for 30 days. Please do not hesitate to contact us if you have any questions or would like to discuss anything.
+        ${payload.companyPhone ? `<br><br>📞 <strong>${payload.companyPhone}</strong>` : ''}
+        ${payload.companyEmail ? `<br>✉ <strong>${payload.companyEmail}</strong>` : ''}
+      </p>
+    </div>
+    <div style="background:#f4f4f0;padding:16px 32px;border-top:1px solid #dde1e5">
+      <div style="font-size:11px;color:#9aa3ad">Kind regards · ${company}</div>
+    </div>
+  </div>
+</body>
+</html>`
+  }
+
   if (payload.type === 'variation_sent') {
     const total = payload.variationTotal != null
       ? `£${payload.variationTotal.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${payload.vatIncluded ? ' inc. VAT' : ''}`
@@ -224,11 +281,19 @@ async function sendEmail(
   html: string,
   apiKey: string,
   from: string,
+  attachment?: { filename: string; content: string } | null,
 ): Promise<{ ok: boolean; error?: string }> {
+  const payload: Record<string, unknown> = { from, to, subject, html }
+  if (attachment) {
+    payload.attachments = [{
+      filename: attachment.filename,
+      content:  attachment.content,  // base64
+    }]
+  }
   const res = await fetch('https://api.resend.com/emails', {
     method:  'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from, to, subject, html }),
+    body: JSON.stringify(payload),
   })
   const data = await res.json()
   if (!res.ok) {
@@ -242,6 +307,24 @@ async function sendEmail(
 function buildWhatsAppBody(payload: NotifyClientPayload, portalUrl: string): string {
   const company = payload.companyName || 'Your Builder'
   const firstName = payload.clientName.split(' ')[0] || payload.clientName
+
+  if (payload.type === 'quote_sent') {
+    const total = payload.quoteTotal != null
+      ? `£${payload.quoteTotal.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${payload.vatIncluded ? ' inc. VAT' : ''}`
+      : ''
+    return [
+      `Hi ${firstName} 👋`,
+      ``,
+      `${company} has sent you a quotation for the ${payload.jobType} works${payload.jobAddress ? ` at ${payload.jobAddress}` : ''}.`,
+      ``,
+      `📋 *${payload.quoteRef || 'Quotation'}*${total ? `\n💷 ${total}` : ''}`,
+      ``,
+      payload.message ? `${payload.message}\n` : '',
+      `We've also sent a PDF copy to your email.`,
+      ``,
+      payload.companyPhone ? `Any questions? Call us on ${payload.companyPhone}` : '',
+    ].filter(l => l !== undefined).join('\n').trim()
+  }
 
   if (payload.type === 'variation_sent') {
     const total = payload.variationTotal != null
@@ -279,6 +362,9 @@ function buildWhatsAppBody(payload: NotifyClientPayload, portalUrl: string): str
 
 function buildEmailSubject(payload: NotifyClientPayload): string {
   const company = payload.companyName || 'Your Builder'
+  if (payload.type === 'quote_sent') {
+    return `${company}: Your quotation${payload.quoteRef ? ` (${payload.quoteRef})` : ''}${payload.jobAddress ? ' for ' + payload.jobAddress : ''}`
+  }
   if (payload.type === 'variation_sent') {
     return `${company}: Change order for your approval${payload.variationRef ? ` (${payload.variationRef})` : ''}`
   }
@@ -333,7 +419,13 @@ export async function POST(req: NextRequest) {
     try {
       const html    = buildEmailHtml(payload, portalUrl)
       const subject = buildEmailSubject(payload)
-      const result  = await sendEmail(clientEmail, subject, html, resendKey, fromEmail)
+
+      // PDF attachment (quote_sent type only)
+      const attachment = payload.pdfBase64
+        ? { filename: payload.pdfFilename || 'Quotation.pdf', content: payload.pdfBase64 }
+        : null
+
+      const result = await sendEmail(clientEmail, subject, html, resendKey, fromEmail, attachment)
       results.email = result.ok
       if (!result.ok) {
         results.errors.push(`Email: ${result.error}`)
