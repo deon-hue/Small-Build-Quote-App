@@ -1312,6 +1312,45 @@ export default function NewQuotePage() {
         </div>
       )}
 
+      {/* ── Scope of Works — full-width, above the two-column grid ── */}
+      {(quoteSource === 'manual' || quoteSource === 'ai') && (
+        <div style={{ background: 'var(--cream)', border: '1.5px solid var(--border)', borderRadius: 8, padding: '14px 18px', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {quoteSource === 'manual' && !editingId && (
+                <button
+                  onClick={() => { if (!phases.length || confirm('Go back to selection? Current lines will be cleared.')) { setPhases([]); setStep('landing'); setQuoteSource(null) } }}
+                  style={{ background: 'none', border: 'none', fontSize: 12, color: 'var(--muted)', cursor: 'pointer', padding: '0 4px' }}
+                >← Change</button>
+              )}
+              {quoteSource === 'manual' && (
+                <select
+                  value={jobType}
+                  onChange={e => onJobTypeChange(e.target.value)}
+                  style={{ padding: '6px 10px', border: '1.5px solid var(--border)', borderRadius: 6, fontSize: 13, fontWeight: 600, background: 'white', minWidth: 180 }}
+                >
+                  {JOB_TYPES.map(t => <option key={t}>{t}</option>)}
+                </select>
+              )}
+              {quoteSource === 'ai' && (
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>✦ AI-Generated Scope of Works</span>
+              )}
+              {quoteSource === 'manual' && (
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Scope of Works</span>
+              )}
+            </div>
+            <span style={{ fontSize: 11, color: 'var(--muted)' }}>Editable — included on the quote PDF</span>
+          </div>
+          <textarea
+            value={scope}
+            onChange={e => setScope(e.target.value)}
+            rows={6}
+            placeholder={quoteSource === 'ai' ? 'AI-generated scope will appear here — you can edit it freely.' : 'Describe the scope of works… (used by AI to generate the quote and included on the PDF)'}
+            style={{ width: '100%', resize: 'vertical', fontSize: 13, padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 6, boxSizing: 'border-box', fontFamily: 'inherit', color: 'var(--text)', lineHeight: 1.6 }}
+          />
+        </div>
+      )}
+
       <div className="qb-grid" style={{ gridTemplateColumns: '270px 1fr' }}>
         {/* Left panel */}
         <div className="qb-left">
@@ -1442,51 +1481,6 @@ export default function NewQuotePage() {
 
         {/* Right panel — Quote Workspace */}
         <div className="qb-right">
-
-          {/* ── Workspace header: shown for manual + AI quotes (not takeoff) ── */}
-          {(quoteSource === 'manual' || quoteSource === 'ai') && <div style={{ background: 'var(--cream)', border: '1.5px solid var(--border)', borderRadius: 8, padding: '14px 16px', marginBottom: 16 }}>
-            {/* Row 1: Job type + action buttons (manual only) */}
-            {quoteSource === 'manual' && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
-                {/* Back to landing */}
-                {!editingId && (
-                  <button
-                    onClick={() => { if (!phases.length || confirm('Go back to selection? Current lines will be cleared.')) { setPhases([]); setStep('landing'); setQuoteSource(null) } }}
-                    style={{ background: 'none', border: 'none', fontSize: 12, color: 'var(--muted)', cursor: 'pointer', padding: '0 4px', display: 'flex', alignItems: 'center', gap: 4 }}
-                  >
-                    ← Change
-                  </button>
-                )}
-                <select
-                  value={jobType}
-                  onChange={e => onJobTypeChange(e.target.value)}
-                  style={{ padding: '6px 10px', border: '1.5px solid var(--border)', borderRadius: 6, fontSize: 13, fontWeight: 600, background: 'white', minWidth: 180 }}
-                >
-                  {JOB_TYPES.map(t => <option key={t}>{t}</option>)}
-                </select>
-                <div style={{ flex: 1 }} />
-              </div>
-            )}
-
-            {/* AI quote: label + edit hint */}
-            {quoteSource === 'ai' && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  ✦ AI-Generated Scope of Works
-                </label>
-                <span style={{ fontSize: 11, color: 'var(--muted)' }}>Editable — changes are saved with the quote</span>
-              </div>
-            )}
-
-            {/* Scope textarea */}
-            <textarea
-              value={scope}
-              onChange={e => setScope(e.target.value)}
-              rows={quoteSource === 'ai' ? 5 : 3}
-              placeholder={quoteSource === 'ai' ? 'AI-generated scope will appear here — you can edit it freely.' : 'Describe the scope of works… (used by AI to generate the quote)'}
-              style={{ width: '100%', resize: 'vertical', fontSize: 12, padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 6, boxSizing: 'border-box', fontFamily: 'inherit', color: 'var(--text)' }}
-            />
-          </div>}
 
           {(buildingEstimate || loadingBO || generatingPhases) ? (
             <div className="empty-dashed" style={{ textAlign: 'center', padding: '40px 20px' }}>
