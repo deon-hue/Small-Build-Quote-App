@@ -41,6 +41,7 @@ export default function SectionPhasesTasks({ userId }: Props) {
   const [expandedSubPhases, setExpandedSubPhases] = useState<Set<string>>(new Set())
   const [editingSubPhaseId, setEditingSubPhaseId] = useState<string | null>(null)
   const [editingSubPhaseName, setEditingSubPhaseName] = useState('')
+  const [movingSubPhaseId, setMovingSubPhaseId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [taskModal, setTaskModal] = useState<TaskModalState>(null)
   const [jobTypeFilter, setJobTypeFilter] = useState<string>('All')
@@ -165,6 +166,22 @@ export default function SectionPhasesTasks({ userId }: Props) {
     setSubPhases(prev => prev.map(sp => sp.id === id ? { ...sp, markup_pct } : sp))
     const sp = subPhases.find(s => s.id === id)!
     await upsertSubPhase(sb, { ...sp, markup_pct })
+  }
+
+  async function moveSubPhase(subPhaseId: string, targetPhaseId: string) {
+    // Update the sub-phase's phase_id
+    const sp = subPhases.find(s => s.id === subPhaseId)
+    if (!sp) return
+    await upsertSubPhase(sb, { ...sp, phase_id: targetPhaseId })
+    // Update all tasks that belong to this sub-phase
+    const spTasks = tasks.filter(t => t.sub_phase_id === subPhaseId)
+    for (const t of spTasks) {
+      await upsertTask(sb, { ...t, user_id: userId, phase_id: targetPhaseId })
+    }
+    // Update local state
+    setSubPhases(prev => prev.map(s => s.id === subPhaseId ? { ...s, phase_id: targetPhaseId } : s))
+    setTasks(prev => prev.map(t => t.sub_phase_id === subPhaseId ? { ...t, phase_id: targetPhaseId } : t))
+    setMovingSubPhaseId(null)
   }
 
   async function removeSubPhase(id: string) {
@@ -440,6 +457,35 @@ export default function SectionPhasesTasks({ userId }: Props) {
                     <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>
                       {spTasks.length} {BUILDUP_PHASES.has(selectedPhase.name) ? 'layers' : 'tasks'}
                     </span>
+
+                    {/* Move to another phase */}
+                    <div style={{ position: 'relative', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                      {movingSubPhaseId === sp.id ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <select
+                            autoFocus
+                            defaultValue=""
+                            onChange={e => { if (e.target.value) moveSubPhase(sp.id, e.target.value) }}
+                            onBlur={() => setMovingSubPhaseId(null)}
+                            style={{ padding: '3px 8px', border: '1px solid #4a90a4', borderRadius: 5, fontSize: 12, background: '#fff', color: '#1e293b', cursor: 'pointer' }}>
+                            <option value="" disabled>Move to phase…</option>
+                            {phases.filter(ph => ph.id !== selectedPhase.id).map(ph => (
+                              <option key={ph.id} value={ph.id}>{ph.name}</option>
+                            ))}
+                          </select>
+                          <button onClick={() => setMovingSubPhaseId(null)}
+                            style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>✕</button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={e => { e.stopPropagation(); setMovingSubPhaseId(sp.id) }}
+                          title="Move sub-phase to another phase"
+                          style={{ padding: '2px 7px', border: '1px solid #e2e8f0', borderRadius: 4, background: '#fff', fontSize: 11, cursor: 'pointer', color: '#64748b', lineHeight: 1 }}>
+                          ↪ Move
+                        </button>
+                      )}
+                    </div>
+
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }} onClick={e => e.stopPropagation()}>
                       <span style={{ fontSize: 11, color: '#64748b' }}>Markup</span>
                       <input
