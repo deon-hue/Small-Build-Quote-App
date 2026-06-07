@@ -107,7 +107,12 @@ async function wrapText(
 
 // ── PDF builder ───────────────────────────────────────────────────────────────
 
-export async function buildQuotePdf(quote: Quote, settings: Settings): Promise<Buffer> {
+export async function buildQuotePdf(
+  quote: Quote,
+  settings: Settings,
+  opts: { customerView?: boolean } = {},
+): Promise<Buffer> {
+  const customerView = opts.customerView ?? false
   const co = settings
   const qMkp = quote.markup || 0
   const qVat = quote.vatIncluded
@@ -262,27 +267,39 @@ export async function buildQuotePdf(quote: Quote, settings: Settings): Promise<B
   page.drawLine({ start: { x: MARGIN, y }, end: { x: MARGIN + CONTENT_W, y }, thickness: 1.5, color: C.charcoal })
   y -= 10
 
-  // ── Table header row ──────────────────────────────────────────────────────
-  const COL = {
-    desc: MARGIN,
+  // ── Table columns — customer view hides price columns ────────────────────
+  // customerView: Description | Qty | Unit  (no prices shown)
+  // detailedView: Description | Qty | Unit | Sell (ex-VAT) [| VAT]
+  const COL = customerView ? {
+    desc:  MARGIN,
+    descW: CONTENT_W - 46 - 40,
+    qty:   MARGIN + CONTENT_W - 46 - 40,
+    qtyW:  40,
+    unit:  MARGIN + CONTENT_W - 46,
+    unitW: 46,
+    amt:   0, amtW: 0, vat: 0, vatW: 0,   // unused in customer view
+  } : {
+    desc:  MARGIN,
     descW: qVat ? CONTENT_W - 40 - 36 - 80 - 72 : CONTENT_W - 40 - 36 - 80,
-    qty:  MARGIN + (qVat ? CONTENT_W - 40 - 36 - 80 - 72 : CONTENT_W - 40 - 36 - 80),
-    qtyW: 40,
-    unit: MARGIN + (qVat ? CONTENT_W - 36 - 80 - 72 : CONTENT_W - 36 - 80),
+    qty:   MARGIN + (qVat ? CONTENT_W - 40 - 36 - 80 - 72 : CONTENT_W - 40 - 36 - 80),
+    qtyW:  40,
+    unit:  MARGIN + (qVat ? CONTENT_W - 36 - 80 - 72 : CONTENT_W - 36 - 80),
     unitW: 36,
-    amt:  MARGIN + (qVat ? CONTENT_W - 80 - 72 : CONTENT_W - 80),
-    amtW: 80,
-    vat:  MARGIN + CONTENT_W - 72,
-    vatW: 72,
+    amt:   MARGIN + (qVat ? CONTENT_W - 80 - 72 : CONTENT_W - 80),
+    amtW:  80,
+    vat:   MARGIN + CONTENT_W - 72,
+    vatW:  72,
   }
 
   const TABLE_ROW_H = 15
   drawRect(page, MARGIN, y - TABLE_ROW_H, CONTENT_W, TABLE_ROW_H, C.charcoal)
-  drawText(page, 'Description',     COL.desc + 4,    y - 10, 7.5, fontBold, C.white)
-  drawText(page, 'Qty',             COL.qty + 4,     y - 10, 7.5, fontBold, C.white)
-  drawText(page, 'Unit',            COL.unit + 2,    y - 10, 7.5, fontBold, C.white)
-  drawText(page, 'Sell (ex-VAT)',   COL.amt + 2,     y - 10, 7.5, fontBold, C.white)
-  if (qVat) drawText(page, 'VAT 20%', COL.vat + 2,  y - 10, 7.5, fontBold, C.white)
+  drawText(page, 'Description', COL.desc + 4,  y - 10, 7.5, fontBold, C.white)
+  drawText(page, 'Qty',         COL.qty + 4,   y - 10, 7.5, fontBold, C.white)
+  drawText(page, 'Unit',        COL.unit + 2,  y - 10, 7.5, fontBold, C.white)
+  if (!customerView) {
+    drawText(page, 'Sell (ex-VAT)', COL.amt + 2, y - 10, 7.5, fontBold, C.white)
+    if (qVat) drawText(page, 'VAT 20%', COL.vat + 2, y - 10, 7.5, fontBold, C.white)
+  }
   y -= TABLE_ROW_H
 
   // ── Phase rows ────────────────────────────────────────────────────────────
@@ -294,13 +311,17 @@ export async function buildQuotePdf(quote: Quote, settings: Settings): Promise<B
 
     ensureSpace(TABLE_ROW_H + 2)
     drawRect(page, MARGIN, y - TABLE_ROW_H, CONTENT_W, TABLE_ROW_H, C.lightBlue)
-    drawText(page, safe(phaseLabel), COL.desc + 4, y - 10, 7.5, fontBold, C.charcoal, COL.descW - 120)
-    // Phase total on the right
-    const ptLabel = 'Phase total'
-    const ptLabelW = fontBold.widthOfTextAtSize(ptLabel, 6.5)
-    drawText(page, ptLabel, COL.amt - ptLabelW - 6, y - 10, 6.5, fontBold, C.charcoal)
-    drawText(page, fmtGBP(phaseSell), COL.amt + 2, y - 10, 7.5, fontBold, C.charcoal, COL.amtW - 4)
-    if (qVat) drawText(page, fmtGBP(phaseVat), COL.vat + 2, y - 10, 7.5, fontBold, C.charcoal, COL.vatW - 4)
+    // In customer view — full-width label, no price
+    if (customerView) {
+      drawText(page, safe(phaseLabel), COL.desc + 4, y - 10, 7.5, fontBold, C.charcoal, CONTENT_W - 8)
+    } else {
+      drawText(page, safe(phaseLabel), COL.desc + 4, y - 10, 7.5, fontBold, C.charcoal, COL.descW - 120)
+      const ptLabel = 'Phase total'
+      const ptLabelW = fontBold.widthOfTextAtSize(ptLabel, 6.5)
+      drawText(page, ptLabel, COL.amt - ptLabelW - 6, y - 10, 6.5, fontBold, C.charcoal)
+      drawText(page, fmtGBP(phaseSell), COL.amt + 2, y - 10, 7.5, fontBold, C.charcoal, COL.amtW - 4)
+      if (qVat) drawText(page, fmtGBP(phaseVat), COL.vat + 2, y - 10, 7.5, fontBold, C.charcoal, COL.vatW - 4)
+    }
     y -= TABLE_ROW_H
 
     // Item rows
@@ -310,11 +331,6 @@ export async function buildQuotePdf(quote: Quote, settings: Settings): Promise<B
     )
 
     for (const item of visibleItems) {
-      const itemCost = (Number(item.labour) || 0) + (Number(item.materials) || 0)
-      const itemSell = itemCost * (1 + qMkp / 100)
-      const itemVat  = qVat ? itemSell * VAT : 0
-
-      // Estimate row height based on notes
       const noteLines = item.notes
         ? Math.ceil(fontRegular.widthOfTextAtSize(safe(item.notes), 7) / (COL.descW - 8)) + 1
         : 0
@@ -327,12 +343,16 @@ export async function buildQuotePdf(quote: Quote, settings: Settings): Promise<B
       if (item.notes) {
         drawText(page, safe(item.notes), COL.desc + 4, y - 10 - 9, 7, fontRegular, C.muted, COL.descW - 8)
       }
-      drawText(page, String(item.qty ?? ''),  COL.qty + 4,  y - 10, 8, fontRegular, C.body)
-      drawText(page, safe(item.unit || ''),   COL.unit + 2, y - 10, 8, fontRegular, C.body)
-      drawText(page, fmtGBP(itemSell), COL.amt + 2,  y - 10, 8, fontRegular, C.body, COL.amtW - 4)
-      if (qVat) drawText(page, fmtGBP(itemVat), COL.vat + 2, y - 10, 8, fontRegular, C.body, COL.vatW - 4)
+      drawText(page, String(item.qty ?? ''), COL.qty + 4,  y - 10, 8, fontRegular, C.body)
+      drawText(page, safe(item.unit || ''),  COL.unit + 2, y - 10, 8, fontRegular, C.body)
+      if (!customerView) {
+        const itemCost = (Number(item.labour) || 0) + (Number(item.materials) || 0)
+        const itemSell = itemCost * (1 + qMkp / 100)
+        const itemVat  = qVat ? itemSell * VAT : 0
+        drawText(page, fmtGBP(itemSell), COL.amt + 2, y - 10, 8, fontRegular, C.body, COL.amtW - 4)
+        if (qVat) drawText(page, fmtGBP(itemVat), COL.vat + 2, y - 10, 8, fontRegular, C.body, COL.vatW - 4)
+      }
 
-      // Border
       page.drawLine({ start: { x: MARGIN, y: y - rowH }, end: { x: MARGIN + CONTENT_W, y: y - rowH }, thickness: 0.4, color: C.border })
       y -= rowH
       rowAlt = !rowAlt
@@ -344,25 +364,36 @@ export async function buildQuotePdf(quote: Quote, settings: Settings): Promise<B
   // ── Totals box ────────────────────────────────────────────────────────────
   const TOTALS_W = 220
   const TOTALS_X = MARGIN + CONTENT_W - TOTALS_W
-  const totalsRows: [string, string][] = [
-    ['Subtotal (ex-VAT)', fmtGBP(net)],
-    ...(qVat ? [['VAT (20%)', fmtGBP(vat)] as [string, string]] : [['* VAT not included', ''] as [string, string]]),
-  ]
-  const TROW_H = 16
-  ensureSpace(TROW_H * (totalsRows.length + 1) + 20)
+  const TROW_H   = 16
 
-  for (const [label, value] of totalsRows) {
-    page.drawLine({ start: { x: TOTALS_X, y: y - TROW_H }, end: { x: TOTALS_X + TOTALS_W, y: y - TROW_H }, thickness: 0.4, color: C.border })
-    drawText(page, label, TOTALS_X + 6, y - 11, 8.5, fontRegular, C.body)
-    if (value) drawText(page, value, TOTALS_X + TOTALS_W - fontBold.widthOfTextAtSize(value, 8.5) - 6, y - 11, 8.5, fontBold, C.body)
-    y -= TROW_H
+  if (customerView) {
+    // Customer view: grand total only — no subtotal breakdown
+    const vatNote = qVat ? ' (inc. VAT)' : ' (ex-VAT)'
+    ensureSpace(TROW_H + 20)
+    drawRect(page, TOTALS_X, y - TROW_H - 2, TOTALS_W, TROW_H + 2, C.darkGreen)
+    drawText(page, `TOTAL${vatNote}`, TOTALS_X + 6, y - 13, 10, fontBold, C.white)
+    const totalStr = fmtGBP(total)
+    drawText(page, totalStr, TOTALS_X + TOTALS_W - fontBold.widthOfTextAtSize(totalStr, 10) - 6, y - 13, 10, fontBold, C.white)
+    y -= TROW_H + 16
+  } else {
+    // Detailed view: subtotal rows then total bar
+    const totalsRows: [string, string][] = [
+      ['Subtotal (ex-VAT)', fmtGBP(net)],
+      ...(qVat ? [['VAT (20%)', fmtGBP(vat)] as [string, string]] : [['* VAT not included', ''] as [string, string]]),
+    ]
+    ensureSpace(TROW_H * (totalsRows.length + 1) + 20)
+    for (const [label, value] of totalsRows) {
+      page.drawLine({ start: { x: TOTALS_X, y: y - TROW_H }, end: { x: TOTALS_X + TOTALS_W, y: y - TROW_H }, thickness: 0.4, color: C.border })
+      drawText(page, label, TOTALS_X + 6, y - 11, 8.5, fontRegular, C.body)
+      if (value) drawText(page, value, TOTALS_X + TOTALS_W - fontBold.widthOfTextAtSize(value, 8.5) - 6, y - 11, 8.5, fontBold, C.body)
+      y -= TROW_H
+    }
+    drawRect(page, TOTALS_X, y - TROW_H - 2, TOTALS_W, TROW_H + 2, C.darkGreen)
+    drawText(page, 'TOTAL', TOTALS_X + 6, y - 13, 10, fontBold, C.white)
+    const totalStr = fmtGBP(total)
+    drawText(page, totalStr, TOTALS_X + TOTALS_W - fontBold.widthOfTextAtSize(totalStr, 10) - 6, y - 13, 10, fontBold, C.white)
+    y -= TROW_H + 16
   }
-  // Total row — dark bar
-  drawRect(page, TOTALS_X, y - TROW_H - 2, TOTALS_W, TROW_H + 2, C.darkGreen)
-  drawText(page, 'TOTAL', TOTALS_X + 6, y - 13, 10, fontBold, C.white)
-  const totalStr = fmtGBP(total)
-  drawText(page, totalStr, TOTALS_X + TOTALS_W - fontBold.widthOfTextAtSize(totalStr, 10) - 6, y - 13, 10, fontBold, C.white)
-  y -= TROW_H + 16
 
   // ── Terms ─────────────────────────────────────────────────────────────────
   if (co.terms) {

@@ -26,6 +26,7 @@ export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
 
   const [toEmail, setToEmail]     = useState(quote.customer.email || '')
   const [message, setMessage]     = useState('')
+  const [pdfType, setPdfType]     = useState<'customer' | 'detailed'>('customer')
   const [busy, setBusy]           = useState<'pdf' | 'sending' | null>(null)
   const [sent, setSent]           = useState(false)
   const [error, setError]         = useState('')
@@ -42,7 +43,7 @@ export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
       const pdfRes = await fetch('/api/generate-quote-pdf', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ quote, settings }),
+        body:    JSON.stringify({ quote, settings, customerView: pdfType === 'customer' }),
       })
 
       if (!pdfRes.ok) {
@@ -166,6 +167,35 @@ export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
                 <div style={{ fontWeight: 700, fontSize: 16, color: '#2b3a2b' }}>
                   £{total.toLocaleString('en-GB', { minimumFractionDigits: 2 })}
                   {quote.vatIncluded && <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--muted)', marginLeft: 4 }}>inc. VAT</span>}
+                </div>
+              </div>
+
+              {/* PDF type toggle */}
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 8 }}>
+                  PDF Format
+                </label>
+                <div style={{ display: 'flex', gap: 0, borderRadius: 6, overflow: 'hidden', border: '1.5px solid var(--border)' }}>
+                  {(['customer', 'detailed'] as const).map(type => (
+                    <button
+                      key={type}
+                      onClick={() => setPdfType(type)}
+                      style={{
+                        flex: 1, padding: '9px 12px', border: 'none', cursor: 'pointer',
+                        background: pdfType === type ? '#2b3a2b' : '#fff',
+                        color: pdfType === type ? '#fff' : 'var(--text)',
+                        fontSize: 12, fontWeight: pdfType === type ? 700 : 400,
+                        fontFamily: 'inherit', transition: 'all 0.15s',
+                      }}
+                    >
+                      {type === 'customer' ? '👤 Customer Quote' : '📊 Detailed Quote'}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6, lineHeight: 1.4 }}>
+                  {pdfType === 'customer'
+                    ? '✓ Shows scope & line descriptions — final total only. No phase prices shown.'
+                    : '✓ Shows all phase totals and individual line prices.'}
                 </div>
               </div>
 
