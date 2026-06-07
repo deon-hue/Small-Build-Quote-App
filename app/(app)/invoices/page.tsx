@@ -56,6 +56,7 @@ export default function InvoicesPage() {
   const [xeroTenantName, setXeroTenantName] = useState('')
   const [xeroError, setXeroError] = useState<string | null>(null)
   const [xeroPushing, setXeroPushing] = useState(false)
+  const [xeroPulling, setXeroPulling] = useState<string | null>(null) // invoice id being pulled
 
   useEffect(() => {
     fetch('/api/xero/status')
@@ -234,6 +235,28 @@ export default function InvoicesPage() {
     }
   }
 
+  async function handleXeroPull(inv: Invoice) {
+    if (!inv.xeroInvoiceId) return
+    setXeroPulling(inv.id)
+    try {
+      const res = await fetch('/api/xero/pull-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ xeroInvoiceId: inv.xeroInvoiceId, invoiceId: inv.id }),
+      })
+      const result = await res.json() as { status?: string; xeroStatus?: string; error?: string }
+      if (result.status) {
+        await updateInvoice({ ...inv, status: result.status as Invoice['status'] })
+      } else {
+        alert(result.error ?? 'Could not fetch status from Xero')
+      }
+    } catch {
+      alert('Could not reach Xero')
+    } finally {
+      setXeroPulling(null)
+    }
+  }
+
   function handlePrint(inv: Invoice) {
     const html = buildInvoiceHtml(inv, settings)
     const w = window.open('', '_blank')
@@ -317,13 +340,20 @@ export default function InvoicesPage() {
                   <span className={`badge ${INV_BADGE[inv.status] || 'b-complete'}`}>{INV_LABEL[inv.status] || inv.status}</span>
                   {inv.syncToXero && (
                     inv.xeroInvoiceId
-                      ? <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: '#e8f5e9', color: '#2e7d32', border: '1px solid #a5d6a7' }}>🔗 Xero</span>
+                      ? <button
+                          onClick={() => handleXeroPull(inv)}
+                          disabled={xeroPulling === inv.id}
+                          title="Refresh status from Xero"
+                          style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: '#e8f5e9', color: '#2e7d32', border: '1px solid #a5d6a7', cursor: 'pointer' }}
+                        >
+                          {xeroPulling === inv.id ? '⟳' : '🔗 Xero ↻'}
+                        </button>
                       : <button
                           onClick={() => handleXeroPush(inv)}
                           disabled={xeroPushing}
                           style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: '#fff8e1', color: '#795548', border: '1px solid #ffe082', cursor: 'pointer' }}
                         >
-                          {xeroPushing ? '⟳' : '⟳ Xero'} Push
+                          {xeroPushing ? '⟳' : '⟳ Xero Push'}
                         </button>
                   )}
                 </div>
