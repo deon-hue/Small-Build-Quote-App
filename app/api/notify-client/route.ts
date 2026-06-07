@@ -361,12 +361,17 @@ function buildWhatsAppBody(payload: NotifyClientPayload, portalUrl: string): str
 }
 
 function buildEmailSubject(payload: NotifyClientPayload): string {
-  const company = payload.companyName || 'Your Builder'
+  // Strip newlines/tabs from any value used in the subject — addresses are multi-line
+  const clean = (s?: string) => (s ?? '').replace(/[\r\n\t]+/g, ' ').trim()
+  const company = clean(payload.companyName) || 'Your Builder'
   if (payload.type === 'quote_sent') {
-    return `${company}: Your quotation${payload.quoteRef ? ` (${payload.quoteRef})` : ''}${payload.jobAddress ? ' for ' + payload.jobAddress : ''}`
+    const ref  = payload.quoteRef  ? ` (${clean(payload.quoteRef)})`  : ''
+    const addr = payload.jobAddress ? ` for ${clean(payload.jobAddress).split(',')[0]}` : ''
+    return `${company}: Your quotation${ref}${addr}`
   }
   if (payload.type === 'variation_sent') {
-    return `${company}: Change order for your approval${payload.variationRef ? ` (${payload.variationRef})` : ''}`
+    const ref = payload.variationRef ? ` (${clean(payload.variationRef)})` : ''
+    return `${company}: Change order for your approval${ref}`
   }
   return `${company}: Your project schedule has been updated`
 }
