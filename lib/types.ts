@@ -134,7 +134,7 @@ export interface Quote {
     | 'accepted'     // legacy alias for approved
     | 'declined'     // legacy alias for rejected
   /** How the quote was created */
-  quoteSource?: 'takeoff' | 'ai' | 'manual'
+  quoteSource?: 'takeoff' | 'ai' | 'manual' | 'quick'
   jobType: string
   markup: number
   vatIncluded: boolean

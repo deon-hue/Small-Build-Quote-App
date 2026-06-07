@@ -1596,7 +1596,7 @@ export interface QuoteWorkspaceProps {
   /** Back Office plant items — used in the plant picker */
   boPlantItems?:     BOPlantItem[]
   /** How the quote was created — drives empty-state messaging */
-  quoteSource?:      'takeoff' | 'ai' | 'manual'
+  quoteSource?:      'takeoff' | 'ai' | 'manual' | 'quick'
   /** Opens the BO library picker modal */
   onOpenLibrary?:    () => void
 }

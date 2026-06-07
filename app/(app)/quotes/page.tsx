@@ -127,10 +127,26 @@ export default function SavedQuotesPage() {
 
   return (
     <>
-      <div style={{ marginBottom: 18, fontSize: 13, color: 'var(--muted)' }}>
-        {quotes.length
-          ? `${open.length} open · ${fmt(pipeline)} pipeline · ${quotes.length} total`
-          : 'No quotes saved yet'}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+        <div style={{ fontSize: 13, color: 'var(--muted)' }}>
+          {quotes.length
+            ? `${open.length} open · ${fmt(pipeline)} pipeline · ${quotes.length} total`
+            : 'No quotes saved yet'}
+        </div>
+        <button
+          onClick={() => router.push('/quick-quote')}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '7px 16px', fontSize: 12, fontWeight: 600, borderRadius: 6,
+            border: '1.5px solid #7c3aed', background: '#fdf4ff', color: '#7c3aed',
+            cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+            transition: 'all 0.15s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = '#7c3aed'; e.currentTarget.style.color = '#fff' }}
+          onMouseLeave={e => { e.currentTarget.style.background = '#fdf4ff'; e.currentTarget.style.color = '#7c3aed' }}
+        >
+          ⚡ Quick Quote
+        </button>
       </div>
 
       {!quotes.length

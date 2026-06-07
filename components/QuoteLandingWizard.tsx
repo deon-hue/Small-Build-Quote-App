@@ -9,7 +9,7 @@
 import { useState } from 'react'
 import { JOB_TYPES } from '@/lib/utils'
 
-export type QuoteCreationMode = 'takeoff' | 'ai' | 'manual'
+export type QuoteCreationMode = 'takeoff' | 'ai' | 'manual' | 'quick'
 
 interface Props {
   onSelect: (mode: QuoteCreationMode, jobType?: string) => void

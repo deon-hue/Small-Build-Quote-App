@@ -13,7 +13,8 @@ const ROUTE_PERMISSIONS: Partial<Record<string, keyof UserPermissions>> = {
   '/calendar':    'calendar',
   '/jobs':        'jobs',
   '/quotes':      'quotes',
-  '/new-quote':   'quotes',
+  '/new-quote':    'quotes',
+  '/quick-quote':  'quotes',
   '/invoices':    'invoices',
   '/clients':     'clients',
   '/suppliers':   'clients',
@@ -64,8 +65,9 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
           {can('calendar') && navItem('/calendar', '▦', 'Calendar')}
           <div className="nav-section">Work</div>
           {can('jobs')    && navItem('/jobs',      '⬡', 'Jobs')}
-          {can('quotes')  && navItem('/quotes',    '◎', 'Saved Quotes')}
-          {can('quotes')  && navItem('/new-quote', '✎', 'New Quote')}
+          {can('quotes')  && navItem('/quotes',      '◎', 'Saved Quotes')}
+          {can('quotes')  && navItem('/new-quote',   '✎', 'New Quote')}
+          {can('quotes')  && navItem('/quick-quote', '⚡', 'Quick Quote')}
           {can('quotes')  && navItem('/takeoff',   '📐', 'Take-off')}
           {can('invoices')&& navItem('/invoices',  '◻', 'Invoices')}
           <div className="nav-section">People</div>
@@ -113,6 +115,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/jobs':         'Jobs',
   '/quotes':       'Saved Quotes',
   '/new-quote':    'New Quote',
+  '/quick-quote':  'Quick Quote',
   '/takeoff':      'Take-off',
   '/invoices':     'Invoices',
   '/clients':      'Clients',
