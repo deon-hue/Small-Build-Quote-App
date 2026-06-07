@@ -93,6 +93,10 @@ export default function DashboardPage() {
         .filter(i => i.jobId === j.id)
         .reduce((s, i) => s + i.total, 0)
 
+      const paidTotal = invoices
+        .filter(i => i.jobId === j.id && i.status === 'paid')
+        .reduce((s, i) => s + i.total, 0)
+
       const approvedVarTotal = (variations ?? [])
         .filter(v => v.jobId === j.id && ['approved', 'invoiced', 'paid'].includes(v.status))
         .reduce((s, v) => s + (v.total || 0), 0)
@@ -113,7 +117,7 @@ export default function DashboardPage() {
 
       return {
         job: j, contractValue, budgetTotal: budget?.total ?? null,
-        actualCost, hasActual, invoicedTotal,
+        actualCost, hasActual, invoicedTotal, paidTotal,
         overBudget, budgetUsedPct, marginPct, marginEstimated,
       }
     })
@@ -343,13 +347,14 @@ export default function DashboardPage() {
         {costingRows.length > 0 && (
           <div style={{
             display: 'grid',
-            gridTemplateColumns: '1fr 110px 110px 170px 90px',
+            gridTemplateColumns: '1fr 100px 120px 100px 150px 80px',
             padding: '6px 18px',
             background: '#f0f2f4',
             fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)',
           }}>
             <span>Job</span>
             <span style={{ textAlign: 'right' }}>Contract</span>
+            <span style={{ textAlign: 'right' }}>Invoiced</span>
             <span style={{ textAlign: 'right' }}>Budget</span>
             <span style={{ paddingLeft: 8 }}>Actual Cost</span>
             <span style={{ textAlign: 'right' }}>Margin</span>
@@ -369,7 +374,7 @@ export default function DashboardPage() {
               return (
                 <div key={r.job.id} style={{
                   display: 'grid',
-                  gridTemplateColumns: '1fr 110px 110px 170px 90px',
+                  gridTemplateColumns: '1fr 100px 120px 100px 150px 80px',
                   padding: '11px 18px',
                   borderBottom: '1px solid var(--border)',
                   alignItems: 'center',
@@ -387,6 +392,25 @@ export default function DashboardPage() {
                   {/* Contract value */}
                   <div style={{ textAlign: 'right', fontFamily: 'DM Mono, monospace', fontSize: 13, fontWeight: 600 }}>
                     {fmt(r.contractValue)}
+                  </div>
+
+                  {/* Invoiced / Received */}
+                  <div style={{ textAlign: 'right' }}>
+                    {r.invoicedTotal > 0 ? (
+                      <>
+                        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{fmt(r.invoicedTotal)}</div>
+                        {r.paidTotal > 0 && (
+                          <div style={{ fontSize: 10, color: '#2e7d32', fontWeight: 700, marginTop: 1 }}>
+                            ✓ {fmt(r.paidTotal)} received
+                          </div>
+                        )}
+                        {r.paidTotal === 0 && (
+                          <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 1 }}>unpaid</div>
+                        )}
+                      </>
+                    ) : (
+                      <span style={{ fontSize: 11, color: 'var(--muted)' }}>—</span>
+                    )}
                   </div>
 
                   {/* Quoted budget (cost) */}
