@@ -9,13 +9,12 @@ const TOKEN_URL       = 'https://identity.xero.com/connect/token'
 const CONNECTIONS_URL = 'https://api.xero.com/connections'
 const API_BASE        = 'https://api.xero.com/api.xro/2.0'
 
-// Scopes for connect + contact sync only (verified accepted by the app).
-// accounting.transactions / .attachments / .settings are added at the bill-push
-// stage — accounting.transactions currently triggers invalid_scope on this app
-// and needs investigating before Phase 4b.
+// Full scopes required for invoice push + contact sync.
+// accounting.transactions is needed to create/update sales invoices in Xero.
 export const XERO_SCOPES = [
   'openid', 'profile', 'email', 'offline_access',
   'accounting.contacts',
+  'accounting.transactions',
 ].join(' ')
 
 export function xeroConfigured(): boolean {

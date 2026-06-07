@@ -63,9 +63,9 @@ export async function POST(req: NextRequest) {
         else if (errJson?.Detail) friendlyMsg += `: ${errJson.Detail}`
         else friendlyMsg += `: ${errText.slice(0, 200)}`
       } catch { friendlyMsg += `: ${errText.slice(0, 200)}` }
-      // 403 = scope not granted
-      if (res.status === 403) {
-        friendlyMsg = 'Xero connection needs updating — disconnect and reconnect Xero in Settings → Integrations to grant invoice permissions.'
+      // 401 = token expired or missing scope, 403 = scope not granted
+      if (res.status === 401 || res.status === 403) {
+        friendlyMsg = 'Xero connection needs updating — go to Settings → Integrations, disconnect Xero, then reconnect to grant invoice permissions.'
       }
       return NextResponse.json({ error: friendlyMsg }, { status: res.status })
     }
