@@ -1313,7 +1313,7 @@ export default function NewQuotePage() {
       )}
 
       {/* ── Scope of Works — full-width, above the two-column grid ── */}
-      {(quoteSource === 'manual' || quoteSource === 'ai') && (
+      {(quoteSource === 'manual' || quoteSource === 'ai' || quoteSource === 'quick' || !quoteSource) && (
         <div style={{ background: 'var(--cream)', border: '1.5px solid var(--border)', borderRadius: 8, padding: '14px 18px', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1335,17 +1335,32 @@ export default function NewQuotePage() {
               {quoteSource === 'ai' && (
                 <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>✦ AI-Generated Scope of Works</span>
               )}
-              {quoteSource === 'manual' && (
+              {quoteSource === 'quick' && (
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>⚡ Quick Quote — Scope of Works</span>
+              )}
+              {(quoteSource === 'manual' || !quoteSource) && (
                 <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Scope of Works</span>
               )}
             </div>
-            <span style={{ fontSize: 11, color: 'var(--muted)' }}>Editable — included on the quote PDF</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 11, color: 'var(--muted)' }}>Editable — included on the quote PDF</span>
+              <button
+                onClick={() => setShowScopeChat(true)}
+                style={{
+                  padding: '4px 12px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: 'none',
+                  background: '#2b3a2b', color: '#fff', cursor: 'pointer', fontFamily: 'inherit',
+                  display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap',
+                }}
+              >
+                💬 {scope.trim() ? 'Edit with AI' : 'Write with AI'}
+              </button>
+            </div>
           </div>
           <textarea
             value={scope}
             onChange={e => setScope(e.target.value)}
             rows={6}
-            placeholder={quoteSource === 'ai' ? 'AI-generated scope will appear here — you can edit it freely.' : 'Describe the scope of works… (used by AI to generate the quote and included on the PDF)'}
+            placeholder={quoteSource === 'ai' ? 'AI-generated scope will appear here — you can edit it freely.' : 'Describe the scope of works… or click "Write with AI" to build it conversationally'}
             style={{ width: '100%', resize: 'vertical', fontSize: 13, padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 6, boxSizing: 'border-box', fontFamily: 'inherit', color: 'var(--text)', lineHeight: 1.6 }}
           />
         </div>
@@ -1627,6 +1642,7 @@ export default function NewQuotePage() {
           onInsert={text => setScope(text)}
           onClose={() => setShowScopeChat(false)}
           onBuildEstimate={handleBuildEstimate}
+          initialScope={scope || undefined}
         />
       )}
     </>
