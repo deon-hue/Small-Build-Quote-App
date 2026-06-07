@@ -15,7 +15,7 @@ const BLANK_JOB: Omit<Job, 'id'> = {
 }
 
 export default function JobsPage() {
-  const { jobs, quotes, jobNotes, variations, addJob, updateJob, deleteJob, updateQuote, addJobNote, deleteJobNote, loading } = useApp()
+  const { jobs, quotes, jobNotes, variations, invoices, addJob, updateJob, deleteJob, updateQuote, addJobNote, deleteJobNote, loading } = useApp()
   const [filter, setFilter] = useState('all')
   const [showModal, setShowModal] = useState(false)
   const [editJob, setEditJob] = useState<Job | null>(null)
@@ -323,12 +323,17 @@ export default function JobsPage() {
         const approved = variations
           .filter(v => v.jobId === docsJob.id && (v.status === 'approved' || v.status === 'invoiced' || v.status === 'paid'))
           .reduce((s, v) => s + v.total, 0)
+        const jobInvoices = invoices.filter(i => i.jobId === docsJob.id)
+        const invoicedTotal = jobInvoices.reduce((s, i) => s + i.total, 0)
+        const paidTotal     = jobInvoices.filter(i => i.status === 'paid').reduce((s, i) => s + i.total, 0)
         return (
           <JobDocumentsModal
             jobId={docsJob.id}
             jobLabel={`${docsJob.type} — ${docsJob.client}`}
             budget={budget}
             revenue={docsJob.value + approved}
+            invoicedTotal={invoicedTotal}
+            paidTotal={paidTotal}
             onClose={() => setDocsJob(null)}
           />
         )

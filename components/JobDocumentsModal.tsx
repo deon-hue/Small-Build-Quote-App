@@ -7,7 +7,7 @@ import type { CategoryBudget } from '@/lib/job-costs'
 import type { JobCost, JobCostCategory, PaymentStatus } from '@/lib/types'
 import type { ExtractedCostLine } from '@/lib/doc-extract/types'
 
-interface Props { jobId: string; jobLabel: string; budget?: CategoryBudget | null; revenue?: number; onClose: () => void }
+interface Props { jobId: string; jobLabel: string; budget?: CategoryBudget | null; revenue?: number; invoicedTotal?: number; paidTotal?: number; onClose: () => void }
 
 const CATS: { value: JobCostCategory; label: string; emoji: string; color: string; bg: string }[] = [
   { value: 'labour',         label: 'Labour',         emoji: '🔨', color: '#1d4ed8', bg: '#eff6ff' },
@@ -32,7 +32,7 @@ const blankManual = (): ManualState => ({
   lines: [{ description: '', costCategory: 'materials', netAmount: 0, vatAmount: 0, grossAmount: 0 }],
 })
 
-export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, onClose }: Props) {
+export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, invoicedTotal = 0, paidTotal = 0, onClose }: Props) {
   const sb = createClient()
   const [userId, setUserId] = useState<string | null>(null)
   const [costs, setCosts] = useState<JobCost[]>([])
@@ -192,9 +192,24 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, on
                   </tr>
                 </tfoot>
               </table>
+              {/* Invoice tracking */}
+              {invoicedTotal > 0 && (
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 10, paddingTop: 10, borderTop: '1px solid #e2e8f0', fontSize: 13 }}>
+                  <span>Invoiced: <strong style={{ fontFamily: 'monospace' }}>{fmt(invoicedTotal)}</strong></span>
+                  <span>
+                    Received:{' '}
+                    <strong style={{ fontFamily: 'monospace', color: paidTotal > 0 ? '#16a34a' : '#94a3b8' }}>
+                      {paidTotal > 0 ? fmt(paidTotal) : '£0.00 — unpaid'}
+                    </strong>
+                  </span>
+                  {invoicedTotal > paidTotal && paidTotal > 0 && (
+                    <span style={{ color: '#e67e22' }}>Outstanding: <strong style={{ fontFamily: 'monospace' }}>{fmt(invoicedTotal - paidTotal)}</strong></span>
+                  )}
+                </div>
+              )}
               {margin !== null && (
-                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 12, paddingTop: 10, borderTop: '1px solid #e2e8f0', fontSize: 13 }}>
-                  <span>Revenue: <strong style={{ fontFamily: 'monospace' }}>{fmt(revenue!)}</strong></span>
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 10, paddingTop: 10, borderTop: '1px solid #e2e8f0', fontSize: 13 }}>
+                  <span>Contract value: <strong style={{ fontFamily: 'monospace' }}>{fmt(revenue!)}</strong></span>
                   <span>Actual cost: <strong style={{ fontFamily: 'monospace' }}>{fmt(totalNet)}</strong></span>
                   <span>Margin: <strong style={{ fontFamily: 'monospace', color: margin >= 0 ? '#16a34a' : '#dc2626' }}>{fmt(margin)}{marginPct !== null ? ` (${marginPct}%)` : ''}</strong></span>
                 </div>
