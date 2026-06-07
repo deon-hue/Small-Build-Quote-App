@@ -384,14 +384,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const { data: { user } } = await supabase.auth.getUser()
     const ownerId = dataOwnerIdRef.current || user!.id
     const portalSettings = c.portalSettings || DEFAULT_CLIENT_PORTAL_SETTINGS
-    const { data, error } = await supabase.from('clients').insert({
+    const basePayload = {
       user_id: ownerId, name: c.name, first_name: c.first, last_name: c.last,
       phone: c.phone, email: c.email, address: c.address,
       notes: c.notes, added_from: c.addedFrom,
-      portal_settings: portalSettings,
       updated_at: new Date().toISOString(),
-    }).select().single()
-    if (error) throw error
+    }
+    // Try with portal_settings column; fall back without it if column doesn't exist yet
+    let res = await supabase.from('clients').insert({ ...basePayload, portal_settings: portalSettings }).select().single()
+    if (res.error) {
+      res = await supabase.from('clients').insert(basePayload).select().single()
+    }
+    if (res.error) throw res.error
+    const data = res.data
     setClients(prev => [...prev, {
       id: data.id, name: data.name, first: data.first_name || '', last: data.last_name || '',
       phone: data.phone || '', email: data.email || '', address: data.address || '',
@@ -402,12 +407,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [supabase])
 
   const updateClient = useCallback(async (c: Client) => {
-    await supabase.from('clients').update({
+    const basePayload = {
       name: c.name, first_name: c.first, last_name: c.last,
       phone: c.phone, email: c.email, address: c.address, notes: c.notes,
-      portal_settings: c.portalSettings || DEFAULT_CLIENT_PORTAL_SETTINGS,
       updated_at: new Date().toISOString(),
+    }
+    // Try with portal_settings column; fall back without it if column doesn't exist yet
+    const { error } = await supabase.from('clients').update({
+      ...basePayload,
+      portal_settings: c.portalSettings || DEFAULT_CLIENT_PORTAL_SETTINGS,
     }).eq('id', c.id)
+    if (error) {
+      await supabase.from('clients').update(basePayload).eq('id', c.id)
+    }
     setClients(prev => prev.map(x => x.id === c.id ? c : x))
   }, [supabase])
 
