@@ -19,6 +19,7 @@ import { useState } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { JOB_TYPES, fmt } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
+import ScopeChat from '@/components/ScopeChat'
 
 let itemId = 1000
 
@@ -49,8 +50,9 @@ export default function QuickQuotePage() {
   const [vatOn,        setVatOn]        = useState(true)
 
   // ── UI state ──────────────────────────────────────────────────────────────
-  const [saving, setSaving] = useState(false)
-  const [error,  setError]  = useState('')
+  const [saving,   setSaving]   = useState(false)
+  const [error,    setError]    = useState('')
+  const [showChat, setShowChat] = useState(false)
 
   // ── Derived numbers ───────────────────────────────────────────────────────
   const sellNum  = parseFloat(sellPriceStr.replace(/,/g, '')) || 0
@@ -309,23 +311,39 @@ export default function QuickQuotePage() {
           <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94a3b8' }}>
             Scope of Works <span style={{ color: '#e74c3c' }}>*</span>
           </div>
-          <button
-            onClick={generateScope}
-            disabled={generatingScope}
-            style={{
-              padding: '6px 14px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: 'none',
-              background: generatingScope ? '#ccc' : '#7c3aed', color: '#fff',
-              cursor: generatingScope ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
-              display: 'flex', alignItems: 'center', gap: 6,
-            }}
-          >
-            {generatingScope ? '⏳ Writing…' : '✦ Generate with AI'}
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => setShowChat(true)}
+              style={{
+                padding: '6px 14px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: 'none',
+                background: '#2b3a2b', color: '#fff',
+                cursor: 'pointer', fontFamily: 'inherit',
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              💬 Chat with AI
+            </button>
+            <button
+              onClick={generateScope}
+              disabled={generatingScope}
+              style={{
+                padding: '6px 14px', fontSize: 12, fontWeight: 600, borderRadius: 6,
+                border: '1.5px solid #7c3aed', background: 'transparent', color: '#7c3aed',
+                cursor: generatingScope ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+                display: 'flex', alignItems: 'center', gap: 6,
+                opacity: generatingScope ? 0.6 : 1,
+              }}
+            >
+              {generatingScope ? '⏳ Writing…' : '✦ Quick Generate'}
+            </button>
+          </div>
         </div>
 
         {!scope && !generatingScope && (
           <div style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 10, fontStyle: 'italic' }}>
-            Click "Generate with AI" to create a scope from the job type and description, or write one below.
+            <strong style={{ color: '#2b3a2b' }}>💬 Chat with AI</strong> — have a conversation to build the perfect scope. Supports voice &amp; plan uploads.
+            <br />
+            <strong style={{ color: '#7c3aed' }}>✦ Quick Generate</strong> — instant one-shot scope from your job type and description above.
           </div>
         )}
 
@@ -484,6 +502,23 @@ export default function QuickQuotePage() {
           {saving ? '⏳ Saving…' : '⚡ Save Quick Quote'}
         </button>
       </div>
+
+      {/* ── AI Scope Chat modal ── */}
+      {showChat && (
+        <ScopeChat
+          quoteId={null}
+          jobType={jobType}
+          address={custAddr}
+          phases={[]}
+          onInsert={text => {
+            setScope(text)
+            setScopeGenerated(true)
+            setShowChat(false)
+          }}
+          onClose={() => setShowChat(false)}
+          // No onBuildEstimate — Quick Quote doesn't generate phases
+        />
+      )}
     </div>
   )
 }
