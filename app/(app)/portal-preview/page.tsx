@@ -4,7 +4,8 @@ import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import PortalGanttChart from '@/components/PortalGanttChart'
-import type { GanttState } from '@/lib/types'
+import type { GanttState, ClientPortalSettings } from '@/lib/types'
+import { DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
 import { fmt, Q_BADGE, Q_LABEL, STAGE_COLOR, STAGE_LABEL, calcPhaseSell, calcItemSell } from '@/lib/utils'
 import type { QuotePhase, QuoteItem } from '@/lib/types'
 
@@ -80,6 +81,7 @@ function PortalPreviewInner() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [expandedGantt, setExpandedGantt] = useState<string | null>(null)
   const [expandedQuote, setExpandedQuote] = useState<string | null>(null)
+  const [clientSettings, setClientSettings] = useState<ClientPortalSettings>(DEFAULT_CLIENT_PORTAL_SETTINGS)
 
   useEffect(() => {
     if (!email) { setError('No client email specified.'); setLoading(false); return }
@@ -125,6 +127,11 @@ function PortalPreviewInner() {
         })))
       }
       if (d?.settings) setSettings(d.settings)
+      if (d?.client_settings && typeof d.client_settings === 'object') {
+        setClientSettings({ ...DEFAULT_CLIENT_PORTAL_SETTINGS, ...(d.client_settings as Partial<ClientPortalSettings>) })
+      } else {
+        setClientSettings(DEFAULT_CLIENT_PORTAL_SETTINGS)
+      }
       setLoading(false)
     }
     load()
@@ -160,7 +167,12 @@ function PortalPreviewInner() {
           </div>
           {/* inline display:flex overrides the @media(max-width:640px) display:none rule */}
           <nav className="portal-nav" style={{ display: 'flex' }}>
-            {(['dashboard', 'quotes', 'jobs', 'invoices'] as Tab[]).map(tab => (
+            {([
+              'dashboard',
+              ...(clientSettings.showQuotesTab   ? ['quotes']   : []),
+              ...(clientSettings.showJobsTab     ? ['jobs']     : []),
+              ...(clientSettings.showInvoicesTab ? ['invoices'] : []),
+            ] as Tab[]).map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -338,6 +350,7 @@ function PortalPreviewInner() {
                 const total = subtotal + vatAmount
                 const canApprove = q.status === 'pending' || q.status === 'sent'
                 const isOpen = expandedQuote === q.id
+                const qv = clientSettings.quoteView
 
                 return (
                   <div key={q.id} className="portal-card" style={{ padding: 0, overflow: 'hidden', marginBottom: 12 }}>
@@ -421,15 +434,15 @@ function PortalPreviewInner() {
                           </div>
 
                           {/* Phases & line items */}
-                          {q.phases.length > 0 && (
+                          {q.phases.length > 0 && qv !== 'total_only' && (
                             <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
                               {q.phases.map((phase: AnyRecord, pi: number) => (
                                 <div key={phase.id || pi}>
                                   <div style={{ background: pi % 2 === 0 ? '#f0f2ee' : '#e8ebe4', padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: pi > 0 ? '2px solid var(--border)' : undefined }}>
                                     <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)' }}>{pi + 1}. {phase.phase}</div>
-                                    <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 13, fontWeight: 700, color: 'var(--moss)' }}>{fmt(phaseNet(phase, q.markup))}</div>
+                                    {qv === 'full' && <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 13, fontWeight: 700, color: 'var(--moss)' }}>{fmt(phaseNet(phase, q.markup))}</div>}
                                   </div>
-                                  {(phase.items || []).map((item: AnyRecord, ii: number) => (
+                                  {qv === 'full' && (phase.items || []).map((item: AnyRecord, ii: number) => (
                                     <div key={item.id || ii} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 16px', gap: 12, borderTop: '1px solid var(--border)', background: ii % 2 === 0 ? '#fff' : '#fafaf8' }}>
                                       <div style={{ flex: 1, minWidth: 0 }}>
                                         <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{item.desc}</div>
@@ -448,11 +461,13 @@ function PortalPreviewInner() {
 
                           {/* Financial summary */}
                           <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 20 }}>
-                            <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', background: '#fafaf8' }}>
-                              <span style={{ fontSize: 13, color: 'var(--muted)' }}>Subtotal (ex. VAT)</span>
-                              <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{fmt(subtotal)}</span>
-                            </div>
-                            {q.vatIncluded && (
+                            {qv !== 'total_only' && (
+                              <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', background: '#fafaf8' }}>
+                                <span style={{ fontSize: 13, color: 'var(--muted)' }}>Subtotal (ex. VAT)</span>
+                                <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{fmt(subtotal)}</span>
+                              </div>
+                            )}
+                            {qv !== 'total_only' && q.vatIncluded && (
                               <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', background: '#fafaf8' }}>
                                 <span style={{ fontSize: 13, color: 'var(--muted)' }}>VAT (20%)</span>
                                 <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{fmt(vatAmount)}</span>
@@ -465,7 +480,7 @@ function PortalPreviewInner() {
                           </div>
 
                           {/* Scope of works */}
-                          {q.scope && (
+                          {clientSettings.showScope && q.scope && (
                             <div style={{ marginBottom: 20 }}>
                               <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }}>Scope of Works</div>
                               <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.7, whiteSpace: 'pre-wrap', padding: '14px 16px', background: '#fafaf8', border: '1px solid var(--border)', borderRadius: 8 }}>
@@ -559,21 +574,23 @@ function PortalPreviewInner() {
                     </div>
 
                     {/* Programme toggle */}
-                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
-                      <button
-                        onClick={() => setExpandedGantt(ganttOpen ? null : j.id)}
-                        style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 12px', fontSize: 12, fontWeight: 600, color: 'var(--ink)', cursor: 'pointer', fontFamily: 'inherit' }}
-                      >
-                        📋 {ganttOpen ? 'Hide Programme ▲' : 'View Programme ▼'}
-                      </button>
-                      {ganttOpen && (
-                        <PortalGanttChart
-                          job={{ ...j, quoteId: undefined, stage: j.stage as 'active' | 'planning' | 'onhold' | 'complete' }}
-                          phases={[]}
-                          ganttState={j.ganttState}
-                        />
-                      )}
-                    </div>
+                    {clientSettings.showProgramme && (
+                      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                        <button
+                          onClick={() => setExpandedGantt(ganttOpen ? null : j.id)}
+                          style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 12px', fontSize: 12, fontWeight: 600, color: 'var(--ink)', cursor: 'pointer', fontFamily: 'inherit' }}
+                        >
+                          📋 {ganttOpen ? 'Hide Programme ▲' : 'View Programme ▼'}
+                        </button>
+                        {ganttOpen && (
+                          <PortalGanttChart
+                            job={{ ...j, quoteId: undefined, stage: j.stage as 'active' | 'planning' | 'onhold' | 'complete' }}
+                            phases={[]}
+                            ganttState={j.ganttState}
+                          />
+                        )}
+                      </div>
+                    )}
                   </div>
                 )
               })
