@@ -445,9 +445,15 @@ export default function NewQuotePage() {
     setVatOn(q.vatIncluded !== false)
     setScope(q.scope || '')
     setPhoto(q.photo || '')
-    setQuoteSource(q.quoteSource ?? 'manual')
+    // Detect Quick Quotes by structure when quoteSource wasn't persisted (legacy saves)
+    const isQuickByStructure =
+      q.phases.length === 1 &&
+      q.phases[0]?.parentPhase === 'Project Works' &&
+      q.phases[0]?.phase === 'Lump Sum'
+    const resolvedSource = q.quoteSource ?? (isQuickByStructure ? 'quick' : 'manual')
+    setQuoteSource(resolvedSource)
     // Quick Quote: extract sell price + cost from the lump-sum phase
-    if (q.quoteSource === 'quick' && q.phases.length > 0) {
+    if (resolvedSource === 'quick' && q.phases.length > 0) {
       const lump = q.phases[0]
       const otherItem = lump.items.find((i: QuoteItem) => i.itemType === 'other')
       const costVal = otherItem?.other ?? 0
