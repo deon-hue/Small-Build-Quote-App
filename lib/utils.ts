@@ -44,8 +44,11 @@ export function calcPhaseSell(p: QuotePhase, mkp: number): number {
 }
 
 export function quoteTotal(q: Quote): number {
-  const net = q.phases.reduce((s, p) => s + calcPhase(p), 0)
-  const sub = net * (1 + (q.markup || 0) / 100)
+  // Use calcPhaseSell (not calcPhase + flat markup) so that labour-trade items
+  // — which already store a sell price — are passed through without a second
+  // markup hit. For standard quotes the result is identical; for quotes with
+  // labour trades this prevents the global markup from being applied twice.
+  const sub = q.phases.reduce((s, p) => s + calcPhaseSell(p, q.markup || 0), 0)
   return sub * (q.vatIncluded ? 1 + VAT : 1)
 }
 
