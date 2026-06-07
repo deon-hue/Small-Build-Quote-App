@@ -1,0 +1,27 @@
+{
+  "name": "Small Build Company",
+  "short_name": "Small Build",
+  "description": "Scan receipts and job documents on site — review and extract costs back in the office.",
+  "start_url": "/scan",
+  "display": "standalone",
+  "background_color": "#f5f4f1",
+  "theme_color": "#2b3a2b",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Scan Document",
+      "short_name": "Scan",
+      "url": "/scan",
+      "description": "Scan a receipt or delivery note to a job"
+    }
+  ],
+  "categories": ["business", "productivity"]
+}

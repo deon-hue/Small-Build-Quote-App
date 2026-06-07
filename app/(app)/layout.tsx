@@ -20,6 +20,7 @@ const ROUTE_PERMISSIONS: Partial<Record<string, keyof UserPermissions>> = {
   '/suppliers':   'clients',
   '/settings':    'settings',
   '/documents':   'jobs',
+  '/scan':        'jobs',
   '/back-office': 'back_office',
   '/team':        'team',
 }
@@ -70,6 +71,7 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
           {can('quotes')  && navItem('/quick-quote', '⚡', 'Quick Quote')}
           {can('quotes')  && navItem('/takeoff',   '📐', 'Take-off')}
           {can('invoices')&& navItem('/invoices',  '◻', 'Invoices')}
+          {can('jobs')    && navItem('/scan',      '📷', 'Scan to Job')}
           <div className="nav-section">People</div>
           {can('clients') && navItem('/clients', '○', 'Clients')}
           {can('clients') && navItem('/suppliers', '◐', 'Suppliers')}
