@@ -56,6 +56,7 @@ export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
       // 2. Send via Resend — call directly so we can check the result
       const filename = `Quote-${quote.ref || 'Draft'}-${(quote.customer.name || 'Client').replace(/[^a-z0-9]/gi, '_')}.pdf`
 
+      const portalUrl = `${window.location.origin}/portal/login?email=${encodeURIComponent(toEmail.trim())}`
       const payload: NotifyClientPayload = {
         type:         'quote_sent',
         clientName:   quote.customer.name || 'Customer',
@@ -69,6 +70,7 @@ export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
         companyName:  settings.name,
         companyPhone: settings.phone,
         companyEmail: settings.email,
+        portalUrl,
         pdfBase64,
         pdfFilename:  filename,
       }

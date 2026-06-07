@@ -200,17 +200,25 @@ export async function buildQuotePdf(quote: Quote, settings: Settings): Promise<B
 
   // ── Scope ─────────────────────────────────────────────────────────────────
   if (quote.scope) {
-    const scopeLines = quote.scope.split('\n')
-    const lineH = 11
-    const boxH  = 14 + scopeLines.length * lineH + 10
+    const lineH = 13
+    // Pre-wrap every paragraph to get the real line count before drawing the box
+    const rawParas = quote.scope.split('\n')
+    const allLines: string[] = []
+    for (const para of rawParas) {
+      const trimmed = para.trim()
+      if (!trimmed) { allLines.push(''); continue }
+      const wrapped = await wrapText(safe(trimmed), fontRegular, 8.5, CONTENT_W - 24)
+      allLines.push(...wrapped)
+    }
+    const boxH = 18 + allLines.length * lineH + 10
     ensureSpace(boxH + 10)
     drawRect(page, MARGIN, y - boxH, CONTENT_W, boxH, rgb(0.973, 0.98, 0.949))
     // Left green border
     drawRect(page, MARGIN, y - boxH, 3, boxH, C.moss)
     drawText(page, 'SCOPE OF WORKS', MARGIN + 10, y - 13, 6.5, fontBold, rgb(0.353, 0.541, 0.125))
-    let sy = y - 25
-    for (const line of scopeLines) {
-      drawText(page, safe(line), MARGIN + 10, sy, 8.5, fontRegular, C.body, CONTENT_W - 20)
+    let sy = y - 26
+    for (const line of allLines) {
+      if (line) drawText(page, line, MARGIN + 10, sy, 8.5, fontRegular, C.body)
       sy -= lineH
     }
     y -= boxH + 12

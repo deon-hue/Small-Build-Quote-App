@@ -186,6 +186,12 @@ function buildEmailHtml(payload: NotifyClientPayload, portalUrl: string): string
           📎 <strong>Your quotation PDF is attached</strong> to this email. Please open the attachment to view the full breakdown.
         </p>
       </div>
+      ${portalUrl ? `<div style="margin-bottom:24px">
+        <a href="${portalUrl}" style="display:inline-block;background:#2b3a2b;color:#fff;text-decoration:none;padding:13px 28px;border-radius:6px;font-size:14px;font-weight:700">
+          View your quote online →
+        </a>
+        <p style="margin:10px 0 0;font-size:12px;color:#9aa3ad">View, track and communicate with us through your secure client portal.</p>
+      </div>` : ''}
       <p style="margin:0;font-size:13px;color:#6b7580;line-height:1.6">
         This quotation is valid for 30 days. Please do not hesitate to contact us if you have any questions or would like to discuss anything.
         ${payload.companyPhone ? `<br><br>📞 <strong>${payload.companyPhone}</strong>` : ''}
@@ -193,7 +199,7 @@ function buildEmailHtml(payload: NotifyClientPayload, portalUrl: string): string
       </p>
     </div>
     <div style="background:#f4f4f0;padding:16px 32px;border-top:1px solid #dde1e5">
-      <div style="font-size:11px;color:#9aa3ad">Kind regards · ${company}</div>
+      <div style="font-size:11px;color:#9aa3ad">Kind regards · ${company}${portalUrl ? ` · <a href="${portalUrl}" style="color:#4a7c1f;text-decoration:none">Client portal</a>` : ''}</div>
     </div>
   </div>
 </body>
