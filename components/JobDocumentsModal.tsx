@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { fetchJobCosts, insertJobCost, deleteJobCost } from '@/lib/job-costs'
 import type { CategoryBudget } from '@/lib/job-costs'
 import type { JobCost, JobCostCategory, PaymentStatus } from '@/lib/types'
 import type { ExtractedCostLine } from '@/lib/doc-extract/types'
+import { useApp } from '@/contexts/AppContext'
 
 interface Props { jobId: string; jobLabel: string; budget?: CategoryBudget | null; revenue?: number; invoicedTotal?: number; paidTotal?: number; onClose: () => void }
 
@@ -34,11 +35,14 @@ const blankManual = (): ManualState => ({
 
 export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, invoicedTotal = 0, paidTotal = 0, onClose }: Props) {
   const sb = createClient()
+  const { suppliers } = useApp()
   const [userId, setUserId] = useState<string | null>(null)
   const [costs, setCosts] = useState<JobCost[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [manual, setManual] = useState<ManualState | null>(null)
+  const [supplierDrop, setSupplierDrop] = useState(false)
+  const supplierRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -123,7 +127,43 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
             <div style={{ border: '2px solid #4a90a4', borderRadius: 10, padding: 14, marginBottom: 16, background: '#f8fcfd' }}>
               <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10 }}>Add cost</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 10 }}>
-                <Field label="Supplier"><input style={inp} value={manual.supplier} onChange={e => setManual(m => m && { ...m, supplier: e.target.value })} /></Field>
+                <Field label="Supplier">
+                  <div ref={supplierRef} style={{ position: 'relative' }}>
+                    <input
+                      style={inp}
+                      value={manual.supplier}
+                      placeholder="Search or type…"
+                      autoComplete="off"
+                      onChange={e => { setManual(m => m && { ...m, supplier: e.target.value }); setSupplierDrop(true) }}
+                      onFocus={() => setSupplierDrop(true)}
+                      onBlur={() => setTimeout(() => setSupplierDrop(false), 150)}
+                    />
+                    {supplierDrop && (
+                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1.5px solid #4a90a4', borderRadius: 6, zIndex: 200, boxShadow: '0 4px 12px rgba(0,0,0,0.12)', maxHeight: 180, overflowY: 'auto' }}>
+                        {suppliers
+                          .filter(s => !manual.supplier || s.name.toLowerCase().includes(manual.supplier.toLowerCase()))
+                          .map(s => (
+                            <div
+                              key={s.id}
+                              onMouseDown={() => { setManual(m => m && { ...m, supplier: s.name }); setSupplierDrop(false) }}
+                              style={{ padding: '8px 10px', cursor: 'pointer', fontSize: 13, borderBottom: '1px solid #f1f5f9' }}
+                              onMouseEnter={e => (e.currentTarget.style.background = '#f0f9ff')}
+                              onMouseLeave={e => (e.currentTarget.style.background = '')}
+                            >
+                              <div style={{ fontWeight: 600 }}>{s.name}</div>
+                              {s.contactName && <div style={{ fontSize: 11, color: '#94a3b8' }}>{s.contactName}</div>}
+                            </div>
+                          ))
+                        }
+                        {suppliers.filter(s => !manual.supplier || s.name.toLowerCase().includes(manual.supplier.toLowerCase())).length === 0 && (
+                          <div style={{ padding: '8px 10px', fontSize: 12, color: '#94a3b8', fontStyle: 'italic' }}>
+                            No match — &quot;{manual.supplier}&quot; will be saved as a new supplier name
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </Field>
                 <Field label="Date"><input type="date" style={inp} value={manual.docDate} onChange={e => setManual(m => m && { ...m, docDate: e.target.value })} /></Field>
                 <Field label="Invoice / receipt #"><input style={inp} value={manual.docNumber} onChange={e => setManual(m => m && { ...m, docNumber: e.target.value })} /></Field>
                 <Field label="Payment">
