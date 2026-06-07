@@ -49,6 +49,38 @@ function safe(s: string | undefined | null): string {
   return (s ?? '').replace(/[\x00-\x1F\x7F]/g, ' ').trim()
 }
 
+/**
+ * Convert a full scope text into a compact bullet list for PDF display.
+ * Extracts **Section:** headings if the text uses markdown bold; falls back
+ * to the first sentence of each paragraph for plain text.
+ */
+function scopeToBullets(scope: string): string[] {
+  // Extract **Heading** or **Heading:** markers (AI scopes always use this format)
+  const headingRx = /\*\*([^*\n]{3,70}?)\*\*/g
+  const seen = new Set<string>()
+  const headings: string[] = []
+  let m: RegExpExecArray | null
+  while ((m = headingRx.exec(scope)) !== null) {
+    const h = m[1].replace(/:$/, '').trim()
+    // Skip very long strings — those are titles/sentences, not section labels
+    if (h.length >= 3 && h.length <= 65 && !seen.has(h)) {
+      seen.add(h)
+      headings.push(h)
+    }
+  }
+  if (headings.length >= 2) return headings.map(h => `- ${h}`)
+
+  // Fallback: clean the text and take the first sentence of each paragraph
+  const clean = scope.replace(/\*\*/g, '').trim()
+  const paras = clean.split(/\n+/).filter(p => p.trim().length > 0)
+  return paras.slice(0, 10).map(p => {
+    const s = p.trim().replace(/\s+/g, ' ')
+    const dot = s.search(/\.\s/)
+    const line = dot > 0 && dot < 120 ? s.slice(0, dot + 1) : s.slice(0, 110) + (s.length > 110 ? '...' : '')
+    return `- ${line}`
+  })
+}
+
 /** Word-wrap a string to max `width` points using the given font at `size` */
 async function wrapText(
   text: string,
@@ -199,26 +231,25 @@ export async function buildQuotePdf(quote: Quote, settings: Settings): Promise<B
   y -= INFO_H + 14
 
   // ── Scope ─────────────────────────────────────────────────────────────────
+  // Rendered as a compact bullet list so it fits on page 1 without a gap.
+  // Full scope text is available in the customer portal.
   if (quote.scope) {
     const lineH = 13
-    // Pre-wrap every paragraph to get the real line count before drawing the box
-    const rawParas = quote.scope.split('\n')
-    const allLines: string[] = []
-    for (const para of rawParas) {
-      const trimmed = para.trim()
-      if (!trimmed) { allLines.push(''); continue }
-      const wrapped = await wrapText(safe(trimmed), fontRegular, 8.5, CONTENT_W - 24)
-      allLines.push(...wrapped)
+    const bullets = scopeToBullets(quote.scope)
+    // Pre-wrap each bullet in case it's still long, using the font measurer
+    const wrappedBullets: string[] = []
+    for (const b of bullets) {
+      const lines = await wrapText(safe(b), fontRegular, 8.5, CONTENT_W - 24)
+      wrappedBullets.push(...lines)
     }
-    const boxH = 18 + allLines.length * lineH + 10
+    const boxH = 18 + wrappedBullets.length * lineH + 18
     ensureSpace(boxH + 10)
     drawRect(page, MARGIN, y - boxH, CONTENT_W, boxH, rgb(0.973, 0.98, 0.949))
-    // Left green border
     drawRect(page, MARGIN, y - boxH, 3, boxH, C.moss)
     drawText(page, 'SCOPE OF WORKS', MARGIN + 10, y - 13, 6.5, fontBold, rgb(0.353, 0.541, 0.125))
     let sy = y - 26
-    for (const line of allLines) {
-      if (line) drawText(page, line, MARGIN + 10, sy, 8.5, fontRegular, C.body)
+    for (const line of wrappedBullets) {
+      drawText(page, line, MARGIN + 10, sy, 8.5, fontRegular, C.body)
       sy -= lineH
     }
     y -= boxH + 12
