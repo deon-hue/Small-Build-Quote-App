@@ -453,10 +453,11 @@ export default function NewQuotePage() {
     const resolvedSource = q.quoteSource ?? (isQuickByStructure ? 'quick' : 'manual')
     setQuoteSource(resolvedSource)
     // Quick Quote: extract sell price + cost from the lump-sum phase
+    // Sum ALL item types — the cost may be split across labour/materials/other in legacy saves
     if (resolvedSource === 'quick' && q.phases.length > 0) {
       const lump = q.phases[0]
-      const otherItem = lump.items.find((i: QuoteItem) => i.itemType === 'other')
-      const costVal = otherItem?.other ?? 0
+      const costVal = lump.items.reduce((sum: number, i: QuoteItem) =>
+        sum + (i.labour || 0) + (i.materials || 0) + (i.plantHire || 0) + (i.subcontractors || 0) + (i.other || 0), 0)
       const sellVal = calcPhaseSell(lump, q.markup || 0)
       setQuickCostStr(costVal > 0 ? String(Math.round(costVal)) : '')
       setQuickSellStr(sellVal > 0 ? String(Math.round(sellVal)) : '')
@@ -481,12 +482,17 @@ export default function NewQuotePage() {
       if (idx !== 0) return p
       return {
         ...p,
-        items: p.items.map(i =>
-          i.itemType === 'other'
-            ? { ...i, other: costNum, desc: 'Estimated Project Cost',
-                notes: `Sell £${sellNum.toLocaleString('en-GB', { minimumFractionDigits: 2 })} | Cost £${costNum.toLocaleString('en-GB', { minimumFractionDigits: 2 })} | Margin ${marginPct}%` }
-            : i
-        ),
+        items: p.items.map(i => {
+          // Consolidate everything into the 'other' row — zero out all other types
+          // so the Quick Quote panel is the single source of truth for cost
+          if (i.itemType === 'other') {
+            return { ...i, other: costNum, labour: 0, materials: 0, plantHire: 0, subcontractors: 0,
+              desc: 'Estimated Project Cost',
+              notes: `Sell £${sellNum.toLocaleString('en-GB', { minimumFractionDigits: 2 })} | Cost £${costNum.toLocaleString('en-GB', { minimumFractionDigits: 2 })} | Margin ${marginPct}%` }
+          }
+          // Zero out all other typed rows so they don't double-count
+          return { ...i, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0 }
+        }),
       }
     }))
   }
