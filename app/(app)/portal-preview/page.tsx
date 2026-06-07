@@ -116,35 +116,28 @@ function PortalPreviewInner() {
   )
 
   return (
-    <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 0 60px' }}>
+    <div className="portal-wrap" style={{ minHeight: '100vh', position: 'relative' }}>
 
-      {/* Admin preview banner */}
-      <div style={{
-        background: '#fff8dc', border: '1px solid #e6c84a', borderRadius: 8,
-        padding: '10px 16px', marginBottom: 24,
-        display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-      }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: '#856a00' }}>
-          👁 Admin Preview
-        </span>
-        <span style={{ fontSize: 12, color: '#856a00', flex: 1 }}>
-          You are viewing the portal as <strong>{clientName}</strong> ({email}).
-          This is read-only — changes made here are not saved.
-        </span>
-        <button className="btn-sm btn-outline" onClick={() => router.back()} style={{ whiteSpace: 'nowrap' }}>
-          ← Back to Clients
-        </button>
-      </div>
+      {/* ── Real portal header — exactly what the customer sees ── */}
+      <header className="portal-header">
+        <div className="portal-header-inner">
+          <div className="portal-logo">
+            {settings?.logo
+              ? <img src={settings.logo} alt="logo" style={{ height: 32, objectFit: 'contain' }} />
+              : <span>🏗 {settings?.name || 'Client Portal'}</span>
+            }
+          </div>
+          <nav className="portal-nav">
+            <span className="portal-nav-link active" style={{ cursor: 'default' }}>Dashboard</span>
+            <span className="portal-nav-link" style={{ cursor: 'default', opacity: 0.5 }}>Quotes</span>
+            <span className="portal-nav-link" style={{ cursor: 'default', opacity: 0.5 }}>Jobs</span>
+            <span className="portal-nav-link" style={{ cursor: 'default', opacity: 0.5 }}>Invoices</span>
+          </nav>
+        </div>
+      </header>
 
-      {/* Company header (mirrors portal header) */}
-      <div style={{ textAlign: 'center', marginBottom: 32 }}>
-        {settings?.logo
-          ? <img src={settings.logo} alt="logo" style={{ height: 40, objectFit: 'contain', marginBottom: 8 }} />
-          : <div style={{ fontSize: 28, marginBottom: 6 }}>🏗</div>
-        }
-        <div style={{ fontWeight: 700, fontSize: 18 }}>{settings?.name || 'Client Portal'}</div>
-        {settings?.tagline && <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>{settings.tagline}</div>}
-      </div>
+      {/* ── Portal content — same layout as real portal ── */}
+      <main className="portal-main">
 
       {/* Welcome strip */}
       <div style={{ background: 'var(--cream)', border: '1px solid var(--border)', borderRadius: 8, padding: '16px 20px', marginBottom: 28 }}>
@@ -268,6 +261,29 @@ function PortalPreviewInner() {
             ))
         }
       </section>
+      </main>
+
+      {/* ── Floating admin chip — small, stays out of the way ── */}
+      <div style={{
+        position: 'fixed', bottom: 20, right: 20, zIndex: 9999,
+        background: '#1e2022', color: '#fff', borderRadius: 24,
+        padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 10,
+        boxShadow: '0 4px 16px rgba(0,0,0,0.3)', fontSize: 12,
+      }}>
+        <span style={{ color: '#f0c040', fontWeight: 700 }}>👁 Preview</span>
+        <span style={{ color: 'rgba(255,255,255,0.65)' }}>as <strong style={{ color: '#fff' }}>{clientName}</strong></span>
+        <button
+          onClick={() => router.back()}
+          style={{
+            background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: 12,
+            color: '#fff', fontSize: 11, padding: '3px 10px', cursor: 'pointer',
+            fontFamily: 'inherit', fontWeight: 600,
+          }}
+        >
+          ← Exit
+        </button>
+      </div>
+
     </div>
   )
 }
