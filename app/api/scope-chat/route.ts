@@ -23,8 +23,13 @@ export async function POST(req: NextRequest) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { messages, context, rawInput, attachments } = body as any
-  const { jobType, address, phases } = context || {}
+  const { jobType, address, phases, existingScope } = context || {}
   const hasFiles = Array.isArray(attachments) && attachments.length > 0
+
+  // ── Existing scope block ───────────────────────────────────────────────────
+  const existingScopeBlock = existingScope?.trim()
+    ? `\n\nEXISTING SCOPE OF WORKS (already saved on this quote — the user wants to update or extend it):\n"""\n${existingScope.trim()}\n"""\nWhen producing an updated scope: preserve everything the user doesn't ask you to change, make targeted improvements only, and produce a single coherent scope — not a list of changes.`
+    : ''
 
   // ── System prompt ─────────────────────────────────────────────────────────
   const planBlock = hasFiles
@@ -52,6 +57,7 @@ JOB CONTEXT:
 - Job type: ${jobType || 'not specified'}
 - Property: ${address || 'not specified'}
 - Phases already added: ${phaseList}
+${existingScopeBlock}
 ${planBlock}
 ━━━ YOUR PERSONA ━━━
 Sound like a knowledgeable site manager or estimator having a real conversation — not an AI form. Be concise, direct and confident. Use plain UK construction English. Never fire a wall of questions.

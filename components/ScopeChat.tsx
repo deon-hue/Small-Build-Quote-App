@@ -42,6 +42,12 @@ interface Props {
    * Used inside the AIScopeWorkspace right panel.
    */
   embedded?: boolean
+  /**
+   * Existing scope text already saved on the quote.
+   * When provided the AI greets in "refinement mode" — it knows the scope
+   * and offers to add/change/expand rather than starting from scratch.
+   */
+  initialScope?: string
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -109,7 +115,7 @@ const MAX_TOTAL_BASE64 = 4 * 1024 * 1024        // 4MB total base64 payload ceil
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function ScopeChat({ quoteId, jobType, address, phases, onInsert, onClose, onBuildEstimate, embedded = false }: Props) {
+export default function ScopeChat({ quoteId, jobType, address, phases, onInsert, onClose, onBuildEstimate, embedded = false, initialScope }: Props) {
   const supabase = createClient()
 
   const [messages, setMessages] = useState<Message[]>([])
@@ -160,15 +166,31 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
   // ── Greeting ────────────────────────────────────────────────
   useEffect(() => {
     const phaseList = phases.length ? phases.join(', ') : null
-    const greeting = [
-      `Hi! I'll help you build a full cost estimate for this **${jobType}**${address ? ` at ${address}` : ''}.`,
-      phaseList
-        ? `\nI can see you've already added ${phases.length} phase${phases.length > 1 ? 's' : ''}: ${phaseList}.`
-        : '',
-      `\n\nTell me about the project — main works, approximate size, any specific requirements. I'll ask a few targeted follow-up questions, then generate a complete scope and cost breakdown.\n\n**📎 Attach plans or drawings** and I'll read them automatically.`,
-    ].filter(Boolean).join('')
 
-    setMessages([{ role: 'assistant', content: greeting }])
+    if (initialScope?.trim()) {
+      // Refinement mode — existing scope already saved on the quote
+      const preview = initialScope.trim()
+      const truncated = preview.length > 320
+        ? preview.slice(0, 320).replace(/\s+\S*$/, '') + '…'
+        : preview
+      const greeting = [
+        `Hi! I can see this **${jobType}** already has a scope of works.`,
+        `\n\nHere's what's currently saved:\n\n> ${truncated}`,
+        `\n\nWhat would you like to do with it? I can **add to it**, **refine sections**, add **exclusions**, add **provisional sums**, or rewrite any part. Just tell me what you need.`,
+      ].join('')
+      setMessages([{ role: 'assistant', content: greeting }])
+    } else {
+      // Fresh mode — no scope yet
+      const greeting = [
+        `Hi! I'll help you build a full cost estimate for this **${jobType}**${address ? ` at ${address}` : ''}.`,
+        phaseList
+          ? `\nI can see you've already added ${phases.length} phase${phases.length > 1 ? 's' : ''}: ${phaseList}.`
+          : '',
+        `\n\nTell me about the project — main works, approximate size, any specific requirements. I'll ask a few targeted follow-up questions, then generate a complete scope and cost breakdown.\n\n**📎 Attach plans or drawings** and I'll read them automatically.`,
+      ].filter(Boolean).join('')
+      setMessages([{ role: 'assistant', content: greeting }])
+    }
+
     setTimeout(() => inputRef.current?.focus(), 100)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -276,7 +298,7 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: updated,
-          context: { jobType, address, phases },
+          context: { jobType, address, phases, existingScope: initialScope || undefined },
           // rawInput is the plain text only — the API never sees "📎 filename.pdf"
           rawInput: textInput,
           attachments: currentAttachments.map(a => ({
@@ -335,22 +357,22 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
     attachments.length > 0
       // Plans attached — prompt to analyse
       ? ['Analyse the plans and write a scope', 'What structural work is shown?', 'Extract all dimensions', 'List all rooms and areas']
-      : latestScope
-      // Scope exists — offer refinements
+      : latestScope || initialScope
+      // Scope exists (newly generated or pre-existing) — offer refinements
       ? ['Add more detail to the scope', 'Add a list of exclusions', 'Add provisional sums paragraph', 'Simplify the language']
-      : messages.length <= 1
-      // Initial state — give example starters so user knows what to type
+      : messages.length <= 1 && !initialScope
+      // Fresh start — give example starters so user knows what to type
       ? [
           'Single storey rear extension, flat roof, bifold doors',
           'Loft conversion with rear dormer and en-suite',
           'Full house refurbishment, 4 bed Victorian terrace',
           'Kitchen extension with structural knock-through',
         ]
-      // Mid-interview — offer skip / allowance shortcuts
+      // Mid-interview or refinement mode — offer skip / allowance shortcuts
       : [
-          'Skip that',
-          "Not sure — make an allowance",
-          "That's everything, generate the scope now",
+          'Add a provisional sum for kitchen',
+          'Add exclusions paragraph',
+          "That's everything, update the scope now",
           'Keep it simple',
         ]
 
