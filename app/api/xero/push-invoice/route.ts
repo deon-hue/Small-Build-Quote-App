@@ -38,7 +38,6 @@ export async function POST(req: NextRequest) {
       Date: invoice.issueDate,
       DueDate: invoice.dueDate || invoice.issueDate,
       InvoiceNumber: invoice.ref,
-      LineAmountTypes: 'EXCLUSIVE',
       LineItems: lineItems,
       Status: xeroStatus,
     }
