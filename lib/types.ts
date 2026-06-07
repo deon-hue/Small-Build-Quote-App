@@ -339,6 +339,10 @@ export interface Invoice {
   notes: string
   createdAt: string
   paymentPlan: PaymentMilestone[] | null
+  /** When true the invoice is pushed to Xero Accounting on save */
+  syncToXero?: boolean
+  /** Xero InvoiceID once the invoice has been successfully pushed */
+  xeroInvoiceId?: string
 }
 
 export interface JobNote {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { fmt, fmtK, calcPhaseSell } from '@/lib/utils'
 import { buildInvoiceHtml } from '@/lib/invoiceHtml'
@@ -49,6 +49,24 @@ export default function InvoicesPage() {
   const [payPlanOn, setPayPlanOn] = useState(false)
   const [milestones, setMilestones] = useState<PaymentMilestone[]>([])
 
+  // Xero sync state
+  const [syncToXero, setSyncToXero] = useState(false)
+  const [xeroInvoiceId, setXeroInvoiceId] = useState('')
+  const [xeroConnected, setXeroConnected] = useState(false)
+  const [xeroTenantName, setXeroTenantName] = useState('')
+  const [xeroError, setXeroError] = useState<string | null>(null)
+  const [xeroPushing, setXeroPushing] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/xero/status')
+      .then(r => r.json())
+      .then((d: { connected?: boolean; tenantName?: string }) => {
+        setXeroConnected(d.connected ?? false)
+        setXeroTenantName(d.tenantName ?? '')
+      })
+      .catch(() => {})
+  }, [])
+
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
 
   // Stats
@@ -64,6 +82,7 @@ export default function InvoicesPage() {
     setVatOn(true); setIssueDate(todayStr()); setDueDate(due30Str())
     setNotes(''); setStatus('draft'); setFromJobId('')
     setPayPlanOn(false); setMilestones([])
+    setSyncToXero(false); setXeroInvoiceId(''); setXeroError(null)
     setShowModal(true)
   }
 
@@ -76,6 +95,7 @@ export default function InvoicesPage() {
     const pp = inv.paymentPlan || []
     setPayPlanOn(pp.length > 0)
     setMilestones(pp.map(m => ({ ...m, id: ++milestoneCounter })))
+    setSyncToXero(inv.syncToXero ?? false); setXeroInvoiceId(inv.xeroInvoiceId ?? ''); setXeroError(null)
     setShowModal(true)
   }
 
@@ -139,21 +159,78 @@ export default function InvoicesPage() {
 
   async function handleSave() {
     setSaving(true)
+    setXeroError(null)
     try {
       const paymentPlan = payPlanOn && milestones.length > 0 ? milestones : null
-      const data = {
+      const invData = {
         jobId: fromJobId, quoteId: '', clientName, clientAddress, clientEmail,
         lineItems, subtotal, vatIncluded: vatOn, vatAmount, total,
         status, issueDate, dueDate, notes, paymentPlan,
+        syncToXero, xeroInvoiceId: xeroInvoiceId || undefined,
       }
+
+      let savedInv: Invoice
       if (editing) {
-        await updateInvoice({ ...editing, ...data })
+        const merged: Invoice = { ...editing, ...invData }
+        await updateInvoice(merged)
+        savedInv = merged
       } else {
-        await addInvoice(data)
+        savedInv = await addInvoice(invData)
       }
+
+      // Push to Xero if toggle is ON, Xero is connected, and not already pushed
+      if (syncToXero && xeroConnected && !xeroInvoiceId) {
+        setXeroPushing(true)
+        try {
+          const res = await fetch('/api/xero/push-invoice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ invoice: savedInv }),
+          })
+          const result = await res.json() as { xeroInvoiceId?: string; error?: string }
+          if (result.xeroInvoiceId) {
+            setXeroInvoiceId(result.xeroInvoiceId)
+            await updateInvoice({ ...savedInv, xeroInvoiceId: result.xeroInvoiceId })
+          } else {
+            setXeroError(result.error ?? 'Xero push failed — invoice saved locally, you can retry from the card.')
+            setXeroPushing(false)
+            setSaving(false)
+            return // stay in modal so user can see the error
+          }
+        } catch {
+          setXeroError('Could not reach Xero — invoice saved locally.')
+          setXeroPushing(false)
+          setSaving(false)
+          return
+        }
+        setXeroPushing(false)
+      }
+
       setShowModal(false)
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleXeroPush(inv: Invoice) {
+    setXeroError(null)
+    setXeroPushing(true)
+    try {
+      const res = await fetch('/api/xero/push-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoice: inv }),
+      })
+      const result = await res.json() as { xeroInvoiceId?: string; error?: string }
+      if (result.xeroInvoiceId) {
+        await updateInvoice({ ...inv, xeroInvoiceId: result.xeroInvoiceId })
+      } else {
+        alert(result.error ?? 'Xero push failed')
+      }
+    } catch {
+      alert('Could not reach Xero')
+    } finally {
+      setXeroPushing(false)
     }
   }
 
@@ -236,7 +313,20 @@ export default function InvoicesPage() {
               </div>
               <div className="sq-val">{fmt(inv.total)}</div>
               <div style={{ textAlign: 'center', minWidth: 220 }}>
-                <span className={`badge ${INV_BADGE[inv.status] || 'b-complete'}`}>{INV_LABEL[inv.status] || inv.status}</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <span className={`badge ${INV_BADGE[inv.status] || 'b-complete'}`}>{INV_LABEL[inv.status] || inv.status}</span>
+                  {inv.syncToXero && (
+                    inv.xeroInvoiceId
+                      ? <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: '#e8f5e9', color: '#2e7d32', border: '1px solid #a5d6a7' }}>🔗 Xero</span>
+                      : <button
+                          onClick={() => handleXeroPush(inv)}
+                          disabled={xeroPushing}
+                          style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: '#fff8e1', color: '#795548', border: '1px solid #ffe082', cursor: 'pointer' }}
+                        >
+                          {xeroPushing ? '⟳' : '⟳ Xero'} Push
+                        </button>
+                  )}
+                </div>
                 <div className="sq-actions" style={{ marginTop: 6 }}>
                   <button className="btn-sm btn-primary" onClick={() => openEdit(inv)}>✎ Edit</button>
                   <button className="btn-sm btn-outline" onClick={() => handlePrint(inv)}>🖨 Print</button>
@@ -432,6 +522,65 @@ export default function InvoicesPage() {
                 )}
               </div>
 
+              {/* ── Xero Sync ── */}
+              <div style={{ borderTop: '2px solid var(--border)', paddingTop: 16, marginBottom: 16 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: syncToXero ? 12 : 0 }}>
+                  <input
+                    type="checkbox"
+                    checked={syncToXero}
+                    onChange={e => { setSyncToXero(e.target.checked); setXeroError(null) }}
+                    style={{ width: 'auto' }}
+                  />
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 14 }}>🔗 Sync to Xero Accounting</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>Push this invoice to Xero as a sales invoice — cost is always tracked here regardless</div>
+                  </div>
+                </label>
+
+                {syncToXero && (
+                  <div style={{ padding: '10px 14px', borderRadius: 6, background: '#f8f9fa', border: '1px solid var(--border)', fontSize: 13 }}>
+                    {xeroConnected ? (
+                      xeroInvoiceId ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                          <span style={{ color: '#2e7d32', fontWeight: 600 }}>✓ Synced to Xero</span>
+                          <span style={{ color: 'var(--muted)', fontSize: 11, fontFamily: 'DM Mono, monospace' }}>{xeroInvoiceId.slice(0, 8)}…</span>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!editing) return
+                              setXeroError(null); setXeroPushing(true)
+                              try {
+                                const res = await fetch('/api/xero/push-invoice', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ invoice: { ...editing, xeroInvoiceId } }) })
+                                const r = await res.json() as { xeroInvoiceId?: string; error?: string }
+                                if (r.xeroInvoiceId) setXeroInvoiceId(r.xeroInvoiceId)
+                                else setXeroError(r.error ?? 'Re-sync failed')
+                              } catch { setXeroError('Could not reach Xero') }
+                              setXeroPushing(false)
+                            }}
+                            disabled={xeroPushing}
+                            style={{ fontSize: 11, padding: '3px 10px', borderRadius: 5, border: '1px solid #a5d6a7', background: '#e8f5e9', color: '#2e7d32', cursor: 'pointer' }}
+                          >{xeroPushing ? 'Syncing…' : '↻ Re-sync'}</button>
+                        </div>
+                      ) : (
+                        <div style={{ color: 'var(--muted)' }}>
+                          Connected: <strong>{xeroTenantName}</strong>
+                          <span style={{ marginLeft: 8, fontSize: 12 }}>— invoice will be pushed to Xero when saved</span>
+                        </div>
+                      )
+                    ) : (
+                      <div style={{ color: '#856404', background: '#fff3cd', borderRadius: 4, padding: '8px 10px', fontSize: 12 }}>
+                        ⚠ Xero not connected. Go to <strong>Settings → Integrations</strong> to connect your Xero account.
+                      </div>
+                    )}
+                    {xeroError && (
+                      <div style={{ marginTop: 8, color: '#c0392b', fontSize: 12, background: '#fdf2f2', borderRadius: 4, padding: '6px 10px' }}>
+                        ⚠ {xeroError}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div className="fg">
                 <label>Notes</label>
                 <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Payment details, bank info, etc." />
@@ -449,8 +598,8 @@ export default function InvoicesPage() {
             </div>
             <div className="form-modal-ft">
               <button className="btn btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-                {saving ? 'Saving…' : editing ? 'Update Invoice' : 'Create Invoice'}
+              <button className="btn btn-primary" onClick={handleSave} disabled={saving || xeroPushing}>
+                {xeroPushing ? '🔗 Syncing to Xero…' : saving ? 'Saving…' : editing ? 'Update Invoice' : 'Create Invoice'}
               </button>
             </div>
           </div>

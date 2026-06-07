@@ -258,6 +258,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           status: r.status, issueDate: r.issue_date || '', dueDate: r.due_date || '',
           notes: r.notes || '', createdAt: r.created_at,
           paymentPlan: r.payment_plan || null,
+          syncToXero: r.sync_to_xero ?? false,
+          xeroInvoiceId: r.xero_invoice_id || undefined,
         })))
       }
 
@@ -548,6 +550,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       vat_amount: inv.vatAmount, total: inv.total,
       status: inv.status, issue_date: inv.issueDate, due_date: inv.dueDate,
       notes: inv.notes, payment_plan: inv.paymentPlan || null,
+      sync_to_xero: inv.syncToXero ?? false,
+      xero_invoice_id: inv.xeroInvoiceId || null,
     }).select().single()
     if (error) throw error
     const newInv: Invoice = {
@@ -559,6 +563,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       status: data.status, issueDate: data.issue_date || '', dueDate: data.due_date || '',
       notes: data.notes || '', createdAt: data.created_at,
       paymentPlan: data.payment_plan || null,
+      syncToXero: data.sync_to_xero ?? false,
+      xeroInvoiceId: data.xero_invoice_id || undefined,
     }
     setInvoices(prev => [newInv, ...prev])
     return newInv
@@ -572,6 +578,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       vat_amount: inv.vatAmount, total: inv.total,
       status: inv.status, issue_date: inv.issueDate, due_date: inv.dueDate,
       notes: inv.notes, payment_plan: inv.paymentPlan || null,
+      sync_to_xero: inv.syncToXero ?? false,
+      xero_invoice_id: inv.xeroInvoiceId || null,
     }).eq('id', inv.id)
     setInvoices(prev => prev.map(x => x.id === inv.id ? inv : x))
   }, [supabase])
