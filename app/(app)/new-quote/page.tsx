@@ -116,6 +116,9 @@ export default function NewQuotePage() {
   const [generatingPhases, setGeneratingPhases] = useState(false)
   const [showScopeChat, setShowScopeChat] = useState(false)
   const [buildingEstimate, setBuildingEstimate] = useState(false)
+  // Quick Quote pricing (only used when quoteSource === 'quick')
+  const [quickSellStr, setQuickSellStr] = useState('')
+  const [quickCostStr, setQuickCostStr] = useState('')
   const [loadingBO, setLoadingBO] = useState(false)   // true while fetching BO defaults for manual quotes
   const [estimateUsedDB, setEstimateUsedDB] = useState(false)
   const [showScopeHelp, setShowScopeHelp] = useState(false)
@@ -443,12 +446,43 @@ export default function NewQuotePage() {
     setScope(q.scope || '')
     setPhoto(q.photo || '')
     setQuoteSource(q.quoteSource ?? 'manual')
+    // Quick Quote: extract sell price + cost from the lump-sum phase
+    if (q.quoteSource === 'quick' && q.phases.length > 0) {
+      const lump = q.phases[0]
+      const otherItem = lump.items.find((i: QuoteItem) => i.itemType === 'other')
+      const costVal = otherItem?.other ?? 0
+      const sellVal = calcPhaseSell(lump, q.markup || 0)
+      setQuickCostStr(costVal > 0 ? String(Math.round(costVal)) : '')
+      setQuickSellStr(sellVal > 0 ? String(Math.round(sellVal)) : '')
+    }
     setPhases(JSON.parse(JSON.stringify(q.phases)).map((p: QuotePhase) => ({
       ...p, id: ++phaseCounter,
       items: toTypedItems(p.items).map((i: Omit<QuoteItem,'id'>) => ({ ...i, id: ++itemCounter })),
     })))
     setEditingId(q.id)
     setIsLockedQuote(q.status === 'accepted')
+  }
+
+  // ── Quick Quote pricing update ─────────────────────────────────────────────
+  function applyQuickPricing(sellStr: string, costStr: string) {
+    const sellNum = parseFloat(sellStr.replace(/,/g, '')) || 0
+    const costNum = parseFloat(costStr.replace(/,/g, '')) || 0
+    if (sellNum <= 0 || costNum <= 0) return
+    const newMarkup = ((sellNum / costNum) - 1) * 100
+    const marginPct = ((sellNum - costNum) / sellNum * 100).toFixed(1)
+    setMarkup(newMarkup)
+    setPhases(prev => prev.map((p, idx) => {
+      if (idx !== 0) return p
+      return {
+        ...p,
+        items: p.items.map(i =>
+          i.itemType === 'other'
+            ? { ...i, other: costNum, desc: 'Estimated Project Cost',
+                notes: `Sell £${sellNum.toLocaleString('en-GB', { minimumFractionDigits: 2 })} | Cost £${costNum.toLocaleString('en-GB', { minimumFractionDigits: 2 })} | Margin ${marginPct}%` }
+            : i
+        ),
+      }
+    }))
   }
 
   function onJobTypeChange(type: string) {
@@ -1365,6 +1399,88 @@ export default function NewQuotePage() {
           />
         </div>
       )}
+
+      {/* ── Quick Quote Pricing ── only shown for quick-source quotes ── */}
+      {quoteSource === 'quick' && (() => {
+        const qSell = parseFloat(quickSellStr.replace(/,/g, '')) || 0
+        const qCost = parseFloat(quickCostStr.replace(/,/g, '')) || 0
+        const qMargin = qSell - qCost
+        const qMarginPct = qSell > 0 ? (qMargin / qSell) * 100 : 0
+        const qVatAmt = vatOn ? qSell * 0.2 : 0
+        const qTotal = qSell + qVatAmt
+        return (
+          <div style={{ background: 'var(--cream)', border: '1.5px solid var(--border)', borderRadius: 8, padding: '14px 18px', marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
+              ⚡ Quick Quote Pricing
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: qSell > 0 && qCost > 0 ? 12 : 0 }}>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>Quote Price (ex. VAT) <span style={{ color: '#e74c3c' }}>*</span></label>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', fontSize: 13, fontWeight: 600 }}>£</span>
+                  <input
+                    type="number" min="0" step="100"
+                    value={quickSellStr}
+                    onChange={e => {
+                      setQuickSellStr(e.target.value)
+                      applyQuickPricing(e.target.value, quickCostStr)
+                    }}
+                    placeholder="0"
+                    style={{ width: '100%', padding: '8px 10px 8px 22px', fontSize: 14, fontWeight: 700, boxSizing: 'border-box', border: '1.5px solid var(--border)', borderRadius: 6, fontFamily: 'DM Mono, monospace' }}
+                  />
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>Price shown to the client</div>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>Estimated Cost (ex. VAT) <span style={{ color: '#e74c3c' }}>*</span></label>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', fontSize: 13, fontWeight: 600 }}>£</span>
+                  <input
+                    type="number" min="0" step="100"
+                    value={quickCostStr}
+                    onChange={e => {
+                      setQuickCostStr(e.target.value)
+                      applyQuickPricing(quickSellStr, e.target.value)
+                    }}
+                    placeholder="0"
+                    style={{ width: '100%', padding: '8px 10px 8px 22px', fontSize: 14, fontWeight: 700, boxSizing: 'border-box', border: '1.5px solid var(--border)', borderRadius: 6, fontFamily: 'DM Mono, monospace' }}
+                  />
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>Your internal cost estimate</div>
+              </div>
+            </div>
+            {qSell > 0 && qCost > 0 && (
+              <div style={{ background: qMargin >= 0 ? '#f0f7e6' : '#fff0ef', border: `1px solid ${qMargin >= 0 ? '#c8e89a' : '#ffb0b0'}`, borderRadius: 6, padding: '10px 14px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b', marginBottom: 3 }}>Sell</div>
+                  <div style={{ fontFamily: 'DM Mono, monospace', fontWeight: 700, fontSize: 14 }}>{fmt(qSell)}</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b', marginBottom: 3 }}>Cost</div>
+                  <div style={{ fontFamily: 'DM Mono, monospace', fontWeight: 700, fontSize: 14 }}>{fmt(qCost)}</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b', marginBottom: 3 }}>Margin</div>
+                  <div style={{ fontFamily: 'DM Mono, monospace', fontWeight: 700, fontSize: 14, color: qMargin >= 0 ? '#4a7c1f' : '#c0392b' }}>
+                    {fmt(qMargin)} <span style={{ fontSize: 11, fontWeight: 400 }}>({qMarginPct.toFixed(1)}%)</span>
+                  </div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b', marginBottom: 3 }}>Total inc. VAT</div>
+                  <div style={{ fontFamily: 'DM Mono, monospace', fontWeight: 700, fontSize: 14 }}>
+                    {vatOn ? fmt(qTotal) : <span style={{ color: 'var(--muted)', fontSize: 12 }}>No VAT</span>}
+                  </div>
+                </div>
+              </div>
+            )}
+            {qCost > 0 && qSell > 0 && qCost >= qSell && (
+              <div style={{ marginTop: 8, fontSize: 12, color: '#c0392b', fontWeight: 600 }}>
+                ⚠ Estimated cost equals or exceeds the sell price — no profit margin.
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       <div className="qb-grid" style={{ gridTemplateColumns: '270px 1fr' }}>
         {/* Left panel */}
