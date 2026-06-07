@@ -102,10 +102,9 @@ function plantLineSell(pl: QuotePlantItem): number {
 }
 
 function subPhaseTotalSell(p: QuotePhase, markup: number): number {
-  const costRowsSell = phaseSell(p, markup)
-  const productsSell = (p.products   ?? []).reduce((s, pr) => s + productLineSell(pr), 0)
-  const plantSell    = (p.plantItems ?? []).reduce((s, pl) => s + plantLineSell(pl),   0)
-  return +(costRowsSell + productsSell + plantSell).toFixed(2)
+  // products and plantItems are now included in calcPhaseSell (via phaseSell)
+  // so we must NOT add them again here — they were previously double-counted.
+  return +phaseSell(p, markup).toFixed(2)
 }
 function roomTotalSell(phases: QuotePhase[], mainPhase: string, room: string, markup: number): number {
   return getSubPhases(phases, mainPhase, room).reduce((s, p) => s + phaseSell(p, markup), 0)

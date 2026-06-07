@@ -5,7 +5,8 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import PortalGanttChart from '@/components/PortalGanttChart'
 import type { GanttState } from '@/lib/types'
-import { fmt, Q_BADGE, Q_LABEL, STAGE_COLOR, STAGE_LABEL } from '@/lib/utils'
+import { fmt, Q_BADGE, Q_LABEL, STAGE_COLOR, STAGE_LABEL, calcPhaseSell, calcItemSell } from '@/lib/utils'
+import type { QuotePhase, QuoteItem } from '@/lib/types'
 
 // ── Types mirroring what the RPC returns ────────────────────
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -47,25 +48,19 @@ const INV_STATUS_LABEL: Record<string, string> = {
 }
 
 // ── Helpers ──────────────────────────────────────────────────
+// Use the same calcPhaseSell / calcItemSell from utils as the real portal and
+// QuoteWorkspace so totals are always consistent. The phases JSONB is stored
+// with camelCase keys (plantHire, not plant) so the cast is safe.
 function quoteTotal(q: PreviewQuote): number {
-  const net = q.phases.reduce((s: number, p: AnyRecord) =>
-    s + (p.items || []).reduce((ps: number, i: AnyRecord) =>
-      ps + (Number(i.labour) || 0) + (Number(i.materials) || 0)
-        + (Number(i.plant) || 0) + (Number(i.subcontractors) || 0) + (Number(i.other) || 0),
-      0), 0)
-  const sub = net * (1 + (q.markup || 0) / 100)
-  return sub + (q.vatIncluded ? sub * 0.2 : 0)
+  const sub = (q.phases as unknown as QuotePhase[]).reduce(
+    (s, p) => s + calcPhaseSell(p, q.markup || 0), 0)
+  return sub * (q.vatIncluded ? 1.2 : 1)
 }
 function phaseNet(phase: AnyRecord, markup: number): number {
-  return (phase.items || []).reduce((s: number, i: AnyRecord) =>
-    s + (Number(i.labour) || 0) + (Number(i.materials) || 0)
-      + (Number(i.plant) || 0) + (Number(i.subcontractors) || 0) + (Number(i.other) || 0),
-    0) * (1 + (markup || 0) / 100)
+  return calcPhaseSell(phase as unknown as QuotePhase, markup)
 }
 function itemNet(item: AnyRecord, markup: number): number {
-  return ((Number(item.labour) || 0) + (Number(item.materials) || 0)
-    + (Number(item.plant) || 0) + (Number(item.subcontractors) || 0) + (Number(item.other) || 0))
-    * (1 + (markup || 0) / 100)
+  return calcItemSell(item as unknown as QuoteItem, markup)
 }
 
 // ── Main preview component ───────────────────────────────────

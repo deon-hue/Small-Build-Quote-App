@@ -35,12 +35,18 @@ export function calcPhaseSell(p: QuotePhase, mkp: number): number {
   // the trade sell price (cost + per-trade markup). Applying global markup on top
   // would double-count. All other item types still get the global markup.
   const hasLabourTrades = (p.labourTrades?.length ?? 0) > 0
-  return p.items.reduce((s, i) => {
+  const itemsSell = p.items.reduce((s, i) => {
     if (i.itemType === 'labour' && hasLabourTrades) {
       return s + (Number(i.labour) || 0)  // pass through — already marked up
     }
     return s + calcItemSell(i, mkp)
   }, 0)
+  // BO catalogue lines — sell price is pre-computed at add time; just sum them up.
+  const productsSell = (p.products ?? []).reduce(
+    (s, pr) => (pr.enabled === false ? s : s + pr.sellPrice * pr.qty), 0)
+  const plantSell = (p.plantItems ?? []).reduce(
+    (s, pl) => (pl.enabled === false ? s : s + pl.sellPrice * pl.qty), 0)
+  return itemsSell + productsSell + plantSell
 }
 
 export function quoteTotal(q: Quote): number {
