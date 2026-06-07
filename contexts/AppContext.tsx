@@ -204,6 +204,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           status: r.status, jobType: r.job_type, markup: Number(r.markup),
           vatIncluded: r.vat_included, scope: r.scope, photo: r.photo,
           convertedToJob: r.converted_to_job, customer: r.customer, phases: r.phases,
+          quoteSource: r.quote_source || undefined,
           clientApprovedAt: r.client_approved_at || null,
           clientApprovedBy: r.client_approved_by || null,
         })))
@@ -354,6 +355,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       status: q.status || 'pending', job_type: q.jobType, markup: q.markup,
       vat_included: q.vatIncluded, scope: q.scope, photo: q.photo,
       converted_to_job: false, customer: q.customer, phases: q.phases,
+      quote_source: q.quoteSource || null,
     }).select().single()
     if (error) throw error
     const newQuote: Quote = {
@@ -361,6 +363,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       status: data.status, jobType: data.job_type, markup: Number(data.markup),
       vatIncluded: data.vat_included, scope: data.scope, photo: data.photo,
       convertedToJob: data.converted_to_job, customer: data.customer, phases: data.phases,
+      quoteSource: data.quote_source || undefined,
     }
     setQuotes(prev => [...prev, newQuote])
     return newQuote
@@ -371,6 +374,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       status: q.status, job_type: q.jobType, markup: q.markup,
       vat_included: q.vatIncluded, scope: q.scope, photo: q.photo,
       converted_to_job: q.convertedToJob, customer: q.customer, phases: q.phases,
+      quote_source: q.quoteSource || null,
       last_edited: new Date().toLocaleDateString('en-GB'),
     }).eq('id', q.id)
     setQuotes(prev => prev.map(x => x.id === q.id ? { ...q, lastEdited: new Date().toLocaleDateString('en-GB') } : x))
