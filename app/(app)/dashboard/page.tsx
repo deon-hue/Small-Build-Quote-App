@@ -1,10 +1,29 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { fmt, fmtK, quoteTotal, STAGE_COLOR, Q_BADGE, Q_LABEL } from '@/lib/utils'
+import { createClient } from '@/lib/supabase/client'
+import { quoteBudget } from '@/lib/job-costs'
+
+function marginColor(pct: number): string {
+  if (pct >= 20) return '#7ab533'
+  if (pct >= 10) return '#e67e22'
+  return '#c0392b'
+}
 
 export default function DashboardPage() {
-  const { jobs, quotes, loading } = useApp()
+  const { jobs, quotes, invoices, variations, loading } = useApp()
+
+  // ── Job costing: fetch all costs in one query ─────────────────────────────
+  const [allJobCosts, setAllJobCosts] = useState<{ job_id: string; net_amount: number }[]>([])
+
+  useEffect(() => {
+    const sb = createClient()
+    sb.from('job_costs')
+      .select('job_id, net_amount')
+      .then(({ data }) => setAllJobCosts((data ?? []) as { job_id: string; net_amount: number }[]))
+  }, [])
 
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
 
@@ -53,6 +72,59 @@ export default function DashboardPage() {
     'On Hold': jobs.filter(j => j.stage === 'onhold'),
     Complete:  jobs.filter(j => j.stage === 'complete'),
   }
+
+  // ── Job costing calculations ───────────────────────────────────────────────
+  const costingRows = jobs
+    .filter(j => j.stage !== 'planning')
+    .sort((a, b) => {
+      const order: Record<string, number> = { active: 0, onhold: 1, complete: 2, planning: 3 }
+      const stageDiff = (order[a.stage] ?? 3) - (order[b.stage] ?? 3)
+      return stageDiff !== 0 ? stageDiff : (Number(b.value) || 0) - (Number(a.value) || 0)
+    })
+    .map(j => {
+      const linkedQuote = quotes.find(q => q.id === j.quoteId)
+      const budget = linkedQuote ? quoteBudget(linkedQuote.phases) : null
+
+      const actualCost = allJobCosts
+        .filter(c => c.job_id === j.id)
+        .reduce((s, c) => s + (Number(c.net_amount) || 0), 0)
+
+      const invoicedTotal = invoices
+        .filter(i => i.jobId === j.id)
+        .reduce((s, i) => s + i.total, 0)
+
+      const approvedVarTotal = (variations ?? [])
+        .filter(v => v.jobId === j.id && ['approved', 'invoiced', 'paid'].includes(v.status))
+        .reduce((s, v) => s + (v.total || 0), 0)
+
+      const contractValue = (Number(j.value) || 0) + approvedVarTotal
+      const hasActual     = actualCost > 0
+      const overBudget    = budget !== null && hasActual && actualCost > budget.total
+      const budgetUsedPct = budget && budget.total > 0
+        ? Math.min(150, Math.round((actualCost / budget.total) * 100))
+        : null
+
+      // Prefer actual cost for margin; fall back to quoted budget estimate
+      const costForMargin    = hasActual ? actualCost : budget?.total ?? null
+      const marginPct        = costForMargin !== null && contractValue > 0
+        ? Math.round(((contractValue - costForMargin) / contractValue) * 100)
+        : null
+      const marginEstimated  = !hasActual && budget !== null
+
+      return {
+        job: j, contractValue, budgetTotal: budget?.total ?? null,
+        actualCost, hasActual, invoicedTotal,
+        overBudget, budgetUsedPct, marginPct, marginEstimated,
+      }
+    })
+
+  const activeRows         = costingRows.filter(r => r.job.stage === 'active')
+  const summaryContract    = activeRows.reduce((s, r) => s + r.contractValue, 0)
+  const summaryActual      = activeRows.reduce((s, r) => s + r.actualCost, 0)
+  const rowsWithMargin     = costingRows.filter(r => r.marginPct !== null)
+  const avgMargin          = rowsWithMargin.length
+    ? Math.round(rowsWithMargin.reduce((s, r) => s + (r.marginPct ?? 0), 0) / rowsWithMargin.length)
+    : null
 
   return (
     <>
@@ -234,6 +306,151 @@ export default function DashboardPage() {
               }
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* ── Job Costing ────────────────────────────────────────────────────────── */}
+      <div className="card" style={{ marginTop: 18 }}>
+        <div className="card-hd">
+          <span>Job Costing</span>
+          <a href="/jobs" style={{ fontSize: 12, color: 'var(--muted)', textDecoration: 'none' }}>Enter costs in Jobs →</a>
+        </div>
+
+        {/* Summary bar */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', borderBottom: '1.5px solid var(--border)' }}>
+          <div style={{ padding: '14px 20px', borderRight: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)', marginBottom: 4 }}>Active Contract Value</div>
+            <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'DM Mono, monospace', color: '#7ab533' }}>{fmtK(summaryContract)}</div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{activeRows.length} active job{activeRows.length !== 1 ? 's' : ''}</div>
+          </div>
+          <div style={{ padding: '14px 20px', borderRight: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)', marginBottom: 4 }}>Actual Costs Entered</div>
+            <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'DM Mono, monospace', color: 'var(--text)' }}>{fmtK(summaryActual)}</div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+              {activeRows.filter(r => r.hasActual).length} of {activeRows.length} jobs with costs
+            </div>
+          </div>
+          <div style={{ padding: '14px 20px' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)', marginBottom: 4 }}>Avg Gross Margin</div>
+            <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'DM Mono, monospace', color: avgMargin !== null ? marginColor(avgMargin) : 'var(--muted)' }}>
+              {avgMargin !== null ? avgMargin + '%' : '—'}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>across {rowsWithMargin.length} job{rowsWithMargin.length !== 1 ? 's' : ''}</div>
+          </div>
+        </div>
+
+        {/* Table header */}
+        {costingRows.length > 0 && (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 110px 110px 170px 90px',
+            padding: '6px 18px',
+            background: '#f0f2f4',
+            fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)',
+          }}>
+            <span>Job</span>
+            <span style={{ textAlign: 'right' }}>Contract</span>
+            <span style={{ textAlign: 'right' }}>Budget</span>
+            <span style={{ paddingLeft: 8 }}>Actual Cost</span>
+            <span style={{ textAlign: 'right' }}>Margin</span>
+          </div>
+        )}
+
+        {/* Rows */}
+        {costingRows.length === 0
+          ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
+              No jobs yet — create jobs to track costs and margin
+            </div>
+          : costingRows.map(r => {
+              const stageCol = STAGE_COLOR[r.job.stage] || 'var(--muted)'
+              const barPct   = Math.min(100, r.budgetUsedPct ?? 0)
+              const barColor = r.overBudget ? '#c0392b' : (r.budgetUsedPct ?? 0) > 85 ? '#e67e22' : '#7ab533'
+
+              return (
+                <div key={r.job.id} style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 110px 110px 170px 90px',
+                  padding: '11px 18px',
+                  borderBottom: '1px solid var(--border)',
+                  alignItems: 'center',
+                }}>
+
+                  {/* Job info */}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: stageCol, marginTop: 5, flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>{r.job.type} — {r.job.client}</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>{r.job.address}</div>
+                    </div>
+                  </div>
+
+                  {/* Contract value */}
+                  <div style={{ textAlign: 'right', fontFamily: 'DM Mono, monospace', fontSize: 13, fontWeight: 600 }}>
+                    {fmt(r.contractValue)}
+                  </div>
+
+                  {/* Quoted budget (cost) */}
+                  <div style={{ textAlign: 'right', fontFamily: 'DM Mono, monospace', fontSize: 13, color: r.budgetTotal !== null ? 'var(--text)' : 'var(--muted)' }}>
+                    {r.budgetTotal !== null ? fmt(r.budgetTotal) : '—'}
+                  </div>
+
+                  {/* Actual cost + budget bar */}
+                  <div style={{ paddingLeft: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: r.hasActual && r.budgetTotal !== null ? 4 : 0 }}>
+                      <span style={{
+                        fontFamily: 'DM Mono, monospace', fontSize: 13,
+                        color: r.overBudget ? '#c0392b' : r.hasActual ? 'var(--text)' : 'var(--muted)',
+                        fontWeight: r.overBudget ? 700 : 400,
+                      }}>
+                        {r.overBudget && '⚠ '}
+                        {r.hasActual ? fmt(r.actualCost) : <span style={{ fontSize: 11 }}>No costs entered</span>}
+                      </span>
+                      {r.budgetUsedPct !== null && r.hasActual && (
+                        <span style={{ fontSize: 10, color: r.overBudget ? '#c0392b' : 'var(--muted)', fontWeight: r.overBudget ? 700 : 400 }}>
+                          {r.budgetUsedPct}%
+                        </span>
+                      )}
+                    </div>
+                    {r.hasActual && r.budgetTotal !== null && (
+                      <div style={{ height: 4, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: barPct + '%', background: barColor, borderRadius: 2, transition: 'width 0.4s' }} />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Margin */}
+                  <div style={{ textAlign: 'right' }}>
+                    {r.marginPct !== null ? (
+                      <span style={{
+                        fontWeight: 700, fontSize: 13, fontFamily: 'DM Mono, monospace',
+                        color: marginColor(r.marginPct),
+                      }}>
+                        {r.marginPct}%
+                        {r.marginEstimated && <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--muted)' }}> est</span>}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 11, color: 'var(--muted)' }}>—</span>
+                    )}
+                  </div>
+                </div>
+              )
+            })
+        }
+
+        {/* Legend */}
+        <div style={{ padding: '8px 18px', display: 'flex', gap: 16, fontSize: 11, color: 'var(--muted)', flexWrap: 'wrap' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#7ab533', display: 'inline-block' }} /> ≥20% margin
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#e67e22', display: 'inline-block' }} /> 10–19%
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#c0392b', display: 'inline-block' }} /> &lt;10% or over budget
+          </span>
+          <span style={{ marginLeft: 'auto' }}>
+            Budget = quoted cost (ex-markup) · est = estimated from quote, no actual costs yet
+          </span>
         </div>
       </div>
     </>
