@@ -9,11 +9,12 @@ const TOKEN_URL       = 'https://identity.xero.com/connect/token'
 const CONNECTIONS_URL = 'https://api.xero.com/connections'
 const API_BASE        = 'https://api.xero.com/api.xro/2.0'
 
-// NOTE: accounting.transactions must be enabled in the Xero Developer Portal
-// (developer.xero.com → your app → Configuration) before adding it here.
+// New-style granular scopes (required for apps created after 2 March 2026).
+// accounting.transactions no longer exists — use accounting.invoices instead.
 export const XERO_SCOPES = [
   'openid', 'profile', 'email', 'offline_access',
   'accounting.contacts',
+  'accounting.invoices',
 ].join(' ')
 
 export function xeroConfigured(): boolean {
