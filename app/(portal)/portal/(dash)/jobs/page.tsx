@@ -51,7 +51,7 @@ function itemSellTotal(item: VariationLineItem, markup: number): number {
 
 export default function PortalJobsPage() {
   const supabase = createClient()
-  const { jobs, variations, ganttStates, settings, loading, error, reload } = usePortal()
+  const { jobs, variations, ganttStates, settings, clientSettings, loading, error, reload } = usePortal()
 
   const [expandedGantt, setExpandedGantt]   = useState<string | null>(null)
   const [expandedVars, setExpandedVars]      = useState<string | null>(null)   // job id
@@ -297,19 +297,21 @@ export default function PortalJobsPage() {
                 </div>
               )}
 
-              {/* Programme / Gantt toggle */}
-              <div style={{ marginTop: 14, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
-                <button
-                  onClick={() => setExpandedGantt(ganttOpen ? null : j.id)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 12px', fontSize: 12, fontWeight: 600, color: 'var(--ink)', cursor: 'pointer', fontFamily: 'inherit' }}
-                >
-                  <span>📋</span>
-                  {ganttOpen ? 'Hide Programme ▲' : 'View Programme ▼'}
-                </button>
-                {ganttOpen && (
-                  <PortalGanttChart job={j} phases={[]} ganttState={ganttState} />
-                )}
-              </div>
+              {/* Programme / Gantt toggle — hidden if admin disabled it */}
+              {clientSettings.showProgramme && (
+                <div style={{ marginTop: 14, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                  <button
+                    onClick={() => setExpandedGantt(ganttOpen ? null : j.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 12px', fontSize: 12, fontWeight: 600, color: 'var(--ink)', cursor: 'pointer', fontFamily: 'inherit' }}
+                  >
+                    <span>📋</span>
+                    {ganttOpen ? 'Hide Programme ▲' : 'View Programme ▼'}
+                  </button>
+                  {ganttOpen && (
+                    <PortalGanttChart job={j} phases={[]} ganttState={ganttState} />
+                  )}
+                </div>
+              )}
             </div>
           )
         })

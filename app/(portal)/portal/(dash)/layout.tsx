@@ -10,7 +10,7 @@ function PortalNav() {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
-  const { settings } = usePortal()
+  const { settings, clientSettings } = usePortal()
   const [menuOpen, setMenuOpen] = useState(false)
 
   async function signOut() {
@@ -43,9 +43,9 @@ function PortalNav() {
         </div>
         <nav className={`portal-nav${menuOpen ? ' open' : ''}`}>
           {navLink('/portal', 'Dashboard')}
-          {navLink('/portal/quotes', 'Quotes')}
-          {navLink('/portal/jobs', 'Jobs')}
-          {navLink('/portal/invoices', 'Invoices')}
+          {clientSettings.showQuotesTab   && navLink('/portal/quotes',   'Quotes')}
+          {clientSettings.showJobsTab     && navLink('/portal/jobs',     'Jobs')}
+          {clientSettings.showInvoicesTab && navLink('/portal/invoices', 'Invoices')}
           <button className="portal-signout-btn" onClick={signOut}>Sign Out</button>
         </nav>
         <button

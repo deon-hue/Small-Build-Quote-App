@@ -24,7 +24,8 @@ function fmtDateTime(iso: string) {
 
 export default function PortalQuotesPage() {
   const supabase = createClient()
-  const { quotes, settings, reload, loading, error } = usePortal()
+  const { quotes, settings, clientSettings, reload, loading, error } = usePortal()
+  const qv = clientSettings.quoteView  // 'full' | 'phases' | 'total_only'
   const [approvingQuote, setApprovingQuote] = useState<Quote | null>(null)
   const [sigName, setSigName] = useState('')
   const [agreed, setAgreed] = useState(false)
@@ -74,7 +75,7 @@ export default function PortalQuotesPage() {
           const subtotal = q.phases.reduce((s, p) => s + calcPhaseSell(p, q.markup), 0)
           const vatAmount = q.vatIncluded ? subtotal * 0.20 : 0
           const total = subtotal + vatAmount
-          const canApprove = q.status === 'pending' || q.status === 'sent'
+          const canApprove = (q.status === 'pending' || q.status === 'sent') && clientSettings.allowOnlineApproval
           const isApproved = q.status === 'accepted'
 
           return (
@@ -143,7 +144,7 @@ export default function PortalQuotesPage() {
                 </div>
 
                 {/* ── Phases & line items ─────────────────── */}
-                {q.phases.length > 0 && (
+                {q.phases.length > 0 && qv !== 'total_only' && (
                   <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
                     {q.phases.map((phase, pi) => (
                       <div key={phase.id}>
@@ -157,13 +158,16 @@ export default function PortalQuotesPage() {
                           <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)' }}>
                             {pi + 1}. {phase.phase}
                           </div>
-                          <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 13, fontWeight: 700, color: 'var(--moss)' }}>
-                            {fmt(calcPhaseSell(phase, q.markup))}
-                          </div>
+                          {/* Phase total — only shown for 'full' quoteView */}
+                          {qv === 'full' && (
+                            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 13, fontWeight: 700, color: 'var(--moss)' }}>
+                              {fmt(calcPhaseSell(phase, q.markup))}
+                            </div>
+                          )}
                         </div>
 
-                        {/* Line items */}
-                        {phase.items.map((item, ii) => (
+                        {/* Line items — only shown for 'full' quoteView */}
+                        {qv === 'full' && phase.items.map((item, ii) => (
                           <div key={item.id} style={{
                             display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
                             padding: '10px 16px', gap: 12,
@@ -196,11 +200,13 @@ export default function PortalQuotesPage() {
                   border: '1px solid var(--border)', borderRadius: 8,
                   overflow: 'hidden', marginBottom: 20,
                 }}>
-                  <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', background: '#fafaf8' }}>
-                    <span style={{ fontSize: 13, color: 'var(--muted)' }}>Subtotal (ex. VAT)</span>
-                    <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{fmt(subtotal)}</span>
-                  </div>
-                  {q.vatIncluded && (
+                  {qv !== 'total_only' && (
+                    <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', background: '#fafaf8' }}>
+                      <span style={{ fontSize: 13, color: 'var(--muted)' }}>Subtotal (ex. VAT)</span>
+                      <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{fmt(subtotal)}</span>
+                    </div>
+                  )}
+                  {qv !== 'total_only' && q.vatIncluded && (
                     <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', background: '#fafaf8' }}>
                       <span style={{ fontSize: 13, color: 'var(--muted)' }}>VAT (20%)</span>
                       <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{fmt(vatAmount)}</span>

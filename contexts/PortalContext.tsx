@@ -2,7 +2,8 @@
 
 import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Quote, Job, Invoice, GanttState, Variation, VariationStatus } from '@/lib/types'
+import type { Quote, Job, Invoice, GanttState, Variation, VariationStatus, ClientPortalSettings } from '@/lib/types'
+import { DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
 
 export interface PortalSettings {
   name: string
@@ -20,6 +21,7 @@ interface PortalContextType {
   variations: Variation[]
   ganttStates: Record<string, GanttState>
   settings: PortalSettings
+  clientSettings: ClientPortalSettings
   userEmail: string
   loading: boolean
   error: string | null
@@ -46,6 +48,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   const [variations, setVariations] = useState<Variation[]>([])
   const [ganttStates, setGanttStates] = useState<Record<string, GanttState>>({})
   const [settings, setSettings] = useState<PortalSettings>(DEFAULT_SETTINGS)
+  const [clientSettings, setClientSettings] = useState<ClientPortalSettings>(DEFAULT_CLIENT_PORTAL_SETTINGS)
   const [userEmail, setUserEmail] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -214,13 +217,23 @@ export function PortalProvider({ children }: { children: ReactNode }) {
         })
       }
 
+      // Map per-client portal settings
+      if (result?.client_settings && typeof result.client_settings === 'object') {
+        setClientSettings({
+          ...DEFAULT_CLIENT_PORTAL_SETTINGS,
+          ...(result.client_settings as Partial<ClientPortalSettings>),
+        })
+      } else {
+        setClientSettings(DEFAULT_CLIENT_PORTAL_SETTINGS)
+      }
+
       setLoading(false)
     }
     load()
   }, [tick]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <PortalContext.Provider value={{ quotes, jobs, invoices, variations, ganttStates, settings, userEmail, loading, error, reload }}>
+    <PortalContext.Provider value={{ quotes, jobs, invoices, variations, ganttStates, settings, clientSettings, userEmail, loading, error, reload }}>
       {children}
     </PortalContext.Provider>
   )

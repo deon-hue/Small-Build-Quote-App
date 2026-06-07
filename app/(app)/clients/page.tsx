@@ -4,7 +4,8 @@ import { useState } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { createClient } from '@/lib/supabase/client'
 import { fmt, quoteTotal, STAGE_COLOR, STAGE_LABEL, Q_BADGE, Q_LABEL } from '@/lib/utils'
-import type { Client, PortalStatus } from '@/lib/types'
+import type { Client, PortalStatus, ClientPortalSettings } from '@/lib/types'
+import { DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
 import { useRouter } from 'next/navigation'
 import QuotePreviewModal from '@/components/QuotePreviewModal'
 import type { Quote } from '@/lib/types'
@@ -48,6 +49,7 @@ export default function ClientsPage() {
   const [showForm, setShowForm] = useState(false)
   const [editingClient, setEditingClient] = useState<Client | null>(null)
   const [form, setForm] = useState(BLANK_FORM)
+  const [formPortalSettings, setFormPortalSettings] = useState<ClientPortalSettings>(DEFAULT_CLIENT_PORTAL_SETTINGS)
   const [saving, setSaving] = useState(false)
   const router = useRouter()
 
@@ -69,12 +71,14 @@ export default function ClientsPage() {
   function openNew() {
     setEditingClient(null)
     setForm(BLANK_FORM)
+    setFormPortalSettings(DEFAULT_CLIENT_PORTAL_SETTINGS)
     setShowForm(true)
   }
 
   function openEdit(c: Client) {
     setEditingClient(c)
     setForm({ name: c.name, first: c.first, last: c.last, email: c.email, phone: c.phone, address: c.address, notes: c.notes })
+    setFormPortalSettings({ ...DEFAULT_CLIENT_PORTAL_SETTINGS, ...(c.portalSettings || {}) })
     setSelected(null)
     setShowForm(true)
   }
@@ -84,9 +88,9 @@ export default function ClientsPage() {
     setSaving(true)
     try {
       if (editingClient) {
-        await updateClient({ ...editingClient, ...form })
+        await updateClient({ ...editingClient, ...form, portalSettings: formPortalSettings })
       } else {
-        await addClient({ ...form, addedFrom: 'manual' })
+        await addClient({ ...form, addedFrom: 'manual', portalSettings: formPortalSettings })
       }
       setShowForm(false)
     } finally {
@@ -435,6 +439,84 @@ export default function ClientsPage() {
               <div className="fg">
                 <label>Notes</label>
                 <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Any extra info…" />
+              </div>
+
+              {/* ── Portal & Quote Settings ───────────────────────── */}
+              <div style={{ paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)', marginBottom: 14 }}>
+                  Portal &amp; Quote Settings
+                </div>
+
+                {/* Quote display level */}
+                <div className="fg" style={{ marginBottom: 12 }}>
+                  <label>Quote Display (Portal &amp; HTML email)</label>
+                  <select
+                    value={formPortalSettings.quoteView}
+                    onChange={e => setFormPortalSettings(s => ({ ...s, quoteView: e.target.value as ClientPortalSettings['quoteView'] }))}
+                  >
+                    <option value="full">Full — all phases with costs</option>
+                    <option value="phases">Phases only — list of phases, no amounts</option>
+                    <option value="total_only">Total only — grand total, no breakdown</option>
+                  </select>
+                </div>
+
+                {/* Default PDF type */}
+                <div className="fg" style={{ marginBottom: 14 }}>
+                  <label>Default PDF Type</label>
+                  <select
+                    value={formPortalSettings.defaultPdfType}
+                    onChange={e => setFormPortalSettings(s => ({ ...s, defaultPdfType: e.target.value as ClientPortalSettings['defaultPdfType'] }))}
+                  >
+                    <option value="customer">Client view — scope &amp; items, no prices</option>
+                    <option value="detailed">Detailed — full breakdown with prices</option>
+                  </select>
+                </div>
+
+                {/* Quote toggles */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px', marginBottom: 14 }}>
+                  {(
+                    [
+                      { key: 'showScope',            label: 'Show Scope of Works' },
+                      { key: 'showPaymentTerms',      label: 'Show Payment Terms' },
+                      { key: 'allowOnlineApproval',   label: 'Online Quote Approval' },
+                    ] as { key: keyof ClientPortalSettings; label: string }[]
+                  ).map(({ key, label }) => (
+                    <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12 }}>
+                      <input
+                        type="checkbox"
+                        checked={formPortalSettings[key] as boolean}
+                        onChange={e => setFormPortalSettings(s => ({ ...s, [key]: e.target.checked }))}
+                        style={{ width: 14, height: 14, flexShrink: 0, cursor: 'pointer' }}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+
+                {/* Portal tabs */}
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)', marginBottom: 8 }}>
+                  Portal Tabs
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px' }}>
+                  {(
+                    [
+                      { key: 'showQuotesTab',    label: 'Quotes tab' },
+                      { key: 'showJobsTab',      label: 'Jobs tab' },
+                      { key: 'showInvoicesTab',  label: 'Invoices tab' },
+                      { key: 'showProgramme',    label: 'Programme / Gantt' },
+                    ] as { key: keyof ClientPortalSettings; label: string }[]
+                  ).map(({ key, label }) => (
+                    <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12 }}>
+                      <input
+                        type="checkbox"
+                        checked={formPortalSettings[key] as boolean}
+                        onChange={e => setFormPortalSettings(s => ({ ...s, [key]: e.target.checked }))}
+                        style={{ width: 14, height: 14, flexShrink: 0, cursor: 'pointer' }}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
             <div className="form-modal-ft">

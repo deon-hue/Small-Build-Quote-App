@@ -223,6 +223,43 @@ export interface Supplier {
 
 export type PortalStatus = 'no_email' | 'not_invited' | 'invited' | 'active'
 
+/**
+ * Per-client settings controlling what the client sees in their portal,
+ * in emailed PDFs, and in HTML quote views.
+ */
+export interface ClientPortalSettings {
+  /** How much quote detail the client sees in the portal and HTML client view */
+  quoteView: 'full' | 'phases' | 'total_only'
+  /** Show the Scope of Works section in PDFs and HTML quotes */
+  showScope: boolean
+  /** Show the Payment Terms & Conditions section in PDFs and HTML quotes */
+  showPaymentTerms: boolean
+  /** Show the Quotes tab in the client portal */
+  showQuotesTab: boolean
+  /** Show the Jobs tab in the client portal */
+  showJobsTab: boolean
+  /** Show the Invoices tab in the client portal */
+  showInvoicesTab: boolean
+  /** Show the Programme (Gantt chart) on the Jobs page */
+  showProgramme: boolean
+  /** Allow client to digitally approve quotes via the portal */
+  allowOnlineApproval: boolean
+  /** Pre-selects the PDF type when sending a quote — 'customer' hides prices */
+  defaultPdfType: 'customer' | 'detailed'
+}
+
+export const DEFAULT_CLIENT_PORTAL_SETTINGS: ClientPortalSettings = {
+  quoteView:          'full',
+  showScope:          true,
+  showPaymentTerms:   false,
+  showQuotesTab:      true,
+  showJobsTab:        true,
+  showInvoicesTab:    true,
+  showProgramme:      true,
+  allowOnlineApproval: true,
+  defaultPdfType:     'customer',
+}
+
 export interface Client {
   id: string
   name: string
@@ -236,6 +273,7 @@ export interface Client {
   portalInvitedAt?: string | null
   portalStatus?: PortalStatus
   portalLastLogin?: string | null
+  portalSettings?: ClientPortalSettings
 }
 
 export interface Settings {

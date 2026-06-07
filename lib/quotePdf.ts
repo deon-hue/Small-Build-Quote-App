@@ -110,9 +110,15 @@ async function wrapText(
 export async function buildQuotePdf(
   quote: Quote,
   settings: Settings,
-  opts: { customerView?: boolean } = {},
+  opts: {
+    customerView?: boolean
+    showScope?: boolean
+    showPaymentTerms?: boolean
+  } = {},
 ): Promise<Buffer> {
-  const customerView = opts.customerView ?? false
+  const customerView    = opts.customerView    ?? false
+  const showScope       = opts.showScope       ?? true
+  const showPaymentTerms = opts.showPaymentTerms ?? true
   const co = settings
   const qMkp = quote.markup || 0
   const qVat = quote.vatIncluded
@@ -238,7 +244,7 @@ export async function buildQuotePdf(
   // ── Scope ─────────────────────────────────────────────────────────────────
   // Rendered as a compact bullet list so it fits on page 1 without a gap.
   // Full scope text is available in the customer portal.
-  if (quote.scope) {
+  if (showScope && quote.scope) {
     const lineH = 13
     const bullets = scopeToBullets(quote.scope)
     // Pre-wrap each bullet in case it's still long, using the font measurer
@@ -396,7 +402,7 @@ export async function buildQuotePdf(
   }
 
   // ── Terms ─────────────────────────────────────────────────────────────────
-  if (co.terms) {
+  if (showPaymentTerms && co.terms) {
     const termsText = [co.terms, co.extra].filter(Boolean).join('\n')
     const termsLines = termsText.split('\n')
     const lineH = 11

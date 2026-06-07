@@ -7,7 +7,15 @@ function esc(s: string): string {
   return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
 }
 
-export function buildHtml(q: Quote, settings: Settings): string {
+export interface HtmlOpts {
+  showScope?: boolean
+  showPaymentTerms?: boolean
+  quoteView?: 'full' | 'phases' | 'total_only'
+}
+
+export function buildHtml(q: Quote, settings: Settings, opts: HtmlOpts = {}): string {
+  const showScope        = opts.showScope        ?? true
+  const showPaymentTerms = opts.showPaymentTerms ?? true
   const co = settings
   const net = q.phases.reduce((s, p) => s + calcPhase(p), 0)
   const mu = net * (q.markup / 100)
@@ -61,7 +69,7 @@ small{font-size:10px;color:#8a8278}
 </div>
 <div class="bd">
 <div class="intro">Dear ${esc(q.customer.name || 'Customer')},<br><br>Thank you for the opportunity to quote for the works at <strong>${esc(q.customer.address || 'your property')}</strong>. Please find below our detailed estimate for the ${esc(q.jobType)} works as discussed. This quotation is valid for 30 days from the date of issue.</div>
-${q.scope ? `<div style="margin-bottom:24px;padding:16px 18px;background:#f8f5f0;border-left:3px solid #7ab533;border-radius:0 4px 4px 0"><div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#5a8a20;margin-bottom:8px">Scope of Works</div><div style="font-size:13px;color:#1e2022;line-height:1.7">${q.scope.replace(/\n/g, '<br>')}</div></div>` : ''}
+${showScope && q.scope ? `<div style="margin-bottom:24px;padding:16px 18px;background:#f8f5f0;border-left:3px solid #7ab533;border-radius:0 4px 4px 0"><div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#5a8a20;margin-bottom:8px">Scope of Works</div><div style="font-size:13px;color:#1e2022;line-height:1.7">${q.scope.replace(/\n/g, '<br>')}</div></div>` : ''}
 ${q.photo ? `<div style="margin-bottom:24px;text-align:center"><img src="${q.photo}" alt="Property" style="max-width:100%;max-height:280px;border-radius:6px;border:1px solid #e0ddd8;object-fit:cover"></div>` : ''}
 <div class="det">
   <dl class="dl"><dt>Quote Reference</dt><dd>${esc(q.ref || '—')}</dd><dt>Date Issued</dt><dd>${now.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</dd><dt>Valid Until</dt><dd>${new Date(now.getTime() + 30 * 864e5).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</dd></dl>
@@ -75,21 +83,28 @@ ${q.photo ? `<div style="margin-bottom:24px;text-align:center"><img src="${q.pho
   <tr class="tr"><td>TOTAL</td><td style="text-align:right">£${total.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</td></tr>
 </table></div>
 <div style="clear:both"></div>
-<div class="terms"><h4>Payment Terms &amp; Conditions</h4><p>${co.terms || ''}</p><p>${co.extra || ''}</p></div>
+${showPaymentTerms ? `<div class="terms"><h4>Payment Terms &amp; Conditions</h4><p>${co.terms || ''}</p><p>${co.extra || ''}</p></div>` : ''}
 <p style="margin-top:20px;font-size:13px;color:#444">To accept this quotation or to discuss any aspect of the works:<br><strong>${esc(co.contact || '')}</strong> &nbsp;·&nbsp; ${esc(co.email || '')} &nbsp;·&nbsp; ${esc(co.phone || '')}</p>
 </div>
 <div class="ft">${esc(co.name || 'Buildospro')} · ${esc(co.address || '')} · Registered in England &amp; Wales</div>
 </div></body></html>`
 }
 
-export function buildHtmlClientView(q: Quote, settings: Settings): string {
+export function buildHtmlClientView(q: Quote, settings: Settings, opts: HtmlOpts = {}): string {
+  const showScope        = opts.showScope        ?? true
+  const showPaymentTerms = opts.showPaymentTerms ?? true
+  const quoteView        = opts.quoteView        ?? 'full'
   const co = settings
   const qMkp = q.markup || 0
   const qVat = q.vatIncluded
   const now = new Date()
 
-  // Deduplicate phases — group by parentPhase, use first occurrence for visual
-  const phaseRows = q.phases.map(p => {
+  const sub = q.phases.reduce((s, p) => s + calcPhaseSell(p, qMkp), 0)
+  const vat = qVat ? sub * VAT : 0
+  const total = sub + vat
+
+  // Build phase card rows — behaviour depends on quoteView
+  const phaseRows = quoteView === 'total_only' ? '' : q.phases.map(p => {
     const sell    = calcPhaseSell(p, qMkp)
     const vatAmt  = qVat ? sell * VAT : 0
     // Use AI-assigned image if available; fall back to the static mapping
@@ -104,22 +119,23 @@ export function buildHtmlClientView(q: Quote, settings: Settings): string {
          </div>`
       : `<div style="width:52px;height:52px;border-radius:6px;background:${color}18;border:1px solid ${color}44;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;margin-right:14px">${emoji}</div>`
 
+    // 'phases' view: show name + visual but hide prices
+    const priceHtml = quoteView === 'full'
+      ? `<div style="text-align:right;flex-shrink:0">
+           <div style="font-weight:700;font-size:14px;color:#2b2f33">£${sell.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>
+           ${qVat ? `<div style="font-size:11px;color:#4a90a4">+£${vatAmt.toLocaleString('en-GB', { minimumFractionDigits: 2 })} VAT</div>` : ''}
+         </div>`
+      : ''
+
     return `<div style="display:flex;align-items:center;padding:12px 14px;border-bottom:1px solid #e8e0d0;border-left:4px solid ${color}">
       ${photoHtml}
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:13px;color:#1a1612">${esc(p.phase)}</div>
         ${p.taskName ? `<div style="font-size:11px;color:#7a7268;margin-top:2px">${esc(p.taskName)}</div>` : ''}
       </div>
-      <div style="text-align:right;flex-shrink:0">
-        <div style="font-weight:700;font-size:14px;color:#2b2f33">£${sell.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>
-        ${qVat ? `<div style="font-size:11px;color:#4a90a4">+£${vatAmt.toLocaleString('en-GB', { minimumFractionDigits: 2 })} VAT</div>` : ''}
-      </div>
+      ${priceHtml}
     </div>`
   }).join('')
-
-  const sub = q.phases.reduce((s, p) => s + calcPhaseSell(p, qMkp), 0)
-  const vat = qVat ? sub * VAT : 0
-  const total = sub + vat
 
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 body{font-family:Arial,sans-serif;background:#f0f2f4;margin:0;padding:28px}
@@ -153,21 +169,21 @@ th{background:#2b2f33;color:white;padding:9px 12px;text-align:left;font-weight:6
 </div>
 <div class="bd">
 <div class="intro">Dear ${esc(q.customer.name || 'Customer')},<br><br>Thank you for the opportunity to quote for the works at <strong>${esc(q.customer.address || 'your property')}</strong>. Please find below our quotation for the ${esc(q.jobType)} works as discussed. This quotation is valid for 30 days from the date of issue.</div>
-${q.scope ? `<div class="scope-box"><div class="scope-label">Scope of Works</div><div class="scope-text">${q.scope.replace(/\n/g, '<br>')}</div></div>` : ''}
+${showScope && q.scope ? `<div class="scope-box"><div class="scope-label">Scope of Works</div><div class="scope-text">${q.scope.replace(/\n/g, '<br>')}</div></div>` : ''}
 ${q.photo ? `<div style="margin-bottom:24px;text-align:center"><img src="${q.photo}" alt="Property" style="max-width:100%;max-height:280px;border-radius:6px;border:1px solid #e0ddd8;object-fit:cover"></div>` : ''}
 <div class="det">
   <dl class="dl"><dt>Quote Reference</dt><dd>${esc(q.ref || '—')}</dd><dt>Date Issued</dt><dd>${now.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</dd><dt>Valid Until</dt><dd>${new Date(now.getTime() + 30 * 864e5).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</dd></dl>
   <dl class="dl"><dt>Prepared For</dt><dd>${esc(q.customer.name || '—')}</dd><dt>Property</dt><dd>${esc(q.customer.address || '—')}</dd><dt>Job Type</dt><dd>${esc(q.jobType)}</dd></dl>
 </div>
-<h3>Summary of Works — ${esc(q.jobType)}</h3>
-<div style="border:1px solid #e8e0d0;border-radius:6px;overflow:hidden;margin-bottom:20px">${phaseRows}</div>
+${quoteView !== 'total_only' ? `<h3>Summary of Works — ${esc(q.jobType)}</h3>
+<div style="border:1px solid #e8e0d0;border-radius:6px;overflow:hidden;margin-bottom:20px">${phaseRows}</div>` : ''}
 <div class="tots"><table>
-  <tr><td>Subtotal (ex-VAT)</td><td style="text-align:right">£${sub.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</td></tr>
-  ${qVat ? `<tr><td>VAT (20%)</td><td style="text-align:right">£${vat.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</td></tr>` : '<tr><td colspan="2" style="font-size:10px;color:#8a8278">*VAT not included</td></tr>'}
-  <tr class="tr"><td>TOTAL</td><td style="text-align:right">£${total.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</td></tr>
+  ${quoteView !== 'total_only' ? `<tr><td>Subtotal (ex-VAT)</td><td style="text-align:right">£${sub.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</td></tr>
+  ${qVat ? `<tr><td>VAT (20%)</td><td style="text-align:right">£${vat.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</td></tr>` : '<tr><td colspan="2" style="font-size:10px;color:#8a8278">*VAT not included</td></tr>'}` : ''}
+  <tr class="tr"><td>TOTAL${qVat ? ' (inc. VAT)' : ''}</td><td style="text-align:right">£${total.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</td></tr>
 </table></div>
 <div style="clear:both"></div>
-<div class="terms"><h4>Payment Terms &amp; Conditions</h4><p>${co.terms || ''}</p><p>${co.extra || ''}</p></div>
+${showPaymentTerms ? `<div class="terms"><h4>Payment Terms &amp; Conditions</h4><p>${co.terms || ''}</p><p>${co.extra || ''}</p></div>` : ''}
 <p style="margin-top:20px;font-size:13px;color:#444">To accept this quotation or to discuss any aspect of the works, please contact us:<br><strong>${esc(co.contact || '')}</strong> &nbsp;·&nbsp; ${esc(co.email || '')} &nbsp;·&nbsp; ${esc(co.phone || '')}</p>
 </div>
 <div class="ft">${esc(co.name || 'Buildospro')} · ${esc(co.address || '')} · Registered in England &amp; Wales</div>

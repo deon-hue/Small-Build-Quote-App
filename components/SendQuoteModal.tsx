@@ -12,6 +12,7 @@
 import { useState } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import type { Quote } from '@/lib/types'
+import { DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
 import type { NotifyClientPayload } from '@/app/api/notify-client/route'
 import { quoteTotal } from '@/lib/utils'
 
@@ -22,11 +23,18 @@ interface Props {
 }
 
 export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
-  const { settings } = useApp()
+  const { settings, clients } = useApp()
+
+  // Look up this client's portal settings to pre-select the right PDF type
+  const matchedClient = clients.find(
+    c => c.email && quote.customer.email &&
+      c.email.toLowerCase() === quote.customer.email.toLowerCase()
+  )
+  const clientSettings = matchedClient?.portalSettings ?? DEFAULT_CLIENT_PORTAL_SETTINGS
 
   const [toEmail, setToEmail]     = useState(quote.customer.email || '')
   const [message, setMessage]     = useState('')
-  const [pdfType, setPdfType]     = useState<'customer' | 'detailed'>('customer')
+  const [pdfType, setPdfType]     = useState<'customer' | 'detailed'>(clientSettings.defaultPdfType)
   const [busy, setBusy]           = useState<'pdf' | 'sending' | null>(null)
   const [sent, setSent]           = useState(false)
   const [error, setError]         = useState('')
@@ -43,7 +51,13 @@ export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
       const pdfRes = await fetch('/api/generate-quote-pdf', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ quote, settings, customerView: pdfType === 'customer' }),
+        body:    JSON.stringify({
+          quote,
+          settings,
+          customerView:     pdfType === 'customer',
+          showScope:        clientSettings.showScope,
+          showPaymentTerms: clientSettings.showPaymentTerms,
+        }),
       })
 
       if (!pdfRes.ok) {

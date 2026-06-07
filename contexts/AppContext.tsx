@@ -2,8 +2,8 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Job, Quote, Client, Supplier, Settings, GanttState, Invoice, JobNote, PortalStatus, TemplatePhaseData, Variation, VariationStatus, TeamMember, TeamMemberRole, UserPermissions } from '@/lib/types'
-import { FULL_PERMISSIONS } from '@/lib/types'
+import type { Job, Quote, Client, Supplier, Settings, GanttState, Invoice, JobNote, PortalStatus, TemplatePhaseData, Variation, VariationStatus, TeamMember, TeamMemberRole, UserPermissions, ClientPortalSettings } from '@/lib/types'
+import { FULL_PERMISSIONS, DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
 import { uid, JOB_TEMPLATES } from '@/lib/utils'
 
 interface AppContextType {
@@ -217,6 +217,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           portalInvitedAt: portalStatusMap[r.id]?.portal_invited_at || null,
           portalStatus: (portalStatusMap[r.id]?.portal_status || (r.email ? 'not_invited' : 'no_email')) as PortalStatus,
           portalLastLogin: portalStatusMap[r.id]?.portal_last_login || null,
+          portalSettings: (r.portal_settings && typeof r.portal_settings === 'object'
+            ? { ...DEFAULT_CLIENT_PORTAL_SETTINGS, ...(r.portal_settings as Partial<ClientPortalSettings>) }
+            : DEFAULT_CLIENT_PORTAL_SETTINGS),
         })))
       }
 
@@ -380,10 +383,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addClient = useCallback(async (c: Omit<Client, 'id'>) => {
     const { data: { user } } = await supabase.auth.getUser()
     const ownerId = dataOwnerIdRef.current || user!.id
+    const portalSettings = c.portalSettings || DEFAULT_CLIENT_PORTAL_SETTINGS
     const { data, error } = await supabase.from('clients').insert({
       user_id: ownerId, name: c.name, first_name: c.first, last_name: c.last,
       phone: c.phone, email: c.email, address: c.address,
       notes: c.notes, added_from: c.addedFrom,
+      portal_settings: portalSettings,
       updated_at: new Date().toISOString(),
     }).select().single()
     if (error) throw error
@@ -392,6 +397,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       phone: data.phone || '', email: data.email || '', address: data.address || '',
       notes: data.notes || '', addedFrom: data.added_from || '',
       portalInvitedAt: null, portalStatus: 'not_invited', portalLastLogin: null,
+      portalSettings,
     }])
   }, [supabase])
 
@@ -399,6 +405,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await supabase.from('clients').update({
       name: c.name, first_name: c.first, last_name: c.last,
       phone: c.phone, email: c.email, address: c.address, notes: c.notes,
+      portal_settings: c.portalSettings || DEFAULT_CLIENT_PORTAL_SETTINGS,
       updated_at: new Date().toISOString(),
     }).eq('id', c.id)
     setClients(prev => prev.map(x => x.id === c.id ? c : x))
