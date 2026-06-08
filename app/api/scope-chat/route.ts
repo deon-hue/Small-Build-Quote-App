@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 
 interface AttachmentPayload {
   name: string
@@ -9,6 +10,10 @@ interface AttachmentPayload {
 
 export async function POST(req: NextRequest) {
   try {
+  const sb = await createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
     return NextResponse.json({ reply: 'AI not configured — please add your ANTHROPIC_API_KEY in Netlify environment variables.' })

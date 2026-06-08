@@ -32,6 +32,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -385,6 +386,10 @@ function buildEmailSubject(payload: NotifyClientPayload): string {
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  const sb = await createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+
   let payload: NotifyClientPayload
   try {
     payload = await req.json()

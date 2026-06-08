@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 
 /**
  * GET /api/phase-image?query=brickwork+construction
@@ -11,6 +12,10 @@ import { NextRequest, NextResponse } from 'next/server'
  * ~400px wide (small size) — good enough for quote documents.
  */
 export async function GET(req: NextRequest) {
+  const sb = await createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  if (!user) return NextResponse.json({ photoUrl: null }, { status: 401 })
+
   const key = process.env.UNSPLASH_ACCESS_KEY
   if (!key) return NextResponse.json({ photoUrl: null })
 

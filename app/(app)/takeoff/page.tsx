@@ -38,7 +38,8 @@ import {
 // ── Smart Draw Mode: phase → default tool mapping ─────────────────────────────
 // When the user selects a phase, the draw tool auto-resets to this default.
 // Prevents "floor tool still active while Demolition is selected" bugs.
-export const PHASE_DEFAULT_TOOL: Record<string, DrawingTool> = {
+// Not exported — page files can only export Next.js special names
+const PHASE_DEFAULT_TOOL: Record<string, DrawingTool> = {
   'Site Setup':                  'select',
   'Demolition':                  'line',
   'Site Setup & Demolition':     'line',  // legacy compat
