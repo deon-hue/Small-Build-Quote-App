@@ -31,7 +31,15 @@ function PortalLoginForm() {
         email,
         options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=/portal` },
       })
-      if (otpError) { setError(otpError.message); return }
+      if (otpError) {
+        const msg = otpError.message.toLowerCase()
+        if (msg.includes('rate limit') || msg.includes('too many')) {
+          setError('Too many sign-in attempts — please wait a few minutes and try again, or use the Password tab instead.')
+        } else {
+          setError(otpError.message)
+        }
+        return
+      }
       setMessage('Sign-in link sent! Check your email and click the link to access your portal.')
     } finally {
       setLoading(false)
