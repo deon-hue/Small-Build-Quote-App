@@ -1037,7 +1037,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
                   onUpdate(markEdited({ ...p, items: [...p.items, newItem] }))
                 }}
                   style={{ padding: '5px 14px', background: '#f59e0b', border: 'none', borderRadius: 5, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                  + Add to Quote
+                  + Add Trade
                 </button>
               </div>
             </div>
