@@ -172,10 +172,13 @@ function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst, lab
 
   // Labour picker state (local — doesn't need to persist)
   const [showPicker,   setShowPicker]   = useState(false)
-  const [pickTrade,    setPickTrade]    = useState(labourTrades[0]?.id ?? '')
-  const [pickRateType, setPickRateType] = useState<LabourRateType>('day')
-  const [pickQty,      setPickQty]      = useState(1)
-  const [pickWorkers,  setPickWorkers]  = useState(1)
+
+  // Multi-trade lines — each line is one trade × rate × qty × workers
+  interface TradeLine { id: number; tradeId: string; rateType: LabourRateType; qty: number; workers: number }
+  const [tradeLines, setTradeLines] = useState<TradeLine[]>([
+    { id: 1, tradeId: labourTrades[0]?.id ?? '', rateType: 'day', qty: 1, workers: 1 }
+  ])
+  let tlCounter = tradeLines.length + 1
 
   // Local trade list — starts from prop, grows when user adds a new trade inline
   const [localTrades,  setLocalTrades]  = useState<typeof labourTrades>(labourTrades)
@@ -185,9 +188,22 @@ function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst, lab
   const [newTradeRate, setNewTradeRate] = useState<number>(200)
   const [savingTrade,  setSavingTrade]  = useState(false)
 
-  const pickedTrade  = localTrades.find(t => t.id === pickTrade)
-  const pickedRate   = pickedTrade ? boLabourRate(pickedTrade, pickRateType) : 0
-  const pickedTotal  = +(pickedRate * pickQty * pickWorkers).toFixed(2)
+  function tradeLineTotal(tl: TradeLine): number {
+    const trade = localTrades.find(t => t.id === tl.tradeId)
+    if (!trade) return 0
+    return +(boLabourRate(trade, tl.rateType) * tl.qty * tl.workers).toFixed(2)
+  }
+  const pickedTotal = +tradeLines.reduce((s, tl) => s + tradeLineTotal(tl), 0).toFixed(2)
+
+  function updateTradeLine(id: number, patch: Partial<TradeLine>) {
+    setTradeLines(prev => prev.map(tl => tl.id === id ? { ...tl, ...patch } : tl))
+  }
+  function removeTradeLine(id: number) {
+    setTradeLines(prev => prev.length > 1 ? prev.filter(tl => tl.id !== id) : prev)
+  }
+  function addTradeLine() {
+    setTradeLines(prev => [...prev, { id: tlCounter++, tradeId: localTrades[0]?.id ?? '', rateType: 'day', qty: 1, workers: 1 }])
+  }
 
   async function saveNewTrade() {
     if (!newTradeName.trim()) return
@@ -209,7 +225,8 @@ function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst, lab
       if (error || !data) return
       const newTrade = data as typeof labourTrades[0]
       setLocalTrades(prev => [...prev, newTrade])
-      setPickTrade(newTrade.id)
+      // Auto-select the new trade in the last line
+      setTradeLines(prev => prev.map((tl, i) => i === prev.length - 1 ? { ...tl, tradeId: newTrade.id } : tl))
       setAddingTrade(false)
       setNewTradeName('')
       setNewTradeRate(200)
@@ -217,8 +234,22 @@ function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst, lab
   }
 
   function applyPicker() {
-    if (!pickedTrade) return
-    onUpdate({ ...item, labour: pickedTotal, desc: item.desc || pickedTrade.name, notes: `${pickedTrade.name} · ${pickedRate.toFixed(2)}/${pickRateType === 'hourly' ? 'hr' : pickRateType === 'half_day' ? 'half-day' : 'day'} × ${pickQty} × ${pickWorkers}` })
+    if (tradeLines.length === 0) return
+    const noteParts = tradeLines.map(tl => {
+      const trade = localTrades.find(t => t.id === tl.tradeId)
+      if (!trade) return null
+      const rate = boLabourRate(trade, tl.rateType)
+      const unit = tl.rateType === 'hourly' ? 'hr' : tl.rateType === 'half_day' ? 'half-day' : 'day'
+      const suffix = tl.workers > 1 ? ` × ${tl.workers} workers` : ''
+      return `${trade.name} £${rate.toFixed(2)}/${unit} × ${tl.qty}${suffix} = £${tradeLineTotal(tl).toFixed(2)}`
+    }).filter(Boolean)
+    const firstTrade = localTrades.find(t => t.id === tradeLines[0]?.tradeId)
+    onUpdate({
+      ...item,
+      labour: pickedTotal,
+      desc: item.desc || (tradeLines.length === 1 && firstTrade ? firstTrade.name : 'Labour'),
+      notes: noteParts.join(' | '),
+    })
     setShowPicker(false)
   }
 
@@ -342,87 +373,59 @@ function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst, lab
     {/* Labour rate picker — expands below the row when 🔨 is clicked */}
     {isLabour && showPicker && (
       <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-        <td colSpan={8} style={{ padding: '0 6px 8px 104px', background: '#fffbeb' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, flexWrap: 'wrap', paddingTop: 6 }}>
-            {/* Trade selector + new trade */}
-            <div>
-              <div style={{ fontSize: 9, color: '#92400e', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Trade</div>
-              <div style={{ display: 'flex', gap: 4 }}>
-                <select value={pickTrade} onChange={e => setPickTrade(e.target.value)}
-                  style={{ padding: '4px 7px', border: '1px solid #f59e0b', borderRadius: 5, fontSize: 12, background: '#fff', minWidth: 170 }}>
-                  {localTrades.map(t => (
-                    <option key={t.id} value={t.id}>{t.name} — £{t.day_rate}/day</option>
-                  ))}
-                </select>
-                <button
-                  title="Add new labour trade to Back Office"
-                  onClick={() => setAddingTrade(a => !a)}
-                  style={{ padding: '4px 8px', border: '1px solid #f59e0b', borderRadius: 5, background: addingTrade ? '#fef3c7' : '#fff', fontSize: 11, cursor: 'pointer', color: '#92400e', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                  + New Trade
-                </button>
-              </div>
-              {/* Inline new-trade form */}
-              {addingTrade && (
-                <div style={{ marginTop: 6, padding: '8px 10px', background: '#fff', border: '1px solid #f59e0b', borderRadius: 6, display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                  <div>
-                    <div style={{ fontSize: 9, color: '#92400e', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Trade Name</div>
-                    <input
-                      autoFocus
-                      value={newTradeName}
-                      onChange={e => setNewTradeName(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') saveNewTrade(); if (e.key === 'Escape') setAddingTrade(false) }}
-                      placeholder="e.g. Bricklayer"
-                      style={{ padding: '4px 7px', border: '1px solid #f59e0b', borderRadius: 5, fontSize: 12, width: 140, outline: 'none' }}
-                    />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 9, color: '#92400e', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Day Rate (£)</div>
-                    <input
-                      type="number" min={0} step={10}
-                      value={newTradeRate}
-                      onChange={e => setNewTradeRate(+e.target.value)}
-                      style={{ padding: '4px 7px', border: '1px solid #f59e0b', borderRadius: 5, fontSize: 12, width: 80, outline: 'none' }}
-                    />
-                  </div>
-                  <button
-                    onClick={saveNewTrade} disabled={savingTrade || !newTradeName.trim()}
-                    style={{ padding: '5px 12px', background: '#f59e0b', border: 'none', borderRadius: 5, color: '#fff', fontSize: 12, fontWeight: 700, cursor: savingTrade ? 'wait' : 'pointer' }}>
-                    {savingTrade ? 'Saving…' : 'Save Trade'}
-                  </button>
-                  <button onClick={() => setAddingTrade(false)}
-                    style={{ padding: '5px 8px', background: 'transparent', border: '1px solid #d1d5db', borderRadius: 5, fontSize: 12, cursor: 'pointer', color: '#6b7280' }}>
-                    Cancel
-                  </button>
+        <td colSpan={8} style={{ padding: '0 6px 10px 6px', background: '#fffbeb' }}>
+          <div style={{ paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+
+            {/* Column headers */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 64px 56px 80px 24px', gap: 6, paddingLeft: 2, paddingRight: 2 }}>
+              {['Trade', 'Rate', 'Qty', 'Workers', 'Total', ''].map(h => (
+                <div key={h} style={{ fontSize: 9, color: '#92400e', textTransform: 'uppercase', letterSpacing: 0.5 }}>{h}</div>
+              ))}
+            </div>
+
+            {/* One row per trade line */}
+            {tradeLines.map(tl => {
+              const trade = localTrades.find(t => t.id === tl.tradeId)
+              const lineTotal = tradeLineTotal(tl)
+              return (
+                <div key={tl.id} style={{ display: 'grid', gridTemplateColumns: '1fr 90px 64px 56px 80px 24px', gap: 6, alignItems: 'center' }}>
+                  <select value={tl.tradeId} onChange={e => updateTradeLine(tl.id, { tradeId: e.target.value })}
+                    style={{ padding: '4px 6px', border: '1px solid #f59e0b', borderRadius: 5, fontSize: 12, background: '#fff', width: '100%' }}>
+                    {localTrades.map(t => <option key={t.id} value={t.id}>{t.name} — £{t.day_rate}/day</option>)}
+                  </select>
+                  <select value={tl.rateType} onChange={e => updateTradeLine(tl.id, { rateType: e.target.value as LabourRateType })}
+                    style={{ padding: '4px 6px', border: '1px solid #f59e0b', borderRadius: 5, fontSize: 12, background: '#fff', width: '100%' }}>
+                    {(Object.keys(LABOUR_RATE_LABELS) as LabourRateType[]).map(rt => (
+                      <option key={rt} value={rt}>{LABOUR_RATE_LABELS[rt]} £{trade ? boLabourRate(trade, rt).toFixed(0) : '—'}</option>
+                    ))}
+                  </select>
+                  <input type="number" min={0} step={0.5} value={tl.qty}
+                    onChange={e => updateTradeLine(tl.id, { qty: Math.max(0, +e.target.value) })}
+                    style={{ padding: '4px 6px', border: '1px solid #f59e0b', borderRadius: 5, fontSize: 12, width: '100%' }} />
+                  <input type="number" min={1} step={1} value={tl.workers}
+                    onChange={e => updateTradeLine(tl.id, { workers: Math.max(1, +e.target.value) })}
+                    style={{ padding: '4px 6px', border: '1px solid #f59e0b', borderRadius: 5, fontSize: 12, width: '100%' }} />
+                  <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: '#92400e' }}>£{lineTotal.toFixed(2)}</span>
+                  <button onClick={() => removeTradeLine(tl.id)} disabled={tradeLines.length === 1}
+                    style={{ background: 'none', border: 'none', cursor: tradeLines.length > 1 ? 'pointer' : 'default', color: tradeLines.length > 1 ? '#ef4444' : '#d1d5db', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
                 </div>
-              )}
-            </div>
-            {/* Rate type */}
-            <div>
-              <div style={{ fontSize: 9, color: '#92400e', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Rate</div>
-              <select value={pickRateType} onChange={e => setPickRateType(e.target.value as LabourRateType)}
-                style={{ padding: '4px 7px', border: '1px solid #f59e0b', borderRadius: 5, fontSize: 12, background: '#fff' }}>
-                {(Object.keys(LABOUR_RATE_LABELS) as LabourRateType[]).map(rt => (
-                  <option key={rt} value={rt}>{LABOUR_RATE_LABELS[rt]} — £{boLabourRate(pickedTrade ?? labourTrades[0], rt).toFixed(2)}</option>
-                ))}
-              </select>
-            </div>
-            {/* Qty */}
-            <div>
-              <div style={{ fontSize: 9, color: '#92400e', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>{LABOUR_QTY_LABELS[pickRateType]}</div>
-              <input type="number" min={0} step={0.5} value={pickQty} onChange={e => setPickQty(Math.max(0, +e.target.value))}
-                style={{ width: 60, padding: '4px 7px', border: '1px solid #f59e0b', borderRadius: 5, fontSize: 12 }} />
-            </div>
-            {/* Workers */}
-            <div>
-              <div style={{ fontSize: 9, color: '#92400e', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Workers</div>
-              <input type="number" min={1} step={1} value={pickWorkers} onChange={e => setPickWorkers(Math.max(1, +e.target.value))}
-                style={{ width: 52, padding: '4px 7px', border: '1px solid #f59e0b', borderRadius: 5, fontSize: 12 }} />
-            </div>
-            {/* Total + Apply */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingBottom: 1 }}>
-              <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14, color: '#92400e' }}>= £{pickedTotal.toFixed(2)}</span>
+              )
+            })}
+
+            {/* Add trade line + new trade form */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+              <button onClick={addTradeLine}
+                style={{ padding: '4px 10px', border: '1px dashed #f59e0b', borderRadius: 5, background: '#fff', fontSize: 11, cursor: 'pointer', color: '#92400e', fontWeight: 600 }}>
+                + Add Trade
+              </button>
+              <button onClick={() => setAddingTrade(a => !a)}
+                style={{ padding: '4px 8px', border: '1px solid #f59e0b', borderRadius: 5, background: addingTrade ? '#fef3c7' : '#fff', fontSize: 11, cursor: 'pointer', color: '#92400e', fontWeight: 600 }}>
+                + New Trade
+              </button>
+              <div style={{ flex: 1 }} />
+              <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14, color: '#92400e' }}>Total £{pickedTotal.toFixed(2)}</span>
               <button onClick={applyPicker}
-                style={{ padding: '5px 12px', background: '#f59e0b', border: 'none', borderRadius: 5, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                style={{ padding: '5px 14px', background: '#f59e0b', border: 'none', borderRadius: 5, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
                 Apply
               </button>
               <button onClick={() => setShowPicker(false)}
@@ -430,6 +433,32 @@ function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst, lab
                 Cancel
               </button>
             </div>
+
+            {/* Inline new-trade form */}
+            {addingTrade && (
+              <div style={{ padding: '8px 10px', background: '#fff', border: '1px solid #f59e0b', borderRadius: 6, display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontSize: 9, color: '#92400e', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Trade Name</div>
+                  <input autoFocus value={newTradeName} onChange={e => setNewTradeName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') saveNewTrade(); if (e.key === 'Escape') setAddingTrade(false) }}
+                    placeholder="e.g. Bricklayer"
+                    style={{ padding: '4px 7px', border: '1px solid #f59e0b', borderRadius: 5, fontSize: 12, width: 140, outline: 'none' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 9, color: '#92400e', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Day Rate (£)</div>
+                  <input type="number" min={0} step={10} value={newTradeRate} onChange={e => setNewTradeRate(+e.target.value)}
+                    style={{ padding: '4px 7px', border: '1px solid #f59e0b', borderRadius: 5, fontSize: 12, width: 80, outline: 'none' }} />
+                </div>
+                <button onClick={saveNewTrade} disabled={savingTrade || !newTradeName.trim()}
+                  style={{ padding: '5px 12px', background: '#f59e0b', border: 'none', borderRadius: 5, color: '#fff', fontSize: 12, fontWeight: 700, cursor: savingTrade ? 'wait' : 'pointer' }}>
+                  {savingTrade ? 'Saving…' : 'Save Trade'}
+                </button>
+                <button onClick={() => setAddingTrade(false)}
+                  style={{ padding: '5px 8px', background: 'transparent', border: '1px solid #d1d5db', borderRadius: 5, fontSize: 12, cursor: 'pointer', color: '#6b7280' }}>
+                  Cancel
+                </button>
+              </div>
+            )}
           </div>
         </td>
       </tr>
