@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { useApp } from '@/contexts/AppContext'
 import { fmt, VAT, JOB_TYPES, calcPhase, calcPhaseSell } from '@/lib/utils'
 import type { QuotePhase, QuoteItem, Quote, TakeoffPhaseMeta } from '@/lib/types'
@@ -94,6 +95,7 @@ interface TaskRateEntry {
 
 export default function NewQuotePage() {
   const { quotes, clients, addQuote, updateQuote, upsertClientFromQuote, getTemplate, loading } = useApp()
+  const router = useRouter()
 
   const [custName, setCustName] = useState('')
   const [custAddr, setCustAddr] = useState('')
@@ -519,9 +521,10 @@ export default function NewQuotePage() {
         loadFromBackOffice(selectedJobType)  // async — BO defaults first, template fallback
       }
     } else if (mode === 'takeoff') {
-      setStep('workspace')
-      // Trigger file picker after workspace renders
-      setTimeout(() => takeoffInputRef.current?.click(), 100)
+      // Navigate to the Takeoff tool — user draws plans there, then
+      // clicks "Send to Quote" which stores data in sessionStorage and
+      // redirects back here with the takeoff data pre-loaded.
+      router.push('/takeoff')
     } else {
       setStep('workspace')
     }
