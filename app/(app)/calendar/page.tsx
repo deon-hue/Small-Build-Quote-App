@@ -118,7 +118,12 @@ export default function CalendarPage() {
       //     always use it when present so calendar reflects actual planned dates.
       //  2. Quote sub-phases spread evenly — initial layout before user touches the Gantt.
       //  3. 5 generic fallback phases — job has no quote and no saved Gantt layout.
-      const totalDays = (job.weeks || 12) * 7
+      //
+      // Always ensure totalDays reaches at least today + 14 days so that jobs
+      // which started in the past but have no saved Gantt layout still appear
+      // on the current calendar view instead of silently disappearing.
+      const daysSinceStart = Math.max(0, daysBetween(jobStart, today))
+      const totalDays = Math.max((job.weeks || 12) * 7, daysSinceStart + 14)
 
       // Find the best linked quote (same matching logic as GanttModal / jobs page)
       const linked = job.quoteId
