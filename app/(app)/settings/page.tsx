@@ -100,6 +100,127 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* Invoice defaults */}
+      <div className="card">
+        <div className="card-hd">Invoice Defaults</div>
+        <div style={{ padding: '18px 20px' }}>
+
+          {/* VAT + payment days */}
+          <div className="row2" style={{ alignItems: 'flex-end' }}>
+            <div className="fg">
+              <label>Default Payment Due</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="number" min={1} max={365}
+                  value={form.invoicePaymentDays ?? 30}
+                  onChange={e => setForm(p => ({ ...p, invoicePaymentDays: +e.target.value }))}
+                  style={{ width: 80 }}
+                />
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>days after issue date</span>
+              </div>
+            </div>
+            <div className="fg">
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={form.invoiceVatDefault ?? true}
+                  onChange={e => setForm(p => ({ ...p, invoiceVatDefault: e.target.checked }))}
+                  style={{ width: 'auto', accentColor: 'var(--moss)' }}
+                />
+                <span>Include VAT by default on new invoices</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Payment methods */}
+          <div className="fg" style={{ marginTop: 4 }}>
+            <label>Accepted Payment Methods</label>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 6 }}>
+              {['Bank Transfer', 'BACS', 'Cheque', 'Cash', 'Card'].map(method => {
+                const checked = (form.invoicePaymentMethods ?? []).includes(method)
+                return (
+                  <label key={method} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', fontWeight: 500 }}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      style={{ width: 'auto', accentColor: 'var(--moss)' }}
+                      onChange={() => {
+                        const current = form.invoicePaymentMethods ?? []
+                        setForm(p => ({
+                          ...p,
+                          invoicePaymentMethods: checked
+                            ? current.filter(m => m !== method)
+                            : [...current, method],
+                        }))
+                      }}
+                    />
+                    {method}
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Bank details */}
+      <div className="card">
+        <div className="card-hd">Bank Details</div>
+        <div style={{ padding: '18px 20px' }}>
+          <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14, lineHeight: 1.5 }}>
+            These appear automatically on every invoice PDF in a dedicated Payment Details block.
+          </p>
+          <div className="row2">
+            <div className="fg">
+              <label>Account Name</label>
+              <input
+                value={form.invoiceAccountName ?? ''}
+                onChange={e => setForm(p => ({ ...p, invoiceAccountName: e.target.value }))}
+                placeholder="Smith Building Ltd"
+              />
+            </div>
+            <div className="fg">
+              <label>Bank Name</label>
+              <input
+                value={form.invoiceBankName ?? ''}
+                onChange={e => setForm(p => ({ ...p, invoiceBankName: e.target.value }))}
+                placeholder="Lloyds Bank"
+              />
+            </div>
+          </div>
+          <div className="row2">
+            <div className="fg">
+              <label>Sort Code</label>
+              <input
+                value={form.invoiceSortCode ?? ''}
+                onChange={e => setForm(p => ({ ...p, invoiceSortCode: e.target.value }))}
+                placeholder="12-34-56"
+              />
+            </div>
+            <div className="fg">
+              <label>Account Number</label>
+              <input
+                value={form.invoiceAccountNumber ?? ''}
+                onChange={e => setForm(p => ({ ...p, invoiceAccountNumber: e.target.value }))}
+                placeholder="12345678"
+              />
+            </div>
+          </div>
+          <div className="fg">
+            <label>Default Invoice Notes</label>
+            <textarea
+              value={form.invoiceDefaultNotes ?? ''}
+              onChange={e => setForm(p => ({ ...p, invoiceDefaultNotes: e.target.value }))}
+              rows={3}
+              placeholder="e.g. Please use the invoice number as your payment reference."
+            />
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+              Pre-fills the Notes field on every new invoice. You can still edit it per invoice.
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
           {saving ? 'Saving…' : '💾 Save Settings'}

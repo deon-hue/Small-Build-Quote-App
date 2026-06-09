@@ -88,6 +88,14 @@ const DEFAULT_SETTINGS: Settings = {
   terms: 'A deposit of 25% is required prior to commencement of works. Stage payments are then due at agreed milestones throughout the project. Final payment is due upon practical completion.',
   extra: 'All works are carried out in accordance with current Building Regulations. Any variations to the agreed scope of works will be priced and agreed in writing prior to proceeding.',
   logo: '',
+  invoiceVatDefault: true,
+  invoicePaymentDays: 30,
+  invoicePaymentMethods: ['Bank Transfer'],
+  invoiceBankName: '',
+  invoiceAccountName: '',
+  invoiceSortCode: '',
+  invoiceAccountNumber: '',
+  invoiceDefaultNotes: '',
 }
 
 function mapTeamMember(r: Record<string, unknown>): TeamMember {
@@ -234,12 +242,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
       if (settingsRes.data) {
+        const sd = settingsRes.data
         setSettings({
-          name: settingsRes.data.company_name, tagline: settingsRes.data.tagline,
-          contact: settingsRes.data.contact, phone: settingsRes.data.phone,
-          email: settingsRes.data.email, address: settingsRes.data.address,
-          terms: settingsRes.data.terms, extra: settingsRes.data.extra,
-          logo: settingsRes.data.logo,
+          name: sd.company_name, tagline: sd.tagline,
+          contact: sd.contact, phone: sd.phone,
+          email: sd.email, address: sd.address,
+          terms: sd.terms, extra: sd.extra,
+          logo: sd.logo,
+          invoiceVatDefault:      sd.invoice_vat_default     ?? true,
+          invoicePaymentDays:     sd.invoice_payment_days    ?? 30,
+          invoicePaymentMethods:  sd.invoice_payment_methods ?? ['Bank Transfer'],
+          invoiceBankName:        sd.invoice_bank_name       ?? '',
+          invoiceAccountName:     sd.invoice_account_name    ?? '',
+          invoiceSortCode:        sd.invoice_sort_code       ?? '',
+          invoiceAccountNumber:   sd.invoice_account_number  ?? '',
+          invoiceDefaultNotes:    sd.invoice_default_notes   ?? '',
         })
       }
 
@@ -514,6 +531,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       user_id: ownerId, company_name: s.name, tagline: s.tagline,
       contact: s.contact, phone: s.phone, email: s.email, address: s.address,
       terms: s.terms, extra: s.extra, logo: s.logo,
+      invoice_vat_default:      s.invoiceVatDefault     ?? true,
+      invoice_payment_days:     s.invoicePaymentDays    ?? 30,
+      invoice_payment_methods:  s.invoicePaymentMethods ?? ['Bank Transfer'],
+      invoice_bank_name:        s.invoiceBankName       ?? '',
+      invoice_account_name:     s.invoiceAccountName    ?? '',
+      invoice_sort_code:        s.invoiceSortCode       ?? '',
+      invoice_account_number:   s.invoiceAccountNumber  ?? '',
+      invoice_default_notes:    s.invoiceDefaultNotes   ?? '',
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id' })
     setSettings(s)

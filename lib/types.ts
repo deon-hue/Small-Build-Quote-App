@@ -286,6 +286,15 @@ export interface Settings {
   terms: string
   extra: string
   logo: string
+  // Invoice defaults
+  invoiceVatDefault?: boolean        // pre-tick VAT on new invoices (default true)
+  invoicePaymentDays?: number        // days until due date on new invoices (default 30)
+  invoicePaymentMethods?: string[]   // e.g. ['Bank Transfer', 'BACS']
+  invoiceBankName?: string
+  invoiceAccountName?: string
+  invoiceSortCode?: string
+  invoiceAccountNumber?: string
+  invoiceDefaultNotes?: string       // pre-fills the invoice notes field
 }
 
 export interface GanttPhase {

@@ -137,6 +137,19 @@ export function buildInvoiceHtml(inv: Invoice, settings: Settings): string {
     </table>
   </div>` : ''}
 
+  <!-- Payment Details (bank info from settings) -->
+  ${(settings.invoiceBankName || settings.invoiceAccountName || settings.invoiceAccountNumber) ? `
+  <div style="margin-top:32px;padding:16px 20px;background:#f0f7ee;border-radius:8px;font-size:13px;color:#3a5a35;line-height:1.8">
+    <div style="font-weight:700;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#6a9162;margin-bottom:10px">Payment Details</div>
+    <div style="display:grid;grid-template-columns:160px 1fr;gap:2px 16px">
+      ${settings.invoicePaymentMethods?.length ? `<span style="color:#6a9162;font-size:12px">Payment Method</span><span>${settings.invoicePaymentMethods.join(', ')}</span>` : ''}
+      ${settings.invoiceAccountName  ? `<span style="color:#6a9162;font-size:12px">Account Name</span><span style="font-weight:600">${settings.invoiceAccountName}</span>` : ''}
+      ${settings.invoiceBankName     ? `<span style="color:#6a9162;font-size:12px">Bank</span><span>${settings.invoiceBankName}</span>` : ''}
+      ${settings.invoiceSortCode     ? `<span style="color:#6a9162;font-size:12px">Sort Code</span><span style="font-family:monospace">${settings.invoiceSortCode}</span>` : ''}
+      ${settings.invoiceAccountNumber ? `<span style="color:#6a9162;font-size:12px">Account Number</span><span style="font-family:monospace">${settings.invoiceAccountNumber}</span>` : ''}
+    </div>
+  </div>` : ''}
+
   <!-- Notes -->
   ${inv.notes ? `
   <div style="margin-top:32px;padding:16px 20px;background:#f8f9fa;border-radius:8px;font-size:13px;color:#555;line-height:1.6">

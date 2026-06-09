@@ -77,11 +77,19 @@ export default function InvoicesPage() {
   const totalInvoiced = invoices.reduce((s, i) => s + i.total, 0)
 
   function openNew() {
+    const days = settings.invoicePaymentDays ?? 30
+    const dueDefault = new Date()
+    dueDefault.setDate(dueDefault.getDate() + days)
+    const dueStr = dueDefault.toISOString().slice(0, 10)
+
     setEditing(null)
     setClientName(''); setClientAddress(''); setClientEmail('')
     setLineItems([BLANK_LINE()])
-    setVatOn(true); setIssueDate(todayStr()); setDueDate(due30Str())
-    setNotes(''); setStatus('draft'); setFromJobId('')
+    setVatOn(settings.invoiceVatDefault ?? true)
+    setIssueDate(todayStr())
+    setDueDate(dueStr)
+    setNotes(settings.invoiceDefaultNotes ?? '')
+    setStatus('draft'); setFromJobId('')
     setPayPlanOn(false); setMilestones([])
     setSyncToXero(false); setXeroInvoiceId(''); setXeroError(null)
     setShowModal(true)
