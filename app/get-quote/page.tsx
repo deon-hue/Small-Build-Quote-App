@@ -89,13 +89,24 @@ export default function GetQuotePage() {
     setMicTarget(target)
     const rec = new SRClass()
     rec.lang = 'en-GB'
-    rec.continuous = false
+    rec.continuous = true
     rec.interimResults = true
     recognitionRef.current = rec
 
     rec.onstart  = () => setListening(true)
-    rec.onend    = () => setListening(false)
-    rec.onerror  = () => setListening(false)
+    rec.onend    = () => {
+      // If still supposed to be listening (e.g. browser auto-stopped on silence), restart
+      if (recognitionRef.current === rec) {
+        try { rec.start() } catch { setListening(false) }
+      } else {
+        setListening(false)
+      }
+    }
+    rec.onerror  = (e: any) => {
+      if (e.error === 'aborted' || e.error === 'no-speech') return // normal — don't stop
+      setListening(false)
+      recognitionRef.current = null
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     rec.onresult = (e: any) => {
       const transcript = Array.from(e.results).map((r: any) => r[0].transcript).join('')
