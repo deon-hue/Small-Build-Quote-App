@@ -16,11 +16,14 @@ export default function SavedQuotesPage() {
   const { quotes, jobs, settings, updateQuote, deleteQuote, deleteJob, addJob, saveGanttState, loading } = useApp()
   const [previewQuote, setPreviewQuote]   = useState<Quote | null>(null)
   const [emailingQuote, setEmailingQuote] = useState<Quote | null>(null)
+  const [archiveOpen, setArchiveOpen]     = useState(false)
   const router = useRouter()
 
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
 
-  const open = quotes.filter(q => ['draft','pending','in-progress','review','sent'].includes(q.status))
+  const open     = quotes.filter(q => ['draft','pending','in-progress','review','sent'].includes(q.status))
+  const active   = quotes.filter(q => q.status !== 'archived')
+  const archived = quotes.filter(q => q.status === 'archived')
   const pipeline = open.reduce((s, q) => s + quoteTotal(q), 0)
 
   async function handleStatusChange(quote: Quote, status: Quote['status']) {
@@ -40,6 +43,16 @@ export default function SavedQuotesPage() {
         console.warn('[quote-intelligence] extraction failed:', e)
       }
     }
+  }
+
+  async function handleArchive(q: Quote) {
+    if (!confirm(`Archive quote ${q.ref || ''}?\n\nIt will move to the Archived section and can be reinstated at any time.`)) return
+    await updateQuote({ ...q, status: 'archived' })
+  }
+
+  async function handleReinstate(q: Quote) {
+    if (!confirm(`Reinstate quote ${q.ref || ''}?\n\nIt will move back to Saved Quotes with Accepted status.`)) return
+    await updateQuote({ ...q, status: 'accepted' })
   }
 
   async function handleDelete(q: Quote) {
@@ -129,8 +142,8 @@ export default function SavedQuotesPage() {
     <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
         <div style={{ fontSize: 13, color: 'var(--muted)' }}>
-          {quotes.length
-            ? `${open.length} open · ${fmt(pipeline)} pipeline · ${quotes.length} total`
+          {active.length
+            ? `${open.length} open · ${fmt(pipeline)} pipeline · ${active.length} total${archived.length ? ` · ${archived.length} archived` : ''}`
             : 'No quotes saved yet'}
         </div>
         <button
@@ -149,17 +162,19 @@ export default function SavedQuotesPage() {
         </button>
       </div>
 
-      {!quotes.length
+      {!active.length
         ? <div className="empty-dashed">
             <div style={{ fontSize: 14, marginBottom: 6 }}>No quotes yet</div>
             <div style={{ fontSize: 12, marginBottom: 14 }}>Create your first quote using New Quote.</div>
           </div>
-        : [...quotes].reverse().map(q => {
-            const alreadyJob = jobs.some(j => {
+        : [...active].reverse().map(q => {
+            const alreadyJob = q.convertedToJob || jobs.some(j => {
+              if (j.quoteId === q.id) return true
               const jn = (j.client || '').toLowerCase()
               const qn = (q.customer.name || '').toLowerCase()
               return jn === qn || jn.includes(qn) || qn.includes(jn)
             })
+            const isConverted = q.status === 'accepted' && alreadyJob
 
             return (
               <div key={q.id} className="sq-card" style={q.status === 'accepted' ? { borderLeft: '3px solid #7ab533' } : {}}>
@@ -218,23 +233,86 @@ export default function SavedQuotesPage() {
                     {q.status === 'accepted' && alreadyJob && (
                       <span style={{ fontSize: 10, color: 'var(--moss)', fontWeight: 500 }}>✓ Job created</span>
                     )}
-                    <select
-                      value={q.status}
-                      onChange={e => handleStatusChange(q, e.target.value as Quote['status'])}
-                      style={{ padding: '4px 6px', fontSize: 11, width: 'auto' }}
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="sent">Sent</option>
-                      <option value="accepted">Accepted</option>
-                      <option value="declined">Declined</option>
-                    </select>
-                    <button className="btn-sm btn-danger" onClick={() => handleDelete(q)}>✕</button>
+                    {!isConverted && (
+                      <select
+                        value={q.status}
+                        onChange={e => handleStatusChange(q, e.target.value as Quote['status'])}
+                        style={{ padding: '4px 6px', fontSize: 11, width: 'auto' }}
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="sent">Sent</option>
+                        <option value="accepted">Accepted</option>
+                        <option value="declined">Declined</option>
+                      </select>
+                    )}
+                    {isConverted ? (
+                      <button
+                        className="btn-sm"
+                        style={{ background: '#64748b', color: 'white', border: 'none', borderRadius: 4, padding: '5px 12px', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500 }}
+                        onClick={() => handleArchive(q)}
+                        title="Move to archive — quote is locked and job already created"
+                      >
+                        📁 Archive
+                      </button>
+                    ) : (
+                      <button className="btn-sm btn-danger" onClick={() => handleDelete(q)}>✕</button>
+                    )}
                   </div>
                 </div>
               </div>
             )
           })
       }
+
+      {/* ── Archived Quotes ────────────────────────────────────── */}
+      {archived.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <button
+            onClick={() => setArchiveOpen(o => !o)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              background: 'none', border: '1px solid var(--border)', borderRadius: 6,
+              padding: '8px 14px', fontSize: 12, fontWeight: 600,
+              color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit',
+              width: '100%', marginBottom: archiveOpen ? 10 : 0,
+            }}
+          >
+            <span style={{ fontSize: 14 }}>{archiveOpen ? '▾' : '▸'}</span>
+            📁 Archived Quotes ({archived.length})
+            <span style={{ marginLeft: 'auto', fontWeight: 400, fontSize: 11 }}>
+              {archiveOpen ? 'Hide' : 'Show'}
+            </span>
+          </button>
+
+          {archiveOpen && [...archived].reverse().map(q => (
+            <div key={q.id} className="sq-card" style={{ borderLeft: '3px solid #94a3b8', opacity: 0.85 }}>
+              <div className="sq-ref" style={{ color: 'var(--muted)' }}>{q.ref || '—'}</div>
+              <div className="sq-info">
+                <div className="sq-title" style={{ color: 'var(--muted)' }}>{q.jobType} — {q.customer.name || '—'}</div>
+                <div className="sq-sub">{q.customer.address || ''} · Saved {q.savedDate || '—'}</div>
+              </div>
+              <div className="sq-val" style={{ color: 'var(--muted)' }}>{fmt(quoteTotal(q))}</div>
+              <div style={{ textAlign: 'center', minWidth: 200 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#f1f5f9', color: '#64748b', border: '1px solid #cbd5e1' }}>
+                  ARCHIVED
+                </span>
+                <div className="sq-actions" style={{ marginTop: 6 }}>
+                  <button className="btn-sm btn-outline" onClick={() => setPreviewQuote(q)}>View</button>
+                  <button className="btn-sm btn-outline" onClick={() => downloadQuote(q)}>⬇ HTML</button>
+                  <button
+                    className="btn-sm"
+                    style={{ background: '#27ae60', color: 'white', border: 'none', borderRadius: 4, padding: '5px 12px', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500 }}
+                    onClick={() => handleReinstate(q)}
+                    title="Restore to Saved Quotes with Accepted status"
+                  >
+                    ↩ Reinstate
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {previewQuote && (
         <QuotePreviewModal quote={previewQuote} onClose={() => setPreviewQuote(null)} />
