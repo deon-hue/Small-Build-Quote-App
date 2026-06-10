@@ -59,6 +59,7 @@ export default function GetQuotePage() {
   const [micTarget, setMicTarget]   = useState<'description' | 'chat'>('chat')
   const recognitionRef              = useRef<SR>(null)
   const finalTranscriptRef          = useRef('')  // accumulates confirmed final text across restarts
+  const keepListeningRef            = useRef(false) // true while mic should stay on; set false to stop
   const hasTriggeredVizRef           = useRef(false) // only generate one visualization per interview session
   const [hasMic, setHasMic]        = useState(false)
 
@@ -87,42 +88,53 @@ export default function GetQuotePage() {
     const SRClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     if (!SRClass) return
     setMicTarget(target)
-    finalTranscriptRef.current = ''   // fresh start each time the mic is tapped
-    const rec = new SRClass()
-    rec.lang = 'en-GB'; rec.continuous = true; rec.interimResults = true
-    recognitionRef.current = rec
-    rec.onstart  = () => setListening(true)
-    rec.onend    = () => {
-      if (recognitionRef.current === rec) { try { rec.start() } catch { setListening(false) } }
-      else setListening(false)
-    }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    rec.onerror  = (e: any) => {
-      if (e.error === 'aborted' || e.error === 'no-speech') return
-      setListening(false); recognitionRef.current = null
-    }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    rec.onresult = (e: any) => {
-      // Only process results from e.resultIndex onwards to avoid re-processing
-      // already-finalized text when onresult fires for a new interim result.
-      let newFinal = ''
-      let interim  = ''
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const text = e.results[i][0].transcript
-        if (e.results[i].isFinal) newFinal += text
-        else interim += text
+    finalTranscriptRef.current = ''
+    keepListeningRef.current = true
+
+    function spawnRec() {
+      if (!keepListeningRef.current) { setListening(false); return }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rec = new SRClass()
+      rec.lang = 'en-GB'; rec.continuous = true; rec.interimResults = true
+      recognitionRef.current = rec
+      rec.onstart = () => setListening(true)
+      // Spawn a brand-new object on each restart — never reuse the same instance.
+      // Reusing causes mobile browsers (Chrome/Android) to replay previously-finalized
+      // results through onresult, doubling the accumulated text.
+      rec.onend = () => { if (keepListeningRef.current) spawnRec(); else setListening(false) }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      rec.onerror = (e: any) => {
+        if (e.error === 'aborted' || e.error === 'no-speech') return
+        keepListeningRef.current = false; setListening(false); recognitionRef.current = null
       }
-      if (newFinal) {
-        const sep = finalTranscriptRef.current && !finalTranscriptRef.current.endsWith(' ') ? ' ' : ''
-        finalTranscriptRef.current += sep + newFinal
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      rec.onresult = (e: any) => {
+        let newFinal = ''
+        let interim  = ''
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const text = e.results[i][0].transcript
+          if (e.results[i].isFinal) newFinal += text
+          else interim += text
+        }
+        if (newFinal) {
+          const sep = finalTranscriptRef.current && !finalTranscriptRef.current.endsWith(' ') ? ' ' : ''
+          finalTranscriptRef.current += sep + newFinal
+        }
+        const display = (finalTranscriptRef.current + (interim ? ' ' + interim : '')).trimStart()
+        if (target === 'description') setDescription(display); else setInput(display)
       }
-      const display = (finalTranscriptRef.current + (interim ? ' ' + interim : '')).trimStart()
-      if (target === 'description') setDescription(display); else setInput(display)
+      try { rec.start() } catch { setListening(false) }
     }
-    rec.start()
+
+    spawnRec()
   }, [])
 
-  function stopListening() { recognitionRef.current?.stop(); setListening(false) }
+  function stopListening() {
+    keepListeningRef.current = false  // signal onend not to restart
+    recognitionRef.current?.stop()
+    recognitionRef.current = null
+    setListening(false)
+  }
 
   const SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
 
