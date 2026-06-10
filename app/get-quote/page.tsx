@@ -122,20 +122,65 @@ export default function GetQuotePage() {
   }
 
   // ── File attachment ───────────────────────────────────────────────────
+  // Images are resized to max 1536px and re-encoded as JPEG so the base64
+  // payload stays well under Netlify's 6 MB function body limit.
+  async function resizeImage(file: File): Promise<{ base64: string; mimeType: string }> {
+    const MAX_PX = 1536
+    return new Promise(resolve => {
+      const img = new Image()
+      const objUrl = URL.createObjectURL(file)
+      img.onload = () => {
+        const maxDim = Math.max(img.width, img.height)
+        const scale = maxDim > MAX_PX ? MAX_PX / maxDim : 1
+        const w = Math.round(img.width * scale)
+        const h = Math.round(img.height * scale)
+        const canvas = document.createElement('canvas')
+        canvas.width = w; canvas.height = h
+        canvas.getContext('2d')!.drawImage(img, 0, 0, w, h)
+        URL.revokeObjectURL(objUrl)
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+        resolve({ base64: dataUrl.split(',')[1], mimeType: 'image/jpeg' })
+      }
+      img.onerror = () => {
+        URL.revokeObjectURL(objUrl)
+        const reader = new FileReader()
+        reader.onload = () => resolve({ base64: (reader.result as string).split(',')[1], mimeType: file.type })
+        reader.readAsDataURL(file)
+      }
+      img.src = objUrl
+    })
+  }
+
   async function handleFileSelect(files: FileList | null) {
     if (!files) return
-    const MAX = 8 * 1024 * 1024 // 8 MB per file
+    const MAX_PDF = 5 * 1024 * 1024 // 5 MB for PDFs (already compressed)
     for (const file of Array.from(files)) {
-      if (file.size > MAX) { alert(`${file.name} is too large (max 8 MB)`); continue }
       const isImage = file.type.startsWith('image/')
-      if (!isImage && file.type !== 'application/pdf') { alert(`${file.name}: only images and PDFs are supported`); continue }
-      const dataBase64 = await new Promise<string>(resolve => {
-        const reader = new FileReader()
-        reader.onload = () => resolve((reader.result as string).split(',')[1])
-        reader.readAsDataURL(file)
-      })
+      if (!isImage && file.type !== 'application/pdf') {
+        alert(`${file.name}: only images and PDFs are supported`)
+        continue
+      }
+      if (!isImage && file.size > MAX_PDF) {
+        alert(`${file.name} is too large (max 5 MB for PDFs)`)
+        continue
+      }
+      let dataBase64: string
+      let mimeType: string
+      if (isImage) {
+        // Resize + compress so base64 stays under the API limit
+        const result = await resizeImage(file)
+        dataBase64 = result.base64
+        mimeType = result.mimeType
+      } else {
+        dataBase64 = await new Promise<string>(resolve => {
+          const reader = new FileReader()
+          reader.onload = () => resolve((reader.result as string).split(',')[1])
+          reader.readAsDataURL(file)
+        })
+        mimeType = file.type
+      }
       const previewUrl = isImage ? URL.createObjectURL(file) : undefined
-      setAttachments(prev => [...prev, { name: file.name, mimeType: file.type, dataBase64, isImage, previewUrl }])
+      setAttachments(prev => [...prev, { name: file.name, mimeType, dataBase64, isImage, previewUrl }])
     }
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
