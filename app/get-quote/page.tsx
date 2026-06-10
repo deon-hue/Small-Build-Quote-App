@@ -609,10 +609,35 @@ export default function GetQuotePage() {
                     Listening… speak now, then click Send
                   </div>
                 )}
-                <div style={{ fontSize: 11, color: '#bbb', marginTop: 7, display: 'flex', gap: 14 }}>
-                  <span>📎 Attach plans &amp; photos</span>
-                  {hasMic && <span>🎤 Mic enabled</span>}
-                </div>
+
+                {/* Attach plans prompt */}
+                {attachments.length === 0 && storedFileRefs.length === 0 && (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    style={{
+                      marginTop: 10, width: '100%', padding: '10px 14px',
+                      background: `${LIME}18`, border: `1.5px dashed ${LIME}`,
+                      borderRadius: 7, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
+                      fontFamily: "'Montserrat', sans-serif", transition: 'background .2s',
+                    }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${LIME}30` }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = `${LIME}18` }}
+                  >
+                    <div style={{ width: 34, height: 34, borderRadius: 7, background: LIME, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                      </svg>
+                    </div>
+                    <div style={{ textAlign: 'left' }}>
+                      <div style={{ fontWeight: 700, fontSize: 12, color: '#000' }}>Got plans, drawings or photos?</div>
+                      <div style={{ fontSize: 11, color: GREY_TXT, marginTop: 1 }}>Tap to attach — Deon will read them and use them in your estimate</div>
+                    </div>
+                  </button>
+                )}
+                {hasMic && (
+                  <div style={{ fontSize: 11, color: '#bbb', marginTop: 6 }}>🎤 Mic enabled — speak your answers</div>
+                )}
               </div>
             )}
           </div>
