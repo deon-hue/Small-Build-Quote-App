@@ -95,7 +95,9 @@ export default function GetQuotePage() {
       if (!keepListeningRef.current) { setListening(false); return }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rec = new SRClass()
-      rec.lang = 'en-GB'; rec.continuous = true; rec.interimResults = true
+      // continuous=false → one clean utterance per session, better accuracy on mobile.
+      // auto-respawn in onend keeps the mic alive between utterances without gaps.
+      rec.lang = 'en-GB'; rec.continuous = false; rec.interimResults = true
       recognitionRef.current = rec
       rec.onstart = () => setListening(true)
       // Spawn a brand-new object on each restart — never reuse the same instance.
@@ -261,6 +263,7 @@ export default function GetQuotePage() {
 
   function handleSend() {
     if ((!input.trim() && attachments.length === 0) || chatLoading) return
+    finalTranscriptRef.current = ''  // reset so mic doesn't prepend this message's text to the next
     sendMessage(input.trim(), messages)
   }
 
