@@ -1,6 +1,22 @@
 -- phase27.sql — Job attachments (client-visible files: plans, photos, documents)
 -- Run in Supabase SQL Editor
 
+-- ── 0. Expand job-documents bucket for attachment use ────────────────────────
+-- Raises file size limit to 50 MB and allows more MIME types (Word, Excel, DWG)
+UPDATE storage.buckets
+SET
+  file_size_limit    = 52428800,  -- 50 MB
+  allowed_mime_types = ARRAY[
+    'image/jpeg','image/jpg','image/png','image/webp','image/heic','image/tiff','image/gif',
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/octet-stream'   -- catches DWG / DXF / other CAD formats
+  ]
+WHERE id = 'job-documents';
+
 -- ── 1. Table ─────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS job_attachments (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),

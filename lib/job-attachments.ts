@@ -12,7 +12,7 @@ export async function uploadAttachment(
   file: File,
   category: AttachmentCategory,
   label: string,
-): Promise<JobAttachment | null> {
+): Promise<{ attachment: JobAttachment } | { error: string }> {
   const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
   const path = `${userId}/${jobId}/attachments/${stamp()}-${safe}`
 
@@ -21,11 +21,11 @@ export async function uploadAttachment(
     .upload(path, file, { contentType: file.type })
 
   if (uploadErr || !uploadData) {
-    console.error('[uploadAttachment] storage error', uploadErr)
-    return null
+    const msg = (uploadErr as { message?: string })?.message || 'Storage upload failed'
+    return { error: msg }
   }
 
-  const { data, error } = await sb.from('job_attachments').insert({
+  const { data, error: dbErr } = await sb.from('job_attachments').insert({
     user_id: userId,
     job_id: jobId,
     file_name: file.name,
@@ -36,12 +36,13 @@ export async function uploadAttachment(
     label: label.trim(),
   }).select().single()
 
-  if (error || !data) {
+  if (dbErr || !data) {
     await sb.storage.from(BUCKET).remove([uploadData.path])
-    return null
+    const msg = (dbErr as { message?: string })?.message || 'Database insert failed'
+    return { error: msg }
   }
 
-  return rowToAttachment(data)
+  return { attachment: rowToAttachment(data) }
 }
 
 export async function fetchAttachments(

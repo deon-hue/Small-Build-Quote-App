@@ -55,10 +55,13 @@ export default function JobAttachmentsModal({ job, onClose }: Props) {
     if (!user) { setUploadErr('Not authenticated'); setUploading(false); return }
 
     for (const file of Array.from(files)) {
-      if (file.size > 50 * 1024 * 1024) { setUploadErr(`${file.name} is too large — max 50 MB`); continue }
-      const att = await uploadAttachment(sb, user.id, job.id, file, category, label)
-      if (att) setAttachments(prev => [...prev, att])
-      else setUploadErr(`Failed to upload ${file.name}`)
+      if (file.size > 50 * 1024 * 1024) { setUploadErr(`${file.name} exceeds 50 MB limit`); continue }
+      const result = await uploadAttachment(sb, user.id, job.id, file, category, label)
+      if ('attachment' in result) {
+        setAttachments(prev => [...prev, result.attachment])
+      } else {
+        setUploadErr(`${file.name}: ${result.error}`)
+      }
     }
     setLabel('')
     setUploading(false)
