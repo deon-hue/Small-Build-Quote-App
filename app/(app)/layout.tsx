@@ -66,7 +66,8 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
           {can('calendar') && navItem('/calendar', '▦', 'Calendar')}
           <div className="nav-section">Work</div>
           {can('jobs')    && navItem('/jobs',      '⬡', 'Jobs')}
-          {can('quotes')  && navItem('/quotes',      '◎', 'Saved Quotes')}
+          {can('quotes')  && navItem('/quotes',        '◎', 'Saved Quotes')}
+          {can('quotes')  && navItem('/quote-requests','📬', 'Quote Requests')}
           {can('quotes')  && navItem('/new-quote',   '✎', 'New Quote')}
           {can('quotes')  && navItem('/quick-quote', '⚡', 'Quick Quote')}
           {can('quotes')  && navItem('/takeoff',   '📐', 'Take-off')}
@@ -124,8 +125,9 @@ const PAGE_TITLES: Record<string, string> = {
   '/suppliers':    'Suppliers',
   '/settings':     'Company Setup',
   '/documents':    'Documents',
-  '/back-office':  'Back Office',
-  '/portal-preview':'Portal Preview',
+  '/back-office':      'Back Office',
+  '/quote-requests':   'Quote Requests',
+  '/portal-preview':   'Portal Preview',
   '/team':         'Team',
 }
 
