@@ -307,6 +307,20 @@ export default function SavedQuotesPage() {
                   >
                     ↩ Reinstate
                   </button>
+                  <button
+                    className="btn-sm btn-danger"
+                    onClick={() => {
+                      if (confirm(
+                        `Permanently delete archived quote ${q.ref || q.id}?\n\n` +
+                        `Client: ${q.customer.name || '—'}\n` +
+                        `Value: ${fmt(quoteTotal(q))}\n\n` +
+                        `⚠ This cannot be undone.`
+                      )) handleDelete(q)
+                    }}
+                    title="Permanently delete this archived quote"
+                  >
+                    ✕ Delete
+                  </button>
                 </div>
               </div>
             </div>
