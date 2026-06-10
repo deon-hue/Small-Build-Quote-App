@@ -51,6 +51,7 @@ export default function GetQuotePage() {
 
   const [attachments, setAttachments]       = useState<AttachmentPayload[]>([])
   const fileInputRef                        = useRef<HTMLInputElement>(null)
+  const cameraInputRef                      = useRef<HTMLInputElement>(null)
   const sessionIdRef                        = useRef<string>(`${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`)
   const [storedFileRefs, setStoredFileRefs] = useState<{name: string; url: string; isImage: boolean}[]>([])
 
@@ -581,8 +582,9 @@ export default function GetQuotePage() {
                 )}
 
                 <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                  {/* Paperclip — gallery / PDFs */}
                   <button type="button" onClick={() => fileInputRef.current?.click()}
-                    title="Attach plans or photos"
+                    title="Attach plans, photos or PDFs"
                     style={{ width: 38, height: 38, borderRadius: '50%', border: `1.5px solid ${GREY_BD}`, background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'border-color .2s' }}
                     onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = LIME }}
                     onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = GREY_BD }}
@@ -592,6 +594,22 @@ export default function GetQuotePage() {
                     </svg>
                   </button>
                   <input ref={fileInputRef} type="file" multiple accept="image/*,application/pdf"
+                    style={{ display: 'none' }} onChange={e => handleFileSelect(e.target.files)} />
+
+                  {/* Camera — opens camera directly on mobile */}
+                  <button type="button" onClick={() => cameraInputRef.current?.click()}
+                    title="Take a photo"
+                    style={{ width: 38, height: 38, borderRadius: '50%', border: `1.5px solid ${GREY_BD}`, background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'border-color .2s' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = LIME }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = GREY_BD }}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={CHARCOAL} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                      <circle cx="12" cy="13" r="4"/>
+                    </svg>
+                  </button>
+                  {/* capture="environment" goes straight to the rear camera on mobile */}
+                  <input ref={cameraInputRef} type="file" multiple accept="image/*" capture="environment"
                     style={{ display: 'none' }} onChange={e => handleFileSelect(e.target.files)} />
 
                   <input value={input} onChange={e => setInput(e.target.value)}
@@ -627,28 +645,36 @@ export default function GetQuotePage() {
 
                 {/* Attach plans prompt */}
                 {attachments.length === 0 && storedFileRefs.length === 0 && (
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    style={{
-                      marginTop: 10, width: '100%', padding: '10px 14px',
-                      background: `${LIME}18`, border: `1.5px dashed ${LIME}`,
-                      borderRadius: 7, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
-                      fontFamily: "'Montserrat', sans-serif", transition: 'background .2s',
-                    }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${LIME}30` }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = `${LIME}18` }}
-                  >
-                    <div style={{ width: 34, height: 34, borderRadius: 7, background: LIME, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-                      </svg>
+                  <div style={{
+                    marginTop: 10, width: '100%', padding: '10px 14px',
+                    background: `${LIME}18`, border: `1.5px dashed ${LIME}`,
+                    borderRadius: 7, display: 'flex', alignItems: 'center', gap: 10,
+                    boxSizing: 'border-box',
+                  }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: 12, color: '#000', marginBottom: 2 }}>Got plans, drawings or photos?</div>
+                      <div style={{ fontSize: 11, color: GREY_TXT }}>Attach from your gallery or take a photo — Deon will read them for the estimate</div>
                     </div>
-                    <div style={{ textAlign: 'left' }}>
-                      <div style={{ fontWeight: 700, fontSize: 12, color: '#000' }}>Got plans, drawings or photos?</div>
-                      <div style={{ fontSize: 11, color: GREY_TXT, marginTop: 1 }}>Tap to attach — Deon will read them and use them in your estimate</div>
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      {/* Gallery / files */}
+                      <button type="button" onClick={() => fileInputRef.current?.click()}
+                        title="Attach from gallery or files"
+                        style={{ width: 36, height: 36, borderRadius: 7, background: LIME, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                        </svg>
+                      </button>
+                      {/* Camera */}
+                      <button type="button" onClick={() => cameraInputRef.current?.click()}
+                        title="Take a photo"
+                        style={{ width: 36, height: 36, borderRadius: 7, background: CHARCOAL, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                          <circle cx="12" cy="13" r="4"/>
+                        </svg>
+                      </button>
                     </div>
-                  </button>
+                  </div>
                 )}
                 {hasMic && (
                   <div style={{ fontSize: 11, color: '#bbb', marginTop: 6 }}>🎤 Mic enabled — speak your answers</div>
