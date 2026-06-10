@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { messages, context, rawInput, attachments, imageRefs, pdfBase64s } = body as any
-  const { jobType, address } = context || {}
+  const { jobType, address, clientName } = context || {}
 
   const hasNewFiles = (Array.isArray(imageRefs) && imageRefs.length > 0) ||
                       (Array.isArray(pdfBase64s) && pdfBase64s.length > 0)
@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
 Your job is to have a genuine, warm conversation that helps them express their vision, build their confidence, and feel excited about their project — while gathering enough information to put together an indicative cost estimate. Think of yourself as the friendly face of the company: knowledgeable, reassuring, and genuinely interested in helping them get this project off the ground.
 
 JOB CONTEXT:
+- Client's name: ${clientName || 'the client'} — use their name naturally throughout the conversation, the way you would in a real face-to-face chat. Not every message, but enough that it feels personal.
 - Project type: ${jobType || 'building project'}
 - Property: ${address || 'not specified'}
 ${planBlock}

@@ -167,11 +167,11 @@ export default function GetQuotePage() {
   }
 
   async function startInterview() {
-    if (!jobType || !address.trim()) return
+    if (!firstName.trim() || !jobType || !address.trim()) return
     setStep(1)
     const greeting = description.trim()
-      ? `Hi! I'm looking to get a quote for a ${jobType} at ${address}. ${description}`
-      : `Hi! I'm looking to get a quote for a ${jobType} at ${address}.`
+      ? `Hi, I'm ${firstName.trim()}. I'm looking to get a quote for a ${jobType} at ${address}. ${description}`
+      : `Hi, I'm ${firstName.trim()}. I'm looking to get a quote for a ${jobType} at ${address}.`
     await sendMessage(greeting, [])
   }
 
@@ -210,7 +210,7 @@ export default function GetQuotePage() {
       const res = await fetch('/api/public/scope-chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: apiMessages, context: { jobType, address }, rawInput: text,
+          messages: apiMessages, context: { jobType, address, clientName: firstName.trim() }, rawInput: text,
           imageRefs: imageRefs.length > 0 ? imageRefs : undefined,
           pdfBase64s: pdfBase64s.length > 0 ? pdfBase64s : undefined,
         }),
@@ -401,7 +401,14 @@ export default function GetQuotePage() {
             <div style={{ background: '#fff', borderRadius: 10, padding: '36px 40px', boxShadow: '0 2px 16px rgba(0,0,0,0.06)' }}>
               <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4, color: '#000' }}>Tell us about your project</div>
               <div style={{ fontSize: 13, color: GREY_TXT, marginBottom: 30, lineHeight: 1.5 }}>
-                Fill in the details below and we'll kick off a short conversation to scope out your works.
+                Fill in a few details and we'll start a short conversation to scope out your works.
+              </div>
+
+              <div style={{ marginBottom: 20 }}>
+                <label style={labelStyle}>Your first name *</label>
+                <input value={firstName} onChange={e => setFirstName(e.target.value)}
+                  placeholder="e.g. Sarah"
+                  style={inputStyle} />
               </div>
 
               <div style={{ marginBottom: 20 }}>
@@ -441,9 +448,9 @@ export default function GetQuotePage() {
                 )}
               </div>
 
-              <button onClick={startInterview} disabled={!jobType || !address.trim()}
-                style={{ ...primaryBtn, opacity: jobType && address.trim() ? 1 : 0.45, cursor: jobType && address.trim() ? 'pointer' : 'default' }}
-                onMouseEnter={e => { if (jobType && address.trim()) (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.98)' }}
+              <button onClick={startInterview} disabled={!firstName.trim() || !jobType || !address.trim()}
+                style={{ ...primaryBtn, opacity: firstName.trim() && jobType && address.trim() ? 1 : 0.45, cursor: firstName.trim() && jobType && address.trim() ? 'pointer' : 'default' }}
+                onMouseEnter={e => { if (firstName.trim() && jobType && address.trim()) (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.98)' }}
                 onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)' }}
               >
                 Start Scope Interview →
@@ -694,9 +701,11 @@ export default function GetQuotePage() {
         {/* ── STEP 3: Contact Details ────────────────────────────────────────── */}
         {step === 3 && !submitted && (
           <div style={{ background: '#fff', borderRadius: 10, boxShadow: '0 2px 16px rgba(0,0,0,0.06)', padding: '32px 36px' }}>
-            <div style={{ fontWeight: 800, fontSize: 20, color: '#000', marginBottom: 4 }}>Your Details</div>
+            <div style={{ fontWeight: 800, fontSize: 20, color: '#000', marginBottom: 4 }}>
+              Almost there{firstName ? `, ${firstName}` : ''}!
+            </div>
             <div style={{ fontSize: 13, color: GREY_TXT, marginBottom: 28, lineHeight: 1.5 }}>
-              We'll review your estimate and one of our team will be in touch to arrange a free site visit.
+              Just a couple of contact details and we'll get your estimate over to the team. Someone will be in touch to arrange a free site visit.
             </div>
 
             <form onSubmit={handleSubmit}>
