@@ -712,7 +712,10 @@ export default function GetQuotePage() {
         )}
       </div>
 
-      <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }`}</style>
+      <style>{`
+        body { overflow-y: auto !important; height: auto !important; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+      `}</style>
     </div>
   )
 }
