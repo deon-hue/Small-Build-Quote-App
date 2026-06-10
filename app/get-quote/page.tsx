@@ -16,7 +16,7 @@ const GREY_BG  = '#f4f5f2'
 const GREY_BD  = '#dde0da'
 const GREY_TXT = '#838383'
 
-interface Message { role: 'user' | 'assistant'; content: string; hasFiles?: boolean }
+interface Message { role: 'user' | 'assistant'; content: string; hasFiles?: boolean; generatedImage?: string; vizLoading?: boolean }
 interface Phase {
   parentPhase: string; phase: string
   labour: number; materials: number; plant: number; subcontractors: number; other: number
@@ -59,6 +59,7 @@ export default function GetQuotePage() {
   const [micTarget, setMicTarget]   = useState<'description' | 'chat'>('chat')
   const recognitionRef              = useRef<SR>(null)
   const finalTranscriptRef          = useRef('')  // accumulates confirmed final text across restarts
+  const hasTriggeredVizRef           = useRef(false) // only generate one visualization per interview session
   const [hasMic, setHasMic]        = useState(false)
 
   const [phases, setPhases]         = useState<Phase[]>([])
@@ -184,6 +185,7 @@ export default function GetQuotePage() {
 
   async function startInterview() {
     if (!firstName.trim() || !jobType || !address.trim()) return
+    hasTriggeredVizRef.current = false
     setStep(1)
     const greeting = description.trim()
       ? `Hi, I'm ${firstName.trim()}. I'm looking to get a quote for a ${jobType} at ${address}. ${description}`
@@ -238,6 +240,8 @@ export default function GetQuotePage() {
         const scopeMatch = reply.match(/\[SCOPE\]([\s\S]*?)\[\/SCOPE\]/)
         if (scopeMatch) { setScope(scopeMatch[1].trim()); setScopeReady(true) }
       }
+      const vizMatch = reply.match(/\[VISUALIZE:\s*([^\]]+)\]/)
+      if (vizMatch) generateVisualization(vizMatch[1].trim())
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Something went wrong. Please try again.' }])
     } finally { setChatLoading(false) }
@@ -291,8 +295,38 @@ export default function GetQuotePage() {
     groupedPhases[key].push(ph)
   }
 
+  async function generateVisualization(description: string) {
+    if (hasTriggeredVizRef.current) return
+    hasTriggeredVizRef.current = true
+    setMessages(prev => [...prev, { role: 'assistant' as const, content: '', vizLoading: true }])
+    try {
+      const res = await fetch('/api/public/generate-visualization', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description }),
+      })
+      const data = await res.json()
+      setMessages(prev => {
+        const without = prev.filter(m => !m.vizLoading)
+        if (data.imageUrl) {
+          return [...without, {
+            role: 'assistant' as const,
+            content: "Here's a rough AI concept of what that could look like — just an impression to help visualise the idea, not an architect's drawing!",
+            generatedImage: data.imageUrl,
+          }]
+        }
+        return without
+      })
+    } catch {
+      setMessages(prev => prev.filter(m => !m.vizLoading))
+    }
+  }
+
   function cleanReply(text: string) {
-    return text.replace(/\[SCOPE\][\s\S]*?\[\/SCOPE\]/g, '').replace(/\[READY_TO_BUILD\]/g, '').trim()
+    return text
+      .replace(/\[SCOPE\][\s\S]*?\[\/SCOPE\]/g, '')
+      .replace(/\[READY_TO_BUILD\]/g, '')
+      .replace(/\[VISUALIZE:[^\]]*\]/g, '')
+      .trim()
   }
 
   const MIC_BTN = (target: 'description' | 'chat', size = 38) => hasMic ? (
@@ -496,8 +530,17 @@ export default function GetQuotePage() {
             {/* Messages */}
             <div style={{ overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14, minHeight: 300, maxHeight: 460 }}>
               {messages.map((m, i) => {
+                if (m.vizLoading) return (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'flex-end', gap: 8 }}>
+                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: LIME, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#000', marginBottom: 2 }}>SB</div>
+                    <div style={{ background: GREY_BG, padding: '11px 16px', borderRadius: 12, borderBottomLeftRadius: 3, display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 16, height: 16, borderRadius: '50%', border: `3px solid ${GREY_BD}`, borderTopColor: LIME, animation: 'spin 0.9s linear infinite', flexShrink: 0 }} />
+                      <span style={{ fontSize: 12.5, color: GREY_TXT }}>Generating concept image…</span>
+                    </div>
+                  </div>
+                )
                 const displayText = m.role === 'assistant' ? cleanReply(m.content) : m.content
-                if (!displayText) return null
+                if (!displayText && !m.generatedImage) return null
                 return (
                   <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: 8 }}>
                     {m.role === 'assistant' && (
@@ -520,6 +563,15 @@ export default function GetQuotePage() {
                         </div>
                       )}
                       {displayText}
+                      {m.generatedImage && (
+                        <div style={{ marginTop: displayText ? 12 : 0 }}>
+                          <img src={m.generatedImage} alt="AI concept visualization"
+                            style={{ width: '100%', maxWidth: 440, borderRadius: 8, display: 'block' }} />
+                          <div style={{ fontSize: 10, color: GREY_TXT, marginTop: 5, fontStyle: 'italic' }}>
+                            AI concept impression — for discussion only, not an architect&#39;s drawing
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )
