@@ -345,7 +345,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
         <div style="min-width:${innerMinW}px">
           <div data-hdr-offset="1" style="display:flex;margin-left:${LABEL_W + 9}px;margin-bottom:0">${monthRowHtml}</div>
           <div data-hdr-offset="1" style="display:flex;margin-left:${LABEL_W + 9}px;margin-bottom:6px">${weekRowHtml}</div>
-          <div style="position:relative;margin-top:20px">${msHtml}${todayHtml}${phaseRowsHtml}</div>
+          <div style="position:relative;margin-top:20px"><div style="position:absolute;left:${LABEL_W + 9}px;right:0;top:0;bottom:0;pointer-events:none">${msHtml}${todayHtml}</div>${phaseRowsHtml}</div>
         </div>
       </div>
       <div id="gantt-tooltip" style="position:fixed;background:#2b2f33;color:white;font-size:11px;padding:6px 10px;border-radius:4px;pointer-events:none;display:none;z-index:999;line-height:1.6"></div>
