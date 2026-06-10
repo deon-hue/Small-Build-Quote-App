@@ -8,6 +8,7 @@ import { quoteBudget } from '@/lib/job-costs'
 import GanttModal from '@/components/GanttModal'
 import VariationModal from '@/components/VariationModal'
 import JobDocumentsModal from '@/components/JobDocumentsModal'
+import JobAttachmentsModal from '@/components/JobAttachmentsModal'
 
 const BLANK_JOB: Omit<Job, 'id'> = {
   client: '', type: 'Rear Extension', address: '', value: 0,
@@ -26,6 +27,7 @@ export default function JobsPage() {
   const [saving, setSaving] = useState(false)
   const [notesJob, setNotesJob] = useState<Job | null>(null)
   const [docsJob, setDocsJob] = useState<Job | null>(null)
+  const [attachmentsJob, setAttachmentsJob] = useState<Job | null>(null)
   const [newNote, setNewNote] = useState('')
   const [addingNote, setAddingNote] = useState(false)
 
@@ -159,6 +161,7 @@ export default function JobsPage() {
                       ±&nbsp;Variations{jobVars.length > 0 ? ` (${jobVars.length})` : ''}
                       {sentVarCount > 0 ? ` · ${sentVarCount} pending` : ''}
                     </button>
+                    <button className="btn-sm btn-outline" onClick={() => setAttachmentsJob(j)} title="Plans, photos and documents shared with the client">📎 Files</button>
                     <button className="btn-sm btn-outline" onClick={() => setDocsJob(j)} title="Scan/upload supplier docs and track costs">💷 Costs</button>
                     <button className="btn-sm btn-outline" onClick={() => openEdit(j)}>Edit</button>
                     <button className="btn-sm btn-danger" onClick={() => handleDelete(j)}>✕</button>
@@ -314,6 +317,11 @@ export default function JobsPage() {
           })}
           onClose={() => setGanttJob(null)}
         />
+      )}
+
+      {/* Attachments modal */}
+      {attachmentsJob && (
+        <JobAttachmentsModal job={attachmentsJob} onClose={() => setAttachmentsJob(null)} />
       )}
 
       {/* Documents & Costs modal */}

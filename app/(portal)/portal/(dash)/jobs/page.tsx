@@ -57,6 +57,33 @@ export default function PortalJobsPage() {
   const [expandedVars, setExpandedVars]      = useState<string | null>(null)   // job id
   const [viewingVar, setViewingVar]          = useState<Variation | null>(null)
 
+  // Attachments per job: { [jobId]: loaded files | 'loading' }
+  type AttFile = { id: string; fileName: string; mimeType: string; fileSize: number; category: string; label: string; url: string | null }
+  const [expandedFiles, setExpandedFiles]    = useState<string | null>(null)
+  const [fileCache, setFileCache]            = useState<Record<string, AttFile[] | 'loading'>>({})
+
+  async function loadAttachments(jobId: string) {
+    setFileCache(prev => ({ ...prev, [jobId]: 'loading' }))
+    try {
+      const res = await fetch(`/api/portal/job-attachments?jobId=${jobId}`)
+      const data: AttFile[] = res.ok ? await res.json() : []
+      setFileCache(prev => ({ ...prev, [jobId]: data }))
+    } catch {
+      setFileCache(prev => ({ ...prev, [jobId]: [] }))
+    }
+  }
+
+  function toggleFiles(jobId: string) {
+    if (expandedFiles === jobId) { setExpandedFiles(null); return }
+    setExpandedFiles(jobId)
+    if (!fileCache[jobId]) loadAttachments(jobId)
+  }
+
+  function fmtSize(bytes: number) {
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  }
+
   // Approve flow
   const [approvingVar, setApprovingVar]      = useState<Variation | null>(null)
   const [sigName, setSigName]                = useState('')
@@ -312,6 +339,69 @@ export default function PortalJobsPage() {
                   )}
                 </div>
               )}
+
+              {/* ── Attachments ──────────────────────────────── */}
+              <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                <button
+                  onClick={() => toggleFiles(j.id)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 12px', fontSize: 12, fontWeight: 600, color: 'var(--ink)', cursor: 'pointer', fontFamily: 'inherit' }}
+                >
+                  📎 {expandedFiles === j.id ? 'Hide Files ▲' : 'Plans, Photos & Documents ▼'}
+                </button>
+
+                {expandedFiles === j.id && (
+                  <div style={{ marginTop: 12 }}>
+                    {fileCache[j.id] === 'loading' ? (
+                      <div style={{ fontSize: 13, color: 'var(--muted)', padding: '8px 0' }}>Loading…</div>
+                    ) : !fileCache[j.id] || (fileCache[j.id] as AttFile[]).length === 0 ? (
+                      <div style={{ fontSize: 13, color: 'var(--muted)', padding: '8px 0' }}>No files shared yet.</div>
+                    ) : (
+                      (['photo', 'plan', 'document'] as const)
+                        .map(cat => {
+                          const catFiles = (fileCache[j.id] as AttFile[]).filter(f => f.category === cat)
+                          if (!catFiles.length) return null
+                          const catLabel = cat === 'photo' ? '📷 Photos' : cat === 'plan' ? '📐 Plans & Drawings' : '📄 Documents'
+                          return (
+                            <div key={cat} style={{ marginBottom: 14 }}>
+                              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.7px', color: 'var(--muted)', marginBottom: 8 }}>
+                                {catLabel}
+                              </div>
+
+                              {cat === 'photo' ? (
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: 6 }}>
+                                  {catFiles.map(f => (
+                                    <a key={f.id} href={f.url ?? '#'} target="_blank" rel="noreferrer"
+                                      style={{ display: 'block', borderRadius: 6, overflow: 'hidden', aspectRatio: '1', background: '#f0f2f4', textDecoration: 'none' }}>
+                                      {f.url
+                                        ? <img src={f.url} alt={f.label || f.fileName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>📷</div>
+                                      }
+                                    </a>
+                                  ))}
+                                </div>
+                              ) : (
+                                catFiles.map(f => (
+                                  <a key={f.id} href={f.url ?? '#'} target="_blank" rel="noreferrer"
+                                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 6, marginBottom: 4, background: '#f8f9fa', border: '1px solid var(--border)', textDecoration: 'none', color: 'inherit' }}>
+                                    <span style={{ fontSize: 18 }}>{cat === 'plan' ? '📐' : '📄'}</span>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {f.label || f.fileName}
+                                      </div>
+                                      {f.label && <div style={{ fontSize: 11, color: 'var(--muted)' }}>{f.fileName}</div>}
+                                      <div style={{ fontSize: 10, color: 'var(--muted)' }}>{fmtSize(f.fileSize)}</div>
+                                    </div>
+                                    <span style={{ fontSize: 11, color: 'var(--moss)', fontWeight: 600, flexShrink: 0 }}>Open ↗</span>
+                                  </a>
+                                ))
+                              )}
+                            </div>
+                          )
+                        })
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )
         })

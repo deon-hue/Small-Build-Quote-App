@@ -161,6 +161,22 @@ export interface Job {
   quoteId?: string
 }
 
+// ── Job attachments (client-visible: plans, photos, documents) ───────────────
+
+export type AttachmentCategory = 'document' | 'plan' | 'photo'
+
+export interface JobAttachment {
+  id: string
+  jobId: string
+  fileName: string
+  storagePath: string
+  mimeType: string
+  fileSize: number
+  category: AttachmentCategory
+  label: string
+  createdAt?: string
+}
+
 // ── Job documents & cost ledger (doc-scan feature) ────────────────────────────
 
 export type JobCostCategory = 'labour' | 'materials' | 'plant' | 'subcontractors' | 'other'
