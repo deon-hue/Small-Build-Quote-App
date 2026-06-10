@@ -39,6 +39,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
   // can remove them before each re-render and on unmount.
   const cleanupDragRef = useRef<(() => void) | null>(null)
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('week')
+  const [fullscreen, setFullscreen] = useState(false)
   // dirty = true means the chart has been dragged since the last save
   const [dirty, setDirty] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
@@ -117,6 +118,12 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       cleanupDragRef.current = null
     }
   }, [job, phases, viewMode]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-render chart when fullscreen changes so track widths recalculate
+  useEffect(() => {
+    if (!stateRef.current) return
+    renderGantt(stateRef.current, viewMode)
+  }, [fullscreen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function renderGantt(state: GanttState, mode: 'day' | 'week' | 'month') {
     const container = containerRef.current
@@ -633,13 +640,25 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div style={{ background: 'var(--cream)', borderRadius: 8, width: 'min(980px,96vw)', maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 80px rgba(0,0,0,0.25)' }}>
+      <div style={fullscreen
+        ? { background: 'var(--cream)', borderRadius: 0, width: '100vw', height: '100vh', maxHeight: '100vh', display: 'flex', flexDirection: 'column', boxShadow: 'none' }
+        : { background: 'var(--cream)', borderRadius: 8, width: 'min(980px,96vw)', maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 80px rgba(0,0,0,0.25)' }
+      }>
         <div className="form-modal-hd">
           <div>
             <div className="serif" style={{ fontSize: 20 }}>{job.type} — {job.address}</div>
             <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{job.client}</div>
           </div>
-          <button className="modal-close" onClick={onClose}>×</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button
+              onClick={() => setFullscreen(f => !f)}
+              title={fullscreen ? 'Exit full screen' : 'Full screen'}
+              style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 4, padding: '4px 8px', cursor: 'pointer', fontSize: 15, lineHeight: 1, color: 'var(--ink)' }}
+            >
+              {fullscreen ? '⤡' : '⛶'}
+            </button>
+            <button className="modal-close" onClick={onClose}>×</button>
+          </div>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px' }}>

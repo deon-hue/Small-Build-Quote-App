@@ -66,7 +66,7 @@ function PortalError({ error, userEmail, reload }: { error: string; userEmail: s
 }
 
 export default function PortalDashboard() {
-  const { quotes, jobs, invoices, settings, userEmail, loading, error, reload } = usePortal()
+  const { quotes, jobs, invoices, variations, settings, userEmail, loading, error, reload } = usePortal()
 
   if (loading) {
     return (
@@ -81,11 +81,18 @@ export default function PortalDashboard() {
     return <PortalError error={error} userEmail={userEmail} reload={reload} />
   }
 
-  const openQuotes = quotes.filter(q => q.status === 'pending' || q.status === 'sent')
-  const activeJobs = jobs.filter(j => j.stage === 'active' || j.stage === 'planning')
+  const openQuotes     = quotes.filter(q => q.status === 'pending' || q.status === 'sent')
+  const activeJobs     = jobs.filter(j => j.stage === 'active' || j.stage === 'planning')
   const unpaidInvoices = invoices.filter(i => i.status === 'sent' || i.status === 'overdue')
-  const totalOutstanding = unpaidInvoices.reduce((s, i) => s + i.total, 0)
-  const totalPaid = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + i.total, 0)
+
+  // Financial summary
+  const totalQuoteValue  = jobs.reduce((s, j) => s + (j.value || 0), 0)
+  const totalVariations  = variations
+    .filter(v => ['approved', 'invoiced', 'paid'].includes(v.status))
+    .reduce((s, v) => s + v.total, 0)
+  const totalInvoiced    = invoices.reduce((s, i) => s + i.total, 0)
+  const totalPaid        = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + i.total, 0)
+  const balanceDue       = (totalQuoteValue + totalVariations) - totalPaid
 
   return (
     <>
@@ -94,23 +101,25 @@ export default function PortalDashboard() {
         {settings.name && <p className="portal-company-name">{settings.name}</p>}
       </div>
 
-      {/* Summary stats */}
+      {/* Financial summary */}
       <div className="portal-stats">
         <div className="portal-stat">
-          <div className="portal-stat-num">{openQuotes.length}</div>
-          <div className="portal-stat-label">Open Quote{openQuotes.length !== 1 ? 's' : ''}</div>
+          <div className="portal-stat-num">{fmt(totalQuoteValue)}</div>
+          <div className="portal-stat-label">Quote Value</div>
         </div>
         <div className="portal-stat">
-          <div className="portal-stat-num">{activeJobs.length}</div>
-          <div className="portal-stat-label">Active Job{activeJobs.length !== 1 ? 's' : ''}</div>
+          <div className="portal-stat-num">{fmt(totalVariations)}</div>
+          <div className="portal-stat-label">Variations</div>
         </div>
         <div className="portal-stat">
-          <div className="portal-stat-num">{fmt(totalOutstanding)}</div>
-          <div className="portal-stat-label">Outstanding</div>
+          <div className="portal-stat-num">{fmt(totalInvoiced)}</div>
+          <div className="portal-stat-label">Invoiced</div>
         </div>
-        <div className="portal-stat">
-          <div className="portal-stat-num">{fmt(totalPaid)}</div>
-          <div className="portal-stat-label">Total Paid</div>
+        <div className="portal-stat" style={{ borderTop: '2px solid var(--moss)' }}>
+          <div className="portal-stat-num" style={{ color: balanceDue > 0 ? 'var(--moss)' : '#27ae60' }}>
+            {fmt(balanceDue)}
+          </div>
+          <div className="portal-stat-label">Balance Due</div>
         </div>
       </div>
 
