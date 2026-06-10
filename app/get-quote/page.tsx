@@ -217,26 +217,39 @@ export default function GetQuotePage() {
     setAttachments([])
     setChatLoading(true)
 
-    // Upload files to Supabase Storage in the background so they persist for the builder
+    // Upload files to Supabase Storage first (awaited), then pass URLs to the AI.
+    // This keeps the scope-chat request body tiny regardless of image size.
+    const imageRefs: { url: string; name: string }[] = []
+    const pdfBase64s: { dataBase64: string; name: string; mimeType: string }[] = []
+
     if (pendingFiles.length > 0) {
-      Promise.all(pendingFiles.map(async att => {
-        try {
-          const res = await fetch('/api/public/upload-client-file', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              sessionId: sessionIdRef.current,
-              name: att.name, mimeType: att.mimeType,
-              dataBase64: att.dataBase64, isImage: att.isImage,
-            }),
-          })
-          const d = await res.json()
-          if (d.url) setStoredFileRefs(prev => [...prev, { name: att.name, url: d.url, isImage: att.isImage }])
-        } catch { /* silent — file upload failure doesn't block the chat */ }
+      await Promise.all(pendingFiles.map(async att => {
+        if (att.isImage) {
+          try {
+            const res = await fetch('/api/public/upload-client-file', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                sessionId: sessionIdRef.current,
+                name: att.name, mimeType: att.mimeType,
+                dataBase64: att.dataBase64, isImage: true,
+              }),
+            })
+            const d = await res.json()
+            if (d.url) {
+              imageRefs.push({ url: d.url, name: att.name })
+              setStoredFileRefs(prev => [...prev, { name: att.name, url: d.url, isImage: true }])
+            }
+          } catch { /* silent */ }
+        } else {
+          // PDFs are small — keep as base64
+          pdfBase64s.push({ dataBase64: att.dataBase64, name: att.name, mimeType: att.mimeType })
+          setStoredFileRefs(prev => [...prev, { name: att.name, url: '', isImage: false }])
+        }
       }))
     }
 
-    // Build API messages (history minus last, since last gets files attached by the API route)
+    // Build API messages (history minus last, files attached by the API route)
     const apiHistory = newHistory.slice(0, -1).map(m => ({ role: m.role, content: m.content }))
     const lastMsg = { role: 'user' as const, content: text || 'Please analyse these files and extract all relevant details.' }
     const apiMessages = [...apiHistory, lastMsg]
@@ -249,7 +262,8 @@ export default function GetQuotePage() {
           messages: apiMessages,
           context: { jobType, address },
           rawInput: text,
-          attachments: pendingFiles.length > 0 ? pendingFiles : undefined,
+          imageRefs:  imageRefs.length  > 0 ? imageRefs  : undefined,
+          pdfBase64s: pdfBase64s.length > 0 ? pdfBase64s : undefined,
         }),
       })
       const data = await res.json()
