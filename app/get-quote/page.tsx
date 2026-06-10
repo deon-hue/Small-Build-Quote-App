@@ -324,7 +324,7 @@ export default function GetQuotePage() {
       {/* Announcement bar */}
       <div style={{ background: CHARCOAL, color: '#fff', fontSize: 12, fontWeight: 500 }}>
         <div style={{ maxWidth: 860, margin: '0 auto', padding: '8px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ opacity: 0.85 }}>Free consultation · No obligation · Covering London &amp; Home Counties</span>
+          <span style={{ opacity: 0.85 }}>Free consultation · No obligation · Windsor, Maidenhead &amp; Berkshire area</span>
           <a href="https://www.smallbuildcompany.com" target="_blank" rel="noreferrer"
             style={{ color: LIME, textDecoration: 'none', fontWeight: 600, fontSize: 11 }}>
             smallbuildcompany.com
