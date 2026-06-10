@@ -96,6 +96,85 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await sb.auth.getUser()
   const { block: ratesBlock, plantByKey } = user ? await fetchReferenceRates(user.id) : { block: '', plantByKey: {} as Record<string, PlantDefault> }
 
+  const ukStandardRates = !ratesBlock ? `
+
+UK STANDARD MARKET RATES 2025 (ex-VAT — use these as your pricing baseline):
+
+LABOUR DAY RATES:
+- General labourer / operative: £210/day
+- Bricklayer (skilled): £260/day
+- Carpenter / joiner: £240/day
+- Plasterer: £250/day
+- Tiler (floor or wall): £230/day
+- Decorator / painter: £200/day
+- Roofer: £260/day
+- Ground worker: £220/day
+- Electrician (1st fix + 2nd fix, per day): £320/day — use as subcontractor
+- Plumber (1st fix + 2nd fix, per day): £320/day — use as subcontractor
+- Steelwork / structural: quote per beam, approx £800–£1,400 installed
+
+TYPICAL TRADE PACKAGE COSTS:
+- Electrician full rewire (3-bed): £5,000–£7,000 (subcontractors)
+- Electrician part rewire / extension circuit: £1,500–£3,000 (subcontractors)
+- Plumber full install (bathroom + kitchen): £4,000–£6,500 (subcontractors)
+- Plumber single bathroom: £2,000–£3,500 (subcontractors)
+- Underfloor heating (wet system, per m²): £80–£120 (subcontractors)
+- MVHR / mechanical vent: £3,000–£5,000 (subcontractors)
+- Steel beam supply & install (per beam, inc SE design): £1,000–£1,800 (subcontractors)
+- Structural engineer report / calcs: £800–£1,500 (subcontractors)
+
+MATERIALS (common items):
+- Ready-mix concrete C25: £115/m³
+- Concrete block 100mm (per m²): £18
+- Concrete block 140mm (per m²): £22
+- Facing brick (per 1,000): £650
+- Engineering brick (per 1,000): £750
+- Timber 100×50 CLS (per m): £3.50
+- Timber 200×50 joist (per m): £6.50
+- OSB 18mm sheet: £28
+- Plasterboard 12.5mm (per m²): £8
+- Multifinish plaster (25kg bag): £14
+- Sand/cement (25kg): £5
+- PIR insulation 100mm (per m²): £20
+- Mineral wool 100mm (per m²): £6
+- DPC 450mm (per roll): £35
+- Roof slate (per m²): £45
+- Concrete roof tile (per m²): £28
+- GRP flat roof kit (per m²): £60
+- EPDM rubber roof (per m²): £50
+- uPVC window (standard, supplied): £350–£600 each
+- Bifold door (per m width, aluminium): £1,200
+- Steel lintel (standard 1.2m): £45
+- Soil pipe 110mm (per m): £18
+
+PLANT HIRE (typical rates):
+- 3t mini excavator (per week): £720
+- 8t tracked excavator (per week): £1,400
+- Tracked dumper 1t (per week): £480
+- Scaffold (typical extension, erect + dismantle): £2,800
+- Skip 8-yard (per skip inc disposal): £320
+- Concrete pump (per day): £650
+- Acrow props (per set per week): £60
+- Pressure washer (per day): £60
+
+BUILDING CONTROL & FEES:
+- Building Control (extension up to 40m²): £1,200
+- Building Control (extension 40–100m²): £1,600
+- Building Control (loft conversion): £900
+- Building Control (full refurb, structural): £1,400
+- Party Wall surveyor (per award): £800–£1,500
+
+M² ALL-IN BUILD RATES (contractor cost, ex-VAT — use to sense-check totals):
+- Single storey rear/side extension: £1,900–£2,600/m² floor area
+- Two storey extension: £1,700–£2,200/m² floor area
+- Loft conversion Velux only: £35,000–£45,000 total
+- Loft conversion rear dormer: £50,000–£70,000 total
+- Full house refurbishment: £500–£800/m² floor area
+- Kitchen fit-out (supply + fit): £12,000–£25,000
+- Bathroom fit-out (supply + fit): £5,000–£12,000
+- Garden room (timber frame, insulated): £1,400–£1,800/m²
+` : ''
+
   const system = `You are an expert UK quantity surveyor and building contractor. Convert a scope of works into a structured cost breakdown using UK industry standard build phases.
 
 The phase structure is job-type dependent. Use a two-level hierarchy:
@@ -128,7 +207,7 @@ Return ONLY valid JSON — no markdown, no code blocks, no explanation:
 Rules:
 - Use the contractor's Back Office rates where provided — these are the agreed pricing defaults
 - Where a Back Office rate is provided, derive totals by multiplying the per-unit rate by the required quantity
-- For tasks or phases NOT in the Back Office rates, use realistic UK 2024 contractor rates (all costs ex-VAT)
+- For tasks or phases NOT in the Back Office rates, use realistic UK 2025 market rates (all costs ex-VAT)
 - labour = direct labour cost for this sub-phase
 - materials = materials, components and supplies
 - plant = machinery hire: excavators, scaffolding, skips, mixers, access platforms — use 0 if none
@@ -140,6 +219,7 @@ Rules:
 - For landscaping or fit-out jobs: fewer phases, typically 5–8 main phases
 - Notes fields must be brief (max 10 words) or empty string
 - Do not include profit, markup or VAT
+- Sense-check your total against the m² all-in rates — if the total is wildly outside the expected range, adjust individual line items${ukStandardRates}
 
 DEMOLITION / STRIP OUT RULES — when the scope mentions any demolition, strip out, or removal work, create detailed sub-phases within Phase 1 – Site Setup & Preparation:
 - "knock through" or "remove load-bearing wall" → sub-phase: Structural Demolition — Remove load-bearing wall (include SE fee in subcontractors, acrow props in plant)
