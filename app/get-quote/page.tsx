@@ -122,9 +122,12 @@ export default function GetQuotePage() {
   }
 
   // ── File attachment ───────────────────────────────────────────────────
-  // Images are resized to max 1536px and re-encoded as JPEG so the base64
-  // payload stays well under Netlify's 6 MB function body limit.
-  async function resizeImage(file: File): Promise<{ base64: string; mimeType: string }> {
+  // Supported by Anthropic vision API — HEIC and other exotic formats are rejected
+  const SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
+
+  // Resize + re-encode as JPEG so the base64 stays well under Netlify's 6 MB body limit.
+  // Returns null if the browser can't decode the image (e.g. unsupported format).
+  async function resizeToJpeg(file: File): Promise<string | null> {
     const MAX_PX = 1536
     return new Promise(resolve => {
       const img = new Image()
@@ -136,16 +139,16 @@ export default function GetQuotePage() {
         const h = Math.round(img.height * scale)
         const canvas = document.createElement('canvas')
         canvas.width = w; canvas.height = h
-        canvas.getContext('2d')!.drawImage(img, 0, 0, w, h)
+        const ctx = canvas.getContext('2d')
+        if (!ctx) { URL.revokeObjectURL(objUrl); resolve(null); return }
+        ctx.drawImage(img, 0, 0, w, h)
         URL.revokeObjectURL(objUrl)
         const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
-        resolve({ base64: dataUrl.split(',')[1], mimeType: 'image/jpeg' })
+        resolve(dataUrl.split(',')[1])
       }
       img.onerror = () => {
         URL.revokeObjectURL(objUrl)
-        const reader = new FileReader()
-        reader.onload = () => resolve({ base64: (reader.result as string).split(',')[1], mimeType: file.type })
-        reader.readAsDataURL(file)
+        resolve(null) // browser can't decode this format
       }
       img.src = objUrl
     })
@@ -153,34 +156,36 @@ export default function GetQuotePage() {
 
   async function handleFileSelect(files: FileList | null) {
     if (!files) return
-    const MAX_PDF = 5 * 1024 * 1024 // 5 MB for PDFs (already compressed)
+    const MAX_PDF = 4 * 1024 * 1024 // 4 MB for PDFs
     for (const file of Array.from(files)) {
       const isImage = file.type.startsWith('image/')
-      if (!isImage && file.type !== 'application/pdf') {
-        alert(`${file.name}: only images and PDFs are supported`)
-        continue
-      }
-      if (!isImage && file.size > MAX_PDF) {
-        alert(`${file.name} is too large (max 5 MB for PDFs)`)
-        continue
-      }
-      let dataBase64: string
-      let mimeType: string
+
       if (isImage) {
-        // Resize + compress so base64 stays under the API limit
-        const result = await resizeImage(file)
-        dataBase64 = result.base64
-        mimeType = result.mimeType
-      } else {
-        dataBase64 = await new Promise<string>(resolve => {
+        if (!SUPPORTED_IMAGE_TYPES.includes(file.type)) {
+          alert(`${file.name}: unsupported format.\n\nPlease use JPEG, PNG, WebP or GIF. iPhone HEIC photos can be converted by opening them in Photos and exporting as JPEG.`)
+          continue
+        }
+        const base64 = await resizeToJpeg(file)
+        if (!base64) {
+          alert(`${file.name}: could not process this image. Please try saving it as JPEG or PNG first.`)
+          continue
+        }
+        const previewUrl = URL.createObjectURL(file)
+        setAttachments(prev => [...prev, { name: file.name, mimeType: 'image/jpeg', dataBase64: base64, isImage: true, previewUrl }])
+      } else if (file.type === 'application/pdf') {
+        if (file.size > MAX_PDF) {
+          alert(`${file.name} is too large (max 4 MB for PDFs). Try compressing it first.`)
+          continue
+        }
+        const base64 = await new Promise<string>(resolve => {
           const reader = new FileReader()
           reader.onload = () => resolve((reader.result as string).split(',')[1])
           reader.readAsDataURL(file)
         })
-        mimeType = file.type
+        setAttachments(prev => [...prev, { name: file.name, mimeType: 'application/pdf', dataBase64: base64, isImage: false }])
+      } else {
+        alert(`${file.name}: only JPEG, PNG, WebP, GIF images and PDFs are supported.`)
       }
-      const previewUrl = isImage ? URL.createObjectURL(file) : undefined
-      setAttachments(prev => [...prev, { name: file.name, mimeType, dataBase64, isImage, previewUrl }])
     }
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
