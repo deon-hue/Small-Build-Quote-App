@@ -10,6 +10,7 @@ export async function middleware(request: NextRequest) {
   const isPortalLogin  = pathname === '/portal/login'
   const isAdminLogin   = pathname === '/login'
   const isTeamAccept   = pathname.startsWith('/team/accept')  // invite acceptance — no auth needed
+  const isPublicRoute  = pathname.startsWith('/get-quote')    // public client-facing pages — no auth needed
 
   let supabaseResponse = NextResponse.next({ request })
 
@@ -40,8 +41,8 @@ export async function middleware(request: NextRequest) {
     if (user && isPortalLogin) {
       return NextResponse.redirect(new URL('/portal', request.url))
     }
-  } else if (isTeamAccept) {
-    // Invite acceptance: always pass through (user not logged in yet)
+  } else if (isTeamAccept || isPublicRoute) {
+    // Public / invite pages: always pass through — no auth required
     // do nothing — fall through to supabaseResponse
   } else {
     // Admin routes: unauthenticated → /login; logged-in on login page → /dashboard
