@@ -144,6 +144,8 @@ export default function NewQuotePage() {
   const [quoteSource, setQuoteSource] = useState<QuoteCreationMode | null>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
   const takeoffInputRef = useRef<HTMLInputElement>(null)
+  const [clientRequestFiles, setClientRequestFiles] = useState<{name: string; url: string; isImage: boolean}[]>([])
+  const [clientFilesExpanded, setClientFilesExpanded] = useState(true)
 
   // DB wall types — loaded from Back Office on mount for quote import lookups
   const [dbWallTypes, setDbWallTypes] = useState<FloorMakeup[]>([])
@@ -203,6 +205,13 @@ export default function NewQuotePage() {
         }
       })()
       return
+    }
+
+    // Client files from a quote request — load and display alongside the quote
+    const rawFiles = sessionStorage.getItem('sbc_quote_request_files')
+    if (rawFiles) {
+      sessionStorage.removeItem('sbc_quote_request_files')
+      try { setClientRequestFiles(JSON.parse(rawFiles)) } catch { /* ignore */ }
     }
 
     // New quote — show landing wizard
@@ -1358,6 +1367,39 @@ export default function NewQuotePage() {
             )}
           </div>
           <button className="btn-sm btn-outline" onClick={cancelEdit}>Cancel Edit</button>
+        </div>
+      )}
+
+      {/* ── Client Plans & Photos (from quote request) ── */}
+      {clientRequestFiles.length > 0 && (
+        <div style={{ background: '#f0f7ff', border: '1.5px solid #bfdbfe', borderRadius: 8, marginBottom: 16, overflow: 'hidden' }}>
+          <button
+            onClick={() => setClientFilesExpanded(v => !v)}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+          >
+            <span style={{ fontSize: 14 }}>📎</span>
+            <span style={{ fontWeight: 700, fontSize: 13, color: '#1e40af' }}>Client Plans &amp; Photos</span>
+            <span style={{ fontSize: 11, color: '#60a5fa', marginLeft: 4 }}>{clientRequestFiles.length} file{clientRequestFiles.length !== 1 ? 's' : ''}</span>
+            <span style={{ marginLeft: 'auto', fontSize: 10, color: '#93c5fd' }}>{clientFilesExpanded ? '▲' : '▼'}</span>
+          </button>
+          {clientFilesExpanded && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, padding: '4px 16px 14px' }}>
+              {clientRequestFiles.map((f, i) => (
+                f.isImage ? (
+                  <a key={i} href={f.url} target="_blank" rel="noopener noreferrer" title={f.name}
+                    style={{ display: 'block', borderRadius: 6, overflow: 'hidden', border: '1px solid #bfdbfe', flexShrink: 0 }}>
+                    <img src={f.url} alt={f.name} style={{ width: 100, height: 100, objectFit: 'cover', display: 'block' }} />
+                  </a>
+                ) : (
+                  <a key={i} href={f.url} target="_blank" rel="noopener noreferrer"
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: 100, height: 100, borderRadius: 6, border: '1px solid #bfdbfe', background: '#fff', gap: 4, textDecoration: 'none', color: '#1e40af', flexShrink: 0 }}>
+                    <span style={{ fontSize: 28 }}>📄</span>
+                    <span style={{ fontSize: 9, textAlign: 'center', maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#60a5fa' }}>{f.name}</span>
+                  </a>
+                )
+              ))}
+            </div>
+          )}
         </div>
       )}
 

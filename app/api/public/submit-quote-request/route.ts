@@ -3,7 +3,7 @@ import { createServiceRoleClient } from '@/lib/supabase/service-role'
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { clientName, clientEmail, clientPhone, projectType, projectAddress, scopeText, aiPhases, estimatedTotal } = body
+  const { clientName, clientEmail, clientPhone, projectType, projectAddress, scopeText, aiPhases, estimatedTotal, clientFiles } = body
 
   if (!clientName?.trim() || !clientEmail?.trim()) {
     return NextResponse.json({ error: 'Name and email are required' }, { status: 400 })
@@ -26,6 +26,7 @@ export async function POST(req: NextRequest) {
     scope_text:      scopeText || '',
     ai_phases:       aiPhases || [],
     estimated_total: estimatedTotal || 0,
+    client_files:    clientFiles || [],
     status:          'pending',
   }).select('id').single()
 

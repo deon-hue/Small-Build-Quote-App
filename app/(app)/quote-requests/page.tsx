@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
+interface ClientFile { name: string; url: string; isImage: boolean }
+
 interface QuoteRequest {
   id: string
   client_name: string
@@ -17,6 +19,7 @@ interface QuoteRequest {
   admin_notes: string
   quote_id: string | null
   created_at: string
+  client_files: ClientFile[]
 }
 
 interface Phase {
@@ -276,6 +279,32 @@ export default function QuoteRequestsPage() {
                 </div>
               )}
 
+              {/* Client files */}
+              {selected.client_files?.length > 0 && (
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--muted)', marginBottom: 8 }}>
+                    Client Plans &amp; Photos ({selected.client_files.length})
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                    {selected.client_files.map((f, i) => (
+                      f.isImage ? (
+                        <a key={i} href={f.url} target="_blank" rel="noopener noreferrer" title={f.name}
+                          style={{ display: 'block', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border)', flexShrink: 0 }}>
+                          <img src={f.url} alt={f.name}
+                            style={{ width: 90, height: 90, objectFit: 'cover', display: 'block' }} />
+                        </a>
+                      ) : (
+                        <a key={i} href={f.url} target="_blank" rel="noopener noreferrer"
+                          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: 90, height: 90, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--warm)', gap: 4, textDecoration: 'none', color: 'var(--ink)', flexShrink: 0 }}>
+                          <span style={{ fontSize: 24 }}>📄</span>
+                          <span style={{ fontSize: 9, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 80, whiteSpace: 'nowrap', color: 'var(--muted)' }}>{f.name}</span>
+                        </a>
+                      )
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Admin notes */}
               <div style={{ marginBottom: 8 }}>
                 <label style={{ display: 'block', fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--muted)', marginBottom: 6 }}>
@@ -320,14 +349,20 @@ export default function QuoteRequestsPage() {
                   Decline
                 </button>
               )}
-              {/* Open in quote builder */}
-              <a
-                href={`/new-quote?clientName=${encodeURIComponent(selected.client_name)}&address=${encodeURIComponent(selected.project_address)}&jobType=${encodeURIComponent(selected.project_type)}`}
+              {/* Open in quote builder — store client files in sessionStorage first */}
+              <button
                 className="btn"
-                style={{ fontSize: 13, textDecoration: 'none' }}
+                style={{ fontSize: 13 }}
+                onClick={() => {
+                  if (selected.client_files?.length) {
+                    sessionStorage.setItem('sbc_quote_request_files', JSON.stringify(selected.client_files))
+                  }
+                  sessionStorage.setItem('sbc_quote_request_scope', selected.scope_text || '')
+                  window.location.href = `/new-quote?clientName=${encodeURIComponent(selected.client_name)}&address=${encodeURIComponent(selected.project_address)}&jobType=${encodeURIComponent(selected.project_type)}`
+                }}
               >
                 ✎ Open in Quote Builder
-              </a>
+              </button>
               <div style={{ flex: 1 }} />
               <button
                 className="btn-sm btn-danger"

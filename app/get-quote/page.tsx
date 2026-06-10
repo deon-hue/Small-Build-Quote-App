@@ -44,9 +44,11 @@ export default function GetQuotePage() {
   const [scopeReady, setScopeReady] = useState(false)
   const chatEndRef                  = useRef<HTMLDivElement>(null)
 
-  // Attachments
+  // Attachments (current unsent) + persistent refs uploaded to storage
   const [attachments, setAttachments]   = useState<AttachmentPayload[]>([])
   const fileInputRef                    = useRef<HTMLInputElement>(null)
+  const sessionIdRef                    = useRef<string>(`${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`)
+  const [storedFileRefs, setStoredFileRefs] = useState<{name: string; url: string; isImage: boolean}[]>([])
 
   // Mic
   const [listening, setListening]       = useState(false)
@@ -154,6 +156,25 @@ export default function GetQuotePage() {
     setAttachments([])
     setChatLoading(true)
 
+    // Upload files to Supabase Storage in the background so they persist for the builder
+    if (pendingFiles.length > 0) {
+      Promise.all(pendingFiles.map(async att => {
+        try {
+          const res = await fetch('/api/public/upload-client-file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sessionId: sessionIdRef.current,
+              name: att.name, mimeType: att.mimeType,
+              dataBase64: att.dataBase64, isImage: att.isImage,
+            }),
+          })
+          const d = await res.json()
+          if (d.url) setStoredFileRefs(prev => [...prev, { name: att.name, url: d.url, isImage: att.isImage }])
+        } catch { /* silent — file upload failure doesn't block the chat */ }
+      }))
+    }
+
     // Build API messages (history minus last, since last gets files attached by the API route)
     const apiHistory = newHistory.slice(0, -1).map(m => ({ role: m.role, content: m.content }))
     const lastMsg = { role: 'user' as const, content: text || 'Please analyse these files and extract all relevant details.' }
@@ -220,6 +241,7 @@ export default function GetQuotePage() {
           clientEmail: email.trim(), clientPhone: phone.trim(),
           projectType: jobType, projectAddress: address,
           scopeText: scope, aiPhases: phases, estimatedTotal: total, message: message.trim(),
+          clientFiles: storedFileRefs,
         }),
       })
       const data = await res.json()
