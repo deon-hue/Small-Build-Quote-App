@@ -57,6 +57,7 @@ export default function GetQuotePage() {
   const [listening, setListening]   = useState(false)
   const [micTarget, setMicTarget]   = useState<'description' | 'chat'>('chat')
   const recognitionRef              = useRef<SR>(null)
+  const finalTranscriptRef          = useRef('')  // accumulates confirmed final text across restarts
   const [hasMic, setHasMic]        = useState(false)
 
   const [phases, setPhases]         = useState<Phase[]>([])
@@ -84,6 +85,7 @@ export default function GetQuotePage() {
     const SRClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     if (!SRClass) return
     setMicTarget(target)
+    finalTranscriptRef.current = ''   // fresh start each time the mic is tapped
     const rec = new SRClass()
     rec.lang = 'en-GB'; rec.continuous = true; rec.interimResults = true
     recognitionRef.current = rec
@@ -99,8 +101,21 @@ export default function GetQuotePage() {
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     rec.onresult = (e: any) => {
-      const transcript = Array.from(e.results).map((r: any) => r[0].transcript).join('')
-      if (target === 'description') setDescription(transcript); else setInput(transcript)
+      // Only process results from e.resultIndex onwards to avoid re-processing
+      // already-finalized text when onresult fires for a new interim result.
+      let newFinal = ''
+      let interim  = ''
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const text = e.results[i][0].transcript
+        if (e.results[i].isFinal) newFinal += text
+        else interim += text
+      }
+      if (newFinal) {
+        const sep = finalTranscriptRef.current && !finalTranscriptRef.current.endsWith(' ') ? ' ' : ''
+        finalTranscriptRef.current += sep + newFinal
+      }
+      const display = (finalTranscriptRef.current + (interim ? ' ' + interim : '')).trimStart()
+      if (target === 'description') setDescription(display); else setInput(display)
     }
     rec.start()
   }, [])
