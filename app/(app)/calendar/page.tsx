@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { useApp } from '@/contexts/AppContext'
 import { STAGE_COLOR, STAGE_LABEL, fmt, JOB_COLORS, jobColor } from '@/lib/utils'
-import type { Job } from '@/lib/types'
+import type { Job, GanttPhase } from '@/lib/types'
 
 // ── Date helpers ───────────────────────────────────────────────
 function addDays(d: Date, n: number): Date { const r = new Date(d); r.setDate(r.getDate() + n); return r }
@@ -164,9 +164,10 @@ export default function CalendarPage() {
             })()
 
       phases.forEach((ph, i) => {
+        const phaseColor = (ph as GanttPhase).isComplete ? '#7ab533' : color
         events.push({
           id: `${job.id}-${i}`,
-          job, phaseLabel: ph.label, phaseIdx: i, color,
+          job, phaseLabel: ph.label, phaseIdx: i, color: phaseColor,
           startDate: addDays(jobStart, ph.startDay),
           endDate:   addDays(jobStart, ph.startDay + ph.durDays),
         })

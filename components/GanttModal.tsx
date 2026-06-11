@@ -275,9 +275,10 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       const isDone = phEndDay <= doneWeeks * 7
       const isActive = ph.startDay < doneWeeks * 7 && phEndDay > doneWeeks * 7
       const barColor = level === 2
-        ? (isDone ? '#5a9e2a' : isActive ? '#3a7a94' : '#a8c4d4')
-        : (isDone ? '#7ab533' : isActive ? '#4a90a4' : '#c8d8e8')
-      const textColor = (isDone || isActive) ? 'white' : '#2b2f33'
+        ? (ph.isComplete || isDone ? '#5a9e2a' : isActive ? '#3a7a94' : '#a8c4d4')
+        : (ph.isComplete || isDone ? '#7ab533' : isActive ? '#4a90a4' : '#c8d8e8')
+      const textColor = (ph.isComplete || isDone || isActive) ? 'white' : '#2b2f33'
+      const pct = ph.percentComplete ?? 0
       const startD = fmtDateShort(addDays(startDate, ph.startDay))
       const endD = fmtDateShort(addDays(startDate, phEndDay))
       const indentPx = level === 2 ? 28 : 18
@@ -286,19 +287,24 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       const idAttr = ph.id ? `data-row-id="${esc(ph.id)}"` : ''
       const parentAttr = ph.parentId ? `data-parent-id="${esc(ph.parentId)}"` : ''
 
+      const pctBg = ph.isComplete ? '#7ab533' : pct > 0 ? '#dbeafe' : '#eef0f2'
+      const pctTxt = ph.isComplete ? '#fff' : pct > 0 ? '#1d4ed8' : '#9ba3ae'
+      const showCtrl = !!ph.id
       return `<div class="gantt-row" ${idAttr} ${parentAttr} data-level="${level}" style="display:${displayStyle};align-items:center;height:${rowH}px;margin-bottom:3px">
-        <div class="gantt-label-cell" style="width:${LABEL_W}px;flex-shrink:0;font-size:${level === 2 ? '10px' : '11px'};font-weight:${level === 2 ? '400' : '500'};color:#1e2022;padding:0 8px 0 ${indentPx}px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:4px;height:${rowH}px;text-align:left" title="${esc(ph.label)}">
+        <div class="gantt-label-cell" style="width:${LABEL_W}px;flex-shrink:0;font-size:${level === 2 ? '10px' : '11px'};font-weight:${level === 2 ? '400' : '500'};color:#1e2022;padding:0 6px 0 ${indentPx}px;display:flex;align-items:center;gap:3px;height:${rowH}px" title="${esc(ph.label)}">
           ${hasChildren
             ? `<span class="gantt-toggle" data-for="${esc(ph.id ?? '')}" onclick="window.__ganttToggle('${esc(ph.id ?? '')}')" style="cursor:pointer;font-size:8px;opacity:0.55;user-select:none;flex-shrink:0;line-height:1">${toggleIcon}</span>`
             : (level === 1 ? '<span style="display:inline-block;width:10px;flex-shrink:0"></span>' : '')}
-          ${esc(ph.label)}
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${esc(ph.label)}</span>
+          ${showCtrl ? `<span onclick="window.__ganttSetPct('${esc(ph.id!)}')" title="Set % complete" style="font-size:9px;cursor:pointer;background:${pctBg};color:${pctTxt};border-radius:3px;padding:1px 4px;flex-shrink:0;min-width:28px;text-align:center;user-select:none;font-weight:600">${pct}%</span><span onclick="window.__ganttCompleteToggle('${esc(ph.id!)}')" title="${ph.isComplete ? 'Mark incomplete' : 'Mark complete'}" style="font-size:13px;cursor:pointer;flex-shrink:0;color:${ph.isComplete ? '#7ab533' : '#c8d0d8'};user-select:none;line-height:1;padding:0 1px">${ph.isComplete ? '✓' : '○'}</span>` : ''}
         </div>
         <div class="gantt-col-divider" style="width:5px;flex-shrink:0;align-self:stretch;cursor:col-resize;background:transparent;border-left:2px dashed #c8d0d8;margin-right:4px" title="Drag to resize label column"></div>
         <div class="gantt-track" style="flex:1;position:relative;height:${rowH - 6}px;background:#f0f2f4;border-radius:3px;cursor:default;overflow:hidden">
           ${trackWeekendHtml}
-          <div class="gantt-bar" data-idx="${i}" style="position:absolute;left:${leftPct}%;width:${widthPct}%;height:100%;background:${barColor};border-radius:3px;cursor:grab;user-select:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;box-shadow:0 1px 3px rgba(0,0,0,0.15);min-width:6px;z-index:1">
-            <span style="font-size:${level === 2 ? '8px' : '9px'};color:${textColor};white-space:nowrap;overflow:hidden;flex:1">${isDone ? '✓ ' : isActive ? '▶ ' : ''}<span class="bar-dates" style="opacity:0.85">${startD}–${endD}</span></span>
-            <div class="gantt-resize-handle" data-idx="${i}" style="width:8px;height:100%;cursor:ew-resize;flex-shrink:0;display:flex;align-items:center;justify-content:center;opacity:0.6"><div style="width:3px;height:60%;background:${textColor};border-radius:2px"></div></div>
+          <div class="gantt-bar" data-idx="${i}" style="position:absolute;left:${leftPct}%;width:${widthPct}%;height:100%;background:${barColor};border-radius:3px;cursor:grab;user-select:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;box-shadow:0 1px 3px rgba(0,0,0,0.15);min-width:6px;z-index:1;overflow:hidden">
+            ${pct > 0 && !ph.isComplete ? `<div style="position:absolute;left:0;top:0;height:100%;width:${pct}%;background:rgba(0,0,0,0.13);pointer-events:none;z-index:0"></div>` : ''}
+            <span style="font-size:${level === 2 ? '8px' : '9px'};color:${textColor};white-space:nowrap;overflow:hidden;flex:1;position:relative;z-index:1">${ph.isComplete || isDone ? '✓ ' : isActive ? '▶ ' : ''}<span class="bar-dates" style="opacity:0.85">${startD}–${endD}</span>${pct > 0 && !ph.isComplete ? `<span style="opacity:0.9;margin-left:3px">${pct}%</span>` : ''}</span>
+            <div class="gantt-resize-handle" data-idx="${i}" style="width:8px;height:100%;cursor:ew-resize;flex-shrink:0;display:flex;align-items:center;justify-content:center;opacity:0.6;position:relative;z-index:1"><div style="width:3px;height:60%;background:${textColor};border-radius:2px"></div></div>
           </div>
         </div>
       </div>`
@@ -402,7 +408,8 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
         barEnd: fmtDateShort(barEnd),
         durText,
       })
-      tooltip.innerHTML = `<strong>${esc(ph.label)}</strong><br>Start: ${fmtDate(barStart)}<br>End: ${fmtDate(barEnd)}<br>Duration: ${durText}`
+      const pctInfo = ph.isComplete ? '<br>✓ Complete' : ph.percentComplete ? `<br>Progress: ${ph.percentComplete}%` : ''
+      tooltip.innerHTML = `<strong>${esc(ph.label)}</strong><br>Start: ${fmtDate(barStart)}<br>End: ${fmtDate(barEnd)}<br>Duration: ${durText}${pctInfo}`
       tooltip.style.display = 'block'
       tooltip.style.left = (e.clientX + 12) + 'px'
       tooltip.style.top = (e.clientY - 10) + 'px'
@@ -609,12 +616,44 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       setDirty(true)
     }
 
+    win.__ganttCompleteToggle = (id: string) => {
+      const s = stateRef.current
+      if (!s) return
+      const ph = s.phases.find(p => p.id === id)
+      if (!ph) return
+      ph.isComplete = !ph.isComplete
+      if (ph.isComplete) ph.percentComplete = 100
+      stateRef.current = s
+      setDirty(true)
+      renderGantt(s, viewMode)
+    }
+
+    win.__ganttSetPct = (id: string) => {
+      const s = stateRef.current
+      if (!s) return
+      const ph = s.phases.find(p => p.id === id)
+      if (!ph) return
+      const cur = ph.percentComplete ?? 0
+      const raw = window.prompt('Set % complete (0–100):', String(cur))
+      if (raw === null) return
+      const parsed = parseInt(raw, 10)
+      if (isNaN(parsed)) return
+      const newPct = Math.max(0, Math.min(100, parsed))
+      ph.percentComplete = newPct
+      ph.isComplete = newPct === 100
+      stateRef.current = s
+      setDirty(true)
+      renderGantt(s, viewMode)
+    }
+
     return () => {
       delete win.__ganttView
       delete win.__ganttReset
       delete win.__ganttToggle
       delete win.__ganttExpandAll
       delete win.__ganttCollapseAll
+      delete win.__ganttCompleteToggle
+      delete win.__ganttSetPct
     }
   }) // eslint-disable-line react-hooks/exhaustive-deps
 

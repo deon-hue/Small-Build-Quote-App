@@ -321,6 +321,8 @@ export interface GanttPhase {
   level?: 0 | 1 | 2   // 0 = parentPhase group header, 1 = phase bar, 2 = task bar
   parentId?: string
   collapsed?: boolean
+  percentComplete?: number  // 0–100
+  isComplete?: boolean      // forces green bar colour regardless of date position
 }
 
 export interface GanttState {
