@@ -349,15 +349,20 @@ export default function QuoteRequestsPage() {
                   Decline
                 </button>
               )}
-              {/* Open in quote builder — store client files in sessionStorage first */}
+              {/* Create QuoteBuilder quote from the customer's AI estimate */}
               <button
-                className="btn"
+                className="btn btn-primary"
                 style={{ fontSize: 13 }}
                 onClick={() => {
+                  // Pass files and scope text
                   if (selected.client_files?.length) {
                     sessionStorage.setItem('sbc_quote_request_files', JSON.stringify(selected.client_files))
                   }
                   sessionStorage.setItem('sbc_quote_request_scope', selected.scope_text || '')
+                  // Pass the AI phases directly so the builder doesn't need to re-call the AI
+                  if (selected.ai_phases?.length) {
+                    sessionStorage.setItem('sbc_quote_request_phases', JSON.stringify(selected.ai_phases))
+                  }
                   const p = new URLSearchParams({
                     clientName: selected.client_name || '',
                     email:      selected.client_email || '',
@@ -368,7 +373,7 @@ export default function QuoteRequestsPage() {
                   window.location.href = `/new-quote?${p.toString()}`
                 }}
               >
-                ✎ Open in Quote Builder
+                📋 Create QuoteBuilder Quote from AI Estimate
               </button>
               <div style={{ flex: 1 }} />
               <button

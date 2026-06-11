@@ -215,7 +215,6 @@ export default function NewQuotePage() {
     }
 
     // Quote request — URL params mean we came from the quote requests page.
-    // Pre-populate all customer details, then auto-generate phases from scope (AI flow).
     const params = new URLSearchParams(window.location.search)
     const reqClientName = params.get('clientName') || ''
     if (reqClientName) {
@@ -225,6 +224,7 @@ export default function NewQuotePage() {
       const reqJobType = params.get('jobType') || 'Rear Extension'
       const reqScope   = sessionStorage.getItem('sbc_quote_request_scope') || ''
       sessionStorage.removeItem('sbc_quote_request_scope')
+
       setCustName(reqClientName)
       setCustEmail(reqEmail)
       setCustPhone(reqPhone)
@@ -233,12 +233,39 @@ export default function NewQuotePage() {
       if (reqScope) setScope(reqScope)
       setQuoteSource('ai')
       setStep('workspace')
-      // Generate phases directly with the URL param values — state hasn't committed yet
-      // so we pass them as overrides rather than reading from state variables.
+
+      // Preferred path: customer's AI estimate phases are stored directly — no re-call needed.
+      const rawPhases = sessionStorage.getItem('sbc_quote_request_phases')
+      sessionStorage.removeItem('sbc_quote_request_phases')
+      if (rawPhases) {
+        try {
+          const aiPhases = JSON.parse(rawPhases) as Array<{
+            parentPhase?: string; phase: string
+            labour: number;        labourNotes?: string
+            materials: number;     materialsNotes?: string
+            plant: number;         plantNotes?: string
+            subcontractors?: number; subNotes?: string
+            other?: number;        otherNotes?: string
+          }>
+          setPhases(aiPhases.map(p => {
+            const ph = makePhase(p.phase, [
+              { desc: p.labourNotes        || 'Labour',       qty: 1, unit: 'Item', labour: Number(p.labour)         || 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'labour'         as const },
+              { desc: p.materialsNotes     || 'Materials',    qty: 1, unit: 'Item', labour: 0, materials: Number(p.materials)      || 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials'      as const },
+              { desc: p.plantNotes         || 'Plant hire',   qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: Number(p.plant)          || 0, subcontractors: 0, other: 0, notes: '', itemType: 'plant'          as const },
+              { desc: p.subNotes           || 'Subcontract',  qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: Number(p.subcontractors) || 0, other: 0, notes: '', itemType: 'subcontractors' as const },
+              { desc: p.otherNotes         || 'Other',        qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: Number(p.other)         || 0, notes: '', itemType: 'other'          as const },
+            ], p.parentPhase || undefined)
+            return { ...ph, source: 'ai' as const, itemStatus: 'ai' as const }
+          }))
+          return
+        } catch { /* fall through to AI re-generate */ }
+      }
+
+      // Fallback: no stored phases — re-generate from scope text via AI.
       if (reqScope) {
         ;(async () => {
           const ok = await generatePhases({ scope: reqScope, jobType: reqJobType, address: reqAddress })
-          if (!ok) loadTemplate(reqJobType)   // fall back to blank template if AI fails
+          if (!ok) loadTemplate(reqJobType)
         })()
       } else {
         loadTemplate(reqJobType)
