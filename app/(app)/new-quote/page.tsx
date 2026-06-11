@@ -215,21 +215,34 @@ export default function NewQuotePage() {
     }
 
     // Quote request — URL params mean we came from the quote requests page.
-    // Pre-populate customer details and jump straight to the workspace.
+    // Pre-populate all customer details, then auto-generate phases from scope (AI flow).
     const params = new URLSearchParams(window.location.search)
     const reqClientName = params.get('clientName') || ''
     if (reqClientName) {
+      const reqEmail   = params.get('email')   || ''
+      const reqPhone   = params.get('phone')   || ''
       const reqAddress = params.get('address') || ''
       const reqJobType = params.get('jobType') || 'Rear Extension'
       const reqScope   = sessionStorage.getItem('sbc_quote_request_scope') || ''
       sessionStorage.removeItem('sbc_quote_request_scope')
       setCustName(reqClientName)
+      setCustEmail(reqEmail)
+      setCustPhone(reqPhone)
       setCustAddr(reqAddress)
       setJobType(reqJobType)
       if (reqScope) setScope(reqScope)
-      setQuoteSource('manual')
-      loadTemplate(reqJobType)
+      setQuoteSource('ai')
       setStep('workspace')
+      // Generate phases directly with the URL param values — state hasn't committed yet
+      // so we pass them as overrides rather than reading from state variables.
+      if (reqScope) {
+        ;(async () => {
+          const ok = await generatePhases({ scope: reqScope, jobType: reqJobType, address: reqAddress })
+          if (!ok) loadTemplate(reqJobType)   // fall back to blank template if AI fails
+        })()
+      } else {
+        loadTemplate(reqJobType)
+      }
       return
     }
 
@@ -586,16 +599,21 @@ export default function NewQuotePage() {
     }
   }
 
-  // AI generate phases from scope
-  async function generatePhases(): Promise<boolean> {
-    if (!scope.trim()) { alert('Write a scope of works first — then click Generate Phases.'); return false }
+  // AI generate phases from scope.
+  // opts can override scope/jobType/address when called before React state has committed
+  // (e.g. straight from the initialization useEffect when coming from a quote request).
+  async function generatePhases(opts?: { scope?: string; jobType?: string; address?: string }): Promise<boolean> {
+    const effectiveScope   = opts?.scope   ?? scope
+    const effectiveJobType = opts?.jobType ?? jobType
+    const effectiveAddr    = opts?.address ?? custAddr
+    if (!effectiveScope.trim()) { alert('Write a scope of works first — then click Generate Phases.'); return false }
     if (phases.length && !confirm('Replace current phases with AI-generated ones?')) return false
     setGeneratingPhases(true)
     try {
       const res = await fetch('/api/generate-phases', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scope, jobType, address: custAddr }),
+        body: JSON.stringify({ scope: effectiveScope, jobType: effectiveJobType, address: effectiveAddr }),
       })
       const data = await res.json()
       if (data.error) { alert('Could not generate phases: ' + data.error); return false }

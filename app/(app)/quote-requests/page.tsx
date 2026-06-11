@@ -358,7 +358,14 @@ export default function QuoteRequestsPage() {
                     sessionStorage.setItem('sbc_quote_request_files', JSON.stringify(selected.client_files))
                   }
                   sessionStorage.setItem('sbc_quote_request_scope', selected.scope_text || '')
-                  window.location.href = `/new-quote?clientName=${encodeURIComponent(selected.client_name)}&address=${encodeURIComponent(selected.project_address)}&jobType=${encodeURIComponent(selected.project_type)}`
+                  const p = new URLSearchParams({
+                    clientName: selected.client_name || '',
+                    email:      selected.client_email || '',
+                    phone:      selected.client_phone || '',
+                    address:    selected.project_address || '',
+                    jobType:    selected.project_type || '',
+                  })
+                  window.location.href = `/new-quote?${p.toString()}`
                 }}
               >
                 ✎ Open in Quote Builder
