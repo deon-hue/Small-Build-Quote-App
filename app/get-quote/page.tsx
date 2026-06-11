@@ -810,11 +810,11 @@ export default function GetQuotePage() {
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   padding: '18px 20px', background: CHARCOAL, borderRadius: 8, marginTop: 12, marginBottom: 8,
                 }}>
-                  <span style={{ fontWeight: 700, fontSize: 15, color: '#fff' }}>Total Estimate (ex-VAT)</span>
+                  <span style={{ fontWeight: 700, fontSize: 15, color: '#fff' }}>Total Estimate (inc. VAT)</span>
                   <span style={{ fontWeight: 800, fontSize: 24, color: LIME }}>{fmt(total)}</span>
                 </div>
                 <div style={{ fontSize: 11, color: GREY_TXT, marginBottom: 28, paddingLeft: 4 }}>
-                  VAT at 20% would add approximately {fmt(total * 0.2)}
+                  Includes contractor margin and VAT. Indicative only — subject to site survey.
                 </div>
 
                 <button onClick={() => setStep(3)} style={primaryBtn}
@@ -874,7 +874,7 @@ export default function GetQuotePage() {
               <div style={{ background: CHARCOAL, borderRadius: 8, padding: '16px 20px', marginBottom: 22, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 13, color: '#fff' }}>{jobType}</div>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>{address} · Indicative ex-VAT</div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>{address} · Indicative inc. VAT</div>
                 </div>
                 <div style={{ fontWeight: 800, fontSize: 22, color: LIME }}>{fmt(total)}</div>
               </div>
@@ -911,7 +911,7 @@ export default function GetQuotePage() {
             </div>
 
             <div style={{ background: CHARCOAL, borderRadius: 8, padding: '16px 24px', maxWidth: 340, margin: '0 auto 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>Your estimate (ex-VAT)</div>
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>Your estimate (inc. VAT)</div>
               <div style={{ fontWeight: 800, fontSize: 20, color: LIME }}>{fmt(total)}</div>
             </div>
 

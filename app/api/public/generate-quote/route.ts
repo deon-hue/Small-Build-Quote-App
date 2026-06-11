@@ -7,31 +7,43 @@ export const maxDuration = 30
 // Uses BUILDER_USER_ID env var to fetch the builder's Back Office rates.
 
 interface PlantDefault { names: string[]; total: number }
+interface BuilderConfig {
+  block: string
+  plantByKey: Record<string, PlantDefault>
+  markup: number      // e.g. 20 = 20%
+  vatRate: number     // e.g. 20 = 20%, 0 if not VAT-registered
+}
 
 function normKey(s: string): string {
   return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 }
 
-async function fetchBuilderRates(): Promise<{ block: string; plantByKey: Record<string, PlantDefault> }> {
+async function fetchBuilderRates(): Promise<BuilderConfig> {
   const userId = process.env.BUILDER_USER_ID
-  if (!userId) return { block: '', plantByKey: {} }
+  if (!userId) return { block: '', plantByKey: {}, markup: 20, vatRate: 20 }
 
   let sb
   try {
     sb = createServiceRoleClient()
   } catch {
-    return { block: '', plantByKey: {} }
+    return { block: '', plantByKey: {}, markup: 20, vatRate: 20 }
   }
 
-  const [{ data: phases }, { data: subPhases }, { data: tasks }] = await Promise.all([
+  const [{ data: phases }, { data: subPhases }, { data: tasks }, { data: settings }] = await Promise.all([
     sb.from('bo_phases').select('id, name').eq('user_id', userId).eq('active', true),
     sb.from('bo_sub_phases').select('id, name, phase_id').eq('user_id', userId).eq('active', true),
     sb.from('bo_tasks')
       .select('name, unit, labour_cost, materials_cost, plant_cost, subcontract_cost, other_cost, phase_id, sub_phase_id, recipe_items')
       .eq('user_id', userId).eq('active', true).order('display_order'),
+    sb.from('settings').select('default_markup, vat_rate, vat_registered').eq('user_id', userId).single(),
   ])
 
-  if (!tasks || tasks.length === 0) return { block: '', plantByKey: {} }
+  const markup  = Number((settings as { default_markup?: number } | null)?.default_markup ?? 20)
+  const vatRate = (settings as { vat_registered?: boolean; vat_rate?: number } | null)?.vat_registered === false
+    ? 0
+    : Number((settings as { vat_rate?: number } | null)?.vat_rate ?? 20)
+
+  if (!tasks || tasks.length === 0) return { block: '', plantByKey: {}, markup, vatRate }
 
   const phaseById = Object.fromEntries((phases ?? []).map(p => [p.id, p.name]))
   const subPhaseById = Object.fromEntries((subPhases ?? []).map(sp => [sp.id, sp.name]))
@@ -81,7 +93,7 @@ async function fetchBuilderRates(): Promise<{ block: string; plantByKey: Record<
   const block = lines
     ? `\n\nCONTRACTOR BACK OFFICE DEFAULT RATES (use these as your cost baseline):\n${lines}\n`
     : ''
-  return { block, plantByKey }
+  return { block, plantByKey, markup, vatRate }
 }
 
 export async function POST(req: NextRequest) {
@@ -95,7 +107,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No scope provided' }, { status: 400 })
   }
 
-  const { block: ratesBlock, plantByKey } = await fetchBuilderRates()
+  const { block: ratesBlock, plantByKey, markup, vatRate } = await fetchBuilderRates()
 
   const system = `You are an expert UK quantity surveyor. Convert a scope of works into a structured cost breakdown.
 
@@ -165,6 +177,7 @@ Generate a full phase cost breakdown scaled to this scope.`
       return NextResponse.json({ error: 'Unexpected AI response' }, { status: 500 })
     }
 
+    // Apply plant defaults from Back Office
     for (const ph of parsed.phases) {
       const def = plantByKey[normKey(ph.phase)] ?? plantByKey[normKey(ph.parentPhase)]
       if (def && def.names.length) {
@@ -173,11 +186,25 @@ Generate a full phase cost breakdown scaled to this scope.`
       }
     }
 
-    const total = parsed.phases.reduce((s: number, ph: Record<string, number>) =>
+    // Apply builder markup to each cost field so the customer sees sell prices.
+    // Phases are stored ex-VAT at sell price; VAT is applied to the total only.
+    const markupFactor = 1 + markup / 100
+    for (const ph of parsed.phases) {
+      const round2 = (n: number) => Math.round(n * 100) / 100
+      ph.labour        = round2((Number(ph.labour)        || 0) * markupFactor)
+      ph.materials     = round2((Number(ph.materials)     || 0) * markupFactor)
+      ph.plant         = round2((Number(ph.plant)         || 0) * markupFactor)
+      ph.subcontractors = round2((Number(ph.subcontractors) || 0) * markupFactor)
+      ph.other         = round2((Number(ph.other)         || 0) * markupFactor)
+    }
+
+    // Total = sum of sell prices (ex-VAT), then VAT applied on top
+    const subtotal = parsed.phases.reduce((s: number, ph: Record<string, number>) =>
       s + (Number(ph.labour) || 0) + (Number(ph.materials) || 0) +
           (Number(ph.plant) || 0) + (Number(ph.subcontractors) || 0) + (Number(ph.other) || 0), 0)
+    const total = Math.round(subtotal * (1 + vatRate / 100) * 100) / 100
 
-    return NextResponse.json({ phases: parsed.phases, total, usingBuilderRates: !!ratesBlock })
+    return NextResponse.json({ phases: parsed.phases, total, subtotal, markup, vatRate, usingBuilderRates: !!ratesBlock })
   } catch (err) {
     console.error('Public generate-quote error:', err)
     return NextResponse.json({ error: 'Failed to generate estimate' }, { status: 500 })

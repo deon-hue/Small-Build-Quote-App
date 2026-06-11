@@ -232,6 +232,8 @@ export default function NewQuotePage() {
       setJobType(reqJobType)
       if (reqScope) setScope(reqScope)
       setQuoteSource('ai')
+      setMarkup(0)    // phases already priced at sell price (markup applied by the customer quote API)
+      setVatOn(true)  // VAT is separate — QB adds it on top of the sell prices
       setStep('workspace')
 
       // Preferred path: customer's AI estimate phases are stored directly — no re-call needed.
