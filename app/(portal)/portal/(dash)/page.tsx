@@ -85,14 +85,14 @@ export default function PortalDashboard() {
   const activeJobs     = jobs.filter(j => j.stage === 'active' || j.stage === 'planning')
   const unpaidInvoices = invoices.filter(i => i.status === 'sent' || i.status === 'overdue')
 
-  // Financial summary
-  const totalQuoteValue  = jobs.reduce((s, j) => s + (j.value || 0), 0)
-  const totalVariations  = variations
-    .filter(v => ['approved', 'invoiced', 'paid'].includes(v.status))
-    .reduce((s, v) => s + v.total, 0)
-  const totalInvoiced    = invoices.reduce((s, i) => s + i.total, 0)
-  const totalPaid        = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + i.total, 0)
-  const balanceDue       = (totalQuoteValue + totalVariations) - totalPaid
+  // Financial snapshot
+  const totalQuoteValue   = jobs.reduce((s, j) => s + (j.value || 0), 0)
+  const approvedVars      = variations.filter(v => ['approved', 'invoiced', 'paid'].includes(v.status))
+  const totalVariations   = approvedVars.reduce((s, v) => s + v.total, 0)
+  const paidInvoices      = invoices.filter(i => i.status === 'paid')
+  const totalPaid         = paidInvoices.reduce((s, i) => s + i.total, 0)
+  const balanceDue        = totalQuoteValue + totalVariations - totalPaid
+  const allSettled        = balanceDue <= 0
 
   return (
     <>
@@ -101,26 +101,51 @@ export default function PortalDashboard() {
         {settings.name && <p className="portal-company-name">{settings.name}</p>}
       </div>
 
-      {/* Financial summary */}
-      <div className="portal-stats">
-        <div className="portal-stat">
-          <div className="portal-stat-num">{fmt(totalQuoteValue)}</div>
-          <div className="portal-stat-label">Quote Value</div>
-        </div>
-        <div className="portal-stat">
-          <div className="portal-stat-num">{fmt(totalVariations)}</div>
-          <div className="portal-stat-label">Variations</div>
-        </div>
-        <div className="portal-stat">
-          <div className="portal-stat-num">{fmt(totalInvoiced)}</div>
-          <div className="portal-stat-label">Invoiced</div>
-        </div>
-        <div className="portal-stat" style={{ borderTop: '2px solid var(--moss)' }}>
-          <div className="portal-stat-num" style={{ color: balanceDue > 0 ? 'var(--moss)' : '#27ae60' }}>
-            {fmt(balanceDue)}
+      {/* ── Financial snapshot ── */}
+      <div className="fin-snapshot">
+
+        {/* Original Quote */}
+        <div className="fin-card" style={{ borderTop: '3px solid #4a90a4' }}>
+          <div className="fin-card-label" style={{ color: '#4a90a4' }}>Original Quote</div>
+          <div className="fin-card-value">{fmt(totalQuoteValue)}</div>
+          <div className="fin-card-sub">
+            {jobs.length === 1 ? jobs[0].type : `${jobs.length} project${jobs.length !== 1 ? 's' : ''}`}
           </div>
-          <div className="portal-stat-label">Balance Due</div>
         </div>
+
+        {/* Approved Variations */}
+        <div className="fin-card" style={{ borderTop: '3px solid #e67e22' }}>
+          <div className="fin-card-label" style={{ color: '#e67e22' }}>Approved Variations</div>
+          <div className="fin-card-value">{fmt(totalVariations)}</div>
+          <div className="fin-card-sub">
+            {approvedVars.length === 0
+              ? 'No change orders'
+              : `${approvedVars.length} change order${approvedVars.length !== 1 ? 's' : ''}`}
+          </div>
+        </div>
+
+        {/* Paid to Date */}
+        <div className="fin-card" style={{ borderTop: '3px solid #7ab533' }}>
+          <div className="fin-card-label" style={{ color: '#7ab533' }}>Paid to Date</div>
+          <div className="fin-card-value">{fmt(totalPaid)}</div>
+          <div className="fin-card-sub">
+            {paidInvoices.length === 0
+              ? 'No payments yet'
+              : `${paidInvoices.length} invoice${paidInvoices.length !== 1 ? 's' : ''} paid`}
+          </div>
+        </div>
+
+        {/* Balance Due */}
+        <div className="fin-card fin-card-due">
+          <div className="fin-card-label" style={{ color: 'rgba(255,255,255,0.75)' }}>Balance Due</div>
+          <div className="fin-card-value" style={{ color: 'white' }}>
+            {fmt(Math.max(0, balanceDue))}
+          </div>
+          <div className="fin-card-sub" style={{ color: 'rgba(255,255,255,0.72)' }}>
+            {allSettled ? 'All payments settled ✓' : 'Quote + variations − paid'}
+          </div>
+        </div>
+
       </div>
 
       {/* Active jobs */}

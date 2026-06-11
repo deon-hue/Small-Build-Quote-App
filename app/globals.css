@@ -240,11 +240,24 @@ textarea{resize:vertical;min-height:56px}
 .portal-page-hd p{font-size:13px;color:var(--muted);margin-top:4px}
 .portal-company-name{font-size:14px;color:var(--muted);margin-top:2px}
 
-/* ── Portal stats ── */
+/* ── Portal stats (legacy — kept for safety) ── */
 .portal-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px}
 .portal-stat{background:white;border:1.5px solid var(--border);border-radius:8px;padding:16px 18px;box-shadow:0 1px 4px rgba(0,0,0,0.04)}
 .portal-stat-num{font-family:'DM Serif Display',serif;font-size:24px;color:var(--ink);line-height:1;margin-bottom:4px}
 .portal-stat-label{font-size:11px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;color:var(--muted)}
+
+/* ── Financial snapshot cards ── */
+.fin-snapshot{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:28px}
+.fin-card{background:white;border:1.5px solid var(--border);border-radius:10px;padding:20px 22px;box-shadow:0 2px 6px rgba(0,0,0,0.05);display:flex;flex-direction:column;gap:0}
+.fin-card-due{background:var(--moss);border-color:var(--moss);box-shadow:0 4px 16px rgba(122,181,51,0.22)}
+.fin-card-label{font-size:10px;font-weight:700;letter-spacing:0.9px;text-transform:uppercase;margin-bottom:10px}
+.fin-card-value{font-family:'DM Serif Display',serif;font-size:28px;line-height:1;margin-bottom:6px}
+.fin-card-sub{font-size:11px;color:var(--muted);margin-top:auto}
+@media(max-width:640px){
+  .fin-snapshot{grid-template-columns:repeat(2,1fr);gap:10px}
+  .fin-card{padding:16px 16px}
+  .fin-card-value{font-size:22px}
+}
 
 /* ── Portal sections ── */
 .portal-section{margin-bottom:28px}
