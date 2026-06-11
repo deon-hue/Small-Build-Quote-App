@@ -143,7 +143,9 @@ export default function CalendarPage() {
         : null
 
       const phases = (gs?.phases?.length ?? 0) > 0
-        ? gs!.phases   // ← saved Gantt layout: reflects every drag/resize the user has made
+        // Only show level-1 phase bars (skip level-0 group headers and level-2 task bars).
+        // Level undefined = legacy flat phases with no hierarchy — show those too.
+        ? gs!.phases.filter(p => (p.level ?? 1) === 1)
         : rawSubPhases
           ? (() => {
               const n = rawSubPhases.length
