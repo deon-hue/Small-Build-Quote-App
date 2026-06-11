@@ -182,38 +182,6 @@ export default function PortalDashboard() {
         </div>
       )}
 
-      {/* Unpaid invoices */}
-      {unpaidInvoices.length > 0 && (
-        <div className="portal-section">
-          <div className="portal-section-title">
-            Awaiting Payment
-            <Link href="/portal/invoices" className="portal-section-link">View all →</Link>
-          </div>
-          {unpaidInvoices.map(inv => (
-            <div key={inv.id} className="portal-card" style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              borderLeft: `3px solid ${inv.status === 'overdue' ? '#c0392b' : '#4a90a4'}`,
-            }}>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 15 }}>{inv.ref}</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                  Due {inv.dueDate ? new Date(inv.dueDate).toLocaleDateString('en-GB') : '—'}
-                </div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontWeight: 700, fontSize: 17, fontFamily: 'DM Mono, monospace' }}>{fmt(inv.total)}</div>
-                <span className="portal-badge" style={{
-                  background: inv.status === 'overdue' ? '#c0392b' : '#4a90a4',
-                  fontSize: 10,
-                }}>
-                  {inv.status === 'overdue' ? 'OVERDUE' : 'DUE'}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* Open quotes */}
       {openQuotes.length > 0 && (
         <div className="portal-section">
@@ -235,7 +203,7 @@ export default function PortalDashboard() {
         </div>
       )}
 
-      {!activeJobs.length && !unpaidInvoices.length && !openQuotes.length && (
+      {!activeJobs.length && !openQuotes.length && (
         <div className="portal-notice">
           <div style={{ fontSize: 40, marginBottom: 12 }}>✓</div>
           <h2 style={{ marginBottom: 6 }}>All up to date</h2>

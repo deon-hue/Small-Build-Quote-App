@@ -346,30 +346,6 @@ function PortalPreviewInner() {
               }
             </section>
 
-            {/* Invoices summary */}
-            <section>
-              <h2 style={{ fontSize: 14, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)', marginBottom: 12 }}>
-                Invoices
-              </h2>
-              {!invoices.length
-                ? <div style={{ fontSize: 13, color: 'var(--muted)', padding: '12px 0' }}>No invoices on file.</div>
-                : invoices.map(inv => (
-                    <div key={inv.id} style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 8, padding: '14px 18px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-                      <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'monospace', minWidth: 70 }}>{inv.ref}</div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 600, fontSize: 14 }}>{inv.clientName}</div>
-                        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
-                          Issued {inv.issueDate} · Due {inv.dueDate}
-                        </div>
-                      </div>
-                      <div style={{ fontWeight: 700, fontSize: 16 }}>{fmt(inv.total)}</div>
-                      <span className={`badge ${inv.status === 'paid' ? 'b-active' : inv.status === 'overdue' ? 'b-danger' : 'b-pending'}`}>
-                        {inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}
-                      </span>
-                    </div>
-                  ))
-              }
-            </section>
           </>
         )})()}
 
