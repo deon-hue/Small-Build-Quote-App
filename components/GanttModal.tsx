@@ -8,6 +8,7 @@ import { fmt, quoteTotal, Q_BADGE, Q_LABEL } from '@/lib/utils'
 import { formatGanttDuration, buildGanttFromQuote } from '@/lib/gantt-utils'
 import { notifyClient } from '@/lib/notify'
 import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 
 interface Props {
   job: Job
@@ -45,6 +46,14 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
   const [dirty, setDirty] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const router = useRouter()
+
+  // ── Row editing / BO picker state ────────────────────────────
+  interface EditingRow { id: string; label: string; startDay: number; durDays: number }
+  const [editingRow, setEditingRow] = useState<EditingRow | null>(null)
+  const [showBoPanel, setShowBoPanel] = useState(false)
+  const [boPhaseList, setBoPhaseList] = useState<Array<{ phaseName: string; subPhaseName: string }>>([])
+  const [boPanelLoading, setBoPanelLoading] = useState(false)
+  const [boSearch, setBoSearch] = useState('')
 
   function buildState(): GanttState {
     // Use any previously saved layout — never silently discard a custom arrangement.
@@ -267,9 +276,10 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
         const toggleIcon = ph.collapsed ? '▶' : '▼'
         const idAttr = ph.id ? `data-row-id="${esc(ph.id)}"` : ''
         return `<div class="gantt-row" ${idAttr} data-level="0" style="display:${displayStyle};align-items:center;height:${ROW_H}px;margin-bottom:2px;background:#e5e8ec;border-radius:3px">
-          <div class="gantt-label-cell" style="width:${LABEL_W}px;flex-shrink:0;font-size:11px;font-weight:700;color:#1e2022;padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;height:${ROW_H}px;gap:5px" title="${esc(ph.label)}">
+          <div class="gantt-label-cell" style="width:${LABEL_W}px;flex-shrink:0;font-size:11px;font-weight:700;color:#1e2022;padding:0 6px 0 8px;display:flex;align-items:center;height:${ROW_H}px;gap:4px" title="${esc(ph.label)}">
             <span class="gantt-toggle" data-for="${esc(ph.id ?? '')}" onclick="window.__ganttToggle('${esc(ph.id ?? '')}')" style="cursor:pointer;font-size:9px;opacity:0.65;user-select:none;flex-shrink:0;line-height:1">${toggleIcon}</span>
-            ${esc(ph.label)}
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${esc(ph.label)}</span>
+            ${ph.id ? `<span onclick="window.__ganttEdit('${esc(ph.id)}')" title="Edit" style="cursor:pointer;font-size:11px;opacity:0.45;flex-shrink:0;user-select:none;padding:0 2px">✎</span>` : ''}
           </div>
           <div class="gantt-col-divider" style="width:5px;flex-shrink:0;align-self:stretch;cursor:col-resize;background:transparent;border-left:2px dashed #c8d0d8;margin-right:4px" title="Drag to resize label column"></div>
           <div class="gantt-track" style="flex:1;position:relative;height:${ROW_H - 8}px;background:#e5e8ec;border-radius:3px;overflow:hidden">
@@ -308,7 +318,9 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
             ? `<span class="gantt-toggle" data-for="${esc(ph.id ?? '')}" onclick="window.__ganttToggle('${esc(ph.id ?? '')}')" style="cursor:pointer;font-size:8px;opacity:0.55;user-select:none;flex-shrink:0;line-height:1">${toggleIcon}</span>`
             : (level === 1 ? '<span style="display:inline-block;width:10px;flex-shrink:0"></span>' : '')}
           <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${esc(ph.label)}</span>
+          ${showCtrl && level === 1 ? `<span onclick="window.__ganttAddChild('${esc(ph.id!)}')" title="Add task" style="font-size:12px;cursor:pointer;opacity:0.4;flex-shrink:0;user-select:none;padding:0 2px;line-height:1">+</span>` : ''}
           ${showCtrl ? `<span onclick="window.__ganttSetPct('${esc(ph.id!)}')" title="Set % complete" style="font-size:9px;cursor:pointer;background:${pctBg};color:${pctTxt};border-radius:3px;padding:1px 4px;flex-shrink:0;min-width:28px;text-align:center;user-select:none;font-weight:600">${pct}%</span><span onclick="window.__ganttCompleteToggle('${esc(ph.id!)}')" title="${ph.isComplete ? 'Mark incomplete' : 'Mark complete'}" style="font-size:13px;cursor:pointer;flex-shrink:0;color:${ph.isComplete ? '#7ab533' : '#c8d0d8'};user-select:none;line-height:1;padding:0 1px">${ph.isComplete ? '✓' : '○'}</span>` : ''}
+          ${showCtrl ? `<span onclick="window.__ganttEdit('${esc(ph.id!)}')" title="Edit row" style="cursor:pointer;font-size:11px;opacity:0.4;flex-shrink:0;user-select:none;padding:0 2px">✎</span>` : ''}
         </div>
         <div class="gantt-col-divider" style="width:5px;flex-shrink:0;align-self:stretch;cursor:col-resize;background:transparent;border-left:2px dashed #c8d0d8;margin-right:4px" title="Drag to resize label column"></div>
         <div class="gantt-track" style="flex:1;position:relative;height:${rowH - 6}px;background:#f0f2f4;border-radius:3px;cursor:default;overflow:hidden">
@@ -628,6 +640,34 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       setDirty(true)
     }
 
+    win.__ganttEdit = (id: string) => {
+      const s = stateRef.current
+      if (!s) return
+      const ph = s.phases.find(p => p.id === id)
+      if (!ph) return
+      setEditingRow({ id, label: ph.label, startDay: ph.startDay, durDays: ph.durDays })
+    }
+
+    win.__ganttAddChild = (parentId: string) => {
+      const s = stateRef.current
+      if (!s) return
+      const parentIdx = s.phases.findIndex(p => p.id === parentId)
+      if (parentIdx < 0) return
+      const parent = s.phases[parentIdx]
+      const siblings = s.phases.filter(p => p.parentId === parentId)
+      const lastSib = siblings[siblings.length - 1]
+      const newStartDay = lastSib ? lastSib.startDay + lastSib.durDays : parent.startDay
+      const newId = `task-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+      const newTask: GanttPhase = { id: newId, label: 'New Task', level: 2, parentId, startDay: newStartDay, durDays: 1 }
+      // Insert after the last sibling, or right after the parent if no siblings
+      const insertAfter = lastSib ? s.phases.indexOf(lastSib) : parentIdx
+      s.phases.splice(insertAfter + 1, 0, newTask)
+      stateRef.current = s
+      setDirty(true)
+      renderGantt(s, viewMode)
+      setEditingRow({ id: newId, label: 'New Task', startDay: newStartDay, durDays: 1 })
+    }
+
     win.__ganttCompleteToggle = (id: string) => {
       const s = stateRef.current
       if (!s) return
@@ -664,6 +704,8 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       delete win.__ganttToggle
       delete win.__ganttExpandAll
       delete win.__ganttCollapseAll
+      delete win.__ganttEdit
+      delete win.__ganttAddChild
       delete win.__ganttCompleteToggle
       delete win.__ganttSetPct
     }
@@ -687,6 +729,121 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     if (saveStatus === 'error')        return { ...base, background: '#c0392b', color: '#fff' }
     if (dirty)                         return { ...base, background: 'var(--moss)', color: '#fff' }
     return { ...base, background: '#e0e3e0', color: '#888', cursor: 'default' }
+  }
+
+  // ── Edit row helpers ─────────────────────────────────────────
+  function applyEdit() {
+    if (!editingRow) return
+    const s = stateRef.current
+    if (!s) return
+    const ph = s.phases.find(p => p.id === editingRow.id)
+    if (!ph) return
+    ph.label    = editingRow.label.trim() || ph.label
+    ph.startDay = editingRow.startDay
+    ph.durDays  = Math.max(1, editingRow.durDays)
+    // If this is a level-0 header, stretch it to cover its children
+    if ((ph.level ?? 1) === 0) {
+      const children = s.phases.filter(p => p.parentId === ph.id)
+      if (children.length) {
+        ph.startDay = Math.min(...children.map(c => c.startDay))
+        ph.durDays  = Math.max(...children.map(c => c.startDay + c.durDays)) - ph.startDay
+      }
+    }
+    stateRef.current = s
+    setDirty(true)
+    renderGantt(s, viewMode)
+    setEditingRow(null)
+  }
+
+  function deleteEditRow() {
+    if (!editingRow) return
+    const s = stateRef.current
+    if (!s) return
+    if (!confirm('Remove this row and any child tasks?')) return
+    const toRemove = new Set<string>()
+    const phases = s.phases
+    function collect(id: string) {
+      toRemove.add(id)
+      phases.filter(p => p.parentId === id).forEach(c => collect(c.id!))
+    }
+    collect(editingRow.id)
+    s.phases = s.phases.filter(p => !p.id || !toRemove.has(p.id))
+    stateRef.current = s
+    setDirty(true)
+    renderGantt(s, viewMode)
+    setEditingRow(null)
+  }
+
+  function addBlankPhase() {
+    const s = stateRef.current
+    if (!s) return
+    const lastRow = [...s.phases].reverse().find(p => (p.level ?? 1) <= 1)
+    const startDay = lastRow ? lastRow.startDay + lastRow.durDays : 0
+    const groupId = `grp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    const phaseId = `ph-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    s.phases.push({ id: groupId, label: 'New Phase', level: 0, startDay, durDays: 5 })
+    s.phases.push({ id: phaseId, label: 'New Phase', level: 1, parentId: groupId, startDay, durDays: 5 })
+    stateRef.current = s
+    setDirty(true)
+    renderGantt(s, viewMode)
+    setEditingRow({ id: phaseId, label: 'New Phase', startDay, durDays: 5 })
+  }
+
+  async function openBoPanel() {
+    setShowBoPanel(true)
+    if (boPhaseList.length > 0) return
+    setBoPanelLoading(true)
+    try {
+      const sb = createClient()
+      const { data: { user } } = await sb.auth.getUser()
+      if (!user) return
+      const [{ data: phases }, { data: subPhases }] = await Promise.all([
+        sb.from('bo_phases').select('id, name').eq('user_id', user.id).eq('active', true),
+        sb.from('bo_sub_phases').select('id, name, phase_id').eq('user_id', user.id).eq('active', true),
+      ])
+      const phaseById: Record<string, string> = Object.fromEntries((phases ?? []).map((p: { id: string; name: string }) => [p.id, p.name]))
+      setBoPhaseList((subPhases ?? []).map((sp: { id: string; name: string; phase_id: string }) => ({
+        phaseName: phaseById[sp.phase_id] || 'Other',
+        subPhaseName: sp.name,
+      })))
+    } finally {
+      setBoPanelLoading(false)
+    }
+  }
+
+  function addBoPhase(phaseName: string, subPhaseName: string) {
+    const s = stateRef.current
+    if (!s) return
+    const lastRow = [...s.phases].reverse().find(p => (p.level ?? 1) <= 1)
+    const startDay = lastRow ? lastRow.startDay + lastRow.durDays : 0
+    // Reuse an existing group header with the same name, or create one
+    let groupId = s.phases.find(p => p.level === 0 && p.label === phaseName)?.id
+    if (!groupId) {
+      groupId = `grp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+      s.phases.push({ id: groupId, label: phaseName, level: 0, startDay, durDays: 5 })
+    }
+    const phaseId = `ph-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    s.phases.push({ id: phaseId, label: subPhaseName, level: 1, parentId: groupId, startDay, durDays: 5 })
+    // Stretch group header to cover new child
+    const grp = s.phases.find(p => p.id === groupId)!
+    const children = s.phases.filter(p => p.parentId === groupId)
+    grp.startDay = Math.min(...children.map(c => c.startDay))
+    grp.durDays  = Math.max(...children.map(c => c.startDay + c.durDays)) - grp.startDay
+    stateRef.current = s
+    setDirty(true)
+    renderGantt(s, viewMode)
+  }
+
+  // Convert startDay ↔ date for the edit panel
+  const jobStartDate = job.start ? new Date(job.start) : new Date()
+  jobStartDate.setHours(0, 0, 0, 0)
+  function startDayToDateStr(day: number): string {
+    const d = new Date(jobStartDate); d.setDate(d.getDate() + day)
+    return d.toISOString().slice(0, 10)
+  }
+  function dateStrToStartDay(str: string): number {
+    const d = new Date(str); d.setHours(0, 0, 0, 0)
+    return Math.round((d.getTime() - jobStartDate.getTime()) / 86400000)
   }
 
   return (
@@ -749,13 +906,101 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
             {/* Save-error detail */}
             {saveStatus === 'error' && (
               <div style={{ marginBottom: 8, padding: '7px 12px', background: '#fff0ef', border: '1px solid #f5a0a0', borderRadius: 6, fontSize: 12, color: '#c0392b' }}>
-                ⚠ The Gantt chart could not be saved. Check your internet connection, then try again. If the problem persists, open the browser console for details.
+                ⚠ The Gantt chart could not be saved. Check your internet connection, then try again.
+              </div>
+            )}
+
+            {/* ── Edit row panel ── */}
+            {editingRow && (
+              <div style={{ marginBottom: 10, padding: '12px 14px', background: '#fff', border: '1px solid #c8d0d8', borderRadius: 6, display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                <div style={{ flex: 2, minWidth: 140 }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', marginBottom: 3 }}>Name</div>
+                  <input
+                    value={editingRow.label}
+                    onChange={e => setEditingRow(r => r ? { ...r, label: e.target.value } : r)}
+                    onKeyDown={e => { if (e.key === 'Enter') applyEdit(); if (e.key === 'Escape') setEditingRow(null) }}
+                    autoFocus
+                    style={{ width: '100%', fontSize: 12, padding: '5px 8px', border: '1px solid #c8d0d8', borderRadius: 4, fontFamily: 'inherit' }}
+                  />
+                </div>
+                <div style={{ flex: 1, minWidth: 120 }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', marginBottom: 3 }}>Start date</div>
+                  <input
+                    type="date"
+                    value={startDayToDateStr(editingRow.startDay)}
+                    onChange={e => setEditingRow(r => r ? { ...r, startDay: dateStrToStartDay(e.target.value) } : r)}
+                    style={{ width: '100%', fontSize: 12, padding: '5px 8px', border: '1px solid #c8d0d8', borderRadius: 4, fontFamily: 'inherit' }}
+                  />
+                </div>
+                <div style={{ flex: 1, minWidth: 90 }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', marginBottom: 3 }}>Duration (days)</div>
+                  <input
+                    type="number" min={1}
+                    value={editingRow.durDays}
+                    onChange={e => setEditingRow(r => r ? { ...r, durDays: parseInt(e.target.value) || 1 } : r)}
+                    style={{ width: '100%', fontSize: 12, padding: '5px 8px', border: '1px solid #c8d0d8', borderRadius: 4, fontFamily: 'inherit' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button onClick={applyEdit} style={{ fontSize: 12, padding: '6px 14px', background: 'var(--moss)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>Apply</button>
+                  <button onClick={() => setEditingRow(null)} style={{ fontSize: 12, padding: '6px 10px', background: '#e8eaec', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Cancel</button>
+                  <button onClick={deleteEditRow} style={{ fontSize: 12, padding: '6px 10px', background: '#fce8e8', color: '#c0392b', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Delete</button>
+                </div>
               </div>
             )}
 
             <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden', minHeight: 200 }}>
               <div ref={containerRef} style={{ padding: '20px 16px 12px' }} />
             </div>
+
+            {/* ── Add phase buttons ── */}
+            <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button onClick={addBlankPhase} style={{ fontSize: 11, padding: '5px 12px', background: '#fff', border: '1px solid #c8d0d8', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>+ Add blank phase</button>
+              <button onClick={openBoPanel} style={{ fontSize: 11, padding: '5px 12px', background: '#fff', border: '1px solid #c8d0d8', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>+ Add from Back Office</button>
+            </div>
+
+            {/* ── Back Office phase picker ── */}
+            {showBoPanel && (
+              <div style={{ marginTop: 10, padding: '12px 14px', background: '#fff', border: '1px solid #c8d0d8', borderRadius: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <span style={{ fontWeight: 700, fontSize: 12, flex: 1 }}>Back Office phases</span>
+                  <input
+                    placeholder="Search…"
+                    value={boSearch}
+                    onChange={e => setBoSearch(e.target.value)}
+                    style={{ fontSize: 11, padding: '4px 8px', border: '1px solid #c8d0d8', borderRadius: 4, width: 160 }}
+                  />
+                  <button onClick={() => setShowBoPanel(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, lineHeight: 1, color: '#888' }}>×</button>
+                </div>
+                {boPanelLoading
+                  ? <div style={{ fontSize: 12, color: 'var(--muted)', padding: '8px 0' }}>Loading…</div>
+                  : boPhaseList.length === 0
+                    ? <div style={{ fontSize: 12, color: 'var(--muted)', padding: '8px 0' }}>No Back Office phases found. Add them in the Back Office section first.</div>
+                    : (() => {
+                        const filtered = boSearch.trim()
+                          ? boPhaseList.filter(p =>
+                              p.phaseName.toLowerCase().includes(boSearch.toLowerCase()) ||
+                              p.subPhaseName.toLowerCase().includes(boSearch.toLowerCase()))
+                          : boPhaseList
+                        const groups: Record<string, string[]> = {}
+                        filtered.forEach(p => { (groups[p.phaseName] ||= []).push(p.subPhaseName) })
+                        return Object.entries(groups).map(([grp, subs]) => (
+                          <div key={grp} style={{ marginBottom: 8 }}>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>{grp}</div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                              {subs.map(sub => (
+                                <button key={sub} onClick={() => addBoPhase(grp, sub)}
+                                  style={{ fontSize: 11, padding: '4px 10px', background: '#f0f4ff', border: '1px solid #c8d4f8', borderRadius: 4, cursor: 'pointer', fontWeight: 500 }}>
+                                  + {sub}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ))
+                      })()
+                }
+              </div>
+            )}
           </div>
 
           {/* Linked quotes */}
