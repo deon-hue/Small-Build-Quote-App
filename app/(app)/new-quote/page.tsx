@@ -207,11 +207,30 @@ export default function NewQuotePage() {
       return
     }
 
-    // Client files from a quote request — load and display alongside the quote
+    // Client files from a quote request — load alongside the quote
     const rawFiles = sessionStorage.getItem('sbc_quote_request_files')
     if (rawFiles) {
       sessionStorage.removeItem('sbc_quote_request_files')
       try { setClientRequestFiles(JSON.parse(rawFiles)) } catch { /* ignore */ }
+    }
+
+    // Quote request — URL params mean we came from the quote requests page.
+    // Pre-populate customer details and jump straight to the workspace.
+    const params = new URLSearchParams(window.location.search)
+    const reqClientName = params.get('clientName') || ''
+    if (reqClientName) {
+      const reqAddress = params.get('address') || ''
+      const reqJobType = params.get('jobType') || 'Rear Extension'
+      const reqScope   = sessionStorage.getItem('sbc_quote_request_scope') || ''
+      sessionStorage.removeItem('sbc_quote_request_scope')
+      setCustName(reqClientName)
+      setCustAddr(reqAddress)
+      setJobType(reqJobType)
+      if (reqScope) setScope(reqScope)
+      setQuoteSource('manual')
+      loadTemplate(reqJobType)
+      setStep('workspace')
+      return
     }
 
     // New quote — show landing wizard
