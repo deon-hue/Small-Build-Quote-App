@@ -847,7 +847,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
   }
 
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
       <div style={fullscreen
         ? { background: 'var(--cream)', borderRadius: 0, width: '100vw', height: '100vh', maxHeight: '100vh', display: 'flex', flexDirection: 'column', boxShadow: 'none' }
         : { background: 'var(--cream)', borderRadius: 8, width: 'min(980px,96vw)', maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 80px rgba(0,0,0,0.25)' }
