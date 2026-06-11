@@ -25,8 +25,5 @@
 [build.environment]
   NODE_VERSION = "20"
 
-[functions]
-  timeout = 30
-
 [[plugins]]
   package = "@netlify/plugin-nextjs"
