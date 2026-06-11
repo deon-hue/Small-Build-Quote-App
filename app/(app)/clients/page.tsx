@@ -53,8 +53,7 @@ export default function ClientsPage() {
   const [saving, setSaving] = useState(false)
   const router = useRouter()
 
-  const origin = typeof window !== 'undefined' ? window.location.origin : ''
-  const portalBase = origin + '/portal/login'
+  const portalBase = (typeof window !== 'undefined' ? window.location.origin : '') + '/portal/login'
 
   // URL for sending to the client (magic-link target / copy link)
   function portalUrl(c: Client) {
@@ -64,8 +63,8 @@ export default function ClientsPage() {
   // URL for admin to preview what the client sees (no sign-in required)
   function adminPreviewUrl(c: Client) {
     return c.email
-      ? `${origin}/portal-preview?email=${encodeURIComponent(c.email)}`
-      : `${origin}/portal-preview`
+      ? `/portal-preview?email=${encodeURIComponent(c.email)}`
+      : `/portal-preview`
   }
 
   function openNew() {
@@ -252,10 +251,11 @@ export default function ClientsPage() {
                           {/* Admin preview of client portal */}
                           <button
                             className="btn-sm btn-sky"
-                            title={c.email ? `Preview portal as ${c.name}` : 'No email on file'}
-                            onClick={() => window.open(adminPreviewUrl(c), '_blank')}
+                            title={c.email ? `View portal as ${c.name}` : 'No email on file — add one to preview portal'}
+                            disabled={!c.email}
+                            onClick={() => router.push(adminPreviewUrl(c))}
                           >
-                            🌐 Portal
+                            👁 View Portal
                           </button>
                           <button className="btn-sm btn-outline" onClick={() => openEdit(c)}>Edit</button>
                           <button className="btn-sm btn-danger" onClick={() => handleDelete(c)}>Delete</button>
@@ -281,9 +281,11 @@ export default function ClientsPage() {
                     📧 Invite to Portal
                   </button>
                 )}
-                <button className="btn-sm btn-sky" onClick={() => window.open(adminPreviewUrl(selected), '_blank')} title="Preview portal as this client">
-                  🌐 Portal
-                </button>
+                {selected.email && (
+                  <button className="btn-sm btn-sky" onClick={() => { setSelected(null); router.push(adminPreviewUrl(selected)) }} title={`View portal as ${selected.name}`}>
+                    👁 View Portal
+                  </button>
+                )}
                 <button className="btn-sm btn-outline" onClick={() => openEdit(selected)}>✎ Edit</button>
                 <button className="btn-sm btn-gold" onClick={() => {
                   sessionStorage.setItem('sbc_prefill_client', selected.id)

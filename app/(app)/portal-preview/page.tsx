@@ -27,6 +27,9 @@ interface PreviewInvoice {
   id: string; ref: string; clientName: string; total: number
   status: string; issueDate: string; dueDate: string
 }
+interface PreviewVariation {
+  id: string; ref: string; title: string; status: string; total: number
+}
 interface PreviewSettings {
   name: string; tagline: string; email: string; phone: string; address: string; logo: string
 }
@@ -77,6 +80,7 @@ function PortalPreviewInner() {
   const [jobs, setJobs] = useState<PreviewJob[]>([])
   const [quotes, setQuotes] = useState<PreviewQuote[]>([])
   const [invoices, setInvoices] = useState<PreviewInvoice[]>([])
+  const [variations, setVariations] = useState<PreviewVariation[]>([])
   const [settings, setSettings] = useState<PreviewSettings | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [expandedGantt, setExpandedGantt] = useState<string | null>(null)
@@ -124,6 +128,12 @@ function PortalPreviewInner() {
           id: r.id, ref: r.ref, clientName: r.client_name,
           total: Number(r.total), status: r.status,
           issueDate: r.issue_date || '', dueDate: r.due_date || '',
+        })))
+      }
+      if (Array.isArray(d?.variations)) {
+        setVariations(d.variations.map((r: AnyRecord) => ({
+          id: r.id, ref: r.ref || '', title: r.title || '',
+          status: r.status, total: Number(r.total),
         })))
       }
       if (d?.settings) setSettings(d.settings)
@@ -203,13 +213,53 @@ function PortalPreviewInner() {
         {/* ══════════════════════════════════════════════
             DASHBOARD TAB
         ══════════════════════════════════════════════ */}
-        {activeTab === 'dashboard' && (
+        {activeTab === 'dashboard' && (() => {
+          const totalQuoteValue = jobs.reduce((s, j) => s + (j.value || 0), 0)
+          const approvedVars    = variations.filter(v => ['approved', 'invoiced', 'paid'].includes(v.status))
+          const totalVariations = approvedVars.reduce((s, v) => s + v.total, 0)
+          const paidInvoices    = invoices.filter(i => i.status === 'paid')
+          const totalPaid       = paidInvoices.reduce((s, i) => s + i.total, 0)
+          const balanceDue      = totalQuoteValue + totalVariations - totalPaid
+          const allSettled      = balanceDue <= 0
+          return (
           <>
             {/* Welcome strip */}
-            <div style={{ background: 'var(--cream)', border: '1px solid var(--border)', borderRadius: 8, padding: '16px 20px', marginBottom: 28 }}>
+            <div style={{ background: 'var(--cream)', border: '1px solid var(--border)', borderRadius: 8, padding: '16px 20px', marginBottom: 20 }}>
               <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 2 }}>Welcome, {clientName}</div>
               <div style={{ fontSize: 13, color: 'var(--muted)' }}>
                 {jobs.length} job{jobs.length !== 1 ? 's' : ''} · {quotes.length} quote{quotes.length !== 1 ? 's' : ''} · {invoices.length} invoice{invoices.length !== 1 ? 's' : ''}
+              </div>
+            </div>
+
+            {/* Financial snapshot */}
+            <div className="fin-snapshot">
+              <div className="fin-card" style={{ borderTop: '3px solid #4a90a4' }}>
+                <div className="fin-card-label" style={{ color: '#4a90a4' }}>Original Quote</div>
+                <div className="fin-card-value">{fmt(totalQuoteValue)}</div>
+                <div className="fin-card-sub">
+                  {jobs.length === 1 ? jobs[0].type : `${jobs.length} project${jobs.length !== 1 ? 's' : ''}`}
+                </div>
+              </div>
+              <div className="fin-card" style={{ borderTop: '3px solid #e67e22' }}>
+                <div className="fin-card-label" style={{ color: '#e67e22' }}>Approved Variations</div>
+                <div className="fin-card-value">{fmt(totalVariations)}</div>
+                <div className="fin-card-sub">
+                  {approvedVars.length === 0 ? 'No change orders' : `${approvedVars.length} change order${approvedVars.length !== 1 ? 's' : ''}`}
+                </div>
+              </div>
+              <div className="fin-card" style={{ borderTop: '3px solid #7ab533' }}>
+                <div className="fin-card-label" style={{ color: '#7ab533' }}>Paid to Date</div>
+                <div className="fin-card-value">{fmt(totalPaid)}</div>
+                <div className="fin-card-sub">
+                  {paidInvoices.length === 0 ? 'No payments yet' : `${paidInvoices.length} invoice${paidInvoices.length !== 1 ? 's' : ''} paid`}
+                </div>
+              </div>
+              <div className="fin-card fin-card-due">
+                <div className="fin-card-label" style={{ color: 'rgba(255,255,255,0.75)' }}>Balance Due</div>
+                <div className="fin-card-value" style={{ color: 'white' }}>{fmt(Math.max(0, balanceDue))}</div>
+                <div className="fin-card-sub" style={{ color: 'rgba(255,255,255,0.72)' }}>
+                  {allSettled ? 'All payments settled ✓' : 'Quote + variations − paid'}
+                </div>
               </div>
             </div>
 
@@ -321,7 +371,7 @@ function PortalPreviewInner() {
               }
             </section>
           </>
-        )}
+        )})()}
 
         {/* ══════════════════════════════════════════════
             QUOTES TAB
