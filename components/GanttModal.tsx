@@ -5,7 +5,7 @@ import { useApp } from '@/contexts/AppContext'
 import type { Job, QuotePhase, GanttState, GanttPhase } from '@/lib/types'
 import type { Quote } from '@/lib/types'
 import { fmt, quoteTotal, Q_BADGE, Q_LABEL } from '@/lib/utils'
-import { formatGanttDuration, buildGanttFromQuote } from '@/lib/gantt-utils'
+import { formatGanttDuration, buildGanttFromQuote, stripPhasePrefix } from '@/lib/gantt-utils'
 import { notifyClient } from '@/lib/notify'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -278,7 +278,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
         return `<div class="gantt-row" ${idAttr} data-level="0" style="display:${displayStyle};align-items:center;height:${ROW_H}px;margin-bottom:2px;background:#e5e8ec;border-radius:3px">
           <div class="gantt-label-cell" style="width:${LABEL_W}px;flex-shrink:0;font-size:11px;font-weight:700;color:#1e2022;padding:0 6px 0 8px;display:flex;align-items:center;height:${ROW_H}px;gap:4px" title="${esc(ph.label)}">
             <span class="gantt-toggle" data-for="${esc(ph.id ?? '')}" onclick="window.__ganttToggle('${esc(ph.id ?? '')}')" style="cursor:pointer;font-size:9px;opacity:0.65;user-select:none;flex-shrink:0;line-height:1">${toggleIcon}</span>
-            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${esc(ph.label)}</span>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${esc(stripPhasePrefix(ph.label))}</span>
             ${ph.id ? `<span onclick="window.__ganttEdit('${esc(ph.id)}')" title="Edit" style="cursor:pointer;font-size:11px;opacity:0.45;flex-shrink:0;user-select:none;padding:0 2px">✎</span>` : ''}
           </div>
           <div class="gantt-col-divider" style="width:5px;flex-shrink:0;align-self:stretch;cursor:col-resize;background:transparent;border-left:2px dashed #c8d0d8;margin-right:4px" title="Drag to resize label column"></div>

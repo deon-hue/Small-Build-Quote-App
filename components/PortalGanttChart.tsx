@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { Job, QuotePhase, GanttState, GanttPhase } from '@/lib/types'
+import { stripPhasePrefix } from '@/lib/gantt-utils'
 
 interface Props {
   job: Job
@@ -144,7 +145,7 @@ export default function PortalGanttChart({ job, phases, ganttState }: Props) {
         if (level === 0) {
           // Group header row — no bar, just a dark label stripe
           return `<div style="display:flex;align-items:center;height:${ROW_H}px;margin-bottom:2px;background:#e5e8ec;border-radius:3px">
-            <div style="width:${LABEL_W}px;flex-shrink:0;font-size:11px;font-weight:700;color:#1e2022;padding:0 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(ph.label)}">${esc(ph.label)}</div>
+            <div style="width:${LABEL_W}px;flex-shrink:0;font-size:11px;font-weight:700;color:#1e2022;padding:0 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(stripPhasePrefix(ph.label))}">${esc(stripPhasePrefix(ph.label))}</div>
             <div style="width:8px;flex-shrink:0"></div>
             <div style="flex:1;position:relative;height:${ROW_H - 8}px;background:#e5e8ec;border-radius:3px">
               <div style="position:absolute;left:${dayToPct(ph.startDay).toFixed(2)}%;width:${(dayToPct(ph.startDay + ph.durDays) - dayToPct(ph.startDay)).toFixed(2)}%;height:2px;top:50%;transform:translateY(-50%);background:#b0b8c8;border-radius:1px"></div>

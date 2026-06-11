@@ -1,5 +1,10 @@
 import type { QuotePhase, GanttPhase, GanttState } from './types'
 
+/** Strip "Phase N – " or "Phase N - " prefixes from group header labels. */
+export function stripPhasePrefix(label: string): string {
+  return label.replace(/^Phase\s+\d+\s*[–\-]\s*/i, '').trim()
+}
+
 /**
  * Build a hierarchical GanttState from quote phases.
  *
@@ -30,7 +35,7 @@ export function buildGanttFromQuote(
   const groupMap: Record<string, QuotePhase[]> = {}
 
   for (const qp of quotePhases) {
-    const group = qp.parentPhase?.trim() || qp.phase.trim()
+    const group = stripPhasePrefix(qp.parentPhase?.trim() || qp.phase.trim())
     if (!groupMap[group]) {
       groupOrder.push(group)
       groupMap[group] = []
