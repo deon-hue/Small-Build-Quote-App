@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceRoleClient } from '@/lib/supabase/service-role'
 
+export const maxDuration = 30
+
 // Public version of generate-phases — no auth required.
 // Uses BUILDER_USER_ID env var to fetch the builder's Back Office rates.
 

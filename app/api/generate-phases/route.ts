@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+export const maxDuration = 30
+
 // ── Fetch Back Office reference rates for the current user ─────────────────────
 
 interface PlantDefault { names: string[]; total: number }
