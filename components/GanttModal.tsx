@@ -38,6 +38,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
   // Stores the cleanup fn for the current drag event listeners so we
   // can remove them before each re-render and on unmount.
   const cleanupDragRef = useRef<(() => void) | null>(null)
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('week')
   const [fullscreen, setFullscreen] = useState(false)
   // dirty = true means the chart has been dragged since the last save
@@ -64,8 +65,8 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     return { phases: ganttPhases, totalDays }
   }
 
-  // ── Explicit save handler ────────────────────────────────────
-  const handleSave = useCallback(async (overrideState?: GanttState) => {
+  // ── Save handler — silent=true skips the client notification ──
+  const handleSave = useCallback(async (overrideState?: GanttState, silent = false) => {
     const s = overrideState ?? stateRef.current
     if (!s) return
     setSaveStatus('saving')
@@ -76,33 +77,44 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       setSaveStatus('saved')
       setTimeout(() => setSaveStatus('idle'), 3000)
 
-      // ── Notify client that schedule has been updated ──────────
-      // Only on explicit user-driven saves (not on auto-generate at job creation)
-      const client = clients.find(c =>
-        c.name?.toLowerCase() === job.client?.toLowerCase()
-      )
-      if (client?.phone || client?.email) {
-        notifyClient({
-          type:         'schedule_updated',
-          clientName:   client.name || job.client,
-          clientPhone:  client.phone || undefined,
-          clientEmail:  client.email || undefined,
-          jobType:      job.type,
-          jobAddress:   job.address,
-          companyName:  settings?.name,
-          companyPhone: settings?.phone,
-          companyEmail: settings?.email,
-          portalUrl:    typeof window !== 'undefined'
-                          ? window.location.origin + '/portal'
-                          : undefined,
-        })
+      if (!silent) {
+        const client = clients.find(c =>
+          c.name?.toLowerCase() === job.client?.toLowerCase()
+        )
+        if (client?.phone || client?.email) {
+          notifyClient({
+            type:         'schedule_updated',
+            clientName:   client.name || job.client,
+            clientPhone:  client.phone || undefined,
+            clientEmail:  client.email || undefined,
+            jobType:      job.type,
+            jobAddress:   job.address,
+            companyName:  settings?.name,
+            companyPhone: settings?.phone,
+            companyEmail: settings?.email,
+            portalUrl:    typeof window !== 'undefined'
+                            ? window.location.origin + '/portal'
+                            : undefined,
+          })
+        }
       }
-      // ─────────────────────────────────────────────────────────
     } else {
       setSaveStatus('error')
       setTimeout(() => setSaveStatus('idle'), 5000)
     }
   }, [job, clients, settings, saveGanttState])
+
+  // ── Auto-save 1.5s after any edit ───────────────────────────
+  useEffect(() => {
+    if (!dirty) return
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+    autoSaveTimerRef.current = setTimeout(() => {
+      handleSave(undefined, true)
+    }, 1500)
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+    }
+  }, [dirty, handleSave])
 
   // Re-render the chart when job props or view mode changes.
   // Reset dirty/status when a different job is opened.
@@ -662,7 +674,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     if (saveStatus === 'saving') return 'Saving…'
     if (saveStatus === 'saved')  return '✓ Saved'
     if (saveStatus === 'error')  return '⚠ Save failed'
-    return 'Save Gantt Chart'
+    return 'Save & Notify Client'
   }
   function saveBtnStyle(): React.CSSProperties {
     const base: React.CSSProperties = {
