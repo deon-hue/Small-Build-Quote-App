@@ -1,4 +1,4 @@
--- Migration: Bill Payments with CIS deduction
+-- Migration: Bill Payments with CIS deduction + job cost sync
 -- Run this in Supabase SQL Editor
 
 CREATE TABLE IF NOT EXISTS bills (
@@ -32,3 +32,10 @@ CREATE POLICY "Users manage own bills"
   ON bills FOR ALL
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
+
+-- Link job_costs rows back to the bill that created them.
+-- ON DELETE CASCADE means deleting a bill auto-removes its cost lines.
+ALTER TABLE job_costs
+  ADD COLUMN IF NOT EXISTS bill_id UUID REFERENCES bills(id) ON DELETE CASCADE;
+
+CREATE INDEX IF NOT EXISTS idx_job_costs_bill ON job_costs(bill_id);

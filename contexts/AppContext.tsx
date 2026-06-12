@@ -739,6 +739,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [customTemplates])
 
   // ── Bills ────────────────────────────────────────────────────
+
+  // Syncs job_cost rows for a bill (delete + re-insert). Called after save.
+  const syncBillCosts = useCallback(async (billId: string, b: Omit<Bill, 'id' | 'ref' | 'createdAt'>, ownerId: string) => {
+    // Remove any existing cost lines tied to this bill
+    await supabase.from('job_costs').delete().eq('bill_id', billId)
+    if (!b.jobId) return
+
+    const paymentStatus: 'unknown' | 'unpaid' | 'paid' =
+      b.status === 'paid' ? 'paid' : b.status === 'approved' ? 'unpaid' : 'unknown'
+
+    // Insert one row per non-zero line item
+    const rows = b.lineItems
+      .filter(l => (Number(l.amount) || 0) > 0)
+      .map(l => ({
+        user_id: ownerId,
+        job_id: b.jobId,
+        bill_id: billId,
+        supplier: b.supplierName,
+        doc_date: b.billDate || null,
+        doc_number: b.lineItems.length === 1 ? (b.description || '') : (l.desc || b.description || ''),
+        description: l.desc || b.description || '',
+        cost_category: l.category === 'plant' ? 'plant' : l.category,
+        net_amount: Number(l.amount),
+        vat_amount: 0,
+        gross_amount: Number(l.amount),
+        payment_status: paymentStatus,
+        source: 'manual',
+      }))
+
+    if (rows.length) await supabase.from('job_costs').insert(rows)
+  }, [supabase])
+
   const addBill = useCallback(async (b: Omit<Bill, 'id' | 'ref' | 'createdAt'>): Promise<Bill> => {
     const { data: { user } } = await supabase.auth.getUser()
     const ownerId = dataOwnerIdRef.current || user!.id
@@ -756,6 +788,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       status: b.status, notes: b.notes,
     }).select().single()
     if (error) throw error
+    await syncBillCosts(data.id, b, ownerId)
     const newBill: Bill = {
       id: data.id, ref: data.ref,
       supplierId: data.supplier_id || '', supplierName: data.supplier_name || '',
@@ -772,9 +805,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     setBills(prev => [newBill, ...prev])
     return newBill
-  }, [supabase])
+  }, [supabase, syncBillCosts])
 
   const updateBill = useCallback(async (b: Bill) => {
+    const { data: { user } } = await supabase.auth.getUser()
+    const ownerId = dataOwnerIdRef.current || user!.id
     const { error } = await supabase.from('bills').update({
       supplier_id: b.supplierId || null, supplier_name: b.supplierName,
       job_id: b.jobId || null,
@@ -788,10 +823,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updated_at: new Date().toISOString(),
     }).eq('id', b.id)
     if (error) throw error
+    await syncBillCosts(b.id, b, ownerId)
     setBills(prev => prev.map(x => x.id === b.id ? b : x))
-  }, [supabase])
+  }, [supabase, syncBillCosts])
 
   const deleteBill = useCallback(async (id: string) => {
+    // job_costs rows cascade-delete via the bill_id FK
     await supabase.from('bills').delete().eq('id', id)
     setBills(prev => prev.filter(b => b.id !== id))
   }, [supabase])
