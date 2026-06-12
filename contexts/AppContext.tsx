@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Job, Quote, Client, Supplier, Settings, GanttState, Invoice, JobNote, PortalStatus, TemplatePhaseData, Variation, VariationStatus, TeamMember, TeamMemberRole, UserPermissions, ClientPortalSettings } from '@/lib/types'
+import type { Job, Quote, Client, Supplier, Settings, GanttState, Invoice, JobNote, PortalStatus, TemplatePhaseData, Variation, VariationStatus, TeamMember, TeamMemberRole, UserPermissions, ClientPortalSettings, Bill, BillStatus } from '@/lib/types'
 import { FULL_PERMISSIONS, DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
 import { uid, JOB_TEMPLATES } from '@/lib/utils'
 
@@ -57,6 +57,11 @@ interface AppContextType {
   addVariation: (jobId: string, v: Omit<Variation, 'id' | 'ref' | 'createdAt' | 'jobId'>) => Promise<Variation>
   updateVariation: (v: Variation) => Promise<void>
   deleteVariation: (id: string) => Promise<void>
+
+  bills: Bill[]
+  addBill: (bill: Omit<Bill, 'id' | 'ref' | 'createdAt'>) => Promise<Bill>
+  updateBill: (bill: Bill) => Promise<void>
+  deleteBill: (id: string) => Promise<void>
 
   saveJobTypeTemplate: (jobType: string, template: TemplatePhaseData[]) => Promise<void>
   resetJobTypeTemplate: (jobType: string) => Promise<void>
@@ -127,6 +132,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [jobNotes, setJobNotes] = useState<JobNote[]>([])
   const [variations, setVariations] = useState<Variation[]>([])
   const [customTemplates, setCustomTemplates] = useState<Record<string, TemplatePhaseData[]>>({})
+  const [bills, setBills] = useState<Bill[]>([])
   const [loading, setLoading] = useState(true)
   // Team state
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
@@ -175,7 +181,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       } catch { /* phase10.sql not run yet — single-user mode */ }
 
-      const [jobsRes, quotesRes, clientsRes, settingsRes, ganttRes, invoicesRes, notesRes, variationsRes, suppliersRes] = await Promise.all([
+      const [jobsRes, quotesRes, clientsRes, settingsRes, ganttRes, invoicesRes, notesRes, variationsRes, suppliersRes, billsRes] = await Promise.all([
         supabase.from('jobs').select('*').order('created_at', { ascending: true }),
         supabase.from('quotes').select('*').order('created_at', { ascending: true }),
         supabase.from('clients').select('*').order('created_at', { ascending: true }),
@@ -185,6 +191,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         supabase.from('job_notes').select('*').order('created_at', { ascending: true }),
         supabase.from('variations').select('*').order('created_at', { ascending: true }),
         supabase.from('suppliers').select('*').order('created_at', { ascending: true }),
+        supabase.from('bills').select('*').order('created_at', { ascending: false }),
       ])
 
       // Separately try to get portal status — only available after phase5.sql is run
@@ -298,6 +305,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
           clientRejectedAt: r.client_rejected_at || null,
           clientRejectionReason: r.client_rejection_reason || null,
           sentAt: r.sent_at || null,
+          createdAt: r.created_at,
+        })))
+      }
+
+      if (billsRes.data) {
+        setBills(billsRes.data.map(r => ({
+          id: r.id, ref: r.ref,
+          supplierId: r.supplier_id || '', supplierName: r.supplier_name || '',
+          jobId: r.job_id || '',
+          billDate: r.bill_date || '', dueDate: r.due_date || '',
+          description: r.description || '',
+          lineItems: r.line_items || [],
+          labourAmount: Number(r.labour_amount), materialsAmount: Number(r.materials_amount),
+          plantAmount: Number(r.plant_amount), otherAmount: Number(r.other_amount),
+          subtotal: Number(r.subtotal),
+          cisRate: Number(r.cis_rate), cisDeduction: Number(r.cis_deduction),
+          totalPayable: Number(r.total_payable),
+          status: r.status as BillStatus, notes: r.notes || '',
           createdAt: r.created_at,
         })))
       }
@@ -713,6 +738,64 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return customTemplates[jobType] || JOB_TEMPLATES[jobType] || []
   }, [customTemplates])
 
+  // ── Bills ────────────────────────────────────────────────────
+  const addBill = useCallback(async (b: Omit<Bill, 'id' | 'ref' | 'createdAt'>): Promise<Bill> => {
+    const { data: { user } } = await supabase.auth.getUser()
+    const ownerId = dataOwnerIdRef.current || user!.id
+    const ref = 'BILL-' + String(Math.floor(Math.random() * 9000) + 1000)
+    const { data, error } = await supabase.from('bills').insert({
+      user_id: ownerId, ref,
+      supplier_id: b.supplierId || null, supplier_name: b.supplierName,
+      job_id: b.jobId || null,
+      bill_date: b.billDate, due_date: b.dueDate,
+      description: b.description, line_items: b.lineItems,
+      labour_amount: b.labourAmount, materials_amount: b.materialsAmount,
+      plant_amount: b.plantAmount, other_amount: b.otherAmount,
+      subtotal: b.subtotal, cis_rate: b.cisRate,
+      cis_deduction: b.cisDeduction, total_payable: b.totalPayable,
+      status: b.status, notes: b.notes,
+    }).select().single()
+    if (error) throw error
+    const newBill: Bill = {
+      id: data.id, ref: data.ref,
+      supplierId: data.supplier_id || '', supplierName: data.supplier_name || '',
+      jobId: data.job_id || '',
+      billDate: data.bill_date || '', dueDate: data.due_date || '',
+      description: data.description || '', lineItems: data.line_items || [],
+      labourAmount: Number(data.labour_amount), materialsAmount: Number(data.materials_amount),
+      plantAmount: Number(data.plant_amount), otherAmount: Number(data.other_amount),
+      subtotal: Number(data.subtotal),
+      cisRate: Number(data.cis_rate), cisDeduction: Number(data.cis_deduction),
+      totalPayable: Number(data.total_payable),
+      status: data.status as BillStatus, notes: data.notes || '',
+      createdAt: data.created_at,
+    }
+    setBills(prev => [newBill, ...prev])
+    return newBill
+  }, [supabase])
+
+  const updateBill = useCallback(async (b: Bill) => {
+    const { error } = await supabase.from('bills').update({
+      supplier_id: b.supplierId || null, supplier_name: b.supplierName,
+      job_id: b.jobId || null,
+      bill_date: b.billDate, due_date: b.dueDate,
+      description: b.description, line_items: b.lineItems,
+      labour_amount: b.labourAmount, materials_amount: b.materialsAmount,
+      plant_amount: b.plantAmount, other_amount: b.otherAmount,
+      subtotal: b.subtotal, cis_rate: b.cisRate,
+      cis_deduction: b.cisDeduction, total_payable: b.totalPayable,
+      status: b.status, notes: b.notes,
+      updated_at: new Date().toISOString(),
+    }).eq('id', b.id)
+    if (error) throw error
+    setBills(prev => prev.map(x => x.id === b.id ? b : x))
+  }, [supabase])
+
+  const deleteBill = useCallback(async (id: string) => {
+    await supabase.from('bills').delete().eq('id', id)
+    setBills(prev => prev.filter(b => b.id !== id))
+  }, [supabase])
+
   // ── Team Management (owner only) ─────────────────────────────
   const inviteTeamMember = useCallback(async (data: {
     email: string; name: string; role: TeamMemberRole; permissions: UserPermissions
@@ -782,6 +865,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addInvoice, updateInvoice, deleteInvoice,
       addJobNote, deleteJobNote,
       addVariation, updateVariation, deleteVariation,
+      bills, addBill, updateBill, deleteBill,
       saveJobTypeTemplate, resetJobTypeTemplate, getTemplate,
       nextQuoteRef,
       inviteTeamMember, updateTeamMember, deleteTeamMember, resendInvite,

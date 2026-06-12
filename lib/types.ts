@@ -463,6 +463,43 @@ export interface VariationLineItem {
   notes: string
 }
 
+// ── Bill Payments (accounts payable) ─────────────────────────────────────────
+
+export type BillStatus = 'draft' | 'approved' | 'paid'
+
+export interface BillLineItem {
+  id: number
+  desc: string
+  category: 'labour' | 'materials' | 'plant' | 'other'
+  amount: number
+}
+
+export interface Bill {
+  id: string
+  ref: string
+  supplierId: string
+  supplierName: string
+  jobId: string
+  billDate: string
+  dueDate: string
+  description: string
+  lineItems: BillLineItem[]
+  labourAmount: number
+  materialsAmount: number
+  plantAmount: number
+  otherAmount: number
+  subtotal: number
+  /** CIS deduction rate: 0 = no CIS, 20 = registered, 30 = unregistered */
+  cisRate: number
+  /** Deduction on labour only: labourAmount × cisRate / 100 */
+  cisDeduction: number
+  /** Amount actually paid to supplier: subtotal − cisDeduction */
+  totalPayable: number
+  status: BillStatus
+  notes: string
+  createdAt: string
+}
+
 export interface Variation {
   id: string
   jobId: string
