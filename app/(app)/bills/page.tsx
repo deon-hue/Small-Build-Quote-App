@@ -66,6 +66,8 @@ export default function BillsPage() {
   const [xeroError, setXeroError]             = useState<string | null>(null)
   const [xeroPushing, setXeroPushing]         = useState(false)
   const [xeroPulling, setXeroPulling]         = useState<string | null>(null)
+  const [autoSyncing, setAutoSyncing]         = useState(false)
+  const [lastSynced, setLastSynced]           = useState<number | null>(null)
 
   useEffect(() => {
     fetch('/api/xero/status')
@@ -76,6 +78,26 @@ export default function BillsPage() {
       })
       .catch(() => {})
   }, [])
+
+  // Auto-sync unpaid Xero-linked bills once bills are loaded and Xero is connected
+  useEffect(() => {
+    if (loading || !xeroConnected) return
+    if (lastSynced !== null) return  // only once per page load
+    setAutoSyncing(true)
+    fetch('/api/xero/sync-bills', { method: 'POST' })
+      .then(r => r.json())
+      .then((d: { synced?: Array<{ id: string; status: BillStatus }> }) => {
+        if (d.synced?.length) {
+          for (const { id, status } of d.synced) {
+            const bill = bills.find(b => b.id === id)
+            if (bill) updateBill({ ...bill, status })
+          }
+        }
+        setLastSynced(Date.now())
+      })
+      .catch(() => {})
+      .finally(() => setAutoSyncing(false))
+  }, [loading, xeroConnected]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
 
@@ -256,6 +278,15 @@ export default function BillsPage() {
           ))}
         </div>
         <div style={{ flex: 1 }} />
+        {xeroConnected && (
+          <span style={{ fontSize: 12, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 5 }}>
+            {autoSyncing
+              ? <><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#facc15', animation: 'pulse 1s infinite' }} />Syncing Xero…</>
+              : lastSynced !== null
+              ? <><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#22c55e' }} />Xero synced</>
+              : null}
+          </span>
+        )}
         <button className="btn btn-primary" onClick={openNew}>+ Add Bill</button>
       </div>
 
