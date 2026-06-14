@@ -130,6 +130,7 @@ function rowToDoc(r: Record<string, unknown>): InboxDocument {
     fileSize: Number(r.file_size) || 0,
     status,
     extraction: (r.raw_extraction as Record<string, unknown>) ?? null,
+    xeroBillId: (r.xero_bill_id as string) || undefined,
     createdAt: r.created_at as string | undefined,
   }
 }

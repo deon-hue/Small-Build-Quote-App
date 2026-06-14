@@ -221,6 +221,7 @@ export interface InboxDocument {
   fileSize: number
   status: 'unallocated' | 'allocated' | 'error'
   extraction?: Record<string, unknown> | null   // raw_extraction snapshot
+  xeroBillId?: string                           // set after publishing to Xero
   createdAt?: string
 }
 

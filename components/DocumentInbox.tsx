@@ -140,6 +140,7 @@ export default function DocumentInbox({ jobs }: Props) {
                   {doc.status === 'allocated'
                     ? <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#dcfce7', color: '#166534' }}>✓ {jobLabel(doc.jobId)}</span>
                     : <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#fef3c7', color: '#92400e' }}>Unallocated</span>}
+                  {doc.xeroBillId && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: '#ede9fe', color: '#5b21b6' }}>✓ Xero</span>}
                   <button className="btn-sm btn-outline" onClick={() => setOpenDoc(doc)}>Open</button>
                   <button className="btn-sm btn-danger" onClick={() => remove(doc)}>✕</button>
                 </div>

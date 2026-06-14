@@ -31,7 +31,6 @@ function initialLines(ex: Record<string, unknown> | null | undefined): Extracted
       grossAmount: Number(l.grossAmount) || 0,
     }))
   }
-  // single line from totals, if any
   const gross = Number(raw?.grossAmount) || 0
   const vat = Number(raw?.vatAmount) || 0
   const net = Number(raw?.netAmount) || (gross ? +(gross - vat).toFixed(2) : 0)
@@ -49,8 +48,12 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
   const [lines, setLines] = useState<ExtractedCostLine[]>(() => initialLines(ex))
   const [jobId, setJobId] = useState(doc.jobId ?? '')
   const [busy, setBusy] = useState(false)
+  const [xeroBusy, setXeroBusy] = useState(false)
+  const [xeroError, setXeroError] = useState<string | null>(null)
 
+  const isAllocated = doc.status === 'allocated'
   const isPdf = doc.mimeType === 'application/pdf'
+  const canXero = !!jobId  // job must be selected before publishing to Xero
 
   useEffect(() => {
     signedDocUrl(sb, doc.storagePath).then(setUrl)
@@ -72,20 +75,58 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
   const removeLine = (i: number) => setLines(p => p.filter((_, idx) => idx !== i))
   const total = lines.reduce((s, l) => s + l.grossAmount, 0)
 
-  async function allocate() {
+  async function allocate(publishToXero = false) {
     if (!jobId) return
     setBusy(true)
+    setXeroError(null)
     try {
       await allocateDocument(sb, userId, doc, jobId, { supplier, docDate, docNumber, paymentStatus }, lines)
-      onSaved()
-    } finally { setBusy(false) }
+
+      if (!publishToXero) { onSaved(); return }
+
+      // Push to Xero after saving costs
+      setXeroBusy(true)
+      try {
+        const res = await fetch('/api/xero/push-doc-bill', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            documentId: doc.id,
+            supplier,
+            docDate,
+            docNumber,
+            lines,
+            fileName: doc.fileName,
+            storagePath: doc.storagePath,
+            mimeType: doc.mimeType,
+          }),
+        })
+        const d = await res.json() as { xeroBillId?: string; error?: string }
+        if (!res.ok || d.error) {
+          setXeroError(d.error || 'Failed to publish to Xero')
+          // Costs are saved — reload inbox but keep modal open so user sees the error
+          onSaved()
+        } else {
+          onSaved()
+        }
+      } finally {
+        setXeroBusy(false)
+      }
+    } finally {
+      setBusy(false)
+    }
   }
+
+  const isBusy = busy || xeroBusy
 
   return (
     <div style={overlay} onClick={onClose}>
       <div style={panel} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 18px', borderBottom: '1px solid #e2e8f0' }}>
-          <div style={{ fontWeight: 700, fontSize: 15 }}>Review document{doc.status === 'allocated' ? ' (allocated)' : ''}</div>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>
+            Review document{isAllocated ? ' (allocated)' : ''}
+            {doc.xeroBillId && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: '#dcfce7', color: '#166534' }}>✓ Xero</span>}
+          </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8' }}>×</button>
         </div>
 
@@ -135,12 +176,31 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
                   {jobs.map(j => <option key={j.id} value={j.id}>{j.label}</option>)}
                 </select>
               </Field>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 }}>
+
+              {xeroError && (
+                <div style={{ marginTop: 8, padding: '8px 10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, fontSize: 12, color: '#b91c1c' }}>
+                  ⚠ {xeroError}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, flexWrap: 'wrap', gap: 8 }}>
                 <span style={{ fontSize: 13 }}>Total gross: <strong style={{ fontFamily: 'monospace' }}>{fmt(total)}</strong></span>
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button onClick={onClose} style={btn}>Cancel</button>
-                  <button onClick={allocate} disabled={!jobId || busy} style={{ ...btn, background: jobId ? '#16a34a' : '#cbd5e1', color: '#fff', border: 'none', cursor: jobId ? 'pointer' : 'not-allowed' }}>
-                    {busy ? 'Saving…' : doc.status === 'allocated' ? 'Update allocation' : 'Allocate to job'}
+                  <button
+                    onClick={() => allocate(false)}
+                    disabled={!jobId || isBusy}
+                    style={{ ...btn, background: jobId ? '#1e40af' : '#cbd5e1', color: '#fff', border: 'none', cursor: jobId ? 'pointer' : 'not-allowed' }}
+                  >
+                    {busy && !xeroBusy ? 'Saving…' : isAllocated ? 'Update allocation' : 'Allocate to job'}
+                  </button>
+                  <button
+                    onClick={() => allocate(true)}
+                    disabled={!canXero || isBusy}
+                    title={!jobId ? 'Select a job first' : undefined}
+                    style={{ ...btn, background: canXero ? '#0d6b3b' : '#cbd5e1', color: '#fff', border: 'none', cursor: canXero ? 'pointer' : 'not-allowed', opacity: isBusy ? 0.7 : 1 }}
+                  >
+                    {xeroBusy ? '📤 Publishing…' : isAllocated ? '📤 Update & Publish to Xero' : '📤 Save & Publish to Xero'}
                   </button>
                 </div>
               </div>
