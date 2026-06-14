@@ -7,10 +7,9 @@ import { extractWithClaude } from './claude'
 
 export type { ExtractInput, ExtractedDoc, ExtractedCostLine } from './types'
 
-export async function extractDocument(input: ExtractInput): Promise<ExtractedDoc> {
+export async function extractDocument(input: ExtractInput | ExtractInput[]): Promise<ExtractedDoc> {
   const provider = (process.env.DOC_EXTRACT_PROVIDER || 'claude').toLowerCase()
   switch (provider) {
-    // case 'mindee': return extractWithMindee(input)   // Phase 3 trial
     case 'claude':
     default:
       return extractWithClaude(input)

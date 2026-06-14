@@ -53,21 +53,33 @@ function num(v: unknown): number {
   return isFinite(n) ? +n.toFixed(2) : 0
 }
 
-export async function extractWithClaude(input: ExtractInput): Promise<ExtractedDoc> {
+export async function extractWithClaude(input: ExtractInput | ExtractInput[]): Promise<ExtractedDoc> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured')
 
-  const isPdf = input.mimeType === 'application/pdf'
-  const block = isPdf
-    ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: input.base64 } }
-    : { type: 'image', source: { type: 'base64', media_type: input.mimeType || 'image/jpeg', data: input.base64 } }
+  const pages = Array.isArray(input) ? input : [input]
+  const multiPage = pages.length > 1
 
+  const contentBlocks: unknown[] = []
+  for (let i = 0; i < pages.length; i++) {
+    const pg = pages[i]
+    const isPg = pg.mimeType === 'application/pdf'
+    if (multiPage) contentBlocks.push({ type: 'text', text: `Page ${i + 1} of ${pages.length}:` })
+    contentBlocks.push(
+      isPg
+        ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pg.base64 } }
+        : { type: 'image', source: { type: 'base64', media_type: pg.mimeType || 'image/jpeg', data: pg.base64 } }
+    )
+  }
+  contentBlocks.push({ type: 'text', text: multiPage ? 'These are all pages of the same document. Extract the combined document as JSON per the schema.' : 'Extract this document as JSON per the schema.' })
+
+  const hasPdf = pages.some(p => p.mimeType === 'application/pdf')
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'x-api-key': apiKey,
     'anthropic-version': '2023-06-01',
   }
-  if (isPdf) headers['anthropic-beta'] = 'pdfs-2024-09-25'
+  if (hasPdf) headers['anthropic-beta'] = 'pdfs-2024-09-25'
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -77,7 +89,7 @@ export async function extractWithClaude(input: ExtractInput): Promise<ExtractedD
       max_tokens: 2000,
       system: SYSTEM,
       messages: [
-        { role: 'user', content: [block, { type: 'text', text: 'Extract this document as JSON per the schema.' }] },
+        { role: 'user', content: contentBlocks },
       ],
     }),
   })
