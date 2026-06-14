@@ -15,6 +15,8 @@ export const XERO_SCOPES = [
   'openid', 'profile', 'email', 'offline_access',
   'accounting.contacts',
   'accounting.invoices',
+  'accounting.settings',
+  'accounting.attachments',
 ].join(' ')
 
 export function xeroConfigured(): boolean {
