@@ -53,19 +53,42 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
 
   const [xeroAccounts, setXeroAccounts] = useState<Array<{ code: string; name: string; type: string }>>([])
   const [xeroAccount, setXeroAccount] = useState('')
+  const [duplicates, setDuplicates] = useState<Array<{ label: string; detail: string; confidence: string }>>([])
+  const [dupDismissed, setDupDismissed] = useState(false)
 
   const isAllocated = doc.status === 'allocated'
   const isPdf = doc.mimeType === 'application/pdf'
 
   useEffect(() => {
     signedDocUrl(sb, doc.storagePath).then(setUrl)
-    // Load Xero chart of accounts silently — no error if not connected
+
+    // Load Xero chart of accounts silently
     fetch('/api/xero/accounts')
       .then(r => r.ok ? r.json() : null)
       .then((d: { accounts?: Array<{ code: string; name: string; type: string }> } | null) => {
         if (d?.accounts?.length) setXeroAccounts(d.accounts)
       })
       .catch(() => {})
+
+    // Check for duplicate invoices / receipts
+    const ex = doc.extraction as Record<string, unknown> | null
+    const docNum = String(ex?.docNumber ?? '').trim()
+    const sup    = String(ex?.supplier ?? '').trim()
+    const gross  = String(ex?.grossAmount ?? '')
+    const date   = String(ex?.docDate ?? '').trim()
+    if (docNum || (sup && gross)) {
+      const qs = new URLSearchParams({ excludeDocId: doc.id })
+      if (docNum)  qs.set('docNumber', docNum)
+      if (sup)     qs.set('supplier', sup)
+      if (gross)   qs.set('grossAmount', gross)
+      if (date)    qs.set('docDate', date)
+      fetch(`/api/check-duplicate?${qs}`)
+        .then(r => r.json())
+        .then((d: { matches?: Array<{ label: string; detail: string; confidence: string }> }) => {
+          if (d.matches?.length) setDuplicates(d.matches)
+        })
+        .catch(() => {})
+    }
   }, [doc.storagePath]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function updateLine(i: number, patch: Partial<ExtractedCostLine>) {
@@ -161,6 +184,23 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
                 </select>
               </Field>
             </div>
+
+            {duplicates.length > 0 && !dupDismissed && (
+              <div style={{ margin: '8px 0 12px', padding: '10px 12px', background: '#fffbeb', border: '1px solid #fbbf24', borderRadius: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 12, color: '#92400e', marginBottom: 4 }}>⚠ Possible duplicate</div>
+                    {duplicates.map((m, i) => (
+                      <div key={i} style={{ fontSize: 12, color: '#78350f', marginBottom: 2 }}>
+                        {m.confidence === 'high' ? '🔴' : '🟡'} {m.label}
+                        {m.detail && <span style={{ color: '#a16207', marginLeft: 6 }}>{m.detail}</span>}
+                      </div>
+                    ))}
+                  </div>
+                  <button onClick={() => setDupDismissed(true)} style={{ border: 'none', background: 'none', color: '#a16207', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 0, flexShrink: 0 }}>×</button>
+                </div>
+              </div>
+            )}
 
             <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#94a3b8', marginBottom: 4 }}>Cost lines</div>
             <div style={{ display: 'grid', gap: 6 }}>
