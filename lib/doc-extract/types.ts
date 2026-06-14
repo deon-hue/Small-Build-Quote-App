@@ -16,6 +16,7 @@ export interface ExtractedCostLine {
   netAmount: number
   vatAmount: number
   grossAmount: number
+  chargeToClient?: boolean
 }
 
 export interface ExtractedDoc {

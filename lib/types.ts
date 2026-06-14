@@ -209,6 +209,7 @@ export interface JobCost {
   grossAmount: number
   paymentStatus: PaymentStatus
   source: 'document' | 'manual'
+  chargeToClient?: boolean
   createdAt?: string
 }
 

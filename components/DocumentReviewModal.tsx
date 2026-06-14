@@ -107,7 +107,7 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
       return ln
     }))
   }
-  const addLine = () => setLines(p => [...p, { description: '', costCategory: 'materials', netAmount: 0, vatAmount: 0, grossAmount: 0 }])
+  const addLine = () => setLines(p => [...p, { description: '', costCategory: 'materials', netAmount: 0, vatAmount: 0, grossAmount: 0, chargeToClient: false }])
   const removeLine = (i: number) => setLines(p => p.filter((_, idx) => idx !== i))
   const total = lines.reduce((s, l) => s + l.grossAmount, 0)
 
@@ -218,10 +218,13 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
               </div>
             )}
 
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#94a3b8', marginBottom: 4 }}>Cost lines</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#94a3b8' }}>Cost lines</div>
+              <div style={{ fontSize: 10, color: '#94a3b8' }}>Net · VAT · Gross · Expense?</div>
+            </div>
             <div style={{ display: 'grid', gap: 6 }}>
               {lines.map((ln, i) => (
-                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 120px 72px 72px 72px 20px', gap: 5, alignItems: 'center' }}>
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 120px 72px 72px 72px auto 20px', gap: 5, alignItems: 'center' }}>
                   <input style={inp} placeholder="Description" value={ln.description} onChange={e => updateLine(i, { description: e.target.value })} />
                   <select style={inp} value={ln.costCategory} onChange={e => updateLine(i, { costCategory: e.target.value as JobCostCategory })}>
                     {CATS.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}
@@ -229,6 +232,18 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
                   <input type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={ln.netAmount} onChange={e => updateLine(i, { netAmount: Math.max(0, +e.target.value) })} title="Net" />
                   <input type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={ln.vatAmount} onChange={e => updateLine(i, { vatAmount: Math.max(0, +e.target.value) })} title="VAT" />
                   <input type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={ln.grossAmount} onChange={e => updateLine(i, { grossAmount: Math.max(0, +e.target.value) })} title="Gross" />
+                  <label
+                    title="Charge to client as an expense"
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', gap: 1 }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={!!ln.chargeToClient}
+                      onChange={e => updateLine(i, { chargeToClient: e.target.checked })}
+                      style={{ cursor: 'pointer', accentColor: '#d97706', width: 14, height: 14 }}
+                    />
+                    <span style={{ fontSize: 8, fontWeight: 700, color: ln.chargeToClient ? '#d97706' : '#cbd5e1', letterSpacing: '0.02em' }}>EXP</span>
+                  </label>
                   <button onClick={() => removeLine(i)} style={{ border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 15 }}>×</button>
                 </div>
               ))}

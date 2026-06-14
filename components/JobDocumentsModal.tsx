@@ -366,7 +366,10 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
                             return (
                               <tr key={c.id} style={{ borderBottom: i === lines.length - 1 ? '1px solid #f1f5f9' : '1px solid #f8fafc', background: '#fafbff' }}>
                                 <td style={{ padding: '5px 8px 5px 28px', color: '#475569' }}>
-                                  {c.description || <span style={{ color: '#cbd5e1', fontStyle: 'italic' }}>no description</span>}
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    {c.description || <span style={{ color: '#cbd5e1', fontStyle: 'italic' }}>no description</span>}
+                                    {c.chargeToClient && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 99, background: '#fef3c7', color: '#d97706' }}>💸 Expense</span>}
+                                  </span>
                                 </td>
                                 <td />
                                 <td style={{ padding: '5px 8px' }}><span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: cm.bg, color: cm.color, fontWeight: 600 }}>{cm.emoji} {cm.label}</span></td>
@@ -412,6 +415,16 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
                       <td style={{ padding: '8px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(totalGross)}</td>
                       <td colSpan={2} />
                     </tr>
+                    {costs.some(c => c.chargeToClient) && (() => {
+                      const expGross = costs.filter(c => c.chargeToClient).reduce((s, c) => s + c.grossAmount, 0)
+                      return (
+                        <tr style={{ background: '#fffbeb', borderTop: '1px dashed #fbbf24' }}>
+                          <td style={{ padding: '6px 8px', fontSize: 12, color: '#92400e' }} colSpan={5}>💸 Chargeable expenses (to be invoiced to client)</td>
+                          <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, color: '#d97706' }}>{fmt(expGross)}</td>
+                          <td colSpan={2} />
+                        </tr>
+                      )
+                    })()}
                   </tfoot>
                 </table>
               </>

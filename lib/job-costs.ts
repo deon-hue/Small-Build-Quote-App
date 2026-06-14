@@ -46,6 +46,7 @@ function rowToCost(r: Record<string, unknown>): JobCost {
     grossAmount: Number(r.gross_amount) || 0,
     paymentStatus: (r.payment_status as JobCost['paymentStatus']) ?? 'unknown',
     source: (r.source as JobCost['source']) ?? 'document',
+    chargeToClient: Boolean(r.charge_to_client),
     createdAt: r.created_at as string | undefined,
   }
 }
@@ -65,6 +66,7 @@ function costToRow(c: Partial<JobCost>) {
   if (c.grossAmount !== undefined) row.gross_amount = c.grossAmount
   if (c.paymentStatus !== undefined) row.payment_status = c.paymentStatus
   if (c.source !== undefined) row.source = c.source
+  if (c.chargeToClient !== undefined) row.charge_to_client = c.chargeToClient
   return row
 }
 
@@ -180,7 +182,7 @@ export async function allocateDocument(
       jobId, documentId: doc.id, supplier: meta.supplier, docDate: meta.docDate, docNumber: meta.docNumber,
       description: ln.description, costCategory: ln.costCategory,
       netAmount: ln.netAmount, vatAmount: ln.vatAmount, grossAmount: ln.grossAmount,
-      paymentStatus: meta.paymentStatus, source: 'document',
+      paymentStatus: meta.paymentStatus, source: 'document', chargeToClient: ln.chargeToClient ?? false,
     })
     if (c) created.push(c)
   }
