@@ -51,11 +51,21 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
   const [xeroBusy, setXeroBusy] = useState(false)
   const [xeroError, setXeroError] = useState<string | null>(null)
 
+  const [xeroAccounts, setXeroAccounts] = useState<Array<{ code: string; name: string; type: string }>>([])
+  const [xeroAccount, setXeroAccount] = useState('')
+
   const isAllocated = doc.status === 'allocated'
   const isPdf = doc.mimeType === 'application/pdf'
 
   useEffect(() => {
     signedDocUrl(sb, doc.storagePath).then(setUrl)
+    // Load Xero chart of accounts silently — no error if not connected
+    fetch('/api/xero/accounts')
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { accounts?: Array<{ code: string; name: string; type: string }> } | null) => {
+        if (d?.accounts?.length) setXeroAccounts(d.accounts)
+      })
+      .catch(() => {})
   }, [doc.storagePath]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function updateLine(i: number, patch: Partial<ExtractedCostLine>) {
@@ -95,6 +105,7 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
           body: JSON.stringify({
             documentId: doc.id, supplier, docDate, docNumber, lines,
             fileName: doc.fileName, storagePath: doc.storagePath, mimeType: doc.mimeType,
+            xeroAccountCode: xeroAccount || undefined,
           }),
         })
         const d = await res.json() as { xeroBillId?: string; error?: string }
@@ -169,12 +180,24 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
             <button onClick={addLine} style={{ ...btn, marginTop: 6, fontSize: 11, padding: '4px 10px' }}>＋ Add line</button>
 
             <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
-              <Field label="Allocate to job">
-                <select style={inp} value={jobId} onChange={e => setJobId(e.target.value)}>
-                  <option value="">— select a job —</option>
-                  {jobs.map(j => <option key={j.id} value={j.id}>{j.label}</option>)}
-                </select>
-              </Field>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <Field label="Allocate to job">
+                  <select style={inp} value={jobId} onChange={e => setJobId(e.target.value)}>
+                    <option value="">— select a job —</option>
+                    {jobs.map(j => <option key={j.id} value={j.id}>{j.label}</option>)}
+                  </select>
+                </Field>
+                {xeroAccounts.length > 0 && (
+                  <Field label="Xero account">
+                    <select style={inp} value={xeroAccount} onChange={e => setXeroAccount(e.target.value)}>
+                      <option value="">— use category defaults —</option>
+                      {xeroAccounts.map(a => (
+                        <option key={a.code} value={a.code}>{a.code} — {a.name}</option>
+                      ))}
+                    </select>
+                  </Field>
+                )}
+              </div>
 
               {xeroError && (
                 <div style={{ marginTop: 8, padding: '8px 10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, fontSize: 12, color: '#b91c1c' }}>

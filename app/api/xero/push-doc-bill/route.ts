@@ -21,6 +21,7 @@ interface PushDocBillBody {
   fileName: string
   storagePath: string
   mimeType: string
+  xeroAccountCode?: string  // override all lines to a specific account (e.g. Motor Expenses)
 }
 
 export async function POST(req: NextRequest) {
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
     const ac: XeroAccountCodes = { ...DEFAULT_XERO_ACCOUNT_CODES, ...((settingsRow?.xero_account_codes as XeroAccountCodes | null) ?? {}) }
 
     const body = await req.json() as PushDocBillBody
-    const { documentId, supplier, supplierId, docDate, docNumber, lines, fileName, storagePath, mimeType } = body
+    const { documentId, supplier, supplierId, docDate, docNumber, lines, fileName, storagePath, mimeType, xeroAccountCode } = body
 
     if (!documentId || !lines?.length) {
       return NextResponse.json({ error: 'documentId and lines are required' }, { status: 400 })
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest) {
         Quantity: 1,
         UnitAmount: Number(l.netAmount) || Number(l.grossAmount),
         TaxAmount: Number(l.vatAmount) || 0,
-        AccountCode: codeFor(l.costCategory),
+        AccountCode: xeroAccountCode || codeFor(l.costCategory),
         TaxType: 'NONE',
       }))
 
