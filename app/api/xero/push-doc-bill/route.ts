@@ -139,9 +139,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Persist Xero bill ID on the document record
+    // Persist Xero bill ID and mark document as completed
     await sb.from('job_documents')
-      .update({ xero_bill_id: xeroBillId })
+      .update({ xero_bill_id: xeroBillId, status: 'allocated' })
       .eq('id', documentId)
       .eq('user_id', user.id)
 

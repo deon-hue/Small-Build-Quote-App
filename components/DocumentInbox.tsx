@@ -145,11 +145,13 @@ export default function DocumentInbox({ jobs }: Props) {
                     <div style={{ fontSize: 11, color: 'var(--muted)' }}>{s.date || '—'}{s.gross ? ` · ${fmt(s.gross)}` : ''}</div>
                   </div>
                   {doc.status === 'allocated'
-                    ? <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#dcfce7', color: '#166534' }}>✓ {jobLabel(doc.jobId)}</span>
+                    ? doc.jobId
+                      ? <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#dcfce7', color: '#166534' }}>✓ {jobLabel(doc.jobId)}</span>
+                      : <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#dcfce7', color: '#166534' }}>✓ Xero</span>
                     : doc.status === 'archived'
                     ? <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#f1f5f9', color: '#64748b' }}>🗄 Archived</span>
                     : <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#fef3c7', color: '#92400e' }}>Unallocated</span>}
-                  {doc.xeroBillId && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: '#ede9fe', color: '#5b21b6' }}>✓ Xero</span>}
+                  {doc.jobId && doc.xeroBillId && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: '#ede9fe', color: '#5b21b6' }}>✓ Xero</span>}
                   <button className="btn-sm btn-outline" onClick={() => setOpenDoc(doc)}>Open</button>
                   <button className="btn-sm btn-danger" onClick={() => remove(doc)}>✕</button>
                 </div>
