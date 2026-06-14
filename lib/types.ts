@@ -497,6 +497,10 @@ export interface Bill {
   totalPayable: number
   status: BillStatus
   notes: string
+  /** When true the bill is pushed to Xero on save */
+  syncToXero?: boolean
+  /** Xero InvoiceID once the bill has been successfully pushed */
+  xeroBillId?: string
   createdAt: string
 }
 

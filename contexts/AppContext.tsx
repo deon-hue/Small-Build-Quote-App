@@ -323,6 +323,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           cisRate: Number(r.cis_rate), cisDeduction: Number(r.cis_deduction),
           totalPayable: Number(r.total_payable),
           status: r.status as BillStatus, notes: r.notes || '',
+          syncToXero: r.sync_to_xero ?? false,
+          xeroBillId: r.xero_bill_id || undefined,
           createdAt: r.created_at,
         })))
       }
@@ -786,6 +788,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       subtotal: b.subtotal, cis_rate: b.cisRate,
       cis_deduction: b.cisDeduction, total_payable: b.totalPayable,
       status: b.status, notes: b.notes,
+      sync_to_xero: b.syncToXero ?? false,
+      xero_bill_id: b.xeroBillId || null,
     }).select().single()
     if (error) throw error
     await syncBillCosts(data.id, b, ownerId)
@@ -801,6 +805,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       cisRate: Number(data.cis_rate), cisDeduction: Number(data.cis_deduction),
       totalPayable: Number(data.total_payable),
       status: data.status as BillStatus, notes: data.notes || '',
+      syncToXero: data.sync_to_xero ?? false,
+      xeroBillId: data.xero_bill_id || undefined,
       createdAt: data.created_at,
     }
     setBills(prev => [newBill, ...prev])
@@ -820,6 +826,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       subtotal: b.subtotal, cis_rate: b.cisRate,
       cis_deduction: b.cisDeduction, total_payable: b.totalPayable,
       status: b.status, notes: b.notes,
+      sync_to_xero: b.syncToXero ?? false,
+      xero_bill_id: b.xeroBillId || null,
       updated_at: new Date().toISOString(),
     }).eq('id', b.id)
     if (error) throw error

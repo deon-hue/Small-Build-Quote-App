@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { fmt } from '@/lib/utils'
 import type { Bill, BillLineItem, BillStatus } from '@/lib/types'
@@ -17,8 +17,8 @@ const BILL_LABEL: Record<BillStatus, string> = {
 
 const CIS_RATES = [
   { value: 0,  label: 'No CIS' },
-  { value: 20, label: '20% (registered subcontractor)' },
-  { value: 30, label: '30% (unregistered subcontractor)' },
+  { value: 20, label: '20% — registered subcontractor' },
+  { value: 30, label: '30% — unregistered subcontractor' },
 ]
 
 function todayStr() { return new Date().toISOString().split('T')[0] }
@@ -41,23 +41,41 @@ function calcTotals(lines: BillLineItem[], cisRate: number) {
 export default function BillsPage() {
   const { bills, suppliers, jobs, addBill, updateBill, deleteBill, loading } = useApp()
 
-  const [showModal, setShowModal] = useState(false)
-  const [editing, setEditing] = useState<Bill | null>(null)
+  const [showModal, setShowModal]     = useState(false)
+  const [editing, setEditing]         = useState<Bill | null>(null)
   const [filterStatus, setFilterStatus] = useState<'all' | BillStatus>('all')
-  const [search, setSearch] = useState('')
+  const [search, setSearch]           = useState('')
 
   // Form state
-  const [supplierId, setSupplierId] = useState('')
+  const [supplierId, setSupplierId]   = useState('')
   const [supplierName, setSupplierName] = useState('')
-  const [jobId, setJobId] = useState('')
-  const [billDate, setBillDate] = useState(todayStr())
-  const [dueDate, setDueDate] = useState('')
+  const [jobId, setJobId]             = useState('')
+  const [billDate, setBillDate]       = useState(todayStr())
+  const [dueDate, setDueDate]         = useState('')
   const [description, setDescription] = useState('')
-  const [lineItems, setLineItems] = useState<BillLineItem[]>([BLANK_LINE()])
-  const [cisRate, setCisRate] = useState(0)
-  const [status, setStatus] = useState<BillStatus>('draft')
-  const [notes, setNotes] = useState('')
-  const [saving, setSaving] = useState(false)
+  const [lineItems, setLineItems]     = useState<BillLineItem[]>([BLANK_LINE()])
+  const [cisRate, setCisRate]         = useState(0)
+  const [status, setStatus]           = useState<BillStatus>('draft')
+  const [notes, setNotes]             = useState('')
+  const [syncToXero, setSyncToXero]   = useState(false)
+  const [saving, setSaving]           = useState(false)
+
+  // Xero state
+  const [xeroConnected, setXeroConnected]     = useState(false)
+  const [xeroTenantName, setXeroTenantName]   = useState('')
+  const [xeroError, setXeroError]             = useState<string | null>(null)
+  const [xeroPushing, setXeroPushing]         = useState(false)
+  const [xeroPulling, setXeroPulling]         = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch('/api/xero/status')
+      .then(r => r.json())
+      .then((d: { connected?: boolean; tenantName?: string }) => {
+        setXeroConnected(d.connected ?? false)
+        setXeroTenantName(d.tenantName ?? '')
+      })
+      .catch(() => {})
+  }, [])
 
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
 
@@ -70,10 +88,10 @@ export default function BillsPage() {
   })
 
   // Summary stats
-  const totalBills   = bills.reduce((s, b) => s + b.subtotal, 0)
-  const outstanding  = bills.filter(b => b.status !== 'paid').reduce((s, b) => s + b.totalPayable, 0)
-  const paid         = bills.filter(b => b.status === 'paid').reduce((s, b) => s + b.totalPayable, 0)
-  const cisTotal     = bills.filter(b => b.status !== 'draft').reduce((s, b) => s + b.cisDeduction, 0)
+  const totalBills  = bills.reduce((s, b) => s + b.subtotal, 0)
+  const outstanding = bills.filter(b => b.status !== 'paid').reduce((s, b) => s + b.totalPayable, 0)
+  const paid        = bills.filter(b => b.status === 'paid').reduce((s, b) => s + b.totalPayable, 0)
+  const cisTotal    = bills.filter(b => b.status !== 'draft').reduce((s, b) => s + b.cisDeduction, 0)
 
   function openNew() {
     setEditing(null)
@@ -81,6 +99,7 @@ export default function BillsPage() {
     setBillDate(todayStr()); setDueDate('')
     setDescription(''); setLineItems([BLANK_LINE()])
     setCisRate(0); setStatus('draft'); setNotes('')
+    setSyncToXero(false); setXeroError(null)
     setShowModal(true)
   }
 
@@ -91,6 +110,7 @@ export default function BillsPage() {
     setDescription(b.description)
     setLineItems(b.lineItems.map(l => ({ ...l, id: ++lineCounter })))
     setCisRate(b.cisRate); setStatus(b.status); setNotes(b.notes)
+    setSyncToXero(b.syncToXero ?? false); setXeroError(null)
     setShowModal(true)
   }
 
@@ -104,7 +124,7 @@ export default function BillsPage() {
     setLineItems(prev => prev.map((l, i) => i === idx ? { ...l, [field]: field === 'amount' ? Number(value) || 0 : value } : l))
   }
 
-  function addLine() { setLineItems(prev => [...prev, BLANK_LINE()]) }
+  function addLine()           { setLineItems(prev => [...prev, BLANK_LINE()]) }
   function removeLine(idx: number) { setLineItems(prev => prev.filter((_, i) => i !== idx)) }
 
   const totals = calcTotals(lineItems, cisRate)
@@ -112,36 +132,93 @@ export default function BillsPage() {
   async function save() {
     if (!supplierName.trim()) { alert('Please select or enter a supplier.'); return }
     setSaving(true)
+    setXeroError(null)
     try {
       const payload = {
         supplierId, supplierName: supplierName.trim(),
-        jobId, billDate, dueDate, description,
-        lineItems,
+        jobId, billDate, dueDate, description, lineItems,
         labourAmount: totals.labour, materialsAmount: totals.materials,
         plantAmount: totals.plant, otherAmount: totals.other,
-        subtotal: totals.subtotal, cisRate, cisDeduction: totals.cisDeduction,
-        totalPayable: totals.totalPayable,
-        status, notes,
+        subtotal: totals.subtotal, cisRate,
+        cisDeduction: totals.cisDeduction, totalPayable: totals.totalPayable,
+        status, notes, syncToXero,
+        xeroBillId: editing?.xeroBillId,
       }
+
+      let savedBill: Bill
       if (editing) {
         await updateBill({ ...editing, ...payload })
+        savedBill = { ...editing, ...payload }
       } else {
-        await addBill(payload)
+        savedBill = await addBill(payload)
       }
+
+      // Push to Xero if toggled on, connected, and not yet synced
+      if (syncToXero && xeroConnected && !savedBill.xeroBillId) {
+        setXeroPushing(true)
+        try {
+          const r = await fetch('/api/xero/push-bill', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bill: savedBill }),
+          })
+          const d = await r.json() as { xeroBillId?: string; error?: string }
+          if (d.error) {
+            setXeroError(d.error)
+            setSaving(false); setXeroPushing(false)
+            return
+          }
+          if (d.xeroBillId) {
+            const updated = { ...savedBill, xeroBillId: d.xeroBillId }
+            await updateBill(updated)
+          }
+        } finally { setXeroPushing(false) }
+      }
+
       setShowModal(false)
     } finally { setSaving(false) }
   }
 
-  async function markPaid(b: Bill) {
-    await updateBill({ ...b, status: 'paid' })
+  async function pushToXero(b: Bill) {
+    setXeroPushing(true); setXeroError(null)
+    try {
+      const r = await fetch('/api/xero/push-bill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bill: b }),
+      })
+      const d = await r.json() as { xeroBillId?: string; error?: string }
+      if (d.error) { alert(`Xero error: ${d.error}`); return }
+      if (d.xeroBillId) await updateBill({ ...b, xeroBillId: d.xeroBillId })
+    } finally { setXeroPushing(false) }
   }
+
+  async function pullFromXero(b: Bill) {
+    if (!b.xeroBillId) return
+    setXeroPulling(b.id)
+    try {
+      const r = await fetch('/api/xero/pull-bill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ xeroBillId: b.xeroBillId, billId: b.id }),
+      })
+      const d = await r.json() as { status?: BillStatus; error?: string }
+      if (d.error) { alert(`Xero error: ${d.error}`); return }
+      if (d.status) await updateBill({ ...b, status: d.status })
+    } finally { setXeroPulling(null) }
+  }
+
+  async function markPaid(b: Bill) { await updateBill({ ...b, status: 'paid' }) }
 
   async function del(b: Bill) {
     if (!confirm(`Delete bill ${b.ref}? This cannot be undone.`)) return
     await deleteBill(b.id)
   }
 
-  const jobLabel = (id: string) => jobs.find(j => j.id === id)?.client || '—'
+  const jobLabel = (id: string) => {
+    const j = jobs.find(x => x.id === id)
+    return j ? `${j.client}` : '—'
+  }
 
   return (
     <>
@@ -174,7 +251,7 @@ export default function BillsPage() {
             <button key={s} onClick={() => setFilterStatus(s)}
               className={`btn btn-sm${filterStatus === s ? ' btn-primary' : ' btn-outline'}`}
               style={{ textTransform: 'capitalize' }}>
-              {s === 'all' ? 'All' : BILL_LABEL[s]}
+              {s === 'all' ? 'All' : BILL_LABEL[s as BillStatus]}
             </button>
           ))}
         </div>
@@ -201,7 +278,12 @@ export default function BillsPage() {
             <tbody>
               {filtered.map(b => (
                 <tr key={b.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                  <td style={{ padding: '10px 14px', fontWeight: 600 }}>{b.ref}</td>
+                  <td style={{ padding: '10px 14px' }}>
+                    <div style={{ fontWeight: 600 }}>{b.ref}</div>
+                    {b.xeroBillId && (
+                      <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>✓ Xero</div>
+                    )}
+                  </td>
                   <td style={{ padding: '10px 14px' }}>{b.supplierName || '—'}</td>
                   <td style={{ padding: '10px 14px', color: 'var(--muted)' }}>{b.jobId ? jobLabel(b.jobId) : '—'}</td>
                   <td style={{ padding: '10px 14px', color: 'var(--muted)' }}>{b.billDate || '—'}</td>
@@ -214,9 +296,21 @@ export default function BillsPage() {
                     <span className={`badge ${BILL_BADGE[b.status]}`}>{BILL_LABEL[b.status]}</span>
                   </td>
                   <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
-                    <button className="btn btn-sm btn-outline" style={{ marginRight: 6 }} onClick={() => openEdit(b)}>Edit</button>
+                    <button className="btn btn-sm btn-outline" style={{ marginRight: 4 }} onClick={() => openEdit(b)}>Edit</button>
                     {b.status !== 'paid' && (
-                      <button className="btn btn-sm btn-outline" style={{ marginRight: 6 }} onClick={() => markPaid(b)}>Mark Paid</button>
+                      <button className="btn btn-sm btn-outline" style={{ marginRight: 4 }} onClick={() => markPaid(b)}>Mark Paid</button>
+                    )}
+                    {xeroConnected && !b.xeroBillId && (
+                      <button className="btn btn-sm btn-outline" style={{ marginRight: 4 }}
+                        onClick={() => pushToXero(b)} disabled={xeroPushing}>
+                        {xeroPushing ? '…' : '⟳ Xero'}
+                      </button>
+                    )}
+                    {b.xeroBillId && (
+                      <button className="btn btn-sm btn-outline" style={{ marginRight: 4 }}
+                        onClick={() => pullFromXero(b)} disabled={xeroPulling === b.id}>
+                        {xeroPulling === b.id ? '…' : '🔗 Xero ↻'}
+                      </button>
                     )}
                     <button className="btn btn-sm btn-danger" onClick={() => del(b)}>Delete</button>
                   </td>
@@ -258,7 +352,9 @@ export default function BillsPage() {
                   <select value={jobId} onChange={e => setJobId(e.target.value)}
                     style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}>
                     <option value="">— No job linked —</option>
-                    {jobs.filter(j => j.stage !== 'complete').map(j => <option key={j.id} value={j.id}>{j.client} — {j.address}</option>)}
+                    {jobs.filter(j => j.stage !== 'complete').map(j => (
+                      <option key={j.id} value={j.id}>{j.client} — {j.address}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -328,7 +424,7 @@ export default function BillsPage() {
                 <button className="btn btn-sm btn-outline" style={{ marginTop: 8 }} onClick={addLine}>+ Add Line</button>
               </div>
 
-              {/* CIS Section */}
+              {/* CIS */}
               <div style={{ background: 'var(--warm, #f8fafc)', borderRadius: 8, padding: 14, border: '1px solid var(--border)' }}>
                 <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 10 }}>CIS — Construction Industry Scheme</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
@@ -350,18 +446,19 @@ export default function BillsPage() {
                 </div>
                 {cisRate > 0 && (
                   <div style={{ marginTop: 8, fontSize: 12, color: 'var(--muted)' }}>
-                    CIS deduction applies to labour only. Deducted amount must be paid to HMRC on behalf of the subcontractor.
+                    CIS applies to labour only. Deducted amount must be paid to HMRC on behalf of the subcontractor.
+                    The deduction is posted to Xero as a separate CIS liability line.
                   </div>
                 )}
               </div>
 
-              {/* Totals summary */}
+              {/* Totals */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
                 {[
-                  { label: 'Labour', value: totals.labour },
+                  { label: 'Labour',    value: totals.labour },
                   { label: 'Materials', value: totals.materials },
-                  { label: 'Plant', value: totals.plant },
-                  { label: 'Other', value: totals.other },
+                  { label: 'Plant',     value: totals.plant },
+                  { label: 'Other',     value: totals.other },
                 ].map(({ label, value }) => (
                   <div key={label} style={{ background: 'var(--warm, #f8fafc)', borderRadius: 6, padding: '8px 12px', border: '1px solid var(--border)' }}>
                     <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 2 }}>{label}</div>
@@ -395,12 +492,41 @@ export default function BillsPage() {
                 </div>
               </div>
 
+              {/* Xero sync */}
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>
+                {xeroConnected ? (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13 }}>
+                    <input type="checkbox" checked={syncToXero} onChange={e => setSyncToXero(e.target.checked)} />
+                    <span>
+                      <strong>Sync to Xero</strong>
+                      <span style={{ color: 'var(--muted)', marginLeft: 6 }}>
+                        Connected: {xeroTenantName} — bill will be pushed as a purchase invoice when saved
+                      </span>
+                    </span>
+                  </label>
+                ) : (
+                  <div style={{ fontSize: 12, color: 'var(--muted)', padding: '8px 12px', background: 'var(--warm, #f8fafc)', borderRadius: 6, border: '1px solid var(--border)' }}>
+                    ⚠ Xero not connected. Go to <strong>Settings → Integrations</strong> to connect.
+                  </div>
+                )}
+                {editing?.xeroBillId && (
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>
+                    ✓ Synced to Xero — ID: {editing.xeroBillId}
+                  </div>
+                )}
+                {xeroError && (
+                  <div style={{ fontSize: 12, color: 'var(--danger, #e53e3e)', marginTop: 8, padding: '8px 12px', background: '#fff5f5', borderRadius: 6, border: '1px solid #fed7d7' }}>
+                    {xeroError}
+                  </div>
+                )}
+              </div>
+
             </div>
 
             <div className="form-modal-ft">
               <button className="btn btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={save} disabled={saving}>
-                {saving ? 'Saving…' : editing ? 'Save Changes' : 'Add Bill'}
+              <button className="btn btn-primary" onClick={save} disabled={saving || xeroPushing}>
+                {xeroPushing ? 'Syncing to Xero…' : saving ? 'Saving…' : editing ? 'Save Changes' : 'Add Bill'}
               </button>
             </div>
           </div>
