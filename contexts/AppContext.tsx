@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Job, Quote, Client, Supplier, Settings, GanttState, Invoice, JobNote, PortalStatus, TemplatePhaseData, Variation, VariationStatus, TeamMember, TeamMemberRole, UserPermissions, ClientPortalSettings, Bill, BillStatus, XeroAccountCodes } from '@/lib/types'
+import type { Job, Quote, Client, Supplier, Settings, GanttState, Invoice, JobNote, JobPayment, PaymentMethod, PortalStatus, TemplatePhaseData, Variation, VariationStatus, TeamMember, TeamMemberRole, UserPermissions, ClientPortalSettings, Bill, BillStatus, XeroAccountCodes } from '@/lib/types'
 import { FULL_PERMISSIONS, DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
 import { uid, JOB_TEMPLATES } from '@/lib/utils'
 
@@ -53,6 +53,10 @@ interface AppContextType {
 
   addJobNote: (jobId: string, note: string) => Promise<JobNote>
   deleteJobNote: (id: string) => Promise<void>
+
+  jobPayments: JobPayment[]
+  addJobPayment: (jobId: string, amount: number, paymentDate: string, method: PaymentMethod, notes?: string) => Promise<JobPayment>
+  deleteJobPayment: (id: string) => Promise<void>
 
   addVariation: (jobId: string, v: Omit<Variation, 'id' | 'ref' | 'createdAt' | 'jobId'>) => Promise<Variation>
   updateVariation: (v: Variation) => Promise<void>
@@ -130,6 +134,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [ganttStates, setGanttStates] = useState<Record<string, GanttState>>({})
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [jobNotes, setJobNotes] = useState<JobNote[]>([])
+  const [jobPayments, setJobPayments] = useState<JobPayment[]>([])
   const [variations, setVariations] = useState<Variation[]>([])
   const [customTemplates, setCustomTemplates] = useState<Record<string, TemplatePhaseData[]>>({})
   const [bills, setBills] = useState<Bill[]>([])
@@ -181,7 +186,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       } catch { /* phase10.sql not run yet — single-user mode */ }
 
-      const [jobsRes, quotesRes, clientsRes, settingsRes, ganttRes, invoicesRes, notesRes, variationsRes, suppliersRes, billsRes] = await Promise.all([
+      const [jobsRes, quotesRes, clientsRes, settingsRes, ganttRes, invoicesRes, notesRes, variationsRes, suppliersRes, billsRes, paymentsRes] = await Promise.all([
         supabase.from('jobs').select('*').order('created_at', { ascending: true }),
         supabase.from('quotes').select('*').order('created_at', { ascending: true }),
         supabase.from('clients').select('*').order('created_at', { ascending: true }),
@@ -192,6 +197,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         supabase.from('variations').select('*').order('created_at', { ascending: true }),
         supabase.from('suppliers').select('*').order('created_at', { ascending: true }),
         supabase.from('bills').select('*').order('created_at', { ascending: false }),
+        (async () => { try { return await supabase.from('job_payments').select('*').order('payment_date', { ascending: false }) } catch { return { data: null } } })(),
       ])
 
       // Separately try to get portal status — only available after phase5.sql is run
@@ -295,6 +301,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         })))
       }
 
+      if (paymentsRes.data) {
+        setJobPayments(paymentsRes.data.map(r => ({
+          id: r.id, jobId: r.job_id, amount: Number(r.amount),
+          paymentDate: r.payment_date, method: r.method as PaymentMethod,
+          notes: r.notes || undefined, createdAt: r.created_at,
+        })))
+      }
+
       if (variationsRes.data) {
         setVariations(variationsRes.data.map(r => ({
           id: r.id, jobId: r.job_id, ref: r.ref, title: r.title,
@@ -378,6 +392,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await supabase.from('jobs').delete().eq('id', id)
     await supabase.from('gantt_states').delete().eq('job_id', id)
     await supabase.from('job_notes').delete().eq('job_id', id)
+    try { await supabase.from('job_payments').delete().eq('job_id', id) } catch { /* table may not exist yet */ }
     await supabase.from('variations').delete().eq('job_id', id)
     setJobs(prev => prev.filter(j => j.id !== id))
     setGanttStates(prev => { const n = { ...prev }; delete n[id]; return n })
@@ -716,6 +731,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setJobNotes(prev => prev.filter(n => n.id !== id))
   }, [supabase])
 
+  // ── Job Payments ──────────────────────────────────────────────
+  const addJobPayment = useCallback(async (jobId: string, amount: number, paymentDate: string, method: PaymentMethod, notes?: string): Promise<JobPayment> => {
+    const { data: { user } } = await supabase.auth.getUser()
+    const ownerId = dataOwnerIdRef.current || user!.id
+    const { data, error } = await supabase.from('job_payments').insert({
+      user_id: ownerId, job_id: jobId, amount, payment_date: paymentDate, method, notes: notes || null,
+    }).select().single()
+    if (error) throw error
+    const p: JobPayment = { id: data.id, jobId: data.job_id, amount: Number(data.amount), paymentDate: data.payment_date, method: data.method, notes: data.notes || undefined, createdAt: data.created_at }
+    setJobPayments(prev => [p, ...prev])
+    return p
+  }, [supabase])
+
+  const deleteJobPayment = useCallback(async (id: string) => {
+    await supabase.from('job_payments').delete().eq('id', id)
+    setJobPayments(prev => prev.filter(p => p.id !== id))
+  }, [supabase])
+
   // ── Job Type Templates ────────────────────────────────────────
   const saveJobTypeTemplate = useCallback(async (jobType: string, template: TemplatePhaseData[]) => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -901,7 +934,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider value={{
-      jobs, quotes, clients, settings, ganttStates, invoices, jobNotes, variations, customTemplates, loading,
+      jobs, quotes, clients, settings, ganttStates, invoices, jobNotes, jobPayments, variations, customTemplates, loading,
       teamMembers, currentMember, isOwner, permissions,
       addJob, updateJob, deleteJob,
       addQuote, updateQuote, deleteQuote,
@@ -911,6 +944,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       saveGanttState, getGanttState,
       addInvoice, updateInvoice, deleteInvoice,
       addJobNote, deleteJobNote,
+      addJobPayment, deleteJobPayment,
       addVariation, updateVariation, deleteVariation,
       bills, addBill, updateBill, deleteBill,
       saveJobTypeTemplate, resetJobTypeTemplate, getTemplate,

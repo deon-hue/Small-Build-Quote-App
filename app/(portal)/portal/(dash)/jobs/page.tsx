@@ -79,6 +79,32 @@ export default function PortalJobsPage() {
     if (!fileCache[jobId]) loadAttachments(jobId)
   }
 
+  // Payments per job
+  type PortalPayment = { id: string; amount: number; payment_date: string; method: string; notes?: string }
+  const [expandedPayments, setExpandedPayments] = useState<string | null>(null)
+  const [paymentCache, setPaymentCache]         = useState<Record<string, PortalPayment[] | 'loading'>>({})
+
+  async function loadPayments(jobId: string) {
+    setPaymentCache(prev => ({ ...prev, [jobId]: 'loading' }))
+    try {
+      const res = await fetch(`/api/portal/job-payments?jobId=${jobId}`)
+      const data: PortalPayment[] = res.ok ? await res.json() : []
+      setPaymentCache(prev => ({ ...prev, [jobId]: data }))
+    } catch {
+      setPaymentCache(prev => ({ ...prev, [jobId]: [] }))
+    }
+  }
+
+  function togglePayments(jobId: string) {
+    if (expandedPayments === jobId) { setExpandedPayments(null); return }
+    setExpandedPayments(jobId)
+    if (!paymentCache[jobId]) loadPayments(jobId)
+  }
+
+  const METHOD_LABEL: Record<string, string> = {
+    cash: 'Cash', cheque: 'Cheque', bank_transfer: 'Bank Transfer', other: 'Other',
+  }
+
   function fmtSize(bytes: number) {
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`
@@ -398,6 +424,43 @@ export default function PortalJobsPage() {
                             </div>
                           )
                         })
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* ── Payments ─────────────────────────────────── */}
+              <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                <button
+                  onClick={() => togglePayments(j.id)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 12px', fontSize: 12, fontWeight: 600, color: 'var(--ink)', cursor: 'pointer', fontFamily: 'inherit' }}
+                >
+                  💰 {expandedPayments === j.id ? 'Hide Payments ▲' : 'Payments Received ▼'}
+                </button>
+
+                {expandedPayments === j.id && (
+                  <div style={{ marginTop: 12 }}>
+                    {paymentCache[j.id] === 'loading' ? (
+                      <div style={{ fontSize: 13, color: 'var(--muted)', padding: '8px 0' }}>Loading…</div>
+                    ) : !paymentCache[j.id] || (paymentCache[j.id] as PortalPayment[]).length === 0 ? (
+                      <div style={{ fontSize: 13, color: 'var(--muted)', padding: '8px 0' }}>No payments recorded yet.</div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {(paymentCache[j.id] as PortalPayment[]).map(p => (
+                          <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#f0fdf4', borderRadius: 7, border: '1px solid #bbf7d0' }}>
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: '#166534' }}>
+                                £{Number(p.amount).toLocaleString('en-GB', { minimumFractionDigits: 2 })}
+                              </div>
+                              <div style={{ fontSize: 11, color: '#4ade80' }}>{METHOD_LABEL[p.method] || p.method}{p.notes ? ` · ${p.notes}` : ''}</div>
+                            </div>
+                            <div style={{ fontSize: 12, color: '#166534', fontWeight: 600 }}>{p.payment_date}</div>
+                          </div>
+                        ))}
+                        <div style={{ fontSize: 12, color: 'var(--muted)', paddingTop: 4 }}>
+                          Total received: <strong>£{(paymentCache[j.id] as PortalPayment[]).reduce((s, p) => s + Number(p.amount), 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })}</strong>
+                        </div>
+                      </div>
                     )}
                   </div>
                 )}

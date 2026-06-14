@@ -9,6 +9,7 @@ import GanttModal from '@/components/GanttModal'
 import VariationModal from '@/components/VariationModal'
 import JobDocumentsModal from '@/components/JobDocumentsModal'
 import JobAttachmentsModal from '@/components/JobAttachmentsModal'
+import CashPaymentModal from '@/components/CashPaymentModal'
 
 const BLANK_JOB: Omit<Job, 'id'> = {
   client: '', type: 'Rear Extension', address: '', value: 0,
@@ -16,7 +17,7 @@ const BLANK_JOB: Omit<Job, 'id'> = {
 }
 
 export default function JobsPage() {
-  const { jobs, quotes, jobNotes, variations, invoices, addJob, updateJob, deleteJob, updateQuote, addJobNote, deleteJobNote, loading } = useApp()
+  const { jobs, quotes, jobNotes, jobPayments, variations, invoices, addJob, updateJob, deleteJob, updateQuote, addJobNote, deleteJobNote, loading } = useApp()
   const [filter, setFilter] = useState('all')
   const [showModal, setShowModal] = useState(false)
   const [editJob, setEditJob] = useState<Job | null>(null)
@@ -28,6 +29,7 @@ export default function JobsPage() {
   const [notesJob, setNotesJob] = useState<Job | null>(null)
   const [docsJob, setDocsJob] = useState<Job | null>(null)
   const [attachmentsJob, setAttachmentsJob] = useState<Job | null>(null)
+  const [paymentJob, setPaymentJob] = useState<Job | null>(null)
   const [newNote, setNewNote] = useState('')
   const [addingNote, setAddingNote] = useState(false)
 
@@ -163,6 +165,9 @@ export default function JobsPage() {
                     </button>
                     <button className="btn-sm btn-outline" onClick={() => setAttachmentsJob(j)} title="Plans, photos and documents shared with the client">📎 Files</button>
                     <button className="btn-sm btn-outline" onClick={() => setDocsJob(j)} title="Scan/upload supplier docs and track costs">💷 Costs</button>
+                    <button className="btn-sm btn-outline" onClick={() => setPaymentJob(j)} title="Record cash/cheque/bank payments received">
+                      💰 Payments{jobPayments.filter(p => p.jobId === j.id).length > 0 ? ` (${jobPayments.filter(p => p.jobId === j.id).length})` : ''}
+                    </button>
                     <button className="btn-sm btn-outline" onClick={() => openEdit(j)}>Edit</button>
                     <button className="btn-sm btn-danger" onClick={() => handleDelete(j)}>✕</button>
                   </div>
@@ -322,6 +327,11 @@ export default function JobsPage() {
       {/* Attachments modal */}
       {attachmentsJob && (
         <JobAttachmentsModal job={attachmentsJob} onClose={() => setAttachmentsJob(null)} />
+      )}
+
+      {/* Cash Payment modal */}
+      {paymentJob && (
+        <CashPaymentModal job={paymentJob} onClose={() => setPaymentJob(null)} />
       )}
 
       {/* Documents & Costs modal */}

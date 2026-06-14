@@ -399,6 +399,18 @@ export interface JobNote {
   createdAt: string
 }
 
+export type PaymentMethod = 'cash' | 'cheque' | 'bank_transfer' | 'other'
+
+export interface JobPayment {
+  id: string
+  jobId: string
+  amount: number
+  paymentDate: string
+  method: PaymentMethod
+  notes?: string
+  createdAt: string
+}
+
 export interface TemplatePhaseData {
   parentPhase: string
   phase: string
