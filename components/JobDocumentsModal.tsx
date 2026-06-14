@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { fetchJobCosts, insertJobCost, deleteJobCost } from '@/lib/job-costs'
 import type { CategoryBudget } from '@/lib/job-costs'
-import type { JobCost, JobCostCategory, PaymentStatus } from '@/lib/types'
+import type { JobCost, JobCostCategory, PaymentStatus, VariationLineItem } from '@/lib/types'
 import type { ExtractedCostLine } from '@/lib/doc-extract/types'
 import { useApp } from '@/contexts/AppContext'
 
@@ -35,7 +35,7 @@ const blankManual = (): ManualState => ({
 
 export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, invoicedTotal = 0, paidTotal = 0, cashReceived = 0, onClose }: Props) {
   const sb = createClient()
-  const { suppliers } = useApp()
+  const { suppliers, addVariation } = useApp()
   const [userId, setUserId] = useState<string | null>(null)
   const [costs, setCosts] = useState<JobCost[]>([])
   const [loading, setLoading] = useState(true)
@@ -101,6 +101,43 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
     if (!confirm('Delete this cost?')) return
     await deleteJobCost(sb, id)
     setCosts(prev => prev.filter(c => c.id !== id))
+  }
+
+  const [raisingVar, setRaisingVar] = useState(false)
+  const [varRaised, setVarRaised] = useState(false)
+
+  async function raiseExpenseVariation() {
+    const expenseLines = costs.filter(c => c.chargeToClient)
+    if (!expenseLines.length) return
+    setRaisingVar(true)
+    try {
+      const items: VariationLineItem[] = expenseLines.map((c, idx) => ({
+        id: idx + 1,
+        itemType: c.costCategory as VariationLineItem['itemType'],
+        desc: [c.supplier, c.description].filter(Boolean).join(' — ') || 'Expense',
+        qty: 1,
+        unit: 'item',
+        rate: c.grossAmount,   // pass-through at gross; markup = 0 so sell = gross
+        notes: c.docNumber ? `Receipt: ${c.docNumber}` : '',
+      }))
+      const expGross = expenseLines.reduce((s, c) => s + c.grossAmount, 0)
+      const suppliers = [...new Set(expenseLines.map(c => c.supplier).filter(Boolean))]
+      await addVariation(jobId, {
+        title: `Expenses — ${suppliers.join(', ') || 'receipts'}`,
+        description: 'Rechargeable expenses — see attached receipts.',
+        status: 'draft',
+        items,
+        markup: 0,
+        vatIncluded: false,
+        total: expGross,
+        notes: '',
+        locked: false,
+        clientApprovedAt: null, clientApprovedBy: null,
+        clientRejectedAt: null, clientRejectionReason: null,
+        sentAt: null,
+      })
+      setVarRaised(true)
+    } finally { setRaisingVar(false) }
   }
 
   async function removeDocGroup(documentId: string, lines: JobCost[]) {
@@ -419,9 +456,23 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
                       const expGross = costs.filter(c => c.chargeToClient).reduce((s, c) => s + c.grossAmount, 0)
                       return (
                         <tr style={{ background: '#fffbeb', borderTop: '1px dashed #fbbf24' }}>
-                          <td style={{ padding: '6px 8px', fontSize: 12, color: '#92400e' }} colSpan={5}>💸 Chargeable expenses (to be invoiced to client)</td>
-                          <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, color: '#d97706' }}>{fmt(expGross)}</td>
+                          <td style={{ padding: '6px 8px', fontSize: 12, color: '#92400e' }} colSpan={3}>
+                            💸 Chargeable expenses
+                          </td>
                           <td colSpan={2} />
+                          <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, color: '#d97706' }}>{fmt(expGross)}</td>
+                          <td colSpan={2} style={{ padding: '4px 8px', textAlign: 'right' }}>
+                            {varRaised
+                              ? <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 700 }}>✓ Variation raised</span>
+                              : <button
+                                  onClick={raiseExpenseVariation}
+                                  disabled={raisingVar}
+                                  style={{ fontSize: 11, fontWeight: 700, padding: '4px 10px', background: '#d97706', color: '#fff', border: 'none', borderRadius: 5, cursor: raisingVar ? 'not-allowed' : 'pointer', opacity: raisingVar ? 0.7 : 1, whiteSpace: 'nowrap' }}
+                                >
+                                  {raisingVar ? 'Raising…' : '↗ Raise variation'}
+                                </button>
+                            }
+                          </td>
                         </tr>
                       )
                     })()}
