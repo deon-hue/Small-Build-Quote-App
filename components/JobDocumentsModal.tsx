@@ -8,7 +8,7 @@ import type { JobCost, JobCostCategory, PaymentStatus } from '@/lib/types'
 import type { ExtractedCostLine } from '@/lib/doc-extract/types'
 import { useApp } from '@/contexts/AppContext'
 
-interface Props { jobId: string; jobLabel: string; budget?: CategoryBudget | null; revenue?: number; invoicedTotal?: number; paidTotal?: number; onClose: () => void }
+interface Props { jobId: string; jobLabel: string; budget?: CategoryBudget | null; revenue?: number; invoicedTotal?: number; paidTotal?: number; cashReceived?: number; onClose: () => void }
 
 const CATS: { value: JobCostCategory; label: string; emoji: string; color: string; bg: string }[] = [
   { value: 'labour',         label: 'Labour',         emoji: '🔨', color: '#1d4ed8', bg: '#eff6ff' },
@@ -33,7 +33,7 @@ const blankManual = (): ManualState => ({
   lines: [{ description: '', costCategory: 'materials', netAmount: 0, vatAmount: 0, grossAmount: 0 }],
 })
 
-export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, invoicedTotal = 0, paidTotal = 0, onClose }: Props) {
+export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, invoicedTotal = 0, paidTotal = 0, cashReceived = 0, onClose }: Props) {
   const sb = createClient()
   const { suppliers } = useApp()
   const [userId, setUserId] = useState<string | null>(null)
@@ -232,18 +232,32 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
                   </tr>
                 </tfoot>
               </table>
-              {/* Invoice tracking */}
-              {invoicedTotal > 0 && (
-                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 10, paddingTop: 10, borderTop: '1px solid #e2e8f0', fontSize: 13 }}>
-                  <span>Invoiced: <strong style={{ fontFamily: 'monospace' }}>{fmt(invoicedTotal)}</strong></span>
-                  <span>
-                    Received:{' '}
-                    <strong style={{ fontFamily: 'monospace', color: paidTotal > 0 ? '#16a34a' : '#94a3b8' }}>
-                      {paidTotal > 0 ? fmt(paidTotal) : '£0.00 — unpaid'}
-                    </strong>
-                  </span>
-                  {invoicedTotal > paidTotal && paidTotal > 0 && (
-                    <span style={{ color: '#e67e22' }}>Outstanding: <strong style={{ fontFamily: 'monospace' }}>{fmt(invoicedTotal - paidTotal)}</strong></span>
+              {/* Invoice + cash payment tracking */}
+              {(invoicedTotal > 0 || cashReceived > 0) && (
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #e2e8f0', fontSize: 13, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {invoicedTotal > 0 && (
+                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                      <span>Invoiced: <strong style={{ fontFamily: 'monospace' }}>{fmt(invoicedTotal)}</strong></span>
+                      <span>
+                        Paid (invoice):{' '}
+                        <strong style={{ fontFamily: 'monospace', color: paidTotal > 0 ? '#16a34a' : '#94a3b8' }}>
+                          {paidTotal > 0 ? fmt(paidTotal) : '£0.00'}
+                        </strong>
+                      </span>
+                    </div>
+                  )}
+                  {cashReceived > 0 && (
+                    <div>
+                      Cash / cheque received: <strong style={{ fontFamily: 'monospace', color: '#16a34a' }}>{fmt(cashReceived)}</strong>
+                    </div>
+                  )}
+                  {(paidTotal + cashReceived) > 0 && (
+                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', paddingTop: 4, borderTop: '1px dashed #e2e8f0' }}>
+                      <span style={{ fontWeight: 600 }}>Total received: <strong style={{ fontFamily: 'monospace', color: '#16a34a' }}>{fmt(paidTotal + cashReceived)}</strong></span>
+                      {revenue !== undefined && (paidTotal + cashReceived) < revenue && (
+                        <span style={{ color: '#e67e22' }}>Outstanding: <strong style={{ fontFamily: 'monospace' }}>{fmt(revenue - paidTotal - cashReceived)}</strong></span>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
