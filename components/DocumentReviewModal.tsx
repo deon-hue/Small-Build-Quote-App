@@ -74,9 +74,12 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
     const ex = doc.extraction as Record<string, unknown> | null
     const docNum = String(ex?.docNumber ?? '').trim()
     const sup    = String(ex?.supplier ?? '').trim()
-    const gross  = String(ex?.grossAmount ?? '')
     const date   = String(ex?.docDate ?? '').trim()
-    if (docNum || (sup && gross)) {
+    // Compute gross from top-level OR sum of lines (AI sometimes omits top-level grossAmount)
+    const rawLines = Array.isArray(ex?.lines) ? ex.lines as Record<string, unknown>[] : []
+    const computedGross = Number(ex?.grossAmount) || rawLines.reduce((s, l) => s + (Number(l.grossAmount) || 0), 0)
+    const gross = computedGross ? String(computedGross) : ''
+    if (sup || docNum) {
       const qs = new URLSearchParams({ excludeDocId: doc.id })
       if (docNum)  qs.set('docNumber', docNum)
       if (sup)     qs.set('supplier', sup)
