@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import type { Settings } from '@/lib/types'
 import XeroConnectionCard from '@/components/XeroConnectionCard'
+import XeroAccountMapping from '@/components/XeroAccountMapping'
 
 export default function SettingsPage() {
   const { settings, saveSettings, loading } = useApp()
@@ -231,6 +232,7 @@ export default function SettingsPage() {
       {/* Xero accounting integration */}
       <div style={{ marginTop: 16 }}>
         <XeroConnectionCard />
+        <XeroAccountMapping />
       </div>
     </div>
   )

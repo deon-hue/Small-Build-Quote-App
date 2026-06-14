@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getValidConnection, xeroFetch } from '@/lib/xero'
-import type { Invoice } from '@/lib/types'
+import type { Invoice, XeroAccountCodes } from '@/lib/types'
+import { DEFAULT_XERO_ACCOUNT_CODES } from '@/lib/types'
 
 interface XeroValidationError { Message: string }
 interface XeroElement { ValidationErrors?: XeroValidationError[] }
@@ -18,6 +19,10 @@ export async function POST(req: NextRequest) {
     const conn = await getValidConnection(sb, user.id)
     if (!conn) return NextResponse.json({ error: 'Xero not connected — go to Settings → Integrations to connect.' }, { status: 400 })
 
+    // Load chart-of-accounts mapping from settings
+    const { data: settingsRow } = await sb.from('settings').select('xero_account_codes').eq('user_id', user.id).maybeSingle()
+    const accountCodes: XeroAccountCodes = { ...DEFAULT_XERO_ACCOUNT_CODES, ...((settingsRow?.xero_account_codes as XeroAccountCodes | null) ?? {}) }
+
     const body = await req.json() as { invoice?: Invoice }
     const invoice = body.invoice
     if (!invoice) return NextResponse.json({ error: 'No invoice provided' }, { status: 400 })
@@ -28,7 +33,7 @@ export async function POST(req: NextRequest) {
       Description: l.desc || 'Works',
       Quantity: l.qty,
       UnitAmount: l.unitPrice,
-      AccountCode: '200',
+      AccountCode: accountCodes.invoiceSales || DEFAULT_XERO_ACCOUNT_CODES.invoiceSales,
       TaxType: invoice.vatIncluded ? 'OUTPUT2' : 'NONE',
     }))
 

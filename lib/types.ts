@@ -292,6 +292,24 @@ export interface Client {
   portalSettings?: ClientPortalSettings
 }
 
+export interface XeroAccountCodes {
+  invoiceSales: string   // default '200'
+  billLabour: string     // default '400'
+  billMaterials: string  // default '300'
+  billPlant: string      // default '300'
+  billOther: string      // default '400'
+  billCis: string        // default '820'
+}
+
+export const DEFAULT_XERO_ACCOUNT_CODES: XeroAccountCodes = {
+  invoiceSales:  '200',
+  billLabour:    '400',
+  billMaterials: '300',
+  billPlant:     '300',
+  billOther:     '400',
+  billCis:       '820',
+}
+
 export interface Settings {
   name: string
   tagline: string
@@ -311,6 +329,7 @@ export interface Settings {
   invoiceSortCode?: string
   invoiceAccountNumber?: string
   invoiceDefaultNotes?: string       // pre-fills the invoice notes field
+  xeroAccountCodes?: XeroAccountCodes
 }
 
 export interface GanttPhase {

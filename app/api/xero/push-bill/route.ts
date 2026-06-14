@@ -1,23 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getValidConnection, xeroFetch } from '@/lib/xero'
-import type { Bill } from '@/lib/types'
+import type { Bill, XeroAccountCodes } from '@/lib/types'
+import { DEFAULT_XERO_ACCOUNT_CODES } from '@/lib/types'
 
 interface XeroValidationError { Message: string }
 interface XeroElement { ValidationErrors?: XeroValidationError[] }
 interface XeroErrorResponse { Detail?: string; Elements?: XeroElement[] }
 interface XeroInvoiceResponse { InvoiceID?: string }
 interface XeroResponse { Invoices?: XeroInvoiceResponse[] }
-
-// Map bill cost category to a sensible Xero account code (UK defaults)
-function accountCode(category: string): string {
-  switch (category) {
-    case 'labour':    return '400'  // Direct Costs / Labour
-    case 'materials': return '300'  // Purchases / Materials
-    case 'plant':     return '300'  // Plant Hire (treat as purchases)
-    default:          return '400'  // Other expenses
-  }
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -28,13 +19,25 @@ export async function POST(req: NextRequest) {
     const conn = await getValidConnection(sb, user.id)
     if (!conn) return NextResponse.json({ error: 'Xero not connected — go to Settings → Integrations to connect.' }, { status: 400 })
 
+    // Load chart-of-accounts mapping from settings
+    const { data: settingsRow } = await sb.from('settings').select('xero_account_codes').eq('user_id', user.id).maybeSingle()
+    const ac: XeroAccountCodes = { ...DEFAULT_XERO_ACCOUNT_CODES, ...((settingsRow?.xero_account_codes as XeroAccountCodes | null) ?? {}) }
+
     const body = await req.json() as { bill?: Bill }
     const bill = body.bill
     if (!bill) return NextResponse.json({ error: 'No bill provided' }, { status: 400 })
 
-    // DRAFT → draft, approved → AUTHORISED, paid → AUTHORISED
+    // DRAFT → draft, approved/paid → AUTHORISED
     // Xero does not accept PAID directly via API — payment must be reconciled in Xero
     const xeroStatus = bill.status === 'draft' ? 'DRAFT' : 'AUTHORISED'
+
+    // Map category to stored account code
+    function codeFor(category: string): string {
+      if (category === 'labour')    return ac.billLabour    || DEFAULT_XERO_ACCOUNT_CODES.billLabour
+      if (category === 'materials') return ac.billMaterials || DEFAULT_XERO_ACCOUNT_CODES.billMaterials
+      if (category === 'plant')     return ac.billPlant     || DEFAULT_XERO_ACCOUNT_CODES.billPlant
+      return ac.billOther || DEFAULT_XERO_ACCOUNT_CODES.billOther
+    }
 
     // Build line items from bill line items
     const lineItems: Record<string, unknown>[] = bill.lineItems
@@ -43,7 +46,7 @@ export async function POST(req: NextRequest) {
         Description: l.desc || bill.description || 'Works',
         Quantity: 1,
         UnitAmount: Number(l.amount),
-        AccountCode: accountCode(l.category),
+        AccountCode: codeFor(l.category),
         TaxType: 'NONE',  // bills are recorded net; VAT reclaim handled separately
       }))
 
@@ -53,7 +56,7 @@ export async function POST(req: NextRequest) {
         Description: `CIS deduction (${bill.cisRate}% on labour)`,
         Quantity: 1,
         UnitAmount: -bill.cisDeduction,
-        AccountCode: '820',  // CIS liability account (common UK code)
+        AccountCode: ac.billCis || DEFAULT_XERO_ACCOUNT_CODES.billCis,
         TaxType: 'NONE',
       })
     }

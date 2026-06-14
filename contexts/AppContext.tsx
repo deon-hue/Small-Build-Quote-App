@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Job, Quote, Client, Supplier, Settings, GanttState, Invoice, JobNote, PortalStatus, TemplatePhaseData, Variation, VariationStatus, TeamMember, TeamMemberRole, UserPermissions, ClientPortalSettings, Bill, BillStatus } from '@/lib/types'
+import type { Job, Quote, Client, Supplier, Settings, GanttState, Invoice, JobNote, PortalStatus, TemplatePhaseData, Variation, VariationStatus, TeamMember, TeamMemberRole, UserPermissions, ClientPortalSettings, Bill, BillStatus, XeroAccountCodes } from '@/lib/types'
 import { FULL_PERMISSIONS, DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
 import { uid, JOB_TEMPLATES } from '@/lib/utils'
 
@@ -264,6 +264,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           invoiceSortCode:        sd.invoice_sort_code       ?? '',
           invoiceAccountNumber:   sd.invoice_account_number  ?? '',
           invoiceDefaultNotes:    sd.invoice_default_notes   ?? '',
+          xeroAccountCodes: (sd.xero_account_codes as XeroAccountCodes | null) ?? undefined,
         })
       }
 
@@ -566,6 +567,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       invoice_sort_code:        s.invoiceSortCode       ?? '',
       invoice_account_number:   s.invoiceAccountNumber  ?? '',
       invoice_default_notes:    s.invoiceDefaultNotes   ?? '',
+      xero_account_codes:       s.xeroAccountCodes      ?? null,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id' })
     setSettings(s)
