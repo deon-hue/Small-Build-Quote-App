@@ -78,7 +78,6 @@ export async function extractWithClaude(input: ExtractInput): Promise<ExtractedD
       system: SYSTEM,
       messages: [
         { role: 'user', content: [block, { type: 'text', text: 'Extract this document as JSON per the schema.' }] },
-        { role: 'assistant', content: '{' },
       ],
     }),
   })
@@ -86,7 +85,7 @@ export async function extractWithClaude(input: ExtractInput): Promise<ExtractedD
   const data = await res.json()
   if (data.error) throw new Error(data.error?.message || 'Anthropic error')
 
-  let jsonStr = ('{' + (data.content?.[0]?.text || '')).trim()
+  let jsonStr = (data.content?.[0]?.text || '').trim()
   const fence = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
   if (fence) jsonStr = fence[1].trim()
   if (!jsonStr.startsWith('{')) {
