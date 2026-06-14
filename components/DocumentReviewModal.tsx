@@ -55,6 +55,7 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
   const [xeroAccount, setXeroAccount] = useState('')
   const [duplicates, setDuplicates] = useState<Array<{ label: string; detail: string; confidence: string }>>([])
   const [dupDismissed, setDupDismissed] = useState(false)
+  const [zoom, setZoom] = useState(1)
 
   const isAllocated = doc.status === 'allocated'
   const isPdf = doc.mimeType === 'application/pdf'
@@ -168,10 +169,22 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
 
         <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
           {/* Preview */}
-          <div style={{ flex: '1 1 45%', background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto', padding: 10 }}>
+          <div style={{ flex: '1 1 45%', background: '#1e293b', overflow: 'auto', padding: 10, position: 'relative', display: zoom > 1 ? 'block' : 'flex', alignItems: zoom > 1 ? undefined : 'center', justifyContent: zoom > 1 ? undefined : 'center' }}>
+            {url && !isPdf && (
+              <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 10, display: 'flex', gap: 4 }}>
+                <button onClick={() => setZoom(z => Math.min(+(z + 0.5).toFixed(1), 4))} style={zoomBtn} title="Zoom in">＋</button>
+                {zoom !== 1 && <button onClick={() => setZoom(1)} style={zoomBtn} title="Reset">↺</button>}
+                <button onClick={() => setZoom(z => Math.max(+(z - 0.5).toFixed(1), 1))} style={zoomBtn} disabled={zoom <= 1} title="Zoom out">－</button>
+              </div>
+            )}
             {!url ? <span style={{ color: '#94a3b8', fontSize: 13 }}>Loading preview…</span>
               : isPdf ? <iframe src={url} title="document" style={{ width: '100%', height: '100%', border: 'none', background: '#fff' }} />
-              : <img src={url} alt={doc.fileName} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />}
+              : <img
+                  src={url}
+                  alt={doc.fileName}
+                  onClick={() => setZoom(z => z >= 4 ? 1 : +(z + 0.5).toFixed(1))}
+                  style={{ maxWidth: zoom === 1 ? '100%' : 'none', maxHeight: zoom === 1 ? '100%' : 'none', objectFit: zoom === 1 ? 'contain' : undefined, zoom: zoom, display: 'block', cursor: zoom < 4 ? 'zoom-in' : 'zoom-out' }}
+                />}
           </div>
 
           {/* Details */}
@@ -293,3 +306,4 @@ const overlay: React.CSSProperties = { position: 'fixed', inset: 0, background: 
 const panel: React.CSSProperties = { background: '#fff', borderRadius: 12, width: '100%', maxWidth: 1000, height: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden' }
 const btn: React.CSSProperties = { padding: '7px 14px', border: '1px solid #d1d5db', borderRadius: 7, background: '#fff', color: '#374151', fontSize: 13, fontWeight: 600, cursor: 'pointer' }
 const inp: React.CSSProperties = { width: '100%', padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 12, boxSizing: 'border-box' }
+const zoomBtn: React.CSSProperties = { background: 'rgba(0,0,0,0.55)', color: '#fff', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 5, width: 30, height: 30, cursor: 'pointer', fontSize: 17, fontWeight: 700, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }
