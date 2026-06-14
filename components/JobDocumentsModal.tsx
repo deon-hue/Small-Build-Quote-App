@@ -43,6 +43,15 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
   const [manual, setManual] = useState<ManualState | null>(null)
   const [supplierDrop, setSupplierDrop] = useState(false)
   const supplierRef = useRef<HTMLDivElement>(null)
+  const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set())
+
+  function toggleDoc(docId: string) {
+    setExpandedDocs(prev => {
+      const next = new Set(prev)
+      next.has(docId) ? next.delete(docId) : next.add(docId)
+      return next
+    })
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -92,6 +101,12 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
     if (!confirm('Delete this cost?')) return
     await deleteJobCost(sb, id)
     setCosts(prev => prev.filter(c => c.id !== id))
+  }
+
+  async function removeDocGroup(documentId: string, lines: JobCost[]) {
+    if (!confirm(`Delete all ${lines.length} line${lines.length > 1 ? 's' : ''} from this receipt?`)) return
+    await Promise.all(lines.map(c => deleteJobCost(sb, c.id)))
+    setCosts(prev => prev.filter(c => c.documentId !== documentId))
   }
 
   const totalNet = costs.reduce((s, c) => s + c.netAmount, 0)
@@ -278,56 +293,130 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
             <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: 13, border: '2px dashed #e2e8f0', borderRadius: 8, padding: 28 }}>
               No costs yet. Add one manually, or scan a document in the Settings inbox and allocate it here.
             </div>
-          ) : (
-            <>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-                {byCat.map(({ cat, total }) => (
-                  <span key={cat.value} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 99, background: cat.bg, color: cat.color, fontWeight: 600 }}>{cat.emoji} {cat.label} {fmt(total)}</span>
-                ))}
-              </div>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                <thead>
-                  <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-                    {['Supplier / description', 'Date', 'Category', 'Net', 'VAT', 'Gross', 'Payment', ''].map(h => (
-                      <th key={h} style={{ padding: '6px 8px', textAlign: ['Net', 'VAT', 'Gross'].includes(h) ? 'right' : 'left', fontSize: 10, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {costs.map(c => {
-                    const cm = catMeta(c.costCategory)
-                    return (
-                      <tr key={c.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '7px 8px' }}>
-                          <div style={{ fontWeight: 600, color: '#1e293b' }}>{c.supplier || '—'}{c.docNumber ? <span style={{ color: '#94a3b8', fontWeight: 400 }}> · {c.docNumber}</span> : null}</div>
-                          {c.description && <div style={{ fontSize: 11, color: '#94a3b8' }}>{c.description}</div>}
-                          {c.source === 'document' && <span style={{ fontSize: 9, color: '#0369a1' }}>📎 from document</span>}
-                        </td>
-                        <td style={{ padding: '7px 8px', color: '#64748b' }}>{c.docDate || '—'}</td>
-                        <td style={{ padding: '7px 8px' }}><span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: cm.bg, color: cm.color, fontWeight: 600 }}>{cm.emoji} {cm.label}</span></td>
-                        <td style={{ padding: '7px 8px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(c.netAmount)}</td>
-                        <td style={{ padding: '7px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#64748b' }}>{fmt(c.vatAmount)}</td>
-                        <td style={{ padding: '7px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700 }}>{fmt(c.grossAmount)}</td>
-                        <td style={{ padding: '7px 8px' }}><span style={{ fontSize: 10, color: c.paymentStatus === 'paid' ? '#16a34a' : c.paymentStatus === 'unpaid' ? '#dc2626' : '#94a3b8' }}>{c.paymentStatus}</span></td>
-                        <td style={{ padding: '4px 6px', textAlign: 'right' }}>
-                          <button onClick={() => removeCost(c.id)} title="Delete" style={{ padding: '2px 7px', border: '1px solid #fecaca', borderRadius: 4, background: '#fef2f2', color: '#dc2626', fontSize: 11, cursor: 'pointer' }}>×</button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr style={{ borderTop: '2px solid #e2e8f0', fontWeight: 700 }}>
-                    <td style={{ padding: '8px' }} colSpan={3}>Total actual cost</td>
-                    <td style={{ padding: '8px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(totalNet)}</td>
-                    <td />
-                    <td style={{ padding: '8px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(totalGross)}</td>
-                    <td colSpan={2} />
-                  </tr>
-                </tfoot>
-              </table>
-            </>
-          )}
+          ) : (() => {
+            // Group document-sourced costs by documentId; keep manual costs separate
+            const docGroups = new Map<string, JobCost[]>()
+            const manualCosts: JobCost[] = []
+            costs.forEach(c => {
+              if (c.documentId) {
+                if (!docGroups.has(c.documentId)) docGroups.set(c.documentId, [])
+                docGroups.get(c.documentId)!.push(c)
+              } else {
+                manualCosts.push(c)
+              }
+            })
+
+            return (
+              <>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                  {byCat.map(({ cat, total }) => (
+                    <span key={cat.value} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 99, background: cat.bg, color: cat.color, fontWeight: 600 }}>{cat.emoji} {cat.label} {fmt(total)}</span>
+                  ))}
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                      {['Supplier / receipt', 'Date', 'Category', 'Net', 'VAT', 'Gross', 'Payment', ''].map(h => (
+                        <th key={h} style={{ padding: '6px 8px', textAlign: ['Net', 'VAT', 'Gross'].includes(h) ? 'right' : 'left', fontSize: 10, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* Document-grouped rows */}
+                    {Array.from(docGroups.entries()).map(([docId, lines]) => {
+                      const first = lines[0]
+                      const isOpen = expandedDocs.has(docId)
+                      const groupNet   = lines.reduce((s, c) => s + c.netAmount, 0)
+                      const groupVat   = lines.reduce((s, c) => s + c.vatAmount, 0)
+                      const groupGross = lines.reduce((s, c) => s + c.grossAmount, 0)
+                      const cats = [...new Set(lines.map(c => c.costCategory))]
+                      return (
+                        <>
+                          {/* Summary row — clickable */}
+                          <tr
+                            key={`doc-${docId}`}
+                            onClick={() => toggleDoc(docId)}
+                            style={{ borderBottom: isOpen ? 'none' : '1px solid #f1f5f9', cursor: 'pointer', background: isOpen ? '#f8fafc' : undefined }}
+                          >
+                            <td style={{ padding: '8px 8px' }}>
+                              <div style={{ fontWeight: 600, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ fontSize: 11, color: '#64748b' }}>{isOpen ? '▲' : '▼'}</span>
+                                {first.supplier || '—'}
+                                {first.docNumber ? <span style={{ color: '#94a3b8', fontWeight: 400 }}>#{first.docNumber}</span> : null}
+                              </div>
+                              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>{lines.length} line{lines.length > 1 ? 's' : ''} · click to {isOpen ? 'hide' : 'expand'}</div>
+                            </td>
+                            <td style={{ padding: '8px 8px', color: '#64748b' }}>{first.docDate || '—'}</td>
+                            <td style={{ padding: '8px 8px' }}>
+                              <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+                                {cats.map(cat => { const cm = catMeta(cat); return <span key={cat} style={{ fontSize: 9, padding: '1px 5px', borderRadius: 99, background: cm.bg, color: cm.color, fontWeight: 600 }}>{cm.emoji}</span> })}
+                              </div>
+                            </td>
+                            <td style={{ padding: '8px 8px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(groupNet)}</td>
+                            <td style={{ padding: '8px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#64748b' }}>{fmt(groupVat)}</td>
+                            <td style={{ padding: '8px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700 }}>{fmt(groupGross)}</td>
+                            <td style={{ padding: '8px 8px' }}><span style={{ fontSize: 10, color: first.paymentStatus === 'paid' ? '#16a34a' : first.paymentStatus === 'unpaid' ? '#dc2626' : '#94a3b8' }}>{first.paymentStatus}</span></td>
+                            <td style={{ padding: '4px 6px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
+                              <button onClick={() => removeDocGroup(docId, lines)} title="Delete all lines" style={{ padding: '2px 7px', border: '1px solid #fecaca', borderRadius: 4, background: '#fef2f2', color: '#dc2626', fontSize: 11, cursor: 'pointer' }}>×</button>
+                            </td>
+                          </tr>
+                          {/* Expanded line items */}
+                          {isOpen && lines.map((c, i) => {
+                            const cm = catMeta(c.costCategory)
+                            return (
+                              <tr key={c.id} style={{ borderBottom: i === lines.length - 1 ? '1px solid #f1f5f9' : '1px solid #f8fafc', background: '#fafbff' }}>
+                                <td style={{ padding: '5px 8px 5px 28px', color: '#475569' }}>
+                                  {c.description || <span style={{ color: '#cbd5e1', fontStyle: 'italic' }}>no description</span>}
+                                </td>
+                                <td />
+                                <td style={{ padding: '5px 8px' }}><span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: cm.bg, color: cm.color, fontWeight: 600 }}>{cm.emoji} {cm.label}</span></td>
+                                <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#64748b' }}>{fmt(c.netAmount)}</td>
+                                <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#94a3b8' }}>{fmt(c.vatAmount)}</td>
+                                <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(c.grossAmount)}</td>
+                                <td />
+                                <td />
+                              </tr>
+                            )
+                          })}
+                        </>
+                      )
+                    })}
+
+                    {/* Manual cost rows — unchanged */}
+                    {manualCosts.map(c => {
+                      const cm = catMeta(c.costCategory)
+                      return (
+                        <tr key={c.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '7px 8px' }}>
+                            <div style={{ fontWeight: 600, color: '#1e293b' }}>{c.supplier || '—'}{c.docNumber ? <span style={{ color: '#94a3b8', fontWeight: 400 }}> · {c.docNumber}</span> : null}</div>
+                            {c.description && <div style={{ fontSize: 11, color: '#94a3b8' }}>{c.description}</div>}
+                          </td>
+                          <td style={{ padding: '7px 8px', color: '#64748b' }}>{c.docDate || '—'}</td>
+                          <td style={{ padding: '7px 8px' }}><span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: cm.bg, color: cm.color, fontWeight: 600 }}>{cm.emoji} {cm.label}</span></td>
+                          <td style={{ padding: '7px 8px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(c.netAmount)}</td>
+                          <td style={{ padding: '7px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#64748b' }}>{fmt(c.vatAmount)}</td>
+                          <td style={{ padding: '7px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700 }}>{fmt(c.grossAmount)}</td>
+                          <td style={{ padding: '7px 8px' }}><span style={{ fontSize: 10, color: c.paymentStatus === 'paid' ? '#16a34a' : c.paymentStatus === 'unpaid' ? '#dc2626' : '#94a3b8' }}>{c.paymentStatus}</span></td>
+                          <td style={{ padding: '4px 6px', textAlign: 'right' }}>
+                            <button onClick={() => removeCost(c.id)} title="Delete" style={{ padding: '2px 7px', border: '1px solid #fecaca', borderRadius: 4, background: '#fef2f2', color: '#dc2626', fontSize: 11, cursor: 'pointer' }}>×</button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ borderTop: '2px solid #e2e8f0', fontWeight: 700 }}>
+                      <td style={{ padding: '8px' }} colSpan={3}>Total actual cost</td>
+                      <td style={{ padding: '8px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(totalNet)}</td>
+                      <td />
+                      <td style={{ padding: '8px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(totalGross)}</td>
+                      <td colSpan={2} />
+                    </tr>
+                  </tfoot>
+                </table>
+              </>
+            )
+          })()}
         </div>
       </div>
     </div>
