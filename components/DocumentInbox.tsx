@@ -70,10 +70,17 @@ export default function DocumentInbox({ jobs }: Props) {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ base64, mimeType: isImage ? 'image/jpeg' : 'application/pdf', fileName: file.name }),
             })
-            const data = await res.json()
-            if (res.ok && data.extracted) extraction = data.extracted
+            const data = await res.json() as { extracted?: unknown; error?: string }
+            if (res.ok && data.extracted) {
+              extraction = data.extracted
+            } else {
+              const reason = data.error || `HTTP ${res.status}`
+              setError(`${file.name}: AI extraction failed (${reason}). File saved — open it to fill in details manually.`)
+            }
           }
-        } catch { /* keep doc without extraction; user can fill in manually */ }
+        } catch (extractErr) {
+          setError(`${file.name}: AI extraction failed (${extractErr instanceof Error ? extractErr.message : 'network error'}). File saved — open it to fill in details manually.`)
+        }
 
         const doc = await createInboxDocument(sb, user.id, {
           fileName: file.name, storagePath: path, mimeType: file.type, fileSize: file.size, rawExtraction: extraction,
