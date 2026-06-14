@@ -219,7 +219,7 @@ export interface InboxDocument {
   storagePath: string
   mimeType: string
   fileSize: number
-  status: 'unallocated' | 'allocated' | 'error'
+  status: 'unallocated' | 'allocated' | 'archived' | 'error'
   extraction?: Record<string, unknown> | null   // raw_extraction snapshot
   xeroBillId?: string                           // set after publishing to Xero
   createdAt?: string

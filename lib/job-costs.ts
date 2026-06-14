@@ -120,7 +120,7 @@ export async function signedDocUrl(sb: SupabaseClient, storagePath: string, seco
 
 // ── Document inbox ────────────────────────────────────────────────────────────
 function rowToDoc(r: Record<string, unknown>): InboxDocument {
-  const status = r.status === 'allocated' ? 'allocated' : r.status === 'error' ? 'error' : 'unallocated'
+  const status = r.status === 'allocated' ? 'allocated' : r.status === 'archived' ? 'archived' : r.status === 'error' ? 'error' : 'unallocated'
   return {
     id: r.id as string,
     jobId: (r.job_id as string) || undefined,

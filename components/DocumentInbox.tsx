@@ -30,7 +30,7 @@ export default function DocumentInbox({ jobs }: Props) {
   const [docs, setDocs] = useState<InboxDocument[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(0)
-  const [filter, setFilter] = useState<'all' | 'unallocated' | 'allocated'>('all')
+  const [filter, setFilter] = useState<'all' | 'unallocated' | 'allocated' | 'archived'>('all')
   const [openDoc, setOpenDoc] = useState<InboxDocument | null>(null)
   const [error, setError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
@@ -99,7 +99,7 @@ export default function DocumentInbox({ jobs }: Props) {
     setDocs(prev => prev.filter(d => d.id !== doc.id))
   }
 
-  const shown = docs.filter(d => filter === 'all' ? true : d.status === filter)
+  const shown = docs.filter(d => filter === 'all' ? d.status !== 'archived' : d.status === filter)
   const unallocatedCount = docs.filter(d => d.status === 'unallocated').length
 
   return (
@@ -119,7 +119,7 @@ export default function DocumentInbox({ jobs }: Props) {
             {uploading > 0 ? `Uploading ${uploading}…` : '📷 Scan / Upload'}
           </button>
           <div style={{ flex: 1 }} />
-          {(['all', 'unallocated', 'allocated'] as const).map(fk => (
+          {(['all', 'unallocated', 'allocated', 'archived'] as const).map(fk => (
             <button key={fk} onClick={() => setFilter(fk)} className={filter === fk ? 'btn-sm btn-primary' : 'btn-sm btn-outline'} style={{ textTransform: 'capitalize' }}>{fk}</button>
           ))}
         </div>
@@ -146,6 +146,8 @@ export default function DocumentInbox({ jobs }: Props) {
                   </div>
                   {doc.status === 'allocated'
                     ? <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#dcfce7', color: '#166534' }}>✓ {jobLabel(doc.jobId)}</span>
+                    : doc.status === 'archived'
+                    ? <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#f1f5f9', color: '#64748b' }}>🗄 Archived</span>
                     : <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#fef3c7', color: '#92400e' }}>Unallocated</span>}
                   {doc.xeroBillId && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: '#ede9fe', color: '#5b21b6' }}>✓ Xero</span>}
                   <button className="btn-sm btn-outline" onClick={() => setOpenDoc(doc)}>Open</button>
