@@ -2,39 +2,69 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceRoleClient } from '@/lib/supabase/service-role'
 import { extractDocument } from '@/lib/doc-extract'
 
-// ── Postmark inbound email payload ────────────────────────────────────────────
-interface PostmarkAttachment {
-  Name: string
-  Content: string      // base64-encoded file data
-  ContentType: string  // may include params e.g. "application/pdf; name=file.pdf"
-  ContentLength: number
-}
-interface PostmarkPayload {
-  From?: string
-  Subject?: string
-  Attachments?: PostmarkAttachment[]
-}
-
 const ALLOWED_TYPES = new Set([
   'application/pdf',
   'image/jpeg', 'image/jpg', 'image/png', 'image/webp',
 ])
-const MAX_BYTES = 9 * 1024 * 1024   // 9 MB per attachment
+const MAX_BYTES = 9 * 1024 * 1024
 const MAX_ATTACHMENTS = 10
 
 function mimeBase(ct: string) { return ct.split(';')[0].trim().toLowerCase() }
 function stamp()               { return Date.now().toString(36) }
 function safeName(n: string)   { return n.replace(/[^a-z0-9._-]/gi, '_').toLowerCase() }
 
+interface NormalisedAttachment {
+  name: string
+  base64: string
+  mime: string
+  size: number
+}
+
+interface NormalisedEmail {
+  from: string
+  subject: string
+  attachments: NormalisedAttachment[]
+}
+
+// Accepts two formats:
+//   Power Automate: { from, subject, attachments: [{ name, contentBytes, contentType, size }] }
+//   Postmark:       { From, Subject, Attachments: [{ Name, Content, ContentType, ContentLength }] }
+function normalise(body: Record<string, unknown>): NormalisedEmail {
+  // Power Automate
+  if (Array.isArray(body.attachments)) {
+    return {
+      from:    String(body.from    ?? ''),
+      subject: String(body.subject ?? ''),
+      attachments: (body.attachments as Record<string, unknown>[]).map(a => ({
+        name:   String(a.name         ?? ''),
+        base64: String(a.contentBytes ?? ''),
+        mime:   mimeBase(String(a.contentType ?? '')),
+        size:   Number(a.size         ?? 0),
+      })),
+    }
+  }
+  // Postmark
+  return {
+    from:    String(body.From    ?? ''),
+    subject: String(body.Subject ?? ''),
+    attachments: (Array.isArray(body.Attachments) ? body.Attachments as Record<string, unknown>[] : []).map(a => ({
+      name:   String(a.Name          ?? ''),
+      base64: String(a.Content       ?? ''),
+      mime:   mimeBase(String(a.ContentType ?? '')),
+      size:   Number(a.ContentLength ?? 0),
+    })),
+  }
+}
+
 // POST /api/email-ingest?token=<EMAIL_INGEST_TOKEN>
-// Called by Postmark Inbound stream when an email arrives.
+//
+// Accepts Power Automate (M365) or Postmark inbound webhooks.
 // Extracts PDF/image attachments, runs AI extraction, saves to document inbox.
 //
-// Required env vars (set in Netlify):
-//   EMAIL_INGEST_TOKEN   — secret you paste into the Postmark webhook URL
-//   EMAIL_INGEST_USER_ID — your Supabase user ID (find it in Supabase → Auth → Users)
+// Required Netlify env vars:
+//   EMAIL_INGEST_TOKEN   — secret appended to the webhook URL as ?token=
+//   EMAIL_INGEST_USER_ID — your Supabase user UUID (Auth → Users in Supabase dashboard)
 export async function POST(req: NextRequest) {
-  // ── Validate webhook token ──────────────────────────────────────────────────
   const token = req.nextUrl.searchParams.get('token')
   if (!token || token !== process.env.EMAIL_INGEST_TOKEN) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -46,23 +76,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 })
   }
 
-  // ── Parse Postmark payload ──────────────────────────────────────────────────
-  let payload: PostmarkPayload
+  let body: Record<string, unknown>
   try {
-    payload = await req.json() as PostmarkPayload
+    body = await req.json() as Record<string, unknown>
   } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
-  const attachments = (payload.Attachments ?? [])
-    .filter(a => {
-      const mime = mimeBase(a.ContentType)
-      return ALLOWED_TYPES.has(mime) && a.ContentLength <= MAX_BYTES
-    })
+  const email = normalise(body)
+
+  const attachments = email.attachments
+    .filter(a => ALLOWED_TYPES.has(a.mime) && a.size <= MAX_BYTES && a.base64)
     .slice(0, MAX_ATTACHMENTS)
 
   if (!attachments.length) {
-    // No valid attachments — acknowledge silently (Postmark requires 200)
     return NextResponse.json({ processed: 0, skipped: 'no valid attachments' })
   }
 
@@ -71,52 +98,45 @@ export async function POST(req: NextRequest) {
 
   for (const att of attachments) {
     try {
-      const mime = mimeBase(att.ContentType)
-      const fileName = att.Name || `email-doc-${stamp()}.${mime === 'application/pdf' ? 'pdf' : 'jpg'}`
+      const ext = att.mime === 'application/pdf' ? 'pdf' : att.mime.split('/')[1]
+      const fileName = att.name || `email-doc-${stamp()}.${ext}`
       const storagePath = `${userId}/inbox/${stamp()}-${safeName(fileName)}`
-      const fileBuffer = Buffer.from(att.Content, 'base64')
+      const fileBuffer = Buffer.from(att.base64, 'base64')
 
-      // Upload to Supabase Storage
       const { error: uploadErr } = await sb.storage
         .from('job-docs')
-        .upload(storagePath, fileBuffer, { contentType: mime, upsert: false })
+        .upload(storagePath, fileBuffer, { contentType: att.mime, upsert: false })
 
-      if (uploadErr) {
-        console.error('email-ingest: storage upload failed', uploadErr.message)
-        continue
-      }
+      if (uploadErr) { console.error('email-ingest: upload failed', uploadErr.message); continue }
 
-      // Run AI extraction (best-effort — doc is still saved if this fails)
       let extraction = null
       try {
-        extraction = await extractDocument({ base64: att.Content, mimeType: mime, fileName })
+        extraction = await extractDocument({ base64: att.base64, mimeType: att.mime, fileName })
       } catch (err) {
         console.warn('email-ingest: AI extraction failed', err)
       }
 
-      // Create document inbox record
       const { error: dbErr } = await sb.from('job_documents').insert({
-        user_id: userId,
-        file_name: fileName,
-        storage_path: storagePath,
-        mime_type: mime,
-        file_size: att.ContentLength,
-        status: 'unallocated',
+        user_id:        userId,
+        file_name:      fileName,
+        storage_path:   storagePath,
+        mime_type:      att.mime,
+        file_size:      att.size,
+        status:         'unallocated',
         raw_extraction: extraction,
-        source_email: payload.From ?? null,
-        source_subject: payload.Subject ?? null,
+        source_email:   email.from   || null,
+        source_subject: email.subject || null,
       })
 
       if (dbErr) {
         console.error('email-ingest: DB insert failed', dbErr.message)
-        // Clean up orphaned storage file
         await sb.storage.from('job-docs').remove([storagePath])
         continue
       }
 
       processed++
     } catch (err) {
-      console.error('email-ingest: unexpected error for attachment', att.Name, err)
+      console.error('email-ingest: unexpected error', att.name, err)
     }
   }
 
