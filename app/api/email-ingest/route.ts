@@ -47,12 +47,14 @@ function normalise(body: Record<string, unknown>): NormalisedEmail {
   return {
     from:    String(body.From    ?? ''),
     subject: String(body.Subject ?? ''),
-    attachments: (Array.isArray(body.Attachments) ? body.Attachments as Record<string, unknown>[] : []).map(a => ({
-      name:   String(a.Name          ?? ''),
-      base64: String(a.Content       ?? ''),
-      mime:   mimeBase(String(a.ContentType ?? '')),
-      size:   Number(a.ContentLength ?? 0),
-    })),
+    attachments: (Array.isArray(body.Attachments) ? body.Attachments as Record<string, unknown>[] : [])
+      .filter(a => !a.ContentID)  // skip inline images (logos, signatures)
+      .map(a => ({
+        name:   String(a.Name          ?? ''),
+        base64: String(a.Content       ?? ''),
+        mime:   mimeBase(String(a.ContentType ?? '')),
+        size:   Number(a.ContentLength ?? 0),
+      })),
   }
 }
 
