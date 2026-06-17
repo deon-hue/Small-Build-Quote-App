@@ -44,17 +44,36 @@ function normalise(body: Record<string, unknown>): NormalisedEmail {
     }
   }
   // Postmark
+  const htmlBody = String(body.HtmlBody ?? '')
+  const textBody = String(body.TextBody ?? '')
   return {
     from:    String(body.From    ?? ''),
     subject: String(body.Subject ?? ''),
     attachments: (Array.isArray(body.Attachments) ? body.Attachments as Record<string, unknown>[] : [])
-      .filter(a => !a.ContentID)  // skip inline images (logos, signatures)
-      .map(a => ({
-        name:   String(a.Name          ?? ''),
-        base64: String(a.Content       ?? ''),
-        mime:   mimeBase(String(a.ContentType ?? '')),
-        size:   Number(a.ContentLength ?? 0),
-      })),
+      .filter(a => {
+        if (!a.ContentID) return true
+        const cid = String(a.ContentID)
+        // Only skip if this ContentID is actually referenced inline in the email body
+        return !htmlBody.includes(`cid:${cid}`) && !textBody.includes(`cid:${cid}`)
+      })
+      .map(a => {
+        const rawMime = mimeBase(String(a.ContentType ?? ''))
+        const name    = String(a.Name ?? '').toLowerCase()
+        // Outlook forwards PDFs as application/octet-stream — detect by extension
+        let mime = rawMime
+        if (rawMime === 'application/octet-stream') {
+          if (name.endsWith('.pdf'))                         mime = 'application/pdf'
+          else if (name.endsWith('.jpg') || name.endsWith('.jpeg')) mime = 'image/jpeg'
+          else if (name.endsWith('.png'))                    mime = 'image/png'
+          else if (name.endsWith('.webp'))                   mime = 'image/webp'
+        }
+        return {
+          name:   String(a.Name          ?? ''),
+          base64: String(a.Content       ?? ''),
+          mime,
+          size:   Number(a.ContentLength ?? 0),
+        }
+      }),
   }
 }
 
