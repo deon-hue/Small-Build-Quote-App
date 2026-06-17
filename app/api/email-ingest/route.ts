@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
       const fileBuffer = Buffer.from(att.base64, 'base64')
 
       const { error: uploadErr } = await sb.storage
-        .from('job-docs')
+        .from('job-documents')
         .upload(storagePath, fileBuffer, { contentType: att.mime, upsert: false })
 
       if (uploadErr) { console.error('email-ingest: upload failed', uploadErr.message); continue }
@@ -130,7 +130,7 @@ export async function POST(req: NextRequest) {
 
       if (dbErr) {
         console.error('email-ingest: DB insert failed', dbErr.message)
-        await sb.storage.from('job-docs').remove([storagePath])
+        await sb.storage.from('job-documents').remove([storagePath])
         continue
       }
 
