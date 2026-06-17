@@ -6,6 +6,9 @@ export interface DuplicateMatch {
   label: string
   detail: string
   confidence: 'high' | 'medium'
+  documentId?: string     // id of the matching job_document (for "View" button)
+  storagePath?: string    // storage path of the matching document
+  mimeType?: string
 }
 
 export async function GET(req: NextRequest) {
@@ -27,7 +30,7 @@ export async function GET(req: NextRequest) {
   // Fetch recent documents and filter in JS to avoid JSONB operator issues
   const { data: allDocs } = await sb
     .from('job_documents')
-    .select('id, file_name, status, raw_extraction, created_at')
+    .select('id, file_name, status, storage_path, mime_type, raw_extraction, created_at')
     .eq('user_id', user.id)
     .neq('id', excludeId)
     .not('status', 'eq', 'archived')
@@ -49,6 +52,9 @@ export async function GET(req: NextRequest) {
         confidence: 'high',
         label: `Receipt #${docNumber} already scanned${d.status === 'allocated' ? ' and allocated' : ''}`,
         detail: [d.file_name, gross ? `£${gross.toFixed(2)}` : ''].filter(Boolean).join(' · '),
+        documentId: d.id,
+        storagePath: d.storage_path,
+        mimeType: d.mime_type,
       })
       continue
     }
@@ -61,6 +67,9 @@ export async function GET(req: NextRequest) {
         confidence: 'medium',
         label: `Similar receipt already in inbox`,
         detail: [d.file_name, gross ? `£${gross.toFixed(2)}` : '', dDate || ''].filter(Boolean).join(' · '),
+        documentId: d.id,
+        storagePath: d.storage_path,
+        mimeType: d.mime_type,
       })
     }
   }
@@ -74,13 +83,24 @@ export async function GET(req: NextRequest) {
       .eq('doc_number', docNumber)
       .limit(10)
 
+    // Look up storage paths for the matched cost documents
+    const costDocIds = [...new Set((costs ?? []).map(c => c.document_id).filter(Boolean))]
+    const { data: costDocs } = costDocIds.length
+      ? await sb.from('job_documents').select('id, storage_path, mime_type').in('id', costDocIds)
+      : { data: [] }
+    const costDocMap = Object.fromEntries((costDocs ?? []).map(d => [d.id, d]))
+
     for (const c of (costs ?? [])) {
       if (c.document_id === excludeId) continue
+      const srcDoc = costDocMap[c.document_id]
       matches.push({
         type: 'cost',
         confidence: 'high',
         label: `Receipt #${docNumber} already recorded in job costs`,
         detail: [c.supplier, c.doc_date, c.gross_amount ? `£${Number(c.gross_amount).toFixed(2)}` : ''].filter(Boolean).join(' · '),
+        documentId: c.document_id ?? undefined,
+        storagePath: srcDoc?.storage_path ?? undefined,
+        mimeType: srcDoc?.mime_type ?? undefined,
       })
     }
   }
@@ -95,14 +115,24 @@ export async function GET(req: NextRequest) {
       .ilike('supplier', `%${supFirst}%`)
       .limit(10)
 
+    const costDocIds2 = [...new Set((costs ?? []).map(c => c.document_id).filter(Boolean))]
+    const { data: costDocs2 } = costDocIds2.length
+      ? await sb.from('job_documents').select('id, storage_path, mime_type').in('id', costDocIds2)
+      : { data: [] }
+    const costDocMap2 = Object.fromEntries((costDocs2 ?? []).map(d => [d.id, d]))
+
     for (const c of (costs ?? [])) {
       if (c.document_id === excludeId) continue
       if (String(c.gross_amount) !== grossAmount && Number(c.gross_amount).toFixed(2) !== Number(grossAmount).toFixed(2)) continue
+      const srcDoc = costDocMap2[c.document_id]
       matches.push({
         type: 'cost',
         confidence: 'medium',
         label: `Similar receipt already in job costs`,
         detail: [c.supplier, c.doc_date, `£${Number(c.gross_amount).toFixed(2)}`].filter(Boolean).join(' · '),
+        documentId: c.document_id ?? undefined,
+        storagePath: srcDoc?.storage_path ?? undefined,
+        mimeType: srcDoc?.mime_type ?? undefined,
       })
     }
   }

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { signedDocUrl, allocateDocument } from '@/lib/job-costs'
 import type { InboxDocument, JobCostCategory, PaymentStatus } from '@/lib/types'
 import type { ExtractedCostLine } from '@/lib/doc-extract/types'
@@ -53,7 +54,7 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
 
   const [xeroAccounts, setXeroAccounts] = useState<Array<{ code: string; name: string; type: string }>>([])
   const [xeroAccount, setXeroAccount] = useState('')
-  const [duplicates, setDuplicates] = useState<Array<{ label: string; detail: string; confidence: string }>>([])
+  const [duplicates, setDuplicates] = useState<Array<{ label: string; detail: string; confidence: string; storagePath?: string; mimeType?: string }>>([])
   const [dupDismissed, setDupDismissed] = useState(false)
   const [zoom, setZoom] = useState(1)
 
@@ -88,7 +89,7 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
       if (date)    qs.set('docDate', date)
       fetch(`/api/check-duplicate?${qs}`)
         .then(r => r.json())
-        .then((d: { matches?: Array<{ label: string; detail: string; confidence: string }> }) => {
+        .then((d: { matches?: Array<{ label: string; detail: string; confidence: string; storagePath?: string; mimeType?: string }> }) => {
           if (d.matches?.length) setDuplicates(d.matches)
         })
         .catch(() => {})
@@ -209,9 +210,14 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
                   <div>
                     <div style={{ fontWeight: 700, fontSize: 12, color: '#92400e', marginBottom: 4 }}>⚠ Possible duplicate</div>
                     {duplicates.map((m, i) => (
-                      <div key={i} style={{ fontSize: 12, color: '#78350f', marginBottom: 2 }}>
-                        {m.confidence === 'high' ? '🔴' : '🟡'} {m.label}
-                        {m.detail && <span style={{ color: '#a16207', marginLeft: 6 }}>{m.detail}</span>}
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <div style={{ fontSize: 12, color: '#78350f', flex: 1 }}>
+                          {m.confidence === 'high' ? '🔴' : '🟡'} {m.label}
+                          {m.detail && <span style={{ color: '#a16207', marginLeft: 6 }}>{m.detail}</span>}
+                        </div>
+                        {m.storagePath && (
+                          <ViewDupButton sb={sb} storagePath={m.storagePath} mimeType={m.mimeType} />
+                        )}
                       </div>
                     ))}
                   </div>
@@ -331,6 +337,27 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <div><label style={{ display: 'block', fontSize: 10, fontWeight: 600, color: '#64748b', marginBottom: 3 }}>{label}</label>{children}</div>
+}
+
+function ViewDupButton({ sb, storagePath, mimeType }: { sb: SupabaseClient; storagePath: string; mimeType?: string }) {
+  const [loading, setLoading] = useState(false)
+  async function open() {
+    setLoading(true)
+    try {
+      const url = await signedDocUrl(sb, storagePath)
+      if (url) window.open(url, '_blank', 'noopener,noreferrer')
+    } finally { setLoading(false) }
+  }
+  const isPdf = (mimeType ?? '').includes('pdf')
+  return (
+    <button
+      onClick={open}
+      disabled={loading}
+      style={{ flexShrink: 0, fontSize: 11, padding: '2px 8px', border: '1px solid #d97706', borderRadius: 5, background: '#fffbeb', color: '#92400e', cursor: 'pointer', fontWeight: 600 }}
+    >
+      {loading ? '…' : isPdf ? '📄 View' : '🖼 View'}
+    </button>
+  )
 }
 const overlay: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }
 const panel: React.CSSProperties = { background: '#fff', borderRadius: 12, width: '100%', maxWidth: 1000, height: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden' }
