@@ -170,7 +170,7 @@ export async function deleteDocument(sb: SupabaseClient, doc: InboxDocument): Pr
 
 /** Allocate (or re-allocate) a document to a job: replaces its cost lines and flips status. */
 export async function allocateDocument(
-  sb: SupabaseClient, userId: string, doc: InboxDocument, jobId: string,
+  sb: SupabaseClient, userId: string, doc: InboxDocument, defaultJobId: string,
   meta: { supplier: string; docDate: string; docNumber: string; paymentStatus: JobCost['paymentStatus'] },
   lines: ExtractedCostLine[],
 ): Promise<JobCost[]> {
@@ -178,8 +178,10 @@ export async function allocateDocument(
   await sb.from('job_costs').delete().eq('document_id', doc.id)
   const created: JobCost[] = []
   for (const ln of lines) {
+    const resolvedJobId = ln.jobId || defaultJobId
+    if (!resolvedJobId) continue  // line has no job — skip
     const c = await insertJobCost(sb, userId, {
-      jobId, documentId: doc.id, supplier: meta.supplier, docDate: meta.docDate, docNumber: meta.docNumber,
+      jobId: resolvedJobId, documentId: doc.id, supplier: meta.supplier, docDate: meta.docDate, docNumber: meta.docNumber,
       description: ln.description, costCategory: ln.costCategory,
       netAmount: ln.netAmount, vatAmount: ln.vatAmount, grossAmount: ln.grossAmount,
       paymentStatus: meta.paymentStatus, source: 'document', chargeToClient: ln.chargeToClient ?? false,
@@ -187,7 +189,7 @@ export async function allocateDocument(
     if (c) created.push(c)
   }
   await sb.from('job_documents').update({
-    job_id: jobId, status: 'allocated', updated_at: new Date().toISOString(),
+    job_id: defaultJobId || null, status: 'allocated', updated_at: new Date().toISOString(),
     raw_extraction: { ...meta, lines, grossAmount: lines.reduce((s, l) => s + l.grossAmount, 0) },
   }).eq('id', doc.id)
   return created

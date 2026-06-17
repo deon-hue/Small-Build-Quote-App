@@ -17,6 +17,7 @@ export interface ExtractedCostLine {
   vatAmount: number
   grossAmount: number
   chargeToClient?: boolean
+  jobId?: string          // overrides the document-level default job for this line
 }
 
 export interface ExtractedDoc {

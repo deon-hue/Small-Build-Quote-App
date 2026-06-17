@@ -111,9 +111,11 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
   const removeLine = (i: number) => setLines(p => p.filter((_, idx) => idx !== i))
   const total = lines.reduce((s, l) => s + l.grossAmount, 0)
 
+  // Allocation is valid when every line can resolve to a job
+  const allLinesHaveJob = lines.every(l => l.jobId || jobId)
+
   async function allocate(publishToXero = false) {
-    // Plain allocation requires a job; Xero-only path does not
-    if (!publishToXero && !jobId) return
+    if (!publishToXero && !allLinesHaveJob) return
     setBusy(true)
     setXeroError(null)
     try {
@@ -224,27 +226,40 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
             </div>
             <div style={{ display: 'grid', gap: 6 }}>
               {lines.map((ln, i) => (
-                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 120px 72px 72px 72px auto 20px', gap: 5, alignItems: 'center' }}>
-                  <input style={inp} placeholder="Description" value={ln.description} onChange={e => updateLine(i, { description: e.target.value })} />
-                  <select style={inp} value={ln.costCategory} onChange={e => updateLine(i, { costCategory: e.target.value as JobCostCategory })}>
-                    {CATS.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}
-                  </select>
-                  <input type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={ln.netAmount} onChange={e => updateLine(i, { netAmount: Math.max(0, +e.target.value) })} title="Net" />
-                  <input type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={ln.vatAmount} onChange={e => updateLine(i, { vatAmount: Math.max(0, +e.target.value) })} title="VAT" />
-                  <input type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={ln.grossAmount} onChange={e => updateLine(i, { grossAmount: Math.max(0, +e.target.value) })} title="Gross" />
-                  <label
-                    title="Charge to client as an expense"
-                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', gap: 1 }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={!!ln.chargeToClient}
-                      onChange={e => updateLine(i, { chargeToClient: e.target.checked })}
-                      style={{ cursor: 'pointer', accentColor: '#d97706', width: 14, height: 14 }}
-                    />
-                    <span style={{ fontSize: 8, fontWeight: 700, color: ln.chargeToClient ? '#d97706' : '#cbd5e1', letterSpacing: '0.02em' }}>EXP</span>
-                  </label>
-                  <button onClick={() => removeLine(i)} style={{ border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 15 }}>×</button>
+                <div key={i} style={{ border: '1px solid #f1f5f9', borderRadius: 6, padding: '6px 8px', background: ln.jobId ? '#f0f9ff' : undefined }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 72px 72px 72px auto 20px', gap: 5, alignItems: 'center' }}>
+                    <input style={inp} placeholder="Description" value={ln.description} onChange={e => updateLine(i, { description: e.target.value })} />
+                    <select style={inp} value={ln.costCategory} onChange={e => updateLine(i, { costCategory: e.target.value as JobCostCategory })}>
+                      {CATS.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}
+                    </select>
+                    <input type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={ln.netAmount} onChange={e => updateLine(i, { netAmount: Math.max(0, +e.target.value) })} title="Net" />
+                    <input type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={ln.vatAmount} onChange={e => updateLine(i, { vatAmount: Math.max(0, +e.target.value) })} title="VAT" />
+                    <input type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={ln.grossAmount} onChange={e => updateLine(i, { grossAmount: Math.max(0, +e.target.value) })} title="Gross" />
+                    <label
+                      title="Charge to client as an expense"
+                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', gap: 1 }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!!ln.chargeToClient}
+                        onChange={e => updateLine(i, { chargeToClient: e.target.checked })}
+                        style={{ cursor: 'pointer', accentColor: '#d97706', width: 14, height: 14 }}
+                      />
+                      <span style={{ fontSize: 8, fontWeight: 700, color: ln.chargeToClient ? '#d97706' : '#cbd5e1', letterSpacing: '0.02em' }}>EXP</span>
+                    </label>
+                    <button onClick={() => removeLine(i)} style={{ border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 15 }}>×</button>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                    <span style={{ fontSize: 10, color: '#94a3b8', whiteSpace: 'nowrap', fontWeight: 600 }}>→ Job</span>
+                    <select
+                      style={{ ...inp, fontSize: 11, padding: '3px 6px', color: ln.jobId ? '#0369a1' : '#94a3b8' }}
+                      value={ln.jobId ?? ''}
+                      onChange={e => updateLine(i, { jobId: e.target.value || undefined })}
+                    >
+                      <option value="">— use default job —</option>
+                      {jobs.map(j => <option key={j.id} value={j.id}>{j.label}</option>)}
+                    </select>
+                  </div>
                 </div>
               ))}
             </div>
@@ -252,7 +267,7 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
 
             <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <Field label="Allocate to job">
+                <Field label="Default job (for lines without an override)">
                   <select style={inp} value={jobId} onChange={e => setJobId(e.target.value)}>
                     <option value="">— select a job —</option>
                     {jobs.map(j => <option key={j.id} value={j.id}>{j.label}</option>)}
@@ -288,7 +303,7 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
                   >
                     {busy && !xeroBusy && !jobId ? 'Archiving…' : '🗄 Archive'}
                   </button>
-                  {jobId && (
+                  {allLinesHaveJob && (
                     <button
                       onClick={() => allocate(false)}
                       disabled={isBusy}
