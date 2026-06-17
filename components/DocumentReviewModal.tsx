@@ -119,8 +119,8 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
     setBusy(true)
     setXeroError(null)
     try {
-      // Save job costs only when a job is selected
-      if (jobId) {
+      // Save job costs when every line resolves to a job
+      if (allLinesHaveJob) {
         await allocateDocument(sb, userId, doc, jobId, { supplier, docDate, docNumber, paymentStatus }, lines)
       }
 
@@ -140,7 +140,7 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
         const d = await res.json() as { xeroBillId?: string; error?: string }
         if (!res.ok || d.error) {
           setXeroError(d.error || 'Failed to publish to Xero')
-          if (jobId) onSaved()  // costs saved — reload even on Xero error
+          if (allLinesHaveJob) onSaved()  // costs saved — reload even on Xero error
         } else {
           onSaved()
         }
