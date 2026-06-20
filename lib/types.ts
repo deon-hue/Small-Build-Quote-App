@@ -534,6 +534,8 @@ export interface Bill {
   syncToXero?: boolean
   /** Xero InvoiceID once the bill has been successfully pushed */
   xeroBillId?: string
+  /** Linked source document from the Document Inbox */
+  documentId?: string
   createdAt: string
 }
 

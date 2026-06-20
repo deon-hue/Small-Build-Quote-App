@@ -340,6 +340,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           status: r.status as BillStatus, notes: r.notes || '',
           syncToXero: r.sync_to_xero ?? false,
           xeroBillId: r.xero_bill_id || undefined,
+          documentId: r.document_id || undefined,
           createdAt: r.created_at,
         })))
       }
@@ -825,6 +826,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       status: b.status, notes: b.notes,
       sync_to_xero: b.syncToXero ?? false,
       xero_bill_id: b.xeroBillId || null,
+      document_id: b.documentId || null,
     }).select().single()
     if (error) throw error
     await syncBillCosts(data.id, b, ownerId)
@@ -842,6 +844,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       status: data.status as BillStatus, notes: data.notes || '',
       syncToXero: data.sync_to_xero ?? false,
       xeroBillId: data.xero_bill_id || undefined,
+      documentId: data.document_id || undefined,
       createdAt: data.created_at,
     }
     setBills(prev => [newBill, ...prev])
@@ -863,6 +866,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       status: b.status, notes: b.notes,
       sync_to_xero: b.syncToXero ?? false,
       xero_bill_id: b.xeroBillId || null,
+      document_id: b.documentId || null,
       updated_at: new Date().toISOString(),
     }).eq('id', b.id)
     if (error) throw error

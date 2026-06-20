@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { fmt } from '@/lib/utils'
+import { createClient } from '@/lib/supabase/client'
+import { signedDocUrlById } from '@/lib/job-costs'
 import type { Bill, BillLineItem, BillStatus } from '@/lib/types'
 
 let lineCounter = 0
@@ -58,7 +60,9 @@ export default function BillsPage() {
   const [status, setStatus]           = useState<BillStatus>('draft')
   const [notes, setNotes]             = useState('')
   const [syncToXero, setSyncToXero]   = useState(false)
+  const [documentId, setDocumentId]   = useState<string | undefined>(undefined)
   const [saving, setSaving]           = useState(false)
+  const [viewingDoc, setViewingDoc]   = useState(false)
 
   // Xero state
   const [xeroConnected, setXeroConnected]     = useState(false)
@@ -121,7 +125,7 @@ export default function BillsPage() {
     setBillDate(todayStr()); setDueDate('')
     setDescription(''); setLineItems([BLANK_LINE()])
     setCisRate(0); setStatus('draft'); setNotes('')
-    setSyncToXero(false); setXeroError(null)
+    setSyncToXero(false); setXeroError(null); setDocumentId(undefined)
     setShowModal(true)
   }
 
@@ -132,8 +136,18 @@ export default function BillsPage() {
     setDescription(b.description)
     setLineItems(b.lineItems.map(l => ({ ...l, id: ++lineCounter })))
     setCisRate(b.cisRate); setStatus(b.status); setNotes(b.notes)
-    setSyncToXero(b.syncToXero ?? false); setXeroError(null)
+    setSyncToXero(b.syncToXero ?? false); setXeroError(null); setDocumentId(b.documentId)
     setShowModal(true)
+  }
+
+  async function viewInvoice() {
+    if (!documentId) return
+    setViewingDoc(true)
+    try {
+      const sb = createClient()
+      const url = await signedDocUrlById(sb, documentId)
+      if (url) window.open(url, '_blank', 'noopener,noreferrer')
+    } finally { setViewingDoc(false) }
   }
 
   function handleSupplierChange(id: string) {
@@ -165,6 +179,7 @@ export default function BillsPage() {
         cisDeduction: totals.cisDeduction, totalPayable: totals.totalPayable,
         status, notes, syncToXero,
         xeroBillId: editing?.xeroBillId,
+        documentId,
       }
 
       let savedBill: Bill
@@ -313,6 +328,9 @@ export default function BillsPage() {
                     <div style={{ fontWeight: 600 }}>{b.ref}</div>
                     {b.xeroBillId && (
                       <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>✓ Xero</div>
+                    )}
+                    {b.documentId && (
+                      <div style={{ fontSize: 11, color: '#7c3aed', marginTop: 2 }}>📄 Invoice attached</div>
                     )}
                   </td>
                   <td style={{ padding: '10px 14px' }}>{b.supplierName || '—'}</td>
@@ -556,6 +574,12 @@ export default function BillsPage() {
 
             <div className="form-modal-ft">
               <button className="btn btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
+              {documentId && (
+                <button className="btn btn-outline" onClick={viewInvoice} disabled={viewingDoc}
+                  style={{ color: '#7c3aed', borderColor: '#7c3aed' }}>
+                  {viewingDoc ? '…' : '📄 View Invoice'}
+                </button>
+              )}
               <button className="btn btn-primary" onClick={save} disabled={saving || xeroPushing}>
                 {xeroPushing ? 'Syncing to Xero…' : saving ? 'Saving…' : editing ? 'Save Changes' : 'Add Bill'}
               </button>

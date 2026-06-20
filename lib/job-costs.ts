@@ -120,6 +120,12 @@ export async function signedDocUrl(sb: SupabaseClient, storagePath: string, seco
   return data?.signedUrl ?? null
 }
 
+export async function signedDocUrlById(sb: SupabaseClient, documentId: string): Promise<string | null> {
+  const { data } = await sb.from('job_documents').select('storage_path').eq('id', documentId).single()
+  if (!data?.storage_path) return null
+  return signedDocUrl(sb, data.storage_path)
+}
+
 // ── Document inbox ────────────────────────────────────────────────────────────
 function rowToDoc(r: Record<string, unknown>): InboxDocument {
   const status = r.status === 'allocated' ? 'allocated' : r.status === 'archived' ? 'archived' : r.status === 'error' ? 'error' : 'unallocated'

@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { signedDocUrl, allocateDocument } from '@/lib/job-costs'
-import type { InboxDocument, JobCostCategory, PaymentStatus } from '@/lib/types'
+import { useApp } from '@/contexts/AppContext'
+import type { InboxDocument, JobCostCategory, PaymentStatus, BillLineItem } from '@/lib/types'
 import type { ExtractedCostLine } from '@/lib/doc-extract/types'
 
 interface JobOption { id: string; label: string }
@@ -40,6 +41,7 @@ function initialLines(ex: Record<string, unknown> | null | undefined): Extracted
 
 export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSaved }: Props) {
   const sb = createClient()
+  const { addBill } = useApp()
   const ex = doc.extraction ?? {}
   const [url, setUrl] = useState<string | null>(null)
   const [supplier, setSupplier] = useState(String((ex as Record<string, unknown>).supplier ?? ''))
@@ -51,6 +53,8 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
   const [busy, setBusy] = useState(false)
   const [xeroBusy, setXeroBusy] = useState(false)
   const [xeroError, setXeroError] = useState<string | null>(null)
+  const [billBusy, setBillBusy] = useState(false)
+  const [billCreated, setBillCreated] = useState(false)
 
   const [xeroAccounts, setXeroAccounts] = useState<Array<{ code: string; name: string; type: string }>>([])
   const [xeroAccount, setXeroAccount] = useState('')
@@ -111,6 +115,43 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
   const addLine = () => setLines(p => [...p, { description: '', costCategory: 'materials', netAmount: 0, vatAmount: 0, grossAmount: 0, chargeToClient: false }])
   const removeLine = (i: number) => setLines(p => p.filter((_, idx) => idx !== i))
   const total = lines.reduce((s, l) => s + l.grossAmount, 0)
+
+  async function createBill() {
+    setBillBusy(true)
+    try {
+      // Map cost category to bill category (bills don't have 'subcontractors' — treat as labour for CIS)
+      const catMap: Record<JobCostCategory, BillLineItem['category']> = {
+        labour: 'labour', materials: 'materials', plant: 'plant',
+        subcontractors: 'labour', other: 'other',
+      }
+      let lineCounter = 0
+      const billLines: BillLineItem[] = lines.map(ln => ({
+        id: ++lineCounter,
+        desc: ln.description || supplier || 'Subcontractor work',
+        category: catMap[ln.costCategory] ?? 'labour',
+        amount: ln.grossAmount,
+      }))
+      const labour    = billLines.filter(l => l.category === 'labour').reduce((s, l) => s + l.amount, 0)
+      const materials = billLines.filter(l => l.category === 'materials').reduce((s, l) => s + l.amount, 0)
+      const plant     = billLines.filter(l => l.category === 'plant').reduce((s, l) => s + l.amount, 0)
+      const other     = billLines.filter(l => l.category === 'other').reduce((s, l) => s + l.amount, 0)
+      const subtotal  = labour + materials + plant + other
+      await addBill({
+        supplierId: '', supplierName: supplier || doc.fileName,
+        jobId: jobId || '',
+        billDate: docDate || new Date().toISOString().split('T')[0],
+        dueDate: '',
+        description: docNumber ? `Invoice ${docNumber}` : supplier || 'Subcontractor invoice',
+        lineItems: billLines,
+        labourAmount: labour, materialsAmount: materials, plantAmount: plant, otherAmount: other,
+        subtotal, cisRate: 0, cisDeduction: 0, totalPayable: subtotal,
+        status: 'draft', notes: docNumber ? `Receipt / invoice #${docNumber}` : '',
+        syncToXero: false,
+        documentId: doc.id,
+      })
+      setBillCreated(true)
+    } finally { setBillBusy(false) }
+  }
 
   // Allocation is valid when every line can resolve to a job
   const allLinesHaveJob = lines.every(l => l.jobId || jobId)
@@ -300,7 +341,7 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, flexWrap: 'wrap', gap: 8 }}>
                 <span style={{ fontSize: 13 }}>Total gross: <strong style={{ fontFamily: 'monospace' }}>{fmt(total)}</strong></span>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button onClick={onClose} style={btn} disabled={isBusy}>Cancel</button>
+                  <button onClick={onClose} style={btn} disabled={isBusy || billBusy}>Cancel</button>
                   <button
                     onClick={archive}
                     disabled={isBusy}
@@ -318,9 +359,20 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
                       {busy && !xeroBusy ? 'Saving…' : isAllocated ? 'Update allocation' : 'Allocate to job'}
                     </button>
                   )}
+                  {billCreated
+                    ? <span style={{ fontSize: 12, fontWeight: 700, color: '#16a34a' }}>✓ Bill created — see Bills page</span>
+                    : <button
+                        onClick={createBill}
+                        disabled={isBusy || billBusy}
+                        title="Create a subcontractor bill from this invoice and link it to the document"
+                        style={{ ...btn, background: '#7c3aed', color: '#fff', border: 'none', opacity: billBusy ? 0.7 : 1 }}
+                      >
+                        {billBusy ? '📋 Creating…' : '📋 Create Bill'}
+                      </button>
+                  }
                   <button
                     onClick={() => allocate(true)}
-                    disabled={isBusy}
+                    disabled={isBusy || billBusy}
                     style={{ ...btn, background: '#0d6b3b', color: '#fff', border: 'none', opacity: isBusy ? 0.7 : 1 }}
                   >
                     {xeroBusy ? '📤 Publishing…' : jobId ? (isAllocated ? '📤 Update & Publish to Xero' : '📤 Save & Publish to Xero') : '📤 Publish to Xero'}
