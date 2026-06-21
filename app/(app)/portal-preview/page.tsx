@@ -179,8 +179,6 @@ function PortalPreviewInner() {
           <nav className="portal-nav" style={{ display: 'flex' }}>
             {([
               'dashboard',
-              ...(clientSettings.showQuotesTab   ? ['quotes']   : []),
-              ...(clientSettings.showJobsTab     ? ['jobs']     : []),
               ...(clientSettings.showInvoicesTab ? ['invoices'] : []),
             ] as Tab[]).map(tab => (
               <button
@@ -263,88 +261,6 @@ function PortalPreviewInner() {
               </div>
             </div>
 
-            {/* Jobs summary */}
-            <section style={{ marginBottom: 36 }}>
-              <h2 style={{ fontSize: 14, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)', marginBottom: 12 }}>
-                Jobs
-              </h2>
-              {!jobs.length
-                ? <div style={{ fontSize: 13, color: 'var(--muted)', padding: '12px 0' }}>No jobs on file.</div>
-                : jobs.map(j => {
-                    const pct = j.weeks ? Math.min(100, Math.round((j.done / j.weeks) * 100)) : 0
-                    const col = STAGE_COLOR[j.stage] || '#888'
-                    const ganttOpen = expandedGantt === j.id
-                    return (
-                      <div key={j.id} style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 8, padding: '16px 20px', marginBottom: 12 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-                          <div>
-                            <div style={{ fontWeight: 700, fontSize: 16 }}>{j.type}</div>
-                            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{j.address}</div>
-                            {j.start && (
-                              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
-                                Started {new Date(j.start).toLocaleDateString('en-GB')}
-                              </div>
-                            )}
-                          </div>
-                          <span style={{ background: col, color: '#fff', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20 }}>
-                            {STAGE_LABEL[j.stage] || j.stage}
-                          </span>
-                        </div>
-                        <div style={{ height: 6, background: '#e8eaec', borderRadius: 3, overflow: 'hidden', marginBottom: 4 }}>
-                          <div style={{ height: '100%', width: pct + '%', background: col, borderRadius: 3, transition: 'width 0.3s' }} />
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--muted)', marginBottom: 10 }}>
-                          <span>Week {j.done} of {j.weeks}</span>
-                          <span style={{ fontWeight: 600 }}>{pct}% complete</span>
-                        </div>
-                        {j.notes && (
-                          <div style={{ marginBottom: 10, padding: '8px 12px', background: '#f8fafc', borderRadius: 6, fontSize: 12, color: 'var(--ink)', lineHeight: 1.6 }}>
-                            {j.notes}
-                          </div>
-                        )}
-                        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-                          <button
-                            onClick={() => setExpandedGantt(ganttOpen ? null : j.id)}
-                            style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '5px 12px', fontSize: 12, fontWeight: 600, color: 'var(--ink)', cursor: 'pointer', fontFamily: 'inherit' }}
-                          >
-                            📋 {ganttOpen ? 'Hide Programme ▲' : 'View Programme ▼'}
-                          </button>
-                          {ganttOpen && (
-                            <PortalGanttChart
-                              job={{ ...j, quoteId: undefined, stage: j.stage as 'active' | 'planning' | 'onhold' | 'complete' }}
-                              phases={[]}
-                              ganttState={j.ganttState}
-                            />
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })
-              }
-            </section>
-
-            {/* Quotes summary */}
-            <section style={{ marginBottom: 36 }}>
-              <h2 style={{ fontSize: 14, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)', marginBottom: 12 }}>
-                Quotes
-              </h2>
-              {!quotes.length
-                ? <div style={{ fontSize: 13, color: 'var(--muted)', padding: '12px 0' }}>No quotes on file.</div>
-                : quotes.map(q => (
-                    <div key={q.id} style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 8, padding: '14px 18px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-                      <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'monospace', minWidth: 60 }}>{q.ref || '—'}</div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 600, fontSize: 14 }}>{q.jobType}</div>
-                        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>Saved {q.savedDate}</div>
-                      </div>
-                      <div style={{ fontWeight: 700, fontSize: 16 }}>{fmt(quoteTotal(q))}</div>
-                      <span className={`badge ${Q_BADGE[q.status] || 'b-pending'}`}>
-                        {Q_LABEL[q.status] || q.status}
-                      </span>
-                    </div>
-                  ))
-              }
-            </section>
 
           </>
         )})()}
