@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter, usePathname, useSearchParams } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { AppProvider } from '@/contexts/AppContext'
 import { createClient } from '@/lib/supabase/client'
@@ -27,10 +27,14 @@ const ROUTE_PERMISSIONS: Partial<Record<string, keyof UserPermissions>> = {
 
 function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const pathname = usePathname()
-  const searchParams = useSearchParams()
   const router = useRouter()
   const supabase = createClient()
   const { settings, permissions, isOwner, currentMember } = useApp()
+  const [currentTab, setCurrentTab] = useState<string | null>(null)
+
+  useEffect(() => {
+    setCurrentTab(new URLSearchParams(window.location.search).get('tab'))
+  }, [pathname])
 
   async function signOut() {
     await supabase.auth.signOut()
@@ -44,10 +48,8 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
     const [hrefPath, hrefQuery] = href.split('?')
     const hrefParams = new URLSearchParams(hrefQuery || '')
     const hrefTab = hrefParams.get('tab')
-    const currentTab = searchParams.get('tab')
     let active = false
     if (pathname === hrefPath) {
-      // Both have no tab param, or both have same tab param
       active = hrefTab === currentTab
     } else if (href !== '/dashboard' && pathname.startsWith(hrefPath) && !hrefQuery) {
       active = !currentTab
@@ -146,10 +148,14 @@ const PAGE_TITLES: Record<string, string> = {
 
 function AppLayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const searchParams = useSearchParams()
   const router = useRouter()
   const { permissions, isOwner, loading, currentMember } = useApp()
-  const tab = searchParams.get('tab')
+  const [tab, setTab] = useState<string | null>(null)
+
+  useEffect(() => {
+    setTab(new URLSearchParams(window.location.search).get('tab'))
+  }, [pathname])
+
   const clientsTitle = tab === 'supplier' ? 'Suppliers' : tab === 'subcontractor' ? 'Sub Contractors' : 'Clients'
   const title = pathname === '/clients' ? clientsTitle : (PAGE_TITLES[pathname] || 'Dashboard')
 
