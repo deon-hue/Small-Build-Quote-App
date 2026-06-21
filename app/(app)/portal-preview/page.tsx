@@ -3,10 +3,9 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import PortalGanttChart from '@/components/PortalGanttChart'
 import type { GanttState, ClientPortalSettings } from '@/lib/types'
 import { DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
-import { fmt, Q_BADGE, Q_LABEL, STAGE_COLOR, STAGE_LABEL, calcPhaseSell, calcItemSell } from '@/lib/utils'
+import { fmt, Q_BADGE, Q_LABEL, calcPhaseSell, calcItemSell } from '@/lib/utils'
 import type { QuotePhase, QuoteItem } from '@/lib/types'
 
 // ── Types mirroring what the RPC returns ────────────────────
@@ -28,13 +27,13 @@ interface PreviewInvoice {
   status: string; issueDate: string; dueDate: string
 }
 interface PreviewVariation {
-  id: string; ref: string; title: string; status: string; total: number
+  id: string; ref: string; title: string; status: string; total: number; description: string
 }
 interface PreviewSettings {
   name: string; tagline: string; email: string; phone: string; address: string; logo: string
 }
 
-type Tab = 'dashboard' | 'quotes' | 'jobs' | 'invoices'
+type Tab = 'dashboard' | 'quotes' | 'variations' | 'invoices'
 
 // ── Status maps ──────────────────────────────────────────────
 const QUOTE_STATUS_LABEL: Record<string, string> = {
@@ -83,7 +82,6 @@ function PortalPreviewInner() {
   const [variations, setVariations] = useState<PreviewVariation[]>([])
   const [settings, setSettings] = useState<PreviewSettings | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
-  const [expandedGantt, setExpandedGantt] = useState<string | null>(null)
   const [expandedQuote, setExpandedQuote] = useState<string | null>(null)
   const [clientSettings, setClientSettings] = useState<ClientPortalSettings>(DEFAULT_CLIENT_PORTAL_SETTINGS)
 
@@ -133,7 +131,7 @@ function PortalPreviewInner() {
       if (Array.isArray(d?.variations)) {
         setVariations(d.variations.map((r: AnyRecord) => ({
           id: r.id, ref: r.ref || '', title: r.title || '',
-          status: r.status, total: Number(r.total),
+          status: r.status, total: Number(r.total), description: r.description || '',
         })))
       }
       if (d?.settings) setSettings(d.settings)
@@ -160,7 +158,7 @@ function PortalPreviewInner() {
   )
 
   const TAB_LABELS: Record<Tab, string> = {
-    dashboard: 'Dashboard', quotes: 'Quotes', jobs: 'Jobs', invoices: 'Invoices',
+    dashboard: 'Dashboard', quotes: 'Quotes', variations: 'Variations', invoices: 'Invoices',
   }
 
   return (
@@ -179,7 +177,9 @@ function PortalPreviewInner() {
           <nav className="portal-nav" style={{ display: 'flex' }}>
             {([
               'dashboard',
-              ...(clientSettings.showInvoicesTab ? ['invoices'] : []),
+              ...(clientSettings.showQuotesTab     ? ['quotes']     : []),
+              ...(clientSettings.showVariationsTab ? ['variations'] : []),
+              ...(clientSettings.showInvoicesTab   ? ['invoices']   : []),
             ] as Tab[]).map(tab => (
               <button
                 key={tab}
@@ -454,91 +454,47 @@ function PortalPreviewInner() {
         {/* ══════════════════════════════════════════════
             JOBS TAB
         ══════════════════════════════════════════════ */}
-        {activeTab === 'jobs' && (
-          <>
-            <div className="portal-page-hd">
-              <h1>Your Jobs</h1>
-              <p>{jobs.length} job{jobs.length !== 1 ? 's' : ''} on file</p>
-            </div>
-
-            {/* Preview-only notice */}
-            <div style={{ background: '#1e2022', color: '#f0c040', borderRadius: 8, padding: '10px 16px', fontSize: 12, fontWeight: 600, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
-              👁 Preview mode — variation actions are disabled
-            </div>
-
-            {!jobs.length ? (
-              <div className="portal-notice">
-                <div style={{ fontSize: 36, marginBottom: 12 }}>🏗</div>
-                <p>No jobs on file yet.</p>
-              </div>
-            ) : (
-              jobs.map(j => {
-                const pct = j.weeks ? Math.min(100, Math.round((j.done / j.weeks) * 100)) : 0
-                const col = STAGE_COLOR[j.stage] || '#888'
-                const ganttOpen = expandedGantt === j.id
-                return (
-                  <div key={j.id} className="portal-card">
-                    {/* Header */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: 17 }}>{j.type}</div>
-                        <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>{j.address}</div>
-                        {j.start && (
-                          <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
-                            Started {new Date(j.start).toLocaleDateString('en-GB')}
-                          </div>
-                        )}
-                      </div>
-                      <span className="portal-badge" style={{ background: col }}>
-                        {STAGE_LABEL[j.stage] || j.stage}
-                      </span>
+        {activeTab === 'variations' && (() => {
+          const pending  = variations.filter(v => v.status === 'sent')
+          const approved = variations.filter(v => ['approved', 'invoiced', 'paid'].includes(v.status))
+          const other    = variations.filter(v => ['rejected', 'cancelled', 'draft'].includes(v.status))
+          const VAR_SL: Record<string, string> = { draft: 'Draft', sent: 'Awaiting your approval', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled', invoiced: 'Invoiced', paid: 'Paid' }
+          const VAR_SC: Record<string, string> = { draft: '#888', sent: '#e67e22', approved: '#27ae60', rejected: '#c0392b', cancelled: '#9aa3ad', invoiced: '#4a90a4', paid: '#7ab533' }
+          function VarCard({ v }: { v: (typeof variations)[0] }) {
+            return (
+              <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 8, padding: '14px 16px', marginBottom: 8, borderLeft: `3px solid ${VAR_SC[v.status]}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                      <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, color: 'var(--muted)' }}>{v.ref}</span>
+                      <span style={{ fontWeight: 700, fontSize: 14 }}>{v.title}</span>
                     </div>
-
-                    {/* Progress */}
-                    <div className="portal-progress">
-                      <div className="portal-progress-bar" style={{ width: pct + '%', background: col }} />
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--muted)', marginTop: 5, marginBottom: j.notes ? 12 : 14 }}>
-                      <span>Week {j.done} of {j.weeks}</span>
-                      <span style={{ fontWeight: 600 }}>{pct}% complete</span>
-                    </div>
-
-                    {j.notes && (
-                      <div style={{ marginBottom: 14, padding: '10px 14px', background: 'var(--warm)', borderRadius: 6, fontSize: 13, color: 'var(--ink)', lineHeight: 1.6 }}>
-                        {j.notes}
-                      </div>
-                    )}
-
-                    {/* Contract value */}
-                    <div style={{ marginBottom: 14, padding: '12px 14px', background: '#f0f4f8', borderRadius: 8 }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.7px', color: 'var(--muted)', marginBottom: 2 }}>Contract Value</div>
-                      <div style={{ fontFamily: 'DM Mono, monospace', fontWeight: 700, fontSize: 16 }}>{fmt(j.value)}</div>
-                    </div>
-
-                    {/* Programme toggle */}
-                    {clientSettings.showProgramme && (
-                      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
-                        <button
-                          onClick={() => setExpandedGantt(ganttOpen ? null : j.id)}
-                          style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 12px', fontSize: 12, fontWeight: 600, color: 'var(--ink)', cursor: 'pointer', fontFamily: 'inherit' }}
-                        >
-                          📋 {ganttOpen ? 'Hide Programme ▲' : 'View Programme ▼'}
-                        </button>
-                        {ganttOpen && (
-                          <PortalGanttChart
-                            job={{ ...j, quoteId: undefined, stage: j.stage as 'active' | 'planning' | 'onhold' | 'complete' }}
-                            phases={[]}
-                            ganttState={j.ganttState}
-                          />
-                        )}
-                      </div>
-                    )}
+                    {v.description && <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{v.description.slice(0, 100)}{v.description.length > 100 ? '…' : ''}</div>}
+                    <span style={{ background: VAR_SC[v.status], color: '#fff', fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20 }}>{VAR_SL[v.status]}</span>
                   </div>
-                )
-              })
-            )}
-          </>
-        )}
+                  <div style={{ fontFamily: 'DM Mono, monospace', fontWeight: 700, fontSize: 16, flexShrink: 0 }}>{fmt(v.total)}</div>
+                </div>
+              </div>
+            )
+          }
+          return (
+            <>
+              <div className="portal-page-hd"><h1>Variations</h1><p>{variations.length} variation{variations.length !== 1 ? 's' : ''} on file</p></div>
+              <div style={{ background: '#1e2022', color: '#f0c040', borderRadius: 8, padding: '10px 16px', fontSize: 12, fontWeight: 600, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+                👁 Preview mode — approve/reject buttons are disabled
+              </div>
+              {!variations.length ? (
+                <div className="portal-notice"><div style={{ fontSize: 36, marginBottom: 12 }}>📝</div><p>No variations on file yet.</p></div>
+              ) : (
+                <>
+                  {pending.length > 0 && <section style={{ marginBottom: 24 }}><div style={{ background: '#fff8ee', border: '1px solid #f5c77a', borderRadius: 8, padding: '10px 14px', marginBottom: 12, fontWeight: 700, fontSize: 13, color: '#856a00' }}>⏳ {pending.length} awaiting approval</div>{pending.map(v => <VarCard key={v.id} v={v} />)}</section>}
+                  {approved.length > 0 && <section style={{ marginBottom: 24 }}><div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.7px', color: 'var(--muted)', marginBottom: 8 }}>Approved</div>{approved.map(v => <VarCard key={v.id} v={v} />)}</section>}
+                  {other.length > 0 && <section style={{ marginBottom: 24 }}><div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.7px', color: 'var(--muted)', marginBottom: 8 }}>Other</div>{other.map(v => <VarCard key={v.id} v={v} />)}</section>}
+                </>
+              )}
+            </>
+          )
+        })()}
 
         {/* ══════════════════════════════════════════════
             INVOICES TAB

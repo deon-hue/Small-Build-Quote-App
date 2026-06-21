@@ -258,6 +258,8 @@ export interface ClientPortalSettings {
   showJobsTab: boolean
   /** Show the Invoices tab in the client portal */
   showInvoicesTab: boolean
+  /** Show the Variations tab in the client portal */
+  showVariationsTab: boolean
   /** Show the Programme (Gantt chart) on the Jobs page */
   showProgramme: boolean
   /** Allow client to digitally approve quotes via the portal */
@@ -273,6 +275,7 @@ export const DEFAULT_CLIENT_PORTAL_SETTINGS: ClientPortalSettings = {
   showQuotesTab:      true,
   showJobsTab:        true,
   showInvoicesTab:    true,
+  showVariationsTab:  true,
   showProgramme:      true,
   allowOnlineApproval: true,
   defaultPdfType:     'customer',
