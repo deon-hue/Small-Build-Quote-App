@@ -152,7 +152,7 @@ export default function ClientsPage() {
       const res = await fetch('/api/portal/send-app-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientName: c.name, clientEmail: c.email, companyName: settings.name }),
+        body: JSON.stringify({ clientName: c.name, clientEmail: c.email, clientPhone: c.phone, companyName: settings.name }),
       })
       if (res.ok) {
         setAppLinkSentId(c.id)

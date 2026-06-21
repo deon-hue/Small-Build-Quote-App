@@ -1,48 +1,111 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+function toE164(raw: string): string | null {
+  let n = raw.trim().replace(/[\s\-().]/g, '')
+  if (n.startsWith('+')) return n.replace(/[^\d+]/g, '').length >= 8 ? n : null
+  if (n.startsWith('00')) n = '+' + n.slice(2)
+  else if (n.startsWith('07') || n.startsWith('01') || n.startsWith('02')) n = '+44' + n.slice(1)
+  else if (n.startsWith('44') && n.length >= 11) n = '+' + n
+  else return null
+  return n.length >= 9 ? n : null
+}
+
+async function sendWhatsApp(
+  to: string, body: string,
+  accountSid: string, authToken: string, from: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const e164 = toE164(to)
+  if (!e164) return { ok: false, error: `Cannot normalise phone number: "${to}"` }
+  const params = new URLSearchParams({ From: from, To: `whatsapp:${e164}`, Body: body })
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`
+  const creds = Buffer.from(`${accountSid}:${authToken}`).toString('base64')
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Basic ${creds}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params.toString(),
+  })
+  const data = await res.json()
+  return res.ok ? { ok: true } : { ok: false, error: data?.message || `Twilio error ${res.status}` }
+}
+
 export async function POST(req: NextRequest) {
   const sb = await createClient()
   const { data: { user } } = await sb.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
 
-  let body: { clientName: string; clientEmail: string; companyName?: string }
+  let body: { clientName: string; clientEmail?: string; clientPhone?: string; companyName?: string }
   try { body = await req.json() } catch {
     return NextResponse.json({ error: 'Bad request' }, { status: 400 })
   }
 
-  const { clientName, clientEmail, companyName } = body
-  if (!clientEmail) return NextResponse.json({ error: 'No email' }, { status: 400 })
+  const { clientName, clientEmail, clientPhone, companyName } = body
+  if (!clientEmail && !clientPhone) return NextResponse.json({ error: 'No email or phone' }, { status: 400 })
 
-  const resendKey = process.env.RESEND_API_KEY
-  const fromEmail = process.env.NOTIFY_FROM_EMAIL || 'noreply@resend.dev'
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || req.headers.get('origin') || ''
+  const resendKey    = process.env.RESEND_API_KEY
+  const fromEmail    = process.env.NOTIFY_FROM_EMAIL || 'noreply@resend.dev'
+  const twilioSid    = process.env.TWILIO_ACCOUNT_SID
+  const twilioToken  = process.env.TWILIO_AUTH_TOKEN
+  const twilioFrom   = process.env.TWILIO_WHATSAPP_FROM
+  const appUrl       = process.env.NEXT_PUBLIC_APP_URL || req.headers.get('origin') || ''
 
-  if (!resendKey) return NextResponse.json({ error: 'Email not configured' }, { status: 500 })
+  const portalUrl  = `${appUrl}/portal`
+  const firstName  = clientName.split(' ')[0] || clientName
+  const company    = companyName || 'The Small Build Co'
 
-  const portalUrl = `${appUrl}/portal`
-  const firstName = clientName.split(' ')[0] || clientName
-  const company = companyName || 'The Small Build Co'
-
-  const html = buildEmail({ firstName, company, portalUrl })
-
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      from: fromEmail,
-      to: clientEmail,
-      subject: `${company}: Access your client portal on your phone`,
-      html,
-    }),
-  })
-
-  if (!res.ok) {
-    const data = await res.json()
-    return NextResponse.json({ error: data?.message || 'Email failed' }, { status: 500 })
+  const results: { email: boolean; whatsapp: boolean; errors: string[] } = {
+    email: false, whatsapp: false, errors: [],
   }
 
-  return NextResponse.json({ sent: true })
+  // ── Email ────────────────────────────────────────────────────
+  if (clientEmail && resendKey) {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: clientEmail,
+        subject: `${company}: Access your client portal on your phone`,
+        html: buildEmail({ firstName, company, portalUrl }),
+      }),
+    })
+    results.email = res.ok
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      results.errors.push(d?.message || `Email error ${res.status}`)
+    }
+  }
+
+  // ── WhatsApp ─────────────────────────────────────────────────
+  if (clientPhone && twilioSid && twilioToken && twilioFrom) {
+    const message = buildWhatsAppMessage({ firstName, company, portalUrl })
+    const r = await sendWhatsApp(clientPhone, message, twilioSid, twilioToken, twilioFrom)
+    results.whatsapp = r.ok
+    if (!r.ok) results.errors.push(`WhatsApp: ${r.error}`)
+  }
+
+  const anySent = results.email || results.whatsapp
+  if (!anySent && results.errors.length) {
+    return NextResponse.json({ error: results.errors.join(' | ') }, { status: 500 })
+  }
+
+  return NextResponse.json({ sent: results })
+}
+
+function buildWhatsAppMessage({ firstName, company, portalUrl }: { firstName: string; company: string; portalUrl: string }): string {
+  return [
+    `Hi ${firstName} 👋`,
+    ``,
+    `${company} has set up a project portal for you — you can add it to your home screen like a downloaded app. No App Store needed.`,
+    ``,
+    `Open this link on your phone:`,
+    portalUrl,
+    ``,
+    `*iPhone:* Tap Share ↑ → "Add to Home Screen"`,
+    `*Android:* Tap ⋮ menu → "Add to Home Screen"`,
+    ``,
+    `Once installed it'll sit on your home screen for quick access to your quotes, invoices and updates.`,
+  ].join('\n')
 }
 
 function buildEmail({ firstName, company, portalUrl }: { firstName: string; company: string; portalUrl: string }): string {
