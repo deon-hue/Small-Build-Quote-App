@@ -363,10 +363,10 @@ export default function VariationModal({ job, onClose }: Props) {
           <div style={{
             background: '#f0f9e8', border: '1px solid #b8e08a', borderRadius: 8,
             padding: '12px 16px', marginBottom: 18,
-            display: 'flex', alignItems: 'center', gap: 10,
+            display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
           }}>
             <span style={{ fontSize: 20 }}>🔒</span>
-            <div>
+            <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 700, fontSize: 13, color: '#4a7c1f' }}>
                 Approved — locked
               </div>
@@ -379,7 +379,29 @@ export default function VariationModal({ job, onClose }: Props) {
             </div>
             <button
               className="btn-sm btn-outline"
-              style={{ marginLeft: 'auto' }}
+              style={{ color: '#e67e22', borderColor: '#e67e22' }}
+              disabled={busy}
+              onClick={async () => {
+                if (!confirm('Unapprove this variation? It will be unlocked and returned to Draft so it can be edited.')) return
+                if (!editingVar) return
+                setBusy(true)
+                try {
+                  const updated: Variation = {
+                    ...editingVar,
+                    status: 'draft',
+                    locked: false,
+                    clientApprovedAt: null,
+                    clientApprovedBy: null,
+                  }
+                  await updateVariation(updated)
+                  setEditingVar(updated)
+                } finally { setBusy(false) }
+              }}
+            >
+              🔓 Unapprove
+            </button>
+            <button
+              className="btn-sm btn-outline"
               onClick={handleCreateRevision}
             >
               + Create Revision
