@@ -124,33 +124,35 @@ export default function JobsPage() {
             const effectiveValue = j.value + approvedVarTotal
             return (
               <div key={j.id} className="card" style={{ marginBottom: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px' }}>
-                  <div className="job-dot" style={{ background: col }} />
-                  <div className="job-info" style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                      <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'white', background: col, borderRadius: 4, padding: '2px 6px', letterSpacing: '0.5px' }}>{jobNum}</span>
-                      <div className="job-name">{j.type} — {j.client}</div>
-                    </div>
-                    <div className="job-meta">{j.address}{j.start ? ' · Started ' + new Date(j.start).toLocaleDateString('en-GB') : ''}</div>
-                    <div className="progress" style={{ maxWidth: 240, marginTop: 6 }}>
-                      <div className="progress-bar" style={{ width: pct + '%', background: col }} />
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
-                      Week {j.done} of {j.weeks} · {pct}% complete
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div className="mono" style={{ fontSize: 18, fontWeight: 600 }}>{fmt(effectiveValue)}</div>
-                    {approvedVarTotal > 0 && (
-                      <div style={{ fontSize: 10, color: '#27ae60', marginTop: 1 }}>
-                        Base {fmt(j.value)} +{fmt(approvedVarTotal)} variations
+                <div className="job-card-inner">
+                  <div className="job-card-main">
+                    <div className="job-dot" style={{ background: col }} />
+                    <div className="job-info">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                        <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'white', background: col, borderRadius: 4, padding: '2px 6px', letterSpacing: '0.5px' }}>{jobNum}</span>
+                        <div className="job-name">{j.type} — {j.client}</div>
                       </div>
-                    )}
-                    <span className={`badge ${STAGE_BADGE[j.stage] || 'b-planning'}`} style={{ marginTop: 4, display: 'block' }}>
-                      {STAGE_LABEL[j.stage] || j.stage}
-                    </span>
+                      <div className="job-meta">{j.address}{j.start ? ' · Started ' + new Date(j.start).toLocaleDateString('en-GB') : ''}</div>
+                      <div className="progress" style={{ maxWidth: 240, marginTop: 6 }}>
+                        <div className="progress-bar" style={{ width: pct + '%', background: col }} />
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
+                        Week {j.done} of {j.weeks} · {pct}% complete
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <div className="mono" style={{ fontSize: 18, fontWeight: 600 }}>{fmt(effectiveValue)}</div>
+                      {approvedVarTotal > 0 && (
+                        <div style={{ fontSize: 10, color: '#27ae60', marginTop: 1 }}>
+                          Base {fmt(j.value)} +{fmt(approvedVarTotal)} variations
+                        </div>
+                      )}
+                      <span className={`badge ${STAGE_BADGE[j.stage] || 'b-planning'}`} style={{ marginTop: 4, display: 'block' }}>
+                        {STAGE_LABEL[j.stage] || j.stage}
+                      </span>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  <div className="job-card-actions">
                     <button className="btn-sm btn-gold" onClick={() => setGanttJob(j)}>📋 Gantt</button>
                     <button className="btn-sm btn-sky" onClick={() => { setNotesJob(j); setNewNote('') }}>
                       📝 Notes {jobNotes.filter(n => n.jobId === j.id).length > 0 ? `(${jobNotes.filter(n => n.jobId === j.id).length})` : ''}

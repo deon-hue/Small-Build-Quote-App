@@ -157,7 +157,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Chart + Overdue quotes */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 18, marginBottom: 18 }}>
+      <div className="dash-2col" style={{ marginBottom: 18 }}>
         {/* Revenue chart */}
         <div className="card">
           <div className="card-hd">Contract Value by Month</div>
@@ -216,7 +216,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Active jobs + recent quotes */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 18 }}>
+      <div className="dash-2col">
         {/* Active jobs */}
         <div className="card">
           <div className="card-hd">

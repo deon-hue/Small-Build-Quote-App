@@ -248,15 +248,15 @@ function ClientsPageInner() {
       )}
 
       <div className="card">
-        <table className="tbl">
+        <table className="tbl tbl-responsive">
           <thead>
             <tr>
               <th>{tab === 'client' ? 'Client' : tab === 'supplier' ? 'Supplier' : 'Subcontractor'}</th>
               <th>Email</th>
-              <th>Phone</th>
-              <th>Jobs</th>
-              {tab === 'client' && <th>Portal Status</th>}
-              <th></th>
+              <th className="col-hide-mobile">Phone</th>
+              <th className="col-hide-mobile">Jobs</th>
+              {tab === 'client' && <th className="col-hide-mobile">Portal Status</th>}
+              <th className="col-hide-mobile"></th>
             </tr>
           </thead>
           <tbody>
@@ -275,10 +275,10 @@ function ClientsPageInner() {
                       <td onClick={() => setSelected(c)} style={{ cursor: 'pointer', fontSize: 13, color: c.email ? 'var(--ink)' : 'var(--muted)' }}>
                         {c.email || '—'}
                       </td>
-                      <td onClick={() => setSelected(c)} style={{ cursor: 'pointer', fontSize: 13 }}>{c.phone || '—'}</td>
-                      <td onClick={() => setSelected(c)} style={{ cursor: 'pointer', fontSize: 13 }}>{cJ.length} job{cJ.length !== 1 ? 's' : ''}</td>
+                      <td className="col-hide-mobile" onClick={() => setSelected(c)} style={{ cursor: 'pointer', fontSize: 13 }}>{c.phone || '—'}</td>
+                      <td className="col-hide-mobile" onClick={() => setSelected(c)} style={{ cursor: 'pointer', fontSize: 13 }}>{cJ.length} job{cJ.length !== 1 ? 's' : ''}</td>
                       {tab === 'client' && (
-                      <td>
+                      <td className="col-hide-mobile">
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                           <span style={{
                             display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -300,9 +300,9 @@ function ClientsPageInner() {
                         </div>
                       </td>
                       )}
-                      <td>
+                      <td className="col-hide-mobile">
                         <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                          {tab === 'client' && (<>
+                          {tab === 'client' && (<div className="btn-mob-hide">
                           {/* Invite / Resend button */}
                           {status === 'no_email' ? (
                             <button className="btn-sm btn-outline" disabled style={{ opacity: 0.4, cursor: 'not-allowed' }} title="Add an email address first">
@@ -344,7 +344,7 @@ function ClientsPageInner() {
                           >
                             👁 View Portal
                           </button>
-                          </>)}
+                          </div>)}
                           <button className="btn-sm btn-outline" onClick={() => openEdit(c)}>Edit</button>
                           <button className="btn-sm btn-danger" onClick={() => handleDelete(c)}>Delete</button>
                         </div>

@@ -77,6 +77,7 @@ textarea{resize:vertical;min-height:56px}
 .stat-label{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;font-weight:600}
 .stat-val{font-family:'DM Serif Display',serif;font-size:32px;line-height:1}
 .stat-sub{font-size:12px;color:var(--muted);margin-top:6px}
+.dash-2col{display:grid;grid-template-columns:1.6fr 1fr;gap:18px}
 
 /* ── Table ── */
 .tbl{width:100%;border-collapse:collapse}
@@ -107,6 +108,10 @@ textarea{resize:vertical;min-height:56px}
 .progress{height:3px;background:var(--warm);border-radius:2px;margin-top:5px;max-width:220px;overflow:hidden}
 .progress-bar{height:100%;border-radius:2px}
 .job-right{text-align:right;flex-shrink:0}
+.job-card-inner{display:flex;align-items:flex-start;gap:12px;padding:16px 20px}
+.job-card-main{display:flex;align-items:flex-start;gap:12px;flex:1;min-width:0}
+.job-card-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.btn-mob-hide{display:contents}
 
 /* ── Pipeline ── */
 .pipeline{display:flex;gap:12px;padding:14px 18px;overflow-x:auto}
@@ -200,6 +205,12 @@ textarea{resize:vertical;min-height:56px}
   .row2{flex-direction:column;gap:0}
   .pipeline{flex-direction:column}
   .pip-col{min-width:unset}
+  .dash-2col{grid-template-columns:1fr}
+  .job-card-inner{flex-wrap:wrap}
+  .job-card-actions{flex:0 0 100%;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+  .col-hide-mobile{display:none}
+  .btn-mob-hide{display:none}
+  .tbl-responsive{min-width:auto}
 }
 
 /* ═══════════════════════════════════════════════════════════
