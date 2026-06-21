@@ -6,6 +6,9 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   manifest: '/portal-manifest.json',
+  icons: {
+    apple: '/portal-icon.png',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
