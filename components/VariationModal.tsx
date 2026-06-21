@@ -322,7 +322,21 @@ export default function VariationModal({ job, onClose }: Props) {
                   </div>
                   {v.vatIncluded && <div style={{ fontSize: 10, color: 'var(--muted)' }}>inc. VAT</div>}
                 </div>
-                <div style={{ color: 'var(--muted)', fontSize: 16 }}>›</div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                  <div style={{ color: 'var(--muted)', fontSize: 16 }}>›</div>
+                  {!v.locked && v.status !== 'invoiced' && v.status !== 'paid' && (
+                    <button
+                      onClick={e => {
+                        e.stopPropagation()
+                        if (confirm(`Delete variation ${v.ref}? This cannot be undone.`)) deleteVariation(v.id)
+                      }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c0392b', fontSize: 13, padding: '2px 4px', lineHeight: 1 }}
+                      title="Delete variation"
+                    >
+                      🗑
+                    </button>
+                  )}
+                </div>
               </div>
             )
           })
@@ -622,8 +636,8 @@ export default function VariationModal({ job, onClose }: Props) {
 
         {/* Action buttons */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 8, borderTop: '1px solid var(--border)' }}>
-          {/* Delete — only drafts */}
-          {editingVar && isDraft && (
+          {/* Delete — any non-approved/invoiced/paid variation */}
+          {editingVar && !isLocked && editingVar.status !== 'invoiced' && editingVar.status !== 'paid' && (
             <button className="btn btn-danger" onClick={handleDelete} style={{ marginRight: 'auto' }}>
               Delete
             </button>
