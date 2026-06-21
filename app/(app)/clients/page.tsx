@@ -63,6 +63,29 @@ export default function ClientsPage() {
     return c.email ? `${portalBase}?email=${encodeURIComponent(c.email)}` : portalBase
   }
 
+  function toIntlDigits(phone: string): string {
+    const d = phone.replace(/\D/g, '')
+    if (d.startsWith('07') || d.startsWith('01') || d.startsWith('02')) return '44' + d.slice(1)
+    if (d.startsWith('00')) return d.slice(2)
+    return d
+  }
+
+  function smsHref(c: Client): string {
+    const num = toIntlDigits(c.phone || '')
+    const url = portalUrl(c)
+    const firstName = (c.name || '').split(' ')[0] || c.name
+    const body = `Hi ${firstName}, here's your ${settings.name || 'Small Build Co'} project portal: ${url}\n\niPhone: Tap Share → "Add to Home Screen"\nAndroid: Tap ⋮ → "Add to Home Screen"`
+    return `sms:+${num}?body=${encodeURIComponent(body)}`
+  }
+
+  function waHref(c: Client): string {
+    const num = toIntlDigits(c.phone || '')
+    const url = portalUrl(c)
+    const firstName = (c.name || '').split(' ')[0] || c.name
+    const body = `Hi ${firstName} 👋\n\nHere's your ${settings.name || 'Small Build Co'} project portal:\n${url}\n\nTo install it as an app on your phone:\n*iPhone*: Tap Share → "Add to Home Screen"\n*Android*: Tap ⋮ menu → "Add to Home Screen"`
+    return `https://wa.me/${num}?text=${encodeURIComponent(body)}`
+  }
+
   // URL for admin to preview what the client sees (no sign-in required)
   function adminPreviewUrl(c: Client) {
     return c.email
@@ -294,6 +317,13 @@ export default function ClientsPage() {
                               {appLinkSentId === c.id ? '✓ App Link Sent' : appLinkSendingId === c.id ? '...' : '📲 App Link'}
                             </button>
                           )}
+                          {/* Text / WhatsApp */}
+                          {c.phone && (
+                            <>
+                              <a className="btn-sm btn-outline" href={smsHref(c)} title="Send portal link via SMS">💬 SMS</a>
+                              <a className="btn-sm btn-outline" href={waHref(c)} target="_blank" rel="noreferrer" title="Send portal link via WhatsApp">🟢 WhatsApp</a>
+                            </>
+                          )}
                           {/* Admin preview of client portal */}
                           <button
                             className="btn-sm btn-sky"
@@ -336,6 +366,12 @@ export default function ClientsPage() {
                   >
                     {appLinkSentId === selected.id ? '✓ App Link Sent' : '📲 App Link'}
                   </button>
+                )}
+                {selected.phone && (
+                  <a className="btn-sm btn-outline" href={smsHref(selected)} title="Send portal link via SMS">💬 SMS</a>
+                )}
+                {selected.phone && (
+                  <a className="btn-sm btn-outline" href={waHref(selected)} target="_blank" rel="noreferrer" title="Send portal link via WhatsApp">🟢 WhatsApp</a>
                 )}
                 {selected.email && (
                   <button className="btn-sm btn-sky" onClick={() => { setSelected(null); router.push(adminPreviewUrl(selected)) }} title={`View portal as ${selected.name}`}>
