@@ -275,7 +275,7 @@ export default function ClientsPage() {
           <tbody>
             {!clients.filter(c => (c.clientType || 'client') === tab).length
               ? <tr><td colSpan={tab === 'client' ? 6 : 5} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>No {tab === 'client' ? 'clients' : tab === 'supplier' ? 'suppliers' : 'subcontractors'} yet</td></tr>
-              : clients.filter(c => (c.clientType || 'client') === tab).map(c => {
+              : clients.filter(c => (c.clientType || 'client') === tab).sort((a, b) => a.name.localeCompare(b.name)).map(c => {
                   const ini = (c.name[0] || '').toUpperCase() + ((c.name.split(' ').pop() || '')[0] || '').toUpperCase()
                   const cJ = getClientJobs(c)
                   const status = c.portalStatus || (c.email ? 'not_invited' : 'no_email')
