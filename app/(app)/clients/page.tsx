@@ -48,6 +48,7 @@ export default function ClientsPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [appLinkSentId, setAppLinkSentId] = useState<string | null>(null)
   const [appLinkSendingId, setAppLinkSendingId] = useState<string | null>(null)
+  const [appLinkError, setAppLinkError] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editingClient, setEditingClient] = useState<Client | null>(null)
   const [form, setForm] = useState(BLANK_FORM)
@@ -146,14 +147,22 @@ export default function ClientsPage() {
   async function sendAppLink(c: Client) {
     if (!c.email || appLinkSendingId) return
     setAppLinkSendingId(c.id)
+    setAppLinkError('')
     try {
-      await fetch('/api/portal/send-app-link', {
+      const res = await fetch('/api/portal/send-app-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clientName: c.name, clientEmail: c.email, companyName: settings.name }),
       })
-      setAppLinkSentId(c.id)
-      setTimeout(() => setAppLinkSentId(null), 3000)
+      if (res.ok) {
+        setAppLinkSentId(c.id)
+        setTimeout(() => setAppLinkSentId(null), 3000)
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setAppLinkError(data.error || 'Failed to send — check Resend is configured in Netlify environment variables')
+      }
+    } catch {
+      setAppLinkError('Network error — could not send app link')
     } finally {
       setAppLinkSendingId(null)
     }
@@ -199,6 +208,13 @@ export default function ClientsPage() {
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
         <button className="btn btn-primary" onClick={openNew}>+ New Client</button>
       </div>
+
+      {appLinkError && (
+        <div style={{ background: '#fff0f0', border: '1px solid #e88', borderRadius: 8, padding: '12px 16px', marginBottom: 12, fontSize: 13, color: '#c00', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>⚠️ App link not sent: {appLinkError}</span>
+          <button onClick={() => setAppLinkError('')} style={{ background: 'none', border: 'none', color: '#c00', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>✕</button>
+        </div>
+      )}
 
       <div className="card">
         <table className="tbl">
