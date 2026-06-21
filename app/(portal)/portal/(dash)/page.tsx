@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePortal } from '@/contexts/PortalContext'
-import { fmt, STAGE_COLOR, STAGE_LABEL } from '@/lib/utils'
+import { fmt } from '@/lib/utils'
 
 function PortalError({ error, userEmail, reload }: { error: string; userEmail: string; reload: () => void }) {
   if (error === 'setup_required') {
@@ -66,7 +66,7 @@ function PortalError({ error, userEmail, reload }: { error: string; userEmail: s
 }
 
 export default function PortalDashboard() {
-  const { quotes, jobs, invoices, variations, settings, userEmail, loading, error, reload } = usePortal()
+  const { invoices, variations, jobs, settings, userEmail, loading, error, reload } = usePortal()
 
   if (loading) {
     return (
@@ -81,8 +81,6 @@ export default function PortalDashboard() {
     return <PortalError error={error} userEmail={userEmail} reload={reload} />
   }
 
-  const openQuotes     = quotes.filter(q => q.status === 'pending' || q.status === 'sent')
-  const activeJobs     = jobs.filter(j => j.stage === 'active' || j.stage === 'planning')
   const unpaidInvoices = invoices.filter(i => i.status === 'sent' || i.status === 'overdue')
 
   // Financial snapshot
@@ -148,66 +146,35 @@ export default function PortalDashboard() {
 
       </div>
 
-      {/* Active jobs */}
-      {activeJobs.length > 0 && (
+      {/* Unpaid invoices */}
+      {unpaidInvoices.length > 0 && (
         <div className="portal-section">
           <div className="portal-section-title">
-            Your Jobs
-            <Link href="/portal/jobs" className="portal-section-link">View all →</Link>
+            Outstanding Invoices
+            <Link href="/portal/invoices" className="portal-section-link">View all →</Link>
           </div>
-          {activeJobs.map(j => {
-            const pct = j.weeks ? Math.min(100, Math.round((j.done / j.weeks) * 100)) : 0
-            const col = STAGE_COLOR[j.stage] || '#888'
-            return (
-              <div key={j.id} className="portal-card">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 16 }}>{j.type}</div>
-                    <div style={{ fontSize: 13, color: 'var(--muted)' }}>{j.address}</div>
-                  </div>
-                  <span className="portal-badge" style={{ background: col }}>
-                    {STAGE_LABEL[j.stage] || j.stage}
-                  </span>
-                </div>
-                <div className="portal-progress">
-                  <div className="portal-progress-bar" style={{ width: pct + '%', background: col }} />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
-                  <span>Week {j.done} of {j.weeks}</span>
-                  <span>{pct}% complete</span>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Open quotes */}
-      {openQuotes.length > 0 && (
-        <div className="portal-section">
-          <div className="portal-section-title">
-            Open Quotes
-            <Link href="/portal/quotes" className="portal-section-link">View all →</Link>
-          </div>
-          {openQuotes.map(q => (
-            <div key={q.id} className="portal-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          {unpaidInvoices.map(i => (
+            <div key={i.id} className="portal-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, color: 'var(--muted)' }}>{q.ref}</div>
-                <div style={{ fontWeight: 600, fontSize: 15 }}>{q.jobType}</div>
+                <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, color: 'var(--muted)' }}>{i.ref}</div>
+                <div style={{ fontWeight: 600, fontSize: 15 }}>{i.clientName || 'Invoice'}</div>
               </div>
-              <span className="portal-badge" style={{ background: q.status === 'sent' ? '#4a90a4' : '#888' }}>
-                {q.status === 'sent' ? 'Awaiting response' : 'Pending'}
-              </span>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>£{(i.total || 0).toFixed(2)}</div>
+                <span className="portal-badge" style={{ background: i.status === 'overdue' ? '#e74c3c' : '#4a90a4' }}>
+                  {i.status === 'overdue' ? 'Overdue' : 'Due'}
+                </span>
+              </div>
             </div>
           ))}
         </div>
       )}
 
-      {!activeJobs.length && !openQuotes.length && (
+      {unpaidInvoices.length === 0 && (
         <div className="portal-notice">
           <div style={{ fontSize: 40, marginBottom: 12 }}>✓</div>
           <h2 style={{ marginBottom: 6 }}>All up to date</h2>
-          <p style={{ color: 'var(--muted)' }}>No outstanding quotes, jobs or invoices right now.</p>
+          <p style={{ color: 'var(--muted)' }}>No outstanding invoices right now.</p>
         </div>
       )}
     </>
