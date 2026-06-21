@@ -300,7 +300,7 @@ export interface Client {
   address: string
   notes: string
   paymentTerms: string
-  clientType: 'client' | 'supplier'
+  clientType: 'client' | 'supplier' | 'subcontractor'
   addedFrom: string
   portalInvitedAt?: string | null
   portalStatus?: PortalStatus

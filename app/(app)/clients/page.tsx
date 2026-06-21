@@ -10,7 +10,7 @@ import { useRouter } from 'next/navigation'
 import QuotePreviewModal from '@/components/QuotePreviewModal'
 import type { Quote } from '@/lib/types'
 
-const BLANK_FORM = { name: '', first: '', last: '', email: '', phone: '', address: '', notes: '', paymentTerms: 'Payment on receipt', clientType: 'client' as 'client' | 'supplier' }
+const BLANK_FORM = { name: '', first: '', last: '', email: '', phone: '', address: '', notes: '', paymentTerms: 'Payment on receipt', clientType: 'client' as 'client' | 'supplier' | 'subcontractor' }
 
 // ── Portal status helpers ───────────────────────────────────
 const STATUS_LABEL: Record<PortalStatus, string> = {
@@ -54,7 +54,7 @@ export default function ClientsPage() {
   const [form, setForm] = useState(BLANK_FORM)
   const [formPortalSettings, setFormPortalSettings] = useState<ClientPortalSettings>(DEFAULT_CLIENT_PORTAL_SETTINGS)
   const [saving, setSaving] = useState(false)
-  const [tab, setTab] = useState<'client' | 'supplier'>('client')
+  const [tab, setTab] = useState<'client' | 'supplier' | 'subcontractor'>('client')
   const router = useRouter()
 
   const portalBase = (typeof window !== 'undefined' ? window.location.origin : '') + '/portal/login'
@@ -232,7 +232,7 @@ export default function ClientsPage() {
   return (
     <>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-        <button className="btn btn-primary" onClick={openNew}>+ New {tab === 'supplier' ? 'Supplier' : 'Client'}</button>
+        <button className="btn btn-primary" onClick={openNew}>+ New {tab === 'supplier' ? 'Supplier' : tab === 'subcontractor' ? 'Subcontractor' : 'Client'}</button>
       </div>
 
       {appLinkError && (
@@ -244,8 +244,9 @@ export default function ClientsPage() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '2px solid var(--border)' }}>
-        {(['client', 'supplier'] as const).map(t => {
+        {(['client', 'supplier', 'subcontractor'] as const).map(t => {
           const count = clients.filter(c => (c.clientType || 'client') === t).length
+          const label = t === 'client' ? 'Clients' : t === 'supplier' ? 'Suppliers' : 'Subcontractors'
           return (
             <button key={t} onClick={() => setTab(t)} style={{
               padding: '8px 20px', border: 'none', background: 'none', cursor: 'pointer',
@@ -253,7 +254,7 @@ export default function ClientsPage() {
               borderBottom: tab === t ? '2px solid var(--slate)' : '2px solid transparent',
               marginBottom: -2, transition: 'all 0.15s',
             }}>
-              {t === 'client' ? 'Clients' : 'Suppliers'} <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--muted)', marginLeft: 4 }}>({count})</span>
+              {label} <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--muted)', marginLeft: 4 }}>({count})</span>
             </button>
           )
         })}
@@ -263,7 +264,7 @@ export default function ClientsPage() {
         <table className="tbl">
           <thead>
             <tr>
-              <th>{tab === 'client' ? 'Client' : 'Supplier'}</th>
+              <th>{tab === 'client' ? 'Client' : tab === 'supplier' ? 'Supplier' : 'Subcontractor'}</th>
               <th>Email</th>
               <th>Phone</th>
               <th>Jobs</th>
@@ -273,7 +274,7 @@ export default function ClientsPage() {
           </thead>
           <tbody>
             {!clients.filter(c => (c.clientType || 'client') === tab).length
-              ? <tr><td colSpan={tab === 'client' ? 6 : 5} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>No {tab === 'client' ? 'clients' : 'suppliers'} yet</td></tr>
+              ? <tr><td colSpan={tab === 'client' ? 6 : 5} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>No {tab === 'client' ? 'clients' : tab === 'supplier' ? 'suppliers' : 'subcontractors'} yet</td></tr>
               : clients.filter(c => (c.clientType || 'client') === tab).map(c => {
                   const ini = (c.name[0] || '').toUpperCase() + ((c.name.split(' ').pop() || '')[0] || '').toUpperCase()
                   const cJ = getClientJobs(c)
@@ -522,20 +523,20 @@ export default function ClientsPage() {
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowForm(false) }}>
           <div className="form-modal" style={{ width: 'min(520px, 96vw)' }}>
             <div className="form-modal-hd">
-              <div style={{ fontWeight: 700, fontSize: 17 }}>{editingClient ? 'Edit' : 'New'} {form.clientType === 'supplier' ? 'Supplier' : 'Client'}</div>
+              <div style={{ fontWeight: 700, fontSize: 17 }}>{editingClient ? 'Edit' : 'New'} {form.clientType === 'supplier' ? 'Supplier' : form.clientType === 'subcontractor' ? 'Subcontractor' : 'Client'}</div>
               <button className="modal-close" onClick={() => setShowForm(false)}>×</button>
             </div>
             <div className="form-modal-bd">
               <div className="fg">
                 <label>Type</label>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  {(['client', 'supplier'] as const).map(t => (
+                  {(['client', 'supplier', 'subcontractor'] as const).map(t => (
                     <button key={t} type="button" onClick={() => setForm(f => ({ ...f, clientType: t }))} style={{
                       flex: 1, padding: '7px 0', border: `2px solid ${form.clientType === t ? 'var(--slate)' : 'var(--border)'}`,
                       borderRadius: 6, background: form.clientType === t ? 'var(--slate)' : 'transparent',
                       color: form.clientType === t ? 'white' : 'var(--muted)', fontWeight: 600, fontSize: 13, cursor: 'pointer',
                     }}>
-                      {t === 'client' ? 'Client' : 'Supplier'}
+                      {t === 'client' ? 'Client' : t === 'supplier' ? 'Supplier' : 'Subcontractor'}
                     </button>
                   ))}
                 </div>
