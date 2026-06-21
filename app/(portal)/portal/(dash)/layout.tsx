@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { PortalProvider, usePortal } from '@/contexts/PortalContext'
 import { createClient } from '@/lib/supabase/client'
+import PortalInstallBanner from '@/components/PortalInstallBanner'
 
 function PortalNav() {
   const pathname = usePathname()
@@ -68,6 +69,7 @@ function PortalLayoutInner({ children }: { children: React.ReactNode }) {
       <main className="portal-main">
         {children}
       </main>
+      <PortalInstallBanner />
     </div>
   )
 }

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="80" fill="#484f5a"/>
+
+  <!-- Lime green roof fill (the accent stripe from the logo) -->
+  <polygon points="256,72 456,250 56,250" fill="#b8cc00"/>
+
+  <!-- Dark cutout to create the lime stripe effect (inner triangle removes fill) -->
+  <polygon points="256,110 420,250 92,250" fill="#484f5a"/>
+
+  <!-- Outer house outline in white -->
+  <polyline points="256,72 456,250 416,250 416,430 96,430 96,250 56,250 256,72"
+    fill="none" stroke="white" stroke-width="28" stroke-linejoin="miter" stroke-linecap="square"/>
+
+  <!-- Inner house outline in white (smaller, concentric) -->
+  <polyline points="256,120 388,242 360,242 360,400 152,400 152,242 124,242 256,120"
+    fill="none" stroke="white" stroke-width="22" stroke-linejoin="miter" stroke-linecap="square"/>
+
+  <!-- Hammer head (horizontal bar) -->
+  <rect x="194" y="274" width="124" height="42" rx="10" fill="white"/>
+
+  <!-- Hammer claw (curved hook on right) -->
+  <path d="M318 274 Q362 274 362 308 Q362 332 338 336"
+    fill="none" stroke="white" stroke-width="22" stroke-linecap="round"/>
+
+  <!-- Hammer handle -->
+  <rect x="248" y="316" width="20" height="76" rx="8" fill="white"/>
+</svg>

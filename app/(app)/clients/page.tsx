@@ -46,6 +46,8 @@ export default function ClientsPage() {
   const [inviteSending, setInviteSending] = useState(false)
   const [inviteError, setInviteError] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [appLinkSentId, setAppLinkSentId] = useState<string | null>(null)
+  const [appLinkSendingId, setAppLinkSendingId] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [editingClient, setEditingClient] = useState<Client | null>(null)
   const [form, setForm] = useState(BLANK_FORM)
@@ -139,6 +141,22 @@ export default function ClientsPage() {
     await navigator.clipboard.writeText(portalUrl(c))
     setCopiedId(c.id)
     setTimeout(() => setCopiedId(null), 3000)
+  }
+
+  async function sendAppLink(c: Client) {
+    if (!c.email || appLinkSendingId) return
+    setAppLinkSendingId(c.id)
+    try {
+      await fetch('/api/portal/send-app-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientName: c.name, clientEmail: c.email, companyName: settings.name }),
+      })
+      setAppLinkSentId(c.id)
+      setTimeout(() => setAppLinkSentId(null), 3000)
+    } finally {
+      setAppLinkSendingId(null)
+    }
   }
 
   function getClientQuotes(c: Client) {
@@ -249,6 +267,17 @@ export default function ClientsPage() {
                               🔄 Resend Invite
                             </button>
                           )}
+                          {/* Send app install link */}
+                          {c.email && (
+                            <button
+                              className={`btn-sm ${appLinkSentId === c.id ? 'btn-gold' : 'btn-outline'}`}
+                              title="Send app install instructions by email"
+                              disabled={appLinkSendingId === c.id}
+                              onClick={() => sendAppLink(c)}
+                            >
+                              {appLinkSentId === c.id ? '✓ App Link Sent' : appLinkSendingId === c.id ? '...' : '📲 App Link'}
+                            </button>
+                          )}
                           {/* Admin preview of client portal */}
                           <button
                             className="btn-sm btn-sky"
@@ -280,6 +309,16 @@ export default function ClientsPage() {
                 {selected.email && (
                   <button className="btn-sm btn-primary" onClick={() => { openInvite(selected); setSelected(null) }}>
                     📧 Invite to Portal
+                  </button>
+                )}
+                {selected.email && (
+                  <button
+                    className={`btn-sm ${appLinkSentId === selected.id ? 'btn-gold' : 'btn-outline'}`}
+                    title="Send app install instructions by email"
+                    disabled={appLinkSendingId === selected.id}
+                    onClick={() => sendAppLink(selected)}
+                  >
+                    {appLinkSentId === selected.id ? '✓ App Link Sent' : '📲 App Link'}
                   </button>
                 )}
                 {selected.email && (

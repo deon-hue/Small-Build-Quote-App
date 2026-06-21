@@ -1,0 +1,19 @@
+{
+  "name": "Small Build Co | Client Portal",
+  "short_name": "SBC Portal",
+  "description": "Track your build project — quotes, variations, invoices and progress.",
+  "start_url": "/portal",
+  "display": "standalone",
+  "background_color": "#f5f4f1",
+  "theme_color": "#484f5a",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/portal-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity"]
+}
