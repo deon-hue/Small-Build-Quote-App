@@ -236,6 +236,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           id: r.id, name: r.name, first: r.first_name || '', last: r.last_name || '',
           phone: r.phone || '', email: r.email || '', address: r.address || '',
           notes: r.notes || '', paymentTerms: r.payment_terms || 'Payment on receipt',
+          clientType: (r.client_type === 'supplier' ? 'supplier' : 'client') as 'client' | 'supplier',
           addedFrom: r.added_from || '',
           portalInvitedAt: portalStatusMap[r.id]?.portal_invited_at || null,
           portalStatus: (portalStatusMap[r.id]?.portal_status || (r.email ? 'not_invited' : 'no_email')) as PortalStatus,
@@ -456,6 +457,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       user_id: ownerId, name: c.name, first_name: c.first, last_name: c.last,
       phone: c.phone, email: c.email, address: c.address,
       notes: c.notes, payment_terms: c.paymentTerms || 'Payment on receipt',
+      client_type: c.clientType || 'client',
       added_from: c.addedFrom,
       updated_at: new Date().toISOString(),
     }
@@ -470,6 +472,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       id: data.id, name: data.name, first: data.first_name || '', last: data.last_name || '',
       phone: data.phone || '', email: data.email || '', address: data.address || '',
       notes: data.notes || '', paymentTerms: data.payment_terms || 'Payment on receipt',
+      clientType: (data.client_type === 'supplier' ? 'supplier' : 'client') as 'client' | 'supplier',
       addedFrom: data.added_from || '',
       portalInvitedAt: null, portalStatus: 'not_invited', portalLastLogin: null,
       portalSettings,
@@ -481,6 +484,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       name: c.name, first_name: c.first, last_name: c.last,
       phone: c.phone, email: c.email, address: c.address, notes: c.notes,
       payment_terms: c.paymentTerms || 'Payment on receipt',
+      client_type: c.clientType || 'client',
       updated_at: new Date().toISOString(),
     }
     // Try with portal_settings column; fall back without it if column doesn't exist yet
@@ -534,6 +538,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         name: customer.name, first, last,
         phone: customer.phone || '', email: customer.email || '',
         address: customer.address || '', notes: '', paymentTerms: 'Payment on receipt',
+        clientType: 'client',
         addedFrom: 'quote',
       })
     }

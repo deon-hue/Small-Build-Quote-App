@@ -10,7 +10,7 @@ import { useRouter } from 'next/navigation'
 import QuotePreviewModal from '@/components/QuotePreviewModal'
 import type { Quote } from '@/lib/types'
 
-const BLANK_FORM = { name: '', first: '', last: '', email: '', phone: '', address: '', notes: '', paymentTerms: 'Payment on receipt' }
+const BLANK_FORM = { name: '', first: '', last: '', email: '', phone: '', address: '', notes: '', paymentTerms: 'Payment on receipt', clientType: 'client' as 'client' | 'supplier' }
 
 // ── Portal status helpers ───────────────────────────────────
 const STATUS_LABEL: Record<PortalStatus, string> = {
@@ -54,6 +54,7 @@ export default function ClientsPage() {
   const [form, setForm] = useState(BLANK_FORM)
   const [formPortalSettings, setFormPortalSettings] = useState<ClientPortalSettings>(DEFAULT_CLIENT_PORTAL_SETTINGS)
   const [saving, setSaving] = useState(false)
+  const [tab, setTab] = useState<'client' | 'supplier'>('client')
   const router = useRouter()
 
   const portalBase = (typeof window !== 'undefined' ? window.location.origin : '') + '/portal/login'
@@ -97,14 +98,14 @@ export default function ClientsPage() {
 
   function openNew() {
     setEditingClient(null)
-    setForm(BLANK_FORM)
+    setForm({ ...BLANK_FORM, clientType: tab })
     setFormPortalSettings(DEFAULT_CLIENT_PORTAL_SETTINGS)
     setShowForm(true)
   }
 
   function openEdit(c: Client) {
     setEditingClient(c)
-    setForm({ name: c.name, first: c.first, last: c.last, email: c.email, phone: c.phone, address: c.address, notes: c.notes, paymentTerms: c.paymentTerms || 'Payment on receipt' })
+    setForm({ name: c.name, first: c.first, last: c.last, email: c.email, phone: c.phone, address: c.address, notes: c.notes, paymentTerms: c.paymentTerms || 'Payment on receipt', clientType: c.clientType || 'client' })
     setFormPortalSettings({ ...DEFAULT_CLIENT_PORTAL_SETTINGS, ...(c.portalSettings || {}) })
     setSelected(null)
     setShowForm(true)
@@ -231,7 +232,7 @@ export default function ClientsPage() {
   return (
     <>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-        <button className="btn btn-primary" onClick={openNew}>+ New Client</button>
+        <button className="btn btn-primary" onClick={openNew}>+ New {tab === 'supplier' ? 'Supplier' : 'Client'}</button>
       </div>
 
       {appLinkError && (
@@ -241,22 +242,39 @@ export default function ClientsPage() {
         </div>
       )}
 
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '2px solid var(--border)' }}>
+        {(['client', 'supplier'] as const).map(t => {
+          const count = clients.filter(c => (c.clientType || 'client') === t).length
+          return (
+            <button key={t} onClick={() => setTab(t)} style={{
+              padding: '8px 20px', border: 'none', background: 'none', cursor: 'pointer',
+              fontSize: 14, fontWeight: 600, color: tab === t ? 'var(--ink)' : 'var(--muted)',
+              borderBottom: tab === t ? '2px solid var(--slate)' : '2px solid transparent',
+              marginBottom: -2, transition: 'all 0.15s',
+            }}>
+              {t === 'client' ? 'Clients' : 'Suppliers'} <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--muted)', marginLeft: 4 }}>({count})</span>
+            </button>
+          )
+        })}
+      </div>
+
       <div className="card">
         <table className="tbl">
           <thead>
             <tr>
-              <th>Client</th>
+              <th>{tab === 'client' ? 'Client' : 'Supplier'}</th>
               <th>Email</th>
               <th>Phone</th>
               <th>Jobs</th>
-              <th>Portal Status</th>
+              {tab === 'client' && <th>Portal Status</th>}
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {!clients.length
-              ? <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>No clients yet — add one above or save a quote to create one automatically</td></tr>
-              : clients.map(c => {
+            {!clients.filter(c => (c.clientType || 'client') === tab).length
+              ? <tr><td colSpan={tab === 'client' ? 6 : 5} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>No {tab === 'client' ? 'clients' : 'suppliers'} yet</td></tr>
+              : clients.filter(c => (c.clientType || 'client') === tab).map(c => {
                   const ini = (c.name[0] || '').toUpperCase() + ((c.name.split(' ').pop() || '')[0] || '').toUpperCase()
                   const cJ = getClientJobs(c)
                   const status = c.portalStatus || (c.email ? 'not_invited' : 'no_email')
@@ -271,6 +289,7 @@ export default function ClientsPage() {
                       </td>
                       <td onClick={() => setSelected(c)} style={{ cursor: 'pointer', fontSize: 13 }}>{c.phone || '—'}</td>
                       <td onClick={() => setSelected(c)} style={{ cursor: 'pointer', fontSize: 13 }}>{cJ.length} job{cJ.length !== 1 ? 's' : ''}</td>
+                      {tab === 'client' && (
                       <td>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                           <span style={{
@@ -292,8 +311,10 @@ export default function ClientsPage() {
                           )}
                         </div>
                       </td>
+                      )}
                       <td>
                         <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                          {tab === 'client' && (<>
                           {/* Invite / Resend button */}
                           {status === 'no_email' ? (
                             <button className="btn-sm btn-outline" disabled style={{ opacity: 0.4, cursor: 'not-allowed' }} title="Add an email address first">
@@ -335,6 +356,7 @@ export default function ClientsPage() {
                           >
                             👁 View Portal
                           </button>
+                          </>)}
                           <button className="btn-sm btn-outline" onClick={() => openEdit(c)}>Edit</button>
                           <button className="btn-sm btn-danger" onClick={() => handleDelete(c)}>Delete</button>
                         </div>
@@ -500,10 +522,24 @@ export default function ClientsPage() {
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowForm(false) }}>
           <div className="form-modal" style={{ width: 'min(520px, 96vw)' }}>
             <div className="form-modal-hd">
-              <div style={{ fontWeight: 700, fontSize: 17 }}>{editingClient ? 'Edit Client' : 'New Client'}</div>
+              <div style={{ fontWeight: 700, fontSize: 17 }}>{editingClient ? 'Edit' : 'New'} {form.clientType === 'supplier' ? 'Supplier' : 'Client'}</div>
               <button className="modal-close" onClick={() => setShowForm(false)}>×</button>
             </div>
             <div className="form-modal-bd">
+              <div className="fg">
+                <label>Type</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {(['client', 'supplier'] as const).map(t => (
+                    <button key={t} type="button" onClick={() => setForm(f => ({ ...f, clientType: t }))} style={{
+                      flex: 1, padding: '7px 0', border: `2px solid ${form.clientType === t ? 'var(--slate)' : 'var(--border)'}`,
+                      borderRadius: 6, background: form.clientType === t ? 'var(--slate)' : 'transparent',
+                      color: form.clientType === t ? 'white' : 'var(--muted)', fontWeight: 600, fontSize: 13, cursor: 'pointer',
+                    }}>
+                      {t === 'client' ? 'Client' : 'Supplier'}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="fg">
                 <label>Full Name</label>
                 <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Mr & Mrs Davies" autoFocus />
