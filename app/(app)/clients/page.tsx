@@ -61,11 +61,6 @@ function ClientsPageInner() {
 
   useEffect(() => { setTab(urlTab || 'client') }, [urlTab])
 
-  function switchTab(t: 'client' | 'supplier' | 'subcontractor') {
-    setTab(t)
-    const url = t === 'client' ? '/clients' : `/clients?tab=${t}`
-    router.replace(url, { scroll: false })
-  }
 
   const portalBase = (typeof window !== 'undefined' ? window.location.origin : '') + '/portal/login'
 
@@ -251,24 +246,6 @@ function ClientsPageInner() {
           <button onClick={() => setAppLinkError('')} style={{ background: 'none', border: 'none', color: '#c00', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>✕</button>
         </div>
       )}
-
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '2px solid var(--border)' }}>
-        {(['client', 'supplier', 'subcontractor'] as const).map(t => {
-          const count = clients.filter(c => (c.clientType || 'client') === t).length
-          const label = t === 'client' ? 'Clients' : t === 'supplier' ? 'Suppliers' : 'Subcontractors'
-          return (
-            <button key={t} onClick={() => switchTab(t)} style={{
-              padding: '8px 20px', border: 'none', background: 'none', cursor: 'pointer',
-              fontSize: 14, fontWeight: 600, color: tab === t ? 'var(--ink)' : 'var(--muted)',
-              borderBottom: tab === t ? '2px solid var(--slate)' : '2px solid transparent',
-              marginBottom: -2, transition: 'all 0.15s',
-            }}>
-              {label} <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--muted)', marginLeft: 4 }}>({count})</span>
-            </button>
-          )
-        })}
-      </div>
 
       <div className="card">
         <table className="tbl">
