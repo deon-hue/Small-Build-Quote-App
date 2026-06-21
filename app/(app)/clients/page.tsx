@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { createClient } from '@/lib/supabase/client'
 import { fmt, quoteTotal, STAGE_COLOR, STAGE_LABEL, Q_BADGE, Q_LABEL } from '@/lib/utils'
@@ -36,7 +36,7 @@ function fmtDateTime(iso: string | null | undefined) {
   catch { return '' }
 }
 
-export default function ClientsPage() {
+function ClientsPageInner() {
   const { clients, quotes, jobs, settings, addClient, updateClient, deleteClient, markPortalInvite, loading } = useApp()
   const supabase = createClient()
   const [selected, setSelected] = useState<Client | null>(null)
@@ -798,5 +798,13 @@ export default function ClientsPage() {
         <QuotePreviewModal quote={previewQuote} onClose={() => setPreviewQuote(null)} />
       )}
     </>
+  )
+}
+
+export default function ClientsPage() {
+  return (
+    <Suspense>
+      <ClientsPageInner />
+    </Suspense>
   )
 }
