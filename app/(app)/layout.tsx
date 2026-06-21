@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { AppProvider } from '@/contexts/AppContext'
 import { createClient } from '@/lib/supabase/client'
@@ -18,7 +18,6 @@ const ROUTE_PERMISSIONS: Partial<Record<string, keyof UserPermissions>> = {
   '/invoices':    'invoices',
   '/bills':       'invoices',
   '/clients':     'clients',
-  '/suppliers':   'clients',
   '/settings':    'settings',
   '/documents':   'jobs',
   '/scan':        'jobs',
@@ -28,6 +27,7 @@ const ROUTE_PERMISSIONS: Partial<Record<string, keyof UserPermissions>> = {
 
 function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const router = useRouter()
   const supabase = createClient()
   const { settings, permissions, isOwner, currentMember } = useApp()
@@ -41,7 +41,17 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const can = (key: keyof UserPermissions) => isOwner || permissions[key]
 
   const navItem = (href: string, icon: string, label: string) => {
-    const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
+    const [hrefPath, hrefQuery] = href.split('?')
+    const hrefParams = new URLSearchParams(hrefQuery || '')
+    const hrefTab = hrefParams.get('tab')
+    const currentTab = searchParams.get('tab')
+    let active = false
+    if (pathname === hrefPath) {
+      // Both have no tab param, or both have same tab param
+      active = hrefTab === currentTab
+    } else if (href !== '/dashboard' && pathname.startsWith(hrefPath) && !hrefQuery) {
+      active = !currentTab
+    }
     return (
       <Link href={href} className={`nav-item${active ? ' active' : ''}`} onClick={onClose}>
         <span className="nav-icon">{icon}</span> {label}
@@ -77,7 +87,8 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
           {can('jobs')    && navItem('/scan',      '📷', 'Scan to Job')}
           <div className="nav-section">People</div>
           {can('clients') && navItem('/clients', '○', 'Clients')}
-          {can('clients') && navItem('/suppliers', '◐', 'Suppliers')}
+          {can('clients') && navItem('/clients?tab=supplier', '◐', 'Suppliers')}
+          {can('clients') && navItem('/clients?tab=subcontractor', '👷', 'Sub Contractors')}
           <div className="nav-section">Settings</div>
           {can('jobs')        && navItem('/documents',   '📥', 'Documents')}
           {can('settings')    && navItem('/settings',    '◇', 'Company Setup')}
@@ -125,7 +136,6 @@ const PAGE_TITLES: Record<string, string> = {
   '/invoices':     'Invoices',
   '/bills':        'Bills',
   '/clients':      'Clients',
-  '/suppliers':    'Suppliers',
   '/settings':     'Company Setup',
   '/documents':    'Documents',
   '/back-office':      'Back Office',
@@ -136,9 +146,12 @@ const PAGE_TITLES: Record<string, string> = {
 
 function AppLayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const router = useRouter()
   const { permissions, isOwner, loading, currentMember } = useApp()
-  const title = PAGE_TITLES[pathname] || 'Dashboard'
+  const tab = searchParams.get('tab')
+  const clientsTitle = tab === 'supplier' ? 'Suppliers' : tab === 'subcontractor' ? 'Sub Contractors' : 'Clients'
+  const title = pathname === '/clients' ? clientsTitle : (PAGE_TITLES[pathname] || 'Dashboard')
 
   // Route-level permission guard
   const requiredPermission = ROUTE_PERMISSIONS[pathname]

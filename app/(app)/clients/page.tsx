@@ -1,12 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { createClient } from '@/lib/supabase/client'
 import { fmt, quoteTotal, STAGE_COLOR, STAGE_LABEL, Q_BADGE, Q_LABEL } from '@/lib/utils'
 import type { Client, PortalStatus, ClientPortalSettings } from '@/lib/types'
 import { DEFAULT_CLIENT_PORTAL_SETTINGS, PAYMENT_TERMS_OPTIONS } from '@/lib/types'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import QuotePreviewModal from '@/components/QuotePreviewModal'
 import type { Quote } from '@/lib/types'
 
@@ -54,8 +54,18 @@ export default function ClientsPage() {
   const [form, setForm] = useState(BLANK_FORM)
   const [formPortalSettings, setFormPortalSettings] = useState<ClientPortalSettings>(DEFAULT_CLIENT_PORTAL_SETTINGS)
   const [saving, setSaving] = useState(false)
-  const [tab, setTab] = useState<'client' | 'supplier' | 'subcontractor'>('client')
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const urlTab = searchParams.get('tab') as 'supplier' | 'subcontractor' | null
+  const [tab, setTab] = useState<'client' | 'supplier' | 'subcontractor'>(urlTab || 'client')
+
+  useEffect(() => { setTab(urlTab || 'client') }, [urlTab])
+
+  function switchTab(t: 'client' | 'supplier' | 'subcontractor') {
+    setTab(t)
+    const url = t === 'client' ? '/clients' : `/clients?tab=${t}`
+    router.replace(url, { scroll: false })
+  }
 
   const portalBase = (typeof window !== 'undefined' ? window.location.origin : '') + '/portal/login'
 
@@ -248,7 +258,7 @@ export default function ClientsPage() {
           const count = clients.filter(c => (c.clientType || 'client') === t).length
           const label = t === 'client' ? 'Clients' : t === 'supplier' ? 'Suppliers' : 'Subcontractors'
           return (
-            <button key={t} onClick={() => setTab(t)} style={{
+            <button key={t} onClick={() => switchTab(t)} style={{
               padding: '8px 20px', border: 'none', background: 'none', cursor: 'pointer',
               fontSize: 14, fontWeight: 600, color: tab === t ? 'var(--ink)' : 'var(--muted)',
               borderBottom: tab === t ? '2px solid var(--slate)' : '2px solid transparent',
