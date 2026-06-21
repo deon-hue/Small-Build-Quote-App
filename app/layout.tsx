@@ -3,7 +3,7 @@ import './globals.css'
 import PWARegister from '@/components/PWARegister'
 
 export const metadata: Metadata = {
-  title: 'Buildospro — Management System',
+  title: 'The Small Build Co',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,

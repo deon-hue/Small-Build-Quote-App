@@ -5,6 +5,7 @@ export const viewport: Viewport = {
 }
 
 export const metadata: Metadata = {
+  title: 'The Small Build Co | Your Project Portal',
   manifest: '/portal-manifest.json',
   icons: {
     apple: '/portal-icon.png',
