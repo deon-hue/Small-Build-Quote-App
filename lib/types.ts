@@ -278,6 +278,15 @@ export const DEFAULT_CLIENT_PORTAL_SETTINGS: ClientPortalSettings = {
   defaultPdfType:     'customer',
 }
 
+export const PAYMENT_TERMS_OPTIONS = [
+  'Payment on receipt',
+  '7 days',
+  '14 days',
+  '30 days',
+  '60 days',
+  '90 days',
+] as const
+
 export interface Client {
   id: string
   name: string
@@ -287,6 +296,7 @@ export interface Client {
   email: string
   address: string
   notes: string
+  paymentTerms: string
   addedFrom: string
   portalInvitedAt?: string | null
   portalStatus?: PortalStatus

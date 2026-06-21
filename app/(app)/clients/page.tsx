@@ -5,12 +5,12 @@ import { useApp } from '@/contexts/AppContext'
 import { createClient } from '@/lib/supabase/client'
 import { fmt, quoteTotal, STAGE_COLOR, STAGE_LABEL, Q_BADGE, Q_LABEL } from '@/lib/utils'
 import type { Client, PortalStatus, ClientPortalSettings } from '@/lib/types'
-import { DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
+import { DEFAULT_CLIENT_PORTAL_SETTINGS, PAYMENT_TERMS_OPTIONS } from '@/lib/types'
 import { useRouter } from 'next/navigation'
 import QuotePreviewModal from '@/components/QuotePreviewModal'
 import type { Quote } from '@/lib/types'
 
-const BLANK_FORM = { name: '', first: '', last: '', email: '', phone: '', address: '', notes: '' }
+const BLANK_FORM = { name: '', first: '', last: '', email: '', phone: '', address: '', notes: '', paymentTerms: 'Payment on receipt' }
 
 // ── Portal status helpers ───────────────────────────────────
 const STATUS_LABEL: Record<PortalStatus, string> = {
@@ -76,7 +76,7 @@ export default function ClientsPage() {
 
   function openEdit(c: Client) {
     setEditingClient(c)
-    setForm({ name: c.name, first: c.first, last: c.last, email: c.email, phone: c.phone, address: c.address, notes: c.notes })
+    setForm({ name: c.name, first: c.first, last: c.last, email: c.email, phone: c.phone, address: c.address, notes: c.notes, paymentTerms: c.paymentTerms || 'Payment on receipt' })
     setFormPortalSettings({ ...DEFAULT_CLIENT_PORTAL_SETTINGS, ...(c.portalSettings || {}) })
     setSelected(null)
     setShowForm(true)
@@ -89,7 +89,8 @@ export default function ClientsPage() {
       if (editingClient) {
         await updateClient({ ...editingClient, ...form, portalSettings: formPortalSettings })
       } else {
-        await addClient({ ...form, addedFrom: 'manual', portalSettings: formPortalSettings })
+        await addClient({ ...form, addedFrom: 'manual', portalSettings: formPortalSettings,
+          portalInvitedAt: null, portalStatus: 'not_invited', portalLastLogin: null })
       }
       setShowForm(false)
     } finally {
@@ -441,6 +442,15 @@ export default function ClientsPage() {
               <div className="fg">
                 <label>Notes</label>
                 <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Any extra info…" />
+              </div>
+              <div className="fg">
+                <label>Payment Terms</label>
+                <select value={form.paymentTerms} onChange={e => setForm(f => ({ ...f, paymentTerms: e.target.value }))}>
+                  {PAYMENT_TERMS_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                  {!PAYMENT_TERMS_OPTIONS.includes(form.paymentTerms as typeof PAYMENT_TERMS_OPTIONS[number]) && (
+                    <option value={form.paymentTerms}>{form.paymentTerms}</option>
+                  )}
+                </select>
               </div>
 
               {/* ── Portal & Quote Settings ───────────────────────── */}
