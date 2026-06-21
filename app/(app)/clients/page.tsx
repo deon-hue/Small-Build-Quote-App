@@ -74,7 +74,8 @@ export default function ClientsPage() {
     const num = toIntlDigits(c.phone || '')
     const url = portalUrl(c)
     const firstName = (c.name || '').split(' ')[0] || c.name
-    const body = `Hi ${firstName}, here's your ${settings.name || 'Small Build Co'} project portal: ${url}\n\niPhone: Tap Share → "Add to Home Screen"\nAndroid: Tap ⋮ → "Add to Home Screen"`
+    const company = settings.name || 'Small Build Co'
+    const body = `Hi ${firstName}, ${company} has set up your project portal where you can view your quotes, approve change orders and check invoices — all in one place.\n\nOpen it here: ${url}\n\nTo install as an app:\niPhone: Tap Share → "Add to Home Screen"\nAndroid: Tap ⋮ → "Add to Home Screen"`
     return `sms:+${num}?body=${encodeURIComponent(body)}`
   }
 
@@ -82,7 +83,8 @@ export default function ClientsPage() {
     const num = toIntlDigits(c.phone || '')
     const url = portalUrl(c)
     const firstName = (c.name || '').split(' ')[0] || c.name
-    const body = `Hi ${firstName} 👋\n\nHere's your ${settings.name || 'Small Build Co'} project portal:\n${url}\n\nTo install it as an app on your phone:\n*iPhone*: Tap Share → "Add to Home Screen"\n*Android*: Tap ⋮ menu → "Add to Home Screen"`
+    const company = settings.name || 'Small Build Co'
+    const body = `Hi ${firstName} 👋\n\n${company} has set up your project portal — a private space where you can:\n• View your project quotes\n• Approve or reject change orders\n• Check and track your invoices\n• Follow your build progress\n\nOpen your portal here:\n${url}\n\nTo install it as an app on your phone:\n*iPhone*: Tap Share ↑ → "Add to Home Screen"\n*Android*: Tap ⋮ menu → "Add to Home Screen"`
     return `https://wa.me/${num}?text=${encodeURIComponent(body)}`
   }
 

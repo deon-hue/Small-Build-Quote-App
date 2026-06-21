@@ -74,8 +74,8 @@ function PortalLoginForm() {
         <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6, textAlign: 'center' }}>
           Sign in to your portal
         </h1>
-        <p style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', marginBottom: 24, lineHeight: 1.5 }}>
-          Access your quotes, jobs and invoices
+        <p style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', marginBottom: 16, lineHeight: 1.6 }}>
+          Your private space to track your project — view quotes, approve change orders, check invoices and follow your build progress. Updated by your builder in real time.
         </p>
 
         {/* Mode tabs */}
