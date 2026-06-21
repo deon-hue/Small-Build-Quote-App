@@ -511,27 +511,29 @@ export default function PortalJobsPage() {
               {/* Line items */}
               {viewingVar.items.length > 0 && (
                 <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 70px 90px', padding: '7px 14px', background: '#f0f2ee', fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', gap: 8 }}>
-                    <div>Description</div>
-                    <div style={{ textAlign: 'right' }}>Qty</div>
-                    <div style={{ textAlign: 'center' }}>Unit</div>
-                    <div style={{ textAlign: 'right' }}>Total</div>
-                  </div>
-                  {viewingVar.items.map((item, idx) => {
-                    const lineTotal = itemSellTotal(item, viewingVar.markup)
-                    return (
-                      <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 70px 90px', padding: '8px 14px', borderTop: '1px solid var(--border)', background: idx % 2 === 0 ? '#fff' : '#fafaf8', alignItems: 'center', gap: 8 }}>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 500 }}>{item.desc}</div>
-                          <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 1 }}>{item.itemType.charAt(0).toUpperCase() + item.itemType.slice(1)}</div>
-                          {item.notes && <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginTop: 1 }}>{item.notes}</div>}
+                  <div style={{ overflowX: 'auto' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 70px 90px', padding: '7px 14px', background: '#f0f2ee', fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', gap: 8, minWidth: 320 }}>
+                      <div>Description</div>
+                      <div style={{ textAlign: 'right' }}>Qty</div>
+                      <div style={{ textAlign: 'center' }}>Unit</div>
+                      <div style={{ textAlign: 'right' }}>Total</div>
+                    </div>
+                    {viewingVar.items.map((item, idx) => {
+                      const lineTotal = itemSellTotal(item, viewingVar.markup)
+                      return (
+                        <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 70px 90px', padding: '8px 14px', borderTop: '1px solid var(--border)', background: idx % 2 === 0 ? '#fff' : '#fafaf8', alignItems: 'center', gap: 8, minWidth: 320 }}>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 500 }}>{item.desc}</div>
+                            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 1 }}>{item.itemType.charAt(0).toUpperCase() + item.itemType.slice(1)}</div>
+                            {item.notes && <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginTop: 1 }}>{item.notes}</div>}
+                          </div>
+                          <div style={{ textAlign: 'right', fontSize: 13 }}>{item.qty}</div>
+                          <div style={{ textAlign: 'center', fontSize: 13 }}>{item.unit}</div>
+                          <div style={{ textAlign: 'right', fontFamily: 'DM Mono, monospace', fontSize: 13, fontWeight: 600 }}>{fmt(lineTotal)}</div>
                         </div>
-                        <div style={{ textAlign: 'right', fontSize: 13 }}>{item.qty}</div>
-                        <div style={{ textAlign: 'center', fontSize: 13 }}>{item.unit}</div>
-                        <div style={{ textAlign: 'right', fontFamily: 'DM Mono, monospace', fontSize: 13, fontWeight: 600 }}>{fmt(lineTotal)}</div>
-                      </div>
-                    )
-                  })}
+                      )
+                    })}
+                  </div>
                 </div>
               )}
 

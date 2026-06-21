@@ -212,11 +212,12 @@ export default function PortalVariationsPage() {
               )}
               {viewingVar.items.length > 0 && (
                 <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 70px 90px', padding: '7px 14px', background: '#f0f2ee', fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', gap: 8 }}>
+                  <div style={{ overflowX: 'auto' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 70px 90px', padding: '7px 14px', background: '#f0f2ee', fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', gap: 8, minWidth: 320 }}>
                     <div>Description</div><div style={{ textAlign: 'right' }}>Qty</div><div style={{ textAlign: 'center' }}>Unit</div><div style={{ textAlign: 'right' }}>Total</div>
                   </div>
                   {viewingVar.items.map((item, idx) => (
-                    <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 70px 90px', padding: '8px 14px', borderTop: '1px solid var(--border)', background: idx % 2 === 0 ? '#fff' : '#fafaf8', alignItems: 'center', gap: 8 }}>
+                    <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 70px 90px', padding: '8px 14px', borderTop: '1px solid var(--border)', background: idx % 2 === 0 ? '#fff' : '#fafaf8', alignItems: 'center', gap: 8, minWidth: 320 }}>
                       <div>
                         <div style={{ fontSize: 13, fontWeight: 500 }}>{item.desc}</div>
                         {item.notes && <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginTop: 1 }}>{item.notes}</div>}
@@ -226,6 +227,7 @@ export default function PortalVariationsPage() {
                       <div style={{ textAlign: 'right', fontFamily: 'DM Mono, monospace', fontSize: 13, fontWeight: 600 }}>{fmt(itemSellTotal(item, viewingVar.markup))}</div>
                     </div>
                   ))}
+                  </div>
                 </div>
               )}
               {(() => {
