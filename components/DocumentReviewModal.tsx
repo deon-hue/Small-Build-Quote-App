@@ -59,6 +59,7 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
   const [busy, setBusy] = useState(false)
   const [xeroBusy, setXeroBusy] = useState(false)
   const [xeroError, setXeroError] = useState<string | null>(null)
+  const [xeroStatusLocked, setXeroStatusLocked] = useState(false)
   const [billBusy, setBillBusy] = useState(false)
   const [billCreated, setBillCreated] = useState(() => bills.some(b => b.documentId === doc.id))
 
@@ -170,12 +171,12 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
   // Allocation is valid when every line can resolve to a job
   const allLinesHaveJob = lines.every(l => l.jobId || jobId)
 
-  async function allocate(publishToXero = false) {
+  async function allocate(publishToXero = false, forceNew = false) {
     if (!publishToXero && !allLinesHaveJob) return
     setBusy(true)
     setXeroError(null)
+    setXeroStatusLocked(false)
     try {
-      // Save job costs when every line resolves to a job
       if (allLinesHaveJob) {
         await allocateDocument(sb, userId, doc, jobId, { supplier, docDate, docNumber, paymentStatus }, lines)
       }
@@ -192,13 +193,13 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
             docDate, docNumber, lines,
             fileName: doc.fileName, storagePath: doc.storagePath, mimeType: doc.mimeType,
             xeroAccountCode: xeroAccount || undefined,
+            forceNew: forceNew || undefined,
           }),
         })
-        const d = await res.json() as { xeroBillId?: string; error?: string }
+        const d = await res.json() as { xeroBillId?: string; error?: string; statusLocked?: boolean }
         if (!res.ok || d.error) {
           setXeroError(d.error || 'Failed to publish to Xero')
-          // Do NOT call onSaved() here — that closes the modal before the error renders.
-          // The user must see the error and close manually; job costs were already saved above.
+          if (d.statusLocked) setXeroStatusLocked(true)
         } else {
           onSaved()
         }
@@ -361,7 +362,16 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
 
               {xeroError && (
                 <div style={{ marginTop: 8, padding: '8px 10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, fontSize: 12, color: '#b91c1c' }}>
-                  ⚠ {xeroError}
+                  <div>⚠ {xeroError}</div>
+                  {xeroStatusLocked && (
+                    <button
+                      onClick={() => allocate(true, true)}
+                      disabled={isBusy}
+                      style={{ marginTop: 8, padding: '5px 12px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      📤 Push as new bill
+                    </button>
+                  )}
                 </div>
               )}
 

@@ -22,6 +22,7 @@ interface PushDocBillBody {
   storagePath: string
   mimeType: string
   xeroAccountCode?: string  // override all lines to a specific account (e.g. Motor Expenses)
+  forceNew?: boolean        // skip existing InvoiceID and create a fresh bill (for locked/paid bills)
 }
 
 export async function POST(req: NextRequest) {
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
     const ac: XeroAccountCodes = { ...DEFAULT_XERO_ACCOUNT_CODES, ...((settingsRow?.xero_account_codes as XeroAccountCodes | null) ?? {}) }
 
     const body = await req.json() as PushDocBillBody
-    const { documentId, supplier, supplierId, docDate, docNumber, lines, fileName, storagePath, mimeType, xeroAccountCode } = body
+    const { documentId, supplier, supplierId, docDate, docNumber, lines, fileName, storagePath, mimeType, xeroAccountCode, forceNew } = body
 
     if (!documentId || !lines?.length) {
       return NextResponse.json({ error: 'documentId and lines are required' }, { status: 400 })
@@ -97,7 +98,7 @@ export async function POST(req: NextRequest) {
       LineItems: lineItems,
       Status: 'AUTHORISED',
     }
-    if (existingXeroBillId) xeroPayload.InvoiceID = existingXeroBillId
+    if (existingXeroBillId && !forceNew) xeroPayload.InvoiceID = existingXeroBillId
 
     const invoiceRes = await xeroFetch(conn, '/Invoices', {
       method: 'POST',
@@ -116,8 +117,12 @@ export async function POST(req: NextRequest) {
       } catch { friendlyMsg += `: ${errText.slice(0, 200)}` }
       if (invoiceRes.status === 401 || invoiceRes.status === 403) {
         friendlyMsg = 'Xero connection needs updating — go to Settings → Integrations, disconnect then reconnect.'
+      } else if (friendlyMsg.toLowerCase().includes('not of valid status')) {
+        friendlyMsg = existingXeroBillId
+          ? 'This bill has been paid or reconciled in Xero and can\'t be modified. Use "Push as new bill" to create a fresh copy, or unreconcile the payment in Xero first.'
+          : 'Xero rejected the bill — the invoice may be voided or deleted in Xero.'
       }
-      return NextResponse.json({ error: friendlyMsg }, { status: invoiceRes.status })
+      return NextResponse.json({ error: friendlyMsg, statusLocked: friendlyMsg.includes('paid or reconciled') }, { status: invoiceRes.status })
     }
 
     const invoiceData = await invoiceRes.json() as XeroResponse
