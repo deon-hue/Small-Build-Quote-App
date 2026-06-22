@@ -51,22 +51,25 @@ export async function POST(req: NextRequest) {
       return ac.billOther || DEFAULT_XERO_ACCOUNT_CODES.billOther
     }
 
-    const lineItems = lines
-      .filter(l => (Number(l.grossAmount) || 0) > 0)
-      .map(l => {
-        const gross = Number(l.grossAmount)
-        const net   = Number(l.netAmount) || +(gross - Number(l.vatAmount || 0)).toFixed(2)
-        const hasVat = (Number(l.vatAmount) || 0) > 0
-        return {
-          Description: l.description || 'Works',
-          Quantity: 1,
-          // INPUT2 = UK 20% VAT on purchases; Xero calculates TaxAmount from net automatically.
-          // NONE   = no VAT; use gross so the Xero bill total matches the actual invoice.
-          UnitAmount: hasVat ? net : gross,
-          TaxType: hasVat ? 'INPUT2' : 'NONE',
-          AccountCode: xeroAccountCode || codeFor(l.costCategory),
-        }
-      })
+    // Credit note detection: all non-zero amounts are negative
+    const nonZeroLines = lines.filter(l => (Number(l.grossAmount) || 0) !== 0)
+    const isCredit = nonZeroLines.length > 0 && nonZeroLines.every(l => (Number(l.grossAmount) || 0) < 0)
+
+    const lineItems = nonZeroLines.map(l => {
+      // Use absolute values — ACCPAYCREDIT handles the direction in Xero
+      const gross = Math.abs(Number(l.grossAmount))
+      const net   = Math.abs(Number(l.netAmount)) || +(gross - Math.abs(Number(l.vatAmount || 0))).toFixed(2)
+      const hasVat = Math.abs(Number(l.vatAmount) || 0) > 0
+      return {
+        Description: l.description || 'Works',
+        Quantity: 1,
+        // INPUT2 = UK 20% VAT on purchases; Xero calculates TaxAmount from net automatically.
+        // NONE   = no VAT; use gross so the Xero bill total matches the actual invoice.
+        UnitAmount: hasVat ? net : gross,
+        TaxType: hasVat ? 'INPUT2' : 'NONE',
+        AccountCode: xeroAccountCode || codeFor(l.costCategory),
+      }
+    })
 
     if (!lineItems.length) {
       return NextResponse.json({ error: 'No line items with amounts to push to Xero' }, { status: 400 })
@@ -89,7 +92,7 @@ export async function POST(req: NextRequest) {
     const existingXeroBillId = (docRow?.xero_bill_id as string) || null
 
     const xeroPayload: Record<string, unknown> = {
-      Type: 'ACCPAY',
+      Type: isCredit ? 'ACCPAYCREDIT' : 'ACCPAY',
       Contact: contact,
       Date: docDate || new Date().toISOString().split('T')[0],
       DueDate: docDate || new Date().toISOString().split('T')[0],
