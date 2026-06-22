@@ -99,6 +99,8 @@ export async function POST(req: NextRequest) {
       Status: 'AUTHORISED',
     }
     if (existingXeroBillId && !forceNew) xeroPayload.InvoiceID = existingXeroBillId
+    // When forcing a new bill, also drop the invoice number to avoid conflicts with voided/deleted invoices
+    if (forceNew) delete xeroPayload.InvoiceNumber
 
     const invoiceRes = await xeroFetch(conn, '/Invoices', {
       method: 'POST',
@@ -120,9 +122,10 @@ export async function POST(req: NextRequest) {
       } else if (friendlyMsg.toLowerCase().includes('not of valid status')) {
         friendlyMsg = existingXeroBillId
           ? 'This bill has been paid or reconciled in Xero and can\'t be modified. Use "Push as new bill" to create a fresh copy, or unreconcile the payment in Xero first.'
-          : 'Xero rejected the bill — the invoice may be voided or deleted in Xero.'
+          : 'This invoice number already exists in Xero as a voided or deleted bill. Use "Push as new bill" to create a fresh copy without the invoice number.'
       }
-      return NextResponse.json({ error: friendlyMsg, statusLocked: friendlyMsg.includes('paid or reconciled') }, { status: invoiceRes.status })
+      const statusLocked = friendlyMsg.includes('paid or reconciled') || friendlyMsg.includes('voided or deleted')
+      return NextResponse.json({ error: friendlyMsg, statusLocked }, { status: invoiceRes.status })
     }
 
     const invoiceData = await invoiceRes.json() as XeroResponse
