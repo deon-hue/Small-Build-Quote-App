@@ -9,6 +9,8 @@ export interface DuplicateMatch {
   documentId?: string     // id of the matching job_document (for "View" button)
   storagePath?: string    // storage path of the matching document
   mimeType?: string
+  jobId?: string
+  jobLabel?: string       // "Client — Address" for display
 }
 
 export async function GET(req: NextRequest) {
@@ -78,12 +80,11 @@ export async function GET(req: NextRequest) {
   if (docNumber) {
     const { data: costs } = await sb
       .from('job_costs')
-      .select('supplier, doc_number, doc_date, gross_amount, document_id')
+      .select('supplier, doc_number, doc_date, gross_amount, document_id, job_id, jobs(client, address, type)')
       .eq('user_id', user.id)
       .eq('doc_number', docNumber)
       .limit(10)
 
-    // Look up storage paths for the matched cost documents
     const costDocIds = [...new Set((costs ?? []).map(c => c.document_id).filter(Boolean))]
     const { data: costDocs } = costDocIds.length
       ? await sb.from('job_documents').select('id, storage_path, mime_type').in('id', costDocIds)
@@ -93,6 +94,8 @@ export async function GET(req: NextRequest) {
     for (const c of (costs ?? [])) {
       if (c.document_id === excludeId) continue
       const srcDoc = costDocMap[c.document_id]
+      const job = c.jobs as { client?: string; address?: string; type?: string } | null
+      const jobLabel = job ? [job.client, job.address].filter(Boolean).join(' — ') : undefined
       matches.push({
         type: 'cost',
         confidence: 'high',
@@ -101,6 +104,8 @@ export async function GET(req: NextRequest) {
         documentId: c.document_id ?? undefined,
         storagePath: srcDoc?.storage_path ?? undefined,
         mimeType: srcDoc?.mime_type ?? undefined,
+        jobId: c.job_id ?? undefined,
+        jobLabel,
       })
     }
   }
@@ -109,7 +114,7 @@ export async function GET(req: NextRequest) {
   if (!matches.length && supFirst && grossAmount && docDate) {
     const { data: costs } = await sb
       .from('job_costs')
-      .select('supplier, doc_number, doc_date, gross_amount, document_id')
+      .select('supplier, doc_number, doc_date, gross_amount, document_id, job_id, jobs(client, address, type)')
       .eq('user_id', user.id)
       .eq('doc_date', docDate)
       .ilike('supplier', `%${supFirst}%`)
@@ -125,6 +130,8 @@ export async function GET(req: NextRequest) {
       if (c.document_id === excludeId) continue
       if (String(c.gross_amount) !== grossAmount && Number(c.gross_amount).toFixed(2) !== Number(grossAmount).toFixed(2)) continue
       const srcDoc = costDocMap2[c.document_id]
+      const job = c.jobs as { client?: string; address?: string; type?: string } | null
+      const jobLabel = job ? [job.client, job.address].filter(Boolean).join(' — ') : undefined
       matches.push({
         type: 'cost',
         confidence: 'medium',
@@ -133,6 +140,8 @@ export async function GET(req: NextRequest) {
         documentId: c.document_id ?? undefined,
         storagePath: srcDoc?.storage_path ?? undefined,
         mimeType: srcDoc?.mime_type ?? undefined,
+        jobId: c.job_id ?? undefined,
+        jobLabel,
       })
     }
   }

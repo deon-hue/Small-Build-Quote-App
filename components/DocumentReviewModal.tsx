@@ -64,7 +64,7 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
 
   const [xeroAccounts, setXeroAccounts] = useState<Array<{ code: string; name: string; type: string }>>([])
   const [xeroAccount, setXeroAccount] = useState('')
-  const [duplicates, setDuplicates] = useState<Array<{ label: string; detail: string; confidence: string; storagePath?: string; mimeType?: string }>>([])
+  const [duplicates, setDuplicates] = useState<Array<{ label: string; detail: string; confidence: string; storagePath?: string; mimeType?: string; jobId?: string; jobLabel?: string }>>([])
   const [dupDismissed, setDupDismissed] = useState(false)
   const [zoom, setZoom] = useState(1)
 
@@ -309,6 +309,7 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
                         <div style={{ fontSize: 12, color: '#78350f', flex: 1 }}>
                           {m.confidence === 'high' ? '🔴' : '🟡'} {m.label}
                           {m.detail && <span style={{ color: '#a16207', marginLeft: 6 }}>{m.detail}</span>}
+                          {m.jobLabel && <span style={{ display: 'block', fontSize: 11, color: '#92400e', marginTop: 2 }}>📋 Job: {m.jobLabel}</span>}
                         </div>
                         {m.storagePath && (
                           <ViewDupButton sb={sb} storagePath={m.storagePath} mimeType={m.mimeType} />
