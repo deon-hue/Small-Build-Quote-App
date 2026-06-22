@@ -890,8 +890,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [supabase, syncBillCosts])
 
   const deleteBill = useCallback(async (id: string) => {
-    // job_costs rows cascade-delete via the bill_id FK
+    // Fetch the document link before deleting
+    const { data: billRow } = await supabase.from('bills').select('document_id').eq('id', id).single()
+    // Delete bill (job_costs linked via bill_id FK cascade automatically)
     await supabase.from('bills').delete().eq('id', id)
+    // Clean up document-allocated job_costs (linked via document_id, no cascade) and reset document to inbox
+    if (billRow?.document_id) {
+      await supabase.from('job_costs').delete().eq('document_id', billRow.document_id)
+      await supabase.from('job_documents')
+        .update({ status: 'unallocated', updated_at: new Date().toISOString() })
+        .eq('id', billRow.document_id)
+    }
     setBills(prev => prev.filter(b => b.id !== id))
   }, [supabase])
 
