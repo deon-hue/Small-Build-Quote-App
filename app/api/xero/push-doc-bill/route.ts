@@ -8,8 +8,6 @@ import type { ExtractedCostLine } from '@/lib/doc-extract/types'
 interface XeroValidationError { Message: string }
 interface XeroElement { ValidationErrors?: XeroValidationError[] }
 interface XeroErrorResponse { Detail?: string; Elements?: XeroElement[] }
-interface XeroInvoiceResponse { InvoiceID?: string }
-interface XeroResponse { Invoices?: XeroInvoiceResponse[] }
 
 interface PushDocBillBody {
   documentId: string
@@ -56,7 +54,7 @@ export async function POST(req: NextRequest) {
     const isCredit = nonZeroLines.length > 0 && nonZeroLines.every(l => (Number(l.grossAmount) || 0) < 0)
 
     const lineItems = nonZeroLines.map(l => {
-      // Use absolute values — ACCPAYCREDIT handles the direction in Xero
+      // Use absolute values — ACCPAYCREDIT handles the direction; ACCPAY uses positives as-is
       const gross = Math.abs(Number(l.grossAmount))
       const net   = Math.abs(Number(l.netAmount)) || +(gross - Math.abs(Number(l.vatAmount || 0))).toFixed(2)
       const hasVat = Math.abs(Number(l.vatAmount) || 0) > 0
@@ -83,7 +81,7 @@ export async function POST(req: NextRequest) {
       else if (sup?.name) contact = { Name: sup.name }
     }
 
-    // Check for existing Xero bill (to update rather than duplicate)
+    // Check for existing Xero bill/credit note (to update rather than duplicate)
     const { data: docRow } = await sb.from('job_documents')
       .select('xero_bill_id')
       .eq('id', documentId)
@@ -91,28 +89,40 @@ export async function POST(req: NextRequest) {
       .single()
     const existingXeroBillId = (docRow?.xero_bill_id as string) || null
 
+    // ── Route to correct Xero endpoint ────────────────────────────────────────
+    // Bills:        POST /Invoices    Type=ACCPAY        → InvoiceID / InvoiceNumber
+    // Credit notes: POST /CreditNotes Type=ACCPAYCREDIT  → CreditNoteID / CreditNoteNumber
+    const xeroEndpoint  = isCredit ? '/CreditNotes' : '/Invoices'
+    const xeroWrapKey   = isCredit ? 'CreditNotes'  : 'Invoices'
+    const xeroIdField   = isCredit ? 'CreditNoteID' : 'InvoiceID'
+    const xeroNumField  = isCredit ? 'CreditNoteNumber' : 'InvoiceNumber'
+
     const xeroPayload: Record<string, unknown> = {
       Type: isCredit ? 'ACCPAYCREDIT' : 'ACCPAY',
       Contact: contact,
       Date: docDate || new Date().toISOString().split('T')[0],
-      DueDate: docDate || new Date().toISOString().split('T')[0],
-      InvoiceNumber: docNumber || undefined,
+      // DueDate not applicable to credit notes
+      ...(isCredit ? {} : { DueDate: docDate || new Date().toISOString().split('T')[0] }),
+      [xeroNumField]: forceNew ? undefined : (docNumber || undefined),
       Reference: supplier || '',
       LineItems: lineItems,
       Status: 'AUTHORISED',
     }
-    if (existingXeroBillId && !forceNew) xeroPayload.InvoiceID = existingXeroBillId
-    // When forcing a new bill, also drop the invoice number to avoid conflicts with voided/deleted invoices
-    if (forceNew) delete xeroPayload.InvoiceNumber
 
-    const invoiceRes = await xeroFetch(conn, '/Invoices', {
+    // Include existing ID to update in-place (bills only — credit notes always create new
+    // since the stored xero_bill_id may point to an ACCPAY invoice, not a credit note)
+    if (!isCredit && existingXeroBillId && !forceNew) {
+      xeroPayload[xeroIdField] = existingXeroBillId
+    }
+
+    const xeroRes = await xeroFetch(conn, xeroEndpoint, {
       method: 'POST',
-      body: JSON.stringify({ Invoices: [xeroPayload] }),
+      body: JSON.stringify({ [xeroWrapKey]: [xeroPayload] }),
     })
 
-    if (!invoiceRes.ok) {
-      const errText = await invoiceRes.text()
-      let friendlyMsg = `Xero error (${invoiceRes.status})`
+    if (!xeroRes.ok) {
+      const errText = await xeroRes.text()
+      let friendlyMsg = `Xero error (${xeroRes.status})`
       try {
         const errJson = JSON.parse(errText) as XeroErrorResponse
         const valErrors = errJson?.Elements?.[0]?.ValidationErrors?.map(e => e.Message).join('; ')
@@ -120,7 +130,7 @@ export async function POST(req: NextRequest) {
         else if (errJson?.Detail) friendlyMsg += `: ${errJson.Detail}`
         else friendlyMsg += `: ${errText.slice(0, 200)}`
       } catch { friendlyMsg += `: ${errText.slice(0, 200)}` }
-      if (invoiceRes.status === 401 || invoiceRes.status === 403) {
+      if (xeroRes.status === 401 || xeroRes.status === 403) {
         friendlyMsg = 'Xero connection needs updating — go to Settings → Integrations, disconnect then reconnect.'
       } else if (friendlyMsg.toLowerCase().includes('not of valid status')) {
         friendlyMsg = existingXeroBillId
@@ -128,21 +138,22 @@ export async function POST(req: NextRequest) {
           : 'This invoice number already exists in Xero as a voided or deleted bill. Use "Push as new bill" to create a fresh copy without the invoice number.'
       }
       const statusLocked = friendlyMsg.includes('paid or reconciled') || friendlyMsg.includes('voided or deleted')
-      return NextResponse.json({ error: friendlyMsg, statusLocked }, { status: invoiceRes.status })
+      return NextResponse.json({ error: friendlyMsg, statusLocked }, { status: xeroRes.status })
     }
 
-    const invoiceData = await invoiceRes.json() as XeroResponse
-    const xeroBillId = invoiceData?.Invoices?.[0]?.InvoiceID
+    const xeroData = await xeroRes.json() as Record<string, Array<Record<string, unknown>>>
+    const xeroBillId = xeroData?.[xeroWrapKey]?.[0]?.[xeroIdField] as string | undefined
     if (!xeroBillId) return NextResponse.json({ error: 'Xero did not return a bill ID' }, { status: 500 })
 
-    // Attach the original document file to the Xero bill (best-effort — don't fail if this errors)
+    // Attach the original document file to the Xero bill/credit note (best-effort)
     if (storagePath && fileName) {
       try {
         const { data: fileBlob } = await sb.storage.from('job-documents').download(storagePath)
         if (fileBlob) {
           const fileBuffer = await fileBlob.arrayBuffer()
           const safeFileName = fileName.replace(/[^\w\s.-]/g, '_')
-          const attachRes = await xeroFetch(conn, `/Invoices/${xeroBillId}/Attachments/${encodeURIComponent(safeFileName)}`, {
+          const attachmentPath = `${xeroEndpoint.slice(1)}/${xeroBillId}/Attachments/${encodeURIComponent(safeFileName)}`
+          const attachRes = await xeroFetch(conn, `/${attachmentPath}`, {
             method: 'PUT',
             body: fileBuffer,
             headers: { 'Content-Type': mimeType || 'application/octet-stream' },
