@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, Suspense } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { createClient } from '@/lib/supabase/client'
 import { fmt, quoteTotal, STAGE_COLOR, STAGE_LABEL, Q_BADGE, Q_LABEL } from '@/lib/utils'
 import type { Client, PortalStatus, ClientPortalSettings } from '@/lib/types'
 import { DEFAULT_CLIENT_PORTAL_SETTINGS, PAYMENT_TERMS_OPTIONS } from '@/lib/types'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import QuotePreviewModal from '@/components/QuotePreviewModal'
 import type { Quote } from '@/lib/types'
 
@@ -55,11 +55,7 @@ function ClientsPageInner() {
   const [formPortalSettings, setFormPortalSettings] = useState<ClientPortalSettings>(DEFAULT_CLIENT_PORTAL_SETTINGS)
   const [saving, setSaving] = useState(false)
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const urlTab = searchParams.get('tab') as 'supplier' | 'subcontractor' | null
-  const [tab, setTab] = useState<'client' | 'supplier' | 'subcontractor'>(urlTab || 'client')
-
-  useEffect(() => { setTab(urlTab || 'client') }, [urlTab])
+  const [filter, setFilter] = useState<'all' | 'client' | 'supplier' | 'subcontractor'>('all')
 
 
   const portalBase = (typeof window !== 'undefined' ? window.location.origin : '') + '/portal/login'
@@ -103,7 +99,7 @@ function ClientsPageInner() {
 
   function openNew() {
     setEditingClient(null)
-    setForm({ ...BLANK_FORM, clientType: tab })
+    setForm({ ...BLANK_FORM, clientType: filter === 'all' ? 'client' : filter })
     setFormPortalSettings(DEFAULT_CLIENT_PORTAL_SETTINGS)
     setShowForm(true)
   }
@@ -234,9 +230,26 @@ function ClientsPageInner() {
   const selJobs = selected ? getClientJobs(selected) : []
   const acceptedValue = selQuotes.filter(q => q.status === 'accepted').reduce((s, q) => s + quoteTotal(q), 0)
 
+  const TYPE_LABEL: Record<string, string> = { client: 'Client', supplier: 'Supplier', subcontractor: 'Sub' }
+  const TYPE_COLOR: Record<string, string> = { client: '#2563eb', supplier: '#7c3aed', subcontractor: '#b45309' }
+
+  const filtered = filter === 'all' ? clients : clients.filter(c => (c.clientType || 'client') === filter)
+
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {(['all', 'client', 'supplier', 'subcontractor'] as const).map(f => (
+            <button key={f} onClick={() => setFilter(f)} style={{
+              padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              border: `1px solid ${filter === f ? 'var(--slate)' : 'var(--border)'}`,
+              background: filter === f ? 'var(--slate)' : 'transparent',
+              color: filter === f ? 'white' : 'var(--muted)',
+            }}>
+              {f === 'all' ? 'All' : f === 'client' ? 'Clients' : f === 'supplier' ? 'Suppliers' : 'Sub Contractors'}
+            </button>
+          ))}
+        </div>
         <button className="btn btn-primary" onClick={openNew}>+ New Contact</button>
       </div>
 
@@ -251,23 +264,35 @@ function ClientsPageInner() {
         <table className="tbl tbl-responsive">
           <thead>
             <tr>
+              <th className="col-hide-mobile">Type</th>
               <th>Contact</th>
               <th>Email</th>
               <th className="col-hide-mobile">Phone</th>
               <th className="col-hide-mobile">Jobs</th>
-              {tab === 'client' && <th className="col-hide-mobile">Portal Status</th>}
               <th className="col-hide-mobile"></th>
             </tr>
           </thead>
           <tbody>
-            {!clients.filter(c => (c.clientType || 'client') === tab).length
-              ? <tr><td colSpan={tab === 'client' ? 6 : 5} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>No contacts yet</td></tr>
-              : clients.filter(c => (c.clientType || 'client') === tab).sort((a, b) => a.name.localeCompare(b.name)).map(c => {
+            {!filtered.length
+              ? <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>No contacts yet</td></tr>
+              : filtered.sort((a, b) => a.name.localeCompare(b.name)).map(c => {
                   const ini = (c.name[0] || '').toUpperCase() + ((c.name.split(' ').pop() || '')[0] || '').toUpperCase()
                   const cJ = getClientJobs(c)
+                  const cType = c.clientType || 'client'
                   const status = c.portalStatus || (c.email ? 'not_invited' : 'no_email')
                   return (
                     <tr key={c.id}>
+                      <td className="col-hide-mobile">
+                        <span style={{
+                          display: 'inline-block', padding: '2px 8px', borderRadius: 4,
+                          fontSize: 10, fontWeight: 700,
+                          background: (TYPE_COLOR[cType] || '#64748b') + '18',
+                          color: TYPE_COLOR[cType] || '#64748b',
+                          border: `1px solid ${(TYPE_COLOR[cType] || '#64748b')}33`,
+                        }}>
+                          {TYPE_LABEL[cType] || cType}
+                        </span>
+                      </td>
                       <td onClick={() => setSelected(c)} style={{ cursor: 'pointer' }}>
                         <span style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--slate)', color: 'white', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, marginRight: 8, verticalAlign: 'middle', flexShrink: 0 }}>{ini}</span>
                         <strong>{c.name}</strong>
@@ -277,33 +302,9 @@ function ClientsPageInner() {
                       </td>
                       <td className="col-hide-mobile" onClick={() => setSelected(c)} style={{ cursor: 'pointer', fontSize: 13 }}>{c.phone || '—'}</td>
                       <td className="col-hide-mobile" onClick={() => setSelected(c)} style={{ cursor: 'pointer', fontSize: 13 }}>{cJ.length} job{cJ.length !== 1 ? 's' : ''}</td>
-                      {tab === 'client' && (
-                      <td className="col-hide-mobile">
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                          <span style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 5,
-                            fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 4,
-                            background: STATUS_COLOR[status] + '18',
-                            color: STATUS_COLOR[status],
-                            border: `1px solid ${STATUS_COLOR[status]}44`,
-                            width: 'fit-content',
-                          }}>
-                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: STATUS_COLOR[status], display: 'inline-block' }} />
-                            {STATUS_LABEL[status]}
-                          </span>
-                          {status === 'active' && c.portalLastLogin && (
-                            <span style={{ fontSize: 10, color: 'var(--muted)' }}>Last login {fmtDate(c.portalLastLogin)}</span>
-                          )}
-                          {status === 'invited' && c.portalInvitedAt && (
-                            <span style={{ fontSize: 10, color: 'var(--muted)' }}>Sent {fmtDate(c.portalInvitedAt)}</span>
-                          )}
-                        </div>
-                      </td>
-                      )}
                       <td className="col-hide-mobile">
                         <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                          {tab === 'client' && (<div className="btn-mob-hide">
-                          {/* Invite / Resend button */}
+                          {cType === 'client' && (<div className="btn-mob-hide">
                           {status === 'no_email' ? (
                             <button className="btn-sm btn-outline" disabled style={{ opacity: 0.4, cursor: 'not-allowed' }} title="Add an email address first">
                               📧 Invite
@@ -317,7 +318,6 @@ function ClientsPageInner() {
                               🔄 Resend Invite
                             </button>
                           )}
-                          {/* Send app install link */}
                           {c.email && (
                             <button
                               className={`btn-sm ${appLinkSentId === c.id ? 'btn-gold' : 'btn-outline'}`}
@@ -328,14 +328,12 @@ function ClientsPageInner() {
                               {appLinkSentId === c.id ? '✓ App Link Sent' : appLinkSendingId === c.id ? '...' : '📲 App Link'}
                             </button>
                           )}
-                          {/* Text / WhatsApp */}
                           {c.phone && (
                             <>
                               <a className="btn-sm btn-outline" href={smsHref(c)} title="Send portal link via SMS">💬 SMS</a>
                               <a className="btn-sm btn-outline" href={waHref(c)} target="_blank" rel="noreferrer" title="Send portal link via WhatsApp">🟢 WhatsApp</a>
                             </>
                           )}
-                          {/* Admin preview of client portal */}
                           <button
                             className="btn-sm btn-sky"
                             title={c.email ? `View portal as ${c.name}` : 'No email on file — add one to preview portal'}
