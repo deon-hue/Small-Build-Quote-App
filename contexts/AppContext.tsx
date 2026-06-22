@@ -195,7 +195,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         supabase.from('invoices').select('*').order('created_at', { ascending: false }),
         supabase.from('job_notes').select('*').order('created_at', { ascending: true }),
         supabase.from('variations').select('*').order('created_at', { ascending: true }),
-        supabase.from('suppliers').select('*').order('created_at', { ascending: true }),
+        supabase.from('clients').select('*').eq('user_id', resolvedOwnerId).in('client_type', ['supplier', 'subcontractor']).order('name', { ascending: true }),
         supabase.from('bills').select('*').order('created_at', { ascending: false }),
         (async () => { try { return await supabase.from('job_payments').select('*').order('payment_date', { ascending: false }) } catch { return { data: null } } })(),
       ])
@@ -249,7 +249,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       if (suppliersRes.data) {
         setSuppliers(suppliersRes.data.map(r => ({
-          id: r.id, name: r.name || '', contactName: r.contact_name || '',
+          id: r.id, name: r.name || '',
+          contactName: [r.first_name, r.last_name].filter(Boolean).join(' '),
           phone: r.phone || '', email: r.email || '', address: r.address || '',
           notes: r.notes || '', accountNumber: r.account_number || '', addedFrom: r.added_from || '',
           xeroContactId: r.xero_contact_id || null,
@@ -329,7 +330,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (billsRes.data) {
         setBills(billsRes.data.map(r => ({
           id: r.id, ref: r.ref,
-          supplierId: r.supplier_id || '', supplierName: r.supplier_name || '',
+          supplierId: r.contact_id || r.supplier_id || '', supplierName: r.supplier_name || '',
           jobId: r.job_id || '',
           billDate: r.bill_date || '', dueDate: r.due_date || '',
           description: r.description || '',
@@ -544,19 +545,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [clients, addClient, updateClient])
 
-  // ── Suppliers ────────────────────────────────────────────────
+  // ── Suppliers (now stored in clients table with client_type='supplier') ───────
   const addSupplier = useCallback(async (s: Omit<Supplier, 'id'>) => {
     const { data: { user } } = await supabase.auth.getUser()
     const ownerId = dataOwnerIdRef.current || user!.id
-    const { data, error } = await supabase.from('suppliers').insert({
-      user_id: ownerId, name: s.name, contact_name: s.contactName, phone: s.phone,
-      email: s.email, address: s.address, notes: s.notes, account_number: s.accountNumber,
-      added_from: s.addedFrom,
-      updated_at: new Date().toISOString(),
+    const nameParts = s.contactName.trim().split(' ')
+    const { data, error } = await supabase.from('clients').insert({
+      user_id: ownerId, name: s.name,
+      first_name: nameParts[0] || '', last_name: nameParts.slice(1).join(' ') || '',
+      phone: s.phone, email: s.email, address: s.address, notes: s.notes,
+      account_number: s.accountNumber, client_type: 'supplier',
+      added_from: s.addedFrom, updated_at: new Date().toISOString(),
     }).select().single()
     if (error) throw error
     setSuppliers(prev => [...prev, {
-      id: data.id, name: data.name || '', contactName: data.contact_name || '',
+      id: data.id, name: data.name || '',
+      contactName: [data.first_name, data.last_name].filter(Boolean).join(' '),
       phone: data.phone || '', email: data.email || '', address: data.address || '',
       notes: data.notes || '', accountNumber: data.account_number || '', addedFrom: data.added_from || '',
       xeroContactId: data.xero_contact_id || null,
@@ -564,16 +568,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [supabase])
 
   const updateSupplier = useCallback(async (s: Supplier) => {
-    await supabase.from('suppliers').update({
-      name: s.name, contact_name: s.contactName, phone: s.phone, email: s.email,
-      address: s.address, notes: s.notes, account_number: s.accountNumber,
-      updated_at: new Date().toISOString(),
+    const nameParts = s.contactName.trim().split(' ')
+    await supabase.from('clients').update({
+      name: s.name, first_name: nameParts[0] || '', last_name: nameParts.slice(1).join(' ') || '',
+      phone: s.phone, email: s.email, address: s.address, notes: s.notes,
+      account_number: s.accountNumber, updated_at: new Date().toISOString(),
     }).eq('id', s.id)
     setSuppliers(prev => prev.map(x => x.id === s.id ? s : x))
   }, [supabase])
 
   const deleteSupplier = useCallback(async (id: string) => {
-    await supabase.from('suppliers').delete().eq('id', id)
+    await supabase.from('clients').delete().eq('id', id)
     setSuppliers(prev => prev.filter(s => s.id !== id))
   }, [supabase])
 
@@ -825,7 +830,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const ref = 'BILL-' + String(Math.floor(Math.random() * 9000) + 1000)
     const { data, error } = await supabase.from('bills').insert({
       user_id: ownerId, ref,
-      supplier_id: b.supplierId || null, supplier_name: b.supplierName,
+      contact_id: b.supplierId || null, supplier_name: b.supplierName,
       job_id: b.jobId || null,
       bill_date: b.billDate, due_date: b.dueDate,
       description: b.description, line_items: b.lineItems,
@@ -842,7 +847,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await syncBillCosts(data.id, b, ownerId)
     const newBill: Bill = {
       id: data.id, ref: data.ref,
-      supplierId: data.supplier_id || '', supplierName: data.supplier_name || '',
+      supplierId: data.contact_id || data.supplier_id || '', supplierName: data.supplier_name || '',
       jobId: data.job_id || '',
       billDate: data.bill_date || '', dueDate: data.due_date || '',
       description: data.description || '', lineItems: data.line_items || [],
@@ -865,7 +870,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const { data: { user } } = await supabase.auth.getUser()
     const ownerId = dataOwnerIdRef.current || user!.id
     const { error } = await supabase.from('bills').update({
-      supplier_id: b.supplierId || null, supplier_name: b.supplierName,
+      contact_id: b.supplierId || null, supplier_name: b.supplierName,
       job_id: b.jobId || null,
       bill_date: b.billDate, due_date: b.dueDate,
       description: b.description, line_items: b.lineItems,

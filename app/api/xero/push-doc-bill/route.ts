@@ -52,23 +52,29 @@ export async function POST(req: NextRequest) {
 
     const lineItems = lines
       .filter(l => (Number(l.grossAmount) || 0) > 0)
-      .map(l => ({
-        Description: l.description || 'Works',
-        Quantity: 1,
-        UnitAmount: Number(l.netAmount) || Number(l.grossAmount),
-        TaxAmount: Number(l.vatAmount) || 0,
-        AccountCode: xeroAccountCode || codeFor(l.costCategory),
-        TaxType: 'NONE',
-      }))
+      .map(l => {
+        const gross = Number(l.grossAmount)
+        const net   = Number(l.netAmount) || +(gross - Number(l.vatAmount || 0)).toFixed(2)
+        const hasVat = (Number(l.vatAmount) || 0) > 0
+        return {
+          Description: l.description || 'Works',
+          Quantity: 1,
+          // INPUT2 = UK 20% VAT on purchases; Xero calculates TaxAmount from net automatically.
+          // NONE   = no VAT; use gross so the Xero bill total matches the actual invoice.
+          UnitAmount: hasVat ? net : gross,
+          TaxType: hasVat ? 'INPUT2' : 'NONE',
+          AccountCode: xeroAccountCode || codeFor(l.costCategory),
+        }
+      })
 
     if (!lineItems.length) {
       return NextResponse.json({ error: 'No line items with amounts to push to Xero' }, { status: 400 })
     }
 
-    // Resolve supplier Xero contact
+    // Resolve contact's Xero ContactID (contacts are now in the clients table)
     let contact: Record<string, unknown> = { Name: supplier || 'Unknown Supplier' }
     if (supplierId) {
-      const { data: sup } = await sb.from('suppliers').select('xero_contact_id, name').eq('id', supplierId).single()
+      const { data: sup } = await sb.from('clients').select('xero_contact_id, name').eq('id', supplierId).single()
       if (sup?.xero_contact_id) contact = { ContactID: sup.xero_contact_id }
       else if (sup?.name) contact = { Name: sup.name }
     }

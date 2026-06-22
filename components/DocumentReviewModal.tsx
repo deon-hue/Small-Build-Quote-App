@@ -182,7 +182,8 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
         const d = await res.json() as { xeroBillId?: string; error?: string }
         if (!res.ok || d.error) {
           setXeroError(d.error || 'Failed to publish to Xero')
-          if (allLinesHaveJob) onSaved()  // costs saved — reload even on Xero error
+          // Do NOT call onSaved() here — that closes the modal before the error renders.
+          // The user must see the error and close manually; job costs were already saved above.
         } else {
           onSaved()
         }

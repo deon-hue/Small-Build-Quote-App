@@ -61,10 +61,10 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Look up supplier's Xero ContactID if available
+    // Look up contact's Xero ContactID if available (contacts are now in the clients table)
     let contact: Record<string, unknown> = { Name: bill.supplierName || 'Unknown Supplier' }
     if (bill.supplierId) {
-      const { data: sup } = await sb.from('suppliers')
+      const { data: sup } = await sb.from('clients')
         .select('xero_contact_id, name')
         .eq('id', bill.supplierId)
         .single()

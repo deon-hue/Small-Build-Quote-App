@@ -88,9 +88,7 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
           {can('invoices')&& navItem('/bills',     '📄', 'Bills')}
           {can('jobs')    && navItem('/scan',      '📷', 'Scan to Job')}
           <div className="nav-section">People</div>
-          {can('clients') && navItem('/clients', '○', 'Clients')}
-          {can('clients') && navItem('/clients?tab=supplier', '◐', 'Suppliers')}
-          {can('clients') && navItem('/clients?tab=subcontractor', '👷', 'Sub Contractors')}
+          {can('clients') && navItem('/clients', '○', 'Contacts')}
           <div className="nav-section">Settings</div>
           {can('jobs')        && navItem('/documents',   '📥', 'Documents')}
           {can('settings')    && navItem('/settings',    '◇', 'Company Setup')}
@@ -137,7 +135,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/takeoff':      'Take-off',
   '/invoices':     'Invoices',
   '/bills':        'Bills',
-  '/clients':      'Clients',
+  '/clients':      'Contacts',
   '/settings':     'Company Setup',
   '/documents':    'Documents',
   '/back-office':      'Back Office',
@@ -156,8 +154,7 @@ function AppLayoutWrapper({ children }: { children: React.ReactNode }) {
     setTab(new URLSearchParams(window.location.search).get('tab'))
   }, [pathname])
 
-  const clientsTitle = tab === 'supplier' ? 'Suppliers' : tab === 'subcontractor' ? 'Sub Contractors' : 'Clients'
-  const title = pathname === '/clients' ? clientsTitle : (PAGE_TITLES[pathname] || 'Dashboard')
+  const title = PAGE_TITLES[pathname] || 'Dashboard'
 
   // Route-level permission guard
   const requiredPermission = ROUTE_PERMISSIONS[pathname]

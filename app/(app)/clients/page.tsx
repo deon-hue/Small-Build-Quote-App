@@ -237,7 +237,7 @@ function ClientsPageInner() {
   return (
     <>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-        <button className="btn btn-primary" onClick={openNew}>+ New {tab === 'supplier' ? 'Supplier' : tab === 'subcontractor' ? 'Subcontractor' : 'Client'}</button>
+        <button className="btn btn-primary" onClick={openNew}>+ New Contact</button>
       </div>
 
       {appLinkError && (
@@ -251,7 +251,7 @@ function ClientsPageInner() {
         <table className="tbl tbl-responsive">
           <thead>
             <tr>
-              <th>{tab === 'client' ? 'Client' : tab === 'supplier' ? 'Supplier' : 'Subcontractor'}</th>
+              <th>Contact</th>
               <th>Email</th>
               <th className="col-hide-mobile">Phone</th>
               <th className="col-hide-mobile">Jobs</th>
@@ -261,7 +261,7 @@ function ClientsPageInner() {
           </thead>
           <tbody>
             {!clients.filter(c => (c.clientType || 'client') === tab).length
-              ? <tr><td colSpan={tab === 'client' ? 6 : 5} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>No {tab === 'client' ? 'clients' : tab === 'supplier' ? 'suppliers' : 'subcontractors'} yet</td></tr>
+              ? <tr><td colSpan={tab === 'client' ? 6 : 5} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>No contacts yet</td></tr>
               : clients.filter(c => (c.clientType || 'client') === tab).sort((a, b) => a.name.localeCompare(b.name)).map(c => {
                   const ini = (c.name[0] || '').toUpperCase() + ((c.name.split(' ').pop() || '')[0] || '').toUpperCase()
                   const cJ = getClientJobs(c)
@@ -510,7 +510,7 @@ function ClientsPageInner() {
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowForm(false) }}>
           <div className="form-modal" style={{ width: 'min(520px, 96vw)' }}>
             <div className="form-modal-hd">
-              <div style={{ fontWeight: 700, fontSize: 17 }}>{editingClient ? 'Edit' : 'New'} {form.clientType === 'supplier' ? 'Supplier' : form.clientType === 'subcontractor' ? 'Subcontractor' : 'Client'}</div>
+              <div style={{ fontWeight: 700, fontSize: 17 }}>{editingClient ? 'Edit' : 'New'} Contact</div>
               <button className="modal-close" onClick={() => setShowForm(false)}>×</button>
             </div>
             <div className="form-modal-bd">
