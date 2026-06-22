@@ -41,7 +41,7 @@ function initialLines(ex: Record<string, unknown> | null | undefined): Extracted
 
 export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSaved }: Props) {
   const sb = createClient()
-  const { addBill } = useApp()
+  const { addBill, bills } = useApp()
   const ex = doc.extraction ?? {}
   const [url, setUrl] = useState<string | null>(null)
   const [supplier, setSupplier] = useState(String((ex as Record<string, unknown>).supplier ?? ''))
@@ -54,7 +54,7 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
   const [xeroBusy, setXeroBusy] = useState(false)
   const [xeroError, setXeroError] = useState<string | null>(null)
   const [billBusy, setBillBusy] = useState(false)
-  const [billCreated, setBillCreated] = useState(false)
+  const [billCreated, setBillCreated] = useState(() => bills.some(b => b.documentId === doc.id))
 
   const [xeroAccounts, setXeroAccounts] = useState<Array<{ code: string; name: string; type: string }>>([])
   const [xeroAccount, setXeroAccount] = useState('')
@@ -206,6 +206,7 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 18px', borderBottom: '1px solid #e2e8f0' }}>
           <div style={{ fontWeight: 700, fontSize: 15 }}>
             Review document{isAllocated ? ' (allocated)' : ''}
+            {billCreated && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: '#f3e8ff', color: '#6b21a8' }}>📋 Bill created</span>}
             {doc.xeroBillId && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: '#dcfce7', color: '#166534' }}>✓ Xero</span>}
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8' }}>×</button>
