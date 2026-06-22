@@ -35,7 +35,7 @@ export default function XeroConnectionCard() {
       if (!res.ok) { if (!silent) setSyncMsg(`Sync failed: ${data.error || 'error'}`); return }
       const s = data.summary
       if (!silent)
-        setSyncMsg(`Synced ✓ — clients: +${s.clientsCreatedLocal} new, ${s.clientsUpdatedLocal} updated, ${s.clientsPushed} sent · suppliers: +${s.suppliersCreatedLocal} new, ${s.suppliersUpdatedLocal} updated, ${s.suppliersPushed} sent.${s.errors?.length ? ` (${s.errors.length} error(s))` : ''}`)
+        setSyncMsg(`Synced ✓ — clients: +${s.clientsCreatedLocal} new, ${s.clientsUpdatedLocal} updated, ${s.clientsPushed} sent · suppliers: +${s.suppliersCreatedLocal} new, ${s.suppliersUpdatedLocal} updated, ${s.suppliersPushed} sent · subcontractors: +${s.subcontractorsCreatedLocal} new, ${s.subcontractorsUpdatedLocal} updated, ${s.subcontractorsPushed} sent.${s.errors?.length ? ` (${s.errors.length} error(s))` : ''}`)
     } catch {
       if (!silent) setSyncMsg('Sync failed — please try again.')
     } finally { setSyncing(false) }
@@ -91,7 +91,7 @@ export default function XeroConnectionCard() {
               <button className="btn-sm btn-danger" onClick={disconnect} disabled={busy}>{busy ? 'Disconnecting…' : 'Disconnect'}</button>
             </div>
             <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--muted)' }}>
-              Auto-syncs every {AUTO_SYNC_HOURS} hours. Pushes clients &amp; suppliers to Xero and pulls Xero contacts back in. Most-recently-edited version wins on conflict.
+              Auto-syncs every {AUTO_SYNC_HOURS} hours. Pushes clients, suppliers &amp; subcontractors to Xero and pulls Xero contacts back in. Most-recently-edited version wins on conflict. Xero has no subcontractor flag — subcontractors sync as suppliers in Xero.
               {lastSyncedAt && (
                 <span style={{ display: 'block', marginTop: 3, color: '#94a3b8' }}>
                   Last synced: {new Date(lastSyncedAt).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}
@@ -103,7 +103,7 @@ export default function XeroConnectionCard() {
         ) : (
           <div>
             <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--muted)' }}>
-              Connect your Xero organisation to sync clients &amp; suppliers and push supplier bills. Captured costs stay tracked in this app; Xero handles the accounting.
+              Connect your Xero organisation to sync clients, suppliers &amp; subcontractors and push supplier bills. Captured costs stay tracked in this app; Xero handles the accounting.
             </p>
             {status.configured ? (
               <a href="/api/xero/connect" className="btn btn-primary" style={{ textDecoration: 'none' }}>Connect to Xero</a>

@@ -1,5 +1,9 @@
-// Two-way contact sync between the app (clients + suppliers) and Xero Contacts.
+// Two-way contact sync between the app (clients, suppliers, subcontractors) and Xero Contacts.
 // Manual trigger, most-recent-edit-wins. Server-only.
+//
+// All three CRM types live in the `clients` table with a `client_type` column.
+// The separate `suppliers` table is used by the document inbox and is also synced.
+// Xero has no "subcontractor" concept — subcontractors are pushed as IsSupplier:true.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getValidConnection, xeroFetch, type XeroConn } from './xero'
@@ -24,6 +28,7 @@ interface XeroContact {
 export interface SyncSummary {
   clientsCreatedLocal: number; clientsUpdatedLocal: number; clientsPushed: number
   suppliersCreatedLocal: number; suppliersUpdatedLocal: number; suppliersPushed: number
+  subcontractorsCreatedLocal: number; subcontractorsUpdatedLocal: number; subcontractorsPushed: number
   errors: string[]
 }
 
@@ -64,103 +69,140 @@ async function putContacts(conn: XeroConn, contacts: XeroContact[]): Promise<Xer
   return data.Contacts ?? []
 }
 
+type Row = Record<string, unknown>
+
+function indexRows(rows: Row[]): { byId: Map<string, Row>; byKey: Map<string, Row>; byComp: Map<string, Row> } {
+  const byId = new Map<string, Row>()
+  const byKey = new Map<string, Row>()
+  const byComp = new Map<string, Row>()
+  for (const r of rows) {
+    if (r.xero_contact_id) byId.set(r.xero_contact_id as string, r)
+    const key = norm(r.email as string) || norm(r.name as string)
+    const comp = normCompany(r.name as string)
+    if (key)  byKey.set(key, r)
+    if (comp) byComp.set(comp, r)
+  }
+  return { byId, byKey, byComp }
+}
+
+function findInIndex(
+  { byId, byKey, byComp }: ReturnType<typeof indexRows>,
+  xc: XeroContact,
+): Row | undefined {
+  return byId.get(xc.ContactID!)
+    || byKey.get(norm(xc.EmailAddress) || norm(xc.Name))
+    || byComp.get(normCompany(xc.Name))
+}
+
 export async function syncContacts(sb: SupabaseClient, userId: string): Promise<SyncSummary> {
   const conn = await getValidConnection(sb, userId)
   if (!conn) throw new Error('Not connected to Xero')
 
   const summary: SyncSummary = {
     clientsCreatedLocal: 0, clientsUpdatedLocal: 0, clientsPushed: 0,
-    suppliersCreatedLocal: 0, suppliersUpdatedLocal: 0, suppliersPushed: 0, errors: [],
+    suppliersCreatedLocal: 0, suppliersUpdatedLocal: 0, suppliersPushed: 0,
+    subcontractorsCreatedLocal: 0, subcontractorsUpdatedLocal: 0, subcontractorsPushed: 0,
+    errors: [],
   }
 
   const xeroContacts = await fetchAllContacts(conn)
-  const { data: clients } = await sb.from('clients').select('*').eq('user_id', userId)
-  const { data: suppliers } = await sb.from('suppliers').select('*').eq('user_id', userId)
-  const clientRows = clients ?? []
-  const supplierRows = suppliers ?? []
 
-  // Index app rows — exact key + fuzzy company-name key
-  const cById   = new Map<string, Record<string, unknown>>()
-  const cByKey  = new Map<string, Record<string, unknown>>()
-  const cByComp = new Map<string, Record<string, unknown>>()
-  for (const c of clientRows) {
-    if (c.xero_contact_id) cById.set(c.xero_contact_id, c)
-    const key  = norm(c.email as string) || norm(c.name as string)
-    const comp = normCompany(c.name as string)
-    if (key)  cByKey.set(key, c)
-    if (comp) cByComp.set(comp, c)
-  }
-  const sById   = new Map<string, Record<string, unknown>>()
-  const sByKey  = new Map<string, Record<string, unknown>>()
-  const sByComp = new Map<string, Record<string, unknown>>()
-  for (const s of supplierRows) {
-    if (s.xero_contact_id) sById.set(s.xero_contact_id, s)
-    const key  = norm(s.email as string) || norm(s.name as string)
-    const comp = normCompany(s.name as string)
-    if (key)  sByKey.set(key, s)
-    if (comp) sByComp.set(comp, s)
-  }
+  // Load all CRM contacts (all three client_types) from the clients table
+  const { data: allCrmRows } = await sb.from('clients').select('*').eq('user_id', userId)
+  const crmRows = allCrmRows ?? []
+
+  // Load document-inbox suppliers (separate table — used for bill linking)
+  const { data: docSupplierData } = await sb.from('suppliers').select('*').eq('user_id', userId)
+  const docSupplierRows = docSupplierData ?? []
+
+  // Build indexes
+  const crmIdx = indexRows(crmRows)
+  const docIdx = indexRows(docSupplierRows)
 
   const now = () => new Date().toISOString()
 
-  // ── PULL (Xero → app) ───────────────────────────────────────────────────────
+  // ── PULL (Xero → app) ──────────────────────────────────────────────────────
   for (const xc of xeroContacts) {
     if (!xc.ContactID || !xc.Name) continue
     const isSupplier = !!xc.IsSupplier
-    const isCustomer = !!xc.IsCustomer || !isSupplier  // default un-flagged contacts to customer
-    const xUpdated = parseXeroDate(xc.UpdatedDateUTC)
+    const isCustomer = !!xc.IsCustomer || !isSupplier // default un-flagged contacts to customer
+    const xUpdated   = parseXeroDate(xc.UpdatedDateUTC)
 
-    if (isCustomer) {
-      const match = cById.get(xc.ContactID)
-        || cByKey.get(norm(xc.EmailAddress) || norm(xc.Name))
-        || cByComp.get(normCompany(xc.Name))
-      if (!match) {
-        const { error } = await sb.from('clients').insert({
-          user_id: userId, name: xc.Name, first_name: xc.FirstName ?? '', last_name: xc.LastName ?? '',
-          email: xc.EmailAddress ?? '', phone: phone(xc), address: addr(xc), notes: '', added_from: 'xero',
-          xero_contact_id: xc.ContactID, xero_synced_at: now(), updated_at: now(),
-        })
-        if (error) summary.errors.push(`client insert ${xc.Name}: ${error.message}`); else summary.clientsCreatedLocal++
-      } else {
-        const appUpdated = Date.parse((match.updated_at as string) || (match.created_at as string) || '') || 0
-        if (xUpdated >= appUpdated) {
-          const { error } = await sb.from('clients').update({
-            name: xc.Name, first_name: xc.FirstName ?? match.first_name, last_name: xc.LastName ?? match.last_name,
-            email: xc.EmailAddress ?? match.email, phone: phone(xc) || match.phone, address: addr(xc) || match.address,
-            xero_contact_id: xc.ContactID, xero_synced_at: now(), updated_at: now(),
-          }).eq('id', match.id)
-          if (error) summary.errors.push(`client update ${xc.Name}: ${error.message}`); else summary.clientsUpdatedLocal++
+    // Check clients table first (all types)
+    const crmMatch = findInIndex(crmIdx, xc)
+    if (crmMatch) {
+      const appUpdated = Date.parse((crmMatch.updated_at as string) || (crmMatch.created_at as string) || '') || 0
+      if (xUpdated >= appUpdated) {
+        const { error } = await sb.from('clients').update({
+          name: xc.Name,
+          first_name: xc.FirstName ?? crmMatch.first_name,
+          last_name: xc.LastName ?? crmMatch.last_name,
+          email: xc.EmailAddress ?? crmMatch.email,
+          phone: phone(xc) || crmMatch.phone,
+          address: addr(xc) || crmMatch.address,
+          xero_contact_id: xc.ContactID,
+          xero_synced_at: now(),
+          updated_at: now(),
+        }).eq('id', crmMatch.id)
+        if (error) {
+          summary.errors.push(`update client ${xc.Name}: ${error.message}`)
+        } else {
+          const t = (crmMatch.client_type as string) || 'client'
+          if (t === 'supplier') summary.suppliersUpdatedLocal++
+          else if (t === 'subcontractor') summary.subcontractorsUpdatedLocal++
+          else summary.clientsUpdatedLocal++
         }
       }
+      continue
     }
 
-    if (isSupplier) {
-      const match = sById.get(xc.ContactID)
-        || sByKey.get(norm(xc.EmailAddress) || norm(xc.Name))
-        || sByComp.get(normCompany(xc.Name))
-      if (!match) {
-        const { error } = await sb.from('suppliers').insert({
-          user_id: userId, name: xc.Name, contact_name: [xc.FirstName, xc.LastName].filter(Boolean).join(' '),
-          email: xc.EmailAddress ?? '', phone: phone(xc), address: addr(xc), notes: '',
-          account_number: xc.AccountNumber ?? '', added_from: 'xero',
-          xero_contact_id: xc.ContactID, xero_synced_at: now(), updated_at: now(),
-        })
-        if (error) summary.errors.push(`supplier insert ${xc.Name}: ${error.message}`); else summary.suppliersCreatedLocal++
-      } else {
-        const appUpdated = Date.parse((match.updated_at as string) || (match.created_at as string) || '') || 0
-        if (xUpdated >= appUpdated) {
-          const { error } = await sb.from('suppliers').update({
-            name: xc.Name, email: xc.EmailAddress ?? match.email, phone: phone(xc) || match.phone,
-            address: addr(xc) || match.address, account_number: xc.AccountNumber ?? match.account_number,
-            xero_contact_id: xc.ContactID, xero_synced_at: now(), updated_at: now(),
-          }).eq('id', match.id)
-          if (error) summary.errors.push(`supplier update ${xc.Name}: ${error.message}`); else summary.suppliersUpdatedLocal++
-        }
+    // Check document-inbox suppliers table
+    const docMatch = findInIndex(docIdx, xc)
+    if (docMatch && isSupplier) {
+      const appUpdated = Date.parse((docMatch.updated_at as string) || (docMatch.created_at as string) || '') || 0
+      if (xUpdated >= appUpdated) {
+        const { error } = await sb.from('suppliers').update({
+          name: xc.Name,
+          email: xc.EmailAddress ?? docMatch.email,
+          phone: phone(xc) || docMatch.phone,
+          address: addr(xc) || docMatch.address,
+          account_number: xc.AccountNumber ?? docMatch.account_number,
+          xero_contact_id: xc.ContactID,
+          xero_synced_at: now(),
+          updated_at: now(),
+        }).eq('id', docMatch.id)
+        if (error) summary.errors.push(`update doc-supplier ${xc.Name}: ${error.message}`)
+        else summary.suppliersUpdatedLocal++
       }
+      continue
+    }
+
+    // No match anywhere — create in clients table
+    if (isCustomer && !isSupplier) {
+      const { error } = await sb.from('clients').insert({
+        user_id: userId, name: xc.Name,
+        first_name: xc.FirstName ?? '', last_name: xc.LastName ?? '',
+        email: xc.EmailAddress ?? '', phone: phone(xc), address: addr(xc),
+        notes: '', added_from: 'xero', client_type: 'client',
+        xero_contact_id: xc.ContactID, xero_synced_at: now(), updated_at: now(),
+      })
+      if (error) summary.errors.push(`create client ${xc.Name}: ${error.message}`)
+      else summary.clientsCreatedLocal++
+    } else if (isSupplier) {
+      // Suppliers without a doc-inbox record go into the CRM as client_type='supplier'
+      const { error } = await sb.from('clients').insert({
+        user_id: userId, name: xc.Name,
+        first_name: xc.FirstName ?? '', last_name: xc.LastName ?? '',
+        email: xc.EmailAddress ?? '', phone: phone(xc), address: addr(xc),
+        notes: '', added_from: 'xero', client_type: 'supplier',
+        xero_contact_id: xc.ContactID, xero_synced_at: now(), updated_at: now(),
+      })
+      if (error) summary.errors.push(`create supplier ${xc.Name}: ${error.message}`)
+      else summary.suppliersCreatedLocal++
     }
   }
 
-  // ── PUSH (app → Xero) — app records not yet linked to a Xero contact ─────────
+  // ── PUSH (app → Xero) — records not yet in Xero ────────────────────────────
   const xByKey  = new Map<string, XeroContact>()
   const xByComp = new Map<string, XeroContact>()
   for (const xc of xeroContacts) {
@@ -170,50 +212,65 @@ export async function syncContacts(sb: SupabaseClient, userId: string): Promise<
     if (comp) xByComp.set(comp, xc)
   }
 
-  const clientsToPush = clientRows.filter(c =>
-    !c.xero_contact_id &&
-    !xByKey.get(norm(c.email as string) || norm(c.name as string)) &&
-    !xByComp.get(normCompany(c.name as string))
-  )
-    .map(c => ({
-      Name: (c.name as string) || [c.first_name, c.last_name].filter(Boolean).join(' '),
-      FirstName: (c.first_name as string) || undefined, LastName: (c.last_name as string) || undefined,
-      EmailAddress: (c.email as string) || undefined, IsCustomer: true,
-      Phones: c.phone ? [{ PhoneType: 'DEFAULT', PhoneNumber: c.phone as string }] : undefined,
-      Addresses: c.address ? [{ AddressType: 'STREET', AddressLine1: c.address as string }] : undefined,
-      _localId: c.id as string,
-    })).filter(x => x.Name)
-
-  const suppliersToPush = supplierRows.filter(s =>
-    !s.xero_contact_id &&
-    !xByKey.get(norm(s.email as string) || norm(s.name as string)) &&
-    !xByComp.get(normCompany(s.name as string))
-  )
-    .map(s => ({
-      Name: s.name as string, EmailAddress: (s.email as string) || undefined, IsSupplier: true,
-      AccountNumber: (s.account_number as string) || undefined,
-      Phones: s.phone ? [{ PhoneType: 'DEFAULT', PhoneNumber: s.phone as string }] : undefined,
-      Addresses: s.address ? [{ AddressType: 'STREET', AddressLine1: s.address as string }] : undefined,
-      _localId: s.id as string,
-    })).filter(x => x.Name)
-
-  // Push clients
-  for (const item of clientsToPush) {
-    try {
-      const { _localId, ...payload } = item
-      const created = await putContacts(conn, [payload])
-      const cid = created[0]?.ContactID
-      if (cid) { await sb.from('clients').update({ xero_contact_id: cid, xero_synced_at: now() }).eq('id', _localId); summary.clientsPushed++ }
-    } catch (e) { summary.errors.push(`push client: ${e instanceof Error ? e.message : 'failed'}`) }
+  function notInXero(r: Row): boolean {
+    return !r.xero_contact_id
+      && !xByKey.get(norm(r.email as string) || norm(r.name as string))
+      && !xByComp.get(normCompany(r.name as string))
   }
-  // Push suppliers
-  for (const item of suppliersToPush) {
+
+  type PushItem = XeroContact & { _localId: string; _table: 'clients' | 'suppliers'; _type: string }
+
+  const toPush: PushItem[] = []
+
+  for (const r of crmRows.filter(notInXero)) {
+    const name = (r.name as string) || [r.first_name, r.last_name].filter(Boolean).join(' ')
+    if (!name) continue
+    const t = (r.client_type as string) || 'client'
+    toPush.push({
+      Name: name,
+      FirstName: (r.first_name as string) || undefined,
+      LastName: (r.last_name as string) || undefined,
+      EmailAddress: (r.email as string) || undefined,
+      // clients → IsCustomer; suppliers and subcontractors → IsSupplier (Xero has no subcontractor flag)
+      IsCustomer: t === 'client' || undefined,
+      IsSupplier: (t === 'supplier' || t === 'subcontractor') || undefined,
+      Phones: r.phone ? [{ PhoneType: 'DEFAULT', PhoneNumber: r.phone as string }] : undefined,
+      Addresses: r.address ? [{ AddressType: 'STREET', AddressLine1: r.address as string }] : undefined,
+      _localId: r.id as string,
+      _table: 'clients',
+      _type: t,
+    })
+  }
+
+  for (const r of docSupplierRows.filter(notInXero)) {
+    if (!r.name) continue
+    toPush.push({
+      Name: r.name as string,
+      EmailAddress: (r.email as string) || undefined,
+      IsSupplier: true,
+      AccountNumber: (r.account_number as string) || undefined,
+      Phones: r.phone ? [{ PhoneType: 'DEFAULT', PhoneNumber: r.phone as string }] : undefined,
+      Addresses: r.address ? [{ AddressType: 'STREET', AddressLine1: r.address as string }] : undefined,
+      _localId: r.id as string,
+      _table: 'suppliers',
+      _type: 'supplier',
+    })
+  }
+
+  for (const item of toPush) {
+    const { _localId, _table, _type, ...payload } = item
     try {
-      const { _localId, ...payload } = item
       const created = await putContacts(conn, [payload])
       const cid = created[0]?.ContactID
-      if (cid) { await sb.from('suppliers').update({ xero_contact_id: cid, xero_synced_at: now() }).eq('id', _localId); summary.suppliersPushed++ }
-    } catch (e) { summary.errors.push(`push supplier: ${e instanceof Error ? e.message : 'failed'}`) }
+      if (cid) {
+        await sb.from(_table).update({ xero_contact_id: cid, xero_synced_at: now() }).eq('id', _localId)
+        if (_type === 'supplier') summary.suppliersPushed++
+        else if (_type === 'subcontractor') summary.subcontractorsPushed++
+        else summary.clientsPushed++
+      }
+    } catch (e) {
+      summary.errors.push(`push ${_type} "${item.Name}": ${e instanceof Error ? e.message : 'failed'}`)
+    }
   }
 
   return summary
