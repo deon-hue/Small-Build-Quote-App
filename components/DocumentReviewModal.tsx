@@ -384,15 +384,6 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
                   >
                     {busy && !xeroBusy && !jobId ? 'Archiving…' : '🗄 Archive'}
                   </button>
-                  {allLinesHaveJob && (
-                    <button
-                      onClick={() => allocate(false)}
-                      disabled={isBusy}
-                      style={{ ...btn, background: '#1e40af', color: '#fff', border: 'none' }}
-                    >
-                      {busy && !xeroBusy ? 'Saving…' : isAllocated ? 'Update allocation' : 'Allocate to job'}
-                    </button>
-                  )}
                   <button
                     onClick={() => allocate(true)}
                     disabled={isBusy}
