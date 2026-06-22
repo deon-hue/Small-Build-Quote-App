@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { signedDocUrl, allocateDocument } from '@/lib/job-costs'
 import { useApp } from '@/contexts/AppContext'
-import type { InboxDocument, JobCostCategory, PaymentStatus, BillLineItem } from '@/lib/types'
+import type { InboxDocument, JobCostCategory, PaymentStatus, BillLineItem, VariationLineItem } from '@/lib/types'
 import type { ExtractedCostLine } from '@/lib/doc-extract/types'
 
 interface JobOption { id: string; label: string }
@@ -41,7 +41,7 @@ function initialLines(ex: Record<string, unknown> | null | undefined): Extracted
 
 export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSaved }: Props) {
   const sb = createClient()
-  const { addBill, bills, clients } = useApp()
+  const { addBill, bills, clients, addVariation } = useApp()
   const ex = doc.extraction ?? {}
   const [url, setUrl] = useState<string | null>(null)
   const extractedSupplier = String((ex as Record<string, unknown>).supplier ?? '')
@@ -176,6 +176,35 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
     try {
       if (allLinesHaveJob) {
         await allocateDocument(sb, userId, doc, jobId, { supplier, docDate, docNumber, paymentStatus }, lines)
+      }
+
+      // Create a draft variation for each job that has expense (EXP) lines
+      const expenseLines = lines.filter(l => l.chargeToClient && (l.jobId || jobId))
+      if (expenseLines.length > 0) {
+        const byJob = new Map<string, typeof expenseLines>()
+        for (const ln of expenseLines) {
+          const j = ln.jobId || jobId
+          if (!byJob.has(j)) byJob.set(j, [])
+          byJob.get(j)!.push(ln)
+        }
+        let itemId = 0
+        for (const [varJobId, varLines] of byJob) {
+          const items: VariationLineItem[] = varLines.map(ln => ({
+            id: ++itemId,
+            itemType: ln.costCategory as VariationLineItem['itemType'],
+            desc: ln.description || supplier || 'Expense',
+            qty: 1, unit: 'item', rate: ln.grossAmount, notes: '',
+          }))
+          const total = items.reduce((s, i) => s + i.rate, 0)
+          await addVariation(varJobId, {
+            title: `Expense: ${supplier || docNumber || doc.fileName}`,
+            description: docNumber ? `Invoice ${docNumber}${docDate ? ` dated ${docDate}` : ''}` : '',
+            status: 'draft', items, markup: 0, vatIncluded: false, total,
+            notes: '', locked: false,
+            clientApprovedAt: null, clientApprovedBy: null,
+            clientRejectedAt: null, clientRejectionReason: null, sentAt: null,
+          })
+        }
       }
 
       if (!publishToXero) { onSaved(); return }
