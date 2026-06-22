@@ -131,41 +131,45 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
   const removeLine = (i: number) => setLines(p => p.filter((_, idx) => idx !== i))
   const total = lines.reduce((s, l) => s + l.grossAmount, 0)
 
+  async function buildAndAddBill(xeroBillId?: string) {
+    const catMap: Record<JobCostCategory, BillLineItem['category']> = {
+      labour: 'labour', materials: 'materials', plant: 'plant',
+      subcontractors: 'labour', other: 'other',
+    }
+    let lineCounter = 0
+    const billLines: BillLineItem[] = lines.map(ln => ({
+      id: ++lineCounter,
+      desc: ln.description || supplier || 'Subcontractor work',
+      category: catMap[ln.costCategory] ?? 'labour',
+      amount: ln.grossAmount,
+    }))
+    const labour    = billLines.filter(l => l.category === 'labour').reduce((s, l) => s + l.amount, 0)
+    const materials = billLines.filter(l => l.category === 'materials').reduce((s, l) => s + l.amount, 0)
+    const plant     = billLines.filter(l => l.category === 'plant').reduce((s, l) => s + l.amount, 0)
+    const other     = billLines.filter(l => l.category === 'other').reduce((s, l) => s + l.amount, 0)
+    const subtotal  = labour + materials + plant + other
+    await addBill({
+      supplierId: supplierId || '', supplierName: supplier || doc.fileName,
+      jobId: jobId || '',
+      billDate: docDate || new Date().toISOString().split('T')[0],
+      dueDate: '',
+      description: docNumber ? `Invoice ${docNumber}` : supplier || 'Subcontractor invoice',
+      lineItems: billLines,
+      labourAmount: labour, materialsAmount: materials, plantAmount: plant, otherAmount: other,
+      subtotal, cisRate: 0, cisDeduction: 0, totalPayable: subtotal,
+      status: xeroBillId ? 'approved' : 'draft',
+      notes: docNumber ? `Receipt / invoice #${docNumber}` : '',
+      syncToXero: !!xeroBillId,
+      xeroBillId,
+      documentId: doc.id,
+    })
+    setBillCreated(true)
+  }
+
   async function createBill() {
     setBillBusy(true)
-    try {
-      // Map cost category to bill category (bills don't have 'subcontractors' — treat as labour for CIS)
-      const catMap: Record<JobCostCategory, BillLineItem['category']> = {
-        labour: 'labour', materials: 'materials', plant: 'plant',
-        subcontractors: 'labour', other: 'other',
-      }
-      let lineCounter = 0
-      const billLines: BillLineItem[] = lines.map(ln => ({
-        id: ++lineCounter,
-        desc: ln.description || supplier || 'Subcontractor work',
-        category: catMap[ln.costCategory] ?? 'labour',
-        amount: ln.grossAmount,
-      }))
-      const labour    = billLines.filter(l => l.category === 'labour').reduce((s, l) => s + l.amount, 0)
-      const materials = billLines.filter(l => l.category === 'materials').reduce((s, l) => s + l.amount, 0)
-      const plant     = billLines.filter(l => l.category === 'plant').reduce((s, l) => s + l.amount, 0)
-      const other     = billLines.filter(l => l.category === 'other').reduce((s, l) => s + l.amount, 0)
-      const subtotal  = labour + materials + plant + other
-      await addBill({
-        supplierId: supplierId || '', supplierName: supplier || doc.fileName,
-        jobId: jobId || '',
-        billDate: docDate || new Date().toISOString().split('T')[0],
-        dueDate: '',
-        description: docNumber ? `Invoice ${docNumber}` : supplier || 'Subcontractor invoice',
-        lineItems: billLines,
-        labourAmount: labour, materialsAmount: materials, plantAmount: plant, otherAmount: other,
-        subtotal, cisRate: 0, cisDeduction: 0, totalPayable: subtotal,
-        status: 'draft', notes: docNumber ? `Receipt / invoice #${docNumber}` : '',
-        syncToXero: false,
-        documentId: doc.id,
-      })
-      setBillCreated(true)
-    } finally { setBillBusy(false) }
+    try { await buildAndAddBill() }
+    finally { setBillBusy(false) }
   }
 
   // Allocation is valid when every line can resolve to a job
@@ -201,6 +205,7 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
           setXeroError(d.error || 'Failed to publish to Xero')
           if (d.statusLocked) setXeroStatusLocked(true)
         } else {
+          if (!billCreated && d.xeroBillId) await buildAndAddBill(d.xeroBillId)
           onSaved()
         }
       } finally { setXeroBusy(false) }
