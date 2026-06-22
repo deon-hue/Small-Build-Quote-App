@@ -60,7 +60,6 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
   const [xeroBusy, setXeroBusy] = useState(false)
   const [xeroError, setXeroError] = useState<string | null>(null)
   const [xeroStatusLocked, setXeroStatusLocked] = useState(false)
-  const [billBusy, setBillBusy] = useState(false)
   const [billCreated, setBillCreated] = useState(() => bills.some(b => b.documentId === doc.id))
 
   const [xeroAccounts, setXeroAccounts] = useState<Array<{ code: string; name: string; type: string }>>([])
@@ -166,13 +165,7 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
     setBillCreated(true)
   }
 
-  async function createBill() {
-    setBillBusy(true)
-    try { await buildAndAddBill() }
-    finally { setBillBusy(false) }
-  }
-
-  // Allocation is valid when every line can resolve to a job
+// Allocation is valid when every line can resolve to a job
   const allLinesHaveJob = lines.every(l => l.jobId || jobId)
 
   async function allocate(publishToXero = false, forceNew = false) {
@@ -228,7 +221,6 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 18px', borderBottom: '1px solid #e2e8f0' }}>
           <div style={{ fontWeight: 700, fontSize: 15 }}>
             Review document{isAllocated ? ' (allocated)' : ''}
-            {billCreated && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: '#f3e8ff', color: '#6b21a8' }}>📋 Bill created</span>}
             {doc.xeroBillId && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: '#dcfce7', color: '#166534' }}>✓ Xero</span>}
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8' }}>×</button>
@@ -383,7 +375,7 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, flexWrap: 'wrap', gap: 8 }}>
                 <span style={{ fontSize: 13 }}>Total gross: <strong style={{ fontFamily: 'monospace' }}>{fmt(total)}</strong></span>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button onClick={onClose} style={btn} disabled={isBusy || billBusy}>Cancel</button>
+                  <button onClick={onClose} style={btn} disabled={isBusy}>Cancel</button>
                   <button
                     onClick={archive}
                     disabled={isBusy}
@@ -401,20 +393,9 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
                       {busy && !xeroBusy ? 'Saving…' : isAllocated ? 'Update allocation' : 'Allocate to job'}
                     </button>
                   )}
-                  {billCreated
-                    ? <span style={{ fontSize: 12, fontWeight: 700, color: '#16a34a' }}>✓ Bill created — see Bills page</span>
-                    : <button
-                        onClick={createBill}
-                        disabled={isBusy || billBusy}
-                        title="Create a subcontractor bill from this invoice and link it to the document"
-                        style={{ ...btn, background: '#7c3aed', color: '#fff', border: 'none', opacity: billBusy ? 0.7 : 1 }}
-                      >
-                        {billBusy ? '📋 Creating…' : '📋 Create Bill'}
-                      </button>
-                  }
                   <button
                     onClick={() => allocate(true)}
-                    disabled={isBusy || billBusy}
+                    disabled={isBusy}
                     style={{ ...btn, background: '#0d6b3b', color: '#fff', border: 'none', opacity: isBusy ? 0.7 : 1 }}
                   >
                     {xeroBusy ? '📤 Publishing…' : jobId ? (isAllocated ? '📤 Update & Publish to Xero' : '📤 Save & Publish to Xero') : '📤 Publish to Xero'}
