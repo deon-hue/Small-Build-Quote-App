@@ -41,10 +41,16 @@ function initialLines(ex: Record<string, unknown> | null | undefined): Extracted
 
 export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSaved }: Props) {
   const sb = createClient()
-  const { addBill, bills } = useApp()
+  const { addBill, bills, clients } = useApp()
   const ex = doc.extraction ?? {}
   const [url, setUrl] = useState<string | null>(null)
-  const [supplier, setSupplier] = useState(String((ex as Record<string, unknown>).supplier ?? ''))
+  const extractedSupplier = String((ex as Record<string, unknown>).supplier ?? '')
+  const [supplierId, setSupplierId] = useState(() => {
+    if (!extractedSupplier) return ''
+    const match = clients.find(c => c.name.toLowerCase() === extractedSupplier.toLowerCase())
+    return match?.id ?? ''
+  })
+  const [supplier, setSupplier] = useState(extractedSupplier)
   const [docDate, setDocDate] = useState(String((ex as Record<string, unknown>).docDate ?? ''))
   const [docNumber, setDocNumber] = useState(String((ex as Record<string, unknown>).docNumber ?? ''))
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>(((ex as Record<string, unknown>).paymentStatus as PaymentStatus) || 'unknown')
@@ -100,6 +106,14 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
     }
   }, [doc.storagePath]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  function handleContactChange(id: string) {
+    setSupplierId(id)
+    if (id) {
+      const c = clients.find(ct => ct.id === id)
+      if (c) setSupplier(c.name)
+    }
+  }
+
   function updateLine(i: number, patch: Partial<ExtractedCostLine>) {
     setLines(prev => prev.map((l, idx) => {
       if (idx !== i) return l
@@ -137,7 +151,7 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
       const other     = billLines.filter(l => l.category === 'other').reduce((s, l) => s + l.amount, 0)
       const subtotal  = labour + materials + plant + other
       await addBill({
-        supplierId: '', supplierName: supplier || doc.fileName,
+        supplierId: supplierId || '', supplierName: supplier || doc.fileName,
         jobId: jobId || '',
         billDate: docDate || new Date().toISOString().split('T')[0],
         dueDate: '',
@@ -174,7 +188,8 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            documentId: doc.id, supplier, docDate, docNumber, lines,
+            documentId: doc.id, supplier, supplierId: supplierId || undefined,
+            docDate, docNumber, lines,
             fileName: doc.fileName, storagePath: doc.storagePath, mimeType: doc.mimeType,
             xeroAccountCode: xeroAccount || undefined,
           }),
@@ -237,7 +252,17 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
           <div style={{ flex: '1 1 55%', padding: 16, overflowY: 'auto', borderLeft: '1px solid #e2e8f0' }}>
             {url && <a href={url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: '#2a7090' }}>↗ Open original in new tab</a>}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, margin: '10px 0' }}>
-              <Field label="Supplier"><input style={inp} value={supplier} onChange={e => setSupplier(e.target.value)} /></Field>
+              <Field label="Contact / Supplier">
+                <select style={inp} value={supplierId} onChange={e => handleContactChange(e.target.value)}>
+                  <option value="">— Select contact —</option>
+                  {[...clients].sort((a, b) => a.name.localeCompare(b.name)).map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                {!supplierId && (
+                  <input style={{ ...inp, marginTop: 4 }} placeholder="Or type name" value={supplier} onChange={e => setSupplier(e.target.value)} />
+                )}
+              </Field>
               <Field label="Date"><input type="date" style={inp} value={docDate} onChange={e => setDocDate(e.target.value)} /></Field>
               <Field label="Invoice / receipt #"><input style={inp} value={docNumber} onChange={e => setDocNumber(e.target.value)} /></Field>
               <Field label="Payment">
