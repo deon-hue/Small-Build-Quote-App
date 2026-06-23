@@ -645,7 +645,9 @@ export default function NewQuotePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scope: effectiveScope, jobType: effectiveJobType, address: effectiveAddr }),
       })
-      const data = await res.json()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let data: { error?: string; phases?: any[] } = {}
+      try { data = await res.json() } catch { data = { error: `Server returned ${res.status} — the request may have timed out. Please try again.` } }
       if (data.error) { alert('Could not generate phases: ' + data.error); return false }
       if (Array.isArray(data.phases) && data.phases.length) {
         setPhases(data.phases.map((p: {

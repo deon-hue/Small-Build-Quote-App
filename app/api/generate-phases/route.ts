@@ -93,10 +93,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No scope provided' }, { status: 400 })
   }
 
-  // Fetch user's Back Office rates for cost grounding
-  const sb = await createClient()
-  const { data: { user } } = await sb.auth.getUser()
-  const { block: ratesBlock, plantByKey } = user ? await fetchReferenceRates(user.id) : { block: '', plantByKey: {} as Record<string, PlantDefault> }
+  // Fetch user's Back Office rates for cost grounding (non-fatal — fall back to standard rates)
+  let ratesBlock = ''
+  let plantByKey: Record<string, PlantDefault> = {}
+  try {
+    const sb = await createClient()
+    const { data: { user } } = await sb.auth.getUser()
+    if (user) {
+      const rates = await fetchReferenceRates(user.id)
+      ratesBlock = rates.block
+      plantByKey = rates.plantByKey
+    }
+  } catch {
+    // proceed with standard rates
+  }
 
   const ukStandardRates = !ratesBlock ? `
 
@@ -267,6 +277,14 @@ Generate a full phase cost breakdown. Use the Back Office default rates provided
         ],
       }),
     })
+
+    if (!res.ok) {
+      const errText = await res.text()
+      console.error('Anthropic API error:', res.status, errText.slice(0, 200))
+      let msg = `AI service error (${res.status})`
+      try { const j = JSON.parse(errText); msg = j?.error?.message || msg } catch { /* ignore */ }
+      return NextResponse.json({ error: msg }, { status: 500 })
+    }
 
     const data = await res.json()
 
