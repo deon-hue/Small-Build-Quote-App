@@ -600,9 +600,10 @@ export default function NewQuotePage() {
     }
   }
 
-  // Called from AIScopeWorkspace when user clicks "Build Estimate"
-  async function handleBuildFromScope() {
-    const ok = await generatePhases()
+  // Called from AIScopeWorkspace when user clicks "Export to Quote"
+  // scopeText is passed directly to avoid relying on React state having committed yet
+  async function handleBuildFromScope(scopeText?: string) {
+    const ok = await generatePhases(scopeText ? { scope: scopeText } : undefined)
     // Only transition to workspace if phases were actually generated
     if (ok) setStep('workspace')
   }

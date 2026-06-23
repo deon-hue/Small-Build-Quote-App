@@ -177,7 +177,7 @@ const outlineBtn = (color: string): React.CSSProperties => ({
 // ── Main component ────────────────────────────────────────────────────────────
 
 interface Props {
-  onBuildEstimate:  () => void
+  onBuildEstimate:  (scopeText: string) => void
   onScopeChange:    (v: string) => void
   onJobTypeChange:  (jt: string) => void
   onBack:           () => void
@@ -288,7 +288,7 @@ export default function AIScopeWorkspace({
         </div>
         <div style={{ flex: 1 }} />
         <button
-          onClick={onBuildEstimate}
+          onClick={() => onBuildEstimate(scopeText)}
           disabled={generating || !scopeText.trim()}
           style={{
             ...btn(generating ? '#e9d5ff' : COLORS.purple, generating ? '#a78bfa' : '#fff'),
@@ -379,7 +379,7 @@ export default function AIScopeWorkspace({
             phases={config.defaultPhases}
             onInsert={text => { setScopeText(text); onScopeChange(text) }}
             onClose={() => {/* no-op in embedded mode */}}
-            onBuildEstimate={text => { setScopeText(text); onScopeChange(text); onBuildEstimate() }}
+            onBuildEstimate={text => { setScopeText(text); onScopeChange(text); onBuildEstimate(text) }}
           />
         </div>
       </div>
