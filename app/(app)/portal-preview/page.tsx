@@ -3,7 +3,8 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import type { GanttState, ClientPortalSettings } from '@/lib/types'
+import type { GanttState, ClientPortalSettings, Job } from '@/lib/types'
+import PortalGanttChart from '@/components/PortalGanttChart'
 import { DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
 import { fmt, Q_BADGE, Q_LABEL, calcPhaseSell, calcItemSell } from '@/lib/utils'
 import type { QuotePhase, QuoteItem } from '@/lib/types'
@@ -33,7 +34,7 @@ interface PreviewSettings {
   name: string; tagline: string; email: string; phone: string; address: string; logo: string
 }
 
-type Tab = 'dashboard' | 'quotes' | 'variations' | 'invoices'
+type Tab = 'dashboard' | 'quotes' | 'variations' | 'invoices' | 'build-plan'
 
 // ── Status maps ──────────────────────────────────────────────
 const QUOTE_STATUS_LABEL: Record<string, string> = {
@@ -158,7 +159,7 @@ function PortalPreviewInner() {
   )
 
   const TAB_LABELS: Record<Tab, string> = {
-    dashboard: 'Dashboard', quotes: 'Quotes', variations: 'Variations', invoices: 'Invoices',
+    dashboard: 'Dashboard', quotes: 'Quotes', variations: 'Variations', invoices: 'Invoices', 'build-plan': 'Build Plan',
   }
 
   return (
@@ -177,9 +178,10 @@ function PortalPreviewInner() {
           <nav className="portal-nav" style={{ display: 'flex' }}>
             {([
               'dashboard',
-              ...(clientSettings.showQuotesTab     ? ['quotes']     : []),
-              ...(clientSettings.showVariationsTab ? ['variations'] : []),
-              ...(clientSettings.showInvoicesTab   ? ['invoices']   : []),
+              ...(clientSettings.showQuotesTab     ? ['quotes']      : []),
+              ...(clientSettings.showVariationsTab ? ['variations']  : []),
+              ...(clientSettings.showInvoicesTab   ? ['invoices']    : []),
+              'build-plan',
             ] as Tab[]).map(tab => (
               <button
                 key={tab}
@@ -545,6 +547,41 @@ function PortalPreviewInner() {
                       {INV_STATUS_LABEL[inv.status] || inv.status}
                     </span>
                   </div>
+                </div>
+              ))
+            )}
+          </>
+        )}
+
+        {/* ══════════════════════════════════════════════
+            BUILD PLAN TAB
+        ══════════════════════════════════════════════ */}
+        {activeTab === 'build-plan' && (
+          <>
+            <div className="portal-page-hd">
+              <h1>Build Plan</h1>
+              <p>{jobs.length} project{jobs.length !== 1 ? 's' : ''}</p>
+            </div>
+            <div style={{ background: '#1e2022', color: '#f0c040', borderRadius: 8, padding: '10px 16px', fontSize: 12, fontWeight: 600, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+              👁 Preview mode
+            </div>
+            {!jobs.length ? (
+              <div className="portal-notice">
+                <div style={{ fontSize: 36, marginBottom: 12 }}>📅</div>
+                <p>No programme on file yet.</p>
+              </div>
+            ) : (
+              jobs.map(j => (
+                <div key={j.id} style={{ marginBottom: 32 }}>
+                  <div style={{ marginBottom: 12 }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 2px' }}>{j.type || 'Building Works'}</h3>
+                    {j.address && <p style={{ fontSize: 13, color: 'var(--muted)', margin: 0 }}>{j.address}</p>}
+                  </div>
+                  <PortalGanttChart
+                    job={j as unknown as Job}
+                    phases={[]}
+                    ganttState={j.ganttState}
+                  />
                 </div>
               ))
             )}
