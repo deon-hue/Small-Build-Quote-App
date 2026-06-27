@@ -104,8 +104,8 @@ export async function syncContacts(sb: SupabaseClient, userId: string): Promise<
       || byComp.get(normCompany(xc.Name))
 
     if (match) {
-      const appUpdated = Date.parse((match.updated_at as string) || (match.created_at as string) || '') || 0
-      if (xUpdated >= appUpdated) {
+      const lastPulled = Date.parse((match.xero_synced_at as string) || '') || 0
+      if (xUpdated >= lastPulled) {
         const { error } = await sb.from('clients').update({
           name: xc.Name,
           first_name: xc.FirstName ?? match.first_name,

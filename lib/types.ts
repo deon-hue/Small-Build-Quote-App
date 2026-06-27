@@ -308,6 +308,40 @@ export interface Client {
   portalSettings?: ClientPortalSettings
 }
 
+export interface SubContract {
+  id: string
+  jobId: string | null
+  contactId: string | null
+  type: 'rate' | 'fixed'
+  description: string
+  rateType: 'hourly' | 'daily' | null
+  rateAmount: number | null
+  quotedAmount: number | null
+  status: 'active' | 'completed' | 'cancelled'
+  notes: string
+  createdAt: string
+}
+
+export interface SubTimeEntry {
+  id: string
+  subContractId: string
+  entryDate: string
+  units: number
+  notes: string
+  createdAt: string
+}
+
+export interface SubPaymentStage {
+  id: string
+  subContractId: string
+  description: string
+  amount: number
+  dueDate: string | null
+  paidDate: string | null
+  xeroBillId: string | null
+  createdAt: string
+}
+
 export interface XeroAccountCodes {
   invoiceSales: string   // default '200'
   billLabour: string     // default '400'

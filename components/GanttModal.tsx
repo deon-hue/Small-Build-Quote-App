@@ -755,6 +755,36 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     setEditingRow(null)
   }
 
+  function doSplit(phaseId: string) {
+    const s = stateRef.current
+    if (!s) return
+    const idx = s.phases.findIndex(p => p.id === phaseId)
+    if (idx < 0) return
+    const ph = s.phases[idx]
+    const dur1 = Math.max(1, Math.floor(ph.durDays / 2))
+    const dur2 = Math.max(1, ph.durDays - dur1)
+    const newId = `ph-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    ph.durDays = dur1
+    const part2: GanttPhase = {
+      id: newId,
+      label: ph.label,
+      startDay: ph.startDay + dur1,
+      durDays: dur2,
+      level: ph.level,
+      parentId: ph.parentId,
+    }
+    s.phases.splice(idx + 1, 0, part2)
+    stateRef.current = s
+    setDirty(true)
+    renderGantt(s, viewMode)
+  }
+
+  function splitEditRow() {
+    if (!editingRow) return
+    doSplit(editingRow.id)
+    setEditingRow(null)
+  }
+
   function deleteEditRow() {
     if (!editingRow) return
     const s = stateRef.current
@@ -944,6 +974,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
                 <div style={{ display: 'flex', gap: 6 }}>
                   <button onClick={applyEdit} style={{ fontSize: 12, padding: '6px 14px', background: 'var(--moss)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>Apply</button>
                   <button onClick={() => setEditingRow(null)} style={{ fontSize: 12, padding: '6px 10px', background: '#e8eaec', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Cancel</button>
+                  <button onClick={splitEditRow} title="Split this task into two equal halves" style={{ fontSize: 12, padding: '6px 10px', background: '#eef4ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: 4, cursor: 'pointer' }}>Split</button>
                   <button onClick={deleteEditRow} style={{ fontSize: 12, padding: '6px 10px', background: '#fce8e8', color: '#c0392b', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Delete</button>
                 </div>
               </div>
@@ -1030,3 +1061,4 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     </div>
   )
 }
+

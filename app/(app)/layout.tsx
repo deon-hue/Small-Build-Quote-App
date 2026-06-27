@@ -16,7 +16,8 @@ const ROUTE_PERMISSIONS: Partial<Record<string, keyof UserPermissions>> = {
   '/new-quote':    'quotes',
   '/quick-quote':  'quotes',
   '/invoices':    'invoices',
-  '/bills':       'invoices',
+  '/bills':            'invoices',
+  '/subcontractors':   'invoices',
   '/clients':     'clients',
   '/settings':    'settings',
   '/documents':   'jobs',
@@ -85,7 +86,8 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
           {can('quotes')  && navItem('/quick-quote', '⚡', 'Quick Quote')}
           {can('quotes')  && navItem('/takeoff',   '📐', 'Take-off')}
           {can('invoices')&& navItem('/invoices',  '◻', 'Invoices')}
-          {can('invoices')&& navItem('/bills',     '📄', 'Bills')}
+          {can('invoices')&& navItem('/bills',           '📄', 'Bills')}
+          {can('invoices')&& navItem('/subcontractors', '🔧', 'Subcontractors')}
           {can('jobs')    && navItem('/scan',      '📷', 'Scan to Job')}
           <div className="nav-section">People</div>
           {can('clients') && navItem('/clients', '○', 'Contacts')}
@@ -134,7 +136,8 @@ const PAGE_TITLES: Record<string, string> = {
   '/quick-quote':  'Quick Quote',
   '/takeoff':      'Take-off',
   '/invoices':     'Invoices',
-  '/bills':        'Bills',
+  '/bills':            'Bills',
+  '/subcontractors':   'Subcontractors',
   '/clients':      'Contacts',
   '/settings':     'Company Setup',
   '/documents':    'Documents',
