@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useApp } from '@/contexts/AppContext'
+import { ContactPicker } from '@/components/ContactPicker'
 
 interface Contract {
   id: string
@@ -543,10 +544,12 @@ export default function SubcontractorsPage() {
             <div style={{ display: 'grid', gap: 14 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Subcontractor *</label>
-                <select value={form.contactId} onChange={e => setForm(f => ({ ...f, contactId: e.target.value }))} style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13 }}>
-                  <option value="">Select subcontractor…</option>
-                  {subs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
+                <ContactPicker
+                  value={form.contactId}
+                  onChange={id => setForm(f => ({ ...f, contactId: id }))}
+                  contacts={subs}
+                  placeholder="Search subcontractor…"
+                />
               </div>
 
               <div>

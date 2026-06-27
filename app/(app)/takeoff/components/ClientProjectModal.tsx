@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { TakeoffProject, TakeoffClient } from '@/lib/takeoff-types'
 import { JOB_TYPES } from '@/lib/utils'
+import { ContactPicker } from '@/components/ContactPicker'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -284,16 +285,12 @@ export default function ClientProjectModal({ open, onClose, project, onSave, use
               </p>
             ) : (
               <Field label="Client">
-                <select
+                <ContactPicker
                   value={selectedClientId}
-                  onChange={e => setSelectedClientId(e.target.value)}
-                  style={selectStyle}
-                >
-                  <option value="">— select client —</option>
-                  {clients.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+                  onChange={setSelectedClientId}
+                  contacts={clients}
+                  placeholder="Search client…"
+                />
               </Field>
             )
           )}

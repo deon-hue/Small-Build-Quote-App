@@ -6,6 +6,7 @@ import { fmt } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { signedDocUrlById } from '@/lib/job-costs'
 import type { Bill, BillLineItem, BillStatus } from '@/lib/types'
+import { ContactPicker } from '@/components/ContactPicker'
 
 let lineCounter = 0
 const BLANK_LINE = (): BillLineItem => ({ id: ++lineCounter, desc: '', category: 'labour', amount: 0 })
@@ -385,11 +386,12 @@ export default function BillsPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Supplier</div>
-                  <select value={supplierId} onChange={e => handleSupplierChange(e.target.value)}
-                    style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}>
-                    <option value="">— Select supplier —</option>
-                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
+                  <ContactPicker
+                    value={supplierId}
+                    onChange={handleSupplierChange}
+                    contacts={suppliers}
+                    placeholder="Search supplier…"
+                  />
                   {!supplierId && (
                     <input placeholder="Or type supplier name" value={supplierName}
                       onChange={e => setSupplierName(e.target.value)}
