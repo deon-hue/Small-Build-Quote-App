@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useApp } from '@/contexts/AppContext'
 import { ContactPicker } from '@/components/ContactPicker'
+import { signedDocUrl } from '@/lib/job-costs'
 
 interface Contract {
   id: string
@@ -16,6 +17,7 @@ interface Contract {
   quoted_amount: number | null
   status: 'active' | 'completed' | 'cancelled'
   notes: string
+  quote_document_id: string | null
   created_at: string
 }
 
@@ -309,6 +311,18 @@ export default function SubcontractorsPage() {
     }
   }
 
+  async function viewQuoteDoc(docId: string) {
+    const { data: doc } = await sb.from('job_documents').select('storage_path, mime_type').eq('id', docId).single()
+    if (!doc) return
+    const url = await signedDocUrl(sb, doc.storage_path as string)
+    if (url) window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
+  async function unlinkQuoteDoc(contractId: string) {
+    await sb.from('sub_contracts').update({ quote_document_id: null }).eq('id', contractId)
+    setContracts(prev => prev.map(c => c.id === contractId ? { ...c, quote_document_id: null } : c))
+  }
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   if (loading) return <div style={{ padding: 32, textAlign: 'center', opacity: 0.5 }}>Loading subcontractors…</div>
@@ -528,7 +542,26 @@ export default function SubcontractorsPage() {
                   </>
                 )}
 
-                {c.notes && <div style={{ marginTop: 10, fontSize: 12, color: '#6b7280', fontStyle: 'italic' }}>📝 {c.notes}</div>}
+                {/* Quote document */}
+                <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                  <span style={{ color: '#6b7280' }}>📄 Quote:</span>
+                  {c.quote_document_id ? (
+                    <>
+                      <button onClick={() => viewQuoteDoc(c.quote_document_id!)}
+                        style={{ fontSize: 11, padding: '2px 8px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: 4, cursor: 'pointer' }}>
+                        View document
+                      </button>
+                      <button onClick={() => unlinkQuoteDoc(c.id)}
+                        style={{ fontSize: 11, padding: '2px 6px', background: 'none', color: '#9ca3af', border: 'none', cursor: 'pointer' }}>
+                        Unlink
+                      </button>
+                    </>
+                  ) : (
+                    <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>None — open the document in Document Inbox and link it to this contract</span>
+                  )}
+                </div>
+
+                {c.notes && <div style={{ marginTop: 8, fontSize: 12, color: '#6b7280', fontStyle: 'italic' }}>📝 {c.notes}</div>}
               </div>
             )}
           </div>

@@ -67,6 +67,10 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
   const [duplicates, setDuplicates] = useState<Array<{ label: string; detail: string; confidence: string; storagePath?: string; mimeType?: string; jobId?: string; jobLabel?: string }>>([])
   const [dupDismissed, setDupDismissed] = useState(false)
   const [zoom, setZoom] = useState(1)
+  const [subContracts, setSubContracts] = useState<Array<{ id: string; contactName: string; description: string; jobLabel: string }>>([])
+  const [linkSubId, setLinkSubId] = useState('')
+  const [linkedSub, setLinkedSub] = useState<{ id: string; contactName: string } | null>(null)
+  const [linkBusy, setLinkBusy] = useState(false)
 
   const isAllocated = doc.status === 'allocated'
   const isPdf = doc.mimeType === 'application/pdf'
@@ -105,6 +109,43 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
         .catch(() => {})
     }
   }, [doc.storagePath]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    async function loadSubContracts() {
+      const { data: scs } = await sb.from('sub_contracts')
+        .select('id, contact_id, description, job_id, quote_document_id')
+        .eq('user_id', userId)
+        .eq('status', 'active')
+      if (!scs) return
+      setSubContracts(scs.map(c => ({
+        id: c.id as string,
+        contactName: clients.find(cl => cl.id === c.contact_id)?.name ?? '—',
+        description: (c.description as string) ?? '',
+        jobLabel: jobs.find(j => j.id === c.job_id)?.label ?? '',
+      })))
+      const already = scs.find(c => c.quote_document_id === doc.id)
+      if (already) setLinkedSub({ id: already.id as string, contactName: clients.find(cl => cl.id === already.contact_id)?.name ?? '—' })
+    }
+    loadSubContracts()
+  }, [doc.id, userId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function linkToSubContract() {
+    if (!linkSubId) return
+    setLinkBusy(true)
+    await sb.from('sub_contracts').update({ quote_document_id: doc.id }).eq('id', linkSubId)
+    const c = subContracts.find(c => c.id === linkSubId)
+    if (c) setLinkedSub({ id: c.id, contactName: c.contactName })
+    setLinkSubId('')
+    setLinkBusy(false)
+  }
+
+  async function unlinkSubContract() {
+    if (!linkedSub) return
+    setLinkBusy(true)
+    await sb.from('sub_contracts').update({ quote_document_id: null }).eq('id', linkedSub.id)
+    setLinkedSub(null)
+    setLinkBusy(false)
+  }
 
   function handleContactChange(id: string) {
     setSupplierId(id)
@@ -401,6 +442,33 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
                   )}
                 </div>
               )}
+
+              {/* Link to Sub Contract */}
+              <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#7c3aed', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>🔧 Sub Contract Quote</div>
+                {linkedSub ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                    <span style={{ color: '#16a34a', fontWeight: 600 }}>✓ Linked to {linkedSub.contactName}</span>
+                    <button onClick={unlinkSubContract} disabled={linkBusy} style={{ fontSize: 11, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', padding: 0, opacity: linkBusy ? 0.5 : 1 }}>Unlink</button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <select value={linkSubId} onChange={e => setLinkSubId(e.target.value)}
+                      style={{ flex: 1, padding: '5px 8px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 12 }}>
+                      <option value="">Attach to sub contract…</option>
+                      {subContracts.map(c => (
+                        <option key={c.id} value={c.id}>
+                          {c.contactName}{c.description ? ` — ${c.description}` : ''}{c.jobLabel ? ` (${c.jobLabel})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <button onClick={linkToSubContract} disabled={!linkSubId || linkBusy}
+                      style={{ padding: '5px 12px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 5, fontSize: 12, cursor: 'pointer', opacity: (!linkSubId || linkBusy) ? 0.5 : 1 }}>
+                      {linkBusy ? '…' : 'Link'}
+                    </button>
+                  </div>
+                )}
+              </div>
 
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, flexWrap: 'wrap', gap: 8 }}>
                 <span style={{ fontSize: 13 }}>Total gross: <strong style={{ fontFamily: 'monospace' }}>{fmt(total)}</strong></span>
