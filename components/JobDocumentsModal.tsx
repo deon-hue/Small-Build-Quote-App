@@ -33,12 +33,19 @@ const blankManual = (): ManualState => ({
   lines: [{ description: '', costCategory: 'materials', netAmount: 0, vatAmount: 0, grossAmount: 0 }],
 })
 
+interface SubContract { id: string; contact_id: string | null; type: 'rate' | 'fixed'; description: string; rate_type: 'hourly' | 'daily' | null; rate_amount: number | null; quoted_amount: number | null; status: string }
+interface SubEntry { id: string; sub_contract_id: string; entry_date: string; units: number }
+interface SubStage { id: string; sub_contract_id: string; description: string; amount: number; paid_date: string | null }
+
 export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, invoicedTotal = 0, paidTotal = 0, cashReceived = 0, onClose }: Props) {
   const sb = createClient()
-  const { suppliers, addVariation } = useApp()
+  const { suppliers, clients, addVariation } = useApp()
   const [userId, setUserId] = useState<string | null>(null)
   const [costs, setCosts] = useState<JobCost[]>([])
   const [loading, setLoading] = useState(true)
+  const [subContracts, setSubContracts] = useState<SubContract[]>([])
+  const [subEntries, setSubEntries] = useState<SubEntry[]>([])
+  const [subStages, setSubStages] = useState<SubStage[]>([])
   const [saving, setSaving] = useState(false)
   const [manual, setManual] = useState<ManualState | null>(null)
   const [supplierDrop, setSupplierDrop] = useState(false)
@@ -56,7 +63,21 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
   const load = useCallback(async () => {
     setLoading(true)
     const { data: { user } } = await sb.auth.getUser()
-    if (user) { setUserId(user.id); setCosts(await fetchJobCosts(sb, user.id, jobId)) }
+    if (user) {
+      setUserId(user.id)
+      const [jobCosts, { data: scs }, { data: ses }, { data: sps }] = await Promise.all([
+        fetchJobCosts(sb, user.id, jobId),
+        sb.from('sub_contracts').select('id,contact_id,type,description,rate_type,rate_amount,quoted_amount,status').eq('user_id', user.id).eq('job_id', jobId),
+        sb.from('sub_time_entries').select('id,sub_contract_id,entry_date,units').eq('user_id', user.id),
+        sb.from('sub_payment_stages').select('id,sub_contract_id,description,amount,paid_date').eq('user_id', user.id),
+      ])
+      setCosts(jobCosts)
+      const contracts = (scs ?? []) as SubContract[]
+      setSubContracts(contracts)
+      const cids = new Set(contracts.map(c => c.id))
+      setSubEntries(((ses ?? []) as SubEntry[]).filter(e => cids.has(e.sub_contract_id)))
+      setSubStages(((sps ?? []) as SubStage[]).filter(s => cids.has(s.sub_contract_id)))
+    }
     setLoading(false)
   }, [jobId]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -322,6 +343,68 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
               )}
             </div>
           )}
+
+          {/* Sub Contracts */}
+          {!loading && subContracts.length > 0 && (() => {
+            const subTotalCommitted = subContracts.reduce((sum, c) => {
+              if (c.type === 'fixed') return sum + (c.quoted_amount ?? 0)
+              return sum + subEntries.filter(e => e.sub_contract_id === c.id).reduce((s, e) => s + (Number(e.units) * (c.rate_amount ?? 0)), 0)
+            }, 0)
+            const subTotalPaid = subContracts.reduce((sum, c) => {
+              if (c.type === 'fixed') return sum + subStages.filter(s => s.sub_contract_id === c.id && s.paid_date).reduce((s2, s) => s2 + Number(s.amount), 0)
+              return sum
+            }, 0)
+            return (
+              <div style={{ border: '1px solid #ede9fe', borderRadius: 10, padding: 14, marginBottom: 16, background: '#faf5ff' }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10, color: '#7c3aed' }}>👷 Sub Contracts</div>
+                {subContracts.map(c => {
+                  const name = clients.find(cl => cl.id === c.contact_id)?.name ?? '—'
+                  const entries = subEntries.filter(e => e.sub_contract_id === c.id)
+                  const stages = subStages.filter(s => s.sub_contract_id === c.id)
+                  const rateTotal = entries.reduce((s, e) => s + (Number(e.units) * (c.rate_amount ?? 0)), 0)
+                  const stagePaid = stages.filter(s => s.paid_date).reduce((s, st) => s + Number(st.amount), 0)
+                  return (
+                    <div key={c.id} style={{ padding: '10px 0', borderBottom: '1px solid #ede9fe' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                        <div style={{ minWidth: 0 }}>
+                          <span style={{ fontWeight: 600, fontSize: 13, color: '#1e293b' }}>{name}</span>
+                          {c.description && <span style={{ fontSize: 12, color: '#64748b', marginLeft: 8 }}>{c.description}</span>}
+                        </div>
+                        <div style={{ textAlign: 'right', fontSize: 12, flexShrink: 0 }}>
+                          {c.type === 'rate' ? (
+                            <>
+                              <strong style={{ color: '#7c3aed', fontFamily: 'monospace' }}>{fmt(rateTotal)}</strong>
+                              <span style={{ color: '#94a3b8', marginLeft: 6 }}>({entries.reduce((s, e) => s + Number(e.units), 0)} {c.rate_type ?? 'day'}s @ {fmt(c.rate_amount ?? 0)})</span>
+                            </>
+                          ) : (
+                            <>
+                              <strong style={{ color: '#16a34a', fontFamily: 'monospace' }}>{fmt(stagePaid)}</strong>
+                              <span style={{ color: '#94a3b8', marginLeft: 4 }}>paid of</span>
+                              <strong style={{ color: '#7c3aed', fontFamily: 'monospace', marginLeft: 4 }}>{fmt(c.quoted_amount ?? 0)}</strong>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      {c.type === 'fixed' && stages.length > 0 && (
+                        <div style={{ marginTop: 5, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {stages.map(s => (
+                            <span key={s.id} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: s.paid_date ? '#dcfce7' : '#f1f5f9', color: s.paid_date ? '#16a34a' : '#64748b' }}>
+                              {s.paid_date ? '✓' : '○'} {s.description}: {fmt(Number(s.amount))}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+                <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 10, fontSize: 12 }}>
+                  <span>Committed: <strong style={{ fontFamily: 'monospace', color: '#7c3aed' }}>{fmt(subTotalCommitted)}</strong></span>
+                  <span>Paid: <strong style={{ fontFamily: 'monospace', color: '#16a34a' }}>{fmt(subTotalPaid)}</strong></span>
+                  <span>Outstanding: <strong style={{ fontFamily: 'monospace', color: subTotalCommitted - subTotalPaid > 0 ? '#dc2626' : '#16a34a' }}>{fmt(subTotalCommitted - subTotalPaid)}</strong></span>
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Ledger */}
           {loading ? (
