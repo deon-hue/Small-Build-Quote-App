@@ -3,9 +3,8 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import type { GanttState, ClientPortalSettings, Job } from '@/lib/types'
+import type { GanttState, Job } from '@/lib/types'
 import PortalGanttChart from '@/components/PortalGanttChart'
-import { DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
 import { fmt, Q_BADGE, Q_LABEL, calcPhaseSell, calcItemSell } from '@/lib/utils'
 import type { QuotePhase, QuoteItem } from '@/lib/types'
 
@@ -72,7 +71,7 @@ function PortalPreviewInner() {
   const supabase = createClient()
   const searchParams = useSearchParams()
   const router = useRouter()
-  const email = searchParams.get('email') || ''
+  const clientId = searchParams.get('clientId') || ''
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -84,26 +83,30 @@ function PortalPreviewInner() {
   const [settings, setSettings] = useState<PreviewSettings | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [expandedQuote, setExpandedQuote] = useState<string | null>(null)
-  const [clientSettings, setClientSettings] = useState<ClientPortalSettings>(DEFAULT_CLIENT_PORTAL_SETTINGS)
 
   useEffect(() => {
-    if (!email) { setError('No client email specified.'); setLoading(false); return }
+    if (!clientId) { setError('No client specified.'); setLoading(false); return }
 
     async function load() {
       setLoading(true)
       setError('')
       const { data, error: rpcErr } = await supabase.rpc(
         'get_portal_preview_for_admin',
-        { p_client_email: email }
+        { p_client_id: clientId }
       )
       if (rpcErr) {
-        setError('Could not load preview. Make sure you have run supabase/phase7.sql in your Supabase dashboard.')
+        setError('Could not load preview. Make sure you have run supabase/phase43.sql in your Supabase dashboard.')
         setLoading(false)
         return
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const d = data as any
-      setClientName(d?.client_name || email)
+      if (d?.error === 'client_not_found') {
+        setError('Client not found.')
+        setLoading(false)
+        return
+      }
+      setClientName(d?.client_name || 'Client')
 
       if (Array.isArray(d?.jobs)) {
         setJobs(d.jobs.map((r: AnyRecord) => ({
@@ -136,15 +139,10 @@ function PortalPreviewInner() {
         })))
       }
       if (d?.settings) setSettings(d.settings)
-      if (d?.client_settings && typeof d.client_settings === 'object') {
-        setClientSettings({ ...DEFAULT_CLIENT_PORTAL_SETTINGS, ...(d.client_settings as Partial<ClientPortalSettings>) })
-      } else {
-        setClientSettings(DEFAULT_CLIENT_PORTAL_SETTINGS)
-      }
       setLoading(false)
     }
     load()
-  }, [email]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [clientId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) return (
     <div style={{ padding: 40, color: 'var(--muted)', fontSize: 14 }}>Loading preview…</div>
@@ -175,14 +173,9 @@ function PortalPreviewInner() {
             }
           </div>
           {/* inline display:flex overrides the @media(max-width:640px) display:none rule */}
+          {/* Admin preview shows every tab, regardless of the client's hidden-tab settings */}
           <nav className="portal-nav" style={{ display: 'flex' }}>
-            {([
-              'dashboard',
-              ...(clientSettings.showQuotesTab     ? ['quotes']      : []),
-              ...(clientSettings.showVariationsTab ? ['variations']  : []),
-              ...(clientSettings.showInvoicesTab   ? ['invoices']    : []),
-              'build-plan',
-            ] as Tab[]).map(tab => (
+            {(['dashboard', 'quotes', 'variations', 'invoices', 'build-plan'] as Tab[]).map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -294,7 +287,6 @@ function PortalPreviewInner() {
                 const total = subtotal + vatAmount
                 const canApprove = q.status === 'pending' || q.status === 'sent'
                 const isOpen = expandedQuote === q.id
-                const qv = clientSettings.quoteView
 
                 return (
                   <div key={q.id} className="portal-card" style={{ padding: 0, overflow: 'hidden', marginBottom: 12 }}>
@@ -378,15 +370,15 @@ function PortalPreviewInner() {
                           </div>
 
                           {/* Phases & line items */}
-                          {q.phases.length > 0 && qv !== 'total_only' && (
+                          {q.phases.length > 0 && (
                             <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
                               {q.phases.map((phase: AnyRecord, pi: number) => (
                                 <div key={phase.id || pi}>
                                   <div style={{ background: pi % 2 === 0 ? '#f0f2ee' : '#e8ebe4', padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: pi > 0 ? '2px solid var(--border)' : undefined }}>
                                     <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)' }}>{pi + 1}. {phase.phase}</div>
-                                    {qv === 'full' && <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 13, fontWeight: 700, color: 'var(--moss)' }}>{fmt(phaseNet(phase, q.markup))}</div>}
+                                    <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 13, fontWeight: 700, color: 'var(--moss)' }}>{fmt(phaseNet(phase, q.markup))}</div>
                                   </div>
-                                  {qv === 'full' && (phase.items || []).map((item: AnyRecord, ii: number) => (
+                                  {(phase.items || []).map((item: AnyRecord, ii: number) => (
                                     <div key={item.id || ii} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 16px', gap: 12, borderTop: '1px solid var(--border)', background: ii % 2 === 0 ? '#fff' : '#fafaf8' }}>
                                       <div style={{ flex: 1, minWidth: 0 }}>
                                         <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{item.desc}</div>
@@ -405,13 +397,11 @@ function PortalPreviewInner() {
 
                           {/* Financial summary */}
                           <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 20 }}>
-                            {qv !== 'total_only' && (
-                              <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', background: '#fafaf8' }}>
-                                <span style={{ fontSize: 13, color: 'var(--muted)' }}>Subtotal (ex. VAT)</span>
-                                <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{fmt(subtotal)}</span>
-                              </div>
-                            )}
-                            {qv !== 'total_only' && q.vatIncluded && (
+                            <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', background: '#fafaf8' }}>
+                              <span style={{ fontSize: 13, color: 'var(--muted)' }}>Subtotal (ex. VAT)</span>
+                              <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{fmt(subtotal)}</span>
+                            </div>
+                            {q.vatIncluded && (
                               <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', background: '#fafaf8' }}>
                                 <span style={{ fontSize: 13, color: 'var(--muted)' }}>VAT (20%)</span>
                                 <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{fmt(vatAmount)}</span>
@@ -423,8 +413,8 @@ function PortalPreviewInner() {
                             </div>
                           </div>
 
-                          {/* Scope of works */}
-                          {clientSettings.showScope && q.scope && (
+                          {/* Scope of works — always shown in admin preview */}
+                          {q.scope && (
                             <div style={{ marginBottom: 20 }}>
                               <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }}>Scope of Works</div>
                               <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.7, whiteSpace: 'pre-wrap', padding: '14px 16px', background: '#fafaf8', border: '1px solid var(--border)', borderRadius: 8 }}>

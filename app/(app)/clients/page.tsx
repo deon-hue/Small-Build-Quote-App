@@ -90,11 +90,10 @@ function ClientsPageInner() {
     return `https://wa.me/${num}?text=${encodeURIComponent(body)}`
   }
 
-  // URL for admin to preview what the client sees (no sign-in required)
+  // URL for admin to preview a client's portal (no sign-in required).
+  // Keyed on the client id so it works for every client — even without an email.
   function adminPreviewUrl(c: Client) {
-    return c.email
-      ? `/portal-preview?email=${encodeURIComponent(c.email)}`
-      : `/portal-preview`
+    return `/portal-preview?clientId=${encodeURIComponent(c.id)}`
   }
 
   function openNew() {
@@ -336,8 +335,7 @@ function ClientsPageInner() {
                           )}
                           <button
                             className="btn-sm btn-sky"
-                            title={c.email ? `View portal as ${c.name}` : 'No email on file — add one to preview portal'}
-                            disabled={!c.email}
+                            title={`View everything in ${c.name}'s portal`}
                             onClick={() => router.push(adminPreviewUrl(c))}
                           >
                             👁 View Portal
@@ -383,11 +381,9 @@ function ClientsPageInner() {
                 {selected.phone && (
                   <a className="btn-sm btn-outline" href={waHref(selected)} target="_blank" rel="noreferrer" title="Send portal link via WhatsApp">🟢 WhatsApp</a>
                 )}
-                {selected.email && (
-                  <button className="btn-sm btn-sky" onClick={() => { setSelected(null); router.push(adminPreviewUrl(selected)) }} title={`View portal as ${selected.name}`}>
-                    👁 View Portal
-                  </button>
-                )}
+                <button className="btn-sm btn-sky" onClick={() => { setSelected(null); router.push(adminPreviewUrl(selected)) }} title={`View everything in ${selected.name}'s portal`}>
+                  👁 View Portal
+                </button>
                 <button className="btn-sm btn-outline" onClick={() => openEdit(selected)}>✎ Edit</button>
                 <button className="btn-sm btn-gold" onClick={() => {
                   sessionStorage.setItem('sbc_prefill_client', selected.id)
