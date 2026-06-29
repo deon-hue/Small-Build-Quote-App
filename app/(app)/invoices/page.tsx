@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useApp } from '@/contexts/AppContext'
+import { ContactPicker } from '@/components/ContactPicker'
 import { fmt, fmtK, calcPhaseSell } from '@/lib/utils'
 import { buildInvoiceHtml } from '@/lib/invoiceHtml'
 import type { Invoice, InvoiceLineItem, PaymentMilestone } from '@/lib/types'
@@ -28,7 +29,7 @@ function due30Str() {
 }
 
 export default function InvoicesPage() {
-  const { invoices, jobs, quotes, settings, addInvoice, updateInvoice, deleteInvoice, loading } = useApp()
+  const { invoices, jobs, quotes, clients, settings, addInvoice, updateInvoice, deleteInvoice, loading } = useApp()
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<Invoice | null>(null)
 
@@ -406,8 +407,30 @@ export default function InvoicesPage() {
 
               <div className="row2">
                 <div className="fg">
-                  <label>Client Name</label>
-                  <input value={clientName} onChange={e => setClientName(e.target.value)} placeholder="Mr & Mrs Davies" />
+                  <label>Customer</label>
+                  <ContactPicker
+                    value={clients.find(c => c.name.trim().toLowerCase() === clientName.trim().toLowerCase())?.id ?? ''}
+                    onChange={id => {
+                      const c = clients.find(cl => cl.id === id)
+                      if (c) {
+                        setClientName(c.name)
+                        if (c.email) setClientEmail(c.email)
+                        if (c.address) setClientAddress(c.address)
+                      } else {
+                        setClientName('')
+                      }
+                    }}
+                    contacts={clients.map(c => ({ id: c.id, name: c.name }))}
+                    placeholder="Search customer…"
+                  />
+                  {!clients.some(c => c.name.trim().toLowerCase() === clientName.trim().toLowerCase()) && (
+                    <input
+                      style={{ marginTop: 6 }}
+                      value={clientName}
+                      onChange={e => setClientName(e.target.value)}
+                      placeholder="Or type a name (won't link to a contact)"
+                    />
+                  )}
                 </div>
                 <div className="fg">
                   <label>Client Email</label>
