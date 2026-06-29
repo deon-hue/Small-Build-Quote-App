@@ -1314,6 +1314,22 @@ export default function NewQuotePage() {
     }
   }
 
+  // Locked/accepted quotes can't change prices, but the admin may still need to
+  // correct WHICH customer the quote is linked to. This saves only the customer.
+  async function saveCustomerOnly() {
+    if (!editingId) return
+    const existing = quotes.find(q => q.id === editingId)
+    if (!existing) return
+    setSaving(true)
+    try {
+      const customer = { name: custName, address: custAddr, email: custEmail, phone: custPhone }
+      await updateQuote({ ...existing, customer })
+      alert('Customer updated for this quote.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   function cancelEdit() {
     setEditingId(null)
     setIsLockedQuote(false)
@@ -1414,12 +1430,22 @@ export default function NewQuotePage() {
       {editingId && isLockedQuote && (
         <div style={{ background: '#f0f9e8', border: '1.5px solid #7ab533', borderRadius: 6, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13 }}>
           <span>
-            🔒 <strong>Accepted quote — read only.</strong>{' '}
+            🔒 <strong>Accepted quote — prices locked.</strong>{' '}
             <span style={{ color: 'var(--muted)' }}>
-              {quotes.find(q => q.id === editingId)?.ref || editingId} · This quote has been accepted and cannot be modified.
+              {quotes.find(q => q.id === editingId)?.ref || editingId} · Prices &amp; scope can&apos;t change, but you can still fix the linked customer.
             </span>
           </span>
-          <button className="btn-sm btn-outline" onClick={cancelEdit}>Close</button>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <button
+              className="btn-sm btn-primary"
+              onClick={saveCustomerOnly}
+              disabled={saving}
+              title="Update which customer this quote is linked to (does not change prices or scope)"
+            >
+              {saving ? 'Saving…' : '💾 Update customer'}
+            </button>
+            <button className="btn-sm btn-outline" onClick={cancelEdit}>Close</button>
+          </div>
         </div>
       )}
       {editingId && !isLockedQuote && (
