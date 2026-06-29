@@ -203,13 +203,21 @@ export default function SavedQuotesPage() {
                   )}
                   <div className="sq-actions" style={{ marginTop: 6 }}>
                     {q.status === 'accepted' ? (
-                      <span style={{
-                        fontSize: 11, fontWeight: 600, padding: '4px 10px',
-                        background: '#f0f9e8', color: '#4a7c1f',
-                        border: '1px solid #b8e08a', borderRadius: 4,
-                      }} title="Accepted quotes are locked and cannot be edited">
+                      <button
+                        className="btn-sm"
+                        style={{
+                          fontSize: 11, fontWeight: 600, padding: '4px 10px',
+                          background: '#f0f9e8', color: '#4a7c1f',
+                          border: '1px solid #b8e08a', borderRadius: 4, cursor: 'pointer',
+                        }}
+                        title="Locked — prices can't change, but you can fix the linked customer"
+                        onClick={() => {
+                          sessionStorage.setItem('sbc_edit_quote', q.id)
+                          router.push('/new-quote')
+                        }}
+                      >
                         🔒 Locked
-                      </span>
+                      </button>
                     ) : (
                       <button className="btn-sm btn-primary" onClick={() => {
                         sessionStorage.setItem('sbc_edit_quote', q.id)
