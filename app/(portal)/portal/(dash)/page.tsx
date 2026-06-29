@@ -66,7 +66,7 @@ function PortalError({ error, userEmail, reload }: { error: string; userEmail: s
 }
 
 export default function PortalDashboard() {
-  const { invoices, variations, jobs, settings, userEmail, loading, error, reload } = usePortal()
+  const { invoices, variations, jobs, payments, settings, userEmail, loading, error, reload } = usePortal()
 
   if (loading) {
     return (
@@ -88,9 +88,15 @@ export default function PortalDashboard() {
   const approvedVars      = variations.filter(v => ['approved', 'invoiced', 'paid'].includes(v.status))
   const totalVariations   = approvedVars.reduce((s, v) => s + v.total, 0)
   const paidInvoices      = invoices.filter(i => i.status === 'paid')
-  const totalPaid         = paidInvoices.reduce((s, i) => s + i.total, 0)
+  const paidInvoiceTotal  = paidInvoices.reduce((s, i) => s + i.total, 0)
+  const cashPaidTotal     = payments.reduce((s, p) => s + p.amount, 0)
+  const totalPaid         = paidInvoiceTotal + cashPaidTotal
   const balanceDue        = totalQuoteValue + totalVariations - totalPaid
   const allSettled        = balanceDue <= 0
+  const paidParts         = [
+    paidInvoices.length ? `${paidInvoices.length} invoice${paidInvoices.length !== 1 ? 's' : ''}` : '',
+    payments.length ? `${payments.length} payment${payments.length !== 1 ? 's' : ''}` : '',
+  ].filter(Boolean).join(' + ')
 
   return (
     <>
@@ -134,9 +140,7 @@ export default function PortalDashboard() {
           <div className="fin-card-label" style={{ color: '#7ab533' }}>Paid to Date</div>
           <div className="fin-card-value">{fmt(totalPaid)}</div>
           <div className="fin-card-sub">
-            {paidInvoices.length === 0
-              ? 'No payments yet'
-              : `${paidInvoices.length} invoice${paidInvoices.length !== 1 ? 's' : ''} paid`}
+            {paidParts ? `${paidParts} received` : 'No payments yet'}
           </div>
         </div>
 

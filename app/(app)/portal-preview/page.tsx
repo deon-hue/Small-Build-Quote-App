@@ -29,6 +29,9 @@ interface PreviewInvoice {
 interface PreviewVariation {
   id: string; ref: string; title: string; status: string; total: number; description: string
 }
+interface PreviewPayment {
+  id: string; amount: number; paymentDate: string; method: string; notes: string
+}
 interface PreviewSettings {
   name: string; tagline: string; email: string; phone: string; address: string; logo: string
 }
@@ -48,6 +51,9 @@ const INV_STATUS_COLOR: Record<string, string> = {
 }
 const INV_STATUS_LABEL: Record<string, string> = {
   draft: 'Draft', sent: 'Sent', paid: 'Paid', overdue: 'Overdue',
+}
+const PAYMENT_METHOD_LABEL: Record<string, string> = {
+  cash: 'Cash', cheque: 'Cheque', bank_transfer: 'Bank transfer', other: 'Other',
 }
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -80,6 +86,7 @@ function PortalPreviewInner() {
   const [quotes, setQuotes] = useState<PreviewQuote[]>([])
   const [invoices, setInvoices] = useState<PreviewInvoice[]>([])
   const [variations, setVariations] = useState<PreviewVariation[]>([])
+  const [payments, setPayments] = useState<PreviewPayment[]>([])
   const [settings, setSettings] = useState<PreviewSettings | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [expandedQuote, setExpandedQuote] = useState<string | null>(null)
@@ -136,6 +143,12 @@ function PortalPreviewInner() {
         setVariations(d.variations.map((r: AnyRecord) => ({
           id: r.id, ref: r.ref || '', title: r.title || '',
           status: r.status, total: Number(r.total), description: r.description || '',
+        })))
+      }
+      if (Array.isArray(d?.payments)) {
+        setPayments(d.payments.map((r: AnyRecord) => ({
+          id: r.id, amount: Number(r.amount) || 0, paymentDate: r.payment_date || '',
+          method: r.method || 'cash', notes: r.notes || '',
         })))
       }
       if (d?.settings) setSettings(d.settings)
@@ -211,9 +224,14 @@ function PortalPreviewInner() {
           const approvedVars    = variations.filter(v => ['approved', 'invoiced', 'paid'].includes(v.status))
           const totalVariations = approvedVars.reduce((s, v) => s + v.total, 0)
           const paidInvoices    = invoices.filter(i => i.status === 'paid')
-          const totalPaid       = paidInvoices.reduce((s, i) => s + i.total, 0)
+          const cashPaidTotal   = payments.reduce((s, p) => s + p.amount, 0)
+          const totalPaid       = paidInvoices.reduce((s, i) => s + i.total, 0) + cashPaidTotal
           const balanceDue      = totalQuoteValue + totalVariations - totalPaid
           const allSettled      = balanceDue <= 0
+          const paidParts       = [
+            paidInvoices.length ? `${paidInvoices.length} invoice${paidInvoices.length !== 1 ? 's' : ''}` : '',
+            payments.length ? `${payments.length} payment${payments.length !== 1 ? 's' : ''}` : '',
+          ].filter(Boolean).join(' + ')
           return (
           <>
             {/* Welcome strip */}
@@ -244,7 +262,7 @@ function PortalPreviewInner() {
                 <div className="fin-card-label" style={{ color: '#7ab533' }}>Paid to Date</div>
                 <div className="fin-card-value">{fmt(totalPaid)}</div>
                 <div className="fin-card-sub">
-                  {paidInvoices.length === 0 ? 'No payments yet' : `${paidInvoices.length} invoice${paidInvoices.length !== 1 ? 's' : ''} paid`}
+                  {paidParts ? `${paidParts} received` : 'No payments yet'}
                 </div>
               </div>
               <div className="fin-card fin-card-due">
@@ -498,11 +516,11 @@ function PortalPreviewInner() {
               <p>{invoices.length} invoice{invoices.length !== 1 ? 's' : ''} on file</p>
             </div>
 
-            {invoices.length > 0 && (
+            {(invoices.length > 0 || payments.length > 0) && (
               <div className="portal-stats" style={{ marginBottom: 24 }}>
                 <div className="portal-stat">
                   <div className="portal-stat-num">
-                    {fmt(invoices.filter(i => i.status === 'paid').reduce((s, i) => s + i.total, 0))}
+                    {fmt(invoices.filter(i => i.status === 'paid').reduce((s, i) => s + i.total, 0) + payments.reduce((s, p) => s + p.amount, 0))}
                   </div>
                   <div className="portal-stat-label">Total Paid</div>
                 </div>
@@ -539,6 +557,29 @@ function PortalPreviewInner() {
                   </div>
                 </div>
               ))
+            )}
+
+            {/* Payments received (cash / cheque / bank transfer) */}
+            {payments.length > 0 && (
+              <div style={{ marginTop: 28 }}>
+                <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 4px' }}>Payments Received</h2>
+                <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 14px' }}>
+                  {payments.length} payment{payments.length !== 1 ? 's' : ''} · {fmt(payments.reduce((s, p) => s + p.amount, 0))} total
+                </p>
+                {payments.map(p => (
+                  <div key={p.id} className="portal-card" style={{ borderLeft: '3px solid #7ab533', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 18, fontFamily: 'DM Mono, monospace' }}>{fmt(p.amount)}</div>
+                      <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                        {PAYMENT_METHOD_LABEL[p.method] || p.method}
+                        {p.paymentDate ? ` · ${new Date(p.paymentDate).toLocaleDateString('en-GB')}` : ''}
+                      </div>
+                      {p.notes && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{p.notes}</div>}
+                    </div>
+                    <span className="portal-badge" style={{ background: '#7ab533' }}>✓ Received</span>
+                  </div>
+                ))}
+              </div>
             )}
           </>
         )}

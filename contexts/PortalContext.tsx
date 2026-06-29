@@ -14,11 +14,21 @@ export interface PortalSettings {
   logo: string
 }
 
+export interface PortalPayment {
+  id: string
+  jobId: string
+  amount: number
+  paymentDate: string
+  method: string
+  notes: string
+}
+
 interface PortalContextType {
   quotes: Quote[]
   jobs: Job[]
   invoices: Invoice[]
   variations: Variation[]
+  payments: PortalPayment[]
   ganttStates: Record<string, GanttState>
   settings: PortalSettings
   clientSettings: ClientPortalSettings
@@ -46,6 +56,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   const [jobs, setJobs] = useState<Job[]>([])
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [variations, setVariations] = useState<Variation[]>([])
+  const [payments, setPayments] = useState<PortalPayment[]>([])
   const [ganttStates, setGanttStates] = useState<Record<string, GanttState>>({})
   const [settings, setSettings] = useState<PortalSettings>(DEFAULT_SETTINGS)
   const [clientSettings, setClientSettings] = useState<ClientPortalSettings>(DEFAULT_CLIENT_PORTAL_SETTINGS)
@@ -205,6 +216,17 @@ export function PortalProvider({ children }: { children: ReactNode }) {
         })))
       }
 
+      // Map manual / cash payments
+      if (Array.isArray(result?.payments)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setPayments(result.payments.map((r: any) => ({
+          id: r.id, jobId: r.job_id || '', amount: Number(r.amount) || 0,
+          paymentDate: r.payment_date || '', method: r.method || 'cash', notes: r.notes || '',
+        })))
+      } else {
+        setPayments([])
+      }
+
       // Map settings
       if (result?.settings) {
         setSettings({
@@ -233,7 +255,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   }, [tick]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <PortalContext.Provider value={{ quotes, jobs, invoices, variations, ganttStates, settings, clientSettings, userEmail, loading, error, reload }}>
+    <PortalContext.Provider value={{ quotes, jobs, invoices, variations, payments, ganttStates, settings, clientSettings, userEmail, loading, error, reload }}>
       {children}
     </PortalContext.Provider>
   )

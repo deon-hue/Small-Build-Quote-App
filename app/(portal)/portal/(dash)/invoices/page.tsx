@@ -10,16 +10,20 @@ const STATUS_COLOR: Record<string, string> = {
 const STATUS_LABEL: Record<string, string> = {
   draft: 'Draft', sent: 'Sent', paid: 'Paid', overdue: 'Overdue',
 }
+const METHOD_LABEL: Record<string, string> = {
+  cash: 'Cash', cheque: 'Cheque', bank_transfer: 'Bank transfer', other: 'Other',
+}
 
 export default function PortalInvoicesPage() {
-  const { invoices, loading, error } = usePortal()
+  const { invoices, payments, loading, error } = usePortal()
 
   if (loading) return <div className="portal-loading">Loading…</div>
   if (error && error !== 'no_admin_linked') {
     return <div className="portal-notice"><p>Unable to load invoices.</p></div>
   }
 
-  const totalPaid = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + i.total, 0)
+  const cashPaidTotal = payments.reduce((s, p) => s + p.amount, 0)
+  const totalPaid = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + i.total, 0) + cashPaidTotal
   const totalOutstanding = invoices.filter(i => i.status === 'sent' || i.status === 'overdue').reduce((s, i) => s + i.total, 0)
 
   return (
@@ -30,7 +34,7 @@ export default function PortalInvoicesPage() {
       </div>
 
       {/* Summary */}
-      {invoices.length > 0 && (
+      {(invoices.length > 0 || payments.length > 0) && (
         <div className="portal-stats" style={{ marginBottom: 24 }}>
           <div className="portal-stat">
             <div className="portal-stat-num">{fmt(totalPaid)}</div>
@@ -131,6 +135,29 @@ export default function PortalInvoicesPage() {
             )}
           </div>
         ))
+      )}
+
+      {/* Payments received (cash / cheque / bank transfer) */}
+      {payments.length > 0 && (
+        <div style={{ marginTop: 28 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 4px' }}>Payments Received</h2>
+          <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 14px' }}>
+            {payments.length} payment{payments.length !== 1 ? 's' : ''} · {fmt(cashPaidTotal)} total
+          </p>
+          {payments.map(p => (
+            <div key={p.id} className="portal-card" style={{ borderLeft: '3px solid #7ab533', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 18, fontFamily: 'DM Mono, monospace' }}>{fmt(p.amount)}</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                  {METHOD_LABEL[p.method] || p.method}
+                  {p.paymentDate ? ` · ${new Date(p.paymentDate).toLocaleDateString('en-GB')}` : ''}
+                </div>
+                {p.notes && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{p.notes}</div>}
+              </div>
+              <span className="portal-badge" style={{ background: '#7ab533' }}>✓ Received</span>
+            </div>
+          ))}
+        </div>
       )}
     </>
   )
