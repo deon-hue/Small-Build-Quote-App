@@ -6,6 +6,7 @@ import { fmt, jobColor, STAGE_BADGE, STAGE_LABEL, JOB_TYPES } from '@/lib/utils'
 import type { Job } from '@/lib/types'
 import { quoteBudget } from '@/lib/job-costs'
 import GanttModal from '@/components/GanttModal'
+import { ContactPicker } from '@/components/ContactPicker'
 import VariationModal from '@/components/VariationModal'
 import JobDocumentsModal from '@/components/JobDocumentsModal'
 import JobAttachmentsModal from '@/components/JobAttachmentsModal'
@@ -17,7 +18,7 @@ const BLANK_JOB: Omit<Job, 'id'> = {
 }
 
 export default function JobsPage() {
-  const { jobs, quotes, jobNotes, jobPayments, variations, invoices, addJob, updateJob, deleteJob, updateQuote, addJobNote, deleteJobNote, loading } = useApp()
+  const { jobs, quotes, clients, jobNotes, jobPayments, variations, invoices, addJob, updateJob, deleteJob, updateQuote, addJobNote, deleteJobNote, loading } = useApp()
   const [filter, setFilter] = useState('all')
   const [showModal, setShowModal] = useState(false)
   const [editJob, setEditJob] = useState<Job | null>(null)
@@ -195,8 +196,24 @@ export default function JobsPage() {
             <div className="form-modal-bd">
               <div className="row2">
                 <div className="fg">
-                  <label>Client Name</label>
-                  <input value={form.client} onChange={e => setForm(f => ({ ...f, client: e.target.value }))} placeholder="Mr & Mrs Davies" />
+                  <label>Customer</label>
+                  <ContactPicker
+                    value={clients.find(c => c.name.trim().toLowerCase() === form.client.trim().toLowerCase())?.id ?? ''}
+                    onChange={id => {
+                      const c = clients.find(cl => cl.id === id)
+                      setForm(f => ({ ...f, client: c ? c.name : '' }))
+                    }}
+                    contacts={clients.map(c => ({ id: c.id, name: c.name }))}
+                    placeholder="Search customer…"
+                  />
+                  {!clients.some(c => c.name.trim().toLowerCase() === form.client.trim().toLowerCase()) && (
+                    <input
+                      style={{ marginTop: 6 }}
+                      value={form.client}
+                      onChange={e => setForm(f => ({ ...f, client: e.target.value }))}
+                      placeholder="Or type a name (won't link to a contact)"
+                    />
+                  )}
                 </div>
                 <div className="fg">
                   <label>Job Type</label>
