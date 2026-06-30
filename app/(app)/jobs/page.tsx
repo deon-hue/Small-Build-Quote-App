@@ -11,6 +11,7 @@ import VariationModal from '@/components/VariationModal'
 import JobDocumentsModal from '@/components/JobDocumentsModal'
 import JobAttachmentsModal from '@/components/JobAttachmentsModal'
 import CashPaymentModal from '@/components/CashPaymentModal'
+import PaymentRequestsModal from '@/components/PaymentRequestsModal'
 
 const BLANK_JOB: Omit<Job, 'id'> = {
   client: '', type: 'Rear Extension', address: '', value: 0,
@@ -31,6 +32,7 @@ export default function JobsPage() {
   const [docsJob, setDocsJob] = useState<Job | null>(null)
   const [attachmentsJob, setAttachmentsJob] = useState<Job | null>(null)
   const [paymentJob, setPaymentJob] = useState<Job | null>(null)
+  const [requestsJob, setRequestsJob] = useState<Job | null>(null)
   const [newNote, setNewNote] = useState('')
   const [addingNote, setAddingNote] = useState(false)
 
@@ -168,6 +170,9 @@ export default function JobsPage() {
                     </button>
                     <button className="btn-sm btn-outline" onClick={() => setAttachmentsJob(j)} title="Plans, photos and documents shared with the client">📎 Files</button>
                     <button className="btn-sm btn-outline" onClick={() => setDocsJob(j)} title="Scan/upload supplier docs and track costs">💷 Costs</button>
+                    <button className="btn-sm btn-outline" onClick={() => setRequestsJob(j)} title="Send payment requests and record when received">
+                      💳 Requests
+                    </button>
                     <button className="btn-sm btn-outline" onClick={() => setPaymentJob(j)} title="Record cash/cheque/bank payments received">
                       💰 Payments{jobPayments.filter(p => p.jobId === j.id).length > 0 ? ` (${jobPayments.filter(p => p.jobId === j.id).length})` : ''}
                     </button>
@@ -346,6 +351,11 @@ export default function JobsPage() {
       {/* Attachments modal */}
       {attachmentsJob && (
         <JobAttachmentsModal job={attachmentsJob} onClose={() => setAttachmentsJob(null)} />
+      )}
+
+      {/* Payment Requests modal */}
+      {requestsJob && (
+        <PaymentRequestsModal job={requestsJob} onClose={() => setRequestsJob(null)} />
       )}
 
       {/* Cash Payment modal */}
