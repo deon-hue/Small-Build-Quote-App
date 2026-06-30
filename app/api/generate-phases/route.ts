@@ -3,6 +3,42 @@ import { createClient } from '@/lib/supabase/server'
 
 export const maxDuration = 30
 
+// Extract every fully-closed phase object from a truncated JSON string.
+// Falls back gracefully when the AI hit the max_tokens ceiling mid-response.
+function recoverPartialPhases(jsonStr: string): unknown[] | null {
+  const phasesStart = jsonStr.indexOf('"phases"')
+  if (phasesStart === -1) return null
+  const arrayStart = jsonStr.indexOf('[', phasesStart)
+  if (arrayStart === -1) return null
+
+  const phases: unknown[] = []
+  let depth = 0
+  let objStart = -1
+  let inString = false
+  let escape = false
+
+  for (let i = arrayStart + 1; i < jsonStr.length; i++) {
+    const c = jsonStr[i]
+    if (escape) { escape = false; continue }
+    if (c === '\\' && inString) { escape = true; continue }
+    if (c === '"') { inString = !inString; continue }
+    if (inString) continue
+
+    if (c === '{') {
+      if (depth === 0) objStart = i
+      depth++
+    } else if (c === '}') {
+      depth--
+      if (depth === 0 && objStart !== -1) {
+        try { phases.push(JSON.parse(jsonStr.slice(objStart, i + 1))) } catch { /* skip malformed */ }
+        objStart = -1
+      }
+    }
+  }
+
+  return phases.length > 0 ? phases : null
+}
+
 // ── Fetch Back Office reference rates for the current user ─────────────────────
 
 interface PlantDefault { names: string[]; total: number }
@@ -269,7 +305,7 @@ Generate a full phase cost breakdown. Use the Back Office default rates provided
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 8000,
+        max_tokens: 8192,
         system,
         messages: [
           { role: 'user', content: userMessage },
@@ -295,6 +331,7 @@ Generate a full phase cost breakdown. Use the Back Office default rates provided
 
     // Prepend the prefilled '{' back
     const rawText = data.content?.[0]?.text || ''
+    const truncated = data.stop_reason === 'max_tokens'
     const text = '{' + rawText
 
     let jsonStr = text.trim()
@@ -311,8 +348,20 @@ Generate a full phase cost breakdown. Use the Back Office default rates provided
     try {
       parsed = JSON.parse(jsonStr)
     } catch {
-      console.error('Failed to parse AI JSON:', jsonStr.slice(0, 300))
-      return NextResponse.json({ error: 'AI returned invalid JSON' }, { status: 500 })
+      if (truncated) {
+        // JSON was cut off mid-stream — extract every complete phase object we have
+        const recovered = recoverPartialPhases(jsonStr)
+        if (recovered && recovered.length > 0) {
+          parsed = { phases: recovered }
+          console.warn(`AI JSON truncated; recovered ${recovered.length} phases`)
+        } else {
+          console.error('AI JSON truncated and unrecoverable:', jsonStr.slice(0, 300))
+          return NextResponse.json({ error: 'AI response was too long to complete. Try a shorter scope or break the job into smaller sections.' }, { status: 500 })
+        }
+      } else {
+        console.error('Failed to parse AI JSON:', jsonStr.slice(0, 300))
+        return NextResponse.json({ error: 'AI returned invalid JSON' }, { status: 500 })
+      }
     }
 
     if (!Array.isArray(parsed.phases)) {
