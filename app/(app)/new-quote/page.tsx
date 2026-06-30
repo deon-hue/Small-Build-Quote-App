@@ -647,28 +647,33 @@ export default function NewQuotePage() {
       })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let data: { error?: string; phases?: any[] } = {}
-      const contentType = res.headers.get('content-type') || ''
-      if (!res.body || !contentType.includes('text/event-stream')) {
-        // Non-streaming error response (e.g. auth failure before stream starts)
-        try { data = await res.json() } catch { /* ignore */ }
-        if (!data.error) data = { error: `Server returned ${res.status} — please try again.` }
+      if (!res.body) {
+        data = { error: `Server returned ${res.status} — please try again.` }
       } else {
-        // Read SSE stream — server sends `: ping` heartbeats while generating,
-        // then a final `data: {...}` event with the phases result
+        // Read body as a stream regardless of content-type — Netlify may not preserve
+        // text/event-stream. Server sends `: ping` heartbeats then a final `data: {...}`.
+        // If streaming failed server-side the body will be plain JSON, handled by fallback.
         const reader = res.body.getReader()
         const decoder = new TextDecoder()
         let sseBuffer = ''
+        let rawText = ''
         while (true) {
           const { done, value } = await reader.read()
           if (done) break
-          sseBuffer += decoder.decode(value, { stream: true })
+          const chunk = decoder.decode(value, { stream: true })
+          rawText += chunk
+          sseBuffer += chunk
           const lines = sseBuffer.split('\n')
           sseBuffer = lines.pop() || ''
           for (const line of lines) {
             if (line.startsWith('data: ')) {
-              try { data = JSON.parse(line.slice(6).trim()) } catch { /* ignore ping comments */ }
+              try { data = JSON.parse(line.slice(6).trim()) } catch { /* ignore pings */ }
             }
           }
+        }
+        // Fallback: plain JSON error emitted before streaming started
+        if (!data.phases && !data.error) {
+          try { data = JSON.parse(rawText.trim()) } catch { /* ignore */ }
         }
         if (!data.phases && !data.error) {
           data = { error: 'No response received — please try again.' }
