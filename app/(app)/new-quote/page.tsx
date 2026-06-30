@@ -647,7 +647,33 @@ export default function NewQuotePage() {
       })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let data: { error?: string; phases?: any[] } = {}
-      try { data = await res.json() } catch { data = { error: `Server returned ${res.status} — the request may have timed out. Please try again.` } }
+      const contentType = res.headers.get('content-type') || ''
+      if (!res.body || !contentType.includes('text/event-stream')) {
+        // Non-streaming error response (e.g. auth failure before stream starts)
+        try { data = await res.json() } catch { /* ignore */ }
+        if (!data.error) data = { error: `Server returned ${res.status} — please try again.` }
+      } else {
+        // Read SSE stream — server sends `: ping` heartbeats while generating,
+        // then a final `data: {...}` event with the phases result
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let sseBuffer = ''
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          sseBuffer += decoder.decode(value, { stream: true })
+          const lines = sseBuffer.split('\n')
+          sseBuffer = lines.pop() || ''
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try { data = JSON.parse(line.slice(6).trim()) } catch { /* ignore ping comments */ }
+            }
+          }
+        }
+        if (!data.phases && !data.error) {
+          data = { error: 'No response received — please try again.' }
+        }
+      }
       if (data.error) { alert('Could not generate phases: ' + data.error); return false }
       if (Array.isArray(data.phases) && data.phases.length) {
         setPhases(data.phases.map((p: {

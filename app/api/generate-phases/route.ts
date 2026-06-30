@@ -295,49 +295,14 @@ ${scope}
 
 Generate a full phase cost breakdown. Use the Back Office default rates provided in the system prompt as your pricing baseline, scaled to the quantities implied by the scope. Include all five cost types per sub-phase.`
 
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 8192,
-        system,
-        messages: [
-          { role: 'user', content: userMessage },
-          { role: 'assistant', content: '{' }, // prefill — forces pure JSON
-        ],
-      }),
-    })
+  const encoder = new TextEncoder()
 
-    if (!res.ok) {
-      const errText = await res.text()
-      console.error('Anthropic API error:', res.status, errText.slice(0, 200))
-      let msg = `AI service error (${res.status})`
-      try { const j = JSON.parse(errText); msg = j?.error?.message || msg } catch { /* ignore */ }
-      return NextResponse.json({ error: msg }, { status: 500 })
-    }
-
-    const data = await res.json()
-
-    if (data.error) {
-      console.error('Anthropic API error:', data.error)
-      return NextResponse.json({ error: data.error?.message || 'AI error' }, { status: 500 })
-    }
-
-    // Prepend the prefilled '{' back
-    const rawText = data.content?.[0]?.text || ''
-    const truncated = data.stop_reason === 'max_tokens'
-    const text = '{' + rawText
-
-    let jsonStr = text.trim()
+  // Process accumulated Anthropic text into the final phases result (called once stream ends)
+  function processPhases(accumulated: string, stopReason: string) {
+    const truncated = stopReason === 'max_tokens'
+    let jsonStr = ('{' + accumulated).trim()
     const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
     if (fenceMatch) jsonStr = fenceMatch[1].trim()
-
     if (!jsonStr.startsWith('{')) {
       const start = jsonStr.indexOf('{')
       const end = jsonStr.lastIndexOf('}')
@@ -349,29 +314,24 @@ Generate a full phase cost breakdown. Use the Back Office default rates provided
       parsed = JSON.parse(jsonStr)
     } catch {
       if (truncated) {
-        // JSON was cut off mid-stream — extract every complete phase object we have
         const recovered = recoverPartialPhases(jsonStr)
         if (recovered && recovered.length > 0) {
           parsed = { phases: recovered }
           console.warn(`AI JSON truncated; recovered ${recovered.length} phases`)
         } else {
           console.error('AI JSON truncated and unrecoverable:', jsonStr.slice(0, 300))
-          return NextResponse.json({ error: 'AI response was too long to complete. Try a shorter scope or break the job into smaller sections.' }, { status: 500 })
+          return { error: 'AI response was too long to complete. Try a shorter scope or break it into sections.' }
         }
       } else {
         console.error('Failed to parse AI JSON:', jsonStr.slice(0, 300))
-        return NextResponse.json({ error: 'AI returned invalid JSON' }, { status: 500 })
+        return { error: 'AI returned invalid JSON' }
       }
     }
 
-    if (!Array.isArray(parsed.phases)) {
-      return NextResponse.json({ error: 'Unexpected AI response structure' }, { status: 500 })
+    if (!parsed || !Array.isArray(parsed.phases)) {
+      return { error: 'Unexpected AI response structure' }
     }
 
-    // Deterministically attach Back Office default plant items to each sub-phase,
-    // matching on sub-phase name (falling back to the main phase name). This
-    // guarantees e.g. "Excavation" carries Mini Excavator / Tracked Dumper / etc.
-    // regardless of what the model wrote.
     let plantDefaultsAttached = 0
     for (const ph of parsed.phases) {
       const def = plantByKey[normKey(ph.phase)] ?? plantByKey[normKey(ph.parentPhase)]
@@ -383,7 +343,93 @@ Generate a full phase cost breakdown. Use the Back Office default rates provided
       }
     }
 
-    return NextResponse.json({ phases: parsed.phases, usingDB: !!ratesBlock, plantDefaultsAttached })
+    return { phases: parsed.phases, usingDB: !!ratesBlock, plantDefaultsAttached }
+  }
+
+  try {
+    const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 8192,
+        stream: true,
+        system,
+        messages: [
+          { role: 'user', content: userMessage },
+          { role: 'assistant', content: '{' }, // prefill — forces pure JSON
+        ],
+      }),
+    })
+
+    if (!anthropicRes.ok) {
+      const errText = await anthropicRes.text()
+      console.error('Anthropic API error:', anthropicRes.status, errText.slice(0, 200))
+      let msg = `AI service error (${anthropicRes.status})`
+      try { const j = JSON.parse(errText); msg = j?.error?.message || msg } catch { /* ignore */ }
+      return NextResponse.json({ error: msg }, { status: 500 })
+    }
+
+    // Stream SSE back to the client. Netlify cuts idle functions after ~26s;
+    // by sending heartbeat comments while Anthropic generates, the connection
+    // stays alive regardless of how long the scope takes to produce.
+    const stream = new ReadableStream({
+      async start(controller) {
+        const reader = anthropicRes.body!.getReader()
+        const decoder = new TextDecoder()
+        let sseBuffer = ''
+        let accumulated = ''
+        let stopReason = ''
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+
+            sseBuffer += decoder.decode(value, { stream: true })
+            const lines = sseBuffer.split('\n')
+            sseBuffer = lines.pop() || ''
+
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue
+              const chunk = line.slice(6).trim()
+              if (chunk === '[DONE]') continue
+              try {
+                const event = JSON.parse(chunk)
+                if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+                  accumulated += event.delta.text
+                } else if (event.type === 'message_delta') {
+                  stopReason = event.delta?.stop_reason || ''
+                }
+              } catch { /* ignore malformed SSE lines */ }
+            }
+
+            // Keep-alive: Netlify sees bytes flowing and won't treat the function as timed out
+            controller.enqueue(encoder.encode(': ping\n\n'))
+          }
+        } catch {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: 'Stream interrupted — please try again.' })}\n\n`))
+          controller.close()
+          return
+        }
+
+        const result = processPhases(accumulated, stopReason)
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(result)}\n\n`))
+        controller.close()
+      }
+    })
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'X-Accel-Buffering': 'no',
+      },
+    })
   } catch (err) {
     console.error('Generate phases error:', err)
     return NextResponse.json({ error: 'Failed to generate phases' }, { status: 500 })
