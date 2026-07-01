@@ -170,8 +170,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setCurrentMember(member)
           setIsOwner(false)
           setPermissions(member.permissions || FULL_PERMISSIONS)
-          // Update last_active_at
-          await supabase.from('team_members')
+          // fire-and-forget — don't block the data load
+          supabase.from('team_members')
             .update({ last_active_at: new Date().toISOString() })
             .eq('id', memberRow.id)
         } else {
@@ -186,7 +186,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       } catch { /* phase10.sql not run yet — single-user mode */ }
 
-      const [jobsRes, quotesRes, clientsRes, settingsRes, ganttRes, invoicesRes, notesRes, variationsRes, suppliersRes, billsRes, paymentsRes] = await Promise.all([
+      const [jobsRes, quotesRes, clientsRes, settingsRes, ganttRes, invoicesRes, notesRes, variationsRes, billsRes, paymentsRes, portalStatusRes, templatesRes] = await Promise.all([
         supabase.from('jobs').select('*').order('created_at', { ascending: true }),
         supabase.from('quotes').select('*').order('created_at', { ascending: true }),
         supabase.from('clients').select('*').order('created_at', { ascending: true }),
@@ -195,21 +195,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         supabase.from('invoices').select('*').order('created_at', { ascending: false }),
         supabase.from('job_notes').select('*').order('created_at', { ascending: true }),
         supabase.from('variations').select('*').order('created_at', { ascending: true }),
-        supabase.from('clients').select('*').eq('user_id', resolvedOwnerId).in('client_type', ['supplier', 'subcontractor']).order('name', { ascending: true }),
         supabase.from('bills').select('*').order('created_at', { ascending: false }),
         (async () => { try { return await supabase.from('job_payments').select('*').order('payment_date', { ascending: false }) } catch { return { data: null } } })(),
+        (async () => { try { return await supabase.rpc('get_clients_with_portal_status') } catch { return { data: null } } })(),
+        (async () => { try { return await supabase.from('job_type_templates').select('*') } catch { return { data: null } } })(),
       ])
 
-      // Separately try to get portal status — only available after phase5.sql is run
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let portalStatusMap: Record<string, any> = {}
-      try {
-        const { data: statusData } = await supabase.rpc('get_clients_with_portal_status')
-        if (Array.isArray(statusData)) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          statusData.forEach((r: any) => { portalStatusMap[r.id] = r })
-        }
-      } catch { /* phase5.sql not run yet — portal status stays as defaults */ }
+      const portalStatusMap: Record<string, any> = {}
+      if (Array.isArray(portalStatusRes?.data)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(portalStatusRes.data as any[]).forEach((r: any) => { portalStatusMap[r.id] = r })
+      }
 
       if (jobsRes.data) {
         setJobs(jobsRes.data.map(r => ({
@@ -247,14 +244,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         })))
       }
 
-      if (suppliersRes.data) {
-        setSuppliers(suppliersRes.data.map(r => ({
-          id: r.id, name: r.name || '',
-          contactName: [r.first_name, r.last_name].filter(Boolean).join(' '),
-          phone: r.phone || '', email: r.email || '', address: r.address || '',
-          notes: r.notes || '', accountNumber: r.account_number || '', addedFrom: r.added_from || '',
-          xeroContactId: r.xero_contact_id || null,
-        })))
+      if (clientsRes.data) {
+        setSuppliers(clientsRes.data
+          .filter(r => ['supplier', 'subcontractor'].includes(r.client_type))
+          .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+          .map(r => ({
+            id: r.id, name: r.name || '',
+            contactName: [r.first_name, r.last_name].filter(Boolean).join(' '),
+            phone: r.phone || '', email: r.email || '', address: r.address || '',
+            notes: r.notes || '', accountNumber: r.account_number || '', addedFrom: r.added_from || '',
+            xeroContactId: r.xero_contact_id || null,
+          })))
       }
 
       if (settingsRes.data) {
@@ -348,16 +348,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         })))
       }
 
-      // Load custom job type templates — only available after phase6.sql is run
-      try {
-        const { data: tplData } = await supabase.from('job_type_templates').select('*')
-        if (Array.isArray(tplData)) {
-          const map: Record<string, TemplatePhaseData[]> = {}
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          tplData.forEach((r: any) => { map[r.job_type] = r.template })
-          setCustomTemplates(map)
-        }
-      } catch { /* phase6.sql not run yet — use built-in templates */ }
+      if (Array.isArray(templatesRes?.data)) {
+        const map: Record<string, TemplatePhaseData[]> = {}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(templatesRes.data as any[]).forEach((r: any) => { map[r.job_type] = r.template })
+        setCustomTemplates(map)
+      }
 
       setLoading(false)
     }
