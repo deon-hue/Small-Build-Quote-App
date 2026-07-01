@@ -153,11 +153,15 @@ Once you understand the vision, fill in the technical gaps — but keep it conve
 
 EXTENSIONS:
 - Rough size: "Any sense of how far out you're thinking? Even a rough idea — like 3 or 4 metres?"
+- Storeys: "Single storey, or are you thinking two storeys to get a bedroom above as well?"
+- Ceiling height: "Standard ceiling height is around 2.4 metres — some clients go taller for that light airy feel. Any preference?"
+- Wall finish: "Would you want the outside walls to match the existing brickwork, or are you open to render or cladding?"
 - Roof: "Flat roof with a lantern, or more of a pitched roof to match the house?"
 - Wall opening: "Would this open straight into the kitchen, or would there be a new opening to knock through?"
 - Glazing: "Bifolds, sliding doors, or more traditional French doors?"
 - Floor: "Are you thinking underfloor heating? Lots of our clients do it while the floors are up — well worth it."
 - Drainage: "Will there be a loo or utility in there, or is it purely living space?"
+- Planning: "Do you have planning permission sorted, or is this still at the ideas stage?"
 
 LOFT CONVERSIONS:
 - "Velux windows to keep it simple, or are you thinking a dormer to get more headroom?"
@@ -280,7 +284,7 @@ IMPORTANT: Never output [READY_TO_BUILD] without a complete [SCOPE] block. Only 
   }
 
   const model     = 'claude-sonnet-4-6'
-  const maxTokens = hasFiles ? 1200 : 1000
+  const maxTokens = hasFiles ? 1500 : 2000
 
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {

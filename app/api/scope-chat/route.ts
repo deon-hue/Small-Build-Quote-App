@@ -74,6 +74,13 @@ WHAT TO PROBE (only where relevant):
 
 EXTENSIONS (rear / side / kitchen / garden room):
 - Approximate footprint if not given — e.g. "roughly how wide and how far out?"
+- Storeys: single-storey or two-storey extension?
+- Wall height: standard ~2.4m ceiling, or taller (2.7m, 3m)? This affects block quantities and scaffolding.
+- Wall construction: cavity blockwork (standard UK), timber frame, ICF, or solid brick to match existing?
+- External finish: brick to match, render, timber cladding, or mixed?
+- Foundations: does the client have ground conditions info, or assume standard strip footings?
+- Party wall: is the property detached, semi-detached, or terraced? Party wall notice required?
+- Planning: permitted development or full planning permission already granted?
 - Roof type: flat GRP/EPDM, pitched tiles/slates, parapet roof, lantern or rooflight?
 - Opening to the house: knock-through existing wall? Steel beam / structural works?
 - Glazing: bifold doors, sliding doors, roof lanterns, standard windows?
@@ -176,7 +183,7 @@ IMPORTANT: Never output [READY_TO_BUILD] without a [SCOPE] block. Only generate 
 
   // ── Model selection ───────────────────────────────────────────────────────
   const model     = 'claude-sonnet-4-6'
-  const maxTokens = hasFiles ? 1000 : 1200  // extra tokens for scope generation
+  const maxTokens = hasFiles ? 1500 : 2000
 
   // ── Call Anthropic API ────────────────────────────────────────────────────
   try {
