@@ -50,6 +50,80 @@ interface Props {
   initialScope?: string
 }
 
+// ── Job-type opening questions ────────────────────────────────────────────────
+const OPENING_QUESTIONS: Record<string, string[]> = {
+  'Rear Extension': [
+    'Approximate footprint? (e.g. 4m wide × 5m deep)',
+    'Single storey or two storey?',
+    'Wall construction: standard cavity blockwork, timber frame, or ICF?',
+    'External finish: brick to match, render, cladding, or mixed?',
+    'Roof: flat GRP/EPDM or pitched to match the house?',
+    'Knock-through to existing house — new steel beam required?',
+  ],
+  'Side Extension': [
+    'Approximate footprint? (e.g. 4m wide × 8m long)',
+    'Single storey or two storey?',
+    'Flat roof or pitched to match the house?',
+    'Knock-through / new opening into existing house required?',
+    'Party wall situation — semi-detached or terraced?',
+  ],
+  'Loft Conversion': [
+    'Type: Velux-only, rear dormer, L-dormer, hip-to-gable, or mansard?',
+    'Number of rooms / bedrooms required up there?',
+    'En-suite or bathroom needed in the loft?',
+    'New staircase, or reusing existing loft hatch / stairs?',
+    'Party wall notice required — semi-detached or terraced?',
+  ],
+  'Full Refurbishment': [
+    'Whole house or specific floors / areas only?',
+    'Full strip-back to structure, or cosmetic refurb?',
+    'Any structural changes — walls out, new openings, RSJs?',
+    'Kitchen replacement included? How many bathrooms?',
+    'Rewire and/or full replumb required?',
+  ],
+  'Kitchen Extension': [
+    'Approximate extension footprint? (e.g. 4m × 5m)',
+    'Flat roof or pitched?',
+    'New kitchen going in, or extension shell only?',
+    'Knock-through to existing house — new steel required?',
+    'Underfloor heating in the extension?',
+  ],
+  'Kitchen Fit-Out': [
+    'Supply and fit, or fit-only (client supplying the kitchen)?',
+    'Approximate kitchen area (m²)?',
+    'Any structural works — walls out, new openings?',
+    'New plumbing first fix, or reusing existing positions?',
+    'Appliances included in the contract?',
+  ],
+  'Bathroom Fit-Out': [
+    'How many bathrooms? (e.g. main bathroom + en-suite)',
+    'Supply and fit, or fit-only?',
+    'Same layout or moving sanitaryware positions?',
+    'New partition walls or doorways required?',
+    'Any tanking / wet room waterproofing?',
+  ],
+  'Garden Room': [
+    'Approximate footprint?',
+    'Construction: timber frame, SIP panels, or masonry?',
+    'Intended use — home office, gym, studio, or entertaining space?',
+    'Power, lighting, heating, and data required?',
+    'Base type: concrete slab, piled, or existing hardstanding?',
+  ],
+  'Landscaping': [
+    'Approximate area, and which parts of the garden? (front / rear / side)',
+    'Main scope: paving, decking, fencing, planting, drainage — or a mix?',
+    'Existing hard landscaping to break out first?',
+    'Design / plan already available, or does that need to be included?',
+  ],
+  'New Build': [
+    'Number of plots / units?',
+    'Approximate GIA per unit (m²)?',
+    'Build system: traditional masonry, timber frame, or SIP?',
+    'Planning granted, and are full working drawings / engineer spec available?',
+    'Site clearance / demolition required first?',
+  ],
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function parseMessage(text: string): { scope: string | null; commentary: string; readyToBuild: boolean } {
@@ -181,12 +255,16 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
       setMessages([{ role: 'assistant', content: greeting }])
     } else {
       // Fresh mode — no scope yet
+      const openingQs = OPENING_QUESTIONS[jobType]
+      const questionsBlock = openingQs
+        ? `\n\nTo build an accurate scope I need a few key details:\n\n${openingQs.map(q => `- ${q}`).join('\n')}\n\nJust answer what you know — I'll make sensible assumptions for anything you're not sure on. **📎 Attach plans or drawings** and I'll read them automatically.`
+        : `\n\nTell me about the project — main works, approximate size, any specific requirements. I'll ask targeted follow-up questions, then generate the scope.\n\n**📎 Attach plans or drawings** and I'll read them automatically.`
       const greeting = [
-        `Hi! I'll help you build a full cost estimate for this **${jobType}**${address ? ` at ${address}` : ''}.`,
+        `Let's build a scope for this **${jobType}**${address ? ` at ${address}` : ''}.`,
         phaseList
           ? `\nI can see you've already added ${phases.length} phase${phases.length > 1 ? 's' : ''}: ${phaseList}.`
           : '',
-        `\n\nTell me about the project — main works, approximate size, any specific requirements. I'll ask a few targeted follow-up questions, then generate a complete scope and cost breakdown.\n\n**📎 Attach plans or drawings** and I'll read them automatically.`,
+        questionsBlock,
       ].filter(Boolean).join('')
       setMessages([{ role: 'assistant', content: greeting }])
     }
