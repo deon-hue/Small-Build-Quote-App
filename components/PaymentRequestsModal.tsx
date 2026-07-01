@@ -22,6 +22,13 @@ const METHODS = ['Bank Transfer', 'Cash', 'Cheque', 'Card', 'Other']
 const fmt = (n: number) => `£${(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const today = () => new Date().toISOString().slice(0, 10)
 
+function toE164(phone: string): string {
+  const digits = phone.replace(/\D/g, '')
+  if (digits.startsWith('44')) return digits
+  if (digits.startsWith('0')) return '44' + digits.slice(1)
+  return digits
+}
+
 const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }> = {
   draft:     { bg: '#f3f4f6', color: '#6b7280', label: 'Draft' },
   sent:      { bg: '#fef9c3', color: '#92400e', label: 'Sent' },
@@ -71,6 +78,9 @@ export default function PaymentRequestsModal({ job, onClose }: Props) {
   const totalReceived  = requests.filter(r => r.status === 'received').reduce((s, r) => s + Number(r.amount), 0)
   const totalSent      = requests.filter(r => r.status === 'sent').reduce((s, r) => s + Number(r.amount), 0)
 
+  const clientContact = clients.find(c => c.name.toLowerCase().trim() === (job.client ?? '').toLowerCase().trim())
+  const clientPhone   = toE164(clientContact?.phone ?? '')
+
   async function createRequest() {
     if (!amount || Number(amount) <= 0) { setError('Enter an amount'); return }
     if (!description.trim()) { setError('Enter a description'); return }
@@ -87,8 +97,6 @@ export default function PaymentRequestsModal({ job, onClose }: Props) {
   }
 
   async function sendRequest(req: PaymentRequest) {
-    // Build mailto: link
-    const clientContact = clients.find(c => c.name.toLowerCase().trim() === (job.client ?? '').toLowerCase().trim())
     const to = clientContact?.email ?? ''
     const subject = encodeURIComponent(`Payment Request — ${job.type ?? 'Works'} at ${job.address ?? ''}`)
     const dueStr = req.due_date ? ` by ${new Date(req.due_date).toLocaleDateString('en-GB')}` : ''
@@ -101,6 +109,19 @@ export default function PaymentRequestsModal({ job, onClose }: Props) {
     window.location.href = `mailto:${to}?subject=${subject}&body=${body}`
 
     // Mark as sent
+    await sb.from('payment_requests').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', req.id)
+    await load()
+  }
+
+  async function sendWhatsApp(req: PaymentRequest) {
+    const dueStr = req.due_date ? ` by ${new Date(req.due_date).toLocaleDateString('en-GB')}` : ''
+    const message = encodeURIComponent(
+      `Hi ${job.client ?? ''},\n\nPayment request for works at ${job.address ?? 'your property'}:\n\n` +
+      `${req.description}\nAmount: ${fmt(Number(req.amount))}${dueStr}\n\n` +
+      `${req.notes ? `${req.notes}\n\n` : ''}` +
+      `Please arrange payment at your earliest convenience.\n\nThank you`
+    )
+    window.open(`https://wa.me/${clientPhone}?text=${message}`, '_blank')
     await sb.from('payment_requests').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', req.id)
     await load()
   }
@@ -266,8 +287,14 @@ export default function PaymentRequestsModal({ job, onClose }: Props) {
                         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                           <button onClick={() => sendRequest(r)}
                             style={{ fontSize: 12, padding: '5px 10px', background: '#fef9c3', color: '#92400e', border: '1px solid #fde68a', borderRadius: 5, cursor: 'pointer', fontWeight: 600 }}>
-                            {r.status === 'sent' ? '↩ Resend' : '📤 Send'}
+                            {r.status === 'sent' ? '↩ Email' : '📧 Email'}
                           </button>
+                          {clientPhone && (
+                            <button onClick={() => sendWhatsApp(r)}
+                              style={{ fontSize: 12, padding: '5px 10px', background: '#e7f9ef', color: '#128c7e', border: '1px solid #25d366', borderRadius: 5, cursor: 'pointer', fontWeight: 600 }}>
+                              {r.status === 'sent' ? '↩ WA' : '💬 WA'}
+                            </button>
+                          )}
                           {r.status === 'sent' && (
                             <button onClick={() => { setReceivingId(r.id); setRecDate(today()); setRecNotes('') }}
                               style={{ fontSize: 12, padding: '5px 10px', background: '#dcfce7', color: '#15803d', border: '1px solid #86efac', borderRadius: 5, cursor: 'pointer', fontWeight: 600 }}>

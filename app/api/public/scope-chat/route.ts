@@ -279,7 +279,7 @@ IMPORTANT: Never output [READY_TO_BUILD] without a complete [SCOPE] block. Only 
     apiMessages = messages || []
   }
 
-  const model     = hasFiles ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001'
+  const model     = 'claude-sonnet-4-6'
   const maxTokens = hasFiles ? 1200 : 1000
 
   try {

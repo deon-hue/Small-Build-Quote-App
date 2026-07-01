@@ -175,8 +175,7 @@ IMPORTANT: Never output [READY_TO_BUILD] without a [SCOPE] block. Only generate 
   }
 
   // ── Model selection ───────────────────────────────────────────────────────
-  // Sonnet 4.6 for document/image analysis; Haiku 4.5 for text-only interview (fast + cheap).
-  const model     = hasFiles ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001'
+  const model     = 'claude-sonnet-4-6'
   const maxTokens = hasFiles ? 1000 : 1200  // extra tokens for scope generation
 
   // ── Call Anthropic API ────────────────────────────────────────────────────
