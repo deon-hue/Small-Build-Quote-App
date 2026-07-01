@@ -149,7 +149,6 @@ Generate a full phase cost breakdown scaled to this scope.`
         system,
         messages: [
           { role: 'user', content: userMessage },
-          { role: 'assistant', content: '{' },
         ],
       }),
     })

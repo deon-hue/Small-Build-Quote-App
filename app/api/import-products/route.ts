@@ -157,7 +157,6 @@ Waste % should reflect realistic ordering waste (5-15% typical).`
         system,
         messages: [
           { role: 'user', content: user_msg },
-          { role: 'assistant', content: '{' },
         ],
       }),
     })

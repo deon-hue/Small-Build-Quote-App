@@ -300,7 +300,7 @@ Generate a full phase cost breakdown. Use the Back Office default rates provided
   // Process accumulated Anthropic text into the final phases result (called once stream ends)
   function processPhases(accumulated: string, stopReason: string) {
     const truncated = stopReason === 'max_tokens'
-    let jsonStr = ('{' + accumulated).trim()
+    let jsonStr = accumulated.trim()
     const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
     if (fenceMatch) jsonStr = fenceMatch[1].trim()
     if (!jsonStr.startsWith('{')) {
@@ -361,7 +361,6 @@ Generate a full phase cost breakdown. Use the Back Office default rates provided
         system,
         messages: [
           { role: 'user', content: userMessage },
-          { role: 'assistant', content: '{' }, // prefill — forces pure JSON
         ],
       }),
     })

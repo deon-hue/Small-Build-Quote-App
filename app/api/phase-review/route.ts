@@ -130,7 +130,6 @@ Limit to the most important 3-5 gaps and 2-3 suggestions. Be specific to the tra
         system,
         messages: [
           { role: 'user',      content: user_msg },
-          { role: 'assistant', content: '{' },
         ],
       }),
     })

@@ -292,7 +292,6 @@ Analyse the scope and select appropriate phases and tasks from the library.`
         system,
         messages: [
           { role: 'user', content: userMessage },
-          { role: 'assistant', content: '{' },  // prefill — forces pure JSON
         ],
       }),
     })
