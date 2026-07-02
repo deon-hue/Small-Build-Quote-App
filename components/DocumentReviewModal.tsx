@@ -55,6 +55,7 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
   const [docDate, setDocDate] = useState(String((ex as Record<string, unknown>).docDate ?? ''))
   const [docNumber, setDocNumber] = useState(String((ex as Record<string, unknown>).docNumber ?? ''))
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>(((ex as Record<string, unknown>).paymentStatus as PaymentStatus) || 'unknown')
+  const [dueDate, setDueDate] = useState(String((ex as Record<string, unknown>).dueDate ?? ''))
   const [lines, setLines] = useState<ExtractedCostLine[]>(() => initialLines(ex))
   const [jobId, setJobId] = useState(doc.jobId ?? '')
   const [busy, setBusy] = useState(false)
@@ -192,7 +193,7 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
       supplierId: supplierId || '', supplierName: supplier || doc.fileName,
       jobId: jobId || '',
       billDate: docDate || new Date().toISOString().split('T')[0],
-      dueDate: '',
+      dueDate: dueDate || '',
       description: docNumber ? `Invoice ${docNumber}` : supplier || 'Subcontractor invoice',
       lineItems: billLines,
       labourAmount: labour, materialsAmount: materials, plantAmount: plant, otherAmount: other,
@@ -321,6 +322,12 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
                 <select style={inp} value={paymentStatus} onChange={e => setPaymentStatus(e.target.value as PaymentStatus)}>
                   {PAYMENTS.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
+                {(paymentStatus === 'unpaid' || paymentStatus === 'partial') && (
+                  <div style={{ marginTop: 4 }}>
+                    <label style={{ display: 'block', fontSize: 10, fontWeight: 600, color: '#64748b', marginBottom: 3 }}>Due date</label>
+                    <input type="date" style={inp} value={dueDate} onChange={e => setDueDate(e.target.value)} />
+                  </div>
+                )}
               </Field>
             </div>
 
