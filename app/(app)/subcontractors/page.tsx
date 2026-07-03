@@ -57,6 +57,8 @@ export default function SubcontractorsPage() {
   const [saving, setSaving] = useState(false)
   const [xeroPushing, setXeroPushing] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [portalInviting, setPortalInviting] = useState<string | null>(null)
+  const [portalInviteSent, setPortalInviteSent] = useState<Set<string>>(new Set())
 
   // Filters
   const [search, setSearch] = useState('')
@@ -83,6 +85,23 @@ export default function SubcontractorsPage() {
   const [stageContractId, setStageContractId] = useState('')
   const [editingStage, setEditingStage] = useState<PaymentStage | null>(null)
   const [stageForm, setStageForm] = useState(emptyStage)
+
+  async function sendPortalInvite(contractId: string, contactId: string | null) {
+    const contact = clients.find(c => c.id === contactId)
+    if (!contact?.email) { alert(`This subcontractor has no email address on file. Add one on the Contacts page first.`); return }
+    setPortalInviting(contractId)
+    try {
+      const { error: otpErr } = await sb.auth.signInWithOtp({
+        email: contact.email,
+        options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=/sub-portal` },
+      })
+      if (otpErr) { alert(`Failed to send invite: ${otpErr.message}`); return }
+      await sb.rpc('mark_sub_portal_invite', { p_client_id: contactId })
+      setPortalInviteSent(prev => new Set(prev).add(contractId))
+    } finally {
+      setPortalInviting(null)
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -440,6 +459,14 @@ export default function SubcontractorsPage() {
               </span>
 
               <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
+                <button
+                  title="Send subcontractor portal invite"
+                  disabled={portalInviting === c.id}
+                  onClick={() => sendPortalInvite(c.id, c.contact_id)}
+                  style={{ fontSize: 11, padding: '3px 8px', border: '1px solid #d1d5db', borderRadius: 5, background: portalInviteSent.has(c.id) ? '#dcfce7' : '#fff', color: portalInviteSent.has(c.id) ? '#16a34a' : '#374151', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  {portalInviting === c.id ? '…' : portalInviteSent.has(c.id) ? '✓ Invited' : '🔗 Portal'}
+                </button>
                 {btn('Edit', () => openEditContract(c), 'ghost', true)}
                 {btn('Del', () => deleteContract(c.id), 'danger', true)}
               </div>
