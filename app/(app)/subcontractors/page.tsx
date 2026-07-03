@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useApp } from '@/contexts/AppContext'
 import { ContactPicker } from '@/components/ContactPicker'
-import { signedDocUrl } from '@/lib/job-costs'
+import { signedDocUrl, insertJobCost } from '@/lib/job-costs'
 
 interface Contract {
   id: string
@@ -27,6 +27,12 @@ interface TimeEntry {
   entry_date: string
   units: number
   notes: string
+  status: string
+  submitted_by: string
+  admin_notes: string | null
+  start_time: string | null
+  finish_time: string | null
+  break_mins: number
   created_at: string
 }
 
@@ -59,6 +65,11 @@ export default function SubcontractorsPage() {
   const [error, setError] = useState('')
   const [portalInviting, setPortalInviting] = useState<string | null>(null)
   const [portalInviteSent, setPortalInviteSent] = useState<Set<string>>(new Set())
+
+  // Timesheet approval
+  const [approvingEntry, setApprovingEntry] = useState<string | null>(null)
+  const [entryNotes, setEntryNotes] = useState<Record<string, string>>({})  // entryId → notes input
+  const [notesOpen, setNotesOpen] = useState<Set<string>>(new Set())        // entries with notes input open
 
   // Filters
   const [search, setSearch] = useState('')
@@ -102,6 +113,46 @@ export default function SubcontractorsPage() {
       setPortalInviting(null)
     }
   }
+
+  async function approveEntry(entry: TimeEntry, contract: Contract) {
+    setApprovingEntry(entry.id)
+    try {
+      const { data: { user } } = await sb.auth.getUser()
+      if (!user) return
+      await sb.from('sub_time_entries').update({ status: 'approved', admin_notes: null }).eq('id', entry.id)
+      // Create job cost if contract has a job
+      if (contract.job_id) {
+        const amount = Number(entry.units) * (contract.rate_amount ?? 0)
+        await insertJobCost(sb, user.id, {
+          jobId: contract.job_id,
+          source: 'timesheet',
+          costCategory: 'subcontractors',
+          supplier: contactName(contract.contact_id),
+          description: entry.notes || `${contractLabel(contract)} — ${entry.entry_date}`,
+          docDate: entry.entry_date,
+          docNumber: '',
+          netAmount: amount,
+          vatAmount: 0,
+          grossAmount: amount,
+          paymentStatus: 'unpaid',
+          chargeToClient: false,
+        })
+      }
+      await load()
+    } finally {
+      setApprovingEntry(null)
+    }
+  }
+
+  async function updateEntryStatus(entryId: string, status: 'queried' | 'rejected', notes: string) {
+    await sb.from('sub_time_entries').update({ status, admin_notes: notes || null }).eq('id', entryId)
+    setNotesOpen(prev => { const n = new Set(prev); n.delete(entryId); return n })
+    setEntryNotes(prev => { const n = { ...prev }; delete n[entryId]; return n })
+    await load()
+  }
+
+  const contractLabel = (c: Contract) => c.description || (c.type === 'rate' ? `${c.rate_type} rate` : 'fixed price')
+  const toggleNotes = (id: string) => setNotesOpen(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -477,6 +528,72 @@ export default function SubcontractorsPage() {
               <div style={{ borderTop: '1px solid #f3f4f6', padding: '14px 16px', background: '#fafafa' }}>
                 {c.type === 'rate' ? (
                   <>
+                    {/* ── Pending Review section ────────────────────────── */}
+                    {(() => {
+                      const pending = entries.filter(e => e.status === 'submitted')
+                      if (!pending.length) return null
+                      return (
+                        <div style={{ marginBottom: 14, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 12px' }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#92400e', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            ⏳ Pending Review ({pending.length})
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {pending.map(e => (
+                              <div key={e.id} style={{ background: '#fff', border: '1px solid #fde68a', borderRadius: 6, padding: '8px 10px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                                  <span style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>{e.entry_date}</span>
+                                  <span style={{ fontSize: 12, color: '#111827', fontWeight: 700 }}>{e.units} {rateLabel}</span>
+                                  <span style={{ fontSize: 12, color: '#111827' }}>= {fmt(Number(e.units) * (c.rate_amount ?? 0))}</span>
+                                  {e.start_time && e.finish_time && (
+                                    <span style={{ fontSize: 11, color: '#9ca3af' }}>{e.start_time.slice(0,5)}–{e.finish_time.slice(0,5)}{e.break_mins > 0 ? ` (${e.break_mins}min break)` : ''}</span>
+                                  )}
+                                </div>
+                                {e.notes && <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6 }}>{e.notes}</div>}
+                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                                  <button
+                                    disabled={approvingEntry === e.id}
+                                    onClick={() => approveEntry(e, c)}
+                                    style={{ fontSize: 11, padding: '3px 10px', background: '#dcfce7', color: '#16a34a', border: '1px solid #86efac', borderRadius: 5, cursor: 'pointer', fontWeight: 600, opacity: approvingEntry === e.id ? 0.5 : 1 }}
+                                  >
+                                    {approvingEntry === e.id ? '…' : '✓ Approve'}
+                                  </button>
+                                  <button
+                                    onClick={() => toggleNotes(e.id)}
+                                    style={{ fontSize: 11, padding: '3px 10px', background: '#ffedd5', color: '#9a3412', border: '1px solid #fdba74', borderRadius: 5, cursor: 'pointer', fontWeight: 600 }}
+                                  >
+                                    💬 Query
+                                  </button>
+                                  <button
+                                    onClick={() => updateEntryStatus(e.id, 'rejected', entryNotes[e.id] ?? '')}
+                                    style={{ fontSize: 11, padding: '3px 10px', background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 5, cursor: 'pointer', fontWeight: 600 }}
+                                  >
+                                    ✕ Reject
+                                  </button>
+                                </div>
+                                {notesOpen.has(e.id) && (
+                                  <div style={{ marginTop: 6, display: 'flex', gap: 6 }}>
+                                    <input
+                                      value={entryNotes[e.id] ?? ''}
+                                      onChange={ev => setEntryNotes(prev => ({ ...prev, [e.id]: ev.target.value }))}
+                                      placeholder="Message to subcontractor…"
+                                      style={{ flex: 1, padding: '5px 8px', border: '1px solid #d1d5db', borderRadius: 5, fontSize: 12 }}
+                                      onKeyDown={ev => { if (ev.key === 'Enter') updateEntryStatus(e.id, 'queried', entryNotes[e.id] ?? '') }}
+                                    />
+                                    <button
+                                      onClick={() => updateEntryStatus(e.id, 'queried', entryNotes[e.id] ?? '')}
+                                      style={{ fontSize: 11, padding: '5px 10px', background: '#ffedd5', color: '#9a3412', border: '1px solid #fdba74', borderRadius: 5, cursor: 'pointer', fontWeight: 600 }}
+                                    >
+                                      Send
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })()}
+
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                       <div style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>Time Entries ({c.rate_type === 'hourly' ? 'hours' : 'days'})</div>
                       <button onClick={() => openNewEntry(c.id)} style={{ fontSize: 11, padding: '4px 10px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: 5, cursor: 'pointer' }}>+ Log Time</button>
@@ -490,16 +607,25 @@ export default function SubcontractorsPage() {
                             <th style={{ textAlign: 'right', padding: '4px 8px', fontWeight: 500 }}>Units</th>
                             <th style={{ textAlign: 'right', padding: '4px 8px', fontWeight: 500 }}>Amount</th>
                             <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 500 }}>Notes</th>
+                            <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 500 }}>Status</th>
                             <th style={{ padding: '4px 4px' }}></th>
                           </tr>
                         </thead>
                         <tbody>
-                          {entries.map(e => (
-                            <tr key={e.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                          {entries.filter(e => e.status !== 'submitted').map(e => (
+                            <tr key={e.id} style={{ borderBottom: '1px solid #f3f4f6', background: e.status === 'rejected' ? '#fff5f5' : 'transparent' }}>
                               <td style={{ padding: '5px 8px' }}>{e.entry_date}</td>
                               <td style={{ padding: '5px 8px', textAlign: 'right' }}>{e.units} {rateLabel}</td>
                               <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 500 }}>{fmt(Number(e.units) * (c.rate_amount ?? 0))}</td>
-                              <td style={{ padding: '5px 8px', color: '#6b7280' }}>{e.notes}</td>
+                              <td style={{ padding: '5px 8px', color: '#6b7280' }}>
+                                {e.notes}
+                                {e.admin_notes && <div style={{ fontSize: 10, color: '#9a3412', marginTop: 2 }}>💬 {e.admin_notes}</div>}
+                              </td>
+                              <td style={{ padding: '5px 8px' }}>
+                                {e.submitted_by === 'subcontractor'
+                                  ? <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 9, background: e.status === 'approved' ? '#dcfce7' : e.status === 'rejected' ? '#fee2e2' : '#f1f5f9', color: e.status === 'approved' ? '#16a34a' : e.status === 'rejected' ? '#dc2626' : '#64748b', fontWeight: 600 }}>{e.status}</span>
+                                  : null}
+                              </td>
                               <td style={{ padding: '5px 4px' }}>
                                 <button onClick={() => deleteEntry(e.id)} style={{ fontSize: 10, padding: '2px 6px', background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 4, cursor: 'pointer' }}>✕</button>
                               </td>

@@ -208,7 +208,7 @@ export interface JobCost {
   vatAmount: number
   grossAmount: number
   paymentStatus: PaymentStatus
-  source: 'document' | 'manual'
+  source: 'document' | 'manual' | 'timesheet'
   chargeToClient?: boolean
   createdAt?: string
 }
