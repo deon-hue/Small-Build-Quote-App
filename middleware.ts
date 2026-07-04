@@ -6,11 +6,13 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
   // Route classification
-  const isPortalRoute  = pathname.startsWith('/portal')
-  const isPortalLogin  = pathname === '/portal/login'
-  const isAdminLogin   = pathname === '/login'
-  const isTeamAccept   = pathname.startsWith('/team/accept')  // invite acceptance — no auth needed
-  const isPublicRoute  = pathname.startsWith('/get-quote')    // public client-facing pages — no auth needed
+  const isPortalRoute    = pathname.startsWith('/portal')
+  const isPortalLogin    = pathname === '/portal/login'
+  const isSubPortalRoute = pathname.startsWith('/sub-portal')
+  const isSubPortalLogin = pathname === '/sub-portal/login'
+  const isAdminLogin     = pathname === '/login'
+  const isTeamAccept     = pathname.startsWith('/team/accept')  // invite acceptance — no auth needed
+  const isPublicRoute    = pathname.startsWith('/get-quote')    // public client-facing pages — no auth needed
 
   let supabaseResponse = NextResponse.next({ request })
 
@@ -40,6 +42,14 @@ export async function middleware(request: NextRequest) {
     }
     if (user && isPortalLogin) {
       return NextResponse.redirect(new URL('/portal', request.url))
+    }
+  } else if (isSubPortalRoute) {
+    // Sub-portal routes: unauthenticated → /sub-portal/login; logged-in on login page → /sub-portal
+    if (!user && !isSubPortalLogin) {
+      return NextResponse.redirect(new URL('/sub-portal/login', request.url))
+    }
+    if (user && isSubPortalLogin) {
+      return NextResponse.redirect(new URL('/sub-portal', request.url))
     }
   } else if (isTeamAccept || isPublicRoute) {
     // Public / invite pages: always pass through — no auth required
