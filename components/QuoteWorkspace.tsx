@@ -52,7 +52,8 @@ const CARD_META: Record<ItemType, { icon: string; label: string; accent: string;
 
 function itemCost(i: QuoteItem): number {
   if (i.enabled === false) return 0
-  return (i.labour ?? 0) + (i.materials ?? 0) + (i.plantHire ?? 0) + (i.subcontractors ?? 0) + (i.other ?? 0)
+  const base = (i.labour ?? 0) + (i.materials ?? 0) + (i.plantHire ?? 0) + (i.subcontractors ?? 0) + (i.other ?? 0)
+  return base * Math.max(i.qty ?? 1, 1)
 }
 function phaseSell(p: QuotePhase, markup: number): number {
   return calcPhaseSell(p, markup)
@@ -167,7 +168,7 @@ function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst, lab
   const cs       = TYPE_COLOR[cat]
   const enabled  = item.enabled !== false   // default true
   const cost     = itemCost(item)           // returns 0 when disabled
-  const rawCost  = (item.labour ?? 0) + (item.materials ?? 0) + (item.plantHire ?? 0) + (item.subcontractors ?? 0) + (item.other ?? 0)
+  const rawCost  = ((item.labour ?? 0) + (item.materials ?? 0) + (item.plantHire ?? 0) + (item.subcontractors ?? 0) + (item.other ?? 0)) * Math.max(item.qty ?? 1, 1)
   const isLabour = cat === 'labour'
 
   // Labour picker state (local — doesn't need to persist)
