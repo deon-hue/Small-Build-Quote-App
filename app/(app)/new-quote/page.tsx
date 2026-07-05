@@ -21,8 +21,8 @@ import { DEFAULT_DEMO_SUBPHASES, calcDemoSellingPrice, DEMO_UNIT_LABELS, type De
 import { ALL_PHASE_SUBPHASES, calcPhaseTaskSellingPrice } from '@/lib/phase-tasks'
 import { sumByCategory } from '@/lib/material-recipes'
 import { createClient } from '@/lib/supabase/client'
-import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchQuoteDefaults, fetchAllQuoteDefaults, upsertTask, fetchLabourTrades, fetchProducts, fetchPlantItems } from '@/lib/back-office-queries'
-import type { BOLabourTrade, BOProduct, BOPlantItem } from '@/lib/back-office-types'
+import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchQuoteDefaults, fetchAllQuoteDefaults, upsertTask, fetchLabourTrades, fetchProducts, fetchPlantItems, fetchPhases, fetchSubPhases } from '@/lib/back-office-queries'
+import type { BOLabourTrade, BOProduct, BOPlantItem, BOPhase, BOSubPhase } from '@/lib/back-office-types'
 import type { FloorMakeup } from '@/lib/takeoff-types'
 
 let phaseCounter = 0
@@ -130,6 +130,8 @@ export default function NewQuotePage() {
   const [labourTrades,  setLabourTrades]  = useState<BOLabourTrade[]>([])
   const [boProducts,    setBoProducts]    = useState<BOProduct[]>([])
   const [boPlantItems,  setBoPlantItems]  = useState<BOPlantItem[]>([])
+  const [boPhases,      setBoPhases]      = useState<BOPhase[]>([])
+  const [boSubPhases,   setBoSubPhases]   = useState<BOSubPhase[]>([])
   const [showLibrary,   setShowLibrary]   = useState(false)
   const [libraryData,   setLibraryData]   = useState<Awaited<ReturnType<typeof fetchAllQuoteDefaults>>>([])
   const [libraryLoading, setLibraryLoading] = useState(false)
@@ -160,6 +162,8 @@ export default function NewQuotePage() {
       fetchLabourTrades(sb, data.user.id).then(trades => setLabourTrades(trades.filter(t => t.active)))
       fetchProducts(sb, data.user.id).then(prods => setBoProducts(prods.filter(p => p.active)))
       fetchPlantItems(sb, data.user.id).then(items => setBoPlantItems(items.filter(i => i.active)))
+      fetchPhases(sb, data.user.id).then(ps => setBoPhases(ps.filter(p => p.active)))
+      fetchSubPhases(sb, data.user.id).then(sp => setBoSubPhases(sp.filter(s => s.active)))
     })
   }, [])
 
@@ -1828,6 +1832,8 @@ export default function NewQuotePage() {
                 labourTrades={labourTrades}
                 boProducts={boProducts}
                 boPlantItems={boPlantItems}
+                boPhases={boPhases}
+                boSubPhases={boSubPhases}
                 quoteSource={quoteSource ?? undefined}
                 onOpenLibrary={openLibrary}
               />

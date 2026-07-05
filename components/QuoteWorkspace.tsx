@@ -15,7 +15,7 @@
 
 import React, { useState, useCallback } from 'react'
 import type { QuotePhase, QuoteItem, QuoteProduct, QuotePlantItem } from '@/lib/types'
-import type { BOLabourTrade, BOProduct, BOPlantItem } from '@/lib/back-office-types'
+import type { BOLabourTrade, BOProduct, BOPlantItem, BOPhase, BOSubPhase } from '@/lib/back-office-types'
 import { fmt, calcPhase, calcPhaseSell } from '@/lib/utils'
 import ProductPicker      from '@/components/ProductPicker'
 import PlantPicker        from '@/components/PlantPicker'
@@ -1624,15 +1624,21 @@ export interface QuoteWorkspaceProps {
   boProducts?:       BOProduct[]
   /** Back Office plant items — used in the plant picker */
   boPlantItems?:     BOPlantItem[]
+  /** Back Office phases — for sub-phase picker grouping */
+  boPhases?:         BOPhase[]
+  /** Back Office sub-phases — shown in the sub-phase picker when adding */
+  boSubPhases?:      BOSubPhase[]
   /** How the quote was created — drives empty-state messaging */
   quoteSource?:      'takeoff' | 'ai' | 'manual' | 'quick'
   /** Opens the BO library picker modal */
   onOpenLibrary?:    () => void
 }
 
-export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked = false, onChange, onAIGenerate, aiGenerating, onLoadTemplate, jobType, onSaveToBO, labourTrades = [], boProducts = [], boPlantItems = [], quoteSource, onOpenLibrary }: QuoteWorkspaceProps) {
+export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked = false, onChange, onAIGenerate, aiGenerating, onLoadTemplate, jobType, onSaveToBO, labourTrades = [], boProducts = [], boPlantItems = [], boPhases = [], boSubPhases = [], quoteSource, onOpenLibrary }: QuoteWorkspaceProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [search,    setSearch]    = useState('')
+  const [subPhasePicker, setSubPhasePicker] = useState<{ mainPhase: string; room: string } | null>(null)
+  const [pickerSearch, setPickerSearch]     = useState('')
 
   const toggle = useCallback((k: string) => {
     setCollapsed(prev => {
@@ -1672,10 +1678,20 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
     onChange(next)
   }
   function addSubPhase(mainPhase: string, room: string) {
+    if (boSubPhases.length > 0) {
+      setPickerSearch('')
+      setSubPhasePicker({ mainPhase, room })
+    } else {
+      createSubPhase(mainPhase, room, 'New Sub-Phase', undefined)
+    }
+  }
+
+  function createSubPhase(mainPhase: string, room: string, name: string, boSubPhaseId: string | undefined) {
     const newPhase: QuotePhase = {
-      id: uid(), phase: 'New Sub-Phase', parentPhase: mainPhase,
+      id: uid(), phase: name, parentPhase: mainPhase,
       roomLabel: room || undefined,
       source: 'manual', itemStatus: 'manual',
+      boSubPhaseId,
       items: [
         { id: uid(), desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'labour' },
         { id: uid(), desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials' },
@@ -1686,6 +1702,7 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
       estimatorItems: [], useEstimator: false,
     }
     onChange([...phases, newPhase])
+    setSubPhasePicker(null)
   }
   function addRoom(mainPhase: string) {
     addSubPhase(mainPhase, 'New Room')
@@ -1883,6 +1900,77 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
           <div style={{ fontSize: 12, color: '#64748b' }}>Sell (ex-VAT): <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{fmt(grandSell)}</span></div>
           {vatOn && <div style={{ fontSize: 12, color: '#64748b' }}>VAT: <span style={{ fontFamily: 'monospace', color: '#4a90a4' }}>{fmt(grandVat)}</span></div>}
           <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'monospace', color: '#7ab533' }}>Total: {fmt(grandTotal)}</div>
+        </div>
+      )}
+
+      {/* ── Sub-phase picker modal ──────────────────────────────────────────── */}
+      {subPhasePicker && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          onClick={() => setSubPhasePicker(null)}>
+          <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 480, maxHeight: '70vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ padding: '16px 18px', borderBottom: '1px solid #e2e8f0' }}>
+              <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 10 }}>Add Sub-Phase</div>
+              <input
+                autoFocus
+                value={pickerSearch}
+                onChange={e => setPickerSearch(e.target.value)}
+                placeholder="Search sub-phases…"
+                style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 7, fontSize: 13, boxSizing: 'border-box' }}
+              />
+            </div>
+            <div style={{ overflowY: 'auto', flex: 1, padding: '8px 0' }}>
+              {(() => {
+                const q = pickerSearch.toLowerCase()
+                const filtered = boSubPhases.filter(sp => !q || sp.name.toLowerCase().includes(q))
+                const grouped = boPhases
+                  .map(bp => ({ phase: bp, subs: filtered.filter(sp => sp.phase_id === bp.id) }))
+                  .filter(g => g.subs.length > 0)
+                // Also show sub-phases not matched to any known phase
+                const ungrouped = filtered.filter(sp => !boPhases.find(bp => bp.id === sp.phase_id))
+                return (
+                  <>
+                    {grouped.map(g => (
+                      <div key={g.phase.id}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', padding: '6px 16px 2px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{g.phase.name}</div>
+                        {g.subs.map(sp => (
+                          <button key={sp.id}
+                            onClick={() => createSubPhase(subPhasePicker.mainPhase, subPhasePicker.room, sp.name, sp.id)}
+                            style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 16px', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', color: '#1e293b' }}
+                            onMouseEnter={e => (e.currentTarget.style.background = '#f1f5f9')}
+                            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                          >
+                            {sp.name}
+                          </button>
+                        ))}
+                      </div>
+                    ))}
+                    {ungrouped.map(sp => (
+                      <button key={sp.id}
+                        onClick={() => createSubPhase(subPhasePicker.mainPhase, subPhasePicker.room, sp.name, sp.id)}
+                        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 16px', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', color: '#1e293b' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = '#f1f5f9')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                      >
+                        {sp.name}
+                      </button>
+                    ))}
+                    {filtered.length === 0 && (
+                      <div style={{ padding: '12px 16px', fontSize: 13, color: '#94a3b8' }}>No matches — use Custom below.</div>
+                    )}
+                  </>
+                )
+              })()}
+            </div>
+            <div style={{ borderTop: '1px solid #e2e8f0', padding: '10px 16px' }}>
+              <button
+                onClick={() => createSubPhase(subPhasePicker.mainPhase, subPhasePicker.room, pickerSearch.trim() || 'New Sub-Phase', undefined)}
+                style={{ width: '100%', padding: '9px', border: '1px dashed #d1d5db', borderRadius: 7, background: '#f8fafc', fontSize: 13, cursor: 'pointer', color: '#374151', textAlign: 'center' }}
+              >
+                + Custom{pickerSearch.trim() ? `: "${pickerSearch.trim()}"` : ' (blank)'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
