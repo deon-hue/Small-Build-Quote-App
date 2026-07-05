@@ -56,6 +56,8 @@ function ClientsPageInner() {
   const [saving, setSaving] = useState(false)
   const router = useRouter()
   const [filter, setFilter] = useState<'all' | 'client' | 'supplier' | 'subcontractor'>('all')
+  const BLANK_SUB_RATES = { subHourlyRate: '', subDayRate: '', subHalfDayRate: '', cisRegistered: false, cisPercentage: '', subPaymentType: 'invoice' }
+  const [formSubRates, setFormSubRates] = useState(BLANK_SUB_RATES)
 
 
   const portalBase = (typeof window !== 'undefined' ? window.location.origin : '') + '/portal/login'
@@ -100,6 +102,7 @@ function ClientsPageInner() {
     setEditingClient(null)
     setForm({ ...BLANK_FORM, clientType: filter === 'all' ? 'client' : filter })
     setFormPortalSettings(DEFAULT_CLIENT_PORTAL_SETTINGS)
+    setFormSubRates(BLANK_SUB_RATES)
     setShowForm(true)
   }
 
@@ -107,6 +110,14 @@ function ClientsPageInner() {
     setEditingClient(c)
     setForm({ name: c.name, first: c.first, last: c.last, email: c.email, phone: c.phone, address: c.address, notes: c.notes, paymentTerms: c.paymentTerms || 'Payment on receipt', clientType: c.clientType || 'client' })
     setFormPortalSettings({ ...DEFAULT_CLIENT_PORTAL_SETTINGS, ...(c.portalSettings || {}) })
+    setFormSubRates({
+      subHourlyRate: c.subHourlyRate?.toString() ?? '',
+      subDayRate: c.subDayRate?.toString() ?? '',
+      subHalfDayRate: c.subHalfDayRate?.toString() ?? '',
+      cisRegistered: c.cisRegistered ?? false,
+      cisPercentage: c.cisPercentage?.toString() ?? '',
+      subPaymentType: c.subPaymentType || 'invoice',
+    })
     setSelected(null)
     setShowForm(true)
   }
@@ -115,11 +126,19 @@ function ClientsPageInner() {
     if (!form.name.trim()) return
     setSaving(true)
     try {
+      const subRateFields = form.clientType === 'subcontractor' ? {
+        subHourlyRate: formSubRates.subHourlyRate ? Number(formSubRates.subHourlyRate) : null,
+        subDayRate: formSubRates.subDayRate ? Number(formSubRates.subDayRate) : null,
+        subHalfDayRate: formSubRates.subHalfDayRate ? Number(formSubRates.subHalfDayRate) : null,
+        cisRegistered: formSubRates.cisRegistered,
+        cisPercentage: formSubRates.cisPercentage ? Number(formSubRates.cisPercentage) : null,
+        subPaymentType: formSubRates.subPaymentType,
+      } : {}
       if (editingClient) {
-        await updateClient({ ...editingClient, ...form, portalSettings: formPortalSettings })
+        await updateClient({ ...editingClient, ...form, portalSettings: formPortalSettings, ...subRateFields })
       } else {
         await addClient({ ...form, addedFrom: 'manual', portalSettings: formPortalSettings,
-          portalInvitedAt: null, portalStatus: 'not_invited', portalLastLogin: null })
+          portalInvitedAt: null, portalStatus: 'not_invited', portalLastLogin: null, ...subRateFields })
       }
       setShowForm(false)
     } finally {
@@ -616,7 +635,7 @@ function ClientsPageInner() {
                   ))}
                 </div>
 
-                {/* Portal tabs */}
+                {/* Portal tabs — only for clients */}
                 <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)', marginBottom: 8 }}>
                   Portal Tabs
                 </div>
@@ -642,6 +661,55 @@ function ClientsPageInner() {
                 </div>
               </div>
             </div>
+
+            {/* ── Sub Rate Profile ─────────────────────────────── */}
+            {form.clientType === 'subcontractor' && (
+              <div style={{ paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)', marginBottom: 14 }}>
+                  Sub Rate Profile
+                </div>
+                <div className="row2" style={{ marginBottom: 10 }}>
+                  <div className="fg">
+                    <label>Day Rate (£)</label>
+                    <input type="number" value={formSubRates.subDayRate} onChange={e => setFormSubRates(s => ({ ...s, subDayRate: e.target.value }))} placeholder="e.g. 250.00" min="0" step="5" />
+                  </div>
+                  <div className="fg">
+                    <label>Half Day Rate (£)</label>
+                    <input type="number" value={formSubRates.subHalfDayRate} onChange={e => setFormSubRates(s => ({ ...s, subHalfDayRate: e.target.value }))} placeholder="e.g. 140.00" min="0" step="5" />
+                  </div>
+                </div>
+                <div className="fg" style={{ marginBottom: 10 }}>
+                  <label>Hourly Rate (£)</label>
+                  <input type="number" value={formSubRates.subHourlyRate} onChange={e => setFormSubRates(s => ({ ...s, subHourlyRate: e.target.value }))} placeholder="e.g. 35.00" min="0" step="0.50" />
+                </div>
+                <div className="fg" style={{ marginBottom: 10 }}>
+                  <label>Payment Type</label>
+                  <select value={formSubRates.subPaymentType} onChange={e => setFormSubRates(s => ({ ...s, subPaymentType: e.target.value }))}>
+                    <option value="invoice">Invoice (self-billed)</option>
+                    <option value="cis">CIS</option>
+                    <option value="payroll">PAYE Payroll</option>
+                    <option value="bacs">BACS Direct</option>
+                  </select>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12 }}>
+                    <input
+                      type="checkbox"
+                      checked={formSubRates.cisRegistered}
+                      onChange={e => setFormSubRates(s => ({ ...s, cisRegistered: e.target.checked }))}
+                      style={{ width: 14, height: 14, flexShrink: 0, cursor: 'pointer' }}
+                    />
+                    CIS Registered
+                  </label>
+                  {formSubRates.cisRegistered && (
+                    <div className="fg" style={{ flex: 1, minWidth: 140, marginBottom: 0 }}>
+                      <label>CIS Deduction %</label>
+                      <input type="number" value={formSubRates.cisPercentage} onChange={e => setFormSubRates(s => ({ ...s, cisPercentage: e.target.value }))} placeholder="20" min="0" max="30" step="1" />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="form-modal-ft">
               <button className="btn btn-outline" onClick={() => setShowForm(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={handleSave} disabled={saving || !form.name.trim()}>

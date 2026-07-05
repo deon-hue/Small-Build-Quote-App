@@ -241,6 +241,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
           portalSettings: (r.portal_settings && typeof r.portal_settings === 'object'
             ? { ...DEFAULT_CLIENT_PORTAL_SETTINGS, ...(r.portal_settings as Partial<ClientPortalSettings>) }
             : DEFAULT_CLIENT_PORTAL_SETTINGS),
+          subHourlyRate: r.sub_hourly_rate ?? null,
+          subDayRate: r.sub_day_rate ?? null,
+          subHalfDayRate: r.sub_half_day_rate ?? null,
+          cisRegistered: r.cis_registered ?? false,
+          cisPercentage: r.cis_percentage ?? null,
+          subPaymentType: r.sub_payment_type || 'invoice',
         })))
       }
 
@@ -457,6 +463,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       client_type: c.clientType || 'client',
       added_from: c.addedFrom,
       updated_at: new Date().toISOString(),
+      sub_hourly_rate: c.subHourlyRate ?? null,
+      sub_day_rate: c.subDayRate ?? null,
+      sub_half_day_rate: c.subHalfDayRate ?? null,
+      cis_registered: c.cisRegistered ?? false,
+      cis_percentage: c.cisPercentage ?? null,
+      sub_payment_type: c.subPaymentType || 'invoice',
     }
     // Try with portal_settings column; fall back without it if column doesn't exist yet
     let res = await supabase.from('clients').insert({ ...basePayload, portal_settings: portalSettings }).select().single()
@@ -473,6 +485,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addedFrom: data.added_from || '',
       portalInvitedAt: null, portalStatus: 'not_invited', portalLastLogin: null,
       portalSettings,
+      subHourlyRate: data.sub_hourly_rate ?? null,
+      subDayRate: data.sub_day_rate ?? null,
+      subHalfDayRate: data.sub_half_day_rate ?? null,
+      cisRegistered: data.cis_registered ?? false,
+      cisPercentage: data.cis_percentage ?? null,
+      subPaymentType: data.sub_payment_type || 'invoice',
     }])
   }, [supabase])
 
@@ -483,6 +501,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       payment_terms: c.paymentTerms || 'Payment on receipt',
       client_type: c.clientType || 'client',
       updated_at: new Date().toISOString(),
+      sub_hourly_rate: c.subHourlyRate ?? null,
+      sub_day_rate: c.subDayRate ?? null,
+      sub_half_day_rate: c.subHalfDayRate ?? null,
+      cis_registered: c.cisRegistered ?? false,
+      cis_percentage: c.cisPercentage ?? null,
+      sub_payment_type: c.subPaymentType || 'invoice',
     }
     // Try with portal_settings column; fall back without it if column doesn't exist yet
     const { error } = await supabase.from('clients').update({

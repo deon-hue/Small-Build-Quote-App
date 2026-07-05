@@ -47,6 +47,24 @@ interface PaymentStage {
   created_at: string
 }
 
+interface AdminTimeLog {
+  id: string
+  contact_id: string
+  job_id: string | null
+  entry_date: string
+  start_time: string | null
+  finish_time: string | null
+  total_hours: number | null
+  rate_type: 'hourly' | 'day' | 'half_day' | 'custom'
+  rate_amount: number
+  amount: number
+  amount_overridden: boolean
+  notes: string
+  entry_type: 'payable' | 'billable' | 'internal'
+  status: 'pending' | 'approved' | 'paid'
+  created_at: string
+}
+
 const fmt = (n: number) => `£${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const today = () => new Date().toISOString().slice(0, 10)
 
@@ -96,6 +114,14 @@ export default function SubcontractorsPage() {
   const [stageContractId, setStageContractId] = useState('')
   const [editingStage, setEditingStage] = useState<PaymentStage | null>(null)
   const [stageForm, setStageForm] = useState(emptyStage)
+
+  // Admin time log
+  const emptyLogForm = { contactId: '', jobId: '', entryDate: today(), rateType: 'day' as AdminTimeLog['rate_type'], rateAmount: '', totalHours: '', amount: '', amountOverridden: false, notes: '', entryType: 'payable' as AdminTimeLog['entry_type'] }
+  const [timeLogs, setTimeLogs] = useState<AdminTimeLog[]>([])
+  const [logModal, setLogModal] = useState(false)
+  const [editingLog, setEditingLog] = useState<AdminTimeLog | null>(null)
+  const [logForm, setLogForm] = useState(emptyLogForm)
+  const [logFilter, setLogFilter] = useState('')
 
   async function sendPortalInvite(contractId: string, contactId: string | null) {
     const contact = clients.find(c => c.id === contactId)
@@ -159,15 +185,17 @@ export default function SubcontractorsPage() {
     const { data: { user } } = await sb.auth.getUser()
     if (!user) { setLoading(false); return }
 
-    const [{ data: cs }, { data: es }, { data: ps }] = await Promise.all([
+    const [{ data: cs }, { data: es }, { data: ps }, { data: tls }] = await Promise.all([
       sb.from('sub_contracts').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
       sb.from('sub_time_entries').select('*').eq('user_id', user.id).order('entry_date', { ascending: true }),
       sb.from('sub_payment_stages').select('*').eq('user_id', user.id).order('created_at', { ascending: true }),
+      sb.from('sub_admin_time_logs').select('*').eq('user_id', user.id).order('entry_date', { ascending: false }),
     ])
 
     setContracts((cs ?? []) as Contract[])
     setTimeEntries((es ?? []) as TimeEntry[])
     setStages((ps ?? []) as PaymentStage[])
+    setTimeLogs((tls ?? []) as AdminTimeLog[])
     setLoading(false)
   }, [])
 
@@ -393,6 +421,97 @@ export default function SubcontractorsPage() {
     setContracts(prev => prev.map(c => c.id === contractId ? { ...c, quote_document_id: null } : c))
   }
 
+  // ─── Admin Time Log helpers ───────────────────────────────────────────────
+
+  function calcLogAmount(form: typeof emptyLogForm): number {
+    const rate = Number(form.rateAmount) || 0
+    if (form.rateType === 'hourly') return rate * (Number(form.totalHours) || 0)
+    return rate
+  }
+
+  function autoFillRate(contactId: string, rateType: AdminTimeLog['rate_type'], currentForm: typeof emptyLogForm) {
+    const contact = clients.find(c => c.id === contactId)
+    if (!contact) return currentForm
+    let rate = ''
+    if (rateType === 'day' && contact.subDayRate) rate = contact.subDayRate.toString()
+    else if (rateType === 'half_day' && contact.subHalfDayRate) rate = contact.subHalfDayRate.toString()
+    else if (rateType === 'hourly' && contact.subHourlyRate) rate = contact.subHourlyRate.toString()
+    const updated = { ...currentForm, contactId, rateType, rateAmount: rate || currentForm.rateAmount }
+    if (!updated.amountOverridden) updated.amount = calcLogAmount(updated).toString()
+    return updated
+  }
+
+  function openNewLog() {
+    setEditingLog(null)
+    setLogForm(emptyLogForm)
+    setError('')
+    setLogModal(true)
+  }
+
+  function openEditLog(log: AdminTimeLog) {
+    setEditingLog(log)
+    setLogForm({
+      contactId: log.contact_id,
+      jobId: log.job_id ?? '',
+      entryDate: log.entry_date,
+      rateType: log.rate_type,
+      rateAmount: log.rate_amount.toString(),
+      totalHours: log.total_hours?.toString() ?? '',
+      amount: log.amount.toString(),
+      amountOverridden: log.amount_overridden,
+      notes: log.notes,
+      entryType: log.entry_type,
+    })
+    setError('')
+    setLogModal(true)
+  }
+
+  async function saveLog() {
+    if (!logForm.contactId) { setError('Select a subcontractor'); return }
+    if (!logForm.entryDate) { setError('Enter a date'); return }
+    if (!logForm.rateAmount) { setError('Enter a rate amount'); return }
+    setSaving(true); setError('')
+    const { data: { user } } = await sb.auth.getUser()
+    if (!user) { setSaving(false); return }
+
+    const amount = logForm.amountOverridden ? Number(logForm.amount) : calcLogAmount(logForm)
+
+    const payload = {
+      user_id: user.id,
+      contact_id: logForm.contactId,
+      job_id: logForm.jobId || null,
+      entry_date: logForm.entryDate,
+      rate_type: logForm.rateType,
+      rate_amount: Number(logForm.rateAmount),
+      total_hours: logForm.rateType === 'hourly' ? (Number(logForm.totalHours) || null) : null,
+      amount,
+      amount_overridden: logForm.amountOverridden,
+      notes: logForm.notes.trim(),
+      entry_type: logForm.entryType,
+      status: editingLog ? editingLog.status : 'pending',
+    }
+
+    if (editingLog) {
+      await sb.from('sub_admin_time_logs').update(payload).eq('id', editingLog.id)
+    } else {
+      await sb.from('sub_admin_time_logs').insert(payload)
+    }
+    setLogModal(false)
+    await load()
+    setSaving(false)
+  }
+
+  async function deleteLog(id: string) {
+    if (!confirm('Delete this time log entry?')) return
+    await sb.from('sub_admin_time_logs').delete().eq('id', id)
+    await load()
+  }
+
+  async function updateLogStatus(id: string, status: AdminTimeLog['status']) {
+    await sb.from('sub_admin_time_logs').update({ status }).eq('id', id)
+    setTimeLogs(prev => prev.map(l => l.id === id ? { ...l, status } : l))
+  }
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   if (loading) return <div style={{ padding: 32, textAlign: 'center', opacity: 0.5 }}>Loading subcontractors…</div>
@@ -453,6 +572,9 @@ export default function SubcontractorsPage() {
 
         <button onClick={openNewContract} style={{ padding: '8px 16px', background: '#111827', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
           + New Contract
+        </button>
+        <button onClick={openNewLog} style={{ padding: '8px 16px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          ⏱ Log Time
         </button>
       </div>
 
@@ -721,6 +843,101 @@ export default function SubcontractorsPage() {
         )
       })}
 
+      {/* ── Admin Time Logs ───────────────────────────────────────── */}
+      <div style={{ marginTop: 40, borderTop: '2px solid #e5e7eb', paddingTop: 28 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#111827' }}>⏱ Time Logs</div>
+            <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
+              Admin-entered time — {timeLogs.length} entr{timeLogs.length === 1 ? 'y' : 'ies'} · Total payable: {fmt(timeLogs.filter(l => l.entry_type === 'payable').reduce((s, l) => s + Number(l.amount), 0))}
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <select value={logFilter} onChange={e => setLogFilter(e.target.value)}
+              style={{ padding: '7px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 12 }}>
+              <option value="">All subs</option>
+              {subs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <button onClick={openNewLog} style={{ padding: '7px 14px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer' }}>
+              + Log Time
+            </button>
+          </div>
+        </div>
+
+        {timeLogs.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 32, color: '#9ca3af', fontSize: 14, border: '1px dashed #d1d5db', borderRadius: 8 }}>
+            No time logs yet. Click &quot;Log Time&quot; or &quot;⏱ Log Time&quot; in the toolbar to add the first entry.
+          </div>
+        ) : (
+          <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                  <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: '#374151', fontSize: 11 }}>Date</th>
+                  <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: '#374151', fontSize: 11 }}>Sub</th>
+                  <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: '#374151', fontSize: 11 }}>Job</th>
+                  <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: '#374151', fontSize: 11 }}>Rate</th>
+                  <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 600, color: '#374151', fontSize: 11 }}>Amount</th>
+                  <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: '#374151', fontSize: 11 }}>Type</th>
+                  <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: '#374151', fontSize: 11 }}>Status</th>
+                  <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: '#374151', fontSize: 11 }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {timeLogs.filter(l => !logFilter || l.contact_id === logFilter).map((log, i) => {
+                  const subName = contactName(log.contact_id)
+                  const jName = log.job_id ? jobName(log.job_id) : '—'
+                  const rateLabel: Record<AdminTimeLog['rate_type'], string> = { day: 'Day', half_day: 'Half day', hourly: `Hourly`, custom: 'Custom' }
+                  const statusColor: Record<AdminTimeLog['status'], string> = { pending: '#fef3c7', approved: '#dcfce7', paid: '#dbeafe' }
+                  const statusText: Record<AdminTimeLog['status'], string> = { pending: '#92400e', approved: '#166534', paid: '#1e40af' }
+                  const typeColor: Record<AdminTimeLog['entry_type'], string> = { payable: '#fee2e2', billable: '#ede9fe', internal: '#f3f4f6' }
+                  const typeText: Record<AdminTimeLog['entry_type'], string> = { payable: '#dc2626', billable: '#7c3aed', internal: '#6b7280' }
+                  return (
+                    <tr key={log.id} style={{ borderBottom: i < timeLogs.length - 1 ? '1px solid #f3f4f6' : 'none', background: '#fff' }}>
+                      <td style={{ padding: '10px 14px', color: '#374151', whiteSpace: 'nowrap' }}>
+                        {new Date(log.entry_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </td>
+                      <td style={{ padding: '10px 14px', fontWeight: 500, color: '#111827' }}>{subName}</td>
+                      <td style={{ padding: '10px 14px', color: '#6b7280', fontSize: 12 }}>{jName}</td>
+                      <td style={{ padding: '10px 14px', color: '#6b7280', fontSize: 12 }}>
+                        {rateLabel[log.rate_type]} · {fmt(log.rate_amount)}
+                        {log.rate_type === 'hourly' && log.total_hours ? ` × ${log.total_hours}h` : ''}
+                      </td>
+                      <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 600 }}>{fmt(log.amount)}</td>
+                      <td style={{ padding: '10px 14px' }}>
+                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: typeColor[log.entry_type], color: typeText[log.entry_type], fontWeight: 600 }}>
+                          {log.entry_type}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 14px' }}>
+                        <select
+                          value={log.status}
+                          onChange={e => updateLogStatus(log.id, e.target.value as AdminTimeLog['status'])}
+                          style={{ fontSize: 11, padding: '3px 6px', border: '1px solid #d1d5db', borderRadius: 4, background: statusColor[log.status], color: statusText[log.status], fontWeight: 600, cursor: 'pointer' }}
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="approved">Approved</option>
+                          <option value="paid">Paid</option>
+                        </select>
+                      </td>
+                      <td style={{ padding: '10px 14px' }}>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          {log.notes && (
+                            <span title={log.notes} style={{ fontSize: 12, cursor: 'default' }}>📝</span>
+                          )}
+                          {btn('Edit', () => openEditLog(log), 'ghost', true)}
+                          {btn('✕', () => deleteLog(log.id), 'danger', true)}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       {/* ── Contract Modal ─────────────────────────────────────────── */}
       {contractModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
@@ -848,6 +1065,123 @@ export default function SubcontractorsPage() {
               <button onClick={() => { setEntryModal(false); setError('') }} style={{ padding: '8px 16px', background: '#f9fafb', color: '#374151', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, cursor: 'pointer' }}>Cancel</button>
               <button onClick={saveEntry} disabled={saving} style={{ padding: '8px 20px', background: '#111827', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
                 {saving ? 'Saving…' : 'Log Time'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Admin Time Log Modal ──────────────────────────────────── */}
+      {logModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: '#fff', borderRadius: 10, padding: 24, width: '100%', maxWidth: 480, maxHeight: '90vh', overflow: 'auto' }}>
+            <h3 style={{ margin: '0 0 20px', fontSize: 16, fontWeight: 700 }}>{editingLog ? 'Edit Time Log' : '⏱ Log Sub Time'}</h3>
+            <div style={{ display: 'grid', gap: 14 }}>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Subcontractor *</label>
+                <ContactPicker
+                  value={logForm.contactId}
+                  onChange={id => setLogForm(f => autoFillRate(id, f.rateType, { ...f, contactId: id }))}
+                  contacts={subs}
+                  placeholder="Search subcontractor…"
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Job</label>
+                <select value={logForm.jobId} onChange={e => setLogForm(f => ({ ...f, jobId: e.target.value }))}
+                  style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13 }}>
+                  <option value="">No specific job</option>
+                  {jobs.map(j => <option key={j.id} value={j.id}>{j.client || j.address} — {j.address}</option>)}
+                </select>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Date *</label>
+                  <input type="date" value={logForm.entryDate} onChange={e => setLogForm(f => ({ ...f, entryDate: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Entry Type</label>
+                  <select value={logForm.entryType} onChange={e => setLogForm(f => ({ ...f, entryType: e.target.value as AdminTimeLog['entry_type'] }))}
+                    style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13 }}>
+                    <option value="payable">Payable (owed to sub)</option>
+                    <option value="billable">Billable (charge to client)</option>
+                    <option value="internal">Internal only</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Rate Type</label>
+                  <select value={logForm.rateType} onChange={e => {
+                    const rt = e.target.value as AdminTimeLog['rate_type']
+                    setLogForm(f => autoFillRate(f.contactId, rt, { ...f, rateType: rt }))
+                  }} style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13 }}>
+                    <option value="day">Day Rate</option>
+                    <option value="half_day">Half Day</option>
+                    <option value="hourly">Hourly</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Rate Amount (£) *</label>
+                  <input type="number" min="0" step="0.01" value={logForm.rateAmount}
+                    onChange={e => setLogForm(f => {
+                      const updated = { ...f, rateAmount: e.target.value }
+                      if (!updated.amountOverridden) updated.amount = calcLogAmount(updated).toString()
+                      return updated
+                    })}
+                    style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
+                </div>
+              </div>
+
+              {logForm.rateType === 'hourly' && (
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Hours</label>
+                  <input type="number" min="0" step="0.5" value={logForm.totalHours}
+                    onChange={e => setLogForm(f => {
+                      const updated = { ...f, totalHours: e.target.value }
+                      if (!updated.amountOverridden) updated.amount = calcLogAmount(updated).toString()
+                      return updated
+                    })}
+                    placeholder="e.g. 7.5"
+                    style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
+                </div>
+              )}
+
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <label style={{ fontSize: 12, color: '#374151', fontWeight: 500 }}>Amount (£)</label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#6b7280', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={logForm.amountOverridden} onChange={e => setLogForm(f => ({ ...f, amountOverridden: e.target.checked }))} />
+                    Override
+                  </label>
+                </div>
+                <input
+                  type="number" min="0" step="0.01"
+                  value={logForm.amountOverridden ? logForm.amount : (calcLogAmount(logForm) || '').toString()}
+                  readOnly={!logForm.amountOverridden}
+                  onChange={e => setLogForm(f => ({ ...f, amount: e.target.value }))}
+                  style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box', background: logForm.amountOverridden ? '#fff' : '#f9fafb' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Notes</label>
+                <input value={logForm.notes} onChange={e => setLogForm(f => ({ ...f, notes: e.target.value }))} placeholder="e.g. First fix carpentry, day 1 of 3"
+                  style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
+              </div>
+
+            </div>
+            {error && <div style={{ color: '#dc2626', fontSize: 12, marginTop: 12 }}>{error}</div>}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
+              <button onClick={() => { setLogModal(false); setError('') }} style={{ padding: '8px 16px', background: '#f9fafb', color: '#374151', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={saveLog} disabled={saving} style={{ padding: '8px 20px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
+                {saving ? 'Saving…' : editingLog ? 'Save Changes' : 'Log Time'}
               </button>
             </div>
           </div>

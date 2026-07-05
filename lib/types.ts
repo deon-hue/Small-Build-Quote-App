@@ -306,6 +306,12 @@ export interface Client {
   portalStatus?: PortalStatus
   portalLastLogin?: string | null
   portalSettings?: ClientPortalSettings
+  subHourlyRate?: number | null
+  subDayRate?: number | null
+  subHalfDayRate?: number | null
+  cisRegistered?: boolean
+  cisPercentage?: number | null
+  subPaymentType?: string
 }
 
 export interface SubContract {
@@ -339,6 +345,24 @@ export interface SubPaymentStage {
   dueDate: string | null
   paidDate: string | null
   xeroBillId: string | null
+  createdAt: string
+}
+
+export interface SubAdminTimeLog {
+  id: string
+  contactId: string
+  jobId?: string | null
+  entryDate: string
+  startTime?: string | null
+  finishTime?: string | null
+  totalHours?: number | null
+  rateType: 'hourly' | 'day' | 'half_day' | 'custom'
+  rateAmount: number
+  amount: number
+  amountOverridden?: boolean
+  notes: string
+  entryType: 'payable' | 'billable' | 'internal'
+  status: 'pending' | 'approved' | 'paid'
   createdAt: string
 }
 
