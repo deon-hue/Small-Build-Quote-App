@@ -576,24 +576,6 @@ function TaskGroup({ tg, items, markup, isLocked, collapsed, colKey, toggle, onU
 
 // ── Item status badge ─────────────────────────────────────────────────────────
 
-const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
-  'bo-default': { label: '🏢 BO Default',  bg: '#f1f5f9', text: '#64748b' },
-  'edited':     { label: '✏️ Edited',       bg: '#fef3c7', text: '#92400e' },
-  'manual':     { label: '➕ Manual',       bg: '#dbeafe', text: '#1d4ed8' },
-  'ai':         { label: '✦ AI',            bg: '#fdf4ff', text: '#7c3aed' },
-}
-
-function ItemStatusBadge({ status }: { status?: string }) {
-  if (!status) return null
-  const cfg = STATUS_CONFIG[status]
-  if (!cfg) return null
-  return (
-    <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, background: cfg.bg, color: cfg.text, flexShrink: 0 }}>
-      {cfg.label}
-    </span>
-  )
-}
-
 // ── Source badge ──────────────────────────────────────────────────────────────
 
 function SourceBadge({ source }: { source?: string }) {
@@ -1175,7 +1157,6 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
             ⚠️ Needs Review
           </span>
         )}
-        <ItemStatusBadge status={p.itemStatus} />
         {p.phaseImage && (
           <span title="AI reviewed — visual assigned" style={{ fontSize: 14, flexShrink: 0, lineHeight: 1 }}>{p.phaseImage.emoji}</span>
         )}
