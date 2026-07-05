@@ -113,6 +113,7 @@ export default function DocumentInbox({ jobs }: Props) {
     }
     return true
   })
+  const shownTotal = shown.reduce((sum, d) => sum + summary(d).gross, 0)
   const unallocatedCount = docs.filter(d => d.status === 'unallocated').length
 
   return (
@@ -143,6 +144,13 @@ export default function DocumentInbox({ jobs }: Props) {
         </div>
 
         {error && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', borderRadius: 6, padding: '8px 10px', fontSize: 12, marginBottom: 12 }}>{error}</div>}
+
+        {!loading && shown.length > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 16, marginBottom: 10, fontSize: 13, color: 'var(--muted)' }}>
+            <span>{shown.length} document{shown.length !== 1 ? 's' : ''}</span>
+            {shownTotal > 0 && <span style={{ fontWeight: 700, color: '#1e293b' }}>Total: {fmt(shownTotal)}</span>}
+          </div>
+        )}
 
         {loading ? (
           <div style={{ textAlign: 'center', color: 'var(--muted)', padding: 24 }}>Loading…</div>
