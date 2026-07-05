@@ -109,7 +109,8 @@ export default function DocumentInbox({ jobs }: Props) {
       const q = search.toLowerCase()
       const s = summary(d)
       const job = jobLabel(d.jobId ?? undefined)
-      if (!s.supplier.toLowerCase().includes(q) && !s.date.includes(q) && !job.toLowerCase().includes(q) && !d.fileName.toLowerCase().includes(q)) return false
+      const grossStr = s.gross ? s.gross.toFixed(2) : ''
+      if (!s.supplier.toLowerCase().includes(q) && !s.date.includes(q) && !job.toLowerCase().includes(q) && !d.fileName.toLowerCase().includes(q) && !grossStr.includes(q.replace('£', ''))) return false
     }
     return true
   })
