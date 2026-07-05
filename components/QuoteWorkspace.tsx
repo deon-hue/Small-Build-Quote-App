@@ -248,6 +248,7 @@ function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst, lab
     onUpdate({
       ...item,
       labour: pickedTotal,
+      qty: 1,
       desc: item.desc || (tradeLines.length === 1 && firstTrade ? firstTrade.name : 'Labour'),
       notes: noteParts.join(' | '),
     })
@@ -1028,7 +1029,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
                   const newItem = {
                     id: uid(),
                     desc,
-                    qty: boLabourQty,
+                    qty: 1,
                     unit: boLabourRate === 'hourly' ? 'hr' : 'day',
                     labour: total,
                     materials: 0, plantHire: 0, subcontractors: 0, other: 0,
