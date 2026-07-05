@@ -103,6 +103,11 @@ export default function DocumentInbox({ jobs }: Props) {
     setDocs(prev => prev.filter(d => d.id !== doc.id))
   }
 
+  async function archiveDoc(doc: InboxDocument) {
+    await sb.from('job_documents').update({ status: 'archived' }).eq('id', doc.id)
+    setDocs(prev => prev.map(d => d.id === doc.id ? { ...d, status: 'archived' } : d))
+  }
+
   const shown = docs.filter(d => {
     if (filter === 'all' ? d.status === 'archived' : d.status !== filter) return false
     if (search.trim()) {
@@ -181,6 +186,9 @@ export default function DocumentInbox({ jobs }: Props) {
                   {billedDocIds.has(doc.id) && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: '#f3e8ff', color: '#6b21a8' }}>📋 Bill created</span>}
                   {doc.jobId && doc.xeroBillId && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: '#ede9fe', color: '#5b21b6' }}>✓ Xero</span>}
                   <button className="btn-sm btn-outline" onClick={() => setOpenDoc(doc)}>Open</button>
+                  {doc.status !== 'archived' && (
+                    <button className="btn-sm btn-outline" onClick={() => archiveDoc(doc)} title="Archive" style={{ color: '#64748b' }}>🗄</button>
+                  )}
                   <button className="btn-sm btn-danger" onClick={() => remove(doc)}>✕</button>
                 </div>
               )
