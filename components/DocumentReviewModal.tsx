@@ -270,6 +270,7 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
           if (d.statusLocked) setXeroStatusLocked(true)
         } else {
           if (!billCreated && d.xeroBillId) await buildAndAddBill(d.xeroBillId)
+          await sb.from('job_documents').update({ status: 'archived' }).eq('id', doc.id)
           onSaved()
         }
       } finally { setXeroBusy(false) }
