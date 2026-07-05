@@ -34,6 +34,7 @@ export default function DocumentInbox({ jobs }: Props) {
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(0)
   const [filter, setFilter] = useState<'all' | 'unallocated' | 'allocated' | 'archived'>('all')
+  const [search, setSearch] = useState('')
   const [openDoc, setOpenDoc] = useState<InboxDocument | null>(null)
   const [error, setError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
@@ -102,7 +103,16 @@ export default function DocumentInbox({ jobs }: Props) {
     setDocs(prev => prev.filter(d => d.id !== doc.id))
   }
 
-  const shown = docs.filter(d => filter === 'all' ? d.status !== 'archived' : d.status === filter)
+  const shown = docs.filter(d => {
+    if (filter === 'all' ? d.status === 'archived' : d.status !== filter) return false
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      const s = summary(d)
+      const job = jobLabel(d.jobId ?? undefined)
+      if (!s.supplier.toLowerCase().includes(q) && !s.date.includes(q) && !job.toLowerCase().includes(q) && !d.fileName.toLowerCase().includes(q)) return false
+    }
+    return true
+  })
   const unallocatedCount = docs.filter(d => d.status === 'unallocated').length
 
   return (
@@ -121,7 +131,12 @@ export default function DocumentInbox({ jobs }: Props) {
           <button className="btn btn-primary" onClick={() => fileRef.current?.click()} disabled={uploading > 0}>
             {uploading > 0 ? `Uploading ${uploading}…` : '📷 Scan / Upload'}
           </button>
-          <div style={{ flex: 1 }} />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search supplier, date, job…"
+            style={{ flex: 1, minWidth: 160, padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
+          />
           {(['all', 'unallocated', 'allocated', 'archived'] as const).map(fk => (
             <button key={fk} onClick={() => setFilter(fk)} className={filter === fk ? 'btn-sm btn-primary' : 'btn-sm btn-outline'} style={{ textTransform: 'capitalize' }}>{fk}</button>
           ))}
