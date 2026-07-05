@@ -102,19 +102,9 @@ export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
       // Check if email was actually delivered
       if (!result?.email) {
         const errs: string[] = result?.errors ?? []
-        // Identify the most likely cause and show a clear message
-        if (errs.some(e => /api.?key|unauthorized|forbidden/i.test(e))) {
-          throw new Error('Resend API key is missing or invalid. Set RESEND_API_KEY in Netlify environment variables.')
-        }
-        if (errs.some(e => /domain|sender|from|verified/i.test(e))) {
-          throw new Error(`Sender email not verified. Set NOTIFY_FROM_EMAIL to an address on a domain you've verified in Resend (resend.com).`)
-        }
-        if (errs.some(e => /test|sandbox/i.test(e))) {
-          throw new Error('Resend test mode: you can only send to the Resend account owner\'s email address. Add a verified domain to send to any address.')
-        }
-        // Generic fallback with raw errors
-        const detail = errs.length ? ` Details: ${errs.join('; ')}` : ' Check that RESEND_API_KEY and NOTIFY_FROM_EMAIL are set in Netlify.'
-        throw new Error(`Email was not delivered.${detail}`)
+        // Show the raw Resend error — easiest to diagnose
+        const detail = errs.length ? errs.join(' | ') : 'No error detail returned. Check RESEND_API_KEY and NOTIFY_FROM_EMAIL are set in Netlify and trigger a new deploy.'
+        throw new Error(`Email not sent: ${detail}`)
       }
 
       setSent(true)
