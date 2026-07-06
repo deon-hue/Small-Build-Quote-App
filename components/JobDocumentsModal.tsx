@@ -65,11 +65,6 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
     const { data: { user } } = await sb.auth.getUser()
     if (user) {
       setUserId(user.id)
-      // Sync Xero payment statuses first so the costs we load are already up-to-date
-      await fetch('/api/xero/sync-payment-statuses', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobId }),
-      }).catch(() => {})
       const [jobCosts, { data: scs }, { data: ses }, { data: sps }] = await Promise.all([
         fetchJobCosts(sb, user.id, jobId),
         sb.from('sub_contracts').select('id,contact_id,type,description,rate_type,rate_amount,quoted_amount,status').eq('user_id', user.id).eq('job_id', jobId),
@@ -82,8 +77,17 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
       const cids = new Set(contracts.map(c => c.id))
       setSubEntries(((ses ?? []) as SubEntry[]).filter(e => cids.has(e.sub_contract_id)))
       setSubStages(((sps ?? []) as SubStage[]).filter(s => cids.has(s.sub_contract_id)))
+      setLoading(false)
+      // Background: sync Xero payment statuses, then quietly refresh costs if anything changed
+      fetch('/api/xero/sync-payment-statuses', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId }),
+      }).then(r => r.ok ? r.json() : null).then((d: { updated?: number } | null) => {
+        if ((d?.updated ?? 0) > 0) fetchJobCosts(sb, user.id, jobId).then(setCosts)
+      }).catch(() => {})
+    } else {
+      setLoading(false)
     }
-    setLoading(false)
   }, [jobId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load() }, [load])
