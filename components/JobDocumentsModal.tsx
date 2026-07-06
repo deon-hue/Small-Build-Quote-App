@@ -124,9 +124,25 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
     setCosts(prev => prev.filter(c => c.id !== id))
   }
 
-  async function updatePaymentStatus(ids: string[], status: PaymentStatus) {
-    await sb.from('job_costs').update({ payment_status: status }).in('id', ids)
-    setCosts(prev => prev.map(c => ids.includes(c.id) ? { ...c, paymentStatus: status } : c))
+  const [syncing, setSyncing] = useState(false)
+  const [syncMsg, setSyncMsg] = useState('')
+
+  async function syncFromXero() {
+    setSyncing(true)
+    setSyncMsg('')
+    try {
+      const res = await fetch('/api/xero/sync-payment-statuses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId }),
+      })
+      const data = await res.json() as { updated?: number; error?: string }
+      if (!res.ok) { setSyncMsg(data.error ?? 'Sync failed'); return }
+      await load()
+      setSyncMsg(`Updated ${data.updated ?? 0} row${data.updated === 1 ? '' : 's'} from Xero`)
+    } finally {
+      setSyncing(false)
+    }
   }
 
   const [raisingVar, setRaisingVar] = useState(false)
@@ -197,6 +213,10 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
         <div style={{ padding: '16px 20px', overflowY: 'auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
             <button onClick={() => setManual(blankManual())} style={{ ...btn, background: '#4a90a4', color: '#fff', border: 'none' }}>＋ Add cost manually</button>
+            <button onClick={syncFromXero} disabled={syncing} style={{ ...btn, background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0' }}>
+              {syncing ? '…' : '↻'} Sync from Xero
+            </button>
+            {syncMsg && <span style={{ fontSize: 11, color: syncMsg.startsWith('Updated') ? '#16a34a' : '#dc2626' }}>{syncMsg}</span>}
             <span style={{ fontSize: 12, color: '#94a3b8' }}>To scan a receipt or invoice, use the <strong>Document Inbox</strong> in Settings, then allocate it to this job.</span>
           </div>
 
@@ -480,11 +500,7 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
                             <td style={{ padding: '8px 8px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(groupNet)}</td>
                             <td style={{ padding: '8px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#64748b' }}>{fmt(groupVat)}</td>
                             <td style={{ padding: '8px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700 }}>{fmt(groupGross)}</td>
-                            <td style={{ padding: '8px 8px' }} onClick={e => e.stopPropagation()}>
-                              <select value={first.paymentStatus ?? 'unknown'} onChange={e => updatePaymentStatus(lines.map(l => l.id), e.target.value as PaymentStatus)} style={{ fontSize: 10, border: 'none', background: 'transparent', color: first.paymentStatus === 'paid' ? '#16a34a' : first.paymentStatus === 'unpaid' ? '#dc2626' : '#94a3b8', cursor: 'pointer', padding: 0, fontWeight: 600 }}>
-                                {PAYMENTS.map(p => <option key={p} value={p}>{p}</option>)}
-                              </select>
-                            </td>
+                            <td style={{ padding: '8px 8px' }}><span style={{ fontSize: 10, color: first.paymentStatus === 'paid' ? '#16a34a' : first.paymentStatus === 'unpaid' ? '#dc2626' : '#94a3b8' }}>{first.paymentStatus}</span></td>
                             <td style={{ padding: '4px 6px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
                               <button onClick={() => removeDocGroup(docId, lines)} title="Delete all lines" style={{ padding: '2px 7px', border: '1px solid #fecaca', borderRadius: 4, background: '#fef2f2', color: '#dc2626', fontSize: 11, cursor: 'pointer' }}>×</button>
                             </td>
@@ -528,11 +544,7 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
                           <td style={{ padding: '7px 8px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(c.netAmount)}</td>
                           <td style={{ padding: '7px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#64748b' }}>{fmt(c.vatAmount)}</td>
                           <td style={{ padding: '7px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700 }}>{fmt(c.grossAmount)}</td>
-                          <td style={{ padding: '7px 8px' }}>
-                            <select value={c.paymentStatus ?? 'unknown'} onChange={e => updatePaymentStatus([c.id], e.target.value as PaymentStatus)} style={{ fontSize: 10, border: 'none', background: 'transparent', color: c.paymentStatus === 'paid' ? '#16a34a' : c.paymentStatus === 'unpaid' ? '#dc2626' : '#94a3b8', cursor: 'pointer', padding: 0, fontWeight: 600 }}>
-                              {PAYMENTS.map(p => <option key={p} value={p}>{p}</option>)}
-                            </select>
-                          </td>
+                          <td style={{ padding: '7px 8px' }}><span style={{ fontSize: 10, color: c.paymentStatus === 'paid' ? '#16a34a' : c.paymentStatus === 'unpaid' ? '#dc2626' : '#94a3b8' }}>{c.paymentStatus}</span></td>
                           <td style={{ padding: '4px 6px', textAlign: 'right' }}>
                             <button onClick={() => removeCost(c.id)} title="Delete" style={{ padding: '2px 7px', border: '1px solid #fecaca', borderRadius: 4, background: '#fef2f2', color: '#dc2626', fontSize: 11, cursor: 'pointer' }}>×</button>
                           </td>
