@@ -32,8 +32,16 @@ export async function GET(request: NextRequest) {
       }
     )
 
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
+      const email = data.session?.user?.email
+      if (email) {
+        fetch(`${origin}/api/portal/log-activity`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, eventType: 'sign_in' }),
+        }).catch(() => {})
+      }
       return NextResponse.redirect(`${origin}${next}`)
     }
   }

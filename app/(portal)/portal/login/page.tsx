@@ -33,13 +33,16 @@ function PortalLoginForm() {
       })
       if (otpError) {
         const msg = otpError.message.toLowerCase()
-        if (msg.includes('rate limit') || msg.includes('too many')) {
+        if (msg.includes('rate limit') || msg.includes('too many') || msg.includes('sending magic link')) {
+          fetch('/api/portal/log-activity', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, eventType: 'magic_link_rate_limit', details: otpError.message }) }).catch(() => {})
           setError('Too many sign-in attempts — please wait a few minutes and try again, or use the Password tab instead.')
         } else {
+          fetch('/api/portal/log-activity', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, eventType: 'sign_in_failed', details: otpError.message }) }).catch(() => {})
           setError(otpError.message)
         }
         return
       }
+      fetch('/api/portal/log-activity', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, eventType: 'magic_link_sent' }) }).catch(() => {})
       setMessage('Sign-in link sent! Check your email and click the link to access your portal.')
     } finally {
       setLoading(false)
@@ -53,7 +56,10 @@ function PortalLoginForm() {
     setLoading(true)
     try {
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
-      if (signInError) { setError(signInError.message); return }
+      if (signInError) {
+        fetch('/api/portal/log-activity', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, eventType: 'sign_in_failed', details: signInError.message }) }).catch(() => {})
+        setError(signInError.message); return
+      }
       await supabase.rpc('create_customer_profile')
       const { data: role } = await supabase.rpc('get_my_role')
       if (role === 'admin') {

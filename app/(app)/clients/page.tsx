@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { createClient } from '@/lib/supabase/client'
 import { fmt, quoteTotal, STAGE_COLOR, STAGE_LABEL, Q_BADGE, Q_LABEL } from '@/lib/utils'
@@ -58,6 +58,22 @@ function ClientsPageInner() {
   const [filter, setFilter] = useState<'all' | 'client' | 'supplier' | 'subcontractor'>('all')
   const BLANK_SUB_RATES = { subHourlyRate: '', subDayRate: '', subHalfDayRate: '', cisRegistered: false, cisPercentage: '', subPaymentType: 'invoice' }
   const [formSubRates, setFormSubRates] = useState(BLANK_SUB_RATES)
+
+  interface ActivityLog { id: string; event_type: string; details: string | null; created_at: string }
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([])
+  const [activityLoading, setActivityLoading] = useState(false)
+
+  useEffect(() => {
+    if (!selected?.email) { setActivityLogs([]); return }
+    setActivityLoading(true)
+    supabase
+      .from('portal_activity_logs')
+      .select('id, event_type, details, created_at')
+      .ilike('client_email', selected.email)
+      .order('created_at', { ascending: false })
+      .limit(20)
+      .then(({ data }) => { setActivityLogs((data ?? []) as ActivityLog[]); setActivityLoading(false) })
+  }, [selected?.email])
 
 
   const portalBase = (typeof window !== 'undefined' ? window.location.origin : '') + '/portal/login'
@@ -515,6 +531,45 @@ function ClientsPageInner() {
                     })
                 }
               </div>
+
+              {/* Portal Activity Log */}
+              {selected.email && (
+                <div style={{ marginTop: 20 }}>
+                  <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 10 }}>Portal Activity</div>
+                  {activityLoading ? (
+                    <div style={{ fontSize: 12, color: 'var(--muted)', padding: '12px 0' }}>Loading…</div>
+                  ) : activityLogs.length === 0 ? (
+                    <div style={{ fontSize: 12, color: 'var(--muted)', padding: '12px 0' }}>No activity recorded yet.</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      {activityLogs.map(log => {
+                        const EVENT: Record<string, { label: string; color: string; bg: string }> = {
+                          sign_in:               { label: 'Signed in',           color: '#166534', bg: '#dcfce7' },
+                          sign_in_failed:        { label: 'Sign-in failed',       color: '#991b1b', bg: '#fee2e2' },
+                          magic_link_sent:       { label: 'Magic link requested', color: '#1e40af', bg: '#dbeafe' },
+                          magic_link_rate_limit: { label: 'Rate limit hit',       color: '#92400e', bg: '#fef3c7' },
+                        }
+                        const ev = EVENT[log.event_type] ?? { label: log.event_type, color: '#374151', bg: '#f3f4f6' }
+                        return (
+                          <div key={log.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: '1px solid var(--border)' }}>
+                            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: ev.bg, color: ev.color, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                              {ev.label}
+                            </span>
+                            {log.details && (
+                              <span style={{ fontSize: 11, color: 'var(--muted)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.details}>
+                                {log.details}
+                              </span>
+                            )}
+                            <span style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap', marginLeft: 'auto' }}>
+                              {fmtDateTime(log.created_at)}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
