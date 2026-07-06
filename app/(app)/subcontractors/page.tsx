@@ -62,6 +62,8 @@ interface AdminTimeLog {
   notes: string
   entry_type: 'payable' | 'billable' | 'internal'
   status: 'pending' | 'approved' | 'paid'
+  xero_bill_id: string | null
+  job_cost_id: string | null
   created_at: string
 }
 
@@ -80,6 +82,7 @@ export default function SubcontractorsPage() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState(false)
   const [xeroPushing, setXeroPushing] = useState<string | null>(null)
+  const [xeroPushingLog, setXeroPushingLog] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [portalInviting, setPortalInviting] = useState<string | null>(null)
   const [portalInviteSent, setPortalInviteSent] = useState<Set<string>>(new Set())
@@ -510,6 +513,49 @@ export default function SubcontractorsPage() {
   async function updateLogStatus(id: string, status: AdminTimeLog['status']) {
     await sb.from('sub_admin_time_logs').update({ status }).eq('id', id)
     setTimeLogs(prev => prev.map(l => l.id === id ? { ...l, status } : l))
+
+    // On approval: create a job cost if the entry has a job and hasn't been costed yet
+    if (status === 'approved') {
+      const log = timeLogs.find(l => l.id === id)
+      if (log?.job_id && !log.job_cost_id) {
+        const { data: { user } } = await sb.auth.getUser()
+        if (user) {
+          const cost = await insertJobCost(sb, user.id, {
+            jobId: log.job_id,
+            source: 'timesheet',
+            costCategory: 'subcontractors',
+            supplier: contactName(log.contact_id),
+            description: log.notes || `Sub time — ${log.entry_date}`,
+            docDate: log.entry_date,
+            docNumber: '',
+            netAmount: log.amount,
+            vatAmount: 0,
+            grossAmount: log.amount,
+            paymentStatus: 'unpaid',
+            chargeToClient: false,
+          })
+          if (cost?.id) {
+            await sb.from('sub_admin_time_logs').update({ job_cost_id: cost.id }).eq('id', id)
+            setTimeLogs(prev => prev.map(l => l.id === id ? { ...l, job_cost_id: cost.id } : l))
+          }
+        }
+      }
+    }
+  }
+
+  async function pushLogToXero(log: AdminTimeLog) {
+    setXeroPushingLog(log.id)
+    setError('')
+    try {
+      const res = await fetch('/api/xero/push-time-log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ logId: log.id }) })
+      const data = await res.json() as { xeroBillId?: string; error?: string }
+      if (!res.ok || data.error) { setError(data.error ?? 'Xero push failed'); return }
+      setTimeLogs(prev => prev.map(l => l.id === log.id ? { ...l, xero_bill_id: data.xeroBillId ?? null } : l))
+    } catch {
+      setError('Network error — could not push to Xero')
+    } finally {
+      setXeroPushingLog(null)
+    }
   }
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -921,7 +967,21 @@ export default function SubcontractorsPage() {
                         </select>
                       </td>
                       <td style={{ padding: '10px 14px' }}>
-                        <div style={{ display: 'flex', gap: 6 }}>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                          {log.job_cost_id && (
+                            <span title="Job cost created" style={{ fontSize: 10, padding: '2px 6px', borderRadius: 8, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>✓ Cost</span>
+                          )}
+                          {log.xero_bill_id ? (
+                            <span title={`Xero bill: ${log.xero_bill_id}`} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 8, background: '#dbeafe', color: '#1e40af', fontWeight: 600 }}>✓ Xero</span>
+                          ) : log.entry_type === 'payable' && log.status === 'approved' ? (
+                            <button
+                              onClick={() => pushLogToXero(log)}
+                              disabled={xeroPushingLog === log.id}
+                              style={{ fontSize: 10, padding: '2px 8px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: 4, cursor: 'pointer', whiteSpace: 'nowrap', opacity: xeroPushingLog === log.id ? 0.6 : 1 }}
+                            >
+                              {xeroPushingLog === log.id ? '…' : '⚡ Xero'}
+                            </button>
+                          ) : null}
                           {log.notes && (
                             <span title={log.notes} style={{ fontSize: 12, cursor: 'default' }}>📝</span>
                           )}
