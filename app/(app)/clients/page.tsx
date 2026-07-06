@@ -168,9 +168,11 @@ function ClientsPageInner() {
         },
       })
       if (otpErr) {
-        const msg = otpErr.message
+        const msg = otpErr.message || ''
         if (!msg || msg === '{}' || msg.trim() === '') {
           setInviteError('Email failed to send — your Supabase Custom SMTP may be misconfigured. Disable it in Supabase → Project Settings → Authentication → SMTP Settings, or use the Copy Link option below.')
+        } else if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('email rate') || msg.toLowerCase().includes('too many') || msg.toLowerCase().includes('sending magic link')) {
+          setInviteError('Supabase email rate limit hit — free tier allows ~4 emails/hour. Use the Copy Link option below to share the portal link directly, or wait an hour and try again.')
         } else {
           setInviteError(msg)
         }
