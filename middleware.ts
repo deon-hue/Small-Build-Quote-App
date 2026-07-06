@@ -33,7 +33,13 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
+  let user = null
+  try {
+    const { data } = await supabase.auth.getUser()
+    user = data.user
+  } catch {
+    // treat as unauthenticated on any transient error — don't crash the page
+  }
 
   if (isPortalRoute) {
     // Portal routes: unauthenticated → /portal/login; logged-in on login page → /portal
