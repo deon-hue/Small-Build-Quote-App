@@ -77,8 +77,17 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
       const cids = new Set(contracts.map(c => c.id))
       setSubEntries(((ses ?? []) as SubEntry[]).filter(e => cids.has(e.sub_contract_id)))
       setSubStages(((sps ?? []) as SubStage[]).filter(s => cids.has(s.sub_contract_id)))
+      setLoading(false)
+      // Silently sync payment statuses from linked Xero bills, then refresh costs if anything changed
+      fetch('/api/xero/sync-payment-statuses', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId }),
+      }).then(r => r.ok ? r.json() : null).then((d: { updated?: number } | null) => {
+        if ((d?.updated ?? 0) > 0) fetchJobCosts(sb, user.id, jobId).then(setCosts)
+      }).catch(() => {})
+    } else {
+      setLoading(false)
     }
-    setLoading(false)
   }, [jobId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load() }, [load])
@@ -122,27 +131,6 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
     if (!confirm('Delete this cost?')) return
     await deleteJobCost(sb, id)
     setCosts(prev => prev.filter(c => c.id !== id))
-  }
-
-  const [syncing, setSyncing] = useState(false)
-  const [syncMsg, setSyncMsg] = useState('')
-
-  async function syncFromXero() {
-    setSyncing(true)
-    setSyncMsg('')
-    try {
-      const res = await fetch('/api/xero/sync-payment-statuses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobId }),
-      })
-      const data = await res.json() as { updated?: number; error?: string }
-      if (!res.ok) { setSyncMsg(data.error ?? 'Sync failed'); return }
-      await load()
-      setSyncMsg(`Updated ${data.updated ?? 0} row${data.updated === 1 ? '' : 's'} from Xero`)
-    } finally {
-      setSyncing(false)
-    }
   }
 
   const [raisingVar, setRaisingVar] = useState(false)
@@ -213,10 +201,6 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
         <div style={{ padding: '16px 20px', overflowY: 'auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
             <button onClick={() => setManual(blankManual())} style={{ ...btn, background: '#4a90a4', color: '#fff', border: 'none' }}>＋ Add cost manually</button>
-            <button onClick={syncFromXero} disabled={syncing} style={{ ...btn, background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0' }}>
-              {syncing ? '…' : '↻'} Sync from Xero
-            </button>
-            {syncMsg && <span style={{ fontSize: 11, color: syncMsg.startsWith('Updated') ? '#16a34a' : '#dc2626' }}>{syncMsg}</span>}
             <span style={{ fontSize: 12, color: '#94a3b8' }}>To scan a receipt or invoice, use the <strong>Document Inbox</strong> in Settings, then allocate it to this job.</span>
           </div>
 
