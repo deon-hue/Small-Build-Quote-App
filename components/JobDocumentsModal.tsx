@@ -124,6 +124,11 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
     setCosts(prev => prev.filter(c => c.id !== id))
   }
 
+  async function updatePaymentStatus(ids: string[], status: PaymentStatus) {
+    await sb.from('job_costs').update({ payment_status: status }).in('id', ids)
+    setCosts(prev => prev.map(c => ids.includes(c.id) ? { ...c, paymentStatus: status } : c))
+  }
+
   const [raisingVar, setRaisingVar] = useState(false)
   const [varRaised, setVarRaised] = useState(false)
 
@@ -475,7 +480,11 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
                             <td style={{ padding: '8px 8px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(groupNet)}</td>
                             <td style={{ padding: '8px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#64748b' }}>{fmt(groupVat)}</td>
                             <td style={{ padding: '8px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700 }}>{fmt(groupGross)}</td>
-                            <td style={{ padding: '8px 8px' }}><span style={{ fontSize: 10, color: first.paymentStatus === 'paid' ? '#16a34a' : first.paymentStatus === 'unpaid' ? '#dc2626' : '#94a3b8' }}>{first.paymentStatus}</span></td>
+                            <td style={{ padding: '8px 8px' }} onClick={e => e.stopPropagation()}>
+                              <select value={first.paymentStatus ?? 'unknown'} onChange={e => updatePaymentStatus(lines.map(l => l.id), e.target.value as PaymentStatus)} style={{ fontSize: 10, border: 'none', background: 'transparent', color: first.paymentStatus === 'paid' ? '#16a34a' : first.paymentStatus === 'unpaid' ? '#dc2626' : '#94a3b8', cursor: 'pointer', padding: 0, fontWeight: 600 }}>
+                                {PAYMENTS.map(p => <option key={p} value={p}>{p}</option>)}
+                              </select>
+                            </td>
                             <td style={{ padding: '4px 6px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
                               <button onClick={() => removeDocGroup(docId, lines)} title="Delete all lines" style={{ padding: '2px 7px', border: '1px solid #fecaca', borderRadius: 4, background: '#fef2f2', color: '#dc2626', fontSize: 11, cursor: 'pointer' }}>×</button>
                             </td>
@@ -519,7 +528,11 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
                           <td style={{ padding: '7px 8px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(c.netAmount)}</td>
                           <td style={{ padding: '7px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#64748b' }}>{fmt(c.vatAmount)}</td>
                           <td style={{ padding: '7px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700 }}>{fmt(c.grossAmount)}</td>
-                          <td style={{ padding: '7px 8px' }}><span style={{ fontSize: 10, color: c.paymentStatus === 'paid' ? '#16a34a' : c.paymentStatus === 'unpaid' ? '#dc2626' : '#94a3b8' }}>{c.paymentStatus}</span></td>
+                          <td style={{ padding: '7px 8px' }}>
+                            <select value={c.paymentStatus ?? 'unknown'} onChange={e => updatePaymentStatus([c.id], e.target.value as PaymentStatus)} style={{ fontSize: 10, border: 'none', background: 'transparent', color: c.paymentStatus === 'paid' ? '#16a34a' : c.paymentStatus === 'unpaid' ? '#dc2626' : '#94a3b8', cursor: 'pointer', padding: 0, fontWeight: 600 }}>
+                              {PAYMENTS.map(p => <option key={p} value={p}>{p}</option>)}
+                            </select>
+                          </td>
                           <td style={{ padding: '4px 6px', textAlign: 'right' }}>
                             <button onClick={() => removeCost(c.id)} title="Delete" style={{ padding: '2px 7px', border: '1px solid #fecaca', borderRadius: 4, background: '#fef2f2', color: '#dc2626', fontSize: 11, cursor: 'pointer' }}>×</button>
                           </td>
