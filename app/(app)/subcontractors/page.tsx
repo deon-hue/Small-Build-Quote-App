@@ -546,7 +546,33 @@ export default function SubcontractorsPage() {
     const weekLogs = timeLogs.filter(l => l.contact_id === contactId && (l.week_start ?? getWeekStart(l.entry_date)) === ws)
     for (const log of weekLogs) {
       await sb.from('sub_admin_time_logs').update({ status: 'paid' }).eq('id', log.id)
-      if (log.job_id && !log.job_cost_id) {
+      if (log.job_id) {
+        if (log.job_cost_id) {
+          await sb.from('job_costs').update({ payment_status: 'paid' }).eq('id', log.job_cost_id)
+        } else {
+          const cost = await insertJobCost(sb, user.id, {
+            jobId: log.job_id, source: 'timesheet', costCategory: 'subcontractors',
+            supplier: contactName(log.contact_id),
+            description: log.notes || `Sub time — ${log.entry_date}`,
+            docDate: log.entry_date, docNumber: '',
+            netAmount: log.amount, vatAmount: 0, grossAmount: log.amount,
+            paymentStatus: 'paid', chargeToClient: false,
+          })
+          if (cost?.id) await sb.from('sub_admin_time_logs').update({ job_cost_id: cost.id }).eq('id', log.id)
+        }
+      }
+    }
+    await load()
+  }
+
+  async function markDayCash(log: AdminTimeLog) {
+    const { data: { user } } = await sb.auth.getUser()
+    if (!user) return
+    await sb.from('sub_admin_time_logs').update({ status: 'paid' }).eq('id', log.id)
+    if (log.job_id) {
+      if (log.job_cost_id) {
+        await sb.from('job_costs').update({ payment_status: 'paid' }).eq('id', log.job_cost_id)
+      } else {
         const cost = await insertJobCost(sb, user.id, {
           jobId: log.job_id, source: 'timesheet', costCategory: 'subcontractors',
           supplier: contactName(log.contact_id),
@@ -557,24 +583,6 @@ export default function SubcontractorsPage() {
         })
         if (cost?.id) await sb.from('sub_admin_time_logs').update({ job_cost_id: cost.id }).eq('id', log.id)
       }
-    }
-    await load()
-  }
-
-  async function markDayCash(log: AdminTimeLog) {
-    const { data: { user } } = await sb.auth.getUser()
-    if (!user) return
-    await sb.from('sub_admin_time_logs').update({ status: 'paid' }).eq('id', log.id)
-    if (log.job_id && !log.job_cost_id) {
-      const cost = await insertJobCost(sb, user.id, {
-        jobId: log.job_id, source: 'timesheet', costCategory: 'subcontractors',
-        supplier: contactName(log.contact_id),
-        description: log.notes || `Sub time — ${log.entry_date}`,
-        docDate: log.entry_date, docNumber: '',
-        netAmount: log.amount, vatAmount: 0, grossAmount: log.amount,
-        paymentStatus: 'paid', chargeToClient: false,
-      })
-      if (cost?.id) await sb.from('sub_admin_time_logs').update({ job_cost_id: cost.id }).eq('id', log.id)
     }
     await load()
   }
