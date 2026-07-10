@@ -547,11 +547,64 @@ export default function SubcontractorsPage() {
     await load()
   }
 
+  async function markDayCash(log: AdminTimeLog) {
+    const { data: { user } } = await sb.auth.getUser()
+    if (!user) return
+    await sb.from('sub_admin_time_logs').update({ status: 'paid' }).eq('id', log.id)
+    if (log.job_id && !log.job_cost_id) {
+      const cost = await insertJobCost(sb, user.id, {
+        jobId: log.job_id, source: 'timesheet', costCategory: 'subcontractors',
+        supplier: contactName(log.contact_id),
+        description: log.notes || `Sub time — ${log.entry_date}`,
+        docDate: log.entry_date, docNumber: '',
+        netAmount: log.amount, vatAmount: 0, grossAmount: log.amount,
+        paymentStatus: 'paid', chargeToClient: false,
+      })
+      if (cost?.id) await sb.from('sub_admin_time_logs').update({ job_cost_id: cost.id }).eq('id', log.id)
+    }
+    await load()
+  }
+
+  async function pushDayToXero(log: AdminTimeLog) {
+    setXeroPushingLog(log.id)
+    setError('')
+    try {
+      const { data: { user } } = await sb.auth.getUser()
+      if (!user) return
+      if (log.status === 'pending') {
+        await sb.from('sub_admin_time_logs').update({ status: 'approved' }).eq('id', log.id)
+        if (log.job_id && !log.job_cost_id) {
+          const cost = await insertJobCost(sb, user.id, {
+            jobId: log.job_id, source: 'timesheet', costCategory: 'subcontractors',
+            supplier: contactName(log.contact_id),
+            description: log.notes || `Sub time — ${log.entry_date}`,
+            docDate: log.entry_date, docNumber: '',
+            netAmount: log.amount, vatAmount: 0, grossAmount: log.amount,
+            paymentStatus: 'unpaid', chargeToClient: false,
+          })
+          if (cost?.id) await sb.from('sub_admin_time_logs').update({ job_cost_id: cost.id }).eq('id', log.id)
+        }
+      }
+      const res = await fetch('/api/xero/push-time-log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ logId: log.id }) })
+      const data = await res.json() as { xeroBillId?: string; error?: string }
+      if (!res.ok || data.error) { setError(data.error ?? 'Xero push failed'); return }
+      await load()
+    } catch {
+      setError('Network error — could not push to Xero')
+    } finally {
+      setXeroPushingLog(null)
+    }
+  }
+
   async function pushWeekToXero(contactId: string, ws: string) {
     const key = `${contactId}_${ws}`
     setXeroPushingLog(key)
     setError('')
-    const logIds = timeLogs.filter(l => l.contact_id === contactId && (l.week_start ?? getWeekStart(l.entry_date)) === ws).map(l => l.id)
+    // Only push entries that haven't already been individually pushed or cash-paid
+    const logIds = timeLogs
+      .filter(l => l.contact_id === contactId && (l.week_start ?? getWeekStart(l.entry_date)) === ws && !l.xero_bill_id && l.status !== 'paid')
+      .map(l => l.id)
+    if (logIds.length === 0) { setError('No unpaid entries to push to Xero'); setXeroPushingLog(null); return }
     try {
       const res = await fetch('/api/xero/push-time-log-week', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contactId, weekStart: ws, logIds }) })
       const data = await res.json() as { xeroBillId?: string; error?: string }
@@ -981,15 +1034,25 @@ export default function SubcontractorsPage() {
                             const dayLabel = DAY_LABELS[dow === 0 ? 6 : dow - 1]
                             const jName = log.job_id ? jobName(log.job_id) : '—'
                             const rateLabel: Record<AdminTimeLog['rate_type'], string> = { day: 'Day', half_day: '½ Day', hourly: `${log.total_hours ?? '?'}h`, custom: 'Custom' }
+                            const hasXero = !!log.xero_bill_id
+                            const isPaid = log.status === 'paid'
                             return (
-                              <div key={log.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderTop: '1px solid #f3f4f6', fontSize: 13, flexWrap: 'wrap' }}>
+                              <div key={log.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderTop: '1px solid #f3f4f6', fontSize: 13, flexWrap: 'wrap' }}>
                                 <span style={{ color: '#6b7280', minWidth: 90, fontSize: 12 }}>{dayLabel} {new Date(log.entry_date + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
                                 <span style={{ color: '#374151', flex: 1, minWidth: 100 }}>{jName}</span>
                                 <span style={{ color: '#6b7280', fontSize: 12 }}>{rateLabel[log.rate_type]} · {fmt(log.rate_amount)}</span>
                                 <span style={{ fontWeight: 600, minWidth: 64, textAlign: 'right' }}>{fmt(log.amount)}</span>
                                 {log.notes && <span title={log.notes} style={{ cursor: 'default' }}>📝</span>}
                                 {log.job_cost_id && <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 6, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>✓ Cost</span>}
-                                <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 6, fontWeight: 600, background: log.status === 'approved' ? '#dcfce7' : log.status === 'paid' ? '#dbeafe' : '#fef3c7', color: log.status === 'approved' ? '#166534' : log.status === 'paid' ? '#1e40af' : '#92400e' }}>{log.status}</span>
+                                {hasXero
+                                  ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#dbeafe', color: '#1e40af', fontWeight: 600 }}>✓ Xero</span>
+                                  : isPaid
+                                    ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#f3f4f6', color: '#374151', fontWeight: 600 }}>✓ Cash</span>
+                                    : <div style={{ display: 'flex', gap: 4 }}>
+                                        <button onClick={() => markDayCash(log)} style={{ fontSize: 10, padding: '2px 7px', background: '#f9fafb', border: '1px solid #d1d5db', color: '#374151', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>💵 Cash</button>
+                                        <button onClick={() => pushDayToXero(log)} disabled={xeroPushingLog === log.id} style={{ fontSize: 10, padding: '2px 7px', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb', borderRadius: 4, cursor: 'pointer', fontWeight: 600, opacity: xeroPushingLog === log.id ? 0.6 : 1 }}>{xeroPushingLog === log.id ? '…' : '⚡ Xero'}</button>
+                                      </div>
+                                }
                               </div>
                             )
                           })}
