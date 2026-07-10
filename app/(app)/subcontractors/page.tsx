@@ -155,6 +155,7 @@ export default function SubcontractorsPage() {
   const [weekRows, setWeekRows] = useState<DayRow[]>([])
   const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set())
   const [logFilter, setLogFilter] = useState('')
+  const [fixingCosts, setFixingCosts] = useState(false)
 
   async function sendPortalInvite(contractId: string, contactId: string | null) {
     const contact = clients.find(c => c.id === contactId)
@@ -647,6 +648,32 @@ export default function SubcontractorsPage() {
     }
   }
 
+  async function fixMissingCosts() {
+    const { data: { user } } = await sb.auth.getUser()
+    if (!user) return
+    setFixingCosts(true)
+    const toFix = timeLogs.filter(l => l.job_id && !l.job_cost_id && (l.status === 'approved' || l.status === 'paid'))
+    let count = 0
+    for (const log of toFix) {
+      const cost = await insertJobCost(sb, user.id, {
+        jobId: log.job_id!, source: 'timesheet', costCategory: 'subcontractors',
+        supplier: contactName(log.contact_id),
+        description: log.notes || `Sub time — ${log.entry_date}`,
+        docDate: log.entry_date, docNumber: '',
+        netAmount: log.amount, vatAmount: 0, grossAmount: log.amount,
+        paymentStatus: log.status === 'paid' ? 'paid' : 'unpaid', chargeToClient: false,
+      })
+      if (cost?.id) {
+        await sb.from('sub_admin_time_logs').update({ job_cost_id: cost.id }).eq('id', log.id)
+        count++
+      }
+    }
+    setFixingCosts(false)
+    await load()
+    if (count > 0) alert(`Created ${count} missing job cost${count === 1 ? '' : 's'}`)
+    else alert('No missing job costs found')
+  }
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   if (loading) return <div style={{ padding: 32, textAlign: 'center', opacity: 0.5 }}>Loading subcontractors…</div>
@@ -981,6 +1008,7 @@ export default function SubcontractorsPage() {
       {/* ── Admin Time Logs — weekly timesheets ──────────────────── */}
       {(() => {
         const filteredLogs = timeLogs.filter(l => !logFilter || l.contact_id === logFilter)
+        const missingCostCount = timeLogs.filter(l => l.job_id && !l.job_cost_id && (l.status === 'approved' || l.status === 'paid')).length
         const weekGroupMap = new Map<string, { contactId: string; ws: string; logs: AdminTimeLog[] }>()
         for (const log of filteredLogs) {
           const ws = log.week_start ?? getWeekStart(log.entry_date)
@@ -1004,6 +1032,11 @@ export default function SubcontractorsPage() {
                   <option value="">All subs</option>
                   {subs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
+                {missingCostCount > 0 && (
+                  <button onClick={fixMissingCosts} disabled={fixingCosts} style={{ padding: '7px 12px', background: '#fef3c7', border: '1px solid #fcd34d', color: '#92400e', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 600, opacity: fixingCosts ? 0.6 : 1 }}>
+                    {fixingCosts ? 'Fixing…' : `⚠ Fix ${missingCostCount} missing cost${missingCostCount === 1 ? '' : 's'}`}
+                  </button>
+                )}
                 <button onClick={() => openWeekSheet()} style={{ padding: '7px 14px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer' }}>
                   + Log Time
                 </button>
