@@ -539,6 +539,14 @@ export default function SubcontractorsPage() {
     await load()
   }
 
+  async function markWeekPaidCash(contactId: string, ws: string) {
+    const ids = timeLogs
+      .filter(l => l.contact_id === contactId && (l.week_start ?? getWeekStart(l.entry_date)) === ws)
+      .map(l => l.id)
+    if (ids.length > 0) await sb.from('sub_admin_time_logs').update({ status: 'paid' }).in('id', ids)
+    await load()
+  }
+
   async function pushWeekToXero(contactId: string, ws: string) {
     const key = `${contactId}_${ws}`
     setXeroPushingLog(key)
@@ -930,6 +938,7 @@ export default function SubcontractorsPage() {
                   const subName = contactName(contactId)
                   const total = logs.reduce((s, l) => s + Number(l.amount), 0)
                   const allApproved = logs.every(l => l.status !== 'pending')
+                  const allPaid = logs.every(l => l.status === 'paid')
                   const anyXero = logs.some(l => l.xero_bill_id)
                   const isExpanded = expandedWeeks.has(key)
                   return (
@@ -952,9 +961,14 @@ export default function SubcontractorsPage() {
                           }
                           {anyXero
                             ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#dbeafe', color: '#1e40af', fontWeight: 600 }}>✓ Xero</span>
-                            : allApproved
-                              ? <button onClick={() => pushWeekToXero(contactId, ws)} disabled={xeroPushingLog === key} style={{ fontSize: 11, padding: '3px 10px', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb', borderRadius: 6, cursor: 'pointer', fontWeight: 600, opacity: xeroPushingLog === key ? 0.6 : 1 }}>{xeroPushingLog === key ? '…' : '⚡ Xero'}</button>
-                              : null
+                            : allPaid
+                              ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#f3f4f6', color: '#374151', fontWeight: 600 }}>✓ Cash paid</span>
+                              : allApproved
+                                ? <>
+                                    <button onClick={() => pushWeekToXero(contactId, ws)} disabled={xeroPushingLog === key} style={{ fontSize: 11, padding: '3px 10px', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb', borderRadius: 6, cursor: 'pointer', fontWeight: 600, opacity: xeroPushingLog === key ? 0.6 : 1 }}>{xeroPushingLog === key ? '…' : '⚡ Xero'}</button>
+                                    <button onClick={() => markWeekPaidCash(contactId, ws)} style={{ fontSize: 11, padding: '3px 10px', background: '#fff', border: '1px solid #d1d5db', color: '#374151', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>💵 Cash paid</button>
+                                  </>
+                                : null
                           }
                           <button onClick={() => openWeekSheet(contactId, ws)} style={{ fontSize: 11, padding: '3px 10px', background: '#fff', border: '1px solid #d1d5db', color: '#374151', borderRadius: 6, cursor: 'pointer' }}>Edit</button>
                           <button onClick={() => deleteWeek(contactId, ws)} style={{ fontSize: 11, padding: '3px 10px', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 6, cursor: 'pointer' }}>Delete</button>
