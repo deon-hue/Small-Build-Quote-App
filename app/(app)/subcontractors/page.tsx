@@ -540,10 +540,23 @@ export default function SubcontractorsPage() {
   }
 
   async function markWeekPaidCash(contactId: string, ws: string) {
-    const ids = timeLogs
-      .filter(l => l.contact_id === contactId && (l.week_start ?? getWeekStart(l.entry_date)) === ws)
-      .map(l => l.id)
-    if (ids.length > 0) await sb.from('sub_admin_time_logs').update({ status: 'paid' }).in('id', ids)
+    const { data: { user } } = await sb.auth.getUser()
+    if (!user) return
+    const weekLogs = timeLogs.filter(l => l.contact_id === contactId && (l.week_start ?? getWeekStart(l.entry_date)) === ws)
+    for (const log of weekLogs) {
+      await sb.from('sub_admin_time_logs').update({ status: 'paid' }).eq('id', log.id)
+      if (log.job_id && !log.job_cost_id) {
+        const cost = await insertJobCost(sb, user.id, {
+          jobId: log.job_id, source: 'timesheet', costCategory: 'subcontractors',
+          supplier: contactName(log.contact_id),
+          description: log.notes || `Sub time — ${log.entry_date}`,
+          docDate: log.entry_date, docNumber: '',
+          netAmount: log.amount, vatAmount: 0, grossAmount: log.amount,
+          paymentStatus: 'paid', chargeToClient: false,
+        })
+        if (cost?.id) await sb.from('sub_admin_time_logs').update({ job_cost_id: cost.id }).eq('id', log.id)
+      }
+    }
     await load()
   }
 
@@ -600,13 +613,30 @@ export default function SubcontractorsPage() {
     const key = `${contactId}_${ws}`
     setXeroPushingLog(key)
     setError('')
-    // Only push entries that haven't already been individually pushed or cash-paid
-    const logIds = timeLogs
-      .filter(l => l.contact_id === contactId && (l.week_start ?? getWeekStart(l.entry_date)) === ws && !l.xero_bill_id && l.status !== 'paid')
-      .map(l => l.id)
-    if (logIds.length === 0) { setError('No unpaid entries to push to Xero'); setXeroPushingLog(null); return }
+    const { data: { user } } = await sb.auth.getUser()
+    if (!user) { setXeroPushingLog(null); return }
+    // Only entries not already individually pushed or cash-paid
+    const weekLogs = timeLogs.filter(l => l.contact_id === contactId && (l.week_start ?? getWeekStart(l.entry_date)) === ws && !l.xero_bill_id && l.status !== 'paid')
+    if (weekLogs.length === 0) { setError('No unpaid entries to push to Xero'); setXeroPushingLog(null); return }
+    // Approve any still-pending entries and create their job costs first
+    for (const log of weekLogs) {
+      if (log.status === 'pending') {
+        await sb.from('sub_admin_time_logs').update({ status: 'approved' }).eq('id', log.id)
+        if (log.job_id && !log.job_cost_id) {
+          const cost = await insertJobCost(sb, user.id, {
+            jobId: log.job_id, source: 'timesheet', costCategory: 'subcontractors',
+            supplier: contactName(log.contact_id),
+            description: log.notes || `Sub time — ${log.entry_date}`,
+            docDate: log.entry_date, docNumber: '',
+            netAmount: log.amount, vatAmount: 0, grossAmount: log.amount,
+            paymentStatus: 'unpaid', chargeToClient: false,
+          })
+          if (cost?.id) await sb.from('sub_admin_time_logs').update({ job_cost_id: cost.id }).eq('id', log.id)
+        }
+      }
+    }
     try {
-      const res = await fetch('/api/xero/push-time-log-week', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contactId, weekStart: ws, logIds }) })
+      const res = await fetch('/api/xero/push-time-log-week', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contactId, weekStart: ws, logIds: weekLogs.map(l => l.id) }) })
       const data = await res.json() as { xeroBillId?: string; error?: string }
       if (!res.ok || data.error) { setError(data.error ?? 'Xero push failed'); return }
       await load()
