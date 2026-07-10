@@ -52,6 +52,7 @@ interface AdminTimeLog {
   contact_id: string
   job_id: string | null
   entry_date: string
+  week_start: string | null
   start_time: string | null
   finish_time: string | null
   total_hours: number | null
@@ -67,8 +68,36 @@ interface AdminTimeLog {
   created_at: string
 }
 
+interface DayRow {
+  date: string
+  active: boolean
+  jobId: string
+  rateType: AdminTimeLog['rate_type']
+  rateAmount: string
+  hours: string
+  notes: string
+  existingId?: string
+}
+
 const fmt = (n: number) => `£${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const today = () => new Date().toISOString().slice(0, 10)
+const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+function getWeekStart(dateStr: string): string {
+  const d = new Date(dateStr + 'T12:00:00')
+  const dow = d.getDay()
+  d.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1))
+  return d.toISOString().slice(0, 10)
+}
+function getWeekDays(ws: string): string[] {
+  const base = new Date(ws + 'T12:00:00')
+  return Array.from({ length: 7 }, (_, i) => { const d = new Date(base); d.setDate(base.getDate() + i); return d.toISOString().slice(0, 10) })
+}
+function fmtWeekRange(ws: string): string {
+  const s = new Date(ws + 'T12:00:00')
+  const e = new Date(ws + 'T12:00:00')
+  e.setDate(e.getDate() + 6)
+  return `${s.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${e.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
+}
 
 export default function SubcontractorsPage() {
   const sb = createClient()
@@ -118,12 +147,13 @@ export default function SubcontractorsPage() {
   const [editingStage, setEditingStage] = useState<PaymentStage | null>(null)
   const [stageForm, setStageForm] = useState(emptyStage)
 
-  // Admin time log
-  const emptyLogForm = { contactId: '', jobId: '', entryDate: today(), rateType: 'day' as AdminTimeLog['rate_type'], rateAmount: '', totalHours: '', amount: '', amountOverridden: false, notes: '', entryType: 'payable' as AdminTimeLog['entry_type'] }
+  // Admin time log — weekly timesheets
   const [timeLogs, setTimeLogs] = useState<AdminTimeLog[]>([])
-  const [logModal, setLogModal] = useState(false)
-  const [editingLog, setEditingLog] = useState<AdminTimeLog | null>(null)
-  const [logForm, setLogForm] = useState(emptyLogForm)
+  const [weekModal, setWeekModal] = useState(false)
+  const [weekSub, setWeekSub] = useState('')
+  const [weekStart, setWeekStart] = useState(() => getWeekStart(today()))
+  const [weekRows, setWeekRows] = useState<DayRow[]>([])
+  const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set())
   const [logFilter, setLogFilter] = useState('')
 
   async function sendPortalInvite(contractId: string, contactId: string | null) {
@@ -424,133 +454,101 @@ export default function SubcontractorsPage() {
     setContracts(prev => prev.map(c => c.id === contractId ? { ...c, quote_document_id: null } : c))
   }
 
-  // ─── Admin Time Log helpers ───────────────────────────────────────────────
+  // ─── Admin Time Log helpers — weekly timesheets ──────────────────────────
 
-  function calcLogAmount(form: typeof emptyLogForm): number {
-    const rate = Number(form.rateAmount) || 0
-    if (form.rateType === 'hourly') return rate * (Number(form.totalHours) || 0)
-    return rate
-  }
-
-  function autoFillRate(contactId: string, rateType: AdminTimeLog['rate_type'], currentForm: typeof emptyLogForm) {
+  function buildWeekRows(ws: string, contactId: string, existingLogs: AdminTimeLog[]): DayRow[] {
     const contact = clients.find(c => c.id === contactId)
-    if (!contact) return currentForm
-    let rate = ''
-    if (rateType === 'day' && contact.subDayRate) rate = contact.subDayRate.toString()
-    else if (rateType === 'half_day' && contact.subHalfDayRate) rate = contact.subHalfDayRate.toString()
-    else if (rateType === 'hourly' && contact.subHourlyRate) rate = contact.subHourlyRate.toString()
-    const updated = { ...currentForm, contactId, rateType, rateAmount: rate || currentForm.rateAmount }
-    if (!updated.amountOverridden) updated.amount = calcLogAmount(updated).toString()
-    return updated
-  }
-
-  function openNewLog() {
-    setEditingLog(null)
-    setLogForm(emptyLogForm)
-    setError('')
-    setLogModal(true)
-  }
-
-  function openEditLog(log: AdminTimeLog) {
-    setEditingLog(log)
-    setLogForm({
-      contactId: log.contact_id,
-      jobId: log.job_id ?? '',
-      entryDate: log.entry_date,
-      rateType: log.rate_type,
-      rateAmount: log.rate_amount.toString(),
-      totalHours: log.total_hours?.toString() ?? '',
-      amount: log.amount.toString(),
-      amountOverridden: log.amount_overridden,
-      notes: log.notes,
-      entryType: log.entry_type,
+    const defType: AdminTimeLog['rate_type'] = contact?.subDayRate ? 'day' : contact?.subHalfDayRate ? 'half_day' : contact?.subHourlyRate ? 'hourly' : 'day'
+    const defRate = (contact?.subDayRate ?? contact?.subHalfDayRate ?? contact?.subHourlyRate ?? 0).toString()
+    return getWeekDays(ws).map(date => {
+      const ex = existingLogs.find(l => l.contact_id === contactId && l.entry_date === date)
+      if (ex) return { date, active: true, jobId: ex.job_id ?? '', rateType: ex.rate_type, rateAmount: ex.rate_amount.toString(), hours: ex.total_hours?.toString() ?? '', notes: ex.notes, existingId: ex.id }
+      return { date, active: false, jobId: '', rateType: defType, rateAmount: defRate, hours: '', notes: '' }
     })
-    setError('')
-    setLogModal(true)
   }
 
-  async function saveLog() {
-    if (!logForm.contactId) { setError('Select a subcontractor'); return }
-    if (!logForm.entryDate) { setError('Enter a date'); return }
-    if (!logForm.rateAmount) { setError('Enter a rate amount'); return }
+  function openWeekSheet(contactId = '', ws = getWeekStart(today())) {
+    setWeekSub(contactId)
+    setWeekStart(ws)
+    setWeekRows(buildWeekRows(ws, contactId, timeLogs))
+    setError('')
+    setWeekModal(true)
+  }
+
+  async function saveWeekSheet() {
+    if (!weekSub) { setError('Select a subcontractor'); return }
     setSaving(true); setError('')
     const { data: { user } } = await sb.auth.getUser()
     if (!user) { setSaving(false); return }
-
-    const amount = logForm.amountOverridden ? Number(logForm.amount) : calcLogAmount(logForm)
-
-    const payload = {
-      user_id: user.id,
-      contact_id: logForm.contactId,
-      job_id: logForm.jobId || null,
-      entry_date: logForm.entryDate,
-      rate_type: logForm.rateType,
-      rate_amount: Number(logForm.rateAmount),
-      total_hours: logForm.rateType === 'hourly' ? (Number(logForm.totalHours) || null) : null,
-      amount,
-      amount_overridden: logForm.amountOverridden,
-      notes: logForm.notes.trim(),
-      entry_type: logForm.entryType,
-      status: editingLog ? editingLog.status : 'pending',
+    const ws = weekStart
+    for (const row of weekRows) {
+      const rate = Number(row.rateAmount) || 0
+      const amount = row.rateType === 'hourly' ? rate * (Number(row.hours) || 0) : rate
+      if (row.active) {
+        if (row.existingId) {
+          await sb.from('sub_admin_time_logs').update({
+            job_id: row.jobId || null, week_start: ws,
+            rate_type: row.rateType, rate_amount: rate,
+            total_hours: row.rateType === 'hourly' ? (Number(row.hours) || null) : null,
+            amount, amount_overridden: false, notes: row.notes.trim(),
+          }).eq('id', row.existingId)
+        } else {
+          await sb.from('sub_admin_time_logs').insert({
+            user_id: user.id, contact_id: weekSub,
+            job_id: row.jobId || null, entry_date: row.date, week_start: ws,
+            rate_type: row.rateType, rate_amount: rate,
+            total_hours: row.rateType === 'hourly' ? (Number(row.hours) || null) : null,
+            amount, amount_overridden: false, notes: row.notes.trim(),
+            entry_type: 'payable', status: 'pending',
+          })
+        }
+      } else if (row.existingId) {
+        await sb.from('sub_admin_time_logs').delete().eq('id', row.existingId)
+      }
     }
-
-    if (editingLog) {
-      await sb.from('sub_admin_time_logs').update(payload).eq('id', editingLog.id)
-    } else {
-      await sb.from('sub_admin_time_logs').insert(payload)
-    }
-    setLogModal(false)
+    setWeekModal(false)
     await load()
     setSaving(false)
   }
 
-  async function deleteLog(id: string) {
-    if (!confirm('Delete this time log entry?')) return
-    await sb.from('sub_admin_time_logs').delete().eq('id', id)
+  async function deleteWeek(contactId: string, ws: string) {
+    if (!confirm('Delete all time entries for this week?')) return
+    const ids = timeLogs.filter(l => l.contact_id === contactId && (l.week_start ?? getWeekStart(l.entry_date)) === ws).map(l => l.id)
+    if (ids.length > 0) await sb.from('sub_admin_time_logs').delete().in('id', ids)
     await load()
   }
 
-  async function updateLogStatus(id: string, status: AdminTimeLog['status']) {
-    await sb.from('sub_admin_time_logs').update({ status }).eq('id', id)
-    setTimeLogs(prev => prev.map(l => l.id === id ? { ...l, status } : l))
-
-    // On approval: create a job cost if the entry has a job and hasn't been costed yet
-    if (status === 'approved') {
-      const log = timeLogs.find(l => l.id === id)
-      if (log?.job_id && !log.job_cost_id) {
-        const { data: { user } } = await sb.auth.getUser()
-        if (user) {
-          const cost = await insertJobCost(sb, user.id, {
-            jobId: log.job_id,
-            source: 'timesheet',
-            costCategory: 'subcontractors',
-            supplier: contactName(log.contact_id),
-            description: log.notes || `Sub time — ${log.entry_date}`,
-            docDate: log.entry_date,
-            docNumber: '',
-            netAmount: log.amount,
-            vatAmount: 0,
-            grossAmount: log.amount,
-            paymentStatus: 'unpaid',
-            chargeToClient: false,
-          })
-          if (cost?.id) {
-            await sb.from('sub_admin_time_logs').update({ job_cost_id: cost.id }).eq('id', id)
-            setTimeLogs(prev => prev.map(l => l.id === id ? { ...l, job_cost_id: cost.id } : l))
-          }
-        }
+  async function approveWeek(contactId: string, ws: string) {
+    const { data: { user } } = await sb.auth.getUser()
+    if (!user) return
+    const pending = timeLogs.filter(l => l.contact_id === contactId && (l.week_start ?? getWeekStart(l.entry_date)) === ws && l.status === 'pending')
+    for (const log of pending) {
+      await sb.from('sub_admin_time_logs').update({ status: 'approved' }).eq('id', log.id)
+      if (log.job_id && !log.job_cost_id) {
+        const cost = await insertJobCost(sb, user.id, {
+          jobId: log.job_id, source: 'timesheet', costCategory: 'subcontractors',
+          supplier: contactName(log.contact_id),
+          description: log.notes || `Sub time — ${log.entry_date}`,
+          docDate: log.entry_date, docNumber: '',
+          netAmount: log.amount, vatAmount: 0, grossAmount: log.amount,
+          paymentStatus: 'unpaid', chargeToClient: false,
+        })
+        if (cost?.id) await sb.from('sub_admin_time_logs').update({ job_cost_id: cost.id }).eq('id', log.id)
       }
     }
+    await load()
   }
 
-  async function pushLogToXero(log: AdminTimeLog) {
-    setXeroPushingLog(log.id)
+  async function pushWeekToXero(contactId: string, ws: string) {
+    const key = `${contactId}_${ws}`
+    setXeroPushingLog(key)
     setError('')
+    const logIds = timeLogs.filter(l => l.contact_id === contactId && (l.week_start ?? getWeekStart(l.entry_date)) === ws).map(l => l.id)
     try {
-      const res = await fetch('/api/xero/push-time-log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ logId: log.id }) })
+      const res = await fetch('/api/xero/push-time-log-week', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contactId, weekStart: ws, logIds }) })
       const data = await res.json() as { xeroBillId?: string; error?: string }
       if (!res.ok || data.error) { setError(data.error ?? 'Xero push failed'); return }
-      setTimeLogs(prev => prev.map(l => l.id === log.id ? { ...l, xero_bill_id: data.xeroBillId ?? null } : l))
+      await load()
     } catch {
       setError('Network error — could not push to Xero')
     } finally {
@@ -619,7 +617,7 @@ export default function SubcontractorsPage() {
         <button onClick={openNewContract} style={{ padding: '8px 16px', background: '#111827', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
           + New Contract
         </button>
-        <button onClick={openNewLog} style={{ padding: '8px 16px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+        <button onClick={() => openWeekSheet()} style={{ padding: '8px 16px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
           ⏱ Log Time
         </button>
       </div>
@@ -889,114 +887,108 @@ export default function SubcontractorsPage() {
         )
       })}
 
-      {/* ── Admin Time Logs ───────────────────────────────────────── */}
-      <div style={{ marginTop: 40, borderTop: '2px solid #e5e7eb', paddingTop: 28 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#111827' }}>⏱ Time Logs</div>
-            <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
-              Admin-entered time — {timeLogs.length} entr{timeLogs.length === 1 ? 'y' : 'ies'} · Total payable: {fmt(timeLogs.filter(l => l.entry_type === 'payable').reduce((s, l) => s + Number(l.amount), 0))}
+      {/* ── Admin Time Logs — weekly timesheets ──────────────────── */}
+      {(() => {
+        const filteredLogs = timeLogs.filter(l => !logFilter || l.contact_id === logFilter)
+        const weekGroupMap = new Map<string, { contactId: string; ws: string; logs: AdminTimeLog[] }>()
+        for (const log of filteredLogs) {
+          const ws = log.week_start ?? getWeekStart(log.entry_date)
+          const key = `${log.contact_id}_${ws}`
+          if (!weekGroupMap.has(key)) weekGroupMap.set(key, { contactId: log.contact_id, ws, logs: [] })
+          weekGroupMap.get(key)!.logs.push(log)
+        }
+        const weekGroups = [...weekGroupMap.values()].sort((a, b) => b.ws.localeCompare(a.ws))
+        return (
+          <div style={{ marginTop: 40, borderTop: '2px solid #e5e7eb', paddingTop: 28 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#111827' }}>⏱ Weekly Timesheets</div>
+                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
+                  {weekGroups.length} week{weekGroups.length === 1 ? '' : 's'} · Total payable: {fmt(timeLogs.reduce((s, l) => s + Number(l.amount), 0))}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <select value={logFilter} onChange={e => setLogFilter(e.target.value)}
+                  style={{ padding: '7px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 12 }}>
+                  <option value="">All subs</option>
+                  {subs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+                <button onClick={() => openWeekSheet()} style={{ padding: '7px 14px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer' }}>
+                  + Log Time
+                </button>
+              </div>
             </div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <select value={logFilter} onChange={e => setLogFilter(e.target.value)}
-              style={{ padding: '7px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 12 }}>
-              <option value="">All subs</option>
-              {subs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-            <button onClick={openNewLog} style={{ padding: '7px 14px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer' }}>
-              + Log Time
-            </button>
-          </div>
-        </div>
 
-        {timeLogs.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 32, color: '#9ca3af', fontSize: 14, border: '1px dashed #d1d5db', borderRadius: 8 }}>
-            No time logs yet. Click &quot;Log Time&quot; or &quot;⏱ Log Time&quot; in the toolbar to add the first entry.
-          </div>
-        ) : (
-          <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead>
-                <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                  <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: '#374151', fontSize: 11 }}>Date</th>
-                  <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: '#374151', fontSize: 11 }}>Sub</th>
-                  <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: '#374151', fontSize: 11 }}>Job</th>
-                  <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: '#374151', fontSize: 11 }}>Rate</th>
-                  <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 600, color: '#374151', fontSize: 11 }}>Amount</th>
-                  <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: '#374151', fontSize: 11 }}>Type</th>
-                  <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: '#374151', fontSize: 11 }}>Status</th>
-                  <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: '#374151', fontSize: 11 }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {timeLogs.filter(l => !logFilter || l.contact_id === logFilter).map((log, i) => {
-                  const subName = contactName(log.contact_id)
-                  const jName = log.job_id ? jobName(log.job_id) : '—'
-                  const rateLabel: Record<AdminTimeLog['rate_type'], string> = { day: 'Day', half_day: 'Half day', hourly: `Hourly`, custom: 'Custom' }
-                  const statusColor: Record<AdminTimeLog['status'], string> = { pending: '#fef3c7', approved: '#dcfce7', paid: '#dbeafe' }
-                  const statusText: Record<AdminTimeLog['status'], string> = { pending: '#92400e', approved: '#166534', paid: '#1e40af' }
-                  const typeColor: Record<AdminTimeLog['entry_type'], string> = { payable: '#fee2e2', billable: '#ede9fe', internal: '#f3f4f6' }
-                  const typeText: Record<AdminTimeLog['entry_type'], string> = { payable: '#dc2626', billable: '#7c3aed', internal: '#6b7280' }
+            {weekGroups.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 32, color: '#9ca3af', fontSize: 14, border: '1px dashed #d1d5db', borderRadius: 8 }}>
+                No time logs yet. Click &quot;Log Time&quot; or &quot;⏱ Log Time&quot; in the toolbar to enter the first weekly timesheet.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {weekGroups.map(({ contactId, ws, logs }) => {
+                  const key = `${contactId}_${ws}`
+                  const subName = contactName(contactId)
+                  const total = logs.reduce((s, l) => s + Number(l.amount), 0)
+                  const allApproved = logs.every(l => l.status !== 'pending')
+                  const anyXero = logs.some(l => l.xero_bill_id)
+                  const isExpanded = expandedWeeks.has(key)
                   return (
-                    <tr key={log.id} style={{ borderBottom: i < timeLogs.length - 1 ? '1px solid #f3f4f6' : 'none', background: '#fff' }}>
-                      <td style={{ padding: '10px 14px', color: '#374151', whiteSpace: 'nowrap' }}>
-                        {new Date(log.entry_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                      </td>
-                      <td style={{ padding: '10px 14px', fontWeight: 500, color: '#111827' }}>{subName}</td>
-                      <td style={{ padding: '10px 14px', color: '#6b7280', fontSize: 12 }}>{jName}</td>
-                      <td style={{ padding: '10px 14px', color: '#6b7280', fontSize: 12 }}>
-                        {rateLabel[log.rate_type]} · {fmt(log.rate_amount)}
-                        {log.rate_type === 'hourly' && log.total_hours ? ` × ${log.total_hours}h` : ''}
-                      </td>
-                      <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 600 }}>{fmt(log.amount)}</td>
-                      <td style={{ padding: '10px 14px' }}>
-                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: typeColor[log.entry_type], color: typeText[log.entry_type], fontWeight: 600 }}>
-                          {log.entry_type}
-                        </span>
-                      </td>
-                      <td style={{ padding: '10px 14px' }}>
-                        <select
-                          value={log.status}
-                          onChange={e => updateLogStatus(log.id, e.target.value as AdminTimeLog['status'])}
-                          style={{ fontSize: 11, padding: '3px 6px', border: '1px solid #d1d5db', borderRadius: 4, background: statusColor[log.status], color: statusText[log.status], fontWeight: 600, cursor: 'pointer' }}
-                        >
-                          <option value="pending">Pending</option>
-                          <option value="approved">Approved</option>
-                          <option value="paid">Paid</option>
-                        </select>
-                      </td>
-                      <td style={{ padding: '10px 14px' }}>
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                          {log.job_cost_id && (
-                            <span title="Job cost created" style={{ fontSize: 10, padding: '2px 6px', borderRadius: 8, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>✓ Cost</span>
-                          )}
-                          {log.xero_bill_id ? (
-                            <span title={`Xero bill: ${log.xero_bill_id}`} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 8, background: '#dbeafe', color: '#1e40af', fontWeight: 600 }}>✓ Xero</span>
-                          ) : log.entry_type === 'payable' && log.status === 'approved' ? (
-                            <button
-                              onClick={() => pushLogToXero(log)}
-                              disabled={xeroPushingLog === log.id}
-                              style={{ fontSize: 10, padding: '2px 8px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: 4, cursor: 'pointer', whiteSpace: 'nowrap', opacity: xeroPushingLog === log.id ? 0.6 : 1 }}
-                            >
-                              {xeroPushingLog === log.id ? '…' : '⚡ Xero'}
-                            </button>
-                          ) : null}
-                          {log.notes && (
-                            <span title={log.notes} style={{ fontSize: 12, cursor: 'default' }}>📝</span>
-                          )}
-                          {btn('Edit', () => openEditLog(log), 'ghost', true)}
-                          {btn('✕', () => deleteLog(log.id), 'danger', true)}
+                    <div key={key} style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+                      <div
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 14px', background: '#f9fafb', cursor: 'pointer', flexWrap: 'wrap', gap: 8 }}
+                        onClick={() => setExpandedWeeks(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 11, color: '#9ca3af' }}>{isExpanded ? '▲' : '▼'}</span>
+                          <span style={{ fontWeight: 700, color: '#111827' }}>{subName}</span>
+                          <span style={{ fontSize: 13, color: '#6b7280' }}>Week of {fmtWeekRange(ws)}</span>
+                          <span style={{ fontSize: 12, color: '#9ca3af' }}>· {logs.length} day{logs.length !== 1 ? 's' : ''}</span>
                         </div>
-                      </td>
-                    </tr>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
+                          <span style={{ fontWeight: 700, fontSize: 14 }}>{fmt(total)}</span>
+                          {allApproved
+                            ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>✓ Approved</span>
+                            : <button onClick={() => approveWeek(contactId, ws)} style={{ fontSize: 11, padding: '3px 10px', background: '#fff', border: '1px solid #16a34a', color: '#16a34a', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>Approve week</button>
+                          }
+                          {anyXero
+                            ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#dbeafe', color: '#1e40af', fontWeight: 600 }}>✓ Xero</span>
+                            : allApproved
+                              ? <button onClick={() => pushWeekToXero(contactId, ws)} disabled={xeroPushingLog === key} style={{ fontSize: 11, padding: '3px 10px', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb', borderRadius: 6, cursor: 'pointer', fontWeight: 600, opacity: xeroPushingLog === key ? 0.6 : 1 }}>{xeroPushingLog === key ? '…' : '⚡ Xero'}</button>
+                              : null
+                          }
+                          <button onClick={() => openWeekSheet(contactId, ws)} style={{ fontSize: 11, padding: '3px 10px', background: '#fff', border: '1px solid #d1d5db', color: '#374151', borderRadius: 6, cursor: 'pointer' }}>Edit</button>
+                          <button onClick={() => deleteWeek(contactId, ws)} style={{ fontSize: 11, padding: '3px 10px', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 6, cursor: 'pointer' }}>Delete</button>
+                        </div>
+                      </div>
+                      {isExpanded && (
+                        <div>
+                          {[...logs].sort((a, b) => a.entry_date.localeCompare(b.entry_date)).map((log) => {
+                            const dow = new Date(log.entry_date + 'T12:00:00').getDay()
+                            const dayLabel = DAY_LABELS[dow === 0 ? 6 : dow - 1]
+                            const jName = log.job_id ? jobName(log.job_id) : '—'
+                            const rateLabel: Record<AdminTimeLog['rate_type'], string> = { day: 'Day', half_day: '½ Day', hourly: `${log.total_hours ?? '?'}h`, custom: 'Custom' }
+                            return (
+                              <div key={log.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderTop: '1px solid #f3f4f6', fontSize: 13, flexWrap: 'wrap' }}>
+                                <span style={{ color: '#6b7280', minWidth: 90, fontSize: 12 }}>{dayLabel} {new Date(log.entry_date + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+                                <span style={{ color: '#374151', flex: 1, minWidth: 100 }}>{jName}</span>
+                                <span style={{ color: '#6b7280', fontSize: 12 }}>{rateLabel[log.rate_type]} · {fmt(log.rate_amount)}</span>
+                                <span style={{ fontWeight: 600, minWidth: 64, textAlign: 'right' }}>{fmt(log.amount)}</span>
+                                {log.notes && <span title={log.notes} style={{ cursor: 'default' }}>📝</span>}
+                                {log.job_cost_id && <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 6, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>✓ Cost</span>}
+                                <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 6, fontWeight: 600, background: log.status === 'approved' ? '#dcfce7' : log.status === 'paid' ? '#dbeafe' : '#fef3c7', color: log.status === 'approved' ? '#166534' : log.status === 'paid' ? '#1e40af' : '#92400e' }}>{log.status}</span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
                   )
                 })}
-              </tbody>
-            </table>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        )
+      })()}
 
       {/* ── Contract Modal ─────────────────────────────────────────── */}
       {contractModal && (
@@ -1131,117 +1123,136 @@ export default function SubcontractorsPage() {
         </div>
       )}
 
-      {/* ── Admin Time Log Modal ──────────────────────────────────── */}
-      {logModal && (
+      {/* ── Weekly Timesheet Modal ────────────────────────────────── */}
+      {weekModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ background: '#fff', borderRadius: 10, padding: 24, width: '100%', maxWidth: 480, maxHeight: '90vh', overflow: 'auto' }}>
-            <h3 style={{ margin: '0 0 20px', fontSize: 16, fontWeight: 700 }}>{editingLog ? 'Edit Time Log' : '⏱ Log Sub Time'}</h3>
-            <div style={{ display: 'grid', gap: 14 }}>
+          <div style={{ background: '#fff', borderRadius: 10, padding: 24, width: '100%', maxWidth: 740, maxHeight: '92vh', overflow: 'auto' }}>
+            <h3 style={{ margin: '0 0 20px', fontSize: 16, fontWeight: 700 }}>⏱ Weekly Timesheet</h3>
 
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Subcontractor *</label>
                 <ContactPicker
-                  value={logForm.contactId}
-                  onChange={id => setLogForm(f => autoFillRate(id, f.rateType, { ...f, contactId: id }))}
+                  value={weekSub}
+                  onChange={id => { setWeekSub(id); setWeekRows(buildWeekRows(weekStart, id, timeLogs)) }}
                   contacts={subs}
                   placeholder="Search subcontractor…"
                 />
               </div>
-
               <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Job</label>
-                <select value={logForm.jobId} onChange={e => setLogForm(f => ({ ...f, jobId: e.target.value }))}
-                  style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13 }}>
-                  <option value="">No specific job</option>
-                  {jobs.map(j => <option key={j.id} value={j.id}>{j.client || j.address} — {j.address}</option>)}
-                </select>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Date *</label>
-                  <input type="date" value={logForm.entryDate} onChange={e => setLogForm(f => ({ ...f, entryDate: e.target.value }))}
-                    style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Entry Type</label>
-                  <select value={logForm.entryType} onChange={e => setLogForm(f => ({ ...f, entryType: e.target.value as AdminTimeLog['entry_type'] }))}
-                    style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13 }}>
-                    <option value="payable">Payable (owed to sub)</option>
-                    <option value="billable">Billable (charge to client)</option>
-                    <option value="internal">Internal only</option>
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Rate Type</label>
-                  <select value={logForm.rateType} onChange={e => {
-                    const rt = e.target.value as AdminTimeLog['rate_type']
-                    setLogForm(f => autoFillRate(f.contactId, rt, { ...f, rateType: rt }))
-                  }} style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13 }}>
-                    <option value="day">Day Rate</option>
-                    <option value="half_day">Half Day</option>
-                    <option value="hourly">Hourly</option>
-                    <option value="custom">Custom</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Rate Amount (£) *</label>
-                  <input type="number" min="0" step="0.01" value={logForm.rateAmount}
-                    onChange={e => setLogForm(f => {
-                      const updated = { ...f, rateAmount: e.target.value }
-                      if (!updated.amountOverridden) updated.amount = calcLogAmount(updated).toString()
-                      return updated
-                    })}
-                    style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
-                </div>
-              </div>
-
-              {logForm.rateType === 'hourly' && (
-                <div>
-                  <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Hours</label>
-                  <input type="number" min="0" step="0.5" value={logForm.totalHours}
-                    onChange={e => setLogForm(f => {
-                      const updated = { ...f, totalHours: e.target.value }
-                      if (!updated.amountOverridden) updated.amount = calcLogAmount(updated).toString()
-                      return updated
-                    })}
-                    placeholder="e.g. 7.5"
-                    style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
-                </div>
-              )}
-
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                  <label style={{ fontSize: 12, color: '#374151', fontWeight: 500 }}>Amount (£)</label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#6b7280', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={logForm.amountOverridden} onChange={e => setLogForm(f => ({ ...f, amountOverridden: e.target.checked }))} />
-                    Override
-                  </label>
-                </div>
+                <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Week</label>
                 <input
-                  type="number" min="0" step="0.01"
-                  value={logForm.amountOverridden ? logForm.amount : (calcLogAmount(logForm) || '').toString()}
-                  readOnly={!logForm.amountOverridden}
-                  onChange={e => setLogForm(f => ({ ...f, amount: e.target.value }))}
-                  style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box', background: logForm.amountOverridden ? '#fff' : '#f9fafb' }}
+                  type="date"
+                  value={weekStart}
+                  onChange={e => {
+                    const ws = getWeekStart(e.target.value)
+                    setWeekStart(ws)
+                    setWeekRows(buildWeekRows(ws, weekSub, timeLogs))
+                  }}
+                  style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' as const }}
                 />
+                <div style={{ fontSize: 11, color: '#6b7280', marginTop: 3 }}>{fmtWeekRange(weekStart)}</div>
               </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Notes</label>
-                <input value={logForm.notes} onChange={e => setLogForm(f => ({ ...f, notes: e.target.value }))} placeholder="e.g. First fix carpentry, day 1 of 3"
-                  style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
-              </div>
-
             </div>
-            {error && <div style={{ color: '#dc2626', fontSize: 12, marginTop: 12 }}>{error}</div>}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
-              <button onClick={() => { setLogModal(false); setError('') }} style={{ padding: '8px 16px', background: '#f9fafb', color: '#374151', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, cursor: 'pointer' }}>Cancel</button>
-              <button onClick={saveLog} disabled={saving} style={{ padding: '8px 20px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
-                {saving ? 'Saving…' : editingLog ? 'Save Changes' : 'Log Time'}
+
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', width: 110, fontWeight: 600, color: '#374151', fontSize: 11 }}>Day</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', fontSize: 11 }}>Job</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', width: 160, fontWeight: 600, color: '#374151', fontSize: 11 }}>Rate</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right', width: 80, fontWeight: 600, color: '#374151', fontSize: 11 }}>Amount</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', fontSize: 11 }}>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {weekRows.map((row, i) => {
+                    const dayLabel = DAY_LABELS[i]
+                    const dateLabel = new Date(row.date + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+                    const rowAmt = row.active ? (row.rateType === 'hourly' ? (Number(row.rateAmount) || 0) * (Number(row.hours) || 0) : (Number(row.rateAmount) || 0)) : 0
+                    return (
+                      <tr key={row.date} style={{ borderBottom: i < 6 ? '1px solid #f3f4f6' : 'none', background: row.active ? '#fff' : '#fafafa' }}>
+                        <td style={{ padding: '7px 10px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                            <input type="checkbox" checked={row.active} onChange={e => setWeekRows(rows => rows.map((r, idx) => idx === i ? { ...r, active: e.target.checked } : r))} />
+                            <div>
+                              <div style={{ fontWeight: row.active ? 600 : 400, color: row.active ? '#111827' : '#9ca3af', fontSize: 12 }}>{dayLabel}</div>
+                              <div style={{ fontSize: 11, color: '#9ca3af' }}>{dateLabel}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ padding: '6px 8px' }}>
+                          {row.active ? (
+                            <select value={row.jobId} onChange={e => setWeekRows(rows => rows.map((r, idx) => idx === i ? { ...r, jobId: e.target.value } : r))}
+                              style={{ width: '100%', padding: '5px 6px', border: '1px solid #d1d5db', borderRadius: 5, fontSize: 12 }}>
+                              <option value="">No job</option>
+                              {jobs.map(j => <option key={j.id} value={j.id}>{j.client || j.address}</option>)}
+                            </select>
+                          ) : <span style={{ color: '#d1d5db', fontSize: 12 }}>—</span>}
+                        </td>
+                        <td style={{ padding: '6px 8px' }}>
+                          {row.active ? (
+                            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                              <select value={row.rateType} onChange={e => setWeekRows(rows => rows.map((r, idx) => {
+                                if (idx !== i) return r
+                                const rt = e.target.value as AdminTimeLog['rate_type']
+                                const contact = clients.find(c => c.id === weekSub)
+                                let ra = r.rateAmount
+                                if (rt === 'day' && contact?.subDayRate) ra = contact.subDayRate.toString()
+                                else if (rt === 'half_day' && contact?.subHalfDayRate) ra = contact.subHalfDayRate.toString()
+                                else if (rt === 'hourly' && contact?.subHourlyRate) ra = contact.subHourlyRate.toString()
+                                return { ...r, rateType: rt, rateAmount: ra }
+                              }))} style={{ padding: '5px 4px', border: '1px solid #d1d5db', borderRadius: 5, fontSize: 11, flex: '0 0 60px' }}>
+                                <option value="day">Day</option>
+                                <option value="half_day">Half</option>
+                                <option value="hourly">Hourly</option>
+                                <option value="custom">Custom</option>
+                              </select>
+                              <input type="number" min="0" step="0.01" value={row.rateAmount}
+                                onChange={e => setWeekRows(rows => rows.map((r, idx) => idx === i ? { ...r, rateAmount: e.target.value } : r))}
+                                style={{ width: 58, padding: '5px 6px', border: '1px solid #d1d5db', borderRadius: 5, fontSize: 12 }} />
+                              {row.rateType === 'hourly' && (
+                                <input type="number" min="0" step="0.5" value={row.hours} placeholder="hrs"
+                                  onChange={e => setWeekRows(rows => rows.map((r, idx) => idx === i ? { ...r, hours: e.target.value } : r))}
+                                  style={{ width: 42, padding: '5px 4px', border: '1px solid #d1d5db', borderRadius: 5, fontSize: 12 }} />
+                              )}
+                            </div>
+                          ) : <span style={{ color: '#d1d5db', fontSize: 12 }}>—</span>}
+                        </td>
+                        <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, fontSize: 12, color: row.active ? '#111827' : '#d1d5db' }}>
+                          {row.active ? fmt(rowAmt) : '—'}
+                        </td>
+                        <td style={{ padding: '6px 8px' }}>
+                          {row.active ? (
+                            <input value={row.notes} onChange={e => setWeekRows(rows => rows.map((r, idx) => idx === i ? { ...r, notes: e.target.value } : r))}
+                              placeholder="Notes…"
+                              style={{ width: '100%', padding: '5px 6px', border: '1px solid #d1d5db', borderRadius: 5, fontSize: 12, boxSizing: 'border-box' as const }} />
+                          ) : <span style={{ color: '#d1d5db', fontSize: 12 }}>—</span>}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr style={{ background: '#f9fafb', borderTop: '2px solid #e5e7eb' }}>
+                    <td colSpan={3} style={{ padding: '10px', fontWeight: 600, fontSize: 13, color: '#374151' }}>
+                      Total · {weekRows.filter(r => r.active).length} day{weekRows.filter(r => r.active).length === 1 ? '' : 's'} worked
+                    </td>
+                    <td style={{ padding: '10px', textAlign: 'right', fontWeight: 700, fontSize: 14 }}>
+                      {fmt(weekRows.filter(r => r.active).reduce((s, r) => s + (r.rateType === 'hourly' ? (Number(r.rateAmount) || 0) * (Number(r.hours) || 0) : (Number(r.rateAmount) || 0)), 0))}
+                    </td>
+                    <td />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {error && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 12 }}>{error}</div>}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button onClick={() => { setWeekModal(false); setError('') }} style={{ padding: '8px 16px', background: '#f9fafb', color: '#374151', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={saveWeekSheet} disabled={saving} style={{ padding: '8px 20px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
+                {saving ? 'Saving…' : 'Save Timesheet'}
               </button>
             </div>
           </div>
