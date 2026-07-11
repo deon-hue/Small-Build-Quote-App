@@ -43,8 +43,9 @@ const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
 
 export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, invoicedTotal = 0, paidTotal = 0, cashReceived = 0, onClose }: Props) {
   const sb = createClient()
-  const { suppliers, clients, addVariation, jobPayments } = useApp()
+  const { suppliers, clients, addVariation, jobPayments, invoices } = useApp()
   const localPayments = jobPayments.filter(p => p.jobId === jobId)
+  const localInvoices = invoices.filter(i => i.jobId === jobId)
   const [userId, setUserId] = useState<string | null>(null)
   const [costs, setCosts] = useState<JobCost[]>([])
   const [loading, setLoading] = useState(true)
@@ -319,11 +320,33 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
                   </tr>
                 </tfoot>
               </table>
-              {/* Invoice tracking */}
-              {invoicedTotal > 0 && (
-                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #e2e8f0', fontSize: 13, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                  <span>Invoiced: <strong style={{ fontFamily: 'monospace' }}>{fmt(invoicedTotal)}</strong></span>
-                  <span>Paid (invoice): <strong style={{ fontFamily: 'monospace', color: paidTotal > 0 ? '#16a34a' : '#94a3b8' }}>{fmt(paidTotal)}</strong></span>
+              {/* Invoices */}
+              {localInvoices.length > 0 && (
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#6b7280', marginBottom: 8 }}>
+                    Invoices — <span style={{ fontFamily: 'monospace', color: '#111827' }}>{fmt(localInvoices.reduce((s, i) => s + i.total, 0))}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    {[...localInvoices].sort((a, b) => a.issueDate.localeCompare(b.issueDate)).map(inv => {
+                      const statusStyle: Record<string, { bg: string; color: string }> = {
+                        draft:   { bg: '#f3f4f6', color: '#6b7280' },
+                        sent:    { bg: '#fef9c3', color: '#92400e' },
+                        paid:    { bg: '#dcfce7', color: '#15803d' },
+                        overdue: { bg: '#fee2e2', color: '#dc2626' },
+                      }
+                      const ss = statusStyle[inv.status] ?? statusStyle.draft
+                      return (
+                        <div key={inv.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: inv.status === 'paid' ? '#f0fdf4' : '#f8fafc', borderRadius: 7, border: `1px solid ${inv.status === 'paid' ? '#bbf7d0' : '#e2e8f0'}`, fontSize: 13 }}>
+                          <div style={{ flex: 1 }}>
+                            <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{fmt(inv.total)}</span>
+                            <span style={{ color: '#64748b' }}> · {inv.ref}</span>
+                            <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: ss.bg, color: ss.color, fontWeight: 600, marginLeft: 8 }}>{inv.status}</span>
+                          </div>
+                          <div style={{ fontSize: 11, color: '#6b7280' }}>Issued: {inv.issueDate}</div>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
               )}
               {/* Payments received from client */}
