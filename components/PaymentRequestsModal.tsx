@@ -170,6 +170,27 @@ export default function PaymentRequestsModal({ job, onClose }: Props) {
     }
   }
 
+  function isOrphaned(r: PaymentRequest): boolean {
+    if (r.status !== 'received' || !r.received_at) return false
+    const recDate = r.received_at.slice(0, 10)
+    const recAmt = Number(r.amount)
+    return !payments.some(p => p.paymentDate === recDate && Math.abs(p.amount - recAmt) < 0.01)
+  }
+
+  async function backfillPayment(r: PaymentRequest) {
+    if (!r.received_at) return
+    setSaving(true); setError('')
+    try {
+      const pm = METHOD_MAP[r.received_method] ?? 'bank_transfer'
+      await addJobPayment(job.id, Number(r.amount), r.received_at.slice(0, 10), pm,
+        r.description + (r.notes ? ` — ${r.notes}` : ''))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to record payment')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function cancelRequest(id: string) {
     if (!confirm('Cancel this payment request?')) return
     await sb.from('payment_requests').update({ status: 'cancelled' }).eq('id', id)
@@ -364,6 +385,12 @@ export default function PaymentRequestsModal({ job, onClose }: Props) {
                               Cancel
                             </button>
                           </div>
+                        )}
+                        {r.status === 'received' && isOrphaned(r) && (
+                          <button onClick={() => backfillPayment(r)} disabled={saving}
+                            style={{ fontSize: 11, padding: '5px 10px', background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', borderRadius: 5, cursor: 'pointer', flexShrink: 0, fontWeight: 600 }}>
+                            ⚠ Add to ledger
+                          </button>
                         )}
                         {(r.status === 'cancelled' || r.status === 'draft') && (
                           <button onClick={() => deleteRequest(r.id)}
