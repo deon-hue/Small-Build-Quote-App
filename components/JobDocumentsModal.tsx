@@ -46,6 +46,8 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
   const { suppliers, clients, addVariation, jobPayments, invoices } = useApp()
   const localPayments = jobPayments.filter(p => p.jobId === jobId)
   const localInvoices = invoices.filter(i => i.jobId === jobId)
+  const [showInvoices, setShowInvoices] = useState(true)
+  const [showPayments, setShowPayments] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
   const [costs, setCosts] = useState<JobCost[]>([])
   const [loading, setLoading] = useState(true)
@@ -323,54 +325,62 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
               {/* Invoices */}
               {localInvoices.length > 0 && (
                 <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#6b7280', marginBottom: 8 }}>
+                  <div onClick={() => setShowInvoices(v => !v)}
+                    style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#6b7280', marginBottom: showInvoices ? 8 : 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, userSelect: 'none' }}>
+                    <span style={{ fontSize: 10 }}>{showInvoices ? '▾' : '▸'}</span>
                     Invoices — <span style={{ fontFamily: 'monospace', color: '#111827' }}>{fmt(localInvoices.reduce((s, i) => s + i.total, 0))}</span>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                    {[...localInvoices].sort((a, b) => a.issueDate.localeCompare(b.issueDate)).map(inv => {
-                      const statusStyle: Record<string, { bg: string; color: string }> = {
-                        draft:   { bg: '#f3f4f6', color: '#6b7280' },
-                        sent:    { bg: '#fef9c3', color: '#92400e' },
-                        paid:    { bg: '#dcfce7', color: '#15803d' },
-                        overdue: { bg: '#fee2e2', color: '#dc2626' },
-                      }
-                      const ss = statusStyle[inv.status] ?? statusStyle.draft
-                      return (
-                        <div key={inv.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: inv.status === 'paid' ? '#f0fdf4' : '#f8fafc', borderRadius: 7, border: `1px solid ${inv.status === 'paid' ? '#bbf7d0' : '#e2e8f0'}`, fontSize: 13 }}>
-                          <div style={{ flex: 1 }}>
-                            <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{fmt(inv.total)}</span>
-                            <span style={{ color: '#64748b' }}> · {inv.ref}</span>
-                            <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: ss.bg, color: ss.color, fontWeight: 600, marginLeft: 8 }}>{inv.status}</span>
+                  {showInvoices && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      {[...localInvoices].sort((a, b) => a.issueDate.localeCompare(b.issueDate)).map(inv => {
+                        const statusStyle: Record<string, { bg: string; color: string }> = {
+                          draft:   { bg: '#f3f4f6', color: '#6b7280' },
+                          sent:    { bg: '#fef9c3', color: '#92400e' },
+                          paid:    { bg: '#dcfce7', color: '#15803d' },
+                          overdue: { bg: '#fee2e2', color: '#dc2626' },
+                        }
+                        const ss = statusStyle[inv.status] ?? statusStyle.draft
+                        return (
+                          <div key={inv.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: inv.status === 'paid' ? '#f0fdf4' : '#f8fafc', borderRadius: 7, border: `1px solid ${inv.status === 'paid' ? '#bbf7d0' : '#e2e8f0'}`, fontSize: 13 }}>
+                            <div style={{ flex: 1 }}>
+                              <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{fmt(inv.total)}</span>
+                              <span style={{ color: '#64748b' }}> · {inv.ref}</span>
+                              <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: ss.bg, color: ss.color, fontWeight: 600, marginLeft: 8 }}>{inv.status}</span>
+                            </div>
+                            <div style={{ fontSize: 11, color: '#6b7280' }}>Issued: {inv.issueDate}</div>
                           </div>
-                          <div style={{ fontSize: 11, color: '#6b7280' }}>Issued: {inv.issueDate}</div>
-                        </div>
-                      )
-                    })}
-                  </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
               {/* Payments received from client */}
               {localPayments.length > 0 && (
                 <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#6b7280', marginBottom: 8 }}>
+                  <div onClick={() => setShowPayments(v => !v)}
+                    style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#6b7280', marginBottom: showPayments ? 8 : 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, userSelect: 'none' }}>
+                    <span style={{ fontSize: 10 }}>{showPayments ? '▾' : '▸'}</span>
                     Payments Received — <span style={{ color: '#16a34a', fontFamily: 'monospace' }}>{fmt(localPayments.reduce((s, p) => s + p.amount, 0))}</span>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                    {[...localPayments].sort((a, b) => b.paymentDate.localeCompare(a.paymentDate)).map(p => (
-                      <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#f0fdf4', borderRadius: 7, border: '1px solid #bbf7d0', fontSize: 13 }}>
-                        <div style={{ flex: 1 }}>
-                          <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{fmt(p.amount)}</span>
-                          <span style={{ color: '#64748b' }}> · {PAYMENT_METHOD_LABELS[p.method]}</span>
+                  {showPayments && <>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      {[...localPayments].sort((a, b) => b.paymentDate.localeCompare(a.paymentDate)).map(p => (
+                        <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#f0fdf4', borderRadius: 7, border: '1px solid #bbf7d0', fontSize: 13 }}>
+                          <div style={{ flex: 1 }}>
+                            <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{fmt(p.amount)}</span>
+                            <span style={{ color: '#64748b' }}> · {PAYMENT_METHOD_LABELS[p.method]}</span>
+                          </div>
+                          <div style={{ fontSize: 11, color: '#6b7280' }}>{p.paymentDate}{p.notes ? ` · ${p.notes}` : ''}</div>
                         </div>
-                        <div style={{ fontSize: 11, color: '#6b7280' }}>{p.paymentDate}{p.notes ? ` · ${p.notes}` : ''}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {revenue !== undefined && (paidTotal + localPayments.reduce((s, p) => s + p.amount, 0)) < revenue && (
-                    <div style={{ fontSize: 13, color: '#d97706', fontWeight: 600, marginTop: 8 }}>
-                      Outstanding: <span style={{ fontFamily: 'monospace' }}>{fmt(revenue - paidTotal - localPayments.reduce((s, p) => s + p.amount, 0))}</span>
+                      ))}
                     </div>
-                  )}
+                    {revenue !== undefined && (paidTotal + localPayments.reduce((s, p) => s + p.amount, 0)) < revenue && (
+                      <div style={{ fontSize: 13, color: '#d97706', fontWeight: 600, marginTop: 8 }}>
+                        Outstanding: <span style={{ fontFamily: 'monospace' }}>{fmt(revenue - paidTotal - localPayments.reduce((s, p) => s + p.amount, 0))}</span>
+                      </div>
+                    )}
+                  </>}
                 </div>
               )}
               {margin !== null && (
