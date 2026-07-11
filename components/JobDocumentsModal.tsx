@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { fetchJobCosts, insertJobCost, deleteJobCost } from '@/lib/job-costs'
 import type { CategoryBudget } from '@/lib/job-costs'
-import type { JobCost, JobCostCategory, PaymentStatus, VariationLineItem } from '@/lib/types'
+import type { JobCost, JobCostCategory, PaymentStatus, VariationLineItem, JobPayment, PaymentMethod } from '@/lib/types'
 import type { ExtractedCostLine } from '@/lib/doc-extract/types'
 import { useApp } from '@/contexts/AppContext'
 
@@ -37,9 +37,14 @@ interface SubContract { id: string; contact_id: string | null; type: 'rate' | 'f
 interface SubEntry { id: string; sub_contract_id: string; entry_date: string; units: number }
 interface SubStage { id: string; sub_contract_id: string; description: string; amount: number; paid_date: string | null }
 
+const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+  cash: '💵 Cash', cheque: '📝 Cheque', bank_transfer: '🏦 Bank Transfer', other: '📋 Other',
+}
+
 export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, invoicedTotal = 0, paidTotal = 0, cashReceived = 0, onClose }: Props) {
   const sb = createClient()
-  const { suppliers, clients, addVariation } = useApp()
+  const { suppliers, clients, addVariation, jobPayments } = useApp()
+  const localPayments = jobPayments.filter(p => p.jobId === jobId)
   const [userId, setUserId] = useState<string | null>(null)
   const [costs, setCosts] = useState<JobCost[]>([])
   const [loading, setLoading] = useState(true)
@@ -314,31 +319,33 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
                   </tr>
                 </tfoot>
               </table>
-              {/* Invoice + cash payment tracking */}
-              {(invoicedTotal > 0 || cashReceived > 0) && (
-                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #e2e8f0', fontSize: 13, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {invoicedTotal > 0 && (
-                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                      <span>Invoiced: <strong style={{ fontFamily: 'monospace' }}>{fmt(invoicedTotal)}</strong></span>
-                      <span>
-                        Paid (invoice):{' '}
-                        <strong style={{ fontFamily: 'monospace', color: paidTotal > 0 ? '#16a34a' : '#94a3b8' }}>
-                          {paidTotal > 0 ? fmt(paidTotal) : '£0.00'}
-                        </strong>
-                      </span>
-                    </div>
-                  )}
-                  {cashReceived > 0 && (
-                    <div>
-                      Cash / cheque received: <strong style={{ fontFamily: 'monospace', color: '#16a34a' }}>{fmt(cashReceived)}</strong>
-                    </div>
-                  )}
-                  {(paidTotal + cashReceived) > 0 && (
-                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', paddingTop: 4, borderTop: '1px dashed #e2e8f0' }}>
-                      <span style={{ fontWeight: 600 }}>Total received: <strong style={{ fontFamily: 'monospace', color: '#16a34a' }}>{fmt(paidTotal + cashReceived)}</strong></span>
-                      {revenue !== undefined && (paidTotal + cashReceived) < revenue && (
-                        <span style={{ color: '#e67e22' }}>Outstanding: <strong style={{ fontFamily: 'monospace' }}>{fmt(revenue - paidTotal - cashReceived)}</strong></span>
-                      )}
+              {/* Invoice tracking */}
+              {invoicedTotal > 0 && (
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #e2e8f0', fontSize: 13, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                  <span>Invoiced: <strong style={{ fontFamily: 'monospace' }}>{fmt(invoicedTotal)}</strong></span>
+                  <span>Paid (invoice): <strong style={{ fontFamily: 'monospace', color: paidTotal > 0 ? '#16a34a' : '#94a3b8' }}>{fmt(paidTotal)}</strong></span>
+                </div>
+              )}
+              {/* Payments received from client */}
+              {localPayments.length > 0 && (
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#6b7280', marginBottom: 8 }}>
+                    Payments Received — <span style={{ color: '#16a34a', fontFamily: 'monospace' }}>{fmt(localPayments.reduce((s, p) => s + p.amount, 0))}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    {[...localPayments].sort((a, b) => b.paymentDate.localeCompare(a.paymentDate)).map(p => (
+                      <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#f0fdf4', borderRadius: 7, border: '1px solid #bbf7d0', fontSize: 13 }}>
+                        <div style={{ flex: 1 }}>
+                          <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{fmt(p.amount)}</span>
+                          <span style={{ color: '#64748b' }}> · {PAYMENT_METHOD_LABELS[p.method]}</span>
+                        </div>
+                        <div style={{ fontSize: 11, color: '#6b7280' }}>{p.paymentDate}{p.notes ? ` · ${p.notes}` : ''}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {revenue !== undefined && (paidTotal + localPayments.reduce((s, p) => s + p.amount, 0)) < revenue && (
+                    <div style={{ fontSize: 13, color: '#d97706', fontWeight: 600, marginTop: 8 }}>
+                      Outstanding: <span style={{ fontFamily: 'monospace' }}>{fmt(revenue - paidTotal - localPayments.reduce((s, p) => s + p.amount, 0))}</span>
                     </div>
                   )}
                 </div>

@@ -150,19 +150,24 @@ export default function PaymentRequestsModal({ job, onClose }: Props) {
     if (!receivingId) return
     const req = requests.find(r => r.id === receivingId)
     if (!req) return
-    setSaving(true)
-    await sb.from('payment_requests').update({
-      status: 'received',
-      received_at: new Date(recDate).toISOString(),
-      received_method: recMethod,
-      notes: recNotes || req.notes,
-    }).eq('id', receivingId)
-    // Auto-record in payments ledger
-    const pm = METHOD_MAP[recMethod] ?? 'bank_transfer'
-    await addJobPayment(job.id, Number(req.amount), recDate, pm,
-      req.description + (recNotes ? ` — ${recNotes}` : ''))
-    setReceivingId(null)
-    await load(); setSaving(false)
+    setSaving(true); setError('')
+    try {
+      await sb.from('payment_requests').update({
+        status: 'received',
+        received_at: new Date(recDate).toISOString(),
+        received_method: recMethod,
+        notes: recNotes || req.notes,
+      }).eq('id', receivingId)
+      const pm = METHOD_MAP[recMethod] ?? 'bank_transfer'
+      await addJobPayment(job.id, Number(req.amount), recDate, pm,
+        req.description + (recNotes ? ` — ${recNotes}` : ''))
+      setReceivingId(null)
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to record payment')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function cancelRequest(id: string) {
