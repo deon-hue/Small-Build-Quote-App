@@ -20,6 +20,7 @@ const CATS: { value: JobCostCategory; label: string; emoji: string; color: strin
 const catMeta = (c: JobCostCategory) => CATS.find(x => x.value === c) ?? CATS[1]
 const PAYMENTS: PaymentStatus[] = ['unknown', 'unpaid', 'partial', 'paid']
 const fmt = (n: number) => `£${(n || 0).toFixed(2)}`
+const fmtDate = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 
 interface ManualState {
   supplier: string
@@ -347,7 +348,7 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
                               <span style={{ color: '#64748b' }}> · {inv.ref}</span>
                               <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: ss.bg, color: ss.color, fontWeight: 600, marginLeft: 8 }}>{inv.status}</span>
                             </div>
-                            <div style={{ fontSize: 11, color: '#6b7280' }}>Issued: {inv.issueDate}</div>
+                            <div style={{ fontSize: 11, color: '#6b7280' }}>Issued: {fmtDate(inv.issueDate)}</div>
                           </div>
                         )
                       })}
@@ -371,7 +372,7 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
                             <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{fmt(p.amount)}</span>
                             <span style={{ color: '#64748b' }}> · {PAYMENT_METHOD_LABELS[p.method]}</span>
                           </div>
-                          <div style={{ fontSize: 11, color: '#6b7280' }}>{p.paymentDate}{p.notes ? ` · ${p.notes}` : ''}</div>
+                          <div style={{ fontSize: 11, color: '#6b7280' }}>{fmtDate(p.paymentDate)}{p.notes ? ` · ${p.notes}` : ''}</div>
                         </div>
                       ))}
                     </div>

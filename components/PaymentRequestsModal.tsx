@@ -34,6 +34,7 @@ const PAYMENT_METHODS: Record<PaymentMethod, string> = {
 }
 
 const fmt = (n: number) => `£${(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const fmtDate = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 const today = () => new Date().toISOString().slice(0, 10)
 
 function toE164(phone: string): string {
@@ -219,7 +220,7 @@ export default function PaymentRequestsModal({ job, onClose }: Props) {
   }
 
   async function handleDeletePayment(p: JobPayment) {
-    if (!confirm(`Delete payment of ${fmt(p.amount)} on ${p.paymentDate}?`)) return
+    if (!confirm(`Delete payment of ${fmt(p.amount)} on ${fmtDate(p.paymentDate)}?`)) return
     await deleteJobPayment(p.id)
   }
 
@@ -469,7 +470,7 @@ export default function PaymentRequestsModal({ job, onClose }: Props) {
                         {fmt(p.amount)}
                         <span style={{ fontWeight: 400, color: '#64748b', fontSize: 12 }}> · {PAYMENT_METHODS[p.method]}</span>
                       </div>
-                      <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{p.paymentDate}{p.notes ? ` · ${p.notes}` : ''}</div>
+                      <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{fmtDate(p.paymentDate)}{p.notes ? ` · ${p.notes}` : ''}</div>
                     </div>
                     <button onClick={() => handleDeletePayment(p)} style={{ border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 16, padding: '2px 6px' }}>×</button>
                   </div>
