@@ -10,7 +10,6 @@ import { ContactPicker } from '@/components/ContactPicker'
 import VariationModal from '@/components/VariationModal'
 import JobDocumentsModal from '@/components/JobDocumentsModal'
 import JobAttachmentsModal from '@/components/JobAttachmentsModal'
-import CashPaymentModal from '@/components/CashPaymentModal'
 import PaymentRequestsModal from '@/components/PaymentRequestsModal'
 
 const BLANK_JOB: Omit<Job, 'id'> = {
@@ -31,7 +30,6 @@ export default function JobsPage() {
   const [notesJob, setNotesJob] = useState<Job | null>(null)
   const [docsJob, setDocsJob] = useState<Job | null>(null)
   const [attachmentsJob, setAttachmentsJob] = useState<Job | null>(null)
-  const [paymentJob, setPaymentJob] = useState<Job | null>(null)
   const [requestsJob, setRequestsJob] = useState<Job | null>(null)
   const [newNote, setNewNote] = useState('')
   const [addingNote, setAddingNote] = useState(false)
@@ -170,11 +168,8 @@ export default function JobsPage() {
                     </button>
                     <button className="btn-sm btn-outline" onClick={() => setAttachmentsJob(j)} title="Plans, photos and documents shared with the client">📎 Files</button>
                     <button className="btn-sm btn-outline" onClick={() => setDocsJob(j)} title="Scan/upload supplier docs and track costs">💷 Costs</button>
-                    <button className="btn-sm btn-outline" onClick={() => setRequestsJob(j)} title="Send payment requests and record when received">
-                      💳 Requests
-                    </button>
-                    <button className="btn-sm btn-outline" onClick={() => setPaymentJob(j)} title="Record cash/cheque/bank payments received">
-                      💰 Payments{jobPayments.filter(p => p.jobId === j.id).length > 0 ? ` (${jobPayments.filter(p => p.jobId === j.id).length})` : ''}
+                    <button className="btn-sm btn-outline" onClick={() => setRequestsJob(j)} title="Payment requests and received payments">
+                      💳 Payments{jobPayments.filter(p => p.jobId === j.id).length > 0 ? ` (${jobPayments.filter(p => p.jobId === j.id).length})` : ''}
                     </button>
                     <button className="btn-sm btn-outline" onClick={() => openEdit(j)}>Edit</button>
                     <button className="btn-sm btn-danger" onClick={() => handleDelete(j)}>✕</button>
@@ -358,10 +353,6 @@ export default function JobsPage() {
         <PaymentRequestsModal job={requestsJob} onClose={() => setRequestsJob(null)} />
       )}
 
-      {/* Cash Payment modal */}
-      {paymentJob && (
-        <CashPaymentModal job={paymentJob} onClose={() => setPaymentJob(null)} />
-      )}
 
       {/* Documents & Costs modal */}
       {docsJob && (() => {
