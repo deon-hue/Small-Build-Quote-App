@@ -101,7 +101,7 @@ function fmtWeekRange(ws: string): string {
 
 export default function SubcontractorsPage() {
   const sb = createClient()
-  const { jobs, clients } = useApp()
+  const { jobs, clients, updateClient } = useApp()
   const subs = clients.filter(c => c.clientType === 'subcontractor' || c.clientType === 'supplier')
 
   const [contracts, setContracts] = useState<Contract[]>([])
@@ -186,7 +186,7 @@ export default function SubcontractorsPage() {
         await insertJobCost(sb, user.id, {
           jobId: contract.job_id,
           source: 'timesheet',
-          costCategory: 'subcontractors',
+          costCategory: isPaye(contract.contact_id) ? 'labour' : 'subcontractors',
           supplier: contactName(contract.contact_id),
           description: entry.notes || `${contractLabel(contract)} — ${entry.entry_date}`,
           docDate: entry.entry_date,
@@ -237,6 +237,13 @@ export default function SubcontractorsPage() {
 
   // Derived helpers
   const contactName = (id: string | null) => id ? (clients.find(c => c.id === id)?.name ?? '—') : '—'
+  const isPaye = (id: string | null) => !!clients.find(c => c.id === id)?.isPaye
+
+  async function togglePaye(contactId: string) {
+    const contact = clients.find(c => c.id === contactId)
+    if (!contact) return
+    await updateClient({ ...contact, isPaye: !contact.isPaye })
+  }
   const jobName = (id: string | null) => id ? (jobs.find(j => j.id === id)?.client ?? jobs.find(j => j.id === id)?.address ?? '—') : '—'
   const contractEntries = (cid: string) => timeEntries.filter(e => e.sub_contract_id === cid)
   const contractStages = (cid: string) => stages.filter(s => s.sub_contract_id === cid)
@@ -527,7 +534,7 @@ export default function SubcontractorsPage() {
       await sb.from('sub_admin_time_logs').update({ status: 'approved' }).eq('id', log.id)
       if (log.job_id && !log.job_cost_id) {
         const cost = await insertJobCost(sb, user.id, {
-          jobId: log.job_id, source: 'timesheet', costCategory: 'subcontractors',
+          jobId: log.job_id, source: 'timesheet', costCategory: isPaye(log.contact_id) ? 'labour' : 'subcontractors',
           supplier: contactName(log.contact_id),
           description: log.notes || `Sub time — ${log.entry_date}`,
           docDate: log.entry_date, docNumber: '',
@@ -551,7 +558,7 @@ export default function SubcontractorsPage() {
           await sb.from('job_costs').update({ payment_status: 'paid' }).eq('id', log.job_cost_id)
         } else {
           const cost = await insertJobCost(sb, user.id, {
-            jobId: log.job_id, source: 'timesheet', costCategory: 'subcontractors',
+            jobId: log.job_id, source: 'timesheet', costCategory: isPaye(log.contact_id) ? 'labour' : 'subcontractors',
             supplier: contactName(log.contact_id),
             description: log.notes || `Sub time — ${log.entry_date}`,
             docDate: log.entry_date, docNumber: '',
@@ -574,7 +581,7 @@ export default function SubcontractorsPage() {
         await sb.from('job_costs').update({ payment_status: 'paid' }).eq('id', log.job_cost_id)
       } else {
         const cost = await insertJobCost(sb, user.id, {
-          jobId: log.job_id, source: 'timesheet', costCategory: 'subcontractors',
+          jobId: log.job_id, source: 'timesheet', costCategory: isPaye(log.contact_id) ? 'labour' : 'subcontractors',
           supplier: contactName(log.contact_id),
           description: log.notes || `Sub time — ${log.entry_date}`,
           docDate: log.entry_date, docNumber: '',
@@ -597,7 +604,7 @@ export default function SubcontractorsPage() {
         await sb.from('sub_admin_time_logs').update({ status: 'approved' }).eq('id', log.id)
         if (log.job_id && !log.job_cost_id) {
           const cost = await insertJobCost(sb, user.id, {
-            jobId: log.job_id, source: 'timesheet', costCategory: 'subcontractors',
+            jobId: log.job_id, source: 'timesheet', costCategory: isPaye(log.contact_id) ? 'labour' : 'subcontractors',
             supplier: contactName(log.contact_id),
             description: log.notes || `Sub time — ${log.entry_date}`,
             docDate: log.entry_date, docNumber: '',
@@ -633,7 +640,7 @@ export default function SubcontractorsPage() {
         await sb.from('sub_admin_time_logs').update({ status: 'approved' }).eq('id', log.id)
         if (log.job_id && !log.job_cost_id) {
           const cost = await insertJobCost(sb, user.id, {
-            jobId: log.job_id, source: 'timesheet', costCategory: 'subcontractors',
+            jobId: log.job_id, source: 'timesheet', costCategory: isPaye(log.contact_id) ? 'labour' : 'subcontractors',
             supplier: contactName(log.contact_id),
             description: log.notes || `Sub time — ${log.entry_date}`,
             docDate: log.entry_date, docNumber: '',
@@ -664,7 +671,7 @@ export default function SubcontractorsPage() {
     let count = 0
     for (const log of toFix) {
       const cost = await insertJobCost(sb, user.id, {
-        jobId: log.job_id!, source: 'timesheet', costCategory: 'subcontractors',
+        jobId: log.job_id!, source: 'timesheet', costCategory: isPaye(log.contact_id) ? 'labour' : 'subcontractors',
         supplier: contactName(log.contact_id),
         description: log.notes || `Sub time — ${log.entry_date}`,
         docDate: log.entry_date, docNumber: '',
@@ -1074,6 +1081,13 @@ export default function SubcontractorsPage() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                           <span style={{ fontSize: 11, color: '#9ca3af' }}>{isExpanded ? '▲' : '▼'}</span>
                           <span style={{ fontWeight: 700, color: '#111827' }}>{subName}</span>
+                          <button
+                            onClick={e => { e.stopPropagation(); togglePaye(contactId) }}
+                            title={isPaye(contactId) ? 'PAYE staff — click to switch back to subcontractor' : 'Subcontractor — click to mark as PAYE staff'}
+                            style={{ fontSize: 10, padding: '1px 7px', borderRadius: 10, background: isPaye(contactId) ? '#e0e7ff' : '#f3f4f6', color: isPaye(contactId) ? '#4338ca' : '#9ca3af', border: `1px solid ${isPaye(contactId) ? '#c7d2fe' : '#e5e7eb'}`, cursor: 'pointer', fontWeight: 600 }}
+                          >
+                            {isPaye(contactId) ? 'PAYE' : 'Sub'}
+                          </button>
                           <span style={{ fontSize: 13, color: '#6b7280' }}>Week of {fmtWeekRange(ws)}</span>
                           <span style={{ fontSize: 12, color: '#9ca3af' }}>· {logs.length} day{logs.length !== 1 ? 's' : ''}</span>
                         </div>
@@ -1089,7 +1103,7 @@ export default function SubcontractorsPage() {
                               ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#f3f4f6', color: '#374151', fontWeight: 600 }}>✓ Cash paid</span>
                               : allApproved
                                 ? <>
-                                    <button onClick={() => pushWeekToXero(contactId, ws)} disabled={xeroPushingLog === key} style={{ fontSize: 11, padding: '3px 10px', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb', borderRadius: 6, cursor: 'pointer', fontWeight: 600, opacity: xeroPushingLog === key ? 0.6 : 1 }}>{xeroPushingLog === key ? '…' : '⚡ Xero'}</button>
+                                    {!isPaye(contactId) && <button onClick={() => pushWeekToXero(contactId, ws)} disabled={xeroPushingLog === key} style={{ fontSize: 11, padding: '3px 10px', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb', borderRadius: 6, cursor: 'pointer', fontWeight: 600, opacity: xeroPushingLog === key ? 0.6 : 1 }}>{xeroPushingLog === key ? '…' : '⚡ Xero'}</button>}
                                     <button onClick={() => markWeekPaidCash(contactId, ws)} style={{ fontSize: 11, padding: '3px 10px', background: '#fff', border: '1px solid #d1d5db', color: '#374151', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>💵 Cash paid</button>
                                   </>
                                 : null
@@ -1121,7 +1135,7 @@ export default function SubcontractorsPage() {
                                     ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#f3f4f6', color: '#374151', fontWeight: 600 }}>✓ Cash</span>
                                     : <div style={{ display: 'flex', gap: 4 }}>
                                         <button onClick={() => markDayCash(log)} style={{ fontSize: 10, padding: '2px 7px', background: '#f9fafb', border: '1px solid #d1d5db', color: '#374151', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>💵 Cash</button>
-                                        <button onClick={() => pushDayToXero(log)} disabled={xeroPushingLog === log.id} style={{ fontSize: 10, padding: '2px 7px', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb', borderRadius: 4, cursor: 'pointer', fontWeight: 600, opacity: xeroPushingLog === log.id ? 0.6 : 1 }}>{xeroPushingLog === log.id ? '…' : '⚡ Xero'}</button>
+                                        {!isPaye(log.contact_id) && <button onClick={() => pushDayToXero(log)} disabled={xeroPushingLog === log.id} style={{ fontSize: 10, padding: '2px 7px', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb', borderRadius: 4, cursor: 'pointer', fontWeight: 600, opacity: xeroPushingLog === log.id ? 0.6 : 1 }}>{xeroPushingLog === log.id ? '…' : '⚡ Xero'}</button>}
                                       </div>
                                 }
                               </div>

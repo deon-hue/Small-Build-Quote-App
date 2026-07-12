@@ -312,6 +312,7 @@ export interface Client {
   cisRegistered?: boolean
   cisPercentage?: number | null
   subPaymentType?: string
+  isPaye?: boolean
 }
 
 export interface SubContract {

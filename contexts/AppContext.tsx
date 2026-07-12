@@ -247,6 +247,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           cisRegistered: r.cis_registered ?? false,
           cisPercentage: r.cis_percentage ?? null,
           subPaymentType: r.sub_payment_type || 'invoice',
+          isPaye: r.is_paye ?? false,
         })))
       }
 
@@ -469,6 +470,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       cis_registered: c.cisRegistered ?? false,
       cis_percentage: c.cisPercentage ?? null,
       sub_payment_type: c.subPaymentType || 'invoice',
+      is_paye: c.isPaye ?? false,
     }
     // Try with portal_settings column; fall back without it if column doesn't exist yet
     let res = await supabase.from('clients').insert({ ...basePayload, portal_settings: portalSettings }).select().single()
@@ -491,6 +493,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       cisRegistered: data.cis_registered ?? false,
       cisPercentage: data.cis_percentage ?? null,
       subPaymentType: data.sub_payment_type || 'invoice',
+      isPaye: data.is_paye ?? false,
     }])
   }, [supabase])
 
@@ -507,6 +510,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       cis_registered: c.cisRegistered ?? false,
       cis_percentage: c.cisPercentage ?? null,
       sub_payment_type: c.subPaymentType || 'invoice',
+      is_paye: c.isPaye ?? false,
     }
     // Try with portal_settings column; fall back without it if column doesn't exist yet
     const { error } = await supabase.from('clients').update({
