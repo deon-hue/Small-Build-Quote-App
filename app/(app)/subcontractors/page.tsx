@@ -692,18 +692,28 @@ export default function SubcontractorsPage() {
 
   async function fixLabourCategories() {
     setFixingLabour(true)
-    const ids = [...new Set(
-      timeLogs
-        .filter(l => l.job_cost_id && isPaye(l.contact_id))
-        .map(l => l.job_cost_id!)
+    // Collect names of all Direct Labour contacts
+    const labourNames = clients.filter(c => c.isPaye).map(c => c.name).filter(Boolean)
+    if (labourNames.length === 0) { setFixingLabour(false); alert('No contacts marked as Direct Labour'); return }
+    // Also collect job_cost_ids directly linked via time log back-references
+    const linkedIds = [...new Set(
+      timeLogs.filter(l => l.job_cost_id && isPaye(l.contact_id)).map(l => l.job_cost_id!)
     )]
-    if (ids.length === 0) { setFixingLabour(false); alert('No job costs to reclassify'); return }
+    // Update by supplier name (covers portal entries with no job_cost_id back-ref)
     await sb.from('job_costs')
       .update({ cost_category: 'labour' })
-      .in('id', ids)
+      .in('supplier', labourNames)
       .eq('cost_category', 'subcontractors')
+      .eq('source', 'timesheet')
+    // Update by linked IDs (belt-and-braces for admin time logs)
+    if (linkedIds.length > 0) {
+      await sb.from('job_costs')
+        .update({ cost_category: 'labour' })
+        .in('id', linkedIds)
+        .eq('cost_category', 'subcontractors')
+    }
     setFixingLabour(false)
-    alert(`Reclassified ${ids.length} job cost${ids.length === 1 ? '' : 's'} from Subcontractors → Labour`)
+    alert('Done — job costs for Direct Labour contacts reclassified to Labour')
   }
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -1069,7 +1079,7 @@ export default function SubcontractorsPage() {
                     {fixingCosts ? 'Fixing…' : `⚠ Fix ${missingCostCount} missing cost${missingCostCount === 1 ? '' : 's'}`}
                   </button>
                 )}
-                {timeLogs.some(l => l.job_cost_id && isPaye(l.contact_id)) && (
+                {clients.some(c => c.isPaye) && (
                   <button onClick={fixLabourCategories} disabled={fixingLabour} style={{ padding: '7px 12px', background: '#ede9fe', border: '1px solid #c4b5fd', color: '#5b21b6', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 600, opacity: fixingLabour ? 0.6 : 1 }}>
                     {fixingLabour ? 'Fixing…' : '🔧 Fix Labour categories'}
                   </button>
