@@ -56,7 +56,7 @@ function ClientsPageInner() {
   const [saving, setSaving] = useState(false)
   const router = useRouter()
   const [filter, setFilter] = useState<'all' | 'client' | 'supplier' | 'subcontractor'>('all')
-  const BLANK_SUB_RATES = { subHourlyRate: '', subDayRate: '', subHalfDayRate: '', cisRegistered: false, cisPercentage: '', subPaymentType: 'invoice' }
+  const BLANK_SUB_RATES = { subHourlyRate: '', subDayRate: '', subHalfDayRate: '', cisRegistered: false, cisPercentage: '', subPaymentType: 'invoice', isPaye: false }
   const [formSubRates, setFormSubRates] = useState(BLANK_SUB_RATES)
 
   interface ActivityLog { id: string; event_type: string; details: string | null; created_at: string }
@@ -133,6 +133,7 @@ function ClientsPageInner() {
       cisRegistered: c.cisRegistered ?? false,
       cisPercentage: c.cisPercentage?.toString() ?? '',
       subPaymentType: c.subPaymentType || 'invoice',
+      isPaye: c.isPaye ?? false,
     })
     setSelected(null)
     setShowForm(true)
@@ -149,6 +150,7 @@ function ClientsPageInner() {
         cisRegistered: formSubRates.cisRegistered,
         cisPercentage: formSubRates.cisPercentage ? Number(formSubRates.cisPercentage) : null,
         subPaymentType: formSubRates.subPaymentType,
+        isPaye: formSubRates.isPaye,
       } : {}
       if (editingClient) {
         await updateClient({ ...editingClient, ...form, portalSettings: formPortalSettings, ...subRateFields })
@@ -749,6 +751,15 @@ function ClientsPageInner() {
                   </select>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12 }}>
+                    <input
+                      type="checkbox"
+                      checked={formSubRates.isPaye}
+                      onChange={e => setFormSubRates(s => ({ ...s, isPaye: e.target.checked }))}
+                      style={{ width: 14, height: 14, flexShrink: 0, cursor: 'pointer' }}
+                    />
+                    PAYE Staff
+                  </label>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12 }}>
                     <input
                       type="checkbox"
