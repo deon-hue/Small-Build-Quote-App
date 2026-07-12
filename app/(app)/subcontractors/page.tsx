@@ -156,6 +156,7 @@ export default function SubcontractorsPage() {
   const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set())
   const [logFilter, setLogFilter] = useState('')
   const [fixingCosts, setFixingCosts] = useState(false)
+  const [fixingLabour, setFixingLabour] = useState(false)
 
   async function sendPortalInvite(contractId: string, contactId: string | null) {
     const contact = clients.find(c => c.id === contactId)
@@ -689,6 +690,22 @@ export default function SubcontractorsPage() {
     else alert('No missing job costs found')
   }
 
+  async function fixLabourCategories() {
+    setFixingLabour(true)
+    const ids = [...new Set(
+      timeLogs
+        .filter(l => l.job_cost_id && isPaye(l.contact_id))
+        .map(l => l.job_cost_id!)
+    )]
+    if (ids.length === 0) { setFixingLabour(false); alert('No job costs to reclassify'); return }
+    await sb.from('job_costs')
+      .update({ cost_category: 'labour' })
+      .in('id', ids)
+      .eq('cost_category', 'subcontractors')
+    setFixingLabour(false)
+    alert(`Reclassified ${ids.length} job cost${ids.length === 1 ? '' : 's'} from Subcontractors → Labour`)
+  }
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   if (loading) return <div style={{ padding: 32, textAlign: 'center', opacity: 0.5 }}>Loading subcontractors…</div>
@@ -1050,6 +1067,11 @@ export default function SubcontractorsPage() {
                 {missingCostCount > 0 && (
                   <button onClick={fixMissingCosts} disabled={fixingCosts} style={{ padding: '7px 12px', background: '#fef3c7', border: '1px solid #fcd34d', color: '#92400e', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 600, opacity: fixingCosts ? 0.6 : 1 }}>
                     {fixingCosts ? 'Fixing…' : `⚠ Fix ${missingCostCount} missing cost${missingCostCount === 1 ? '' : 's'}`}
+                  </button>
+                )}
+                {timeLogs.some(l => l.job_cost_id && isPaye(l.contact_id)) && (
+                  <button onClick={fixLabourCategories} disabled={fixingLabour} style={{ padding: '7px 12px', background: '#ede9fe', border: '1px solid #c4b5fd', color: '#5b21b6', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 600, opacity: fixingLabour ? 0.6 : 1 }}>
+                    {fixingLabour ? 'Fixing…' : '🔧 Fix Labour categories'}
                   </button>
                 )}
                 <button onClick={() => openWeekSheet()} style={{ padding: '7px 14px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer' }}>
