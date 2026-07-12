@@ -1079,11 +1079,9 @@ export default function SubcontractorsPage() {
                     {fixingCosts ? 'Fixing…' : `⚠ Fix ${missingCostCount} missing cost${missingCostCount === 1 ? '' : 's'}`}
                   </button>
                 )}
-                {clients.some(c => c.isPaye) && (
-                  <button onClick={fixLabourCategories} disabled={fixingLabour} style={{ padding: '7px 12px', background: '#ede9fe', border: '1px solid #c4b5fd', color: '#5b21b6', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 600, opacity: fixingLabour ? 0.6 : 1 }}>
-                    {fixingLabour ? 'Fixing…' : '🔧 Fix Labour categories'}
-                  </button>
-                )}
+                <button onClick={fixLabourCategories} disabled={fixingLabour} style={{ padding: '7px 12px', background: '#ede9fe', border: '1px solid #c4b5fd', color: '#5b21b6', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 600, opacity: fixingLabour ? 0.6 : 1 }}>
+                  {fixingLabour ? 'Fixing…' : '🔧 Fix Labour categories'}
+                </button>
                 <button onClick={() => openWeekSheet()} style={{ padding: '7px 14px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer' }}>
                   + Log Time
                 </button>
