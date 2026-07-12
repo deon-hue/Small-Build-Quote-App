@@ -758,7 +758,7 @@ function ClientsPageInner() {
                       onChange={e => setFormSubRates(s => ({ ...s, isPaye: e.target.checked }))}
                       style={{ width: 14, height: 14, flexShrink: 0, cursor: 'pointer' }}
                     />
-                    PAYE Staff
+                    Direct Labour
                   </label>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12 }}>
                     <input

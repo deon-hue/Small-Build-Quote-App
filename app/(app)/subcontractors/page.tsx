@@ -1083,10 +1083,10 @@ export default function SubcontractorsPage() {
                           <span style={{ fontWeight: 700, color: '#111827' }}>{subName}</span>
                           <button
                             onClick={e => { e.stopPropagation(); togglePaye(contactId) }}
-                            title={isPaye(contactId) ? 'PAYE staff — click to switch back to subcontractor' : 'Subcontractor — click to mark as PAYE staff'}
+                            title={isPaye(contactId) ? 'Direct Labour — costs recorded as Labour. Click to switch to Subcontractor' : 'Subcontractor — click to mark as Direct Labour'}
                             style={{ fontSize: 10, padding: '1px 7px', borderRadius: 10, background: isPaye(contactId) ? '#e0e7ff' : '#f3f4f6', color: isPaye(contactId) ? '#4338ca' : '#9ca3af', border: `1px solid ${isPaye(contactId) ? '#c7d2fe' : '#e5e7eb'}`, cursor: 'pointer', fontWeight: 600 }}
                           >
-                            {isPaye(contactId) ? 'PAYE' : 'Sub'}
+                            {isPaye(contactId) ? 'Labour' : 'Sub'}
                           </button>
                           <span style={{ fontSize: 13, color: '#6b7280' }}>Week of {fmtWeekRange(ws)}</span>
                           <span style={{ fontSize: 12, color: '#9ca3af' }}>· {logs.length} day{logs.length !== 1 ? 's' : ''}</span>
