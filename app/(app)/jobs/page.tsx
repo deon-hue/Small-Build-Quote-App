@@ -371,6 +371,8 @@ export default function JobsPage() {
             jobLabel={`${docsJob.type} — ${docsJob.client}`}
             budget={budget}
             revenue={docsJob.value + approved}
+            contractValue={docsJob.value}
+            variationsTotal={approved}
             invoicedTotal={invoicedTotal}
             paidTotal={paidTotal}
             cashReceived={cashReceived}

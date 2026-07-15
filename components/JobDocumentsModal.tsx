@@ -8,7 +8,7 @@ import type { JobCost, JobCostCategory, PaymentStatus, VariationLineItem, JobPay
 import type { ExtractedCostLine } from '@/lib/doc-extract/types'
 import { useApp } from '@/contexts/AppContext'
 
-interface Props { jobId: string; jobLabel: string; budget?: CategoryBudget | null; revenue?: number; invoicedTotal?: number; paidTotal?: number; cashReceived?: number; onClose: () => void }
+interface Props { jobId: string; jobLabel: string; budget?: CategoryBudget | null; revenue?: number; contractValue?: number; variationsTotal?: number; invoicedTotal?: number; paidTotal?: number; cashReceived?: number; onClose: () => void }
 
 const CATS: { value: JobCostCategory; label: string; emoji: string; color: string; bg: string }[] = [
   { value: 'labour',         label: 'Labour',         emoji: '🔨', color: '#1d4ed8', bg: '#eff6ff' },
@@ -42,7 +42,7 @@ const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   cash: '💵 Cash', cheque: '📝 Cheque', bank_transfer: '🏦 Bank Transfer', other: '📋 Other',
 }
 
-export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, invoicedTotal = 0, paidTotal = 0, cashReceived = 0, onClose }: Props) {
+export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, contractValue, variationsTotal, invoicedTotal = 0, paidTotal = 0, cashReceived = 0, onClose }: Props) {
   const sb = createClient()
   const { suppliers, clients, addVariation, jobPayments, invoices } = useApp()
   const localPayments = jobPayments.filter(p => p.jobId === jobId)
@@ -286,6 +286,57 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, in
               </div>
             </div>
           )}
+
+          {/* Financial Summary */}
+          {revenue !== undefined && !loading && (() => {
+            const totalReceived = paidTotal + localPayments.reduce((s, p) => s + p.amount, 0)
+            const outstanding = +(revenue - totalReceived).toFixed(2)
+            const base = contractValue ?? revenue
+            const varTotal = variationsTotal ?? 0
+            return (
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 16, marginBottom: 16, background: '#fafbff' }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12, color: '#1e293b' }}>📊 Financial Summary</div>
+                <div style={{ fontSize: 13 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>
+                    <span>Original contract</span>
+                    <span style={{ fontFamily: 'monospace', color: '#1e293b', fontWeight: 600 }}>{fmt(base)}</span>
+                  </div>
+                  {varTotal !== 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>
+                      <span>Approved variations</span>
+                      <span style={{ fontFamily: 'monospace', color: '#2563eb', fontWeight: 600 }}>{varTotal > 0 ? '+' : ''}{fmt(varTotal)}</span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '2px solid #e2e8f0', fontWeight: 700, color: '#1e293b' }}>
+                    <span>Total contract value</span>
+                    <span style={{ fontFamily: 'monospace' }}>{fmt(revenue)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', marginTop: 6, borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>
+                    <span>Actual costs (ex-VAT)</span>
+                    <span style={{ fontFamily: 'monospace', color: '#1e293b', fontWeight: 600 }}>{fmt(totalNet)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '2px solid #e2e8f0', color: '#64748b' }}>
+                    <span>Gross margin</span>
+                    <span style={{ fontFamily: 'monospace', fontWeight: 700, color: margin !== null && margin >= 0 ? '#16a34a' : '#dc2626' }}>
+                      {fmt(margin ?? 0)}{marginPct !== null ? ` (${marginPct}%)` : ''}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', marginTop: 6, borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>
+                    <span>Invoiced to date</span>
+                    <span style={{ fontFamily: 'monospace', color: '#1e293b', fontWeight: 600 }}>{fmt(invoicedTotal)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>
+                    <span>Payments received</span>
+                    <span style={{ fontFamily: 'monospace', color: '#16a34a', fontWeight: 600 }}>{fmt(totalReceived)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', fontWeight: 700 }}>
+                    <span style={{ color: outstanding > 0 ? '#d97706' : '#16a34a' }}>Outstanding balance</span>
+                    <span style={{ fontFamily: 'monospace', color: outstanding > 0 ? '#d97706' : '#16a34a' }}>{fmt(outstanding)}</span>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Budget vs actual */}
           {budget && !loading && (
