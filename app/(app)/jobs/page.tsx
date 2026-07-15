@@ -362,8 +362,8 @@ export default function JobsPage() {
           .filter(v => v.jobId === docsJob.id && (v.status === 'approved' || v.status === 'invoiced' || v.status === 'paid'))
           .reduce((s, v) => s + v.total, 0)
         const jobInvoices = invoices.filter(i => i.jobId === docsJob.id)
-        const invoicedTotal = jobInvoices.reduce((s, i) => s + i.total, 0)
-        const paidTotal     = jobInvoices.filter(i => i.status === 'paid').reduce((s, i) => s + i.total, 0)
+        const invoicedTotal = jobInvoices.reduce((s, i) => s + i.subtotal, 0)
+        const paidTotal     = jobInvoices.filter(i => i.status === 'paid').reduce((s, i) => s + i.subtotal, 0)
         const cashReceived  = jobPayments.filter(p => p.jobId === docsJob.id).reduce((s, p) => s + p.amount, 0)
         return (
           <JobDocumentsModal
