@@ -322,11 +322,11 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
                     </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', marginTop: 6, borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>
-                    <span>Invoiced to date <span style={{ fontSize: 11, color: '#94a3b8' }}>(ex-VAT)</span></span>
+                    <span>Invoiced to date</span>
                     <span style={{ fontFamily: 'monospace', color: '#1e293b', fontWeight: 600 }}>{fmt(invoicedTotal)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>
-                    <span>Payments received <span style={{ fontSize: 11, color: '#94a3b8' }}>(ex-VAT)</span></span>
+                    <span>Payments received</span>
                     <span style={{ fontFamily: 'monospace', color: '#16a34a', fontWeight: 600 }}>{fmt(totalReceived)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', fontWeight: 700 }}>
