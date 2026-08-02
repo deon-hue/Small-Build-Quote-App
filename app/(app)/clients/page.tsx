@@ -373,16 +373,31 @@ function ClientsPageInner() {
                       <td className="col-hide-mobile">
                         <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                           {cType === 'subcontractor' && c.email && (<div className="btn-mob-hide" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                            <button
-                              className={`btn-sm ${subInviteSentId === c.id ? 'btn-gold' : subInviteErrors[c.id] ? 'btn-danger' : 'btn-outline'}`}
-                              disabled={subInviteSendingId === c.id}
-                              onClick={() => sendSubPortalInvite(c)}
-                            >
-                              {subInviteSentId === c.id ? '✓ Link Sent' : subInviteSendingId === c.id ? '…' : '📧 Invite to Sub Portal'}
-                            </button>
+                            <div style={{ display: 'flex', gap: 4 }}>
+                              <button
+                                className={`btn-sm ${subInviteSentId === c.id ? 'btn-gold' : 'btn-outline'}`}
+                                disabled={subInviteSendingId === c.id}
+                                onClick={() => sendSubPortalInvite(c)}
+                                title="Email a sign-in link to this subcontractor"
+                              >
+                                {subInviteSentId === c.id ? '✓ Sent' : subInviteSendingId === c.id ? '…' : '📧 Invite'}
+                              </button>
+                              <button
+                                className={`btn-sm ${copiedId === c.id ? 'btn-gold' : 'btn-outline'}`}
+                                onClick={async () => {
+                                  const link = `${window.location.origin}/sub-portal/login?email=${encodeURIComponent(c.email)}`
+                                  await navigator.clipboard.writeText(link)
+                                  setCopiedId(c.id)
+                                  setTimeout(() => setCopiedId(null), 3000)
+                                }}
+                                title="Copy the sub-portal login link — paste into WhatsApp or SMS"
+                              >
+                                {copiedId === c.id ? '✓ Copied' : '📋 Copy Link'}
+                              </button>
+                            </div>
                             {subInviteErrors[c.id] && (
-                              <span style={{ fontSize: 10, color: '#dc2626', maxWidth: 180, textAlign: 'right', lineHeight: 1.3 }}>
-                                {subInviteErrors[c.id]}
+                              <span style={{ fontSize: 10, color: '#dc2626', maxWidth: 220, textAlign: 'right', lineHeight: 1.3 }}>
+                                ⚠ {subInviteErrors[c.id]} — use Copy Link instead
                               </span>
                             )}
                           </div>)}
