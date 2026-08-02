@@ -114,6 +114,10 @@ export function SubPortalProvider({ children }: { children: ReactNode }) {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) { setError('unauthenticated'); setLoading(false); return }
 
+        // Ensure a sub profile exists (no-op if already set up)
+        const { error: profileErr } = await supabase.rpc('create_sub_profile')
+        if (profileErr) { setError('setup_required'); setLoading(false); return }
+
         const { data, error: rpcErr } = await supabase.rpc('get_sub_portal_data')
         if (rpcErr) { setError('rpc_error'); setLoading(false); return }
 

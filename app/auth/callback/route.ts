@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Code missing or exchange failed — send to login with an error flag
-  return NextResponse.redirect(`${origin}/portal/login?error=auth`)
+  // Code missing or exchange failed — send to the correct login page with an error flag
+  const loginPage = next.startsWith('/sub-portal') ? '/sub-portal/login' : '/portal/login'
+  return NextResponse.redirect(`${origin}${loginPage}?error=auth`)
 }

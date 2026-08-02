@@ -1,23 +1,52 @@
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+
+const COOLDOWN_SECS = 90
+const COOLDOWN_KEY = 'sub_portal_otp_cooldown'
 
 function SubPortalLoginForm() {
   const supabase = createClient()
-  const router = useRouter()
   const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [cooldown, setCooldown] = useState(0)
 
+  // Pre-fill email and handle auth errors from URL params
   useEffect(() => {
     const emailParam = searchParams.get('email')
     if (emailParam) setEmail(emailParam)
-    if (searchParams.get('error') === 'auth') setError('Sign-in link expired or invalid — please request a new one.')
+    if (searchParams.get('error') === 'auth') {
+      setError('Your sign-in link has expired or was already used. Please request a new one below.')
+    }
   }, [searchParams])
+
+  // Restore cooldown if the page was refreshed mid-wait
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(COOLDOWN_KEY)
+      if (stored) {
+        const remaining = Math.ceil((parseInt(stored) - Date.now()) / 1000)
+        if (remaining > 0) setCooldown(remaining)
+      }
+    } catch { /* localStorage unavailable */ }
+  }, [])
+
+  // Tick down every second
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const t = setTimeout(() => setCooldown(c => c - 1), 1000)
+    return () => clearTimeout(t)
+  }, [cooldown])
+
+  function startCooldown() {
+    try { localStorage.setItem(COOLDOWN_KEY, String(Date.now() + COOLDOWN_SECS * 1000)) } catch { /* unavailable */ }
+    setCooldown(COOLDOWN_SECS)
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -30,14 +59,16 @@ function SubPortalLoginForm() {
       })
       if (otpError) {
         const msg = otpError.message.toLowerCase()
-        if (msg.includes('rate limit') || msg.includes('too many')) {
-          setError('Too many attempts — please wait a few minutes and try again.')
+        if (msg.includes('rate limit') || msg.includes('too many') || msg.includes('sending magic link')) {
+          startCooldown()
+          setError('Too many sign-in attempts — please wait 90 seconds before trying again.')
         } else {
           setError(otpError.message)
         }
         return
       }
-      setMessage('Sign-in link sent! Check your email and click the link to access your portal.')
+      setMessage('Sign-in link sent! Check your email (and spam folder) and click the link to access your portal.')
+      startCooldown()
     } finally {
       setLoading(false)
     }
@@ -73,9 +104,19 @@ function SubPortalLoginForm() {
             <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
               We&apos;ll email you a secure one-click sign-in link — no password needed.
             </div>
-            <button className="btn btn-primary" style={{ width: '100%' }} type="submit" disabled={loading}>
-              {loading ? 'Sending…' : '📧 Send sign-in link'}
+            <button
+              className="btn btn-primary"
+              style={{ width: '100%' }}
+              type="submit"
+              disabled={loading || cooldown > 0}
+            >
+              {loading ? 'Sending…' : cooldown > 0 ? `Resend available in ${cooldown}s` : '📧 Send sign-in link'}
             </button>
+            {cooldown > 0 && (
+              <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 10 }}>
+                Check your inbox (and spam folder). The link expires in 60 minutes.
+              </p>
+            )}
           </form>
         )}
 
