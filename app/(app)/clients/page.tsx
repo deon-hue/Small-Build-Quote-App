@@ -372,15 +372,19 @@ function ClientsPageInner() {
                       <td className="col-hide-mobile" onClick={() => setSelected(c)} style={{ cursor: 'pointer', fontSize: 13 }}>{cJ.length} job{cJ.length !== 1 ? 's' : ''}</td>
                       <td className="col-hide-mobile">
                         <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                          {cType === 'subcontractor' && c.email && (<div className="btn-mob-hide">
+                          {cType === 'subcontractor' && c.email && (<div className="btn-mob-hide" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
                             <button
                               className={`btn-sm ${subInviteSentId === c.id ? 'btn-gold' : subInviteErrors[c.id] ? 'btn-danger' : 'btn-outline'}`}
                               disabled={subInviteSendingId === c.id}
                               onClick={() => sendSubPortalInvite(c)}
-                              title={subInviteErrors[c.id] ? `Error: ${subInviteErrors[c.id]}` : 'Send the subcontractor a link to log into their portal'}
                             >
-                              {subInviteSentId === c.id ? '✓ Link Sent' : subInviteSendingId === c.id ? '…' : subInviteErrors[c.id] ? '⚠ Retry Invite' : '📧 Invite to Sub Portal'}
+                              {subInviteSentId === c.id ? '✓ Link Sent' : subInviteSendingId === c.id ? '…' : '📧 Invite to Sub Portal'}
                             </button>
+                            {subInviteErrors[c.id] && (
+                              <span style={{ fontSize: 10, color: '#dc2626', maxWidth: 180, textAlign: 'right', lineHeight: 1.3 }}>
+                                {subInviteErrors[c.id]}
+                              </span>
+                            )}
                           </div>)}
                           {cType === 'client' && (<div className="btn-mob-hide">
                           {status === 'no_email' ? (
