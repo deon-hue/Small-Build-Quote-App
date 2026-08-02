@@ -13,7 +13,7 @@ import { createClient } from '@/lib/supabase/client'
 import { extractQuoteIntelligence } from '@/lib/quote-intelligence'
 
 export default function SavedQuotesPage() {
-  const { quotes, jobs, settings, updateQuote, deleteQuote, deleteJob, addJob, addVariation, saveGanttState, loading } = useApp()
+  const { quotes, jobs, variations, settings, updateQuote, deleteQuote, deleteJob, addJob, addVariation, saveGanttState, loading } = useApp()
   const [previewQuote, setPreviewQuote]   = useState<Quote | null>(null)
   const [emailingQuote, setEmailingQuote] = useState<Quote | null>(null)
   const [archiveOpen, setArchiveOpen]     = useState(false)
@@ -137,6 +137,7 @@ export default function SavedQuotesPage() {
         clientRejectionReason: null,
         sentAt: null,
       })
+      await updateQuote({ ...q, convertedToJob: true })
       setPushVarQuote(null)
       setPushVarJobId('')
       alert(`Done — variation added to "${job.type} — ${job.client}". The contract value has been updated.`)
@@ -202,8 +203,9 @@ export default function SavedQuotesPage() {
             <div style={{ fontSize: 12, marginBottom: 14 }}>Create your first quote using New Quote.</div>
           </div>
         : [...active].reverse().map(q => {
-            const alreadyJob = q.convertedToJob || jobs.some(j => {
-              if (j.quoteId === q.id) return true
+            const hasLinkedJob = jobs.some(j => j.quoteId === q.id)
+            const pushedAsVariation = !!q.ref && variations.some(v => v.notes === `Added from quote ${q.ref}`)
+            const alreadyJob = q.convertedToJob || hasLinkedJob || pushedAsVariation || jobs.some(j => {
               const jn = (j.client || '').toLowerCase()
               const qn = (q.customer.name || '').toLowerCase()
               return jn === qn || jn.includes(qn) || qn.includes(jn)
@@ -273,9 +275,11 @@ export default function SavedQuotesPage() {
                       </button>
                     )}
                     {q.status === 'accepted' && alreadyJob && (
-                      <span style={{ fontSize: 10, color: 'var(--moss)', fontWeight: 500 }}>✓ Job created</span>
+                      <span style={{ fontSize: 10, color: 'var(--moss)', fontWeight: 500 }}>
+                        {pushedAsVariation && !hasLinkedJob ? '✓ Added as variation' : '✓ Job created'}
+                      </span>
                     )}
-                    {q.status === 'accepted' && (
+                    {q.status === 'accepted' && !isConverted && (
                       pushVarQuote?.id === q.id ? (
                         <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
                           <select
