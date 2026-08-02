@@ -19,10 +19,14 @@ function PortalLoginForm() {
   const [error, setError] = useState('')
   const [cooldown, setCooldown] = useState(0)
 
-  // Pre-fill email from URL param (set by admin portal button)
+  // Pre-fill email and handle auth errors from URL params
   useEffect(() => {
     const emailParam = searchParams.get('email')
     if (emailParam) setEmail(emailParam)
+    const errorParam = searchParams.get('error')
+    if (errorParam === 'auth') {
+      setError('Your sign-in link has expired or was already used. Please request a new one below.')
+    }
   }, [searchParams])
 
   // Restore cooldown if the page was refreshed mid-wait
