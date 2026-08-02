@@ -33,12 +33,13 @@ function esc(s: string): string {
 }
 
 export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props) {
-  const { getGanttState, saveGanttState, clients, settings } = useApp()
+  const { getGanttState, saveGanttState, updateJob, clients, settings } = useApp()
   const containerRef = useRef<HTMLDivElement>(null)
   const stateRef = useRef<GanttState | null>(null)
   // Stores the cleanup fn for the current drag event listeners so we
   // can remove them before each re-render and on unmount.
   const cleanupDragRef = useRef<(() => void) | null>(null)
+  const extraWeeksRef = useRef(0)
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('week')
   const [fullscreen, setFullscreen] = useState(false)
@@ -86,6 +87,15 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       setSaveStatus('saved')
       setTimeout(() => setSaveStatus('idle'), 3000)
 
+      // Persist expanded weeks to the job so the chart keeps its size after reload
+      if (s.phases.length) {
+        const maxEndDay = Math.max(...s.phases.map(p => p.startDay + p.durDays))
+        const neededWeeks = Math.ceil(maxEndDay / 7)
+        if (neededWeeks > (job.weeks || 12)) {
+          updateJob({ ...job, weeks: neededWeeks })
+        }
+      }
+
       if (!silent) {
         const client = clients.find(c =>
           c.name?.toLowerCase() === job.client?.toLowerCase()
@@ -111,7 +121,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       setSaveStatus('error')
       setTimeout(() => setSaveStatus('idle'), 5000)
     }
-  }, [job, clients, settings, saveGanttState])
+  }, [job, clients, settings, saveGanttState, updateJob])
 
   // ── Auto-save 1.5s after any edit ───────────────────────────
   useEffect(() => {
@@ -128,6 +138,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
   // Re-render the chart when job props or view mode changes.
   // Reset dirty/status when a different job is opened.
   useEffect(() => {
+    extraWeeksRef.current = 0
     setDirty(false)
     setSaveStatus('idle')
     const state = buildState()
@@ -150,7 +161,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     const container = containerRef.current
     if (!container) return
 
-    const totalWeeks = job.weeks || 12
+    const totalWeeks = (job.weeks || 12) + extraWeeksRef.current
     const startDate = job.start ? new Date(job.start) : new Date()
     startDate.setHours(0, 0, 0, 0)
     const totalDays = totalWeeks * 7
@@ -490,13 +501,18 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
 
     const onUp = () => {
       if (!dragging) return
+      const ph = state.phases[dragging.idx]
       dragging = null
       document.body.style.cursor = ''
       if (tooltip) tooltip.style.display = 'none'
-      // Mark as dirty — user must click Save to persist
       stateRef.current = state
       setDirty(true)
       setSaveStatus('idle')
+      // Auto-expand chart if the task was pushed to the right boundary
+      if (ph.startDay + ph.durDays >= totalDays - 1) {
+        extraWeeksRef.current += 4
+        renderGantt(state, mode)
+      }
     }
 
     document.addEventListener('mousemove', onMove)
