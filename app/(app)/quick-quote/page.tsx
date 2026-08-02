@@ -477,8 +477,8 @@ export default function QuickQuotePage() {
           Required:
           {!custName.trim() && <span style={{ marginLeft: 8 }}>✗ client name</span>}
           {!scope.trim() && <span style={{ marginLeft: 8 }}>✗ scope of works</span>}
-          {!(sellNum > 0) && <span style={{ marginLeft: 8 }}>✗ sell price</span>}
-          {!(costNum > 0) && <span style={{ marginLeft: 8 }}>✗ estimated cost</span>}
+          {sellNum === 0 && <span style={{ marginLeft: 8 }}>✗ sell price</span>}
+          {sellNum >= 0 && !(costNum > 0) && <span style={{ marginLeft: 8 }}>✗ estimated cost</span>}
         </div>
       )}
 
