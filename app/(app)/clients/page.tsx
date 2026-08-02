@@ -49,6 +49,9 @@ function ClientsPageInner() {
   const [appLinkSentId, setAppLinkSentId] = useState<string | null>(null)
   const [appLinkSendingId, setAppLinkSendingId] = useState<string | null>(null)
   const [appLinkError, setAppLinkError] = useState('')
+  const [subInviteSentId, setSubInviteSentId] = useState<string | null>(null)
+  const [subInviteSendingId, setSubInviteSendingId] = useState<string | null>(null)
+  const [subInviteError, setSubInviteError] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editingClient, setEditingClient] = useState<Client | null>(null)
   const [form, setForm] = useState(BLANK_FORM)
@@ -209,6 +212,34 @@ function ClientsPageInner() {
     setTimeout(() => setCopiedId(null), 3000)
   }
 
+  async function sendSubPortalInvite(c: Client) {
+    if (!c.email || subInviteSendingId) return
+    setSubInviteSendingId(c.id)
+    setSubInviteError('')
+    try {
+      const { error: otpErr } = await supabase.auth.signInWithOtp({
+        email: c.email,
+        options: {
+          shouldCreateUser: true,
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=/sub-portal`,
+        },
+      })
+      if (otpErr) {
+        const msg = otpErr.message || ''
+        if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('too many') || msg.toLowerCase().includes('sending magic link')) {
+          setSubInviteError('Email rate limit hit — wait a minute and try again, or copy the link manually.')
+        } else {
+          setSubInviteError(msg || 'Failed to send invite')
+        }
+        return
+      }
+      setSubInviteSentId(c.id)
+      setTimeout(() => setSubInviteSentId(null), 4000)
+    } finally {
+      setSubInviteSendingId(null)
+    }
+  }
+
   async function sendAppLink(c: Client) {
     if (!c.email || appLinkSendingId) return
     setAppLinkSendingId(c.id)
@@ -342,6 +373,19 @@ function ClientsPageInner() {
                       <td className="col-hide-mobile" onClick={() => setSelected(c)} style={{ cursor: 'pointer', fontSize: 13 }}>{cJ.length} job{cJ.length !== 1 ? 's' : ''}</td>
                       <td className="col-hide-mobile">
                         <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                          {cType === 'subcontractor' && c.email && (<div className="btn-mob-hide">
+                            {subInviteError && subInviteSendingId !== c.id && (
+                              <span style={{ fontSize: 11, color: '#dc2626' }} title={subInviteError}>⚠ invite error</span>
+                            )}
+                            <button
+                              className={`btn-sm ${subInviteSentId === c.id ? 'btn-gold' : 'btn-outline'}`}
+                              disabled={subInviteSendingId === c.id}
+                              onClick={() => sendSubPortalInvite(c)}
+                              title="Send sub-portal sign-in link"
+                            >
+                              {subInviteSentId === c.id ? '✓ Invite Sent' : subInviteSendingId === c.id ? '…' : '🔗 Sub Portal'}
+                            </button>
+                          </div>)}
                           {cType === 'client' && (<div className="btn-mob-hide">
                           {status === 'no_email' ? (
                             <button className="btn-sm btn-outline" disabled style={{ opacity: 0.4, cursor: 'not-allowed' }} title="Add an email address first">

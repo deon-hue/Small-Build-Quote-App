@@ -11,6 +11,21 @@ export interface SubPortalSettings {
   logo: string
 }
 
+export interface SubPortalJob {
+  id: string
+  client: string
+  type: string
+  address: string
+  stage: string
+}
+
+export interface SubRates {
+  hourlyRate: number | null
+  dayRate: number | null
+  halfDayRate: number | null
+  paymentType: string | null
+}
+
 export interface SubContract {
   id: string
   job_id: string | null
@@ -32,7 +47,8 @@ export interface SubContract {
 
 export interface SubTimeEntry {
   id: string
-  sub_contract_id: string
+  sub_contract_id: string | null
+  job_id: string | null
   entry_date: string
   units: number
   notes: string
@@ -61,6 +77,8 @@ interface SubPortalContextType {
   timeEntries: SubTimeEntry[]
   paymentStages: SubPaymentStage[]
   settings: SubPortalSettings
+  jobs: SubPortalJob[]
+  subRates: SubRates
   subName: string
   loading: boolean
   error: string | null
@@ -76,6 +94,7 @@ export function useSubPortal() {
 }
 
 const DEFAULT_SETTINGS: SubPortalSettings = { name: '', tagline: '', email: '', phone: '', logo: '' }
+const DEFAULT_RATES: SubRates = { hourlyRate: null, dayRate: null, halfDayRate: null, paymentType: null }
 
 export function SubPortalProvider({ children }: { children: ReactNode }) {
   const supabase = createClient()
@@ -83,6 +102,8 @@ export function SubPortalProvider({ children }: { children: ReactNode }) {
   const [timeEntries, setTimeEntries] = useState<SubTimeEntry[]>([])
   const [paymentStages, setPaymentStages] = useState<SubPaymentStage[]>([])
   const [settings, setSettings] = useState<SubPortalSettings>(DEFAULT_SETTINGS)
+  const [jobs, setJobs] = useState<SubPortalJob[]>([])
+  const [subRates, setSubRates] = useState<SubRates>(DEFAULT_RATES)
   const [subName, setSubName] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -127,6 +148,8 @@ export function SubPortalProvider({ children }: { children: ReactNode }) {
           timeEntries: SubTimeEntry[]
           paymentStages: SubPaymentStage[]
           settings: SubPortalSettings
+          jobs: SubPortalJob[]
+          subRates: SubRates
           subName: string
         }
 
@@ -136,6 +159,8 @@ export function SubPortalProvider({ children }: { children: ReactNode }) {
         setTimeEntries(d.timeEntries ?? [])
         setPaymentStages(d.paymentStages ?? [])
         setSettings(d.settings ?? DEFAULT_SETTINGS)
+        setJobs(d.jobs ?? [])
+        setSubRates(d.subRates ?? DEFAULT_RATES)
         setSubName(d.subName ?? '')
         setError(null)
       } catch {
@@ -148,7 +173,7 @@ export function SubPortalProvider({ children }: { children: ReactNode }) {
   }, [tick]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <SubPortalContext.Provider value={{ contracts, timeEntries, paymentStages, settings, subName, loading, error, reload }}>
+    <SubPortalContext.Provider value={{ contracts, timeEntries, paymentStages, settings, jobs, subRates, subName, loading, error, reload }}>
       {children}
     </SubPortalContext.Provider>
   )

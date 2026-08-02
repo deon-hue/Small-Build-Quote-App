@@ -23,7 +23,11 @@ interface Contract {
 
 interface TimeEntry {
   id: string
-  sub_contract_id: string
+  sub_contract_id: string | null
+  job_id: string | null
+  contact_id: string | null
+  rate_type: string | null
+  rate_amount: number | null
   entry_date: string
   units: number
   notes: string
@@ -197,6 +201,34 @@ export default function SubcontractorsPage() {
           grossAmount: amount,
           paymentStatus: 'unpaid',
           chargeToClient: false,
+        })
+      }
+      await load()
+    } finally {
+      setApprovingEntry(null)
+    }
+  }
+
+  async function approveDirectEntry(entry: TimeEntry) {
+    setApprovingEntry(entry.id)
+    try {
+      const { data: { user } } = await sb.auth.getUser()
+      if (!user) return
+      await sb.from('sub_time_entries').update({ status: 'approved', admin_notes: null }).eq('id', entry.id)
+      // Derive amount from rate stored on the entry itself
+      const amount = entry.rate_type === 'daily' || entry.rate_type === 'half_day'
+        ? Number(entry.rate_amount) ?? 0
+        : Number(entry.units) * (Number(entry.rate_amount) ?? 0)
+      if (entry.job_id && amount > 0) {
+        await insertJobCost(sb, user.id, {
+          jobId: entry.job_id,
+          source: 'timesheet',
+          costCategory: isPaye(entry.contact_id) ? 'labour' : 'subcontractors',
+          supplier: contactName(entry.contact_id),
+          description: entry.notes || `Sub time — ${entry.entry_date}`,
+          docDate: entry.entry_date, docNumber: '',
+          netAmount: amount, vatAmount: 0, grossAmount: amount,
+          paymentStatus: 'unpaid', chargeToClient: false,
         })
       }
       await load()
@@ -783,6 +815,80 @@ export default function SubcontractorsPage() {
       </div>
 
       {error && <div style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 6, padding: '10px 14px', marginBottom: 16, fontSize: 13 }}>{error}</div>}
+
+      {/* ── Direct portal submissions (no contract) ─────────── */}
+      {(() => {
+        const direct = timeEntries.filter(e => !e.sub_contract_id && e.status === 'submitted')
+        if (!direct.length) return null
+        return (
+          <div style={{ marginBottom: 24, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 16px' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#92400e', marginBottom: 10 }}>
+              ⏳ Portal Timesheets Pending Review ({direct.length})
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {direct.map(e => {
+                const subLabel = contactName(e.contact_id)
+                const jName = jobName(e.job_id)
+                const amount = e.rate_type === 'daily' || e.rate_type === 'half_day'
+                  ? Number(e.rate_amount) ?? 0
+                  : Number(e.units) * (Number(e.rate_amount) ?? 0)
+                return (
+                  <div key={e.id} style={{ background: '#fff', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 700, fontSize: 12, color: '#374151' }}>{subLabel}</span>
+                      <span style={{ fontSize: 11, color: '#6b7280' }}>→ {jName}</span>
+                      <span style={{ fontSize: 12, color: '#111827', fontWeight: 600 }}>{e.entry_date}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{e.units} {e.rate_type === 'hourly' ? 'hrs' : e.rate_type === 'half_day' ? 'half day' : 'day'}</span>
+                      {amount > 0 && <span style={{ fontSize: 12, color: '#1d4ed8', fontWeight: 600 }}>{fmt(amount)}</span>}
+                      {e.rate_amount && <span style={{ fontSize: 11, color: '#9ca3af' }}>@ £{e.rate_amount}/{e.rate_type}</span>}
+                      {e.start_time && e.finish_time && <span style={{ fontSize: 11, color: '#9ca3af' }}>{e.start_time.slice(0,5)}–{e.finish_time.slice(0,5)}{e.break_mins > 0 ? ` (${e.break_mins}min break)` : ''}</span>}
+                    </div>
+                    {e.notes && <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6 }}>{e.notes}</div>}
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <button
+                        disabled={approvingEntry === e.id}
+                        onClick={() => approveDirectEntry(e)}
+                        style={{ fontSize: 11, padding: '3px 10px', background: '#dcfce7', color: '#16a34a', border: '1px solid #86efac', borderRadius: 5, cursor: 'pointer', fontWeight: 600, opacity: approvingEntry === e.id ? 0.5 : 1 }}
+                      >
+                        {approvingEntry === e.id ? '…' : '✓ Approve'}
+                      </button>
+                      <button
+                        onClick={() => toggleNotes(e.id)}
+                        style={{ fontSize: 11, padding: '3px 10px', background: '#ffedd5', color: '#9a3412', border: '1px solid #fdba74', borderRadius: 5, cursor: 'pointer', fontWeight: 600 }}
+                      >
+                        💬 Query
+                      </button>
+                      <button
+                        onClick={() => updateEntryStatus(e.id, 'rejected', entryNotes[e.id] ?? '')}
+                        style={{ fontSize: 11, padding: '3px 10px', background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 5, cursor: 'pointer', fontWeight: 600 }}
+                      >
+                        ✕ Reject
+                      </button>
+                    </div>
+                    {notesOpen.has(e.id) && (
+                      <div style={{ marginTop: 6, display: 'flex', gap: 6 }}>
+                        <input
+                          value={entryNotes[e.id] ?? ''}
+                          onChange={ev => setEntryNotes(prev => ({ ...prev, [e.id]: ev.target.value }))}
+                          placeholder="Message to subcontractor…"
+                          style={{ flex: 1, padding: '5px 8px', border: '1px solid #d1d5db', borderRadius: 5, fontSize: 12 }}
+                          onKeyDown={ev => { if (ev.key === 'Enter') updateEntryStatus(e.id, 'queried', entryNotes[e.id] ?? '') }}
+                        />
+                        <button
+                          onClick={() => updateEntryStatus(e.id, 'queried', entryNotes[e.id] ?? '')}
+                          style={{ fontSize: 11, padding: '5px 10px', background: '#ffedd5', color: '#9a3412', border: '1px solid #fdba74', borderRadius: 5, cursor: 'pointer', fontWeight: 600 }}
+                        >
+                          Send
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Contract list */}
       {filtered.length === 0 && (
