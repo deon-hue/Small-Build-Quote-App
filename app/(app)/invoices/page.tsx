@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { ContactPicker } from '@/components/ContactPicker'
 import { fmt, fmtK, calcPhaseSell } from '@/lib/utils'
@@ -58,6 +58,8 @@ export default function InvoicesPage() {
   const [xeroError, setXeroError] = useState<string | null>(null)
   const [xeroPushing, setXeroPushing] = useState(false)
   const [xeroPulling, setXeroPulling] = useState<string | null>(null) // invoice id being pulled
+  const [xeroAutoSyncing, setXeroAutoSyncing] = useState(false)
+  const hasAutoSynced = useRef(false)
 
   useEffect(() => {
     fetch('/api/xero/status')
@@ -68,6 +70,27 @@ export default function InvoicesPage() {
       })
       .catch(() => {})
   }, [])
+
+  // Auto-pull all Xero-linked invoices once on page load
+  useEffect(() => {
+    if (!xeroConnected || loading || hasAutoSynced.current) return
+    const linked = invoices.filter(i => !!i.xeroInvoiceId)
+    if (!linked.length) return
+    hasAutoSynced.current = true
+    setXeroAutoSyncing(true)
+    Promise.allSettled(
+      linked.map(inv =>
+        fetch('/api/xero/pull-invoice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ xeroInvoiceId: inv.xeroInvoiceId, invoiceId: inv.id }),
+        })
+          .then(r => r.json() as Promise<{ status?: string }>)
+          .then(result => { if (result.status) return updateInvoice({ ...inv, status: result.status as Invoice['status'] }) })
+          .catch(() => {})
+      )
+    ).finally(() => setXeroAutoSyncing(false))
+  }, [xeroConnected, loading, invoices, updateInvoice])
 
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
 
@@ -291,6 +314,11 @@ export default function InvoicesPage() {
 
   return (
     <>
+      {xeroAutoSyncing && (
+        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>
+          ⟳ Syncing invoice statuses with Xero…
+        </div>
+      )}
       {/* Stats */}
       <div className="stats-grid" style={{ marginBottom: 20 }}>
         <div className="stat green">
