@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
-const COOLDOWN_SECS = 60
+const COOLDOWN_SECS = 90
 const COOLDOWN_KEY = 'portal_otp_cooldown'
 
 function PortalLoginForm() {
