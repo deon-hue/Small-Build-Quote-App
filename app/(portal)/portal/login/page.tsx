@@ -57,7 +57,9 @@ function PortalLoginForm() {
         const msg = otpError.message.toLowerCase()
         if (msg.includes('rate limit') || msg.includes('too many') || msg.includes('sending magic link')) {
           fetch('/api/portal/log-activity', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, eventType: 'magic_link_rate_limit', details: otpError.message }) }).catch(() => {})
-          setError('Too many sign-in attempts — please wait a few minutes and try again, or use the Password tab instead.')
+          try { localStorage.setItem(COOLDOWN_KEY, String(Date.now() + COOLDOWN_SECS * 1000)) } catch { /* unavailable */ }
+          setCooldown(COOLDOWN_SECS)
+          setError('Too many sign-in attempts — please wait 90 seconds before trying again.')
         } else {
           fetch('/api/portal/log-activity', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, eventType: 'sign_in_failed', details: otpError.message }) }).catch(() => {})
           setError(otpError.message)
