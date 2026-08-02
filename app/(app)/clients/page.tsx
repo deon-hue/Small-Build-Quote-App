@@ -51,7 +51,7 @@ function ClientsPageInner() {
   const [appLinkError, setAppLinkError] = useState('')
   const [subInviteSentId, setSubInviteSentId] = useState<string | null>(null)
   const [subInviteSendingId, setSubInviteSendingId] = useState<string | null>(null)
-  const [subInviteError, setSubInviteError] = useState('')
+  const [subInviteErrors, setSubInviteErrors] = useState<Record<string, string>>({})
   const [showForm, setShowForm] = useState(false)
   const [editingClient, setEditingClient] = useState<Client | null>(null)
   const [form, setForm] = useState(BLANK_FORM)
@@ -215,7 +215,7 @@ function ClientsPageInner() {
   async function sendSubPortalInvite(c: Client) {
     if (!c.email || subInviteSendingId) return
     setSubInviteSendingId(c.id)
-    setSubInviteError('')
+    setSubInviteErrors(prev => { const n = { ...prev }; delete n[c.id]; return n })
     try {
       const { error: otpErr } = await supabase.auth.signInWithOtp({
         email: c.email,
@@ -226,11 +226,10 @@ function ClientsPageInner() {
       })
       if (otpErr) {
         const msg = otpErr.message || ''
-        if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('too many') || msg.toLowerCase().includes('sending magic link')) {
-          setSubInviteError('Email rate limit hit — wait a minute and try again, or copy the link manually.')
-        } else {
-          setSubInviteError(msg || 'Failed to send invite')
-        }
+        const friendly = msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('too many') || msg.toLowerCase().includes('sending magic link')
+          ? 'Email rate limit — wait a minute and try again.'
+          : msg || 'Failed to send invite'
+        setSubInviteErrors(prev => ({ ...prev, [c.id]: friendly }))
         return
       }
       setSubInviteSentId(c.id)
@@ -374,16 +373,13 @@ function ClientsPageInner() {
                       <td className="col-hide-mobile">
                         <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                           {cType === 'subcontractor' && c.email && (<div className="btn-mob-hide">
-                            {subInviteError && subInviteSendingId !== c.id && (
-                              <span style={{ fontSize: 11, color: '#dc2626' }} title={subInviteError}>⚠ invite error</span>
-                            )}
                             <button
-                              className={`btn-sm ${subInviteSentId === c.id ? 'btn-gold' : 'btn-outline'}`}
+                              className={`btn-sm ${subInviteSentId === c.id ? 'btn-gold' : subInviteErrors[c.id] ? 'btn-danger' : 'btn-outline'}`}
                               disabled={subInviteSendingId === c.id}
                               onClick={() => sendSubPortalInvite(c)}
-                              title="Send sub-portal sign-in link"
+                              title={subInviteErrors[c.id] ? `Error: ${subInviteErrors[c.id]}` : 'Send the subcontractor a link to log into their portal'}
                             >
-                              {subInviteSentId === c.id ? '✓ Invite Sent' : subInviteSendingId === c.id ? '…' : '🔗 Sub Portal'}
+                              {subInviteSentId === c.id ? '✓ Link Sent' : subInviteSendingId === c.id ? '…' : subInviteErrors[c.id] ? '⚠ Retry Invite' : '📧 Invite to Sub Portal'}
                             </button>
                           </div>)}
                           {cType === 'client' && (<div className="btn-mob-hide">
