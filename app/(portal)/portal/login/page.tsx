@@ -4,6 +4,9 @@ import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
+const COOLDOWN_SECS = 60
+const COOLDOWN_KEY = 'portal_otp_cooldown'
+
 function PortalLoginForm() {
   const supabase = createClient()
   const router = useRouter()
@@ -14,12 +17,31 @@ function PortalLoginForm() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [cooldown, setCooldown] = useState(0)
 
   // Pre-fill email from URL param (set by admin portal button)
   useEffect(() => {
     const emailParam = searchParams.get('email')
     if (emailParam) setEmail(emailParam)
   }, [searchParams])
+
+  // Restore cooldown if the page was refreshed mid-wait
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(COOLDOWN_KEY)
+      if (stored) {
+        const remaining = Math.ceil((parseInt(stored) - Date.now()) / 1000)
+        if (remaining > 0) setCooldown(remaining)
+      }
+    } catch { /* localStorage unavailable */ }
+  }, [])
+
+  // Tick down every second
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const t = setTimeout(() => setCooldown(c => c - 1), 1000)
+    return () => clearTimeout(t)
+  }, [cooldown])
 
   // Send magic link — works for all invited customers (no password needed)
   async function handleMagicLink(e: React.FormEvent) {
@@ -43,7 +65,11 @@ function PortalLoginForm() {
         return
       }
       fetch('/api/portal/log-activity', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, eventType: 'magic_link_sent' }) }).catch(() => {})
-      setMessage('Sign-in link sent! Check your email and click the link to access your portal.')
+      setMessage('Sign-in link sent! Check your email (and spam folder) and click the link to access your portal.')
+      try {
+        localStorage.setItem(COOLDOWN_KEY, String(Date.now() + COOLDOWN_SECS * 1000))
+      } catch { /* localStorage unavailable */ }
+      setCooldown(COOLDOWN_SECS)
     } finally {
       setLoading(false)
     }
@@ -138,10 +164,15 @@ function PortalLoginForm() {
               className="btn btn-primary"
               style={{ width: '100%' }}
               type="submit"
-              disabled={loading}
+              disabled={loading || cooldown > 0}
             >
-              {loading ? 'Sending…' : '📧 Send sign-in link'}
+              {loading ? 'Sending…' : cooldown > 0 ? `Resend available in ${cooldown}s` : '📧 Send sign-in link'}
             </button>
+            {cooldown > 0 && (
+              <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 10 }}>
+                Check your inbox (and spam folder). The link expires in 60 minutes.
+              </p>
+            )}
           </form>
         ) : (
           /* ── Password ── */
