@@ -211,6 +211,8 @@ export default function SavedQuotesPage() {
               return jn === qn || jn.includes(qn) || qn.includes(jn)
             })
             const isConverted = q.status === 'accepted' && alreadyJob
+            // Only hide the variation button when explicitly actioned — not just name-matched
+            const isActioned = q.status === 'accepted' && (hasLinkedJob || pushedAsVariation || q.convertedToJob)
 
             return (
               <div key={q.id} className="sq-card" style={q.status === 'accepted' ? { borderLeft: '3px solid #7ab533' } : {}}>
@@ -279,7 +281,7 @@ export default function SavedQuotesPage() {
                         {pushedAsVariation && !hasLinkedJob ? '✓ Added as variation' : '✓ Job created'}
                       </span>
                     )}
-                    {q.status === 'accepted' && !isConverted && (
+                    {q.status === 'accepted' && !isActioned && (
                       pushVarQuote?.id === q.id ? (
                         <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
                           <select
