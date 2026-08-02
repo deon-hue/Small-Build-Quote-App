@@ -13,10 +13,13 @@ import { createClient } from '@/lib/supabase/client'
 import { extractQuoteIntelligence } from '@/lib/quote-intelligence'
 
 export default function SavedQuotesPage() {
-  const { quotes, jobs, settings, updateQuote, deleteQuote, deleteJob, addJob, saveGanttState, loading } = useApp()
+  const { quotes, jobs, settings, updateQuote, deleteQuote, deleteJob, addJob, addVariation, saveGanttState, loading } = useApp()
   const [previewQuote, setPreviewQuote]   = useState<Quote | null>(null)
   const [emailingQuote, setEmailingQuote] = useState<Quote | null>(null)
   const [archiveOpen, setArchiveOpen]     = useState(false)
+  const [pushVarQuote, setPushVarQuote]   = useState<Quote | null>(null)
+  const [pushVarJobId, setPushVarJobId]   = useState('')
+  const [pushingVar, setPushingVar]       = useState(false)
   const router = useRouter()
 
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
@@ -109,6 +112,37 @@ export default function SavedQuotesPage() {
     await updateQuote({ ...q, convertedToJob: true })
     alert('Job created! Find it in the Jobs section.')
     router.push('/jobs')
+  }
+
+  async function handlePushToVariation(q: Quote, jobId: string) {
+    const total = quoteTotal(q)
+    const job = jobs.find(j => j.id === jobId)
+    if (!job) return
+    if (!confirm(`Add "${q.ref}" as an approved variation on "${job.type} — ${job.client}"?\n\nAmount: ${fmt(total)}\n\nThis will immediately update that job's contract value.`)) return
+    setPushingVar(true)
+    try {
+      await addVariation(jobId, {
+        title: `${q.ref}${q.customer.name ? ` — ${q.customer.name}` : ''}`,
+        description: q.scope || '',
+        status: 'approved',
+        items: [],
+        markup: 0,
+        vatIncluded: q.vatIncluded,
+        total,
+        notes: `Added from quote ${q.ref}`,
+        locked: true,
+        clientApprovedAt: new Date().toISOString(),
+        clientApprovedBy: q.customer.name || '(Client)',
+        clientRejectedAt: null,
+        clientRejectionReason: null,
+        sentAt: null,
+      })
+      setPushVarQuote(null)
+      setPushVarJobId('')
+      alert(`Done — variation added to "${job.type} — ${job.client}". The contract value has been updated.`)
+    } finally {
+      setPushingVar(false)
+    }
   }
 
   function downloadQuote(q: Quote) {
@@ -240,6 +274,36 @@ export default function SavedQuotesPage() {
                     )}
                     {q.status === 'accepted' && alreadyJob && (
                       <span style={{ fontSize: 10, color: 'var(--moss)', fontWeight: 500 }}>✓ Job created</span>
+                    )}
+                    {q.status === 'accepted' && (
+                      pushVarQuote?.id === q.id ? (
+                        <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
+                          <select
+                            value={pushVarJobId}
+                            onChange={e => setPushVarJobId(e.target.value)}
+                            style={{ fontSize: 11, padding: '4px 6px', border: '1px solid var(--border)', borderRadius: 4 }}
+                          >
+                            <option value="">Select job…</option>
+                            {jobs.map(j => <option key={j.id} value={j.id}>{j.type} — {j.client}</option>)}
+                          </select>
+                          <button
+                            className="btn-sm btn-primary"
+                            disabled={!pushVarJobId || pushingVar}
+                            onClick={() => handlePushToVariation(q, pushVarJobId)}
+                          >
+                            {pushingVar ? '…' : '✓ Add'}
+                          </button>
+                          <button className="btn-sm btn-outline" onClick={() => { setPushVarQuote(null); setPushVarJobId('') }}>✕</button>
+                        </div>
+                      ) : (
+                        <button
+                          className="btn-sm btn-outline"
+                          onClick={() => { setPushVarQuote(q); setPushVarJobId('') }}
+                          style={{ whiteSpace: 'nowrap', color: '#7c3aed', borderColor: '#c4b5fd' }}
+                        >
+                          ↗ Add to Job as Variation
+                        </button>
+                      )
                     )}
                     {!isConverted && (
                       <select

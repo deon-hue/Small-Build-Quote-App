@@ -63,7 +63,7 @@ export default function QuickQuotePage() {
   const vatAmt   = vatOn ? sellNum * 0.2 : 0
   const totalInc = sellNum + vatAmt
 
-  const canSave = !!(custName.trim() && sellNum > 0 && costNum > 0 && scope.trim())
+  const canSave = !!(custName.trim() && sellNum !== 0 && scope.trim() && (sellNum < 0 || costNum > 0))
 
   // ── Client autocomplete ───────────────────────────────────────────────────
   const filteredClients = clientSearch.trim()
@@ -116,7 +116,7 @@ export default function QuickQuotePage() {
   // ── Save ──────────────────────────────────────────────────────────────────
   async function handleSave() {
     if (!canSave) return
-    if (costNum >= sellNum) {
+    if (sellNum > 0 && costNum >= sellNum) {
       const ok = confirm(
         `Your estimated cost (${fmt(costNum)}) is ≥ your sell price (${fmt(sellNum)}) — no profit margin.\n\nContinue anyway?`
       )
@@ -127,21 +127,28 @@ export default function QuickQuotePage() {
     try {
       const customer = { name: custName.trim(), address: custAddr.trim(), email: custEmail.trim(), phone: custPhone.trim() }
 
-      // Single lump-sum phase — estimated cost stored in `other`; markup derived to hit sellNum
-      const markupPct = costNum > 0 ? ((sellNum / costNum) - 1) * 100 : 0
+      // For a discount (negative sell), store sellNum directly as `other` with markup 0 so
+      // quoteTotal() returns the correct negative value. For regular quotes, use the normal
+      // cost-in-other + back-calculated markup approach.
+      const isDiscount = sellNum < 0
+      const markupPct = isDiscount ? 0 : (costNum > 0 ? ((sellNum / costNum) - 1) * 100 : 0)
+      const otherAmount = isDiscount ? sellNum : costNum
+      const costNotes = isDiscount
+        ? `Discount: −£${Math.abs(sellNum).toLocaleString('en-GB', { minimumFractionDigits: 2 })}`
+        : `Sell £${sellNum.toLocaleString('en-GB', { minimumFractionDigits: 2 })} | Cost £${costNum.toLocaleString('en-GB', { minimumFractionDigits: 2 })} | Margin ${marginPct.toFixed(1)}%`
 
       const lumpPhase = {
         id: ++itemId,
         phase: 'Lump Sum',
         parentPhase: 'Project Works',
         items: [
-          { id: ++itemId, desc: 'Labour',                  qty: 1, unit: 'Item', labour: 0,       materials: 0, plantHire: 0, subcontractors: 0, other: 0,       notes: '', itemType: 'labour'         as const },
-          { id: ++itemId, desc: 'Materials',               qty: 1, unit: 'Item', labour: 0,       materials: 0, plantHire: 0, subcontractors: 0, other: 0,       notes: '', itemType: 'materials'      as const },
-          { id: ++itemId, desc: 'Plant Hire',              qty: 1, unit: 'Item', labour: 0,       materials: 0, plantHire: 0, subcontractors: 0, other: 0,       notes: '', itemType: 'plant'          as const },
-          { id: ++itemId, desc: 'Subcontractors',          qty: 1, unit: 'Item', labour: 0,       materials: 0, plantHire: 0, subcontractors: 0, other: 0,       notes: '', itemType: 'subcontractors' as const },
-          { id: ++itemId, desc: 'Estimated Project Cost',  qty: 1, unit: 'Item', labour: 0,       materials: 0, plantHire: 0, subcontractors: 0, other: costNum,
-            notes: `Sell £${sellNum.toLocaleString('en-GB', { minimumFractionDigits: 2 })} | Cost £${costNum.toLocaleString('en-GB', { minimumFractionDigits: 2 })} | Margin ${marginPct.toFixed(1)}%`,
-            itemType: 'other' as const },
+          { id: ++itemId, desc: 'Labour',                  qty: 1, unit: 'Item', labour: 0,       materials: 0, plantHire: 0, subcontractors: 0, other: 0,           notes: '', itemType: 'labour'         as const },
+          { id: ++itemId, desc: 'Materials',               qty: 1, unit: 'Item', labour: 0,       materials: 0, plantHire: 0, subcontractors: 0, other: 0,           notes: '', itemType: 'materials'      as const },
+          { id: ++itemId, desc: 'Plant Hire',              qty: 1, unit: 'Item', labour: 0,       materials: 0, plantHire: 0, subcontractors: 0, other: 0,           notes: '', itemType: 'plant'          as const },
+          { id: ++itemId, desc: 'Subcontractors',          qty: 1, unit: 'Item', labour: 0,       materials: 0, plantHire: 0, subcontractors: 0, other: 0,           notes: '', itemType: 'subcontractors' as const },
+          { id: ++itemId, desc: isDiscount ? 'Discount'  : 'Estimated Project Cost',
+            qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: otherAmount,
+            notes: costNotes, itemType: 'other' as const },
         ],
         estimatorItems: [],
         useEstimator:   false as const,
@@ -382,7 +389,6 @@ export default function QuickQuotePage() {
               <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', fontWeight: 600, color: 'var(--muted)', fontSize: 13 }}>£</span>
               <input
                 type="number"
-                min="0"
                 step="100"
                 value={sellPriceStr}
                 onChange={e => setSellPriceStr(e.target.value)}
