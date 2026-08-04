@@ -159,7 +159,7 @@ Generate a full phase cost breakdown scaled to this scope.`
     }
 
     const rawText = data.content?.[0]?.text || ''
-    let jsonStr = ('{' + rawText).trim()
+    let jsonStr = rawText.trim()
     const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
     if (fenceMatch) jsonStr = fenceMatch[1].trim()
     if (!jsonStr.startsWith('{')) {
