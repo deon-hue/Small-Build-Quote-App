@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 // Public version of scope-chat — no auth required.
 // Called by the client-facing /get-quote wizard.
 
+export const maxDuration = 60
+
 interface AttachmentPayload {
   name: string
   mimeType: string
