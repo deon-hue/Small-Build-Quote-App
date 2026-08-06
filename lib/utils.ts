@@ -17,6 +17,23 @@ export function fmtK(n: number): string {
   return n >= 1000 ? '£' + (n / 1000).toFixed(0) + 'k' : fmt(n)
 }
 
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
+
+// Formats a date as "4 August 2026" (day, month name, year).
+// Accepts "YYYY-MM-DD" or any Date-parseable string; returns '' for empty/invalid input.
+export function fmtDate(input?: string | null): string {
+  if (!input) return ''
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(input)
+  if (iso) {
+    const [, y, m, d] = iso
+    const month = MONTHS[Number(m) - 1]
+    if (month) return `${Number(d)} ${month} ${y}`
+  }
+  const dt = new Date(input)
+  if (isNaN(dt.getTime())) return input
+  return `${dt.getDate()} ${MONTHS[dt.getMonth()]} ${dt.getFullYear()}`
+}
+
 export function calcItem(i: QuoteItem): number {
   return (Number(i.labour) || 0) + (Number(i.materials) || 0) + (Number(i.plantHire) || 0)
     + (Number(i.subcontractors) || 0) + (Number(i.other) || 0)

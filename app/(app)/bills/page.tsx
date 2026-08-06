@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useApp } from '@/contexts/AppContext'
-import { fmt } from '@/lib/utils'
+import { fmt, fmtDate } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { signedDocUrlById } from '@/lib/job-costs'
 import type { Bill, BillLineItem, BillStatus } from '@/lib/types'
@@ -336,8 +336,8 @@ export default function BillsPage() {
                   </td>
                   <td style={{ padding: '10px 14px' }}>{b.supplierName || '—'}</td>
                   <td style={{ padding: '10px 14px', color: 'var(--muted)' }}>{b.jobId ? jobLabel(b.jobId) : '—'}</td>
-                  <td style={{ padding: '10px 14px', color: 'var(--muted)' }}>{b.billDate || '—'}</td>
-                  <td style={{ padding: '10px 14px' }}>{fmt(b.subtotal)}</td>
+                  <td style={{ padding: '10px 14px', color: '#334155', fontWeight: 500, whiteSpace: 'nowrap' }}>{fmtDate(b.billDate) || '—'}</td>
+                  <td style={{ padding: '10px 14px', fontWeight: 600, whiteSpace: 'nowrap' }}>{fmt(b.subtotal)}</td>
                   <td style={{ padding: '10px 14px', color: b.cisDeduction > 0 ? 'var(--danger, #e53e3e)' : 'var(--muted)' }}>
                     {b.cisDeduction > 0 ? `−${fmt(b.cisDeduction)}` : '—'}
                   </td>

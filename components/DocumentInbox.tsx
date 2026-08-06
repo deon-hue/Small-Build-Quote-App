@@ -9,6 +9,7 @@ import {
 import DocumentReviewModal from './DocumentReviewModal'
 import type { InboxDocument, Job } from '@/lib/types'
 import { useApp } from '@/contexts/AppContext'
+import { fmtDate } from '@/lib/utils'
 
 interface Props { jobs: Job[] }
 
@@ -174,7 +175,10 @@ export default function DocumentInbox({ jobs }: Props) {
                   <span style={{ fontSize: 20 }}>{isPdf ? '📄' : '🧾'}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: 13, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.supplier}</div>
-                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>{s.date || '—'}{s.gross ? ` · ${fmt(s.gross)}` : ''}</div>
+                    <div style={{ fontSize: 13, color: '#334155', marginTop: 2, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 500 }}>{fmtDate(s.date) || '—'}</span>
+                      {s.gross ? <span style={{ fontWeight: 700, color: '#1e293b' }}>{fmt(s.gross)}</span> : null}
+                    </div>
                   </div>
                   {doc.status === 'allocated'
                     ? doc.jobId
