@@ -355,24 +355,44 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
               </div>
             )}
 
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#94a3b8' }}>Cost lines</div>
-              <div style={{ fontSize: 10, color: '#94a3b8' }}>Net · VAT · Gross · Expense?</div>
-            </div>
-            <div style={{ display: 'grid', gap: 6 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#94a3b8', marginBottom: 6 }}>Cost lines</div>
+            <div style={{ display: 'grid', gap: 8 }}>
               {lines.map((ln, i) => (
-                <div key={i} style={{ border: '1px solid #f1f5f9', borderRadius: 6, padding: '6px 8px', background: ln.jobId ? '#f0f9ff' : undefined }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 72px 72px 72px auto 20px', gap: 5, alignItems: 'center' }}>
-                    <input style={inp} placeholder="Description" value={ln.description} onChange={e => updateLine(i, { description: e.target.value })} />
-                    <select style={inp} value={ln.costCategory} onChange={e => updateLine(i, { costCategory: e.target.value as JobCostCategory })}>
-                      {CATS.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}
-                    </select>
-                    <input type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={ln.netAmount} onChange={e => updateLine(i, { netAmount: Math.max(0, +e.target.value) })} title="Net" />
-                    <input type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={ln.vatAmount} onChange={e => updateLine(i, { vatAmount: Math.max(0, +e.target.value) })} title="VAT" />
-                    <input type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={ln.grossAmount} onChange={e => updateLine(i, { grossAmount: Math.max(0, +e.target.value) })} title="Gross" />
+                <div key={i} style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 12px', background: ln.jobId ? '#f0f9ff' : '#fafbfc' }}>
+                  {/* Description — full width for readability */}
+                  <div>
+                    <label style={miniLabel}>Description</label>
+                    <textarea
+                      style={{ ...inp, fontSize: 13, padding: '8px 10px', resize: 'vertical', minHeight: 38, lineHeight: 1.4, fontFamily: 'inherit' }}
+                      rows={1}
+                      placeholder="Description of cost"
+                      value={ln.description}
+                      onChange={e => updateLine(i, { description: e.target.value })}
+                    />
+                  </div>
+                  {/* Category + amounts */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px auto 20px', gap: 6, alignItems: 'end', marginTop: 8 }}>
+                    <div>
+                      <label style={miniLabel}>Category</label>
+                      <select style={inp} value={ln.costCategory} onChange={e => updateLine(i, { costCategory: e.target.value as JobCostCategory })}>
+                        {CATS.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={miniLabel}>Net £</label>
+                      <input type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={ln.netAmount} onChange={e => updateLine(i, { netAmount: Math.max(0, +e.target.value) })} title="Net" />
+                    </div>
+                    <div>
+                      <label style={miniLabel}>VAT £</label>
+                      <input type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={ln.vatAmount} onChange={e => updateLine(i, { vatAmount: Math.max(0, +e.target.value) })} title="VAT" />
+                    </div>
+                    <div>
+                      <label style={miniLabel}>Gross £</label>
+                      <input type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }} value={ln.grossAmount} onChange={e => updateLine(i, { grossAmount: Math.max(0, +e.target.value) })} title="Gross" />
+                    </div>
                     <label
                       title="Charge to client as an expense"
-                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', gap: 1 }}
+                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', gap: 1, paddingBottom: 4 }}
                     >
                       <input
                         type="checkbox"
@@ -382,9 +402,9 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
                       />
                       <span style={{ fontSize: 8, fontWeight: 700, color: ln.chargeToClient ? '#d97706' : '#cbd5e1', letterSpacing: '0.02em' }}>EXP</span>
                     </label>
-                    <button onClick={() => removeLine(i)} style={{ border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 15 }}>×</button>
+                    <button onClick={() => removeLine(i)} style={{ border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 15, paddingBottom: 4 }}>×</button>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
                     <span style={{ fontSize: 10, color: '#94a3b8', whiteSpace: 'nowrap', fontWeight: 600 }}>→ Job</span>
                     <select
                       style={{ ...inp, fontSize: 11, padding: '3px 6px', color: ln.jobId ? '#0369a1' : '#94a3b8' }}
@@ -519,3 +539,4 @@ const overlay: React.CSSProperties = { position: 'fixed', inset: 0, background: 
 const panel: React.CSSProperties = { background: '#fff', borderRadius: 12, width: '100%', maxWidth: 1000, height: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden' }
 const btn: React.CSSProperties = { padding: '7px 14px', border: '1px solid #d1d5db', borderRadius: 7, background: '#fff', color: '#374151', fontSize: 13, fontWeight: 600, cursor: 'pointer' }
 const inp: React.CSSProperties = { width: '100%', padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 12, boxSizing: 'border-box' }
+const miniLabel: React.CSSProperties = { display: 'block', fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 2 }
