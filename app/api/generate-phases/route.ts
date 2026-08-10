@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
-export const maxDuration = 30
+export const maxDuration = 60
 
 // Extract every fully-closed phase object from a truncated JSON string.
 // Falls back gracefully when the AI hit the max_tokens ceiling mid-response.
@@ -355,8 +355,8 @@ Generate a full phase cost breakdown. Use the Back Office default rates provided
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 8192,
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 4096,
         stream: true,
         system,
         messages: [
