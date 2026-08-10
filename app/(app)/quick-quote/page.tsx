@@ -34,6 +34,7 @@ export default function QuickQuotePage() {
   const [custPhone, setCustPhone] = useState('')
   const [clientSearch, setClientSearch] = useState('')
   const [clientDrop,   setClientDrop]   = useState(false)
+  const [contactSaved, setContactSaved] = useState(false)
 
   // ── Job ───────────────────────────────────────────────────────────────────
   const [jobType, setJobType] = useState('Rear Extension')
@@ -84,6 +85,17 @@ export default function QuickQuotePage() {
     setClientDrop(false)
     setClientSearch('')
   }
+
+  async function saveAsNewContact() {
+    if (!custName.trim()) return
+    await upsertClientFromQuote({ name: custName, address: custAddr, email: custEmail, phone: custPhone })
+    setContactSaved(true)
+    setClientDrop(false); setClientSearch('')
+    setTimeout(() => setContactSaved(false), 3000)
+  }
+
+  const clientNameIsNew = custName.trim().length > 0 &&
+    !clients.some(c => (c.name || '').toLowerCase() === custName.trim().toLowerCase())
 
   // ── Generate scope ────────────────────────────────────────────────────────
   async function generateScope() {
@@ -216,7 +228,7 @@ export default function QuickQuotePage() {
             style={{ width: '100%', padding: '8px 10px', fontSize: 13, boxSizing: 'border-box', border: '1px solid var(--border)', borderRadius: 6, fontFamily: 'inherit' }}
           />
           {clientDrop && filteredClients.length > 0 && (
-            <div style={{ position: 'absolute', zIndex: 100, top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid var(--border)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.1)', maxHeight: 200, overflowY: 'auto', marginTop: 2 }}>
+            <div style={{ position: 'absolute', zIndex: 100, top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid var(--border)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.1)', maxHeight: 220, overflowY: 'auto', marginTop: 2 }}>
               {filteredClients.map(c => (
                 <div
                   key={c.id}
@@ -280,6 +292,15 @@ export default function QuickQuotePage() {
             />
           </div>
         </div>
+        {contactSaved && (
+          <div style={{ marginTop: 10, fontSize: 12, color: '#16a34a', fontWeight: 600 }}>✓ Contact saved</div>
+        )}
+        {clientNameIsNew && !contactSaved && (
+          <button type="button" onClick={saveAsNewContact}
+            style={{ marginTop: 10, padding: '6px 14px', fontSize: 12, fontWeight: 600, color: '#16a34a', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 6, cursor: 'pointer' }}>
+            ＋ Save &ldquo;{custName}&rdquo; as new contact
+          </button>
+        )}
       </div>
 
       {/* ── Section 2: Job ── */}
