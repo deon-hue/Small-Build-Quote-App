@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+export const maxDuration = 60
+
 // Generates an AI architectural concept image.
 // Requires OPENAI_API_KEY in env. Returns { imageUrl } or { error }.
 export async function POST(req: NextRequest) {

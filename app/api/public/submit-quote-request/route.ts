@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceRoleClient } from '@/lib/supabase/service-role'
 
+export const maxDuration = 60
+
 export async function POST(req: NextRequest) {
   const body = await req.json()
   const { clientName, clientEmail, clientPhone, projectType, projectAddress, scopeText, aiPhases, estimatedTotal, clientFiles } = body

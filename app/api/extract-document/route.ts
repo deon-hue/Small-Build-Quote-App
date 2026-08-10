@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { extractDocument } from '@/lib/doc-extract'
 
+export const maxDuration = 60
+
 export async function POST(req: NextRequest) {
   const sb = await createClient()
   const { data: { user } } = await sb.auth.getUser()

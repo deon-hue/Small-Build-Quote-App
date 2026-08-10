@@ -3,6 +3,8 @@ import { createClient }              from '@/lib/supabase/server'
 import { fetchSimilarPhases }        from '@/lib/quote-intelligence'
 import type { QuotePhase }           from '@/lib/types'
 
+export const maxDuration = 60
+
 export interface PhaseReviewRequest {
   phase:   QuotePhase
   jobType: string
