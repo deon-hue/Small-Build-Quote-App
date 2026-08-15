@@ -448,17 +448,55 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       const barStart = addDays(jStart, ph.startDay)
       const barEnd   = addDays(jStart, ph.startDay + ph.durDays)
       const durText  = formatGanttDuration(ph.durDays, mode)
-      // Debug: open browser DevTools console to verify bar ↔ tooltip parity
-      console.debug('[Gantt tooltip]', `"${ph.label}"`, {
-        mode,
-        startDay: ph.startDay,
-        durDays: ph.durDays,
-        barStart: fmtDateShort(barStart),
-        barEnd: fmtDateShort(barEnd),
-        durText,
-      })
       const pctInfo = ph.isComplete ? '<br>✓ Complete' : ph.percentComplete ? `<br>Progress: ${ph.percentComplete}%` : ''
-      tooltip.innerHTML = `<strong>${esc(ph.label)}</strong><br>Start: ${fmtDate(barStart)}<br>End: ${fmtDate(barEnd)}<br>Duration: ${durText}${pctInfo}`
+
+      // Cost breakdown from linked quote phases
+      const phLevel = ph.level ?? 1
+      const markup = linkedQuotes[0]?.markup ?? 0
+      let costHtml = ''
+      if ((phLevel === 0 || phLevel === 1) && phases.length > 0) {
+        const strippedLabel = stripPhasePrefix(ph.label)
+        const matchingPhases = phLevel === 0
+          ? phases.filter(qp => stripPhasePrefix(qp.parentPhase?.trim() || qp.phase.trim()) === strippedLabel)
+          : phases.filter(qp => qp.phase === ph.label)
+
+        if (matchingPhases.length > 0) {
+          let labour = 0, materials = 0, plant = 0, sub = 0, other = 0
+          for (const qp of matchingPhases) {
+            const hasLabourTrades = (qp.labourTrades?.length ?? 0) > 0
+            for (const item of qp.items) {
+              const mkpMult = 1 + markup / 100
+              materials += (Number(item.materials) || 0) * mkpMult
+              plant     += (Number(item.plantHire) || 0) * mkpMult
+              sub       += (Number(item.subcontractors) || 0) * mkpMult
+              other     += (Number(item.other) || 0) * mkpMult
+              const l    = Number(item.labour) || 0
+              labour    += (item.itemType === 'labour' && hasLabourTrades) ? l : l * mkpMult
+            }
+            for (const pr of qp.products ?? []) {
+              if (pr.enabled !== false) materials += pr.sellPrice * pr.qty
+            }
+            for (const pl of qp.plantItems ?? []) {
+              if (pl.enabled !== false) plant += pl.sellPrice * pl.qty
+            }
+          }
+          const total = labour + materials + plant + sub + other
+          if (total > 0) {
+            const parts: string[] = []
+            if (labour > 0)    parts.push(`Labour: ${fmt(Math.round(labour))}`)
+            if (materials > 0) parts.push(`Materials: ${fmt(Math.round(materials))}`)
+            if (plant > 0)     parts.push(`Plant: ${fmt(Math.round(plant))}`)
+            if (sub > 0)       parts.push(`Sub: ${fmt(Math.round(sub))}`)
+            if (other > 0)     parts.push(`Other: ${fmt(Math.round(other))}`)
+            const breakdownLine = parts.length > 1
+              ? `<br><span style="opacity:0.7;font-size:10px">${parts.join(' · ')}</span>`
+              : ''
+            costHtml = `<br><span style="display:block;opacity:0.25;font-size:8px;padding:3px 0 1px">————————</span><span style="font-size:13px;font-weight:700">${fmt(Math.round(total))}</span><span style="opacity:0.65;font-size:10px"> excl. VAT</span>${breakdownLine}`
+          }
+        }
+      }
+
+      tooltip.innerHTML = `<strong>${esc(ph.label)}</strong><br>Start: ${fmtDate(barStart)}<br>End: ${fmtDate(barEnd)}<br>Duration: ${durText}${pctInfo}${costHtml}`
       tooltip.style.display = 'block'
       tooltip.style.left = (e.clientX + 12) + 'px'
       tooltip.style.top = (e.clientY - 10) + 'px'
