@@ -204,19 +204,6 @@ export default function InvoicesPage() {
 
     const result: PaymentMilestone[] = []
 
-    // 10% deposit upfront at job start
-    const deposit = Math.round(total * 0.1 * 100) / 100
-    if (deposit > 0) {
-      result.push({
-        id: ++milestoneCounter,
-        description: '10% Deposit',
-        amount: deposit,
-        dueDate: jobStart,
-        paid: false,
-        paidDate: '',
-      })
-    }
-
     // Parent-phase rows only (level 0)
     const parentRows = gantt.phases.filter(gp => gp.level === 0)
 
