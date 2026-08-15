@@ -316,11 +316,33 @@ export default function InvoicesPage() {
       status: 'draft',
       issueDate: todayStr(), dueDate: invDue,
       notes: settings.invoiceDefaultNotes ?? '',
-      paymentPlan: null, syncToXero: false,
+      paymentPlan: null, syncToXero: xeroConnected,
     })
 
     setSelectedMilestoneIds(new Set())
-    setMilestoneInvMsg(`✓ ${newInv.ref} created — find it in the invoices list to send to the client`)
+
+    // Push to Xero immediately if connected — mirrors what handleSave does
+    if (xeroConnected) {
+      try {
+        const res = await fetch('/api/xero/push-invoice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ invoice: newInv }),
+        })
+        const result = await res.json() as { xeroInvoiceId?: string; error?: string }
+        if (result.xeroInvoiceId) {
+          await updateInvoice({ ...newInv, xeroInvoiceId: result.xeroInvoiceId })
+          setMilestoneInvMsg(`✓ ${newInv.ref} created and synced to Xero`)
+        } else {
+          setMilestoneInvMsg(`✓ ${newInv.ref} created — Xero sync failed: ${result.error ?? 'unknown error'}`)
+        }
+      } catch {
+        setMilestoneInvMsg(`✓ ${newInv.ref} created — could not reach Xero`)
+      }
+    } else {
+      setMilestoneInvMsg(`✓ ${newInv.ref} created — find it in the invoices list to send to the client`)
+    }
+
     setTimeout(() => setMilestoneInvMsg(''), 7000)
   }
 
