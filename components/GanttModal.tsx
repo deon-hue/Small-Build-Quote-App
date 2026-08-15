@@ -277,6 +277,9 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
 
     const hasHierarchy = state.phases.some(p => p.level !== undefined)
 
+    // Pre-compute parent phase IDs in order (for ↑↓ reorder buttons)
+    const parentPhaseIds = state.phases.filter(p => p.level === 0 && p.id).map(p => p.id!)
+
     const phaseRowsHtml = state.phases.map((ph, i) => {
       const level = ph.level ?? 1  // legacy phases (no level field) render as level 1
       const visible = isRowVisible(ph)
@@ -286,10 +289,20 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       if (level === 0) {
         const toggleIcon = ph.collapsed ? '▶' : '▼'
         const idAttr = ph.id ? `data-row-id="${esc(ph.id)}"` : ''
+        const groupPos = ph.id ? parentPhaseIds.indexOf(ph.id) : -1
+        const isFirst = groupPos === 0
+        const isLast = groupPos === parentPhaseIds.length - 1
+        const upBtn = ph.id
+          ? `<span onclick="${!isFirst ? `window.__ganttMoveGroup('${esc(ph.id)}','up')` : ''}" title="Move up" style="cursor:${isFirst ? 'default' : 'pointer'};font-size:10px;opacity:${isFirst ? '0.15' : '0.5'};flex-shrink:0;user-select:none;line-height:1;padding:0 1px">↑</span>`
+          : ''
+        const dnBtn = ph.id
+          ? `<span onclick="${!isLast ? `window.__ganttMoveGroup('${esc(ph.id)}','down')` : ''}" title="Move down" style="cursor:${isLast ? 'default' : 'pointer'};font-size:10px;opacity:${isLast ? '0.15' : '0.5'};flex-shrink:0;user-select:none;line-height:1;padding:0 1px">↓</span>`
+          : ''
         return `<div class="gantt-row" ${idAttr} data-level="0" style="display:${displayStyle};align-items:center;height:${ROW_H}px;margin-bottom:2px;background:#e5e8ec;border-radius:3px">
           <div class="gantt-label-cell" style="width:${LABEL_W}px;flex-shrink:0;font-size:11px;font-weight:700;color:#1e2022;padding:0 6px 0 8px;display:flex;align-items:center;height:${ROW_H}px;gap:4px" title="${esc(ph.label)}">
             <span class="gantt-toggle" data-for="${esc(ph.id ?? '')}" onclick="window.__ganttToggle('${esc(ph.id ?? '')}')" style="cursor:pointer;font-size:9px;opacity:0.65;user-select:none;flex-shrink:0;line-height:1">${toggleIcon}</span>
             <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${esc(stripPhasePrefix(ph.label))}</span>
+            ${upBtn}${dnBtn}
             ${ph.id ? `<span onclick="window.__ganttEdit('${esc(ph.id)}')" title="Edit" style="cursor:pointer;font-size:11px;opacity:0.45;flex-shrink:0;user-select:none;padding:0 2px">✎</span>` : ''}
           </div>
           <div class="gantt-col-divider" style="width:5px;flex-shrink:0;align-self:stretch;cursor:col-resize;background:transparent;border-left:2px dashed #c8d0d8;margin-right:4px" title="Drag to resize label column"></div>
@@ -379,6 +392,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
           <span style="display:flex;align-items:center;gap:4px;font-size:10px"><span style="width:10px;height:10px;border-radius:2px;background:#4a90a4;display:inline-block"></span>Active</span>
           <span style="display:flex;align-items:center;gap:4px;font-size:10px"><span style="width:10px;height:10px;border-radius:2px;background:#c8d8e8;display:inline-block"></span>Upcoming</span>
           ${hasHierarchy ? `<button onclick="window.__ganttExpandAll()" style="font-size:10px;background:transparent;border:1px solid #dde1e5;border-radius:3px;padding:2px 8px;cursor:pointer;color:#6b7580" title="Expand all groups">▼ All</button><button onclick="window.__ganttCollapseAll()" style="font-size:10px;background:transparent;border:1px solid #dde1e5;border-radius:3px;padding:2px 8px;cursor:pointer;color:#6b7580" title="Collapse all groups">▶ All</button>` : ''}
+          ${hasHierarchy && parentPhaseIds.length > 1 ? `<button onclick="window.__ganttSortByDate()" style="font-size:10px;background:transparent;border:1px solid #dde1e5;border-radius:3px;padding:2px 8px;cursor:pointer;color:#6b7580" title="Sort phases into date order">↕ Sort by date</button>` : ''}
           <button onclick="window.__ganttReset()" style="font-size:10px;background:transparent;border:1px solid #dde1e5;border-radius:3px;padding:2px 8px;cursor:pointer;color:#6b7580">Reset to default</button>
         </div>
       </div>
@@ -696,6 +710,82 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       renderGantt(s, viewMode)
     }
 
+    win.__ganttMoveGroup = (id: string, dir: string) => {
+      const s = stateRef.current
+      if (!s) return
+
+      const groupIdx = s.phases.findIndex(p => p.id === id)
+      if (groupIdx < 0) return
+
+      // Collect this level-0 row + all its descendants
+      const slice: GanttPhase[] = [s.phases[groupIdx]]
+      let i = groupIdx + 1
+      while (i < s.phases.length && (s.phases[i].level ?? 1) !== 0) {
+        slice.push(s.phases[i])
+        i++
+      }
+      const sliceLen = slice.length
+
+      // Remove the group from the array
+      s.phases.splice(groupIdx, sliceLen)
+
+      if (dir === 'up') {
+        // Find the previous level-0 row
+        let prevIdx = groupIdx - 1
+        while (prevIdx >= 0 && (s.phases[prevIdx].level ?? 1) !== 0) prevIdx--
+        if (prevIdx < 0) {
+          // Already first — restore in place
+          s.phases.splice(groupIdx, 0, ...slice)
+          return
+        }
+        s.phases.splice(prevIdx, 0, ...slice)
+      } else {
+        // groupIdx now points to what was the next group
+        if (groupIdx >= s.phases.length || (s.phases[groupIdx].level ?? 1) !== 0) {
+          // Already last — restore in place
+          s.phases.splice(s.phases.length, 0, ...slice)
+          return
+        }
+        // Find the end of the next group
+        let nextEnd = groupIdx + 1
+        while (nextEnd < s.phases.length && (s.phases[nextEnd].level ?? 1) !== 0) nextEnd++
+        s.phases.splice(nextEnd, 0, ...slice)
+      }
+
+      stateRef.current = s
+      setDirty(true)
+      renderGantt(s, viewMode)
+    }
+
+    win.__ganttSortByDate = () => {
+      const s = stateRef.current
+      if (!s) return
+
+      // Split flat array into ordered groups
+      type Group = { header: GanttPhase; children: GanttPhase[] }
+      const groups: Group[] = []
+      const orphans: GanttPhase[] = []
+      let cur: Group | null = null
+
+      for (const ph of s.phases) {
+        if ((ph.level ?? 1) === 0) {
+          cur = { header: ph, children: [] }
+          groups.push(cur)
+        } else if (cur) {
+          cur.children.push(ph)
+        } else {
+          orphans.push(ph)
+        }
+      }
+
+      groups.sort((a, b) => a.header.startDay - b.header.startDay)
+      s.phases = [...orphans, ...groups.flatMap(g => [g.header, ...g.children])]
+
+      stateRef.current = s
+      setDirty(true)
+      renderGantt(s, viewMode)
+    }
+
     win.__ganttSetPct = (id: string) => {
       const s = stateRef.current
       if (!s) return
@@ -724,6 +814,8 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       delete win.__ganttAddChild
       delete win.__ganttCompleteToggle
       delete win.__ganttSetPct
+      delete win.__ganttMoveGroup
+      delete win.__ganttSortByDate
     }
   }) // eslint-disable-line react-hooks/exhaustive-deps
 
