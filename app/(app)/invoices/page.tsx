@@ -55,6 +55,8 @@ export default function InvoicesPage() {
   // Payment plan state
   const [payPlanOn, setPayPlanOn] = useState(false)
   const [milestones, setMilestones] = useState<PaymentMilestone[]>([])
+  const [selectedMilestoneIds, setSelectedMilestoneIds] = useState<Set<number>>(new Set())
+  const [milestoneInvMsg, setMilestoneInvMsg] = useState('')
 
   // Xero sync state
   const [syncToXero, setSyncToXero] = useState(false)
@@ -120,7 +122,7 @@ export default function InvoicesPage() {
     setDueDate(dueStr)
     setNotes(settings.invoiceDefaultNotes ?? '')
     setStatus('draft'); setFromJobId('')
-    setPayPlanOn(false); setMilestones([])
+    setPayPlanOn(false); setMilestones([]); setSelectedMilestoneIds(new Set()); setMilestoneInvMsg('')
     setSyncToXero(false); setXeroInvoiceId(''); setXeroError(null)
     setShowModal(true)
   }
@@ -134,6 +136,7 @@ export default function InvoicesPage() {
     const pp = inv.paymentPlan || []
     setPayPlanOn(pp.length > 0)
     setMilestones(pp.map(m => ({ ...m, id: ++milestoneCounter })))
+    setSelectedMilestoneIds(new Set()); setMilestoneInvMsg('')
     setSyncToXero(inv.syncToXero ?? false); setXeroInvoiceId(inv.xeroInvoiceId ?? ''); setXeroError(null)
     setShowModal(true)
   }
@@ -282,6 +285,43 @@ export default function InvoicesPage() {
 
     setMilestones(result)
     setPayPlanOn(true)
+  }
+
+  async function createInvoiceFromMilestones() {
+    const selected = milestones.filter(m => selectedMilestoneIds.has(m.id))
+    if (!selected.length) return
+
+    // Milestone amounts from buildFromGantt include VAT when vatOn=true.
+    // Strip VAT back out so the new invoice can display net + VAT correctly.
+    const subItems: InvoiceLineItem[] = selected.map(m => {
+      const unitP = vatOn
+        ? Math.round((m.amount / 1.2) * 100) / 100
+        : m.amount
+      return { id: ++lineCounter, desc: m.description || 'Payment milestone', qty: 1, unitPrice: unitP, total: unitP }
+    })
+
+    const subTotal = Math.round(subItems.reduce((s, l) => s + l.total, 0) * 100) / 100
+    const vatAmt   = vatOn ? Math.round(subTotal * 0.2 * 100) / 100 : 0
+    const invTotal = Math.round((subTotal + vatAmt) * 100) / 100
+
+    // Use earliest due date from selected milestones
+    const dueDates = selected.map(m => m.dueDate).filter(Boolean).sort()
+    const invDue   = dueDates[0] || dueDate
+
+    const newInv = await addInvoice({
+      jobId: fromJobId, quoteId: '',
+      clientName, clientAddress, clientEmail,
+      lineItems: subItems,
+      subtotal: subTotal, vatIncluded: vatOn, vatAmount: vatAmt, total: invTotal,
+      status: 'draft',
+      issueDate: todayStr(), dueDate: invDue,
+      notes: settings.invoiceDefaultNotes ?? '',
+      paymentPlan: null, syncToXero: false,
+    })
+
+    setSelectedMilestoneIds(new Set())
+    setMilestoneInvMsg(`✓ ${newInv.ref} created — find it in the invoices list to send to the client`)
+    setTimeout(() => setMilestoneInvMsg(''), 7000)
   }
 
   function updateLine(id: number, key: keyof InvoiceLineItem, val: string | number) {
@@ -656,31 +696,58 @@ export default function InvoicesPage() {
 
                 {payPlanOn && (
                   <div>
-                    <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
                       <button className="btn-sm btn-sky" onClick={loadMilestonesFromPhases}>
                         ↓ Load from line items
                       </button>
                       {fromJobId && (
-                        <button className="btn-sm btn-sky" onClick={buildFromGantt} title="10% deposit + materials at phase start, labour & costs at phase end">
+                        <button className="btn-sm btn-sky" onClick={buildFromGantt} title="Materials at phase start, labour & costs at phase end">
                           📅 Build from Gantt
                         </button>
                       )}
                       <button className="btn-sm btn-outline" onClick={() => setMilestones(p => [...p, BLANK_MILESTONE()])}>
                         + Add milestone
                       </button>
+                      {selectedMilestoneIds.size > 0 && (
+                        <button className="btn-sm btn-primary" onClick={createInvoiceFromMilestones} style={{ marginLeft: 'auto' }}>
+                          📄 Invoice {selectedMilestoneIds.size} selected
+                        </button>
+                      )}
                     </div>
+
+                    {milestoneInvMsg && (
+                      <div style={{ marginBottom: 10, padding: '8px 12px', background: '#f0f7e6', border: '1px solid #b7dfa0', borderRadius: 6, fontSize: 12, color: '#2e6b1a', fontWeight: 600 }}>
+                        {milestoneInvMsg}
+                      </div>
+                    )}
 
                     {/* Milestones table */}
                     <div style={{ border: '1.5px solid var(--border)', borderRadius: 6, overflow: 'hidden', marginBottom: 8 }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 110px 80px 28px', gap: 0, background: '#f0f2f4', padding: '6px 10px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 100px 110px 80px 28px', gap: 0, background: '#f0f2f4', padding: '6px 10px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)' }}>
+                        <input
+                          type="checkbox"
+                          style={{ width: 'auto', cursor: 'pointer' }}
+                          checked={milestones.length > 0 && milestones.every(m => selectedMilestoneIds.has(m.id))}
+                          onChange={e => setSelectedMilestoneIds(e.target.checked ? new Set(milestones.map(m => m.id)) : new Set())}
+                        />
                         <span>Description</span><span style={{ textAlign: 'right' }}>Amount</span><span style={{ textAlign: 'center' }}>Due Date</span><span style={{ textAlign: 'center' }}>Paid</span><span />
                       </div>
                       {milestones.map(m => (
-                        <div key={m.id} style={{ display: 'grid', gridTemplateColumns: '1fr 100px 110px 80px 28px', gap: 0, borderTop: '1px solid var(--border)', padding: '4px 6px', alignItems: 'center' }}>
+                        <div key={m.id} style={{ display: 'grid', gridTemplateColumns: '28px 1fr 100px 110px 80px 28px', gap: 0, borderTop: '1px solid var(--border)', padding: '4px 6px', alignItems: 'center', background: selectedMilestoneIds.has(m.id) ? '#f0f7e6' : undefined }}>
+                          <input
+                            type="checkbox"
+                            checked={selectedMilestoneIds.has(m.id)}
+                            onChange={e => setSelectedMilestoneIds(prev => {
+                              const next = new Set(prev)
+                              e.target.checked ? next.add(m.id) : next.delete(m.id)
+                              return next
+                            })}
+                            style={{ width: 'auto', cursor: 'pointer' }}
+                          />
                           <input
                             value={m.description}
                             onChange={e => updateMilestone(m.id, 'description', e.target.value)}
-                            placeholder="e.g. Deposit"
+                            placeholder="e.g. Site Establishment — Materials"
                             style={{ border: 'none', outline: 'none', fontSize: 13, padding: '4px 4px' }}
                           />
                           <input
