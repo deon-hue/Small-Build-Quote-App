@@ -445,49 +445,197 @@ const drainageSubphases: PhaseSubphase[] = [
   },
 ]
 
-// ── 7. ELECTRICS ──────────────────────────────────────────────────────────────
+// ── 7. ELECTRICS — Room-based per-point rate system ──────────────────────────
+//
+// Rates are all-in per-point subcontractor costs (what the electrician charges).
+// defaultQty = 0 on every item; the estimator sets quantities per room per job.
+// Old subphases (elec-first-fix, elec-second-fix, elec-external) are cleaned
+// up from the DB by syncBackOfficeFromProduct on next back-office load.
+
+function bedroomItems(prefix: string): PhaseTask[] {
+  return [
+    t(`${prefix}-dbl-socket`,  'Double Socket',         'nr', 0, 0, 0, 0,  65, 0),
+    t(`${prefix}-sgl-socket`,  'Single Socket',         'nr', 0, 0, 0, 0,  45, 0),
+    t(`${prefix}-usb-socket`,  'USB Socket',            'nr', 0, 0, 0, 0,  70, 0),
+    t(`${prefix}-1g-switch`,   '1-Gang Light Switch',   'nr', 0, 0, 0, 0,  50, 0),
+    t(`${prefix}-2g-switch`,   '2-Gang Light Switch',   'nr', 0, 0, 0, 0,  50, 0),
+    t(`${prefix}-2way-switch`, '2-Way Switch',          'nr', 0, 0, 0, 0,  55, 0),
+    t(`${prefix}-downlight`,   'Downlighter',           'nr', 0, 0, 0, 0,  70, 0),
+    t(`${prefix}-pendant`,     'Pendant Light',         'nr', 0, 0, 0, 0,  55, 0),
+    t(`${prefix}-tv-point`,    'TV Aerial Point',       'nr', 0, 0, 0, 0,  45, 0),
+    t(`${prefix}-data-point`,  'Data / Ethernet Point', 'nr', 0, 0, 0, 0,  45, 0),
+    t(`${prefix}-smoke-det`,   'Smoke Detector',        'nr', 0, 0, 0, 0,  45, 0),
+  ]
+}
+
+function wetRoomItems(prefix: string): PhaseTask[] {
+  return [
+    t(`${prefix}-downlight`,   'Downlighter',               'nr', 0, 0, 0, 0,  70, 0),
+    t(`${prefix}-shaver`,      'Shaver Socket',             'nr', 0, 0, 0, 0,  75, 0),
+    t(`${prefix}-extractor`,   'Extractor Fan',             'nr', 0, 0, 0, 0,  90, 0),
+    t(`${prefix}-towel-rail`,  'Heated Towel Rail Con.',    'nr', 0, 0, 0, 0,  85, 0),
+    t(`${prefix}-switch`,      '1-Gang Switch / Pull Cord', 'nr', 0, 0, 0, 0,  50, 0),
+    t(`${prefix}-heat-det`,    'Heat Detector',             'nr', 0, 0, 0, 0,  45, 0),
+    t(`${prefix}-ufh`,         'Electric UFH Mat',          'm²', 0, 0, 0, 0,  55, 0, '150W/m² mat + thermostat'),
+  ]
+}
+
+function livingItems(prefix: string): PhaseTask[] {
+  return [
+    t(`${prefix}-dbl-socket`,  'Double Socket',         'nr', 0, 0, 0, 0,  65, 0),
+    t(`${prefix}-sgl-socket`,  'Single Socket',         'nr', 0, 0, 0, 0,  45, 0),
+    t(`${prefix}-usb-socket`,  'USB Socket',            'nr', 0, 0, 0, 0,  70, 0),
+    t(`${prefix}-tv-point`,    'TV / Satellite Point',  'nr', 0, 0, 0, 0,  55, 0),
+    t(`${prefix}-data-point`,  'Data / Ethernet Point', 'nr', 0, 0, 0, 0,  45, 0),
+    t(`${prefix}-1g-switch`,   '1-Gang Light Switch',   'nr', 0, 0, 0, 0,  50, 0),
+    t(`${prefix}-2g-switch`,   '2-Gang Light Switch',   'nr', 0, 0, 0, 0,  50, 0),
+    t(`${prefix}-2way-switch`, '2-Way Switch',          'nr', 0, 0, 0, 0,  55, 0),
+    t(`${prefix}-downlight`,   'Downlighter',           'nr', 0, 0, 0, 0,  70, 0),
+    t(`${prefix}-pendant`,     'Pendant Light',         'nr', 0, 0, 0, 0,  55, 0),
+    t(`${prefix}-smoke-det`,   'Smoke Detector',        'nr', 0, 0, 0, 0,  45, 0),
+  ]
+}
+
+function hallwayItems(prefix: string): PhaseTask[] {
+  return [
+    t(`${prefix}-dbl-socket`,  'Double Socket',       'nr', 0, 0, 0, 0,  65, 0),
+    t(`${prefix}-downlight`,   'Downlighter',         'nr', 0, 0, 0, 0,  70, 0),
+    t(`${prefix}-pendant`,     'Pendant Light',       'nr', 0, 0, 0, 0,  55, 0),
+    t(`${prefix}-1g-switch`,   '1-Gang Light Switch', 'nr', 0, 0, 0, 0,  50, 0),
+    t(`${prefix}-2way-switch`, '2-Way Switch',        'nr', 0, 0, 0, 0,  55, 0),
+    t(`${prefix}-smoke-det`,   'Smoke Detector',      'nr', 0, 0, 0, 0,  45, 0),
+  ]
+}
 
 const electricsSubphases: PhaseSubphase[] = [
+  // ── General (project-level) ────────────────────────────────────────────────
   {
-    id: 'elec-first-fix',
+    id: 'elec-general',
     phase: 'Electrics',
-    name: 'First Fix Electrics',
+    name: 'General / Consumer Unit',
     markupPct: 20,
-    ukWarning: 'All electrical work in England must comply with BS 7671:2018 (18th Edition). Notifiable work requires a Part P registered electrician (NICEIC/NAPIT) or Building Control notification.',
+    ukWarning: 'All electrical work must comply with BS 7671:2018 (18th Edition). Notifiable work requires a Part P registered electrician (NICEIC/NAPIT) or Building Control notification.',
     tasks: [
-      t('elec-ff-consumer-unit',    'Consumer unit relocation / upgrade',    'nr',   1,   0,    0,    0,  450,    0,  'NICEIC electrician — provisional sum'),
-      t('elec-ff-circuit',          'New radial / ring circuit (1st fix)',   'nr',   4,   0,    0,    0,  120,    0,  'Per circuit — includes cable & back boxes'),
-      t('elec-ff-downlight-prep',   'Downlight back boxes & cable drops',    'nr',  12,   0,    0,    0,   35,    0,  'Per light position — 1st fix'),
-      t('elec-ff-socket-prep',      'Socket & switch back boxes',            'nr',  20,   0,    0,    0,   15,    0,  'Per position — surface or flush'),
-      t('elec-ff-data-prep',        'Data / Cat 6 cable drops',              'nr',   6,   0,    0,    0,   25,    0,  'Per RJ45 outlet position'),
-      t('elec-ff-smoke-heat',       'Smoke & heat detector positions',       'nr',   4,   0,    0,    0,   45,    0,  'LD2 grade to Part B / BS 5839'),
+      t('elec-gen-consumer-unit', 'Consumer Unit (upgrade / new)',     'nr',  0, 0, 0, 0,  550, 0, 'NICEIC electrician — provisional sum'),
+      t('elec-gen-circuit',       'New Radial / Ring Circuit',         'nr',  0, 0, 0, 0,  120, 0, 'Per circuit — cable, MCB & containment'),
+      t('elec-gen-eicr',          'EICR / Electrical Certificate',     'sum', 0, 0, 0, 0,  250, 0, 'Periodic inspection & report — Part P'),
+      t('elec-gen-ext-light',     'External Security / Wall Light',    'nr',  0, 0, 0, 0,   75, 0, 'PIR or dusk-to-dawn LED fitting'),
+      t('elec-gen-ext-socket',    'External Weatherproof Socket IP65', 'nr',  0, 0, 0, 0,   85, 0, 'Garden / patio power point'),
+      t('elec-gen-ev-charger',    'EV Charge Point (7kW)',             'nr',  0, 0, 0, 0,  650, 0, 'OZEV grant may apply'),
     ],
   },
+
+  // ── Bedrooms ───────────────────────────────────────────────────────────────
+  { id: 'elec-bed-1', phase: 'Electrics', name: 'Bedroom 1', markupPct: 20, tasks: bedroomItems('elec-bed1') },
+  { id: 'elec-bed-2', phase: 'Electrics', name: 'Bedroom 2', markupPct: 20, tasks: bedroomItems('elec-bed2') },
+  { id: 'elec-bed-3', phase: 'Electrics', name: 'Bedroom 3', markupPct: 20, tasks: bedroomItems('elec-bed3') },
+  { id: 'elec-bed-4', phase: 'Electrics', name: 'Bedroom 4', markupPct: 20, tasks: bedroomItems('elec-bed4') },
+  { id: 'elec-bed-5', phase: 'Electrics', name: 'Bedroom 5', markupPct: 20, tasks: bedroomItems('elec-bed5') },
+  { id: 'elec-bed-6', phase: 'Electrics', name: 'Bedroom 6', markupPct: 20, tasks: bedroomItems('elec-bed6') },
+
+  // ── En-Suites ──────────────────────────────────────────────────────────────
+  { id: 'elec-ens-1', phase: 'Electrics', name: 'En-Suite 1', markupPct: 20, tasks: wetRoomItems('elec-ens1') },
+  { id: 'elec-ens-2', phase: 'Electrics', name: 'En-Suite 2', markupPct: 20, tasks: wetRoomItems('elec-ens2') },
+  { id: 'elec-ens-3', phase: 'Electrics', name: 'En-Suite 3', markupPct: 20, tasks: wetRoomItems('elec-ens3') },
+  { id: 'elec-ens-4', phase: 'Electrics', name: 'En-Suite 4', markupPct: 20, tasks: wetRoomItems('elec-ens4') },
+  { id: 'elec-ens-5', phase: 'Electrics', name: 'En-Suite 5', markupPct: 20, tasks: wetRoomItems('elec-ens5') },
+  { id: 'elec-ens-6', phase: 'Electrics', name: 'En-Suite 6', markupPct: 20, tasks: wetRoomItems('elec-ens6') },
+
+  // ── Bathrooms ──────────────────────────────────────────────────────────────
+  { id: 'elec-fam-bath', phase: 'Electrics', name: 'Family Bathroom', markupPct: 20, tasks: wetRoomItems('elec-fbath') },
+  { id: 'elec-bath-2',   phase: 'Electrics', name: 'Bathroom 2',      markupPct: 20, tasks: wetRoomItems('elec-bath2') },
+
+  // ── Cloakroom / WC ─────────────────────────────────────────────────────────
   {
-    id: 'elec-second-fix',
+    id: 'elec-cloakroom',
     phase: 'Electrics',
-    name: 'Second Fix & Testing',
+    name: 'Cloakroom / WC',
     markupPct: 20,
     tasks: [
-      t('elec-sf-sockets',          'Double socket & switch (2nd fix)',      'nr',  20,   0,    0,    0,   22,    0,  'Includes plate and final connection'),
-      t('elec-sf-downlights',       'LED downlight fitting (2nd fix)',       'nr',  12,   0,    0,    0,   25,    0,  'Recess, bezel & lamp supplied'),
-      t('elec-sf-pendant',          'Pendant / ceiling light fitting',       'nr',   6,   0,    0,    0,   18,    0,  'Rose, flex & lampholder'),
-      t('elec-sf-extractor',        'Bathroom extractor fan (wired)',        'nr',   1,   0,    0,    0,  120,    0,  'Continuous running or humidity controlled'),
-      t('elec-sf-test-cert',        'EICR electrical installation cert.',    'sum',  1,   0,    0,    0,  250,    0,  'Periodic inspection & report — Part P'),
-      t('elec-sf-underfloor',       'Electric underfloor heating mat (S&F)', 'm²',  10,   0,    0,    0,   55,    0,  '150W/m² bathroom mat + thermostat'),
+      t('elec-cloak-downlight', 'Downlighter',               'nr', 0, 0, 0, 0,  70, 0),
+      t('elec-cloak-extractor', 'Extractor Fan',             'nr', 0, 0, 0, 0,  90, 0),
+      t('elec-cloak-switch',    '1-Gang Switch / Pull Cord', 'nr', 0, 0, 0, 0,  50, 0),
+      t('elec-cloak-heat-det',  'Heat Detector',             'nr', 0, 0, 0, 0,  45, 0),
     ],
   },
+
+  // ── Kitchen ────────────────────────────────────────────────────────────────
   {
-    id: 'elec-external',
+    id: 'elec-kitchen',
     phase: 'Electrics',
-    name: 'External Electrics',
-    markupPct: 18,
+    name: 'Kitchen',
+    markupPct: 20,
     tasks: [
-      t('elec-ext-lighting',        'External wall / security lighting',     'nr',   4,   0,    0,    0,   65,    0,  'PIR or dusk-to-dawn LED fitting'),
-      t('elec-ext-socket',          'External weatherproof socket (IP65)',   'nr',   2,   0,    0,    0,   85,    0,  'Garden / patio power point'),
-      t('elec-ext-ev-charger',      'EV charge point (7kW tethered)',        'nr',   1,   0,    0,    0,  650,    0,  'OZEV grant may be available'),
+      t('elec-kit-dbl-socket',  'Double Socket',              'nr', 0, 0, 0, 0,  65, 0),
+      t('elec-kit-sgl-socket',  'Single Socket',              'nr', 0, 0, 0, 0,  45, 0),
+      t('elec-kit-usb-socket',  'USB Socket',                 'nr', 0, 0, 0, 0,  70, 0),
+      t('elec-kit-fused-spur',  'Fused Spur',                 'nr', 0, 0, 0, 0,  65, 0),
+      t('elec-kit-downlight',   'Downlighter',                'nr', 0, 0, 0, 0,  70, 0),
+      t('elec-kit-under-cab',   'Under-Cabinet Light Strip',  'nr', 0, 0, 0, 0,  55, 0),
+      t('elec-kit-extractor',   'Extractor Hood Connection',  'nr', 0, 0, 0, 0,  90, 0),
+      t('elec-kit-cooker-sw',   'Cooker Switch (45A)',        'nr', 0, 0, 0, 0,  85, 0),
+      t('elec-kit-1g-switch',   '1-Gang Light Switch',        'nr', 0, 0, 0, 0,  50, 0),
+      t('elec-kit-2g-switch',   '2-Gang Light Switch',        'nr', 0, 0, 0, 0,  50, 0),
+      t('elec-kit-data-point',  'Data / Ethernet Point',      'nr', 0, 0, 0, 0,  45, 0),
+      t('elec-kit-smoke-det',   'Smoke Detector',             'nr', 0, 0, 0, 0,  45, 0),
     ],
   },
+
+  // ── Utility Room ───────────────────────────────────────────────────────────
+  {
+    id: 'elec-utility',
+    phase: 'Electrics',
+    name: 'Utility Room',
+    markupPct: 20,
+    tasks: [
+      t('elec-util-dbl-socket', 'Double Socket',       'nr', 0, 0, 0, 0,  65, 0),
+      t('elec-util-sgl-socket', 'Single Socket',       'nr', 0, 0, 0, 0,  45, 0),
+      t('elec-util-fused-spur', 'Fused Spur',          'nr', 0, 0, 0, 0,  65, 0),
+      t('elec-util-downlight',  'Downlighter',         'nr', 0, 0, 0, 0,  70, 0),
+      t('elec-util-extractor',  'Extractor Fan',       'nr', 0, 0, 0, 0,  90, 0),
+      t('elec-util-1g-switch',  '1-Gang Light Switch', 'nr', 0, 0, 0, 0,  50, 0),
+      t('elec-util-smoke-det',  'Smoke Detector',      'nr', 0, 0, 0, 0,  45, 0),
+    ],
+  },
+
+  // ── Living Spaces ──────────────────────────────────────────────────────────
+  { id: 'elec-living-rm',  phase: 'Electrics', name: 'Living Room',           markupPct: 20, tasks: livingItems('elec-liv') },
+  { id: 'elec-dining-rm',  phase: 'Electrics', name: 'Dining Room',           markupPct: 20, tasks: livingItems('elec-din') },
+  { id: 'elec-study',      phase: 'Electrics', name: 'Study / Home Office',   markupPct: 20, tasks: livingItems('elec-study') },
+  { id: 'elec-playroom',   phase: 'Electrics', name: 'Playroom / Games Room', markupPct: 20, tasks: livingItems('elec-play') },
+
+  // ── Hallways & Landings ────────────────────────────────────────────────────
+  { id: 'elec-entrance',   phase: 'Electrics', name: 'Entrance Hall',          markupPct: 20, tasks: hallwayItems('elec-ent') },
+  { id: 'elec-gf-hall',    phase: 'Electrics', name: 'Ground Floor Hallway',   markupPct: 20, tasks: hallwayItems('elec-gfh') },
+  { id: 'elec-ff-land',    phase: 'Electrics', name: 'First Floor Landing',    markupPct: 20, tasks: hallwayItems('elec-ffl') },
+  { id: 'elec-sf-land',    phase: 'Electrics', name: 'Second Floor Landing',   markupPct: 20, tasks: hallwayItems('elec-sfl') },
+
+  // ── Garage ─────────────────────────────────────────────────────────────────
+  {
+    id: 'elec-garage',
+    phase: 'Electrics',
+    name: 'Garage',
+    markupPct: 20,
+    tasks: [
+      t('elec-gar-dbl-socket', 'Double Socket',             'nr', 0, 0, 0, 0,  65, 0),
+      t('elec-gar-sgl-socket', 'Single Socket',             'nr', 0, 0, 0, 0,  45, 0),
+      t('elec-gar-fused-spur', 'Fused Spur',                'nr', 0, 0, 0, 0,  65, 0),
+      t('elec-gar-light',      'LED / Fluorescent Fitting', 'nr', 0, 0, 0, 0,  65, 0),
+      t('elec-gar-ext-light',  'External Security Light',   'nr', 0, 0, 0, 0,  75, 0),
+      t('elec-gar-1g-switch',  '1-Gang Light Switch',       'nr', 0, 0, 0, 0,  50, 0),
+      t('elec-gar-ev-charger', 'EV Charge Point (7kW)',     'nr', 0, 0, 0, 0, 650, 0, 'OZEV grant may apply'),
+      t('elec-gar-smoke-det',  'Smoke / Heat Detector',     'nr', 0, 0, 0, 0,  45, 0),
+    ],
+  },
+
+  // ── Other Rooms ────────────────────────────────────────────────────────────
+  { id: 'elec-boot-room',  phase: 'Electrics', name: 'Boot Room',          markupPct: 20, tasks: [
+    t('elec-boot-dbl-socket', 'Double Socket',       'nr', 0, 0, 0, 0,  65, 0),
+    t('elec-boot-downlight',  'Downlighter',         'nr', 0, 0, 0, 0,  70, 0),
+    t('elec-boot-1g-switch',  '1-Gang Light Switch', 'nr', 0, 0, 0, 0,  50, 0),
+  ]},
+  { id: 'elec-loft-room',  phase: 'Electrics', name: 'Loft Room',          markupPct: 20, tasks: bedroomItems('elec-loft') },
+  { id: 'elec-garden-rm',  phase: 'Electrics', name: 'Garden Room / Annexe', markupPct: 20, tasks: livingItems('elec-grm') },
 ]
 
 // ── 8. PLUMBING & HEATING ─────────────────────────────────────────────────────

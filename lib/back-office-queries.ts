@@ -852,6 +852,16 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
     if (pc) desiredSubs.push({ canonical_id: `demo-${sub.id}`, phase_canonical: pc, name: sub.name, display_order: i, markup_pct: sub.markupPct })
   })
 
+  // ── Cleanup: remove old electrical subphases replaced by room-based system ───
+  const RETIRED_SUB_CANON_IDS = ['elec-first-fix', 'elec-second-fix', 'elec-external']
+  const retiredSubs = (dbSubs ?? []).filter(s => s.canonical_id && RETIRED_SUB_CANON_IDS.includes(s.canonical_id as string))
+  if (retiredSubs.length > 0) {
+    console.log('[sync] removing retired electrical subphases:', retiredSubs.map(s => s.canonical_id))
+    for (const rs of retiredSubs) {
+      await sb.from('bo_sub_phases').delete().eq('id', rs.id)
+    }
+  }
+
   // ── Heal sub-phases that exist in DB but have no canonical_id ─────────────────
   // Match by name + phase_id and write the canonical_id back so task insertion works.
   const unmappedSubs = (dbSubs ?? []).filter(s => !s.canonical_id)
