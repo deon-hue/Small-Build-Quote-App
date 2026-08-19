@@ -9,7 +9,7 @@
 
 import { PDFDocument, PDFFont, rgb, StandardFonts, PDFPage } from 'pdf-lib'
 import type { Quote, Settings } from './types'
-import { calcPhaseSell, VAT } from './utils'
+import { calcPhaseSell, calcItemSell, VAT } from './utils'
 
 // ── Colour helpers ────────────────────────────────────────────────────────────
 
@@ -333,7 +333,8 @@ export async function buildQuotePdf(
     // Item rows
     const visibleItems = p.items.filter(
       i => i.enabled !== false &&
-        (i.itemType === 'labour' || i.itemType === 'materials' || !i.itemType)
+        (i.itemType === 'labour' || i.itemType === 'materials' || !i.itemType) &&
+        calcItemSell(i, qMkp) > 0
     )
 
     for (const item of visibleItems) {

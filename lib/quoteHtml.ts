@@ -28,7 +28,7 @@ export function buildHtml(q: Quote, settings: Settings, opts: HtmlOpts = {}): st
 
   const phRows = q.phases.map(p => `
     <tr class="ph"><td colspan="${qVat ? 5 : 4}">${esc(p.phase)}</td><td style="text-align:right;font-size:11px">Sell ex-VAT</td>${qVat ? '<td style="text-align:right;font-size:11px">VAT</td>' : ''}</tr>
-    ${p.items.map(i => {
+    ${p.items.filter(i => calcItemSell(i, qMkp) > 0).map(i => {
       const sell = calcItemSell(i, qMkp)
       const vatAmt = qVat ? sell * VAT : 0
       return `<tr><td>${esc(i.desc)}${i.notes ? '<br><small>' + esc(i.notes) + '</small>' : ''}</td><td style="text-align:center">${i.qty}</td><td style="text-align:center">${esc(i.unit)}</td><td style="text-align:right">${sell.toFixed(2)}</td>${qVat ? '<td style="text-align:right">' + vatAmt.toFixed(2) + '</td>' : ''}</tr>`

@@ -167,7 +167,7 @@ export default function PortalQuotesPage() {
                         </div>
 
                         {/* Line items — only shown for 'full' quoteView */}
-                        {qv === 'full' && phase.items.map((item, ii) => (
+                        {qv === 'full' && phase.items.filter(item => calcItemSell(item, q.markup) > 0).map((item, ii) => (
                           <div key={item.id} style={{
                             display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
                             padding: '10px 16px', gap: 12,
