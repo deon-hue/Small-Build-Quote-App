@@ -332,9 +332,7 @@ export async function buildQuotePdf(
 
     // Item rows
     const visibleItems = p.items.filter(
-      i => i.enabled !== false &&
-        (i.itemType === 'labour' || i.itemType === 'materials' || !i.itemType) &&
-        calcItemSell(i, qMkp) > 0
+      i => i.enabled !== false && calcItemSell(i, qMkp) > 0
     )
 
     for (const item of visibleItems) {

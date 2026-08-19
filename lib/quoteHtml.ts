@@ -127,13 +127,30 @@ export function buildHtmlClientView(q: Quote, settings: Settings, opts: HtmlOpts
          </div>`
       : ''
 
-    return `<div style="display:flex;align-items:center;padding:12px 14px;border-bottom:1px solid #e8e0d0;border-left:4px solid ${color}">
-      ${photoHtml}
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:700;font-size:13px;color:#1a1612">${esc(p.phase)}</div>
-        ${p.taskName ? `<div style="font-size:11px;color:#7a7268;margin-top:2px">${esc(p.taskName)}</div>` : ''}
+    const visibleItems = quoteView === 'full'
+      ? p.items.filter(i => calcItemSell(i, qMkp) > 0)
+      : []
+    const itemRowsHtml = visibleItems.map(i => {
+      const iSell = calcItemSell(i, qMkp)
+      return `<div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 14px 6px 80px;border-bottom:1px solid #f0ece4;background:#faf8f4">
+        <div>
+          <span style="font-size:12px;color:#2b2f33">${esc(i.desc)}</span>
+          <span style="font-size:11px;color:#9a9288;margin-left:8px">${i.qty} ${esc(i.unit)}</span>
+        </div>
+        <span style="font-size:12px;font-weight:600;color:#2b2f33;white-space:nowrap">£${iSell.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</span>
+      </div>`
+    }).join('')
+
+    return `<div style="border-left:4px solid ${color}">
+      <div style="display:flex;align-items:center;padding:12px 14px;border-bottom:1px solid #e8e0d0">
+        ${photoHtml}
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:13px;color:#1a1612">${esc(p.phase)}</div>
+          ${p.taskName ? `<div style="font-size:11px;color:#7a7268;margin-top:2px">${esc(p.taskName)}</div>` : ''}
+        </div>
+        ${priceHtml}
       </div>
-      ${priceHtml}
+      ${itemRowsHtml}
     </div>`
   }).join('')
 
