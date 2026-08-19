@@ -911,11 +911,11 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
 
   const { data: dbTasks } = await sb
     .from('bo_tasks')
-    .select('id, canonical_id, name, unit, sub_phase_id')
+    .select('id, canonical_id, name, unit, sub_phase_id, description, client_description')
     .eq('user_id', userId)
 
   const taskByCanon = new Map(
-    (dbTasks ?? []).filter(t => t.canonical_id).map(t => [t.canonical_id as string, t as { id: string; name: string; unit: string }])
+    (dbTasks ?? []).filter(t => t.canonical_id).map(t => [t.canonical_id as string, t as { id: string; name: string; unit: string; description: string; client_description: string }])
   )
 
   interface TaskRow {
@@ -948,8 +948,8 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
         name:               task.name,
         unit:               task.unit,
         display_order:      i,
-        description:        task.notes ?? '',
-        client_description: task.notes ?? '',
+        description:        task.notes || task.name,
+        client_description: task.notes || task.name,
         default_qty:        task.defaultQty,
         markup_pct:         sub.markupPct,
         labour_cost:        task.labour,
@@ -1033,12 +1033,23 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
     }
   }
 
-  // Update tasks whose name or unit changed (preserve all cost fields)
+  // Update tasks whose name or unit changed (preserve all cost fields and user-set descriptions)
   for (const t of desiredTasks.filter(t => taskByCanon.has(t.canonical_id))) {
     const ex = taskByCanon.get(t.canonical_id)!
-    if (ex.name !== t.name || ex.unit !== t.unit) {
+    const nameChanged = ex.name !== t.name || ex.unit !== t.unit
+    // Backfill blank descriptions with the task name (only if user hasn't set one)
+    const needsDescFill = !ex.description || !ex.client_description
+    if (nameChanged || needsDescFill) {
       await sb.from('bo_tasks')
-        .update({ name: t.name, unit: t.unit, updated_at: new Date().toISOString() })
+        .update({
+          name: t.name,
+          unit: t.unit,
+          ...(needsDescFill ? {
+            description:        ex.description        || t.name,
+            client_description: ex.client_description || t.name,
+          } : {}),
+          updated_at: new Date().toISOString(),
+        })
         .eq('id', ex.id)
     }
   }
