@@ -608,6 +608,25 @@ export default function InvoicesPage() {
                 </div>
               )}
 
+              {/* Previously invoiced summary */}
+              {fromJobId && (() => {
+                const priorInvs = invoices.filter(i => i.jobId === fromJobId && i.id !== editing?.id)
+                if (priorInvs.length === 0) return null
+                const priorTotal = priorInvs.reduce((s, i) => s + (i.total || 0), 0)
+                const priorPaid  = priorInvs.filter(i => i.status === 'paid').reduce((s, i) => s + (i.total || 0), 0)
+                const priorUnpaid = priorTotal - priorPaid
+                return (
+                  <div style={{ padding: '10px 14px', borderRadius: 6, background: '#f8f5f0', border: '1px solid var(--border)', fontSize: 12, marginBottom: 4 }}>
+                    <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 6, color: 'var(--ink)' }}>Previously invoiced on this job</div>
+                    <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+                      <span style={{ color: 'var(--muted)' }}>Invoiced to date: <strong style={{ color: 'var(--ink)', fontFamily: 'DM Mono, monospace' }}>{fmt(priorTotal)}</strong></span>
+                      <span style={{ color: 'var(--muted)' }}>Paid: <strong style={{ color: '#7ab533', fontFamily: 'DM Mono, monospace' }}>{fmt(priorPaid)}</strong></span>
+                      {priorUnpaid > 0 && <span style={{ color: 'var(--muted)' }}>Outstanding: <strong style={{ color: '#d97706', fontFamily: 'DM Mono, monospace' }}>{fmt(priorUnpaid)}</strong></span>}
+                    </div>
+                  </div>
+                )
+              })()}
+
               <div className="row2">
                 <div className="fg">
                   <label>Customer</label>
@@ -754,6 +773,22 @@ export default function InvoicesPage() {
                         />
                         <span>Description</span><span style={{ textAlign: 'right' }}>Amount</span><span style={{ textAlign: 'center' }}>Due Date</span><span style={{ textAlign: 'center' }}>Paid</span><span />
                       </div>
+                      {/* Read-only rows for prior invoices on the same job */}
+                      {fromJobId && invoices
+                        .filter(i => i.jobId === fromJobId && i.id !== editing?.id)
+                        .map(i => (
+                          <div key={i.id} style={{ display: 'grid', gridTemplateColumns: '28px 1fr 100px 110px 80px 28px', gap: 0, borderTop: '1px solid var(--border)', padding: '4px 6px', alignItems: 'center', background: i.status === 'paid' ? '#f0f7e6' : '#fffbf0', opacity: 0.85 }}>
+                            <span />
+                            <span style={{ fontSize: 12, color: 'var(--muted)', fontStyle: 'italic' }}>
+                              {i.ref} — {i.status.charAt(0).toUpperCase() + i.status.slice(1)}
+                            </span>
+                            <span style={{ textAlign: 'right', fontSize: 12, fontFamily: 'DM Mono, monospace', color: 'var(--muted)', paddingRight: 4 }}>{fmt(i.total)}</span>
+                            <span style={{ textAlign: 'center', fontSize: 11, color: 'var(--muted)' }}>{i.dueDate || '—'}</span>
+                            <span style={{ textAlign: 'center', fontSize: 13 }}>{i.status === 'paid' ? <span style={{ color: '#7ab533', fontWeight: 700 }}>✓</span> : '—'}</span>
+                            <span />
+                          </div>
+                        ))
+                      }
                       {milestones.map(m => (
                         <div key={m.id} style={{ display: 'grid', gridTemplateColumns: '28px 1fr 100px 110px 80px 28px', gap: 0, borderTop: '1px solid var(--border)', padding: '4px 6px', alignItems: 'center', background: selectedMilestoneIds.has(m.id) ? '#f0f7e6' : undefined }}>
                           <input
