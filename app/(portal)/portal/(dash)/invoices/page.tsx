@@ -53,7 +53,14 @@ export default function PortalInvoicesPage() {
           <p>No invoices on file yet.</p>
         </div>
       ) : (
-        invoices.map(inv => (
+        invoices.map(inv => {
+          // Contract account summary for follow-up invoices on the same job
+          const priorInvs = inv.jobId ? invoices.filter(i => i.jobId === inv.jobId && i.id !== inv.id) : []
+          const priorInvoicedTotal = priorInvs.reduce((s, i) => s + (i.total || 0), 0)
+          const priorPaidTotal = priorInvs.filter(i => i.status === 'paid').reduce((s, i) => s + (i.total || 0), 0)
+          const showContractSummary = priorInvs.length > 0
+
+          return (
           <div key={inv.id} className="portal-card" style={{ borderLeft: `3px solid ${STATUS_COLOR[inv.status] || '#aaa'}` }}>
 
             {/* Header */}
@@ -127,6 +134,29 @@ export default function PortalInvoicesPage() {
               </div>
             )}
 
+            {/* Contract account summary */}
+            {showContractSummary && (
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 4 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }}>
+                  Contract Account
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '4px 16px', fontSize: 13 }}>
+                  <span style={{ color: 'var(--muted)' }}>Previously invoiced</span>
+                  <span style={{ fontFamily: 'DM Mono, monospace', textAlign: 'right' }}>{fmt(priorInvoicedTotal)}</span>
+                  <span style={{ color: 'var(--muted)' }}>Previously paid</span>
+                  <span style={{ fontFamily: 'DM Mono, monospace', textAlign: 'right', color: 'var(--moss)' }}>({fmt(priorPaidTotal)})</span>
+                  <span style={{ fontWeight: 700, paddingTop: 6, borderTop: '1px solid var(--border)' }}>This invoice</span>
+                  <span style={{ fontFamily: 'DM Mono, monospace', textAlign: 'right', fontWeight: 700, paddingTop: 6, borderTop: '1px solid var(--border)' }}>{fmt(inv.total)}</span>
+                  <span style={{ color: 'var(--muted)', fontSize: 12 }}>Total invoiced to date</span>
+                  <span style={{ fontFamily: 'DM Mono, monospace', textAlign: 'right', fontSize: 12 }}>{fmt(priorInvoicedTotal + inv.total)}</span>
+                  {(priorInvoicedTotal - priorPaidTotal + inv.total) > 0.01 && (<>
+                    <span style={{ color: '#c0392b', fontWeight: 700 }}>Balance now due</span>
+                    <span style={{ fontFamily: 'DM Mono, monospace', textAlign: 'right', color: '#c0392b', fontWeight: 700 }}>{fmt(priorInvoicedTotal - priorPaidTotal + inv.total)}</span>
+                  </>)}
+                </div>
+              </div>
+            )}
+
             {/* Notes */}
             {inv.notes && (
               <div style={{ marginTop: 10, fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
@@ -134,7 +164,7 @@ export default function PortalInvoicesPage() {
               </div>
             )}
           </div>
-        ))
+        )})
       )}
 
       {/* Payments received (cash / cheque / bank transfer) */}

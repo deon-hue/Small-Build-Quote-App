@@ -370,22 +370,11 @@ export default function InvoicesPage() {
     setXeroError(null)
     try {
       const paymentPlan = payPlanOn && milestones.length > 0 ? milestones : null
-      // Calculate prior invoice totals for the contract account summary on the printed invoice
-      const priorInvs = fromJobId && !editing
-        ? invoices.filter(i => i.jobId === fromJobId)
-        : []
-      const priorInvoicedTotal = priorInvs.length > 0
-        ? priorInvs.reduce((s, i) => s + (i.total || 0), 0)
-        : undefined
-      const priorPaidTotal = priorInvs.length > 0
-        ? priorInvs.filter(i => i.status === 'paid').reduce((s, i) => s + (i.total || 0), 0)
-        : undefined
       const invData = {
         jobId: fromJobId, quoteId: '', clientName, clientAddress, clientEmail,
         lineItems, subtotal, vatIncluded: vatOn, vatAmount, total,
         status, issueDate, dueDate, notes, paymentPlan,
         syncToXero, xeroInvoiceId: xeroInvoiceId || undefined,
-        priorInvoicedTotal, priorPaidTotal,
       }
 
       let savedInv: Invoice
@@ -475,8 +464,19 @@ export default function InvoicesPage() {
     }
   }
 
+  function withPriorTotals(inv: Invoice): Invoice {
+    if (!inv.jobId) return inv
+    const priorInvs = invoices.filter(i => i.jobId === inv.jobId && i.id !== inv.id)
+    if (!priorInvs.length) return inv
+    return {
+      ...inv,
+      priorInvoicedTotal: priorInvs.reduce((s, i) => s + (i.total || 0), 0),
+      priorPaidTotal: priorInvs.filter(i => i.status === 'paid').reduce((s, i) => s + (i.total || 0), 0),
+    }
+  }
+
   function handlePrint(inv: Invoice) {
-    const html = buildInvoiceHtml(inv, settings)
+    const html = buildInvoiceHtml(withPriorTotals(inv), settings)
     const w = window.open('', '_blank')
     if (!w) { alert('Pop-up blocked — please allow pop-ups.'); return }
     w.document.write(html)
@@ -485,7 +485,7 @@ export default function InvoicesPage() {
   }
 
   function handleDownload(inv: Invoice) {
-    const html = buildInvoiceHtml(inv, settings)
+    const html = buildInvoiceHtml(withPriorTotals(inv), settings)
     const blob = new Blob([html], { type: 'text/html' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
