@@ -370,11 +370,22 @@ export default function InvoicesPage() {
     setXeroError(null)
     try {
       const paymentPlan = payPlanOn && milestones.length > 0 ? milestones : null
+      // Calculate prior invoice totals for the contract account summary on the printed invoice
+      const priorInvs = fromJobId && !editing
+        ? invoices.filter(i => i.jobId === fromJobId)
+        : []
+      const priorInvoicedTotal = priorInvs.length > 0
+        ? priorInvs.reduce((s, i) => s + (i.total || 0), 0)
+        : undefined
+      const priorPaidTotal = priorInvs.length > 0
+        ? priorInvs.filter(i => i.status === 'paid').reduce((s, i) => s + (i.total || 0), 0)
+        : undefined
       const invData = {
         jobId: fromJobId, quoteId: '', clientName, clientAddress, clientEmail,
         lineItems, subtotal, vatIncluded: vatOn, vatAmount, total,
         status, issueDate, dueDate, notes, paymentPlan,
         syncToXero, xeroInvoiceId: xeroInvoiceId || undefined,
+        priorInvoicedTotal, priorPaidTotal,
       }
 
       let savedInv: Invoice

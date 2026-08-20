@@ -464,6 +464,10 @@ export interface Invoice {
   syncToXero?: boolean
   /** Xero InvoiceID once the invoice has been successfully pushed */
   xeroInvoiceId?: string
+  /** Total of all prior invoices on the same job (excluding this one) at time of creation */
+  priorInvoicedTotal?: number
+  /** Total paid on prior invoices on the same job at time of creation */
+  priorPaidTotal?: number
 }
 
 export interface JobNote {

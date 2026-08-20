@@ -108,6 +108,32 @@ export function buildInvoiceHtml(inv: Invoice, settings: Settings): string {
     </div>
   </div>
 
+  <!-- Contract account summary (only when this is a follow-up invoice on a job) -->
+  ${(inv.priorInvoicedTotal !== undefined && inv.priorInvoicedTotal > 0) ? (() => {
+    const priorInvoiced = inv.priorInvoicedTotal!
+    const priorPaid = inv.priorPaidTotal ?? 0
+    const priorOutstanding = priorInvoiced - priorPaid
+    const totalInvoicedToDate = priorInvoiced + inv.total
+    const totalOutstanding = priorOutstanding + inv.total
+    return `
+  <div style="margin-top:32px;padding:20px 24px;background:#f8f9fa;border-radius:8px;border-left:4px solid #4a90a4">
+    <div style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:#4a90a4;font-weight:700;margin-bottom:14px">Contract Account Summary</div>
+    <div style="display:grid;grid-template-columns:1fr auto;gap:6px 24px;font-size:13px">
+      <span style="color:#888">Previously invoiced</span>
+      <span style="font-family:monospace;text-align:right">${fmt(priorInvoiced)}</span>
+      <span style="color:#888">Previously paid</span>
+      <span style="font-family:monospace;text-align:right;color:#7ab533">(${fmt(priorPaid)})</span>
+      ${priorOutstanding > 0.01 ? `<span style="color:#888">Previously outstanding</span><span style="font-family:monospace;text-align:right;color:#d97706">${fmt(priorOutstanding)}</span>` : ''}
+      <span style="border-top:1px solid #ddd;padding-top:8px;margin-top:2px;font-weight:700">This invoice</span>
+      <span style="font-family:monospace;text-align:right;border-top:1px solid #ddd;padding-top:8px;margin-top:2px;font-weight:700">${fmt(inv.total)}</span>
+      <span style="padding-top:6px;font-weight:700;color:#2b2f33">Total invoiced to date</span>
+      <span style="font-family:monospace;text-align:right;padding-top:6px;font-weight:700;color:#2b2f33">${fmt(totalInvoicedToDate)}</span>
+      <span style="color:#888;font-size:12px">Balance now due</span>
+      <span style="font-family:monospace;text-align:right;color:#c0392b;font-weight:700;font-size:14px">${fmt(totalOutstanding)}</span>
+    </div>
+  </div>`
+  })() : ''}
+
   <!-- Payment plan / schedule -->
   ${inv.paymentPlan && inv.paymentPlan.length > 0 ? `
   <div style="margin-top:32px">
