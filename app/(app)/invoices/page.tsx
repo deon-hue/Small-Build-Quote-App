@@ -35,7 +35,7 @@ function due30Str() {
 }
 
 export default function InvoicesPage() {
-  const { invoices, jobs, quotes, clients, settings, addInvoice, updateInvoice, deleteInvoice, loading, getGanttState } = useApp()
+  const { invoices, jobs, quotes, clients, settings, jobPayments, addInvoice, updateInvoice, deleteInvoice, loading, getGanttState } = useApp()
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<Invoice | null>(null)
 
@@ -467,11 +467,12 @@ export default function InvoicesPage() {
   function withPriorTotals(inv: Invoice): Invoice {
     if (!inv.jobId) return inv
     const priorInvs = invoices.filter(i => i.jobId === inv.jobId && i.id !== inv.id)
-    if (!priorInvs.length) return inv
+    const cashPaid = jobPayments.filter(p => p.jobId === inv.jobId).reduce((s, p) => s + (p.amount || 0), 0)
+    if (!priorInvs.length && cashPaid === 0) return inv
     return {
       ...inv,
       priorInvoicedTotal: priorInvs.reduce((s, i) => s + (i.total || 0), 0),
-      priorPaidTotal: priorInvs.filter(i => i.status === 'paid').reduce((s, i) => s + (i.total || 0), 0),
+      priorPaidTotal: priorInvs.filter(i => i.status === 'paid').reduce((s, i) => s + (i.total || 0), 0) + cashPaid,
     }
   }
 

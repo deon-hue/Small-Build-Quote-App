@@ -56,9 +56,10 @@ export default function PortalInvoicesPage() {
         invoices.map(inv => {
           // Contract account summary for follow-up invoices on the same job
           const priorInvs = inv.jobId ? invoices.filter(i => i.jobId === inv.jobId && i.id !== inv.id) : []
+          const cashPaid = inv.jobId ? payments.filter(p => p.jobId === inv.jobId).reduce((s, p) => s + (p.amount || 0), 0) : 0
           const priorInvoicedTotal = priorInvs.reduce((s, i) => s + (i.total || 0), 0)
-          const priorPaidTotal = priorInvs.filter(i => i.status === 'paid').reduce((s, i) => s + (i.total || 0), 0)
-          const showContractSummary = priorInvs.length > 0
+          const priorPaidTotal = priorInvs.filter(i => i.status === 'paid').reduce((s, i) => s + (i.total || 0), 0) + cashPaid
+          const showContractSummary = priorInvs.length > 0 || cashPaid > 0
 
           return (
           <div key={inv.id} className="portal-card" style={{ borderLeft: `3px solid ${STATUS_COLOR[inv.status] || '#aaa'}` }}>
