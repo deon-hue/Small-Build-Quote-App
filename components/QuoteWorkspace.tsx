@@ -2022,10 +2022,10 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
 
             {/* Labour by trade + days per phase */}
             {(() => {
-              // Collect all labourTrade lines across every phase
-              type TradeRow = { days: number; cost: number; sell: number; dayRate: number; unit: string }
+              // Trade data is stored as QuoteItems with desc like "Carpenter × 5 day"
+              // Parse these to build trade and phase summaries
+              type TradeRow = { days: number; cost: number; sell: number; dayRate: number }
               const byTrade = new Map<string, TradeRow>()
-              // Phase → list of {trade, days, cost, sell}
               const byPhase: { phase: string; trades: { trade: string; days: number; cost: number; sell: number }[] }[] = []
 
               for (const mp of allMainPhases) {
@@ -2033,18 +2033,24 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
                 const phaseTradeMap = new Map<string, { days: number; cost: number; sell: number }>()
 
                 for (const p of mpPhases) {
-                  for (const lt of p.labourTrades ?? []) {
-                    const days = lt.unit === 'day' ? lt.qty : lt.unit === 'half-day' ? lt.qty * 0.5 : lt.qty / 8
-                    const existing = byTrade.get(lt.trade) ?? { days: 0, cost: 0, sell: 0, dayRate: lt.dayRate, unit: lt.unit }
-                    byTrade.set(lt.trade, {
-                      days: existing.days + days,
-                      cost: existing.cost + lt.cost,
-                      sell: existing.sell + lt.quotePrice,
-                      dayRate: lt.dayRate,
-                      unit: lt.unit,
-                    })
-                    const pt = phaseTradeMap.get(lt.trade) ?? { days: 0, cost: 0, sell: 0 }
-                    phaseTradeMap.set(lt.trade, { days: pt.days + days, cost: pt.cost + lt.cost, sell: pt.sell + lt.quotePrice })
+                  const mkp = 1 + markup / 100
+                  for (const item of p.items) {
+                    if (item.enabled === false || item.itemType !== 'labour') continue
+                    // Match trade picker format: "TradeName × N day/half-day/hr"
+                    const m = (item.desc || '').match(/^(.+?)\s*[×x]\s*([\d.]+)\s*(day|half-day|hr)/i)
+                    if (!m) continue
+                    const tradeName = m[1].trim()
+                    const qty = parseFloat(m[2])
+                    const unit = m[3].toLowerCase()
+                    const days = unit === 'day' ? qty : unit === 'half-day' ? qty * 0.5 : qty / 8
+                    const cost = (Number(item.labour) || 0) * Math.max(item.qty ?? 1, 1)
+                    const sell = cost * mkp
+                    const rateMatch = (item.notes || '').match(/£([\d.]+)\//)
+                    const dayRate = rateMatch ? parseFloat(rateMatch[1]) : (days > 0 ? Math.round(cost / days) : 0)
+                    const ex = byTrade.get(tradeName) ?? { days: 0, cost: 0, sell: 0, dayRate }
+                    byTrade.set(tradeName, { days: ex.days + days, cost: ex.cost + cost, sell: ex.sell + sell, dayRate: ex.dayRate || dayRate })
+                    const pt = phaseTradeMap.get(tradeName) ?? { days: 0, cost: 0, sell: 0 }
+                    phaseTradeMap.set(tradeName, { days: pt.days + days, cost: pt.cost + cost, sell: pt.sell + sell })
                   }
                 }
                 if (phaseTradeMap.size > 0) {
