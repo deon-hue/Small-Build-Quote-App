@@ -2019,6 +2019,126 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
                 </table>
               </div>
             )}
+
+            {/* Labour by trade + days per phase */}
+            {(() => {
+              // Collect all labourTrade lines across every phase
+              type TradeRow = { days: number; cost: number; sell: number; dayRate: number; unit: string }
+              const byTrade = new Map<string, TradeRow>()
+              // Phase → list of {trade, days, cost, sell}
+              const byPhase: { phase: string; trades: { trade: string; days: number; cost: number; sell: number }[] }[] = []
+
+              for (const mp of allMainPhases) {
+                const mpPhases = phases.filter(p => (p.parentPhase || '(No Phase)') === mp)
+                const phaseTradeMap = new Map<string, { days: number; cost: number; sell: number }>()
+
+                for (const p of mpPhases) {
+                  for (const lt of p.labourTrades ?? []) {
+                    const days = lt.unit === 'day' ? lt.qty : lt.unit === 'half-day' ? lt.qty * 0.5 : lt.qty / 8
+                    const existing = byTrade.get(lt.trade) ?? { days: 0, cost: 0, sell: 0, dayRate: lt.dayRate, unit: lt.unit }
+                    byTrade.set(lt.trade, {
+                      days: existing.days + days,
+                      cost: existing.cost + lt.cost,
+                      sell: existing.sell + lt.quotePrice,
+                      dayRate: lt.dayRate,
+                      unit: lt.unit,
+                    })
+                    const pt = phaseTradeMap.get(lt.trade) ?? { days: 0, cost: 0, sell: 0 }
+                    phaseTradeMap.set(lt.trade, { days: pt.days + days, cost: pt.cost + lt.cost, sell: pt.sell + lt.quotePrice })
+                  }
+                }
+                if (phaseTradeMap.size > 0) {
+                  byPhase.push({ phase: mp, trades: [...phaseTradeMap.entries()].map(([trade, v]) => ({ trade, ...v })) })
+                }
+              }
+
+              if (byTrade.size === 0) return null
+              const tradeRows = [...byTrade.entries()].sort((a, b) => b[1].cost - a[1].cost)
+              const totalDays = tradeRows.reduce((s, [, v]) => s + v.days, 0)
+              const totalCost = tradeRows.reduce((s, [, v]) => s + v.cost, 0)
+              const totalSell = tradeRows.reduce((s, [, v]) => s + v.sell, 0)
+              const fmtDays = (d: number) => d % 1 === 0 ? `${d}d` : `${d.toFixed(1)}d`
+
+              return (
+                <>
+                  {/* Trade summary */}
+                  <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: '#64748b', marginBottom: 8 }}>
+                      Labour by Trade
+                    </div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                      <thead>
+                        <tr style={{ background: '#f1f5f9' }}>
+                          <th style={{ padding: '5px 8px', textAlign: 'left', color: '#64748b', fontWeight: 700 }}>Trade</th>
+                          <th style={{ padding: '5px 8px', textAlign: 'right', color: '#64748b', fontWeight: 700 }}>Days</th>
+                          <th style={{ padding: '5px 8px', textAlign: 'right', color: '#64748b', fontWeight: 700 }}>Day Rate</th>
+                          <th style={{ padding: '5px 8px', textAlign: 'right', color: '#64748b', fontWeight: 700 }}>Cost</th>
+                          <th style={{ padding: '5px 8px', textAlign: 'right', color: '#64748b', fontWeight: 700 }}>Sell</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tradeRows.map(([trade, v]) => (
+                          <tr key={trade} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                            <td style={{ padding: '6px 8px', fontWeight: 600, color: '#1e293b' }}>{trade}</td>
+                            <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#7c3aed' }}>{fmtDays(v.days)}</td>
+                            <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#64748b' }}>{fmt(v.dayRate)}</td>
+                            <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#e67e22' }}>{fmt(v.cost)}</td>
+                            <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#1e293b' }}>{fmt(v.sell)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr style={{ background: '#f1f5f9', fontWeight: 700 }}>
+                          <td style={{ padding: '6px 8px', color: '#1e293b' }}>Total</td>
+                          <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#7c3aed' }}>{fmtDays(totalDays)}</td>
+                          <td style={{ padding: '6px 8px' }}></td>
+                          <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#e67e22' }}>{fmt(totalCost)}</td>
+                          <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#7ab533' }}>{fmt(totalSell)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+
+                  {/* Days per phase */}
+                  {byPhase.length > 1 && (
+                    <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: '#64748b', marginBottom: 8 }}>
+                        Labour Days by Phase
+                      </div>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                        <thead>
+                          <tr style={{ background: '#f1f5f9' }}>
+                            <th style={{ padding: '5px 8px', textAlign: 'left', color: '#64748b', fontWeight: 700 }}>Phase</th>
+                            <th style={{ padding: '5px 8px', textAlign: 'left', color: '#64748b', fontWeight: 700 }}>Trades</th>
+                            <th style={{ padding: '5px 8px', textAlign: 'right', color: '#64748b', fontWeight: 700 }}>Days</th>
+                            <th style={{ padding: '5px 8px', textAlign: 'right', color: '#64748b', fontWeight: 700 }}>Cost</th>
+                            <th style={{ padding: '5px 8px', textAlign: 'right', color: '#64748b', fontWeight: 700 }}>Sell</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {byPhase.map(({ phase, trades }) => {
+                            const pDays = trades.reduce((s, t) => s + t.days, 0)
+                            const pCost = trades.reduce((s, t) => s + t.cost, 0)
+                            const pSell = trades.reduce((s, t) => s + t.sell, 0)
+                            return (
+                              <tr key={phase} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                <td style={{ padding: '6px 8px', fontWeight: 600, color: '#1e293b', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{phase}</td>
+                                <td style={{ padding: '6px 8px', color: '#64748b' }}>
+                                  {trades.map(t => `${t.trade} (${fmtDays(t.days)})`).join(', ')}
+                                </td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#7c3aed', whiteSpace: 'nowrap' }}>{fmtDays(pDays)}</td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#e67e22', whiteSpace: 'nowrap' }}>{fmt(pCost)}</td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#1e293b', whiteSpace: 'nowrap' }}>{fmt(pSell)}</td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
+              )
+            })()}
           </div>
         )
       })()}
