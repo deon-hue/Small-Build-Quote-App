@@ -1877,6 +1877,82 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
       ))}
 
       {/* Grand total footer */}
+      {/* ── Phase breakdown chart ─────────────────────────────────────────────── */}
+      {phases.length > 1 && (() => {
+        const CHART_TYPES = ['labour','materials','plant','subcontractors','other'] as const
+        const CHART_COLORS: Record<string,string> = {
+          labour:'#f59e0b', materials:'#3b82f6', plant:'#a855f7', subcontractors:'#ef4444', other:'#94a3b8',
+        }
+        const CHART_LABELS: Record<string,string> = {
+          labour:'Labour', materials:'Materials', plant:'Plant', subcontractors:'Subcontract', other:'Other',
+        }
+
+        const breakdown = mainPhases.map(mp => {
+          const mpPhases = phases.filter(p => (p.parentPhase || '(No Phase)') === mp)
+          const t: Record<string,number> = { labour:0, materials:0, plant:0, subcontractors:0, other:0 }
+          for (const p of mpPhases) {
+            const hasLabourTrades = (p.labourTrades?.length ?? 0) > 0
+            const mkp = 1 + markup / 100
+            for (const item of p.items) {
+              if (item.enabled === false) continue
+              const qty = Math.max(item.qty ?? 1, 1)
+              if (item.itemType === 'labour')         t.labour         += (Number(item.labour)         || 0) * qty * (hasLabourTrades ? 1 : mkp)
+              else if (item.itemType === 'materials') t.materials      += (Number(item.materials)      || 0) * qty * mkp
+              else if (item.itemType === 'plant')     t.plant          += (Number(item.plantHire)      || 0) * qty * mkp
+              else if (item.itemType === 'subcontractors') t.subcontractors += (Number(item.subcontractors) || 0) * qty * mkp
+              else if (item.itemType === 'other')     t.other          += (Number(item.other)          || 0) * qty * mkp
+            }
+            for (const pr of p.products  ?? []) { if (pr.enabled !== false) t.materials += pr.sellPrice * pr.qty }
+            for (const pl of p.plantItems ?? []) { if (pl.enabled !== false) t.plant     += pl.sellPrice * pl.qty }
+          }
+          const total = CHART_TYPES.reduce((s, k) => s + t[k], 0)
+          return { name: mp, t, total }
+        }).filter(b => b.total > 0)
+
+        if (breakdown.length < 2) return null
+        const maxTotal = Math.max(...breakdown.map(b => b.total))
+
+        return (
+          <div style={{ marginTop: 20, padding: '16px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: '#64748b', marginBottom: 14 }}>
+              Phase Cost Breakdown (sell price)
+            </div>
+            {breakdown.map(b => (
+              <div key={b.name} style={{ marginBottom: 10 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3 }}>
+                  <span style={{ fontWeight: 600, color: '#1e293b', maxWidth: '70%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name}</span>
+                  <span style={{ fontFamily: 'monospace', color: '#374151', fontWeight: 600 }}>{fmt(b.total)}</span>
+                </div>
+                {/* Outer bar: proportional to this phase's share of the largest phase */}
+                <div style={{ display: 'flex', height: 20, borderRadius: 4, overflow: 'hidden', background: '#e2e8f0', width: '100%' }}>
+                  <div style={{ display: 'flex', width: `${(b.total / maxTotal) * 100}%`, height: '100%' }}>
+                    {CHART_TYPES.map(k => {
+                      const v = b.t[k]
+                      if (!v || v <= 0) return null
+                      const pct = (v / b.total) * 100
+                      return (
+                        <div key={k} title={`${CHART_LABELS[k]}: ${fmt(v)}`}
+                          style={{ width: `${pct}%`, background: CHART_COLORS[k], height: '100%', minWidth: v > 0 ? 2 : 0 }}
+                        />
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            ))}
+            {/* Legend */}
+            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 12, paddingTop: 10, borderTop: '1px solid #e2e8f0' }}>
+              {CHART_TYPES.map(k => (
+                <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#64748b' }}>
+                  <div style={{ width: 11, height: 11, borderRadius: 2, background: CHART_COLORS[k], flexShrink: 0 }} />
+                  {CHART_LABELS[k]}
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
+
       {phases.length > 0 && (
         <div style={{ borderTop: '2px solid #e2e8f0', marginTop: 8, paddingTop: 12, display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
           <div style={{ fontSize: 12, color: '#64748b' }}>Cost: <span style={{ fontFamily: 'monospace', color: '#e67e22', fontWeight: 600 }}>{fmt(grandCost)}</span></div>
