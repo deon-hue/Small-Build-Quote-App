@@ -1878,7 +1878,7 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
 
       {/* Grand total footer */}
       {/* ── Phase breakdown chart ─────────────────────────────────────────────── */}
-      {phases.length > 1 && (() => {
+      {phases.length > 0 && (() => {
         const CHART_TYPES = ['labour','materials','plant','subcontractors','other'] as const
         const CHART_COLORS: Record<string,string> = {
           labour:'#f59e0b', materials:'#3b82f6', plant:'#a855f7', subcontractors:'#ef4444', other:'#94a3b8',
@@ -1887,7 +1887,9 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
           labour:'Labour', materials:'Materials', plant:'Plant', subcontractors:'Subcontract', other:'Other',
         }
 
-        const breakdown = mainPhases.map(mp => {
+        // Use all phases (not search-filtered) and group by parentPhase
+        const allMainPhases = getMainPhases(phases)
+        const breakdown = allMainPhases.map(mp => {
           const mpPhases = phases.filter(p => (p.parentPhase || '(No Phase)') === mp)
           const t: Record<string,number> = { labour:0, materials:0, plant:0, subcontractors:0, other:0 }
           for (const p of mpPhases) {
@@ -1909,7 +1911,7 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
           return { name: mp, t, total }
         }).filter(b => b.total > 0)
 
-        if (breakdown.length < 2) return null
+        if (breakdown.length === 0) return null
         const maxTotal = Math.max(...breakdown.map(b => b.total))
 
         return (
