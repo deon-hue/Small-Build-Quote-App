@@ -1914,10 +1914,42 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
         if (breakdown.length === 0) return null
         const maxTotal = Math.max(...breakdown.map(b => b.total))
 
+        // Category totals across all phases — cost and sell
+        const catCost: Record<string,number> = { labour:0, materials:0, plant:0, subcontractors:0, other:0 }
+        const catSell: Record<string,number> = { labour:0, materials:0, plant:0, subcontractors:0, other:0 }
+        for (const p of phases) {
+          const hasLabourTrades = (p.labourTrades?.length ?? 0) > 0
+          const mkp = 1 + markup / 100
+          for (const item of p.items) {
+            if (item.enabled === false) continue
+            const qty = Math.max(item.qty ?? 1, 1)
+            if (item.itemType === 'labour') {
+              const c = (Number(item.labour) || 0) * qty
+              catCost.labour += c
+              catSell.labour += hasLabourTrades ? c : c * mkp
+            } else if (item.itemType === 'materials') {
+              const c = (Number(item.materials) || 0) * qty
+              catCost.materials += c; catSell.materials += c * mkp
+            } else if (item.itemType === 'plant') {
+              const c = (Number(item.plantHire) || 0) * qty
+              catCost.plant += c; catSell.plant += c * mkp
+            } else if (item.itemType === 'subcontractors') {
+              const c = (Number(item.subcontractors) || 0) * qty
+              catCost.subcontractors += c; catSell.subcontractors += c * mkp
+            } else if (item.itemType === 'other') {
+              const c = (Number(item.other) || 0) * qty
+              catCost.other += c; catSell.other += c * mkp
+            }
+          }
+          for (const pr of p.products  ?? []) { if (pr.enabled !== false) { catSell.materials += pr.sellPrice * pr.qty } }
+          for (const pl of p.plantItems ?? []) { if (pl.enabled !== false) { catSell.plant     += pl.sellPrice * pl.qty } }
+        }
+        const activeCats = CHART_TYPES.filter(k => catSell[k] > 0)
+
         return (
           <div style={{ marginTop: 20, padding: '16px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: '#64748b', marginBottom: 14 }}>
-              Phase Cost Breakdown (sell price)
+              Phase Cost Breakdown
             </div>
             {breakdown.map(b => (
               <div key={b.name} style={{ marginBottom: 10 }}>
@@ -1925,7 +1957,6 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
                   <span style={{ fontWeight: 600, color: '#1e293b', maxWidth: '70%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name}</span>
                   <span style={{ fontFamily: 'monospace', color: '#374151', fontWeight: 600 }}>{fmt(b.total)}</span>
                 </div>
-                {/* Outer bar: proportional to this phase's share of the largest phase */}
                 <div style={{ display: 'flex', height: 20, borderRadius: 4, overflow: 'hidden', background: '#e2e8f0', width: '100%' }}>
                   <div style={{ display: 'flex', width: `${(b.total / maxTotal) * 100}%`, height: '100%' }}>
                     {CHART_TYPES.map(k => {
@@ -1942,15 +1973,52 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
                 </div>
               </div>
             ))}
-            {/* Legend */}
-            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 12, paddingTop: 10, borderTop: '1px solid #e2e8f0' }}>
-              {CHART_TYPES.map(k => (
-                <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#64748b' }}>
-                  <div style={{ width: 11, height: 11, borderRadius: 2, background: CHART_COLORS[k], flexShrink: 0 }} />
-                  {CHART_LABELS[k]}
-                </div>
-              ))}
-            </div>
+
+            {/* Category totals table */}
+            {activeCats.length > 0 && (
+              <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #e2e8f0', overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                  <thead>
+                    <tr style={{ background: '#f1f5f9' }}>
+                      <th style={{ padding: '5px 8px', textAlign: 'left', color: '#64748b', fontWeight: 700, letterSpacing: '0.5px' }}></th>
+                      {activeCats.map(k => (
+                        <th key={k} style={{ padding: '5px 8px', textAlign: 'right', color: '#64748b', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: 2, background: CHART_COLORS[k], display: 'inline-block' }} />
+                            {CHART_LABELS[k]}
+                          </span>
+                        </th>
+                      ))}
+                      <th style={{ padding: '5px 8px', textAlign: 'right', color: '#64748b', fontWeight: 700 }}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                      <td style={{ padding: '6px 8px', color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>Cost</td>
+                      {activeCats.map(k => (
+                        <td key={k} style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#e67e22' }}>
+                          {catCost[k] > 0 ? fmt(catCost[k]) : '—'}
+                        </td>
+                      ))}
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, color: '#e67e22' }}>
+                        {fmt(activeCats.reduce((s, k) => s + catCost[k], 0))}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: '6px 8px', color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>Sell</td>
+                      {activeCats.map(k => (
+                        <td key={k} style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#1e293b' }}>
+                          {catSell[k] > 0 ? fmt(catSell[k]) : '—'}
+                        </td>
+                      ))}
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, color: '#7ab533' }}>
+                        {fmt(activeCats.reduce((s, k) => s + catSell[k], 0))}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )
       })()}
