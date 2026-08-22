@@ -1246,6 +1246,8 @@ export default function SubcontractorsPage() {
                   const allApproved = logs.every(l => l.status !== 'pending')
                   const allPaid = logs.every(l => l.status === 'paid')
                   const anyXero = logs.some(l => l.xero_bill_id)
+                  const cashCount = logs.filter(l => l.status === 'paid' && !l.xero_bill_id).length
+                  const pendingCount = logs.filter(l => l.status === 'pending').length
                   const isExpanded = expandedWeeks.has(key)
                   return (
                     <div key={key} style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
@@ -1265,6 +1267,8 @@ export default function SubcontractorsPage() {
                           </button>
                           <span style={{ fontSize: 13, color: '#6b7280' }}>Week of {fmtWeekRange(ws)}</span>
                           <span style={{ fontSize: 12, color: '#9ca3af' }}>· {logs.length} day{logs.length !== 1 ? 's' : ''}</span>
+                          {cashCount > 0 && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>💵 {cashCount} cash</span>}
+                          {pendingCount > 0 && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#fef9c3', color: '#854d0e', fontWeight: 600 }}>⏳ {pendingCount} pending</span>}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
                           <span style={{ fontWeight: 700, fontSize: 14 }}>{fmt(total)}</span>
@@ -1308,7 +1312,8 @@ export default function SubcontractorsPage() {
                                   ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#dbeafe', color: '#1e40af', fontWeight: 600 }}>✓ Xero</span>
                                   : isPaid
                                     ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#f3f4f6', color: '#374151', fontWeight: 600 }}>✓ Cash</span>
-                                    : <div style={{ display: 'flex', gap: 4 }}>
+                                    : <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                                        <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#fef9c3', color: '#854d0e', fontWeight: 600 }}>⏳ Pending</span>
                                         <button onClick={() => markDayCash(log)} style={{ fontSize: 10, padding: '2px 7px', background: '#f9fafb', border: '1px solid #d1d5db', color: '#374151', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>💵 Cash</button>
                                         {!isPaye(log.contact_id) && <button onClick={() => pushDayToXero(log)} disabled={xeroPushingLog === log.id} style={{ fontSize: 10, padding: '2px 7px', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb', borderRadius: 4, cursor: 'pointer', fontWeight: 600, opacity: xeroPushingLog === log.id ? 0.6 : 1 }}>{xeroPushingLog === log.id ? '…' : '⚡ Xero'}</button>}
                                       </div>
