@@ -698,6 +698,17 @@ export default function SubcontractorsPage() {
     }
   }
 
+  async function repairWeekBillStatus(contactId: string, ws: string) {
+    // Reset logs that were incorrectly set to 'paid' by a prior buggy sync.
+    // Only runs on weeks where the bill is paid but ALL logs are 'paid' (no 'approved' remain),
+    // meaning cash was not mixed in (or the user explicitly triggers this).
+    const weekLogs = timeLogs.filter(l => l.contact_id === contactId && (l.week_start ?? getWeekStart(l.entry_date)) === ws && l.status === 'paid' && !l.xero_bill_id)
+    if (!weekLogs.length) return
+    const ids = weekLogs.map(l => l.id)
+    await sb.from('sub_admin_time_logs').update({ status: 'approved' }).in('id', ids)
+    await load()
+  }
+
   async function deleteWeek(contactId: string, ws: string) {
     const weekLogs = timeLogs.filter(l => l.contact_id === contactId && (l.week_start ?? getWeekStart(l.entry_date)) === ws)
     const costIds = weekLogs.map(l => l.job_cost_id).filter(Boolean) as string[]
@@ -1368,6 +1379,7 @@ export default function SubcontractorsPage() {
                   const billSent = !!wb && wb.status !== 'paid'
                   const cashCount = logs.filter(l => l.status === 'paid' && !l.xero_bill_id).length
                   const pendingCount = logs.filter(l => l.status === 'pending').length
+                  const approvedCount = logs.filter(l => l.status === 'approved' && !l.xero_bill_id).length
                   const billableCount = logs.filter(l => l.status !== 'paid' && !l.xero_bill_id).length
                   const isExpanded = expandedWeeks.has(key)
                   return (
@@ -1388,10 +1400,10 @@ export default function SubcontractorsPage() {
                           </button>
                           <span style={{ fontSize: 13, color: '#6b7280' }}>Week of {fmtWeekRange(ws)}</span>
                           <span style={{ fontSize: 12, color: '#9ca3af' }}>· {logs.length} day{logs.length !== 1 ? 's' : ''}</span>
-                          {cashCount > 0 && !billPaid && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>💵 {cashCount} cash</span>}
+                          {cashCount > 0 && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>💵 {cashCount} cash</span>}
                           {pendingCount > 0 && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#fef9c3', color: '#854d0e', fontWeight: 600 }}>⏳ {pendingCount} pending</span>}
-                          {billPaid && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>✓ Bill paid</span>}
-                          {billSent && !billPaid && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#ede9fe', color: '#6d28d9', fontWeight: 600 }}>↗ In bills</span>}
+                          {billPaid && approvedCount > 0 && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>✓ Bill paid</span>}
+                          {billSent && !billPaid && approvedCount > 0 && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#ede9fe', color: '#6d28d9', fontWeight: 600 }}>↗ In bills</span>}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
                           <span style={{ fontWeight: 700, fontSize: 14 }}>{fmt(total)}</span>
@@ -1413,6 +1425,13 @@ export default function SubcontractorsPage() {
                             >
                               {sendingToBills === key ? '…' : '→ Bills'}
                             </button>
+                          )}
+                          {billPaid && approvedCount === 0 && cashCount > 0 && (
+                            <button
+                              onClick={() => { if (confirm('Reset these days from Cash to Bill paid? Only do this if they were sent to a bill, not paid in cash.')) repairWeekBillStatus(contactId, ws) }}
+                              style={{ fontSize: 11, padding: '3px 10px', background: '#fef9c3', border: '1px solid #fde68a', color: '#92400e', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}
+                              title="Fix days incorrectly marked as cash — resets them so Bill paid shows correctly"
+                            >⚠ Fix status</button>
                           )}
                           <button onClick={() => openWeekSheet(contactId, ws)} style={{ fontSize: 11, padding: '3px 10px', background: '#fff', border: '1px solid #d1d5db', color: '#374151', borderRadius: 6, cursor: 'pointer' }}>Edit</button>
                           <button onClick={() => deleteWeek(contactId, ws)} style={{ fontSize: 11, padding: '3px 10px', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 6, cursor: 'pointer' }}>Delete</button>
@@ -1437,12 +1456,12 @@ export default function SubcontractorsPage() {
                                 {log.job_cost_id && <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 6, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>✓ Cost</span>}
                                 {hasXero
                                   ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#dbeafe', color: '#1e40af', fontWeight: 600 }}>✓ Xero</span>
-                                  : billPaid
-                                    ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>✓ Bill paid</span>
-                                    : billSent
-                                      ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#ede9fe', color: '#6d28d9', fontWeight: 600 }}>↗ In bills</span>
-                                      : isPaid
-                                        ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#f3f4f6', color: '#374151', fontWeight: 600 }}>✓ Cash</span>
+                                  : isPaid
+                                    ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#f3f4f6', color: '#374151', fontWeight: 600 }}>✓ Cash</span>
+                                    : billPaid
+                                      ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>✓ Bill paid</span>
+                                      : billSent
+                                        ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#ede9fe', color: '#6d28d9', fontWeight: 600 }}>↗ In bills</span>
                                         : <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                                             <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#fef9c3', color: '#854d0e', fontWeight: 600 }}>⏳ Pending</span>
                                             <button onClick={() => markDayCash(log)} style={{ fontSize: 10, padding: '2px 7px', background: '#f9fafb', border: '1px solid #d1d5db', color: '#374151', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>💵 Cash</button>
