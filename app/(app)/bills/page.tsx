@@ -328,7 +328,7 @@ export default function BillsPage() {
                   <td style={{ padding: '10px 14px' }}>
                     <div style={{ fontWeight: 600 }}>{b.ref}</div>
                     {b.xeroBillId && (
-                      <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>✓ Xero</div>
+                      <div style={{ fontSize: 11, color: '#047857', marginTop: 2 }}>✓ Xero ref: {b.xeroBillId.slice(0, 8)}…</div>
                     )}
                     {b.documentId && (
                       <div style={{ fontSize: 11, color: '#7c3aed', marginTop: 2 }}>📄 Invoice attached</div>
@@ -346,7 +346,13 @@ export default function BillsPage() {
                   </td>
                   <td style={{ padding: '10px 14px', fontWeight: 600 }}>{fmt(b.totalPayable)}</td>
                   <td style={{ padding: '10px 14px' }}>
-                    <span className={`badge ${BILL_BADGE[b.status]}`}>{BILL_LABEL[b.status]}</span>
+                    {b.status === 'paid' ? (
+                      <span className="badge b-accepted">Paid</span>
+                    ) : b.xeroBillId ? (
+                      <span className="badge b-pending" style={{ background: '#d1fae5', color: '#065f46', borderColor: '#6ee7b7' }}>✓ Sent to Xero</span>
+                    ) : (
+                      <span className={`badge ${BILL_BADGE[b.status]}`}>{BILL_LABEL[b.status]}</span>
+                    )}
                   </td>
                   <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
                     <button className="btn btn-sm btn-outline" style={{ marginRight: 4 }} onClick={() => openEdit(b)}>Edit</button>
