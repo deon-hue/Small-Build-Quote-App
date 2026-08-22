@@ -108,7 +108,7 @@ function fmtWeekRange(ws: string): string {
 export default function SubcontractorsPage() {
   const sb = createClient()
   const router = useRouter()
-  const { jobs, clients, updateClient, addClient, addBill } = useApp()
+  const { jobs, clients, bills, updateClient, addClient, addBill } = useApp()
   const subs = clients.filter(c => c.clientType === 'subcontractor' || c.clientType === 'supplier')
 
   const [contracts, setContracts] = useState<Contract[]>([])
@@ -313,6 +313,14 @@ export default function SubcontractorsPage() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // Returns the bill created from sendToBills for a given contact + week
+  function weekBill(contactId: string, ws: string) {
+    const weekEnd = new Date(ws + 'T12:00:00')
+    weekEnd.setDate(weekEnd.getDate() + 6)
+    const weekEndStr = weekEnd.toISOString().slice(0, 10)
+    return bills.find(b => b.supplierId === contactId && b.billDate === weekEndStr) ?? null
+  }
 
   // Derived helpers
   const contactName = (id: string | null) => id ? (clients.find(c => c.id === id)?.name ?? '—') : '—'
@@ -1355,6 +1363,9 @@ export default function SubcontractorsPage() {
                   const allApproved = logs.every(l => l.status !== 'pending')
                   const allPaid = logs.every(l => l.status === 'paid')
                   const anyXero = logs.some(l => l.xero_bill_id)
+                  const wb = weekBill(contactId, ws)
+                  const billPaid = wb?.status === 'paid'
+                  const billSent = !!wb && wb.status !== 'paid'
                   const cashCount = logs.filter(l => l.status === 'paid' && !l.xero_bill_id).length
                   const pendingCount = logs.filter(l => l.status === 'pending').length
                   const billableCount = logs.filter(l => l.status !== 'paid' && !l.xero_bill_id).length
@@ -1377,20 +1388,24 @@ export default function SubcontractorsPage() {
                           </button>
                           <span style={{ fontSize: 13, color: '#6b7280' }}>Week of {fmtWeekRange(ws)}</span>
                           <span style={{ fontSize: 12, color: '#9ca3af' }}>· {logs.length} day{logs.length !== 1 ? 's' : ''}</span>
-                          {cashCount > 0 && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>💵 {cashCount} cash</span>}
+                          {cashCount > 0 && !billPaid && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>💵 {cashCount} cash</span>}
                           {pendingCount > 0 && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#fef9c3', color: '#854d0e', fontWeight: 600 }}>⏳ {pendingCount} pending</span>}
+                          {billPaid && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>✓ Bill paid</span>}
+                          {billSent && !billPaid && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#ede9fe', color: '#6d28d9', fontWeight: 600 }}>↗ In bills</span>}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
                           <span style={{ fontWeight: 700, fontSize: 14 }}>{fmt(total)}</span>
                           {anyXero
                             ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#dbeafe', color: '#1e40af', fontWeight: 600 }}>✓ Xero</span>
-                            : allPaid
-                              ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#f3f4f6', color: '#374151', fontWeight: 600 }}>✓ Cash paid</span>
-                              : billableCount > 0
-                                ? <button onClick={() => markWeekPaidCash(contactId, ws)} style={{ fontSize: 11, padding: '3px 10px', background: '#fff', border: '1px solid #d1d5db', color: '#374151', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>💵 Cash paid</button>
-                                : null
+                            : billPaid
+                              ? null
+                              : allPaid
+                                ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#f3f4f6', color: '#374151', fontWeight: 600 }}>✓ Cash paid</span>
+                                : billableCount > 0 && !wb
+                                  ? <button onClick={() => markWeekPaidCash(contactId, ws)} style={{ fontSize: 11, padding: '3px 10px', background: '#fff', border: '1px solid #d1d5db', color: '#374151', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>💵 Cash paid</button>
+                                  : null
                           }
-                          {billableCount > 0 && (
+                          {billableCount > 0 && !wb && (
                             <button
                               onClick={() => sendToBills(contactId, ws)}
                               disabled={sendingToBills === key}
@@ -1422,12 +1437,16 @@ export default function SubcontractorsPage() {
                                 {log.job_cost_id && <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 6, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>✓ Cost</span>}
                                 {hasXero
                                   ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#dbeafe', color: '#1e40af', fontWeight: 600 }}>✓ Xero</span>
-                                  : isPaid
-                                    ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#f3f4f6', color: '#374151', fontWeight: 600 }}>✓ Cash</span>
-                                    : <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                                        <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#fef9c3', color: '#854d0e', fontWeight: 600 }}>⏳ Pending</span>
-                                        <button onClick={() => markDayCash(log)} style={{ fontSize: 10, padding: '2px 7px', background: '#f9fafb', border: '1px solid #d1d5db', color: '#374151', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>💵 Cash</button>
-                                      </div>
+                                  : billPaid
+                                    ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>✓ Bill paid</span>
+                                    : billSent
+                                      ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#ede9fe', color: '#6d28d9', fontWeight: 600 }}>↗ In bills</span>
+                                      : isPaid
+                                        ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#f3f4f6', color: '#374151', fontWeight: 600 }}>✓ Cash</span>
+                                        : <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                                            <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#fef9c3', color: '#854d0e', fontWeight: 600 }}>⏳ Pending</span>
+                                            <button onClick={() => markDayCash(log)} style={{ fontSize: 10, padding: '2px 7px', background: '#f9fafb', border: '1px solid #d1d5db', color: '#374151', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>💵 Cash</button>
+                                          </div>
                                 }
                               </div>
                             )

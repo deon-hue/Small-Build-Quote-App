@@ -47,17 +47,14 @@ export default function BillsPage() {
 
   async function syncTimeLogsForBill(b: Bill, newStatus: BillStatus) {
     if (newStatus !== 'paid' || !b.supplierId) return
-    // Mark all approved time logs for this supplier as paid
+    // Mark linked job_costs as paid (time log status is NOT changed — the
+    // subcontractors page derives paid state from the bill status directly)
     const { data: logs } = await sb
       .from('sub_admin_time_logs')
       .select('id, job_cost_id')
       .eq('contact_id', b.supplierId)
       .eq('status', 'approved')
-    if (!logs?.length) return
-    const logIds = logs.map(l => l.id)
-    await sb.from('sub_admin_time_logs').update({ status: 'paid' }).in('id', logIds)
-    // Also mark linked job_costs as paid
-    const costIds = logs.map(l => l.job_cost_id).filter(Boolean) as string[]
+    const costIds = (logs ?? []).map(l => l.job_cost_id).filter(Boolean) as string[]
     if (costIds.length) {
       await sb.from('job_costs').update({ payment_status: 'paid' }).in('id', costIds)
     }
