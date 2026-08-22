@@ -43,6 +43,25 @@ function calcTotals(lines: BillLineItem[], cisRate: number) {
 
 export default function BillsPage() {
   const { bills, suppliers, jobs, addBill, updateBill, deleteBill, loading } = useApp()
+  const sb = createClient()
+
+  async function syncTimeLogsForBill(b: Bill, newStatus: BillStatus) {
+    if (newStatus !== 'paid' || !b.supplierId) return
+    // Mark all approved time logs for this supplier as paid
+    const { data: logs } = await sb
+      .from('sub_admin_time_logs')
+      .select('id, job_cost_id')
+      .eq('contact_id', b.supplierId)
+      .eq('status', 'approved')
+    if (!logs?.length) return
+    const logIds = logs.map(l => l.id)
+    await sb.from('sub_admin_time_logs').update({ status: 'paid' }).in('id', logIds)
+    // Also mark linked job_costs as paid
+    const costIds = logs.map(l => l.job_cost_id).filter(Boolean) as string[]
+    if (costIds.length) {
+      await sb.from('job_costs').update({ payment_status: 'paid' }).in('id', costIds)
+    }
+  }
 
   const [showModal, setShowModal]     = useState(false)
   const [editing, setEditing]         = useState<Bill | null>(null)
@@ -91,11 +110,14 @@ export default function BillsPage() {
     setAutoSyncing(true)
     fetch('/api/xero/sync-bills', { method: 'POST' })
       .then(r => r.json())
-      .then((d: { synced?: Array<{ id: string; status: BillStatus }> }) => {
+      .then(async (d: { synced?: Array<{ id: string; status: BillStatus }> }) => {
         if (d.synced?.length) {
           for (const { id, status } of d.synced) {
             const bill = bills.find(b => b.id === id)
-            if (bill) updateBill({ ...bill, status })
+            if (bill) {
+              await updateBill({ ...bill, status })
+              await syncTimeLogsForBill(bill, status)
+            }
           }
         }
         setLastSynced(Date.now())
@@ -242,11 +264,17 @@ export default function BillsPage() {
       })
       const d = await r.json() as { status?: BillStatus; error?: string }
       if (d.error) { alert(`Xero error: ${d.error}`); return }
-      if (d.status) await updateBill({ ...b, status: d.status })
+      if (d.status) {
+        await updateBill({ ...b, status: d.status })
+        await syncTimeLogsForBill(b, d.status)
+      }
     } finally { setXeroPulling(null) }
   }
 
-  async function markPaid(b: Bill) { await updateBill({ ...b, status: 'paid' }) }
+  async function markPaid(b: Bill) {
+    await updateBill({ ...b, status: 'paid' })
+    await syncTimeLogsForBill(b, 'paid')
+  }
 
   async function del(b: Bill) {
     if (!confirm(`Delete bill ${b.ref}? This cannot be undone.`)) return
