@@ -634,9 +634,16 @@ export default function SubcontractorsPage() {
   }
 
   async function deleteWeek(contactId: string, ws: string) {
-    if (!confirm('Delete all time entries for this week?')) return
-    const ids = timeLogs.filter(l => l.contact_id === contactId && (l.week_start ?? getWeekStart(l.entry_date)) === ws).map(l => l.id)
+    const weekLogs = timeLogs.filter(l => l.contact_id === contactId && (l.week_start ?? getWeekStart(l.entry_date)) === ws)
+    const costIds = weekLogs.map(l => l.job_cost_id).filter(Boolean) as string[]
+    const hasCosts = costIds.length > 0
+    const msg = hasCosts
+      ? `Delete all ${weekLogs.length} time entries for this week?\n\nThis will also remove the ${costIds.length} linked job cost record${costIds.length !== 1 ? 's' : ''} from job tracking.`
+      : `Delete all ${weekLogs.length} time entries for this week?`
+    if (!confirm(msg)) return
+    const ids = weekLogs.map(l => l.id)
     if (ids.length > 0) await sb.from('sub_admin_time_logs').delete().in('id', ids)
+    if (costIds.length > 0) await sb.from('job_costs').delete().in('id', costIds)
     await load()
   }
 
