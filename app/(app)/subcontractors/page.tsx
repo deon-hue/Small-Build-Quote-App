@@ -598,10 +598,29 @@ export default function SubcontractorsPage() {
     const key = `${contactId}_${ws}`
     setSendingToBills(key)
     try {
+      const { data: { user } } = await sb.auth.getUser()
+      if (!user) return
       const billableLogs = timeLogs
         .filter(l => l.contact_id === contactId && (l.week_start ?? getWeekStart(l.entry_date)) === ws && l.status !== 'paid' && !l.xero_bill_id)
         .sort((a, b) => a.entry_date.localeCompare(b.entry_date))
       if (billableLogs.length === 0) return
+      // Approve any still-pending days and link job_costs
+      for (const log of billableLogs) {
+        if (log.status === 'pending') {
+          await sb.from('sub_admin_time_logs').update({ status: 'approved' }).eq('id', log.id)
+          if (log.job_id && !log.job_cost_id) {
+            const cost = await insertJobCost(sb, user.id, {
+              jobId: log.job_id, source: 'timesheet', costCategory: isPaye(log.contact_id) ? 'labour' : 'subcontractors',
+              supplier: contactName(log.contact_id),
+              description: log.notes || `Sub time — ${log.entry_date}`,
+              docDate: log.entry_date, docNumber: '',
+              netAmount: log.amount, vatAmount: 0, grossAmount: log.amount,
+              paymentStatus: 'unpaid', chargeToClient: false,
+            })
+            if (cost?.id) await sb.from('sub_admin_time_logs').update({ job_cost_id: cost.id }).eq('id', log.id)
+          }
+        }
+      }
       let li = 0
       const lineItems = billableLogs.map(log => {
         const dow = new Date(log.entry_date + 'T12:00:00').getDay()
@@ -1322,19 +1341,12 @@ export default function SubcontractorsPage() {
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
                           <span style={{ fontWeight: 700, fontSize: 14 }}>{fmt(total)}</span>
-                          {allApproved
-                            ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>✓ Approved</span>
-                            : <button onClick={() => approveWeek(contactId, ws)} style={{ fontSize: 11, padding: '3px 10px', background: '#fff', border: '1px solid #16a34a', color: '#16a34a', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>Approve week</button>
-                          }
                           {anyXero
                             ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#dbeafe', color: '#1e40af', fontWeight: 600 }}>✓ Xero</span>
                             : allPaid
                               ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#f3f4f6', color: '#374151', fontWeight: 600 }}>✓ Cash paid</span>
-                              : allApproved
-                                ? <>
-                                    {!isPaye(contactId) && <button onClick={() => pushWeekToXero(contactId, ws)} disabled={xeroPushingLog === key} style={{ fontSize: 11, padding: '3px 10px', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb', borderRadius: 6, cursor: 'pointer', fontWeight: 600, opacity: xeroPushingLog === key ? 0.6 : 1 }}>{xeroPushingLog === key ? '…' : '⚡ Xero'}</button>}
-                                    <button onClick={() => markWeekPaidCash(contactId, ws)} style={{ fontSize: 11, padding: '3px 10px', background: '#fff', border: '1px solid #d1d5db', color: '#374151', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>💵 Cash paid</button>
-                                  </>
+                              : billableCount > 0
+                                ? <button onClick={() => markWeekPaidCash(contactId, ws)} style={{ fontSize: 11, padding: '3px 10px', background: '#fff', border: '1px solid #d1d5db', color: '#374151', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>💵 Cash paid</button>
                                 : null
                           }
                           {billableCount > 0 && (
@@ -1374,7 +1386,6 @@ export default function SubcontractorsPage() {
                                     : <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                                         <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#fef9c3', color: '#854d0e', fontWeight: 600 }}>⏳ Pending</span>
                                         <button onClick={() => markDayCash(log)} style={{ fontSize: 10, padding: '2px 7px', background: '#f9fafb', border: '1px solid #d1d5db', color: '#374151', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>💵 Cash</button>
-                                        {!isPaye(log.contact_id) && <button onClick={() => pushDayToXero(log)} disabled={xeroPushingLog === log.id} style={{ fontSize: 10, padding: '2px 7px', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb', borderRadius: 4, cursor: 'pointer', fontWeight: 600, opacity: xeroPushingLog === log.id ? 0.6 : 1 }}>{xeroPushingLog === log.id ? '…' : '⚡ Xero'}</button>}
                                       </div>
                                 }
                               </div>
