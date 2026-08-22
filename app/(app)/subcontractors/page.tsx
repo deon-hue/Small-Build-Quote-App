@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useApp } from '@/contexts/AppContext'
 import { ContactPicker } from '@/components/ContactPicker'
@@ -106,7 +107,8 @@ function fmtWeekRange(ws: string): string {
 
 export default function SubcontractorsPage() {
   const sb = createClient()
-  const { jobs, clients, updateClient, addClient } = useApp()
+  const router = useRouter()
+  const { jobs, clients, updateClient, addClient, addBill } = useApp()
   const subs = clients.filter(c => c.clientType === 'subcontractor' || c.clientType === 'supplier')
 
   const [contracts, setContracts] = useState<Contract[]>([])
@@ -175,6 +177,7 @@ export default function SubcontractorsPage() {
   const [weekRows, setWeekRows] = useState<DayRow[]>([])
   const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set())
   const [logFilter, setLogFilter] = useState('')
+  const [sendingToBills, setSendingToBills] = useState<string | null>(null)
   const [fixingCosts, setFixingCosts] = useState(false)
   const [fixingLabour, setFixingLabour] = useState(false)
 
@@ -589,6 +592,45 @@ export default function SubcontractorsPage() {
     setWeekModal(false)
     await load()
     setSaving(false)
+  }
+
+  async function sendToBills(contactId: string, ws: string) {
+    const key = `${contactId}_${ws}`
+    setSendingToBills(key)
+    try {
+      const billableLogs = timeLogs
+        .filter(l => l.contact_id === contactId && (l.week_start ?? getWeekStart(l.entry_date)) === ws && l.status !== 'paid' && !l.xero_bill_id)
+        .sort((a, b) => a.entry_date.localeCompare(b.entry_date))
+      if (billableLogs.length === 0) return
+      let li = 0
+      const lineItems = billableLogs.map(log => {
+        const dow = new Date(log.entry_date + 'T12:00:00').getDay()
+        const dayLabel = DAY_LABELS[dow === 0 ? 6 : dow - 1]
+        const dateLabel = new Date(log.entry_date + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+        const rateLabel: Record<AdminTimeLog['rate_type'], string> = { day: 'Day rate', half_day: 'Half day', hourly: `${log.total_hours ?? '?'}h`, custom: 'Custom' }
+        return { id: ++li, desc: `${dayLabel} ${dateLabel}${log.notes ? ` — ${log.notes}` : ''} (${rateLabel[log.rate_type]} @ ${fmt(log.rate_amount)})`, category: 'labour' as const, amount: Number(log.amount) }
+      })
+      const total = billableLogs.reduce((s, l) => s + Number(l.amount), 0)
+      const sub = clients.find(c => c.id === contactId)
+      const cisRate = sub?.cisPercentage ?? 0
+      const cisDeduction = Math.round(total * cisRate) / 100
+      const jobCounts = new Map<string, number>()
+      for (const l of billableLogs) if (l.job_id) jobCounts.set(l.job_id, (jobCounts.get(l.job_id) ?? 0) + 1)
+      const dominantJobId = [...jobCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? ''
+      const weekEnd = new Date(ws + 'T12:00:00'); weekEnd.setDate(weekEnd.getDate() + 6)
+      await addBill({
+        supplierId: contactId, supplierName: contactName(contactId),
+        jobId: dominantJobId,
+        billDate: weekEnd.toISOString().slice(0, 10), dueDate: '',
+        description: `Week of ${fmtWeekRange(ws)}`,
+        lineItems, labourAmount: total, materialsAmount: 0, plantAmount: 0, otherAmount: 0,
+        subtotal: total, cisRate, cisDeduction, totalPayable: total - cisDeduction,
+        status: 'draft', notes: '', syncToXero: false,
+      })
+      router.push('/bills')
+    } finally {
+      setSendingToBills(null)
+    }
   }
 
   async function deleteWeek(contactId: string, ws: string) {
@@ -1248,6 +1290,7 @@ export default function SubcontractorsPage() {
                   const anyXero = logs.some(l => l.xero_bill_id)
                   const cashCount = logs.filter(l => l.status === 'paid' && !l.xero_bill_id).length
                   const pendingCount = logs.filter(l => l.status === 'pending').length
+                  const billableCount = logs.filter(l => l.status !== 'paid' && !l.xero_bill_id).length
                   const isExpanded = expandedWeeks.has(key)
                   return (
                     <div key={key} style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
@@ -1287,6 +1330,15 @@ export default function SubcontractorsPage() {
                                   </>
                                 : null
                           }
+                          {billableCount > 0 && (
+                            <button
+                              onClick={() => sendToBills(contactId, ws)}
+                              disabled={sendingToBills === key}
+                              style={{ fontSize: 11, padding: '3px 10px', background: '#f5f3ff', border: '1px solid #c4b5fd', color: '#6d28d9', borderRadius: 6, cursor: 'pointer', fontWeight: 600, opacity: sendingToBills === key ? 0.6 : 1 }}
+                            >
+                              {sendingToBills === key ? '…' : '→ Bills'}
+                            </button>
+                          )}
                           <button onClick={() => openWeekSheet(contactId, ws)} style={{ fontSize: 11, padding: '3px 10px', background: '#fff', border: '1px solid #d1d5db', color: '#374151', borderRadius: 6, cursor: 'pointer' }}>Edit</button>
                           <button onClick={() => deleteWeek(contactId, ws)} style={{ fontSize: 11, padding: '3px 10px', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 6, cursor: 'pointer' }}>Delete</button>
                         </div>
