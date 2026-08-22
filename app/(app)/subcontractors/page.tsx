@@ -611,12 +611,33 @@ export default function SubcontractorsPage() {
           logId = ins?.id
         }
         // If cash-paid, mark status and link to job_costs
+        // Sync job_cost job_id when job changes on an existing log (regardless of cash status)
+        if (row.existingId) {
+          const existingLog = timeLogs.find(l => l.id === row.existingId)
+          if (existingLog?.job_cost_id && !row.paidCash) {
+            // Non-cash log with existing cost: sync job_id and amount
+            const updatePayload: Record<string, unknown> = {
+              net_amount: amount, gross_amount: amount,
+              description: row.notes.trim() || `Sub time — ${row.date}`,
+            }
+            if (row.jobId) updatePayload.job_id = row.jobId
+            else updatePayload.job_id = null
+            await sb.from('job_costs').update(updatePayload).eq('id', existingLog.job_cost_id)
+          }
+        }
+
         if (row.paidCash && logId) {
           await sb.from('sub_admin_time_logs').update({ status: 'paid' }).eq('id', logId)
           if (row.jobId) {
             const existingLog = timeLogs.find(l => l.id === logId)
             if (existingLog?.job_cost_id) {
-              await sb.from('job_costs').update({ payment_status: 'paid' }).eq('id', existingLog.job_cost_id)
+              // Sync job_id, amount, and payment_status on existing cost
+              await sb.from('job_costs').update({
+                payment_status: 'paid',
+                job_id: row.jobId,
+                net_amount: amount, gross_amount: amount,
+                description: row.notes.trim() || `Sub time — ${row.date}`,
+              }).eq('id', existingLog.job_cost_id)
             } else {
               const cost = await insertJobCost(sb, user.id, {
                 jobId: row.jobId, source: 'timesheet',
