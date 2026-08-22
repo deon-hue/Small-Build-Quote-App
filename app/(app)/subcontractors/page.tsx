@@ -644,7 +644,7 @@ export default function SubcontractorsPage() {
         description: `Week of ${fmtWeekRange(ws)}`,
         lineItems, labourAmount: total, materialsAmount: 0, plantAmount: 0, otherAmount: 0,
         subtotal: total, cisRate, cisDeduction, totalPayable: total - cisDeduction,
-        status: 'draft', notes: '', syncToXero: false,
+        status: 'draft', notes: 'Awaiting subcontractor invoice', syncToXero: false,
       })
       router.push('/bills')
     } finally {

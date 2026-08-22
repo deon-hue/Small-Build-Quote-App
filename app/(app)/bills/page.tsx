@@ -333,6 +333,9 @@ export default function BillsPage() {
                     {b.documentId && (
                       <div style={{ fontSize: 11, color: '#7c3aed', marginTop: 2 }}>📄 Invoice attached</div>
                     )}
+                    {b.notes && !b.xeroBillId && (
+                      <div style={{ fontSize: 11, color: '#92400e', background: '#fef9c3', borderRadius: 4, padding: '1px 5px', marginTop: 4, display: 'inline-block' }}>⏳ {b.notes}</div>
+                    )}
                   </td>
                   <td style={{ padding: '10px 14px' }}>{b.supplierName || '—'}</td>
                   <td style={{ padding: '10px 14px', color: 'var(--muted)' }}>{b.jobId ? jobLabel(b.jobId) : '—'}</td>
