@@ -885,9 +885,11 @@ export default function SubcontractorsPage() {
     const { data: { user } } = await sb.auth.getUser()
     if (!user) return
     setFixingCosts(true)
-    const toFix = timeLogs.filter(l => l.job_id && !l.job_cost_id && (l.status === 'approved' || l.status === 'paid'))
     let count = 0
-    for (const log of toFix) {
+
+    // Pass 1: create costs for logs with job_id but no job_cost_id
+    const toCreate = timeLogs.filter(l => l.job_id && !l.job_cost_id && (l.status === 'approved' || l.status === 'paid'))
+    for (const log of toCreate) {
       const cost = await insertJobCost(sb, user.id, {
         jobId: log.job_id!, source: 'timesheet', costCategory: isPaye(log.contact_id) ? 'labour' : 'subcontractors',
         supplier: contactName(log.contact_id),
@@ -901,10 +903,29 @@ export default function SubcontractorsPage() {
         count++
       }
     }
+
+    // Pass 2: sync job_id on existing costs where it may be null or stale
+    // Groups logs by job_id so we can batch-update their linked costs
+    const toSync = timeLogs.filter(l => l.job_id && l.job_cost_id && (l.status === 'approved' || l.status === 'paid'))
+    const jobGroups = new Map<string, string[]>()
+    for (const log of toSync) {
+      const jid = log.job_id!
+      if (!jobGroups.has(jid)) jobGroups.set(jid, [])
+      jobGroups.get(jid)!.push(log.job_cost_id!)
+    }
+    for (const [jobId, costIds] of jobGroups.entries()) {
+      // Only update costs that don't already have this job_id (avoids unnecessary writes)
+      const { count: updated } = await sb.from('job_costs')
+        .update({ job_id: jobId })
+        .in('id', costIds)
+        .or(`job_id.is.null,job_id.neq.${jobId}`)
+      count += (updated ?? 0)
+    }
+
     setFixingCosts(false)
     await load()
-    if (count > 0) alert(`Created ${count} missing job cost${count === 1 ? '' : 's'}`)
-    else alert('No missing job costs found')
+    if (count > 0) alert(`Fixed ${count} job cost link${count === 1 ? '' : 's'}`)
+    else alert('No job cost issues found')
   }
 
   async function fixLabourCategories() {
