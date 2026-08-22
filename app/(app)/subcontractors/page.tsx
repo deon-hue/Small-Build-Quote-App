@@ -135,7 +135,7 @@ export default function SubcontractorsPage() {
   const [statusFilter, setStatusFilter] = useState('active')
 
   // Contract modal
-  const emptyForm = { contactId: '', jobId: '', type: 'rate' as 'rate' | 'fixed', description: '', rateType: 'daily' as 'hourly' | 'daily', rateAmount: '', quotedAmount: '', notes: '', status: 'active' as 'active' | 'completed' | 'cancelled' }
+  const emptyForm = { contactId: '', jobId: '', type: 'fixed' as 'rate' | 'fixed', description: '', rateType: 'daily' as 'hourly' | 'daily', rateAmount: '', quotedAmount: '', notes: '', status: 'active' as 'active' | 'completed' | 'cancelled' }
   const [contractModal, setContractModal] = useState(false)
   const [editingContract, setEditingContract] = useState<Contract | null>(null)
   const [form, setForm] = useState(emptyForm)
@@ -154,6 +154,33 @@ export default function SubcontractorsPage() {
       setPendingSelectName('')
     }
   }, [clients, pendingSelectName])
+
+  // New subcontractor contact modal
+  const [newContactModal, setNewContactModal] = useState(false)
+  const [newContactForm, setNewContactForm] = useState({ name: '', email: '', phone: '' })
+  const [newContactSaving, setNewContactSaving] = useState(false)
+
+  async function saveNewContact() {
+    if (!newContactForm.name.trim()) return
+    setNewContactSaving(true)
+    try {
+      const name = newContactForm.name.trim()
+      const parts = name.split(' ')
+      const first = parts.slice(0, -1).join(' ') || parts[0]
+      const last = parts.length > 1 ? parts[parts.length - 1] : ''
+      await addClient({
+        name, first, last,
+        email: newContactForm.email.trim(), phone: newContactForm.phone.trim(),
+        address: '', notes: '', paymentTerms: '30 days',
+        clientType: 'subcontractor', portalStatus: 'no_email', addedFrom: 'subcontractors',
+        portalSettings: undefined as never,
+      })
+      setNewContactModal(false)
+      setNewContactForm({ name: '', email: '', phone: '' })
+    } finally {
+      setNewContactSaving(false)
+    }
+  }
 
   // Time entry modal
   const emptyEntry = { entryDate: today(), units: '', notes: '' }
@@ -913,8 +940,11 @@ export default function SubcontractorsPage() {
           <option value="cancelled">Cancelled</option>
         </select>
 
+        <button onClick={() => { setNewContactForm({ name: '', email: '', phone: '' }); setNewContactModal(true) }} style={{ padding: '8px 16px', background: '#fff', color: '#374151', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          + New Contact
+        </button>
         <button onClick={openNewContract} style={{ padding: '8px 16px', background: '#111827', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-          + New Contract
+          📋 Fixed Quote
         </button>
         <button onClick={() => openWeekSheet()} style={{ padding: '8px 16px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
           ⏱ Log Time
@@ -1406,7 +1436,7 @@ export default function SubcontractorsPage() {
       {contractModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: '#fff', borderRadius: 10, padding: 24, width: '100%', maxWidth: 520, maxHeight: '90vh', overflow: 'auto' }}>
-            <h3 style={{ margin: '0 0 20px', fontSize: 16, fontWeight: 700 }}>{editingContract ? 'Edit Sub Contract' : 'New Sub Contract'}</h3>
+            <h3 style={{ margin: '0 0 20px', fontSize: 16, fontWeight: 700 }}>{editingContract ? 'Edit Fixed Quote' : 'New Fixed Quote'}</h3>
 
             <div style={{ display: 'grid', gap: 14 }}>
               <div>
@@ -1493,47 +1523,16 @@ export default function SubcontractorsPage() {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Contract Type *</label>
-                <div style={{ display: 'flex', gap: 10 }}>
-                  {(['rate', 'fixed'] as const).map(t => (
-                    <label key={t} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', padding: '8px 14px', border: `1px solid ${form.type === t ? '#2563eb' : '#d1d5db'}`, borderRadius: 6, background: form.type === t ? '#eff6ff' : '#fff' }}>
-                      <input type="radio" checked={form.type === t} onChange={() => setForm(f => ({ ...f, type: t }))} style={{ accentColor: '#2563eb' }} />
-                      {t === 'rate' ? '⏱ Day/Hour Rate' : '📋 Fixed Quote'}
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div>
                 <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Description / Scope *</label>
                 <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="e.g. Plastering works, First fix plumbing…"
                   style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
               </div>
 
-              {form.type === 'rate' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Rate Type</label>
-                    <select value={form.rateType} onChange={e => setForm(f => ({ ...f, rateType: e.target.value as 'hourly' | 'daily' }))} style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13 }}>
-                      <option value="daily">Daily</option>
-                      <option value="hourly">Hourly</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Rate (£) *</label>
-                    <input type="number" min="0" step="0.01" value={form.rateAmount} onChange={e => setForm(f => ({ ...f, rateAmount: e.target.value }))} placeholder="e.g. 180"
-                      style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
-                  </div>
-                </div>
-              )}
-
-              {form.type === 'fixed' && (
-                <div>
-                  <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Quoted Amount (£) *</label>
-                  <input type="number" min="0" step="0.01" value={form.quotedAmount} onChange={e => setForm(f => ({ ...f, quotedAmount: e.target.value }))} placeholder="e.g. 4500"
-                    style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
-                </div>
-              )}
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Quoted Amount (£) *</label>
+                <input type="number" min="0" step="0.01" value={form.quotedAmount} onChange={e => setForm(f => ({ ...f, quotedAmount: e.target.value }))} placeholder="e.g. 4500"
+                  style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
+              </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Notes</label>
@@ -1558,7 +1557,57 @@ export default function SubcontractorsPage() {
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
               <button onClick={() => { setContractModal(false); setError('') }} style={{ padding: '8px 16px', background: '#f9fafb', color: '#374151', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, cursor: 'pointer' }}>Cancel</button>
               <button onClick={saveContract} disabled={saving} style={{ padding: '8px 20px', background: '#111827', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
-                {saving ? 'Saving…' : editingContract ? 'Save Changes' : 'Create Contract'}
+                {saving ? 'Saving…' : editingContract ? 'Save Changes' : 'Create Fixed Quote'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── New Contact Modal ──────────────────────────────────────── */}
+      {newContactModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: '#fff', borderRadius: 10, padding: 24, width: '100%', maxWidth: 420 }}>
+            <h3 style={{ margin: '0 0 20px', fontSize: 16, fontWeight: 700 }}>New Subcontractor Contact</h3>
+            <div style={{ display: 'grid', gap: 12 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Full Name *</label>
+                <input
+                  value={newContactForm.name}
+                  onChange={e => setNewContactForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="e.g. John Smith"
+                  style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Email</label>
+                <input
+                  type="email"
+                  value={newContactForm.email}
+                  onChange={e => setNewContactForm(f => ({ ...f, email: e.target.value }))}
+                  placeholder="john@example.com"
+                  style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Phone</label>
+                <input
+                  value={newContactForm.phone}
+                  onChange={e => setNewContactForm(f => ({ ...f, phone: e.target.value }))}
+                  placeholder="07700 000000"
+                  style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
+                />
+              </div>
+            </div>
+            {error && <div style={{ color: '#dc2626', fontSize: 12, marginTop: 12 }}>{error}</div>}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
+              <button onClick={() => { setNewContactModal(false); setError('') }} style={{ padding: '8px 16px', background: '#f9fafb', color: '#374151', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+              <button
+                onClick={saveNewContact}
+                disabled={!newContactForm.name.trim() || newContactSaving}
+                style={{ padding: '8px 20px', background: '#111827', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer', opacity: !newContactForm.name.trim() || newContactSaving ? 0.6 : 1 }}
+              >
+                {newContactSaving ? 'Saving…' : 'Add Contact'}
               </button>
             </div>
           </div>
