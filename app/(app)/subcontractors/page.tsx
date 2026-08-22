@@ -105,7 +105,7 @@ function fmtWeekRange(ws: string): string {
 
 export default function SubcontractorsPage() {
   const sb = createClient()
-  const { jobs, clients, updateClient } = useApp()
+  const { jobs, clients, updateClient, addClient } = useApp()
   const subs = clients.filter(c => c.clientType === 'subcontractor' || c.clientType === 'supplier')
 
   const [contracts, setContracts] = useState<Contract[]>([])
@@ -136,6 +136,21 @@ export default function SubcontractorsPage() {
   const [contractModal, setContractModal] = useState(false)
   const [editingContract, setEditingContract] = useState<Contract | null>(null)
   const [form, setForm] = useState(emptyForm)
+  // Quick-add new subcontractor inline in the contract modal
+  const [quickAddOpen, setQuickAddOpen] = useState(false)
+  const [quickAddSaving, setQuickAddSaving] = useState(false)
+  const [quickAdd, setQuickAdd] = useState({ name: '', email: '', phone: '' })
+  const [pendingSelectName, setPendingSelectName] = useState('')
+
+  // Auto-select newly created subcontractor once clients list updates
+  useEffect(() => {
+    if (!pendingSelectName) return
+    const match = clients.find(c => c.name.trim().toLowerCase() === pendingSelectName.toLowerCase())
+    if (match) {
+      setForm(f => ({ ...f, contactId: match.id }))
+      setPendingSelectName('')
+    }
+  }, [clients, pendingSelectName])
 
   // Time entry modal
   const emptyEntry = { entryDate: today(), units: '', notes: '' }
@@ -1296,13 +1311,78 @@ export default function SubcontractorsPage() {
 
             <div style={{ display: 'grid', gap: 14 }}>
               <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Subcontractor *</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <label style={{ fontSize: 12, color: '#374151', fontWeight: 500 }}>Subcontractor *</label>
+                  <button
+                    type="button"
+                    onClick={() => { setQuickAddOpen(o => !o); setQuickAdd({ name: '', email: '', phone: '' }) }}
+                    style={{ fontSize: 11, color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 600 }}
+                  >
+                    {quickAddOpen ? '✕ Cancel' : '+ New Subcontractor'}
+                  </button>
+                </div>
                 <ContactPicker
                   value={form.contactId}
                   onChange={id => setForm(f => ({ ...f, contactId: id }))}
                   contacts={subs}
                   placeholder="Search subcontractor…"
                 />
+                {quickAddOpen && (
+                  <div style={{ marginTop: 10, padding: '12px 14px', background: '#f0f7ff', border: '1px solid #bfdbfe', borderRadius: 8 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#1d4ed8', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.5px' }}>New Subcontractor</div>
+                    <div style={{ display: 'grid', gap: 8 }}>
+                      <input
+                        value={quickAdd.name}
+                        onChange={e => setQuickAdd(q => ({ ...q, name: e.target.value }))}
+                        placeholder="Full name *"
+                        style={{ width: '100%', padding: '7px 10px', border: '1px solid #bfdbfe', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
+                      />
+                      <input
+                        type="email"
+                        value={quickAdd.email}
+                        onChange={e => setQuickAdd(q => ({ ...q, email: e.target.value }))}
+                        placeholder="Email address"
+                        style={{ width: '100%', padding: '7px 10px', border: '1px solid #bfdbfe', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
+                      />
+                      <input
+                        value={quickAdd.phone}
+                        onChange={e => setQuickAdd(q => ({ ...q, phone: e.target.value }))}
+                        placeholder="Phone number"
+                        style={{ width: '100%', padding: '7px 10px', border: '1px solid #bfdbfe', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
+                      />
+                      <button
+                        type="button"
+                        disabled={!quickAdd.name.trim() || quickAddSaving}
+                        onClick={async () => {
+                          if (!quickAdd.name.trim()) return
+                          setQuickAddSaving(true)
+                          try {
+                            const name = quickAdd.name.trim()
+                            const parts = name.split(' ')
+                            const first = parts.slice(0, -1).join(' ') || parts[0]
+                            const last = parts.length > 1 ? parts[parts.length - 1] : ''
+                            await addClient({
+                              name, first, last,
+                              email: quickAdd.email.trim(), phone: quickAdd.phone.trim(),
+                              address: '', notes: '', paymentTerms: '30 days',
+                              clientType: 'subcontractor',
+                              portalStatus: 'no_email', addedFrom: 'subcontractors',
+                              portalSettings: undefined as never,
+                            })
+                            // useEffect will auto-select once clients list updates
+                            setPendingSelectName(name)
+                            setQuickAddOpen(false)
+                          } finally {
+                            setQuickAddSaving(false)
+                          }
+                        }}
+                        style={{ padding: '7px 14px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: !quickAdd.name.trim() || quickAddSaving ? 0.5 : 1 }}
+                      >
+                        {quickAddSaving ? 'Saving…' : 'Add & Select'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
