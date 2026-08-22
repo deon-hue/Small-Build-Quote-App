@@ -321,7 +321,18 @@ export default function SubcontractorsPage() {
   async function togglePaye(contactId: string) {
     const contact = clients.find(c => c.id === contactId)
     if (!contact) return
-    await updateClient({ ...contact, isPaye: !contact.isPaye })
+    const newIsPaye = !contact.isPaye
+    await updateClient({ ...contact, isPaye: newIsPaye })
+    const newCategory = newIsPaye ? 'labour' : 'subcontractors'
+    // Update existing job_costs records linked via time logs for this contact
+    const linkedIds = timeLogs.filter(l => l.contact_id === contactId && l.job_cost_id).map(l => l.job_cost_id!)
+    if (linkedIds.length > 0) {
+      await sb.from('job_costs').update({ cost_category: newCategory }).in('id', linkedIds)
+    }
+    // Also update by supplier name to catch any without a back-reference
+    if (contact.name) {
+      await sb.from('job_costs').update({ cost_category: newCategory }).eq('supplier', contact.name).eq('source', 'timesheet')
+    }
   }
   const jobName = (id: string | null) => id ? (jobs.find(j => j.id === id)?.client ?? jobs.find(j => j.id === id)?.address ?? '—') : '—'
   const contractEntries = (cid: string) => timeEntries.filter(e => e.sub_contract_id === cid)
