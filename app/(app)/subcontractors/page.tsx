@@ -80,6 +80,7 @@ interface DayRow {
   rateAmount: string
   hours: string
   notes: string
+  paidCash: boolean
   existingId?: string
 }
 
@@ -518,8 +519,8 @@ export default function SubcontractorsPage() {
     const defRate = (contact?.subDayRate ?? contact?.subHalfDayRate ?? contact?.subHourlyRate ?? 0).toString()
     return getWeekDays(ws).map(date => {
       const ex = existingLogs.find(l => l.contact_id === contactId && l.entry_date === date)
-      if (ex) return { date, active: true, jobId: ex.job_id ?? '', rateType: ex.rate_type, rateAmount: ex.rate_amount.toString(), hours: ex.total_hours?.toString() ?? '', notes: ex.notes, existingId: ex.id }
-      return { date, active: false, jobId: '', rateType: defType, rateAmount: defRate, hours: '', notes: '' }
+      if (ex) return { date, active: true, jobId: ex.job_id ?? '', rateType: ex.rate_type, rateAmount: ex.rate_amount.toString(), hours: ex.total_hours?.toString() ?? '', notes: ex.notes, paidCash: ex.status === 'paid', existingId: ex.id }
+      return { date, active: false, jobId: '', rateType: defType, rateAmount: defRate, hours: '', notes: '', paidCash: false }
     })
   }
 
@@ -541,6 +542,7 @@ export default function SubcontractorsPage() {
       const rate = Number(row.rateAmount) || 0
       const amount = row.rateType === 'hourly' ? rate * (Number(row.hours) || 0) : rate
       if (row.active) {
+        let logId = row.existingId
         if (row.existingId) {
           await sb.from('sub_admin_time_logs').update({
             job_id: row.jobId || null, week_start: ws,
@@ -549,14 +551,36 @@ export default function SubcontractorsPage() {
             amount, amount_overridden: false, notes: row.notes.trim(),
           }).eq('id', row.existingId)
         } else {
-          await sb.from('sub_admin_time_logs').insert({
+          const { data: ins } = await sb.from('sub_admin_time_logs').insert({
             user_id: user.id, contact_id: weekSub,
             job_id: row.jobId || null, entry_date: row.date, week_start: ws,
             rate_type: row.rateType, rate_amount: rate,
             total_hours: row.rateType === 'hourly' ? (Number(row.hours) || null) : null,
             amount, amount_overridden: false, notes: row.notes.trim(),
             entry_type: 'payable', status: 'pending',
-          })
+          }).select('id').single()
+          logId = ins?.id
+        }
+        // If cash-paid, mark status and link to job_costs
+        if (row.paidCash && logId) {
+          await sb.from('sub_admin_time_logs').update({ status: 'paid' }).eq('id', logId)
+          if (row.jobId) {
+            const existingLog = timeLogs.find(l => l.id === logId)
+            if (existingLog?.job_cost_id) {
+              await sb.from('job_costs').update({ payment_status: 'paid' }).eq('id', existingLog.job_cost_id)
+            } else {
+              const cost = await insertJobCost(sb, user.id, {
+                jobId: row.jobId, source: 'timesheet',
+                costCategory: isPaye(weekSub) ? 'labour' : 'subcontractors',
+                supplier: contactName(weekSub),
+                description: row.notes.trim() || `Sub time — ${row.date}`,
+                docDate: row.date, docNumber: '',
+                netAmount: amount, vatAmount: 0, grossAmount: amount,
+                paymentStatus: 'paid', chargeToClient: false,
+              })
+              if (cost?.id) await sb.from('sub_admin_time_logs').update({ job_cost_id: cost.id }).eq('id', logId)
+            }
+          }
         }
       } else if (row.existingId) {
         await sb.from('sub_admin_time_logs').delete().eq('id', row.existingId)
@@ -1541,6 +1565,7 @@ export default function SubcontractorsPage() {
                     <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', fontSize: 11 }}>Job</th>
                     <th style={{ padding: '8px 10px', textAlign: 'left', width: 160, fontWeight: 600, color: '#374151', fontSize: 11 }}>Rate</th>
                     <th style={{ padding: '8px 10px', textAlign: 'right', width: 80, fontWeight: 600, color: '#374151', fontSize: 11 }}>Amount</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'center', width: 72, fontWeight: 600, color: '#374151', fontSize: 11 }}>Cash paid?</th>
                     <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', fontSize: 11 }}>Notes</th>
                   </tr>
                 </thead>
@@ -1601,6 +1626,17 @@ export default function SubcontractorsPage() {
                         <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, fontSize: 12, color: row.active ? '#111827' : '#d1d5db' }}>
                           {row.active ? fmt(rowAmt) : '—'}
                         </td>
+                        <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                          {row.active ? (
+                            <input
+                              type="checkbox"
+                              checked={row.paidCash}
+                              title={row.paidCash ? 'Paid in cash — will be linked to job, not sent to Xero' : 'Not yet paid — will generate a Xero bill'}
+                              onChange={e => setWeekRows(rows => rows.map((r, idx) => idx === i ? { ...r, paidCash: e.target.checked } : r))}
+                              style={{ accentColor: '#16a34a', width: 16, height: 16, cursor: 'pointer' }}
+                            />
+                          ) : <span style={{ color: '#d1d5db', fontSize: 12 }}>—</span>}
+                        </td>
                         <td style={{ padding: '6px 8px' }}>
                           {row.active ? (
                             <input value={row.notes} onChange={e => setWeekRows(rows => rows.map((r, idx) => idx === i ? { ...r, notes: e.target.value } : r))}
@@ -1616,11 +1652,16 @@ export default function SubcontractorsPage() {
                   <tr style={{ background: '#f9fafb', borderTop: '2px solid #e5e7eb' }}>
                     <td colSpan={3} style={{ padding: '10px', fontWeight: 600, fontSize: 13, color: '#374151' }}>
                       Total · {weekRows.filter(r => r.active).length} day{weekRows.filter(r => r.active).length === 1 ? '' : 's'} worked
+                      {weekRows.some(r => r.active && r.paidCash) && (
+                        <span style={{ marginLeft: 10, fontSize: 11, color: '#16a34a', fontWeight: 500 }}>
+                          · {weekRows.filter(r => r.active && r.paidCash).length} cash paid
+                        </span>
+                      )}
                     </td>
                     <td style={{ padding: '10px', textAlign: 'right', fontWeight: 700, fontSize: 14 }}>
                       {fmt(weekRows.filter(r => r.active).reduce((s, r) => s + (r.rateType === 'hourly' ? (Number(r.rateAmount) || 0) * (Number(r.hours) || 0) : (Number(r.rateAmount) || 0)), 0))}
                     </td>
-                    <td />
+                    <td colSpan={2} />
                   </tr>
                 </tfoot>
               </table>
