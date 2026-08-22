@@ -37,7 +37,7 @@ function fmtDateTime(iso: string | null | undefined) {
 }
 
 function ClientsPageInner() {
-  const { clients, quotes, jobs, settings, addClient, updateClient, deleteClient, markPortalInvite, loading } = useApp()
+  const { clients, quotes, jobs, settings, bills, addClient, updateClient, deleteClient, markPortalInvite, loading } = useApp()
   const supabase = createClient()
   const [selected, setSelected] = useState<Client | null>(null)
   const [previewQuote, setPreviewQuote] = useState<Quote | null>(null)
@@ -78,6 +78,47 @@ function ClientsPageInner() {
       .then(({ data }) => { setActivityLogs((data ?? []) as ActivityLog[]); setActivityLoading(false) })
   }, [selected?.email])
 
+  // ── Subcontractor history ────────────────────────────────────
+  interface SubTimeLog {
+    id: string; contact_id: string; job_id: string | null; entry_date: string; week_start: string
+    rate_type: string; rate_amount: number; amount: number; notes: string; status: string
+    entry_type: string
+  }
+  interface SubContract {
+    id: string; description: string; type: string; quoted_amount: number | null
+    rate_type: string | null; rate_amount: number | null; status: string; job_id: string | null
+    created_at: string
+    stages: { id: string; description: string; amount: number; paid_date: string | null }[]
+  }
+  const [subTimeLogs, setSubTimeLogs] = useState<SubTimeLog[]>([])
+  const [subContracts, setSubContracts] = useState<SubContract[]>([])
+  const [subHistoryLoading, setSubHistoryLoading] = useState(false)
+  const [subHistoryTab, setSubHistoryTab] = useState<'logs' | 'bills' | 'quotes'>('logs')
+
+  useEffect(() => {
+    if (!selected || selected.clientType !== 'subcontractor') {
+      setSubTimeLogs([]); setSubContracts([]); return
+    }
+    setSubHistoryLoading(true)
+    Promise.all([
+      supabase.from('sub_admin_time_logs')
+        .select('id, contact_id, job_id, entry_date, week_start, rate_type, rate_amount, amount, notes, status, entry_type')
+        .eq('contact_id', selected.id)
+        .order('entry_date', { ascending: false })
+        .limit(100),
+      supabase.from('sub_contracts')
+        .select('id, description, type, quoted_amount, rate_type, rate_amount, status, job_id, created_at, sub_payment_stages(id, description, amount, paid_date)')
+        .eq('contact_id', selected.id)
+        .order('created_at', { ascending: false }),
+    ]).then(([logsRes, contractsRes]) => {
+      setSubTimeLogs((logsRes.data ?? []) as SubTimeLog[])
+      const raw = (contractsRes.data ?? []) as (Omit<SubContract, 'stages'> & { sub_payment_stages: SubContract['stages'] })[]
+      setSubContracts(raw.map(c => ({ ...c, stages: c.sub_payment_stages ?? [] })))
+      setSubHistoryLoading(false)
+    })
+  }, [selected?.id, selected?.clientType])
+
+  const subBills = bills.filter(b => b.supplierId === selected?.id)
 
   const portalBase = (typeof window !== 'undefined' ? window.location.origin : '') + '/portal/login'
 
@@ -592,6 +633,176 @@ function ClientsPageInner() {
                     })
                 }
               </div>
+
+              {/* ── Subcontractor History ───────────────────────── */}
+              {selected.clientType === 'subcontractor' && (
+                <div style={{ marginTop: 20, marginBottom: 20 }}>
+                  <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 10 }}>Subcontractor History</div>
+
+                  {/* Tab bar */}
+                  <div style={{ display: 'flex', gap: 0, marginBottom: 12, borderBottom: '2px solid var(--border)' }}>
+                    {([
+                      { key: 'logs',   label: `Time Logs (${subTimeLogs.length})` },
+                      { key: 'bills',  label: `Bills (${subBills.length})` },
+                      { key: 'quotes', label: `Fixed Quotes (${subContracts.length})` },
+                    ] as const).map(t => (
+                      <button key={t.key} onClick={() => setSubHistoryTab(t.key)} style={{
+                        padding: '6px 14px', fontSize: 12, fontWeight: 600, border: 'none', background: 'none', cursor: 'pointer',
+                        color: subHistoryTab === t.key ? 'var(--slate)' : 'var(--muted)',
+                        borderBottom: subHistoryTab === t.key ? '2px solid var(--slate)' : '2px solid transparent',
+                        marginBottom: -2,
+                      }}>{t.label}</button>
+                    ))}
+                  </div>
+
+                  {subHistoryLoading ? (
+                    <div style={{ fontSize: 12, color: 'var(--muted)', padding: '12px 0' }}>Loading…</div>
+                  ) : subHistoryTab === 'logs' ? (
+                    // ── Time Logs ──────────────────────────────────
+                    !subTimeLogs.length ? (
+                      <div style={{ fontSize: 12, color: 'var(--muted)', padding: '12px 0' }}>No time logs recorded yet.</div>
+                    ) : (
+                      <div>
+                        {/* Group by week */}
+                        {Object.entries(
+                          subTimeLogs.reduce<Record<string, SubTimeLog[]>>((acc, log) => {
+                            const wk = log.week_start || log.entry_date
+                            ;(acc[wk] = acc[wk] || []).push(log)
+                            return acc
+                          }, {})
+                        ).map(([wk, logs]) => {
+                          const weekTotal = logs.reduce((s, l) => s + l.amount, 0)
+                          const allPaid = logs.every(l => l.status === 'paid')
+                          const allPending = logs.every(l => l.status === 'pending')
+                          const weekDate = new Date(wk + 'T12:00:00')
+                          const weekEnd = new Date(weekDate); weekEnd.setDate(weekEnd.getDate() + 6)
+                          const fmtWk = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+                          return (
+                            <div key={wk} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontWeight: 600, fontSize: 13 }}>Week of {fmtWk(weekDate)} – {fmtWk(weekEnd)}</div>
+                                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                                    {logs.length} day{logs.length !== 1 ? 's' : ''}{' · '}
+                                    {logs.filter(l => l.status === 'paid').length} cash, {logs.filter(l => l.status !== 'paid').length} bill
+                                  </div>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                  <div className="mono" style={{ fontSize: 15, fontWeight: 700 }}>{fmt(weekTotal)}</div>
+                                  <span style={{
+                                    fontSize: 10, padding: '1px 7px', borderRadius: 10, fontWeight: 600,
+                                    background: allPaid ? '#dcfce7' : allPending ? '#fef3c7' : '#ede9fe',
+                                    color: allPaid ? '#166534' : allPending ? '#92400e' : '#5b21b6',
+                                  }}>
+                                    {allPaid ? '✓ Cash paid' : allPending ? '⏳ Pending' : '↗ To bills'}
+                                  </span>
+                                </div>
+                              </div>
+                              <div style={{ marginTop: 6, paddingLeft: 8 }}>
+                                {logs.map(l => {
+                                  const jobLabel = jobs.find(j => j.id === l.job_id)
+                                  return (
+                                    <div key={l.id} style={{ display: 'flex', gap: 10, fontSize: 11, color: 'var(--muted)', padding: '2px 0' }}>
+                                      <span style={{ minWidth: 72 }}>{fmtDate(l.entry_date)}</span>
+                                      <span style={{ flex: 1 }}>{jobLabel ? (jobLabel.client || jobLabel.address) : '—'}</span>
+                                      <span>{l.notes || '—'}</span>
+                                      <span className="mono">{fmt(l.amount)}</span>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )
+                        })}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', fontSize: 13, fontWeight: 700 }}>
+                          <span>Total logged</span>
+                          <span className="mono">{fmt(subTimeLogs.reduce((s, l) => s + l.amount, 0))}</span>
+                        </div>
+                      </div>
+                    )
+                  ) : subHistoryTab === 'bills' ? (
+                    // ── Bills ──────────────────────────────────────
+                    !subBills.length ? (
+                      <div style={{ fontSize: 12, color: 'var(--muted)', padding: '12px 0' }}>No bills recorded yet.</div>
+                    ) : (
+                      <div>
+                        {subBills.map(b => (
+                          <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: 600, fontSize: 13 }}>{b.ref || 'Draft bill'}</div>
+                              {b.notes && <div style={{ fontSize: 11, color: '#92400e', marginTop: 2 }}>⏳ {b.notes}</div>}
+                              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{fmtDate(b.billDate)}</div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div className="mono" style={{ fontSize: 15, fontWeight: 700 }}>{fmt(b.lineItems.reduce((s, li) => s + (li.amount || 0), 0))}</div>
+                              <span style={{
+                                fontSize: 10, padding: '1px 7px', borderRadius: 10, fontWeight: 600,
+                                background: b.status === 'paid' ? '#dcfce7' : b.status === 'approved' ? '#dbeafe' : '#f3f4f6',
+                                color: b.status === 'paid' ? '#166534' : b.status === 'approved' ? '#1e40af' : '#374151',
+                              }}>{b.status}</span>
+                            </div>
+                          </div>
+                        ))}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', fontSize: 13, fontWeight: 700 }}>
+                          <span>Total billed</span>
+                          <span className="mono">{fmt(subBills.reduce((s, b) => s + b.lineItems.reduce((ls, li) => ls + (li.amount || 0), 0), 0))}</span>
+                        </div>
+                      </div>
+                    )
+                  ) : (
+                    // ── Fixed Quotes ────────────────────────────────
+                    !subContracts.length ? (
+                      <div style={{ fontSize: 12, color: 'var(--muted)', padding: '12px 0' }}>No fixed quotes recorded yet.</div>
+                    ) : (
+                      <div>
+                        {subContracts.map(c => {
+                          const jobLabel = jobs.find(j => j.id === c.job_id)
+                          const stagesPaid = c.stages.reduce((s, st) => s + (st.paid_date ? Number(st.amount) : 0), 0)
+                          const stagesTotal = c.stages.reduce((s, st) => s + Number(st.amount), 0)
+                          return (
+                            <div key={c.id} style={{ padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
+                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontWeight: 600, fontSize: 13 }}>{c.description}</div>
+                                  {jobLabel && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{jobLabel.client || jobLabel.address}</div>}
+                                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{fmtDate(c.created_at)}</div>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                  <div className="mono" style={{ fontSize: 15, fontWeight: 700 }}>{fmt(c.quoted_amount ?? 0)}</div>
+                                  <span style={{
+                                    fontSize: 10, padding: '1px 7px', borderRadius: 10, fontWeight: 600,
+                                    background: c.status === 'completed' ? '#dcfce7' : c.status === 'cancelled' ? '#fee2e2' : '#f3f4f6',
+                                    color: c.status === 'completed' ? '#166534' : c.status === 'cancelled' ? '#991b1b' : '#374151',
+                                  }}>{c.status}</span>
+                                </div>
+                              </div>
+                              {c.stages.length > 0 && (
+                                <div style={{ marginTop: 8, paddingLeft: 8 }}>
+                                  {c.stages.map(st => (
+                                    <div key={st.id} style={{ display: 'flex', gap: 10, fontSize: 11, color: 'var(--muted)', padding: '3px 0' }}>
+                                      <span style={{ flex: 1 }}>{st.description}</span>
+                                      <span className="mono">{fmt(Number(st.amount))}</span>
+                                      <span style={{ minWidth: 60, textAlign: 'right', color: st.paid_date ? '#166534' : '#92400e' }}>
+                                        {st.paid_date ? `✓ ${fmtDate(st.paid_date)}` : '⏳ Unpaid'}
+                                      </span>
+                                    </div>
+                                  ))}
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginTop: 4, paddingTop: 4, borderTop: '1px solid var(--border)' }}>
+                                    <span>Paid {fmt(stagesPaid)} of {fmt(stagesTotal)}</span>
+                                    <span style={{ color: stagesPaid >= stagesTotal ? '#166534' : '#92400e' }}>
+                                      {stagesPaid >= stagesTotal ? '✓ Fully paid' : `${fmt(stagesTotal - stagesPaid)} outstanding`}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
 
               {/* Portal Activity Log */}
               {selected.email && (
