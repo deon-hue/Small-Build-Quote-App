@@ -27,6 +27,12 @@ function weekStatusPriority(status: string): number {
   return { paid: 4, approved: 3, submitted: 2, queried: 1, rejected: 1, pending: 0 }[status] ?? 0
 }
 
+function effectiveStatus(e: SubTimeEntry): string {
+  if (e.status === 'paid') return 'paid'
+  if (e.payment_method != null) return 'paid'
+  return e.status
+}
+
 const STATUS_STYLE: Record<string, { bg: string; text: string }> = {
   approved:  { bg: '#dcfce7', text: '#166534' },
   submitted: { bg: '#fef9c3', text: '#854d0e' },
@@ -364,7 +370,7 @@ export default function SubPortalTimesheets() {
           {weeks.map(([ws, entries]) => {
             const isOpen = expandedWeeks.has(ws)
             const sorted = [...entries].sort((a, b) => a.entry_date.localeCompare(b.entry_date))
-            const topStatus = sorted.reduce((best, e) => weekStatusPriority(e.status) > weekStatusPriority(best) ? e.status : best, sorted[0].status)
+            const topStatus = sorted.reduce((best, e) => weekStatusPriority(effectiveStatus(e)) > weekStatusPriority(best) ? effectiveStatus(e) : best, effectiveStatus(sorted[0]))
             const sc = STATUS_STYLE[topStatus] ?? { bg: '#f1f5f9', text: '#64748b' }
             const totalAmount = entries.filter(e => e.source === 'admin' && e.amount != null).reduce((s, e) => s + Number(e.amount), 0)
             const totalHours  = entries.filter(e => e.source !== 'admin').reduce((s, e) => s + Number(e.units), 0)
@@ -398,14 +404,14 @@ export default function SubPortalTimesheets() {
                     {sorted.map(e => {
                       const contract = e.sub_contract_id ? contractById[e.sub_contract_id] : null
                       const jobEntry = !e.sub_contract_id && e.job_id ? jobs.find(j => j.id === e.job_id) : null
-                      const ds = STATUS_STYLE[e.status] ?? { bg: '#f1f5f9', text: '#64748b' }
+                      const ds = STATUS_STYLE[effectiveStatus(e)] ?? { bg: '#f1f5f9', text: '#64748b' }
                       const payLabel = rateLabel(e)
                       return (
                         <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, padding: '12px 16px', borderBottom: '1px solid #f8fafc' }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 3 }}>
                               <span style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>{fmtDay(e.entry_date)}</span>
-                              <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: ds.bg, color: ds.text }}>{e.status}</span>
+                              <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: ds.bg, color: ds.text }}>{effectiveStatus(e)}</span>
                               {e.source === 'admin' && (
                                 <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: '#f0f9ff', color: '#0369a1', border: '1px solid #bae6fd' }}>office logged</span>
                               )}
