@@ -395,7 +395,7 @@ export default function BillsPage() {
                     {b.documentId && (
                       <div style={{ fontSize: 11, color: '#7c3aed', marginTop: 2 }}>📄 Invoice attached</div>
                     )}
-                    {b.notes && !b.xeroBillId && (
+                    {b.notes && !b.xeroBillId && !b.documentId && (
                       <div style={{ fontSize: 11, color: '#92400e', background: '#fef9c3', borderRadius: 4, padding: '1px 5px', marginTop: 4, display: 'inline-block' }}>⏳ {b.notes}</div>
                     )}
                   </td>
