@@ -12,6 +12,7 @@ const STATUS_STYLE: Record<string, { bg: string; text: string }> = {
   queried:   { bg: '#ffedd5', text: '#9a3412' },
   rejected:  { bg: '#fee2e2', text: '#991b1b' },
   paid:      { bg: '#dbeafe', text: '#1e40af' },
+  pending:   { bg: '#f1f5f9', text: '#64748b' },
 }
 
 interface ParsedEntry {
@@ -330,11 +331,16 @@ export default function SubPortalTimesheets() {
               <div key={e.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>{fmtDate(e.entry_date)}</span>
                       <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: sc.bg, color: sc.text }}>
                         {e.status}
                       </span>
+                      {e.source === 'admin' && (
+                        <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: '#f0f9ff', color: '#0369a1', border: '1px solid #bae6fd' }}>
+                          office logged
+                        </span>
+                      )}
                     </div>
                     {contract && (
                       <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 600, marginBottom: e.notes ? 3 : 0 }}>
@@ -360,7 +366,9 @@ export default function SubPortalTimesheets() {
                     )}
                   </div>
                   <div style={{ fontSize: 22, fontWeight: 700, fontFamily: 'monospace', color: '#0f172a', flexShrink: 0 }}>
-                    {e.units}h
+                    {e.source === 'admin' && e.amount != null
+                      ? `£${Number(e.amount).toFixed(2)}`
+                      : `${e.units}h`}
                   </div>
                 </div>
               </div>

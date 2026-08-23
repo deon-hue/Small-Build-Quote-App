@@ -59,6 +59,8 @@ export interface SubTimeEntry {
   finish_time: string | null
   break_mins: number
   created_at: string
+  amount?: number | null
+  source?: 'portal' | 'admin'
 }
 
 export interface SubPaymentStage {
