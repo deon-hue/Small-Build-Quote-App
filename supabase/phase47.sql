@@ -49,9 +49,9 @@ BEGIN
       j.type        AS job_type,
       j.client      AS job_client,
       j.address     AS job_address,
-      j.status      AS job_status,
+      j.stage       AS job_status,
       j.start_date,
-      j.end_date
+      NULL::date AS end_date
     FROM sub_contracts sc
     LEFT JOIN jobs j ON j.id::text = sc.job_id AND j.user_id = v_admin_id
     WHERE sc.user_id    = v_admin_id
