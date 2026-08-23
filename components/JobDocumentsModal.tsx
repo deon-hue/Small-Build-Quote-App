@@ -60,6 +60,13 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
   const [supplierDrop, setSupplierDrop] = useState(false)
   const supplierRef = useRef<HTMLDivElement>(null)
   const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set())
+  const [sortCol, setSortCol] = useState<'supplier' | 'date' | 'category' | 'payment' | 'gross'>('date')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+
+  function toggleSort(col: typeof sortCol) {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortCol(col); setSortDir('asc') }
+  }
 
   function toggleDoc(docId: string) {
     setExpandedDocs(prev => {
@@ -527,6 +534,24 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
               }
             })
 
+            // Sort key for a cost (uses first line of a doc group)
+            function sortKey(c: JobCost): string | number {
+              if (sortCol === 'date') return c.docDate || ''
+              if (sortCol === 'supplier') return (c.supplier || '').toLowerCase()
+              if (sortCol === 'category') return c.costCategory
+              if (sortCol === 'payment') return c.paymentStatus
+              if (sortCol === 'gross') return c.grossAmount
+              return ''
+            }
+            function cmp<T>(a: T, b: T) {
+              if (a < b) return sortDir === 'asc' ? -1 : 1
+              if (a > b) return sortDir === 'asc' ? 1 : -1
+              return 0
+            }
+            const sortedDocEntries = Array.from(docGroups.entries())
+              .sort(([, a], [, b]) => cmp(sortKey(a[0]), sortKey(b[0])))
+            const sortedManual = [...manualCosts].sort((a, b) => cmp(sortKey(a), sortKey(b)))
+
             return (
               <>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
@@ -537,14 +562,36 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-                      {['Supplier / receipt', 'Date', 'Category', 'Net', 'VAT', 'Gross', 'Payment', ''].map(h => (
-                        <th key={h} style={{ padding: '6px 8px', textAlign: ['Net', 'VAT', 'Gross'].includes(h) ? 'right' : 'left', fontSize: 10, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
+                      {([
+                        { label: 'Supplier / receipt', col: 'supplier' as const },
+                        { label: 'Date', col: 'date' as const },
+                        { label: 'Category', col: 'category' as const },
+                        { label: 'Net', col: null },
+                        { label: 'VAT', col: null },
+                        { label: 'Gross', col: 'gross' as const },
+                        { label: 'Payment', col: 'payment' as const },
+                        { label: '', col: null },
+                      ] as { label: string; col: typeof sortCol | null }[]).map(({ label, col }) => (
+                        <th
+                          key={label || 'action'}
+                          onClick={col ? () => toggleSort(col) : undefined}
+                          style={{
+                            padding: '6px 8px',
+                            textAlign: ['Net', 'VAT', 'Gross'].includes(label) ? 'right' : 'left',
+                            fontSize: 10, color: col ? '#1d4ed8' : '#475569',
+                            textTransform: 'uppercase', letterSpacing: '0.04em',
+                            cursor: col ? 'pointer' : 'default',
+                            userSelect: 'none', whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {label}{col && sortCol === col ? (sortDir === 'asc' ? ' ▲' : ' ▼') : col ? ' ⇅' : ''}
+                        </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {/* Document-grouped rows */}
-                    {Array.from(docGroups.entries()).map(([docId, lines]) => {
+                    {sortedDocEntries.map(([docId, lines]) => {
                       const first = lines[0]
                       const isOpen = expandedDocs.has(docId)
                       const groupNet   = lines.reduce((s, c) => s + c.netAmount, 0)
@@ -606,8 +653,8 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
                       )
                     })}
 
-                    {/* Manual cost rows — unchanged */}
-                    {manualCosts.map(c => {
+                    {/* Manual cost rows */}
+                    {sortedManual.map(c => {
                       const cm = catMeta(c.costCategory)
                       return (
                         <tr key={c.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
