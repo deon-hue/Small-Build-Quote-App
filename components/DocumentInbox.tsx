@@ -29,7 +29,7 @@ function summary(doc: InboxDocument) {
 export default function DocumentInbox({ jobs }: Props) {
   const sb = createClient()
   const { bills } = useApp()
-  const billedDocIds = new Set(bills.filter(b => b.documentId).map(b => b.documentId!))
+  const billedDocMap = new Map(bills.filter(b => b.documentId).map(b => [b.documentId!, b]))
   const [userId, setUserId] = useState<string | null>(null)
   const [docs, setDocs] = useState<InboxDocument[]>([])
   const [loading, setLoading] = useState(true)
@@ -183,11 +183,12 @@ export default function DocumentInbox({ jobs }: Props) {
                   {doc.status === 'allocated'
                     ? doc.jobId
                       ? <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#dcfce7', color: '#166534' }}>✓ {jobLabel(doc.jobId)}</span>
-                      : <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#dcfce7', color: '#166534' }}>✓ Xero</span>
+                      : billedDocMap.has(doc.id)
+                        ? <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#f3e8ff', color: '#6b21a8' }}>📋 {billedDocMap.get(doc.id)!.ref}</span>
+                        : <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#dcfce7', color: '#166534' }}>✓ Allocated</span>
                     : doc.status === 'archived'
                     ? <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#f1f5f9', color: '#64748b' }}>🗄 Archived</span>
                     : <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#fef3c7', color: '#92400e' }}>Unallocated</span>}
-                  {billedDocIds.has(doc.id) && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: '#f3e8ff', color: '#6b21a8' }}>📋 Bill created</span>}
                   {doc.jobId && doc.xeroBillId && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: '#ede9fe', color: '#5b21b6' }}>✓ Xero</span>}
                   <button className="btn-sm btn-outline" onClick={() => setOpenDoc(doc)}>Open</button>
                   {doc.status !== 'archived' && (
