@@ -42,7 +42,7 @@ function initialLines(ex: Record<string, unknown> | null | undefined): Extracted
 
 export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSaved }: Props) {
   const sb = createClient()
-  const { addBill, bills, clients, addVariation } = useApp()
+  const { addBill, updateBill, bills, clients, addVariation } = useApp()
   const ex = doc.extraction ?? {}
   const [url, setUrl] = useState<string | null>(null)
   const extractedSupplier = String((ex as Record<string, unknown>).supplier ?? '')
@@ -72,6 +72,12 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
   const [linkSubId, setLinkSubId] = useState('')
   const [linkedSub, setLinkedSub] = useState<{ id: string; contactName: string } | null>(null)
   const [linkBusy, setLinkBusy] = useState(false)
+
+  // Link to existing bill
+  const [linkBillId, setLinkBillId] = useState('')
+  const [linkBillBusy, setLinkBillBusy] = useState(false)
+  const linkedBill = bills.find(b => b.documentId === doc.id) ?? null
+  const linkableBills = bills.filter(b => !b.documentId && b.status !== 'paid')
 
   const isAllocated = doc.status === 'allocated'
   const isPdf = doc.mimeType === 'application/pdf'
@@ -146,6 +152,32 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
     await sb.from('sub_contracts').update({ quote_document_id: null }).eq('id', linkedSub.id)
     setLinkedSub(null)
     setLinkBusy(false)
+  }
+
+  async function linkToBill() {
+    if (!linkBillId) return
+    const bill = bills.find(b => b.id === linkBillId)
+    if (!bill) return
+    setLinkBillBusy(true)
+    try {
+      await updateBill({ ...bill, documentId: doc.id })
+      await sb.from('job_documents').update({ status: 'allocated' }).eq('id', doc.id)
+      onSaved()
+    } finally {
+      setLinkBillBusy(false)
+    }
+  }
+
+  async function unlinkFromBill() {
+    if (!linkedBill) return
+    setLinkBillBusy(true)
+    try {
+      await updateBill({ ...linkedBill, documentId: undefined })
+      await sb.from('job_documents').update({ status: 'unallocated' }).eq('id', doc.id)
+      onSaved()
+    } finally {
+      setLinkBillBusy(false)
+    }
   }
 
   function handleContactChange(id: string) {
@@ -477,6 +509,38 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
                     <button onClick={linkToSubContract} disabled={!linkSubId || linkBusy}
                       style={{ padding: '5px 12px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 5, fontSize: 12, cursor: 'pointer', opacity: (!linkSubId || linkBusy) ? 0.5 : 1 }}>
                       {linkBusy ? '…' : 'Link'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Link to Bill */}
+              <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#0369a1', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>📋 Link to Bill</div>
+                {linkedBill ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                    <span style={{ color: '#16a34a', fontWeight: 600 }}>✓ Linked to {linkedBill.ref}{linkedBill.supplierName ? ` — ${linkedBill.supplierName}` : ''}</span>
+                    <button onClick={unlinkFromBill} disabled={linkBillBusy}
+                      style={{ fontSize: 11, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', padding: 0, opacity: linkBillBusy ? 0.5 : 1 }}>
+                      Unlink
+                    </button>
+                  </div>
+                ) : linkableBills.length === 0 ? (
+                  <div style={{ fontSize: 12, color: '#94a3b8' }}>No unlinked bills available — create one on the Bills page first.</div>
+                ) : (
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <select value={linkBillId} onChange={e => setLinkBillId(e.target.value)}
+                      style={{ flex: 1, padding: '5px 8px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 12 }}>
+                      <option value="">Attach to bill…</option>
+                      {linkableBills.map(b => (
+                        <option key={b.id} value={b.id}>
+                          {b.ref}{b.supplierName ? ` — ${b.supplierName}` : ''}{b.description ? ` (${b.description})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <button onClick={linkToBill} disabled={!linkBillId || linkBillBusy}
+                      style={{ padding: '5px 12px', background: '#0369a1', color: '#fff', border: 'none', borderRadius: 5, fontSize: 12, cursor: 'pointer', opacity: (!linkBillId || linkBillBusy) ? 0.5 : 1 }}>
+                      {linkBillBusy ? '…' : 'Link'}
                     </button>
                   </div>
                 )}
