@@ -61,26 +61,27 @@ BEGIN
   ) sc;
 
   -- Time entries: sub-submitted UNION admin-logged
+  -- Explicit casts on all columns to prevent UNION type-mismatch errors
   SELECT json_agg(row_to_json(te)) INTO v_time_entries
   FROM (
     SELECT
-      te.id,
-      te.sub_contract_id,
-      te.entry_date,
-      te.units,
-      te.notes,
-      te.status,
-      te.submitted_by,
-      te.admin_notes,
-      te.start_time,
-      te.finish_time,
-      te.break_mins,
-      te.created_at,
-      te.job_id,
-      te.rate_type,
-      te.rate_amount,
-      NULL::numeric AS amount,
-      'portal'::text AS source
+      te.id::text,
+      te.sub_contract_id::text,
+      te.entry_date::text,
+      te.units::numeric,
+      COALESCE(te.notes, '')::text        AS notes,
+      te.status::text,
+      COALESCE(te.submitted_by, '')::text AS submitted_by,
+      te.admin_notes::text,
+      te.start_time::text,
+      te.finish_time::text,
+      COALESCE(te.break_mins, 0)::int     AS break_mins,
+      te.created_at::text,
+      te.job_id::text,
+      te.rate_type::text,
+      te.rate_amount::numeric,
+      NULL::numeric                        AS amount,
+      'portal'::text                       AS source
     FROM sub_time_entries te
     WHERE te.user_id = v_admin_id
       AND (
@@ -94,26 +95,26 @@ BEGIN
     UNION ALL
 
     SELECT
-      atl.id,
-      NULL::uuid                 AS sub_contract_id,
-      atl.entry_date,
+      atl.id::text,
+      NULL::text                           AS sub_contract_id,
+      atl.entry_date::text,
       COALESCE(
         atl.total_hours,
         CASE atl.rate_type WHEN 'day' THEN 1.0 WHEN 'half_day' THEN 0.5 ELSE 0.0 END
-      )                          AS units,
-      atl.notes,
-      atl.status,
-      'admin'::text              AS submitted_by,
-      NULL::text                 AS admin_notes,
-      atl.start_time,
-      atl.finish_time,
-      0                          AS break_mins,
-      atl.created_at,
-      atl.job_id,
-      atl.rate_type::text        AS rate_type,
-      atl.rate_amount,
-      atl.amount,
-      'admin'::text              AS source
+      )::numeric                           AS units,
+      COALESCE(atl.notes, '')::text        AS notes,
+      atl.status::text,
+      'admin'::text                        AS submitted_by,
+      NULL::text                           AS admin_notes,
+      atl.start_time::text,
+      atl.finish_time::text,
+      0::int                               AS break_mins,
+      atl.created_at::text,
+      atl.job_id::text,
+      atl.rate_type::text,
+      atl.rate_amount::numeric,
+      atl.amount::numeric,
+      'admin'::text                        AS source
     FROM sub_admin_time_logs atl
     WHERE atl.user_id    = v_admin_id
       AND atl.contact_id = p_contact_id
