@@ -106,7 +106,7 @@ export default function SubcontractorsPage() {
   const sb = createClient()
   const router = useRouter()
   const { jobs, clients, bills, updateClient, addClient, addBill } = useApp()
-  const subs = clients.filter(c => c.clientType === 'subcontractor' || c.clientType === 'supplier')
+  const subs = clients.filter(c => c.clientType === 'subcontractor')
 
   const [contracts, setContracts] = useState<Contract[]>([])
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([])
