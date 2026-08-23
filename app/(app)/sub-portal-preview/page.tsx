@@ -122,10 +122,10 @@ function SubPortalPreviewInner() {
   const paidFromStages = paymentStages.filter(p => !!p.paid_date).reduce((s, p) => s + p.amount, 0)
   const outstandingFromStages = paymentStages.filter(p => !p.paid_date).reduce((s, p) => s + p.amount, 0)
   const paidFromEntries = timeEntries
-    .filter(e => e.source === 'admin' && e.amount != null && e.status === 'paid')
+    .filter(e => e.source === 'admin' && e.amount != null && (e.status === 'paid' || e.payment_method != null))
     .reduce((s, e) => s + Number(e.amount), 0)
   const outstandingFromEntries = timeEntries
-    .filter(e => e.source === 'admin' && e.amount != null && e.status !== 'paid' && e.status !== 'rejected')
+    .filter(e => e.source === 'admin' && e.amount != null && e.status !== 'paid' && e.payment_method == null && e.status !== 'rejected')
     .reduce((s, e) => s + Number(e.amount), 0)
   const totalPaid = paymentStages.length > 0 ? paidFromStages : paidFromEntries
   const totalOutstanding = paymentStages.length > 0 ? outstandingFromStages : outstandingFromEntries
