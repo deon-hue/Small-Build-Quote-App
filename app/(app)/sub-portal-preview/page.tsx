@@ -116,8 +116,18 @@ function SubPortalPreviewInner() {
     </div>
   )
 
-  const totalPaid = paymentStages.filter(p => !!p.paid_date).reduce((s, p) => s + p.amount, 0)
-  const totalOutstanding = paymentStages.filter(p => !p.paid_date).reduce((s, p) => s + p.amount, 0)
+  // For fixed-contract subs, totals come from payment stages.
+  // For rate/timesheet subs (no payment stages), sum from admin time log amounts.
+  const paidFromStages = paymentStages.filter(p => !!p.paid_date).reduce((s, p) => s + p.amount, 0)
+  const outstandingFromStages = paymentStages.filter(p => !p.paid_date).reduce((s, p) => s + p.amount, 0)
+  const paidFromEntries = timeEntries
+    .filter(e => e.source === 'admin' && e.amount != null && e.payment_method != null)
+    .reduce((s, e) => s + Number(e.amount), 0)
+  const outstandingFromEntries = timeEntries
+    .filter(e => e.source === 'admin' && e.amount != null && e.payment_method == null && e.status !== 'rejected')
+    .reduce((s, e) => s + Number(e.amount), 0)
+  const totalPaid = paymentStages.length > 0 ? paidFromStages : paidFromEntries
+  const totalOutstanding = paymentStages.length > 0 ? outstandingFromStages : outstandingFromEntries
 
   return (
     <div style={{ maxWidth: 860, margin: '0 auto', padding: '24px 20px 60px' }}>
