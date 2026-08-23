@@ -124,6 +124,31 @@ export async function POST(req: NextRequest) {
       .eq('id', bill.id)
       .eq('user_id', user.id)
 
+    // Attach the sub's invoice document to the Xero bill (best-effort)
+    if (bill.documentId) {
+      try {
+        const { data: docRow } = await sb
+          .from('job_documents')
+          .select('storage_path, file_name, mime_type')
+          .eq('id', bill.documentId)
+          .single()
+        if (docRow?.storage_path) {
+          const { data: fileBlob } = await sb.storage.from('job-documents').download(docRow.storage_path)
+          if (fileBlob) {
+            const fileBuffer = await fileBlob.arrayBuffer()
+            const safeFileName = (docRow.file_name ?? 'invoice.pdf').replace(/[^\w\s.-]/g, '_')
+            await xeroFetch(conn, `/Invoices/${xeroBill.InvoiceID}/Attachments/${encodeURIComponent(safeFileName)}`, {
+              method: 'PUT',
+              body: fileBuffer,
+              headers: { 'Content-Type': docRow.mime_type || 'application/pdf' },
+            })
+          }
+        }
+      } catch (attachErr) {
+        console.warn('push-bill: attachment failed (non-fatal)', attachErr)
+      }
+    }
+
     return NextResponse.json({ xeroBillId: xeroBill.InvoiceID })
   } catch (err) {
     console.error('push-bill error:', err)

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { fmt, fmtDate } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -80,6 +80,43 @@ export default function BillsPage() {
   const [documentId, setDocumentId]   = useState<string | undefined>(undefined)
   const [saving, setSaving]           = useState(false)
   const [viewingDoc, setViewingDoc]   = useState(false)
+
+  // Invoice attachment
+  const [attachingBill, setAttachingBill] = useState<string | null>(null)
+  const fileInputRef    = useRef<HTMLInputElement>(null)
+  const pendingAttachBill = useRef<Bill | null>(null)
+
+  function startAttach(b: Bill) {
+    pendingAttachBill.current = b
+    fileInputRef.current?.click()
+  }
+
+  async function handleFileAttach(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    const bill = pendingAttachBill.current
+    e.target.value = ''
+    if (!file || !bill) return
+    setAttachingBill(bill.id)
+    try {
+      const { data: { user } } = await sb.auth.getUser()
+      if (!user) { alert('Not authenticated'); return }
+      const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const path = `${user.id}/bills/${Date.now()}-${safe}`
+      const { data: uploadData, error: uploadErr } = await sb.storage
+        .from('job-documents').upload(path, file, { contentType: file.type })
+      if (uploadErr || !uploadData) { alert('Upload failed: ' + (uploadErr?.message ?? 'unknown')); return }
+      const { data: docData, error: docErr } = await sb.from('job_documents').insert({
+        user_id: user.id, job_id: null, file_name: file.name,
+        storage_path: uploadData.path, mime_type: file.type,
+        file_size: file.size, status: 'allocated',
+      }).select('id').single()
+      if (docErr || !docData) { alert('Failed to save document record'); return }
+      await updateBill({ ...bill, documentId: docData.id as string })
+    } finally {
+      setAttachingBill(null)
+      pendingAttachBill.current = null
+    }
+  }
 
   // Xero state
   const [xeroConnected, setXeroConnected]     = useState(false)
@@ -381,6 +418,21 @@ export default function BillsPage() {
                   </td>
                   <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
                     <button className="btn btn-sm btn-outline" style={{ marginRight: 4 }} onClick={() => openEdit(b)}>Edit</button>
+                    {!b.documentId && (
+                      <button className="btn btn-sm btn-outline" style={{ marginRight: 4 }}
+                        onClick={() => startAttach(b)} disabled={attachingBill === b.id}>
+                        {attachingBill === b.id ? '…' : '📎 Attach'}
+                      </button>
+                    )}
+                    {b.documentId && (
+                      <button className="btn btn-sm btn-outline" style={{ marginRight: 4 }}
+                        onClick={async () => {
+                          const url = await signedDocUrlById(sb, b.documentId!)
+                          if (url) window.open(url, '_blank')
+                        }}>
+                        📄 Invoice
+                      </button>
+                    )}
                     {b.status !== 'paid' && (
                       <button className="btn btn-sm btn-outline" style={{ marginRight: 4 }} onClick={() => markPaid(b)}>Mark Paid</button>
                     )}
@@ -623,6 +675,15 @@ export default function BillsPage() {
           </div>
         </div>
       )}
+
+      {/* Hidden file input for invoice attachment */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf,.jpg,.jpeg,.png"
+        style={{ display: 'none' }}
+        onChange={handleFileAttach}
+      />
     </>
   )
 }
