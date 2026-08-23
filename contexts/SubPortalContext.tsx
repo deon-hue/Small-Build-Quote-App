@@ -63,6 +63,7 @@ export interface SubTimeEntry {
   source?: 'portal' | 'admin'
   rate_type?: string | null
   rate_amount?: number | null
+  paid_date?: string | null
 }
 
 export interface SubPaymentStage {

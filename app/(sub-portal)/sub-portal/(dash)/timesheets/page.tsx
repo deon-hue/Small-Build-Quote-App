@@ -16,10 +16,10 @@ function getWeekStart(dateStr: string): string {
 }
 
 function rateLabel(e: SubTimeEntry): string {
-  if (e.source === 'admin') {
-    const type = e.rate_type === 'day' ? 'day rate' : e.rate_type === 'half_day' ? 'half day' : e.rate_type === 'hourly' ? 'hourly' : e.rate_type ?? ''
-    return type
-  }
+  const typeStr = e.rate_type === 'day' ? 'Day rate' : e.rate_type === 'half_day' ? 'Half day' : e.rate_type === 'hourly' ? 'Hourly' : e.rate_type ?? ''
+  const amtStr  = e.rate_amount ? ` · £${Number(e.rate_amount).toFixed(2)}${e.rate_type === 'hourly' ? '/hr' : ''}` : ''
+  if (e.source === 'admin') return typeStr + amtStr
+  if (e.rate_type && e.rate_amount) return typeStr + amtStr
   return e.units > 0 ? `${e.units}h` : ''
 }
 
@@ -424,6 +424,9 @@ export default function SubPortalTimesheets() {
                               <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>
                                 {e.start_time.slice(0, 5)} – {e.finish_time.slice(0, 5)}{e.break_mins > 0 ? ` (${e.break_mins}min break)` : ''}
                               </div>
+                            )}
+                            {e.status === 'paid' && e.paid_date && (
+                              <div style={{ fontSize: 11, color: '#1e40af', marginTop: 2 }}>✓ Paid {fmtDate(e.paid_date)}</div>
                             )}
                             {e.admin_notes && (
                               <div style={{ marginTop: 4, fontSize: 11, padding: '4px 8px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 5, color: '#92400e' }}>

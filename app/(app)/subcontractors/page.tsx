@@ -624,7 +624,7 @@ export default function SubcontractorsPage() {
         }
 
         if (row.paidCash && logId) {
-          await sb.from('sub_admin_time_logs').update({ status: 'paid' }).eq('id', logId)
+          await sb.from('sub_admin_time_logs').update({ status: 'paid', paid_date: new Date().toISOString().slice(0, 10) }).eq('id', logId)
           if (row.jobId) {
             const existingLog = timeLogs.find(l => l.id === logId)
             if (existingLog?.job_cost_id) {
@@ -767,7 +767,7 @@ export default function SubcontractorsPage() {
     if (!user) return
     const weekLogs = timeLogs.filter(l => l.contact_id === contactId && (l.week_start ?? getWeekStart(l.entry_date)) === ws)
     for (const log of weekLogs) {
-      await sb.from('sub_admin_time_logs').update({ status: 'paid' }).eq('id', log.id)
+      await sb.from('sub_admin_time_logs').update({ status: 'paid', paid_date: new Date().toISOString().slice(0, 10) }).eq('id', log.id)
       if (log.job_id) {
         if (log.job_cost_id) {
           await sb.from('job_costs').update({ payment_status: 'paid' }).eq('id', log.job_cost_id)
@@ -790,7 +790,7 @@ export default function SubcontractorsPage() {
   async function markDayCash(log: AdminTimeLog) {
     const { data: { user } } = await sb.auth.getUser()
     if (!user) return
-    await sb.from('sub_admin_time_logs').update({ status: 'paid' }).eq('id', log.id)
+    await sb.from('sub_admin_time_logs').update({ status: 'paid', paid_date: new Date().toISOString().slice(0, 10) }).eq('id', log.id)
     if (log.job_id) {
       if (log.job_cost_id) {
         await sb.from('job_costs').update({ payment_status: 'paid' }).eq('id', log.job_cost_id)

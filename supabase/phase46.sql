@@ -101,7 +101,8 @@ BEGIN
       te.rate_type::text,
       te.rate_amount::numeric,
       NULL::numeric                        AS amount,
-      'portal'::text                       AS source
+      'portal'::text                       AS source,
+      NULL::date                           AS paid_date
     FROM sub_time_entries te
     WHERE te.user_id = v_admin_id
       AND (
@@ -139,7 +140,8 @@ BEGIN
       atl.rate_type::text,
       atl.rate_amount::numeric,
       atl.amount::numeric,
-      'admin'::text                        AS source
+      'admin'::text                        AS source,
+      atl.paid_date::date                  AS paid_date
     FROM sub_admin_time_logs atl
     WHERE atl.user_id    = v_admin_id
       AND atl.contact_id = v_contact_id

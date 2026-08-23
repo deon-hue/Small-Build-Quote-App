@@ -21,10 +21,11 @@ function weekStatusPriority(s: string): number {
   return ({ paid: 4, approved: 3, submitted: 2, queried: 1, rejected: 1, pending: 0 } as Record<string,number>)[s] ?? 0
 }
 function rateLabel(e: TimeEntry): string {
-  if (e.source === 'admin') {
-    const t = (e as AnyRecord).rate_type
-    return t === 'day' ? 'day rate' : t === 'half_day' ? 'half day' : t === 'hourly' ? 'hourly' : t ?? ''
-  }
+  const rt = e.rate_type
+  const typeStr = rt === 'day' ? 'Day rate' : rt === 'half_day' ? 'Half day' : rt === 'hourly' ? 'Hourly' : rt ?? ''
+  const amtStr  = e.rate_amount ? ` · £${Number(e.rate_amount).toFixed(2)}${rt === 'hourly' ? '/hr' : ''}` : ''
+  if (e.source === 'admin') return typeStr + amtStr
+  if (rt && e.rate_amount) return typeStr + amtStr
   return e.units > 0 ? `${e.units}h` : ''
 }
 
@@ -41,7 +42,7 @@ interface TimeEntry {
   id: string; entry_date: string; units: number; notes: string; status: string
   submitted_by: string; admin_notes: string | null; job_id: string | null
   start_time: string | null; finish_time: string | null; amount: number | null; source: string
-  rate_type?: string | null; rate_amount?: number | null
+  rate_type?: string | null; rate_amount?: number | null; paid_date?: string | null
 }
 interface Contract {
   id: string; job_id: string | null; type: string; description: string
@@ -239,6 +240,7 @@ function SubPortalPreviewInner() {
                                 {job && <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 600 }}>{job.client}{job.address ? ` · ${job.address}` : ''}</div>}
                                 {e.notes && <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{e.notes}</div>}
                                 {e.start_time && e.finish_time && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>{e.start_time.slice(0, 5)} – {e.finish_time.slice(0, 5)}</div>}
+                                {e.status === 'paid' && e.paid_date && <div style={{ fontSize: 11, color: '#1e40af', marginTop: 2 }}>✓ Paid {fmtDate(e.paid_date)}</div>}
                                 {e.admin_notes && <div style={{ marginTop: 4, fontSize: 11, padding: '4px 8px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 5, color: '#92400e' }}>💬 {e.admin_notes}</div>}
                               </div>
                               <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'monospace', color: '#0f172a', flexShrink: 0 }}>
