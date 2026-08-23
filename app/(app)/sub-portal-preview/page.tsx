@@ -55,9 +55,14 @@ function SubPortalPreviewInner() {
     async function load() {
       setLoading(true); setError('')
       const { data, error: rpcErr } = await supabase.rpc('get_sub_portal_preview_for_admin', { p_contact_id: contactId })
-      if (rpcErr) { setError('Could not load preview. Make sure you have run supabase/phase47.sql in Supabase.'); setLoading(false); return }
+      if (rpcErr) { setError(`Could not load preview: ${rpcErr.message || rpcErr.code || 'unknown error'}. Make sure you have re-run supabase/phase47.sql in Supabase.`); setLoading(false); return }
       const d = data as AnyRecord
-      if (d?.error) { setError(d.error === 'contact_not_found' ? 'Subcontractor not found.' : d.error); setLoading(false); return }
+      if (d?.error) {
+        const msg = d.error === 'contact_not_found' ? 'Subcontractor not found.'
+          : d.error === 'not_admin' ? 'Admin check failed — your profile may not have role=admin.'
+          : d.error
+        setError(msg); setLoading(false); return
+      }
       setSubName(d.subName || 'Subcontractor')
       setContracts((d.contracts ?? []) as Contract[])
       setTimeEntries((d.timeEntries ?? []) as TimeEntry[])
