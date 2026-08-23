@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { fmt, fmtDate } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -320,6 +320,29 @@ export default function BillsPage() {
     return j ? `${j.client}` : '—'
   }
 
+  // Column resize
+  const COL_KEYS = ['ref', 'supplier', 'job', 'date', 'subtotal', 'cis', 'payable', 'status', 'actions'] as const
+  const DEFAULT_WIDTHS: Record<string, number> = { ref: 140, supplier: 160, job: 120, date: 100, subtotal: 90, cis: 80, payable: 90, status: 120, actions: 220 }
+  const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_WIDTHS)
+  const resizingCol = useRef<string | null>(null)
+  const resizeStartX = useRef(0)
+  const resizeStartW = useRef(0)
+
+  const onResizeMouseDown = useCallback((col: string, e: React.MouseEvent) => {
+    e.preventDefault()
+    resizingCol.current = col
+    resizeStartX.current = e.clientX
+    resizeStartW.current = colWidths[col]
+    const onMove = (ev: MouseEvent) => {
+      if (!resizingCol.current) return
+      const delta = ev.clientX - resizeStartX.current
+      setColWidths(prev => ({ ...prev, [resizingCol.current!]: Math.max(50, resizeStartW.current + delta) }))
+    }
+    const onUp = () => { resizingCol.current = null; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [colWidths])
+
   return (
     <>
       {/* Summary cards */}
@@ -375,12 +398,22 @@ export default function BillsPage() {
           {!q && filterStatus === 'all' && <div style={{ fontSize: 12 }}>Record supplier invoices and subcontractor bills here.</div>}
         </div>
       ) : (
-        <div className="card" style={{ overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <div className="card" style={{ overflow: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed' }}>
+            <colgroup>
+              {COL_KEYS.map(k => <col key={k} style={{ width: colWidths[k] }} />)}
+            </colgroup>
             <thead>
               <tr style={{ background: 'var(--warm, #f8fafc)', borderBottom: '2px solid var(--border)' }}>
-                {['Ref', 'Supplier', 'Job', 'Date', 'Subtotal', 'CIS', 'Payable', 'Status', ''].map(h => (
-                  <th key={h} style={{ textAlign: 'left', padding: '10px 14px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--muted)' }}>{h}</th>
+                {(['Ref','Supplier','Job','Date','Subtotal','CIS','Payable','Status',''] as const).map((h, i) => (
+                  <th key={COL_KEYS[i]} style={{ textAlign: 'left', padding: '10px 14px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--muted)', position: 'relative', userSelect: 'none', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                    {h}
+                    {i < COL_KEYS.length - 1 && (
+                      <span onMouseDown={e => onResizeMouseDown(COL_KEYS[i], e)}
+                        style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 6, cursor: 'col-resize', background: 'transparent' }}
+                        title="Drag to resize" />
+                    )}
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -399,8 +432,8 @@ export default function BillsPage() {
                       <div style={{ fontSize: 11, color: '#92400e', background: '#fef9c3', borderRadius: 4, padding: '1px 5px', marginTop: 4, display: 'inline-block' }}>⏳ {b.notes}</div>
                     )}
                   </td>
-                  <td style={{ padding: '10px 14px' }}>{b.supplierName || '—'}</td>
-                  <td style={{ padding: '10px 14px', color: 'var(--muted)' }}>{b.jobId ? jobLabel(b.jobId) : '—'}</td>
+                  <td style={{ padding: '10px 14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.supplierName || '—'}</td>
+                  <td style={{ padding: '10px 14px', color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.jobId ? jobLabel(b.jobId) : '—'}</td>
                   <td style={{ padding: '10px 14px', color: '#334155', fontWeight: 500, whiteSpace: 'nowrap' }}>{fmtDate(b.billDate) || '—'}</td>
                   <td style={{ padding: '10px 14px', fontWeight: 600, whiteSpace: 'nowrap' }}>{fmt(b.subtotal)}</td>
                   <td style={{ padding: '10px 14px', color: b.cisDeduction > 0 ? 'var(--danger, #e53e3e)' : 'var(--muted)' }}>
