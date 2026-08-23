@@ -152,9 +152,8 @@ function ClientsPageInner() {
     return `https://wa.me/${num}?text=${encodeURIComponent(body)}`
   }
 
-  // URL for admin to preview a client's portal (no sign-in required).
-  // Keyed on the client id so it works for every client — even without an email.
   function adminPreviewUrl(c: Client) {
+    if (c.clientType === 'subcontractor') return `/sub-portal`
     return `/portal-preview?clientId=${encodeURIComponent(c.id)}`
   }
 
