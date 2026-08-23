@@ -99,10 +99,7 @@ function getWeekDays(ws: string): string[] {
   return Array.from({ length: 7 }, (_, i) => { const d = new Date(base); d.setDate(base.getDate() + i); return d.toISOString().slice(0, 10) })
 }
 function fmtWeekRange(ws: string): string {
-  const s = new Date(ws + 'T12:00:00')
-  const e = new Date(ws + 'T12:00:00')
-  e.setDate(e.getDate() + 6)
-  return `${s.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${e.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
+  return new Date(ws + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 export default function SubcontractorsPage() {
