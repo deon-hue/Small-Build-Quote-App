@@ -399,7 +399,7 @@ export default function BillsPage() {
         </div>
       ) : (
         <div className="card" style={{ overflow: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed' }}>
+          <table style={{ minWidth: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed' }}>
             <colgroup>
               {COL_KEYS.map(k => <col key={k} style={{ width: colWidths[k] }} />)}
             </colgroup>
@@ -410,8 +410,9 @@ export default function BillsPage() {
                     {h}
                     {i < COL_KEYS.length - 1 && (
                       <span onMouseDown={e => onResizeMouseDown(COL_KEYS[i], e)}
-                        style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 6, cursor: 'col-resize', background: 'transparent' }}
-                        title="Drag to resize" />
+                        style={{ position: 'absolute', right: -2, top: '20%', bottom: '20%', width: 5, cursor: 'col-resize', background: 'var(--border)', borderRadius: 2, opacity: 0.5 }}
+                        onMouseEnter={e => { (e.target as HTMLElement).style.opacity = '1' }}
+                        onMouseLeave={e => { (e.target as HTMLElement).style.opacity = '0.5' }} />
                     )}
                   </th>
                 ))}
