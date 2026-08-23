@@ -160,6 +160,29 @@ export default function BillsPage() {
       .finally(() => setAutoSyncing(false))
   }, [loading, xeroConnected]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Column resize — must be before early return to satisfy rules of hooks
+  const COL_KEYS = ['ref', 'supplier', 'job', 'date', 'subtotal', 'cis', 'payable', 'status', 'actions'] as const
+  const DEFAULT_WIDTHS: Record<string, number> = { ref: 140, supplier: 160, job: 120, date: 100, subtotal: 90, cis: 80, payable: 90, status: 120, actions: 220 }
+  const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_WIDTHS)
+  const resizingCol = useRef<string | null>(null)
+  const resizeStartX = useRef(0)
+  const resizeStartW = useRef(0)
+
+  const onResizeMouseDown = useCallback((col: string, e: React.MouseEvent) => {
+    e.preventDefault()
+    resizingCol.current = col
+    resizeStartX.current = e.clientX
+    resizeStartW.current = colWidths[col]
+    const onMove = (ev: MouseEvent) => {
+      if (!resizingCol.current) return
+      const delta = ev.clientX - resizeStartX.current
+      setColWidths(prev => ({ ...prev, [resizingCol.current!]: Math.max(50, resizeStartW.current + delta) }))
+    }
+    const onUp = () => { resizingCol.current = null; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [colWidths])
+
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
 
   // Filter
@@ -319,29 +342,6 @@ export default function BillsPage() {
     const j = jobs.find(x => x.id === id)
     return j ? `${j.client}` : '—'
   }
-
-  // Column resize
-  const COL_KEYS = ['ref', 'supplier', 'job', 'date', 'subtotal', 'cis', 'payable', 'status', 'actions'] as const
-  const DEFAULT_WIDTHS: Record<string, number> = { ref: 140, supplier: 160, job: 120, date: 100, subtotal: 90, cis: 80, payable: 90, status: 120, actions: 220 }
-  const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_WIDTHS)
-  const resizingCol = useRef<string | null>(null)
-  const resizeStartX = useRef(0)
-  const resizeStartW = useRef(0)
-
-  const onResizeMouseDown = useCallback((col: string, e: React.MouseEvent) => {
-    e.preventDefault()
-    resizingCol.current = col
-    resizeStartX.current = e.clientX
-    resizeStartW.current = colWidths[col]
-    const onMove = (ev: MouseEvent) => {
-      if (!resizingCol.current) return
-      const delta = ev.clientX - resizeStartX.current
-      setColWidths(prev => ({ ...prev, [resizingCol.current!]: Math.max(50, resizeStartW.current + delta) }))
-    }
-    const onUp = () => { resizingCol.current = null; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }, [colWidths])
 
   return (
     <>
