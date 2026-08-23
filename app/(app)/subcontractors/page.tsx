@@ -973,6 +973,9 @@ export default function SubcontractorsPage() {
     }}>{label}</button>
   )
 
+  const missingCostCount = timeLogs.filter(l => l.job_id && !l.job_cost_id && (l.status === 'approved' || l.status === 'paid')).length
+  const hasJobCosts = timeLogs.some(l => l.job_id && (l.status === 'approved' || l.status === 'paid'))
+
   return (
     <div style={{ padding: '24px 24px 80px' }}>
       {/* Summary */}
@@ -1017,6 +1020,14 @@ export default function SubcontractorsPage() {
         </button>
         <button onClick={() => openWeekSheet()} style={{ padding: '8px 16px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
           ⏱ Log Time
+        </button>
+        {hasJobCosts && (
+          <button onClick={fixMissingCosts} disabled={fixingCosts} style={{ padding: '8px 12px', background: '#fef3c7', border: '1px solid #fcd34d', color: '#92400e', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', opacity: fixingCosts ? 0.6 : 1 }}>
+            {fixingCosts ? 'Fixing…' : missingCostCount > 0 ? `⚠ Fix ${missingCostCount} missing cost${missingCostCount === 1 ? '' : 's'}` : '🔧 Sync job costs'}
+          </button>
+        )}
+        <button onClick={fixLabourCategories} disabled={fixingLabour} style={{ padding: '8px 12px', background: '#ede9fe', border: '1px solid #c4b5fd', color: '#5b21b6', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', opacity: fixingLabour ? 0.6 : 1 }}>
+          {fixingLabour ? 'Fixing…' : '🔧 Fix Labour categories'}
         </button>
       </div>
 
@@ -1362,8 +1373,6 @@ export default function SubcontractorsPage() {
       {/* ── Admin Time Logs — weekly timesheets ──────────────────── */}
       {(() => {
         const filteredLogs = timeLogs.filter(l => !logFilter || l.contact_id === logFilter)
-        const missingCostCount = timeLogs.filter(l => l.job_id && !l.job_cost_id && (l.status === 'approved' || l.status === 'paid')).length
-        const hasJobCosts = timeLogs.some(l => l.job_id && (l.status === 'approved' || l.status === 'paid'))
         const weekGroupMap = new Map<string, { contactId: string; ws: string; logs: AdminTimeLog[] }>()
         for (const log of filteredLogs) {
           const ws = log.week_start ?? getWeekStart(log.entry_date)
@@ -1381,24 +1390,11 @@ export default function SubcontractorsPage() {
                   {weekGroups.length} week{weekGroups.length === 1 ? '' : 's'} · Total payable: {fmt(timeLogs.reduce((s, l) => s + Number(l.amount), 0))}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <select value={logFilter} onChange={e => setLogFilter(e.target.value)}
-                  style={{ padding: '7px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 12 }}>
-                  <option value="">All subs</option>
-                  {subs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-                {hasJobCosts && (
-                  <button onClick={fixMissingCosts} disabled={fixingCosts} style={{ padding: '7px 12px', background: '#fef3c7', border: '1px solid #fcd34d', color: '#92400e', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 600, opacity: fixingCosts ? 0.6 : 1 }}>
-                    {fixingCosts ? 'Fixing…' : missingCostCount > 0 ? `⚠ Fix ${missingCostCount} missing cost${missingCostCount === 1 ? '' : 's'}` : '🔧 Sync job costs'}
-                  </button>
-                )}
-                <button onClick={fixLabourCategories} disabled={fixingLabour} style={{ padding: '7px 12px', background: '#ede9fe', border: '1px solid #c4b5fd', color: '#5b21b6', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 600, opacity: fixingLabour ? 0.6 : 1 }}>
-                  {fixingLabour ? 'Fixing…' : '🔧 Fix Labour categories'}
-                </button>
-                <button onClick={() => openWeekSheet()} style={{ padding: '7px 14px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer' }}>
-                  + Log Time
-                </button>
-              </div>
+              <select value={logFilter} onChange={e => setLogFilter(e.target.value)}
+                style={{ padding: '7px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 12 }}>
+                <option value="">All subs</option>
+                {subs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
             </div>
 
             {weekGroups.length === 0 ? (
