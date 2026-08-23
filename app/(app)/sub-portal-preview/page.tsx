@@ -1,0 +1,223 @@
+'use client'
+
+import { useEffect, useState, Suspense } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyRecord = Record<string, any>
+
+const fmt = (n: number) => `£${(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const fmtDate = (d: string | null) => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
+
+const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
+  approved: { bg: '#dcfce7', color: '#166534' },
+  submitted: { bg: '#fef9c3', color: '#854d0e' },
+  queried:   { bg: '#ffedd5', color: '#9a3412' },
+  rejected:  { bg: '#fee2e2', color: '#991b1b' },
+  paid:      { bg: '#dbeafe', color: '#1e40af' },
+  pending:   { bg: '#f1f5f9', color: '#64748b' },
+}
+
+interface TimeEntry {
+  id: string; entry_date: string; units: number; notes: string; status: string
+  submitted_by: string; admin_notes: string | null; job_id: string | null
+  start_time: string | null; finish_time: string | null; amount: number | null; source: string
+}
+interface Contract {
+  id: string; job_id: string | null; type: string; description: string
+  rate_type: string | null; rate_amount: number | null; quoted_amount: number | null
+  job_type: string | null; job_client: string | null; job_address: string | null
+  start_date: string | null; end_date: string | null
+}
+interface PaymentStage {
+  id: string; description: string; amount: number; due_date: string | null; paid_date: string | null
+}
+interface Job { id: string; client: string; address: string }
+
+function SubPortalPreviewInner() {
+  const supabase = createClient()
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const contactId = searchParams.get('contactId') || ''
+
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [subName, setSubName] = useState('')
+  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([])
+  const [contracts, setContracts] = useState<Contract[]>([])
+  const [paymentStages, setPaymentStages] = useState<PaymentStage[]>([])
+  const [jobs, setJobs] = useState<Job[]>([])
+  const [tab, setTab] = useState<'timesheets' | 'payments'>('timesheets')
+
+  useEffect(() => {
+    if (!contactId) { setError('No contact specified.'); setLoading(false); return }
+    async function load() {
+      setLoading(true); setError('')
+      const { data, error: rpcErr } = await supabase.rpc('get_sub_portal_preview_for_admin', { p_contact_id: contactId })
+      if (rpcErr) { setError('Could not load preview. Make sure you have run supabase/phase47.sql in Supabase.'); setLoading(false); return }
+      const d = data as AnyRecord
+      if (d?.error) { setError(d.error === 'contact_not_found' ? 'Subcontractor not found.' : d.error); setLoading(false); return }
+      setSubName(d.subName || 'Subcontractor')
+      setContracts((d.contracts ?? []) as Contract[])
+      setTimeEntries((d.timeEntries ?? []) as TimeEntry[])
+      setPaymentStages((d.paymentStages ?? []) as PaymentStage[])
+      setJobs((d.jobs ?? []) as Job[])
+      setLoading(false)
+    }
+    load()
+  }, [contactId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const jobMap = Object.fromEntries(jobs.map(j => [j.id, j]))
+
+  if (loading) return <div style={{ padding: 40, color: '#6b7280', fontSize: 14 }}>Loading preview…</div>
+  if (error) return (
+    <div style={{ padding: 40 }}>
+      <div style={{ background: '#fff0ef', border: '1px solid #f5a0a0', borderRadius: 8, padding: '16px 20px', color: '#c0392b', fontSize: 13, marginBottom: 16 }}>⚠ {error}</div>
+      <button className="btn btn-outline" onClick={() => router.back()}>← Back</button>
+    </div>
+  )
+
+  const totalPaid = paymentStages.filter(p => !!p.paid_date).reduce((s, p) => s + p.amount, 0)
+  const totalOutstanding = paymentStages.filter(p => !p.paid_date).reduce((s, p) => s + p.amount, 0)
+
+  return (
+    <div style={{ maxWidth: 860, margin: '0 auto', padding: '24px 20px 60px' }}>
+
+      {/* Admin banner */}
+      <div style={{ background: '#fef9c3', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 16px', marginBottom: 24, fontSize: 13, color: '#92400e', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span>👁</span>
+        <span>Admin preview — this is what <strong>{subName}</strong> sees in their sub-portal.</span>
+        <button onClick={() => router.back()} style={{ marginLeft: 'auto', fontSize: 12, padding: '4px 12px', background: '#fff', border: '1px solid #d1d5db', borderRadius: 5, cursor: 'pointer', color: '#374151' }}>← Back</button>
+      </div>
+
+      {/* Welcome header */}
+      <div style={{ marginBottom: 24 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a' }}>Good morning, {subName.split(' ')[0]} 👋</h1>
+        <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{contracts.length} active job{contracts.length !== 1 ? 's' : ''} · Here's your overview</p>
+      </div>
+
+      {/* Summary cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 28 }}>
+        {[
+          { label: 'Active Jobs',      value: String(contracts.length),        color: '#6366f1', mono: false },
+          { label: 'Timesheet Entries', value: String(timeEntries.length),     color: '#0ea5e9', mono: false },
+          { label: 'Total Paid',        value: fmt(totalPaid),                 color: '#10b981', mono: true  },
+          { label: 'Outstanding',       value: fmt(totalOutstanding),          color: totalOutstanding > 0 ? '#f59e0b' : '#94a3b8', mono: true },
+        ].map(c => (
+          <div key={c.label} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '16px 18px' }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>{c.label}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: c.color, fontFamily: c.mono ? 'monospace' : undefined }}>{c.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Active contracts */}
+      {contracts.length > 0 && (
+        <div style={{ marginBottom: 28 }}>
+          <h2 style={{ fontSize: 14, fontWeight: 700, color: '#374151', marginBottom: 12 }}>Active Jobs</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {contracts.map(c => (
+              <div key={c.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>{c.job_type || c.description || 'Contract'}</div>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: c.type === 'fixed' ? '#ede9fe' : '#e0f2fe', color: c.type === 'fixed' ? '#6d28d9' : '#0369a1', flexShrink: 0 }}>
+                    {c.type === 'fixed' ? 'Fixed price' : c.rate_type === 'daily' || c.rate_type === 'day' ? 'Day rate' : 'Hourly rate'}
+                  </span>
+                </div>
+                {c.job_address && <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>📍 {c.job_address}</div>}
+                <div style={{ display: 'flex', gap: 16, marginTop: 6, fontSize: 11, color: '#94a3b8' }}>
+                  {c.start_date && <span>Start: {fmtDate(c.start_date)}</span>}
+                  {c.end_date   && <span>Due: {fmtDate(c.end_date)}</span>}
+                </div>
+                {c.type === 'rate' && c.rate_amount && (
+                  <div style={{ marginTop: 4, fontSize: 12, color: '#0369a1', fontWeight: 600 }}>
+                    {fmt(c.rate_amount)} / {c.rate_type === 'daily' || c.rate_type === 'day' ? 'day' : 'hour'}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '2px solid #e5e7eb' }}>
+        {(['timesheets', 'payments'] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)} style={{
+            padding: '8px 16px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer',
+            background: 'none', borderBottom: `2px solid ${tab === t ? '#6366f1' : 'transparent'}`,
+            color: tab === t ? '#6366f1' : '#64748b', marginBottom: -2, textTransform: 'capitalize',
+          }}>
+            {t === 'timesheets' ? `Timesheets (${timeEntries.length})` : `Payments (${paymentStages.length})`}
+          </button>
+        ))}
+      </div>
+
+      {/* Timesheets tab */}
+      {tab === 'timesheets' && (
+        timeEntries.length === 0
+          ? <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8', fontSize: 13 }}>No timesheets recorded yet.</div>
+          : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {timeEntries.map(e => {
+                const sc = STATUS_STYLE[e.status] ?? { bg: '#f1f5f9', color: '#64748b' }
+                const job = e.job_id ? jobMap[e.job_id] : null
+                return (
+                  <div key={e.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>{fmtDate(e.entry_date)}</span>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: sc.bg, color: sc.color }}>{e.status}</span>
+                        {e.source === 'admin' && (
+                          <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: '#f0f9ff', color: '#0369a1', border: '1px solid #bae6fd' }}>office logged</span>
+                        )}
+                      </div>
+                      {job && <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 600 }}>{job.client}{job.address ? ` · ${job.address}` : ''}</div>}
+                      {e.notes && <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{e.notes}</div>}
+                      {e.start_time && e.finish_time && (
+                        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{e.start_time.slice(0, 5)} – {e.finish_time.slice(0, 5)}</div>
+                      )}
+                      {e.admin_notes && (
+                        <div style={{ marginTop: 6, fontSize: 11, padding: '5px 8px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 5, color: '#92400e' }}>💬 {e.admin_notes}</div>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'monospace', color: '#0f172a', flexShrink: 0 }}>
+                      {e.source === 'admin' && e.amount != null ? fmt(Number(e.amount)) : `${e.units}h`}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+      )}
+
+      {/* Payments tab */}
+      {tab === 'payments' && (
+        paymentStages.length === 0
+          ? <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8', fontSize: 13 }}>No payment stages recorded yet.</div>
+          : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {paymentStages.map(p => (
+                <div key={p.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{p.description || 'Payment'}</div>
+                    {p.paid_date
+                      ? <div style={{ fontSize: 11, color: '#16a34a', marginTop: 3 }}>✓ Paid {fmtDate(p.paid_date)}</div>
+                      : p.due_date
+                        ? <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>Due {fmtDate(p.due_date)}</div>
+                        : null}
+                  </div>
+                  <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'monospace', color: p.paid_date ? '#16a34a' : '#0f172a' }}>{fmt(p.amount)}</div>
+                </div>
+              ))}
+            </div>
+      )}
+    </div>
+  )
+}
+
+export default function SubPortalPreviewPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 40, color: '#6b7280' }}>Loading…</div>}>
+      <SubPortalPreviewInner />
+    </Suspense>
+  )
+}

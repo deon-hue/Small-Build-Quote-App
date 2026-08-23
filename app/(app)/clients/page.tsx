@@ -153,7 +153,7 @@ function ClientsPageInner() {
   }
 
   function adminPreviewUrl(c: Client) {
-    if (c.clientType === 'subcontractor') return `/sub-portal`
+    if (c.clientType === 'subcontractor') return `/sub-portal-preview?contactId=${encodeURIComponent(c.id)}`
     return `/portal-preview?clientId=${encodeURIComponent(c.id)}`
   }
 
