@@ -144,8 +144,8 @@ BEGIN
       'admin'::text                        AS source,
       atl.paid_date::date                  AS paid_date,
       CASE
-        WHEN jc.payment_status = 'paid' THEN 'bill'
         WHEN atl.status = 'paid'        THEN 'cash'
+        WHEN jc.payment_status = 'paid' THEN 'bill'
         ELSE NULL
       END::text                            AS payment_method
     FROM sub_admin_time_logs atl
