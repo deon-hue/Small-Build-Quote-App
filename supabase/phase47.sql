@@ -142,7 +142,7 @@ BEGIN
   FROM (
     SELECT id, client, type, address, stage
     FROM jobs
-    WHERE user_id = v_admin_id AND (done = false OR done IS NULL)
+    WHERE user_id = v_admin_id AND (done = 0 OR done IS NULL)
     ORDER BY client
   ) j;
 
