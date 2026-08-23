@@ -64,6 +64,7 @@ export interface SubTimeEntry {
   rate_type?: string | null
   rate_amount?: number | null
   paid_date?: string | null
+  payment_method?: 'cash' | 'bill' | null
 }
 
 export interface SubPaymentStage {

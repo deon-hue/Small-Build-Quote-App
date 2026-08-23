@@ -425,8 +425,10 @@ export default function SubPortalTimesheets() {
                                 {e.start_time.slice(0, 5)} – {e.finish_time.slice(0, 5)}{e.break_mins > 0 ? ` (${e.break_mins}min break)` : ''}
                               </div>
                             )}
-                            {e.status === 'paid' && e.paid_date && (
-                              <div style={{ fontSize: 11, color: '#1e40af', marginTop: 2 }}>✓ Paid {fmtDate(e.paid_date)}</div>
+                            {(e.status === 'paid' || e.payment_method) && (
+                              <div style={{ fontSize: 11, color: '#1e40af', marginTop: 2 }}>
+                                ✓ {e.payment_method === 'bill' ? 'Bill payment' : 'Cash'}{e.paid_date ? ` · ${fmtDate(e.paid_date)}` : ''}
+                              </div>
                             )}
                             {e.admin_notes && (
                               <div style={{ marginTop: 4, fontSize: 11, padding: '4px 8px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 5, color: '#92400e' }}>

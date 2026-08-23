@@ -42,7 +42,7 @@ interface TimeEntry {
   id: string; entry_date: string; units: number; notes: string; status: string
   submitted_by: string; admin_notes: string | null; job_id: string | null
   start_time: string | null; finish_time: string | null; amount: number | null; source: string
-  rate_type?: string | null; rate_amount?: number | null; paid_date?: string | null
+  rate_type?: string | null; rate_amount?: number | null; paid_date?: string | null; payment_method?: string | null
 }
 interface Contract {
   id: string; job_id: string | null; type: string; description: string
@@ -240,7 +240,7 @@ function SubPortalPreviewInner() {
                                 {job && <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 600 }}>{job.client}{job.address ? ` · ${job.address}` : ''}</div>}
                                 {e.notes && <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{e.notes}</div>}
                                 {e.start_time && e.finish_time && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>{e.start_time.slice(0, 5)} – {e.finish_time.slice(0, 5)}</div>}
-                                {e.status === 'paid' && e.paid_date && <div style={{ fontSize: 11, color: '#1e40af', marginTop: 2 }}>✓ Paid {fmtDate(e.paid_date)}</div>}
+                                {(e.status === 'paid' || e.payment_method) && <div style={{ fontSize: 11, color: '#1e40af', marginTop: 2 }}>✓ {e.payment_method === 'bill' ? 'Bill payment' : 'Cash'}{e.paid_date ? ` · ${fmtDate(e.paid_date)}` : ''}</div>}
                                 {e.admin_notes && <div style={{ marginTop: 4, fontSize: 11, padding: '4px 8px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 5, color: '#92400e' }}>💬 {e.admin_notes}</div>}
                               </div>
                               <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'monospace', color: '#0f172a', flexShrink: 0 }}>
