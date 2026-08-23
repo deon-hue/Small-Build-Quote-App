@@ -20,7 +20,7 @@ const CATS: { value: JobCostCategory; label: string; emoji: string; color: strin
 const catMeta = (c: JobCostCategory) => CATS.find(x => x.value === c) ?? CATS[1]
 const PAYMENTS: PaymentStatus[] = ['unknown', 'unpaid', 'partial', 'paid']
 const fmt = (n: number) => `£${(n || 0).toFixed(2)}`
-const fmtDate = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+const fmtDate = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 
 interface ManualState {
   supplier: string
@@ -84,7 +84,7 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
     const s = new Date(ws + 'T12:00:00')
     const e = new Date(ws + 'T12:00:00')
     e.setDate(e.getDate() + 6)
-    return `${s.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} – ${e.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`
+    return fmtDate(ws)
   }
 
   function toggleDoc(docId: string) {
@@ -668,7 +668,7 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
                             <td />
                           </tr>
                           {isOpen && tw.costs.map((c, i) => {
-                            const dow = new Date(c.docDate + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })
+                            const dow = new Date(c.docDate + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
                             return (
                               <tr key={c.id} style={{ borderBottom: i === tw.costs.length - 1 ? '1px solid #f1f5f9' : '1px solid #f0fdf4', background: '#f9fffe' }}>
                                 <td style={{ padding: '5px 8px 5px 28px', color: '#475569' }}>
