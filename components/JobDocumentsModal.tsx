@@ -20,7 +20,7 @@ const CATS: { value: JobCostCategory; label: string; emoji: string; color: strin
 const catMeta = (c: JobCostCategory) => CATS.find(x => x.value === c) ?? CATS[1]
 const PAYMENTS: PaymentStatus[] = ['unknown', 'unpaid', 'partial', 'paid']
 const fmt = (n: number) => `£${(n || 0).toFixed(2)}`
-const fmtDate = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+const fmtDate = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
 
 interface ManualState {
   supplier: string
@@ -84,7 +84,7 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
     const s = new Date(ws + 'T12:00:00')
     const e = new Date(ws + 'T12:00:00')
     e.setDate(e.getDate() + 6)
-    return `${s.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${e.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
+    return `${s.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} – ${e.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`
   }
 
   function toggleDoc(docId: string) {
@@ -668,7 +668,7 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
                             <td />
                           </tr>
                           {isOpen && tw.costs.map((c, i) => {
-                            const dow = new Date(c.docDate + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+                            const dow = new Date(c.docDate + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })
                             return (
                               <tr key={c.id} style={{ borderBottom: i === tw.costs.length - 1 ? '1px solid #f1f5f9' : '1px solid #f0fdf4', background: '#f9fffe' }}>
                                 <td style={{ padding: '5px 8px 5px 28px', color: '#475569' }}>
@@ -716,7 +716,7 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
                               </div>
                               <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>{lines.length} line{lines.length > 1 ? 's' : ''} · click to {isOpen ? 'hide' : 'expand'}</div>
                             </td>
-                            <td style={{ padding: '8px 8px', color: '#64748b' }}>{first.docDate || '—'}</td>
+                            <td style={{ padding: '8px 8px', color: '#64748b' }}>{first.docDate ? fmtDate(first.docDate) : '—'}</td>
                             <td style={{ padding: '8px 8px' }}>
                               <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
                                 {cats.map(cat => { const cm = catMeta(cat); return <span key={cat} style={{ fontSize: 9, padding: '1px 5px', borderRadius: 99, background: cm.bg, color: cm.color, fontWeight: 600 }}>{cm.emoji}</span> })}
@@ -764,7 +764,7 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
                             <div style={{ fontWeight: 600, color: '#1e293b' }}>{c.supplier || '—'}{c.docNumber ? <span style={{ color: '#94a3b8', fontWeight: 400 }}> · {c.docNumber}</span> : null}</div>
                             {c.description && <div style={{ fontSize: 11, color: '#94a3b8' }}>{c.description}</div>}
                           </td>
-                          <td style={{ padding: '7px 8px', color: '#64748b' }}>{c.docDate || '—'}</td>
+                          <td style={{ padding: '7px 8px', color: '#64748b' }}>{c.docDate ? fmtDate(c.docDate) : '—'}</td>
                           <td style={{ padding: '7px 8px' }}><span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: cm.bg, color: cm.color, fontWeight: 600 }}>{cm.emoji} {cm.label}</span></td>
                           <td style={{ padding: '7px 8px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(c.netAmount)}</td>
                           <td style={{ padding: '7px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#64748b' }}>{fmt(c.vatAmount)}</td>
