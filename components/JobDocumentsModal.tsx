@@ -60,12 +60,31 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
   const [supplierDrop, setSupplierDrop] = useState(false)
   const supplierRef = useRef<HTMLDivElement>(null)
   const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set())
+  const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set())
   const [sortCol, setSortCol] = useState<'supplier' | 'date' | 'category' | 'payment' | 'gross'>('date')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
   function toggleSort(col: typeof sortCol) {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setSortCol(col); setSortDir('asc') }
+  }
+
+  function toggleWeek(key: string) {
+    setExpandedWeeks(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
+  }
+
+  function weekStartOf(dateStr: string): string {
+    const d = new Date(dateStr + 'T12:00:00')
+    const dow = d.getDay()
+    d.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow))
+    return d.toISOString().slice(0, 10)
+  }
+
+  function fmtWeekRange(ws: string): string {
+    const s = new Date(ws + 'T12:00:00')
+    const e = new Date(ws + 'T12:00:00')
+    e.setDate(e.getDate() + 6)
+    return `${s.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${e.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
   }
 
   function toggleDoc(docId: string) {
@@ -522,20 +541,42 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
               No costs yet. Add one manually, or scan a document in the Settings inbox and allocate it here.
             </div>
           ) : (() => {
-            // Group document-sourced costs by documentId; keep manual costs separate
+            // Three buckets: timesheet (grouped by week), document-sourced, other manual
             const docGroups = new Map<string, JobCost[]>()
+            const timesheetWeeks = new Map<string, { ws: string; supplier: string; costs: JobCost[] }>()
             const manualCosts: JobCost[] = []
             costs.forEach(c => {
               if (c.documentId) {
                 if (!docGroups.has(c.documentId)) docGroups.set(c.documentId, [])
                 docGroups.get(c.documentId)!.push(c)
+              } else if (c.source === 'timesheet') {
+                const ws = c.docDate ? weekStartOf(c.docDate) : (c.createdAt ? weekStartOf(c.createdAt.slice(0, 10)) : '0000-00-00')
+                const key = `${c.supplier}_${ws}`
+                if (!timesheetWeeks.has(key)) timesheetWeeks.set(key, { ws, supplier: c.supplier || '', costs: [] })
+                timesheetWeeks.get(key)!.costs.push(c)
               } else {
                 manualCosts.push(c)
               }
             })
 
-            // Sort key for a cost (uses first line of a doc group)
-            function sortKey(c: JobCost): string | number {
+            function cmp<T>(a: T, b: T) {
+              if (a < b) return sortDir === 'asc' ? -1 : 1
+              if (a > b) return sortDir === 'asc' ? 1 : -1
+              return 0
+            }
+
+            // Sort key helpers
+            function twSortKey(tw: { ws: string; supplier: string; costs: JobCost[] }): string | number {
+              const total = tw.costs.reduce((s, c) => s + c.grossAmount, 0)
+              const paid = tw.costs.every(c => c.paymentStatus === 'paid')
+              if (sortCol === 'date') return tw.ws
+              if (sortCol === 'supplier') return tw.supplier.toLowerCase()
+              if (sortCol === 'category') return tw.costs[0]?.costCategory ?? ''
+              if (sortCol === 'payment') return paid ? 'paid' : 'unpaid'
+              if (sortCol === 'gross') return total
+              return ''
+            }
+            function costSortKey(c: JobCost): string | number {
               if (sortCol === 'date') return c.docDate || ''
               if (sortCol === 'supplier') return (c.supplier || '').toLowerCase()
               if (sortCol === 'category') return c.costCategory
@@ -543,14 +584,13 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
               if (sortCol === 'gross') return c.grossAmount
               return ''
             }
-            function cmp<T>(a: T, b: T) {
-              if (a < b) return sortDir === 'asc' ? -1 : 1
-              if (a > b) return sortDir === 'asc' ? 1 : -1
-              return 0
-            }
+
+            const sortedTimesheetWeeks = Array.from(timesheetWeeks.values())
+              .map(tw => ({ ...tw, costs: [...tw.costs].sort((a, b) => a.docDate.localeCompare(b.docDate)) }))
+              .sort((a, b) => cmp(twSortKey(a), twSortKey(b)))
             const sortedDocEntries = Array.from(docGroups.entries())
-              .sort(([, a], [, b]) => cmp(sortKey(a[0]), sortKey(b[0])))
-            const sortedManual = [...manualCosts].sort((a, b) => cmp(sortKey(a), sortKey(b)))
+              .sort(([, a], [, b]) => cmp(costSortKey(a[0]), costSortKey(b[0])))
+            const sortedManual = [...manualCosts].sort((a, b) => cmp(costSortKey(a), costSortKey(b)))
 
             return (
               <>
@@ -590,6 +630,68 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
                     </tr>
                   </thead>
                   <tbody>
+                    {/* Timesheet week groups */}
+                    {sortedTimesheetWeeks.map(tw => {
+                      const key = `${tw.supplier}_${tw.ws}`
+                      const isOpen = expandedWeeks.has(key)
+                      const groupGross = tw.costs.reduce((s, c) => s + c.grossAmount, 0)
+                      const groupNet   = tw.costs.reduce((s, c) => s + c.netAmount, 0)
+                      const allPaid = tw.costs.every(c => c.paymentStatus === 'paid')
+                      const anyPaid = tw.costs.some(c => c.paymentStatus === 'paid')
+                      const cm = catMeta(tw.costs[0]?.costCategory ?? 'labour')
+                      const payStatus = allPaid ? 'paid' : anyPaid ? 'partial' : 'unpaid'
+                      return (
+                        <>
+                          <tr
+                            key={`tw-${key}`}
+                            onClick={() => toggleWeek(key)}
+                            style={{ borderBottom: isOpen ? 'none' : '1px solid #f1f5f9', cursor: 'pointer', background: isOpen ? '#f0fdf4' : '#f9fffe' }}
+                          >
+                            <td style={{ padding: '8px 8px' }}>
+                              <div style={{ fontWeight: 600, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ fontSize: 11, color: '#64748b' }}>{isOpen ? '▲' : '▼'}</span>
+                                <span>⏱</span>
+                                {tw.supplier || 'Subcontractor'}
+                              </div>
+                              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>{tw.costs.length} day{tw.costs.length !== 1 ? 's' : ''} · click to {isOpen ? 'hide' : 'expand'}</div>
+                            </td>
+                            <td style={{ padding: '8px 8px', color: '#374151', fontWeight: 500 }}>{fmtWeekRange(tw.ws)}</td>
+                            <td style={{ padding: '8px 8px' }}>
+                              <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: cm.bg, color: cm.color, fontWeight: 600 }}>{cm.emoji} {cm.label}</span>
+                            </td>
+                            <td style={{ padding: '8px 8px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(groupNet)}</td>
+                            <td style={{ padding: '8px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#64748b' }}>—</td>
+                            <td style={{ padding: '8px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700 }}>{fmt(groupGross)}</td>
+                            <td style={{ padding: '8px 8px' }}>
+                              <span style={{ fontSize: 10, color: payStatus === 'paid' ? '#16a34a' : payStatus === 'partial' ? '#d97706' : '#dc2626' }}>{payStatus}</span>
+                            </td>
+                            <td />
+                          </tr>
+                          {isOpen && tw.costs.map((c, i) => {
+                            const dow = new Date(c.docDate + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+                            return (
+                              <tr key={c.id} style={{ borderBottom: i === tw.costs.length - 1 ? '1px solid #f1f5f9' : '1px solid #f0fdf4', background: '#f9fffe' }}>
+                                <td style={{ padding: '5px 8px 5px 28px', color: '#475569' }}>
+                                  {c.description || <span style={{ color: '#cbd5e1', fontStyle: 'italic' }}>no notes</span>}
+                                </td>
+                                <td style={{ padding: '5px 8px', color: '#64748b', whiteSpace: 'nowrap' }}>{dow}</td>
+                                <td />
+                                <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#64748b' }}>{fmt(c.netAmount)}</td>
+                                <td />
+                                <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(c.grossAmount)}</td>
+                                <td style={{ padding: '5px 8px' }}>
+                                  <span style={{ fontSize: 10, color: c.paymentStatus === 'paid' ? '#16a34a' : '#dc2626' }}>{c.paymentStatus}</span>
+                                </td>
+                                <td style={{ padding: '4px 6px', textAlign: 'right' }}>
+                                  <button onClick={e => { e.stopPropagation(); removeCost(c.id) }} title="Delete" style={{ padding: '2px 7px', border: '1px solid #fecaca', borderRadius: 4, background: '#fef2f2', color: '#dc2626', fontSize: 11, cursor: 'pointer' }}>×</button>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </>
+                      )
+                    })}
+
                     {/* Document-grouped rows */}
                     {sortedDocEntries.map(([docId, lines]) => {
                       const first = lines[0]
