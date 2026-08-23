@@ -2,9 +2,30 @@
 
 import { useState } from 'react'
 import { useSubPortal } from '@/contexts/SubPortalContext'
+import type { SubTimeEntry } from '@/contexts/SubPortalContext'
 
-const fmtDate = (d: string) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+const fmtDate = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+const fmtDay  = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
 const todayISO = () => new Date().toISOString().slice(0, 10)
+
+function getWeekStart(dateStr: string): string {
+  const d = new Date(dateStr + 'T12:00:00')
+  const day = d.getDay()
+  d.setDate(d.getDate() - (day === 0 ? 6 : day - 1))
+  return d.toISOString().slice(0, 10)
+}
+
+function rateLabel(e: SubTimeEntry): string {
+  if (e.source === 'admin') {
+    const type = e.rate_type === 'day' ? 'day rate' : e.rate_type === 'half_day' ? 'half day' : e.rate_type === 'hourly' ? 'hourly' : e.rate_type ?? ''
+    return type
+  }
+  return e.units > 0 ? `${e.units}h` : ''
+}
+
+function weekStatusPriority(status: string): number {
+  return { paid: 4, approved: 3, submitted: 2, queried: 1, rejected: 1, pending: 0 }[status] ?? 0
+}
 
 const STATUS_STYLE: Record<string, { bg: string; text: string }> = {
   approved:  { bg: '#dcfce7', text: '#166534' },
@@ -146,6 +167,24 @@ export default function SubPortalTimesheets() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  // Group time entries by week (Monday start)
+  const weekMap = new Map<string, SubTimeEntry[]>()
+  for (const e of timeEntries) {
+    const ws = getWeekStart(e.entry_date)
+    if (!weekMap.has(ws)) weekMap.set(ws, [])
+    weekMap.get(ws)!.push(e)
+  }
+  const weeks = Array.from(weekMap.entries()).sort((a, b) => b[0].localeCompare(a[0]))
+
+  const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set())
+  function toggleWeek(ws: string) {
+    setExpandedWeeks(prev => {
+      const next = new Set(prev)
+      next.has(ws) ? next.delete(ws) : next.add(ws)
+      return next
+    })
   }
 
   if (loading) return <div className="portal-loading">Loading timesheets…</div>
@@ -322,55 +361,84 @@ export default function SubPortalTimesheets() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {timeEntries.map(e => {
-            const contract = e.sub_contract_id ? contractById[e.sub_contract_id] : null
-            const sc = STATUS_STYLE[e.status] ?? { bg: '#f1f5f9', text: '#64748b' }
-            // For direct entries, find job label
-            const jobEntry = !e.sub_contract_id && e.job_id ? jobs.find(j => j.id === e.job_id) : null
+          {weeks.map(([ws, entries]) => {
+            const isOpen = expandedWeeks.has(ws)
+            const sorted = [...entries].sort((a, b) => a.entry_date.localeCompare(b.entry_date))
+            const topStatus = sorted.reduce((best, e) => weekStatusPriority(e.status) > weekStatusPriority(best) ? e.status : best, sorted[0].status)
+            const sc = STATUS_STYLE[topStatus] ?? { bg: '#f1f5f9', text: '#64748b' }
+            const totalAmount = entries.filter(e => e.source === 'admin' && e.amount != null).reduce((s, e) => s + Number(e.amount), 0)
+            const totalHours  = entries.filter(e => e.source !== 'admin').reduce((s, e) => s + Number(e.units), 0)
+            const hasAmount   = entries.some(e => e.source === 'admin' && e.amount != null)
+            const hasHours    = entries.some(e => e.source !== 'admin')
+
             return (
-              <div key={e.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>{fmtDate(e.entry_date)}</span>
-                      <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: sc.bg, color: sc.text }}>
-                        {e.status}
-                      </span>
-                      {e.source === 'admin' && (
-                        <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: '#f0f9ff', color: '#0369a1', border: '1px solid #bae6fd' }}>
-                          office logged
-                        </span>
-                      )}
+              <div key={ws} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
+                {/* Week header — click to expand */}
+                <button
+                  onClick={() => toggleWeek(ws)}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer', gap: 10, textAlign: 'left' }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flex: 1 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>w/c {fmtDate(ws)}</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: sc.bg, color: sc.text }}>{topStatus}</span>
+                    <span style={{ fontSize: 11, color: '#94a3b8' }}>{entries.length} day{entries.length !== 1 ? 's' : ''}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                    <div style={{ textAlign: 'right' }}>
+                      {hasAmount && <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'monospace', color: '#0f172a' }}>£{totalAmount.toFixed(2)}</div>}
+                      {hasHours  && <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b' }}>{totalHours}h</div>}
                     </div>
-                    {contract && (
-                      <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 600, marginBottom: e.notes ? 3 : 0 }}>
-                        {contract.job_type || contract.description}{contract.job_address ? ` · ${contract.job_address}` : ''}
-                      </div>
-                    )}
-                    {jobEntry && (
-                      <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 600, marginBottom: e.notes ? 3 : 0 }}>
-                        {jobEntry.client}{jobEntry.address ? ` · ${jobEntry.address}` : ''}
-                      </div>
-                    )}
-                    {e.notes && <div style={{ fontSize: 12, color: '#64748b' }}>{e.notes}</div>}
-                    {e.start_time && e.finish_time && (
-                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>
-                        {e.start_time.slice(0, 5)} – {e.finish_time.slice(0, 5)}
-                        {e.break_mins > 0 ? ` (${e.break_mins}min break)` : ''}
-                      </div>
-                    )}
-                    {e.admin_notes && (
-                      <div style={{ marginTop: 6, fontSize: 11, padding: '5px 8px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 5, color: '#92400e' }}>
-                        💬 {e.admin_notes}
-                      </div>
-                    )}
+                    <span style={{ fontSize: 14, color: '#94a3b8' }}>{isOpen ? '▲' : '▼'}</span>
                   </div>
-                  <div style={{ fontSize: 22, fontWeight: 700, fontFamily: 'monospace', color: '#0f172a', flexShrink: 0 }}>
-                    {e.source === 'admin' && e.amount != null
-                      ? `£${Number(e.amount).toFixed(2)}`
-                      : `${e.units}h`}
+                </button>
+
+                {/* Expanded day rows */}
+                {isOpen && (
+                  <div style={{ borderTop: '1px solid #f1f5f9' }}>
+                    {sorted.map(e => {
+                      const contract = e.sub_contract_id ? contractById[e.sub_contract_id] : null
+                      const jobEntry = !e.sub_contract_id && e.job_id ? jobs.find(j => j.id === e.job_id) : null
+                      const ds = STATUS_STYLE[e.status] ?? { bg: '#f1f5f9', text: '#64748b' }
+                      const payLabel = rateLabel(e)
+                      return (
+                        <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, padding: '12px 16px', borderBottom: '1px solid #f8fafc' }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 3 }}>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>{fmtDay(e.entry_date)}</span>
+                              <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: ds.bg, color: ds.text }}>{e.status}</span>
+                              {e.source === 'admin' && (
+                                <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: '#f0f9ff', color: '#0369a1', border: '1px solid #bae6fd' }}>office logged</span>
+                              )}
+                              {payLabel && (
+                                <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: '#f5f3ff', color: '#6d28d9', border: '1px solid #ddd6fe' }}>{payLabel}</span>
+                              )}
+                            </div>
+                            {(contract || jobEntry) && (
+                              <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 600 }}>
+                                {contract ? (contract.job_type || contract.description) + (contract.job_address ? ` · ${contract.job_address}` : '') : ''}
+                                {jobEntry ? jobEntry.client + (jobEntry.address ? ` · ${jobEntry.address}` : '') : ''}
+                              </div>
+                            )}
+                            {e.notes && <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{e.notes}</div>}
+                            {e.start_time && e.finish_time && (
+                              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>
+                                {e.start_time.slice(0, 5)} – {e.finish_time.slice(0, 5)}{e.break_mins > 0 ? ` (${e.break_mins}min break)` : ''}
+                              </div>
+                            )}
+                            {e.admin_notes && (
+                              <div style={{ marginTop: 4, fontSize: 11, padding: '4px 8px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 5, color: '#92400e' }}>
+                                💬 {e.admin_notes}
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'monospace', color: '#0f172a', flexShrink: 0, textAlign: 'right' }}>
+                            {e.source === 'admin' && e.amount != null ? `£${Number(e.amount).toFixed(2)}` : `${e.units}h`}
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
-                </div>
+                )}
               </div>
             )
           })}

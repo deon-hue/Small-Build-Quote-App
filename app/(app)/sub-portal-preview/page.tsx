@@ -9,6 +9,24 @@ type AnyRecord = Record<string, any>
 
 const fmt = (n: number) => `£${(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const fmtDate = (d: string | null) => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
+const fmtDay  = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+
+function getWeekStart(dateStr: string): string {
+  const d = new Date(dateStr + 'T12:00:00')
+  const day = d.getDay()
+  d.setDate(d.getDate() - (day === 0 ? 6 : day - 1))
+  return d.toISOString().slice(0, 10)
+}
+function weekStatusPriority(s: string): number {
+  return ({ paid: 4, approved: 3, submitted: 2, queried: 1, rejected: 1, pending: 0 } as Record<string,number>)[s] ?? 0
+}
+function rateLabel(e: TimeEntry): string {
+  if (e.source === 'admin') {
+    const t = (e as AnyRecord).rate_type
+    return t === 'day' ? 'day rate' : t === 'half_day' ? 'half day' : t === 'hourly' ? 'hourly' : t ?? ''
+  }
+  return e.units > 0 ? `${e.units}h` : ''
+}
 
 const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
   approved: { bg: '#dcfce7', color: '#166534' },
@@ -23,6 +41,7 @@ interface TimeEntry {
   id: string; entry_date: string; units: number; notes: string; status: string
   submitted_by: string; admin_notes: string | null; job_id: string | null
   start_time: string | null; finish_time: string | null; amount: number | null; source: string
+  rate_type?: string | null; rate_amount?: number | null
 }
 interface Contract {
   id: string; job_id: string | null; type: string; description: string
@@ -74,6 +93,19 @@ function SubPortalPreviewInner() {
   }, [contactId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const jobMap = Object.fromEntries(jobs.map(j => [j.id, j]))
+
+  // Group time entries by week
+  const weekMap = new Map<string, TimeEntry[]>()
+  for (const e of timeEntries) {
+    const ws = getWeekStart(e.entry_date)
+    if (!weekMap.has(ws)) weekMap.set(ws, [])
+    weekMap.get(ws)!.push(e)
+  }
+  const weeks = Array.from(weekMap.entries()).sort((a, b) => b[0].localeCompare(a[0]))
+  const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set())
+  function toggleWeek(ws: string) {
+    setExpandedWeeks(prev => { const n = new Set(prev); n.has(ws) ? n.delete(ws) : n.add(ws); return n })
+  }
 
   if (loading) return <div style={{ padding: 40, color: '#6b7280', fontSize: 14 }}>Loading preview…</div>
   if (error) return (
@@ -164,31 +196,59 @@ function SubPortalPreviewInner() {
         timeEntries.length === 0
           ? <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8', fontSize: 13 }}>No timesheets recorded yet.</div>
           : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {timeEntries.map(e => {
-                const sc = STATUS_STYLE[e.status] ?? { bg: '#f1f5f9', color: '#64748b' }
-                const job = e.job_id ? jobMap[e.job_id] : null
+              {weeks.map(([ws, entries]) => {
+                const isOpen = expandedWeeks.has(ws)
+                const sorted = [...entries].sort((a, b) => a.entry_date.localeCompare(b.entry_date))
+                const topStatus = sorted.reduce((best, e) => weekStatusPriority(e.status) > weekStatusPriority(best) ? e.status : best, sorted[0].status)
+                const sc = STATUS_STYLE[topStatus] ?? { bg: '#f1f5f9', color: '#64748b' }
+                const totalAmount = entries.filter(e => e.source === 'admin' && e.amount != null).reduce((s, e) => s + Number(e.amount), 0)
+                const totalHours  = entries.filter(e => e.source !== 'admin').reduce((s, e) => s + Number(e.units), 0)
+                const hasAmount   = entries.some(e => e.source === 'admin' && e.amount != null)
+                const hasHours    = entries.some(e => e.source !== 'admin')
                 return (
-                  <div key={e.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>{fmtDate(e.entry_date)}</span>
-                        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: sc.bg, color: sc.color }}>{e.status}</span>
-                        {e.source === 'admin' && (
-                          <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: '#f0f9ff', color: '#0369a1', border: '1px solid #bae6fd' }}>office logged</span>
-                        )}
+                  <div key={ws} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
+                    <button onClick={() => toggleWeek(ws)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer', gap: 10, textAlign: 'left' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flex: 1 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>w/c {fmtDate(ws)}</span>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: sc.bg, color: sc.color }}>{topStatus}</span>
+                        <span style={{ fontSize: 11, color: '#94a3b8' }}>{entries.length} day{entries.length !== 1 ? 's' : ''}</span>
                       </div>
-                      {job && <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 600 }}>{job.client}{job.address ? ` · ${job.address}` : ''}</div>}
-                      {e.notes && <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{e.notes}</div>}
-                      {e.start_time && e.finish_time && (
-                        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{e.start_time.slice(0, 5)} – {e.finish_time.slice(0, 5)}</div>
-                      )}
-                      {e.admin_notes && (
-                        <div style={{ marginTop: 6, fontSize: 11, padding: '5px 8px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 5, color: '#92400e' }}>💬 {e.admin_notes}</div>
-                      )}
-                    </div>
-                    <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'monospace', color: '#0f172a', flexShrink: 0 }}>
-                      {e.source === 'admin' && e.amount != null ? fmt(Number(e.amount)) : `${e.units}h`}
-                    </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                        <div style={{ textAlign: 'right' }}>
+                          {hasAmount && <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'monospace', color: '#0f172a' }}>{fmt(totalAmount)}</div>}
+                          {hasHours  && <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b' }}>{totalHours}h</div>}
+                        </div>
+                        <span style={{ fontSize: 14, color: '#94a3b8' }}>{isOpen ? '▲' : '▼'}</span>
+                      </div>
+                    </button>
+                    {isOpen && (
+                      <div style={{ borderTop: '1px solid #f1f5f9' }}>
+                        {sorted.map(e => {
+                          const job = e.job_id ? jobMap[e.job_id] : null
+                          const ds = STATUS_STYLE[e.status] ?? { bg: '#f1f5f9', color: '#64748b' }
+                          const payLabel = rateLabel(e)
+                          return (
+                            <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, padding: '12px 16px', borderBottom: '1px solid #f8fafc' }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 3 }}>
+                                  <span style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>{fmtDay(e.entry_date)}</span>
+                                  <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: ds.bg, color: ds.color }}>{e.status}</span>
+                                  {e.source === 'admin' && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: '#f0f9ff', color: '#0369a1', border: '1px solid #bae6fd' }}>office logged</span>}
+                                  {payLabel && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: '#f5f3ff', color: '#6d28d9', border: '1px solid #ddd6fe' }}>{payLabel}</span>}
+                                </div>
+                                {job && <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 600 }}>{job.client}{job.address ? ` · ${job.address}` : ''}</div>}
+                                {e.notes && <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{e.notes}</div>}
+                                {e.start_time && e.finish_time && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>{e.start_time.slice(0, 5)} – {e.finish_time.slice(0, 5)}</div>}
+                                {e.admin_notes && <div style={{ marginTop: 4, fontSize: 11, padding: '4px 8px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 5, color: '#92400e' }}>💬 {e.admin_notes}</div>}
+                              </div>
+                              <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'monospace', color: '#0f172a', flexShrink: 0 }}>
+                                {e.source === 'admin' && e.amount != null ? fmt(Number(e.amount)) : `${e.units}h`}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 )
               })}
