@@ -53,7 +53,7 @@ BEGIN
       j.start_date,
       j.end_date
     FROM sub_contracts sc
-    LEFT JOIN jobs j ON j.id = sc.job_id AND j.user_id = v_admin_id
+    LEFT JOIN jobs j ON j.id::text = sc.job_id AND j.user_id = v_admin_id
     WHERE sc.user_id    = v_admin_id
       AND sc.contact_id = p_contact_id
       AND sc.status     = 'active'
