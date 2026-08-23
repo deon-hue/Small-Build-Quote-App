@@ -655,7 +655,7 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
                               </div>
                               <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>{tw.costs.length} day{tw.costs.length !== 1 ? 's' : ''} · click to {isOpen ? 'hide' : 'expand'}</div>
                             </td>
-                            <td style={{ padding: '8px 8px', color: '#374151', fontWeight: 500 }}>{fmtWeekRange(tw.ws)}</td>
+                            <td style={{ padding: '8px 8px', color: '#374151', fontWeight: 500, whiteSpace: 'nowrap' }}>{fmtWeekRange(tw.ws)}</td>
                             <td style={{ padding: '8px 8px' }}>
                               <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: cm.bg, color: cm.color, fontWeight: 600 }}>{cm.emoji} {cm.label}</span>
                             </td>
