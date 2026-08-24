@@ -234,3 +234,29 @@ export function compressImage(file: File): Promise<string> {
     img.src = url
   })
 }
+
+/** Compress an image and return both a Blob (for upload) and base64 (for AI) in one pass. */
+export function compressImageFull(file: File): Promise<{ blob: Blob; base64: string }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      const MAX = 1600
+      const scale = Math.min(MAX / img.width, MAX / img.height, 1)
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round(img.width * scale)
+      canvas.height = Math.round(img.height * scale)
+      canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height)
+      URL.revokeObjectURL(url)
+      canvas.toBlob(blob => {
+        if (!blob) { reject(new Error('Compression failed')); return }
+        const reader = new FileReader()
+        reader.onload = e => resolve({ blob, base64: (e.target?.result as string).split(',')[1] })
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      }, 'image/jpeg', 0.82)
+    }
+    img.onerror = reject
+    img.src = url
+  })
+}

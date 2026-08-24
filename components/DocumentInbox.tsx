@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   fetchDocuments, uploadInboxFile, createInboxDocument, deleteDocument,
-  readAsBase64, compressImage,
+  readAsBase64, compressImage, compressImageFull,
 } from '@/lib/job-costs'
 import DocumentReviewModal from './DocumentReviewModal'
 import type { InboxDocument, Job } from '@/lib/types'
@@ -64,34 +64,45 @@ export default function DocumentInbox({ jobs }: Props) {
 
       setUploading(n => n + 1)
       try {
-        const path = await uploadInboxFile(sb, user.id, file, file.name)
+        // Compress image before upload so mobile photos go up at ~300KB not ~10MB
+        let uploadBlob: File | Blob = file
+        let base64ForAI: string | null = null
+        if (isImage) {
+          try {
+            const compressed = await compressImageFull(file)
+            uploadBlob = compressed.blob
+            base64ForAI = compressed.base64
+          } catch { /* fallback: upload original */ }
+        }
+
+        const path = await uploadInboxFile(sb, user.id, uploadBlob, file.name)
         if (!path) { setError(`${file.name}: upload failed — check the "job-documents" storage bucket exists (run supabase/phase17.sql).`); continue }
 
-        let extraction: unknown = null
-        try {
-          const base64 = isImage ? await compressImage(file) : await readAsBase64(file)
-          if (base64.length <= 9_000_000) {
+        // Save document record and show it immediately — don't wait for AI
+        const doc = await createInboxDocument(sb, user.id, {
+          fileName: file.name, storagePath: path,
+          mimeType: isImage ? 'image/jpeg' : file.type,
+          fileSize: uploadBlob.size, rawExtraction: null,
+        })
+        if (!doc) { setError(`${file.name}: file uploaded but couldn't be saved to the inbox.`); continue }
+        setDocs(prev => [doc, ...prev])
+
+        // AI extraction runs in the background and updates the document when done
+        ;(async () => {
+          try {
+            const b64 = base64ForAI ?? (isPdf ? await readAsBase64(file) : null)
+            if (!b64 || b64.length > 9_000_000) return
             const res = await fetch('/api/extract-document', {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ base64, mimeType: isImage ? 'image/jpeg' : 'application/pdf', fileName: file.name }),
+              body: JSON.stringify({ base64: b64, mimeType: isImage ? 'image/jpeg' : file.type, fileName: file.name }),
             })
             const data = await res.json() as { extracted?: unknown; error?: string }
             if (res.ok && data.extracted) {
-              extraction = data.extracted
-            } else {
-              const reason = data.error || `HTTP ${res.status}`
-              setError(`${file.name}: AI extraction failed (${reason}). File saved — open it to fill in details manually.`)
+              await sb.from('job_documents').update({ raw_extraction: data.extracted }).eq('id', doc.id)
+              setDocs(prev => prev.map(d => d.id === doc.id ? { ...d, extraction: data.extracted as Record<string, unknown> } : d))
             }
-          }
-        } catch (extractErr) {
-          setError(`${file.name}: AI extraction failed (${extractErr instanceof Error ? extractErr.message : 'network error'}). File saved — open it to fill in details manually.`)
-        }
-
-        const doc = await createInboxDocument(sb, user.id, {
-          fileName: file.name, storagePath: path, mimeType: file.type, fileSize: file.size, rawExtraction: extraction,
-        })
-        if (doc) setDocs(prev => [doc, ...prev])
-        else setError(`${file.name}: file uploaded but couldn't be saved to the inbox — has supabase/phase17.sql been run?`)
+          } catch { /* non-fatal — doc is already saved */ }
+        })()
       } finally {
         setUploading(n => n - 1)
       }
