@@ -401,18 +401,8 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
         return
       }
 
-      // Response is SSE — read full text then extract the final data: line (skip ping comments)
-      let reply = 'Sorry, something went wrong. Please try again.'
-      try {
-        const text = await res.text()
-        for (const line of text.split('\n')) {
-          if (!line.startsWith('data: ')) continue
-          try {
-            const parsed = JSON.parse(line.slice(6)) as { reply?: string }
-            if (parsed.reply) reply = parsed.reply
-          } catch { /* ignore malformed line */ }
-        }
-      } catch { /* use fallback reply */ }
+      const data = await res.json() as { reply?: string }
+      const reply = data.reply || 'Sorry, something went wrong. Please try again.'
 
       setMessages(prev => [...prev, { role: 'assistant', content: reply }])
       const { scope, readyToBuild: rdy } = parseMessage(reply)
