@@ -187,33 +187,76 @@ IMPORTANT: Never output [READY_TO_BUILD] without a [SCOPE] block. Only generate 
   const model     = 'claude-sonnet-4-6'
   const maxTokens = hasFiles ? 1500 : 2000
 
-  // ── Call Anthropic API ────────────────────────────────────────────────────
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({ model, max_tokens: maxTokens, system, messages: apiMessages }),
-    })
+  // ── Call Anthropic API (streaming to avoid Netlify 26s timeout on large files) ──
+  const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({ model, max_tokens: maxTokens, stream: true, system, messages: apiMessages }),
+  })
 
-    const data = await res.json()
-    if (data.error) {
-      console.error('Anthropic API error:', data.error)
-      const msg = data.error?.type === 'authentication_error'
-        ? 'AI not configured — please add your ANTHROPIC_API_KEY in Netlify environment variables.'
-        : `AI error: ${data.error?.message || 'Unknown error'}`
-      return NextResponse.json({ reply: msg })
-    }
-
-    const reply = data.content?.[0]?.text || 'Sorry, I could not generate a response. Please try again.'
-    return NextResponse.json({ reply })
-  } catch (err) {
-    console.error('AI scope chat error:', err)
-    return NextResponse.json({ reply: `Server error: ${err instanceof Error ? err.message : String(err)}` }, { status: 500 })
+  if (!anthropicRes.ok) {
+    const errText = await anthropicRes.text().catch(() => '')
+    let msg = `AI service error (${anthropicRes.status})`
+    try { const j = JSON.parse(errText); msg = j?.error?.message || msg } catch { /* ignore */ }
+    if (anthropicRes.status === 401) msg = 'AI not configured — please add your ANTHROPIC_API_KEY in Netlify environment variables.'
+    return NextResponse.json({ reply: msg })
   }
+
+  const encoder = new TextEncoder()
+  const stream = new ReadableStream({
+    async start(controller) {
+      const reader = anthropicRes.body!.getReader()
+      const decoder = new TextDecoder()
+      let sseBuffer = ''
+      let accumulated = ''
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          sseBuffer += decoder.decode(value, { stream: true })
+          const lines = sseBuffer.split('\n')
+          sseBuffer = lines.pop() || ''
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue
+            const chunk = line.slice(6).trim()
+            if (chunk === '[DONE]') continue
+            try {
+              const event = JSON.parse(chunk)
+              if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+                accumulated += event.delta.text
+              }
+            } catch { /* ignore malformed SSE */ }
+          }
+
+          // Keep-alive so Netlify doesn't kill the function while Claude thinks
+          controller.enqueue(encoder.encode(': ping\n\n'))
+        }
+      } catch {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ reply: 'Stream interrupted — please try again.' })}\n\n`))
+        controller.close()
+        return
+      }
+
+      const reply = accumulated.trim() || 'Sorry, I could not generate a response. Please try again.'
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify({ reply })}\n\n`))
+      controller.close()
+    }
+  })
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'X-Accel-Buffering': 'no',
+    },
+  })
 
   } catch (outerErr) {
     console.error('scope-chat unhandled error:', outerErr)
