@@ -376,7 +376,7 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: updated,
-          context: { jobType, address, phases, existingScope: initialScope || undefined },
+          context: { jobType, address, phases, existingScope: latestScope || initialScope || undefined },
           // rawInput is the plain text only — the API never sees "📎 filename.pdf"
           rawInput: textInput,
           attachments: currentAttachments.map(a => ({
