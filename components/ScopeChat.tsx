@@ -272,6 +272,11 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
+  // Auto-save whenever AI produces a new scope — so closing the dialog never loses work
+  useEffect(() => {
+    if (latestScope) onInsert(latestScope)
+  }, [latestScope]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── File attachment ─────────────────────────────────────────
   async function handleFiles(fileList: FileList) {
     const files = Array.from(fileList)
@@ -810,7 +815,7 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
   return (
     <div
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end', padding: 16 }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      onClick={e => e.stopPropagation()}
       onDragOver={e => e.preventDefault()}
       onDrop={handleDrop}
     >

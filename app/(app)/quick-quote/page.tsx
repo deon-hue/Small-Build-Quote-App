@@ -540,7 +540,6 @@ export default function QuickQuotePage() {
           onInsert={text => {
             setScope(text)
             setScopeGenerated(true)
-            setShowChat(false)
           }}
           onClose={() => setShowChat(false)}
           // No onBuildEstimate — Quick Quote doesn't generate phases
