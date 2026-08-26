@@ -61,9 +61,15 @@ export default function JobsPage() {
       } else {
         const newJob = await addJob({ ...form, quoteId: prefillQuoteId || undefined })
         // Mark quote as converted if we have a quoteId
-        if (prefillQuoteId) {
+        if (prefillQuoteId && newJob?.id) {
           const q = quotes.find(q => q.id === prefillQuoteId)
           if (q) await updateQuote({ ...q, convertedToJob: true })
+          // Copy any plan attachments from the quote into the job's files section
+          fetch('/api/copy-quote-plans', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ quoteId: prefillQuoteId, jobId: newJob.id }),
+          }).catch(err => console.warn('Could not copy quote plans to job:', err))
         }
       }
       setShowModal(false)

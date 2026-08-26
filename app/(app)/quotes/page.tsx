@@ -108,6 +108,12 @@ export default function SavedQuotesPage() {
       } catch (err) {
         console.warn('Could not auto-generate Gantt chart:', err)
       }
+      // Copy any plan attachments from the quote into the job's files section
+      fetch('/api/copy-quote-plans', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quoteId: q.id, jobId: newJob.id }),
+      }).catch(err => console.warn('Could not copy quote plans to job:', err))
     }
     await updateQuote({ ...q, convertedToJob: true })
     alert('Job created! Find it in the Jobs section.')
