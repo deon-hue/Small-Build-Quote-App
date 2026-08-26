@@ -243,14 +243,10 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
 
     if (initialScope?.trim()) {
       // Refinement mode — existing scope already saved on the quote
-      const preview = initialScope.trim()
-      const truncated = preview.length > 320
-        ? preview.slice(0, 320).replace(/\s+\S*$/, '') + '…'
-        : preview
       const greeting = [
-        `Hi! I can see this **${jobType}** already has a scope of works.`,
-        `\n\nHere's what's currently saved:\n\n> ${truncated}`,
-        `\n\nWhat would you like to do with it? I can **add to it**, **refine sections**, add **exclusions**, add **provisional sums**, or rewrite any part. Just tell me what you need.`,
+        `Hi! Here's the current scope of works for this **${jobType}**. Read through it and tell me what you'd like to change.\n\n`,
+        `---\n\n${initialScope.trim()}\n\n---`,
+        `\n\nI can **add to it**, **refine sections**, add **exclusions**, add **provisional sums**, or rewrite any part. What needs changing?`,
       ].join('')
       setMessages([{ role: 'assistant', content: greeting }])
     } else {
