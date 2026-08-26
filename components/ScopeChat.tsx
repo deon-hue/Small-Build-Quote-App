@@ -401,25 +401,16 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
         return
       }
 
-      // Response is SSE — read until we get the final data: line (skip ping comments)
+      // Response is SSE — read full text then extract the final data: line (skip ping comments)
       let reply = 'Sorry, something went wrong. Please try again.'
       try {
-        const reader = res.body!.getReader()
-        const decoder = new TextDecoder()
-        let buf = ''
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          buf += decoder.decode(value, { stream: true })
-          const lines = buf.split('\n')
-          buf = lines.pop() || ''
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue
-            try {
-              const parsed = JSON.parse(line.slice(6)) as { reply?: string }
-              if (parsed.reply) reply = parsed.reply
-            } catch { /* ignore malformed line */ }
-          }
+        const text = await res.text()
+        for (const line of text.split('\n')) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const parsed = JSON.parse(line.slice(6)) as { reply?: string }
+            if (parsed.reply) reply = parsed.reply
+          } catch { /* ignore malformed line */ }
         }
       } catch { /* use fallback reply */ }
 
