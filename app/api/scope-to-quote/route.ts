@@ -306,22 +306,26 @@ Analyse the scope and select appropriate phases and tasks from the library.`
     }
 
     const rawText = data.content?.[0]?.text || ''
-    let jsonStr = ('{' + rawText).trim()
 
+    // Extract from markdown fences if present
+    let jsonStr = rawText
     const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
     if (fenceMatch) jsonStr = fenceMatch[1].trim()
 
-    if (!jsonStr.startsWith('{')) {
-      const s = jsonStr.indexOf('{')
-      const e = jsonStr.lastIndexOf('}')
-      if (s !== -1 && e !== -1) jsonStr = jsonStr.slice(s, e + 1)
+    // Find JSON object boundaries
+    const openBrace = jsonStr.indexOf('{')
+    const closeBrace = jsonStr.lastIndexOf('}')
+    if (openBrace !== -1 && closeBrace !== -1 && closeBrace > openBrace) {
+      jsonStr = jsonStr.slice(openBrace, closeBrace + 1)
     }
 
     let parsed
     try {
       parsed = JSON.parse(jsonStr)
-    } catch {
-      console.error('Failed to parse AI JSON:', jsonStr.slice(0, 400))
+    } catch (parseErr) {
+      console.error('Failed to parse AI JSON. Raw response:', rawText.slice(0, 500))
+      console.error('Extracted JSON attempt:', jsonStr.slice(0, 300))
+      console.error('Parse error:', parseErr instanceof Error ? parseErr.message : String(parseErr))
       return NextResponse.json({ error: 'AI returned invalid JSON' }, { status: 500 })
     }
 
