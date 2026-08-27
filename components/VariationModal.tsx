@@ -526,15 +526,27 @@ export default function VariationModal({ job, onClose }: Props) {
                     >
                       {UNITS.map(u => <option key={u}>{u}</option>)}
                     </select>
-                    {/* Rate */}
-                    <input
-                      type="number"
-                      value={item.rate}
-                      onChange={e => updateItem(item.id, { rate: Number(e.target.value) })}
-                      readOnly={!canEdit}
-                      step="any"
-                      style={{ fontSize: 12, padding: '3px 4px', border: '1px solid var(--border)', borderRadius: 3, textAlign: 'right', background: canEdit ? '#fff' : '#f8fafc', marginLeft: 4, color: item.rate < 0 ? '#c0392b' : 'var(--ink)' }}
-                    />
+                    {/* Rate + Negate button */}
+                    <div style={{ display: 'flex', gap: 2, alignItems: 'center', marginLeft: 4 }}>
+                      <input
+                        type="number"
+                        value={item.rate}
+                        onChange={e => updateItem(item.id, { rate: Number(e.target.value) })}
+                        readOnly={!canEdit}
+                        step="any"
+                        min={-999999}
+                        style={{ flex: 1, fontSize: 12, padding: '3px 4px', border: '1px solid var(--border)', borderRadius: 3, textAlign: 'right', background: canEdit ? '#fff' : '#f8fafc', color: item.rate < 0 ? '#c0392b' : 'var(--ink)' }}
+                      />
+                      {canEdit && (
+                        <button
+                          title="Toggle positive/negative"
+                          onClick={() => updateItem(item.id, { rate: -item.rate })}
+                          style={{ fontSize: 10, padding: '2px 6px', border: '1px solid var(--border)', borderRadius: 3, background: '#f8fafc', cursor: 'pointer', fontWeight: 600, color: item.rate < 0 ? '#c0392b' : 'var(--ink)' }}
+                        >
+                          ±
+                        </button>
+                      )}
+                    </div>
                     {/* Total */}
                     <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 12, textAlign: 'right', padding: '0 6px', color: itemTotal < 0 ? '#c0392b' : 'var(--ink)', fontWeight: itemTotal < 0 ? 600 : 400 }}>
                       {fmt(itemTotal)}
