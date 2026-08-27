@@ -532,10 +532,11 @@ export default function VariationModal({ job, onClose }: Props) {
                       value={item.rate}
                       onChange={e => updateItem(item.id, { rate: Number(e.target.value) })}
                       readOnly={!canEdit}
-                      style={{ fontSize: 12, padding: '3px 4px', border: '1px solid var(--border)', borderRadius: 3, textAlign: 'right', background: canEdit ? '#fff' : '#f8fafc', marginLeft: 4 }}
+                      step="any"
+                      style={{ fontSize: 12, padding: '3px 4px', border: '1px solid var(--border)', borderRadius: 3, textAlign: 'right', background: canEdit ? '#fff' : '#f8fafc', marginLeft: 4, color: item.rate < 0 ? '#c0392b' : 'var(--ink)' }}
                     />
                     {/* Total */}
-                    <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 12, textAlign: 'right', padding: '0 6px', color: 'var(--ink)' }}>
+                    <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 12, textAlign: 'right', padding: '0 6px', color: itemTotal < 0 ? '#c0392b' : 'var(--ink)', fontWeight: itemTotal < 0 ? 600 : 400 }}>
                       {fmt(itemTotal)}
                     </div>
                     {/* Notes */}
