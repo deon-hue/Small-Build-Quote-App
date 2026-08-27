@@ -330,6 +330,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           clientRejectedAt: r.client_rejected_at || null,
           clientRejectionReason: r.client_rejection_reason || null,
           sentAt: r.sent_at || null,
+          resentAt: r.resent_at || null,
           createdAt: r.created_at,
         })))
       }
@@ -717,7 +718,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       total: v.total, notes: v.notes, locked: v.locked,
       client_approved_at: v.clientApprovedAt, client_approved_by: v.clientApprovedBy,
       client_rejected_at: v.clientRejectedAt, client_rejection_reason: v.clientRejectionReason,
-      sent_at: v.sentAt,
+      sent_at: v.sentAt, resent_at: v.resentAt || null,
     }).select().single()
     if (error) throw error
     const newVar: Variation = {
@@ -729,7 +730,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       clientApprovedBy: data.client_approved_by || null,
       clientRejectedAt: data.client_rejected_at || null,
       clientRejectionReason: data.client_rejection_reason || null,
-      sentAt: data.sent_at || null, createdAt: data.created_at,
+      sentAt: data.sent_at || null, resentAt: data.resent_at || null, createdAt: data.created_at,
     }
     setVariations(prev => [...prev, newVar])
     return newVar
@@ -742,7 +743,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       total: v.total, notes: v.notes, locked: v.locked,
       client_approved_at: v.clientApprovedAt, client_approved_by: v.clientApprovedBy,
       client_rejected_at: v.clientRejectedAt, client_rejection_reason: v.clientRejectionReason,
-      sent_at: v.sentAt, updated_at: new Date().toISOString(),
+      sent_at: v.sentAt, resent_at: v.resentAt || null, updated_at: new Date().toISOString(),
     }).eq('id', v.id)
     if (error) throw error
     setVariations(prev => prev.map(x => x.id === v.id ? v : x))

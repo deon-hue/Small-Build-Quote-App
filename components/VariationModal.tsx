@@ -307,7 +307,7 @@ export default function VariationModal({ job, onClose }: Props) {
                   )}
                   {v.status === 'sent' && (
                     <div style={{ fontSize: 11, color: '#e67e22', marginTop: 2 }}>
-                      Sent {fmtDate(v.sentAt)} — awaiting customer response
+                      {v.resentAt ? `🔄 Resent ${fmtDate(v.resentAt)}` : `Sent ${fmtDate(v.sentAt)}`} — awaiting customer response
                     </div>
                   )}
                   {v.status === 'draft' && (
@@ -687,7 +687,7 @@ export default function VariationModal({ job, onClose }: Props) {
                     ...editingVar,
                     title: form.title, description: form.description, items: form.items,
                     markup: form.markup, vatIncluded: form.vatIncluded, total, notes: form.notes,
-                    status: 'sent', sentAt: new Date().toISOString(),
+                    status: 'sent', sentAt: new Date().toISOString(), resentAt: null,
                   }
                   await updateVariation(updated)
                   setEditingVar(updated)
@@ -699,7 +699,7 @@ export default function VariationModal({ job, onClose }: Props) {
                     total, notes: form.notes, locked: false,
                     clientApprovedAt: null, clientApprovedBy: null,
                     clientRejectedAt: null, clientRejectionReason: null,
-                    sentAt: new Date().toISOString(),
+                    sentAt: new Date().toISOString(), resentAt: null,
                   })
                   savedRef = created?.ref ?? ''
                 }
@@ -734,6 +734,56 @@ export default function VariationModal({ job, onClose }: Props) {
               } finally { setBusy(false) }
             }}>
               {busy ? 'Sending…' : '📤 Send to Customer'}
+            </button>
+          )}
+
+          {/* Sent/Approved → Resend after updates */}
+          {(isSent || isApproved) && editingVar && (
+            <button className="btn btn-primary" disabled={busy || saving} style={{ background: '#3498db', borderColor: '#3498db' }} onClick={async () => {
+              if (!confirm(`Resend updated variation "${editingVar.title}" to the customer?\n\nThey will see the latest changes.`)) return
+              setBusy(true)
+              const total = calcVarTotal(form.items, form.markup, form.vatIncluded)
+              try {
+                const updated: Variation = {
+                  ...editingVar,
+                  title: form.title, description: form.description, items: form.items,
+                  markup: form.markup, vatIncluded: form.vatIncluded, total, notes: form.notes,
+                  status: 'sent', resentAt: new Date().toISOString(),
+                }
+                await updateVariation(updated)
+                setEditingVar(updated)
+
+                // ── Notify client ─────────────────────────────────────
+                const client = clients.find(c =>
+                  c.name?.toLowerCase() === job.client?.toLowerCase()
+                )
+                if (client?.phone || client?.email) {
+                  notifyClient({
+                    type:           'variation_sent',
+                    clientName:     client.name || job.client,
+                    clientPhone:    client.phone || undefined,
+                    clientEmail:    client.email || undefined,
+                    jobType:        job.type,
+                    jobAddress:     job.address,
+                    variationRef:   editingVar.ref,
+                    variationTitle: editingVar.title,
+                    variationTotal: total,
+                    vatIncluded:    form.vatIncluded,
+                    companyName:    settings?.name,
+                    companyPhone:   settings?.phone,
+                    companyEmail:   settings?.email,
+                    portalUrl:      typeof window !== 'undefined'
+                                      ? window.location.origin + '/portal'
+                                      : undefined,
+                  })
+                }
+                // ─────────────────────────────────────────────────────
+
+                alert('Variation resent to the customer.')
+                backToList()
+              } finally { setBusy(false) }
+            }}>
+              {busy ? 'Resending…' : '🔄 Resend Updated'}
             </button>
           )}
 

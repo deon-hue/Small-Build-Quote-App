@@ -634,5 +634,6 @@ export interface Variation {
   clientRejectedAt: string | null
   clientRejectionReason: string | null
   sentAt: string | null
+  resentAt?: string | null  // when resent after updates
   createdAt: string
 }
