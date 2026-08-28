@@ -596,6 +596,7 @@ export default function TakeoffPage() {
   const [panelMode, setPanelMode] = useState<PanelMode>('schedule')
   const [editingItem, setEditingItem] = useState<TakeoffItem | null>(null)
   const [editingElement, setEditingElement] = useState<DrawnElement | null>(null)
+  const [phaseDefaults, setPhaseDefaults] = useState<TakeoffItem | null>(null)
 
   // Calibration dialog
   const [showCalib, setShowCalib] = useState(false)
@@ -782,6 +783,18 @@ export default function TakeoffPage() {
 
     const item = itemFromElement(el, project.calibration.mpp)
 
+    // Apply phase defaults to the new item
+    if (phaseDefaults) {
+      // Copy over phase default properties (but keep element-specific ones)
+      item.wallHeight = item.wallHeight ?? phaseDefaults.wallHeight
+      item.wallBandPx = item.wallBandPx ?? phaseDefaults.wallBandPx
+      item.foundationWidth = item.foundationWidth ?? phaseDefaults.foundationWidth
+      item.foundationDepth = item.foundationDepth ?? phaseDefaults.foundationDepth
+      item.foundationType = item.foundationType ?? phaseDefaults.foundationType
+      if (phaseDefaults.spec) item.spec = item.spec ?? phaseDefaults.spec
+      if (phaseDefaults.subPhase) item.subPhase = item.subPhase ?? phaseDefaults.subPhase
+    }
+
     // Floor-specific enrichment
     if (floorMakeupId) {
       item.floorMakeupId = floorMakeupId
@@ -804,6 +817,7 @@ export default function TakeoffPage() {
     setPanelMode('properties')
     setEditingElement(el)
     setEditingItem(item)
+    setPhaseDefaults(null)
   })
 
   // ── Keep editingItem in sync when project.items is recalculated ──────────────
@@ -1048,6 +1062,11 @@ export default function TakeoffPage() {
   }
 
   function saveItemEdit(item: TakeoffItem) {
+    // If editing phase defaults, update the local state instead of project
+    if (item.id.startsWith('__phase-defaults-')) {
+      setPhaseDefaults(item)
+      return
+    }
     setProject(p => ({
       ...p,
       items: p.items.map(it => it.id === item.id ? item : it),
@@ -1057,16 +1076,19 @@ export default function TakeoffPage() {
 
   // ── Manual add item ────────────────────────────────────────────────────────
   function addManualItem() {
+    // Start with phase defaults, if available
     const item: TakeoffItem = {
+      ...(phaseDefaults ? { ...phaseDefaults } : {}),
       id: uid(),
-      name: 'New Item',
+      name: phaseDefaults?.name && phaseDefaults.name.includes('Default') ? 'New Item' : (phaseDefaults?.name ?? 'New Item'),
       phase: activePhase,
-      qty: 1,
-      unit: 'nr',
+      qty: phaseDefaults?.qty ?? 1,
+      unit: phaseDefaults?.unit ?? 'nr',
     }
     setProject(p => ({ ...p, items: [...p.items, item] }))
     setEditingItem(item)
     setEditingElement(null)
+    setPhaseDefaults(null)
     setPanelMode('properties')
   }
 
@@ -1283,10 +1305,20 @@ export default function TakeoffPage() {
     setTool(defaultTool)
     setDrawPoints([])
     setIsDrawing(false)
-    // Clear previous item selection so properties panel resets
+    // Show phase defaults in properties panel
     setEditingItem(null)
     setEditingElement(null)
     setSelectedId(null)
+    setPhaseDefaults({
+      id: `__phase-defaults-${ph}`,
+      phase: ph,
+      name: `${ph} – Default Properties`,
+      qty: 1,
+      unit: 'item',
+      wallHeight: 3,  // sensible default for walls
+      wallBandPx: 9,  // default wall width in pixels
+    })
+    setPanelMode('properties')
   }
 
   // Auto-scroll schedule panel to active phase when phase is selected
@@ -3326,17 +3358,18 @@ export default function TakeoffPage() {
 
   // ── Properties panel ───────────────────────────────────────────────────────
   function renderProperties() {
-    if (!editingItem) {
+    const item = editingItem ?? phaseDefaults
+    if (!item) {
       return (
         <div style={{ padding: '16px', color: 'var(--to-muted)', fontSize: 13, textAlign: 'center', paddingTop: 40 }}>
           <div style={{ fontSize: 28, marginBottom: 12 }}>☝️</div>
-          Click an element on the canvas to view and edit its properties.
+          Click a phase on the left or an element on the canvas to view properties.
           <br /><br />
           Or click <strong>+ Add Item</strong> to manually add a take-off line.
         </div>
       )
     }
-    return renderUnifiedProperties(editingItem)
+    return renderUnifiedProperties(item)
   }
 
   // ── Recovery snapshot banner (reusable) ──────────────────────────────────────
