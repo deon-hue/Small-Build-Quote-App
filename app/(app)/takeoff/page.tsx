@@ -3449,8 +3449,13 @@ export default function TakeoffPage() {
                   style={inputStyle}
                   value={selectedTaskId ?? (taskList[0]?.id ?? '')}
                   onChange={e => {
-                    setSelectedTaskId(e.target.value)
-                    const tk = taskList.find(t => t.id === e.target.value)
+                    const taskIdValue = e.target.value
+                    setSelectedTaskId(taskIdValue)
+                    // Look up task from fresh phase data to ensure we have correct unit
+                    const allSubs = getAllSubphasesForPhase(activePhase)
+                    const subphaseId = selectedTaskSubphaseId ?? allSubs[0]?.id
+                    const sub = allSubs.find(s => s.id === subphaseId)
+                    const tk = sub?.tasks.find(t => t.id === taskIdValue)
                     if (tk) {
                       // Switch tool based on task unit
                       const toolForUnit = tk.unit === 'nr' || tk.unit === 'day' || tk.unit === 'wk' || tk.unit === 'sum' || tk.unit === '%' ? 'click' : PHASE_DEFAULT_TOOL[activePhase] ?? 'select'
@@ -3932,6 +3937,7 @@ export default function TakeoffPage() {
             { t: 'line',    icon: '╱', label: 'Line'       },
             { t: 'rect',    icon: '▭', label: 'Rectangle'  },
             { t: 'polygon', icon: '⬠', label: 'Polygon'    },
+            { t: 'click',   icon: '💠', label: 'Click to Place Item' },
           ] as { t: DrawingTool; icon: string; label: string }[]).map(({ t, icon, label }) => (
             <div
               key={t}
