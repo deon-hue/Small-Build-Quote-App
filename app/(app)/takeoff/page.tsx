@@ -992,18 +992,22 @@ export default function TakeoffPage() {
 
     // Click tool for item-based tasks
     if (tool === 'click') {
-      if (selectedTaskId && selectedTaskSubphaseId) {
-        const taskSubs = getAllSubphasesForPhase(activePhase)
-        const sub = taskSubs.find(s => s.id === selectedTaskSubphaseId)
-        const task = sub?.tasks.find(t => t.id === selectedTaskId)
-        if (task) {
-          finishElement('rect', [pt, { x: pt.x + 20, y: pt.y + 20 }], false)
-          // Mark this element as task-based so it renders as a point marker
-          queuedTaskSubphaseIdRef.current = selectedTaskSubphaseId
-          queuedTaskIdRef.current = selectedTaskId
-          queuedTaskNameRef.current = task.name
-        }
+      if (!selectedTaskId || !selectedTaskSubphaseId) {
+        showToast('⚠️ Please select a task from the Properties panel first')
+        return
       }
+      const taskSubs = getAllSubphasesForPhase(activePhase)
+      const sub = taskSubs.find(s => s.id === selectedTaskSubphaseId)
+      const task = sub?.tasks.find(t => t.id === selectedTaskId)
+      if (!task) {
+        showToast('⚠️ Could not find selected task')
+        return
+      }
+      finishElement('rect', [pt, { x: pt.x + 20, y: pt.y + 20 }], false)
+      // Mark this element as task-based so it renders as a point marker
+      queuedTaskSubphaseIdRef.current = selectedTaskSubphaseId
+      queuedTaskIdRef.current = selectedTaskId
+      queuedTaskNameRef.current = task.name
       return
     }
 
