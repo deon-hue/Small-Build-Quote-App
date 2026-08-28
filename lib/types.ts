@@ -430,6 +430,7 @@ export interface InvoiceLineItem {
   qty: number
   unitPrice: number
   total: number
+  percentage?: number  // 0-100; default 100 for full invoice, <100 for partial
 }
 
 export interface PaymentMilestone {
