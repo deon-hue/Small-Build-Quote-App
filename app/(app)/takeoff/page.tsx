@@ -815,6 +815,7 @@ export default function TakeoffPage() {
 
   // ── SVG container resize ───────────────────────────────────────────────────
   const containerRef = useRef<HTMLDivElement>(null)
+  const scheduleContainerRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const obs = new ResizeObserver(entries => {
       const el = entries[0]?.contentRect
@@ -1283,6 +1284,16 @@ export default function TakeoffPage() {
     setDrawPoints([])
     setIsDrawing(false)
   }
+
+  // Auto-scroll schedule panel to active phase when phase is selected
+  useEffect(() => {
+    if (scheduleContainerRef.current && panelMode === 'schedule') {
+      const phaseElement = scheduleContainerRef.current.querySelector(`[data-phase="${activePhase}"]`)
+      if (phaseElement) {
+        phaseElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    }
+  }, [activePhase, panelMode])
 
   /** Return cursor to selection mode without changing the active phase */
   function resetDrawMode() {
@@ -3381,7 +3392,7 @@ export default function TakeoffPage() {
     }
 
     return (
-      <div style={{ overflowY: 'auto', height: '100%' }}>
+      <div ref={scheduleContainerRef} style={{ overflowY: 'auto', height: '100%' }}>
         {renderRecoveryBanner()}
         {/* Item count summary */}
         <div style={{ padding: '10px 14px', background: 'var(--to-alt)', borderBottom: '1px solid var(--to-border)',
@@ -3396,7 +3407,7 @@ export default function TakeoffPage() {
 
         {/* Phase groups */}
         {phaseGroups.map(g => (
-          <div key={g.phase}>
+          <div key={g.phase} data-phase={g.phase}>
             <div style={{ padding: '8px 14px', background: 'var(--to-panel)', borderBottom: '1px solid var(--to-border)',
               display: 'flex', alignItems: 'center', gap: 6 }}>
               <div style={{ width: 10, height: 10, borderRadius: 2, background: PHASE_COLORS[g.phase], flexShrink: 0 }} />
