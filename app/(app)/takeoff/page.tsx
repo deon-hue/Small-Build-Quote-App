@@ -4056,7 +4056,7 @@ export default function TakeoffPage() {
             style={{
               display: 'block',
               position: 'absolute', top: 0, left: 0,
-              cursor: isPanning ? 'grabbing' : spaceHeld ? 'grab' : tool === 'select' ? 'default' : 'crosshair',
+              cursor: isPanning ? 'grabbing' : spaceHeld ? 'grab' : tool === 'select' ? 'default' : tool === 'click' ? 'pointer' : 'crosshair',
               userSelect: 'none',
             }}
             onClick={handleSvgClick}
