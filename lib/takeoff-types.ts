@@ -6,7 +6,7 @@ import type { WallConstructionType, WallFinishType, CalculatedMaterial } from '.
 
 // ── Drawing tools ─────────────────────────────────────────────────────────────
 
-export type DrawingTool = 'select' | 'line' | 'rect' | 'polygon' | 'floor'
+export type DrawingTool = 'select' | 'line' | 'rect' | 'polygon' | 'floor' | 'click'
 
 // ── Measurement categories (match quote parentPhase names) ────────────────────
 

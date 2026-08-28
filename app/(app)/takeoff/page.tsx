@@ -26,7 +26,7 @@ import {
 } from '@/lib/demolition-data'
 import {
   ALL_PHASE_SUBPHASES, getAllSubphasesForPhase, getTasksForSubphase,
-  calcPhaseTaskSellingPrice,
+  calcPhaseTaskSellingPrice, PHASE_TASK_UNIT_LABELS,
   type PhaseSubphase, type PhaseTask,
 } from '@/lib/phase-tasks'
 import {
@@ -93,6 +93,7 @@ const TOOL_DISPLAY: Record<DrawingTool, string> = {
   rect:    'Rectangle (Area)',
   polygon: 'Polygon (Area)',
   floor:   'Floor Area',
+  click:   'Click to Place Item',
 }
 
 // ── ID helpers ────────────────────────────────────────────────────────────────
@@ -597,6 +598,8 @@ export default function TakeoffPage() {
   const [editingItem, setEditingItem] = useState<TakeoffItem | null>(null)
   const [editingElement, setEditingElement] = useState<DrawnElement | null>(null)
   const [phaseDefaults, setPhaseDefaults] = useState<TakeoffItem | null>(null)
+  const [selectedTaskSubphaseId, setSelectedTaskSubphaseId] = useState<string | null>(null)
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
 
   // Calibration dialog
   const [showCalib, setShowCalib] = useState(false)
@@ -671,6 +674,9 @@ export default function TakeoffPage() {
   const svgRef = useRef<SVGSVGElement>(null)
   const queuedFinishRef = useRef<DrawnElement | null>(null)
   const queuedFloorMakeupRef = useRef<string | null>(null)
+  const queuedTaskSubphaseIdRef = useRef<string | null>(null)
+  const queuedTaskIdRef = useRef<string | null>(null)
+  const queuedTaskNameRef = useRef<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const importJsonRef = useRef<HTMLInputElement>(null)
 
@@ -780,8 +786,23 @@ export default function TakeoffPage() {
     queuedFinishRef.current = null
     const floorMakeupId = queuedFloorMakeupRef.current
     queuedFloorMakeupRef.current = null
+    const taskSubphaseId = queuedTaskSubphaseIdRef.current
+    queuedTaskSubphaseIdRef.current = null
+    const taskId = queuedTaskIdRef.current
+    queuedTaskIdRef.current = null
+    const taskName = queuedTaskNameRef.current
+    queuedTaskNameRef.current = null
 
     const item = itemFromElement(el, project.calibration.mpp)
+
+    // Apply task info if this was a click-placed item
+    if (taskSubphaseId && taskId) {
+      item.taskSubphaseId = taskSubphaseId
+      item.taskId = taskId
+      if (taskName) item.name = taskName
+      item.qty = 1
+      item.unit = 'nr'
+    }
 
     // Apply phase defaults to the new item
     if (phaseDefaults) {
@@ -818,6 +839,9 @@ export default function TakeoffPage() {
     setEditingElement(el)
     setEditingItem(item)
     setPhaseDefaults(null)
+    // Reset task selection after placing item
+    setSelectedTaskSubphaseId(null)
+    setSelectedTaskId(null)
   })
 
   // ── Keep editingItem in sync when project.items is recalculated ──────────────
@@ -965,6 +989,23 @@ export default function TakeoffPage() {
     }
     if (tool === 'select') return
     const pt = svgCoords(e)
+
+    // Click tool for item-based tasks
+    if (tool === 'click') {
+      if (selectedTaskId && selectedTaskSubphaseId) {
+        const taskSubs = getAllSubphasesForPhase(activePhase)
+        const sub = taskSubs.find(s => s.id === selectedTaskSubphaseId)
+        const task = sub?.tasks.find(t => t.id === selectedTaskId)
+        if (task) {
+          finishElement('rect', [pt, { x: pt.x + 20, y: pt.y + 20 }], false)
+          // Mark this element as task-based so it renders as a point marker
+          queuedTaskSubphaseIdRef.current = selectedTaskSubphaseId
+          queuedTaskIdRef.current = selectedTaskId
+          queuedTaskNameRef.current = task.name
+        }
+      }
+      return
+    }
 
     // Floor tool
     if (tool === 'floor') {
@@ -1318,6 +1359,9 @@ export default function TakeoffPage() {
       wallHeight: 3,  // sensible default for walls
       wallBandPx: 9,  // default wall width in pixels
     })
+    // Reset task selection for this phase
+    setSelectedTaskSubphaseId(null)
+    setSelectedTaskId(null)
     setPanelMode('properties')
   }
 
@@ -3369,6 +3413,92 @@ export default function TakeoffPage() {
         </div>
       )
     }
+
+    // If showing phase defaults, show task picker first
+    if (item.id.startsWith('__phase-defaults-')) {
+      const taskSubs = getAllSubphasesForPhase(activePhase)
+      const selectedSub = taskSubs.find(s => s.id === selectedTaskSubphaseId) ?? taskSubs[0]
+      const taskList = selectedSub?.tasks ?? []
+      const selectedTask = taskList.find(t => t.id === selectedTaskId)
+
+      return (
+        <div style={{ padding: '16px' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--to-text)', marginBottom: 12 }}>
+            {activePhase}
+          </div>
+
+          {taskSubs.length > 0 && (
+            <>
+              <div style={{ marginBottom: 10 }}>
+                <label style={labelStyle}>Sub-Phase</label>
+                <select
+                  style={inputStyle}
+                  value={selectedTaskSubphaseId ?? (taskSubs[0]?.id ?? '')}
+                  onChange={e => {
+                    setSelectedTaskSubphaseId(e.target.value)
+                    const sp = getAllSubphasesForPhase(activePhase).find(s => s.id === e.target.value)
+                    if (sp?.tasks[0]) setSelectedTaskId(sp.tasks[0].id)
+                  }}>
+                  {taskSubs.map(sp => <option key={sp.id} value={sp.id}>{sp.name}</option>)}
+                </select>
+              </div>
+
+              <div style={{ marginBottom: 10 }}>
+                <label style={labelStyle}>Task</label>
+                <select
+                  style={inputStyle}
+                  value={selectedTaskId ?? (taskList[0]?.id ?? '')}
+                  onChange={e => {
+                    setSelectedTaskId(e.target.value)
+                    const tk = taskList.find(t => t.id === e.target.value)
+                    if (tk) {
+                      // Switch tool based on task unit
+                      const toolForUnit = tk.unit === 'nr' || tk.unit === 'day' || tk.unit === 'wk' || tk.unit === 'sum' || tk.unit === '%' ? 'click' : PHASE_DEFAULT_TOOL[activePhase] ?? 'select'
+                      setTool(toolForUnit)
+                    }
+                  }}>
+                  {taskList.map(t => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({PHASE_TASK_UNIT_LABELS[t.unit]})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedTask && (
+                <div style={{
+                  background: 'var(--to-alt)',
+                  padding: 10,
+                  borderRadius: 6,
+                  fontSize: 12,
+                  color: 'var(--to-text)',
+                  marginBottom: 12
+                }}>
+                  <div style={{ fontWeight: 600, marginBottom: 4 }}>{selectedTask.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--to-muted)' }}>
+                    {selectedTask.unit === 'nr' ? '💠 Click to place item' :
+                     selectedTask.unit === 'lm' ? '📏 Draw line (linear metres)' :
+                     selectedTask.unit === 'm²' ? '📐 Draw shape (square metres)' :
+                     selectedTask.unit === 'm³' ? '📦 Draw shape (cubic metres)' :
+                     selectedTask.unit === 'day' ? '⏱️ Lump sum per day' :
+                     selectedTask.unit === 'wk' ? '📅 Lump sum per week' :
+                     selectedTask.unit === 'sum' ? '💷 Lump sum' :
+                     selectedTask.unit === '%' ? '% Percentage of value' : 'Draw on canvas'}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          <div style={{ marginTop: 16, padding: '12px', background: 'var(--to-alt)', borderRadius: 6, fontSize: 12, color: 'var(--to-muted)' }}>
+            {selectedTask?.unit === 'nr'
+              ? '👈 Ready to click on canvas to place a marker'
+              : '👈 Ready to draw on canvas'}
+          </div>
+        </div>
+      )
+    }
+
     return renderUnifiedProperties(item)
   }
 
