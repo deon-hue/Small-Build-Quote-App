@@ -1283,6 +1283,10 @@ export default function TakeoffPage() {
     setTool(defaultTool)
     setDrawPoints([])
     setIsDrawing(false)
+    // Clear previous item selection so properties panel resets
+    setEditingItem(null)
+    setEditingElement(null)
+    setSelectedId(null)
   }
 
   // Auto-scroll schedule panel to active phase when phase is selected
