@@ -13,7 +13,7 @@ function PortalLoginForm() {
   const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [mode, setMode] = useState<'link' | 'password'>('link')
+  const [mode, setMode] = useState<'link' | 'password' | 'reset'>('link')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -105,6 +105,27 @@ function PortalLoginForm() {
     }
   }
 
+  // Password reset — send reset email
+  async function handlePasswordReset(e: React.FormEvent) {
+    e.preventDefault()
+    setError(''); setMessage('')
+    setLoading(true)
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/callback?next=/portal/reset-password`,
+      })
+      if (resetError) {
+        fetch('/api/portal/log-activity', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, eventType: 'password_reset_failed', details: resetError.message }) }).catch(() => {})
+        setError(resetError.message); return
+      }
+      fetch('/api/portal/log-activity', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, eventType: 'password_reset_requested' }) }).catch(() => {})
+      setMessage('Password reset email sent! Check your inbox (and spam folder) for a link to reset your password.')
+      setEmail('')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="portal-login-wrap">
       <div className="portal-login-card">
@@ -117,34 +138,36 @@ function PortalLoginForm() {
         </p>
 
         {/* Mode tabs */}
-        <div style={{ display: 'flex', background: '#f0f2ee', borderRadius: 8, padding: 3, marginBottom: 24, gap: 3 }}>
-          <button
-            type="button"
-            onClick={() => { setMode('link'); setError(''); setMessage('') }}
-            style={{
-              flex: 1, padding: '8px 0', borderRadius: 6, border: 'none', fontSize: 13, fontWeight: 600,
-              cursor: 'pointer', transition: 'all 0.15s',
-              background: mode === 'link' ? '#fff' : 'transparent',
-              color: mode === 'link' ? 'var(--ink)' : 'var(--muted)',
-              boxShadow: mode === 'link' ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
-            }}
-          >
-            📧 Email link
-          </button>
-          <button
-            type="button"
-            onClick={() => { setMode('password'); setError(''); setMessage('') }}
-            style={{
-              flex: 1, padding: '8px 0', borderRadius: 6, border: 'none', fontSize: 13, fontWeight: 600,
-              cursor: 'pointer', transition: 'all 0.15s',
-              background: mode === 'password' ? '#fff' : 'transparent',
-              color: mode === 'password' ? 'var(--ink)' : 'var(--muted)',
-              boxShadow: mode === 'password' ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
-            }}
-          >
-            🔑 Password
-          </button>
-        </div>
+        {mode !== 'reset' && (
+          <div style={{ display: 'flex', background: '#f0f2ee', borderRadius: 8, padding: 3, marginBottom: 24, gap: 3 }}>
+            <button
+              type="button"
+              onClick={() => { setMode('link'); setError(''); setMessage('') }}
+              style={{
+                flex: 1, padding: '8px 0', borderRadius: 6, border: 'none', fontSize: 13, fontWeight: 600,
+                cursor: 'pointer', transition: 'all 0.15s',
+                background: mode === 'link' ? '#fff' : 'transparent',
+                color: mode === 'link' ? 'var(--ink)' : 'var(--muted)',
+                boxShadow: mode === 'link' ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
+              }}
+            >
+              📧 Email link
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode('password'); setError(''); setMessage('') }}
+              style={{
+                flex: 1, padding: '8px 0', borderRadius: 6, border: 'none', fontSize: 13, fontWeight: 600,
+                cursor: 'pointer', transition: 'all 0.15s',
+                background: mode === 'password' ? '#fff' : 'transparent',
+                color: mode === 'password' ? 'var(--ink)' : 'var(--muted)',
+                boxShadow: mode === 'password' ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
+              }}
+            >
+              🔑 Password
+            </button>
+          </div>
+        )}
 
         {error && <div className="portal-alert portal-alert-error">{error}</div>}
         {message && <div className="portal-alert portal-alert-success">{message}</div>}
@@ -180,7 +203,7 @@ function PortalLoginForm() {
               </p>
             )}
           </form>
-        ) : (
+        ) : mode === 'password' ? (
           /* ── Password ── */
           <form onSubmit={handlePassword}>
             <div className="fg">
@@ -213,6 +236,56 @@ function PortalLoginForm() {
             >
               {loading ? 'Please wait…' : 'Sign In'}
             </button>
+            <p style={{ textAlign: 'center', fontSize: 12, marginTop: 12 }}>
+              <button
+                type="button"
+                onClick={() => { setMode('reset'); setError(''); setMessage(''); setPassword('') }}
+                style={{
+                  background: 'none', border: 'none', color: 'var(--link)', cursor: 'pointer',
+                  textDecoration: 'underline', fontSize: 12, fontWeight: 500, padding: 0
+                }}
+              >
+                Forgot your password?
+              </button>
+            </p>
+          </form>
+        ) : (
+          /* ── Password Reset ── */
+          <form onSubmit={handlePasswordReset}>
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 16, lineHeight: 1.6 }}>
+              Enter your email address and we&apos;ll send you a link to reset your password.
+            </p>
+            <div className="fg">
+              <label>Email Address</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                autoFocus
+                placeholder="your@email.com"
+              />
+            </div>
+            <button
+              className="btn btn-primary"
+              style={{ width: '100%', marginTop: 4 }}
+              type="submit"
+              disabled={loading}
+            >
+              {loading ? 'Sending…' : 'Send Reset Link'}
+            </button>
+            <p style={{ textAlign: 'center', fontSize: 12, marginTop: 12 }}>
+              <button
+                type="button"
+                onClick={() => { setMode('password'); setError(''); setMessage(''); setEmail('') }}
+                style={{
+                  background: 'none', border: 'none', color: 'var(--link)', cursor: 'pointer',
+                  textDecoration: 'underline', fontSize: 12, fontWeight: 500, padding: 0
+                }}
+              >
+                Back to sign in
+              </button>
+            </p>
           </form>
         )}
       </div>
