@@ -44,9 +44,17 @@ function dateStr(d: Date): string {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
-/** Clamp string to avoid pdf-lib crashing on control characters */
+/** Clamp string to avoid pdf-lib crashing on unsupported characters */
 function safe(s: string | undefined | null): string {
-  return (s ?? '').replace(/[\x00-\x1F\x7F]/g, ' ').trim()
+  return (s ?? '')
+    .replace(/[\x00-\x1F\x7F]/g, ' ')
+    // Replace Unicode math symbols with ASCII equivalents
+    .replace(/≈/g, '~')
+    .replace(/±/g, '+/-')
+    .replace(/×/g, 'x')
+    .replace(/÷/g, '/')
+    .replace(/[^\x20-\x7E\xA0-\xFF]/g, '?')  // Replace any other non-WinAnsi chars with ?
+    .trim()
 }
 
 /**
