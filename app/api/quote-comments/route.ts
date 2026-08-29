@@ -1,5 +1,19 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import type { QuoteComment } from '@/lib/types'
+
+function toQuoteComment(data: any): QuoteComment {
+  return {
+    id: data.id,
+    quoteId: data.quote_id,
+    userId: data.user_id,
+    authorName: data.author_name,
+    message: data.message,
+    isInternal: data.is_internal,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  }
+}
 
 export async function GET(req: NextRequest) {
   const quoteId = req.nextUrl.searchParams.get('quoteId')
@@ -20,7 +34,7 @@ export async function GET(req: NextRequest) {
     .order('created_at', { ascending: true })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  return NextResponse.json(data.map(toQuoteComment))
 }
 
 export async function POST(req: NextRequest) {
@@ -60,5 +74,5 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data, { status: 201 })
+  return NextResponse.json(toQuoteComment(data), { status: 201 })
 }

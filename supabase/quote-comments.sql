@@ -33,4 +33,10 @@ DROP POLICY IF EXISTS "Contractor can update own comments" ON quote_comments;
 CREATE POLICY "Contractor can update own comments" ON quote_comments
   FOR UPDATE USING (user_id = auth.uid());
 
--- TODO: Add portal auth policies for clients to see non-internal comments on their quotes
+-- Portal: Clients can see non-internal comments on their quotes
+DROP POLICY IF EXISTS "Portal clients see non-internal comments" ON quote_comments;
+CREATE POLICY "Portal clients see non-internal comments" ON quote_comments
+  FOR SELECT USING (
+    NOT is_internal AND
+    quote_id IN (SELECT id FROM quotes WHERE customer ->> 'email' = auth.jwt() ->> 'email')
+  );
