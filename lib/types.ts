@@ -147,6 +147,19 @@ export interface Quote {
   clientApprovedBy?: string | null
 }
 
+// ── Quote Comments — client/contractor communication on quotes ──────────────
+
+export interface QuoteComment {
+  id: string
+  quoteId: string
+  userId: string
+  authorName: string  // "You" for contractor, client name for portal users
+  message: string
+  isInternal: boolean  // Only visible to contractor if true
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Job {
   id: string
   client: string
