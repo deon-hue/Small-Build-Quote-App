@@ -4,6 +4,7 @@ import { useState, useRef } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { buildHtml, buildHtmlClientView } from '@/lib/quoteHtml'
 import type { Quote } from '@/lib/types'
+import QuoteCommentsSection from './QuoteCommentsSection'
 
 interface Props {
   quote: Quote
@@ -66,13 +67,18 @@ export default function QuotePreviewModal({ quote, onClose }: Props) {
             <button className="modal-close" onClick={onClose}>×</button>
           </div>
         </div>
-        <iframe
-          ref={frameRef}
-          className="modal-iframe"
-          srcDoc={html}
-          style={{ flex: 1, border: 'none', minHeight: 560 }}
-          title="Quote Preview"
-        />
+        <div style={{ display: 'flex', flex: 1, minHeight: 560, gap: 20 }}>
+          <iframe
+            ref={frameRef}
+            className="modal-iframe"
+            srcDoc={html}
+            style={{ flex: 1, border: 'none' }}
+            title="Quote Preview"
+          />
+          <div style={{ width: 320, overflowY: 'auto', borderLeft: '1px solid var(--border)', paddingLeft: 16 }}>
+            <QuoteCommentsSection quoteId={quote.id} />
+          </div>
+        </div>
       </div>
     </div>
   )

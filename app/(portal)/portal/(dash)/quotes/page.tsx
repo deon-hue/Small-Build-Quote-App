@@ -5,6 +5,7 @@ import { usePortal } from '@/contexts/PortalContext'
 import { calcItemSell, calcPhaseSell, fmt } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import type { Quote } from '@/lib/types'
+import QuoteCommentsSection from '@/components/QuoteCommentsSection'
 
 const STATUS_LABEL: Record<string, string> = {
   pending: 'Awaiting review', sent: 'Sent — awaiting your approval',
@@ -247,6 +248,9 @@ export default function PortalQuotesPage() {
                     ✍️ Review &amp; Approve This Quote
                   </button>
                 )}
+
+                {/* ── Comments section ───────────────────── */}
+                <QuoteCommentsSection quoteId={q.id} isPortalView={true} />
 
               </div>
             </div>
