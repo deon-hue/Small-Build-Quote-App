@@ -67,15 +67,17 @@ export default function QuotePreviewModal({ quote, onClose }: Props) {
             <button className="modal-close" onClick={onClose}>×</button>
           </div>
         </div>
-        <iframe
-          ref={frameRef}
-          className="modal-iframe"
-          srcDoc={html}
-          style={{ flex: 1, border: 'none', minHeight: 560 }}
-          title="Quote Preview"
-        />
-        <div style={{ maxHeight: 240, overflowY: 'auto', borderTop: '1px solid var(--border)', paddingTop: 16 }}>
-          <QuoteCommentsSection quoteId={quote.id} />
+        <div style={{ display: 'flex', flex: 1, minHeight: 0, flexDirection: 'column', gap: 0 }}>
+          <iframe
+            ref={frameRef}
+            className="modal-iframe"
+            srcDoc={html}
+            style={{ flex: 0.7, border: 'none', minHeight: 400 }}
+            title="Quote Preview"
+          />
+          <div style={{ flex: 0.3, overflowY: 'auto', borderTop: '1px solid var(--border)', paddingTop: 16, paddingLeft: 16, paddingRight: 16, paddingBottom: 16 }}>
+            <QuoteCommentsSection quoteId={quote.id} />
+          </div>
         </div>
       </div>
     </div>
