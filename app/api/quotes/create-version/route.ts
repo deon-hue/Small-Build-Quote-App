@@ -11,6 +11,8 @@ export async function POST(req: NextRequest) {
   if (!quoteId) return NextResponse.json({ error: 'Quote ID required' }, { status: 400 })
 
   try {
+    console.log(`[create-version] quoteId=${quoteId}, user=${user.id}`)
+
     // Get the quote to version
     const { data: quote, error: fetchError } = await sb
       .from('quotes')
@@ -20,7 +22,8 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (fetchError || !quote) {
-      return NextResponse.json({ error: 'Quote not found' }, { status: 404 })
+      console.error(`[create-version] Quote not found: fetchError=${fetchError?.message}, quote=${!!quote}`)
+      return NextResponse.json({ error: `Quote not found${fetchError ? `: ${fetchError.message}` : ''}` }, { status: 404 })
     }
 
     const currentQuote = quote as Quote & { user_id: string }
