@@ -286,6 +286,16 @@ export default function NewQuotePage() {
     setStep('landing')
   }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Update document title based on editing state
+  useEffect(() => {
+    if (editingId) {
+      const quote = quotes.find(q => q.id === editingId)
+      document.title = `Editing: ${quote?.ref || 'Quote'} - Small Build Quote App`
+    } else {
+      document.title = 'New Quote - Small Build Quote App'
+    }
+  }, [editingId, quotes])
+
   // ── Auto-save when editing an existing saved quote ───────────────────────────
   // Debounced 2s — fires silently on any change to phases, customer data or settings.
   // Does NOT fire for new unsaved quotes, locked quotes, or during initial load.
