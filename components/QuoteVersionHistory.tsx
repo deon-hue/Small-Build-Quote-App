@@ -53,7 +53,8 @@ export default function QuoteVersionHistory({ quoteId, currentVersion, onVersion
 
       if (res.ok) {
         const newQuote = await res.json()
-        router.push(`/new-quote?id=${newQuote.id}`)
+        sessionStorage.setItem('sbc_edit_quote', newQuote.id)
+        router.push(`/new-quote`)
         router.refresh()
       } else {
         const errorData = await res.json()
