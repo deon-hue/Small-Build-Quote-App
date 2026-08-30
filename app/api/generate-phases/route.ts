@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
-export const maxDuration = 60
+export const maxDuration = 300  // 5 minutes for complex scopes
 
 // Extract every fully-closed phase object from a truncated JSON string.
 // Falls back gracefully when the AI hit the max_tokens ceiling mid-response.
