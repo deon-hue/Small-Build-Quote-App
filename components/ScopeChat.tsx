@@ -590,6 +590,22 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
         {/* ── Quick prompts ── */}
         {!loading && !readyToBuild && (
           <div style={{ padding: '6px 16px 0', display: 'flex', flexWrap: 'wrap', gap: 6, flexShrink: 0 }}>
+            {/* Show "Generate Scope" button during interview phase */}
+            {messages.length > 1 && !latestScope && (
+              <button
+                onClick={() => send('generate')}
+                style={{
+                  background: '#7ab533',
+                  border: 'none',
+                  borderRadius: 20, padding: '6px 14px', fontSize: 11, fontWeight: 600,
+                  color: '#fff',
+                  cursor: 'pointer', fontFamily: 'inherit',
+                  boxShadow: '0 2px 8px rgba(122, 181, 51, 0.3)',
+                }}
+              >
+                ✦ Generate Scope
+              </button>
+            )}
             {quickPrompts.map(p => {
               // Short interview-response chips send immediately; descriptive starter chips set input
               const inInterviewPhase = messages.length > 1 && !latestScope
