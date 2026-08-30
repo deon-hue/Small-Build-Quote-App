@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { JOB_TEMPLATES } from '@/lib/utils'
 
-export const maxDuration = 60
+export const maxDuration = 300
 import { ESTIMATOR_PHASE_DEFAULTS } from '@/lib/estimatorDefaults'
 
 // ── Back Office library builder ────────────────────────────────────────────────
@@ -281,7 +281,7 @@ ${rateLines ? `\nBack Office default rates (for reference only — do not includ
 Analyse the scope and select appropriate phases and tasks from the library.`
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -291,6 +291,7 @@ Analyse the scope and select appropriate phases and tasks from the library.`
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 4096,
+        stream: true,
         system,
         messages: [
           { role: 'user', content: userMessage },
@@ -298,14 +299,40 @@ Analyse the scope and select appropriate phases and tasks from the library.`
       }),
     })
 
-    const data = await res.json()
-
-    if (data.error) {
-      console.error('Anthropic API error:', data.error)
-      return NextResponse.json({ error: data.error?.message || 'AI error' }, { status: 500 })
+    if (!anthropicRes.ok) {
+      const errText = await anthropicRes.text()
+      console.error('Anthropic API error:', anthropicRes.status, errText.slice(0, 200))
+      let msg = `AI service error (${anthropicRes.status})`
+      try { const j = JSON.parse(errText); msg = j?.error?.message || msg } catch { /* ignore */ }
+      return NextResponse.json({ error: msg }, { status: 500 })
     }
 
-    const rawText = data.content?.[0]?.text || ''
+    // Collect full response from stream
+    const reader = anthropicRes.body!.getReader()
+    const decoder = new TextDecoder()
+    let rawText = ''
+    let sseBuffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      sseBuffer += decoder.decode(value, { stream: true })
+      const lines = sseBuffer.split('\n')
+      sseBuffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        const chunk = line.slice(6).trim()
+        if (chunk === '[DONE]') continue
+        try {
+          const event = JSON.parse(chunk)
+          if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+            rawText += event.delta.text
+          }
+        } catch { /* ignore malformed SSE lines */ }
+      }
+    }
 
     // Extract from markdown fences if present
     let jsonStr = rawText
