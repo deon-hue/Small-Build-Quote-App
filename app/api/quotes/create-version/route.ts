@@ -26,11 +26,11 @@ export async function POST(req: NextRequest) {
     const currentQuote = quote as Quote & { user_id: string }
 
     // Determine parent quote and next version number
-    const parentQuoteId = currentQuote.parent_quote_id || currentQuote.id
+    const parentQuoteId = currentQuote.parentQuoteId || currentQuote.id
     const { data: versionData } = await sb
       .from('quotes')
       .select('version_number')
-      .eq(currentQuote.parent_quote_id ? 'parent_quote_id' : 'id', parentQuoteId)
+      .eq(currentQuote.parentQuoteId ? 'parent_quote_id' : 'id', parentQuoteId)
       .order('version_number', { ascending: false })
       .limit(1)
 
