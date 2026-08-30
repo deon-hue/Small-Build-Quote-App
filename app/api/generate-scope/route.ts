@@ -29,7 +29,7 @@ Write a clear, professional scope of works. ${hasPhases ? `Start with a single-l
 Then organize it by the following phases, using each phase name as a bold markdown heading (e.g. **Phase Name**). For each phase, write 1-2 sentences describing the works involved in that phase.
 
 Phases:
-${phases.map((p, i) => `${i + 1}. ${p}`).join('\n')}
+${phases.map((p: string, i: number) => `${i + 1}. ${p}`).join('\n')}
 
 ` : 'Start with a single-line overview, then write as 4-6 sentences covering all main work areas in logical order (demolition → structure → external → roof → internal → finishes).'}
 
