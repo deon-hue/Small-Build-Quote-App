@@ -53,7 +53,7 @@ export default function QuoteVersionHistory({ quoteId, currentVersion, onVersion
 
       if (res.ok) {
         const newQuote = await res.json()
-        router.push(`/quotes/${newQuote.id}`)
+        router.push(`/new-quote?id=${newQuote.id}`)
         router.refresh()
       } else {
         const errorData = await res.json()
