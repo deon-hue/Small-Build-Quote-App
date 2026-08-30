@@ -520,7 +520,15 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
                       <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: '#7ab533', marginBottom: 6 }}>
                         ✓ Scope Draft
                       </div>
-                      <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{scope}</div>
+                      <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.65 }}>
+                        {scope.split(/(\*\*[^*]+\*\*|\n)/g).map((part, j) => {
+                          if (part === '\n') return <div key={j} style={{ height: '0.5em' }} />
+                          if (part.startsWith('**') && part.endsWith('**')) {
+                            return <div key={j} style={{ fontWeight: 700, marginTop: j > 0 ? '12px' : 0, marginBottom: '6px', color: '#3a7a1a' }}>{part.slice(2, -2)}</div>
+                          }
+                          return <div key={j} style={{ whiteSpace: 'pre-wrap' }}>{part}</div>
+                        })}
+                      </div>
                       <div style={{ marginTop: 10, display: 'flex', gap: 6 }}>
                         {onBuildEstimate && (
                           <button
@@ -644,8 +652,10 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
                 </button>
               </div>
             </div>
-            <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, maxHeight: 36, overflow: 'hidden' }}>
-              {latestScope.slice(0, 120)}{latestScope.length > 120 ? '…' : ''}
+            <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, maxHeight: 60, overflow: 'hidden' }}>
+              {latestScope.split('\n').slice(0, 2).map((line, i) => (
+                <div key={i}>{line.replace(/\*\*/g, '').slice(0, 100)}{line.length > 100 ? '…' : ''}</div>
+              ))}
             </div>
           </div>
         )}

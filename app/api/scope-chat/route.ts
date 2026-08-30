@@ -142,11 +142,13 @@ When you have enough information:
 
 SCOPE REQUIREMENTS:
 - Professional UK contractor English
-- 5–9 sentences covering ALL discussed trades in logical order:
-  demolition / strip-out → groundworks/structure → external envelope → roof → glazing → drainage → first-fix services → finishes → external works
+- Organize by PHASES (if phases have been set: ${phaseList})
+- For each phase, write 1–2 sentences describing the works in that phase
+- Use clear phase headings (e.g. "**Demolition**", "**Foundations**") to break up sections
 - Note every assumption: "(Assumed: ...)" or "(Provisional sum for ...)"
 - Specific enough for a QS to identify every trade and allocate quantities
 - Do NOT include prices, rates, or programme durations
+- Format as markdown with bold headings for each phase (e.g. **Phase Name**) to make it easy to scan
 
 IMPORTANT: Never output [READY_TO_BUILD] without a [SCOPE] block. Only generate the scope when you genuinely have enough information to price the job accurately.`
 

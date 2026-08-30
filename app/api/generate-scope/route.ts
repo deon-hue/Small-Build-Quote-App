@@ -15,13 +15,23 @@ export async function POST(req: NextRequest) {
 
   const { jobType, address, phases } = await req.json()
 
+  const phaseList = phases?.join(', ') || 'various phases'
+  const hasPhases = phases && phases.length > 0
+
   const prompt = `You are a professional UK building contractor writing a scope of works for a client quote.
 
 Job type: ${jobType}
 Property address: ${address || 'not specified'}
-Phases of work: ${phases?.join(', ') || 'various phases'}
+Phases of work: ${phaseList}
 
-Write a clear, professional scope of works paragraph (3-5 sentences) that describes what the works involve, how they will be carried out, and what the client can expect. Write in plain English suitable for sending to a homeowner. Do not include pricing or timescales. Start directly with the description — no preamble.`
+Write a clear, professional scope of works. ${hasPhases ? `Organize it by the following phases, using each phase name as a bold markdown heading (e.g. **Phase Name**). For each phase, write 1-2 sentences describing the works involved in that phase.
+
+Phases:
+${phases.map((p, i) => `${i + 1}. ${p}`).join('\n')}
+
+` : 'Write as 4-6 sentences covering all main work areas in logical order (demolition → structure → external → roof → internal → finishes).'}
+
+Use plain English suitable for sending to a homeowner. Do not include pricing or timescales. Start directly with the description — no preamble.`
 
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
