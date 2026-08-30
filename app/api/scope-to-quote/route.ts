@@ -308,7 +308,11 @@ Analyse the scope and select appropriate phases and tasks from the library.`
     }
 
     // Collect full response from stream
-    const reader = anthropicRes.body!.getReader()
+    if (!anthropicRes.body) {
+      return NextResponse.json({ error: 'No response body from AI service' }, { status: 500 })
+    }
+
+    const reader = anthropicRes.body.getReader()
     const decoder = new TextDecoder()
     let rawText = ''
     let sseBuffer = ''
