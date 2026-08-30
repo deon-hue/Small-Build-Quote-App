@@ -37,16 +37,25 @@ export async function POST(req: NextRequest) {
     const nextVersion = ((versionData?.[0]?.version_number as number) ?? 0) + 1
 
     // Create new version by duplicating the quote
+    // Map camelCase Quote type to snake_case database columns
+    const rawQuote = quote as any
     const newQuote = {
-      ...currentQuote,
-      id: undefined,  // Let Supabase generate new ID
+      user_id: user.id,
+      ref: `${rawQuote.ref}-v${nextVersion}`,
+      saved_date: new Date().toISOString(),
+      last_edited: new Date().toISOString(),
+      status: 'draft',
+      job_type: rawQuote.job_type,
+      markup: rawQuote.markup,
+      vat_included: rawQuote.vat_included,
+      scope: rawQuote.scope,
+      photo: rawQuote.photo,
+      converted_to_job: rawQuote.converted_to_job,
+      customer: rawQuote.customer,
+      phases: rawQuote.phases,
       version_number: nextVersion,
       parent_quote_id: parentQuoteId,
-      created_from_version_id: currentQuote.id,
-      ref: `${currentQuote.ref}-v${nextVersion}`,  // Append version to ref
-      savedDate: new Date().toISOString(),
-      lastEdited: new Date().toISOString(),
-      status: 'draft' as const,  // New versions start as draft
+      created_from_version_id: rawQuote.id,
     }
 
     // Insert the new version
