@@ -191,7 +191,7 @@ IMPORTANT: Never output [READY_TO_BUILD] without a [SCOPE] block. Only generate 
   const model     = hasFiles ? 'claude-haiku-4-5-20251001' : 'claude-sonnet-4-6'
   const maxTokens = hasFiles ? 1500 : 2000
 
-  // ── Call Anthropic API ────────────────────────────────────────────────────
+  // ── Call Anthropic API with streaming ─────────────────────────────────────
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -200,20 +200,64 @@ IMPORTANT: Never output [READY_TO_BUILD] without a [SCOPE] block. Only generate 
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify({ model, max_tokens: maxTokens, system, messages: apiMessages }),
+      body: JSON.stringify({ model, max_tokens: maxTokens, system, messages: apiMessages, stream: true }),
     })
 
-    const data = await res.json()
-    if (data.error) {
-      console.error('Anthropic API error:', data.error)
+    if (!res.ok) {
+      const data = await res.json()
+      console.error('Anthropic API error:', data)
       const msg = data.error?.type === 'authentication_error'
         ? 'AI not configured — please add your ANTHROPIC_API_KEY in Netlify environment variables.'
         : `AI error: ${data.error?.message || 'Unknown error'}`
       return NextResponse.json({ reply: msg })
     }
 
-    const reply = data.content?.[0]?.text || 'Sorry, I could not generate a response. Please try again.'
-    return NextResponse.json({ reply })
+    // Convert Anthropic stream to SSE format
+    const encoder = new TextEncoder()
+    const reader = res.body?.getReader()
+    if (!reader) throw new Error('No response body')
+
+    let fullText = ''
+
+    return new NextResponse(
+      new ReadableStream({
+        async start(controller) {
+          try {
+            let buffer = ''
+            while (true) {
+              const { done, value } = await reader.read()
+              if (done) {
+                // Send final complete text
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'complete', text: fullText })}\n\n`))
+                controller.close()
+                break
+              }
+
+              buffer += new TextDecoder().decode(value)
+              const lines = buffer.split('\n')
+              buffer = lines.pop() || ''
+
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  try {
+                    const event = JSON.parse(line.slice(6))
+                    if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+                      fullText += event.delta.text
+                      // Stream each chunk to client
+                      controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'chunk', text: event.delta.text })}\n\n`))
+                    }
+                  } catch { /* ignore parse errors */ }
+                }
+              }
+            }
+          } catch (err) {
+            console.error('Stream error:', err)
+            controller.error(err)
+          }
+        },
+      }),
+      { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } }
+    )
   } catch (err) {
     console.error('AI scope chat error:', err)
     return NextResponse.json({ reply: `Server error: ${err instanceof Error ? err.message : String(err)}` }, { status: 500 })

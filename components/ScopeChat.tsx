@@ -402,8 +402,35 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
         return
       }
 
-      const data = await res.json() as { reply?: string }
-      const reply = data.reply || 'Sorry, something went wrong. Please try again.'
+      // Handle streaming response
+      let reply = ''
+      const reader = res.body?.getReader()
+      if (!reader) throw new Error('No response body')
+
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const event = JSON.parse(line.slice(6))
+              if (event.type === 'chunk' || event.type === 'complete') {
+                reply += event.text
+              }
+            } catch { /* ignore parse errors */ }
+          }
+        }
+      }
+
+      if (!reply) reply = 'Sorry, something went wrong. Please try again.'
 
       setMessages(prev => [...prev, { role: 'assistant', content: reply }])
       const { scope, readyToBuild: rdy } = parseMessage(reply)
