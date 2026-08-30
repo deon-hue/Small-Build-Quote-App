@@ -111,9 +111,7 @@ function PortalLoginForm() {
     setError(''); setMessage('')
     setLoading(true)
     try {
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/callback?next=/portal/reset-password`,
-      })
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email)
       if (resetError) {
         fetch('/api/portal/log-activity', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, eventType: 'password_reset_failed', details: resetError.message }) }).catch(() => {})
         setError(resetError.message); return
