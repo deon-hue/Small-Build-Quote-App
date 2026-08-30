@@ -15,6 +15,7 @@ import TakeoffBreakdownView from '@/components/TakeoffBreakdownView'
 import QuoteWorkspace from '@/components/QuoteWorkspace'
 import QuoteLandingWizard, { type QuoteCreationMode } from '@/components/QuoteLandingWizard'
 import AIScopeWorkspace from '@/components/AIScopeWorkspace'
+import QuoteVersionHistory from '@/components/QuoteVersionHistory'
 import type { TakeoffItem, TakeoffPhase, LayerCostRecord } from '@/lib/takeoff-types'
 import { PHASE_TO_QUOTE_PARENT, ALL_MAKEUPS, calcLayerQty, WALL_OPENING_LABELS, type TakeoffLabourLine } from '@/lib/takeoff-types'
 import { DEFAULT_DEMO_SUBPHASES, calcDemoSellingPrice, DEMO_UNIT_LABELS, type DemoUnit } from '@/lib/demolition-data'
@@ -1497,8 +1498,12 @@ export default function NewQuotePage() {
       )}
       {editingId && !isLockedQuote && (
         <div style={{ background: 'rgba(74,144,164,0.1)', border: '1px solid #4a90a4', borderRadius: 6, padding: '10px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <span>✎ Editing: <strong>{quotes.find(q => q.id === editingId)?.ref || editingId}</strong></span>
+            <QuoteVersionHistory
+              quoteId={editingId}
+              currentVersion={quotes.find(q => q.id === editingId)?.versionNumber}
+            />
             {autoSaving && (
               <span style={{ fontSize: 11, color: '#4a90a4' }}>⟳ Saving…</span>
             )}
