@@ -17,6 +17,8 @@ interface AppContextType {
   variations: Variation[]
   customTemplates: Record<string, TemplatePhaseData[]>
   loading: boolean
+  pageTitle: string | null
+  setPageTitle: (title: string | null) => void
 
   // Team / permissions
   teamMembers: TeamMember[]
@@ -139,6 +141,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [customTemplates, setCustomTemplates] = useState<Record<string, TemplatePhaseData[]>>({})
   const [bills, setBills] = useState<Bill[]>([])
   const [loading, setLoading] = useState(true)
+  const [pageTitle, setPageTitle] = useState<string | null>(null)
   // Team state
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [currentMember, setCurrentMember] = useState<TeamMember | null>(null)
@@ -987,7 +990,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider value={{
-      jobs, quotes, clients, settings, ganttStates, invoices, jobNotes, jobPayments, variations, customTemplates, loading,
+      jobs, quotes, clients, settings, ganttStates, invoices, jobNotes, jobPayments, variations, customTemplates, loading, pageTitle, setPageTitle,
       teamMembers, currentMember, isOwner, permissions,
       addJob, updateJob, deleteJob,
       addQuote, updateQuote, deleteQuote,

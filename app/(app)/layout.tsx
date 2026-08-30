@@ -150,14 +150,14 @@ const PAGE_TITLES: Record<string, string> = {
 function AppLayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { permissions, isOwner, loading, currentMember } = useApp()
+  const { permissions, isOwner, loading, currentMember, pageTitle } = useApp()
   const [tab, setTab] = useState<string | null>(null)
 
   useEffect(() => {
     setTab(new URLSearchParams(window.location.search).get('tab'))
   }, [pathname])
 
-  const title = PAGE_TITLES[pathname] || 'Dashboard'
+  const title = pageTitle || PAGE_TITLES[pathname] || 'Dashboard'
 
   // Route-level permission guard
   const requiredPermission = ROUTE_PERMISSIONS[pathname]
