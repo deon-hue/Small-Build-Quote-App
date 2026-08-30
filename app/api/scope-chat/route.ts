@@ -142,7 +142,8 @@ When you have enough information:
 
 SCOPE REQUIREMENTS:
 - Professional UK contractor English
-- Organize by PHASES (if phases have been set: ${phaseList})
+- START with a single-line overview (e.g. "Single-storey rear extension to existing dwelling at [address]")
+- Then organize by PHASES (if phases have been set: ${phaseList})
 - For each phase, write 1–2 sentences describing the works in that phase
 - Use clear phase headings (e.g. "**Demolition**", "**Foundations**") to break up sections
 - Note every assumption: "(Assumed: ...)" or "(Provisional sum for ...)"

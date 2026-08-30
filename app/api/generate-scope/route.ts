@@ -24,14 +24,16 @@ Job type: ${jobType}
 Property address: ${address || 'not specified'}
 Phases of work: ${phaseList}
 
-Write a clear, professional scope of works. ${hasPhases ? `Organize it by the following phases, using each phase name as a bold markdown heading (e.g. **Phase Name**). For each phase, write 1-2 sentences describing the works involved in that phase.
+Write a clear, professional scope of works. ${hasPhases ? `Start with a single-line overview (e.g. "${jobType} to existing dwelling at ${address || 'property address'}").
+
+Then organize it by the following phases, using each phase name as a bold markdown heading (e.g. **Phase Name**). For each phase, write 1-2 sentences describing the works involved in that phase.
 
 Phases:
 ${phases.map((p, i) => `${i + 1}. ${p}`).join('\n')}
 
-` : 'Write as 4-6 sentences covering all main work areas in logical order (demolition → structure → external → roof → internal → finishes).'}
+` : 'Start with a single-line overview, then write as 4-6 sentences covering all main work areas in logical order (demolition → structure → external → roof → internal → finishes).'}
 
-Use plain English suitable for sending to a homeowner. Do not include pricing or timescales. Start directly with the description — no preamble.`
+Use plain English suitable for sending to a homeowner. Do not include pricing or timescales.`
 
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
