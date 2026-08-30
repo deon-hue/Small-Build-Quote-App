@@ -67,12 +67,17 @@ export async function POST(req: NextRequest) {
 
     if (insertError || !created) {
       console.error('Failed to create version:', insertError)
-      return NextResponse.json({ error: 'Failed to create version' }, { status: 500 })
+      return NextResponse.json({
+        error: insertError?.message || 'Failed to create version',
+        details: insertError?.details || insertError?.hint
+      }, { status: 500 })
     }
 
     return NextResponse.json(created)
   } catch (err) {
     console.error('Create version error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({
+      error: err instanceof Error ? err.message : 'Internal server error'
+    }, { status: 500 })
   }
 }

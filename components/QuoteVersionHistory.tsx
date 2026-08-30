@@ -56,7 +56,8 @@ export default function QuoteVersionHistory({ quoteId, currentVersion, onVersion
         router.push(`/quotes/${newQuote.id}`)
         router.refresh()
       } else {
-        alert('Failed to create new version')
+        const errorData = await res.json()
+        alert(`Failed to create new version: ${errorData.error}${errorData.details ? ` (${errorData.details})` : ''}`)
       }
     } catch (err) {
       console.error('Error creating version:', err)
