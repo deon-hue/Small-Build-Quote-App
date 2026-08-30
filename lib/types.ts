@@ -145,6 +145,10 @@ export interface Quote {
   phases: QuotePhase[]
   clientApprovedAt?: string | null
   clientApprovedBy?: string | null
+  /** Versioning fields */
+  versionNumber?: number           // Version number within this quote series (1, 2, 3, etc)
+  parentQuoteId?: string | null    // Parent quote ID if this is a version; null if original
+  createdFromVersionId?: string | null  // Which version this was created from
 }
 
 // ── Quote Comments — client/contractor communication on quotes ──────────────
