@@ -609,10 +609,12 @@ interface SubPhaseBlockProps {
   labourTrades?: BOLabourTrade[]
   boProducts?: BOProduct[]
   boPlantItems?: BOPlantItem[]
+  boPhases?: BOPhase[]
+  boSubPhases?: BOSubPhase[]
   boTasks?: BOTask[]
 }
 
-function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, onUpdate, onDelete, onDuplicate, onAddTask, onSaveToBO, labourTrades, boProducts = [], boPlantItems = [], boTasks = [] }: SubPhaseBlockProps) {
+function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, onUpdate, onDelete, onDuplicate, onAddTask, onSaveToBO, labourTrades, boProducts = [], boPlantItems = [], boPhases = [], boSubPhases = [], boTasks = [] }: SubPhaseBlockProps) {
   const colKey = `sp_${p.id}`
   const open   = !collapsed.has(colKey)
   const sell   = subPhaseTotalSell(p, markup)
@@ -1500,9 +1502,12 @@ interface RoomBlockProps {
   labourTrades?: BOLabourTrade[]
   boProducts?: BOProduct[]
   boPlantItems?: BOPlantItem[]
+  boPhases?: BOPhase[]
+  boSubPhases?: BOSubPhase[]
+  boTasks?: BOTask[]
 }
 
-function RoomBlock({ mainPhase, room, phases, markup, jobType, isLocked, collapsed, toggle, onUpdatePhase, onDeletePhase, onDuplicatePhase, onAddSubPhase, onAddTask, onRenameRoom, onSaveToBO, labourTrades, boProducts, boPlantItems }: RoomBlockProps) {
+function RoomBlock({ mainPhase, room, phases, markup, jobType, isLocked, collapsed, toggle, onUpdatePhase, onDeletePhase, onDuplicatePhase, onAddSubPhase, onAddTask, onRenameRoom, onSaveToBO, labourTrades, boProducts, boPlantItems, boPhases = [], boSubPhases = [], boTasks = [] }: RoomBlockProps) {
   const hasRoom = !!room
   const total   = roomTotalSell(phases, mainPhase, room, markup)
   const subPhs  = getSubPhases(phases, mainPhase, room)
@@ -1554,6 +1559,8 @@ function RoomBlock({ mainPhase, room, phases, markup, jobType, isLocked, collaps
               labourTrades={labourTrades}
               boProducts={boProducts}
               boPlantItems={boPlantItems}
+              boPhases={boPhases}
+              boSubPhases={boSubPhases}
               boTasks={boTasks}
             />
           ))}
@@ -1591,9 +1598,12 @@ interface PhaseBlockProps {
   labourTrades?: BOLabourTrade[]
   boProducts?: BOProduct[]
   boPlantItems?: BOPlantItem[]
+  boPhases?: BOPhase[]
+  boSubPhases?: BOSubPhase[]
+  boTasks?: BOTask[]
 }
 
-function PhaseBlock({ mainPhase, phases, markup, jobType, isLocked, collapsed, toggle, onUpdatePhase, onDeletePhase, onDuplicatePhase, onAddSubPhase, onAddRoom, onAddTask, onRenameMain, onDeleteMain, onRenameRoom, onSaveToBO, labourTrades, boProducts, boPlantItems }: PhaseBlockProps) {
+function PhaseBlock({ mainPhase, phases, markup, jobType, isLocked, collapsed, toggle, onUpdatePhase, onDeletePhase, onDuplicatePhase, onAddSubPhase, onAddRoom, onAddTask, onRenameMain, onDeleteMain, onRenameRoom, onSaveToBO, labourTrades, boProducts, boPlantItems, boPhases = [], boSubPhases = [], boTasks = [] }: PhaseBlockProps) {
   const colKey = `mp_${mainPhase}`
   const open   = !collapsed.has(colKey)
   const total  = mainPhaseTotalSell(phases, mainPhase, markup)
@@ -1664,6 +1674,9 @@ function PhaseBlock({ mainPhase, phases, markup, jobType, isLocked, collapsed, t
               labourTrades={labourTrades}
               boProducts={boProducts}
               boPlantItems={boPlantItems}
+              boPhases={boPhases}
+              boSubPhases={boSubPhases}
+              boTasks={boTasks}
             />
           ))}
         </div>
@@ -1958,8 +1971,11 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
           onRenameRoom={renameRoom}
           onSaveToBO={onSaveToBO}
           labourTrades={labourTrades}
-                  boProducts={boProducts}
-                  boPlantItems={boPlantItems}
+          boProducts={boProducts}
+          boPlantItems={boPlantItems}
+          boPhases={boPhases}
+          boSubPhases={boSubPhases}
+          boTasks={boTasks}
         />
       ))}
 
