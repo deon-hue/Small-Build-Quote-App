@@ -250,8 +250,12 @@ export default function PortalQuoteDetailsModal({
               <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }}>
                 Scope of Works
               </div>
-              <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.7, whiteSpace: 'pre-wrap', padding: '14px 16px', background: '#fafaf8', border: '1px solid var(--border)', borderRadius: 8 }}>
-                {quote.scope}
+              <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.8, padding: '14px 16px', background: '#fafaf8', border: '1px solid var(--border)', borderRadius: 8 }}>
+                {quote.scope.split(/\n\n+|\. (?=[A-Z])/g).map((para, idx) => (
+                  <p key={idx} style={{ margin: '0 0 12px 0', wordSpacing: '0.05em', textAlign: 'justify' }}>
+                    {para.trim()}
+                  </p>
+                ))}
               </div>
             </div>
           )}
