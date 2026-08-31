@@ -21,6 +21,7 @@ interface PreviewQuote {
   id: string; ref: string; savedDate: string; status: string
   jobType: string; customer: AnyRecord; phases: AnyRecord[]
   markup: number; vatIncluded: boolean; scope?: string
+  versionNumber?: number; parentQuoteId?: string
 }
 interface PreviewInvoice {
   id: string; ref: string; clientName: string; total: number
@@ -89,7 +90,6 @@ function PortalPreviewInner() {
   const [payments, setPayments] = useState<PreviewPayment[]>([])
   const [settings, setSettings] = useState<PreviewSettings | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
-  const [expandedQuote, setExpandedQuote] = useState<string | null>(null)
 
   useEffect(() => {
     if (!clientId) { setError('No client specified.'); setLoading(false); return }
@@ -130,6 +130,7 @@ function PortalPreviewInner() {
           customer: r.customer || {}, phases: r.phases || [],
           markup: Number(r.markup), vatIncluded: r.vat_included,
           scope: r.scope || '',
+          versionNumber: r.version_number, parentQuoteId: r.parent_quote_id,
         })))
       }
       if (Array.isArray(d?.invoices)) {
@@ -156,6 +157,26 @@ function PortalPreviewInner() {
     }
     load()
   }, [clientId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Determine current versions ────────────────────────────────
+  // For each parent quote, the highest version number is "current"
+  const currentVersionIds = new Set<string>()
+  const quotesByParent = new Map<string, PreviewQuote[]>()
+
+  quotes.forEach(q => {
+    const parentId = q.parentQuoteId || q.id
+    if (!quotesByParent.has(parentId)) {
+      quotesByParent.set(parentId, [])
+    }
+    quotesByParent.get(parentId)!.push(q)
+  })
+
+  quotesByParent.forEach(versions => {
+    if (versions.length > 0) {
+      const sorted = versions.sort((a, b) => (b.versionNumber || 0) - (a.versionNumber || 0))
+      currentVersionIds.add(sorted[0].id)
+    }
+  })
 
   if (loading) return (
     <div style={{ padding: 40, color: 'var(--muted)', fontSize: 14 }}>Loading preview…</div>
@@ -303,157 +324,149 @@ function PortalPreviewInner() {
                 const subtotal = q.phases.reduce((s: number, p: AnyRecord) => s + phaseNet(p, q.markup), 0)
                 const vatAmount = q.vatIncluded ? subtotal * 0.20 : 0
                 const total = subtotal + vatAmount
-                const canApprove = q.status === 'pending' || q.status === 'sent'
-                const isOpen = expandedQuote === q.id
+                const isCurrentVersion = currentVersionIds.has(q.id)
+                const canApprove = isCurrentVersion && (q.status === 'pending' || q.status === 'sent')
+                const versionBadge = q.versionNumber ? `v${q.versionNumber}` : 'v1'
+                const statusBadgeLabel = isCurrentVersion ? 'Current Version' : 'Superseded'
+                const statusBadgeColor = isCurrentVersion ? '#7ab533' : '#999'
 
                 return (
                   <div key={q.id} className="portal-card" style={{ padding: 0, overflow: 'hidden', marginBottom: 12 }}>
 
-                    {/* ── Collapsed summary row — always visible ── */}
-                    <button
-                      onClick={() => setExpandedQuote(isOpen ? null : q.id)}
-                      style={{
-                        display: 'flex', alignItems: 'center', width: '100%',
-                        padding: '16px 20px', gap: 14, background: 'none',
-                        border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                        textAlign: 'left',
-                        borderBottom: isOpen ? '1px solid var(--border)' : 'none',
-                      }}
-                    >
+                    {/* ── Full card content — always visible ── */}
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '16px 20px', gap: 14, borderBottom: '1px solid var(--border)' }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                          <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, color: 'var(--muted)' }}>{q.ref || '—'}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
+                          <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, color: 'var(--muted)' }}>{q.ref || '—'} {versionBadge}</span>
                           <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--ink)' }}>{q.jobType}</span>
                         </div>
                         {q.savedDate && (
                           <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3 }}>Issued {q.savedDate}</div>
                         )}
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-                        <span style={{ fontFamily: 'DM Mono, monospace', fontWeight: 700, fontSize: 16, color: 'var(--ink)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        <span style={{ fontFamily: 'DM Mono, monospace', fontWeight: 700, fontSize: 16, color: 'var(--ink)', whiteSpace: 'nowrap' }}>
                           {fmt(total)}
                           {q.vatIncluded && <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--muted)', marginLeft: 4 }}>inc. VAT</span>}
                         </span>
                         <span style={{ background: QUOTE_STATUS_COLOR[q.status] || '#888', color: '#fff', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20, whiteSpace: 'nowrap' }}>
                           {QUOTE_STATUS_LABEL[q.status] || q.status}
                         </span>
-                        <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 600 }}>
-                          {isOpen ? '▲' : '▼'}
+                        <span style={{ background: statusBadgeColor, color: '#fff', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20, whiteSpace: 'nowrap' }}>
+                          {statusBadgeLabel}
                         </span>
                       </div>
-                    </button>
+                    </div>
 
-                    {/* ── Expanded full detail ── */}
-                    {isOpen && (
-                      <>
-                        {/* Company header */}
-                        <div style={{ background: 'var(--moss)', color: '#fff', padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
-                          <div>
-                            {settings?.logo
-                              ? <img src={settings.logo} alt="logo" style={{ height: 36, objectFit: 'contain', filter: 'brightness(0) invert(1)', marginBottom: 6 }} />
-                              : <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4 }}>{settings?.name || 'Your Builder'}</div>
-                            }
-                            {settings?.tagline && <div style={{ fontSize: 12, opacity: 0.85 }}>{settings.tagline}</div>}
-                            {settings?.phone   && <div style={{ fontSize: 12, opacity: 0.8, marginTop: 2 }}>{settings.phone}</div>}
-                            {settings?.email   && <div style={{ fontSize: 12, opacity: 0.8 }}>{settings.email}</div>}
-                            {settings?.address && <div style={{ fontSize: 12, opacity: 0.8 }}>{settings.address}</div>}
-                          </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: 11, opacity: 0.75, letterSpacing: '0.8px', textTransform: 'uppercase' }}>Quotation</div>
-                            <div style={{ fontFamily: 'DM Mono, monospace', fontWeight: 700, fontSize: 18 }}>{q.ref}</div>
-                            {q.savedDate && <div style={{ fontSize: 12, opacity: 0.85, marginTop: 2 }}>Issued {q.savedDate}</div>}
-                          </div>
+                    {/* ── Full detail section ── */}
+                    <>
+                      {/* Company header */}
+                      <div style={{ background: 'var(--moss)', color: '#fff', padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+                        <div>
+                          {settings?.logo
+                            ? <img src={settings.logo} alt="logo" style={{ height: 36, objectFit: 'contain', filter: 'brightness(0) invert(1)', marginBottom: 6 }} />
+                            : <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4 }}>{settings?.name || 'Your Builder'}</div>
+                          }
+                          {settings?.tagline && <div style={{ fontSize: 12, opacity: 0.85 }}>{settings.tagline}</div>}
+                          {settings?.phone   && <div style={{ fontSize: 12, opacity: 0.8, marginTop: 2 }}>{settings.phone}</div>}
+                          {settings?.email   && <div style={{ fontSize: 12, opacity: 0.8 }}>{settings.email}</div>}
+                          {settings?.address && <div style={{ fontSize: 12, opacity: 0.8 }}>{settings.address}</div>}
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: 11, opacity: 0.75, letterSpacing: '0.8px', textTransform: 'uppercase' }}>Quotation</div>
+                          <div style={{ fontFamily: 'DM Mono, monospace', fontWeight: 700, fontSize: 18 }}>{q.ref} {versionBadge}</div>
+                          {q.savedDate && <div style={{ fontSize: 12, opacity: 0.85, marginTop: 2 }}>Issued {q.savedDate}</div>}
+                        </div>
+                      </div>
+
+                      {/* Quote meta */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16, padding: '16px 24px', borderBottom: '1px solid var(--border)', background: '#fafaf8' }}>
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 4 }}>Prepared for</div>
+                          <div style={{ fontWeight: 700, fontSize: 15 }}>{q.customer.name}</div>
+                          {q.customer.address && <div style={{ fontSize: 13, color: 'var(--muted)' }}>{q.customer.address}</div>}
+                          {q.customer.email   && <div style={{ fontSize: 13, color: 'var(--muted)' }}>{q.customer.email}</div>}
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 4 }}>Status</div>
+                          <span style={{ background: QUOTE_STATUS_COLOR[q.status] || '#888', color: '#fff', fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 20 }}>
+                            {QUOTE_STATUS_LABEL[q.status] || q.status}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div style={{ padding: '0 24px 24px' }}>
+                        {/* Job type */}
+                        <div style={{ marginTop: 20, marginBottom: 16 }}>
+                          <div style={{ fontWeight: 700, fontSize: 20 }}>{q.jobType}</div>
                         </div>
 
-                        {/* Quote meta */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16, padding: '16px 24px', borderBottom: '1px solid var(--border)', background: '#fafaf8' }}>
-                          <div>
-                            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 4 }}>Prepared for</div>
-                            <div style={{ fontWeight: 700, fontSize: 15 }}>{q.customer.name}</div>
-                            {q.customer.address && <div style={{ fontSize: 13, color: 'var(--muted)' }}>{q.customer.address}</div>}
-                            {q.customer.email   && <div style={{ fontSize: 13, color: 'var(--muted)' }}>{q.customer.email}</div>}
-                          </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 4 }}>Status</div>
-                            <span style={{ background: QUOTE_STATUS_COLOR[q.status] || '#888', color: '#fff', fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 20 }}>
-                              {QUOTE_STATUS_LABEL[q.status] || q.status}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div style={{ padding: '0 24px 24px' }}>
-                          {/* Job type */}
-                          <div style={{ marginTop: 20, marginBottom: 16 }}>
-                            <div style={{ fontWeight: 700, fontSize: 20 }}>{q.jobType}</div>
-                          </div>
-
-                          {/* Phases & line items */}
-                          {q.phases.length > 0 && (
-                            <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
-                              {q.phases.map((phase: AnyRecord, pi: number) => (
-                                <div key={phase.id || pi}>
-                                  <div style={{ background: pi % 2 === 0 ? '#f0f2ee' : '#e8ebe4', padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: pi > 0 ? '2px solid var(--border)' : undefined }}>
-                                    <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)' }}>{pi + 1}. {phase.phase}</div>
-                                    <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 13, fontWeight: 700, color: 'var(--moss)' }}>{fmt(phaseNet(phase, q.markup))}</div>
-                                  </div>
-                                  {(phase.items || []).map((item: AnyRecord, ii: number) => (
-                                    <div key={item.id || ii} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 16px', gap: 12, borderTop: '1px solid var(--border)', background: ii % 2 === 0 ? '#fff' : '#fafaf8' }}>
-                                      <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{item.desc}</div>
-                                        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{item.qty} {item.unit}</div>
-                                        {item.notes && <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginTop: 2 }}>{item.notes}</div>}
-                                      </div>
-                                      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 13, fontWeight: 600, color: 'var(--ink)', whiteSpace: 'nowrap' }}>
-                                        {fmt(itemNet(item, q.markup))}
-                                      </div>
-                                    </div>
-                                  ))}
+                        {/* Phases & line items */}
+                        {q.phases.length > 0 && (
+                          <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
+                            {q.phases.map((phase: AnyRecord, pi: number) => (
+                              <div key={phase.id || pi}>
+                                <div style={{ background: pi % 2 === 0 ? '#f0f2ee' : '#e8ebe4', padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: pi > 0 ? '2px solid var(--border)' : undefined }}>
+                                  <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)' }}>{pi + 1}. {phase.phase}</div>
+                                  <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 13, fontWeight: 700, color: 'var(--moss)' }}>{fmt(phaseNet(phase, q.markup))}</div>
                                 </div>
-                              ))}
+                                {(phase.items || []).map((item: AnyRecord, ii: number) => (
+                                  <div key={item.id || ii} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 16px', gap: 12, borderTop: '1px solid var(--border)', background: ii % 2 === 0 ? '#fff' : '#fafaf8' }}>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{item.desc}</div>
+                                      <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{item.qty} {item.unit}</div>
+                                      {item.notes && <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginTop: 2 }}>{item.notes}</div>}
+                                    </div>
+                                    <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 13, fontWeight: 600, color: 'var(--ink)', whiteSpace: 'nowrap' }}>
+                                      {fmt(itemNet(item, q.markup))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Financial summary */}
+                        <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 20 }}>
+                          <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', background: '#fafaf8' }}>
+                            <span style={{ fontSize: 13, color: 'var(--muted)' }}>Subtotal (ex. VAT)</span>
+                            <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{fmt(subtotal)}</span>
+                          </div>
+                          {q.vatIncluded && (
+                            <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', background: '#fafaf8' }}>
+                              <span style={{ fontSize: 13, color: 'var(--muted)' }}>VAT (20%)</span>
+                              <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{fmt(vatAmount)}</span>
                             </div>
                           )}
+                          <div style={{ padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--moss)' }}>
+                            <span style={{ fontWeight: 700, fontSize: 15, color: '#fff' }}>Total{q.vatIncluded ? ' (inc. VAT)' : ''}</span>
+                            <span style={{ fontFamily: 'DM Mono, monospace', fontWeight: 700, fontSize: 20, color: '#fff' }}>{fmt(total)}</span>
+                          </div>
+                        </div>
 
-                          {/* Financial summary */}
-                          <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 20 }}>
-                            <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', background: '#fafaf8' }}>
-                              <span style={{ fontSize: 13, color: 'var(--muted)' }}>Subtotal (ex. VAT)</span>
-                              <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{fmt(subtotal)}</span>
-                            </div>
-                            {q.vatIncluded && (
-                              <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', background: '#fafaf8' }}>
-                                <span style={{ fontSize: 13, color: 'var(--muted)' }}>VAT (20%)</span>
-                                <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{fmt(vatAmount)}</span>
-                              </div>
-                            )}
-                            <div style={{ padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--moss)' }}>
-                              <span style={{ fontWeight: 700, fontSize: 15, color: '#fff' }}>Total{q.vatIncluded ? ' (inc. VAT)' : ''}</span>
-                              <span style={{ fontFamily: 'DM Mono, monospace', fontWeight: 700, fontSize: 20, color: '#fff' }}>{fmt(total)}</span>
+                        {/* Scope of works — always shown in admin preview */}
+                        {q.scope && (
+                          <div style={{ marginBottom: 20 }}>
+                            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }}>Scope of Works</div>
+                            <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.7, whiteSpace: 'pre-wrap', padding: '14px 16px', background: '#fafaf8', border: '1px solid var(--border)', borderRadius: 8 }}>
+                              {q.scope}
                             </div>
                           </div>
+                        )}
 
-                          {/* Scope of works — always shown in admin preview */}
-                          {q.scope && (
-                            <div style={{ marginBottom: 20 }}>
-                              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }}>Scope of Works</div>
-                              <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.7, whiteSpace: 'pre-wrap', padding: '14px 16px', background: '#fafaf8', border: '1px solid var(--border)', borderRadius: 8 }}>
-                                {q.scope}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Approve button (disabled in preview) */}
-                          {canApprove && (
-                            <button
-                              disabled
-                              title="Preview only — customer approves this from their portal"
-                              style={{ width: '100%', fontSize: 14, padding: '12px 0', background: '#aaa', color: '#fff', border: 'none', borderRadius: 6, cursor: 'not-allowed', fontFamily: 'inherit', fontWeight: 600 }}
-                            >
-                              ✍️ Review &amp; Approve This Quote
-                            </button>
-                          )}
-                        </div>
-                      </>
-                    )}
+                        {/* Approve button (disabled in preview) */}
+                        {canApprove && (
+                          <button
+                            disabled
+                            title="Preview only — customer approves this from their portal"
+                            style={{ width: '100%', fontSize: 14, padding: '12px 0', background: '#aaa', color: '#fff', border: 'none', borderRadius: 6, cursor: 'not-allowed', fontFamily: 'inherit', fontWeight: 600 }}
+                          >
+                            ✍️ Review &amp; Approve This Quote
+                          </button>
+                        )}
+                      </div>
+                    </>
                   </div>
                 )
               })
