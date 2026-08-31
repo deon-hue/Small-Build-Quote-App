@@ -22,8 +22,8 @@ import { DEFAULT_DEMO_SUBPHASES, calcDemoSellingPrice, DEMO_UNIT_LABELS, type De
 import { ALL_PHASE_SUBPHASES, calcPhaseTaskSellingPrice } from '@/lib/phase-tasks'
 import { sumByCategory } from '@/lib/material-recipes'
 import { createClient } from '@/lib/supabase/client'
-import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchQuoteDefaults, fetchAllQuoteDefaults, upsertTask, fetchLabourTrades, fetchProducts, fetchPlantItems, fetchPhases, fetchSubPhases } from '@/lib/back-office-queries'
-import type { BOLabourTrade, BOProduct, BOPlantItem, BOPhase, BOSubPhase } from '@/lib/back-office-types'
+import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchQuoteDefaults, fetchAllQuoteDefaults, upsertTask, fetchLabourTrades, fetchProducts, fetchPlantItems, fetchPhases, fetchSubPhases, fetchTasks } from '@/lib/back-office-queries'
+import type { BOLabourTrade, BOProduct, BOPlantItem, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
 import type { FloorMakeup } from '@/lib/takeoff-types'
 
 let phaseCounter = 0
@@ -134,6 +134,7 @@ export default function NewQuotePage() {
   const [boPlantItems,  setBoPlantItems]  = useState<BOPlantItem[]>([])
   const [boPhases,      setBoPhases]      = useState<BOPhase[]>([])
   const [boSubPhases,   setBoSubPhases]   = useState<BOSubPhase[]>([])
+  const [boTasks,       setBoTasks]       = useState<BOTask[]>([])
   const [showLibrary,   setShowLibrary]   = useState(false)
   const [libraryData,   setLibraryData]   = useState<Awaited<ReturnType<typeof fetchAllQuoteDefaults>>>([])
   const [libraryLoading, setLibraryLoading] = useState(false)
@@ -166,6 +167,7 @@ export default function NewQuotePage() {
       fetchPlantItems(sb, data.user.id).then(items => setBoPlantItems(items.filter(i => i.active)))
       fetchPhases(sb, data.user.id).then(ps => setBoPhases(ps.filter(p => p.active)))
       fetchSubPhases(sb, data.user.id).then(sp => setBoSubPhases(sp.filter(s => s.active)))
+      fetchTasks(sb, data.user.id).then(tasks => setBoTasks(tasks.filter(t => t.active)))
     })
   }, [])
 
@@ -1878,6 +1880,7 @@ export default function NewQuotePage() {
                 boPlantItems={boPlantItems}
                 boPhases={boPhases}
                 boSubPhases={boSubPhases}
+                boTasks={boTasks}
                 quoteSource={quoteSource ?? undefined}
                 onOpenLibrary={openLibrary}
               />

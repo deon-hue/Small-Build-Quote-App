@@ -15,7 +15,7 @@
 
 import React, { useState, useCallback } from 'react'
 import type { QuotePhase, QuoteItem, QuoteProduct, QuotePlantItem } from '@/lib/types'
-import type { BOLabourTrade, BOProduct, BOPlantItem, BOPhase, BOSubPhase } from '@/lib/back-office-types'
+import type { BOLabourTrade, BOProduct, BOPlantItem, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
 import { fmt, calcPhase, calcPhaseSell } from '@/lib/utils'
 import ProductPicker      from '@/components/ProductPicker'
 import PlantPicker        from '@/components/PlantPicker'
@@ -609,9 +609,10 @@ interface SubPhaseBlockProps {
   labourTrades?: BOLabourTrade[]
   boProducts?: BOProduct[]
   boPlantItems?: BOPlantItem[]
+  boTasks?: BOTask[]
 }
 
-function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, onUpdate, onDelete, onDuplicate, onAddTask, onSaveToBO, labourTrades, boProducts = [], boPlantItems = [] }: SubPhaseBlockProps) {
+function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, onUpdate, onDelete, onDuplicate, onAddTask, onSaveToBO, labourTrades, boProducts = [], boPlantItems = [], boTasks = [] }: SubPhaseBlockProps) {
   const colKey = `sp_${p.id}`
   const open   = !collapsed.has(colKey)
   const sell   = subPhaseTotalSell(p, markup)
@@ -1487,6 +1488,7 @@ function RoomBlock({ mainPhase, room, phases, markup, jobType, isLocked, collaps
               labourTrades={labourTrades}
               boProducts={boProducts}
               boPlantItems={boPlantItems}
+              boTasks={boTasks}
             />
           ))}
           {!isLocked && !hasRoom && (
@@ -1628,13 +1630,15 @@ export interface QuoteWorkspaceProps {
   boPhases?:         BOPhase[]
   /** Back Office sub-phases — shown in the sub-phase picker when adding */
   boSubPhases?:      BOSubPhase[]
+  /** Back Office tasks — used for electrical items selector */
+  boTasks?:          BOTask[]
   /** How the quote was created — drives empty-state messaging */
   quoteSource?:      'takeoff' | 'ai' | 'manual' | 'quick'
   /** Opens the BO library picker modal */
   onOpenLibrary?:    () => void
 }
 
-export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked = false, onChange, onAIGenerate, aiGenerating, onLoadTemplate, jobType, onSaveToBO, labourTrades = [], boProducts = [], boPlantItems = [], boPhases = [], boSubPhases = [], quoteSource, onOpenLibrary }: QuoteWorkspaceProps) {
+export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked = false, onChange, onAIGenerate, aiGenerating, onLoadTemplate, jobType, onSaveToBO, labourTrades = [], boProducts = [], boPlantItems = [], boPhases = [], boSubPhases = [], boTasks = [], quoteSource, onOpenLibrary }: QuoteWorkspaceProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [search,    setSearch]    = useState('')
   const [subPhasePicker, setSubPhasePicker] = useState<{ mainPhase: string; room: string } | null>(null)
