@@ -25,6 +25,29 @@ import PhaseReviewModal   from '@/components/PhaseReviewModal'
 let _id = Date.now()
 const uid = () => ++_id
 
+// Backfill descriptions for items missing them (match against boTasks by cost)
+function backfillItemDescriptions(phases: QuotePhase[], boTasks: BOTask[]): QuotePhase[] {
+  return phases.map(p => ({
+    ...p,
+    items: p.items.map(i => {
+      if (i.desc) return i
+      // Try to find matching back office task by cost
+      const match = boTasks.find(t =>
+        t.labour_cost === i.labour && t.materials_cost === i.materials &&
+        t.plant_cost === i.plantHire && t.subcontract_cost === i.subcontractors &&
+        t.other_cost === i.other
+      )
+      if (match) return { ...i, desc: match.name }
+      // Fallback: generate label from itemType
+      const labels: Record<typeof i.itemType, string> = {
+        labour: 'Labour', materials: 'Materials', plant: 'Plant Work',
+        subcontractors: 'Subcontractor Work', other: 'Other Cost'
+      }
+      return { ...i, desc: labels[i.itemType] || 'Item' }
+    })
+  }))
+}
+
 // ── Cost helpers ───────────────────────────────────────────────────────────────
 const ITEM_TYPES = ['labour','materials','plant','subcontractors','other'] as const
 type ItemType = typeof ITEM_TYPES[number]

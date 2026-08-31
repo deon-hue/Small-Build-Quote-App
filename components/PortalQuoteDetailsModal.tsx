@@ -284,7 +284,14 @@ export default function PortalQuoteDetailsModal({
                   </div>
 
                   {/* Line items — only shown for 'full' quoteView */}
-                  {quoteView === 'full' && phase.items.filter(item => calcItemSell(item, quote.markup) > 0).map((item, ii) => (
+                  {quoteView === 'full' && phase.items.filter(item => calcItemSell(item, quote.markup) > 0).map((item, ii) => {
+                    // Backfill description if missing
+                    const itemTypeLabels: Record<string, string> = {
+                      labour: 'Labour', materials: 'Materials', plant: 'Plant Work',
+                      subcontractors: 'Subcontractor Work', other: 'Other Cost'
+                    }
+                    const desc = item.desc || itemTypeLabels[item.itemType] || 'Item'
+                    return (
                     <div key={item.id} style={{
                       display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
                       padding: '10px 16px', gap: 12,
@@ -292,7 +299,7 @@ export default function PortalQuoteDetailsModal({
                       background: ii % 2 === 0 ? '#fff' : '#fafaf8',
                     }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{item.desc}</div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{desc}</div>
                         <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
                           {item.qty} {item.unit}
                         </div>
@@ -306,7 +313,8 @@ export default function PortalQuoteDetailsModal({
                         {fmt(calcItemSell(item, quote.markup))}
                       </div>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               ))}
             </div>
