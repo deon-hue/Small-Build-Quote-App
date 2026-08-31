@@ -1238,47 +1238,49 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
             </div>
           )}
 
-          {/* Cost-category cards — accordion, one open at a time */}
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {ITEM_TYPES.map(t => {
-              const meta   = CARD_META[t]
-              const active = openCard === t
-              return (
-                <button key={t} type="button" onClick={() => setOpenCard(active ? null : t)}
-                  style={{
-                    flex: '1 1 130px', minWidth: 112, textAlign: 'left', cursor: 'pointer',
-                    border: `1.5px solid ${active ? meta.accent : meta.border}`,
-                    background: meta.bg, borderRadius: 12, padding: '10px 12px',
-                    boxShadow: active ? `0 4px 14px ${meta.accent}33` : 'none',
-                    transition: 'box-shadow 0.15s, border-color 0.15s', outline: 'none',
-                  }}>
-                  {/* Icon chip + expand caret */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <span style={{
-                      width: 30, height: 30, borderRadius: 9, background: '#fff',
-                      border: `1px solid ${meta.border}`, display: 'inline-flex',
-                      alignItems: 'center', justifyContent: 'center', fontSize: 16,
+          {/* Cost-category cards — accordion, one open at a time (not for Electrics) */}
+          {p.phase !== 'Electrics' && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {ITEM_TYPES.map(t => {
+                const meta   = CARD_META[t]
+                const active = openCard === t
+                return (
+                  <button key={t} type="button" onClick={() => setOpenCard(active ? null : t)}
+                    style={{
+                      flex: '1 1 130px', minWidth: 112, textAlign: 'left', cursor: 'pointer',
+                      border: `1.5px solid ${active ? meta.accent : meta.border}`,
+                      background: meta.bg, borderRadius: 12, padding: '10px 12px',
+                      boxShadow: active ? `0 4px 14px ${meta.accent}33` : 'none',
+                      transition: 'box-shadow 0.15s, border-color 0.15s', outline: 'none',
                     }}>
-                      {meta.icon}
-                    </span>
-                    <span style={{ fontSize: 11, color: meta.accent, opacity: 0.6 }}>↗</span>
-                  </div>
-                  <div style={{ fontSize: 11, fontWeight: 800, color: meta.accent, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    {meta.label}
-                  </div>
-                  <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 15, color: '#0f172a', marginTop: 2 }}>
-                    {cardCost[t] > 0 ? `£${cardCost[t].toFixed(2)}` : '—'}
-                  </div>
-                  <div style={{ fontSize: 10, color: meta.accent, opacity: 0.7 }}>
-                    {cardCount[t]} line{cardCount[t] === 1 ? '' : 's'}
-                  </div>
-                </button>
-              )
-            })}
-          </div>
+                    {/* Icon chip + expand caret */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <span style={{
+                        width: 30, height: 30, borderRadius: 9, background: '#fff',
+                        border: `1px solid ${meta.border}`, display: 'inline-flex',
+                        alignItems: 'center', justifyContent: 'center', fontSize: 16,
+                      }}>
+                        {meta.icon}
+                      </span>
+                      <span style={{ fontSize: 11, color: meta.accent, opacity: 0.6 }}>↗</span>
+                    </div>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: meta.accent, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      {meta.label}
+                    </div>
+                    <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 15, color: '#0f172a', marginTop: 2 }}>
+                      {cardCost[t] > 0 ? `£${cardCost[t].toFixed(2)}` : '—'}
+                    </div>
+                    <div style={{ fontSize: 10, color: meta.accent, opacity: 0.7 }}>
+                      {cardCount[t]} line{cardCount[t] === 1 ? '' : 's'}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
 
-          {/* Summary of what's been added across all cost categories */}
-          {(() => {
+          {/* Summary of what's been added across all cost categories (not for Electrics) */}
+          {p.phase !== 'Electrics' && (() => {
             const lines: { icon: string; color: string; text: string }[] = []
 
             // Labour — from cost rows
@@ -1321,8 +1323,8 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
             )
           })()}
 
-          {/* Cost-category popup modal */}
-          {openCard && (
+          {/* Cost-category popup modal (not for Electrics) */}
+          {openCard && p.phase !== 'Electrics' && (
             <div
               style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
               onClick={e => { if (e.target === e.currentTarget) setOpenCard(null) }}>
