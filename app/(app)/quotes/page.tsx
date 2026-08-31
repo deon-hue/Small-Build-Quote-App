@@ -233,21 +233,24 @@ export default function SavedQuotesPage() {
             return (
               <div key={group.groupId}>
                 {isMultiVersion && (
-                  <button
-                    onClick={() => setExpandedGroups(prev => ({ ...prev, [group.groupId]: !prev[group.groupId] }))}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 8, marginBottom: isExpanded ? 8 : 10,
-                      background: 'none', border: '1px solid var(--border)', borderRadius: 6,
-                      padding: '8px 14px', fontSize: 12, fontWeight: 600, color: 'var(--text)',
-                      cursor: 'pointer', fontFamily: 'inherit', width: '100%',
-                    }}
-                  >
-                    <span style={{ fontSize: 14 }}>{isExpanded ? '▾' : '▸'}</span>
-                    <span>{rootQuote.ref || '—'}</span>
-                    <span style={{ marginLeft: 'auto', fontSize: 11, background: '#f0f9e8', color: '#4a7c1f', padding: '2px 8px', borderRadius: 4, fontWeight: 500 }}>
-                      {group.quotes.length} versions
-                    </span>
-                  </button>
+                  <div className="sq-card" style={{ cursor: 'pointer', position: 'relative' }} onClick={() => setExpandedGroups(prev => ({ ...prev, [group.groupId]: !prev[group.groupId] }))}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', fontSize: 14, width: 20, textAlign: 'center' }}>
+                      {isExpanded ? '▾' : '▸'}
+                    </div>
+                    <div className="sq-ref" style={{ paddingLeft: 36 }}>{rootQuote.ref || '—'}</div>
+                    <div className="sq-info" style={{ paddingLeft: 36 }}>
+                      <div className="sq-title">{rootQuote.jobType} — {rootQuote.customer.name || '—'}</div>
+                      <div className="sq-sub">
+                        {rootQuote.customer.address || ''} · Saved {rootQuote.savedDate || '—'}
+                      </div>
+                    </div>
+                    <div className="sq-val">{fmt(quoteTotal(rootQuote))}</div>
+                    <div style={{ textAlign: 'center', minWidth: 200 }}>
+                      <span style={{ fontSize: 11, background: '#e0e7ff', color: '#4c1d95', padding: '4px 10px', borderRadius: 4, fontWeight: 600 }}>
+                        {group.quotes.length} versions
+                      </span>
+                    </div>
+                  </div>
                 )}
 
                 {(!isMultiVersion || isExpanded) && group.quotes.map((q, idx) => {
