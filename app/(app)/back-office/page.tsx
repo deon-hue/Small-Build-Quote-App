@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { createClient } from '@/lib/supabase/client'
-import { syncBackOfficeFromProduct } from '@/lib/back-office-queries'
+import { syncBackOfficeFromProduct, backfillElectricalDescriptions } from '@/lib/back-office-queries'
 import { JOB_TYPES, JOB_TEMPLATES } from '@/lib/utils'
 import type { TemplatePhaseData, QuoteItem } from '@/lib/types'
 import type { EstimatorItemTemplate, MeasurementType } from '@/lib/estimator'
@@ -172,6 +172,7 @@ export default function BackOfficePage() {
       setSyncing(true)
       try {
         await syncBackOfficeFromProduct(sb, data.user.id)
+        await backfillElectricalDescriptions(sb, data.user.id)
       } finally {
         setSyncing(false)
         setSyncKey(k => k + 1)

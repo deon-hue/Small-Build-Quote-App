@@ -1296,3 +1296,34 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
     }
   }
 }
+
+// ── Backfill electrical item descriptions ──────────────────────────────────────
+// Copy task name into description for all electrical items that are missing descriptions
+export async function backfillElectricalDescriptions(sb: SupabaseClient, userId: string): Promise<void> {
+  const electricsPhase = await sb
+    .from('bo_phases')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('name', 'Electrics')
+    .single()
+
+  if (!electricsPhase.data) return
+
+  const tasks = await sb
+    .from('bo_tasks')
+    .select('id, name, description, phase_id')
+    .eq('user_id', userId)
+    .eq('phase_id', electricsPhase.data.id)
+
+  if (!tasks.data) return
+
+  for (const task of tasks.data) {
+    if (!task.description || task.description.trim() === '') {
+      await sb
+        .from('bo_tasks')
+        .update({ description: task.name })
+        .eq('id', task.id)
+      console.log('[backfill] set description for', task.name)
+    }
+  }
+}
