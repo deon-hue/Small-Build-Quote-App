@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { calcItemSell, calcPhaseSell, fmt } from '@/lib/utils'
 import type { Quote } from '@/lib/types'
 import QuoteCommentsSection from './QuoteCommentsSection'
@@ -39,10 +40,108 @@ export default function PortalQuoteDetailsModal({
   isPreview = false,
   quoteView = 'full',
 }: Props) {
+  const [showPrintOptions, setShowPrintOptions] = useState(false)
+  const [printOptions, setPrintOptions] = useState({
+    includeScope: true,
+    includePhases: true,
+    includeCosts: true,
+  })
+
   const subtotal = quote.phases.reduce((s, p) => s + calcPhaseSell(p, quote.markup), 0)
   const vatAmount = quote.vatIncluded ? subtotal * 0.20 : 0
   const total = subtotal + vatAmount
   const isApproved = quote.status === 'accepted'
+
+  function handlePrint() {
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) return
+
+    const phaseContent = quote.phases.length > 0 ? `
+      <h3 style="margin-top: 24px; margin-bottom: 16px; font-size: 16px; font-weight: 700;">Breakdown</h3>
+      <table style="width: 100%; border-collapse: collapse;">
+        ${quote.phases.map((phase, pi) => `
+          <tr style="background: #f0f2ee;">
+            <td style="padding: 10px; font-weight: 700; border: 1px solid #ddd;">${pi + 1}. ${phase.phase}</td>
+            ${printOptions.includeCosts ? `<td style="padding: 10px; text-align: right; font-weight: 700; border: 1px solid #ddd;">${fmt(calcPhaseSell(phase, quote.markup))}</td>` : ''}
+          </tr>
+          ${printOptions.includePhases ? phase.items.filter(item => calcItemSell(item, quote.markup) > 0).map(item => `
+            <tr style="background: #fff;">
+              <td style="padding: 8px; border: 1px solid #ddd;">${item.desc} (${item.qty} ${item.unit})</td>
+              ${printOptions.includeCosts ? `<td style="padding: 8px; text-align: right; border: 1px solid #ddd;">${fmt(calcItemSell(item, quote.markup))}</td>` : ''}
+            </tr>
+          `).join('') : ''}
+        `).join('')}
+      </table>
+    ` : ''
+
+    const scopeContent = printOptions.includeScope && quote.scope ? `
+      <h3 style="margin-top: 24px; margin-bottom: 16px; font-size: 16px; font-weight: 700;">Scope of Works</h3>
+      <div style="white-space: pre-wrap; line-height: 1.7; padding: 12px; background: #fafaf8; border: 1px solid #ddd; border-radius: 4px;">
+        ${quote.scope}
+      </div>
+    ` : ''
+
+    const costContent = printOptions.includeCosts ? `
+      <div style="margin-top: 24px; border: 1px solid #ddd; border-radius: 4px; overflow: hidden;">
+        ${quote.phases.length > 0 ? `
+          <div style="padding: 10px; background: #fafaf8; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between;">
+            <span>Subtotal (ex. VAT)</span>
+            <strong>${fmt(subtotal)}</strong>
+          </div>
+        ` : ''}
+        ${quote.vatIncluded ? `
+          <div style="padding: 10px; background: #fafaf8; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between;">
+            <span>VAT (20%)</span>
+            <strong>${fmt(vatAmount)}</strong>
+          </div>
+        ` : ''}
+        <div style="padding: 14px; background: #2d5f3e; color: #fff; display: flex; justify-content: space-between; font-weight: 700;">
+          <span>Total${quote.vatIncluded ? ' (inc. VAT)' : ''}</span>
+          <strong style="font-size: 18px;">${fmt(total)}</strong>
+        </div>
+      </div>
+    ` : ''
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>${settings.name || 'Your Builder'} - Quote ${quote.ref}</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', sans-serif; margin: 0; padding: 20px; }
+          .header { background: #2d5f3e; color: #fff; padding: 20px; border-radius: 4px; margin-bottom: 20px; }
+          .header h1 { margin: 0 0 8px 0; font-size: 24px; }
+          .header p { margin: 0 0 4px 0; font-size: 13px; }
+          h2 { font-size: 18px; margin-top: 24px; margin-bottom: 16px; }
+          h3 { font-size: 16px; margin-top: 24px; margin-bottom: 16px; }
+          @media print { body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>${quote.jobType}</h1>
+          <p><strong>Quote Ref:</strong> ${quote.ref}${quote.versionNumber ? ` v${quote.versionNumber}` : ''}</p>
+          <p><strong>Customer:</strong> ${quote.customer.name}</p>
+          <p><strong>Prepared by:</strong> ${settings.name || 'Your Builder'}</p>
+        </div>
+
+        ${phaseContent}
+        ${scopeContent}
+        ${costContent}
+
+        <div style="margin-top: 40px; font-size: 12px; color: #888;">
+          <p>This quote is valid for 30 days from the date of issue.</p>
+          ${settings.email ? `<p>Questions? Contact us at ${settings.email}</p>` : ''}
+        </div>
+      </body>
+      </html>
+    `
+
+    printWindow.document.write(html)
+    printWindow.document.close()
+    setTimeout(() => printWindow.print(), 250)
+  }
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
@@ -54,7 +153,19 @@ export default function PortalQuoteDetailsModal({
               {quote.ref} — {quote.jobType}
             </div>
           </div>
-          <button className="modal-close" onClick={onClose}>×</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => setShowPrintOptions(true)}
+              style={{
+                background: '#f0f2ee', border: '1px solid var(--border)', borderRadius: 4,
+                padding: '6px 12px', cursor: 'pointer', fontSize: 13, fontWeight: 500,
+              }}
+              title="Print quote"
+            >
+              🖨️ Print
+            </button>
+            <button className="modal-close" onClick={onClose}>×</button>
+          </div>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
@@ -234,6 +345,74 @@ export default function PortalQuoteDetailsModal({
           </div>
         )}
       </div>
+
+      {/* ── Print options dialog ─────────────────────────────── */}
+      {showPrintOptions && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowPrintOptions(false) }}>
+          <div className="portal-modal" style={{ maxWidth: 400 }}>
+            <div className="portal-modal-hd">
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 18 }}>Print Options</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                  Choose what to include in your print
+                </div>
+              </div>
+              <button className="modal-close" onClick={() => setShowPrintOptions(false)}>×</button>
+            </div>
+
+            <div className="portal-modal-bd" style={{ paddingBottom: 0 }}>
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginBottom: 16, padding: 0 }}>
+                <input
+                  type="checkbox"
+                  checked={printOptions.includeScope}
+                  onChange={e => setPrintOptions(p => ({ ...p, includeScope: e.target.checked }))}
+                  style={{ marginTop: 2, flexShrink: 0, width: 16, height: 16 }}
+                />
+                <span style={{ fontSize: 14, lineHeight: 1.5 }}>
+                  Include Scope of Works
+                </span>
+              </label>
+
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginBottom: 16, padding: 0 }}>
+                <input
+                  type="checkbox"
+                  checked={printOptions.includePhases}
+                  onChange={e => setPrintOptions(p => ({ ...p, includePhases: e.target.checked }))}
+                  style={{ marginTop: 2, flexShrink: 0, width: 16, height: 16 }}
+                />
+                <span style={{ fontSize: 14, lineHeight: 1.5 }}>
+                  Include Phases Breakdown
+                </span>
+              </label>
+
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginBottom: 16, padding: 0 }}>
+                <input
+                  type="checkbox"
+                  checked={printOptions.includeCosts}
+                  onChange={e => setPrintOptions(p => ({ ...p, includeCosts: e.target.checked }))}
+                  style={{ marginTop: 2, flexShrink: 0, width: 16, height: 16 }}
+                />
+                <span style={{ fontSize: 14, lineHeight: 1.5 }}>
+                  Include Cost Details
+                </span>
+              </label>
+            </div>
+
+            <div className="portal-modal-ft">
+              <button className="btn btn-outline" onClick={() => setShowPrintOptions(false)}>Cancel</button>
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  handlePrint()
+                  setShowPrintOptions(false)
+                }}
+              >
+                🖨️ Print
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
