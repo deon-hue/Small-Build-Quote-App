@@ -228,6 +228,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           quoteSource: r.quote_source || undefined,
           clientApprovedAt: r.client_approved_at || null,
           clientApprovedBy: r.client_approved_by || null,
+          versionNumber: r.version_number || undefined,
+          parentQuoteId: r.parent_quote_id || null,
+          createdFromVersionId: r.created_from_version_id || null,
         })))
       }
 
