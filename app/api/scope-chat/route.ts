@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
 
   // ── Existing scope block ───────────────────────────────────────────────────
   const existingScopeBlock = existingScope?.trim()
-    ? `\n\nEXISTING SCOPE OF WORKS (already saved on this quote — the user wants to update or extend it):\n"""\n${existingScope.trim()}\n"""\nWhen producing an updated scope: preserve everything the user doesn't ask you to change, make targeted improvements only, and produce a single coherent scope — not a list of changes. Output ONLY the final updated scope text — do not repeat or reference the old scope, and do not include any explanations or change notes.`
+    ? `\n\nEXISTING SCOPE OF WORKS (already saved on this quote — the user wants to update or extend it):\n"""\n${existingScope.trim()}\n"""\n\nINSTRUCTIONS FOR REFINEMENT: Rewrite the scope to incorporate the user's requested changes. Output a completely new, single, unified scope that integrates the updates. Do NOT include the old scope text, do NOT list changes separately, do NOT repeat sections. Output ONLY the new complete scope text within [SCOPE] tags.`
     : ''
 
   // ── System prompt ─────────────────────────────────────────────────────────
