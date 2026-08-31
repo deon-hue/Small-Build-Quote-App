@@ -1240,19 +1240,85 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
           )}
 
           {/* Electrical items selector (for Electrics only) */}
-          {p.phase === 'Electrics' && (
-            <div style={{ padding: '12px', background: '#f0f9ff', border: '1px solid #bfdbfe', borderRadius: 8, marginBottom: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
-                ⚡ Electrical Items Selection
+          {p.phase === 'Electrics' && (() => {
+            const electricsPhase = boPhases.find(ph => ph.name === 'Electrics')
+            const electricsRooms = electricsPhase
+              ? boSubPhases.filter(sp => sp.phase_id === electricsPhase.id)
+              : []
+            const [selectedRoom, setSelectedRoom] = React.useState<string>(electricsRooms[0]?.id || '')
+            const roomItems = selectedRoom
+              ? boTasks.filter(t => t.sub_phase_id === selectedRoom && t.active)
+              : []
+
+            return (
+              <div style={{ padding: '12px', background: '#f0f9ff', border: '1px solid #bfdbfe', borderRadius: 8, marginBottom: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                  ⚡ Electrical Items Selection
+                </div>
+
+                {electricsRooms.length === 0 ? (
+                  <div style={{ padding: 8, background: '#fff', border: '1px solid #e0e7ff', borderRadius: 6, color: '#94a3b8', fontSize: 11 }}>
+                    No rooms configured in back office for Electrics. Please add rooms (sub-phases) first.
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#1e293b', marginBottom: 6 }}>
+                        Select Room:
+                      </label>
+                      <select
+                        value={selectedRoom}
+                        onChange={e => setSelectedRoom(e.target.value)}
+                        style={{ width: '100%', padding: '8px 12px', fontSize: 12, border: '1px solid #bfdbfe', borderRadius: 6, background: '#fff' }}
+                      >
+                        {electricsRooms.map(room => (
+                          <option key={room.id} value={room.id}>{room.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {roomItems.length === 0 ? (
+                      <div style={{ padding: 8, background: '#fff', border: '1px solid #e0e7ff', borderRadius: 6, color: '#94a3b8', fontSize: 11 }}>
+                        No electrical items available for {electricsRooms.find(r => r.id === selectedRoom)?.name || 'this room'} in back office.
+                      </div>
+                    ) : (
+                      <div style={{ background: '#fff', border: '1px solid #bfdbfe', borderRadius: 6, maxHeight: 250, overflowY: 'auto' }}>
+                        {roomItems.map(item => (
+                          <div key={item.id} style={{ padding: '10px 12px', borderBottom: '1px solid #e0e7ff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
+                            <div>
+                              <div style={{ fontWeight: 500, color: '#1e293b' }}>{item.name}</div>
+                              <div style={{ fontSize: 11, color: '#64748b' }}>£{item.subcontract_cost || 0}</div>
+                            </div>
+                            <button
+                              onClick={() => {
+                                const newItem: QuoteItem = {
+                                  id: uid(),
+                                  desc: item.name,
+                                  qty: 1,
+                                  unit: 'item',
+                                  labour: item.labour_cost || 0,
+                                  materials: item.materials_cost || 0,
+                                  plantHire: item.plant_cost || 0,
+                                  subcontractors: item.subcontract_cost || 0,
+                                  other: item.other_cost || 0,
+                                  notes: item.description || '',
+                                  itemType: 'other' as const,
+                                }
+                                onUpdate({ ...p, items: [...p.items, newItem] })
+                              }}
+                              style={{ padding: '4px 10px', fontSize: 11, background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}
+                            >
+                              + Add
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
-              <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>
-                Select a room and add electrical items. Room is tracked via the sub-phase, item details below.
-              </div>
-              <div style={{ padding: 8, background: '#fff', border: '1px solid #e0e7ff', borderRadius: 6, textAlign: 'center', color: '#94a3b8', fontSize: 11 }}>
-                🚧 Coming soon: Room selector and items list will be implemented here
-              </div>
-            </div>
-          )}
+            )
+          })()}
 
           {/* Cost-category cards — accordion, one open at a time (not for Electrics) */}
           {p.phase !== 'Electrics' && (
