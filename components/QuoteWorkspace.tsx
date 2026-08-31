@@ -1782,13 +1782,7 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
       roomLabel: room || undefined,
       source: 'manual', itemStatus: 'manual',
       boSubPhaseId,
-      items: [
-        { id: uid(), desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'labour' },
-        { id: uid(), desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials' },
-        { id: uid(), desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'plant' },
-        { id: uid(), desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'subcontractors' },
-        { id: uid(), desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'other' },
-      ],
+      items: [],
       estimatorItems: [], useEstimator: false,
     }
     onChange([...phases, newPhase])
