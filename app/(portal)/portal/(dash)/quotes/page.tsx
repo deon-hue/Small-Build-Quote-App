@@ -170,6 +170,7 @@ export default function PortalQuotesPage() {
           }
           isPreview={false}
           quoteView={qv}
+          clientSettings={clientSettings}
         />
       )}
 

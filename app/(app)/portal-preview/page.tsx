@@ -90,6 +90,7 @@ function PortalPreviewInner() {
   const [variations, setVariations] = useState<PreviewVariation[]>([])
   const [payments, setPayments] = useState<PreviewPayment[]>([])
   const [settings, setSettings] = useState<PreviewSettings | null>(null)
+  const [clientSettings, setClientSettings] = useState<{ quoteView?: 'full' | 'phases' | 'total_only'; showScope?: boolean }>({})
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null)
 
@@ -116,6 +117,14 @@ function PortalPreviewInner() {
         return
       }
       setClientName(d?.client_name || 'Client')
+
+      // Extract client settings (quote view permissions)
+      if (d?.client_settings) {
+        setClientSettings({
+          quoteView: d.client_settings.quote_view || 'full',
+          showScope: d.client_settings.show_scope !== false,
+        })
+      }
 
       if (Array.isArray(d?.jobs)) {
         setJobs(d.jobs.map((r: AnyRecord) => ({
@@ -566,6 +575,7 @@ function PortalPreviewInner() {
           onClose={() => setSelectedQuoteId(null)}
           isPreview={true}
           quoteView="full"
+          clientSettings={clientSettings}
         />
       )}
 

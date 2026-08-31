@@ -13,6 +13,7 @@ interface Props {
   canApprove?: boolean
   isPreview?: boolean
   quoteView?: 'full' | 'phases' | 'total_only'
+  clientSettings?: { quoteView?: 'full' | 'phases' | 'total_only'; showScope?: boolean }
 }
 
 function fmtDateTime(iso: string) {
@@ -39,12 +40,19 @@ export default function PortalQuoteDetailsModal({
   canApprove,
   isPreview = false,
   quoteView = 'full',
+  clientSettings,
 }: Props) {
+  // Determine what the client is allowed to see based on their quoteView setting
+  const clientQuoteView = clientSettings?.quoteView || 'full'
+  const clientCanSeeScope = clientSettings?.showScope !== false
+  const clientCanSeeCosts = clientQuoteView === 'full'
+  const clientCanSeePhases = clientQuoteView === 'full' || clientQuoteView === 'phases'
+
   const [showPrintOptions, setShowPrintOptions] = useState(false)
   const [printOptions, setPrintOptions] = useState({
-    includeScope: true,
-    includePhases: true,
-    includeCosts: true,
+    includeScope: clientCanSeeScope,
+    includePhases: clientCanSeePhases,
+    includeCosts: clientCanSeeCosts,
   })
 
   const subtotal = quote.phases.reduce((s, p) => s + calcPhaseSell(p, quote.markup), 0)
@@ -361,41 +369,53 @@ export default function PortalQuoteDetailsModal({
             </div>
 
             <div className="portal-modal-bd" style={{ paddingBottom: 0 }}>
-              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginBottom: 16, padding: 0 }}>
-                <input
-                  type="checkbox"
-                  checked={printOptions.includeScope}
-                  onChange={e => setPrintOptions(p => ({ ...p, includeScope: e.target.checked }))}
-                  style={{ marginTop: 2, flexShrink: 0, width: 16, height: 16 }}
-                />
-                <span style={{ fontSize: 14, lineHeight: 1.5 }}>
-                  Include Scope of Works
-                </span>
-              </label>
+              {clientCanSeeScope && (
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginBottom: 16, padding: 0 }}>
+                  <input
+                    type="checkbox"
+                    checked={printOptions.includeScope}
+                    onChange={e => setPrintOptions(p => ({ ...p, includeScope: e.target.checked }))}
+                    style={{ marginTop: 2, flexShrink: 0, width: 16, height: 16 }}
+                  />
+                  <span style={{ fontSize: 14, lineHeight: 1.5 }}>
+                    Include Scope of Works
+                  </span>
+                </label>
+              )}
 
-              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginBottom: 16, padding: 0 }}>
-                <input
-                  type="checkbox"
-                  checked={printOptions.includePhases}
-                  onChange={e => setPrintOptions(p => ({ ...p, includePhases: e.target.checked }))}
-                  style={{ marginTop: 2, flexShrink: 0, width: 16, height: 16 }}
-                />
-                <span style={{ fontSize: 14, lineHeight: 1.5 }}>
-                  Include Phases Breakdown
-                </span>
-              </label>
+              {clientCanSeePhases && (
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginBottom: 16, padding: 0 }}>
+                  <input
+                    type="checkbox"
+                    checked={printOptions.includePhases}
+                    onChange={e => setPrintOptions(p => ({ ...p, includePhases: e.target.checked }))}
+                    style={{ marginTop: 2, flexShrink: 0, width: 16, height: 16 }}
+                  />
+                  <span style={{ fontSize: 14, lineHeight: 1.5 }}>
+                    Include Phases Breakdown
+                  </span>
+                </label>
+              )}
 
-              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginBottom: 16, padding: 0 }}>
-                <input
-                  type="checkbox"
-                  checked={printOptions.includeCosts}
-                  onChange={e => setPrintOptions(p => ({ ...p, includeCosts: e.target.checked }))}
-                  style={{ marginTop: 2, flexShrink: 0, width: 16, height: 16 }}
-                />
-                <span style={{ fontSize: 14, lineHeight: 1.5 }}>
-                  Include Cost Details
-                </span>
-              </label>
+              {clientCanSeeCosts && (
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginBottom: 16, padding: 0 }}>
+                  <input
+                    type="checkbox"
+                    checked={printOptions.includeCosts}
+                    onChange={e => setPrintOptions(p => ({ ...p, includeCosts: e.target.checked }))}
+                    style={{ marginTop: 2, flexShrink: 0, width: 16, height: 16 }}
+                  />
+                  <span style={{ fontSize: 14, lineHeight: 1.5 }}>
+                    Include Cost Details
+                  </span>
+                </label>
+              )}
+
+              {!clientCanSeeScope && !clientCanSeePhases && !clientCanSeeCosts && (
+                <div style={{ fontSize: 13, color: 'var(--muted)', padding: '8px 0' }}>
+                  No print options available for this client.
+                </div>
+              )}
             </div>
 
             <div className="portal-modal-ft">
