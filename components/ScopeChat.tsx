@@ -434,6 +434,7 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
 
       setMessages(prev => [...prev, { role: 'assistant', content: reply }])
       const { scope, readyToBuild: rdy } = parseMessage(reply)
+      console.log('[ScopeChat] Parsed scope:', scope ? `${scope.substring(0, 50)}...` : 'null')
       if (scope) setLatestScope(scope)
       if (rdy)   setReadyToBuild(true)
     } catch (err) {
@@ -639,69 +640,84 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
           </div>
         )}
 
-        {/* ── Scope / ready-to-build sticky bar ── */}
-        {latestScope && (
-          <div style={{
-            padding: readyToBuild ? '14px 16px' : '10px 16px',
-            borderTop: `2px solid ${readyToBuild ? '#7ab533' : 'var(--border)'}`,
-            background: readyToBuild ? '#f0f9e8' : '#f8faf5',
-            flexShrink: 0,
-            transition: 'background 0.3s, border-color 0.3s',
-          }}>
-            {/* Interview-complete banner */}
-            {readyToBuild && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-                <span style={{ fontSize: 16 }}>✅</span>
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#3a7a1a' }}>Interview complete</div>
-                  <div style={{ fontSize: 11, color: '#5a9a3a' }}>Scope is ready — click Build Estimate to auto-populate all phases and tasks</div>
-                </div>
-              </div>
-            )}
+        {/* ── Fixed action bar (always visible) ── */}
+        <div style={{
+          padding: '12px 16px',
+          borderTop: '1px solid var(--border)',
+          background: readyToBuild ? '#f0f9e8' : '#fafaf8',
+          display: 'flex',
+          gap: 8,
+          flexShrink: 0,
+          transition: 'background 0.3s',
+        }}>
+          {readyToBuild && (
+            <div style={{ fontSize: 11, color: '#3a7a1a', fontWeight: 600, alignSelf: 'center', flex: 1 }}>
+              ✅ Interview complete — choose an action
+            </div>
+          )}
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#7ab533', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-                {readyToBuild ? 'Scope ready' : 'Latest scope'}
-              </span>
-              <div style={{ display: 'flex', gap: 6 }}>
-                {onBuildEstimate && (
-                  <button
-                    onClick={() => { onBuildEstimate(latestScope); onClose() }}
-                    title="Analyse the scope and auto-populate all phases and tasks from the task library"
-                    style={{
-                      background: '#e67e22',
-                      color: '#fff', border: 'none', borderRadius: 6,
-                      padding: readyToBuild ? '9px 18px' : '6px 14px',
-                      fontSize: readyToBuild ? 13 : 12,
-                      fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
-                      boxShadow: readyToBuild ? '0 2px 10px rgba(230,126,34,0.45)' : 'none',
-                      transition: 'all 0.2s',
-                    }}
-                  >
-                    ✦ Build Estimate
-                  </button>
-                )}
-                <button
-                  onClick={() => { onInsert(latestScope); onClose() }}
-                  title="Paste scope text into the quote — estimate not built yet"
-                  style={{
-                    background: 'var(--moss)', color: '#fff', border: 'none', borderRadius: 6,
-                    padding: '6px 14px', fontSize: 12, fontWeight: 600,
-                    cursor: 'pointer', whiteSpace: 'nowrap',
-                    opacity: readyToBuild ? 0.7 : 1,
-                  }}
-                >
-                  ✓ Insert Scope Only
-                </button>
-              </div>
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, maxHeight: 60, overflow: 'hidden' }}>
-              {latestScope.split('\n').slice(0, 2).map((line, i) => (
-                <div key={i}>{line.replace(/\*\*/g, '').slice(0, 100)}{line.length > 100 ? '…' : ''}</div>
-              ))}
-            </div>
-          </div>
-        )}
+          <button
+            onClick={() => send('generate')}
+            disabled={messages.length <= 1 || !!latestScope}
+            title="Generate scope from your answers"
+            style={{
+              background: messages.length > 1 && !latestScope ? '#7ab533' : '#e0e0e0',
+              color: messages.length > 1 && !latestScope ? '#fff' : '#999',
+              border: 'none',
+              borderRadius: 6,
+              padding: '8px 14px',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: messages.length > 1 && !latestScope ? 'pointer' : 'not-allowed',
+              whiteSpace: 'nowrap',
+              transition: 'all 0.2s',
+            }}
+          >
+            ✦ Generate Scope
+          </button>
+
+          {onBuildEstimate && (
+            <button
+              onClick={() => { if (latestScope) { onBuildEstimate(latestScope); onClose() } }}
+              disabled={!latestScope}
+              title="Analyse scope and auto-populate all phases"
+              style={{
+                background: latestScope ? '#e67e22' : '#e0e0e0',
+                color: latestScope ? '#fff' : '#999',
+                border: 'none',
+                borderRadius: 6,
+                padding: '8px 14px',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: latestScope ? 'pointer' : 'not-allowed',
+                whiteSpace: 'nowrap',
+                transition: 'all 0.2s',
+              }}
+            >
+              ✦ Build Estimate
+            </button>
+          )}
+
+          <button
+            onClick={() => { if (latestScope) { onInsert(latestScope); onClose() } }}
+            disabled={!latestScope}
+            title="Insert scope into quote without building estimate"
+            style={{
+              background: latestScope ? 'var(--moss)' : '#e0e0e0',
+              color: latestScope ? '#fff' : '#999',
+              border: 'none',
+              borderRadius: 6,
+              padding: '8px 14px',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: latestScope ? 'pointer' : 'not-allowed',
+              whiteSpace: 'nowrap',
+              transition: 'all 0.2s',
+            }}
+          >
+            ✓ Scope Only
+          </button>
+        </div>
 
         {/* ── Attachment preview strip ── */}
         {(attachments.length > 0 || processing) && (
