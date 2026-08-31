@@ -263,7 +263,10 @@ export default function SavedQuotesPage() {
             const isActioned = q.status === 'accepted' && (hasLinkedJob || pushedAsVariation || q.convertedToJob)
 
             return (
-              <div key={q.id} className="sq-card" style={q.status === 'accepted' ? { borderLeft: '3px solid #7ab533' } : {}, q.versionNumber && isMultiVersion ? { marginLeft: 20, borderRadius: '4px 4px 4px 4px' } : {}}>
+              <div key={q.id} className="sq-card" style={{
+                ...(q.status === 'accepted' ? { borderLeft: '3px solid #7ab533' } : {}),
+                ...(q.versionNumber && isMultiVersion ? { marginLeft: 20 } : {}),
+              }}>
                 <div className="sq-ref" style={q.versionNumber && isMultiVersion ? { display: 'flex', alignItems: 'center', gap: 8 } : {}}>
                   {q.ref || '—'}
                   {q.versionNumber && isMultiVersion && (
