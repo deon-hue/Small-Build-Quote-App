@@ -35,8 +35,9 @@ export function fmtDate(input?: string | null): string {
 }
 
 export function calcItem(i: QuoteItem): number {
-  return (Number(i.labour) || 0) + (Number(i.materials) || 0) + (Number(i.plantHire) || 0)
-    + (Number(i.subcontractors) || 0) + (Number(i.other) || 0)
+  const qty = Number(i.qty) || 1
+  return qty * ((Number(i.labour) || 0) + (Number(i.materials) || 0) + (Number(i.plantHire) || 0)
+    + (Number(i.subcontractors) || 0) + (Number(i.other) || 0))
 }
 
 export function calcPhase(p: QuotePhase): number {
