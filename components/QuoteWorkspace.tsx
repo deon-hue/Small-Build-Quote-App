@@ -1293,6 +1293,13 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
                             </div>
                             <button
                               onClick={() => {
+                                // Determine itemType based on which cost field has the value
+                                let itemType: 'labour' | 'materials' | 'plant' | 'subcontractors' | 'other' = 'other'
+                                if (item.subcontract_cost) itemType = 'subcontractors'
+                                else if (item.labour_cost) itemType = 'labour'
+                                else if (item.materials_cost) itemType = 'materials'
+                                else if (item.plant_cost) itemType = 'plant'
+
                                 const newItem: QuoteItem = {
                                   id: uid(),
                                   desc: item.name,
@@ -1304,7 +1311,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
                                   subcontractors: item.subcontract_cost || 0,
                                   other: item.other_cost || 0,
                                   notes: item.description || '',
-                                  itemType: 'other' as const,
+                                  itemType,
                                 }
                                 onUpdate({ ...p, items: [...p.items, newItem] })
                               }}
