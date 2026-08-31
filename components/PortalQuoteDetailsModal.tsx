@@ -251,11 +251,30 @@ export default function PortalQuoteDetailsModal({
                 Scope of Works
               </div>
               <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.8, padding: '14px 16px', background: '#fafaf8', border: '1px solid var(--border)', borderRadius: 8 }}>
-                {quote.scope.split(/\n\n+|\. (?=[A-Z])/g).map((para, idx) => (
-                  <p key={idx} style={{ margin: '0 0 12px 0', wordSpacing: '0.05em', textAlign: 'justify' }}>
-                    {para.trim()}
-                  </p>
-                ))}
+                {(() => {
+                  const text = quote.scope
+                  if (text.includes('\n\n')) {
+                    return text.split(/\n\n+/).map((p, i) => (
+                      <p key={i} style={{ margin: '0 0 16px 0', paddingBottom: '12px', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
+                        {p.trim()}
+                      </p>
+                    ))
+                  }
+                  const sentences = text.split('. ')
+                  const paras = []
+                  for (let i = 0; i < sentences.length; i += 2) {
+                    if (i + 1 < sentences.length) {
+                      paras.push(sentences[i] + '. ' + sentences[i + 1] + '.')
+                    } else {
+                      paras.push(sentences[i] + (text.trim().endsWith('.') ? '.' : ''))
+                    }
+                  }
+                  return paras.map((p, i) => (
+                    <p key={i} style={{ margin: '0 0 16px 0', paddingBottom: '12px', borderBottom: i < paras.length - 1 ? '1px solid rgba(0,0,0,0.1)' : 'none' }}>
+                      {p}
+                    </p>
+                  ))
+                })()}
               </div>
             </div>
           )}
