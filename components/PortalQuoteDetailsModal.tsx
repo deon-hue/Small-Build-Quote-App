@@ -271,8 +271,8 @@ export default function PortalQuoteDetailsModal({
                     <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)' }}>
                       {pi + 1}. {phase.phase}
                     </div>
-                    {/* Phase total — only shown for 'full' quoteView */}
-                    {quoteView === 'full' && (
+                    {/* Phase total — shown for 'full' and 'phases' views */}
+                    {(quoteView === 'full' || quoteView === 'phases') && (
                       <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 13, fontWeight: 700, color: 'var(--moss)' }}>
                         {fmt(calcPhaseSell(phase, quote.markup))}
                       </div>
