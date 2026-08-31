@@ -39,11 +39,11 @@ function backfillItemDescriptions(phases: QuotePhase[], boTasks: BOTask[]): Quot
       )
       if (match) return { ...i, desc: match.name }
       // Fallback: generate label from itemType
-      const labels: Record<typeof i.itemType, string> = {
+      const labels: Record<string, string> = {
         labour: 'Labour', materials: 'Materials', plant: 'Plant Work',
         subcontractors: 'Subcontractor Work', other: 'Other Cost'
       }
-      return { ...i, desc: labels[i.itemType] || 'Item' }
+      return { ...i, desc: (i.itemType ? labels[i.itemType] : undefined) || 'Item' }
     })
   }))
 }

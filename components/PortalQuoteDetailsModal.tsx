@@ -290,7 +290,7 @@ export default function PortalQuoteDetailsModal({
                       labour: 'Labour', materials: 'Materials', plant: 'Plant Work',
                       subcontractors: 'Subcontractor Work', other: 'Other Cost'
                     }
-                    const desc = item.desc || itemTypeLabels[item.itemType] || 'Item'
+                    const desc = item.desc || (item.itemType ? itemTypeLabels[item.itemType] : undefined) || 'Item'
                     return (
                     <div key={item.id} style={{
                       display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
