@@ -150,12 +150,19 @@ const PAGE_TITLES: Record<string, string> = {
 function AppLayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { permissions, isOwner, loading, currentMember, pageTitle } = useApp()
+  const { permissions, isOwner, loading, currentMember, pageTitle, setPageTitle } = useApp()
   const [tab, setTab] = useState<string | null>(null)
 
   useEffect(() => {
     setTab(new URLSearchParams(window.location.search).get('tab'))
   }, [pathname])
+
+  // Clear custom pageTitle when navigating away from new-quote page
+  useEffect(() => {
+    if (pathname !== '/new-quote' && pageTitle) {
+      setPageTitle(null)
+    }
+  }, [pathname, pageTitle, setPageTitle])
 
   const title = pageTitle || PAGE_TITLES[pathname] || 'Dashboard'
 
