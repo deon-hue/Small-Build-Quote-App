@@ -21,6 +21,7 @@ export default function SavedQuotesPage() {
   const [pushVarQuote, setPushVarQuote]   = useState<Quote | null>(null)
   const [pushVarJobId, setPushVarJobId]   = useState('')
   const [pushingVar, setPushingVar]       = useState(false)
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
   const router = useRouter()
 
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
@@ -29,6 +30,21 @@ export default function SavedQuotesPage() {
   const active   = quotes.filter(q => q.status !== 'archived')
   const archived = quotes.filter(q => q.status === 'archived')
   const pipeline = open.reduce((s, q) => s + quoteTotal(q), 0)
+
+  // Group quotes by version: root quotes + their versions
+  const groupedQuotes = (() => {
+    const groups: Record<string, Quote[]> = {}
+    for (const q of active) {
+      const groupId = q.parentQuoteId || q.id
+      if (!groups[groupId]) groups[groupId] = []
+      groups[groupId].push(q)
+    }
+    // Sort each group by versionNumber, then return groups in reverse order
+    Object.values(groups).forEach(g => g.sort((a, b) => (a.versionNumber || 1) - (b.versionNumber || 1)))
+    return Object.entries(groups)
+      .map(([id, quoteGroup]) => ({ groupId: id, quotes: quoteGroup }))
+      .reverse()
+  })()
 
   async function handleStatusChange(quote: Quote, status: Quote['status']) {
     await updateQuote({ ...quote, status })
@@ -209,7 +225,32 @@ export default function SavedQuotesPage() {
             <div style={{ fontSize: 14, marginBottom: 6 }}>No quotes yet</div>
             <div style={{ fontSize: 12, marginBottom: 14 }}>Create your first quote using New Quote.</div>
           </div>
-        : [...active].reverse().map(q => {
+        : groupedQuotes.map(group => {
+            const isMultiVersion = group.quotes.length > 1
+            const isExpanded = expandedGroups[group.groupId]
+            const rootQuote = group.quotes[0] // First in sorted order (v1)
+
+            return (
+              <div key={group.groupId}>
+                {isMultiVersion && (
+                  <button
+                    onClick={() => setExpandedGroups(prev => ({ ...prev, [group.groupId]: !prev[group.groupId] }))}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8, marginBottom: isExpanded ? 8 : 10,
+                      background: 'none', border: '1px solid var(--border)', borderRadius: 6,
+                      padding: '8px 14px', fontSize: 12, fontWeight: 600, color: 'var(--text)',
+                      cursor: 'pointer', fontFamily: 'inherit', width: '100%',
+                    }}
+                  >
+                    <span style={{ fontSize: 14 }}>{isExpanded ? '▾' : '▸'}</span>
+                    <span>{rootQuote.ref || '—'}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: 11, background: '#f0f9e8', color: '#4a7c1f', padding: '2px 8px', borderRadius: 4, fontWeight: 500 }}>
+                      {group.quotes.length} versions
+                    </span>
+                  </button>
+                )}
+
+                {(!isMultiVersion || isExpanded) && group.quotes.map((q, idx) => {
             const hasLinkedJob = jobs.some(j => j.quoteId === q.id)
             const pushedAsVariation = !!q.ref && variations.some(v => v.notes === `Added from quote ${q.ref}`)
             const alreadyJob = q.convertedToJob || hasLinkedJob || pushedAsVariation || jobs.some(j => {
@@ -222,8 +263,15 @@ export default function SavedQuotesPage() {
             const isActioned = q.status === 'accepted' && (hasLinkedJob || pushedAsVariation || q.convertedToJob)
 
             return (
-              <div key={q.id} className="sq-card" style={q.status === 'accepted' ? { borderLeft: '3px solid #7ab533' } : {}}>
-                <div className="sq-ref">{q.ref || '—'}</div>
+              <div key={q.id} className="sq-card" style={q.status === 'accepted' ? { borderLeft: '3px solid #7ab533' } : {}, q.versionNumber && isMultiVersion ? { marginLeft: 20, borderRadius: '4px 4px 4px 4px' } : {}}>
+                <div className="sq-ref" style={q.versionNumber && isMultiVersion ? { display: 'flex', alignItems: 'center', gap: 8 } : {}}>
+                  {q.ref || '—'}
+                  {q.versionNumber && isMultiVersion && (
+                    <span style={{ fontSize: 10, background: '#e0e7ff', color: '#4c1d95', padding: '2px 6px', borderRadius: 3, fontWeight: 600 }}>
+                      v{q.versionNumber}
+                    </span>
+                  )}
+                </div>
                 <div className="sq-info">
                   <div className="sq-title">{q.jobType} — {q.customer.name || '—'}</div>
                   <div className="sq-sub">
@@ -344,6 +392,9 @@ export default function SavedQuotesPage() {
                     )}
                   </div>
                 </div>
+              </div>
+            )
+                })}
               </div>
             )
           })
