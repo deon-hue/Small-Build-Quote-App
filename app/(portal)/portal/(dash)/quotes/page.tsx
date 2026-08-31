@@ -33,6 +33,16 @@ export default function PortalQuotesPage() {
   const [submitting, setSubmitting] = useState(false)
   const [approveError, setApproveError] = useState('')
 
+  // Determine which version is current (latest) for each quote group
+  const currentVersionMap = new Map<string, string>() // groupId -> quoteId of current version
+  quotes.forEach(q => {
+    const groupId = q.parentQuoteId || q.id
+    const existing = currentVersionMap.get(groupId)
+    if (!existing || (q.versionNumber || 1) > (quotes.find(x => x.id === existing)?.versionNumber || 1)) {
+      currentVersionMap.set(groupId, q.id)
+    }
+  })
+
   function openApproval(q: Quote) {
     setApprovingQuote(q); setSigName(''); setAgreed(false); setApproveError('')
   }
@@ -76,7 +86,10 @@ export default function PortalQuotesPage() {
           const subtotal = q.phases.reduce((s, p) => s + calcPhaseSell(p, q.markup), 0)
           const vatAmount = q.vatIncluded ? subtotal * 0.20 : 0
           const total = subtotal + vatAmount
-          const canApprove = (q.status === 'pending' || q.status === 'sent') && clientSettings.allowOnlineApproval
+          const groupId = q.parentQuoteId || q.id
+          const isCurrentVersion = currentVersionMap.get(groupId) === q.id
+          const isSuperseded = q.versionNumber && !isCurrentVersion
+          const canApprove = isCurrentVersion && (q.status === 'pending' || q.status === 'sent') && clientSettings.allowOnlineApproval
           const isApproved = q.status === 'accepted'
 
           return (
@@ -100,7 +113,10 @@ export default function PortalQuotesPage() {
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: 11, opacity: 0.75, letterSpacing: '0.8px', textTransform: 'uppercase' }}>Quotation</div>
-                  <div style={{ fontFamily: 'DM Mono, monospace', fontWeight: 700, fontSize: 18 }}>{q.ref}</div>
+                  <div style={{ fontFamily: 'DM Mono, monospace', fontWeight: 700, fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+                    {q.ref}
+                    {q.versionNumber && <span style={{ fontSize: 12, background: 'rgba(255,255,255,0.2)', padding: '2px 6px', borderRadius: 3, fontWeight: 600 }}>v{q.versionNumber}</span>}
+                  </div>
                   {q.savedDate && <div style={{ fontSize: 12, opacity: 0.85, marginTop: 2 }}>Issued {q.savedDate}</div>}
                 </div>
               </div>
@@ -120,9 +136,21 @@ export default function PortalQuotesPage() {
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 4 }}>Status</div>
-                  <span className="portal-badge" style={{ background: STATUS_COLOR[q.status] || '#888', fontSize: 12 }}>
-                    {STATUS_LABEL[q.status] || q.status}
-                  </span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+                    <span className="portal-badge" style={{ background: STATUS_COLOR[q.status] || '#888', fontSize: 12 }}>
+                      {STATUS_LABEL[q.status] || q.status}
+                    </span>
+                    {isSuperseded && (
+                      <span className="portal-badge" style={{ background: '#cbd5e1', color: '#475569', fontSize: 11 }}>
+                        Superseded
+                      </span>
+                    )}
+                    {isCurrentVersion && q.versionNumber && q.versionNumber > 1 && (
+                      <span className="portal-badge" style={{ background: '#dbeafe', color: '#0c4a6e', fontSize: 11 }}>
+                        Current Version
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
