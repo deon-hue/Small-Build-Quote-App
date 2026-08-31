@@ -200,7 +200,7 @@ IMPORTANT: Never output [READY_TO_BUILD] without a [SCOPE] block. Only generate 
   // Use Haiku for file attachments (4-5× faster than Sonnet, processes images in <10s)
   // Use Sonnet for text-only chat (better reasoning for multi-turn interview)
   const model     = hasFiles ? 'claude-haiku-4-5-20251001' : 'claude-sonnet-4-6'
-  const maxTokens = hasFiles ? 1500 : 2000
+  const maxTokens = hasFiles ? 4000 : 5000
 
   // ── Call Anthropic API with streaming ─────────────────────────────────────
   try {
