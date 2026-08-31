@@ -126,8 +126,8 @@ export default function PortalQuoteDetailsModal({
           <p><strong>Prepared by:</strong> ${settings.name || 'Your Builder'}</p>
         </div>
 
-        ${phaseContent}
         ${scopeContent}
+        ${phaseContent}
         ${costContent}
 
         <div style="margin-top: 40px; font-size: 12px; color: #888;">
@@ -236,6 +236,18 @@ export default function PortalQuoteDetailsModal({
             </div>
           )}
 
+          {/* ── Scope of works ──────────────────────── */}
+          {quote.scope && (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }}>
+                Scope of Works
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.7, whiteSpace: 'pre-wrap', padding: '14px 16px', background: '#fafaf8', border: '1px solid var(--border)', borderRadius: 8 }}>
+                {quote.scope}
+              </div>
+            </div>
+          )}
+
           {/* ── Phases & line items ─────────────────── */}
           {quote.phases.length > 0 && quoteView !== 'total_only' && (
             <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
@@ -317,18 +329,6 @@ export default function PortalQuoteDetailsModal({
               </span>
             </div>
           </div>
-
-          {/* ── Scope of works ──────────────────────── */}
-          {quote.scope && (
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }}>
-                Scope of Works
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.7, whiteSpace: 'pre-wrap', padding: '14px 16px', background: '#fafaf8', border: '1px solid var(--border)', borderRadius: 8 }}>
-                {quote.scope}
-              </div>
-            </div>
-          )}
 
           {/* ── Comments section ───────────────────── */}
           {!isPreview && <QuoteCommentsSection quoteId={quote.id} isPortalView={true} />}
