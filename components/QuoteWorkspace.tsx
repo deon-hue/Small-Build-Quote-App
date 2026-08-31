@@ -1794,25 +1794,14 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
   function addMainPhase() {
     const newPhase: QuotePhase = {
       id: uid(), phase: 'New Sub-Phase', parentPhase: 'New Phase',
-      items: [
-        { id: uid(), desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'labour' },
-        { id: uid(), desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials' },
-        { id: uid(), desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'other' },
-      ],
+      items: [],
       estimatorItems: [], useEstimator: false,
     }
     onChange([...phases, newPhase])
   }
   function addTask(phaseId: number) {
-    const p = phases.find(x => x.id === phaseId)
-    if (!p) return
-    const tgName = `Task ${getTaskGroups(p.items).length + 1}`
-    const rows: QuoteItem[] = ITEM_TYPES.map(t => ({
-      id: uid(), desc: '', qty: 1, unit: 'Item',
-      labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0,
-      notes: '', itemType: t, taskGroup: tgName,
-    }))
-    updatePhase({ ...p, items: [...p.items, ...rows] })
+    // Task groups are created implicitly when users add their first item
+    // No placeholder items needed
   }
   function renameMain(oldName: string, newName: string) {
     onChange(phases.map(p => (p.parentPhase || '(No Phase)') === oldName ? { ...p, parentPhase: newName } : p))
