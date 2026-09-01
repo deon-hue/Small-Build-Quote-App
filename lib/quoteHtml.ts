@@ -26,12 +26,17 @@ export function buildHtml(q: Quote, settings: Settings, opts: HtmlOpts = {}): st
   const qVat = q.vatIncluded
   const now = new Date()
 
+  const itemTypeLabels: Record<string, string> = {
+    labour: 'Labour', materials: 'Materials', plant: 'Plant Work',
+    subcontractors: 'Subcontractor Work', other: 'Other Cost'
+  }
   const phRows = q.phases.map(p => `
     <tr class="ph"><td colspan="${qVat ? 5 : 4}">${esc(p.phase)}</td><td style="text-align:right;font-size:11px">Sell ex-VAT</td>${qVat ? '<td style="text-align:right;font-size:11px">VAT</td>' : ''}</tr>
     ${p.items.filter(i => calcItemSell(i, qMkp) > 0).map(i => {
       const sell = calcItemSell(i, qMkp)
       const vatAmt = qVat ? sell * VAT : 0
-      return `<tr><td>${esc(i.desc)}${i.notes ? '<br><small>' + esc(i.notes) + '</small>' : ''}</td><td style="text-align:center">${i.qty}</td><td style="text-align:center">${esc(i.unit)}</td><td style="text-align:right">${sell.toFixed(2)}</td>${qVat ? '<td style="text-align:right">' + vatAmt.toFixed(2) + '</td>' : ''}</tr>`
+      const desc = i.desc || (i.itemType ? itemTypeLabels[i.itemType] : undefined) || 'Item'
+      return `<tr><td>${esc(desc)}${i.notes ? '<br><small>' + esc(i.notes) + '</small>' : ''}</td><td style="text-align:center">${i.qty}</td><td style="text-align:center">${esc(i.unit)}</td><td style="text-align:right">${sell.toFixed(2)}</td>${qVat ? '<td style="text-align:right">' + vatAmt.toFixed(2) + '</td>' : ''}</tr>`
     }).join('')}
     <tr><td colspan="${qVat ? 4 : 3}" style="text-align:right;font-weight:600;font-size:11px;color:#2b2f33">Phase Total</td><td style="text-align:right;font-weight:700">£${calcPhaseSell(p, qMkp).toLocaleString('en-GB', { minimumFractionDigits: 2 })}</td>${qVat ? '<td style="text-align:right;font-weight:700">£' + (calcPhaseSell(p, qMkp) * VAT).toLocaleString('en-GB', { minimumFractionDigits: 2 }) + '</td>' : ''}</tr>`
   ).join('')
@@ -132,9 +137,15 @@ export function buildHtmlClientView(q: Quote, settings: Settings, opts: HtmlOpts
       : []
     const itemRowsHtml = visibleItems.map(i => {
       const iSell = calcItemSell(i, qMkp)
+      // Backfill description if missing
+      const itemTypeLabels: Record<string, string> = {
+        labour: 'Labour', materials: 'Materials', plant: 'Plant Work',
+        subcontractors: 'Subcontractor Work', other: 'Other Cost'
+      }
+      const desc = i.desc || (i.itemType ? itemTypeLabels[i.itemType] : undefined) || 'Item'
       return `<div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 14px 6px 80px;border-bottom:1px solid #f0ece4;background:#faf8f4">
         <div>
-          <span style="font-size:12px;color:#2b2f33">${esc(i.desc)}</span>
+          <span style="font-size:12px;color:#2b2f33">${esc(desc)}</span>
           <span style="font-size:11px;color:#9a9288;margin-left:8px">${i.qty} ${esc(i.unit)}</span>
         </div>
         <span style="font-size:12px;font-weight:600;color:#2b2f33;white-space:nowrap">£${iSell.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</span>
