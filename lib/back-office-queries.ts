@@ -1327,3 +1327,60 @@ export async function backfillElectricalDescriptions(sb: SupabaseClient, userId:
     }
   }
 }
+
+// ── Backfill quote item descriptions ───────────────────────────────────────────
+// For all quote items missing descriptions, try to match them to BO tasks by cost
+// and populate the description with the task name
+export async function backfillQuoteItemDescriptions(sb: SupabaseClient, userId: string): Promise<void> {
+  // Get all BO tasks for cost matching
+  const { data: boTasks } = await sb
+    .from('bo_tasks')
+    .select('id, name, labour_cost, materials_cost, plant_cost, subcontract_cost, other_cost')
+    .eq('user_id', userId)
+
+  if (!boTasks || boTasks.length === 0) return
+
+  // Get all quotes for this user
+  const { data: quotes } = await sb
+    .from('quotes')
+    .select('id, phases')
+    .eq('user_id', userId)
+
+  if (!quotes || quotes.length === 0) return
+
+  for (const quote of quotes) {
+    const phases = quote.phases as any[]
+    if (!phases || phases.length === 0) continue
+
+    let changed = false
+    const updatedPhases = phases.map(p => ({
+      ...p,
+      items: (p.items || []).map((i: any) => {
+        if (i.desc && i.desc.trim() !== '') return i
+
+        // Try to match by cost
+        const match = boTasks.find(t =>
+          t.labour_cost === i.labour &&
+          t.materials_cost === i.materials &&
+          t.plant_cost === i.plantHire &&
+          t.subcontract_cost === i.subcontractors &&
+          t.other_cost === i.other
+        )
+
+        if (match) {
+          changed = true
+          return { ...i, desc: match.name }
+        }
+        return i
+      })
+    }))
+
+    if (changed) {
+      await sb
+        .from('quotes')
+        .update({ phases: updatedPhases })
+        .eq('id', quote.id)
+      console.log('[backfill-quotes] updated items for quote', quote.id)
+    }
+  }
+}

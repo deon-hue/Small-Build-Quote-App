@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { fmt, quoteTotal, STAGE_LABEL, Q_BADGE, Q_LABEL } from '@/lib/utils'
 import { buildHtmlClientView } from '@/lib/quoteHtml'
 import { buildGanttFromQuote } from '@/lib/gantt-utils'
+import { backfillQuoteItemDescriptions } from '@/lib/back-office-queries'
 import type { Quote } from '@/lib/types'
 import QuotePreviewModal from '@/components/QuotePreviewModal'
 import SendQuoteModal from '@/components/SendQuoteModal'
@@ -23,6 +24,16 @@ export default function SavedQuotesPage() {
   const [pushingVar, setPushingVar]       = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
   const router = useRouter()
+
+  // Backfill quote item descriptions on load
+  useEffect(() => {
+    const backfill = async () => {
+      const sb = createClient()
+      const { data: { user } } = await sb.auth.getUser()
+      if (user) await backfillQuoteItemDescriptions(sb, user.id)
+    }
+    backfill().catch(err => console.error('[backfill] error:', err))
+  }, [])
 
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
 
