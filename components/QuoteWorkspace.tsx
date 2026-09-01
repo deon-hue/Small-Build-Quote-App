@@ -1340,6 +1340,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
                                   other: item.other_cost || 0,
                                   notes: item.description || '',
                                   itemType,
+                                  boTaskId: item.id,
                                 }
                                 onUpdate({ ...p, items: [...p.items, newItem] })
                               }}
