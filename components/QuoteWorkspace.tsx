@@ -326,8 +326,8 @@ function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst, lab
           style={{ ...fldStyle, fontSize: 12, width: '100%', display: 'block' }}
           value={item.desc} readOnly={isLocked}
           onChange={e => setField('desc', e.target.value)}
-          placeholder="Description"
-          title={item.desc}
+          placeholder={TYPE_LABEL[cat] || 'Description'}
+          title={item.desc || TYPE_LABEL[cat]}
         />
         {/* Notes as subtle sub-line — avoids a whole extra column */}
         {(item.notes || !isLocked) && (
@@ -1761,16 +1761,22 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
     })
   }, [])
 
+  // ── Backfill item descriptions from back office or item type ───────────────
+  const backfilledPhases = React.useMemo(
+    () => backfillItemDescriptions(phases, boTasks),
+    [phases, boTasks]
+  )
+
   // ── Filter ───────────────────────────────────────────────────────────────
   const q = search.toLowerCase().trim()
   const visiblePhases = q
-    ? phases.filter(p =>
+    ? backfilledPhases.filter(p =>
         (p.parentPhase ?? '').toLowerCase().includes(q) ||
         (p.roomLabel   ?? '').toLowerCase().includes(q) ||
         p.phase.toLowerCase().includes(q) ||
         p.items.some(i => i.desc.toLowerCase().includes(q) || (i.notes ?? '').toLowerCase().includes(q))
       )
-    : phases
+    : backfilledPhases
 
   // ── Helpers for updating phases array ────────────────────────────────────
   function updatePhase(updated: QuotePhase) {
