@@ -1335,7 +1335,7 @@ export async function backfillQuoteItemDescriptions(sb: SupabaseClient, userId: 
   // Get all BO tasks for cost matching
   const { data: boTasks } = await sb
     .from('bo_tasks')
-    .select('id, name, labour_cost, materials_cost, plant_cost, subcontract_cost, other_cost')
+    .select('id, name, labour_cost, materials_cost, plant_cost, subcontract_cost, waste_cost, other_cost')
     .eq('user_id', userId)
 
   if (!boTasks || boTasks.length === 0) return
@@ -1358,17 +1358,19 @@ export async function backfillQuoteItemDescriptions(sb: SupabaseClient, userId: 
       items: (p.items || []).map((i: any) => {
         if (i.desc && i.desc.trim() !== '') return i
 
-        // Try to match by cost
+        // Try to match by cost (all 6 cost fields)
         const match = boTasks.find(t =>
           t.labour_cost === i.labour &&
           t.materials_cost === i.materials &&
           t.plant_cost === i.plantHire &&
           t.subcontract_cost === i.subcontractors &&
+          (t.waste_cost ?? 0) === (i.waste ?? 0) &&
           t.other_cost === i.other
         )
 
         if (match) {
           changed = true
+          console.log('[backfill-quotes] matched item to task:', match.name)
           return { ...i, desc: match.name }
         }
         return i
