@@ -31,13 +31,18 @@ function backfillItemDescriptions(phases: QuotePhase[], boTasks: BOTask[]): Quot
     ...p,
     items: p.items.map(i => {
       if (i.desc) return i
+      // Try to find matching back office task by boTaskId
+      if (i.boTaskId) {
+        const match = boTasks.find(t => t.id === i.boTaskId)
+        if (match) return { ...i, desc: match.name }
+      }
       // Try to find matching back office task by cost
-      const match = boTasks.find(t =>
+      const costMatch = boTasks.find(t =>
         t.labour_cost === i.labour && t.materials_cost === i.materials &&
         t.plant_cost === i.plantHire && t.subcontract_cost === i.subcontractors &&
         t.other_cost === i.other
       )
-      if (match) return { ...i, desc: match.name }
+      if (costMatch) return { ...i, desc: costMatch.name }
       // Fallback: generate label from itemType
       const labels: Record<string, string> = {
         labour: 'Labour', materials: 'Materials', plant: 'Plant Work',

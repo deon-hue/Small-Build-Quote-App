@@ -13,7 +13,7 @@ export interface HtmlOpts {
   quoteView?: 'full' | 'phases' | 'total_only'
 }
 
-export function buildHtml(q: Quote, settings: Settings, opts: HtmlOpts = {}): string {
+export function buildHtml(q: Quote, settings: Settings, opts: HtmlOpts = {}, boTasks: any[] = []): string {
   const showScope        = opts.showScope        ?? true
   const showPaymentTerms = opts.showPaymentTerms ?? true
   const co = settings
@@ -30,12 +30,20 @@ export function buildHtml(q: Quote, settings: Settings, opts: HtmlOpts = {}): st
     labour: 'Labour', materials: 'Materials', plant: 'Plant Work',
     subcontractors: 'Subcontractor Work', other: 'Other Cost'
   }
+  const getItemDesc = (i: any): string => {
+    if (i.desc) return i.desc
+    if (i.boTaskId) {
+      const task = boTasks.find(t => t.id === i.boTaskId)
+      if (task) return task.name
+    }
+    return (i.itemType ? itemTypeLabels[i.itemType] : undefined) || 'Item'
+  }
   const phRows = q.phases.map(p => `
     <tr class="ph"><td colspan="${qVat ? 5 : 4}">${esc(p.phase)}</td><td style="text-align:right;font-size:11px">Sell ex-VAT</td>${qVat ? '<td style="text-align:right;font-size:11px">VAT</td>' : ''}</tr>
     ${p.items.filter(i => calcItemSell(i, qMkp) > 0).map(i => {
       const sell = calcItemSell(i, qMkp)
       const vatAmt = qVat ? sell * VAT : 0
-      const desc = i.desc || (i.itemType ? itemTypeLabels[i.itemType] : undefined) || 'Item'
+      const desc = getItemDesc(i)
       return `<tr><td>${esc(desc)}${i.notes ? '<br><small>' + esc(i.notes) + '</small>' : ''}</td><td style="text-align:center">${i.qty}</td><td style="text-align:center">${esc(i.unit)}</td><td style="text-align:right">${sell.toFixed(2)}</td>${qVat ? '<td style="text-align:right">' + vatAmt.toFixed(2) + '</td>' : ''}</tr>`
     }).join('')}
     <tr><td colspan="${qVat ? 4 : 3}" style="text-align:right;font-weight:600;font-size:11px;color:#2b2f33">Phase Total</td><td style="text-align:right;font-weight:700">£${calcPhaseSell(p, qMkp).toLocaleString('en-GB', { minimumFractionDigits: 2 })}</td>${qVat ? '<td style="text-align:right;font-weight:700">£' + (calcPhaseSell(p, qMkp) * VAT).toLocaleString('en-GB', { minimumFractionDigits: 2 }) + '</td>' : ''}</tr>`
@@ -95,7 +103,7 @@ ${showPaymentTerms ? `<div class="terms"><h4>Payment Terms &amp; Conditions</h4>
 </div></body></html>`
 }
 
-export function buildHtmlClientView(q: Quote, settings: Settings, opts: HtmlOpts = {}): string {
+export function buildHtmlClientView(q: Quote, settings: Settings, opts: HtmlOpts = {}, boTasks: any[] = []): string {
   const showScope        = opts.showScope        ?? true
   const showPaymentTerms = opts.showPaymentTerms ?? true
   const quoteView        = opts.quoteView        ?? 'full'
@@ -135,14 +143,21 @@ export function buildHtmlClientView(q: Quote, settings: Settings, opts: HtmlOpts
     const visibleItems = quoteView === 'full'
       ? p.items.filter(i => calcItemSell(i, qMkp) > 0)
       : []
-    const itemRowsHtml = visibleItems.map(i => {
-      const iSell = calcItemSell(i, qMkp)
-      // Backfill description if missing
+    const getItemDesc = (i: any): string => {
+      if (i.desc) return i.desc
+      if (i.boTaskId) {
+        const task = boTasks.find(t => t.id === i.boTaskId)
+        if (task) return task.name
+      }
       const itemTypeLabels: Record<string, string> = {
         labour: 'Labour', materials: 'Materials', plant: 'Plant Work',
         subcontractors: 'Subcontractor Work', other: 'Other Cost'
       }
-      const desc = i.desc || (i.itemType ? itemTypeLabels[i.itemType] : undefined) || 'Item'
+      return (i.itemType ? itemTypeLabels[i.itemType] : undefined) || 'Item'
+    }
+    const itemRowsHtml = visibleItems.map(i => {
+      const iSell = calcItemSell(i, qMkp)
+      const desc = getItemDesc(i)
       return `<div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 14px 6px 80px;border-bottom:1px solid #f0ece4;background:#faf8f4">
         <div>
           <span style="font-size:12px;color:#2b2f33">${esc(desc)}</span>

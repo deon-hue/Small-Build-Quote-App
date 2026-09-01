@@ -9,14 +9,15 @@ import QuoteCommentsSection from './QuoteCommentsSection'
 interface Props {
   quote: Quote
   onClose: () => void
+  boTasks?: any[]
 }
 
-export default function QuotePreviewModal({ quote, onClose }: Props) {
+export default function QuotePreviewModal({ quote, onClose, boTasks = [] }: Props) {
   const { settings } = useApp()
   const [view, setView] = useState<'detailed' | 'client'>('detailed')
   const frameRef = useRef<HTMLIFrameElement>(null)
 
-  const html = view === 'detailed' ? buildHtml(quote, settings) : buildHtmlClientView(quote, settings)
+  const html = view === 'detailed' ? buildHtml(quote, settings, {}, boTasks) : buildHtmlClientView(quote, settings, {}, boTasks)
 
   function handlePrint() {
     const w = window.open('', '_blank')
