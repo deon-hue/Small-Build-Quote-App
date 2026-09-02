@@ -118,11 +118,14 @@ function PortalPreviewInner() {
       }
       setClientName(d?.client_name || 'Client')
 
-      // Extract client settings (quote view permissions)
+      // Extract client settings (quote view permissions). Unlike the other
+      // fields on this RPC response, client_settings is a passthrough of the
+      // clients.portal_settings JSONB column — it keeps the app's own
+      // camelCase keys (quoteView/showScope), not snake_case DB columns.
       if (d?.client_settings) {
         setClientSettings({
-          quoteView: d.client_settings.quote_view || 'full',
-          showScope: d.client_settings.show_scope !== false,
+          quoteView: d.client_settings.quoteView || 'full',
+          showScope: d.client_settings.showScope !== false,
         })
       }
 

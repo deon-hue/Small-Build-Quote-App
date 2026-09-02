@@ -132,15 +132,16 @@ export function buildHtmlClientView(q: Quote, settings: Settings, opts: HtmlOpts
          </div>`
       : `<div style="width:52px;height:52px;border-radius:6px;background:${color}18;border:1px solid ${color}44;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;margin-right:14px">${emoji}</div>`
 
-    // 'phases' view: show name + visual but hide prices
-    const priceHtml = quoteView === 'full'
+    // 'phases' view: show name, item/task list and the phase total, but hide
+    // per-item and per-phase prices. 'full' shows everything.
+    const priceHtml = (quoteView === 'full' || quoteView === 'phases')
       ? `<div style="text-align:right;flex-shrink:0">
            <div style="font-weight:700;font-size:14px;color:#2b2f33">£${sell.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>
            ${qVat ? `<div style="font-size:11px;color:#4a90a4">+£${vatAmt.toLocaleString('en-GB', { minimumFractionDigits: 2 })} VAT</div>` : ''}
          </div>`
       : ''
 
-    const visibleItems = quoteView === 'full'
+    const visibleItems = (quoteView === 'full' || quoteView === 'phases')
       ? p.items.filter(i => calcItemSell(i, qMkp) > 0)
       : []
     const getItemDesc = (i: any): string => {
@@ -163,7 +164,7 @@ export function buildHtmlClientView(q: Quote, settings: Settings, opts: HtmlOpts
           <span style="font-size:12px;color:#2b2f33">${esc(desc)}</span>
           <span style="font-size:11px;color:#9a9288;margin-left:8px">${i.qty} ${esc(i.unit)}</span>
         </div>
-        <span style="font-size:12px;font-weight:600;color:#2b2f33;white-space:nowrap">£${iSell.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</span>
+        ${quoteView === 'full' ? `<span style="font-size:12px;font-weight:600;color:#2b2f33;white-space:nowrap">£${iSell.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</span>` : ''}
       </div>`
     }).join('')
 
