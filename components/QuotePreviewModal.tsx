@@ -4,6 +4,7 @@ import { useState, useRef } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { buildHtml, buildHtmlClientView } from '@/lib/quoteHtml'
 import type { Quote } from '@/lib/types'
+import { DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
 import QuoteCommentsSection from './QuoteCommentsSection'
 
 interface Props {
@@ -13,11 +14,27 @@ interface Props {
 }
 
 export default function QuotePreviewModal({ quote, onClose, boTasks = [] }: Props) {
-  const { settings } = useApp()
+  const { settings, clients } = useApp()
   const [view, setView] = useState<'detailed' | 'client'>('detailed')
   const frameRef = useRef<HTMLIFrameElement>(null)
 
-  const html = view === 'detailed' ? buildHtml(quote, settings, {}, boTasks) : buildHtmlClientView(quote, settings, {}, boTasks)
+  // Look up this client's portal settings so "Client View" here matches what
+  // they actually see in the portal/emailed quote, instead of always
+  // defaulting to 'full' (which was showing prices regardless of the
+  // client's configured quoteView).
+  const matchedClient = clients.find(
+    c => c.email && quote.customer.email &&
+      c.email.toLowerCase() === quote.customer.email.toLowerCase()
+  )
+  const clientSettings = matchedClient?.portalSettings ?? DEFAULT_CLIENT_PORTAL_SETTINGS
+
+  const html = view === 'detailed'
+    ? buildHtml(quote, settings, {}, boTasks)
+    : buildHtmlClientView(quote, settings, {
+        quoteView:        clientSettings.quoteView,
+        showScope:        clientSettings.showScope,
+        showPaymentTerms: clientSettings.showPaymentTerms,
+      }, boTasks)
 
   function handlePrint() {
     const w = window.open('', '_blank')

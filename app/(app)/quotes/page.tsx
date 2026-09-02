@@ -7,6 +7,7 @@ import { buildHtmlClientView } from '@/lib/quoteHtml'
 import { buildGanttFromQuote } from '@/lib/gantt-utils'
 import { backfillQuoteItemDescriptions } from '@/lib/back-office-queries'
 import type { Quote } from '@/lib/types'
+import { DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
 import QuotePreviewModal from '@/components/QuotePreviewModal'
 import SendQuoteModal from '@/components/SendQuoteModal'
 import QuoteCommentsSection from '@/components/QuoteCommentsSection'
@@ -15,7 +16,7 @@ import { createClient } from '@/lib/supabase/client'
 import { extractQuoteIntelligence } from '@/lib/quote-intelligence'
 
 export default function SavedQuotesPage() {
-  const { quotes, jobs, variations, settings, updateQuote, deleteQuote, deleteJob, addJob, addVariation, saveGanttState, loading } = useApp()
+  const { quotes, jobs, variations, settings, clients, updateQuote, deleteQuote, deleteJob, addJob, addVariation, saveGanttState, loading } = useApp()
   const [previewQuote, setPreviewQuote]   = useState<Quote | null>(null)
   const [emailingQuote, setEmailingQuote] = useState<Quote | null>(null)
   const [archiveOpen, setArchiveOpen]     = useState(false)
@@ -181,7 +182,16 @@ export default function SavedQuotesPage() {
   }
 
   function downloadQuote(q: Quote) {
-    const html = buildHtmlClientView(q, settings)
+    const matchedClient = clients.find(
+      c => c.email && q.customer.email &&
+        c.email.toLowerCase() === q.customer.email.toLowerCase()
+    )
+    const clientSettings = matchedClient?.portalSettings ?? DEFAULT_CLIENT_PORTAL_SETTINGS
+    const html = buildHtmlClientView(q, settings, {
+      quoteView:        clientSettings.quoteView,
+      showScope:        clientSettings.showScope,
+      showPaymentTerms: clientSettings.showPaymentTerms,
+    })
     const blob = new Blob([html], { type: 'text/html' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)

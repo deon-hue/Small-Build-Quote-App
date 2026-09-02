@@ -574,7 +574,7 @@ function PortalPreviewInner() {
           settings={settings || { name: '', tagline: '', email: '', phone: '', address: '', logo: '' }}
           onClose={() => setSelectedQuoteId(null)}
           isPreview={true}
-          quoteView="full"
+          quoteView={clientSettings.quoteView ?? 'full'}
           clientSettings={clientSettings}
         />
       )}
