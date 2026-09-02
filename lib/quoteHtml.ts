@@ -38,69 +38,145 @@ export function buildHtml(q: Quote, settings: Settings, opts: HtmlOpts = {}, boT
     }
     return (i.itemType ? itemTypeLabels[i.itemType] : undefined) || 'Item'
   }
-  const phRows = q.phases.map(p => `
-    <tr class="ph"><td colspan="${qVat ? 5 : 4}">${esc(p.phase)}</td><td style="text-align:right;font-size:11px">Sell ex-VAT</td>${qVat ? '<td style="text-align:right;font-size:11px">VAT</td>' : ''}</tr>
-    ${p.items.filter(i => calcItemSell(i, qMkp) > 0).map(i => {
-      const sell = calcItemSell(i, qMkp)
-      const vatAmt = qVat ? sell * VAT : 0
-      const desc = getItemDesc(i)
-      return `<tr><td>${esc(desc)}${i.notes ? '<br><small>' + esc(i.notes) + '</small>' : ''}</td><td style="text-align:center">${i.qty}</td><td style="text-align:center">${esc(i.unit)}</td><td style="text-align:right">${sell.toFixed(2)}</td>${qVat ? '<td style="text-align:right">' + vatAmt.toFixed(2) + '</td>' : ''}</tr>`
-    }).join('')}
-    <tr><td colspan="${qVat ? 4 : 3}" style="text-align:right;font-weight:600;font-size:11px;color:#2b2f33">Phase Total</td><td style="text-align:right;font-weight:700">£${calcPhaseSell(p, qMkp).toLocaleString('en-GB', { minimumFractionDigits: 2 })}</td>${qVat ? '<td style="text-align:right;font-weight:700">£' + (calcPhaseSell(p, qMkp) * VAT).toLocaleString('en-GB', { minimumFractionDigits: 2 }) + '</td>' : ''}</tr>`
-  ).join('')
 
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-body{font-family:Arial,sans-serif;background:#f0ece4;margin:0;padding:28px}
-.w{max-width:720px;margin:0 auto;background:#fff;border-radius:6px;overflow:hidden;box-shadow:0 2px 20px rgba(0,0,0,0.1)}
-.hd{background:#2b2f33;padding:28px 36px;color:white}
-.co{font-size:22px;font-weight:700;margin-bottom:3px}
-.tag{font-size:11px;opacity:0.7;letter-spacing:1px;text-transform:uppercase}
-.bd{padding:32px 36px}
-.intro{font-size:14px;line-height:1.7;color:#444;margin-bottom:24px}
-.det{display:flex;gap:36px;margin-bottom:24px;padding:18px;background:#f8f5f0;border-radius:4px;flex-wrap:wrap}
-.dl dt{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#8a8278;margin-bottom:2px}
-.dl dd{font-size:13px;color:#1a1612;margin-bottom:10px}
-h3{font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#2b2f33;margin:0 0 10px;padding-bottom:7px;border-bottom:2px solid #3d4a3e}
-table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:12px}
-th{background:#2b2f33;color:white;padding:7px 9px;text-align:left;font-weight:600;font-size:11px}
-tr:nth-child(even) td{background:#f8f5f0}
-td{padding:7px 9px;border-bottom:1px solid #e8e0d0;vertical-align:top}
-.ph td{background:#e8ecf0;font-weight:600;color:#2b2f33}
-.tots{float:right;width:260px;margin-bottom:28px}
-.tots table{margin:0;font-size:13px}
-.tots td{border:none;padding:5px 9px}
-.tr td{font-weight:700;font-size:14px;background:#2b2f33;color:white}
-.terms{background:#f8f5f0;border-radius:4px;padding:16px 18px;margin-top:6px;clear:both}
-.terms h4{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#8a8278;margin-bottom:7px}
-.terms p{font-size:12px;color:#444;line-height:1.6;margin-bottom:5px}
-.ft{background:#2b2f33;padding:16px 36px;text-align:center;color:rgba(255,255,255,0.5);font-size:11px}
-small{font-size:10px;color:#8a8278}
-</style></head><body><div class="w">
-<div class="hd" style="display:flex;align-items:center;gap:24px">
-  ${co.logo ? `<div style="flex-shrink:0"><img src="${co.logo}" alt="Logo" style="height:60px;max-width:160px;object-fit:contain;filter:brightness(0) invert(1)"></div>` : ''}
-  <div><div class="co">${esc(co.name || 'Buildospro')}</div><div class="tag">${esc(co.tagline || 'Building Extensions & Renovations')}</div></div>
+  const phaseRows = q.phases.map(p => {
+    const phaseTotal = calcPhaseSell(p, qMkp)
+    const phaseVat = qVat ? phaseTotal * VAT : 0
+    return `
+      <div style="margin-bottom:20px;border-left:4px solid #7ab533;background:#f8fafc;padding:16px;border-radius:4px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div style="font-size:14px;font-weight:600;color:#1e293b">${esc(p.phase)}</div>
+          <div style="font-size:16px;font-weight:700;color:#7ab533;font-family:monospace">£${phaseTotal.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>
+        </div>
+        <div style="background:white;border-radius:4px;overflow:hidden">
+          ${p.items.filter(i => calcItemSell(i, qMkp) > 0).map(i => {
+            const sell = calcItemSell(i, qMkp)
+            const itemVat = qVat ? sell * VAT : 0
+            const desc = getItemDesc(i)
+            return `<div style="display:flex;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #e2e8f0;font-size:13px">
+              <div style="flex:1;color:#334155">${esc(desc)}${i.notes ? '<div style="font-size:11px;color:#94a3b8;margin-top:2px">' + esc(i.notes) + '</div>' : ''}</div>
+              <div style="color:#7ab533;font-weight:600;font-family:monospace;text-align:right;min-width:80px">£${sell.toFixed(2)}</div>
+              ${qVat ? `<div style="color:#94a3b8;font-size:11px;text-align:right;min-width:60px">£${itemVat.toFixed(2)}</div>` : ''}
+            </div>`
+          }).join('')}
+        </div>
+      </div>`
+  }).join('')
+
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#f5f5f5;padding:40px 20px}
+.container{max-width:900px;margin:0 auto;background:white;box-shadow:0 10px 40px rgba(0,0,0,0.1)}
+.header{display:flex;align-items:center;gap:30px;padding:40px;border-bottom:3px solid #7ab533;background:linear-gradient(135deg,#f8faf8 0%,#fff 100%)}
+.logo{width:80px;height:80px;background:#7ab533;border-radius:8px;display:flex;align-items:center;justify-content:center;color:white;font-size:28px;font-weight:bold;flex-shrink:0}
+.company-info h1{font-size:28px;color:#1e293b;margin-bottom:8px}
+.company-info p{font-size:13px;color:#64748b;line-height:1.6}
+.quote-title{padding:30px 40px;background:#f8fafc;border-bottom:1px solid #e2e8f0}
+.quote-title h2{font-size:18px;color:#1e293b;margin-bottom:12px;text-transform:uppercase;letter-spacing:1px}
+.details-grid{display:grid;grid-template-columns:1fr 1fr;gap:40px;padding:30px 40px;background:white;border-bottom:1px solid #e2e8f0}
+.detail-block h3{font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;font-weight:600}
+.detail-block p{font-size:13px;color:#334155;line-height:1.7}
+.phases-section{padding:40px}
+.phases-title{font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:20px;font-weight:600;border-bottom:2px solid #7ab533;padding-bottom:10px}
+.totals-section{display:flex;justify-content:flex-end;padding:40px;background:#f8fafc;border-top:2px solid #e2e8f0}
+.totals-box{width:350px}
+.total-row{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid #e2e8f0;font-size:13px}
+.total-label{color:#64748b}
+.total-amount{color:#1e293b;font-weight:600;font-family:'Monaco',monospace}
+.grand-total{border-bottom:none!important;border-top:2px solid #7ab533;padding-top:16px;padding-bottom:0;font-size:16px}
+.grand-total .total-label{color:#1e293b;font-weight:700}
+.grand-total .total-amount{color:#7ab533;font-size:18px;font-weight:700}
+.scope-box{margin:0 40px 24px;padding:16px 18px;background:#f8fafc;border-left:3px solid #7ab533;border-radius:0 4px 4px 0}
+.scope-label{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#5a8a20;margin-bottom:8px}
+.scope-text{font-size:13px;color:#1e2022;line-height:1.7}
+.terms-box{margin:0 40px 24px;padding:16px 18px;background:#f8fafc;border-radius:4px}
+.terms-box h4{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#64748b;margin-bottom:7px}
+.terms-box p{font-size:12px;color:#444;line-height:1.6;margin-bottom:5px}
+.footer{padding:30px 40px;background:#1e293b;color:rgba(255,255,255,0.7);font-size:12px;text-align:center;line-height:1.6}
+.footer-divider{height:1px;background:rgba(255,255,255,0.2);margin-bottom:20px}
+</style></head><body>
+<div class="container">
+  <div class="header">
+    ${co.logo ? `<img src="${co.logo}" alt="Logo" style="height:80px;max-width:160px;object-fit:contain;flex-shrink:0">` : `<div class="logo">SBC</div>`}
+    <div class="company-info">
+      <h1>${esc(co.name || 'Small Build Company')}</h1>
+      <p>${esc(co.tagline || 'Building Extensions & Renovations')}<br>
+      📍 ${esc(co.address || '123 High Street, London, UK')}<br>
+      📧 ${esc(co.email || 'info@company.co.uk')} · 📞 ${esc(co.phone || '')}</p>
+    </div>
+  </div>
+
+  <div class="quote-title">
+    <h2>Quotation for Works</h2>
+  </div>
+
+  <div class="details-grid">
+    <div>
+      <div class="detail-block">
+        <h3>Quote Reference</h3>
+        <p>${esc(q.ref || '—')}</p>
+      </div>
+      <div class="detail-block" style="margin-top:20px">
+        <h3>Date Issued</h3>
+        <p>${now.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+      </div>
+      <div class="detail-block" style="margin-top:20px">
+        <h3>Valid Until</h3>
+        <p>${new Date(now.getTime() + 30 * 864e5).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+      </div>
+    </div>
+    <div>
+      <div class="detail-block">
+        <h3>Prepared For</h3>
+        <p>${esc(q.customer.name || '—')}</p>
+      </div>
+      <div class="detail-block" style="margin-top:20px">
+        <h3>Property Address</h3>
+        <p>${esc(q.customer.address || '—')}</p>
+      </div>
+      <div class="detail-block" style="margin-top:20px">
+        <h3>Job Type</h3>
+        <p>${esc(q.jobType)}</p>
+      </div>
+    </div>
+  </div>
+
+  ${showScope && q.scope ? `<div class="scope-box"><div class="scope-label">Scope of Works</div><div class="scope-text">${q.scope.replace(/\n/g, '<br>')}</div></div>` : ''}
+  ${q.photo ? `<div style="margin:0 40px 24px;text-align:center"><img src="${q.photo}" alt="Property" style="max-width:100%;max-height:280px;border-radius:6px;border:1px solid #e2e8f0;object-fit:cover"></div>` : ''}
+
+  <div class="phases-section">
+    <div class="phases-title">Summary of Works — ${esc(q.jobType)}</div>
+    ${phaseRows}
+  </div>
+
+  <div class="totals-section">
+    <div class="totals-box">
+      <div class="total-row">
+        <div class="total-label">Subtotal (ex-VAT)</div>
+        <div class="total-amount">£${sub.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>
+      </div>
+      ${qVat ? `<div class="total-row">
+        <div class="total-label">VAT (20%)</div>
+        <div class="total-amount">£${vat.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>
+      </div>` : ''}
+      <div class="total-row grand-total">
+        <div class="total-label">TOTAL${!qVat ? ' (ex-VAT)' : ' (inc. VAT)'}</div>
+        <div class="total-amount">£${total.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>
+      </div>
+    </div>
+  </div>
+
+  ${showPaymentTerms ? `<div class="terms-box"><h4>Payment Terms &amp; Conditions</h4><p>${co.terms || ''}</p><p>${co.extra || ''}</p></div>` : ''}
+  <p style="margin:0 40px 32px;font-size:13px;color:#444">To accept this quotation or to discuss any aspect of the works:<br><strong>${esc(co.contact || '')}</strong> &nbsp;·&nbsp; ${esc(co.email || '')} &nbsp;·&nbsp; ${esc(co.phone || '')}</p>
+
+  <div class="footer">
+    <div class="footer-divider"></div>
+    <p><strong>${esc(co.name || 'Small Build Company')}</strong><br>
+    ${esc(co.address || '')} · Registered in England &amp; Wales<br>
+    This quotation is valid for 30 days from the date of issue.</p>
+  </div>
 </div>
-<div class="bd">
-<div class="intro">Dear ${esc(q.customer.name || 'Customer')},<br><br>Thank you for the opportunity to quote for the works at <strong>${esc(q.customer.address || 'your property')}</strong>. Please find below our detailed estimate for the ${esc(q.jobType)} works as discussed. This quotation is valid for 30 days from the date of issue.</div>
-${showScope && q.scope ? `<div style="margin-bottom:24px;padding:16px 18px;background:#f8f5f0;border-left:3px solid #7ab533;border-radius:0 4px 4px 0"><div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#5a8a20;margin-bottom:8px">Scope of Works</div><div style="font-size:13px;color:#1e2022;line-height:1.7">${q.scope.replace(/\n/g, '<br>')}</div></div>` : ''}
-${q.photo ? `<div style="margin-bottom:24px;text-align:center"><img src="${q.photo}" alt="Property" style="max-width:100%;max-height:280px;border-radius:6px;border:1px solid #e0ddd8;object-fit:cover"></div>` : ''}
-<div class="det">
-  <dl class="dl"><dt>Quote Reference</dt><dd>${esc(q.ref || '—')}</dd><dt>Date Issued</dt><dd>${now.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</dd><dt>Valid Until</dt><dd>${new Date(now.getTime() + 30 * 864e5).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</dd></dl>
-  <dl class="dl"><dt>Prepared For</dt><dd>${esc(q.customer.name || '—')}</dd><dt>Property</dt><dd>${esc(q.customer.address || '—')}</dd><dt>Job Type</dt><dd>${esc(q.jobType)}</dd></dl>
-</div>
-<h3>Itemised Estimate — ${esc(q.jobType)}</h3>
-<table><thead><tr><th>Description</th><th style="width:48px;text-align:center">Qty</th><th style="width:44px;text-align:center">Unit</th><th style="width:90px;text-align:right">Sell Price (ex-VAT)</th>${qVat ? '<th style="width:80px;text-align:right">VAT (20%)</th>' : ''}</tr></thead><tbody>${phRows}</tbody></table>
-<div class="tots"><table>
-  <tr><td>Sell Price (ex-VAT)</td><td style="text-align:right">£${sub.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</td></tr>
-  ${q.vatIncluded ? `<tr><td>VAT (20%)</td><td style="text-align:right">£${vat.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</td></tr>` : '<tr><td colspan="2" style="font-size:10px;color:#8a8278">*VAT not included</td></tr>'}
-  <tr class="tr"><td>TOTAL</td><td style="text-align:right">£${total.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</td></tr>
-</table></div>
-<div style="clear:both"></div>
-${showPaymentTerms ? `<div class="terms"><h4>Payment Terms &amp; Conditions</h4><p>${co.terms || ''}</p><p>${co.extra || ''}</p></div>` : ''}
-<p style="margin-top:20px;font-size:13px;color:#444">To accept this quotation or to discuss any aspect of the works:<br><strong>${esc(co.contact || '')}</strong> &nbsp;·&nbsp; ${esc(co.email || '')} &nbsp;·&nbsp; ${esc(co.phone || '')}</p>
-</div>
-<div class="ft">${esc(co.name || 'Buildospro')} · ${esc(co.address || '')} · Registered in England &amp; Wales</div>
-</div></body></html>`
+</body></html>`
 }
 
 export function buildHtmlClientView(q: Quote, settings: Settings, opts: HtmlOpts = {}, boTasks: any[] = []): string {
@@ -159,77 +235,140 @@ export function buildHtmlClientView(q: Quote, settings: Settings, opts: HtmlOpts
     const itemRowsHtml = visibleItems.map(i => {
       const iSell = calcItemSell(i, qMkp)
       const desc = getItemDesc(i)
-      return `<div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 14px 6px 80px;border-bottom:1px solid #f0ece4;background:#faf8f4">
+      return `<div style="display:flex;justify-content:space-between;align-items:baseline;padding:10px 16px;border-bottom:1px solid #e2e8f0;background:white">
         <div>
-          <span style="font-size:12px;color:#2b2f33">${esc(desc)}</span>
-          <span style="font-size:11px;color:#9a9288;margin-left:8px">${i.qty} ${esc(i.unit)}</span>
+          <span style="font-size:12px;color:#334155">${esc(desc)}</span>
+          <span style="font-size:11px;color:#94a3b8;margin-left:8px">${i.qty} ${esc(i.unit)}</span>
         </div>
         ${quoteView === 'full' ? `<span style="font-size:12px;font-weight:600;color:#2b2f33;white-space:nowrap">£${iSell.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</span>` : ''}
       </div>`
     }).join('')
 
-    return `<div style="border-left:4px solid ${color}">
-      <div style="display:flex;align-items:center;padding:12px 14px;border-bottom:1px solid #e8e0d0">
+    return `<div style="margin-bottom:20px;border-left:4px solid #7ab533;background:#f8fafc;border-radius:4px;overflow:hidden">
+      <div style="display:flex;align-items:center;padding:12px 14px">
         ${photoHtml}
         <div style="flex:1;min-width:0">
-          <div style="font-weight:700;font-size:13px;color:#1a1612">${esc(p.phase)}</div>
-          ${p.taskName ? `<div style="font-size:11px;color:#7a7268;margin-top:2px">${esc(p.taskName)}</div>` : ''}
+          <div style="font-weight:700;font-size:13px;color:#1e293b">${esc(p.phase)}</div>
+          ${p.taskName ? `<div style="font-size:11px;color:#64748b;margin-top:2px">${esc(p.taskName)}</div>` : ''}
         </div>
         ${priceHtml}
       </div>
-      ${itemRowsHtml}
+      ${itemRowsHtml ? `<div style="border-top:1px solid #e2e8f0">${itemRowsHtml}</div>` : ''}
     </div>`
   }).join('')
 
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-body{font-family:Arial,sans-serif;background:#f0f2f4;margin:0;padding:28px}
-.w{max-width:680px;margin:0 auto;background:#fff;border-radius:6px;overflow:hidden;box-shadow:0 2px 20px rgba(0,0,0,0.1)}
-.hd{background:#2b2f33;padding:28px 36px;color:white}
-.co{font-size:22px;font-weight:700;margin-bottom:3px}
-.tag{font-size:11px;opacity:0.7;letter-spacing:1px;text-transform:uppercase}
-.bd{padding:32px 36px}
-.intro{font-size:14px;line-height:1.7;color:#444;margin-bottom:24px}
-.scope-box{margin-bottom:24px;padding:16px 18px;background:#f8f5f0;border-left:3px solid #7ab533;border-radius:0 4px 4px 0}
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#f5f5f5;padding:40px 20px}
+.container{max-width:900px;margin:0 auto;background:white;box-shadow:0 10px 40px rgba(0,0,0,0.1)}
+.header{display:flex;align-items:center;gap:30px;padding:40px;border-bottom:3px solid #7ab533;background:linear-gradient(135deg,#f8faf8 0%,#fff 100%)}
+.logo{width:80px;height:80px;background:#7ab533;border-radius:8px;display:flex;align-items:center;justify-content:center;color:white;font-size:28px;font-weight:bold;flex-shrink:0}
+.company-info h1{font-size:28px;color:#1e293b;margin-bottom:8px}
+.company-info p{font-size:13px;color:#64748b;line-height:1.6}
+.quote-title{padding:30px 40px;background:#f8fafc;border-bottom:1px solid #e2e8f0}
+.quote-title h2{font-size:18px;color:#1e293b;margin-bottom:12px;text-transform:uppercase;letter-spacing:1px}
+.details-grid{display:grid;grid-template-columns:1fr 1fr;gap:40px;padding:30px 40px;background:white;border-bottom:1px solid #e2e8f0}
+.detail-block h3{font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;font-weight:600}
+.detail-block p{font-size:13px;color:#334155;line-height:1.7}
+.phases-section{padding:40px}
+.phases-title{font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:20px;font-weight:600;border-bottom:2px solid #7ab533;padding-bottom:10px}
+.totals-section{display:flex;justify-content:flex-end;padding:40px;background:#f8fafc;border-top:2px solid #e2e8f0}
+.totals-box{width:350px}
+.total-row{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid #e2e8f0;font-size:13px}
+.total-label{color:#64748b}
+.total-amount{color:#1e293b;font-weight:600;font-family:'Monaco',monospace}
+.grand-total{border-bottom:none!important;border-top:2px solid #7ab533;padding-top:16px;padding-bottom:0;font-size:16px}
+.grand-total .total-label{color:#1e293b;font-weight:700}
+.grand-total .total-amount{color:#7ab533;font-size:18px;font-weight:700}
+.scope-box{margin:0 40px 24px;padding:16px 18px;background:#f8fafc;border-left:3px solid #7ab533;border-radius:0 4px 4px 0}
 .scope-label{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#5a8a20;margin-bottom:8px}
 .scope-text{font-size:13px;color:#1e2022;line-height:1.7}
-.det{display:flex;gap:36px;margin-bottom:24px;padding:18px;background:#f8f5f0;border-radius:4px;flex-wrap:wrap}
-.dl dt{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#8a8278;margin-bottom:2px}
-.dl dd{font-size:13px;color:#1a1612;margin-bottom:10px}
-h3{font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#2b2f33;margin:0 0 10px;padding-bottom:7px;border-bottom:2px solid #2b2f33}
-table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:13px}
-th{background:#2b2f33;color:white;padding:9px 12px;text-align:left;font-weight:600;font-size:11px}
-.tots{float:right;width:280px;margin-bottom:28px}
-.tots table{margin:0;font-size:13px;border-collapse:collapse}
-.tots td{border:none;padding:6px 10px}
-.tr td{font-weight:700;font-size:15px;background:#2b2f33;color:white;padding:10px}
-.terms{background:#f8f5f0;border-radius:4px;padding:16px 18px;margin-top:6px;clear:both}
-.terms h4{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#8a8278;margin-bottom:7px}
-.terms p{font-size:12px;color:#444;line-height:1.6;margin-bottom:5px}
-.ft{background:#2b2f33;padding:16px 36px;text-align:center;color:rgba(255,255,255,0.5);font-size:11px}
-</style></head><body><div class="w">
-<div class="hd" style="display:flex;align-items:center;gap:24px">
-  ${co.logo ? `<div style="flex-shrink:0"><img src="${co.logo}" alt="Logo" style="height:60px;max-width:160px;object-fit:contain;filter:brightness(0) invert(1)"></div>` : ''}
-  <div><div class="co">${esc(co.name || 'Buildospro')}</div><div class="tag">${esc(co.tagline || 'Building Extensions & Renovations')}</div></div>
+.terms-box{margin:0 40px 24px;padding:16px 18px;background:#f8fafc;border-radius:4px}
+.terms-box h4{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#64748b;margin-bottom:7px}
+.terms-box p{font-size:12px;color:#444;line-height:1.6;margin-bottom:5px}
+.footer{padding:30px 40px;background:#1e293b;color:rgba(255,255,255,0.7);font-size:12px;text-align:center;line-height:1.6}
+.footer-divider{height:1px;background:rgba(255,255,255,0.2);margin-bottom:20px}
+</style></head><body>
+<div class="container">
+  <div class="header">
+    ${co.logo ? `<img src="${co.logo}" alt="Logo" style="height:80px;max-width:160px;object-fit:contain;flex-shrink:0">` : `<div class="logo">SBC</div>`}
+    <div class="company-info">
+      <h1>${esc(co.name || 'Small Build Company')}</h1>
+      <p>${esc(co.tagline || 'Building Extensions & Renovations')}<br>
+      📍 ${esc(co.address || '123 High Street, London, UK')}<br>
+      📧 ${esc(co.email || 'info@company.co.uk')} · 📞 ${esc(co.phone || '')}</p>
+    </div>
+  </div>
+
+  <div class="quote-title">
+    <h2>Quotation for Works</h2>
+  </div>
+
+  <div class="details-grid">
+    <div>
+      <div class="detail-block">
+        <h3>Quote Reference</h3>
+        <p>${esc(q.ref || '—')}</p>
+      </div>
+      <div class="detail-block" style="margin-top:20px">
+        <h3>Date Issued</h3>
+        <p>${now.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+      </div>
+      <div class="detail-block" style="margin-top:20px">
+        <h3>Valid Until</h3>
+        <p>${new Date(now.getTime() + 30 * 864e5).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+      </div>
+    </div>
+    <div>
+      <div class="detail-block">
+        <h3>Prepared For</h3>
+        <p>${esc(q.customer.name || '—')}</p>
+      </div>
+      <div class="detail-block" style="margin-top:20px">
+        <h3>Property Address</h3>
+        <p>${esc(q.customer.address || '—')}</p>
+      </div>
+      <div class="detail-block" style="margin-top:20px">
+        <h3>Job Type</h3>
+        <p>${esc(q.jobType)}</p>
+      </div>
+    </div>
+  </div>
+
+  ${showScope && q.scope ? `<div class="scope-box"><div class="scope-label">Scope of Works</div><div class="scope-text">${q.scope.replace(/\n/g, '<br>')}</div></div>` : ''}
+  ${q.photo ? `<div style="margin:0 40px 24px;text-align:center"><img src="${q.photo}" alt="Property" style="max-width:100%;max-height:280px;border-radius:6px;border:1px solid #e2e8f0;object-fit:cover"></div>` : ''}
+
+  ${quoteView !== 'total_only' ? `<div class="phases-section">
+    <div class="phases-title">Summary of Works — ${esc(q.jobType)}</div>
+    ${phaseRows}
+  </div>` : ''}
+
+  <div class="totals-section">
+    <div class="totals-box">
+      ${quoteView !== 'total_only' ? `<div class="total-row">
+        <div class="total-label">Subtotal (ex-VAT)</div>
+        <div class="total-amount">£${sub.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>
+      </div>
+      ${qVat ? `<div class="total-row">
+        <div class="total-label">VAT (20%)</div>
+        <div class="total-amount">£${vat.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>
+      </div>` : '<div class="total-row"><div class="total-label" style="font-size:10px">*VAT not included</div></div>'}` : ''}
+      <div class="total-row grand-total">
+        <div class="total-label">TOTAL${qVat ? ' (inc. VAT)' : ''}</div>
+        <div class="total-amount">£${total.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>
+      </div>
+    </div>
+  </div>
+
+  ${showPaymentTerms ? `<div class="terms-box"><h4>Payment Terms &amp; Conditions</h4><p>${co.terms || ''}</p><p>${co.extra || ''}</p></div>` : ''}
+  <p style="margin:0 40px 32px;font-size:13px;color:#444">To accept this quotation or to discuss any aspect of the works, please contact us:<br><strong>${esc(co.contact || '')}</strong> &nbsp;·&nbsp; ${esc(co.email || '')} &nbsp;·&nbsp; ${esc(co.phone || '')}</p>
+
+  <div class="footer">
+    <div class="footer-divider"></div>
+    <p><strong>${esc(co.name || 'Small Build Company')}</strong><br>
+    ${esc(co.address || '')} · Registered in England &amp; Wales<br>
+    This quotation is valid for 30 days from the date of issue.</p>
+  </div>
 </div>
-<div class="bd">
-<div class="intro">Dear ${esc(q.customer.name || 'Customer')},<br><br>Thank you for the opportunity to quote for the works at <strong>${esc(q.customer.address || 'your property')}</strong>. Please find below our quotation for the ${esc(q.jobType)} works as discussed. This quotation is valid for 30 days from the date of issue.</div>
-${showScope && q.scope ? `<div class="scope-box"><div class="scope-label">Scope of Works</div><div class="scope-text">${q.scope.replace(/\n/g, '<br>')}</div></div>` : ''}
-${q.photo ? `<div style="margin-bottom:24px;text-align:center"><img src="${q.photo}" alt="Property" style="max-width:100%;max-height:280px;border-radius:6px;border:1px solid #e0ddd8;object-fit:cover"></div>` : ''}
-<div class="det">
-  <dl class="dl"><dt>Quote Reference</dt><dd>${esc(q.ref || '—')}</dd><dt>Date Issued</dt><dd>${now.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</dd><dt>Valid Until</dt><dd>${new Date(now.getTime() + 30 * 864e5).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</dd></dl>
-  <dl class="dl"><dt>Prepared For</dt><dd>${esc(q.customer.name || '—')}</dd><dt>Property</dt><dd>${esc(q.customer.address || '—')}</dd><dt>Job Type</dt><dd>${esc(q.jobType)}</dd></dl>
-</div>
-${quoteView !== 'total_only' ? `<h3>Summary of Works — ${esc(q.jobType)}</h3>
-<div style="border:1px solid #e8e0d0;border-radius:6px;overflow:hidden;margin-bottom:20px">${phaseRows}</div>` : ''}
-<div class="tots"><table>
-  ${quoteView !== 'total_only' ? `<tr><td>Subtotal (ex-VAT)</td><td style="text-align:right">£${sub.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</td></tr>
-  ${qVat ? `<tr><td>VAT (20%)</td><td style="text-align:right">£${vat.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</td></tr>` : '<tr><td colspan="2" style="font-size:10px;color:#8a8278">*VAT not included</td></tr>'}` : ''}
-  <tr class="tr"><td>TOTAL${qVat ? ' (inc. VAT)' : ''}</td><td style="text-align:right">£${total.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</td></tr>
-</table></div>
-<div style="clear:both"></div>
-${showPaymentTerms ? `<div class="terms"><h4>Payment Terms &amp; Conditions</h4><p>${co.terms || ''}</p><p>${co.extra || ''}</p></div>` : ''}
-<p style="margin-top:20px;font-size:13px;color:#444">To accept this quotation or to discuss any aspect of the works, please contact us:<br><strong>${esc(co.contact || '')}</strong> &nbsp;·&nbsp; ${esc(co.email || '')} &nbsp;·&nbsp; ${esc(co.phone || '')}</p>
-</div>
-<div class="ft">${esc(co.name || 'Buildospro')} · ${esc(co.address || '')} · Registered in England &amp; Wales</div>
-</div></body></html>`
+</body></html>`
 }
