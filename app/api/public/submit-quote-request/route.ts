@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { data, error } = await sb.from('quote_requests').insert({
+    user_id:         'c1d9fdaf-5f12-4b1d-b6f5-6318be733d71',
     client_name:     clientName.trim(),
     client_email:    clientEmail.trim().toLowerCase(),
     client_phone:    (clientPhone || '').trim(),
