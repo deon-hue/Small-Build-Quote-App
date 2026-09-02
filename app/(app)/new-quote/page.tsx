@@ -115,6 +115,12 @@ export default function NewQuotePage() {
   const [autoSaving,  setAutoSaving]  = useState(false)
   const [lastSaved,   setLastSaved]   = useState<Date | null>(null)
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Guards the one-shot init effect below against running twice for the same
+  // mount. Must be a ref, not state — a second invocation can happen before
+  // React has re-rendered with state set by the first, so a state-based guard
+  // sees stale (pre-update) values on both calls. A ref mutates synchronously
+  // and is shared across both, so it reliably blocks the second run.
+  const initRanRef = useRef(false)
   const [generatingScope, setGeneratingScope] = useState(false)
   const [generatingPhases, setGeneratingPhases] = useState(false)
   const [showScopeChat, setShowScopeChat] = useState(false)
@@ -189,6 +195,18 @@ export default function NewQuotePage() {
   // instead of the saved Back Office template with zeroed rates.
   useEffect(() => {
     if (loading) return
+
+    // Guard against this effect running twice for the same mount (observed:
+    // React invokes it a second time using the SAME pre-update closure before
+    // the first invocation's state changes have been re-rendered — a
+    // state-based guard can't see that, hence the ref). sessionStorage's
+    // 'sbc_edit_quote' flag is consumed (deleted) on first read below, so a
+    // second run would find it gone and fall through to the blank "new quote"
+    // branch — resetting phases to [] while editingId stays pointed at the
+    // real quote, which the auto-save would then persist over real data.
+    // This exact bug wiped a live customer quote (QT-1282, Sept 2026).
+    if (initRanRef.current) return
+    initRanRef.current = true
 
     // Resume editing an existing saved quote
     const editId = sessionStorage.getItem('sbc_edit_quote')
@@ -309,6 +327,15 @@ export default function NewQuotePage() {
     autoSaveTimer.current = setTimeout(async () => {
       const existing = quotes.find(q => q.id === editingId)
       if (!existing) return
+      // Never let a silent, unattended save wipe out phases that are still
+      // saved in the database — this exact scenario caused a real quote to
+      // lose all its data (QT-1282, Sept 2026). If the local state somehow
+      // ends up empty while the DB still has phases, skip this save cycle
+      // rather than overwrite good data with a race condition or stale state.
+      if (phases.length === 0 && existing.phases.length > 0) {
+        console.error('[autosave] refusing to save empty phases over existing data for quote', editingId)
+        return
+      }
       setAutoSaving(true)
       try {
         const customer = { name: custName, address: custAddr, email: custEmail, phone: custPhone }
@@ -637,6 +664,10 @@ export default function NewQuotePage() {
       const qData = { status: 'draft' as const, jobType, markup, vatIncluded: vatOn, scope, photo, convertedToJob: false, lastEdited: '', customer, phases: JSON.parse(JSON.stringify(phases)), quoteSource: quoteSource ?? undefined }
       if (editingId) {
         const existing = quotes.find(q => q.id === editingId)!
+        if (!phases.length && existing.phases.length > 0) {
+          alert('This quote currently has no lines — refusing to overwrite the saved version, which still has data. Reload the page before continuing.')
+          return
+        }
         await updateQuote({ ...existing, ...qData })
         alert('Draft updated.')
       } else {
