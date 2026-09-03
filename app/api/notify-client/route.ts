@@ -289,8 +289,10 @@ async function sendEmail(
   apiKey: string,
   from: string,
   attachment?: { filename: string; content: string } | null,
+  replyTo?: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const payload: Record<string, unknown> = { from, to, subject, html }
+  if (replyTo) payload.reply_to = replyTo
   if (attachment) {
     payload.attachments = [{
       filename: attachment.filename,
@@ -441,7 +443,9 @@ export async function POST(req: NextRequest) {
         ? { filename: payload.pdfFilename || 'Quotation.pdf', content: payload.pdfBase64 }
         : null
 
-      const result = await sendEmail(clientEmail, subject, html, resendKey, fromEmail, attachment)
+      // Route any client reply straight to the real business inbox rather
+      // than the no-reply sending address, so nothing gets lost.
+      const result = await sendEmail(clientEmail, subject, html, resendKey, fromEmail, attachment, payload.companyEmail || undefined)
       results.email = result.ok
       if (!result.ok) {
         results.errors.push(`Email: ${result.error}`)
