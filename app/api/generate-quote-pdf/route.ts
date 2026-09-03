@@ -17,19 +17,19 @@ export async function POST(req: NextRequest) {
     const body = await req.json() as {
       quote: Quote
       settings: Settings
-      customerView?: boolean
+      quoteView?: 'full' | 'phases' | 'total_only'
       showScope?: boolean
       showPaymentTerms?: boolean
     }
-    const { quote, settings, customerView, showScope, showPaymentTerms } = body
+    const { quote, settings, quoteView, showScope, showPaymentTerms } = body
 
     if (!quote || !settings) {
       return NextResponse.json({ error: 'Missing quote or settings' }, { status: 400 })
     }
 
     const buffer = await buildQuotePdf(quote, settings, {
-      customerView:    customerView    ?? true,
-      showScope:       showScope       ?? true,
+      quoteView:        quoteView        ?? 'full',
+      showScope:        showScope        ?? true,
       showPaymentTerms: showPaymentTerms ?? true,
     })
     const base64 = buffer.toString('base64')

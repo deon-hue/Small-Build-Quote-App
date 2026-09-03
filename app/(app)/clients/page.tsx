@@ -919,7 +919,7 @@ function ClientsPageInner() {
 
                 {/* Quote display level */}
                 <div className="fg" style={{ marginBottom: 12 }}>
-                  <label>Quote Display (Portal &amp; HTML email)</label>
+                  <label>Quote Display (Portal, HTML email &amp; PDF)</label>
                   <select
                     value={formPortalSettings.quoteView}
                     onChange={e => setFormPortalSettings(s => ({ ...s, quoteView: e.target.value as ClientPortalSettings['quoteView'] }))}
@@ -927,18 +927,6 @@ function ClientsPageInner() {
                     <option value="full">Full — all phases with costs</option>
                     <option value="phases">Phases only — list of phases, no amounts</option>
                     <option value="total_only">Total only — grand total, no breakdown</option>
-                  </select>
-                </div>
-
-                {/* Default PDF type */}
-                <div className="fg" style={{ marginBottom: 14 }}>
-                  <label>Default PDF Type</label>
-                  <select
-                    value={formPortalSettings.defaultPdfType}
-                    onChange={e => setFormPortalSettings(s => ({ ...s, defaultPdfType: e.target.value as ClientPortalSettings['defaultPdfType'] }))}
-                  >
-                    <option value="customer">Client view — scope &amp; items, no prices</option>
-                    <option value="detailed">Detailed — full breakdown with prices</option>
                   </select>
                 </div>
 

@@ -263,7 +263,7 @@ export type PortalStatus = 'no_email' | 'not_invited' | 'invited' | 'active'
  * in emailed PDFs, and in HTML quote views.
  */
 export interface ClientPortalSettings {
-  /** How much quote detail the client sees in the portal and HTML client view */
+  /** How much quote detail the client sees — in the portal, HTML email, and PDF alike */
   quoteView: 'full' | 'phases' | 'total_only'
   /** Show the Scope of Works section in PDFs and HTML quotes */
   showScope: boolean
@@ -281,8 +281,6 @@ export interface ClientPortalSettings {
   showProgramme: boolean
   /** Allow client to digitally approve quotes via the portal */
   allowOnlineApproval: boolean
-  /** Pre-selects the PDF type when sending a quote — 'customer' hides prices */
-  defaultPdfType: 'customer' | 'detailed'
 }
 
 export const DEFAULT_CLIENT_PORTAL_SETTINGS: ClientPortalSettings = {
@@ -295,7 +293,6 @@ export const DEFAULT_CLIENT_PORTAL_SETTINGS: ClientPortalSettings = {
   showVariationsTab:  true,
   showProgramme:      true,
   allowOnlineApproval: true,
-  defaultPdfType:     'customer',
 }
 
 export const PAYMENT_TERMS_OPTIONS = [

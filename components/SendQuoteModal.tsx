@@ -34,7 +34,10 @@ export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
 
   const [toEmail, setToEmail]     = useState(quote.customer.email || '')
   const [message, setMessage]     = useState('')
-  const [pdfType, setPdfType]     = useState<'customer' | 'detailed'>(clientSettings.defaultPdfType)
+  // Defaults to this client's own "Quote Display" setting (Portal & Quote
+  // Settings) — the same one that already governs the portal and HTML email —
+  // but can be overridden per-send.
+  const [pdfView, setPdfView]     = useState<'full' | 'phases' | 'total_only'>(clientSettings.quoteView)
   const [busy, setBusy]           = useState<'pdf' | 'sending' | null>(null)
   const [sent, setSent]           = useState(false)
   const [error, setError]         = useState('')
@@ -54,7 +57,7 @@ export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
         body:    JSON.stringify({
           quote,
           settings,
-          customerView:     pdfType === 'customer',
+          quoteView:        pdfView,
           showScope:        clientSettings.showScope,
           showPaymentTerms: clientSettings.showPaymentTerms,
         }),
@@ -174,32 +177,34 @@ export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
                 </div>
               </div>
 
-              {/* PDF type toggle */}
+              {/* PDF detail level — same three levels as Quote Display in Portal & Quote Settings */}
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 8 }}>
-                  PDF Format
+                  PDF Detail Level
                 </label>
                 <div style={{ display: 'flex', gap: 0, borderRadius: 6, overflow: 'hidden', border: '1.5px solid var(--border)' }}>
-                  {(['customer', 'detailed'] as const).map(type => (
+                  {(['full', 'phases', 'total_only'] as const).map(v => (
                     <button
-                      key={type}
-                      onClick={() => setPdfType(type)}
+                      key={v}
+                      onClick={() => setPdfView(v)}
                       style={{
-                        flex: 1, padding: '9px 12px', border: 'none', cursor: 'pointer',
-                        background: pdfType === type ? '#2b3a2b' : '#fff',
-                        color: pdfType === type ? '#fff' : 'var(--text)',
-                        fontSize: 12, fontWeight: pdfType === type ? 700 : 400,
+                        flex: 1, padding: '9px 8px', border: 'none', cursor: 'pointer',
+                        background: pdfView === v ? '#2b3a2b' : '#fff',
+                        color: pdfView === v ? '#fff' : 'var(--text)',
+                        fontSize: 12, fontWeight: pdfView === v ? 700 : 400,
                         fontFamily: 'inherit', transition: 'all 0.15s',
                       }}
                     >
-                      {type === 'customer' ? '👤 Customer Quote' : '📊 Detailed Quote'}
+                      {v === 'full' ? '📊 Full' : v === 'phases' ? '📋 Phases only' : '💷 Total only'}
                     </button>
                   ))}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6, lineHeight: 1.4 }}>
-                  {pdfType === 'customer'
-                    ? '✓ Shows scope & line descriptions — final total only. No phase prices shown.'
-                    : '✓ Shows all phase totals and individual line prices.'}
+                  {pdfView === 'full'
+                    ? '✓ Shows all phase totals and individual line item costs.'
+                    : pdfView === 'phases'
+                    ? '✓ Shows phase totals and item names — no individual item prices.'
+                    : '✓ Shows the grand total only — no phase or item breakdown.'}
                 </div>
               </div>
 
