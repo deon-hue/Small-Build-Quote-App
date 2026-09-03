@@ -242,7 +242,12 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
     const phaseList = phases.length ? phases.join(', ') : null
 
     if (initialScope?.trim()) {
-      // Refinement mode — existing scope already saved on the quote
+      // Refinement mode — existing scope already saved on the quote.
+      // Seed latestScope with it immediately so Build Estimate / Scope Only
+      // are enabled from the start, not just after a fresh AI reply parses
+      // a new [SCOPE] block — otherwise they stay disabled until the user
+      // sends a message and the AI happens to re-emit the full scope.
+      setLatestScope(initialScope.trim())
       const greeting = [
         `Hi! Here's the current scope of works for this **${jobType}**. Read through it and tell me what you'd like to change.\n\n`,
         `---\n\n${initialScope.trim()}\n\n---`,
