@@ -1734,7 +1734,7 @@ export default function NewQuotePage() {
                 {clientDrop && (filteredClients.length > 0 || clientNameIsNew) && (
                   <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '1.5px solid var(--border)', borderRadius: 6, zIndex: 100, boxShadow: '0 4px 12px rgba(0,0,0,0.12)', maxHeight: 220, overflowY: 'auto' }}>
                     {filteredClients.map(c => (
-                      <div key={c.id} onMouseDown={() => selectClient(c.id)}
+                      <div key={c.id} onMouseDown={e => { e.preventDefault(); selectClient(c.id) }}
                         style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border)', display: 'flex', gap: 10, alignItems: 'center' }}>
                         <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--slate)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, flexShrink: 0 }}>
                           {(c.name[0] || '').toUpperCase()}
@@ -1746,7 +1746,7 @@ export default function NewQuotePage() {
                       </div>
                     ))}
                     {clientNameIsNew && (
-                      <div onMouseDown={saveAsNewContact}
+                      <div onMouseDown={e => { e.preventDefault(); saveAsNewContact() }}
                         style={{ padding: '9px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, color: '#16a34a', fontWeight: 600, fontSize: 12, borderTop: filteredClients.length > 0 ? '1px solid var(--border)' : 'none', background: '#f0fdf4' }}>
                         <span style={{ fontSize: 14 }}>＋</span> Add &ldquo;{custName}&rdquo; as new contact
                       </div>

@@ -147,6 +147,17 @@ textarea{resize:vertical;min-height:56px}
 .sq-val{font-family:'DM Serif Display',serif;font-size:22px;min-width:110px;text-align:right}
 .sq-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 
+/* Small coloured action buttons/selects on a quote row — pulled out of
+   inline styles (unchanged values) so touch-target sizing below can
+   reach them; a class can be overridden by a media query, an inline
+   style can't. */
+.btn-locked{font-size:11px;font-weight:600;padding:4px 10px;background:#f0f9e8;color:#4a7c1f;border:1px solid #b8e08a;border-radius:4px;cursor:pointer}
+.btn-email-pdf{background:#2b3a2b;color:white;border:none;border-radius:4px;padding:5px 12px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:500}
+.btn-archive{background:#64748b;color:white;border:none;border-radius:4px;padding:5px 12px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:500}
+.btn-reinstate{background:#27ae60;color:white;border:none;border-radius:4px;padding:5px 12px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:500}
+.sel-status{padding:4px 6px;font-size:11px;width:auto}
+.sel-inline-sm{font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px}
+
 /* ── Modal ── */
 .modal-overlay{position:fixed;inset:0;background:rgba(26,22,18,0.6);display:flex;align-items:center;justify-content:center;z-index:400;padding:20px}
 .modal-box{background:var(--cream);border-radius:8px;width:min(860px,96vw);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,0.25)}
@@ -179,7 +190,14 @@ textarea{resize:vertical;min-height:56px}
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:199}
 
 /* ── Mobile responsive ── */
-@media (max-width:768px){
+/* Fires for narrow windows (phones) AND for any genuine touch device
+   regardless of width/orientation (tablets in portrait are commonly
+   810-834px — wider than the 768px cutoff below, so without the
+   pointer:coarse clause a tablet would silently miss this block and get
+   the cramped desktop layout). Never fires for a mouse/trackpad, even in
+   a narrow window on a laptop — pointer:coarse is a hardware signal, not
+   a width signal. */
+@media (max-width:768px), (hover:none) and (pointer:coarse){
   body{overflow:auto;height:auto}
   .app{flex-direction:column;height:auto;min-height:100vh;overflow:visible}
   .sidebar{position:fixed;top:0;left:-260px;width:260px;height:100vh;z-index:200;transition:left 0.25s ease;box-shadow:4px 0 20px rgba(0,0,0,0.3)}
@@ -211,6 +229,32 @@ textarea{resize:vertical;min-height:56px}
   .col-hide-mobile{display:none}
   .btn-mob-hide{display:none}
   .tbl-responsive{min-width:auto}
+}
+
+/* ── Touch target sizing ── */
+/* Real touchscreens only — hover:none + pointer:coarse is a hardware
+   signal (can a fine hover be shown, is the primary pointer imprecise),
+   never a viewport-width signal, so this never fires for a mouse or
+   trackpad regardless of window size. Bumps buttons/inputs/selects
+   toward the ~44px minimum touch target and stops iOS Safari's
+   auto-zoom-on-focus (triggered by any input font-size under 16px). */
+@media (hover:none) and (pointer:coarse){
+  .btn,.btn-sm,.btn-locked,.btn-email-pdf,.btn-archive,.btn-reinstate{min-height:44px}
+  .btn{padding:12px 20px}
+  .btn-sm,.btn-locked,.btn-email-pdf,.btn-archive,.btn-reinstate{padding:11px 16px;font-size:13px}
+  input,select,textarea{min-height:44px;font-size:16px}
+  .sel-status,.sel-inline-sm{min-height:44px;padding:10px 12px;font-size:14px}
+  .rm-btn{width:40px;height:40px;font-size:22px}
+  .sq-actions,.job-card-actions{gap:10px}
+  /* Quote-builder icon-only buttons (⧉ duplicate, × delete, 🤖 review, etc.)
+     set their own inline padding/size per call site, which beats a plain
+     class rule — !important is needed here specifically to reach past
+     those inline styles; color/border/background are left alone. */
+  .icon-btn-touch{padding:10px 12px!important;min-width:40px!important;min-height:40px!important;font-size:15px!important}
+  .icon-btn-row{gap:10px!important}
+  .nav-item{padding:15px 22px}
+  .hamburger{padding:10px}
+  .modal-close{padding:10px;font-size:26px}
 }
 
 /* ═══════════════════════════════════════════════════════════

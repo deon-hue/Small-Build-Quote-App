@@ -550,7 +550,7 @@ function TaskGroup({ tg, items, markup, isLocked, collapsed, colKey, toggle, onU
             {sell > 0 ? `£${fmt2(sell)}` : '—'}
           </span>
           {!isLocked && (
-            <button onClick={e => { e.stopPropagation(); onDeleteTask(tg) }} style={iconBtn('#e74c3c')} title="Remove task">×</button>
+            <button onClick={e => { e.stopPropagation(); onDeleteTask(tg) }} className="icon-btn-touch" style={iconBtn('#e74c3c')} title="Remove task">×</button>
           )}
         </div>
       )}
@@ -895,7 +895,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
                   </td>
                   <td style={{ padding: '4px 2px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                     {!isLocked && (
-                      <button onClick={() => removeProduct(prod.id)} style={iconBtn('#e74c3c')} title="Remove">×</button>
+                      <button onClick={() => removeProduct(prod.id)} className="icon-btn-touch" style={iconBtn('#e74c3c')} title="Remove">×</button>
                     )}
                   </td>
                 </tr>
@@ -973,7 +973,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
                     </div>
                   </td>
                   <td style={{ padding: '4px 2px', textAlign: 'right' }}>
-                    {!isLocked && <button onClick={() => removePlant(pl.id)} style={iconBtn('#e74c3c')} title="Remove">×</button>}
+                    {!isLocked && <button onClick={() => removePlant(pl.id)} className="icon-btn-touch" style={iconBtn('#e74c3c')} title="Remove">×</button>}
                   </td>
                 </tr>
               )
@@ -1198,12 +1198,13 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
           {sell > 0 ? fmt(sell) : '—'}
         </span>
         {!isLocked && (
-          <div style={{ display: 'flex', gap: 2, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-            <button style={iconBtn()} title="Add task" onClick={onAddTask}>+ Task</button>
-            <button style={iconBtn()} title="Duplicate" onClick={onDuplicate}>⧉</button>
+          <div className="icon-btn-row" style={{ display: 'flex', gap: 2, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+            <button className="icon-btn-touch" style={iconBtn()} title="Add task" onClick={onAddTask}>+ Task</button>
+            <button className="icon-btn-touch" style={iconBtn()} title="Duplicate" onClick={onDuplicate}>⧉</button>
             <button
               onClick={e => { e.stopPropagation(); setShowReview(true) }}
               title="AI Phase Review — check for missing items before completing"
+              className="icon-btn-touch"
               style={{ ...iconBtn('#7c3aed'), fontSize: 11, border: '1px solid #ddd6fe', borderRadius: 4, padding: '2px 6px', background: p.aiReviewed ? '#f0fdf4' : undefined }}>
               🤖
             </button>
@@ -1211,12 +1212,13 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
               <button
                 onClick={e => { e.stopPropagation(); onSaveToBO(p) }}
                 title="Save current rates back to Back Office defaults"
+                className="icon-btn-touch"
                 style={{ ...iconBtn('#16a34a'), fontSize: 10, border: '1px solid #86efac', borderRadius: 4, padding: '2px 6px' }}
               >
                 ↑ BO
               </button>
             )}
-            <button style={iconBtn('#e74c3c')} title="Delete" onClick={onDelete}>×</button>
+            <button className="icon-btn-touch" style={iconBtn('#e74c3c')} title="Delete" onClick={onDelete}>×</button>
           </div>
         )}
       </div>
@@ -1262,6 +1264,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
               {!isLocked && (
                 <button
                   onClick={() => onUpdate({ ...p, needsReview: false, reviewNote: undefined })}
+                  className="icon-btn-touch"
                   style={{ ...iconBtn('#92400e'), fontSize: 10, border: '1px solid #f59e0b', borderRadius: 3, padding: '1px 6px' }}>
                   Mark reviewed
                 </button>
@@ -1680,7 +1683,7 @@ function PhaseBlock({ mainPhase, phases, markup, jobType, isLocked, collapsed, t
               onClick={() => onAddRoom(mainPhase)}>+ Room</button>
             <button style={{ ...addBtn, border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.8)', fontSize: 11 }}
               onClick={() => onAddSubPhase(mainPhase, '')}>+ Sub-phase</button>
-            <button style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: 14, padding: '0 2px' }}
+            <button className="icon-btn-touch" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: 14, padding: '0 2px' }}
               onClick={() => onDeleteMain(mainPhase)} title="Delete phase">×</button>
           </div>
         )}

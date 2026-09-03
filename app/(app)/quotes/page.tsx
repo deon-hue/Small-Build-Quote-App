@@ -341,12 +341,7 @@ export default function SavedQuotesPage() {
                   <div className="sq-actions" style={{ marginTop: 6 }}>
                     {q.status === 'accepted' ? (
                       <button
-                        className="btn-sm"
-                        style={{
-                          fontSize: 11, fontWeight: 600, padding: '4px 10px',
-                          background: '#f0f9e8', color: '#4a7c1f',
-                          border: '1px solid #b8e08a', borderRadius: 4, cursor: 'pointer',
-                        }}
+                        className="btn-sm btn-locked"
                         title="Locked — prices can't change, but you can fix the linked customer"
                         onClick={() => {
                           sessionStorage.setItem('sbc_edit_quote', q.id)
@@ -364,8 +359,7 @@ export default function SavedQuotesPage() {
                     <button className="btn-sm btn-outline" onClick={() => setPreviewQuote(q)}>View</button>
                     <button className="btn-sm btn-outline" onClick={() => downloadQuote(q)}>⬇ HTML</button>
                     <button
-                      className="btn-sm"
-                      style={{ background: '#2b3a2b', color: 'white', border: 'none', borderRadius: 4, padding: '5px 12px', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500 }}
+                      className="btn-sm btn-email-pdf"
                       onClick={() => setEmailingQuote(q)}
                     >
                       ✉ Email + PDF
@@ -386,7 +380,7 @@ export default function SavedQuotesPage() {
                           <select
                             value={pushVarJobId}
                             onChange={e => setPushVarJobId(e.target.value)}
-                            style={{ fontSize: 11, padding: '4px 6px', border: '1px solid var(--border)', borderRadius: 4 }}
+                            className="sel-inline-sm"
                           >
                             <option value="">Select job…</option>
                             {jobs.map(j => <option key={j.id} value={j.id}>{j.type} — {j.client}</option>)}
@@ -414,7 +408,7 @@ export default function SavedQuotesPage() {
                       <select
                         value={q.status}
                         onChange={e => handleStatusChange(q, e.target.value as Quote['status'])}
-                        style={{ padding: '4px 6px', fontSize: 11, width: 'auto' }}
+                        className="sel-status"
                       >
                         <option value="pending">Pending</option>
                         <option value="sent">Sent</option>
@@ -424,8 +418,7 @@ export default function SavedQuotesPage() {
                     )}
                     {isConverted ? (
                       <button
-                        className="btn-sm"
-                        style={{ background: '#64748b', color: 'white', border: 'none', borderRadius: 4, padding: '5px 12px', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500 }}
+                        className="btn-sm btn-archive"
                         onClick={() => handleArchive(q)}
                         title="Move to archive — quote is locked and job already created"
                       >
@@ -480,8 +473,7 @@ export default function SavedQuotesPage() {
                   <button className="btn-sm btn-outline" onClick={() => setPreviewQuote(q)}>View</button>
                   <button className="btn-sm btn-outline" onClick={() => downloadQuote(q)}>⬇ HTML</button>
                   <button
-                    className="btn-sm"
-                    style={{ background: '#27ae60', color: 'white', border: 'none', borderRadius: 4, padding: '5px 12px', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500 }}
+                    className="btn-sm btn-reinstate"
                     onClick={() => handleReinstate(q)}
                     title="Restore to Saved Quotes with Accepted status"
                   >
