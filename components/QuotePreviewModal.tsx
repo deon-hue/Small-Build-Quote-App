@@ -94,7 +94,7 @@ export default function QuotePreviewModal({ quote, onClose, boTasks = [] }: Prop
             title="Quote Preview"
           />
           <div style={{ flex: 0.3, overflowY: 'auto', borderTop: '1px solid var(--border)', paddingTop: 16, paddingLeft: 16, paddingRight: 16, paddingBottom: 16 }}>
-            <QuoteCommentsSection quoteId={quote.id} />
+            <QuoteCommentsSection quoteId={quote.id} phases={quote.phases.map(p => p.phase)} />
           </div>
         </div>
       </div>

@@ -24,6 +24,7 @@ export default function SavedQuotesPage() {
   const [pushVarJobId, setPushVarJobId]   = useState('')
   const [pushingVar, setPushingVar]       = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
+  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({})
   const router = useRouter()
 
   // Backfill quote item descriptions on load
@@ -35,6 +36,17 @@ export default function SavedQuotesPage() {
     }
     backfill().catch(err => console.error('[backfill] error:', err))
   }, [])
+
+  // Comment counts for the "💬 N" badge — one bulk request for the whole list
+  // rather than one request per quote row.
+  useEffect(() => {
+    if (!quotes.length) return
+    const ids = quotes.map(q => q.id).join(',')
+    fetch(`/api/quote-comments/counts?quoteIds=${ids}`)
+      .then(res => res.ok ? res.json() : {})
+      .then(setCommentCounts)
+      .catch(err => console.error('[commentCounts] error:', err))
+  }, [quotes])
 
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
 
@@ -307,6 +319,11 @@ export default function SavedQuotesPage() {
                     {quoteExpiry(q.savedDate) && (
                       <span style={{ marginLeft: 6, color: isExpired(q.savedDate) ? 'var(--terra)' : 'var(--muted)' }}>
                         · {isExpired(q.savedDate) ? '⚠ Expired' : 'Expires'} {quoteExpiry(q.savedDate)}
+                      </span>
+                    )}
+                    {!!commentCounts[q.id] && (
+                      <span style={{ marginLeft: 6, fontSize: 11, background: '#dbeafe', color: '#1d4ed8', padding: '1px 7px', borderRadius: 10, fontWeight: 600 }}>
+                        💬 {commentCounts[q.id]}
                       </span>
                     )}
                   </div>

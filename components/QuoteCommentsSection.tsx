@@ -6,11 +6,16 @@ import type { QuoteComment } from '@/lib/types'
 interface QuoteCommentsSectionProps {
   quoteId: string
   isPortalView?: boolean  // true for client portal, false for contractor app
+  /** Phase names from the quote, offered as an optional "Ask/reply about" tag */
+  phases?: string[]
+  /** Client's display name — sent as the author name when posting from the portal */
+  customerName?: string
 }
 
-export default function QuoteCommentsSection({ quoteId, isPortalView = false }: QuoteCommentsSectionProps) {
+export default function QuoteCommentsSection({ quoteId, isPortalView = false, phases = [], customerName }: QuoteCommentsSectionProps) {
   const [comments, setComments] = useState<QuoteComment[]>([])
   const [newMessage, setNewMessage] = useState('')
+  const [phaseTag, setPhaseTag] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -47,12 +52,15 @@ export default function QuoteCommentsSection({ quoteId, isPortalView = false }: 
           quoteId,
           message: newMessage,
           isInternal: false,
+          phaseLabel: phaseTag || undefined,
+          authorName: isPortalView ? customerName : undefined,
         }),
       })
       if (!res.ok) throw new Error('Failed to post comment')
       const newComment = await res.json()
       setComments([...comments, newComment])
       setNewMessage('')
+      setPhaseTag('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to post comment')
     } finally {
@@ -152,6 +160,20 @@ export default function QuoteCommentsSection({ quoteId, isPortalView = false }: 
                   </button>
                 )}
               </div>
+              {comment.phaseLabel && (
+                <div style={{
+                  display: 'inline-block',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: '#1d4ed8',
+                  background: '#dbeafe',
+                  borderRadius: '4px',
+                  padding: '2px 8px',
+                  marginBottom: '6px',
+                }}>
+                  Re: {comment.phaseLabel}
+                </div>
+              )}
               <p style={{ margin: '0', color: '#374151', lineHeight: '1.5', fontSize: '14px' }}>
                 {comment.message}
               </p>
@@ -172,64 +194,93 @@ export default function QuoteCommentsSection({ quoteId, isPortalView = false }: 
         )}
       </div>
 
-      {/* Comment form */}
-      {!isPortalView && (
-        <form onSubmit={handleSubmit} style={{
-          padding: '16px',
-          background: '#f0fdf4',
-          border: '1px solid #bbf7d0',
-          borderRadius: '6px',
-        }}>
-          <div style={{ marginBottom: '12px' }}>
+      {/* Comment form — shown in both the contractor app and the client portal */}
+      <form onSubmit={handleSubmit} style={{
+        padding: '16px',
+        background: '#f0fdf4',
+        border: '1px solid #bbf7d0',
+        borderRadius: '6px',
+      }}>
+        {phases.length > 0 && (
+          <div style={{ marginBottom: '10px' }}>
             <label style={{
               display: 'block',
-              fontSize: '13px',
+              fontSize: '12px',
               fontWeight: '600',
               color: '#166534',
-              marginBottom: '8px',
+              marginBottom: '5px',
             }}>
-              Reply to client
+              {isPortalView ? 'Ask about' : 'Re: phase'} <span style={{ fontWeight: 400, color: '#6b7280' }}>(optional)</span>
             </label>
-            <textarea
-              value={newMessage}
-              onChange={e => setNewMessage(e.target.value)}
-              placeholder="Type your reply here..."
+            <select
+              value={phaseTag}
+              onChange={e => setPhaseTag(e.target.value)}
+              disabled={isSubmitting}
               style={{
                 width: '100%',
-                padding: '10px',
+                padding: '8px 10px',
                 border: '1px solid #86efac',
                 borderRadius: '4px',
                 fontFamily: 'inherit',
-                fontSize: '14px',
-                lineHeight: '1.5',
-                resize: 'vertical',
-                minHeight: '80px',
+                fontSize: '13px',
+                background: '#fff',
                 boxSizing: 'border-box',
               }}
-              disabled={isSubmitting}
-            />
-          </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              type="submit"
-              disabled={isSubmitting || !newMessage.trim()}
-              style={{
-                padding: '8px 16px',
-                background: '#16a34a',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '4px',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: isSubmitting || !newMessage.trim() ? 'default' : 'pointer',
-                opacity: isSubmitting || !newMessage.trim() ? 0.5 : 1,
-              }}
             >
-              {isSubmitting ? '⏳ Posting...' : '✓ Post Reply'}
-            </button>
+              <option value="">General question — not about one phase</option>
+              {phases.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
           </div>
-        </form>
-      )}
+        )}
+        <div style={{ marginBottom: '12px' }}>
+          <label style={{
+            display: 'block',
+            fontSize: '13px',
+            fontWeight: '600',
+            color: '#166534',
+            marginBottom: '8px',
+          }}>
+            {isPortalView ? 'Ask a question' : 'Reply to client'}
+          </label>
+          <textarea
+            value={newMessage}
+            onChange={e => setNewMessage(e.target.value)}
+            placeholder={isPortalView ? 'Type your question here...' : 'Type your reply here...'}
+            style={{
+              width: '100%',
+              padding: '10px',
+              border: '1px solid #86efac',
+              borderRadius: '4px',
+              fontFamily: 'inherit',
+              fontSize: '14px',
+              lineHeight: '1.5',
+              resize: 'vertical',
+              minHeight: '80px',
+              boxSizing: 'border-box',
+            }}
+            disabled={isSubmitting}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            type="submit"
+            disabled={isSubmitting || !newMessage.trim()}
+            style={{
+              padding: '8px 16px',
+              background: '#16a34a',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '4px',
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: isSubmitting || !newMessage.trim() ? 'default' : 'pointer',
+              opacity: isSubmitting || !newMessage.trim() ? 0.5 : 1,
+            }}
+          >
+            {isSubmitting ? '⏳ Posting...' : isPortalView ? '✓ Send Question' : '✓ Post Reply'}
+          </button>
+        </div>
+      </form>
     </div>
   )
 }

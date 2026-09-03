@@ -160,6 +160,8 @@ export interface QuoteComment {
   authorName: string  // "You" for contractor, client name for portal users
   message: string
   isInternal: boolean  // Only visible to contractor if true
+  /** Which phase this message is about, if the poster tagged one (plain label, not a foreign key) */
+  phaseLabel?: string | null
   createdAt: string
   updatedAt: string
 }

@@ -353,7 +353,14 @@ export default function PortalQuoteDetailsModal({
           </div>
 
           {/* ── Comments section ───────────────────── */}
-          {!isPreview && <QuoteCommentsSection quoteId={quote.id} isPortalView={true} />}
+          {!isPreview && (
+            <QuoteCommentsSection
+              quoteId={quote.id}
+              isPortalView={true}
+              phases={quote.phases.map(p => p.phase)}
+              customerName={quote.customer.name}
+            />
+          )}
 
         </div>
 
