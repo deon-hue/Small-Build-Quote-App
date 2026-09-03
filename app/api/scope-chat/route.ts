@@ -202,15 +202,21 @@ IMPORTANT: Never output [READY_TO_BUILD] without a [SCOPE] block. Only generate 
   const model     = hasFiles ? 'claude-haiku-4-5-20251001' : 'claude-sonnet-4-6'
   const maxTokens = hasFiles ? 4000 : 5000
 
+  // Matches lib/doc-extract/claude.ts's existing pattern — required for the PDF
+  // document content-block type to be accepted reliably.
+  const hasPdf = hasFiles && (attachments as AttachmentPayload[]).some(a => a.mimeType === 'application/pdf')
+  const anthropicHeaders: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'x-api-key': apiKey,
+    'anthropic-version': '2023-06-01',
+  }
+  if (hasPdf) anthropicHeaders['anthropic-beta'] = 'pdfs-2024-09-25'
+
   // ── Call Anthropic API with streaming ─────────────────────────────────────
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
+      headers: anthropicHeaders,
       body: JSON.stringify({ model, max_tokens: maxTokens, system, messages: apiMessages, stream: true }),
     })
 
@@ -220,7 +226,12 @@ IMPORTANT: Never output [READY_TO_BUILD] without a [SCOPE] block. Only generate 
       const msg = data.error?.type === 'authentication_error'
         ? 'AI not configured — please add your ANTHROPIC_API_KEY in Netlify environment variables.'
         : `AI error: ${data.error?.message || 'Unknown error'}`
-      return NextResponse.json({ reply: msg })
+      // Respond in the same SSE format the streaming success path uses below —
+      // the client only parses `data: {...}` lines, so a plain JSON body here was
+      // silently discarded and replaced with a generic "something went wrong"
+      // message, hiding the real cause from the user.
+      const sseBody = new TextEncoder().encode(`data: ${JSON.stringify({ type: 'complete', text: msg })}\n\n`)
+      return new NextResponse(sseBody, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } })
     }
 
     // Convert Anthropic stream to SSE format

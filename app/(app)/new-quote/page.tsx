@@ -94,6 +94,111 @@ interface TaskRateEntry {
   measurementType: string
 }
 
+// Maps a /api/scope-to-quote response into QuotePhase[], preferring real Back Office
+// rates and flagging anything the AI had to invent or couldn't match for human review.
+// Shared by generatePhases() (new-quote landing flow) and handleBuildEstimate()
+// (in-workspace "Edit with AI") so both entry points behave identically instead of
+// one silently letting the AI invent its own pricing.
+function buildPhasesFromScopeToQuote(
+  scopePhases: ScopeToQuotePhase[],
+  taskRates: Record<string, TaskRateEntry>
+): QuotePhase[] {
+  const VALID_TYPES: MeasurementType[] = ['area', 'volume', 'linear', 'quantity']
+
+  return scopePhases.map(sp => {
+    const selectedSet = new Set(sp.selectedTasks ?? [])
+
+    // Build template items — prefer Back Office rates, fall back to static defaults
+    const templateItems: EstimatorItemTemplate[] = []
+    for (const taskName of sp.selectedTasks ?? []) {
+      if (taskRates[taskName]) {
+        const r = taskRates[taskName]
+        templateItems.push({
+          id: `bo-${taskName}`,
+          name: taskName,
+          description: r.description,
+          measurementType: VALID_TYPES.includes(r.measurementType as MeasurementType)
+            ? (r.measurementType as MeasurementType)
+            : 'quantity',
+          unit: r.unit,
+          labourRate:    r.labourRate,
+          materialsRate: r.materialsRate,
+          plantRate:     r.plantRate,
+          subRate:       r.subRate,
+          otherRate:     r.otherRate,
+          wastePercent:  r.wastePercent,
+        })
+      } else {
+        const allDefaults = getPhaseEstimatorDefaults(sp.phase)
+        const match = allDefaults.find(t => selectedSet.has(t.name) && t.name === taskName)
+        if (match) templateItems.push(match)
+      }
+    }
+
+    // Convert extra tasks (genuinely out-of-library work) to EstimatorItemTemplate
+    const extraTemplates: EstimatorItemTemplate[] = (sp.extraTasks ?? []).map(et => ({
+      id: `extra-${Date.now()}-${Math.floor(Math.random() * 99999)}`,
+      name: et.name,
+      description: et.description ?? '',
+      measurementType: VALID_TYPES.includes(et.measurementType as MeasurementType)
+        ? (et.measurementType as MeasurementType)
+        : 'quantity',
+      unit: et.unit ?? 'nr',
+      labourRate:    et.labourRate    ?? 0,
+      materialsRate: et.materialsRate ?? 0,
+      plantRate:     et.plantRate     ?? 0,
+      subRate:       et.subRate       ?? 0,
+      otherRate:     et.otherRate     ?? 0,
+      wastePercent:  et.wastePercent  ?? 0,
+    }))
+
+    const estimatorItems = [...templateItems, ...extraTemplates].map(itemFromTemplate)
+
+    // Sync the 5 typed QuoteItem rows from estimator aggregates
+    const agg = estimatorAggregates(estimatorItems, [])
+    const typedItems: Omit<QuoteItem, 'id'>[] = [
+      { desc: '', qty: 1, unit: 'Item', labour: agg.labour,         materials: 0, plantHire: 0, subcontractors: 0, other: 0,         notes: '', itemType: 'labour'         as const },
+      { desc: '', qty: 1, unit: 'Item', labour: 0, materials: agg.materials,      plantHire: 0, subcontractors: 0, other: 0,         notes: '', itemType: 'materials'      as const },
+      { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0,    plantHire: agg.plant,        subcontractors: 0, other: 0,         notes: '', itemType: 'plant'          as const },
+      { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0,    plantHire: 0, subcontractors: agg.subcontractors, other: 0,       notes: '', itemType: 'subcontractors' as const },
+      { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0,    plantHire: 0, subcontractors: 0, other: agg.other,                notes: '', itemType: 'other'          as const },
+    ]
+
+    const hasExtraTasks = (sp.extraTasks ?? []).length > 0
+    const allTasksFound = (sp.selectedTasks ?? []).every(t => !!taskRates[t])
+    const ph = makePhase(sp.phase, typedItems, sp.parentPhase || undefined, estimatorItems)
+    return {
+      ...ph,
+      source: 'ai' as const,
+      itemStatus: 'ai' as const,
+      // Flag if AI had to invent tasks (extraTasks) or couldn't find BO rates
+      ...(hasExtraTasks && {
+        needsReview: true,
+        reviewNote: `Contains ${(sp.extraTasks ?? []).length} task(s) not found in Back Office master data`,
+      }),
+      ...(!allTasksFound && !hasExtraTasks && {
+        needsReview: true,
+        reviewNote: 'Some tasks could not be matched to Back Office rates — verify costs',
+      }),
+    }
+  })
+}
+
+// Snapshots a quote as a new version before an AI action replaces its phases, so the
+// prior state is never silently lost. Best-effort — a failure here doesn't block the
+// AI action itself, same as the existing (non-blocking) document-upload pattern.
+async function backupQuoteBeforeReplace(quoteId: string): Promise<void> {
+  try {
+    await fetch('/api/quotes/create-version', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quoteId }),
+    })
+  } catch (err) {
+    console.error('[backupQuoteBeforeReplace] snapshot failed (non-blocking):', err)
+  }
+}
+
 export default function NewQuotePage() {
   const { quotes, clients, addQuote, updateQuote, upsertClientFromQuote, getTemplate, loading, setPageTitle } = useApp()
   const router = useRouter()
@@ -292,7 +397,7 @@ export default function NewQuotePage() {
       // Fallback: no stored phases — re-generate from scope text via AI.
       if (reqScope) {
         ;(async () => {
-          const ok = await generatePhases({ scope: reqScope, jobType: reqJobType, address: reqAddress })
+          const ok = await generatePhases({ scope: reqScope, jobType: reqJobType })
           if (!ok) loadTemplate(reqJobType)
         })()
       } else {
@@ -683,75 +788,34 @@ export default function NewQuotePage() {
   // AI generate phases from scope.
   // opts can override scope/jobType/address when called before React state has committed
   // (e.g. straight from the initialization useEffect when coming from a quote request).
-  async function generatePhases(opts?: { scope?: string; jobType?: string; address?: string }): Promise<boolean> {
+  // Builds phases from a written scope by selecting real tasks from the contractor's
+  // Back Office library (falling back to static UK-standard defaults only when no
+  // Back Office data exists for that job type) — the AI never invents prices itself.
+  // Shares its response-mapping logic with handleBuildEstimate() below so both
+  // "Build Estimate" entry points behave identically.
+  async function generatePhases(opts?: { scope?: string; jobType?: string }): Promise<boolean> {
     const effectiveScope   = opts?.scope   ?? scope
     const effectiveJobType = opts?.jobType ?? jobType
-    const effectiveAddr    = opts?.address ?? custAddr
     if (!effectiveScope.trim()) { alert('Write a scope of works first — then click Generate Phases.'); return false }
-    if (phases.length && !confirm('Replace current phases with AI-generated ones?')) return false
+    if (phases.length) {
+      if (!confirm('Replace current phases with AI-generated ones? (Your current version will be saved first.)')) return false
+      if (editingId) await backupQuoteBeforeReplace(editingId)
+    }
     setGeneratingPhases(true)
     try {
-      const res = await fetch('/api/generate-phases', {
+      const res = await fetch('/api/scope-to-quote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scope: effectiveScope, jobType: effectiveJobType, address: effectiveAddr }),
+        body: JSON.stringify({ scope: effectiveScope, jobType: effectiveJobType }),
       })
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let data: { error?: string; phases?: any[] } = {}
-      if (!res.body) {
-        data = { error: `Server returned ${res.status} — please try again.` }
-      } else {
-        // Read body as a stream regardless of content-type — Netlify may not preserve
-        // text/event-stream. Server sends `: ping` heartbeats then a final `data: {...}`.
-        // If streaming failed server-side the body will be plain JSON, handled by fallback.
-        const reader = res.body.getReader()
-        const decoder = new TextDecoder()
-        let sseBuffer = ''
-        let rawText = ''
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          const chunk = decoder.decode(value, { stream: true })
-          rawText += chunk
-          sseBuffer += chunk
-          const lines = sseBuffer.split('\n')
-          sseBuffer = lines.pop() || ''
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try { data = JSON.parse(line.slice(6).trim()) } catch { /* ignore pings */ }
-            }
-          }
-        }
-        // Fallback: plain JSON error emitted before streaming started
-        if (!data.phases && !data.error) {
-          try { data = JSON.parse(rawText.trim()) } catch { /* ignore */ }
-        }
-        if (!data.phases && !data.error) {
-          data = { error: 'No response received — please try again.' }
-        }
-      }
+      const data = await res.json()
       if (data.error) { alert('Could not generate phases: ' + data.error); return false }
-      if (Array.isArray(data.phases) && data.phases.length) {
-        setPhases(data.phases.map((p: {
-          parentPhase?: string; phase: string
-          labour: number; labourNotes: string
-          materials: number; materialsNotes: string
-          plant: number; plantNotes: string
-          subcontractors?: number; subNotes?: string
-          other?: number; otherNotes?: string
-        }) => {
-          const ph = makePhase(p.phase, [
-            { desc: p.labourNotes    || 'Labour',        qty: 1, unit: 'Item', labour: Number(p.labour) || 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'labour'         as const },
-            { desc: p.materialsNotes || 'Materials',     qty: 1, unit: 'Item', labour: 0, materials: Number(p.materials) || 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials'      as const },
-            { desc: p.plantNotes     || 'Plant hire',    qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: Number(p.plant) || 0, subcontractors: 0, other: 0, notes: '', itemType: 'plant'          as const },
-            { desc: p.subNotes       || 'Subcontract',   qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: Number(p.subcontractors) || 0, other: 0, notes: '', itemType: 'subcontractors' as const },
-            { desc: p.otherNotes     || 'Other',         qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: Number(p.other) || 0, notes: '', itemType: 'other'          as const },
-          ], p.parentPhase)
-          return { ...ph, source: 'ai' as const, itemStatus: 'ai' as const }
-        }))
-        return true   // phases were set — safe to transition
-      }
-      return false
+      if (!Array.isArray(data.phases)) { alert('Unexpected response from AI.'); return false }
+
+      const built = buildPhasesFromScopeToQuote(data.phases as ScopeToQuotePhase[], data.taskRates ?? {})
+      setPhases(built)
+      setEstimateUsedDB(!!data.usingDB)
+      return true   // phases were set — safe to transition
     } catch {
       alert('Failed to generate phases — check your connection.')
       return false
@@ -1223,7 +1287,10 @@ export default function NewQuotePage() {
 
   // ── AI Scope → fully-populated estimate ───────────────────────────────────
   async function handleBuildEstimate(scopeText: string) {
-    if (phases.length && !confirm('Replace current phases with AI-generated estimate from scope?')) return
+    if (phases.length) {
+      if (!confirm('Replace current phases with AI-generated estimate from scope? (Your current version will be saved first.)')) return
+      if (editingId) await backupQuoteBeforeReplace(editingId)
+    }
     setBuildingEstimate(true)
     try {
       const res = await fetch('/api/scope-to-quote', {
@@ -1235,90 +1302,7 @@ export default function NewQuotePage() {
       if (data.error) { alert('Could not build estimate: ' + data.error); return }
       if (!Array.isArray(data.phases)) { alert('Unexpected response from AI.'); return }
 
-      // taskRates comes from Back Office when available; otherwise empty
-      const taskRates: Record<string, TaskRateEntry> = data.taskRates ?? {}
-      const VALID_TYPES: MeasurementType[] = ['area', 'volume', 'linear', 'quantity']
-
-      const built: QuotePhase[] = (data.phases as ScopeToQuotePhase[]).map(sp => {
-        const selectedSet = new Set(sp.selectedTasks ?? [])
-
-        // Build template items — prefer Back Office rates, fall back to static defaults
-        const templateItems: EstimatorItemTemplate[] = []
-        for (const taskName of sp.selectedTasks ?? []) {
-          if (taskRates[taskName]) {
-            // ✅ Back Office rate found
-            const r = taskRates[taskName]
-            templateItems.push({
-              id: `bo-${taskName}`,
-              name: taskName,
-              description: r.description,
-              measurementType: VALID_TYPES.includes(r.measurementType as MeasurementType)
-                ? (r.measurementType as MeasurementType)
-                : 'quantity',
-              unit: r.unit,
-              labourRate:    r.labourRate,
-              materialsRate: r.materialsRate,
-              plantRate:     r.plantRate,
-              subRate:       r.subRate,
-              otherRate:     r.otherRate,
-              wastePercent:  r.wastePercent,
-            })
-          } else {
-            // Fallback: look up static defaults
-            const allDefaults = getPhaseEstimatorDefaults(sp.phase)
-            const match = allDefaults.find(t => selectedSet.has(t.name) && t.name === taskName)
-            if (match) templateItems.push(match)
-          }
-        }
-
-        // Convert extra tasks (genuinely out-of-library work) to EstimatorItemTemplate
-        const extraTemplates: EstimatorItemTemplate[] = (sp.extraTasks ?? []).map(et => ({
-          id: `extra-${Date.now()}-${Math.floor(Math.random() * 99999)}`,
-          name: et.name,
-          description: et.description ?? '',
-          measurementType: VALID_TYPES.includes(et.measurementType as MeasurementType)
-            ? (et.measurementType as MeasurementType)
-            : 'quantity',
-          unit: et.unit ?? 'nr',
-          labourRate:    et.labourRate    ?? 0,
-          materialsRate: et.materialsRate ?? 0,
-          plantRate:     et.plantRate     ?? 0,
-          subRate:       et.subRate       ?? 0,
-          otherRate:     et.otherRate     ?? 0,
-          wastePercent:  et.wastePercent  ?? 0,
-        }))
-
-        const estimatorItems = [...templateItems, ...extraTemplates].map(itemFromTemplate)
-
-        // Sync the 5 typed QuoteItem rows from estimator aggregates
-        const agg = estimatorAggregates(estimatorItems, [])
-        const typedItems: Omit<QuoteItem, 'id'>[] = [
-          { desc: '', qty: 1, unit: 'Item', labour: agg.labour,         materials: 0, plantHire: 0, subcontractors: 0, other: 0,         notes: '', itemType: 'labour'         as const },
-          { desc: '', qty: 1, unit: 'Item', labour: 0, materials: agg.materials,      plantHire: 0, subcontractors: 0, other: 0,         notes: '', itemType: 'materials'      as const },
-          { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0,    plantHire: agg.plant,        subcontractors: 0, other: 0,         notes: '', itemType: 'plant'          as const },
-          { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0,    plantHire: 0, subcontractors: agg.subcontractors, other: 0,       notes: '', itemType: 'subcontractors' as const },
-          { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0,    plantHire: 0, subcontractors: 0, other: agg.other,                notes: '', itemType: 'other'          as const },
-        ]
-
-        const hasExtraTasks = (sp.extraTasks ?? []).length > 0
-        const allTasksFound = (sp.selectedTasks ?? []).every(t => !!taskRates[t])
-        const ph = makePhase(sp.phase, typedItems, sp.parentPhase || undefined, estimatorItems)
-        return {
-          ...ph,
-          source: 'ai' as const,
-          itemStatus: 'ai' as const,
-          // Flag if AI had to invent tasks (extraTasks) or couldn't find BO rates
-          ...(hasExtraTasks && {
-            needsReview: true,
-            reviewNote: `Contains ${(sp.extraTasks ?? []).length} task(s) not found in Back Office master data`,
-          }),
-          ...(!allTasksFound && !hasExtraTasks && {
-            needsReview: true,
-            reviewNote: 'Some tasks could not be matched to Back Office rates — verify costs',
-          }),
-        }
-      })
-
+      const built = buildPhasesFromScopeToQuote(data.phases as ScopeToQuotePhase[], data.taskRates ?? {})
       setPhases(built)
       setScope(scopeText)
       setEstimateUsedDB(!!data.usingDB)
