@@ -1376,157 +1376,82 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
             </div>
           )}
 
-          {/* Room-based task picker — used whenever this sub-phase is linked to a Back Office
-              room/sub-phase that has its own individual task items (Electrics, Plumbing & Heating
-              rooms, etc.), instead of the generic labour/materials/plant/sub/other cost-category
-              cards. Driven by data (does this sub-phase have BO tasks?), not by phase name, so it
-              covers every room-based phase without needing a new special case each time one is added. */}
-          {(() => {
-            const isLegacyElectricsBlob = p.phase === 'Electrics' && roomTasks.length === 0
-            if (roomTasks.length === 0 && !isLegacyElectricsBlob) return null
-
-            // Legacy path: a sub-phase literally named "Electrics" (not linked to one specific
-            // room) — keep the old cross-room dropdown so existing quotes built this way still work.
-            if (isLegacyElectricsBlob) {
-              const electricsPhase = boPhases.find(ph => ph.name === 'Electrics')
-              const electricsRooms = electricsPhase
-                ? boSubPhases.filter(sp => sp.phase_id === electricsPhase.id)
-                : []
-              const [selectedRoom, setSelectedRoom] = React.useState<string>(electricsRooms[0]?.id || '')
-              const roomItems = selectedRoom
-                ? boTasks.filter(t => t.sub_phase_id === selectedRoom && t.active)
-                : []
-
-              return (
-                <div style={{ padding: '12px', background: '#f0f9ff', border: '1px solid #bfdbfe', borderRadius: 8, marginBottom: 12 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
-                    ⚡ Electrical Items Selection
-                  </div>
-
-                  {electricsRooms.length === 0 ? (
-                    <div style={{ padding: 8, background: '#fff', border: '1px solid #e0e7ff', borderRadius: 6, color: '#94a3b8', fontSize: 11 }}>
-                      No rooms configured in back office for Electrics. Please add rooms (sub-phases) first.
-                    </div>
-                  ) : (
-                    <>
-                      <div style={{ marginBottom: 12 }}>
-                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#1e293b', marginBottom: 6 }}>
-                          Select Room:
-                        </label>
-                        <select
-                          value={selectedRoom}
-                          onChange={e => setSelectedRoom(e.target.value)}
-                          style={{ width: '100%', padding: '8px 12px', fontSize: 12, border: '1px solid #bfdbfe', borderRadius: 6, background: '#fff' }}
-                        >
-                          {electricsRooms.map(room => (
-                            <option key={room.id} value={room.id}>{room.name}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {roomItems.length === 0 ? (
-                        <div style={{ padding: 8, background: '#fff', border: '1px solid #e0e7ff', borderRadius: 6, color: '#94a3b8', fontSize: 11 }}>
-                          No electrical items available for {electricsRooms.find(r => r.id === selectedRoom)?.name || 'this room'} in back office.
-                        </div>
-                      ) : (
-                        <div style={{ background: '#fff', border: '1px solid #bfdbfe', borderRadius: 6, maxHeight: 250, overflowY: 'auto' }}>
-                          {roomItems.map(item => (
-                            <div key={item.id} style={{ padding: '10px 12px', borderBottom: '1px solid #e0e7ff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
-                              <div>
-                                <div style={{ fontWeight: 500, color: '#1e293b' }}>{item.name}</div>
-                                <div style={{ fontSize: 11, color: '#64748b' }}>£{item.subcontract_cost || 0}</div>
-                              </div>
-                              <button
-                                onClick={() => {
-                                  // Determine itemType based on which cost field has the value
-                                  let itemType: 'labour' | 'materials' | 'plant' | 'subcontractors' | 'other' = 'other'
-                                  if (item.subcontract_cost) itemType = 'subcontractors'
-                                  else if (item.labour_cost) itemType = 'labour'
-                                  else if (item.materials_cost) itemType = 'materials'
-                                  else if (item.plant_cost) itemType = 'plant'
-
-                                  const newItem: QuoteItem = {
-                                    id: uid(),
-                                    desc: item.name,
-                                    qty: 1,
-                                    unit: 'item',
-                                    labour: item.labour_cost || 0,
-                                    materials: item.materials_cost || 0,
-                                    plantHire: item.plant_cost || 0,
-                                    subcontractors: item.subcontract_cost || 0,
-                                    other: item.other_cost || 0,
-                                    notes: item.description || '',
-                                    itemType,
-                                    boTaskId: item.id,
-                                  }
-                                  onUpdate({ ...p, items: [...p.items, newItem] })
-                                }}
-                                style={{ padding: '4px 10px', fontSize: 11, background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}
-                              >
-                                + Add
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              )
-            }
-
-            // General path: this sub-phase is already linked to one specific Back Office room
-            // (Kitchen, Bathroom, etc.) — list its tasks directly, no room dropdown needed.
-            return (
-              <div style={{ padding: '12px', background: '#f0f9ff', border: '1px solid #bfdbfe', borderRadius: 8, marginBottom: 12 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
-                  🔧 {p.phase} — Available Tasks
-                </div>
-                <div style={{ background: '#fff', border: '1px solid #bfdbfe', borderRadius: 6, maxHeight: 250, overflowY: 'auto' }}>
-                  {roomTasks.map(item => (
-                    <div key={item.id} style={{ padding: '10px 12px', borderBottom: '1px solid #e0e7ff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
-                      <div>
-                        <div style={{ fontWeight: 500, color: '#1e293b' }}>{item.name}</div>
-                        <div style={{ fontSize: 11, color: '#64748b' }}>£{item.subcontract_cost || 0}</div>
-                      </div>
-                      <button
-                        onClick={() => {
-                          let itemType: 'labour' | 'materials' | 'plant' | 'subcontractors' | 'other' = 'other'
-                          if (item.subcontract_cost) itemType = 'subcontractors'
-                          else if (item.labour_cost) itemType = 'labour'
-                          else if (item.materials_cost) itemType = 'materials'
-                          else if (item.plant_cost) itemType = 'plant'
-
-                          const newItem: QuoteItem = {
-                            id: uid(),
-                            desc: item.name,
-                            qty: 1,
-                            unit: 'item',
-                            labour: item.labour_cost || 0,
-                            materials: item.materials_cost || 0,
-                            plantHire: item.plant_cost || 0,
-                            subcontractors: item.subcontract_cost || 0,
-                            other: item.other_cost || 0,
-                            notes: item.description || '',
-                            itemType,
-                            boTaskId: item.id,
-                          }
-                          onUpdate({ ...p, items: [...p.items, newItem] })
-                        }}
-                        style={{ padding: '4px 10px', fontSize: 11, background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}
-                      >
-                        + Add
-                      </button>
-                    </div>
-                  ))}
-                </div>
+          {/* Task rows sourced from Back Office — shown whenever this sub-phase is linked to a
+              Back Office room/sub-phase that has its own individual tasks (Electrics, Plumbing &
+              Heating rooms, etc.). Every task is added automatically when the room is chosen
+              (see createSubPhase) and is edited or hidden individually here — the same idea as
+              editing a task in Back Office, just scoped to this one quote. Driven by data (does
+              this sub-phase have BO tasks?), not by phase name, so it covers every room-based
+              phase without a new special case each time one is added. Back Office → quote stays
+              one-way: editing here never writes back, only "Refresh from Back Office" pulls
+              current BO names/costs in. */}
+          {roomTasks.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ display: 'flex', gap: 6, padding: '0 4px 4px', fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <span style={{ width: 16, flexShrink: 0 }} />
+                <span style={{ flex: 1 }}>Task</span>
+                <span style={{ width: 70, flexShrink: 0, textAlign: 'right' }}>Labour</span>
+                <span style={{ width: 70, flexShrink: 0, textAlign: 'right' }}>Materials</span>
+                <span style={{ width: 70, flexShrink: 0, textAlign: 'right' }}>Plant</span>
+                <span style={{ width: 70, flexShrink: 0, textAlign: 'right' }}>Sub</span>
+                <span style={{ width: 70, flexShrink: 0, textAlign: 'right' }}>Other</span>
+                <span style={{ width: 20, flexShrink: 0 }} />
               </div>
-            )
-          })()}
+              {p.items.map(item => {
+                const hidden = item.enabled === false
+                return (
+                  <div key={item.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 6, padding: '6px 4px', marginBottom: 3,
+                    border: '1px solid #e2e8f0', borderRadius: 6,
+                    background: hidden ? '#f8fafc' : '#fff',
+                  }}>
+                    <button
+                      type="button" disabled={isLocked}
+                      onClick={() => updateItem({ ...item, enabled: hidden ? true : false })}
+                      title={hidden ? 'Hidden from this quote — click to include' : 'Included in this quote — click to hide'}
+                      style={{ width: 16, flexShrink: 0, background: 'none', border: 'none', cursor: isLocked ? 'default' : 'pointer', fontSize: 13, color: hidden ? '#cbd5e1' : '#16a34a', padding: 0, lineHeight: 1 }}
+                    >
+                      {hidden ? '○' : '●'}
+                    </button>
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <input
+                        value={item.desc}
+                        readOnly={isLocked}
+                        onChange={e => updateItem({ ...item, desc: e.target.value })}
+                        style={{ ...fldStyle, fontSize: 12, fontWeight: 500, color: hidden ? '#94a3b8' : '#1e293b', textDecoration: hidden ? 'line-through' : 'none' }}
+                      />
+                      {hidden && <span style={{ fontSize: 8, fontWeight: 700, padding: '1px 5px', borderRadius: 99, background: '#e2e8f0', color: '#64748b', flexShrink: 0 }}>HIDDEN</span>}
+                    </div>
+                    {(['labour', 'materials', 'plantHire', 'subcontractors', 'other'] as const).map(field => (
+                      <div key={field} style={{ position: 'relative', width: 70, flexShrink: 0 }}>
+                        <span style={{ position: 'absolute', left: 4, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: '#cbd5e1' }}>£</span>
+                        <input
+                          type="number" min={0} step={0.01}
+                          value={item[field] ?? 0}
+                          readOnly={isLocked}
+                          onChange={e => updateItem({ ...item, [field]: Math.max(0, +e.target.value) })}
+                          style={{ width: '100%', padding: '3px 4px 3px 13px', fontSize: 11, border: '1px solid #e2e8f0', borderRadius: 4, textAlign: 'right', color: hidden ? '#cbd5e1' : 'inherit' }}
+                        />
+                      </div>
+                    ))}
+                    {!isLocked && (
+                      <button onClick={() => deleteItem(item.id)} className="icon-btn-touch" style={{ ...iconBtn('#e74c3c'), width: 20, flexShrink: 0 }} title="Remove entirely">×</button>
+                    )}
+                  </div>
+                )
+              })}
+              {!isLocked && (
+                <button style={{ ...addBtn, fontSize: 10, marginTop: 2 }} onClick={() => {
+                  const newItem: QuoteItem = { id: uid(), desc: '', qty: 1, unit: 'nr', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '' }
+                  onUpdate(markEdited({ ...p, items: [...p.items, newItem] }))
+                }}>+ Task</button>
+              )}
+            </div>
+          )}
 
           {/* Cost-category cards — accordion, one open at a time (hidden when the room-based
               task picker above is showing instead) */}
-          {roomTasks.length === 0 && p.phase !== 'Electrics' && (
+          {roomTasks.length === 0 && (
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {ITEM_TYPES.map(t => {
                 const meta   = CARD_META[t]
@@ -1568,7 +1493,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
 
           {/* Summary of what's been added across all cost categories (hidden when the room-based
               task picker above is showing instead) */}
-          {roomTasks.length === 0 && p.phase !== 'Electrics' && (() => {
+          {roomTasks.length === 0 && (() => {
             const lines: { icon: string; color: string; text: string }[] = []
 
             // Labour — from cost rows
@@ -1612,7 +1537,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
           })()}
 
           {/* Cost-category popup modal (hidden when the room-based task picker above is showing instead) */}
-          {openCard && roomTasks.length === 0 && p.phase !== 'Electrics' && (
+          {openCard && roomTasks.length === 0 && (
             <div
               style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
               onClick={e => { if (e.target === e.currentTarget) setOpenCard(null) }}>
@@ -1980,12 +1905,30 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
   }
 
   function createSubPhase(mainPhase: string, room: string, name: string, boSubPhaseId: string | undefined) {
+    // A sub-phase linked to a Back Office room (Kitchen, Utility Room, etc.) pulls in every one
+    // of that room's tasks straight away — Back Office is the source of truth for what a room
+    // contains, so the quote shouldn't need a separate "pick which tasks apply" step. Any task
+    // not needed for this job gets hidden (or deleted) individually afterwards.
+    const roomTasks = boSubPhaseId ? boTasks.filter(t => t.sub_phase_id === boSubPhaseId && t.active) : []
+    const items: QuoteItem[] = roomTasks.map(t => ({
+      id: uid(),
+      desc: t.name,
+      qty: 1,
+      unit: t.unit || 'nr',
+      labour: t.labour_cost || 0,
+      materials: t.materials_cost || 0,
+      plantHire: t.plant_cost || 0,
+      subcontractors: t.subcontract_cost || 0,
+      other: t.other_cost || 0,
+      notes: t.description || '',
+      boTaskId: t.id,
+    }))
     const newPhase: QuotePhase = {
       id: uid(), phase: name, parentPhase: mainPhase,
       roomLabel: room || undefined,
-      source: 'manual', itemStatus: 'manual',
+      source: 'manual', itemStatus: items.length ? 'bo-default' : 'manual',
       boSubPhaseId,
-      items: [],
+      items,
       estimatorItems: [], useEstimator: false,
     }
     onChange([...phases, newPhase])
