@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useApp } from '@/contexts/AppContext'
 import { ContactPicker } from '@/components/ContactPicker'
-import { signedDocUrl, insertJobCost } from '@/lib/job-costs'
+import { signedDocUrl, insertJobCost, updateJobCost, deleteJobCost } from '@/lib/job-costs'
 import type { PaymentMethod } from '@/lib/types'
 
 const STAGE_PAYMENT_METHODS: Record<PaymentMethod, string> = {
@@ -57,6 +57,7 @@ interface PaymentStage {
   due_date: string | null
   paid_date: string | null
   payment_method: PaymentMethod | null
+  job_cost_id: string | null
   xero_bill_id: string | null
   created_at: string
 }
@@ -508,10 +509,40 @@ export default function SubcontractorsPage() {
       payment_method: stageForm.paidDate ? (stageForm.paymentMethod || null) : null,
     }
 
-    const { error: saveError } = editingStage
-      ? await sb.from('sub_payment_stages').update(payload).eq('id', editingStage.id)
-      : await sb.from('sub_payment_stages').insert(payload)
+    const { data: savedRow, error: saveError } = editingStage
+      ? await sb.from('sub_payment_stages').update(payload).eq('id', editingStage.id).select().single()
+      : await sb.from('sub_payment_stages').insert(payload).select().single()
     if (saveError) { setError(saveError.message); setSaving(false); return }
+
+    // Keep the linked job_costs entry in sync so a paid stage actually counts
+    // toward that job's Actual Cost / margin — it previously never did.
+    const contract = contracts.find(c => c.id === stageContractId)
+    const existingJobCostId = editingStage?.job_cost_id ?? null
+    if (payload.paid_date && contract?.job_id) {
+      const costFields = {
+        jobId: contract.job_id,
+        costCategory: 'subcontractors' as const,
+        source: 'manual' as const,
+        supplier: contactName(contract.contact_id),
+        description: payload.description,
+        docDate: payload.paid_date,
+        docNumber: '',
+        netAmount: payload.amount, vatAmount: 0, grossAmount: payload.amount,
+        paymentStatus: 'paid' as const,
+        chargeToClient: false,
+      }
+      if (existingJobCostId) {
+        await updateJobCost(sb, existingJobCostId, costFields)
+      } else {
+        const cost = await insertJobCost(sb, user.id, costFields)
+        if (cost?.id) await sb.from('sub_payment_stages').update({ job_cost_id: cost.id }).eq('id', savedRow.id)
+      }
+    } else if (existingJobCostId) {
+      // Stage was previously paid (and linked) but no longer has a paid date — remove the cost.
+      await deleteJobCost(sb, existingJobCostId)
+      await sb.from('sub_payment_stages').update({ job_cost_id: null }).eq('id', savedRow.id)
+    }
+
     setStageModal(false)
     await load()
     setSaving(false)
@@ -533,9 +564,10 @@ export default function SubcontractorsPage() {
     setStageModal(true)
   }
 
-  async function deleteStage(id: string) {
+  async function deleteStage(stage: PaymentStage) {
     if (!confirm('Delete this payment stage?')) return
-    await sb.from('sub_payment_stages').delete().eq('id', id)
+    if (stage.job_cost_id) await deleteJobCost(sb, stage.job_cost_id)
+    await sb.from('sub_payment_stages').delete().eq('id', stage.id)
     await load()
   }
 
@@ -1331,6 +1363,11 @@ export default function SubcontractorsPage() {
                                           {STAGE_PAYMENT_METHODS[s.payment_method]}
                                         </span>
                                       )}
+                                      {s.job_cost_id && (
+                                        <span style={{ display: 'inline-block', marginTop: 2, fontSize: 10, padding: '1px 5px', borderRadius: 6, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>
+                                          ✓ On job
+                                        </span>
+                                      )}
                                     </span>
                                   )
                                   : <span style={{ color: '#9ca3af' }}>—</span>}
@@ -1347,7 +1384,7 @@ export default function SubcontractorsPage() {
                               </td>
                               <td style={{ padding: '5px 4px', whiteSpace: 'nowrap' }}>
                                 <button onClick={() => openEditStage(s)} style={{ fontSize: 10, padding: '2px 6px', background: '#f9fafb', color: '#374151', border: '1px solid #d1d5db', borderRadius: 4, cursor: 'pointer', marginRight: 4 }}>✎</button>
-                                <button onClick={() => deleteStage(s.id)} style={{ fontSize: 10, padding: '2px 6px', background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 4, cursor: 'pointer' }}>✕</button>
+                                <button onClick={() => deleteStage(s)} style={{ fontSize: 10, padding: '2px 6px', background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 4, cursor: 'pointer' }}>✕</button>
                               </td>
                             </tr>
                           ))}
