@@ -640,34 +640,88 @@ const electricsSubphases: PhaseSubphase[] = [
 
 // ── 8. PLUMBING & HEATING ─────────────────────────────────────────────────────
 
+// 'First Fix Plumbing' and 'Second Fix & Sanitaryware' (plumb-first-fix, plumb-second-fix)
+// were replaced by this room-based structure — same pattern as Electrics above.
+// Their old canonical ids are retired via RETIRED_SUB_CANON_IDS in
+// back-office-queries.ts so syncBackOfficeFromProduct deletes any resurrected
+// copies instead of recreating them on next page load.
+
+function plumbBathroomItems(prefix: string): PhaseTask[] {
+  return [
+    t(`${prefix}-bath`,          'Bath (supply & fix)',                    'nr', 1, 120, 250, 0, 0, 0, 'Standard 1700×700 — PC sum'),
+    t(`${prefix}-shower-valve`,  'Concealed / thermostatic shower valve',  'nr', 1,  85, 280, 0, 0, 0, 'Including riser rail & head'),
+    t(`${prefix}-towel-rail`,    'Heated towel rail (chrome)',             'nr', 1,  65, 120, 0, 0, 0, 'Dual fuel or plumbed'),
+    t(`${prefix}-shower-encl`,   'Shower enclosure & tray (supply & fix)', 'nr', 1, 150, 380, 0, 0, 0, '900×900 enclosure + stone tray'),
+    t(`${prefix}-radiator`,      'Steel panel radiator (supply & fit)',    'nr', 1,  65,  95, 0, 0, 0, 'Per standard panel rad — TRV included'),
+    t(`${prefix}-basin`,         'Wash basin (supply & fix)',              'nr', 1,  85, 120, 0, 0, 0, 'With pedestal / semi-pedestal'),
+    t(`${prefix}-wc`,            'WC suite (supply & fix)',                'nr', 1,  95, 180, 0, 0, 0, 'Close-coupled — PC sum for suite'),
+  ]
+}
+
 const plumbingSubphases: PhaseSubphase[] = [
   {
-    id: 'plumb-first-fix',
+    id: 'plumb-kitchen',
     phase: 'Plumbing & Heating',
-    name: 'First Fix Plumbing',
+    name: 'Kitchen',
     markupPct: 20,
-    ukWarning: 'Gas work must be carried out by a Gas Safe registered engineer. Water supply requires WRAS-approved materials. Unvented cylinders require G3 qualified installer.',
     tasks: [
-      t('plumb-ff-copper-15',       '15mm copper supply pipework',           'lm',  20,  12,   6.50,  0,    0,    0,  'Push-fit or solder fittings'),
-      t('plumb-ff-copper-22',       '22mm copper supply pipework',           'lm',  10,  14,   9.50,  0,    0,    0,  'For boiler / cylinder connections'),
-      t('plumb-ff-manifold-ufh',    'UFH manifold & controls (install)',     'nr',   1,   0,    0,    0,  450,    0,  'Installer to commission system'),
-      t('plumb-ff-boiler-flue',     'Boiler position & flue route',          'sum',  1,   0,    0,    0,  180,    0,  '1st fix boiler position, flue penetration'),
+      t('plumb-kitchen-sink',      'Kitchen sink (supply & fix)',            'nr', 1, 120, 220, 0, 0, 0, 'Inset or undermount 1.5-bowl'),
+      t('plumb-kitchen-radiator',  'Steel panel radiator (supply & fit)',    'nr', 1,  65,  95, 0, 0, 0, 'Per standard panel rad — TRV included'),
+      t('plumb-kitchen-wm',        'Washing Machine Connection',             'nr', 1,   0,   0, 0, 0, 0),
+      t('plumb-kitchen-dw',        'Dishwasher Connection',                  'nr', 1,   0,   0, 0, 0, 0),
+      t('plumb-kitchen-fridge',    'Water Supply for Fridge / Freezer',      'nr', 1,   0,   0, 0, 0, 0),
+      t('plumb-kitchen-softener',  'Water Softener (installation)',          'nr', 1,   0,   0, 0, 0, 0),
     ],
   },
   {
-    id: 'plumb-second-fix',
+    id: 'plumb-utility',
     phase: 'Plumbing & Heating',
-    name: 'Second Fix & Sanitaryware',
+    name: 'Utility Room',
     markupPct: 20,
     tasks: [
-      t('plumb-sf-wc',              'WC suite (supply & fix)',               'nr',   2,  95,  180,    0,    0,    0,  'Close-coupled — PC sum for suite'),
-      t('plumb-sf-basin',           'Wash basin (supply & fix)',             'nr',   2,  85,  120,    0,    0,    0,  'With pedestal / semi-pedestal'),
-      t('plumb-sf-bath',            'Bath (supply & fix)',                   'nr',   1, 120,  250,    0,    0,    0,  'Standard 1700×700 — PC sum'),
-      t('plumb-sf-shower-encl',     'Shower enclosure & tray (supply & fix)','nr',   1, 150,  380,    0,    0,    0,  '900×900 enclosure + stone tray'),
-      t('plumb-sf-shower-valve',    'Concealed / thermostatic shower valve', 'nr',   1,  85,  280,    0,    0,    0,  'Including riser rail & head'),
-      t('plumb-sf-kitchen-sink',    'Kitchen sink (supply & fix)',           'nr',   1, 120,  220,    0,    0,    0,  'Inset or undermount 1.5-bowl'),
-      t('plumb-sf-radiators',       'Steel panel radiator (supply & fit)',   'nr',   8,  65,   95,    0,    0,    0,  'Per standard panel rad — TRV included'),
-      t('plumb-sf-towel-rail',      'Heated towel rail (chrome)',            'nr',   2,  65,  120,    0,    0,    0,  'Dual fuel or plumbed'),
+      t('plumb-utility-sink',     'Utility sink (supply & fix)',            'nr', 1, 100, 150, 0, 0, 0, 'Single bowl stainless/ceramic utility sink'),
+      t('plumb-utility-wm',       'Washing Machine Connection',             'nr', 1,   0,   0, 0, 0, 0),
+      t('plumb-utility-dw',       'Dishwasher Connection',                  'nr', 1,   0,   0, 0, 0, 0),
+      t('plumb-utility-fridge',   'Water Supply for Fridge / Freezer',      'nr', 1,   0,   0, 0, 0, 0),
+      t('plumb-utility-softener', 'Water Softener (installation)',          'nr', 1,   0,   0, 0, 0, 0),
+    ],
+  },
+  {
+    id: 'plumb-fam-bath',
+    phase: 'Plumbing & Heating',
+    name: 'Family Bathroom',
+    markupPct: 20,
+    tasks: plumbBathroomItems('plumb-fam-bath'),
+  },
+  {
+    id: 'plumb-bath-2',
+    phase: 'Plumbing & Heating',
+    name: 'Bathroom 2',
+    markupPct: 20,
+    tasks: plumbBathroomItems('plumb-bath-2'),
+  },
+  {
+    id: 'plumb-ensuite-1',
+    phase: 'Plumbing & Heating',
+    name: 'En-Suite 1',
+    markupPct: 20,
+    tasks: plumbBathroomItems('plumb-ensuite-1'),
+  },
+  {
+    id: 'plumb-ensuite-2',
+    phase: 'Plumbing & Heating',
+    name: 'En-Suite 2',
+    markupPct: 20,
+    tasks: plumbBathroomItems('plumb-ensuite-2'),
+  },
+  {
+    id: 'plumb-cloakroom',
+    phase: 'Plumbing & Heating',
+    name: 'Cloakroom / WC',
+    markupPct: 20,
+    tasks: [
+      t('plumb-cloakroom-basin', 'Wash basin (supply & fix)', 'nr', 1, 85, 120, 0, 0, 0, 'With pedestal / semi-pedestal'),
+      t('plumb-cloakroom-wc',    'WC suite (supply & fix)',   'nr', 1, 95, 180, 0, 0, 0, 'Close-coupled — PC sum for suite'),
     ],
   },
   {
@@ -1427,11 +1481,12 @@ export function matchPhaseTasksFromScope(
     [['downlight','downlights'],            'elec-first-fix',       'elec-ff-downlight-prep'],
     [['ev charge','ev charger'],            'elec-external',        'elec-ext-ev-charger'],
     // Plumbing
-    [['bathroom','sanitaryware'],           'plumb-second-fix',     'plumb-sf-wc'],
+    [['bathroom','sanitaryware'],           'plumb-fam-bath',       'plumb-fam-bath-wc'],
     [['combi boiler','replace boiler'],     'plumb-boiler-heating', 'plumb-boiler-combi'],
     [['heat pump','ashp'],                  'plumb-boiler-heating', 'plumb-heat-pump-ashp'],
-    [['radiator'],                          'plumb-second-fix',     'plumb-sf-radiators'],
-    [['shower'],                            'plumb-second-fix',     'plumb-sf-shower-encl'],
+    [['radiator'],                          'plumb-fam-bath',       'plumb-fam-bath-radiator'],
+    [['shower'],                            'plumb-fam-bath',       'plumb-fam-bath-shower-encl'],
+    [['kitchen sink'],                      'plumb-kitchen',        'plumb-kitchen-sink'],
     // Joinery
     [['staircase','stairs'],               'join-staircase',        'join-stair-straight'],
     [['kitchen fit','kitchen installation'],'join-kitchen',         'join-kitchen-units'],

@@ -491,7 +491,7 @@ export default function SectionPhasesTasks({ userId }: Props) {
                         style={{ flex: 1, border: '1.5px solid #4a90a4', borderRadius: 5, background: '#fff', fontSize: 13, fontWeight: 600, color: '#1e293b', outline: 'none', padding: '3px 8px', minWidth: 0 }}
                       />
                     ) : (
-                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }} onClick={e => e.stopPropagation()}>
+                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                         <span style={{ fontSize: 13, fontWeight: 600, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sp.name}</span>
                         <button
                           onClick={e => { e.stopPropagation(); setEditingSubPhaseId(sp.id); setEditingSubPhaseName(sp.name) }}

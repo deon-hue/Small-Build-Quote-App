@@ -67,6 +67,9 @@ export async function upsertSubPhase(sb: SupabaseClient, sp: Partial<BOSubPhase>
 }
 
 export async function deleteSubPhase(sb: SupabaseClient, id: string): Promise<void> {
+  // Tasks aren't cascade-deleted by the DB (their FK just nulls sub_phase_id),
+  // which silently turns them into orphaned "Direct Tasks" — delete them explicitly first.
+  await sb.from('bo_tasks').delete().eq('sub_phase_id', id)
   await sb.from('bo_sub_phases').delete().eq('id', id)
 }
 
@@ -852,12 +855,15 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
     if (pc) desiredSubs.push({ canonical_id: `demo-${sub.id}`, phase_canonical: pc, name: sub.name, display_order: i, markup_pct: sub.markupPct })
   })
 
-  // ── Cleanup: remove old electrical subphases replaced by room-based system ───
-  const RETIRED_SUB_CANON_IDS = ['elec-first-fix', 'elec-second-fix', 'elec-external']
+  // ── Cleanup: remove old subphases replaced by room-based systems ─────────────
+  const RETIRED_SUB_CANON_IDS = ['elec-first-fix', 'elec-second-fix', 'elec-external', 'plumb-first-fix', 'plumb-second-fix']
   const retiredSubs = (dbSubs ?? []).filter(s => s.canonical_id && RETIRED_SUB_CANON_IDS.includes(s.canonical_id as string))
   if (retiredSubs.length > 0) {
-    console.log('[sync] removing retired electrical subphases:', retiredSubs.map(s => s.canonical_id))
+    console.log('[sync] removing retired subphases:', retiredSubs.map(s => s.canonical_id))
     for (const rs of retiredSubs) {
+      // Delete child tasks first — the FK only nulls sub_phase_id on delete,
+      // which would otherwise orphan them into "Direct Tasks" under the phase.
+      await sb.from('bo_tasks').delete().eq('sub_phase_id', rs.id)
       await sb.from('bo_sub_phases').delete().eq('id', rs.id)
     }
   }
