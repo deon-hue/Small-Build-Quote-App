@@ -50,8 +50,8 @@ export function buildHtml(q: Quote, settings: Settings, opts: HtmlOpts = {}, boT
     const qtyHtml = qty !== undefined ? `<span style="font-size:11px;color:#94a3b8;margin-left:8px">${qty} ${esc(unit || '')}</span>` : ''
     return `<div style="display:flex;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #e2e8f0;font-size:13px">
       <div style="flex:1;color:#334155">${esc(desc)}${qtyHtml}${notes ? '<div style="font-size:11px;color:#94a3b8;margin-top:2px">' + esc(notes) + '</div>' : ''}</div>
-      <div style="color:#7ab533;font-weight:600;font-family:monospace;text-align:right;min-width:80px">£${sell.toFixed(2)}</div>
-      ${qVat ? `<div style="color:#94a3b8;font-size:11px;text-align:right;min-width:60px">£${itemVat.toFixed(2)}</div>` : ''}
+      <div style="color:#7ab533;font-weight:600;font-family:'DM Mono',monospace;text-align:right;min-width:80px">£${sell.toFixed(2)}</div>
+      ${qVat ? `<div style="color:#94a3b8;font-size:11px;font-family:'DM Mono',monospace;text-align:right;min-width:60px">£${itemVat.toFixed(2)}</div>` : ''}
     </div>`
   }
 
@@ -67,7 +67,7 @@ export function buildHtml(q: Quote, settings: Settings, opts: HtmlOpts = {}, boT
       <div style="margin-bottom:20px;border-left:4px solid #7ab533;background:#f8fafc;padding:16px;border-radius:4px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
           <div style="font-size:14px;font-weight:600;color:#1e293b">${esc(p.phase)}</div>
-          <div style="font-size:16px;font-weight:700;color:#7ab533;font-family:monospace">£${phaseTotal.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>
+          <div style="font-size:16px;font-weight:700;color:#7ab533;font-family:'DM Mono',monospace">£${phaseTotal.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>
         </div>
         <div style="background:white;border-radius:4px;overflow:hidden">
           ${itemRows}${productRows}${plantRows}
@@ -76,12 +76,13 @@ export function buildHtml(q: Quote, settings: Settings, opts: HtmlOpts = {}, boT
   }).join('')
 
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#f5f5f5;padding:40px 20px}
+body{font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#f5f5f5;padding:40px 20px}
 .container{max-width:900px;margin:0 auto;background:white;box-shadow:0 10px 40px rgba(0,0,0,0.1)}
 .header{display:flex;align-items:center;gap:30px;padding:40px;border-bottom:3px solid #7ab533;background:linear-gradient(135deg,#f8faf8 0%,#fff 100%)}
 .logo{width:80px;height:80px;background:#7ab533;border-radius:8px;display:flex;align-items:center;justify-content:center;color:white;font-size:28px;font-weight:bold;flex-shrink:0}
-.company-info h1{font-size:28px;color:#1e293b;margin-bottom:8px}
+.company-info h1{font-family:'DM Serif Display',serif;font-weight:400;font-size:28px;color:#1e293b;margin-bottom:8px}
 .company-info p{font-size:13px;color:#64748b;line-height:1.6}
 .quote-title{padding:30px 40px;background:#f8fafc;border-bottom:1px solid #e2e8f0}
 .quote-title h2{font-size:18px;color:#1e293b;margin-bottom:12px;text-transform:uppercase;letter-spacing:1px}
@@ -94,7 +95,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;ba
 .totals-box{width:350px}
 .total-row{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid #e2e8f0;font-size:13px}
 .total-label{color:#64748b}
-.total-amount{color:#1e293b;font-weight:600;font-family:'Monaco',monospace}
+.total-amount{color:#1e293b;font-weight:600;font-family:'DM Mono',monospace}
 .grand-total{border-bottom:none!important;border-top:2px solid #7ab533;padding-top:16px;padding-bottom:0;font-size:16px}
 .grand-total .total-label{color:#1e293b;font-weight:700}
 .grand-total .total-amount{color:#7ab533;font-size:18px;font-weight:700}
@@ -224,8 +225,8 @@ export function buildHtmlClientView(q: Quote, settings: Settings, opts: HtmlOpts
     // per-item and per-phase prices. 'full' shows everything.
     const priceHtml = (quoteView === 'full' || quoteView === 'phases')
       ? `<div style="text-align:right;flex-shrink:0">
-           <div style="font-weight:700;font-size:14px;color:#2b2f33">£${sell.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>
-           ${qVat ? `<div style="font-size:11px;color:#4a90a4">+£${vatAmt.toLocaleString('en-GB', { minimumFractionDigits: 2 })} VAT</div>` : ''}
+           <div style="font-weight:700;font-size:14px;color:#2b2f33;font-family:'DM Mono',monospace">£${sell.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>
+           ${qVat ? `<div style="font-size:11px;color:#4a90a4;font-family:'DM Mono',monospace">+£${vatAmt.toLocaleString('en-GB', { minimumFractionDigits: 2 })} VAT</div>` : ''}
          </div>`
       : ''
 
@@ -261,7 +262,7 @@ export function buildHtmlClientView(q: Quote, settings: Settings, opts: HtmlOpts
           <span style="font-size:12px;color:#334155">${esc(entry.desc)}</span>
           <span style="font-size:11px;color:#94a3b8;margin-left:8px">${entry.qty} ${esc(entry.unit)}</span>
         </div>
-        ${quoteView === 'full' ? `<span style="font-size:12px;font-weight:600;color:#2b2f33;white-space:nowrap">£${entry.sell.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</span>` : ''}
+        ${quoteView === 'full' ? `<span style="font-size:12px;font-weight:600;color:#2b2f33;font-family:'DM Mono',monospace;white-space:nowrap">£${entry.sell.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</span>` : ''}
       </div>`
     }).join('')
 
@@ -279,12 +280,13 @@ export function buildHtmlClientView(q: Quote, settings: Settings, opts: HtmlOpts
   }).join('')
 
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#f5f5f5;padding:40px 20px}
+body{font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#f5f5f5;padding:40px 20px}
 .container{max-width:900px;margin:0 auto;background:white;box-shadow:0 10px 40px rgba(0,0,0,0.1)}
 .header{display:flex;align-items:center;gap:30px;padding:40px;border-bottom:3px solid #7ab533;background:linear-gradient(135deg,#f8faf8 0%,#fff 100%)}
 .logo{width:80px;height:80px;background:#7ab533;border-radius:8px;display:flex;align-items:center;justify-content:center;color:white;font-size:28px;font-weight:bold;flex-shrink:0}
-.company-info h1{font-size:28px;color:#1e293b;margin-bottom:8px}
+.company-info h1{font-family:'DM Serif Display',serif;font-weight:400;font-size:28px;color:#1e293b;margin-bottom:8px}
 .company-info p{font-size:13px;color:#64748b;line-height:1.6}
 .quote-title{padding:30px 40px;background:#f8fafc;border-bottom:1px solid #e2e8f0}
 .quote-title h2{font-size:18px;color:#1e293b;margin-bottom:12px;text-transform:uppercase;letter-spacing:1px}
@@ -297,7 +299,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;ba
 .totals-box{width:350px}
 .total-row{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid #e2e8f0;font-size:13px}
 .total-label{color:#64748b}
-.total-amount{color:#1e293b;font-weight:600;font-family:'Monaco',monospace}
+.total-amount{color:#1e293b;font-weight:600;font-family:'DM Mono',monospace}
 .grand-total{border-bottom:none!important;border-top:2px solid #7ab533;padding-top:16px;padding-bottom:0;font-size:16px}
 .grand-total .total-label{color:#1e293b;font-weight:700}
 .grand-total .total-amount{color:#7ab533;font-size:18px;font-weight:700}
