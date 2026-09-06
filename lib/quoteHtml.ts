@@ -1,6 +1,6 @@
 import type { Quote } from './types'
 import type { Settings } from './types'
-import { VAT, calcPhase, calcItemSell, calcPhaseSell } from './utils'
+import { VAT, calcItemSell, calcPhaseSell } from './utils'
 import { getPhaseVisual } from './phase-visuals'
 
 function esc(s: string): string {
@@ -17,13 +17,15 @@ export function buildHtml(q: Quote, settings: Settings, opts: HtmlOpts = {}, boT
   const showScope        = opts.showScope        ?? true
   const showPaymentTerms = opts.showPaymentTerms ?? true
   const co = settings
-  const net = q.phases.reduce((s, p) => s + calcPhase(p), 0)
-  const mu = net * (q.markup / 100)
-  const sub = net + mu
-  const vat = q.vatIncluded ? sub * VAT : 0
-  const total = sub + vat
   const qMkp = q.markup || 0
   const qVat = q.vatIncluded
+  // Sum calcPhaseSell per phase rather than calcPhase(net) + a flat markup:
+  // calcPhase only totals the generic item rows (it misses BO catalogue
+  // products/plant), and a flat markup on top double-counts labour-trade
+  // items, which already store their own marked-up sell price.
+  const sub = q.phases.reduce((s, p) => s + calcPhaseSell(p, qMkp), 0)
+  const vat = qVat ? sub * VAT : 0
+  const total = sub + vat
   const now = new Date()
 
   const itemTypeLabels: Record<string, string> = {
@@ -39,9 +41,27 @@ export function buildHtml(q: Quote, settings: Settings, opts: HtmlOpts = {}, boT
     return (i.itemType ? itemTypeLabels[i.itemType] : undefined) || 'Item'
   }
 
+  // One line-item row — shared by generic items, BO catalogue products and
+  // BO catalogue plant-hire lines, so every row that contributes to
+  // calcPhaseSell() also gets a visible row (previously products/plantItems
+  // were counted into the phase total but never rendered).
+  const itemRow = (desc: string, notes: string | undefined, sell: number): string => {
+    const itemVat = qVat ? sell * VAT : 0
+    return `<div style="display:flex;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #e2e8f0;font-size:13px">
+      <div style="flex:1;color:#334155">${esc(desc)}${notes ? '<div style="font-size:11px;color:#94a3b8;margin-top:2px">' + esc(notes) + '</div>' : ''}</div>
+      <div style="color:#7ab533;font-weight:600;font-family:monospace;text-align:right;min-width:80px">£${sell.toFixed(2)}</div>
+      ${qVat ? `<div style="color:#94a3b8;font-size:11px;text-align:right;min-width:60px">£${itemVat.toFixed(2)}</div>` : ''}
+    </div>`
+  }
+
   const phaseRows = q.phases.map(p => {
     const phaseTotal = calcPhaseSell(p, qMkp)
-    const phaseVat = qVat ? phaseTotal * VAT : 0
+    const itemRows = p.items.filter(i => calcItemSell(i, qMkp) > 0)
+      .map(i => itemRow(getItemDesc(i), i.notes, calcItemSell(i, qMkp))).join('')
+    const productRows = (p.products ?? []).filter(pr => pr.enabled !== false)
+      .map(pr => itemRow(`${pr.name} (${pr.qty} ${pr.unit})`, pr.notes, pr.sellPrice * pr.qty)).join('')
+    const plantRows = (p.plantItems ?? []).filter(pl => pl.enabled !== false)
+      .map(pl => itemRow(`${pl.name} (${pl.qty} ${pl.unit})`, pl.notes, pl.sellPrice * pl.qty)).join('')
     return `
       <div style="margin-bottom:20px;border-left:4px solid #7ab533;background:#f8fafc;padding:16px;border-radius:4px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -49,16 +69,7 @@ export function buildHtml(q: Quote, settings: Settings, opts: HtmlOpts = {}, boT
           <div style="font-size:16px;font-weight:700;color:#7ab533;font-family:monospace">£${phaseTotal.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>
         </div>
         <div style="background:white;border-radius:4px;overflow:hidden">
-          ${p.items.filter(i => calcItemSell(i, qMkp) > 0).map(i => {
-            const sell = calcItemSell(i, qMkp)
-            const itemVat = qVat ? sell * VAT : 0
-            const desc = getItemDesc(i)
-            return `<div style="display:flex;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #e2e8f0;font-size:13px">
-              <div style="flex:1;color:#334155">${esc(desc)}${i.notes ? '<div style="font-size:11px;color:#94a3b8;margin-top:2px">' + esc(i.notes) + '</div>' : ''}</div>
-              <div style="color:#7ab533;font-weight:600;font-family:monospace;text-align:right;min-width:80px">£${sell.toFixed(2)}</div>
-              ${qVat ? `<div style="color:#94a3b8;font-size:11px;text-align:right;min-width:60px">£${itemVat.toFixed(2)}</div>` : ''}
-            </div>`
-          }).join('')}
+          ${itemRows}${productRows}${plantRows}
         </div>
       </div>`
   }).join('')
@@ -217,9 +228,6 @@ export function buildHtmlClientView(q: Quote, settings: Settings, opts: HtmlOpts
          </div>`
       : ''
 
-    const visibleItems = (quoteView === 'full' || quoteView === 'phases')
-      ? p.items.filter(i => calcItemSell(i, qMkp) > 0)
-      : []
     const getItemDesc = (i: any): string => {
       if (i.desc) return i.desc
       if (i.boTaskId) {
@@ -232,15 +240,27 @@ export function buildHtmlClientView(q: Quote, settings: Settings, opts: HtmlOpts
       }
       return (i.itemType ? itemTypeLabels[i.itemType] : undefined) || 'Item'
     }
-    const itemRowsHtml = visibleItems.map(i => {
-      const iSell = calcItemSell(i, qMkp)
-      const desc = getItemDesc(i)
+    // Combine generic items with BO catalogue products/plant-hire — all three
+    // feed calcPhaseSell(), so all three need a visible row or the list
+    // undercounts the phase total shown above it.
+    type LineEntry = { desc: string; qty: number; unit: string; sell: number }
+    const visibleItems: LineEntry[] = (quoteView === 'full' || quoteView === 'phases')
+      ? [
+          ...p.items.filter(i => calcItemSell(i, qMkp) > 0)
+            .map(i => ({ desc: getItemDesc(i), qty: i.qty, unit: i.unit, sell: calcItemSell(i, qMkp) })),
+          ...(p.products ?? []).filter(pr => pr.enabled !== false)
+            .map(pr => ({ desc: pr.name, qty: pr.qty, unit: pr.unit, sell: pr.sellPrice * pr.qty })),
+          ...(p.plantItems ?? []).filter(pl => pl.enabled !== false)
+            .map(pl => ({ desc: pl.name, qty: pl.qty, unit: pl.unit, sell: pl.sellPrice * pl.qty })),
+        ]
+      : []
+    const itemRowsHtml = visibleItems.map(entry => {
       return `<div style="display:flex;justify-content:space-between;align-items:baseline;padding:10px 16px;border-bottom:1px solid #e2e8f0;background:white">
         <div>
-          <span style="font-size:12px;color:#334155">${esc(desc)}</span>
-          <span style="font-size:11px;color:#94a3b8;margin-left:8px">${i.qty} ${esc(i.unit)}</span>
+          <span style="font-size:12px;color:#334155">${esc(entry.desc)}</span>
+          <span style="font-size:11px;color:#94a3b8;margin-left:8px">${entry.qty} ${esc(entry.unit)}</span>
         </div>
-        ${quoteView === 'full' ? `<span style="font-size:12px;font-weight:600;color:#2b2f33;white-space:nowrap">£${iSell.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</span>` : ''}
+        ${quoteView === 'full' ? `<span style="font-size:12px;font-weight:600;color:#2b2f33;white-space:nowrap">£${entry.sell.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</span>` : ''}
       </div>`
     }).join('')
 
