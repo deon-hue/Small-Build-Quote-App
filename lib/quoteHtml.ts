@@ -45,10 +45,11 @@ export function buildHtml(q: Quote, settings: Settings, opts: HtmlOpts = {}, boT
   // BO catalogue plant-hire lines, so every row that contributes to
   // calcPhaseSell() also gets a visible row (previously products/plantItems
   // were counted into the phase total but never rendered).
-  const itemRow = (desc: string, notes: string | undefined, sell: number): string => {
+  const itemRow = (desc: string, qty: number | undefined, unit: string | undefined, notes: string | undefined, sell: number): string => {
     const itemVat = qVat ? sell * VAT : 0
+    const qtyHtml = qty !== undefined ? `<span style="font-size:11px;color:#94a3b8;margin-left:8px">${qty} ${esc(unit || '')}</span>` : ''
     return `<div style="display:flex;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #e2e8f0;font-size:13px">
-      <div style="flex:1;color:#334155">${esc(desc)}${notes ? '<div style="font-size:11px;color:#94a3b8;margin-top:2px">' + esc(notes) + '</div>' : ''}</div>
+      <div style="flex:1;color:#334155">${esc(desc)}${qtyHtml}${notes ? '<div style="font-size:11px;color:#94a3b8;margin-top:2px">' + esc(notes) + '</div>' : ''}</div>
       <div style="color:#7ab533;font-weight:600;font-family:monospace;text-align:right;min-width:80px">£${sell.toFixed(2)}</div>
       ${qVat ? `<div style="color:#94a3b8;font-size:11px;text-align:right;min-width:60px">£${itemVat.toFixed(2)}</div>` : ''}
     </div>`
@@ -57,11 +58,11 @@ export function buildHtml(q: Quote, settings: Settings, opts: HtmlOpts = {}, boT
   const phaseRows = q.phases.map(p => {
     const phaseTotal = calcPhaseSell(p, qMkp)
     const itemRows = p.items.filter(i => calcItemSell(i, qMkp) > 0)
-      .map(i => itemRow(getItemDesc(i), i.notes, calcItemSell(i, qMkp))).join('')
+      .map(i => itemRow(getItemDesc(i), i.qty, i.unit, i.notes, calcItemSell(i, qMkp))).join('')
     const productRows = (p.products ?? []).filter(pr => pr.enabled !== false)
-      .map(pr => itemRow(`${pr.name} (${pr.qty} ${pr.unit})`, pr.notes, pr.sellPrice * pr.qty)).join('')
+      .map(pr => itemRow(pr.name, pr.qty, pr.unit, pr.notes, pr.sellPrice * pr.qty)).join('')
     const plantRows = (p.plantItems ?? []).filter(pl => pl.enabled !== false)
-      .map(pl => itemRow(`${pl.name} (${pl.qty} ${pl.unit})`, pl.notes, pl.sellPrice * pl.qty)).join('')
+      .map(pl => itemRow(pl.name, pl.qty, pl.unit, pl.notes, pl.sellPrice * pl.qty)).join('')
     return `
       <div style="margin-bottom:20px;border-left:4px solid #7ab533;background:#f8fafc;padding:16px;border-radius:4px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
