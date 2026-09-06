@@ -53,6 +53,62 @@ function backfillItemDescriptions(phases: QuotePhase[], boTasks: BOTask[]): Quot
   }))
 }
 
+/**
+ * Pulls the current name/description and pricing from Back Office into every
+ * item/product/plant-line in this quote that's linked to a Back Office record
+ * (boTaskId/boProductId/boPlantId) — a manual, whole-quote action the user
+ * triggers explicitly (nothing here runs automatically, and it never touches
+ * any other quote). Quantity/unit are left alone — that's specific to this
+ * job, not a Back Office fact. Items never linked to Back Office (typed by
+ * hand) are untouched, since there's nothing to refresh them from.
+ */
+function refreshFromBackOffice(
+  phases: QuotePhase[],
+  boTasks: BOTask[],
+  boProducts: BOProduct[],
+  boPlantItems: BOPlantItem[],
+): { phases: QuotePhase[]; updatedCount: number } {
+  let updatedCount = 0
+  const newPhases = phases.map(p => ({
+    ...p,
+    items: p.items.map(i => {
+      if (!i.boTaskId) return i
+      const task = boTasks.find(t => t.id === i.boTaskId)
+      if (!task) return i
+      updatedCount++
+      return {
+        ...i,
+        desc: task.name,
+        notes: task.description || '',
+        labour: task.labour_cost || 0,
+        materials: task.materials_cost || 0,
+        plantHire: task.plant_cost || 0,
+        subcontractors: task.subcontract_cost || 0,
+        other: task.other_cost || 0,
+      }
+    }),
+    products: (p.products ?? []).map(pr => {
+      if (!pr.boProductId) return pr
+      const bp = boProducts.find(b => b.id === pr.boProductId)
+      if (!bp) return pr
+      updatedCount++
+      const costPrice = bp.default_cost
+      const sellPrice = +(costPrice * (1 + (bp.markup_pct ?? 0) / 100)).toFixed(2)
+      return { ...pr, name: bp.name, costPrice, sellPrice, supplier: bp.supplier || pr.supplier, wastePercent: bp.waste_pct || pr.wastePercent }
+    }),
+    plantItems: (p.plantItems ?? []).map(pl => {
+      if (!pl.boPlantId) return pl
+      const bp = boPlantItems.find(b => b.id === pl.boPlantId)
+      if (!bp) return pl
+      updatedCount++
+      const costPrice = bp.default_cost
+      const sellPrice = +(costPrice * (1 + (bp.markup_pct ?? 0) / 100)).toFixed(2)
+      return { ...pl, name: bp.name, costPrice, sellPrice }
+    }),
+  }))
+  return { phases: newPhases, updatedCount }
+}
+
 // ── Cost helpers ───────────────────────────────────────────────────────────────
 const ITEM_TYPES = ['labour','materials','plant','subcontractors','other'] as const
 type ItemType = typeof ITEM_TYPES[number]
@@ -1837,6 +1893,23 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
     }
     onChange([...phases, newPhase])
   }
+  function handleRefreshFromBO() {
+    const linkedCount = phases.reduce((s, p) =>
+      s + p.items.filter(i => i.boTaskId).length
+        + (p.products ?? []).filter(pr => pr.boProductId).length
+        + (p.plantItems ?? []).filter(pl => pl.boPlantId).length, 0)
+    if (linkedCount === 0) {
+      alert('Nothing in this quote is linked to Back Office — nothing to refresh.')
+      return
+    }
+    if (!confirm(
+      `Refresh ${linkedCount} item${linkedCount !== 1 ? 's' : ''} in this quote with their current Back Office name and pricing?\n\n` +
+      `This only changes this quote, right now — nothing else changes automatically, and nothing without a Back Office link is touched.`
+    )) return
+    const { phases: refreshed, updatedCount } = refreshFromBackOffice(phases, boTasks, boProducts, boPlantItems)
+    onChange(refreshed)
+    alert(`Updated ${updatedCount} item${updatedCount !== 1 ? 's' : ''} from Back Office.`)
+  }
   function addTask(phaseId: number) {
     // Task groups are created implicitly when users add their first item
     // No placeholder items needed
@@ -1898,6 +1971,7 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
         <button style={{ ...addBtn, fontSize: 11 }} onClick={collapseAll}>▶▶ Collapse All</button>
         {!isLocked && <button style={{ ...addBtn, fontSize: 11, borderColor: '#7ab533', color: '#16a34a' }} onClick={addMainPhase}>+ Add Phase</button>}
         {!isLocked && onOpenLibrary && <button style={{ ...addBtn, fontSize: 11, borderColor: '#4a90a4', color: '#1d6a8a' }} onClick={onOpenLibrary}>📚 From Library</button>}
+        {!isLocked && <button style={{ ...addBtn, fontSize: 11, borderColor: '#7c3aed', color: '#7c3aed' }} onClick={handleRefreshFromBO} title="Pull current names and pricing from Back Office into this quote">↻ Refresh from Back Office</button>}
       </div>
 
       {/* Empty / landing state */}
