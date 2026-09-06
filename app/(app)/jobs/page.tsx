@@ -11,6 +11,8 @@ import VariationModal from '@/components/VariationModal'
 import JobDocumentsModal from '@/components/JobDocumentsModal'
 import JobAttachmentsModal from '@/components/JobAttachmentsModal'
 import PaymentRequestsModal from '@/components/PaymentRequestsModal'
+import { useDraggableModal } from '@/components/useDraggableModal'
+import ModalResizeHandle from '@/components/ModalResizeHandle'
 
 const BLANK_JOB: Omit<Job, 'id'> = {
   client: '', type: 'Rear Extension', address: '', value: 0,
@@ -33,6 +35,8 @@ export default function JobsPage() {
   const [requestsJob, setRequestsJob] = useState<Job | null>(null)
   const [newNote, setNewNote] = useState('')
   const [addingNote, setAddingNote] = useState(false)
+  const jobFormModal = useDraggableModal()
+  const notesModal = useDraggableModal()
 
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
 
@@ -194,8 +198,8 @@ export default function JobsPage() {
       {/* Job add/edit modal */}
       {showModal && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowModal(false) }}>
-          <div className="form-modal">
-            <div className="form-modal-hd">
+          <div ref={jobFormModal.boxRef} className="form-modal" style={jobFormModal.draggableStyle}>
+            <div className="form-modal-hd" onMouseDown={jobFormModal.onHeaderMouseDown}>
               <div style={{ fontWeight: 700, fontSize: 17 }}>{editJob ? 'Edit Job' : 'New Job'}</div>
               <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
             </div>
@@ -272,6 +276,7 @@ export default function JobsPage() {
                 {saving ? 'Saving…' : editJob ? 'Update Job' : 'Add Job'}
               </button>
             </div>
+            <ModalResizeHandle onMouseDown={jobFormModal.onResizeMouseDown} />
           </div>
         </div>
       )}
@@ -279,8 +284,8 @@ export default function JobsPage() {
       {/* Job notes modal */}
       {notesJob && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setNotesJob(null) }}>
-          <div className="form-modal" style={{ width: 'min(520px, 96vw)', maxHeight: '85vh', overflowY: 'auto' }}>
-            <div className="form-modal-hd">
+          <div ref={notesModal.boxRef} className="form-modal" style={{ width: 'min(520px, 96vw)', maxHeight: '85vh', overflowY: 'auto', ...notesModal.draggableStyle }}>
+            <div className="form-modal-hd" onMouseDown={notesModal.onHeaderMouseDown}>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 17 }}>Activity Log</div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{notesJob.type} — {notesJob.client}</div>
@@ -322,6 +327,7 @@ export default function JobsPage() {
                 }
               </div>
             </div>
+            <ModalResizeHandle onMouseDown={notesModal.onResizeMouseDown} />
           </div>
         </div>
       )}

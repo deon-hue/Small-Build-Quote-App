@@ -6,6 +6,8 @@ import { calcPhaseSell, fmt } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import type { Quote } from '@/lib/types'
 import PortalQuoteDetailsModal from '@/components/PortalQuoteDetailsModal'
+import { useDraggableModal } from '@/components/useDraggableModal'
+import ModalResizeHandle from '@/components/ModalResizeHandle'
 
 const STATUS_LABEL: Record<string, string> = {
   pending: 'Awaiting review', sent: 'Sent — awaiting your approval',
@@ -27,6 +29,7 @@ export default function PortalQuotesPage() {
   const [agreed, setAgreed] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [approveError, setApproveError] = useState('')
+  const approvalModal = useDraggableModal()
 
   // Determine which version is current (latest) for each quote group
   const currentVersionMap = new Map<string, string>() // groupId -> quoteId of current version
@@ -177,8 +180,8 @@ export default function PortalQuotesPage() {
       {/* ── Approval signing modal ────────────────────────────────── */}
       {approvingQuote && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) closeApproval() }}>
-          <div className="portal-modal">
-            <div className="portal-modal-hd">
+          <div ref={approvalModal.boxRef} className="portal-modal" style={approvalModal.draggableStyle}>
+            <div className="portal-modal-hd" onMouseDown={approvalModal.onHeaderMouseDown}>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 18 }}>Approve Quote</div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
@@ -263,6 +266,7 @@ export default function PortalQuotesPage() {
                 {submitting ? 'Approving…' : '✍️ Approve Quote'}
               </button>
             </div>
+            <ModalResizeHandle onMouseDown={approvalModal.onResizeMouseDown} />
           </div>
         </div>
       )}

@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { calcItemSell, calcPhaseSell, fmt } from '@/lib/utils'
 import type { Quote } from '@/lib/types'
 import QuoteCommentsSection from './QuoteCommentsSection'
+import { useDraggableModal } from './useDraggableModal'
+import ModalResizeHandle from './ModalResizeHandle'
 
 interface Props {
   quote: Quote
@@ -48,6 +50,8 @@ export default function PortalQuoteDetailsModal({
   const clientCanSeeCosts = clientQuoteView === 'full'
   const clientCanSeePhases = clientQuoteView === 'full' || clientQuoteView === 'phases'
 
+  const mainModal = useDraggableModal()
+  const printOptionsModal = useDraggableModal()
   const [showPrintOptions, setShowPrintOptions] = useState(false)
   const [printOptions, setPrintOptions] = useState({
     includeScope: clientCanSeeScope,
@@ -153,8 +157,8 @@ export default function PortalQuoteDetailsModal({
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="portal-modal" style={{ maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
-        <div className="portal-modal-hd">
+      <div ref={mainModal.boxRef} className="portal-modal" style={{ maxHeight: '90vh', display: 'flex', flexDirection: 'column', ...mainModal.draggableStyle }}>
+        <div className="portal-modal-hd" onMouseDown={mainModal.onHeaderMouseDown}>
           <div>
             <div style={{ fontWeight: 700, fontSize: 18 }}>Quote Details</div>
             <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
@@ -373,13 +377,14 @@ export default function PortalQuoteDetailsModal({
             </button>
           </div>
         )}
+        <ModalResizeHandle onMouseDown={mainModal.onResizeMouseDown} />
       </div>
 
       {/* ── Print options dialog ─────────────────────────────── */}
       {showPrintOptions && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowPrintOptions(false) }}>
-          <div className="portal-modal" style={{ maxWidth: 400 }}>
-            <div className="portal-modal-hd">
+          <div ref={printOptionsModal.boxRef} className="portal-modal" style={{ maxWidth: 400, ...printOptionsModal.draggableStyle }}>
+            <div className="portal-modal-hd" onMouseDown={printOptionsModal.onHeaderMouseDown}>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 18 }}>Print Options</div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
@@ -451,6 +456,7 @@ export default function PortalQuoteDetailsModal({
                 🖨️ Print
               </button>
             </div>
+            <ModalResizeHandle onMouseDown={printOptionsModal.onResizeMouseDown} />
           </div>
         </div>
       )}

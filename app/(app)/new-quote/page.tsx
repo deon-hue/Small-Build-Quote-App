@@ -16,6 +16,8 @@ import QuoteWorkspace from '@/components/QuoteWorkspace'
 import QuoteLandingWizard, { type QuoteCreationMode } from '@/components/QuoteLandingWizard'
 import AIScopeWorkspace from '@/components/AIScopeWorkspace'
 import QuoteVersionHistory from '@/components/QuoteVersionHistory'
+import { useDraggableModal } from '@/components/useDraggableModal'
+import ModalResizeHandle from '@/components/ModalResizeHandle'
 import type { TakeoffItem, TakeoffPhase, LayerCostRecord } from '@/lib/takeoff-types'
 import { PHASE_TO_QUOTE_PARENT, ALL_MAKEUPS, calcLayerQty, WALL_OPENING_LABELS, type TakeoffLabourLine } from '@/lib/takeoff-types'
 import { DEFAULT_DEMO_SUBPHASES, calcDemoSellingPrice, DEMO_UNIT_LABELS, type DemoUnit } from '@/lib/demolition-data'
@@ -236,6 +238,7 @@ export default function NewQuotePage() {
   const [loadingBO, setLoadingBO] = useState(false)   // true while fetching BO defaults for manual quotes
   const [estimateUsedDB, setEstimateUsedDB] = useState(false)
   const [showScopeHelp, setShowScopeHelp] = useState(false)
+  const scopeHelpModal = useDraggableModal()
   const [clientDrop, setClientDrop] = useState(false)
   const [clientSearch, setClientSearch] = useState('')
   const [contactSaved, setContactSaved] = useState(false)
@@ -1920,8 +1923,8 @@ export default function NewQuotePage() {
       {/* ── Scope of Works AI help modal ── */}
       {showScopeHelp && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowScopeHelp(false) }}>
-          <div className="form-modal" style={{ width: 'min(500px, 96vw)', maxHeight: '90vh', overflowY: 'auto' }}>
-            <div className="form-modal-hd">
+          <div ref={scopeHelpModal.boxRef} className="form-modal" style={{ width: 'min(500px, 96vw)', maxHeight: '90vh', overflowY: 'auto', ...scopeHelpModal.draggableStyle }}>
+            <div className="form-modal-hd" onMouseDown={scopeHelpModal.onHeaderMouseDown}>
               <div style={{ fontWeight: 700, fontSize: 17 }}>✦ How to use the AI Scope Writer</div>
               <button className="modal-close" onClick={() => setShowScopeHelp(false)}>×</button>
             </div>
@@ -1996,6 +1999,7 @@ export default function NewQuotePage() {
               </button>
               <button className="btn btn-outline" onClick={() => setShowScopeHelp(false)}>Close</button>
             </div>
+            <ModalResizeHandle onMouseDown={scopeHelpModal.onResizeMouseDown} />
           </div>
         </div>
       )}
@@ -2026,6 +2030,7 @@ function BOLibraryModal({
   onClose: () => void
 }) {
   const [selected, setSelected] = React.useState<Set<string>>(new Set())
+  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown } = useDraggableModal()
 
   // Group sub-phases by main phase
   const grouped = React.useMemo(() => {
@@ -2052,8 +2057,8 @@ function BOLibraryModal({
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="modal-box" style={{ width: 'min(580px,96vw)', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
-        <div className="modal-hd">
+      <div ref={boxRef} className="modal-box" style={{ width: 'min(580px,96vw)', maxHeight: '85vh', display: 'flex', flexDirection: 'column', ...draggableStyle }}>
+        <div className="modal-hd" onMouseDown={onHeaderMouseDown}>
           <div>
             <div style={{ fontWeight: 700 }}>📚 Add from Back Office Library</div>
             <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>Select sub-phases to add to this quote</div>
@@ -2127,6 +2132,7 @@ function BOLibraryModal({
             </button>
           </div>
         </div>
+        <ModalResizeHandle onMouseDown={onResizeMouseDown} />
       </div>
     </div>
   )

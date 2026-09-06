@@ -15,6 +15,8 @@ import type { Quote } from '@/lib/types'
 import { DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
 import type { NotifyClientPayload } from '@/app/api/notify-client/route'
 import { quoteTotal } from '@/lib/utils'
+import { useDraggableModal } from './useDraggableModal'
+import ModalResizeHandle from './ModalResizeHandle'
 
 interface Props {
   quote: Quote
@@ -41,6 +43,7 @@ export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
   const [busy, setBusy]           = useState<'pdf' | 'sending' | null>(null)
   const [sent, setSent]           = useState(false)
   const [error, setError]         = useState('')
+  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown } = useDraggableModal()
 
   const total = quoteTotal(quote)
 
@@ -122,10 +125,10 @@ export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="modal-box" style={{ width: 'min(520px,96vw)', maxHeight: '90vh' }}>
+      <div ref={boxRef} className="modal-box" style={{ width: 'min(520px,96vw)', maxHeight: '90vh', ...draggableStyle }}>
 
         {/* Header */}
-        <div className="modal-hd">
+        <div className="modal-hd" onMouseDown={onHeaderMouseDown}>
           <div>
             <div style={{ fontWeight: 700 }}>✉ Send Quote to Client</div>
             <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
@@ -293,6 +296,7 @@ export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
             </>
           )}
         </div>
+        <ModalResizeHandle onMouseDown={onResizeMouseDown} />
       </div>
     </div>
   )

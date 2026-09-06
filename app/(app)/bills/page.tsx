@@ -7,6 +7,8 @@ import { createClient } from '@/lib/supabase/client'
 import { signedDocUrlById } from '@/lib/job-costs'
 import type { Bill, BillLineItem, BillStatus } from '@/lib/types'
 import { ContactPicker } from '@/components/ContactPicker'
+import { useDraggableModal } from '@/components/useDraggableModal'
+import ModalResizeHandle from '@/components/ModalResizeHandle'
 
 let lineCounter = 0
 const BLANK_LINE = (): BillLineItem => ({ id: ++lineCounter, desc: '', category: 'labour', amount: 0 })
@@ -60,6 +62,7 @@ export default function BillsPage() {
     }
   }
 
+  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown: onModalResizeMouseDown } = useDraggableModal()
   const [showModal, setShowModal]     = useState(false)
   const [editing, setEditing]         = useState<Bill | null>(null)
   const [filterStatus, setFilterStatus] = useState<'all' | BillStatus>('all')
@@ -494,8 +497,8 @@ export default function BillsPage() {
       {/* Add / Edit Modal */}
       {showModal && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal-box form-modal" style={{ maxWidth: 680 }} onClick={e => e.stopPropagation()}>
-            <div className="form-modal-hd">
+          <div ref={boxRef} className="modal-box form-modal" style={{ maxWidth: 680, ...draggableStyle }} onClick={e => e.stopPropagation()}>
+            <div className="form-modal-hd" onMouseDown={onHeaderMouseDown}>
               <div>{editing ? `Edit Bill — ${editing.ref}` : 'Add Bill'}</div>
               <button className="modal-close" onClick={() => setShowModal(false)}>✕</button>
             </div>
@@ -706,6 +709,7 @@ export default function BillsPage() {
                 {xeroPushing ? 'Syncing to Xero…' : saving ? 'Saving…' : editing ? 'Save Changes' : 'Add Bill'}
               </button>
             </div>
+            <ModalResizeHandle onMouseDown={onModalResizeMouseDown} />
           </div>
         </div>
       )}

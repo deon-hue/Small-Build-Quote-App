@@ -6,6 +6,8 @@ import { STAGE_COLOR, STAGE_LABEL, fmt } from '@/lib/utils'
 import PortalGanttChart from '@/components/PortalGanttChart'
 import { createClient } from '@/lib/supabase/client'
 import type { Variation, VariationLineItem, VariationStatus } from '@/lib/types'
+import { useDraggableModal } from '@/components/useDraggableModal'
+import ModalResizeHandle from '@/components/ModalResizeHandle'
 
 // ── Helpers ─────────────────────────────────────────────────
 
@@ -56,6 +58,9 @@ export default function PortalJobsPage() {
   const [expandedGantt, setExpandedGantt]   = useState<string | null>(null)
   const [expandedVars, setExpandedVars]      = useState<string | null>(null)   // job id
   const [viewingVar, setViewingVar]          = useState<Variation | null>(null)
+  const viewVarModal = useDraggableModal()
+  const approveVarModal = useDraggableModal()
+  const rejectVarModal = useDraggableModal()
 
   // Attachments per job: { [jobId]: loaded files | 'loading' }
   type AttFile = { id: string; fileName: string; mimeType: string; fileSize: number; category: string; label: string; url: string | null }
@@ -473,8 +478,8 @@ export default function PortalJobsPage() {
       {/* ── Variation detail modal ──────────────────────────── */}
       {viewingVar && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setViewingVar(null) }}>
-          <div className="portal-modal" style={{ width: 'min(680px, 96vw)' }}>
-            <div className="portal-modal-hd">
+          <div ref={viewVarModal.boxRef} className="portal-modal" style={{ width: 'min(680px, 96vw)', ...viewVarModal.draggableStyle }}>
+            <div className="portal-modal-hd" onMouseDown={viewVarModal.onHeaderMouseDown}>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 18 }}>Variation Details</div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
@@ -601,6 +606,7 @@ export default function PortalJobsPage() {
                 <button className="btn btn-outline" onClick={() => setViewingVar(null)}>Close</button>
               )}
             </div>
+            <ModalResizeHandle onMouseDown={viewVarModal.onResizeMouseDown} />
           </div>
         </div>
       )}
@@ -608,8 +614,8 @@ export default function PortalJobsPage() {
       {/* ── Approve modal ───────────────────────────────────── */}
       {approvingVar && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setApprovingVar(null) }}>
-          <div className="portal-modal">
-            <div className="portal-modal-hd">
+          <div ref={approveVarModal.boxRef} className="portal-modal" style={approveVarModal.draggableStyle}>
+            <div className="portal-modal-hd" onMouseDown={approveVarModal.onHeaderMouseDown}>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 18 }}>Approve Variation</div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
@@ -684,6 +690,7 @@ export default function PortalJobsPage() {
                 {submitting ? 'Approving…' : '✍️ Approve Variation'}
               </button>
             </div>
+            <ModalResizeHandle onMouseDown={approveVarModal.onResizeMouseDown} />
           </div>
         </div>
       )}
@@ -691,8 +698,8 @@ export default function PortalJobsPage() {
       {/* ── Reject modal ────────────────────────────────────── */}
       {rejectingVar && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setRejectingVar(null) }}>
-          <div className="portal-modal">
-            <div className="portal-modal-hd">
+          <div ref={rejectVarModal.boxRef} className="portal-modal" style={rejectVarModal.draggableStyle}>
+            <div className="portal-modal-hd" onMouseDown={rejectVarModal.onHeaderMouseDown}>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 18 }}>Reject Variation</div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
@@ -726,6 +733,7 @@ export default function PortalJobsPage() {
                 {submitting ? 'Rejecting…' : '✗ Reject Variation'}
               </button>
             </div>
+            <ModalResizeHandle onMouseDown={rejectVarModal.onResizeMouseDown} />
           </div>
         </div>
       )}

@@ -167,6 +167,26 @@ textarea{resize:vertical;min-height:56px}
 
 /* ── Job modal form ── */
 .form-modal{background:var(--cream);border-radius:8px;width:min(520px,96vw);max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,0.25)}
+
+/* ── Draggable / resizable modals — desktop mouse only ──
+   Mirrors the touch-target work above but inverted: (hover:hover) and
+   (pointer:fine) matches a mouse/trackpad and never a touchscreen, so
+   dragging/resizing simply doesn't exist as an affordance on tablet or
+   phone — those keep the existing fixed, full-width bottom-sheet modal
+   untouched. See components/useDraggableModal.ts + ModalResizeHandle.tsx. */
+.modal-box,.form-modal,.portal-modal{ position:relative }
+@media (hover:hover) and (pointer:fine){
+  .modal-hd,.form-modal-hd,.portal-modal-hd{ cursor:move }
+}
+.modal-resize-handle{
+  display:none; position:absolute; right:3px; bottom:3px; width:16px; height:16px;
+  align-items:center; justify-content:center; color:var(--muted); cursor:nwse-resize;
+  opacity:0.45; border-radius:4px;
+}
+.modal-resize-handle:hover{ opacity:0.85; background:var(--warm) }
+@media (hover:hover) and (pointer:fine){
+  .modal-resize-handle{ display:flex }
+}
 .form-modal-hd{padding:20px 26px 16px;border-bottom:2px solid var(--border);display:flex;align-items:center;justify-content:space-between}
 .form-modal-bd{padding:22px 26px}
 .form-modal-ft{padding:16px 26px;border-top:2px solid var(--border);display:flex;justify-content:flex-end;gap:10px}

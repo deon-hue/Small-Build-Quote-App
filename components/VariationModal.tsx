@@ -5,6 +5,8 @@ import { useApp } from '@/contexts/AppContext'
 import type { Job, Variation, VariationLineItem, VariationStatus } from '@/lib/types'
 import { fmt } from '@/lib/utils'
 import { notifyClient } from '@/lib/notify'
+import { useDraggableModal } from './useDraggableModal'
+import ModalResizeHandle from './ModalResizeHandle'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -108,6 +110,7 @@ export default function VariationModal({ job, onClose }: Props) {
   const [busy, setBusy] = useState(false)   // status-change in progress
   const [rejectReason, setRejectReason] = useState('')
   const [showRejectBox, setShowRejectBox] = useState(false)
+  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown } = useDraggableModal()
 
   // ── Summaries ─────────────────────────────────────────────────
   const approvedTotal = jobVars
@@ -899,14 +902,16 @@ export default function VariationModal({ job, onClose }: Props) {
   // ── Modal shell ───────────────────────────────────────────────
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div style={{
+      <div ref={boxRef} style={{
         background: 'var(--cream)', borderRadius: 8,
         width: 'min(920px, 96vw)', maxHeight: '93vh',
         display: 'flex', flexDirection: 'column',
         boxShadow: '0 24px 80px rgba(0,0,0,0.25)',
+        position: 'relative',
+        ...draggableStyle,
       }}>
         {/* Header */}
-        <div className="form-modal-hd">
+        <div className="form-modal-hd" onMouseDown={onHeaderMouseDown}>
           <div>
             {view === 'editor' ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -940,6 +945,7 @@ export default function VariationModal({ job, onClose }: Props) {
 
         {/* Body */}
         {view === 'list' ? renderList() : renderEditor()}
+        <ModalResizeHandle onMouseDown={onResizeMouseDown} />
       </div>
     </div>
   )

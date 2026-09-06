@@ -9,6 +9,8 @@ import { DEFAULT_CLIENT_PORTAL_SETTINGS, PAYMENT_TERMS_OPTIONS } from '@/lib/typ
 import { useRouter } from 'next/navigation'
 import QuotePreviewModal from '@/components/QuotePreviewModal'
 import type { Quote } from '@/lib/types'
+import { useDraggableModal } from '@/components/useDraggableModal'
+import ModalResizeHandle from '@/components/ModalResizeHandle'
 
 const BLANK_FORM = { name: '', first: '', last: '', email: '', phone: '', address: '', notes: '', paymentTerms: 'Payment on receipt', clientType: 'client' as 'client' | 'supplier' | 'subcontractor' }
 
@@ -61,6 +63,9 @@ function ClientsPageInner() {
   const [filter, setFilter] = useState<'all' | 'client' | 'supplier' | 'subcontractor'>('all')
   const BLANK_SUB_RATES = { subHourlyRate: '', subDayRate: '', subHalfDayRate: '', cisRegistered: false, cisPercentage: '', subPaymentType: 'invoice', isPaye: false }
   const [formSubRates, setFormSubRates] = useState(BLANK_SUB_RATES)
+  const detailModal = useDraggableModal()
+  const formModal = useDraggableModal()
+  const inviteModal = useDraggableModal()
 
   interface ActivityLog { id: string; event_type: string; details: string | null; created_at: string }
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([])
@@ -494,8 +499,8 @@ function ClientsPageInner() {
       {/* ── Client detail modal ────────────────────────────── */}
       {selected && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setSelected(null) }}>
-          <div className="modal-box" style={{ width: 'min(760px,96vw)' }}>
-            <div className="modal-hd">
+          <div ref={detailModal.boxRef} className="modal-box" style={{ width: 'min(760px,96vw)', ...detailModal.draggableStyle }}>
+            <div className="modal-hd" onMouseDown={detailModal.onHeaderMouseDown}>
               <div style={{ fontWeight: 700, fontSize: 18 }}>{selected.name}</div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 {selected.email && (
@@ -842,6 +847,7 @@ function ClientsPageInner() {
                 </div>
               )}
             </div>
+            <ModalResizeHandle onMouseDown={detailModal.onResizeMouseDown} />
           </div>
         </div>
       )}
@@ -849,8 +855,8 @@ function ClientsPageInner() {
       {/* ── Add / Edit client modal ────────────────────────── */}
       {showForm && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowForm(false) }}>
-          <div className="form-modal" style={{ width: 'min(520px, 96vw)' }}>
-            <div className="form-modal-hd">
+          <div ref={formModal.boxRef} className="form-modal" style={{ width: 'min(520px, 96vw)', ...formModal.draggableStyle }}>
+            <div className="form-modal-hd" onMouseDown={formModal.onHeaderMouseDown}>
               <div style={{ fontWeight: 700, fontSize: 17 }}>{editingClient ? 'Edit' : 'New'} Contact</div>
               <button className="modal-close" onClick={() => setShowForm(false)}>×</button>
             </div>
@@ -1041,6 +1047,7 @@ function ClientsPageInner() {
                 {saving ? 'Saving…' : editingClient ? 'Save Changes' : 'Add Client'}
               </button>
             </div>
+            <ModalResizeHandle onMouseDown={formModal.onResizeMouseDown} />
           </div>
         </div>
       )}
@@ -1048,8 +1055,8 @@ function ClientsPageInner() {
       {/* ── Portal invite modal ────────────────────────────── */}
       {inviteClient && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setInviteClient(null) }}>
-          <div className="form-modal" style={{ width: 'min(500px, 96vw)' }}>
-            <div className="form-modal-hd">
+          <div ref={inviteModal.boxRef} className="form-modal" style={{ width: 'min(500px, 96vw)', ...inviteModal.draggableStyle }}>
+            <div className="form-modal-hd" onMouseDown={inviteModal.onHeaderMouseDown}>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 17 }}>
                   {inviteSent ? '✅ Invite Sent' : '📧 Invite to Portal'}
@@ -1154,6 +1161,7 @@ function ClientsPageInner() {
                 </button>
               )}
             </div>
+            <ModalResizeHandle onMouseDown={inviteModal.onResizeMouseDown} />
           </div>
         </div>
       )}

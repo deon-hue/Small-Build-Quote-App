@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import type { TeamMember, TeamMemberRole, UserPermissions } from '@/lib/types'
 import { ROLE_PERMISSIONS, FULL_PERMISSIONS } from '@/lib/types'
+import { useDraggableModal } from '@/components/useDraggableModal'
+import ModalResizeHandle from '@/components/ModalResizeHandle'
 
 const ROLE_LABELS: Record<TeamMemberRole, string> = {
   admin:     'Admin',
@@ -59,6 +61,7 @@ export default function TeamPage() {
   } = useApp()
 
   const [modal, setModal] = useState<InviteModalState | null>(null)
+  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown } = useDraggableModal()
   const [saving, setSaving] = useState(false)
   const [inviteLink, setInviteLink] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
@@ -275,8 +278,8 @@ export default function TeamPage() {
       {/* Invite / Edit modal */}
       {modal && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) { setModal(null); setInviteLink(null) } }}>
-          <div className="form-modal" style={{ width: 'min(560px, 96vw)', maxHeight: '90vh', overflowY: 'auto' }}>
-            <div className="form-modal-hd">
+          <div ref={boxRef} className="form-modal" style={{ width: 'min(560px, 96vw)', maxHeight: '90vh', overflowY: 'auto', ...draggableStyle }}>
+            <div className="form-modal-hd" onMouseDown={onHeaderMouseDown}>
               <div style={{ fontWeight: 700, fontSize: 17 }}>
                 {modal.editId ? 'Edit Team Member' : 'Invite Team Member'}
               </div>
@@ -410,6 +413,7 @@ export default function TeamPage() {
                 </button>
               </div>
             )}
+            <ModalResizeHandle onMouseDown={onResizeMouseDown} />
           </div>
         </div>
       )}

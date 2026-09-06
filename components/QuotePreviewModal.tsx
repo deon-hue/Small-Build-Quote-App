@@ -6,6 +6,8 @@ import { buildHtml, buildHtmlClientView } from '@/lib/quoteHtml'
 import type { Quote } from '@/lib/types'
 import { DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
 import QuoteCommentsSection from './QuoteCommentsSection'
+import { useDraggableModal } from './useDraggableModal'
+import ModalResizeHandle from './ModalResizeHandle'
 
 interface Props {
   quote: Quote
@@ -17,6 +19,7 @@ export default function QuotePreviewModal({ quote, onClose, boTasks = [] }: Prop
   const { settings, clients } = useApp()
   const [view, setView] = useState<'detailed' | 'client'>('detailed')
   const frameRef = useRef<HTMLIFrameElement>(null)
+  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown, isInteracting } = useDraggableModal()
 
   // Look up this client's portal settings so "Client View" here matches what
   // they actually see in the portal/emailed quote, instead of always
@@ -54,8 +57,8 @@ export default function QuotePreviewModal({ quote, onClose, boTasks = [] }: Prop
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="modal-box" style={{ width: 'min(900px,96vw)', maxHeight: '92vh' }}>
-        <div className="modal-hd">
+      <div ref={boxRef} className="modal-box" style={{ width: 'min(900px,96vw)', maxHeight: '92vh', ...draggableStyle }}>
+        <div className="modal-hd" onMouseDown={onHeaderMouseDown}>
           <div>
             <div style={{ fontWeight: 700 }}>{quote.ref || '—'} — {quote.customer.name || '—'}</div>
             <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{quote.jobType}</div>
@@ -90,13 +93,14 @@ export default function QuotePreviewModal({ quote, onClose, boTasks = [] }: Prop
             ref={frameRef}
             className="modal-iframe"
             srcDoc={html}
-            style={{ flex: 0.7, border: 'none', minHeight: 400 }}
+            style={{ flex: 0.7, border: 'none', minHeight: 400, pointerEvents: isInteracting ? 'none' : 'auto' }}
             title="Quote Preview"
           />
           <div style={{ flex: 0.3, overflowY: 'auto', borderTop: '1px solid var(--border)', paddingTop: 16, paddingLeft: 16, paddingRight: 16, paddingBottom: 16 }}>
             <QuoteCommentsSection quoteId={quote.id} phases={quote.phases.map(p => p.phase)} />
           </div>
         </div>
+        <ModalResizeHandle onMouseDown={onResizeMouseDown} />
       </div>
     </div>
   )

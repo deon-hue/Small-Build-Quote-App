@@ -7,6 +7,8 @@ import { fmt, fmtK, calcPhaseSell } from '@/lib/utils'
 import { stripPhasePrefix } from '@/lib/gantt-utils'
 import { buildInvoiceHtml } from '@/lib/invoiceHtml'
 import type { Invoice, InvoiceLineItem, PaymentMilestone } from '@/lib/types'
+import { useDraggableModal } from '@/components/useDraggableModal'
+import ModalResizeHandle from '@/components/ModalResizeHandle'
 
 let lineCounter = 0
 let milestoneCounter = 0
@@ -38,6 +40,7 @@ export default function InvoicesPage() {
   const { invoices, jobs, quotes, clients, settings, jobPayments, addInvoice, updateInvoice, deleteInvoice, loading, getGanttState } = useApp()
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<Invoice | null>(null)
+  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown } = useDraggableModal()
 
   // Form state
   const [clientName, setClientName] = useState('')
@@ -602,8 +605,8 @@ export default function InvoicesPage() {
       {/* Invoice modal */}
       {showModal && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowModal(false) }}>
-          <div className="form-modal" style={{ width: 'min(700px, 96vw)', maxHeight: '90vh', overflowY: 'auto' }}>
-            <div className="form-modal-hd">
+          <div ref={boxRef} className="form-modal" style={{ width: 'min(700px, 96vw)', maxHeight: '90vh', overflowY: 'auto', ...draggableStyle }}>
+            <div className="form-modal-hd" onMouseDown={onHeaderMouseDown}>
               <div style={{ fontWeight: 700, fontSize: 17 }}>{editing ? 'Edit Invoice ' + editing.ref : 'New Invoice'}</div>
               <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
             </div>
@@ -946,6 +949,7 @@ export default function InvoicesPage() {
                 {xeroPushing ? '🔗 Syncing to Xero…' : saving ? 'Saving…' : editing ? 'Update Invoice' : 'Create Invoice'}
               </button>
             </div>
+            <ModalResizeHandle onMouseDown={onResizeMouseDown} />
           </div>
         </div>
       )}

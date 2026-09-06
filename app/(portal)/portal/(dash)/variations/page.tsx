@@ -5,6 +5,8 @@ import { usePortal } from '@/contexts/PortalContext'
 import { fmt } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import type { Variation, VariationLineItem, VariationStatus } from '@/lib/types'
+import { useDraggableModal } from '@/components/useDraggableModal'
+import ModalResizeHandle from '@/components/ModalResizeHandle'
 
 const VAR_STATUS_LABEL: Record<VariationStatus, string> = {
   draft:     'Draft',
@@ -45,6 +47,9 @@ export default function PortalVariationsPage() {
   const { variations, loading, error, reload } = usePortal()
 
   const [viewingVar, setViewingVar]     = useState<Variation | null>(null)
+  const viewVarModal = useDraggableModal()
+  const approveVarModal = useDraggableModal()
+  const rejectVarModal = useDraggableModal()
   const [approvingVar, setApprovingVar] = useState<Variation | null>(null)
   const [rejectingVar, setRejectingVar] = useState<Variation | null>(null)
   const [sigName, setSigName]           = useState('')
@@ -188,8 +193,8 @@ export default function PortalVariationsPage() {
       {/* ── Variation detail modal ── */}
       {viewingVar && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setViewingVar(null) }}>
-          <div className="portal-modal" style={{ width: 'min(680px, 96vw)' }}>
-            <div className="portal-modal-hd">
+          <div ref={viewVarModal.boxRef} className="portal-modal" style={{ width: 'min(680px, 96vw)', ...viewVarModal.draggableStyle }}>
+            <div className="portal-modal-hd" onMouseDown={viewVarModal.onHeaderMouseDown}>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 18 }}>Variation Details</div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{viewingVar.ref} · {viewingVar.title}</div>
@@ -268,6 +273,7 @@ export default function PortalVariationsPage() {
                 <button className="btn btn-outline" onClick={() => setViewingVar(null)}>Close</button>
               )}
             </div>
+            <ModalResizeHandle onMouseDown={viewVarModal.onResizeMouseDown} />
           </div>
         </div>
       )}
@@ -275,8 +281,8 @@ export default function PortalVariationsPage() {
       {/* ── Approve modal ── */}
       {approvingVar && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setApprovingVar(null) }}>
-          <div className="portal-modal">
-            <div className="portal-modal-hd">
+          <div ref={approveVarModal.boxRef} className="portal-modal" style={approveVarModal.draggableStyle}>
+            <div className="portal-modal-hd" onMouseDown={approveVarModal.onHeaderMouseDown}>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 18 }}>Approve Variation</div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{approvingVar.ref} — {approvingVar.title}</div>
@@ -321,6 +327,7 @@ export default function PortalVariationsPage() {
                 {submitting ? 'Approving…' : '✍️ Approve Variation'}
               </button>
             </div>
+            <ModalResizeHandle onMouseDown={approveVarModal.onResizeMouseDown} />
           </div>
         </div>
       )}
@@ -328,8 +335,8 @@ export default function PortalVariationsPage() {
       {/* ── Reject modal ── */}
       {rejectingVar && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setRejectingVar(null) }}>
-          <div className="portal-modal">
-            <div className="portal-modal-hd">
+          <div ref={rejectVarModal.boxRef} className="portal-modal" style={rejectVarModal.draggableStyle}>
+            <div className="portal-modal-hd" onMouseDown={rejectVarModal.onHeaderMouseDown}>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 18 }}>Reject Variation</div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{rejectingVar.ref} — {rejectingVar.title}</div>
@@ -352,6 +359,7 @@ export default function PortalVariationsPage() {
                 {submitting ? 'Rejecting…' : '✗ Reject Variation'}
               </button>
             </div>
+            <ModalResizeHandle onMouseDown={rejectVarModal.onResizeMouseDown} />
           </div>
         </div>
       )}

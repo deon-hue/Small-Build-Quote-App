@@ -6,6 +6,8 @@ import {
   uploadAttachment, fetchAttachments, deleteAttachment, signedAttachmentUrl,
 } from '@/lib/job-attachments'
 import type { Job, JobAttachment, AttachmentCategory } from '@/lib/types'
+import { useDraggableModal } from './useDraggableModal'
+import ModalResizeHandle from './ModalResizeHandle'
 
 const CATEGORY_LABEL: Record<AttachmentCategory, string> = {
   photo:    '📷 Photo',
@@ -38,6 +40,7 @@ export default function JobAttachmentsModal({ job, onClose }: Props) {
   const [uploading,   setUploading]   = useState(false)
   const [uploadErr,   setUploadErr]   = useState('')
   const [category,    setCategory]    = useState<AttachmentCategory>('document')
+  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown } = useDraggableModal()
   const [label,       setLabel]       = useState('')
   const [dragging,    setDragging]    = useState(false)
   const [previewUrl,  setPreviewUrl]  = useState<string | null>(null)
@@ -97,8 +100,8 @@ export default function JobAttachmentsModal({ job, onClose }: Props) {
   return (
     <>
       <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-        <div className="form-modal" style={{ maxWidth: 680, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
-          <div className="form-modal-hd">
+        <div ref={boxRef} className="form-modal" style={{ maxWidth: 680, maxHeight: '90vh', display: 'flex', flexDirection: 'column', ...draggableStyle }}>
+          <div className="form-modal-hd" onMouseDown={onHeaderMouseDown}>
             <div>
               <div style={{ fontWeight: 700, fontSize: 17 }}>📎 Job Attachments</div>
               <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
@@ -244,6 +247,7 @@ export default function JobAttachmentsModal({ job, onClose }: Props) {
             </div>
             <button className="btn btn-outline" onClick={onClose}>Close</button>
           </div>
+          <ModalResizeHandle onMouseDown={onResizeMouseDown} />
         </div>
       </div>
 

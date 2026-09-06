@@ -2,6 +2,8 @@
 import { useState } from 'react'
 import type { EstimatorItem } from '@/lib/estimator'
 import { calcMeasurement, MEASUREMENT_LABELS } from '@/lib/estimator'
+import { useDraggableModal } from './useDraggableModal'
+import ModalResizeHandle from './ModalResizeHandle'
 
 interface Props {
   item: EstimatorItem
@@ -16,6 +18,7 @@ export default function MeasureModal({ item, onConfirm, onClose }: Props) {
   const [qty,    setQty]       = useState(item.qty || 1)
   const [manual, setManual]    = useState(item.manualMeasurement)
   const [manVal, setManVal]    = useState(item.measurement)
+  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown } = useDraggableModal()
 
   const cfg      = MEASUREMENT_LABELS[item.measurementType]
   const computed = calcMeasurement(item.measurementType, length, width, depth, qty)
@@ -36,8 +39,8 @@ export default function MeasureModal({ item, onConfirm, onClose }: Props) {
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="form-modal" style={{ width: 'min(400px, 96vw)' }} onClick={e => e.stopPropagation()}>
-        <div className="form-modal-hd">
+      <div ref={boxRef} className="form-modal" style={{ width: 'min(400px, 96vw)', ...draggableStyle }} onClick={e => e.stopPropagation()}>
+        <div className="form-modal-hd" onMouseDown={onHeaderMouseDown}>
           <span style={{ fontWeight: 700, fontSize: 15 }}>📐 {item.name}</span>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
@@ -109,6 +112,7 @@ export default function MeasureModal({ item, onConfirm, onClose }: Props) {
           <button className="btn btn-outline" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={handleConfirm}>Confirm</button>
         </div>
+        <ModalResizeHandle onMouseDown={onResizeMouseDown} />
       </div>
     </div>
   )
