@@ -69,13 +69,48 @@ function refreshFromBackOffice(
   boPlantItems: BOPlantItem[],
 ): { phases: QuotePhase[]; updatedCount: number } {
   let updatedCount = 0
-  const newPhases = phases.map(p => ({
+  const newPhases = phases.map(p => {
+    // A Back Office task lands in a quote one of two ways: as a single row
+    // holding all 5 costs (the manual "+ Add" picker), or as up to 5 sibling
+    // rows sharing the same boTaskId + taskGroup, each holding only ONE
+    // category — the exploded pattern used for AI-generated and electrical
+    // items, where the other 4 rows sit at quantity 0 as placeholders.
+    // Refreshing a sibling row must only touch its own matching field:
+    // calcItem() treats an explicit quantity of 0 as 1 for costing, so
+    // writing a real cost into every sibling (not just the one that's meant
+    // to carry it) silently multiplies that item's true cost by up to 5x.
+    const siblingKey = (i: QuoteItem) => `${i.boTaskId ?? ''}::${i.taskGroup ?? ''}`
+    const siblingCount = new Map<string, number>()
+    for (const i of p.items) {
+      if (!i.boTaskId) continue
+      siblingCount.set(siblingKey(i), (siblingCount.get(siblingKey(i)) ?? 0) + 1)
+    }
+    return {
     ...p,
     items: p.items.map(i => {
       if (!i.boTaskId) return i
       const task = boTasks.find(t => t.id === i.boTaskId)
       if (!task) return i
       updatedCount++
+      const isSibling = (siblingCount.get(siblingKey(i)) ?? 1) > 1
+      if (isSibling && i.itemType) {
+        // Zero every category first, then set only this row's own — a
+        // sibling row's non-matching fields should always be 0 by
+        // definition, so this also self-heals a row that a previous,
+        // buggy refresh had already miscategorised.
+        const base = {
+          ...i, desc: task.name, notes: task.description || '',
+          labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0,
+        }
+        switch (i.itemType) {
+          case 'labour':         return { ...base, labour: task.labour_cost || 0 }
+          case 'materials':      return { ...base, materials: task.materials_cost || 0 }
+          case 'plant':          return { ...base, plantHire: task.plant_cost || 0 }
+          case 'subcontractors': return { ...base, subcontractors: task.subcontract_cost || 0 }
+          case 'other':          return { ...base, other: task.other_cost || 0 }
+          default:               return base
+        }
+      }
       return {
         ...i,
         desc: task.name,
@@ -105,7 +140,8 @@ function refreshFromBackOffice(
       const sellPrice = +(costPrice * (1 + (bp.markup_pct ?? 0) / 100)).toFixed(2)
       return { ...pl, name: bp.name, costPrice, sellPrice }
     }),
-  }))
+  }
+  })
   return { phases: newPhases, updatedCount }
 }
 
