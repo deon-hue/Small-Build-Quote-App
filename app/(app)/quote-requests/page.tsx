@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useDraggableModal } from '@/components/useDraggableModal'
 import ModalResizeHandle from '@/components/ModalResizeHandle'
+import ModalMaximizeButton from '@/components/ModalMaximizeButton'
 
 interface ClientFile { name: string; url: string; isImage: boolean }
 
@@ -63,7 +64,7 @@ export default function QuoteRequestsPage() {
   const [requests, setRequests] = useState<QuoteRequest[]>([])
   const [loading, setLoading]   = useState(true)
   const [selected, setSelected] = useState<QuoteRequest | null>(null)
-  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown } = useDraggableModal()
+  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown, onOverlayClick, isMaximized, toggleMaximize } = useDraggableModal()
   const [notes, setNotes]       = useState('')
   const [saving, setSaving]     = useState(false)
   const [filter, setFilter]     = useState<'all' | 'pending' | 'reviewing' | 'accepted' | 'declined'>('all')
@@ -214,7 +215,7 @@ export default function QuoteRequestsPage() {
 
       {/* ── Review modal ─────────────────────────────────────────────── */}
       {selected && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setSelected(null) }}>
+        <div className="modal-overlay" onClick={e => onOverlayClick(e, () => setSelected(null))}>
           <div ref={boxRef} style={{ background: 'var(--cream)', borderRadius: 10, width: 'min(820px, 96vw)', maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 80px rgba(0,0,0,0.25)', position: 'relative', ...draggableStyle }}>
             <div className="form-modal-hd" onMouseDown={onHeaderMouseDown}>
               <div>
@@ -225,6 +226,7 @@ export default function QuoteRequestsPage() {
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <span className={`badge ${STATUS_BADGE[selected.status]}`}>{STATUS_LABEL[selected.status]}</span>
+                <ModalMaximizeButton isMaximized={isMaximized} onClick={toggleMaximize} />
                 <button className="modal-close" onClick={() => setSelected(null)}>×</button>
               </div>
             </div>
@@ -387,7 +389,7 @@ export default function QuoteRequestsPage() {
                 Delete
               </button>
             </div>
-            <ModalResizeHandle onMouseDown={onResizeMouseDown} />
+            {!isMaximized && <ModalResizeHandle onMouseDown={onResizeMouseDown} />}
           </div>
         </div>
       )}

@@ -11,6 +11,7 @@ import QuotePreviewModal from '@/components/QuotePreviewModal'
 import type { Quote } from '@/lib/types'
 import { useDraggableModal } from '@/components/useDraggableModal'
 import ModalResizeHandle from '@/components/ModalResizeHandle'
+import ModalMaximizeButton from '@/components/ModalMaximizeButton'
 
 const BLANK_FORM = { name: '', first: '', last: '', email: '', phone: '', address: '', notes: '', paymentTerms: 'Payment on receipt', clientType: 'client' as 'client' | 'supplier' | 'subcontractor' }
 
@@ -498,7 +499,7 @@ function ClientsPageInner() {
 
       {/* ── Client detail modal ────────────────────────────── */}
       {selected && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setSelected(null) }}>
+        <div className="modal-overlay" onClick={e => detailModal.onOverlayClick(e, () => setSelected(null))}>
           <div ref={detailModal.boxRef} className="modal-box" style={{ width: 'min(760px,96vw)', ...detailModal.draggableStyle }}>
             <div className="modal-hd" onMouseDown={detailModal.onHeaderMouseDown}>
               <div style={{ fontWeight: 700, fontSize: 18 }}>{selected.name}</div>
@@ -533,6 +534,7 @@ function ClientsPageInner() {
                   setSelected(null)
                   router.push('/new-quote')
                 }}>+ Quote</button>
+                <ModalMaximizeButton isMaximized={detailModal.isMaximized} onClick={detailModal.toggleMaximize} />
                 <button className="modal-close" onClick={() => setSelected(null)}>×</button>
               </div>
             </div>
@@ -847,18 +849,21 @@ function ClientsPageInner() {
                 </div>
               )}
             </div>
-            <ModalResizeHandle onMouseDown={detailModal.onResizeMouseDown} />
+            {!detailModal.isMaximized && <ModalResizeHandle onMouseDown={detailModal.onResizeMouseDown} />}
           </div>
         </div>
       )}
 
       {/* ── Add / Edit client modal ────────────────────────── */}
       {showForm && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowForm(false) }}>
+        <div className="modal-overlay" onClick={e => formModal.onOverlayClick(e, () => setShowForm(false))}>
           <div ref={formModal.boxRef} className="form-modal" style={{ width: 'min(520px, 96vw)', ...formModal.draggableStyle }}>
             <div className="form-modal-hd" onMouseDown={formModal.onHeaderMouseDown}>
               <div style={{ fontWeight: 700, fontSize: 17 }}>{editingClient ? 'Edit' : 'New'} Contact</div>
-              <button className="modal-close" onClick={() => setShowForm(false)}>×</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <ModalMaximizeButton isMaximized={formModal.isMaximized} onClick={formModal.toggleMaximize} />
+                <button className="modal-close" onClick={() => setShowForm(false)}>×</button>
+              </div>
             </div>
             <div className="form-modal-bd">
               <div className="fg">
@@ -1047,14 +1052,14 @@ function ClientsPageInner() {
                 {saving ? 'Saving…' : editingClient ? 'Save Changes' : 'Add Client'}
               </button>
             </div>
-            <ModalResizeHandle onMouseDown={formModal.onResizeMouseDown} />
+            {!formModal.isMaximized && <ModalResizeHandle onMouseDown={formModal.onResizeMouseDown} />}
           </div>
         </div>
       )}
 
       {/* ── Portal invite modal ────────────────────────────── */}
       {inviteClient && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setInviteClient(null) }}>
+        <div className="modal-overlay" onClick={e => inviteModal.onOverlayClick(e, () => setInviteClient(null))}>
           <div ref={inviteModal.boxRef} className="form-modal" style={{ width: 'min(500px, 96vw)', ...inviteModal.draggableStyle }}>
             <div className="form-modal-hd" onMouseDown={inviteModal.onHeaderMouseDown}>
               <div>
@@ -1063,7 +1068,10 @@ function ClientsPageInner() {
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{inviteClient.name}</div>
               </div>
-              <button className="modal-close" onClick={() => setInviteClient(null)}>×</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <ModalMaximizeButton isMaximized={inviteModal.isMaximized} onClick={inviteModal.toggleMaximize} />
+                <button className="modal-close" onClick={() => setInviteClient(null)}>×</button>
+              </div>
             </div>
             <div className="form-modal-bd">
 
@@ -1161,7 +1169,7 @@ function ClientsPageInner() {
                 </button>
               )}
             </div>
-            <ModalResizeHandle onMouseDown={inviteModal.onResizeMouseDown} />
+            {!inviteModal.isMaximized && <ModalResizeHandle onMouseDown={inviteModal.onResizeMouseDown} />}
           </div>
         </div>
       )}

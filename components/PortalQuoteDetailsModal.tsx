@@ -6,6 +6,7 @@ import type { Quote } from '@/lib/types'
 import QuoteCommentsSection from './QuoteCommentsSection'
 import { useDraggableModal } from './useDraggableModal'
 import ModalResizeHandle from './ModalResizeHandle'
+import ModalMaximizeButton from './ModalMaximizeButton'
 
 interface Props {
   quote: Quote
@@ -156,7 +157,7 @@ export default function PortalQuoteDetailsModal({
   }
 
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="modal-overlay" onClick={e => mainModal.onOverlayClick(e, onClose)}>
       <div ref={mainModal.boxRef} className="portal-modal" style={{ maxHeight: '90vh', display: 'flex', flexDirection: 'column', ...mainModal.draggableStyle }}>
         <div className="portal-modal-hd" onMouseDown={mainModal.onHeaderMouseDown}>
           <div>
@@ -176,6 +177,7 @@ export default function PortalQuoteDetailsModal({
             >
               🖨️ Print
             </button>
+            <ModalMaximizeButton isMaximized={mainModal.isMaximized} onClick={mainModal.toggleMaximize} />
             <button className="modal-close" onClick={onClose}>×</button>
           </div>
         </div>
@@ -377,12 +379,12 @@ export default function PortalQuoteDetailsModal({
             </button>
           </div>
         )}
-        <ModalResizeHandle onMouseDown={mainModal.onResizeMouseDown} />
+        {!mainModal.isMaximized && <ModalResizeHandle onMouseDown={mainModal.onResizeMouseDown} />}
       </div>
 
       {/* ── Print options dialog ─────────────────────────────── */}
       {showPrintOptions && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowPrintOptions(false) }}>
+        <div className="modal-overlay" onClick={e => printOptionsModal.onOverlayClick(e, () => setShowPrintOptions(false))}>
           <div ref={printOptionsModal.boxRef} className="portal-modal" style={{ maxWidth: 400, ...printOptionsModal.draggableStyle }}>
             <div className="portal-modal-hd" onMouseDown={printOptionsModal.onHeaderMouseDown}>
               <div>
@@ -391,7 +393,10 @@ export default function PortalQuoteDetailsModal({
                   Choose what to include in your print
                 </div>
               </div>
-              <button className="modal-close" onClick={() => setShowPrintOptions(false)}>×</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <ModalMaximizeButton isMaximized={printOptionsModal.isMaximized} onClick={printOptionsModal.toggleMaximize} />
+                <button className="modal-close" onClick={() => setShowPrintOptions(false)}>×</button>
+              </div>
             </div>
 
             <div className="portal-modal-bd" style={{ paddingBottom: 0 }}>
@@ -456,7 +461,7 @@ export default function PortalQuoteDetailsModal({
                 🖨️ Print
               </button>
             </div>
-            <ModalResizeHandle onMouseDown={printOptionsModal.onResizeMouseDown} />
+            {!printOptionsModal.isMaximized && <ModalResizeHandle onMouseDown={printOptionsModal.onResizeMouseDown} />}
           </div>
         </div>
       )}

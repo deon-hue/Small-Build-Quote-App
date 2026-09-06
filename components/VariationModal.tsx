@@ -7,6 +7,7 @@ import { fmt } from '@/lib/utils'
 import { notifyClient } from '@/lib/notify'
 import { useDraggableModal } from './useDraggableModal'
 import ModalResizeHandle from './ModalResizeHandle'
+import ModalMaximizeButton from './ModalMaximizeButton'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -110,7 +111,7 @@ export default function VariationModal({ job, onClose }: Props) {
   const [busy, setBusy] = useState(false)   // status-change in progress
   const [rejectReason, setRejectReason] = useState('')
   const [showRejectBox, setShowRejectBox] = useState(false)
-  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown } = useDraggableModal()
+  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown, onOverlayClick, isMaximized, toggleMaximize } = useDraggableModal()
 
   // ── Summaries ─────────────────────────────────────────────────
   const approvedTotal = jobVars
@@ -901,7 +902,7 @@ export default function VariationModal({ job, onClose }: Props) {
 
   // ── Modal shell ───────────────────────────────────────────────
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="modal-overlay" onClick={e => onOverlayClick(e, onClose)}>
       <div ref={boxRef} style={{
         background: 'var(--cream)', borderRadius: 8,
         width: 'min(920px, 96vw)', maxHeight: '93vh',
@@ -940,12 +941,15 @@ export default function VariationModal({ job, onClose }: Props) {
               </div>
             )}
           </div>
-          <button className="modal-close" onClick={onClose}>×</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <ModalMaximizeButton isMaximized={isMaximized} onClick={toggleMaximize} />
+            <button className="modal-close" onClick={onClose}>×</button>
+          </div>
         </div>
 
         {/* Body */}
         {view === 'list' ? renderList() : renderEditor()}
-        <ModalResizeHandle onMouseDown={onResizeMouseDown} />
+        {!isMaximized && <ModalResizeHandle onMouseDown={onResizeMouseDown} />}
       </div>
     </div>
   )

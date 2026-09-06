@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { Variation, VariationLineItem, VariationStatus } from '@/lib/types'
 import { useDraggableModal } from '@/components/useDraggableModal'
 import ModalResizeHandle from '@/components/ModalResizeHandle'
+import ModalMaximizeButton from '@/components/ModalMaximizeButton'
 
 // ── Helpers ─────────────────────────────────────────────────
 
@@ -477,7 +478,7 @@ export default function PortalJobsPage() {
 
       {/* ── Variation detail modal ──────────────────────────── */}
       {viewingVar && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setViewingVar(null) }}>
+        <div className="modal-overlay" onClick={e => viewVarModal.onOverlayClick(e, () => setViewingVar(null))}>
           <div ref={viewVarModal.boxRef} className="portal-modal" style={{ width: 'min(680px, 96vw)', ...viewVarModal.draggableStyle }}>
             <div className="portal-modal-hd" onMouseDown={viewVarModal.onHeaderMouseDown}>
               <div>
@@ -486,7 +487,10 @@ export default function PortalJobsPage() {
                   {viewingVar.ref} · {viewingVar.title}
                 </div>
               </div>
-              <button className="modal-close" onClick={() => setViewingVar(null)}>×</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <ModalMaximizeButton isMaximized={viewVarModal.isMaximized} onClick={viewVarModal.toggleMaximize} />
+                <button className="modal-close" onClick={() => setViewingVar(null)}>×</button>
+              </div>
             </div>
             <div className="portal-modal-bd">
               {/* Status */}
@@ -606,14 +610,14 @@ export default function PortalJobsPage() {
                 <button className="btn btn-outline" onClick={() => setViewingVar(null)}>Close</button>
               )}
             </div>
-            <ModalResizeHandle onMouseDown={viewVarModal.onResizeMouseDown} />
+            {!viewVarModal.isMaximized && <ModalResizeHandle onMouseDown={viewVarModal.onResizeMouseDown} />}
           </div>
         </div>
       )}
 
       {/* ── Approve modal ───────────────────────────────────── */}
       {approvingVar && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setApprovingVar(null) }}>
+        <div className="modal-overlay" onClick={e => approveVarModal.onOverlayClick(e, () => setApprovingVar(null))}>
           <div ref={approveVarModal.boxRef} className="portal-modal" style={approveVarModal.draggableStyle}>
             <div className="portal-modal-hd" onMouseDown={approveVarModal.onHeaderMouseDown}>
               <div>
@@ -622,7 +626,10 @@ export default function PortalJobsPage() {
                   {approvingVar.ref} — {approvingVar.title}
                 </div>
               </div>
-              <button className="modal-close" onClick={() => setApprovingVar(null)}>×</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <ModalMaximizeButton isMaximized={approveVarModal.isMaximized} onClick={approveVarModal.toggleMaximize} />
+                <button className="modal-close" onClick={() => setApprovingVar(null)}>×</button>
+              </div>
             </div>
             <div className="portal-modal-bd">
               {/* Summary */}
@@ -690,14 +697,14 @@ export default function PortalJobsPage() {
                 {submitting ? 'Approving…' : '✍️ Approve Variation'}
               </button>
             </div>
-            <ModalResizeHandle onMouseDown={approveVarModal.onResizeMouseDown} />
+            {!approveVarModal.isMaximized && <ModalResizeHandle onMouseDown={approveVarModal.onResizeMouseDown} />}
           </div>
         </div>
       )}
 
       {/* ── Reject modal ────────────────────────────────────── */}
       {rejectingVar && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setRejectingVar(null) }}>
+        <div className="modal-overlay" onClick={e => rejectVarModal.onOverlayClick(e, () => setRejectingVar(null))}>
           <div ref={rejectVarModal.boxRef} className="portal-modal" style={rejectVarModal.draggableStyle}>
             <div className="portal-modal-hd" onMouseDown={rejectVarModal.onHeaderMouseDown}>
               <div>
@@ -706,7 +713,10 @@ export default function PortalJobsPage() {
                   {rejectingVar.ref} — {rejectingVar.title}
                 </div>
               </div>
-              <button className="modal-close" onClick={() => setRejectingVar(null)}>×</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <ModalMaximizeButton isMaximized={rejectVarModal.isMaximized} onClick={rejectVarModal.toggleMaximize} />
+                <button className="modal-close" onClick={() => setRejectingVar(null)}>×</button>
+              </div>
             </div>
             <div className="portal-modal-bd">
               <div style={{ marginBottom: 16, fontSize: 13, lineHeight: 1.6, color: 'var(--ink)' }}>
@@ -733,7 +743,7 @@ export default function PortalJobsPage() {
                 {submitting ? 'Rejecting…' : '✗ Reject Variation'}
               </button>
             </div>
-            <ModalResizeHandle onMouseDown={rejectVarModal.onResizeMouseDown} />
+            {!rejectVarModal.isMaximized && <ModalResizeHandle onMouseDown={rejectVarModal.onResizeMouseDown} />}
           </div>
         </div>
       )}

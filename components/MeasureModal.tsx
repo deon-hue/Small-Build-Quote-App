@@ -4,6 +4,7 @@ import type { EstimatorItem } from '@/lib/estimator'
 import { calcMeasurement, MEASUREMENT_LABELS } from '@/lib/estimator'
 import { useDraggableModal } from './useDraggableModal'
 import ModalResizeHandle from './ModalResizeHandle'
+import ModalMaximizeButton from './ModalMaximizeButton'
 
 interface Props {
   item: EstimatorItem
@@ -18,7 +19,7 @@ export default function MeasureModal({ item, onConfirm, onClose }: Props) {
   const [qty,    setQty]       = useState(item.qty || 1)
   const [manual, setManual]    = useState(item.manualMeasurement)
   const [manVal, setManVal]    = useState(item.measurement)
-  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown } = useDraggableModal()
+  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown, onOverlayClick, isMaximized, toggleMaximize } = useDraggableModal()
 
   const cfg      = MEASUREMENT_LABELS[item.measurementType]
   const computed = calcMeasurement(item.measurementType, length, width, depth, qty)
@@ -38,11 +39,14 @@ export default function MeasureModal({ item, onConfirm, onClose }: Props) {
   }
 
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="modal-overlay" onClick={e => onOverlayClick(e, onClose)}>
       <div ref={boxRef} className="form-modal" style={{ width: 'min(400px, 96vw)', ...draggableStyle }} onClick={e => e.stopPropagation()}>
         <div className="form-modal-hd" onMouseDown={onHeaderMouseDown}>
           <span style={{ fontWeight: 700, fontSize: 15 }}>📐 {item.name}</span>
-          <button className="modal-close" onClick={onClose}>×</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <ModalMaximizeButton isMaximized={isMaximized} onClick={toggleMaximize} />
+            <button className="modal-close" onClick={onClose}>×</button>
+          </div>
         </div>
 
         <div className="form-modal-bd">
@@ -112,7 +116,7 @@ export default function MeasureModal({ item, onConfirm, onClose }: Props) {
           <button className="btn btn-outline" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={handleConfirm}>Confirm</button>
         </div>
-        <ModalResizeHandle onMouseDown={onResizeMouseDown} />
+        {!isMaximized && <ModalResizeHandle onMouseDown={onResizeMouseDown} />}
       </div>
     </div>
   )

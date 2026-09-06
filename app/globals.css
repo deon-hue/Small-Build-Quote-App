@@ -187,6 +187,14 @@ textarea{resize:vertical;min-height:56px}
 @media (hover:hover) and (pointer:fine){
   .modal-resize-handle{ display:flex }
 }
+.modal-maximize-btn{
+  display:none; background:none; border:none; cursor:pointer; color:var(--muted);
+  padding:5px; border-radius:4px; align-items:center; justify-content:center; flex-shrink:0;
+}
+.modal-maximize-btn:hover{ color:var(--ink); background:var(--warm) }
+@media (hover:hover) and (pointer:fine){
+  .modal-maximize-btn{ display:inline-flex }
+}
 .form-modal-hd{padding:20px 26px 16px;border-bottom:2px solid var(--border);display:flex;align-items:center;justify-content:space-between}
 .form-modal-bd{padding:22px 26px}
 .form-modal-ft{padding:16px 26px;border-top:2px solid var(--border);display:flex;justify-content:flex-end;gap:10px}

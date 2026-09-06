@@ -13,6 +13,7 @@ import JobAttachmentsModal from '@/components/JobAttachmentsModal'
 import PaymentRequestsModal from '@/components/PaymentRequestsModal'
 import { useDraggableModal } from '@/components/useDraggableModal'
 import ModalResizeHandle from '@/components/ModalResizeHandle'
+import ModalMaximizeButton from '@/components/ModalMaximizeButton'
 
 const BLANK_JOB: Omit<Job, 'id'> = {
   client: '', type: 'Rear Extension', address: '', value: 0,
@@ -197,11 +198,14 @@ export default function JobsPage() {
 
       {/* Job add/edit modal */}
       {showModal && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowModal(false) }}>
+        <div className="modal-overlay" onClick={e => jobFormModal.onOverlayClick(e, () => setShowModal(false))}>
           <div ref={jobFormModal.boxRef} className="form-modal" style={jobFormModal.draggableStyle}>
             <div className="form-modal-hd" onMouseDown={jobFormModal.onHeaderMouseDown}>
               <div style={{ fontWeight: 700, fontSize: 17 }}>{editJob ? 'Edit Job' : 'New Job'}</div>
-              <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <ModalMaximizeButton isMaximized={jobFormModal.isMaximized} onClick={jobFormModal.toggleMaximize} />
+                <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
+              </div>
             </div>
             <div className="form-modal-bd">
               <div className="row2">
@@ -276,21 +280,24 @@ export default function JobsPage() {
                 {saving ? 'Saving…' : editJob ? 'Update Job' : 'Add Job'}
               </button>
             </div>
-            <ModalResizeHandle onMouseDown={jobFormModal.onResizeMouseDown} />
+            {!jobFormModal.isMaximized && <ModalResizeHandle onMouseDown={jobFormModal.onResizeMouseDown} />}
           </div>
         </div>
       )}
 
       {/* Job notes modal */}
       {notesJob && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setNotesJob(null) }}>
+        <div className="modal-overlay" onClick={e => notesModal.onOverlayClick(e, () => setNotesJob(null))}>
           <div ref={notesModal.boxRef} className="form-modal" style={{ width: 'min(520px, 96vw)', maxHeight: '85vh', overflowY: 'auto', ...notesModal.draggableStyle }}>
             <div className="form-modal-hd" onMouseDown={notesModal.onHeaderMouseDown}>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 17 }}>Activity Log</div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{notesJob.type} — {notesJob.client}</div>
               </div>
-              <button className="modal-close" onClick={() => setNotesJob(null)}>×</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <ModalMaximizeButton isMaximized={notesModal.isMaximized} onClick={notesModal.toggleMaximize} />
+                <button className="modal-close" onClick={() => setNotesJob(null)}>×</button>
+              </div>
             </div>
             <div className="form-modal-bd">
               {/* Add note */}
@@ -327,7 +334,7 @@ export default function JobsPage() {
                 }
               </div>
             </div>
-            <ModalResizeHandle onMouseDown={notesModal.onResizeMouseDown} />
+            {!notesModal.isMaximized && <ModalResizeHandle onMouseDown={notesModal.onResizeMouseDown} />}
           </div>
         </div>
       )}

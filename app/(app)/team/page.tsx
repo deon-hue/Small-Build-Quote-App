@@ -6,6 +6,7 @@ import type { TeamMember, TeamMemberRole, UserPermissions } from '@/lib/types'
 import { ROLE_PERMISSIONS, FULL_PERMISSIONS } from '@/lib/types'
 import { useDraggableModal } from '@/components/useDraggableModal'
 import ModalResizeHandle from '@/components/ModalResizeHandle'
+import ModalMaximizeButton from '@/components/ModalMaximizeButton'
 
 const ROLE_LABELS: Record<TeamMemberRole, string> = {
   admin:     'Admin',
@@ -61,7 +62,7 @@ export default function TeamPage() {
   } = useApp()
 
   const [modal, setModal] = useState<InviteModalState | null>(null)
-  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown } = useDraggableModal()
+  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown, onOverlayClick, isMaximized, toggleMaximize } = useDraggableModal()
   const [saving, setSaving] = useState(false)
   const [inviteLink, setInviteLink] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
@@ -277,13 +278,16 @@ export default function TeamPage() {
 
       {/* Invite / Edit modal */}
       {modal && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) { setModal(null); setInviteLink(null) } }}>
+        <div className="modal-overlay" onClick={e => onOverlayClick(e, () => { setModal(null); setInviteLink(null) })}>
           <div ref={boxRef} className="form-modal" style={{ width: 'min(560px, 96vw)', maxHeight: '90vh', overflowY: 'auto', ...draggableStyle }}>
             <div className="form-modal-hd" onMouseDown={onHeaderMouseDown}>
               <div style={{ fontWeight: 700, fontSize: 17 }}>
                 {modal.editId ? 'Edit Team Member' : 'Invite Team Member'}
               </div>
-              <button className="modal-close" onClick={() => { setModal(null); setInviteLink(null) }}>×</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <ModalMaximizeButton isMaximized={isMaximized} onClick={toggleMaximize} />
+                <button className="modal-close" onClick={() => { setModal(null); setInviteLink(null) }}>×</button>
+              </div>
             </div>
 
             {/* Invite link result */}
@@ -413,7 +417,7 @@ export default function TeamPage() {
                 </button>
               </div>
             )}
-            <ModalResizeHandle onMouseDown={onResizeMouseDown} />
+            {!isMaximized && <ModalResizeHandle onMouseDown={onResizeMouseDown} />}
           </div>
         </div>
       )}

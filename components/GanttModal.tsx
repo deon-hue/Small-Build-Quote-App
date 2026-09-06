@@ -45,7 +45,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('week')
   const [fullscreen, setFullscreen] = useState(false)
-  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown } = useDraggableModal()
+  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown, onOverlayClick } = useDraggableModal()
   // dirty = true means the chart has been dragged since the last save
   const [dirty, setDirty] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
@@ -1026,7 +1026,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
   }
 
   return (
-    <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="modal-overlay" onMouseDown={e => onOverlayClick(e, onClose)}>
       <div ref={boxRef} style={fullscreen
         ? { background: 'var(--cream)', borderRadius: 0, width: '100vw', height: '100vh', maxHeight: '100vh', display: 'flex', flexDirection: 'column', boxShadow: 'none' }
         : { background: 'var(--cream)', borderRadius: 8, width: 'min(980px,96vw)', maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 80px rgba(0,0,0,0.25)', position: 'relative', ...draggableStyle }

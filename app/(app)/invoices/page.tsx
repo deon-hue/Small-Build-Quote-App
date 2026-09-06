@@ -9,6 +9,7 @@ import { buildInvoiceHtml } from '@/lib/invoiceHtml'
 import type { Invoice, InvoiceLineItem, PaymentMilestone } from '@/lib/types'
 import { useDraggableModal } from '@/components/useDraggableModal'
 import ModalResizeHandle from '@/components/ModalResizeHandle'
+import ModalMaximizeButton from '@/components/ModalMaximizeButton'
 
 let lineCounter = 0
 let milestoneCounter = 0
@@ -40,7 +41,7 @@ export default function InvoicesPage() {
   const { invoices, jobs, quotes, clients, settings, jobPayments, addInvoice, updateInvoice, deleteInvoice, loading, getGanttState } = useApp()
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<Invoice | null>(null)
-  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown } = useDraggableModal()
+  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown, onOverlayClick, isMaximized, toggleMaximize } = useDraggableModal()
 
   // Form state
   const [clientName, setClientName] = useState('')
@@ -604,11 +605,14 @@ export default function InvoicesPage() {
 
       {/* Invoice modal */}
       {showModal && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowModal(false) }}>
+        <div className="modal-overlay" onClick={e => onOverlayClick(e, () => setShowModal(false))}>
           <div ref={boxRef} className="form-modal" style={{ width: 'min(700px, 96vw)', maxHeight: '90vh', overflowY: 'auto', ...draggableStyle }}>
             <div className="form-modal-hd" onMouseDown={onHeaderMouseDown}>
               <div style={{ fontWeight: 700, fontSize: 17 }}>{editing ? 'Edit Invoice ' + editing.ref : 'New Invoice'}</div>
-              <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <ModalMaximizeButton isMaximized={isMaximized} onClick={toggleMaximize} />
+                <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
+              </div>
             </div>
             <div className="form-modal-bd">
 
@@ -949,7 +953,7 @@ export default function InvoicesPage() {
                 {xeroPushing ? '🔗 Syncing to Xero…' : saving ? 'Saving…' : editing ? 'Update Invoice' : 'Create Invoice'}
               </button>
             </div>
-            <ModalResizeHandle onMouseDown={onResizeMouseDown} />
+            {!isMaximized && <ModalResizeHandle onMouseDown={onResizeMouseDown} />}
           </div>
         </div>
       )}

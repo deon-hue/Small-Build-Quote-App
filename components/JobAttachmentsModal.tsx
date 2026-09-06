@@ -8,6 +8,7 @@ import {
 import type { Job, JobAttachment, AttachmentCategory } from '@/lib/types'
 import { useDraggableModal } from './useDraggableModal'
 import ModalResizeHandle from './ModalResizeHandle'
+import ModalMaximizeButton from './ModalMaximizeButton'
 
 const CATEGORY_LABEL: Record<AttachmentCategory, string> = {
   photo:    '📷 Photo',
@@ -40,7 +41,7 @@ export default function JobAttachmentsModal({ job, onClose }: Props) {
   const [uploading,   setUploading]   = useState(false)
   const [uploadErr,   setUploadErr]   = useState('')
   const [category,    setCategory]    = useState<AttachmentCategory>('document')
-  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown } = useDraggableModal()
+  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown, onOverlayClick, isMaximized, toggleMaximize } = useDraggableModal()
   const [label,       setLabel]       = useState('')
   const [dragging,    setDragging]    = useState(false)
   const [previewUrl,  setPreviewUrl]  = useState<string | null>(null)
@@ -99,7 +100,7 @@ export default function JobAttachmentsModal({ job, onClose }: Props) {
 
   return (
     <>
-      <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal-overlay" onClick={e => onOverlayClick(e, onClose)}>
         <div ref={boxRef} className="form-modal" style={{ maxWidth: 680, maxHeight: '90vh', display: 'flex', flexDirection: 'column', ...draggableStyle }}>
           <div className="form-modal-hd" onMouseDown={onHeaderMouseDown}>
             <div>
@@ -108,7 +109,10 @@ export default function JobAttachmentsModal({ job, onClose }: Props) {
                 {job.type} — {job.client} · {job.address}
               </div>
             </div>
-            <button className="modal-close" onClick={onClose}>×</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <ModalMaximizeButton isMaximized={isMaximized} onClick={toggleMaximize} />
+              <button className="modal-close" onClick={onClose}>×</button>
+            </div>
           </div>
 
           <div className="form-modal-bd" style={{ overflowY: 'auto', flex: 1 }}>
@@ -247,7 +251,7 @@ export default function JobAttachmentsModal({ job, onClose }: Props) {
             </div>
             <button className="btn btn-outline" onClick={onClose}>Close</button>
           </div>
-          <ModalResizeHandle onMouseDown={onResizeMouseDown} />
+          {!isMaximized && <ModalResizeHandle onMouseDown={onResizeMouseDown} />}
         </div>
       </div>
 

@@ -17,6 +17,7 @@ import type { NotifyClientPayload } from '@/app/api/notify-client/route'
 import { quoteTotal } from '@/lib/utils'
 import { useDraggableModal } from './useDraggableModal'
 import ModalResizeHandle from './ModalResizeHandle'
+import ModalMaximizeButton from './ModalMaximizeButton'
 
 interface Props {
   quote: Quote
@@ -43,7 +44,7 @@ export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
   const [busy, setBusy]           = useState<'pdf' | 'sending' | null>(null)
   const [sent, setSent]           = useState(false)
   const [error, setError]         = useState('')
-  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown } = useDraggableModal()
+  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown, onOverlayClick, isMaximized, toggleMaximize } = useDraggableModal()
 
   const total = quoteTotal(quote)
 
@@ -124,7 +125,7 @@ export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
   }
 
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="modal-overlay" onClick={e => onOverlayClick(e, onClose)}>
       <div ref={boxRef} className="modal-box" style={{ width: 'min(520px,96vw)', maxHeight: '90vh', ...draggableStyle }}>
 
         {/* Header */}
@@ -135,7 +136,10 @@ export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
               {quote.ref || 'Draft'} — {quote.customer.name || '—'} · {quote.jobType}
             </div>
           </div>
-          <button className="modal-close" onClick={onClose}>×</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <ModalMaximizeButton isMaximized={isMaximized} onClick={toggleMaximize} />
+            <button className="modal-close" onClick={onClose}>×</button>
+          </div>
         </div>
 
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -296,7 +300,7 @@ export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
             </>
           )}
         </div>
-        <ModalResizeHandle onMouseDown={onResizeMouseDown} />
+        {!isMaximized && <ModalResizeHandle onMouseDown={onResizeMouseDown} />}
       </div>
     </div>
   )

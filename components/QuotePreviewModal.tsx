@@ -8,6 +8,7 @@ import { DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
 import QuoteCommentsSection from './QuoteCommentsSection'
 import { useDraggableModal } from './useDraggableModal'
 import ModalResizeHandle from './ModalResizeHandle'
+import ModalMaximizeButton from './ModalMaximizeButton'
 
 interface Props {
   quote: Quote
@@ -19,7 +20,7 @@ export default function QuotePreviewModal({ quote, onClose, boTasks = [] }: Prop
   const { settings, clients } = useApp()
   const [view, setView] = useState<'detailed' | 'client'>('detailed')
   const frameRef = useRef<HTMLIFrameElement>(null)
-  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown, isInteracting } = useDraggableModal()
+  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown, isInteracting, onOverlayClick, isMaximized, toggleMaximize } = useDraggableModal()
 
   // Look up this client's portal settings so "Client View" here matches what
   // they actually see in the portal/emailed quote, instead of always
@@ -56,7 +57,7 @@ export default function QuotePreviewModal({ quote, onClose, boTasks = [] }: Prop
   }
 
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="modal-overlay" onClick={e => onOverlayClick(e, onClose)}>
       <div ref={boxRef} className="modal-box" style={{ width: 'min(900px,96vw)', maxHeight: '92vh', ...draggableStyle }}>
         <div className="modal-hd" onMouseDown={onHeaderMouseDown}>
           <div>
@@ -85,6 +86,7 @@ export default function QuotePreviewModal({ quote, onClose, boTasks = [] }: Prop
             </div>
             <button className="btn-sm btn-outline" onClick={handlePrint}>🖨 Print / PDF</button>
             <button className="btn-sm btn-outline" onClick={handleDownload}>⬇ Download</button>
+            <ModalMaximizeButton isMaximized={isMaximized} onClick={toggleMaximize} />
             <button className="modal-close" onClick={onClose}>×</button>
           </div>
         </div>
@@ -100,7 +102,7 @@ export default function QuotePreviewModal({ quote, onClose, boTasks = [] }: Prop
             <QuoteCommentsSection quoteId={quote.id} phases={quote.phases.map(p => p.phase)} />
           </div>
         </div>
-        <ModalResizeHandle onMouseDown={onResizeMouseDown} />
+        {!isMaximized && <ModalResizeHandle onMouseDown={onResizeMouseDown} />}
       </div>
     </div>
   )

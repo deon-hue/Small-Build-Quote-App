@@ -8,6 +8,7 @@ import type { Quote } from '@/lib/types'
 import PortalQuoteDetailsModal from '@/components/PortalQuoteDetailsModal'
 import { useDraggableModal } from '@/components/useDraggableModal'
 import ModalResizeHandle from '@/components/ModalResizeHandle'
+import ModalMaximizeButton from '@/components/ModalMaximizeButton'
 
 const STATUS_LABEL: Record<string, string> = {
   pending: 'Awaiting review', sent: 'Sent — awaiting your approval',
@@ -179,7 +180,7 @@ export default function PortalQuotesPage() {
 
       {/* ── Approval signing modal ────────────────────────────────── */}
       {approvingQuote && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) closeApproval() }}>
+        <div className="modal-overlay" onClick={e => approvalModal.onOverlayClick(e, closeApproval)}>
           <div ref={approvalModal.boxRef} className="portal-modal" style={approvalModal.draggableStyle}>
             <div className="portal-modal-hd" onMouseDown={approvalModal.onHeaderMouseDown}>
               <div>
@@ -188,7 +189,10 @@ export default function PortalQuotesPage() {
                   {approvingQuote.ref} — {approvingQuote.jobType}
                 </div>
               </div>
-              <button className="modal-close" onClick={closeApproval}>×</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <ModalMaximizeButton isMaximized={approvalModal.isMaximized} onClick={approvalModal.toggleMaximize} />
+                <button className="modal-close" onClick={closeApproval}>×</button>
+              </div>
             </div>
 
             <div className="portal-modal-bd">
@@ -266,7 +270,7 @@ export default function PortalQuotesPage() {
                 {submitting ? 'Approving…' : '✍️ Approve Quote'}
               </button>
             </div>
-            <ModalResizeHandle onMouseDown={approvalModal.onResizeMouseDown} />
+            {!approvalModal.isMaximized && <ModalResizeHandle onMouseDown={approvalModal.onResizeMouseDown} />}
           </div>
         </div>
       )}

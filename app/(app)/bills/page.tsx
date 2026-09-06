@@ -9,6 +9,7 @@ import type { Bill, BillLineItem, BillStatus } from '@/lib/types'
 import { ContactPicker } from '@/components/ContactPicker'
 import { useDraggableModal } from '@/components/useDraggableModal'
 import ModalResizeHandle from '@/components/ModalResizeHandle'
+import ModalMaximizeButton from '@/components/ModalMaximizeButton'
 
 let lineCounter = 0
 const BLANK_LINE = (): BillLineItem => ({ id: ++lineCounter, desc: '', category: 'labour', amount: 0 })
@@ -62,7 +63,7 @@ export default function BillsPage() {
     }
   }
 
-  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown: onModalResizeMouseDown } = useDraggableModal()
+  const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown: onModalResizeMouseDown, onOverlayClick, isMaximized, toggleMaximize } = useDraggableModal()
   const [showModal, setShowModal]     = useState(false)
   const [editing, setEditing]         = useState<Bill | null>(null)
   const [filterStatus, setFilterStatus] = useState<'all' | BillStatus>('all')
@@ -496,11 +497,14 @@ export default function BillsPage() {
 
       {/* Add / Edit Modal */}
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+        <div className="modal-overlay" onClick={e => onOverlayClick(e, () => setShowModal(false))}>
           <div ref={boxRef} className="modal-box form-modal" style={{ maxWidth: 680, ...draggableStyle }} onClick={e => e.stopPropagation()}>
             <div className="form-modal-hd" onMouseDown={onHeaderMouseDown}>
               <div>{editing ? `Edit Bill — ${editing.ref}` : 'Add Bill'}</div>
-              <button className="modal-close" onClick={() => setShowModal(false)}>✕</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <ModalMaximizeButton isMaximized={isMaximized} onClick={toggleMaximize} />
+                <button className="modal-close" onClick={() => setShowModal(false)}>✕</button>
+              </div>
             </div>
 
             <div className="form-modal-bd" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -709,7 +713,7 @@ export default function BillsPage() {
                 {xeroPushing ? 'Syncing to Xero…' : saving ? 'Saving…' : editing ? 'Save Changes' : 'Add Bill'}
               </button>
             </div>
-            <ModalResizeHandle onMouseDown={onModalResizeMouseDown} />
+            {!isMaximized && <ModalResizeHandle onMouseDown={onModalResizeMouseDown} />}
           </div>
         </div>
       )}
