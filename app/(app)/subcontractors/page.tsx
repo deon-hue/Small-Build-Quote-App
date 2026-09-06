@@ -6,6 +6,14 @@ import { createClient } from '@/lib/supabase/client'
 import { useApp } from '@/contexts/AppContext'
 import { ContactPicker } from '@/components/ContactPicker'
 import { signedDocUrl, insertJobCost } from '@/lib/job-costs'
+import type { PaymentMethod } from '@/lib/types'
+
+const STAGE_PAYMENT_METHODS: Record<PaymentMethod, string> = {
+  cash: '💵 Cash',
+  cheque: '📝 Cheque',
+  bank_transfer: '🏦 Bank Transfer',
+  other: '📋 Other',
+}
 
 interface Contract {
   id: string
@@ -48,6 +56,7 @@ interface PaymentStage {
   amount: number
   due_date: string | null
   paid_date: string | null
+  payment_method: PaymentMethod | null
   xero_bill_id: string | null
   created_at: string
 }
@@ -187,7 +196,7 @@ export default function SubcontractorsPage() {
   const [entryForm, setEntryForm] = useState(emptyEntry)
 
   // Payment stage modal
-  const emptyStage = { description: '', amount: '', dueDate: '', paidDate: '' }
+  const emptyStage = { description: '', amount: '', dueDate: '', paidDate: '', paymentMethod: '' as PaymentMethod | '' }
   const [stageModal, setStageModal] = useState(false)
   const [stageContractId, setStageContractId] = useState('')
   const [editingStage, setEditingStage] = useState<PaymentStage | null>(null)
@@ -496,13 +505,13 @@ export default function SubcontractorsPage() {
       amount: Number(stageForm.amount),
       due_date: stageForm.dueDate || null,
       paid_date: stageForm.paidDate || null,
+      payment_method: stageForm.paidDate ? (stageForm.paymentMethod || null) : null,
     }
 
-    if (editingStage) {
-      await sb.from('sub_payment_stages').update(payload).eq('id', editingStage.id)
-    } else {
-      await sb.from('sub_payment_stages').insert(payload)
-    }
+    const { error: saveError } = editingStage
+      ? await sb.from('sub_payment_stages').update(payload).eq('id', editingStage.id)
+      : await sb.from('sub_payment_stages').insert(payload)
+    if (saveError) { setError(saveError.message); setSaving(false); return }
     setStageModal(false)
     await load()
     setSaving(false)
@@ -519,7 +528,7 @@ export default function SubcontractorsPage() {
   function openEditStage(stage: PaymentStage) {
     setStageContractId(stage.sub_contract_id)
     setEditingStage(stage)
-    setStageForm({ description: stage.description, amount: stage.amount.toString(), dueDate: stage.due_date ?? '', paidDate: stage.paid_date ?? '' })
+    setStageForm({ description: stage.description, amount: stage.amount.toString(), dueDate: stage.due_date ?? '', paidDate: stage.paid_date ?? '', paymentMethod: stage.payment_method ?? '' })
     setError('')
     setStageModal(true)
   }
@@ -1314,7 +1323,16 @@ export default function SubcontractorsPage() {
                               <td style={{ padding: '5px 8px', color: '#6b7280' }}>{s.due_date ?? '—'}</td>
                               <td style={{ padding: '5px 8px' }}>
                                 {s.paid_date
-                                  ? <span style={{ color: '#16a34a', fontWeight: 500 }}>✓ {s.paid_date}</span>
+                                  ? (
+                                    <span style={{ color: '#16a34a', fontWeight: 500 }}>
+                                      ✓ {s.paid_date}
+                                      {s.payment_method && (
+                                        <span style={{ display: 'block', fontWeight: 400, fontSize: 11, color: '#6b7280' }}>
+                                          {STAGE_PAYMENT_METHODS[s.payment_method]}
+                                        </span>
+                                      )}
+                                    </span>
+                                  )
                                   : <span style={{ color: '#9ca3af' }}>—</span>}
                               </td>
                               <td style={{ padding: '5px 8px', textAlign: 'center' }}>
@@ -1915,6 +1933,18 @@ export default function SubcontractorsPage() {
                     style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
                 </div>
               </div>
+              {stageForm.paidDate && (
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Paid By</label>
+                  <select value={stageForm.paymentMethod} onChange={e => setStageForm(f => ({ ...f, paymentMethod: e.target.value as PaymentMethod }))}
+                    style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}>
+                    <option value="">Select method…</option>
+                    {(Object.entries(STAGE_PAYMENT_METHODS) as [PaymentMethod, string][]).map(([k, v]) => (
+                      <option key={k} value={k}>{v}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
             {error && <div style={{ color: '#dc2626', fontSize: 12, marginTop: 12 }}>{error}</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
