@@ -13,7 +13,7 @@
  * Works for all data sources: takeoff import, AI-generated, manual.
  */
 
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import type { QuotePhase, QuoteItem, QuoteProduct, QuotePlantItem } from '@/lib/types'
 import type { BOLabourTrade, BOProduct, BOPlantItem, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
 import { fmt, calcPhase, calcPhaseSell } from '@/lib/utils'
@@ -764,6 +764,53 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
   const roomTasks = linkedBOSubPhase
     ? boTasks.filter(t => t.sub_phase_id === linkedBOSubPhase.id && t.active)
     : []
+
+  // Self-heal older rooms saved before this quote used one row per task — AI-generated and
+  // Electrics quotes used to explode each task into up to 5 sibling rows (one per cost
+  // category, boTaskId shared) so the old cost-category cards would show them under the
+  // right heading. Now that each task is its own row with every cost field, collapse any
+  // leftover siblings into a single row per boTaskId (summing their costs — the total is
+  // unchanged) the first time this sub-phase renders, so the room shows exactly as many
+  // rows as it has tasks, same as Back Office.
+  useEffect(() => {
+    if (roomTasks.length === 0) return
+    const byTask = new Map<string, QuoteItem[]>()
+    const rest: QuoteItem[] = []
+    for (const item of p.items) {
+      if (!item.boTaskId) { rest.push(item); continue }
+      const list = byTask.get(item.boTaskId)
+      if (list) list.push(item)
+      else byTask.set(item.boTaskId, [item])
+    }
+    const needsMerge = [...byTask.values()].some(list => list.length > 1)
+    if (!needsMerge) return
+    const mergeGroup = (boTaskId: string, list: QuoteItem[], boTask: BOTask | undefined): QuoteItem => {
+      // itemCost() multiplies a row's summed fields by its own qty, so a sibling with qty > 1
+      // must have that baked in here before merging into one row at qty 1 — otherwise the
+      // merged total silently loses whatever that row's quantity was multiplying.
+      const sum = (f: 'labour' | 'materials' | 'plantHire' | 'subcontractors' | 'other') =>
+        list.reduce((s, i) => s + (i[f] ?? 0) * Math.max(i.qty ?? 1, 1), 0)
+      return {
+        id: list[0].id,
+        desc: boTask?.name ?? list[0].desc,
+        qty: 1,
+        unit: boTask?.unit || list[0].unit || 'nr',
+        labour: sum('labour'), materials: sum('materials'), plantHire: sum('plantHire'),
+        subcontractors: sum('subcontractors'), other: sum('other'),
+        notes: boTask?.description || list[0].notes || '',
+        boTaskId,
+        enabled: list.some(i => i.enabled !== false),
+      }
+    }
+    // Order matches roomTasks (Back Office's own order) rather than however the old exploded
+    // rows happened to be arranged; any boTaskId no longer found there (retired/inactive task)
+    // is still merged, just appended after the ones Back Office currently lists.
+    const matched = roomTasks.filter(t => byTask.has(t.id)).map(t => mergeGroup(t.id, byTask.get(t.id)!, t))
+    const matchedIds = new Set(matched.map(i => i.boTaskId))
+    const orphaned = [...byTask.entries()].filter(([id]) => !matchedIds.has(id)).map(([id, list]) => mergeGroup(id, list, undefined))
+    onUpdate({ ...p, items: [...matched, ...orphaned, ...rest] })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [p.items])
 
   // Picker state
   const [showProductPicker, setShowProductPicker] = useState(false)
