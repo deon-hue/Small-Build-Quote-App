@@ -1437,11 +1437,13 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
               <div style={{ display: 'flex', gap: 6, padding: '0 4px 4px', fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                 <span style={{ width: 16, flexShrink: 0 }} />
                 <span style={{ flex: 1 }}>Task</span>
+                <span style={{ width: 44, flexShrink: 0, textAlign: 'right' }}>Qty</span>
                 <span style={{ width: 70, flexShrink: 0, textAlign: 'right' }}>Labour</span>
                 <span style={{ width: 70, flexShrink: 0, textAlign: 'right' }}>Materials</span>
                 <span style={{ width: 70, flexShrink: 0, textAlign: 'right' }}>Plant</span>
                 <span style={{ width: 70, flexShrink: 0, textAlign: 'right' }}>Sub</span>
                 <span style={{ width: 70, flexShrink: 0, textAlign: 'right' }}>Other</span>
+                <span style={{ width: 74, flexShrink: 0, textAlign: 'right' }}>Total</span>
                 <span style={{ width: 20, flexShrink: 0 }} />
               </div>
               {p.items.map(item => {
@@ -1469,11 +1471,21 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
                       />
                       {hidden && <span style={{ fontSize: 8, fontWeight: 700, padding: '1px 5px', borderRadius: 99, background: '#e2e8f0', color: '#64748b', flexShrink: 0 }}>HIDDEN</span>}
                     </div>
+                    {/* Qty — the 5 cost boxes below are the per-unit rate (Back Office's default
+                        price for one), so the row's total is rate × qty, same as every other cost
+                        row in the quote (itemCost() already multiplies by qty). */}
+                    <input
+                      type="number" min={0} step={1} title={`Quantity (${item.unit || 'nr'})`}
+                      value={item.qty ?? 1}
+                      readOnly={isLocked}
+                      onChange={e => updateItem({ ...item, qty: Math.max(0, +e.target.value) })}
+                      style={{ width: 44, flexShrink: 0, padding: '3px 4px', fontSize: 11, border: '1px solid #e2e8f0', borderRadius: 4, textAlign: 'right', color: hidden ? '#cbd5e1' : 'inherit' }}
+                    />
                     {(['labour', 'materials', 'plantHire', 'subcontractors', 'other'] as const).map(field => (
                       <div key={field} style={{ position: 'relative', width: 70, flexShrink: 0 }}>
                         <span style={{ position: 'absolute', left: 4, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: '#cbd5e1' }}>£</span>
                         <input
-                          type="number" min={0} step={0.01}
+                          type="number" min={0} step={0.01} title="Rate per unit"
                           value={item[field] ?? 0}
                           readOnly={isLocked}
                           onChange={e => updateItem({ ...item, [field]: Math.max(0, +e.target.value) })}
@@ -1481,6 +1493,9 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
                         />
                       </div>
                     ))}
+                    <div style={{ width: 74, flexShrink: 0, textAlign: 'right', fontFamily: 'monospace', fontSize: 11, fontWeight: 600, color: hidden ? '#cbd5e1' : '#1e293b' }}>
+                      £{itemCost(item).toFixed(2)}
+                    </div>
                     {!isLocked && (
                       <button onClick={() => deleteItem(item.id)} className="icon-btn-touch" style={{ ...iconBtn('#e74c3c'), width: 20, flexShrink: 0 }} title="Remove entirely">×</button>
                     )}
