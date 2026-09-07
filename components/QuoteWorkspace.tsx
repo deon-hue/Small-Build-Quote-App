@@ -1966,12 +1966,28 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
     }
   }
 
-  function createSubPhase(mainPhase: string, room: string, name: string, boSubPhaseId: string | undefined) {
+  async function createSubPhase(mainPhase: string, room: string, name: string, boSubPhaseId: string | undefined) {
     // A sub-phase linked to a Back Office room (Kitchen, Utility Room, etc.) pulls in every one
     // of that room's tasks straight away — Back Office is the source of truth for what a room
     // contains, so the quote shouldn't need a separate "pick which tasks apply" step. Any task
     // not needed for this job gets hidden (or deleted) individually afterwards.
-    const roomTasks = boSubPhaseId ? boTasks.filter(t => t.sub_phase_id === boSubPhaseId && t.active) : []
+    //
+    // Fetched fresh from Supabase here rather than trusting the boTasks prop: that prop is
+    // fetched once when the quote page first loads and kept in memory for the whole session, so
+    // on a long-lived tab it can be stale — a room picked from a picker that itself reads live
+    // boSubPhases could end up filtering that stale array by a sub_phase_id it doesn't actually
+    // recognise, silently matching an unrelated task instead of returning nothing.
+    let roomTasks: BOTask[] = []
+    if (boSubPhaseId) {
+      try {
+        const { createClient } = await import('@/lib/supabase/client')
+        const sb = createClient()
+        const { data, error } = await sb.from('bo_tasks').select('*').eq('sub_phase_id', boSubPhaseId).eq('active', true)
+        roomTasks = error || !data ? boTasks.filter(t => t.sub_phase_id === boSubPhaseId && t.active) : data
+      } catch {
+        roomTasks = boTasks.filter(t => t.sub_phase_id === boSubPhaseId && t.active)
+      }
+    }
     const items: QuoteItem[] = roomTasks.map(t => ({
       id: uid(),
       desc: t.name,
