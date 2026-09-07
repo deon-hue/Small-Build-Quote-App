@@ -13,7 +13,7 @@
  * Works for all data sources: takeoff import, AI-generated, manual.
  */
 
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import type { QuotePhase, QuoteItem, QuoteProduct, QuotePlantItem } from '@/lib/types'
 import type { BOLabourTrade, BOProduct, BOPlantItem, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
 import { fmt, calcPhase, calcPhaseSell } from '@/lib/utils'
@@ -1912,6 +1912,10 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [search,    setSearch]    = useState('')
   const [subPhasePicker, setSubPhasePicker] = useState<{ mainPhase: string; room: string } | null>(null)
+  // Guards createSubPhase against a second click landing while its live Back Office fetch is
+  // still in flight (the picker closes instantly now, but a very fast double-click could still
+  // land both before React re-renders) — a ref so it doesn't need a render to take effect.
+  const addingSubPhase = useRef(false)
   const [pickerSearch, setPickerSearch]     = useState('')
 
   const toggle = useCallback((k: string) => {
@@ -1972,50 +1976,59 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
     // contains, so the quote shouldn't need a separate "pick which tasks apply" step. Any task
     // not needed for this job gets hidden (or deleted) individually afterwards.
     //
-    // Fetched fresh from Supabase here rather than trusting the boTasks prop: that prop is
-    // fetched once when the quote page first loads and kept in memory for the whole session, so
-    // on a long-lived tab it can be stale — a room picked from a picker that itself reads live
-    // boSubPhases could end up filtering that stale array by a sub_phase_id it doesn't actually
-    // recognise, silently matching an unrelated task instead of returning nothing.
-    let roomTasks: BOTask[] = []
-    if (boSubPhaseId) {
-      try {
-        const { createClient } = await import('@/lib/supabase/client')
-        const sb = createClient()
-        const { data, error } = await sb.from('bo_tasks').select('*').eq('sub_phase_id', boSubPhaseId).eq('active', true)
-        roomTasks = error || !data ? boTasks.filter(t => t.sub_phase_id === boSubPhaseId && t.active) : data
-      } catch {
-        roomTasks = boTasks.filter(t => t.sub_phase_id === boSubPhaseId && t.active)
-      }
-      // A chosen Back Office room coming back with no tasks at all is unexpected — surface it
-      // instead of silently adding an empty room the estimator has no reason to suspect is wrong.
-      if (roomTasks.length === 0) {
-        alert(`"${name}" has no tasks in Back Office right now, so this room was added empty. Check Back Office → Phases & Tasks, or try again — this can happen if the connection dropped mid-request.`)
-      }
-    }
-    const items: QuoteItem[] = roomTasks.map(t => ({
-      id: uid(),
-      desc: t.name,
-      qty: 1,
-      unit: t.unit || 'nr',
-      labour: t.labour_cost || 0,
-      materials: t.materials_cost || 0,
-      plantHire: t.plant_cost || 0,
-      subcontractors: t.subcontract_cost || 0,
-      other: t.other_cost || 0,
-      notes: t.description || '',
-      boTaskId: t.id,
-    }))
-    const newPhase: QuotePhase = {
-      id: uid(), phase: name, parentPhase: mainPhase,
-      roomLabel: room || undefined,
-      source: 'manual', itemStatus: items.length ? 'bo-default' : 'manual',
-      boSubPhaseId,
-      items,
-      estimatorItems: [], useEstimator: false,
-    }
-    onChange([...phases, newPhase])
+    // Close the picker immediately — this now does a live network fetch below, so leaving the
+    // picker open until it resolves gave a real window for a second click (impatient re-click,
+    // or clicking a different room while the first was still loading) to add a duplicate room.
     setSubPhasePicker(null)
+    if (addingSubPhase.current) return
+    addingSubPhase.current = true
+    try {
+      // Fetched fresh from Supabase here rather than trusting the boTasks prop: that prop is
+      // fetched once when the quote page first loads and kept in memory for the whole session,
+      // so on a long-lived tab it can be stale — a room picked from a picker that itself reads
+      // live boSubPhases could end up filtering that stale array by a sub_phase_id it doesn't
+      // actually recognise, silently matching an unrelated task instead of returning nothing.
+      let roomTasks: BOTask[] = []
+      if (boSubPhaseId) {
+        try {
+          const { createClient } = await import('@/lib/supabase/client')
+          const sb = createClient()
+          const { data, error } = await sb.from('bo_tasks').select('*').eq('sub_phase_id', boSubPhaseId).eq('active', true)
+          roomTasks = error || !data ? boTasks.filter(t => t.sub_phase_id === boSubPhaseId && t.active) : data
+        } catch {
+          roomTasks = boTasks.filter(t => t.sub_phase_id === boSubPhaseId && t.active)
+        }
+        // A chosen Back Office room coming back with no tasks at all is unexpected — surface it
+        // instead of silently adding an empty room the estimator has no reason to suspect is wrong.
+        if (roomTasks.length === 0) {
+          alert(`"${name}" has no tasks in Back Office right now, so this room was added empty. Check Back Office → Phases & Tasks, or try again — this can happen if the connection dropped mid-request.`)
+        }
+      }
+      const items: QuoteItem[] = roomTasks.map(t => ({
+        id: uid(),
+        desc: t.name,
+        qty: 1,
+        unit: t.unit || 'nr',
+        labour: t.labour_cost || 0,
+        materials: t.materials_cost || 0,
+        plantHire: t.plant_cost || 0,
+        subcontractors: t.subcontract_cost || 0,
+        other: t.other_cost || 0,
+        notes: t.description || '',
+        boTaskId: t.id,
+      }))
+      const newPhase: QuotePhase = {
+        id: uid(), phase: name, parentPhase: mainPhase,
+        roomLabel: room || undefined,
+        source: 'manual', itemStatus: items.length ? 'bo-default' : 'manual',
+        boSubPhaseId,
+        items,
+        estimatorItems: [], useEstimator: false,
+      }
+      onChange([...phases, newPhase])
+    } finally {
+      addingSubPhase.current = false
+    }
   }
   function addRoom(mainPhase: string) {
     addSubPhase(mainPhase, 'New Room')
