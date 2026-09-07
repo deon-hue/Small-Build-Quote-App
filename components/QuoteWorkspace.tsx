@@ -1987,6 +1987,11 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
       } catch {
         roomTasks = boTasks.filter(t => t.sub_phase_id === boSubPhaseId && t.active)
       }
+      // A chosen Back Office room coming back with no tasks at all is unexpected — surface it
+      // instead of silently adding an empty room the estimator has no reason to suspect is wrong.
+      if (roomTasks.length === 0) {
+        alert(`"${name}" has no tasks in Back Office right now, so this room was added empty. Check Back Office → Phases & Tasks, or try again — this can happen if the connection dropped mid-request.`)
+      }
     }
     const items: QuoteItem[] = roomTasks.map(t => ({
       id: uid(),
