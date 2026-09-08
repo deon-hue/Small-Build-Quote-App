@@ -94,6 +94,16 @@ function fmtDateTime(iso: string | null | undefined): string {
   catch { return '' }
 }
 
+// Every write in this modal goes through Supabase and can fail (a schema mismatch, RLS, a
+// dropped connection). Without this, a failed write silently reverts the button with zero
+// feedback — see VAR-7453, where a missing `resent_at` column made every status change on
+// every variation fail invisibly. Always report, never swallow.
+function reportError(action: string, err: unknown) {
+  console.error(err)
+  const detail = err instanceof Error ? err.message : String(err)
+  alert(`Couldn't ${action}: ${detail}`)
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function VariationModal({ job, onClose }: Props) {
@@ -181,12 +191,17 @@ export default function VariationModal({ job, onClose }: Props) {
         })
         backToList()
       }
+    } catch (err) {
+      reportError('save this variation', err)
     } finally { setSaving(false) }
   }, [form, editingVar, job.id, addVariation, updateVariation])
 
   // ── Status transitions ────────────────────────────────────────
-  const changeStatus = useCallback(async (newStatus: VariationStatus, extra?: Partial<Variation>) => {
-    if (!editingVar) return
+  // Returns whether the write succeeded — callers with follow-up UI actions (closing the
+  // editor, clearing a form) must check this before doing them, or a failed write ends up
+  // looking like a successful one.
+  const changeStatus = useCallback(async (newStatus: VariationStatus, extra?: Partial<Variation>): Promise<boolean> => {
+    if (!editingVar) return false
     setBusy(true)
     const total = calcVarTotal(form.items, form.markup, form.vatIncluded)
     const updated: Variation = {
@@ -205,6 +220,10 @@ export default function VariationModal({ job, onClose }: Props) {
       setEditingVar(updated)
       setForm(f => ({ ...f })) // trigger re-render
       if (newStatus === 'approved') backToList()
+      return true
+    } catch (err) {
+      reportError('update this variation', err)
+      return false
     } finally { setBusy(false) }
   }, [editingVar, form, updateVariation])
 
@@ -661,7 +680,8 @@ export default function VariationModal({ job, onClose }: Props) {
             />
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
               <button className="btn btn-danger" disabled={busy} onClick={async () => {
-                await changeStatus('rejected', { clientRejectedAt: new Date().toISOString(), clientRejectionReason: rejectReason })
+                const ok = await changeStatus('rejected', { clientRejectedAt: new Date().toISOString(), clientRejectionReason: rejectReason })
+                if (!ok) return
                 setShowRejectBox(false)
                 setRejectReason('')
                 backToList()
@@ -748,6 +768,8 @@ export default function VariationModal({ job, onClose }: Props) {
                 // ─────────────────────────────────────────────────────
 
                 backToList()
+              } catch (err) {
+                reportError('send this variation', err)
               } finally { setBusy(false) }
             }}>
               {busy ? 'Sending…' : '📤 Send to Customer'}
@@ -798,6 +820,8 @@ export default function VariationModal({ job, onClose }: Props) {
 
                 alert('Variation resent to the customer.')
                 backToList()
+              } catch (err) {
+                reportError('resend this variation', err)
               } finally { setBusy(false) }
             }}>
               {busy ? 'Resending…' : '🔄 Resend Updated'}
@@ -836,6 +860,8 @@ export default function VariationModal({ job, onClose }: Props) {
                     })
                   }
                   backToList()
+                } catch (err) {
+                  reportError('accept this variation', err)
                 } finally { setBusy(false) }
               }}
             >
@@ -869,8 +895,8 @@ export default function VariationModal({ job, onClose }: Props) {
           {isSent && (
             <button className="btn-sm btn-outline" disabled={busy} style={{ color: '#888' }} onClick={async () => {
               if (!confirm('Cancel this variation?')) return
-              await changeStatus('cancelled')
-              backToList()
+              const ok = await changeStatus('cancelled')
+              if (ok) backToList()
             }}>
               Cancel Variation
             </button>
