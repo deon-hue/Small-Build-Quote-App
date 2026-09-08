@@ -1140,17 +1140,24 @@ export default function NewQuotePage() {
               roomName: item.roomName, drawingLabel: item.name,
               measurements: { qty: item.qty, unit: item.unit, length: item.length, area: item.area, volume: item.volume },
             }
-            newPhases.push(makePhase(
-              taskSubName,
-              [
-                { desc: `${item.qty} ${item.unit} — ${taskDesc}${refStr}`, qty: item.qty, unit: item.unit, labour, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes, itemType: 'labour' },
-                { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials' },
-                { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: plant, subcontractors: 0, other: 0, notes: plant > 0 ? 'Plant/equipment' : '', itemType: 'plant' },
-                { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: subCost, other: 0, notes: '', itemType: 'subcontractors' },
-                { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other, notes: `Markup ${markupPct}% → sell £${selling.toFixed(2)}`, itemType: 'other' },
-              ],
-              parentPhase, undefined, taskMeta,
-            ))
+            // Link back to the real Back Office sub-phase by name, same as scope-to-quote
+            // and "From Library" — so a sub-phase with a built assembly calculator (see
+            // lib/built-assemblies.ts) can be opened from a take-off-drawn item too.
+            const boSub = boSubPhases.find(s => s.name === taskSubName)
+            newPhases.push({
+              ...makePhase(
+                taskSubName,
+                [
+                  { desc: `${item.qty} ${item.unit} — ${taskDesc}${refStr}`, qty: item.qty, unit: item.unit, labour, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes, itemType: 'labour' },
+                  { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials' },
+                  { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: plant, subcontractors: 0, other: 0, notes: plant > 0 ? 'Plant/equipment' : '', itemType: 'plant' },
+                  { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: subCost, other: 0, notes: '', itemType: 'subcontractors' },
+                  { desc: '', qty: item.qty, unit: item.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other, notes: `Markup ${markupPct}% → sell £${selling.toFixed(2)}`, itemType: 'other' },
+                ],
+                parentPhase, undefined, taskMeta,
+              ),
+              ...(boSub && { boSubPhaseId: boSub.id }),
+            })
             continue
           }
 
