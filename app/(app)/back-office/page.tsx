@@ -158,6 +158,8 @@ export default function BackOfficePage() {
   })
   const [userId, setUserId] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
+  // Assemblies section: which assembly's full-screen calculator is open, if any
+  const [openAssembly, setOpenAssembly] = useState<string | null>(null)
 
   // Incremented after every sync completes so DB-backed sections re-fetch
   // with the latest data (fixes race where SectionPhasesTasks loaded before
@@ -311,12 +313,39 @@ export default function BackOfficePage() {
           <div>
             <h2 style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 700 }}>Assemblies</h2>
             <p style={{ margin: '0 0 16px', fontSize: 13, color: '#64748b', maxWidth: 640, lineHeight: 1.5 }}>
-              A working preview of the assembly calculator engine — currently just the Timber Frame Wall
-              module. Play with the properties and see the cost breakdown update live. It's still running
-              on sample rates below, not your real products/labour/plant records, and nothing here saves
-              to a quote yet — that's the next stage.
+              A working preview of the assembly calculator engine. Open one below to play with its
+              properties and see the cost breakdown update live. Still sample rates, not your real
+              products/labour/plant records, and nothing here saves to a quote yet — that's the next stage.
             </p>
-            <AssemblyWallDemo />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12, maxWidth: 640 }}>
+              <button onClick={() => setOpenAssembly('timber-frame-wall')} style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6,
+                padding: '16px 18px', border: '1px solid #e9d5ff', borderRadius: 10, background: '#fdfaff',
+                cursor: 'pointer', textAlign: 'left',
+              }}>
+                <span style={{ fontSize: 24 }}>🧱</span>
+                <span style={{ fontWeight: 700, fontSize: 14, color: '#1e293b' }}>Timber Frame Wall</span>
+                <span style={{ fontSize: 11, color: '#7c3aed', fontWeight: 600 }}>🧪 Preview</span>
+              </button>
+            </div>
+
+            {openAssembly === 'timber-frame-wall' && (
+              <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setOpenAssembly(null) }}>
+                <div style={{
+                  background: 'var(--cream, #fff)', borderRadius: 8,
+                  width: '96vw', height: '92vh', maxWidth: 1400,
+                  display: 'flex', flexDirection: 'column', boxShadow: '0 24px 80px rgba(0,0,0,0.25)',
+                }}>
+                  <div className="form-modal-hd">
+                    <span className="serif" style={{ fontSize: 17 }}>🧱 Timber Frame Wall — Assembly Calculator</span>
+                    <button className="modal-close" onClick={() => setOpenAssembly(null)}>×</button>
+                  </div>
+                  <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px' }}>
+                    <AssemblyWallDemo />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
