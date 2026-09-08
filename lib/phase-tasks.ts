@@ -984,7 +984,6 @@ const prelimSubphases: PhaseSubphase[] = [
   { id: 'prelim-parking-permits',    phase: 'General Preliminaries', name: 'Parking Permits',        markupPct: 10, tasks: [] },
   { id: 'prelim-congestion-charge',  phase: 'General Preliminaries', name: 'Congestion Charge',      markupPct: 10, tasks: [] },
   { id: 'prelim-temporary-services', phase: 'General Preliminaries', name: 'Temporary Services',     markupPct: 10, tasks: [] },
-  { id: 'prelim-disposal-waste',     phase: 'General Preliminaries', name: 'Disposal Waste',         markupPct: 10, tasks: [] },
   { id: 'prelim-site-accommodation', phase: 'General Preliminaries', name: 'Accommodation',          markupPct: 10, tasks: [] },
   { id: 'prelim-cleaning',           phase: 'General Preliminaries', name: 'Cleaning',               markupPct: 10, tasks: [] },
   { id: 'prelim-fuel',               phase: 'General Preliminaries', name: 'Fuel',                   markupPct: 10, tasks: [] },
@@ -1337,6 +1336,11 @@ const siteSetupSubphases: PhaseSubphase[] = [
       { id: 'floor_protect',  name: 'Floor & surface protection',       unit: 'm²',  defaultQty: 30, labour: 4, materials: 6, plant: 0, subcontractor: 0, other: 0 },
       { id: 'temp_road',      name: 'Temporary access road / tracking', unit: 'sum', defaultQty: 1, labour: 120, materials: 200, plant: 80, subcontractor: 0, other: 0 },
     ],
+  },
+  {
+    // Moved from General Preliminaries — waste disposal belongs with the rest of physical
+    // site-establishment work, not the project-management-style items around it there.
+    id: 'site_disposal_waste', phase: 'Site Setup', name: 'Disposal Waste', markupPct: 20, tasks: [],
   },
 ]
 

@@ -862,6 +862,8 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
     // (hoarding, scaffold, welfare hire, skip hire, temp electric/water, floor protection)
     // duplicated what's already modelled under the Site Setup phase.
     'prelim-site-setup', 'prelim-accommodation', 'prelim-plant-logistics',
+    // Disposal Waste moved from General Preliminaries to Site Setup (as 'site_disposal_waste').
+    'prelim-disposal-waste',
   ]
   const retiredSubs = (dbSubs ?? []).filter(s => s.canonical_id && RETIRED_SUB_CANON_IDS.includes(s.canonical_id as string))
   if (retiredSubs.length > 0) {
