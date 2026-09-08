@@ -318,18 +318,18 @@ export default function BackOfficePage() {
               products/labour/plant records, and nothing here saves to a quote yet — that's the next stage.
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12, maxWidth: 640 }}>
-              <button onClick={() => setOpenAssembly('timber-frame-wall')} style={{
+              <button onClick={() => setOpenAssembly('internal-frame-wall')} style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6,
                 padding: '16px 18px', border: '1px solid #e9d5ff', borderRadius: 10, background: '#fdfaff',
                 cursor: 'pointer', textAlign: 'left',
               }}>
-                <span style={{ fontSize: 24 }}>🧱</span>
-                <span style={{ fontWeight: 700, fontSize: 14, color: '#1e293b' }}>Timber Frame Wall</span>
+                <StudWallIcon size={26} />
+                <span style={{ fontWeight: 700, fontSize: 14, color: '#1e293b' }}>Internal Frame Wall</span>
                 <span style={{ fontSize: 11, color: '#7c3aed', fontWeight: 600 }}>🧪 Preview</span>
               </button>
             </div>
 
-            {openAssembly === 'timber-frame-wall' && (
+            {openAssembly === 'internal-frame-wall' && (
               <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setOpenAssembly(null) }}>
                 <div style={{
                   background: 'var(--cream, #fff)', borderRadius: 8,
@@ -337,7 +337,9 @@ export default function BackOfficePage() {
                   display: 'flex', flexDirection: 'column', boxShadow: '0 24px 80px rgba(0,0,0,0.25)',
                 }}>
                   <div className="form-modal-hd">
-                    <span className="serif" style={{ fontSize: 17 }}>🧱 Timber Frame Wall — Assembly Calculator</span>
+                    <span className="serif" style={{ fontSize: 17, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <StudWallIcon size={18} /> Internal Frame Wall — Assembly Calculator
+                    </span>
                     <button className="modal-close" onClick={() => setOpenAssembly(null)}>×</button>
                   </div>
                   <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px' }}>
@@ -502,3 +504,19 @@ export default function BackOfficePage() {
 
 const lbl: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }
 const inp: React.CSSProperties = { width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }
+
+// A framed stud wall in elevation — an outline with evenly-spaced vertical studs. No emoji
+// reads as "stud wall", so this is a tiny hand-drawn icon instead, in the same visual
+// language as the assembly calculator's own elevation drawing.
+function StudWallIcon({ size = 24 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="3" width="20" height="18" rx="1" stroke="#7c3aed" strokeWidth="1.6" />
+      <line x1="2" y1="3" x2="2" y2="21" stroke="#7c3aed" strokeWidth="1.6" />
+      {[6.8, 11.6, 16.4].map(x => (
+        <line key={x} x1={x} y1="3" x2={x} y2="21" stroke="#7c3aed" strokeWidth="1.6" />
+      ))}
+      <line x1="22" y1="3" x2="22" y2="21" stroke="#7c3aed" strokeWidth="1.6" />
+    </svg>
+  )
+}
