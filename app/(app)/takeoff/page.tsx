@@ -4,8 +4,8 @@ import { useState, useRef, useEffect, useCallback, ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { makeDebouncedSave, loadTakeoffFromSupabase } from '@/lib/takeoff-sync'
-import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchLabourTrades } from '@/lib/back-office-queries'
-import type { BOLabourTrade } from '@/lib/back-office-types'
+import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchLabourTrades, fetchPhases, fetchSubPhases, fetchTasks } from '@/lib/back-office-queries'
+import type { BOLabourTrade, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
 import LabourCostBuilder from './components/LabourCostBuilder'
 import ClientProjectModal from './components/ClientProjectModal'
 import ConstructionLayerModal, { saveLayerCostToBackOffice } from './components/ConstructionLayerModal'
@@ -25,9 +25,8 @@ import {
   type DemoSubphase, type DemoTask,
 } from '@/lib/demolition-data'
 import {
-  ALL_PHASE_SUBPHASES, getAllSubphasesForPhase, getTasksForSubphase,
   calcPhaseTaskSellingPrice, PHASE_TASK_UNIT_LABELS,
-  type PhaseSubphase, type PhaseTask,
+  type PhaseSubphase, type PhaseTask, type PhaseTaskUnit,
 } from '@/lib/phase-tasks'
 import {
   calcMaterialLines, recalcMaterial, sumByCategory,
@@ -666,6 +665,44 @@ export default function TakeoffPage() {
   // Back Office labour trades — loaded once, used by LabourCostBuilder in every panel
   const [labourTrades, setLabourTrades] = useState<BOLabourTrade[]>([])
 
+  // Back Office Phases & Tasks — live, replaces the old static ALL_PHASE_SUBPHASES +
+  // per-browser local-storage "custom sub-phase" layer entirely. This is deliberately the
+  // same data Back Office → Phases & Tasks and Assemblies read/write (Assemblies is just a
+  // different view onto these same tables, not a separate source) — so anything changed in
+  // Back Office shows up here next time this page loads. Doesn't cover the separate wall/
+  // floor "build-up" system (External Walls, Floors & Screeds, Foundations, Plastering &
+  // Boarding, Roof) — that already has its own live fetch (fetchWallTypesWithLayers above).
+  const [boPhases, setBoPhases] = useState<BOPhase[]>([])
+  const [boSubPhases, setBoSubPhases] = useState<BOSubPhase[]>([])
+  const [boTasks, setBoTasks] = useState<BOTask[]>([])
+
+  // Map a live BOTask onto the same PhaseTask shape the old static data used, so every
+  // call site below (which expects PhaseTask's field names) keeps working unchanged.
+  function boTaskToPhaseTask(t: BOTask): PhaseTask {
+    return {
+      id: t.id, name: t.name, unit: (t.unit as PhaseTaskUnit) || 'nr', defaultQty: t.default_qty,
+      labour: t.labour_cost, materials: t.materials_cost, plant: t.plant_cost,
+      subcontractor: t.subcontract_cost, other: t.other_cost,
+      notes: t.description || t.client_description || undefined,
+    }
+  }
+  // Replaces the old static getAllSubphasesForPhase(phase) from lib/phase-tasks.ts — same
+  // name and signature, so nothing below needed to change, just where the data comes from.
+  const getAllSubphasesForPhase = useCallback((phaseName: string): PhaseSubphase[] => {
+    const phase = boPhases.find(p => p.name === phaseName)
+    if (!phase) return []
+    return boSubPhases
+      .filter(sp => sp.phase_id === phase.id)
+      .map((sp): PhaseSubphase => ({
+        id: sp.id, phase: phaseName, name: sp.name, markupPct: sp.markup_pct,
+        tasks: boTasks.filter(t => t.sub_phase_id === sp.id).map(boTaskToPhaseTask),
+      }))
+  }, [boPhases, boSubPhases, boTasks])
+  // Replaces the old static getTasksForSubphase(subphaseId).
+  function getTasksForSubphase(subphaseId: string): PhaseTask[] {
+    return boTasks.filter(t => t.sub_phase_id === subphaseId).map(boTaskToPhaseTask)
+  }
+
   // Custom demolition subphases (loaded from localStorage on mount)
   const [customDemoSubphases, setCustomDemoSubphases] = useState<DemoSubphase[]>([])
   useEffect(() => { setCustomDemoSubphases(loadCustomDemoSubphases()) }, [])
@@ -760,6 +797,14 @@ export default function TakeoffPage() {
       // Load Back Office labour trades (for LabourCostBuilder in every panel)
       fetchLabourTrades(sb, uid).then(trades => {
         setLabourTrades(trades.filter(t => t.active))
+      })
+
+      // Load Back Office Phases & Tasks live — see the boPhases/boSubPhases/boTasks
+      // declaration above for why this replaces the old static + local-storage picker.
+      Promise.all([fetchPhases(sb, uid), fetchSubPhases(sb, uid), fetchTasks(sb, uid)]).then(([ph, sp, tk]) => {
+        setBoPhases(ph.filter(p => p.active))
+        setBoSubPhases(sp.filter(s => s.active))
+        setBoTasks(tk.filter(t => t.active))
       })
 
       // Async cloud sync — merge if the Supabase record has a newer updatedAt
@@ -2159,9 +2204,9 @@ export default function TakeoffPage() {
     }
 
     // Generic phase tasks
-    const _phaseHasTasks = ALL_PHASE_SUBPHASES.some(s => s.phase === item.phase)
+    const _subs = getAllSubphasesForPhase(item.phase)
+    const _phaseHasTasks = _subs.length > 0
     if (_phaseHasTasks && !item.taskSubphaseId && !_isBuildupItem) {
-      const _subs = getAllSubphasesForPhase(item.phase)
       const _ds = _subs[0]; const _dt = _ds?.tasks[0]
       if (_ds && _dt) {
         const _q = item.qty > 0 ? item.qty : _dt.defaultQty
