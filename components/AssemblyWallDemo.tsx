@@ -65,9 +65,18 @@ export default function AssemblyWallDemo({ onClose, onSave }: Props) {
   const [doubleTopPlate, setDoubleTopPlate] = useState(false)
   const [wastePct, setWastePct] = useState(10)
   const [openings, setOpenings] = useState<AssemblyOpening[]>(sampleOpenings)
+  // Sample rates the user has overridden in this session — keyed by layer id. Still not
+  // linked to real Products/Labour/Plant records, but editable here in the meantime.
+  const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
 
   const input: WallInput = { lengthMm, heightMm, studCentresMm: centresMm, doubleTopPlate, openings }
-  const layers = useMemo(() => buildSampleLayers(wastePct), [wastePct])
+  const layers = useMemo(() => {
+    const base = buildSampleLayers(wastePct)
+    return base.map(l => rateOverrides[l.id] != null ? { ...l, unitCost: rateOverrides[l.id] } : l)
+  }, [wastePct, rateOverrides])
+  function setRate(layerId: string, unitCost: number) {
+    setRateOverrides(prev => ({ ...prev, [layerId]: Math.max(0, unitCost) }))
+  }
 
   const result = useMemo(() => {
     try { return { ok: true as const, value: calculateWallCost(input, layers) } }
@@ -199,7 +208,7 @@ export default function AssemblyWallDemo({ onClose, onSave }: Props) {
 
           {/* Breakdown — spans both columns */}
           <div style={{ gridColumn: '1 / -1', marginTop: 4 }}>
-            <BreakdownTable lines={result.value.lines} />
+            <BreakdownTable lines={result.value.lines} onRateChange={setRate} />
           </div>
         </div>
       )}
@@ -219,12 +228,12 @@ function PropRow({ label, children }: { label: string; children: React.ReactNode
   )
 }
 
-function BreakdownTable({ lines }: { lines: CostedLine[] }) {
+function BreakdownTable({ lines, onRateChange }: { lines: CostedLine[]; onRateChange: (layerId: string, unitCost: number) => void }) {
   const groups = ['materials', 'labour', 'plant', 'subcontractors', 'other'] as const
   return (
     <div>
       <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 }}>
-        Cost breakdown (sample rates — Stage 3 pulls these live from Back Office)
+        Cost breakdown — sample rates, editable for now until Products/Labour/Plant linking replaces them
       </div>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
         <thead>
@@ -255,7 +264,17 @@ function BreakdownTable({ lines }: { lines: CostedLine[] }) {
                     <td style={{ padding: '3px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{l.rawQty}</td>
                     <td style={{ padding: '3px 6px', textAlign: 'right', fontFamily: 'monospace', color: '#94a3b8' }}>{l.wastePct}%</td>
                     <td style={{ padding: '3px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{l.purchaseQty} {l.unit}</td>
-                    <td style={{ padding: '3px 6px', textAlign: 'right', fontFamily: 'monospace' }}>£{l.unitCost.toFixed(2)}</td>
+                    <td style={{ padding: '3px 4px', textAlign: 'right' }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+                        <span style={{ fontFamily: 'monospace', color: '#94a3b8' }}>£</span>
+                        <input
+                          type="number" min={0} step={0.01} value={l.unitCost}
+                          onChange={e => onRateChange(l.layerId, +e.target.value)}
+                          title="Edit this sample rate"
+                          style={{ width: 62, fontFamily: 'monospace', fontSize: 12, textAlign: 'right', padding: '2px 4px', border: '1px solid #e2e8f0', borderRadius: 4 }}
+                        />
+                      </div>
+                    </td>
                     <td style={{ padding: '3px 6px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>£{l.cost.toFixed(2)}</td>
                   </tr>
                 ))}
