@@ -557,7 +557,8 @@ export default function NewQuotePage() {
           { desc: '', qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'other'          as const },
         )
       }
-      return makePhase(row.subPhaseName, items, row.phaseName) as QuotePhase
+      const ph = makePhase(row.subPhaseName, items, row.phaseName)
+      return { ...ph, source: 'manual' as const, itemStatus: 'bo-default' as const, boSubPhaseId: row.subPhaseId }
     })
     setPhases(prev => [...prev, ...newPhases])
     setShowLibrary(false)
