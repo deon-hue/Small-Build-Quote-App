@@ -2095,8 +2095,11 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
         </div>
         <button style={{ ...addBtn, fontSize: 11 }} onClick={expandAll}>▼▼ Expand All</button>
         <button style={{ ...addBtn, fontSize: 11 }} onClick={collapseAll}>▶▶ Collapse All</button>
-        {!isLocked && <button style={{ ...addBtn, fontSize: 11, borderColor: '#7ab533', color: '#16a34a' }} onClick={addMainPhase}>+ Add Phase</button>}
-        {!isLocked && onOpenLibrary && <button style={{ ...addBtn, fontSize: 11, borderColor: '#4a90a4', color: '#1d6a8a' }} onClick={onOpenLibrary}>📚 From Library</button>}
+        {!isLocked && (
+          <button style={{ ...addBtn, fontSize: 11, borderColor: '#7ab533', color: '#16a34a' }} onClick={onOpenLibrary ?? addMainPhase}>
+            + Add Phase
+          </button>
+        )}
         {!isLocked && <button style={{ ...addBtn, fontSize: 11, borderColor: '#7c3aed', color: '#7c3aed' }} onClick={handleRefreshFromBO} title="Pull current names and pricing from Back Office into this quote">↻ Refresh from Back Office</button>}
       </div>
 
@@ -2111,15 +2114,9 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
               <div style={{ fontWeight: 700, fontSize: 17, color: '#1e293b', marginBottom: 8 }}>
                 Select your phases to start the quote
               </div>
-              <div style={{ fontSize: 13, color: '#64748b', marginBottom: 24, maxWidth: 360, margin: '0 auto 24px', lineHeight: 1.6 }}>
-                Click <strong>+ Add Phase</strong> in the search bar above to add your first phase, or use the search to filter once phases are added.
+              <div style={{ fontSize: 13, color: '#64748b', margin: '0 auto', maxWidth: 360, lineHeight: 1.6 }}>
+                Click <strong>+ Add Phase</strong> above to choose from your Back Office phases, or use the search to filter once phases are added.
               </div>
-              <button
-                onClick={addMainPhase}
-                style={{ padding: '10px 24px', background: '#1e293b', border: 'none', borderRadius: 8, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}
-              >
-                + Add Phase
-              </button>
             </>
           ) : (
             <>

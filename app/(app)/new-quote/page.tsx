@@ -534,6 +534,17 @@ export default function NewQuotePage() {
     }
   }
 
+  /** The escape hatch inside the library modal — a genuinely custom one-off phase that
+   * isn't in Back Office at all, rather than a separate top-level "+ Add Phase" button. */
+  function addBlankPhase() {
+    const newPhase: QuotePhase = {
+      id: ++phaseCounter, phase: 'New Sub-Phase', parentPhase: 'New Phase',
+      items: [], estimatorItems: [], useEstimator: false,
+    }
+    setPhases(prev => [...prev, newPhase])
+    setShowLibrary(false)
+  }
+
   function addFromLibrary(selectedSubPhaseIds: string[]) {
     const toAdd = libraryData.filter(row => selectedSubPhaseIds.includes(row.subPhaseId))
     const newPhases: QuotePhase[] = toAdd.map(row => {
@@ -1923,6 +1934,7 @@ export default function NewQuotePage() {
           data={libraryData}
           loading={libraryLoading}
           onAdd={addFromLibrary}
+          onAddBlank={addBlankPhase}
           onClose={() => setShowLibrary(false)}
         />
       )}
@@ -2032,11 +2044,12 @@ export default function NewQuotePage() {
 
 // ── BO Library picker modal ───────────────────────────────────────────────────
 function BOLibraryModal({
-  data, loading, onAdd, onClose,
+  data, loading, onAdd, onAddBlank, onClose,
 }: {
   data: Array<{ phaseName: string; phaseId: string; subPhaseName: string; subPhaseId: string; tasks: { id: string }[] }>
   loading: boolean
   onAdd: (ids: string[]) => void
+  onAddBlank: () => void
   onClose: () => void
 }) {
   const [selected, setSelected] = React.useState<Set<string>>(new Set())
@@ -2131,9 +2144,16 @@ function BOLibraryModal({
           })}
         </div>
 
-        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-          <span style={{ fontSize: 12, color: 'var(--muted)' }}>{selected.size} sub-phase{selected.size !== 1 ? 's' : ''} selected</span>
-          <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <span style={{ fontSize: 12, color: 'var(--muted)', flexShrink: 0 }}>{selected.size} sub-phase{selected.size !== 1 ? 's' : ''} selected</span>
+            <button onClick={onAddBlank}
+              title="For a genuinely custom one-off phase that isn't in Back Office at all"
+              style={{ fontSize: 11, color: '#4a90a4', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0, whiteSpace: 'nowrap' }}>
+              + Create blank phase instead
+            </button>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
             <button className="btn-sm btn-outline" onClick={onClose}>Cancel</button>
             <button
               className="btn-sm btn-primary"
