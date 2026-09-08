@@ -88,6 +88,18 @@ export default function AssemblyWallDemo({ onClose, onSave }: Props) {
   }
   const [description, setDescription] = useState(buildAutoDescription)
 
+  // Layers toggled off — e.g. a stud wall without insulation. Kept out of the total and
+  // excluded from what Save & Price writes to the quote, but still shown (greyed out, with
+  // its rate) so it's easy to switch back on rather than having to re-add it from scratch.
+  const [disabledLayerIds, setDisabledLayerIds] = useState<Set<string>>(new Set())
+  function toggleLayer(layerId: string) {
+    setDisabledLayerIds(prev => {
+      const next = new Set(prev)
+      next.has(layerId) ? next.delete(layerId) : next.add(layerId)
+      return next
+    })
+  }
+
   const input: WallInput = { lengthMm, heightMm, studCentresMm: centresMm, doubleTopPlate, openings }
   const layers = useMemo(() => {
     const base = buildSampleLayers(wastePct)
@@ -100,7 +112,11 @@ export default function AssemblyWallDemo({ onClose, onSave }: Props) {
   const result = useMemo(() => {
     try { return { ok: true as const, value: calculateWallCost(input, layers) } }
     catch (e: any) { return { ok: false as const, error: e.message as string } }
-  }, [lengthMm, heightMm, centresMm, doubleTopPlate, wastePct, JSON.stringify(openings)])
+  }, [lengthMm, heightMm, centresMm, doubleTopPlate, JSON.stringify(openings), layers])
+
+  // What actually counts — every line minus whatever's been toggled off.
+  const enabledLines = result.ok ? result.value.lines.filter(l => !disabledLayerIds.has(l.layerId)) : []
+  const totalCost = enabledLines.reduce((s, l) => s + l.cost, 0)
 
   function updateOpening(id: string, patch: Partial<AssemblyOpening>) {
     setOpenings(prev => prev.map(o => o.id === id ? { ...o, ...patch } : o))
@@ -144,12 +160,12 @@ export default function AssemblyWallDemo({ onClose, onSave }: Props) {
           style={{ width: 48, fontSize: 12, padding: '3px 5px', border: '1px solid #e2e8f0', borderRadius: 4 }} />
         {result.ok && (
           <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 700, color: '#7ab533' }}>
-            {fmt(result.value.totalCost * qty)}
+            {fmt(totalCost * qty)}
           </span>
         )}
         {onSave && result.ok && (
           <button
-            onClick={() => onSave({ name, qty, location, description, lines: result.value.lines })}
+            onClick={() => onSave({ name, qty, location, description, lines: enabledLines })}
             title="Replace this sub-phase's cost items with this calculation's costed lines"
             style={{ background: '#16a34a', border: 'none', borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: '6px 12px' }}>
             💾 Save &amp; Price
@@ -255,7 +271,7 @@ export default function AssemblyWallDemo({ onClose, onSave }: Props) {
 
           {/* Breakdown — spans both columns */}
           <div style={{ gridColumn: '1 / -1', marginTop: 4 }}>
-            <BreakdownTable lines={result.value.lines} onRateChange={setRate} />
+            <BreakdownTable lines={result.value.lines} onRateChange={setRate} disabledLayerIds={disabledLayerIds} onToggleLayer={toggleLayer} />
           </div>
         </div>
       )}
@@ -275,16 +291,22 @@ function PropRow({ label, children }: { label: string; children: React.ReactNode
   )
 }
 
-function BreakdownTable({ lines, onRateChange }: { lines: CostedLine[]; onRateChange: (layerId: string, unitCost: number) => void }) {
+function BreakdownTable({ lines, onRateChange, disabledLayerIds, onToggleLayer }: {
+  lines: CostedLine[]
+  onRateChange: (layerId: string, unitCost: number) => void
+  disabledLayerIds: Set<string>
+  onToggleLayer: (layerId: string) => void
+}) {
   const groups = ['materials', 'labour', 'plant', 'subcontractors', 'other'] as const
   return (
     <div>
       <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 }}>
-        Cost breakdown — sample rates, editable for now until Products/Labour/Plant linking replaces them
+        Cost breakdown — sample rates, editable for now until Products/Labour/Plant linking replaces them. Untick a line to leave it out (e.g. no insulation).
       </div>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
         <thead>
           <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+            <th style={{ width: 20 }} />
             <th style={{ textAlign: 'left', padding: '4px 6px', fontSize: 10, color: '#94a3b8' }}>Item</th>
             <th style={{ textAlign: 'right', padding: '4px 6px', fontSize: 10, color: '#94a3b8' }}>Raw qty</th>
             <th style={{ textAlign: 'right', padding: '4px 6px', fontSize: 10, color: '#94a3b8' }}>Waste</th>
@@ -297,36 +319,44 @@ function BreakdownTable({ lines, onRateChange }: { lines: CostedLine[]; onRateCh
           {groups.map(g => {
             const groupLines = lines.filter(l => l.category === g)
             if (groupLines.length === 0) return null
-            const groupTotal = groupLines.reduce((s, l) => s + l.cost, 0)
+            const groupTotal = groupLines.filter(l => !disabledLayerIds.has(l.layerId)).reduce((s, l) => s + l.cost, 0)
             return (
               <React.Fragment key={g}>
                 <tr>
-                  <td colSpan={6} style={{ padding: '6px 6px 2px', fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
+                  <td colSpan={7} style={{ padding: '6px 6px 2px', fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
                     {CATEGORY_LABEL[g]}
                   </td>
                 </tr>
-                {groupLines.map(l => (
-                  <tr key={l.layerId} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '3px 6px' }}>{l.name}</td>
-                    <td style={{ padding: '3px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{l.rawQty}</td>
-                    <td style={{ padding: '3px 6px', textAlign: 'right', fontFamily: 'monospace', color: '#94a3b8' }}>{l.wastePct}%</td>
-                    <td style={{ padding: '3px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{l.purchaseQty} {l.unit}</td>
-                    <td style={{ padding: '3px 4px', textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
-                        <span style={{ fontFamily: 'monospace', color: '#94a3b8' }}>£</span>
-                        <input
-                          type="number" min={0} step={0.01} value={l.unitCost}
-                          onChange={e => onRateChange(l.layerId, +e.target.value)}
-                          title="Edit this sample rate"
-                          style={{ width: 62, fontFamily: 'monospace', fontSize: 12, textAlign: 'right', padding: '2px 4px', border: '1px solid #e2e8f0', borderRadius: 4 }}
-                        />
-                      </div>
-                    </td>
-                    <td style={{ padding: '3px 6px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>£{l.cost.toFixed(2)}</td>
-                  </tr>
-                ))}
+                {groupLines.map(l => {
+                  const off = disabledLayerIds.has(l.layerId)
+                  return (
+                    <tr key={l.layerId} style={{ borderBottom: '1px solid #f1f5f9', opacity: off ? 0.45 : 1 }}>
+                      <td style={{ padding: '3px 6px' }}>
+                        <input type="checkbox" checked={!off} onChange={() => onToggleLayer(l.layerId)}
+                          title={off ? 'Excluded — click to include' : 'Included — click to leave out'}
+                          style={{ cursor: 'pointer' }} />
+                      </td>
+                      <td style={{ padding: '3px 6px', textDecoration: off ? 'line-through' : 'none' }}>{l.name}</td>
+                      <td style={{ padding: '3px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{l.rawQty}</td>
+                      <td style={{ padding: '3px 6px', textAlign: 'right', fontFamily: 'monospace', color: '#94a3b8' }}>{l.wastePct}%</td>
+                      <td style={{ padding: '3px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{l.purchaseQty} {l.unit}</td>
+                      <td style={{ padding: '3px 4px', textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+                          <span style={{ fontFamily: 'monospace', color: '#94a3b8' }}>£</span>
+                          <input
+                            type="number" min={0} step={0.01} value={l.unitCost} disabled={off}
+                            onChange={e => onRateChange(l.layerId, +e.target.value)}
+                            title="Edit this sample rate"
+                            style={{ width: 62, fontFamily: 'monospace', fontSize: 12, textAlign: 'right', padding: '2px 4px', border: '1px solid #e2e8f0', borderRadius: 4 }}
+                          />
+                        </div>
+                      </td>
+                      <td style={{ padding: '3px 6px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 600, textDecoration: off ? 'line-through' : 'none' }}>£{l.cost.toFixed(2)}</td>
+                    </tr>
+                  )
+                })}
                 <tr>
-                  <td colSpan={5} style={{ padding: '2px 6px', textAlign: 'right', fontSize: 11, color: '#94a3b8' }}>{CATEGORY_LABEL[g]} total</td>
+                  <td colSpan={6} style={{ padding: '2px 6px', textAlign: 'right', fontSize: 11, color: '#94a3b8' }}>{CATEGORY_LABEL[g]} total</td>
                   <td style={{ padding: '2px 6px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, fontWeight: 700 }}>£{groupTotal.toFixed(2)}</td>
                 </tr>
               </React.Fragment>
