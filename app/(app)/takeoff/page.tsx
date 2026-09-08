@@ -2248,6 +2248,15 @@ export default function TakeoffPage() {
     const showWallLine     = isLineBased && (isExtWall || isIntWall || isPlaster)
     const hasOpenings      = (isExtWall || isIntWall || isPlaster) && isLineBased
 
+    // Internal Walls: does the selected sub-phase have a built assembly calculator?
+    // When it does, the assembly calculator has final say on measurements/materials/
+    // pricing, so all the old recipe-engine UI below is suppressed.
+    const intWallSubs   = isIntWall ? getAllSubphasesForPhase('Internal Walls & Partitions') : []
+    const intWallSelSub = intWallSubs.find(s => s.id === item.taskSubphaseId) ?? intWallSubs[0]
+    const intWallBoSub  = intWallSelSub ? boSubPhases.find(sp => sp.id === intWallSelSub.id) : undefined
+    const builtAssembly = intWallBoSub?.canonical_id ? BUILT_ASSEMBLY_CANON_IDS[intWallBoSub.canonical_id] : undefined
+    const hideForBuiltAssembly = isIntWall && !!builtAssembly
+
     // ── 4. Computed wall measurements ──────────────────────────────────────
     const wallLength     = item.length ?? 0
     const wallHeight     = item.wallHeight ?? (isExtWall ? 2.7 : 2.4)
@@ -2622,7 +2631,7 @@ export default function TakeoffPage() {
         )}
 
         {/* ── Top metrics card (wall phases) ── */}
-        {showWallLine && (
+        {showWallLine && !hideForBuiltAssembly && (
           <div style={{ padding: '10px 14px 0' }}>
             <div style={{ background: darkMode ? `rgba(0,0,0,0.25)` : `rgba(0,0,0,0.04)`, borderRadius: 8, padding: '12px 14px', border: `1px solid ${accent}44` }}>
               <div style={{ fontSize: 10, color: accent, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
@@ -2749,10 +2758,7 @@ export default function TakeoffPage() {
               calculator instead. Live from Back Office, same as every other phase's
               sub-phase list, so a newly-built assembly shows up here automatically. */}
           {isIntWall && (() => {
-            const intWallSubs = getAllSubphasesForPhase('Internal Walls & Partitions')
-            const selectedSub = intWallSubs.find(s => s.id === item.taskSubphaseId) ?? intWallSubs[0]
-            const boSub = selectedSub ? boSubPhases.find(sp => sp.id === selectedSub.id) : undefined
-            const builtAssembly = boSub?.canonical_id ? BUILT_ASSEMBLY_CANON_IDS[boSub.canonical_id] : undefined
+            const selectedSub = intWallSelSub
 
             function selectIntWallSub(subId: string) {
               const sub = intWallSubs.find(s => s.id === subId)
@@ -2968,6 +2974,8 @@ export default function TakeoffPage() {
         </div>
 
         {/* ════════════════ MEASUREMENT ════════════════ */}
+        {!hideForBuiltAssembly && (
+        <>
         <div style={secHdr}><span>📐</span><span>Measurement</span></div>
         <div style={secBody}>
 
@@ -3163,8 +3171,12 @@ export default function TakeoffPage() {
             </div>
           )}
         </div>
+        </>
+        )}
 
         {/* ════════════════ CONSTRUCTION ════════════════ */}
+        {!hideForBuiltAssembly && (
+        <>
         <div style={secHdr}><span>🔧</span><span>Construction</span></div>
         <div style={secBody}>
 
@@ -3254,9 +3266,11 @@ export default function TakeoffPage() {
             />
           </div>
         </div>
+        </>
+        )}
 
         {/* ════════════════ OPENINGS ════════════════ */}
-        {hasOpenings && (
+        {hasOpenings && !hideForBuiltAssembly && (
           <>
             <div style={secHdr}><span>🚪</span><span>Openings</span></div>
             <div style={secBody}>
@@ -3309,6 +3323,8 @@ export default function TakeoffPage() {
         )}
 
         {/* ════════════════ OUTPUTS ════════════════ */}
+        {!hideForBuiltAssembly && (
+        <>
         <div style={secHdr}><span>📊</span><span>Outputs</span></div>
         <div style={secBody}>
 
@@ -3497,6 +3513,8 @@ export default function TakeoffPage() {
             </>
           )}
         </div>
+        </>
+        )}
 
         {/* ════════════════ FOOTER ════════════════ */}
         <div style={{ padding: '8px 14px 18px', borderTop: '1px solid var(--to-border)', marginTop: 2 }}>
