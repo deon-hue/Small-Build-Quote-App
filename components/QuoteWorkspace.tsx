@@ -20,7 +20,7 @@ import { fmt, calcPhase, calcPhaseSell } from '@/lib/utils'
 import ProductPicker      from '@/components/ProductPicker'
 import PlantPicker        from '@/components/PlantPicker'
 import PhaseReviewModal   from '@/components/PhaseReviewModal'
-import { BUILT_ASSEMBLY_CANON_IDS, AssemblyIconGlyph } from '@/lib/built-assemblies'
+import { BUILT_ASSEMBLY_CANON_IDS, AssemblyIconGlyph, type AssemblySaveResult } from '@/lib/built-assemblies'
 
 // ── IDs ────────────────────────────────────────────────────────────────────────
 let _id = Date.now()
@@ -826,6 +826,26 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
     next.splice(idx + 1, 0, copy)
     onUpdate({ ...p, items: next })
   }
+  // A calculator's "Save & Price" replaces this sub-phase's items outright with its costed
+  // lines — one QuoteItem per line, its cost in the single field matching its category (the
+  // same "one category per row" shape used elsewhere, e.g. refreshFromBackOffice's siblings).
+  function applyAssemblyCalculation(result: AssemblySaveResult) {
+    const newItems: QuoteItem[] = result.lines
+      .filter(l => l.cost !== 0)
+      .map(l => {
+        const base: QuoteItem = {
+          id: uid(), desc: l.name, qty: 1, unit: l.unit,
+          labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0,
+          notes: `${l.purchaseQty} ${l.unit} @ £${l.unitCost.toFixed(2)}/${l.unit}${l.wastePct ? ` (${l.wastePct}% waste)` : ''}`,
+          itemType: l.category,
+        }
+        const key = l.category === 'plant' ? 'plantHire' : l.category
+        return { ...base, [key]: l.cost }
+      })
+    onUpdate(markEdited({ ...p, items: newItems, taskName: result.name }))
+    setShowAssemblyCalc(false)
+  }
+
   function addRow(tg: string, type: ItemType) {
     const newItem: QuoteItem = {
       id: uid(), desc: '', qty: 1, unit: 'item',
@@ -1473,8 +1493,32 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
             )
           })()}
 
+          {/* Assembly calculator summary — replaces the cost-category cards entirely when
+              this sub-phase has a built assembly, since editing happens via the calculator. */}
+          {builtAssembly && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px',
+              background: '#fdfaff', border: '1px dashed #e9d5ff', borderRadius: 8,
+            }}>
+              <AssemblyIconGlyph icon={builtAssembly.icon} size={26} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: '#1e293b' }}>
+                  {p.items.length > 0 ? `Priced via Assembly Calculator — ${p.items.length} line${p.items.length !== 1 ? 's' : ''}` : 'Not yet calculated'}
+                </div>
+                <div style={{ fontSize: 11, color: '#94a3b8' }}>
+                  {p.items.length > 0 ? 'Cost £' + totalCost.toFixed(2) + ' — open the calculator to recalculate' : 'Open the calculator to size this and price it'}
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAssemblyCalc(true)}
+                style={{ padding: '6px 14px', background: '#7c3aed', border: 'none', borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+                {p.items.length > 0 ? 'Recalculate' : 'Open Calculator'}
+              </button>
+            </div>
+          )}
+
           {/* Cost-category cards — accordion, one open at a time (not for Electrics) */}
-          {p.phase !== 'Electrics' && (
+          {p.phase !== 'Electrics' && !builtAssembly && (
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {ITEM_TYPES.map(t => {
                 const meta   = CARD_META[t]
@@ -1515,7 +1559,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
           )}
 
           {/* Summary of what's been added across all cost categories (not for Electrics) */}
-          {p.phase !== 'Electrics' && (() => {
+          {p.phase !== 'Electrics' && !builtAssembly && (() => {
             const lines: { icon: string; color: string; text: string }[] = []
 
             // Labour — from cost rows
@@ -1646,7 +1690,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
               <div style={{ fontSize: 12, color: '#7c3aed', background: '#fdfaff', border: '1px dashed #e9d5ff', borderRadius: 6, padding: '8px 12px', marginBottom: 14 }}>
                 🧪 Sample rates for now — playing with this doesn't change this quote's actual costs yet.
               </div>
-              {builtAssembly.render()}
+              {builtAssembly.render({ onSave: applyAssemblyCalculation })}
             </div>
           </div>
         </div>

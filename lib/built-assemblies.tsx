@@ -6,11 +6,19 @@
 //   - components/QuoteWorkspace.tsx (shows a button to open the calculator from a quote)
 
 import AssemblyWallDemo from '@/components/AssemblyWallDemo'
+import type { CostedLine } from '@/lib/assembly-calc'
 
 export type AssemblyIcon = 'stud-wall'
 
-export const BUILT_ASSEMBLY_CANON_IDS: Record<string, { icon: AssemblyIcon; render: () => React.ReactNode }> = {
-  'iw-stud-partition': { icon: 'stud-wall', render: () => <AssemblyWallDemo /> },
+/** Fired when a calculator's "Save & Price" is used from inside a real quote — absent in
+ * the Back Office preview context, which has no quote to save into. */
+export interface AssemblySaveResult { name: string; qty: number; lines: CostedLine[] }
+
+export const BUILT_ASSEMBLY_CANON_IDS: Record<string, {
+  icon: AssemblyIcon
+  render: (opts?: { onSave?: (result: AssemblySaveResult) => void }) => React.ReactNode
+}> = {
+  'iw-stud-partition': { icon: 'stud-wall', render: opts => <AssemblyWallDemo onSave={opts?.onSave} /> },
 }
 
 export function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; size?: number }) {

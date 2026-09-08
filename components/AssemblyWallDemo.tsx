@@ -51,9 +51,12 @@ function sampleOpenings(): AssemblyOpening[] {
 interface Props {
   /** Omit when embedded as a fixed section (e.g. Back Office) rather than a dismissible overlay. */
   onClose?: () => void
+  /** Present when opened from a real quote sub-phase — writes this calculation's costed
+   * lines into it, replacing whatever was there before. Absent in Back Office's preview. */
+  onSave?: (result: { name: string; qty: number; lines: CostedLine[] }) => void
 }
 
-export default function AssemblyWallDemo({ onClose }: Props) {
+export default function AssemblyWallDemo({ onClose, onSave }: Props) {
   const [name, setName]         = useState('Timber Stud Partition')
   const [qty, setQty]           = useState(1)
   const [lengthMm, setLengthMm] = useState(5000)
@@ -111,6 +114,14 @@ export default function AssemblyWallDemo({ onClose }: Props) {
           <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 700, color: '#7ab533' }}>
             {fmt(result.value.totalCost * qty)}
           </span>
+        )}
+        {onSave && result.ok && (
+          <button
+            onClick={() => onSave({ name, qty, lines: result.value.lines })}
+            title="Replace this sub-phase's cost items with this calculation's costed lines"
+            style={{ background: '#16a34a', border: 'none', borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: '6px 12px' }}>
+            💾 Save &amp; Price
+          </button>
         )}
       </div>
 
