@@ -2065,6 +2065,19 @@ function BOLibraryModal({
     return map
   }, [data])
 
+  // Every phase starts collapsed — the library can list a lot of phases, most with nothing
+  // selected, so scrolling a compact list beats scrolling every sub-phase of every phase.
+  // null = not yet defaulted (data may still be loading when this first renders).
+  const [collapsedPhases, setCollapsedPhases] = React.useState<Set<string> | null>(null)
+  const effectiveCollapsed = collapsedPhases ?? new Set(grouped.keys())
+  function togglePhase(phaseName: string) {
+    setCollapsedPhases(prev => {
+      const next = new Set(prev ?? grouped.keys())
+      next.has(phaseName) ? next.delete(phaseName) : next.add(phaseName)
+      return next
+    })
+  }
+
   function toggleSub(id: string) {
     setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
@@ -2103,26 +2116,38 @@ function BOLibraryModal({
             const subIds = subs.map(s => s.subPhaseId)
             const allChecked = subIds.every(id => selected.has(id))
             const someChecked = subIds.some(id => selected.has(id))
+            const selectedCount = subIds.filter(id => selected.has(id)).length
+            const isCollapsed = effectiveCollapsed.has(phaseName)
             return (
               <div key={phaseName} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                {/* Main phase header — always visible, not collapsible */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px', background: '#1e293b' }}>
+                {/* Main phase header — collapsed by default, click to expand */}
+                <div
+                  onClick={() => togglePhase(phaseName)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px', background: '#1e293b', cursor: 'pointer' }}
+                >
+                  <span style={{ flexShrink: 0, fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>{isCollapsed ? '▸' : '▾'}</span>
                   <input
                     type="checkbox"
                     checked={allChecked}
                     ref={el => { if (el) el.indeterminate = someChecked && !allChecked }}
                     onChange={() => toggleAll(subIds)}
+                    onClick={e => e.stopPropagation()}
                     style={{ flexShrink: 0, width: 15, height: 15, cursor: 'pointer' }}
                   />
                   <span style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 13, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {phaseName}
                   </span>
+                  {selectedCount > 0 && (
+                    <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: '#7ab533', color: '#fff' }}>
+                      {selectedCount} selected
+                    </span>
+                  )}
                   <span style={{ flexShrink: 0, fontSize: 11, color: 'rgba(255,255,255,0.45)', marginLeft: 6 }}>
                     {subs.length} sub-phase{subs.length !== 1 ? 's' : ''}
                   </span>
                 </div>
-                {/* Sub-phases — always shown */}
-                {subs.map(sub => (
+                {/* Sub-phases — shown once this phase is expanded */}
+                {!isCollapsed && subs.map(sub => (
                   <label
                     key={sub.subPhaseId}
                     style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 16px 7px 38px', cursor: 'pointer', borderTop: '1px solid #f0f4f8', background: '#fff' }}
