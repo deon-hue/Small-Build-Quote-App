@@ -185,16 +185,25 @@ export default function AssemblyWallDemo({ onClose, onSave }: Props) {
               <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 }}>
                 Openings
               </div>
+              {openings.length > 0 && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr 20px', gap: 4, marginBottom: 3 }}>
+                  {['Kind', 'Width', 'Height', 'From left', 'Sill'].map(h => (
+                    <div key={h} style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.3 }}>{h}</div>
+                  ))}
+                  <div />
+                </div>
+              )}
               {openings.map(o => (
-                <div key={o.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 20px', gap: 4, marginBottom: 4, alignItems: 'center' }}>
+                <div key={o.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr 20px', gap: 4, marginBottom: 4, alignItems: 'center' }}>
                   <select value={o.kind} onChange={e => updateOpening(o.id, { kind: e.target.value as AssemblyOpening['kind'], sillHeightMm: e.target.value === 'door' ? 0 : (o.sillHeightMm || 900) })} style={miniInput}>
                     <option value="window">Window</option>
                     <option value="door">Door</option>
                     <option value="custom">Custom</option>
                   </select>
-                  <input type="number" title="Width (mm)" value={o.widthMm} onChange={e => updateOpening(o.id, { widthMm: +e.target.value || 0 })} style={miniInput} />
-                  <input type="number" title="Offset from left (mm)" value={o.offsetMm} onChange={e => updateOpening(o.id, { offsetMm: +e.target.value || 0 })} style={miniInput} />
-                  <input type="number" title="Sill height (mm), 0 for a door" value={o.sillHeightMm} onChange={e => updateOpening(o.id, { sillHeightMm: +e.target.value || 0 })} style={miniInput} disabled={o.kind === 'door'} />
+                  <input type="number" title="Width of the opening (mm)" value={o.widthMm} onChange={e => updateOpening(o.id, { widthMm: +e.target.value || 0 })} style={miniInput} />
+                  <input type="number" title="Height of the opening itself (mm)" value={o.heightMm} onChange={e => updateOpening(o.id, { heightMm: +e.target.value || 0 })} style={miniInput} />
+                  <input type="number" title="Distance from the wall's left end to the opening's left edge (mm)" value={o.offsetMm} onChange={e => updateOpening(o.id, { offsetMm: +e.target.value || 0 })} style={miniInput} />
+                  <input type="number" title="Sill height — floor to the bottom of the opening (mm), 0 for a door" value={o.sillHeightMm} onChange={e => updateOpening(o.id, { sillHeightMm: +e.target.value || 0 })} style={miniInput} disabled={o.kind === 'door'} />
                   <button onClick={() => removeOpening(o.id)} title="Remove opening"
                     style={{ background: 'none', border: 'none', color: '#e74c3c', cursor: 'pointer', fontSize: 14 }}>×</button>
                 </div>
