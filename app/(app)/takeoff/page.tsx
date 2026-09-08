@@ -702,6 +702,13 @@ export default function TakeoffPage() {
   function getTasksForSubphase(subphaseId: string): PhaseTask[] {
     return boTasks.filter(t => t.sub_phase_id === subphaseId).map(boTaskToPhaseTask)
   }
+  // The phase list itself (left-hand sidebar, the phase-assignment dropdown, the layers
+  // panel, the schedule summary) — live order + current names from Back Office, falling
+  // back to the static canonical list before the fetch completes or if Back Office has no
+  // phases yet, so the sidebar isn't empty on first paint.
+  const livePhaseNames: TakeoffPhase[] = boPhases.length > 0
+    ? [...boPhases].sort((a, b) => a.display_order - b.display_order).map(p => p.name as TakeoffPhase)
+    : [...TAKEOFF_PHASES]
 
   // Custom demolition subphases (loaded from localStorage on mount)
   const [customDemoSubphases, setCustomDemoSubphases] = useState<DemoSubphase[]>([])
@@ -1471,7 +1478,7 @@ export default function TakeoffPage() {
   }
 
   // ── Phase summary for schedule panel ──────────────────────────────────────
-  const phaseGroups = TAKEOFF_PHASES.map(ph => ({
+  const phaseGroups = livePhaseNames.map(ph => ({
     phase: ph,
     items: project.items.filter(it => it.phase === ph),
   })).filter(g => g.items.length > 0)
@@ -2695,7 +2702,7 @@ export default function TakeoffPage() {
             <label style={labelStyle}>Phase</label>
             <select style={inputStyle} value={item.phase}
               onChange={e => saveItemEdit({ ...item, phase: e.target.value as TakeoffPhase })}>
-              {TAKEOFF_PHASES.map(ph => <option key={ph} value={ph}>{ph}</option>)}
+              {livePhaseNames.map(ph => <option key={ph} value={ph}>{ph}</option>)}
             </select>
           </div>
 
@@ -4064,7 +4071,7 @@ export default function TakeoffPage() {
           </div>
 
           {/* Phase list */}
-          {TAKEOFF_PHASES.map(ph => (
+          {livePhaseNames.map(ph => (
             <div key={ph}>
             <div
               title={ph}
@@ -4231,7 +4238,7 @@ export default function TakeoffPage() {
 
           {/* ── Layers panel — top of canvas, only shown when there are drawn elements ── */}
           {(() => {
-            const drawnPhases = TAKEOFF_PHASES.filter(ph => project.elements.some(el => el.phase === ph))
+            const drawnPhases = livePhaseNames.filter(ph => project.elements.some(el => el.phase === ph))
             if (drawnPhases.length === 0) return null
             const hiddenCount = drawnPhases.filter(ph => hiddenPhases.has(ph)).length
             return (
