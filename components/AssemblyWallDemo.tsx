@@ -14,7 +14,7 @@
  * and an "Add to Quote" action for the Walls phase.
  */
 
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useRef } from 'react'
 import {
   calculateWallCost, studPositionsMm,
   type WallInput, type AssemblyOpening, type AssemblyLayerDef, type CostedLine,
@@ -140,7 +140,7 @@ export default function AssemblyWallDemo({ onClose, onSave }: Props) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16 }}>
           {/* Left: elevation + description */}
           <div>
-            <WallElevationSvg input={input} />
+            <WallElevationSvg input={input} onOpeningOffsetChange={(id, offsetMm) => updateOpening(id, { offsetMm })} />
             {result.value.geometry.warnings.length > 0 && (
               <div style={{ marginTop: 6 }}>
                 {result.value.geometry.warnings.map((w, i) => (
@@ -291,54 +291,157 @@ function BreakdownTable({ lines, onRateChange }: { lines: CostedLine[]; onRateCh
   )
 }
 
-// ── Elevation SVG — a plan/elevation-style sketch of the wall, drawn from the
-// same inputs the engine costs. Visual only: stud display positions approximate
-// which field studs an opening displaces (matched to the grid), it doesn't feed
-// any number in the breakdown above. ──
-function WallElevationSvg({ input }: { input: WallInput }) {
+// A dimension line with end-ticks and a centred label — the standard elevation-drawing
+// convention, used for every measurement annotation below rather than plain floating text.
+function HDim({ x1, x2, y, label }: { x1: number; x2: number; y: number; label: string }) {
+  if (Math.abs(x2 - x1) < 1) return null
+  return (
+    <g>
+      <line x1={x1} y1={y - 4} x2={x1} y2={y + 4} stroke="#94a3b8" strokeWidth={1} />
+      <line x1={x2} y1={y - 4} x2={x2} y2={y + 4} stroke="#94a3b8" strokeWidth={1} />
+      <line x1={x1} y1={y} x2={x2} y2={y} stroke="#94a3b8" strokeWidth={1} />
+      <text x={(x1 + x2) / 2} y={y - 3} textAnchor="middle" fontSize={8} fill="#64748b">{label}</text>
+    </g>
+  )
+}
+function VDim({ y1, y2, x, label }: { y1: number; y2: number; x: number; label: string }) {
+  if (Math.abs(y2 - y1) < 1) return null
+  return (
+    <g>
+      <line x1={x - 4} y1={y1} x2={x + 4} y2={y1} stroke="#94a3b8" strokeWidth={1} />
+      <line x1={x - 4} y1={y2} x2={x + 4} y2={y2} stroke="#94a3b8" strokeWidth={1} />
+      <line x1={x} y1={y1} x2={x} y2={y2} stroke="#94a3b8" strokeWidth={1} />
+      <text x={x + 5} y={(y1 + y2) / 2} dominantBaseline="middle" fontSize={8} fill="#64748b">{label}</text>
+    </g>
+  )
+}
+
+// ── Elevation SVG — a plan/elevation-style sketch of the wall, drawn from the same inputs
+// the engine costs. Drag an opening left/right to reposition it — dimensions update live.
+// King + jack studs are drawn as the doubled-up pair they actually are: the king stud runs
+// full height to the sole plate, the jack stud is cut to the header's underside and sits
+// right against it. Visual only — stud display positions approximate which field studs an
+// opening displaces (matched to the grid), none of this feeds the numbers in the breakdown.
+function WallElevationSvg({ input, onOpeningOffsetChange }: { input: WallInput; onOpeningOffsetChange: (id: string, offsetMm: number) => void }) {
   const { lengthMm: L, heightMm: H, studCentresMm: C, openings } = input
-  const vbW = 600, vbH = 260, pad = 20
-  const scale = Math.min((vbW - pad * 2) / L, (vbH - pad * 2) / H)
+  const vbW = 640, vbH = 320, padX = 28, padTop = 20 + openings.length * 14, padBottom = 34
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [dragId, setDragId] = useState<string | null>(null)
+
+  const availW = vbW - padX * 2, availH = vbH - padTop - padBottom
+  const scale = Math.min(availW / L, availH / H)
   const w = L * scale, h = H * scale
-  const x0 = (vbW - w) / 2, y0 = (vbH - h) / 2
+  const x0 = padX + (availW - w) / 2, y0 = padTop + (availH - h) / 2
   const X = (mmVal: number) => x0 + mmVal * scale
   const Y = (mmVal: number) => y0 + h - mmVal * scale // y grows downward in SVG, up in real life
 
   const positions = studPositionsMm(L, C).filter(p =>
     !openings.some(o => p > o.offsetMm && p < o.offsetMm + o.widthMm)
   )
+  const sortedOpenings = [...openings].sort((a, b) => a.offsetMm - b.offsetMm)
+
+  function offsetFromClientX(clientX: number, widthMm: number): number {
+    // Use the SVG's own screen transform (not a plain width ratio) so this stays correct
+    // even though the viewBox is letterboxed inside a wider responsive container.
+    const svg = svgRef.current!
+    const ctm = svg.getScreenCTM()
+    if (!ctm) return 0
+    const pt = svg.createSVGPoint()
+    pt.x = clientX
+    const svgX = pt.matrixTransform(ctm.inverse()).x
+    const mm = (svgX - x0) / scale
+    return Math.max(0, Math.min(L - widthMm, Math.round(mm / 10) * 10))
+  }
+  function handlePointerDown(e: React.PointerEvent, id: string) {
+    (e.target as Element).setPointerCapture(e.pointerId)
+    setDragId(id)
+  }
+  function handlePointerMove(e: React.PointerEvent) {
+    if (!dragId || !svgRef.current) return
+    const o = openings.find(op => op.id === dragId)
+    if (!o) return
+    onOpeningOffsetChange(dragId, offsetFromClientX(e.clientX, o.widthMm))
+  }
+  function endDrag() { setDragId(null) }
 
   return (
-    <svg viewBox={`0 0 ${vbW} ${vbH}`} style={{ width: '100%', height: 220, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6 }}>
+    <svg
+      ref={svgRef}
+      viewBox={`0 0 ${vbW} ${vbH}`}
+      onPointerMove={handlePointerMove}
+      onPointerUp={endDrag}
+      onPointerLeave={endDrag}
+      style={{ width: '100%', height: 280, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, touchAction: 'none' }}
+    >
       {/* Wall outline */}
       <rect x={x0} y={y0} width={w} height={h} fill="#f8fafc" stroke="#334155" strokeWidth={1.5} />
       {/* Field studs */}
       {positions.map(p => (
         <line key={p} x1={X(p)} y1={y0} x2={X(p)} y2={y0 + h} stroke="#94a3b8" strokeWidth={1.5} />
       ))}
-      {/* Openings */}
+
+      {/* Per-opening dimension row above the wall: offset from left, then the opening's own width */}
+      {sortedOpenings.map((o, i) => {
+        const dimY = y0 - 10 - i * 14
+        return (
+          <React.Fragment key={`dim-${o.id}`}>
+            <HDim x1={x0} x2={X(o.offsetMm)} y={dimY} label={`${o.offsetMm}`} />
+            <HDim x1={X(o.offsetMm)} x2={X(o.offsetMm + o.widthMm)} y={dimY} label={`${o.widthMm}`} />
+          </React.Fragment>
+        )
+      })}
+
+      {/* Openings — void, doubled king+jack studs, header, and a drag handle */}
       {openings.map(o => {
         const ox = X(o.offsetMm), ow = o.widthMm * scale
         const oyTop = Y(o.sillHeightMm + o.heightMm), oh = o.heightMm * scale
+        const leftEdge = X(o.offsetMm), rightEdge = X(o.offsetMm + o.widthMm)
+        const jackGap = 3
+        const dragging = dragId === o.id
         return (
           <g key={o.id}>
-            {/* King studs at the rough opening edges */}
-            <line x1={X(o.offsetMm)} y1={y0} x2={X(o.offsetMm)} y2={y0 + h} stroke="#1e293b" strokeWidth={2.5} />
-            <line x1={X(o.offsetMm + o.widthMm)} y1={y0} x2={X(o.offsetMm + o.widthMm)} y2={y0 + h} stroke="#1e293b" strokeWidth={2.5} />
-            {/* Opening void */}
-            <rect x={ox} y={oyTop} width={ow} height={oh} fill={o.kind === 'door' ? '#fef3c7' : '#dbeafe'} stroke="#4a90a4" strokeWidth={1.5} />
+            {/* King studs — full height, carry the header load to the sole plate */}
+            <line x1={leftEdge} y1={y0} x2={leftEdge} y2={y0 + h} stroke="#1e293b" strokeWidth={2.5} />
+            <line x1={rightEdge} y1={y0} x2={rightEdge} y2={y0 + h} stroke="#1e293b" strokeWidth={2.5} />
+            {/* Jack studs — cut to the header's underside, doubled up against each king stud */}
+            <line x1={leftEdge - jackGap} y1={oyTop} x2={leftEdge - jackGap} y2={y0 + h} stroke="#7c3aed" strokeWidth={1.6} />
+            <line x1={rightEdge + jackGap} y1={oyTop} x2={rightEdge + jackGap} y2={y0 + h} stroke="#7c3aed" strokeWidth={1.6} />
+
+            {/* Opening void — draggable */}
+            <rect
+              x={ox} y={oyTop} width={ow} height={oh}
+              fill={o.kind === 'door' ? '#fef3c7' : '#dbeafe'}
+              stroke={dragging ? '#7c3aed' : '#4a90a4'} strokeWidth={dragging ? 2.5 : 1.5}
+              cursor="grab"
+              onPointerDown={e => handlePointerDown(e, o.id)}
+            />
             {/* Header line */}
             <line x1={ox} y1={oyTop} x2={ox + ow} y2={oyTop} stroke="#c0392b" strokeWidth={2} />
-            <text x={ox + ow / 2} y={oyTop + oh / 2} textAnchor="middle" dominantBaseline="middle" fontSize={9} fill="#1d4ed8">
+            <text x={ox + ow / 2} y={oyTop + oh / 2 - 5} textAnchor="middle" dominantBaseline="middle" fontSize={9} fill="#1d4ed8" pointerEvents="none">
               {o.kind === 'door' ? '🚪' : '🪟'} {o.widthMm}×{o.heightMm}
             </text>
+            <text x={ox + ow / 2} y={oyTop + oh / 2 + 8} textAnchor="middle" dominantBaseline="middle" fontSize={8} fill="#94a3b8" pointerEvents="none">
+              ⋮⋮ drag to move
+            </text>
+
+            {/* Sill height + opening height, to the right of the opening */}
+            {o.sillHeightMm > 0 && <VDim y1={y0 + h} y2={oyTop + oh} x={rightEdge + jackGap + 6} label={`${o.sillHeightMm}`} />}
+            <VDim y1={oyTop + oh} y2={oyTop} x={rightEdge + jackGap + 6} label={`${o.heightMm}`} />
           </g>
         )
       })}
-      {/* Dimension label */}
-      <text x={vbW / 2} y={vbH - 4} textAnchor="middle" fontSize={10} fill="#64748b">
-        {(L / 1000).toFixed(2)}m × {(H / 1000).toFixed(2)}m
-      </text>
+
+      {/* Overall dimensions */}
+      <HDim x1={x0} x2={x0 + w} y={y0 + h + 18} label={`${(L / 1000).toFixed(2)}m`} />
+      <VDim y1={y0} y2={y0 + h} x={x0 - 16} label={`${(H / 1000).toFixed(2)}m`} />
+
+      {/* Legend */}
+      <g transform={`translate(${x0}, ${vbH - 10})`}>
+        <line x1={0} y1={0} x2={14} y2={0} stroke="#1e293b" strokeWidth={2.5} />
+        <text x={18} y={3} fontSize={8} fill="#64748b">King stud</text>
+        <line x1={80} y1={0} x2={94} y2={0} stroke="#7c3aed" strokeWidth={1.6} />
+        <text x={98} y={3} fontSize={8} fill="#64748b">Jack stud (doubled at each opening)</text>
+      </g>
     </svg>
   )
 }
