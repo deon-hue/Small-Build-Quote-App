@@ -20,6 +20,7 @@ import { fmt, calcPhase, calcPhaseSell } from '@/lib/utils'
 import ProductPicker      from '@/components/ProductPicker'
 import PlantPicker        from '@/components/PlantPicker'
 import PhaseReviewModal   from '@/components/PhaseReviewModal'
+import { BUILT_ASSEMBLY_CANON_IDS, AssemblyIconGlyph } from '@/lib/built-assemblies'
 
 // ── IDs ────────────────────────────────────────────────────────────────────────
 let _id = Date.now()
@@ -753,6 +754,15 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
     p.items.find(i => i.desc?.trim())?.desc?.trim() ||
     ''
 
+  // If this sub-phase came from a Back Office sub-phase that has a built assembly
+  // calculator, offer a way to open it — see lib/built-assemblies.ts. Read-only for now:
+  // the calculator's numbers don't write back into this sub-phase's items yet.
+  const builtAssembly = React.useMemo(() => {
+    const boSub = p.boSubPhaseId ? boSubPhases.find(sp => sp.id === p.boSubPhaseId) : undefined
+    return boSub?.canonical_id ? BUILT_ASSEMBLY_CANON_IDS[boSub.canonical_id] : undefined
+  }, [p.boSubPhaseId, boSubPhases])
+  const [showAssemblyCalc, setShowAssemblyCalc] = useState(false)
+
   // Picker state
   const [showProductPicker, setShowProductPicker] = useState(false)
   const [showPlantPicker,   setShowPlantPicker]   = useState(false)
@@ -1310,6 +1320,16 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
                 ↑ BO
               </button>
             )}
+            {builtAssembly && (
+              <button
+                onClick={e => { e.stopPropagation(); setShowAssemblyCalc(true) }}
+                title="Open its assembly calculator — sample rates for now, doesn't change this quote's costs yet"
+                className="icon-btn-touch"
+                style={{ ...iconBtn('#7c3aed'), fontSize: 10, border: '1px solid #e9d5ff', borderRadius: 4, padding: '2px 6px', background: '#fdfaff' }}
+              >
+                🧪 Calculator
+              </button>
+            )}
             <button className="icon-btn-touch" style={iconBtn('#e74c3c')} title="Delete" onClick={onDelete}>×</button>
           </div>
         )}
@@ -1607,6 +1627,29 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
           }}
           onClose={() => setShowReview(false)}
         />
+      )}
+
+      {showAssemblyCalc && builtAssembly && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowAssemblyCalc(false) }}>
+          <div style={{
+            background: 'var(--cream, #fff)', borderRadius: 8,
+            width: '96vw', height: '92vh', maxWidth: 1400,
+            display: 'flex', flexDirection: 'column', boxShadow: '0 24px 80px rgba(0,0,0,0.25)',
+          }}>
+            <div className="form-modal-hd">
+              <span className="serif" style={{ fontSize: 17, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <AssemblyIconGlyph icon={builtAssembly.icon} size={18} /> {p.phase} — Assembly Calculator
+              </span>
+              <button className="modal-close" onClick={() => setShowAssemblyCalc(false)}>×</button>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px' }}>
+              <div style={{ fontSize: 12, color: '#7c3aed', background: '#fdfaff', border: '1px dashed #e9d5ff', borderRadius: 6, padding: '8px 12px', marginBottom: 14 }}>
+                🧪 Sample rates for now — playing with this doesn't change this quote's actual costs yet.
+              </div>
+              {builtAssembly.render()}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

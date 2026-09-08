@@ -9,7 +9,7 @@ import {
   fetchLabourTrades, fetchProducts, fetchPlantItems,
 } from '@/lib/back-office-queries'
 import type { BOPhase, BOSubPhase, BOTask, BOLabourTrade, BOProduct, BOPlantItem } from '@/lib/back-office-types'
-import { BUILT_ASSEMBLY_CANON_IDS } from './SectionAssemblies'
+import { BUILT_ASSEMBLY_CANON_IDS } from '@/lib/built-assemblies'
 
 // Phases that use FloorMakeup build-ups — tasks under these are "Construction Layers"
 const BUILDUP_PHASES = new Set(['External Walls', 'Floors & Screeds', 'Foundations', 'Plastering & Boarding', 'Roof'])

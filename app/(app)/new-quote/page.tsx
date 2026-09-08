@@ -104,7 +104,8 @@ interface TaskRateEntry {
 // one silently letting the AI invent its own pricing.
 function buildPhasesFromScopeToQuote(
   scopePhases: ScopeToQuotePhase[],
-  taskRates: Record<string, TaskRateEntry>
+  taskRates: Record<string, TaskRateEntry>,
+  boSubPhases: BOSubPhase[] = []
 ): QuotePhase[] {
   const VALID_TYPES: MeasurementType[] = ['area', 'volume', 'linear', 'quantity']
 
@@ -170,10 +171,14 @@ function buildPhasesFromScopeToQuote(
     const hasExtraTasks = (sp.extraTasks ?? []).length > 0
     const allTasksFound = (sp.selectedTasks ?? []).every(t => !!taskRates[t])
     const ph = makePhase(sp.phase, typedItems, sp.parentPhase || undefined, estimatorItems)
+    // Link back to the real Back Office sub-phase by name, so a sub-phase with a built
+    // assembly calculator (see lib/built-assemblies.ts) can be opened from this quote item.
+    const boSub = boSubPhases.find(s => s.name === sp.phase)
     return {
       ...ph,
       source: 'ai' as const,
       itemStatus: 'ai' as const,
+      ...(boSub && { boSubPhaseId: boSub.id }),
       // Flag if AI had to invent tasks (extraTasks) or couldn't find BO rates
       ...(hasExtraTasks && {
         needsReview: true,
@@ -816,7 +821,7 @@ export default function NewQuotePage() {
       if (data.error) { alert('Could not generate phases: ' + data.error); return false }
       if (!Array.isArray(data.phases)) { alert('Unexpected response from AI.'); return false }
 
-      const built = buildPhasesFromScopeToQuote(data.phases as ScopeToQuotePhase[], data.taskRates ?? {})
+      const built = buildPhasesFromScopeToQuote(data.phases as ScopeToQuotePhase[], data.taskRates ?? {}, boSubPhases)
       setPhases(built)
       setEstimateUsedDB(!!data.usingDB)
       return true   // phases were set — safe to transition
@@ -1306,7 +1311,7 @@ export default function NewQuotePage() {
       if (data.error) { alert('Could not build estimate: ' + data.error); return }
       if (!Array.isArray(data.phases)) { alert('Unexpected response from AI.'); return }
 
-      const built = buildPhasesFromScopeToQuote(data.phases as ScopeToQuotePhase[], data.taskRates ?? {})
+      const built = buildPhasesFromScopeToQuote(data.phases as ScopeToQuotePhase[], data.taskRates ?? {}, boSubPhases)
       setPhases(built)
       setScope(scopeText)
       setEstimateUsedDB(!!data.usingDB)

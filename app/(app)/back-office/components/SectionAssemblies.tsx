@@ -19,33 +19,9 @@ import { createClient } from '@/lib/supabase/client'
 import { fetchPhases, fetchSubPhases, upsertSubPhase, deleteSubPhase, fetchTasks } from '@/lib/back-office-queries'
 import type { BOPhase, BOSubPhase } from '@/lib/back-office-types'
 import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react'
-import AssemblyWallDemo from '@/components/AssemblyWallDemo'
+import { BUILT_ASSEMBLY_CANON_IDS, AssemblyIconGlyph } from '@/lib/built-assemblies'
 
 interface Props { userId: string }
-
-type AssemblyIcon = 'stud-wall'
-
-// Which sub-phases (by canonical_id — stable across renames) have a real, working
-// calculator today. Exported so SectionPhasesTasks.tsx can lock editing for the same ones.
-export const BUILT_ASSEMBLY_CANON_IDS: Record<string, { icon: AssemblyIcon; render: () => React.ReactNode }> = {
-  'iw-stud-partition': { icon: 'stud-wall', render: () => <AssemblyWallDemo /> },
-}
-
-function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; size?: number }) {
-  switch (icon) {
-    case 'stud-wall':
-      return (
-        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect x="2" y="3" width="20" height="18" rx="1" stroke="#7c3aed" strokeWidth="1.6" />
-          <line x1="2" y1="3" x2="2" y2="21" stroke="#7c3aed" strokeWidth="1.6" />
-          {[6.8, 11.6, 16.4].map(x => (
-            <line key={x} x1={x} y1="3" x2={x} y2="21" stroke="#7c3aed" strokeWidth="1.6" />
-          ))}
-          <line x1="22" y1="3" x2="22" y2="21" stroke="#7c3aed" strokeWidth="1.6" />
-        </svg>
-      )
-  }
-}
 
 export default function SectionAssemblies({ userId }: Props) {
   const sb = createClient()
