@@ -54,7 +54,7 @@ interface Props {
 }
 
 export default function AssemblyWallDemo({ onClose }: Props) {
-  const [name, setName]         = useState('Internal Frame Wall — Partition')
+  const [name, setName]         = useState('Timber Stud Partition')
   const [qty, setQty]           = useState(1)
   const [lengthMm, setLengthMm] = useState(5000)
   const [heightMm, setHeightMm] = useState(2400)
