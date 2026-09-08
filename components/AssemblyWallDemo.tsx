@@ -53,7 +53,7 @@ interface Props {
   onClose?: () => void
   /** Present when opened from a real quote sub-phase — writes this calculation's costed
    * lines into it, replacing whatever was there before. Absent in Back Office's preview. */
-  onSave?: (result: { name: string; qty: number; lines: CostedLine[] }) => void
+  onSave?: (result: { name: string; qty: number; location: string; description: string; lines: CostedLine[] }) => void
 }
 
 export default function AssemblyWallDemo({ onClose, onSave }: Props) {
@@ -65,9 +65,28 @@ export default function AssemblyWallDemo({ onClose, onSave }: Props) {
   const [doubleTopPlate, setDoubleTopPlate] = useState(false)
   const [wastePct, setWastePct] = useState(10)
   const [openings, setOpenings] = useState<AssemblyOpening[]>(sampleOpenings)
+  const [location, setLocation] = useState('')
   // Sample rates the user has overridden in this session — keyed by layer id. Still not
   // linked to real Products/Labour/Plant records, but editable here in the meantime.
   const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
+
+  // A quote-facing description — sizing and openings, in plain language. Auto-generated,
+  // but kept as its own editable state (not recomputed on every keystroke) so typing notes
+  // into it doesn't get clobbered; "↻ Regenerate" refreshes it from the current numbers.
+  function buildAutoDescription(): string {
+    const parts = [
+      `${(lengthMm / 1000).toFixed(2)}m long × ${(heightMm / 1000).toFixed(2)}m high timber stud partition`,
+      `studs at ${centresMm}mm centres`,
+    ]
+    if (doubleTopPlate) parts.push('double top plate')
+    let text = parts.join(', ') + '.'
+    if (openings.length) {
+      const list = openings.map(o => `${o.kind} (${o.widthMm}×${o.heightMm}mm)`).join(', ')
+      text += ` Includes ${openings.length} opening${openings.length !== 1 ? 's' : ''}: ${list}.`
+    }
+    return text
+  }
+  const [description, setDescription] = useState(buildAutoDescription)
 
   const input: WallInput = { lengthMm, heightMm, studCentresMm: centresMm, doubleTopPlate, openings }
   const layers = useMemo(() => {
@@ -116,6 +135,10 @@ export default function AssemblyWallDemo({ onClose, onSave }: Props) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <input value={name} onChange={e => setName(e.target.value)}
           style={{ fontWeight: 700, fontSize: 14, color: '#1e293b', flex: 1, border: 'none', outline: 'none', background: 'transparent' }} />
+        <input value={location} onChange={e => setLocation(e.target.value)}
+          placeholder="Room / location"
+          title="Which room or location this is — becomes the quote's room grouping when saved"
+          style={{ fontSize: 12, color: '#7c3aed', width: 140, padding: '4px 8px', border: '1px solid #e9d5ff', borderRadius: 5, background: '#fdfaff' }} />
         <label style={{ fontSize: 11, color: '#64748b' }}>Qty</label>
         <input type="number" min={1} value={qty} onChange={e => setQty(Math.max(1, +e.target.value || 1))}
           style={{ width: 48, fontSize: 12, padding: '3px 5px', border: '1px solid #e2e8f0', borderRadius: 4 }} />
@@ -126,12 +149,27 @@ export default function AssemblyWallDemo({ onClose, onSave }: Props) {
         )}
         {onSave && result.ok && (
           <button
-            onClick={() => onSave({ name, qty, lines: result.value.lines })}
+            onClick={() => onSave({ name, qty, location, description, lines: result.value.lines })}
             title="Replace this sub-phase's cost items with this calculation's costed lines"
             style={{ background: '#16a34a', border: 'none', borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: '6px 12px' }}>
             💾 Save &amp; Price
           </button>
         )}
+      </div>
+
+      {/* Quote-facing description — auto-generated from the sizing/openings, editable, and
+          what gets saved as the sub-phase's task description on Save & Price. */}
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+          <label style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4 }}>Description (for the quote)</label>
+          <button onClick={() => setDescription(buildAutoDescription())}
+            title="Regenerate from the current sizing and openings — overwrites any edits below"
+            style={{ fontSize: 10, color: '#7c3aed', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+            ↻ Regenerate
+          </button>
+        </div>
+        <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2}
+          style={{ width: '100%', fontSize: 12, color: '#1e293b', padding: '6px 9px', border: '1px solid #e2e8f0', borderRadius: 5, boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }} />
       </div>
 
       {!result.ok ? (

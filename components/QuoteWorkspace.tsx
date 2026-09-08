@@ -842,7 +842,10 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
         const key = l.category === 'plant' ? 'plantHire' : l.category
         return { ...base, [key]: l.cost }
       })
-    onUpdate(markEdited({ ...p, items: newItems, taskName: result.name }))
+    onUpdate(markEdited({
+      ...p, items: newItems, taskName: result.description,
+      ...(result.location.trim() && { roomLabel: result.location.trim() }),
+    }))
     setShowAssemblyCalc(false)
   }
 

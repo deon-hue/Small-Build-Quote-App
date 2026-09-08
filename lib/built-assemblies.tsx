@@ -12,7 +12,7 @@ export type AssemblyIcon = 'stud-wall'
 
 /** Fired when a calculator's "Save & Price" is used from inside a real quote — absent in
  * the Back Office preview context, which has no quote to save into. */
-export interface AssemblySaveResult { name: string; qty: number; lines: CostedLine[] }
+export interface AssemblySaveResult { name: string; qty: number; location: string; description: string; lines: CostedLine[] }
 
 export const BUILT_ASSEMBLY_CANON_IDS: Record<string, {
   icon: AssemblyIcon
