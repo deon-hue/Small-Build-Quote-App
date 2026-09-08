@@ -36,7 +36,8 @@ export const PHASE_VISUALS: Record<string, PhaseVisual> = {
   'Tiling & Finishes':            { emoji: '🏺', color: '#e91e63', keywords: 'tiling floor wall bathroom modern finish' },
   'Decoration':                   { emoji: '🎨', color: '#9c27b0', keywords: 'interior painting decoration modern home' },
   'External Works & Landscaping': { emoji: '🌿', color: '#388e3c', keywords: 'landscaping garden patio outdoor' },
-  'Preliminaries':                { emoji: '📋', color: '#607d8b', keywords: 'construction site management safety' },
+  'Preliminaries':                { emoji: '📋', color: '#607d8b', keywords: 'construction site management safety' },  // legacy
+  'General Preliminaries':        { emoji: '📋', color: '#607d8b', keywords: 'construction site management safety' },
 }
 
 /** Fallback for any phase not in the map above */

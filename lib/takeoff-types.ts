@@ -11,6 +11,7 @@ export type DrawingTool = 'select' | 'line' | 'rect' | 'polygon' | 'floor' | 'cl
 // ── Measurement categories (match quote parentPhase names) ────────────────────
 
 export const TAKEOFF_PHASES = [
+  'General Preliminaries',
   'Site Setup',
   'Demolition',
   'Foundations',
@@ -28,13 +29,13 @@ export const TAKEOFF_PHASES = [
   'Tiling & Finishes',
   'Decoration',
   'External Works & Landscaping',
-  'Preliminaries',
   'Other',
 ] as const
 
 export type TakeoffPhase = typeof TAKEOFF_PHASES[number]
 
 export const PHASE_COLORS: Record<TakeoffPhase, string> = {
+  'General Preliminaries':       '#0277bd',
   'Site Setup':                  '#f59e0b',
   'Demolition':                  '#e74c3c',
   'Foundations':                  '#8e44ad',
@@ -52,7 +53,6 @@ export const PHASE_COLORS: Record<TakeoffPhase, string> = {
   'Tiling & Finishes':            '#ad1457',
   'Decoration':                   '#4a148c',
   'External Works & Landscaping': '#558b2f',
-  'Preliminaries':                '#0277bd',
   'Other':                        '#546e7a',
 }
 
@@ -61,6 +61,7 @@ export const PHASE_COLORS: Record<TakeoffPhase, string> = {
  * Used when importing take-off items into the New Quote page.
  */
 export const PHASE_TO_QUOTE_PARENT: Record<TakeoffPhase, string> = {
+  'General Preliminaries':       'Phase 1 – Site Setup & Demolition',
   'Site Setup':                  'Phase 1 – Site Setup',
   'Demolition':                  'Phase 1 – Demolition',
   'Foundations':                  'Phase 2 – Foundations & Groundworks',
@@ -78,7 +79,6 @@ export const PHASE_TO_QUOTE_PARENT: Record<TakeoffPhase, string> = {
   'Tiling & Finishes':            'Phase 8 – Second Fix & Finishes',
   'Decoration':                   'Phase 9 – Decoration',
   'External Works & Landscaping': 'Phase 10 – External Works',
-  'Preliminaries':                'Phase 1 – Site Setup & Demolition',
   'Other':                        'Phase 10 – External Works',
 }
 

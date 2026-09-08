@@ -962,24 +962,36 @@ const externalSubphases: PhaseSubphase[] = [
 
 // ── 13. PRELIMINARIES ────────────────────────────────────────────────────────
 
+// Renamed from 'Preliminaries' to 'General Preliminaries' and moved before Site Setup
+// (see CANONICAL_PHASE_IDS in product-config.ts for the safe-rename mechanism — same
+// canonical_id, so the sync updates the existing DB row in place rather than replacing it).
+//
+// Restructured to one sub-phase per item on the user's reference list, each starting
+// empty — real rates get added as each one's calculation engine is built, rather than
+// guessed now. The old Site Establishment / Temporary Works & Accommodation / Plant &
+// Logistics sub-phases are retired: their content (hoarding, scaffold, welfare hire, skip
+// hire, temp electric/water, floor protection) duplicated what's already modelled under
+// the Site Setup phase, which stays the single home for that. Insurance, Fees & Compliance
+// doesn't map onto the reference list, so it's kept as-is, just re-parented here.
 const prelimSubphases: PhaseSubphase[] = [
-  {
-    id: 'prelim-site-setup',
-    phase: 'Preliminaries',
-    name: 'Site Establishment',
-    markupPct: 10,
-    ukWarning: 'CDM 2015: Projects where construction phase > 30 working days or >500 person-days require F10 notification to HSE and appointment of Principal Designer and Principal Contractor.',
-    tasks: [
-      t('prelim-site-manager',      'Site manager / foreman (on-site)',      'day',  10, 350,    0,    0,    0,    0,  'Daily rate includes travel'),
-      t('prelim-welfare-unit',      'Welfare / toilet unit (hire)',          'wk',    8,   0,    0,    0,    0,  180,  'Portable welfare unit hire'),
-      t('prelim-skip-perm',         'Permitting for skip on highway',        'nr',    2,   0,    0,    0,    0,   55,  'Local authority skip licence'),
-      t('prelim-hoarding',          'Site hoarding / security (supply)',      'lm',   20,   8,   14,    0,    0,    0,  'Heras fencing or timber hoarding'),
-      t('prelim-scaffold',          'Scaffold (erect / dismantle)',          'sum',   1,   0,    0,    0, 1800,    0,  'Scaffold subcontract — adjust to project'),
-    ],
-  },
+  { id: 'prelim-projects-manager',   phase: 'General Preliminaries', name: 'Projects Manager',      markupPct: 10, tasks: [] },
+  { id: 'prelim-quantity-surveyor',  phase: 'General Preliminaries', name: 'Quantity Surveyor',      markupPct: 10, tasks: [] },
+  { id: 'prelim-foreman-supervisor', phase: 'General Preliminaries', name: 'Foreman / Supervisor',   markupPct: 10, tasks: [] },
+  { id: 'prelim-general-labourers',  phase: 'General Preliminaries', name: 'General Labourers',      markupPct: 10, tasks: [] },
+  { id: 'prelim-sign-boards',        phase: 'General Preliminaries', name: 'Sign Boards',            markupPct: 10, tasks: [] },
+  { id: 'prelim-health-safety',      phase: 'General Preliminaries', name: 'Health and Safety',      markupPct: 10, tasks: [],
+    ukWarning: 'CDM 2015: Projects where construction phase > 30 working days or >500 person-days require F10 notification to HSE and appointment of Principal Designer and Principal Contractor.' },
+  { id: 'prelim-parking-permits',    phase: 'General Preliminaries', name: 'Parking Permits',        markupPct: 10, tasks: [] },
+  { id: 'prelim-congestion-charge',  phase: 'General Preliminaries', name: 'Congestion Charge',      markupPct: 10, tasks: [] },
+  { id: 'prelim-temporary-services', phase: 'General Preliminaries', name: 'Temporary Services',     markupPct: 10, tasks: [] },
+  { id: 'prelim-disposal-waste',     phase: 'General Preliminaries', name: 'Disposal Waste',         markupPct: 10, tasks: [] },
+  { id: 'prelim-site-accommodation', phase: 'General Preliminaries', name: 'Accommodation',          markupPct: 10, tasks: [] },
+  { id: 'prelim-cleaning',           phase: 'General Preliminaries', name: 'Cleaning',               markupPct: 10, tasks: [] },
+  { id: 'prelim-fuel',               phase: 'General Preliminaries', name: 'Fuel',                   markupPct: 10, tasks: [] },
+  { id: 'prelim-travel-cost',        phase: 'General Preliminaries', name: 'Travel Cost',            markupPct: 10, tasks: [] },
   {
     id: 'prelim-insurance-fees',
-    phase: 'Preliminaries',
+    phase: 'General Preliminaries',
     name: 'Insurance, Fees & Compliance',
     markupPct: 5,
     tasks: [
@@ -989,30 +1001,6 @@ const prelimSubphases: PhaseSubphase[] = [
       t('prelim-cdm-notifications', 'CDM F10 notification to HSE',           'sum',   1,   0,    0,    0,    0,  150,  'If project meets F10 threshold'),
       t('prelim-insurance-ci',      'Contractors All Risk insurance',        'sum',   1,   0,    0,    0,    0,  650,  'Annual policy — provisional sum'),
       t('prelim-party-wall',        'Party Wall surveyor fees',              'sum',   1,   0,    0,    0,    0,  900,  'Both surveyors — if applicable'),
-    ],
-  },
-  {
-    id: 'prelim-accommodation',
-    phase: 'Preliminaries',
-    name: 'Temporary Works & Accommodation',
-    markupPct: 10,
-    tasks: [
-      t('prelim-temp-elec',         'Temporary electrical supply',           'sum',   1,   0,    0,    0,    0,  350,  'Temporary consumer unit & distribution'),
-      t('prelim-temp-water',        'Temporary water supply',                'sum',   1,  80,   20,    0,    0,    0,  'Hose connections and distribution'),
-      t('prelim-protection',        'Floor / surface protection',            'm²',   50,   1.50,  2.50,  0,    0,    0,  'Correx, hardboard protection'),
-      t('prelim-clean',             'Final clean (internal)',                 'sum',   1,  280,    0,    0,    0,    0,  'After completion — snagging clean'),
-    ],
-  },
-  {
-    id: 'prelim-plant-logistics',
-    phase: 'Preliminaries',
-    name: 'Plant & Logistics',
-    markupPct: 10,
-    tasks: [
-      t('prelim-skip-14',           'Skip hire (14-yard builders skip)',      'nr',    3,  40,    0,  310,    0,    0,  'Labour loading, hire & disposal'),
-      t('prelim-crane',             'Mobile crane hire (half-day)',           'nr',    1,   0,    0,    0,    0, 950,  'For structural steel / heavy lifts'),
-      t('prelim-mewp',              'MEWP / cherry picker (day rate)',        'day',   2,   0,    0,  350,    0,    0,  'Scissor lift or cherry picker hire'),
-      t('prelim-transport',         'Materials delivery & transport',        'sum',   1, 120,    0,  180,    0,    0,  'Allowance for delivery charges'),
     ],
   },
 ]

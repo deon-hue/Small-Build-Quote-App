@@ -856,7 +856,13 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
   })
 
   // ── Cleanup: remove old subphases replaced by room-based systems ─────────────
-  const RETIRED_SUB_CANON_IDS = ['elec-first-fix', 'elec-second-fix', 'elec-external', 'plumb-first-fix', 'plumb-second-fix']
+  const RETIRED_SUB_CANON_IDS = [
+    'elec-first-fix', 'elec-second-fix', 'elec-external', 'plumb-first-fix', 'plumb-second-fix',
+    // Preliminaries restructure — superseded by the reference-list sub-phases; their content
+    // (hoarding, scaffold, welfare hire, skip hire, temp electric/water, floor protection)
+    // duplicated what's already modelled under the Site Setup phase.
+    'prelim-site-setup', 'prelim-accommodation', 'prelim-plant-logistics',
+  ]
   const retiredSubs = (dbSubs ?? []).filter(s => s.canonical_id && RETIRED_SUB_CANON_IDS.includes(s.canonical_id as string))
   if (retiredSubs.length > 0) {
     console.log('[sync] removing retired subphases:', retiredSubs.map(s => s.canonical_id))

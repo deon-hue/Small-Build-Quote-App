@@ -79,7 +79,8 @@ export const CANONICAL_PHASE_IDS: Record<string, string> = {
   'Tiling & Finishes':            'phase_tiling',
   'Decoration':                   'phase_decoration',
   'External Works & Landscaping': 'phase_external_works',
-  'Preliminaries':                'phase_preliminaries',
+  'Preliminaries':                'phase_preliminaries',   // legacy — kept for DB backward compat
+  'General Preliminaries':        'phase_preliminaries',   // maps to same DB row (renamed phase)
   'Other':                        'phase_other',
 }
 
