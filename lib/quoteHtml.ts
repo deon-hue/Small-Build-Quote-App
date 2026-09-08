@@ -65,10 +65,13 @@ export function buildHtml(q: Quote, settings: Settings, opts: HtmlOpts = {}, boT
       .map(pl => itemRow(pl.name, pl.qty, pl.unit, pl.notes, pl.sellPrice * pl.qty)).join('')
     return `
       <div style="margin-bottom:20px;border-left:4px solid #7ab533;background:#f8fafc;padding:16px;border-radius:4px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-          <div style="font-size:14px;font-weight:600;color:#1e293b">${esc(p.phase)}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${p.taskName ? '4px' : '12px'}">
+          <div style="font-size:14px;font-weight:600;color:#1e293b">
+            ${p.roomLabel ? `<span style="font-size:11px;font-weight:700;color:#16a34a;margin-right:6px">📍 ${esc(p.roomLabel)}</span>` : ''}${esc(p.phase)}
+          </div>
           <div style="font-size:16px;font-weight:700;color:#7ab533;font-family:'DM Mono',monospace">£${phaseTotal.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>
         </div>
+        ${p.taskName ? `<div style="font-size:12px;color:#64748b;margin-bottom:12px">${esc(p.taskName)}</div>` : ''}
         <div style="background:white;border-radius:4px;overflow:hidden">
           ${itemRows}${productRows}${plantRows}
         </div>
@@ -270,7 +273,9 @@ export function buildHtmlClientView(q: Quote, settings: Settings, opts: HtmlOpts
       <div style="display:flex;align-items:center;padding:12px 14px">
         ${photoHtml}
         <div style="flex:1;min-width:0">
-          <div style="font-weight:700;font-size:13px;color:#1e293b">${esc(p.phase)}</div>
+          <div style="font-weight:700;font-size:13px;color:#1e293b">
+            ${p.roomLabel ? `<span style="font-size:11px;font-weight:700;color:#16a34a;margin-right:6px">📍 ${esc(p.roomLabel)}</span>` : ''}${esc(p.phase)}
+          </div>
           ${p.taskName ? `<div style="font-size:11px;color:#64748b;margin-top:2px">${esc(p.taskName)}</div>` : ''}
         </div>
         ${priceHtml}
