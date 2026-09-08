@@ -49,7 +49,8 @@ function sampleOpenings(): AssemblyOpening[] {
 }
 
 interface Props {
-  onClose: () => void
+  /** Omit when embedded as a fixed section (e.g. Back Office) rather than a dismissible overlay. */
+  onClose?: () => void
 }
 
 export default function AssemblyWallDemo({ onClose }: Props) {
@@ -88,13 +89,15 @@ export default function AssemblyWallDemo({ onClose }: Props) {
           🧪 PREVIEW
         </span>
         <span style={{ fontSize: 12, color: '#7c3aed', fontWeight: 600 }}>
-          Assembly Calculator — sample data only, not part of this quote
+          Assembly Calculator — sample data and sample rates, nothing here is saved yet
         </span>
         <div style={{ flex: 1 }} />
-        <button onClick={onClose}
-          style={{ background: 'none', border: '1px solid #e9d5ff', borderRadius: 5, color: '#7c3aed', fontSize: 12, cursor: 'pointer', padding: '3px 10px' }}>
-          Close preview
-        </button>
+        {onClose && (
+          <button onClick={onClose}
+            style={{ background: 'none', border: '1px solid #e9d5ff', borderRadius: 5, color: '#7c3aed', fontSize: 12, cursor: 'pointer', padding: '3px 10px' }}>
+            Close preview
+          </button>
+        )}
       </div>
 
       {/* Card header — mirrors a real sp-card */}

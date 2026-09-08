@@ -22,6 +22,7 @@ import SectionPlant from './components/SectionPlant'
 import SectionTakeoffMapping from './components/SectionTakeoffMapping'
 import SectionFormulaRules from './components/SectionFormulaRules'
 import SectionAIMapping from './components/SectionAIMapping'
+import AssemblyWallDemo from '@/components/AssemblyWallDemo'
 
 function deepClone<T>(v: T): T { return JSON.parse(JSON.stringify(v)) }
 
@@ -46,6 +47,7 @@ type SectionId =
   | 'takeoff-mapping'
   | 'formula-rules'
   | 'ai-mapping'
+  | 'assemblies'
 
 const SECTIONS: Array<{ id: SectionId; label: string; icon: string; badge?: string; group?: string }> = [
   { id: 'job-templates',    label: 'Job Templates',      icon: '📋', badge: 'DB',    group: 'Master Data' },
@@ -56,6 +58,7 @@ const SECTIONS: Array<{ id: SectionId; label: string; icon: string; badge?: stri
   { id: 'takeoff-mapping',  label: 'Takeoff Mapping',    icon: '📐', badge: 'DB',    group: 'Tool Config' },
   { id: 'formula-rules',    label: 'Formula Rules',      icon: '∑',  badge: 'DB',    group: 'Tool Config' },
   { id: 'ai-mapping',       label: 'AI Scope Mapping',   icon: '🤖', badge: 'DB',    group: 'Tool Config' },
+  { id: 'assemblies',       label: 'Assemblies',         icon: '🧱', badge: 'Preview', group: 'Tool Config' },
 ]
 
 // ── Estimator items editor (unchanged from original) ─────────────────────────
@@ -303,6 +306,19 @@ export default function BackOfficePage() {
         {activeSection === 'takeoff-mapping' && userId && <SectionTakeoffMapping userId={userId} />}
         {activeSection === 'formula-rules' && userId && <SectionFormulaRules userId={userId} />}
         {activeSection === 'ai-mapping' && userId && <SectionAIMapping userId={userId} />}
+
+        {activeSection === 'assemblies' && (
+          <div>
+            <h2 style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 700 }}>Assemblies</h2>
+            <p style={{ margin: '0 0 16px', fontSize: 13, color: '#64748b', maxWidth: 640, lineHeight: 1.5 }}>
+              A working preview of the assembly calculator engine — currently just the Timber Frame Wall
+              module. Play with the properties and see the cost breakdown update live. It's still running
+              on sample rates below, not your real products/labour/plant records, and nothing here saves
+              to a quote yet — that's the next stage.
+            </p>
+            <AssemblyWallDemo />
+          </div>
+        )}
 
         {!userId && ['labour','phases-tasks','products','plant','takeoff-mapping','formula-rules','ai-mapping'].includes(activeSection) && (
           <div style={{ textAlign: 'center', padding: 48, color: '#64748b' }}>Loading…</div>

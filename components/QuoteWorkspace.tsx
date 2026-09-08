@@ -20,12 +20,6 @@ import { fmt, calcPhase, calcPhaseSell } from '@/lib/utils'
 import ProductPicker      from '@/components/ProductPicker'
 import PlantPicker        from '@/components/PlantPicker'
 import PhaseReviewModal   from '@/components/PhaseReviewModal'
-import AssemblyWallDemo   from '@/components/AssemblyWallDemo'
-
-// Stage 2 preview toggle for the assembly calculator (see lib/assembly-calc.ts and the
-// feasibility report, §17). Flip to false to hide the preview entirely; it never reads
-// or writes any quote data either way.
-const ENABLE_ASSEMBLY_CALC_PREVIEW = true
 
 // ── IDs ────────────────────────────────────────────────────────────────────────
 let _id = Date.now()
@@ -1859,7 +1853,6 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
   const [search,    setSearch]    = useState('')
   const [subPhasePicker, setSubPhasePicker] = useState<{ mainPhase: string; room: string } | null>(null)
   const [pickerSearch, setPickerSearch]     = useState('')
-  const [showAssemblyDemo, setShowAssemblyDemo] = useState(false)
 
   const toggle = useCallback((k: string) => {
     setCollapsed(prev => {
@@ -2015,18 +2008,7 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
         {!isLocked && <button style={{ ...addBtn, fontSize: 11, borderColor: '#7ab533', color: '#16a34a' }} onClick={addMainPhase}>+ Add Phase</button>}
         {!isLocked && onOpenLibrary && <button style={{ ...addBtn, fontSize: 11, borderColor: '#4a90a4', color: '#1d6a8a' }} onClick={onOpenLibrary}>📚 From Library</button>}
         {!isLocked && <button style={{ ...addBtn, fontSize: 11, borderColor: '#7c3aed', color: '#7c3aed' }} onClick={handleRefreshFromBO} title="Pull current names and pricing from Back Office into this quote">↻ Refresh from Back Office</button>}
-        {ENABLE_ASSEMBLY_CALC_PREVIEW && !showAssemblyDemo && (
-          <button style={{ ...addBtn, fontSize: 11, borderColor: '#7c3aed', color: '#7c3aed' }}
-            onClick={() => setShowAssemblyDemo(true)}
-            title="Preview the assembly calculator with sample data — not part of this quote">
-            🧪 Assembly Calculator (preview)
-          </button>
-        )}
       </div>
-
-      {ENABLE_ASSEMBLY_CALC_PREVIEW && showAssemblyDemo && (
-        <AssemblyWallDemo onClose={() => setShowAssemblyDemo(false)} />
-      )}
 
       {/* Empty / landing state */}
       {mainPhases.length === 0 && !search && (
