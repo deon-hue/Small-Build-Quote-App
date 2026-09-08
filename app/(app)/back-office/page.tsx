@@ -23,6 +23,7 @@ import SectionTakeoffMapping from './components/SectionTakeoffMapping'
 import SectionFormulaRules from './components/SectionFormulaRules'
 import SectionAIMapping from './components/SectionAIMapping'
 import AssemblyWallDemo from '@/components/AssemblyWallDemo'
+import { TAKEOFF_PHASES, type TakeoffPhase } from '@/lib/takeoff-types'
 
 function deepClone<T>(v: T): T { return JSON.parse(JSON.stringify(v)) }
 
@@ -59,6 +60,19 @@ const SECTIONS: Array<{ id: SectionId; label: string; icon: string; badge?: stri
   { id: 'formula-rules',    label: 'Formula Rules',      icon: '∑',  badge: 'DB',    group: 'Tool Config' },
   { id: 'ai-mapping',       label: 'AI Scope Mapping',   icon: '🤖', badge: 'DB',    group: 'Tool Config' },
   { id: 'assemblies',       label: 'Assemblies',         icon: '🧱', badge: 'Preview', group: 'Tool Config' },
+]
+
+// ── Assemblies ─────────────────────────────────────────────────────────────────
+// An assembly is the primary thing (its own calculation engine); `phase` is just a field
+// on it, not a structural nesting — this is what lets it be picked up by whichever phase
+// AI Scope, manual quoting, or Take-off is already working with, and reassigned later
+// without restructuring anything. The Assemblies section below groups this flat list by
+// phase purely for display.
+type AssemblyIcon = 'stud-wall'
+interface AssemblyDef { key: string; label: string; icon: AssemblyIcon; phase: TakeoffPhase }
+
+const ASSEMBLIES: AssemblyDef[] = [
+  { key: 'internal-frame-wall', label: 'Internal Frame Wall', icon: 'stud-wall', phase: 'Internal Walls & Partitions' },
 ]
 
 // ── Estimator items editor (unchanged from original) ─────────────────────────
@@ -160,6 +174,14 @@ export default function BackOfficePage() {
   const [syncing, setSyncing] = useState(false)
   // Assemblies section: which assembly's full-screen calculator is open, if any
   const [openAssembly, setOpenAssembly] = useState<string | null>(null)
+  // Assemblies section: collapsed phase groups — every phase with no assemblies yet
+  // starts collapsed so the list of 19 phases doesn't swamp the one that's built.
+  const [collapsedAssemblyPhases, setCollapsedAssemblyPhases] = useState<Set<string>>(
+    () => new Set(TAKEOFF_PHASES.filter(p => !ASSEMBLIES.some(a => a.phase === p)))
+  )
+  const toggleAssemblyPhase = (p: string) => setCollapsedAssemblyPhases(prev => {
+    const next = new Set(prev); next.has(p) ? next.delete(p) : next.add(p); return next
+  })
 
   // Incremented after every sync completes so DB-backed sections re-fetch
   // with the latest data (fixes race where SectionPhasesTasks loaded before
@@ -313,41 +335,80 @@ export default function BackOfficePage() {
           <div>
             <h2 style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 700 }}>Assemblies</h2>
             <p style={{ margin: '0 0 16px', fontSize: 13, color: '#64748b', maxWidth: 640, lineHeight: 1.5 }}>
-              A working preview of the assembly calculator engine. Open one below to play with its
-              properties and see the cost breakdown update live. Still sample rates, not your real
-              products/labour/plant records, and nothing here saves to a quote yet — that's the next stage.
+              Calculation engines, grouped by the same phases as Phases &amp; Tasks — built out one phase
+              at a time. Most tasks don't need one (a flat quantity is fine); these are for the ones where
+              the numbers genuinely need to be derived, like a wall's stud count or a scaffold's lifts.
+              Still sample rates, not your real products/labour/plant records, and nothing here saves to a
+              quote yet — that's a later stage.
             </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12, maxWidth: 640 }}>
-              <button onClick={() => setOpenAssembly('internal-frame-wall')} style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6,
-                padding: '16px 18px', border: '1px solid #e9d5ff', borderRadius: 10, background: '#fdfaff',
-                cursor: 'pointer', textAlign: 'left',
-              }}>
-                <StudWallIcon size={26} />
-                <span style={{ fontWeight: 700, fontSize: 14, color: '#1e293b' }}>Internal Frame Wall</span>
-                <span style={{ fontSize: 11, color: '#7c3aed', fontWeight: 600 }}>🧪 Preview</span>
-              </button>
-            </div>
 
-            {openAssembly === 'internal-frame-wall' && (
-              <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setOpenAssembly(null) }}>
-                <div style={{
-                  background: 'var(--cream, #fff)', borderRadius: 8,
-                  width: '96vw', height: '92vh', maxWidth: 1400,
-                  display: 'flex', flexDirection: 'column', boxShadow: '0 24px 80px rgba(0,0,0,0.25)',
-                }}>
-                  <div className="form-modal-hd">
-                    <span className="serif" style={{ fontSize: 17, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <StudWallIcon size={18} /> Internal Frame Wall — Assembly Calculator
+            {TAKEOFF_PHASES.map(phase => {
+              const assemblies = ASSEMBLIES.filter(a => a.phase === phase)
+              const collapsed = collapsedAssemblyPhases.has(phase)
+              return (
+                <div key={phase} style={{ marginBottom: 6, border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
+                  <button onClick={() => toggleAssemblyPhase(phase)} style={{
+                    display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                    padding: '9px 14px', border: 'none', background: '#f8fafc', cursor: 'pointer', textAlign: 'left',
+                  }}>
+                    {collapsed ? <ChevronRight size={14} style={{ color: '#94a3b8', flexShrink: 0 }} /> : <ChevronDown size={14} style={{ color: '#94a3b8', flexShrink: 0 }} />}
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#1e293b', flex: 1 }}>{phase}</span>
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 99,
+                      background: assemblies.length ? '#ede9fe' : '#f1f5f9',
+                      color: assemblies.length ? '#7c3aed' : '#94a3b8',
+                    }}>
+                      {assemblies.length} {assemblies.length === 1 ? 'assembly' : 'assemblies'}
                     </span>
-                    <button className="modal-close" onClick={() => setOpenAssembly(null)}>×</button>
-                  </div>
-                  <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px' }}>
-                    <AssemblyWallDemo />
+                  </button>
+                  {!collapsed && (
+                    <div style={{ padding: '12px 14px', borderTop: '1px solid #e2e8f0' }}>
+                      {assemblies.length === 0 ? (
+                        <div style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic' }}>No assemblies built for this phase yet.</div>
+                      ) : (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
+                          {assemblies.map(a => (
+                            <button key={a.key} onClick={() => setOpenAssembly(a.key)} style={{
+                              display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6,
+                              padding: '16px 18px', border: '1px solid #e9d5ff', borderRadius: 10, background: '#fdfaff',
+                              cursor: 'pointer', textAlign: 'left',
+                            }}>
+                              <AssemblyIconGlyph icon={a.icon} size={26} />
+                              <span style={{ fontWeight: 700, fontSize: 14, color: '#1e293b' }}>{a.label}</span>
+                              <span style={{ fontSize: 11, color: '#7c3aed', fontWeight: 600 }}>🧪 Preview</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+
+            {openAssembly && (() => {
+              const def = ASSEMBLIES.find(a => a.key === openAssembly)
+              if (!def) return null
+              return (
+                <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setOpenAssembly(null) }}>
+                  <div style={{
+                    background: 'var(--cream, #fff)', borderRadius: 8,
+                    width: '96vw', height: '92vh', maxWidth: 1400,
+                    display: 'flex', flexDirection: 'column', boxShadow: '0 24px 80px rgba(0,0,0,0.25)',
+                  }}>
+                    <div className="form-modal-hd">
+                      <span className="serif" style={{ fontSize: 17, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <AssemblyIconGlyph icon={def.icon} size={18} /> {def.label} — Assembly Calculator
+                      </span>
+                      <button className="modal-close" onClick={() => setOpenAssembly(null)}>×</button>
+                    </div>
+                    <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px' }}>
+                      {def.key === 'internal-frame-wall' && <AssemblyWallDemo />}
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )
+            })()}
           </div>
         )}
 
@@ -505,18 +566,21 @@ export default function BackOfficePage() {
 const lbl: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }
 const inp: React.CSSProperties = { width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }
 
-// A framed stud wall in elevation — an outline with evenly-spaced vertical studs. No emoji
-// reads as "stud wall", so this is a tiny hand-drawn icon instead, in the same visual
-// language as the assembly calculator's own elevation drawing.
-function StudWallIcon({ size = 24 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="2" y="3" width="20" height="18" rx="1" stroke="#7c3aed" strokeWidth="1.6" />
-      <line x1="2" y1="3" x2="2" y2="21" stroke="#7c3aed" strokeWidth="1.6" />
-      {[6.8, 11.6, 16.4].map(x => (
-        <line key={x} x1={x} y1="3" x2={x} y2="21" stroke="#7c3aed" strokeWidth="1.6" />
-      ))}
-      <line x1="22" y1="3" x2="22" y2="21" stroke="#7c3aed" strokeWidth="1.6" />
-    </svg>
-  )
+// Assembly card/modal icons. One per AssemblyIcon kind — add a case here as each new
+// assembly module gets its own icon, rather than reaching for emoji that don't quite fit.
+function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; size?: number }) {
+  switch (icon) {
+    case 'stud-wall':
+      // A framed stud wall in elevation — an outline with evenly-spaced vertical studs.
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="2" y="3" width="20" height="18" rx="1" stroke="#7c3aed" strokeWidth="1.6" />
+          <line x1="2" y1="3" x2="2" y2="21" stroke="#7c3aed" strokeWidth="1.6" />
+          {[6.8, 11.6, 16.4].map(x => (
+            <line key={x} x1={x} y1="3" x2={x} y2="21" stroke="#7c3aed" strokeWidth="1.6" />
+          ))}
+          <line x1="22" y1="3" x2="22" y2="21" stroke="#7c3aed" strokeWidth="1.6" />
+        </svg>
+      )
+  }
 }
