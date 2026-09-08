@@ -9,6 +9,7 @@ import {
   fetchLabourTrades, fetchProducts, fetchPlantItems,
 } from '@/lib/back-office-queries'
 import type { BOPhase, BOSubPhase, BOTask, BOLabourTrade, BOProduct, BOPlantItem } from '@/lib/back-office-types'
+import { BUILT_ASSEMBLY_CANON_IDS } from './SectionAssemblies'
 
 // Phases that use FloorMakeup build-ups — tasks under these are "Construction Layers"
 const BUILDUP_PHASES = new Set(['External Walls', 'Floors & Screeds', 'Foundations', 'Plastering & Boarding', 'Roof'])
@@ -468,6 +469,10 @@ export default function SectionPhasesTasks({ userId }: Props) {
             {phaseSubPhases.map(sp => {
               const spTasks = tasks.filter(t => t.sub_phase_id === sp.id)
               const isOpen = expandedSubPhases.has(sp.id)
+              // A sub-phase with a built assembly is edited there instead — see Assemblies.
+              // Phases & Tasks just displays it read-only, since this is what AI Scope,
+              // Take-off, and manual quoting actually read from.
+              const isBuiltAssembly = !!(sp.canonical_id && BUILT_ASSEMBLY_CANON_IDS[sp.canonical_id])
               return (
                 <div key={sp.id} style={{ border: '1px solid #e2e8f0', borderRadius: 8, marginBottom: 10, overflow: 'hidden' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#f8fafc', cursor: 'pointer' }} onClick={() => toggleSubPhase(sp.id)}>
@@ -493,71 +498,87 @@ export default function SectionPhasesTasks({ userId }: Props) {
                     ) : (
                       <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                         <span style={{ fontSize: 13, fontWeight: 600, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sp.name}</span>
-                        <button
-                          onClick={e => { e.stopPropagation(); setEditingSubPhaseId(sp.id); setEditingSubPhaseName(sp.name) }}
-                          title="Rename sub-phase"
-                          style={{ padding: '2px 6px', border: '1px solid #e2e8f0', borderRadius: 4, background: '#fff', fontSize: 11, cursor: 'pointer', color: '#64748b', flexShrink: 0, lineHeight: 1 }}>
-                          ✎
-                        </button>
+                        {isBuiltAssembly ? (
+                          <span title="Edited via its Assembly, not here" style={{ fontSize: 11, color: '#7c3aed', flexShrink: 0 }}>🔒</span>
+                        ) : (
+                          <button
+                            onClick={e => { e.stopPropagation(); setEditingSubPhaseId(sp.id); setEditingSubPhaseName(sp.name) }}
+                            title="Rename sub-phase"
+                            style={{ padding: '2px 6px', border: '1px solid #e2e8f0', borderRadius: 4, background: '#fff', fontSize: 11, cursor: 'pointer', color: '#64748b', flexShrink: 0, lineHeight: 1 }}>
+                            ✎
+                          </button>
+                        )}
                       </div>
                     )}
                     <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>
                       {spTasks.length} {BUILDUP_PHASES.has(selectedPhase.name) ? 'layers' : 'tasks'}
                     </span>
 
-                    {/* Move to another phase */}
-                    <div style={{ position: 'relative', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                      {movingSubPhaseId === sp.id ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <select
-                            autoFocus
-                            defaultValue=""
-                            onChange={e => { if (e.target.value) moveSubPhase(sp.id, e.target.value) }}
-                            onBlur={() => setMovingSubPhaseId(null)}
-                            style={{ padding: '3px 8px', border: '1px solid #4a90a4', borderRadius: 5, fontSize: 12, background: '#fff', color: '#1e293b', cursor: 'pointer' }}>
-                            <option value="" disabled>Move to phase…</option>
-                            {phases.filter(ph => ph.id !== selectedPhase.id).map(ph => (
-                              <option key={ph.id} value={ph.id}>{ph.name}</option>
-                            ))}
-                          </select>
-                          <button onClick={() => setMovingSubPhaseId(null)}
-                            style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>✕</button>
+                    {isBuiltAssembly ? (
+                      <span style={{ fontSize: 11, color: '#7c3aed', fontWeight: 600, flexShrink: 0 }}>Edit via Assemblies →</span>
+                    ) : (
+                      <>
+                        {/* Move to another phase */}
+                        <div style={{ position: 'relative', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                          {movingSubPhaseId === sp.id ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <select
+                                autoFocus
+                                defaultValue=""
+                                onChange={e => { if (e.target.value) moveSubPhase(sp.id, e.target.value) }}
+                                onBlur={() => setMovingSubPhaseId(null)}
+                                style={{ padding: '3px 8px', border: '1px solid #4a90a4', borderRadius: 5, fontSize: 12, background: '#fff', color: '#1e293b', cursor: 'pointer' }}>
+                                <option value="" disabled>Move to phase…</option>
+                                {phases.filter(ph => ph.id !== selectedPhase.id).map(ph => (
+                                  <option key={ph.id} value={ph.id}>{ph.name}</option>
+                                ))}
+                              </select>
+                              <button onClick={() => setMovingSubPhaseId(null)}
+                                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>✕</button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={e => { e.stopPropagation(); setMovingSubPhaseId(sp.id) }}
+                              title="Move sub-phase to another phase"
+                              style={{ padding: '2px 7px', border: '1px solid #e2e8f0', borderRadius: 4, background: '#fff', fontSize: 11, cursor: 'pointer', color: '#64748b', lineHeight: 1 }}>
+                              ↪ Move
+                            </button>
+                          )}
                         </div>
-                      ) : (
-                        <button
-                          onClick={e => { e.stopPropagation(); setMovingSubPhaseId(sp.id) }}
-                          title="Move sub-phase to another phase"
-                          style={{ padding: '2px 7px', border: '1px solid #e2e8f0', borderRadius: 4, background: '#fff', fontSize: 11, cursor: 'pointer', color: '#64748b', lineHeight: 1 }}>
-                          ↪ Move
-                        </button>
-                      )}
-                    </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }} onClick={e => e.stopPropagation()}>
-                      <span style={{ fontSize: 11, color: '#64748b' }}>Markup</span>
-                      <input
-                        type="number" min={0} max={200} value={sp.markup_pct}
-                        onChange={e => updateSubPhaseMarkup(sp.id, +e.target.value)}
-                        style={{ width: 52, padding: '2px 6px', border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 12, textAlign: 'right' }}
-                      />
-                      <span style={{ fontSize: 11, color: '#64748b' }}>%</span>
-                    </div>
-                    <button
-                      onClick={e => { e.stopPropagation(); openNewTask(selectedPhase.id, sp.id) }}
-                      style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '3px 8px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 4, color: '#1d4ed8', fontSize: 11, cursor: 'pointer', flexShrink: 0 }}
-                    >
-                      <Plus size={11} /> {BUILDUP_PHASES.has(selectedPhase.name) ? 'Layer' : 'Task'}
-                    </button>
-                    <button
-                      onClick={e => { e.stopPropagation(); removeSubPhase(sp.id) }}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#fca5a5', padding: 2, flexShrink: 0 }}
-                    >
-                      <Trash2 size={13} />
-                    </button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }} onClick={e => e.stopPropagation()}>
+                          <span style={{ fontSize: 11, color: '#64748b' }}>Markup</span>
+                          <input
+                            type="number" min={0} max={200} value={sp.markup_pct}
+                            onChange={e => updateSubPhaseMarkup(sp.id, +e.target.value)}
+                            style={{ width: 52, padding: '2px 6px', border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 12, textAlign: 'right' }}
+                          />
+                          <span style={{ fontSize: 11, color: '#64748b' }}>%</span>
+                        </div>
+                        <button
+                          onClick={e => { e.stopPropagation(); openNewTask(selectedPhase.id, sp.id) }}
+                          style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '3px 8px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 4, color: '#1d4ed8', fontSize: 11, cursor: 'pointer', flexShrink: 0 }}
+                        >
+                          <Plus size={11} /> {BUILDUP_PHASES.has(selectedPhase.name) ? 'Layer' : 'Task'}
+                        </button>
+                        <button
+                          onClick={e => { e.stopPropagation(); removeSubPhase(sp.id) }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#fca5a5', padding: 2, flexShrink: 0 }}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </>
+                    )}
                   </div>
                   {isOpen && (
                     <div style={{ padding: '8px 14px 12px' }}>
-                      {spTasks.length > 0 ? (
+                      {isBuiltAssembly ? (
+                        <div style={{ color: '#7c3aed', fontSize: 12, padding: '10px 12px', textAlign: 'center', background: '#fdfaff', border: '1px dashed #e9d5ff', borderRadius: 6 }}>
+                          🔒 This sub-phase has a built assembly — edit its {spTasks.length} task{spTasks.length !== 1 ? 's' : ''} from
+                          Back Office → Assemblies instead. This view is read-only, since it's what AI Scope, Take-off, and
+                          manual quoting read from.
+                        </div>
+                      ) : spTasks.length > 0 ? (
                         <TaskTable tasks={spTasks} onEdit={openEditTask} onDelete={removeTask} onDuplicate={duplicateTask} onToggleActive={toggleTaskActive} onUpdate={patchTask} labourTrades={labourTrades} products={products} plantItems={plantItems} />
                       ) : (
                         <div style={{ color: '#94a3b8', fontSize: 12, padding: '8px 0', textAlign: 'center' }}>

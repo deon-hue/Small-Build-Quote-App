@@ -22,10 +22,7 @@ import SectionPlant from './components/SectionPlant'
 import SectionTakeoffMapping from './components/SectionTakeoffMapping'
 import SectionFormulaRules from './components/SectionFormulaRules'
 import SectionAIMapping from './components/SectionAIMapping'
-import AssemblyWallDemo from '@/components/AssemblyWallDemo'
-import { TAKEOFF_PHASES, type TakeoffPhase } from '@/lib/takeoff-types'
-import { ALL_PHASE_SUBPHASES } from '@/lib/phase-tasks'
-import { DEFAULT_DEMO_SUBPHASES } from '@/lib/demolition-data'
+import SectionAssemblies from './components/SectionAssemblies'
 
 function deepClone<T>(v: T): T { return JSON.parse(JSON.stringify(v)) }
 
@@ -61,37 +58,8 @@ const SECTIONS: Array<{ id: SectionId; label: string; icon: string; badge?: stri
   { id: 'takeoff-mapping',  label: 'Takeoff Mapping',    icon: '📐', badge: 'DB',    group: 'Tool Config' },
   { id: 'formula-rules',    label: 'Formula Rules',      icon: '∑',  badge: 'DB',    group: 'Tool Config' },
   { id: 'ai-mapping',       label: 'AI Scope Mapping',   icon: '🤖', badge: 'DB',    group: 'Tool Config' },
-  { id: 'assemblies',       label: 'Assemblies',         icon: '🧱', badge: 'Preview', group: 'Tool Config' },
+  { id: 'assemblies',       label: 'Assemblies',         icon: '🧱', badge: 'DB',      group: 'Tool Config' },
 ]
-
-// ── Assemblies ─────────────────────────────────────────────────────────────────
-// One card per real sub-phase — generated from the same data that feeds Phases & Tasks
-// (ALL_PHASE_SUBPHASES + Demolition's own list), not hand-maintained, so it can never drift
-// out of sync with the real phase/sub-phase structure. Most cards have no calculator yet —
-// that's expected; they're filled in one at a time via BUILT_ASSEMBLIES below. `phase` is a
-// field on each assembly, not a structural nesting, so it can be reassigned later and picked
-// up by whichever phase AI Scope, manual quoting, or Take-off is already working with.
-type AssemblyIcon = 'stud-wall'
-interface AssemblyDef { key: string; label: string; phase: TakeoffPhase; taskCount: number }
-
-// A duplicate, orphaned phase left over in the data (not one of the real 19 in
-// TAKEOFF_PHASES) — excluded here rather than silently shown as an extra ungrouped phase.
-const EXCLUDED_ASSEMBLY_PHASES = new Set(['External Wall Construction'])
-
-const ASSEMBLIES: AssemblyDef[] = [
-  ...ALL_PHASE_SUBPHASES
-    .filter(s => !EXCLUDED_ASSEMBLY_PHASES.has(s.phase))
-    .map(s => ({ key: s.id, label: s.name, phase: s.phase as TakeoffPhase, taskCount: s.tasks.length })),
-  ...DEFAULT_DEMO_SUBPHASES.map(s => ({ key: `demo-${s.id}`, label: s.name, phase: 'Demolition' as TakeoffPhase, taskCount: s.tasks.length })),
-]
-
-// Which of the generated cards above actually have a working calculator today. Everything
-// else renders as a "not built yet" placeholder — this is the roadmap, filled in phase by
-// phase. 'iw-stud-partition' = the real "Timber Stud Partitions" sub-phase under Internal
-// Walls & Partitions; the framed-wall engine built so far applies to it directly.
-const BUILT_ASSEMBLIES: Record<string, { icon: AssemblyIcon; render: () => React.ReactNode }> = {
-  'iw-stud-partition': { icon: 'stud-wall', render: () => <AssemblyWallDemo /> },
-}
 
 // ── Estimator items editor (unchanged from original) ─────────────────────────
 const MEAS_TYPES = Object.keys(MEASUREMENT_LABELS) as MeasurementType[]
@@ -190,19 +158,6 @@ export default function BackOfficePage() {
   })
   const [userId, setUserId] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
-  // Assemblies section: which assembly's full-screen calculator is open, if any
-  const [openAssembly, setOpenAssembly] = useState<string | null>(null)
-  // Assemblies section: collapsed phase groups. Every phase has generated cards now (one
-  // per real sub-phase), so default to collapsed except phases with at least one *built*
-  // calculator — otherwise all 19 would auto-expand and swamp the page on load.
-  const [collapsedAssemblyPhases, setCollapsedAssemblyPhases] = useState<Set<string>>(
-    () => new Set(TAKEOFF_PHASES.filter(p =>
-      !ASSEMBLIES.some(a => a.phase === p && BUILT_ASSEMBLIES[a.key])
-    ))
-  )
-  const toggleAssemblyPhase = (p: string) => setCollapsedAssemblyPhases(prev => {
-    const next = new Set(prev); next.has(p) ? next.delete(p) : next.add(p); return next
-  })
 
   // Incremented after every sync completes so DB-backed sections re-fetch
   // with the latest data (fixes race where SectionPhasesTasks loaded before
@@ -352,107 +307,9 @@ export default function BackOfficePage() {
         {activeSection === 'formula-rules' && userId && <SectionFormulaRules userId={userId} />}
         {activeSection === 'ai-mapping' && userId && <SectionAIMapping userId={userId} />}
 
-        {activeSection === 'assemblies' && (
-          <div>
-            <h2 style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 700 }}>Assemblies</h2>
-            <p style={{ margin: '0 0 16px', fontSize: 13, color: '#64748b', maxWidth: 640, lineHeight: 1.5 }}>
-              One card per real sub-phase from Phases &amp; Tasks — this is the full roadmap, filled in one
-              engine at a time. Most cards say "Not built yet" and that's fine; plenty of tasks are already
-              correctly served by a flat quantity and won't need one. Built ones (marked 🧪 Preview) still run
-              on sample rates, not your real products/labour/plant records, and nothing here saves to a quote
-              yet — that's a later stage.
-            </p>
+        {activeSection === 'assemblies' && userId && <SectionAssemblies userId={userId} key={syncKey} />}
 
-            {TAKEOFF_PHASES.map(phase => {
-              const assemblies = ASSEMBLIES.filter(a => a.phase === phase)
-              const collapsed = collapsedAssemblyPhases.has(phase)
-              return (
-                <div key={phase} style={{ marginBottom: 6, border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
-                  <button onClick={() => toggleAssemblyPhase(phase)} style={{
-                    display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-                    padding: '9px 14px', border: 'none', background: '#f8fafc', cursor: 'pointer', textAlign: 'left',
-                  }}>
-                    {collapsed ? <ChevronRight size={14} style={{ color: '#94a3b8', flexShrink: 0 }} /> : <ChevronDown size={14} style={{ color: '#94a3b8', flexShrink: 0 }} />}
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#1e293b', flex: 1 }}>{phase}</span>
-                    <span style={{
-                      fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 99,
-                      background: assemblies.length ? '#ede9fe' : '#f1f5f9',
-                      color: assemblies.length ? '#7c3aed' : '#94a3b8',
-                    }}>
-                      {assemblies.length} {assemblies.length === 1 ? 'assembly' : 'assemblies'}
-                    </span>
-                  </button>
-                  {!collapsed && (
-                    <div style={{ padding: '12px 14px', borderTop: '1px solid #e2e8f0' }}>
-                      {assemblies.length === 0 ? (
-                        <div style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic' }}>No sub-phases for this phase yet.</div>
-                      ) : (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
-                          {assemblies.map(a => {
-                            const built = BUILT_ASSEMBLIES[a.key]
-                            return (
-                              <button key={a.key} onClick={() => setOpenAssembly(a.key)} style={{
-                                display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6,
-                                padding: '16px 18px', borderRadius: 10, textAlign: 'left', cursor: 'pointer',
-                                border: built ? '1px solid #e9d5ff' : '1px dashed #d1d5db',
-                                background: built ? '#fdfaff' : '#fafafa',
-                              }}>
-                                {built ? <AssemblyIconGlyph icon={built.icon} size={26} /> : <span style={{ fontSize: 22, opacity: 0.4 }}>🔧</span>}
-                                <span style={{ fontWeight: 700, fontSize: 14, color: built ? '#1e293b' : '#64748b' }}>{a.label}</span>
-                                {built ? (
-                                  <span style={{ fontSize: 11, color: '#7c3aed', fontWeight: 600 }}>🧪 Preview</span>
-                                ) : (
-                                  <span style={{ fontSize: 11, color: '#94a3b8' }}>Not built yet · {a.taskCount} task{a.taskCount !== 1 ? 's' : ''} today</span>
-                                )}
-                              </button>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-
-            {openAssembly && (() => {
-              const def = ASSEMBLIES.find(a => a.key === openAssembly)
-              if (!def) return null
-              const built = BUILT_ASSEMBLIES[def.key]
-              return (
-                <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setOpenAssembly(null) }}>
-                  <div style={{
-                    background: 'var(--cream, #fff)', borderRadius: 8,
-                    width: '96vw', height: '92vh', maxWidth: 1400,
-                    display: 'flex', flexDirection: 'column', boxShadow: '0 24px 80px rgba(0,0,0,0.25)',
-                  }}>
-                    <div className="form-modal-hd">
-                      <span className="serif" style={{ fontSize: 17, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {built ? <AssemblyIconGlyph icon={built.icon} size={18} /> : <span style={{ fontSize: 16 }}>🔧</span>} {def.label} — Assembly Calculator
-                      </span>
-                      <button className="modal-close" onClick={() => setOpenAssembly(null)}>×</button>
-                    </div>
-                    <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px' }}>
-                      {built ? built.render() : (
-                        <div style={{ maxWidth: 480, margin: '40px auto', textAlign: 'center', color: '#64748b' }}>
-                          <div style={{ fontSize: 32, marginBottom: 10 }}>🔧</div>
-                          <div style={{ fontWeight: 700, fontSize: 15, color: '#1e293b', marginBottom: 6 }}>No calculator built yet</div>
-                          <div style={{ fontSize: 13, lineHeight: 1.6 }}>
-                            "{def.label}" is a real sub-phase under <strong>{def.phase}</strong> in Phases &amp; Tasks
-                            {def.taskCount > 0 ? `, with ${def.taskCount} task${def.taskCount !== 1 ? 's' : ''} already priced there` : ', with no tasks priced there yet'}.
-                            It doesn't have a calculation engine yet — that gets built when we get to this phase.
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )
-            })()}
-          </div>
-        )}
-
-        {!userId && ['labour','phases-tasks','products','plant','takeoff-mapping','formula-rules','ai-mapping'].includes(activeSection) && (
+        {!userId && ['labour','phases-tasks','products','plant','takeoff-mapping','formula-rules','ai-mapping','assemblies'].includes(activeSection) && (
           <div style={{ textAlign: 'center', padding: 48, color: '#64748b' }}>Loading…</div>
         )}
 
@@ -605,22 +462,3 @@ export default function BackOfficePage() {
 
 const lbl: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }
 const inp: React.CSSProperties = { width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }
-
-// Assembly card/modal icons. One per AssemblyIcon kind — add a case here as each new
-// assembly module gets its own icon, rather than reaching for emoji that don't quite fit.
-function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; size?: number }) {
-  switch (icon) {
-    case 'stud-wall':
-      // A framed stud wall in elevation — an outline with evenly-spaced vertical studs.
-      return (
-        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect x="2" y="3" width="20" height="18" rx="1" stroke="#7c3aed" strokeWidth="1.6" />
-          <line x1="2" y1="3" x2="2" y2="21" stroke="#7c3aed" strokeWidth="1.6" />
-          {[6.8, 11.6, 16.4].map(x => (
-            <line key={x} x1={x} y1="3" x2={x} y2="21" stroke="#7c3aed" strokeWidth="1.6" />
-          ))}
-          <line x1="22" y1="3" x2="22" y2="21" stroke="#7c3aed" strokeWidth="1.6" />
-        </svg>
-      )
-  }
-}
