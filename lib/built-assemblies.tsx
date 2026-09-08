@@ -7,6 +7,7 @@
 
 import AssemblyWallDemo from '@/components/AssemblyWallDemo'
 import type { CostedLine } from '@/lib/assembly-calc'
+import type { BOLabourTrade } from '@/lib/back-office-types'
 
 export type AssemblyIcon = 'stud-wall'
 
@@ -16,9 +17,9 @@ export interface AssemblySaveResult { name: string; qty: number; location: strin
 
 export const BUILT_ASSEMBLY_CANON_IDS: Record<string, {
   icon: AssemblyIcon
-  render: (opts?: { onSave?: (result: AssemblySaveResult) => void }) => React.ReactNode
+  render: (opts?: { onSave?: (result: AssemblySaveResult) => void; labourTrades?: BOLabourTrade[] }) => React.ReactNode
 }> = {
-  'iw-stud-partition': { icon: 'stud-wall', render: opts => <AssemblyWallDemo onSave={opts?.onSave} /> },
+  'iw-stud-partition': { icon: 'stud-wall', render: opts => <AssemblyWallDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
 }
 
 export function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; size?: number }) {

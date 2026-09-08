@@ -20,10 +20,11 @@ import {
   type WallInput, type AssemblyOpening, type AssemblyLayerDef, type CostedLine,
 } from '@/lib/assembly-calc'
 import { fmt } from '@/lib/utils'
+import type { BOLabourTrade } from '@/lib/back-office-types'
 
-// ── Sample Back Office-style rates (placeholders — Stage 3 will pull these live) ──
-const SAMPLE_HOURLY_RATE = 28 // £/hr, stand-in for a Back Office labour trade's day rate ÷ 8
-
+// ── Sample Back Office-style rates for materials (placeholders — real Products linking
+// comes later). Labour isn't derived from geometry at all — see LabourLine below, it's a
+// manual trade + hours entry priced from real Back Office labour rates. ──
 function buildSampleLayers(wastePct: number): AssemblyLayerDef[] {
   return [
     { id: 'studs',     name: 'CLS studs 89×38',        category: 'materials', source: 'studCount',    unit: 'nr',    unitCost: 4.20,  roundToWhole: true },
@@ -34,10 +35,13 @@ function buildSampleLayers(wastePct: number): AssemblyLayerDef[] {
     { id: 'membrane',  name: 'Breather membrane',       category: 'materials', source: 'grossAreaM2',  unit: 'm²',    unitCost: 1.20,  wastePct },
     { id: 'insulation',name: 'Insulation (between studs)', category: 'materials', source: 'netAreaM2', unit: 'm²',    unitCost: 8.50,  wastePct },
     { id: 'lining',    name: 'Plasterboard lining',     category: 'materials', source: 'netAreaM2',    unit: 'm²',    unitCost: 6.90,  wastePct },
-    { id: 'labour-area', name: 'Fix & sheet frame',     category: 'labour',    source: 'grossAreaM2',  unit: 'hr',    unitCost: SAMPLE_HOURLY_RATE, coveragePerUnit: 1 / 0.75 },
-    { id: 'labour-openings', name: 'Frame each opening', category: 'labour',  source: 'headerCount',   unit: 'hr',    unitCost: SAMPLE_HOURLY_RATE, coveragePerUnit: 1 / 2 },
   ]
 }
+
+interface LabourLine { id: string; tradeId: string; task: string; hours: number }
+let _labourLineId = 0
+const newLabourLineId = () => `ll-${++_labourLineId}`
+function hourlyRate(trade: BOLabourTrade): number { return +(trade.day_rate / 8).toFixed(2) }
 
 const CATEGORY_LABEL: Record<string, string> = { materials: 'Materials', labour: 'Labour', plant: 'Plant', subcontractors: 'Subcontractors', other: 'Other' }
 
@@ -54,9 +58,12 @@ interface Props {
   /** Present when opened from a real quote sub-phase — writes this calculation's costed
    * lines into it, replacing whatever was there before. Absent in Back Office's preview. */
   onSave?: (result: { name: string; qty: number; location: string; description: string; lines: CostedLine[] }) => void
+  /** Real Back Office labour trades, for the manual trade + hours labour picker. Absent (or
+   * empty) shows a message pointing at Back Office rather than falling back to a guess. */
+  labourTrades?: BOLabourTrade[]
 }
 
-export default function AssemblyWallDemo({ onClose, onSave }: Props) {
+export default function AssemblyWallDemo({ onClose, onSave, labourTrades = [] }: Props) {
   const [name, setName]         = useState('Timber Stud Partition')
   const [qty, setQty]           = useState(1)
   const [lengthMm, setLengthMm] = useState(5000)
@@ -66,6 +73,18 @@ export default function AssemblyWallDemo({ onClose, onSave }: Props) {
   const [wastePct, setWastePct] = useState(10)
   const [openings, setOpenings] = useState<AssemblyOpening[]>(sampleOpenings)
   const [location, setLocation] = useState('')
+  const [labourLines, setLabourLines] = useState<LabourLine[]>([
+    { id: newLabourLineId(), tradeId: '', task: 'Build stud wall', hours: 4 },
+  ])
+  function addLabourLine() {
+    setLabourLines(prev => [...prev, { id: newLabourLineId(), tradeId: prev[0]?.tradeId ?? '', task: '', hours: 0 }])
+  }
+  function updateLabourLine(id: string, patch: Partial<LabourLine>) {
+    setLabourLines(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l))
+  }
+  function removeLabourLine(id: string) {
+    setLabourLines(prev => prev.filter(l => l.id !== id))
+  }
   // Sample rates the user has overridden in this session — keyed by layer id. Still not
   // linked to real Products/Labour/Plant records, but editable here in the meantime.
   const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
@@ -114,9 +133,28 @@ export default function AssemblyWallDemo({ onClose, onSave }: Props) {
     catch (e: any) { return { ok: false as const, error: e.message as string } }
   }, [lengthMm, heightMm, centresMm, doubleTopPlate, JSON.stringify(openings), layers])
 
-  // What actually counts — every line minus whatever's been toggled off.
-  const enabledLines = result.ok ? result.value.lines.filter(l => !disabledLayerIds.has(l.layerId)) : []
-  const totalCost = enabledLines.reduce((s, l) => s + l.cost, 0)
+  // Materials only now — every line minus whatever's been toggled off.
+  const materialLines = result.ok ? result.value.lines : []
+  const enabledMaterialLines = materialLines.filter(l => !disabledLayerIds.has(l.layerId))
+
+  // Labour is never derived from geometry — it's manual trade + hours, priced from the
+  // real Back Office day rate (÷8 for an hourly figure), per line. No rate override here:
+  // the whole point is that this comes from Back Office, not a typed-in guess.
+  const labourCostedLines: CostedLine[] = labourLines
+    .map(l => {
+      const trade = labourTrades.find(t => t.id === l.tradeId)
+      if (!trade || l.hours <= 0) return null
+      const rate = hourlyRate(trade)
+      const line: CostedLine = {
+        layerId: l.id, name: `${trade.name} — ${l.task || 'Labour'}`, category: 'labour',
+        source: 'fixed', wastePct: 0, rawQty: l.hours, purchaseQty: l.hours, unit: 'hr',
+        unitCost: rate, cost: +(l.hours * rate).toFixed(2),
+      }
+      return line
+    })
+    .filter((l): l is CostedLine => l !== null)
+
+  const totalCost = enabledMaterialLines.reduce((s, l) => s + l.cost, 0) + labourCostedLines.reduce((s, l) => s + l.cost, 0)
 
   function updateOpening(id: string, patch: Partial<AssemblyOpening>) {
     setOpenings(prev => prev.map(o => o.id === id ? { ...o, ...patch } : o))
@@ -165,7 +203,7 @@ export default function AssemblyWallDemo({ onClose, onSave }: Props) {
         )}
         {onSave && result.ok && (
           <button
-            onClick={() => onSave({ name, qty, location, description, lines: enabledLines })}
+            onClick={() => onSave({ name, qty, location, description, lines: [...enabledMaterialLines, ...labourCostedLines] })}
             title="Replace this sub-phase's cost items with this calculation's costed lines"
             style={{ background: '#16a34a', border: 'none', borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: '6px 12px' }}>
             💾 Save &amp; Price
@@ -269,9 +307,56 @@ export default function AssemblyWallDemo({ onClose, onSave }: Props) {
             </div>
           </div>
 
+          {/* Labour — manual trade + hours, priced from real Back Office day rates. Spans
+              both columns: it needs the room, and it's not a wall-geometry property. */}
+          <div style={{ gridColumn: '1 / -1', marginTop: 4 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 }}>
+              Labour — pick a trade, allow some time, add another trade for the next task
+            </div>
+            {labourTrades.length === 0 ? (
+              <div style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic', padding: '6px 0' }}>
+                No Back Office labour trades found — add some under Back Office → Labour &amp; Trades.
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr 70px 90px 90px 20px', gap: 6, marginBottom: 3 }}>
+                  {['Trade', 'Task', 'Hours', 'Rate', 'Cost'].map(h => (
+                    <div key={h} style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.3 }}>{h}</div>
+                  ))}
+                  <div />
+                </div>
+                {labourLines.map(l => {
+                  const trade = labourTrades.find(t => t.id === l.tradeId)
+                  const rate = trade ? hourlyRate(trade) : 0
+                  const cost = trade ? +(l.hours * rate).toFixed(2) : 0
+                  return (
+                    <div key={l.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr 70px 90px 90px 20px', gap: 6, marginBottom: 4, alignItems: 'center' }}>
+                      <select value={l.tradeId} onChange={e => updateLabourLine(l.id, { tradeId: e.target.value })} style={miniInput}>
+                        <option value="">Select trade…</option>
+                        {labourTrades.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      </select>
+                      <input value={l.task} onChange={e => updateLabourLine(l.id, { task: e.target.value })}
+                        placeholder="e.g. Build stud wall" style={miniInput} />
+                      <input type="number" min={0} step={0.5} value={l.hours}
+                        onChange={e => updateLabourLine(l.id, { hours: +e.target.value || 0 })} style={miniInput} />
+                      <div style={{ fontSize: 11, fontFamily: 'monospace', color: '#94a3b8' }}>{trade ? `£${rate.toFixed(2)}/hr` : '—'}</div>
+                      <div style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 600 }}>{trade ? `£${cost.toFixed(2)}` : '—'}</div>
+                      <button onClick={() => removeLabourLine(l.id)} title="Remove this labour line"
+                        style={{ background: 'none', border: 'none', color: '#e74c3c', cursor: 'pointer', fontSize: 14 }}>×</button>
+                    </div>
+                  )
+                })}
+                <button onClick={addLabourLine}
+                  style={{ fontSize: 11, border: '1px dashed #94a3b8', background: 'transparent', borderRadius: 4, color: '#64748b', padding: '3px 8px', cursor: 'pointer' }}>
+                  + Add Trade
+                </button>
+              </>
+            )}
+          </div>
+
           {/* Breakdown — spans both columns */}
           <div style={{ gridColumn: '1 / -1', marginTop: 4 }}>
-            <BreakdownTable lines={result.value.lines} onRateChange={setRate} disabledLayerIds={disabledLayerIds} onToggleLayer={toggleLayer} />
+            <BreakdownTable lines={materialLines} onRateChange={setRate} disabledLayerIds={disabledLayerIds} onToggleLayer={toggleLayer} />
           </div>
         </div>
       )}

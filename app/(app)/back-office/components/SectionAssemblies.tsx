@@ -16,8 +16,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { fetchPhases, fetchSubPhases, upsertSubPhase, deleteSubPhase, fetchTasks } from '@/lib/back-office-queries'
-import type { BOPhase, BOSubPhase } from '@/lib/back-office-types'
+import { fetchPhases, fetchSubPhases, upsertSubPhase, deleteSubPhase, fetchTasks, fetchLabourTrades } from '@/lib/back-office-queries'
+import type { BOPhase, BOSubPhase, BOLabourTrade } from '@/lib/back-office-types'
 import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { BUILT_ASSEMBLY_CANON_IDS, AssemblyIconGlyph } from '@/lib/built-assemblies'
 
@@ -28,6 +28,7 @@ export default function SectionAssemblies({ userId }: Props) {
   const [phases, setPhases] = useState<BOPhase[]>([])
   const [subPhases, setSubPhases] = useState<BOSubPhase[]>([])
   const [taskCounts, setTaskCounts] = useState<Record<string, number>>({})
+  const [labourTrades, setLabourTrades] = useState<BOLabourTrade[]>([])
   const [loading, setLoading] = useState(true)
   const [collapsed, setCollapsed] = useState<Set<string> | null>(null) // null = not yet defaulted
   const [openAssembly, setOpenAssembly] = useState<string | null>(null) // sub-phase id
@@ -35,13 +36,15 @@ export default function SectionAssemblies({ userId }: Props) {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [ph, sp, tasks] = await Promise.all([
+    const [ph, sp, tasks, trades] = await Promise.all([
       fetchPhases(sb, userId),
       fetchSubPhases(sb, userId),
       fetchTasks(sb, userId),
+      fetchLabourTrades(sb, userId),
     ])
     setPhases(ph)
     setSubPhases(sp)
+    setLabourTrades(trades.filter(t => t.active))
     const counts: Record<string, number> = {}
     for (const t of tasks) { if (t.sub_phase_id) counts[t.sub_phase_id] = (counts[t.sub_phase_id] ?? 0) + 1 }
     setTaskCounts(counts)
@@ -206,7 +209,7 @@ export default function SectionAssemblies({ userId }: Props) {
               <button className="modal-close" onClick={() => setOpenAssembly(null)}>×</button>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px' }}>
-              {openBuilt ? openBuilt.render() : (
+              {openBuilt ? openBuilt.render({ labourTrades }) : (
                 <div style={{ maxWidth: 480, margin: '40px auto', textAlign: 'center', color: '#64748b' }}>
                   <div style={{ fontSize: 32, marginBottom: 10 }}>🔧</div>
                   <div style={{ fontWeight: 700, fontSize: 15, color: '#1e293b', marginBottom: 6 }}>No calculator built yet</div>
