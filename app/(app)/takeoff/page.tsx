@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/client'
 import { makeDebouncedSave, loadTakeoffFromSupabase } from '@/lib/takeoff-sync'
 import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchLabourTrades, fetchPhases, fetchSubPhases, fetchTasks } from '@/lib/back-office-queries'
 import type { BOLabourTrade, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
+import AssemblyWallDemo from '@/components/AssemblyWallDemo'
+import { BUILT_ASSEMBLY_CANON_IDS } from '@/lib/built-assemblies'
 import LabourCostBuilder from './components/LabourCostBuilder'
 import ClientProjectModal from './components/ClientProjectModal'
 import ConstructionLayerModal, { saveLayerCostToBackOffice } from './components/ConstructionLayerModal'
@@ -2210,8 +2212,10 @@ export default function TakeoffPage() {
       saveItemEdit(item)
     }
 
-    // Generic phase tasks
-    const _subs = getAllSubphasesForPhase(item.phase)
+    // Generic phase tasks — Internal Walls has its own dedicated sub-phase picker below
+    // (recipe engine or assembly calculator, depending on what's picked), so it's excluded
+    // here rather than also being auto-stamped with flat-task cost fields nothing displays.
+    const _subs = item.phase === 'Internal Walls & Partitions' ? [] : getAllSubphasesForPhase(item.phase)
     const _phaseHasTasks = _subs.length > 0
     if (_phaseHasTasks && !item.taskSubphaseId && !_isBuildupItem) {
       const _ds = _subs[0]; const _dt = _ds?.tasks[0]
@@ -2740,31 +2744,81 @@ export default function TakeoffPage() {
             )
           })()}
 
-          {/* Internal Walls: Construction Type + Finish Type */}
-          {isIntWall && (
-            <>
-              <div style={{ marginBottom: 10 }}>
-                <label style={labelStyle}>Construction Type</label>
-                <select style={{ ...inputStyle, color: accent }}
-                  value={item.wallConstructionType ?? 'stud_metal_70'}
-                  onChange={e => recalcWallAndSave({ wallConstructionType: e.target.value as WallConstructionType })}>
-                  {(Object.entries(WALL_CONSTRUCTION_LABELS) as [WallConstructionType, string][]).map(([k, v]) => (
-                    <option key={k} value={k}>{v}</option>
-                  ))}
-                </select>
-              </div>
-              <div style={{ marginBottom: 10 }}>
-                <label style={labelStyle}>Finish Type</label>
-                <select style={{ ...inputStyle, color: accent }}
-                  value={item.wallFinishType ?? 'board_skim'}
-                  onChange={e => recalcWallAndSave({ wallFinishType: e.target.value as WallFinishType })}>
-                  {(Object.entries(WALL_FINISH_LABELS) as [WallFinishType, string][]).map(([k, v]) => (
-                    <option key={k} value={k}>{v}</option>
-                  ))}
-                </select>
-              </div>
-            </>
-          )}
+          {/* Internal Walls: Sub-Phase — picks between the recipe-based Wall Measurement
+              Engine (below) and, for whichever wall types have one, the real assembly
+              calculator instead. Live from Back Office, same as every other phase's
+              sub-phase list, so a newly-built assembly shows up here automatically. */}
+          {isIntWall && (() => {
+            const intWallSubs = getAllSubphasesForPhase('Internal Walls & Partitions')
+            const selectedSub = intWallSubs.find(s => s.id === item.taskSubphaseId) ?? intWallSubs[0]
+            const boSub = selectedSub ? boSubPhases.find(sp => sp.id === selectedSub.id) : undefined
+            const builtAssembly = boSub?.canonical_id ? BUILT_ASSEMBLY_CANON_IDS[boSub.canonical_id] : undefined
+
+            function selectIntWallSub(subId: string) {
+              const sub = intWallSubs.find(s => s.id === subId)
+              const bo = sub ? boSubPhases.find(sp => sp.id === sub.id) : undefined
+              const built = bo?.canonical_id ? BUILT_ASSEMBLY_CANON_IDS[bo.canonical_id] : undefined
+              // Clear whichever system's fields don't apply to the newly-picked sub-phase,
+              // so switching back and forth never leaves stale mixed state behind.
+              saveItemEdit({
+                ...item, taskSubphaseId: subId, subPhase: sub?.name,
+                ...(built
+                  ? { wallConstructionType: undefined, wallFinishType: undefined, calculatedMaterials: undefined, materialsConfirmed: undefined }
+                  : { assemblyResult: undefined }),
+              })
+            }
+
+            return (
+              <>
+                {intWallSubs.length > 0 && (
+                  <div style={{ marginBottom: 10 }}>
+                    <label style={labelStyle}>Sub-Phase</label>
+                    <select style={{ ...inputStyle, color: accent }}
+                      value={selectedSub?.id ?? ''}
+                      onChange={e => selectIntWallSub(e.target.value)}>
+                      {intWallSubs.map(sp => <option key={sp.id} value={sp.id}>{sp.name}</option>)}
+                    </select>
+                  </div>
+                )}
+
+                {builtAssembly ? (
+                  <div style={{ marginBottom: 10 }}>
+                    <AssemblyWallDemo
+                      externalLengthMm={wallLength > 0 ? Math.round(wallLength * 1000) : undefined}
+                      labourTrades={labourTrades}
+                      onSave={result => saveItemEdit({
+                        ...item, taskSubphaseId: selectedSub?.id, subPhase: selectedSub?.name,
+                        assemblyResult: result, name: result.name, roomName: result.location || item.roomName,
+                      })}
+                    />
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ marginBottom: 10 }}>
+                      <label style={labelStyle}>Construction Type</label>
+                      <select style={{ ...inputStyle, color: accent }}
+                        value={item.wallConstructionType ?? 'stud_metal_70'}
+                        onChange={e => recalcWallAndSave({ wallConstructionType: e.target.value as WallConstructionType })}>
+                        {(Object.entries(WALL_CONSTRUCTION_LABELS) as [WallConstructionType, string][]).map(([k, v]) => (
+                          <option key={k} value={k}>{v}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div style={{ marginBottom: 10 }}>
+                      <label style={labelStyle}>Finish Type</label>
+                      <select style={{ ...inputStyle, color: accent }}
+                        value={item.wallFinishType ?? 'board_skim'}
+                        onChange={e => recalcWallAndSave({ wallFinishType: e.target.value as WallFinishType })}>
+                        {(Object.entries(WALL_FINISH_LABELS) as [WallFinishType, string][]).map(([k, v]) => (
+                          <option key={k} value={k}>{v}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                )}
+              </>
+            )
+          })()}
 
           {/* Plastering: Finish Type */}
           {isPlaster && (() => {

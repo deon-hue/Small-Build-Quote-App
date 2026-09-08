@@ -3,6 +3,7 @@
  */
 
 import type { WallConstructionType, WallFinishType, CalculatedMaterial } from './material-recipes'
+import type { CostedLine } from './assembly-calc'
 
 // ── Drawing tools ─────────────────────────────────────────────────────────────
 
@@ -232,6 +233,12 @@ export interface TakeoffItem {
   // Per-layer cost records — Construction Layer Editor
   // Key = FloorLayer.id; stores the 5-category cost recipe for each layer
   layerCosts?: Record<string, LayerCostRecord>
+
+  // Assembly calculator result (sub-phases with a built assembly — see lib/built-
+  // assemblies.ts) — saved from the embedded calculator in the properties panel while
+  // tracing. When present, applyTakeoffData() builds the quote phase straight from these
+  // costed lines instead of the generic flat-task path.
+  assemblyResult?: { name: string; location: string; description: string; lines: CostedLine[] }
 }
 
 // ── Construction Layer Cost Records ──────────────────────────────────────────

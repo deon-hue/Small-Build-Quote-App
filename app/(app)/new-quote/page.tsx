@@ -1015,6 +1015,38 @@ export default function NewQuotePage() {
             item.notes ?? '',
           ].filter(Boolean).join(' | ')
 
+          if (item.assemblyResult) {
+            // ── Assembly-calculator item (e.g. Timber Stud Partitions traced in Take-off) ──
+            // Already computed and saved by the embedded calculator in Take-off's
+            // properties panel — build the phase straight from its costed lines, same
+            // conversion as applyAssemblyCalculation() in QuoteWorkspace.tsx. taskSubphaseId
+            // here is already a real bo_sub_phases id (Take-off's picker is live now), so no
+            // name lookup is needed the way scope-to-quote/From Library/the generic take-off
+            // branch below need one.
+            const asmResult = item.assemblyResult
+            const assemblyItems: Omit<QuoteItem, 'id'>[] = asmResult.lines
+              .filter(l => l.cost !== 0)
+              .map(l => {
+                const base: Omit<QuoteItem, 'id'> = {
+                  desc: l.name, qty: 1, unit: l.unit,
+                  labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0,
+                  notes: `${l.purchaseQty} ${l.unit} @ £${l.unitCost.toFixed(2)}/${l.unit}${l.wastePct ? ` (${l.wastePct}% waste)` : ''}`,
+                  itemType: l.category,
+                }
+                const key = l.category === 'plant' ? 'plantHire' : l.category
+                return { ...base, [key]: l.cost }
+              })
+            const ph = makePhase(item.subPhase || asmResult.name || item.phase, assemblyItems, parentPhase)
+            newPhases.push({
+              ...ph,
+              source: 'manual', itemStatus: 'bo-default',
+              taskName: asmResult.description,
+              ...(item.taskSubphaseId && { boSubPhaseId: item.taskSubphaseId }),
+              ...(asmResult.location.trim() && { roomLabel: asmResult.location.trim() }),
+            })
+            continue
+          }
+
           if (item.floorMakeupId) {
             // ── Build-up item: one sub-phase per build-up type, layers as rows ──
             // DB wall types take precedence (Back Office master); ALL_MAKEUPS is the static fallback

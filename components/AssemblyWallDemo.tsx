@@ -14,7 +14,7 @@
  * and an "Add to Quote" action for the Walls phase.
  */
 
-import React, { useMemo, useState, useRef } from 'react'
+import React, { useMemo, useState, useRef, useEffect } from 'react'
 import {
   calculateWallCost, studPositionsMm,
   type WallInput, type AssemblyOpening, type AssemblyLayerDef, type CostedLine,
@@ -61,12 +61,19 @@ interface Props {
   /** Real Back Office labour trades, for the manual trade + hours labour picker. Absent (or
    * empty) shows a message pointing at Back Office rather than falling back to a guess. */
   labourTrades?: BOLabourTrade[]
+  /** Present when embedded in Take-off — the traced line's live length (mm). Whenever this
+   * changes (the user redraws or adjusts the shape), it overwrites the length field below,
+   * same as any other seeded default in Take-off; still freely editable by hand in between. */
+  externalLengthMm?: number
 }
 
-export default function AssemblyWallDemo({ onClose, onSave, labourTrades = [] }: Props) {
+export default function AssemblyWallDemo({ onClose, onSave, labourTrades = [], externalLengthMm }: Props) {
   const [name, setName]         = useState('Timber Stud Partition')
   const [qty, setQty]           = useState(1)
-  const [lengthMm, setLengthMm] = useState(5000)
+  const [lengthMm, setLengthMm] = useState(externalLengthMm ?? 5000)
+  useEffect(() => {
+    if (externalLengthMm != null) setLengthMm(externalLengthMm)
+  }, [externalLengthMm])
   const [heightMm, setHeightMm] = useState(2400)
   const [centresMm, setCentresMm] = useState(400)
   const [doubleTopPlate, setDoubleTopPlate] = useState(false)
