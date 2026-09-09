@@ -241,6 +241,16 @@ export default function SectionPhasesTasks({ userId, onEditViaAssemblies }: Prop
     setTasks(prev => prev.filter(t => t.id !== id))
   }
 
+  // Bulk-delete every task under a sub-phase — for the old flat-rate tasks left behind once
+  // a sub-phase gets a built assembly calculator and no longer prices from them.
+  async function removeAllTasksForSubPhase(subPhaseId: string) {
+    const ids = tasks.filter(t => t.sub_phase_id === subPhaseId).map(t => t.id)
+    if (ids.length === 0) return
+    if (!confirm(`Delete ${ids.length} old task${ids.length !== 1 ? 's' : ''} from this sub-phase? This cannot be undone.`)) return
+    await Promise.all(ids.map(id => deleteTask(sb, id)))
+    setTasks(prev => prev.filter(t => t.sub_phase_id !== subPhaseId))
+  }
+
   // Persist a single task (used by the inline per-category cost editors).
   // Rebuild recipe_items from the task so the plant list + aggregates stay in
   // sync and the Takeoff layer editor reads the same numbers.
@@ -589,7 +599,7 @@ export default function SectionPhasesTasks({ userId, onEditViaAssemblies }: Prop
                     <div style={{ padding: '8px 14px 12px' }}>
                       {isBuiltAssembly ? (
                         <div style={{ color: '#7c3aed', fontSize: 12, padding: '10px 12px', textAlign: 'center', background: '#fdfaff', border: '1px dashed #e9d5ff', borderRadius: 6 }}>
-                          🔒 This sub-phase has a built assembly — edit its {spTasks.length} task{spTasks.length !== 1 ? 's' : ''} from{' '}
+                          🔒 This sub-phase has a built assembly — edit its pricing from{' '}
                           {onEditViaAssemblies ? (
                             <button onClick={() => onEditViaAssemblies(sp.id)}
                               style={{ background: 'none', border: 'none', padding: 0, color: '#7c3aed', fontWeight: 600, textDecoration: 'underline', cursor: 'pointer', fontSize: 12 }}>
@@ -597,6 +607,14 @@ export default function SectionPhasesTasks({ userId, onEditViaAssemblies }: Prop
                             </button>
                           ) : 'Back Office → Assemblies'} instead. This view is read-only, since it's what AI Scope, Take-off, and
                           manual quoting read from.
+                          {spTasks.length > 0 && (
+                            <div style={{ marginTop: 8 }}>
+                              <button onClick={() => removeAllTasksForSubPhase(sp.id)}
+                                style={{ padding: '4px 10px', border: '1px solid #fca5a5', borderRadius: 5, background: '#fef2f2', color: '#dc2626', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                                🗑 Delete {spTasks.length} old flat-rate task{spTasks.length !== 1 ? 's' : ''} — now unused
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ) : spTasks.length > 0 ? (
                         <TaskTable tasks={spTasks} onEdit={openEditTask} onDelete={removeTask} onDuplicate={duplicateTask} onToggleActive={toggleTaskActive} onUpdate={patchTask} labourTrades={labourTrades} products={products} plantItems={plantItems} />
