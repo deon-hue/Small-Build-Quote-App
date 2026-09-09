@@ -25,7 +25,12 @@ import type { BOLabourTrade } from '@/lib/back-office-types'
 // ── Sample Back Office-style rates for materials (placeholders — real Products linking
 // comes later). Labour isn't derived from geometry at all — see LabourLine below, it's a
 // manual trade + hours entry priced from real Back Office labour rates. ──
-function buildSampleLayers(wastePct: number): AssemblyLayerDef[] {
+//
+// The framing geometry (calculateWallGeometry/calculateWallCost in lib/assembly-calc.ts) is
+// shared by every stud-wall system — studs at centres, doubled studs + header around each
+// opening, top/bottom run, noggin rows. Only the material layer list and a few labels differ
+// per system, captured in WALL_SYSTEM_CONFIG below.
+function buildTimberLayers(wastePct: number): AssemblyLayerDef[] {
   return [
     { id: 'studs',     name: 'CLS studs 89×38',        category: 'materials', source: 'studCount',    unit: 'nr',    unitCost: 4.20,  roundToWhole: true },
     { id: 'plates',    name: 'Head & sole plate',       category: 'materials', source: 'plateLm',      unit: 'lm',    unitCost: 3.80,  wastePct: 5 },
@@ -38,10 +43,53 @@ function buildSampleLayers(wastePct: number): AssemblyLayerDef[] {
   ]
 }
 
-// Layers that can be applied to one or both faces of the wall — sheathing and lining board
-// each face separately, so each face doubles the raw quantity (and cost). Everything else
-// (studs, plates, membrane, insulation) exists once regardless of how many faces are boarded.
-const SIDES_ELIGIBLE_LAYER_IDS = new Set(['sheathing', 'lining'])
+// No sheathing or breather membrane — those were timber-frame bracing/weatherproofing layers
+// for an external wall, not relevant to an internal metal stud partition. Noggin/bridging is
+// kept as a togglable layer since not every metal stud job needs it — leave it out per-job
+// with the existing toggle-off checkbox rather than removing it from the system entirely.
+function buildMetalLayers(wastePct: number): AssemblyLayerDef[] {
+  return [
+    { id: 'studs',     name: 'Metal C-studs 70×50',       category: 'materials', source: 'studCount',   unit: 'nr', unitCost: 3.60,  roundToWhole: true },
+    { id: 'plates',    name: 'Head & sole track',         category: 'materials', source: 'plateLm',     unit: 'lm', unitCost: 4.10,  wastePct: 5 },
+    { id: 'noggins',   name: 'Nogging / bridging',        category: 'materials', source: 'nogginCount', unit: 'nr', unitCost: 2.40,  roundToWhole: true },
+    { id: 'headers',   name: 'Boxed head track (opening)', category: 'materials', source: 'headerCount', unit: 'nr', unitCost: 22.00, roundToWhole: true },
+    { id: 'insulation',name: 'Acoustic insulation (between studs)', category: 'materials', source: 'netAreaM2', unit: 'm²', unitCost: 8.50, wastePct },
+    { id: 'lining',    name: 'Plasterboard lining',       category: 'materials', source: 'netAreaM2',   unit: 'm²', unitCost: 6.90,  wastePct },
+  ]
+}
+
+export type WallSystem = 'timber' | 'metal'
+
+interface WallSystemConfig {
+  label: string                          // default name for a new calculation
+  descriptor: string                     // e.g. 'timber stud partition' — used in the auto description
+  buildLayers: (wastePct: number) => AssemblyLayerDef[]
+  sidesEligibleLayerIds: Set<string>      // layers that can be applied to one or both faces of the wall
+  topPlateRowLabel: string                // PropRow label, e.g. 'Top plate' / 'Head track'
+  topPlateLabel: string                  // checkbox label for WallInput.doubleTopPlate
+  studLabels: { full: string; cut: string } // elevation legend for the doubled studs at an opening
+}
+
+const WALL_SYSTEM_CONFIG: Record<WallSystem, WallSystemConfig> = {
+  timber: {
+    label: 'Timber Stud Partition',
+    descriptor: 'timber stud partition',
+    buildLayers: buildTimberLayers,
+    sidesEligibleLayerIds: new Set(['sheathing', 'lining']),
+    topPlateRowLabel: 'Top plate',
+    topPlateLabel: 'Double top plate',
+    studLabels: { full: 'King stud', cut: 'Jack stud (doubled at each opening)' },
+  },
+  metal: {
+    label: 'Metal Stud Partition',
+    descriptor: 'metal stud partition',
+    buildLayers: buildMetalLayers,
+    sidesEligibleLayerIds: new Set(['lining']),
+    topPlateRowLabel: 'Head track',
+    topPlateLabel: 'Double head track',
+    studLabels: { full: 'Jamb stud (full height)', cut: 'Jamb stud (cut to head track)' },
+  },
+}
 
 interface LabourLine { id: string; tradeId: string; task: string; hours: number }
 let _labourLineId = 0
@@ -64,6 +112,9 @@ function sampleOpenings(): AssemblyOpening[] {
 }
 
 interface Props {
+  /** Which stud-wall system this is — picks the material layer list and a few labels.
+   * Defaults to 'timber' for callers that predate this option. */
+  system?: WallSystem
   /** Omit when embedded as a fixed section (e.g. Back Office) rather than a dismissible overlay. */
   onClose?: () => void
   /** Present when opened from a real quote sub-phase — writes this calculation's costed
@@ -78,8 +129,9 @@ interface Props {
   externalLengthMm?: number
 }
 
-export default function AssemblyWallDemo({ onClose, onSave, labourTrades = [], externalLengthMm }: Props) {
-  const [name, setName]         = useState('Timber Stud Partition')
+export default function AssemblyWallDemo({ system = 'timber', onClose, onSave, labourTrades = [], externalLengthMm }: Props) {
+  const cfg = WALL_SYSTEM_CONFIG[system]
+  const [name, setName]         = useState(cfg.label)
   const [qty, setQty]           = useState(1)
   const [lengthMm, setLengthMm] = useState(externalLengthMm ?? 5000)
   useEffect(() => {
@@ -138,10 +190,10 @@ export default function AssemblyWallDemo({ onClose, onSave, labourTrades = [], e
   // into it doesn't get clobbered; "↻ Regenerate" refreshes it from the current numbers.
   function buildAutoDescription(): string {
     const parts = [
-      `${(lengthMm / 1000).toFixed(2)}m long × ${(heightMm / 1000).toFixed(2)}m high timber stud partition`,
+      `${(lengthMm / 1000).toFixed(2)}m long × ${(heightMm / 1000).toFixed(2)}m high ${cfg.descriptor}`,
       `studs at ${centresMm}mm centres`,
     ]
-    if (doubleTopPlate) parts.push('double top plate')
+    if (doubleTopPlate) parts.push(cfg.topPlateLabel.toLowerCase())
     if ((layerSides.sheathing ?? 1) === 2) parts.push('sheathed both faces')
     if ((layerSides.lining ?? 1) === 2) parts.push('boarded both faces')
     let text = parts.join(', ') + '.'
@@ -167,14 +219,14 @@ export default function AssemblyWallDemo({ onClose, onSave, labourTrades = [], e
 
   const input: WallInput = { lengthMm, heightMm, studCentresMm: centresMm, doubleTopPlate, openings }
   const layers = useMemo(() => {
-    const base = buildSampleLayers(wastePct)
+    const base = cfg.buildLayers(wastePct)
     return base.map(l => {
       let next = l
       if (rateOverrides[l.id] != null) next = { ...next, unitCost: rateOverrides[l.id] }
-      if (SIDES_ELIGIBLE_LAYER_IDS.has(l.id)) next = { ...next, sidesMultiplier: layerSides[l.id] ?? 1 }
+      if (cfg.sidesEligibleLayerIds.has(l.id)) next = { ...next, sidesMultiplier: layerSides[l.id] ?? 1 }
       return next
     })
-  }, [wastePct, rateOverrides, layerSides])
+  }, [cfg, wastePct, rateOverrides, layerSides])
   function setRate(layerId: string, unitCost: number) {
     setRateOverrides(prev => ({ ...prev, [layerId]: Math.max(0, unitCost) }))
   }
@@ -305,7 +357,7 @@ export default function AssemblyWallDemo({ onClose, onSave, labourTrades = [], e
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16 }}>
           {/* Left: elevation + description */}
           <div>
-            <WallElevationSvg input={input} onOpeningOffsetChange={(id, offsetMm) => updateOpening(id, { offsetMm })} />
+            <WallElevationSvg input={input} studLabels={cfg.studLabels} onOpeningOffsetChange={(id, offsetMm) => updateOpening(id, { offsetMm })} />
             {result.value.geometry.warnings.length > 0 && (
               <div style={{ marginTop: 6 }}>
                 {result.value.geometry.warnings.map((w, i) => (
@@ -335,10 +387,10 @@ export default function AssemblyWallDemo({ onClose, onSave, labourTrades = [], e
                 {[300, 400, 600].map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </PropRow>
-            <PropRow label="Top plate">
+            <PropRow label={cfg.topPlateRowLabel}>
               <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <input type="checkbox" checked={doubleTopPlate} onChange={e => setDoubleTopPlate(e.target.checked)} />
-                Double top plate
+                {cfg.topPlateLabel}
               </label>
             </PropRow>
             <PropRow label={`Waste % (${wastePct}%)`}>
@@ -475,7 +527,7 @@ export default function AssemblyWallDemo({ onClose, onSave, labourTrades = [], e
           {/* Breakdown — spans both columns */}
           <div style={{ gridColumn: '1 / -1', marginTop: 4 }}>
             <BreakdownTable lines={materialLines} onRateChange={handleBreakdownRateChange} disabledLayerIds={disabledLayerIds} onToggleLayer={toggleLayer}
-              layerSides={layerSides} onSidesChange={setSides} />
+              layerSides={layerSides} onSidesChange={setSides} sidesEligibleLayerIds={cfg.sidesEligibleLayerIds} />
             {profitPct > 0 && (
               <div style={{ fontSize: 11, color: '#64748b', marginTop: 6, textAlign: 'right' }}>
                 Cost: £{costSubtotal.toFixed(2)} + {profitPct}% profit (£{profitAmount.toFixed(2)}) ={' '}
@@ -501,13 +553,14 @@ function PropRow({ label, children }: { label: string; children: React.ReactNode
   )
 }
 
-function BreakdownTable({ lines, onRateChange, disabledLayerIds, onToggleLayer, layerSides, onSidesChange }: {
+function BreakdownTable({ lines, onRateChange, disabledLayerIds, onToggleLayer, layerSides, onSidesChange, sidesEligibleLayerIds }: {
   lines: CostedLine[]
   onRateChange: (layerId: string, unitCost: number) => void
   disabledLayerIds: Set<string>
   onToggleLayer: (layerId: string) => void
   layerSides: Record<string, 1 | 2>
   onSidesChange: (layerId: string, sides: 1 | 2) => void
+  sidesEligibleLayerIds: Set<string>
 }) {
   const groups = ['materials', 'labour', 'plant', 'subcontractors', 'other'] as const
   return (
@@ -542,7 +595,7 @@ function BreakdownTable({ lines, onRateChange, disabledLayerIds, onToggleLayer, 
                 </tr>
                 {groupLines.map(l => {
                   const off = disabledLayerIds.has(l.layerId)
-                  const sidesEligible = SIDES_ELIGIBLE_LAYER_IDS.has(l.layerId)
+                  const sidesEligible = sidesEligibleLayerIds.has(l.layerId)
                   const sides = layerSides[l.layerId] ?? 1
                   return (
                     <tr key={l.layerId} style={{ borderBottom: '1px solid #f1f5f9', opacity: off ? 0.45 : 1 }}>
@@ -629,11 +682,16 @@ function VDim({ y1, y2, x, label }: { y1: number; y2: number; x: number; label: 
 
 // ── Elevation SVG — a plan/elevation-style sketch of the wall, drawn from the same inputs
 // the engine costs. Drag an opening left/right to reposition it — dimensions update live.
-// King + jack studs are drawn as the doubled-up pair they actually are: the king stud runs
-// full height to the sole plate, the jack stud is cut to the header's underside and sits
-// right against it. Visual only — stud display positions approximate which field studs an
-// opening displaces (matched to the grid), none of this feeds the numbers in the breakdown.
-function WallElevationSvg({ input, onOpeningOffsetChange }: { input: WallInput; onOpeningOffsetChange: (id: string, offsetMm: number) => void }) {
+// The doubled studs at each opening are drawn as the pair they actually are: one runs full
+// height to the bottom track/plate, the other is cut to the header's underside and sits right
+// against it — labelled per wall system (king/jack for timber, jamb studs for metal) via
+// studLabels. Visual only — stud display positions approximate which field studs an opening
+// displaces (matched to the grid), none of this feeds the numbers in the breakdown.
+function WallElevationSvg({ input, studLabels, onOpeningOffsetChange }: {
+  input: WallInput
+  studLabels: { full: string; cut: string }
+  onOpeningOffsetChange: (id: string, offsetMm: number) => void
+}) {
   const { lengthMm: L, heightMm: H, studCentresMm: C, openings } = input
   const vbW = 640, vbH = 320, padX = 28, padTop = 20 + openings.length * 14, padBottom = 34
   const svgRef = useRef<SVGSVGElement>(null)
@@ -702,7 +760,7 @@ function WallElevationSvg({ input, onOpeningOffsetChange }: { input: WallInput; 
         )
       })}
 
-      {/* Openings — void, doubled king+jack studs, header, and a drag handle */}
+      {/* Openings — void, doubled studs, header, and a drag handle */}
       {openings.map(o => {
         const ox = X(o.offsetMm), ow = o.widthMm * scale
         const oyTop = Y(o.sillHeightMm + o.heightMm), oh = o.heightMm * scale
@@ -711,10 +769,10 @@ function WallElevationSvg({ input, onOpeningOffsetChange }: { input: WallInput; 
         const dragging = dragId === o.id
         return (
           <g key={o.id}>
-            {/* King studs — full height, carry the header load to the sole plate */}
+            {/* Full-height studs — carry the header load to the bottom track/plate */}
             <line x1={leftEdge} y1={y0} x2={leftEdge} y2={y0 + h} stroke="#1e293b" strokeWidth={2.5} />
             <line x1={rightEdge} y1={y0} x2={rightEdge} y2={y0 + h} stroke="#1e293b" strokeWidth={2.5} />
-            {/* Jack studs — cut to the header's underside, doubled up against each king stud */}
+            {/* Cut studs — trimmed to the header's underside, doubled up against each full-height stud */}
             <line x1={leftEdge - jackGap} y1={oyTop} x2={leftEdge - jackGap} y2={y0 + h} stroke="#7c3aed" strokeWidth={1.6} />
             <line x1={rightEdge + jackGap} y1={oyTop} x2={rightEdge + jackGap} y2={y0 + h} stroke="#7c3aed" strokeWidth={1.6} />
 
@@ -749,9 +807,9 @@ function WallElevationSvg({ input, onOpeningOffsetChange }: { input: WallInput; 
       {/* Legend */}
       <g transform={`translate(${x0}, ${vbH - 10})`}>
         <line x1={0} y1={0} x2={14} y2={0} stroke="#1e293b" strokeWidth={2.5} />
-        <text x={18} y={3} fontSize={8} fill="#64748b">King stud</text>
+        <text x={18} y={3} fontSize={8} fill="#64748b">{studLabels.full}</text>
         <line x1={80} y1={0} x2={94} y2={0} stroke="#7c3aed" strokeWidth={1.6} />
-        <text x={98} y={3} fontSize={8} fill="#64748b">Jack stud (doubled at each opening)</text>
+        <text x={98} y={3} fontSize={8} fill="#64748b">{studLabels.cut}</text>
       </g>
     </svg>
   )
