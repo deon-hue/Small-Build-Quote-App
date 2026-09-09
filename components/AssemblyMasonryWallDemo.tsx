@@ -29,13 +29,13 @@ import {
 } from '@/components/assembly-ui'
 
 // Mortar mix assumptions — sample rates like everything else here, easy to correct:
-//   - 0.01 m³ of mortar per m² of blockwork (standard rule of thumb for 100mm block joints)
+//   - 0.013 m³ of mortar per m² of blockwork (bumped up from an initial 0.01 — too light)
 //   - 1:5 cement:sand mix by volume (general-purpose blockwork mortar)
 //   - cement @ 1440 kg/m³ in 25kg bags; sand @ 1600 kg/m³ sold by the tonne
-// That works out to ~2.4kg (0.096 bags) of cement and ~13.3kg (0.0133 tonnes) of sand per m²,
-// i.e. one bag of cement covers ~10.4m² and one tonne of sand covers ~75m².
-const CEMENT_M2_PER_BAG = 10.42
-const SAND_M2_PER_TONNE = 75
+// That works out to ~3.1kg (0.125 bags) of cement and ~17.3kg (0.0173 tonnes) of sand per m²,
+// i.e. one bag of cement covers ~8.0m² and one tonne of sand covers ~57.7m².
+const CEMENT_M2_PER_BAG = 8.0
+const SAND_M2_PER_TONNE = 57.7
 
 type BlockType = 'concrete' | 'thermal'
 const BLOCK_TYPE_CONFIG: Record<BlockType, { label: string; unitCost: number }> = {
