@@ -19,7 +19,11 @@ import { buildTaskRecipe, uid, plantListTotal } from '@/lib/layer-recipe'
 import type { LayerCostRecord, LayerPlantItem } from '@/lib/takeoff-types'
 import { Plus, Trash2, ChevronRight, ChevronDown } from 'lucide-react'
 
-interface Props { userId: string }
+interface Props {
+  userId: string
+  /** Jumps to Back Office → Assemblies and opens this sub-phase's calculator directly. */
+  onEditViaAssemblies?: (subPhaseId: string) => void
+}
 
 const EMPTY_TASK = (userId: string, phaseId: string | null, subPhaseId: string | null, order: number): Omit<BOTask, 'id' | 'created_at' | 'updated_at'> => ({
   user_id: userId, phase_id: phaseId, sub_phase_id: subPhaseId,
@@ -32,7 +36,7 @@ const EMPTY_TASK = (userId: string, phaseId: string | null, subPhaseId: string |
 
 type TaskModalState = { task: BOTask; isNew: boolean } | null
 
-export default function SectionPhasesTasks({ userId }: Props) {
+export default function SectionPhasesTasks({ userId, onEditViaAssemblies }: Props) {
   const sb = createClient()
   const [phases, setPhases] = useState<BOPhase[]>([])
   const [subPhases, setSubPhases] = useState<BOSubPhase[]>([])
@@ -515,7 +519,18 @@ export default function SectionPhasesTasks({ userId }: Props) {
                     </span>
 
                     {isBuiltAssembly ? (
-                      <span style={{ fontSize: 11, color: '#7c3aed', fontWeight: 600, flexShrink: 0 }}>Edit via Assemblies →</span>
+                      <button
+                        onClick={e => { e.stopPropagation(); onEditViaAssemblies?.(sp.id) }}
+                        disabled={!onEditViaAssemblies}
+                        title="Open this sub-phase's calculator in Assemblies"
+                        style={{
+                          fontSize: 11, color: '#7c3aed', fontWeight: 600, flexShrink: 0,
+                          background: 'none', border: 'none', padding: 0,
+                          cursor: onEditViaAssemblies ? 'pointer' : 'default',
+                          textDecoration: onEditViaAssemblies ? 'underline' : 'none',
+                        }}>
+                        Edit via Assemblies →
+                      </button>
                     ) : (
                       <>
                         {/* Move to another phase */}
@@ -574,8 +589,13 @@ export default function SectionPhasesTasks({ userId }: Props) {
                     <div style={{ padding: '8px 14px 12px' }}>
                       {isBuiltAssembly ? (
                         <div style={{ color: '#7c3aed', fontSize: 12, padding: '10px 12px', textAlign: 'center', background: '#fdfaff', border: '1px dashed #e9d5ff', borderRadius: 6 }}>
-                          🔒 This sub-phase has a built assembly — edit its {spTasks.length} task{spTasks.length !== 1 ? 's' : ''} from
-                          Back Office → Assemblies instead. This view is read-only, since it's what AI Scope, Take-off, and
+                          🔒 This sub-phase has a built assembly — edit its {spTasks.length} task{spTasks.length !== 1 ? 's' : ''} from{' '}
+                          {onEditViaAssemblies ? (
+                            <button onClick={() => onEditViaAssemblies(sp.id)}
+                              style={{ background: 'none', border: 'none', padding: 0, color: '#7c3aed', fontWeight: 600, textDecoration: 'underline', cursor: 'pointer', fontSize: 12 }}>
+                              Back Office → Assemblies
+                            </button>
+                          ) : 'Back Office → Assemblies'} instead. This view is read-only, since it's what AI Scope, Take-off, and
                           manual quoting read from.
                         </div>
                       ) : spTasks.length > 0 ? (

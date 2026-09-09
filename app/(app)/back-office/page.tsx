@@ -151,6 +151,13 @@ function EstimatorEditor({ phase, onLoad, onAdd, onUpdate, onRemove }: Estimator
 export default function BackOfficePage() {
   const { customTemplates, getTemplate, saveJobTypeTemplate, resetJobTypeTemplate, loading } = useApp()
   const [activeSection, setActiveSection] = useState<SectionId>('job-templates')
+  // Set by "Edit via Assemblies →" in Phases & Tasks — jumps to Assemblies and opens
+  // that sub-phase's calculator directly, instead of just switching sections.
+  const [assemblyDeepLinkId, setAssemblyDeepLinkId] = useState<string | null>(null)
+  function editViaAssemblies(subPhaseId: string) {
+    setAssemblyDeepLinkId(subPhaseId)
+    setActiveSection('assemblies')
+  }
   // Collapsed main-phase headers in the Job Templates editor (keyed by phase name)
   const [collapsedTplPhases, setCollapsedTplPhases] = useState<Set<string>>(new Set())
   const toggleTplPhase = (pp: string) => setCollapsedTplPhases(prev => {
@@ -300,14 +307,14 @@ export default function BackOfficePage() {
 
         {/* ── DB-backed sections ── */}
         {activeSection === 'labour' && userId && <SectionLabour userId={userId} />}
-        {activeSection === 'phases-tasks' && userId && <SectionPhasesTasks userId={userId} key={syncKey} />}
+        {activeSection === 'phases-tasks' && userId && <SectionPhasesTasks userId={userId} key={syncKey} onEditViaAssemblies={editViaAssemblies} />}
         {activeSection === 'products' && userId && <SectionProducts userId={userId} />}
         {activeSection === 'plant' && userId && <SectionPlant userId={userId} />}
         {activeSection === 'takeoff-mapping' && userId && <SectionTakeoffMapping userId={userId} />}
         {activeSection === 'formula-rules' && userId && <SectionFormulaRules userId={userId} />}
         {activeSection === 'ai-mapping' && userId && <SectionAIMapping userId={userId} />}
 
-        {activeSection === 'assemblies' && userId && <SectionAssemblies userId={userId} key={syncKey} />}
+        {activeSection === 'assemblies' && userId && <SectionAssemblies userId={userId} key={syncKey} openSubPhaseId={assemblyDeepLinkId} />}
 
         {!userId && ['labour','phases-tasks','products','plant','takeoff-mapping','formula-rules','ai-mapping','assemblies'].includes(activeSection) && (
           <div style={{ textAlign: 'center', padding: 48, color: '#64748b' }}>Loading…</div>

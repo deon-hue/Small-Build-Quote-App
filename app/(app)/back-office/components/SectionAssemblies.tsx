@@ -14,16 +14,21 @@
  * the matching lock there (SectionPhasesTasks.tsx checks the same BUILT_ASSEMBLY_CANON_IDS).
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { fetchPhases, fetchSubPhases, upsertSubPhase, deleteSubPhase, fetchTasks, fetchLabourTrades } from '@/lib/back-office-queries'
 import type { BOPhase, BOSubPhase, BOLabourTrade } from '@/lib/back-office-types'
 import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { BUILT_ASSEMBLY_CANON_IDS, AssemblyIconGlyph } from '@/lib/built-assemblies'
 
-interface Props { userId: string }
+interface Props {
+  userId: string
+  /** Deep-link from Phases & Tasks' "Edit via Assemblies →" — opens this sub-phase's
+   * calculator (and expands its phase group) as soon as the data has loaded. */
+  openSubPhaseId?: string | null
+}
 
-export default function SectionAssemblies({ userId }: Props) {
+export default function SectionAssemblies({ userId, openSubPhaseId }: Props) {
   const sb = createClient()
   const [phases, setPhases] = useState<BOPhase[]>([])
   const [subPhases, setSubPhases] = useState<BOSubPhase[]>([])
@@ -61,6 +66,25 @@ export default function SectionAssemblies({ userId }: Props) {
   }, [userId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load() }, [load])
+
+  // Deep-link from Phases & Tasks — open this sub-phase's calculator (and expand its
+  // phase group) as soon as the data has loaded. Handled once per id, via a ref rather
+  // than putting `collapsed` in the effect's own deps, to avoid re-opening it if the
+  // user closes the modal afterwards.
+  const handledDeepLinkRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!openSubPhaseId || loading || collapsed === null) return
+    if (handledDeepLinkRef.current === openSubPhaseId) return
+    const sub = subPhases.find(s => s.id === openSubPhaseId)
+    if (!sub) return
+    handledDeepLinkRef.current = openSubPhaseId
+    setOpenAssembly(sub.id)
+    setCollapsed(prev => {
+      const next = new Set(prev ?? [])
+      next.delete(sub.phase_id)
+      return next
+    })
+  }, [openSubPhaseId, loading, collapsed, subPhases])
 
   function toggle(id: string) {
     setCollapsed(prev => {
