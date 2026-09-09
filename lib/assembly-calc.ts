@@ -86,6 +86,9 @@ export interface AssemblyLayerDef {
   roundToWhole?: boolean    // round the purchase qty up to a whole unit (e.g. studs, sheets)
   coveragePerUnit?: number  // for sheet/roll goods: raw units (m², lm, ...) covered per purchase unit, e.g. 2.88 m² per sheathing sheet
   fixedQty?: number         // required when source === 'fixed'
+  /** Multiplies the raw quantity — e.g. 2 for a material applied to both faces of a wall
+   * (plasterboard lining, sheathing). Default 1 (one side only). */
+  sidesMultiplier?: number
   /** Placeholder for a real bo_task / bo_product / bo_labour_trade / bo_plant_item id. */
   boRef?: string
 }
@@ -217,7 +220,7 @@ function resolveRawQty(layer: AssemblyLayerDef, geometry: WallGeometry): number 
  * that, same as every other line in the app (feasibility report §8, "Markup — pick one pattern").
  */
 export function costLayer(layer: AssemblyLayerDef, geometry: WallGeometry): CostedLine {
-  const rawQty = resolveRawQty(layer, geometry)
+  const rawQty = resolveRawQty(layer, geometry) * (layer.sidesMultiplier ?? 1)
   const wastePct = layer.wastePct ?? 0
   const withWaste = rawQty * (1 + wastePct / 100)
   const units = withWaste / (layer.coveragePerUnit ?? 1)

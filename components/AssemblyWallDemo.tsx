@@ -38,6 +38,11 @@ function buildSampleLayers(wastePct: number): AssemblyLayerDef[] {
   ]
 }
 
+// Layers that can be applied to one or both faces of the wall — sheathing and lining board
+// each face separately, so each face doubles the raw quantity (and cost). Everything else
+// (studs, plates, membrane, insulation) exists once regardless of how many faces are boarded.
+const SIDES_ELIGIBLE_LAYER_IDS = new Set(['sheathing', 'lining'])
+
 interface LabourLine { id: string; tradeId: string; task: string; hours: number }
 let _labourLineId = 0
 const newLabourLineId = () => `ll-${++_labourLineId}`
@@ -96,6 +101,14 @@ export default function AssemblyWallDemo({ onClose, onSave, labourTrades = [], e
   // linked to real Products/Labour/Plant records, but editable here in the meantime.
   const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
 
+  // How many faces each sides-eligible layer (sheathing, lining) is applied to. Defaults to
+  // 1 (one side) — a stud wall boarded/lined on both faces sets it to 2, doubling that
+  // layer's raw quantity and cost.
+  const [layerSides, setLayerSides] = useState<Record<string, 1 | 2>>({})
+  function setSides(layerId: string, sides: 1 | 2) {
+    setLayerSides(prev => ({ ...prev, [layerId]: sides }))
+  }
+
   // A quote-facing description — sizing and openings, in plain language. Auto-generated,
   // but kept as its own editable state (not recomputed on every keystroke) so typing notes
   // into it doesn't get clobbered; "↻ Regenerate" refreshes it from the current numbers.
@@ -105,6 +118,8 @@ export default function AssemblyWallDemo({ onClose, onSave, labourTrades = [], e
       `studs at ${centresMm}mm centres`,
     ]
     if (doubleTopPlate) parts.push('double top plate')
+    if ((layerSides.sheathing ?? 1) === 2) parts.push('sheathed both faces')
+    if ((layerSides.lining ?? 1) === 2) parts.push('boarded both faces')
     let text = parts.join(', ') + '.'
     if (openings.length) {
       const list = openings.map(o => `${o.kind} (${o.widthMm}×${o.heightMm}mm)`).join(', ')
@@ -129,8 +144,13 @@ export default function AssemblyWallDemo({ onClose, onSave, labourTrades = [], e
   const input: WallInput = { lengthMm, heightMm, studCentresMm: centresMm, doubleTopPlate, openings }
   const layers = useMemo(() => {
     const base = buildSampleLayers(wastePct)
-    return base.map(l => rateOverrides[l.id] != null ? { ...l, unitCost: rateOverrides[l.id] } : l)
-  }, [wastePct, rateOverrides])
+    return base.map(l => {
+      let next = l
+      if (rateOverrides[l.id] != null) next = { ...next, unitCost: rateOverrides[l.id] }
+      if (SIDES_ELIGIBLE_LAYER_IDS.has(l.id)) next = { ...next, sidesMultiplier: layerSides[l.id] ?? 1 }
+      return next
+    })
+  }, [wastePct, rateOverrides, layerSides])
   function setRate(layerId: string, unitCost: number) {
     setRateOverrides(prev => ({ ...prev, [layerId]: Math.max(0, unitCost) }))
   }
@@ -363,7 +383,8 @@ export default function AssemblyWallDemo({ onClose, onSave, labourTrades = [], e
 
           {/* Breakdown — spans both columns */}
           <div style={{ gridColumn: '1 / -1', marginTop: 4 }}>
-            <BreakdownTable lines={materialLines} onRateChange={setRate} disabledLayerIds={disabledLayerIds} onToggleLayer={toggleLayer} />
+            <BreakdownTable lines={materialLines} onRateChange={setRate} disabledLayerIds={disabledLayerIds} onToggleLayer={toggleLayer}
+              layerSides={layerSides} onSidesChange={setSides} />
           </div>
         </div>
       )}
@@ -383,11 +404,13 @@ function PropRow({ label, children }: { label: string; children: React.ReactNode
   )
 }
 
-function BreakdownTable({ lines, onRateChange, disabledLayerIds, onToggleLayer }: {
+function BreakdownTable({ lines, onRateChange, disabledLayerIds, onToggleLayer, layerSides, onSidesChange }: {
   lines: CostedLine[]
   onRateChange: (layerId: string, unitCost: number) => void
   disabledLayerIds: Set<string>
   onToggleLayer: (layerId: string) => void
+  layerSides: Record<string, 1 | 2>
+  onSidesChange: (layerId: string, sides: 1 | 2) => void
 }) {
   const groups = ['materials', 'labour', 'plant', 'subcontractors', 'other'] as const
   return (
@@ -400,6 +423,7 @@ function BreakdownTable({ lines, onRateChange, disabledLayerIds, onToggleLayer }
           <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
             <th style={{ width: 20 }} />
             <th style={{ textAlign: 'left', padding: '4px 6px', fontSize: 10, color: '#94a3b8' }}>Item</th>
+            <th style={{ textAlign: 'center', padding: '4px 6px', fontSize: 10, color: '#94a3b8' }}>Sides</th>
             <th style={{ textAlign: 'right', padding: '4px 6px', fontSize: 10, color: '#94a3b8' }}>Raw qty</th>
             <th style={{ textAlign: 'right', padding: '4px 6px', fontSize: 10, color: '#94a3b8' }}>Waste</th>
             <th style={{ textAlign: 'right', padding: '4px 6px', fontSize: 10, color: '#94a3b8' }}>Purchase qty</th>
@@ -415,12 +439,14 @@ function BreakdownTable({ lines, onRateChange, disabledLayerIds, onToggleLayer }
             return (
               <React.Fragment key={g}>
                 <tr>
-                  <td colSpan={7} style={{ padding: '6px 6px 2px', fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
+                  <td colSpan={8} style={{ padding: '6px 6px 2px', fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
                     {CATEGORY_LABEL[g]}
                   </td>
                 </tr>
                 {groupLines.map(l => {
                   const off = disabledLayerIds.has(l.layerId)
+                  const sidesEligible = SIDES_ELIGIBLE_LAYER_IDS.has(l.layerId)
+                  const sides = layerSides[l.layerId] ?? 1
                   return (
                     <tr key={l.layerId} style={{ borderBottom: '1px solid #f1f5f9', opacity: off ? 0.45 : 1 }}>
                       <td style={{ padding: '3px 6px' }}>
@@ -429,6 +455,25 @@ function BreakdownTable({ lines, onRateChange, disabledLayerIds, onToggleLayer }
                           style={{ cursor: 'pointer' }} />
                       </td>
                       <td style={{ padding: '3px 6px', textDecoration: off ? 'line-through' : 'none' }}>{l.name}</td>
+                      <td style={{ padding: '3px 6px', textAlign: 'center' }}>
+                        {sidesEligible && (
+                          <div style={{ display: 'inline-flex', gap: 2 }}>
+                            {([1, 2] as const).map(s => (
+                              <button key={s} type="button" disabled={off}
+                                onClick={() => onSidesChange(l.layerId, s)}
+                                title={s === 1 ? 'Applied to one face only' : 'Applied to both faces of the wall'}
+                                style={{
+                                  fontSize: 10, padding: '2px 6px', borderRadius: 3, cursor: off ? 'default' : 'pointer',
+                                  border: `1px solid ${sides === s ? '#7c3aed' : '#e2e8f0'}`,
+                                  background: sides === s ? '#7c3aed' : 'transparent',
+                                  color: sides === s ? '#fff' : '#64748b',
+                                }}>
+                                {s}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </td>
                       <td style={{ padding: '3px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{l.rawQty}</td>
                       <td style={{ padding: '3px 6px', textAlign: 'right', fontFamily: 'monospace', color: '#94a3b8' }}>{l.wastePct}%</td>
                       <td style={{ padding: '3px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{l.purchaseQty} {l.unit}</td>
@@ -448,7 +493,7 @@ function BreakdownTable({ lines, onRateChange, disabledLayerIds, onToggleLayer }
                   )
                 })}
                 <tr>
-                  <td colSpan={6} style={{ padding: '2px 6px', textAlign: 'right', fontSize: 11, color: '#94a3b8' }}>{CATEGORY_LABEL[g]} total</td>
+                  <td colSpan={7} style={{ padding: '2px 6px', textAlign: 'right', fontSize: 11, color: '#94a3b8' }}>{CATEGORY_LABEL[g]} total</td>
                   <td style={{ padding: '2px 6px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, fontWeight: 700 }}>£{groupTotal.toFixed(2)}</td>
                 </tr>
               </React.Fragment>
