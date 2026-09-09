@@ -48,6 +48,12 @@ let _labourLineId = 0
 const newLabourLineId = () => `ll-${++_labourLineId}`
 function hourlyRate(trade: BOLabourTrade): number { return +(trade.day_rate / 8).toFixed(2) }
 
+// Freeform materials not covered by the standard layers above — e.g. fixings, adhesive,
+// anything the estimator wants to price without it being a named layer in the shell.
+interface MiscMaterialLine { id: string; name: string; qty: number; unit: string; unitCost: number }
+let _miscMaterialLineId = 0
+const newMiscMaterialLineId = () => `misc-${++_miscMaterialLineId}`
+
 const CATEGORY_LABEL: Record<string, string> = { materials: 'Materials', labour: 'Labour', plant: 'Plant', subcontractors: 'Subcontractors', other: 'Other' }
 
 let _openingId = 0
@@ -97,6 +103,24 @@ export default function AssemblyWallDemo({ onClose, onSave, labourTrades = [], e
   function removeLabourLine(id: string) {
     setLabourLines(prev => prev.filter(l => l.id !== id))
   }
+
+  // Miscellaneous materials — freeform name/qty/unit/rate lines for anything not covered by
+  // the standard layers (fixings, adhesive, sundries, ...).
+  const [miscMaterialLines, setMiscMaterialLines] = useState<MiscMaterialLine[]>([])
+  function addMiscMaterialLine() {
+    setMiscMaterialLines(prev => [...prev, { id: newMiscMaterialLineId(), name: '', qty: 1, unit: 'item', unitCost: 0 }])
+  }
+  function updateMiscMaterialLine(id: string, patch: Partial<MiscMaterialLine>) {
+    setMiscMaterialLines(prev => prev.map(m => m.id === id ? { ...m, ...patch } : m))
+  }
+  function removeMiscMaterialLine(id: string) {
+    setMiscMaterialLines(prev => prev.filter(m => m.id !== id))
+  }
+
+  // Profit % — applied to the whole calculation (materials + labour + misc), shown as its
+  // own line in the breakdown and folded into the total price and Save & Price.
+  const [profitPct, setProfitPct] = useState(0)
+
   // Sample rates the user has overridden in this session — keyed by layer id. Still not
   // linked to real Products/Labour/Plant records, but editable here in the meantime.
   const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
@@ -154,14 +178,30 @@ export default function AssemblyWallDemo({ onClose, onSave, labourTrades = [], e
   function setRate(layerId: string, unitCost: number) {
     setRateOverrides(prev => ({ ...prev, [layerId]: Math.max(0, unitCost) }))
   }
+  // Breakdown-table rate edits route to whichever state actually owns that line — a sample
+  // layer's override, or a misc material's own rate.
+  function handleBreakdownRateChange(layerId: string, unitCost: number) {
+    if (miscMaterialLines.some(m => m.id === layerId)) {
+      updateMiscMaterialLine(layerId, { unitCost: Math.max(0, unitCost) })
+    } else {
+      setRate(layerId, unitCost)
+    }
+  }
 
   const result = useMemo(() => {
     try { return { ok: true as const, value: calculateWallCost(input, layers) } }
     catch (e: any) { return { ok: false as const, error: e.message as string } }
   }, [lengthMm, heightMm, centresMm, doubleTopPlate, JSON.stringify(openings), layers])
 
-  // Materials only now — every line minus whatever's been toggled off.
-  const materialLines = result.ok ? result.value.lines : []
+  // Standard layers, plus any freeform misc materials — every line minus whatever's toggled off.
+  const miscCostedLines: CostedLine[] = miscMaterialLines
+    .filter(m => m.name.trim() !== '' && m.qty > 0)
+    .map(m => ({
+      layerId: m.id, name: m.name, category: 'materials', source: 'fixed',
+      wastePct: 0, rawQty: m.qty, purchaseQty: m.qty, unit: m.unit || 'item',
+      unitCost: m.unitCost, cost: +(m.qty * m.unitCost).toFixed(2),
+    }))
+  const materialLines = [...(result.ok ? result.value.lines : []), ...miscCostedLines]
   const enabledMaterialLines = materialLines.filter(l => !disabledLayerIds.has(l.layerId))
 
   // Labour is never derived from geometry — it's manual trade + hours, priced from the
@@ -181,7 +221,13 @@ export default function AssemblyWallDemo({ onClose, onSave, labourTrades = [], e
     })
     .filter((l): l is CostedLine => l !== null)
 
-  const totalCost = enabledMaterialLines.reduce((s, l) => s + l.cost, 0) + labourCostedLines.reduce((s, l) => s + l.cost, 0)
+  const costSubtotal = enabledMaterialLines.reduce((s, l) => s + l.cost, 0) + labourCostedLines.reduce((s, l) => s + l.cost, 0)
+  const profitAmount = +(costSubtotal * profitPct / 100).toFixed(2)
+  const profitLine: CostedLine | null = profitPct > 0 ? {
+    layerId: 'profit', name: `Profit (${profitPct}%)`, category: 'other', source: 'fixed',
+    wastePct: 0, rawQty: 1, purchaseQty: 1, unit: 'item', unitCost: profitAmount, cost: profitAmount,
+  } : null
+  const totalCost = costSubtotal + profitAmount
 
   function updateOpening(id: string, patch: Partial<AssemblyOpening>) {
     setOpenings(prev => prev.map(o => o.id === id ? { ...o, ...patch } : o))
@@ -230,7 +276,7 @@ export default function AssemblyWallDemo({ onClose, onSave, labourTrades = [], e
         )}
         {onSave && result.ok && (
           <button
-            onClick={() => onSave({ name, qty, location, description, lines: [...enabledMaterialLines, ...labourCostedLines] })}
+            onClick={() => onSave({ name, qty, location, description, lines: [...enabledMaterialLines, ...labourCostedLines, ...(profitLine ? [profitLine] : [])] })}
             title="Replace this sub-phase's cost items with this calculation's costed lines"
             style={{ background: '#16a34a', border: 'none', borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: '6px 12px' }}>
             💾 Save &amp; Price
@@ -297,6 +343,9 @@ export default function AssemblyWallDemo({ onClose, onSave, labourTrades = [], e
             </PropRow>
             <PropRow label={`Waste % (${wastePct}%)`}>
               <input type="range" min={0} max={25} value={wastePct} onChange={e => setWastePct(+e.target.value)} style={{ width: '100%' }} />
+            </PropRow>
+            <PropRow label={`Profit % (${profitPct}%)`}>
+              <input type="range" min={0} max={50} value={profitPct} onChange={e => setProfitPct(+e.target.value)} style={{ width: '100%' }} />
             </PropRow>
 
             {/* Openings */}
@@ -381,10 +430,58 @@ export default function AssemblyWallDemo({ onClose, onSave, labourTrades = [], e
             )}
           </div>
 
+          {/* Miscellaneous Materials — freeform name/qty/unit/rate lines for anything not
+              covered by the standard layers (fixings, adhesive, sundries, ...). Spans both
+              columns, same pattern as Labour above. */}
+          <div style={{ gridColumn: '1 / -1', marginTop: 4 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 }}>
+              Miscellaneous Materials — anything not covered by the layers below
+            </div>
+            {miscMaterialLines.length > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 70px 80px 90px 90px 20px', gap: 6, marginBottom: 3 }}>
+                {['Name', 'Qty', 'Unit', 'Rate', 'Cost'].map(h => (
+                  <div key={h} style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.3 }}>{h}</div>
+                ))}
+                <div />
+              </div>
+            )}
+            {miscMaterialLines.map(m => {
+              const cost = +(m.qty * m.unitCost).toFixed(2)
+              return (
+                <div key={m.id} style={{ display: 'grid', gridTemplateColumns: '2fr 70px 80px 90px 90px 20px', gap: 6, marginBottom: 4, alignItems: 'center' }}>
+                  <input value={m.name} onChange={e => updateMiscMaterialLine(m.id, { name: e.target.value })}
+                    placeholder="e.g. Fixings" style={miniInput} />
+                  <input type="number" min={0} step={0.5} value={m.qty}
+                    onChange={e => updateMiscMaterialLine(m.id, { qty: Math.max(0, +e.target.value || 0) })} style={miniInput} />
+                  <input value={m.unit} onChange={e => updateMiscMaterialLine(m.id, { unit: e.target.value })}
+                    placeholder="item" style={miniInput} />
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+                    <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#94a3b8' }}>£</span>
+                    <input type="number" min={0} step={0.01} value={m.unitCost}
+                      onChange={e => updateMiscMaterialLine(m.id, { unitCost: Math.max(0, +e.target.value || 0) })} style={miniInput} />
+                  </div>
+                  <div style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 600 }}>£{cost.toFixed(2)}</div>
+                  <button onClick={() => removeMiscMaterialLine(m.id)} title="Remove this material"
+                    style={{ background: 'none', border: 'none', color: '#e74c3c', cursor: 'pointer', fontSize: 14 }}>×</button>
+                </div>
+              )
+            })}
+            <button onClick={addMiscMaterialLine}
+              style={{ fontSize: 11, border: '1px dashed #94a3b8', background: 'transparent', borderRadius: 4, color: '#64748b', padding: '3px 8px', cursor: 'pointer' }}>
+              + Add Material
+            </button>
+          </div>
+
           {/* Breakdown — spans both columns */}
           <div style={{ gridColumn: '1 / -1', marginTop: 4 }}>
-            <BreakdownTable lines={materialLines} onRateChange={setRate} disabledLayerIds={disabledLayerIds} onToggleLayer={toggleLayer}
+            <BreakdownTable lines={materialLines} onRateChange={handleBreakdownRateChange} disabledLayerIds={disabledLayerIds} onToggleLayer={toggleLayer}
               layerSides={layerSides} onSidesChange={setSides} />
+            {profitPct > 0 && (
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 6, textAlign: 'right' }}>
+                Cost: £{costSubtotal.toFixed(2)} + {profitPct}% profit (£{profitAmount.toFixed(2)}) ={' '}
+                <strong style={{ color: '#7ab533' }}>£{totalCost.toFixed(2)}</strong>
+              </div>
+            )}
           </div>
         </div>
       )}
