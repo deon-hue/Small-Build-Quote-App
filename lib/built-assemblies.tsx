@@ -6,10 +6,11 @@
 //   - components/QuoteWorkspace.tsx (shows a button to open the calculator from a quote)
 
 import AssemblyWallDemo from '@/components/AssemblyWallDemo'
+import AssemblyMasonryWallDemo from '@/components/AssemblyMasonryWallDemo'
 import type { CostedLine } from '@/lib/assembly-calc'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 
-export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall'
+export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall'
 
 /** Fired when a calculator's "Save & Price" is used from inside a real quote — absent in
  * the Back Office preview context, which has no quote to save into. */
@@ -21,6 +22,7 @@ export const BUILT_ASSEMBLY_CANON_IDS: Record<string, {
 }> = {
   'iw-stud-partition': { icon: 'stud-wall', render: opts => <AssemblyWallDemo system="timber" onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'iw-metal-stud': { icon: 'metal-stud-wall', render: opts => <AssemblyWallDemo system="metal" onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
+  'iw-block-masonry': { icon: 'block-wall', render: opts => <AssemblyMasonryWallDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
 }
 
 export function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; size?: number }) {
@@ -47,6 +49,20 @@ export function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; siz
             <line key={x} x1={x} y1="3" x2={x} y2="21" stroke="#0891b2" strokeWidth="1.6" />
           ))}
           <line x1="22" y1="3" x2="22" y2="21" stroke="#0891b2" strokeWidth="1.6" />
+        </svg>
+      )
+    case 'block-wall':
+      // A running-bond block course pattern — staggered horizontal joints, not vertical
+      // studs, so it reads as masonry rather than a framed wall at a glance.
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="2" y="3" width="20" height="18" rx="1" stroke="#b45309" strokeWidth="1.6" />
+          <line x1="2" y1="9" x2="22" y2="9" stroke="#b45309" strokeWidth="1.4" />
+          <line x1="2" y1="15" x2="22" y2="15" stroke="#b45309" strokeWidth="1.4" />
+          <line x1="12" y1="3" x2="12" y2="9" stroke="#b45309" strokeWidth="1.4" />
+          <line x1="7" y1="9" x2="7" y2="15" stroke="#b45309" strokeWidth="1.4" />
+          <line x1="17" y1="9" x2="17" y2="15" stroke="#b45309" strokeWidth="1.4" />
+          <line x1="12" y1="15" x2="12" y2="21" stroke="#b45309" strokeWidth="1.4" />
         </svg>
       )
   }
