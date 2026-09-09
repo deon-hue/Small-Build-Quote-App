@@ -12,6 +12,7 @@ import { TAKEOFF_PHASES, WALL_MAKEUPS, DWARF_WALL_MAKEUPS, PHASE_MAKEUPS, type F
 import { CANONICAL_PHASE_IDS } from './product-config'
 import { ALL_PHASE_SUBPHASES } from './phase-tasks'
 import { DEFAULT_DEMO_SUBPHASES } from './demolition-data'
+import { BUILT_ASSEMBLY_CANONICAL_IDS } from './built-assembly-ids'
 import { PLANT_LIBRARY } from './plant-library'
 
 // ── Labour Trades ─────────────────────────────────────────────────────────────
@@ -953,6 +954,11 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
   const desiredTasks: TaskRow[] = []
 
   ALL_PHASE_SUBPHASES.forEach(sub => {
+    // A sub-phase with a built assembly calculator is fully calculator-owned now — its old
+    // flat-rate tasks are superseded, deletable from Phases & Tasks, and must stay deleted.
+    // Without this, every sync (which runs on every Back Office page load) would see the
+    // deleted task's canonical_id missing from the DB and treat it as "new", re-inserting it.
+    if (BUILT_ASSEMBLY_CANONICAL_IDS.has(sub.id)) return
     const pc = CANONICAL_PHASE_IDS[sub.phase]
     sub.tasks.forEach((task, i) => {
       desiredTasks.push({

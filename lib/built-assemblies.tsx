@@ -1,9 +1,15 @@
 // Shared registry of which Back Office sub-phases (by canonical_id — stable across renames)
-// have a real, working assembly calculator today. Used by three places that all need to
+// have a real, working assembly calculator today. Used by four places that all need to
 // agree on the same answer:
 //   - app/(app)/back-office/components/SectionAssemblies.tsx (renders the built card)
 //   - app/(app)/back-office/components/SectionPhasesTasks.tsx (locks editing there instead)
 //   - components/QuoteWorkspace.tsx (shows a button to open the calculator from a quote)
+//   - lib/back-office-queries.ts (syncBackOfficeFromProduct skips re-seeding these
+//     sub-phases' old flat-rate tasks from static code — see built-assembly-ids.ts)
+//
+// The plain canonical_id keys below MUST match lib/built-assembly-ids.ts's
+// BUILT_ASSEMBLY_CANONICAL_IDS set — that file exists so non-UI code can check membership
+// without importing the React components this file renders.
 
 import AssemblyWallDemo from '@/components/AssemblyWallDemo'
 import AssemblyMasonryWallDemo from '@/components/AssemblyMasonryWallDemo'
