@@ -10,11 +10,44 @@
 import React from 'react'
 import type { AssemblyOpening, CostedLine } from '@/lib/assembly-calc'
 import type { BOLabourTrade } from '@/lib/back-office-types'
+import { openMaterialsPrintView, downloadMaterialsCsv } from '@/lib/materials-report'
 
 export const CATEGORY_LABEL: Record<string, string> = { materials: 'Materials', labour: 'Labour', plant: 'Plant', subcontractors: 'Subcontractors', other: 'Other' }
 
 export const propInput: React.CSSProperties = { width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #e2e8f0', borderRadius: 4, boxSizing: 'border-box' }
 export const miniInput: React.CSSProperties = { width: '100%', fontSize: 11, padding: '3px 4px', border: '1px solid #e2e8f0', borderRadius: 4, boxSizing: 'border-box' }
+
+// Print + CSV export for a materials list — used both inside a calculator (the current,
+// possibly-unsaved calculation) and on a quote's sub-phase (its last-saved snapshot). Only
+// materials-category lines make sense here (labour/profit aren't something you buy), so
+// this filters defensively even though every caller today already passes materials only.
+export function MaterialsListButtons({ lines, title, location, description, compact }: {
+  lines: CostedLine[]
+  title: string
+  location?: string
+  description?: string
+  /** Smaller icon-only buttons for a tight header row, vs. labelled buttons for a summary panel. */
+  compact?: boolean
+}) {
+  const materials = lines.filter(l => l.category === 'materials')
+  if (materials.length === 0) return null
+  const btnStyle: React.CSSProperties = {
+    fontSize: 11, padding: compact ? '4px 7px' : '5px 10px', borderRadius: 5, cursor: 'pointer',
+    border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontWeight: 600,
+  }
+  return (
+    <div style={{ display: 'flex', gap: 6 }}>
+      <button type="button" style={btnStyle} title="Print the materials list — or save as PDF from the print dialog"
+        onClick={() => openMaterialsPrintView(materials, { title, location, description })}>
+        🖨{compact ? '' : ' Materials List'}
+      </button>
+      <button type="button" style={btnStyle} title="Download the materials list as a CSV"
+        onClick={() => downloadMaterialsCsv(title, materials)}>
+        ⬇{compact ? '' : ' CSV'}
+      </button>
+    </div>
+  )
+}
 
 export function PropRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (

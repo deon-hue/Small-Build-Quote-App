@@ -1,5 +1,6 @@
 import type { EstimatorItem, EstimatorItemTemplate } from './estimator'
 import type { LabourTrade, TaskLabourLine } from './tradeRates'
+import type { CostedLine } from './assembly-calc'
 export type { EstimatorItem, EstimatorItemTemplate, LabourTrade, TaskLabourLine }
 
 export interface QuoteItem {
@@ -97,6 +98,12 @@ export interface QuotePhase {
   itemStatus?: 'bo-default' | 'edited' | 'manual' | 'takeoff' | 'ai'
   /** Back Office sub-phase ID — set when the phase originated from a bo_sub_phases row */
   boSubPhaseId?: string
+  /** The assembly calculator's full costed-line snapshot, saved alongside the flattened
+   * QuoteItem[] above — QuoteItem doesn't keep purchaseQty/unit/wastePct as separate
+   * fields (they're folded into `notes` as text), so this is what a "print/download the
+   * materials list" report reads from. Set whenever a calculator's Save & Price is used,
+   * from a real quote sub-phase or via Take-off. */
+  assemblyLines?: CostedLine[]
   /** AI-generated item that couldn't be matched to Back Office master data */
   needsReview?: boolean
   reviewNote?: string

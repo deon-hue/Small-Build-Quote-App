@@ -1041,6 +1041,7 @@ export default function NewQuotePage() {
               ...ph,
               source: 'manual', itemStatus: 'bo-default',
               taskName: asmResult.description,
+              assemblyLines: asmResult.lines,
               ...(item.taskSubphaseId && { boSubPhaseId: item.taskSubphaseId }),
               ...(asmResult.location.trim() && { roomLabel: asmResult.location.trim() }),
             })

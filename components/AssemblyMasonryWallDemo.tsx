@@ -25,7 +25,7 @@ import {
   propInput, PropRow, BreakdownTable, HDim, VDim,
   LabourSection, type LabourLine, newLabourLineId, hourlyRate,
   MiscMaterialsSection, type MiscMaterialLine, newMiscMaterialLineId,
-  OpeningsEditor, newOpeningId,
+  OpeningsEditor, newOpeningId, MaterialsListButtons,
 } from '@/components/assembly-ui'
 
 // Mortar mix assumptions — sample rates like everything else here, easy to correct:
@@ -268,6 +268,9 @@ export default function AssemblyMasonryWallDemo({ onClose, onSave, labourTrades 
           <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 700, color: '#7ab533' }}>
             {fmt(totalCost * qty)}
           </span>
+        )}
+        {result.ok && (
+          <MaterialsListButtons lines={enabledMaterialLines} title={name} location={location} description={description} compact />
         )}
         {onSave && result.ok && (
           <button

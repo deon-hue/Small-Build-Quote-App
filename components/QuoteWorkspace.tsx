@@ -21,6 +21,7 @@ import ProductPicker      from '@/components/ProductPicker'
 import PlantPicker        from '@/components/PlantPicker'
 import PhaseReviewModal   from '@/components/PhaseReviewModal'
 import { BUILT_ASSEMBLY_CANON_IDS, AssemblyIconGlyph, type AssemblySaveResult } from '@/lib/built-assemblies'
+import { MaterialsListButtons } from '@/components/assembly-ui'
 
 // ── IDs ────────────────────────────────────────────────────────────────────────
 let _id = Date.now()
@@ -843,7 +844,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
         return { ...base, [key]: l.cost }
       })
     onUpdate(markEdited({
-      ...p, items: newItems, taskName: result.description,
+      ...p, items: newItems, taskName: result.description, assemblyLines: result.lines,
       ...(result.location.trim() && { roomLabel: result.location.trim() }),
     }))
     setShowAssemblyCalc(false)
@@ -1512,6 +1513,9 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
                   {p.items.length > 0 ? 'Cost £' + totalCost.toFixed(2) + ' — open the calculator to recalculate' : 'Open the calculator to size this and price it'}
                 </div>
               </div>
+              {p.assemblyLines && p.assemblyLines.length > 0 && (
+                <MaterialsListButtons lines={p.assemblyLines} title={p.phase} location={p.roomLabel} description={p.taskName} />
+              )}
               <button
                 onClick={() => setShowAssemblyCalc(true)}
                 style={{ padding: '6px 14px', background: '#7c3aed', border: 'none', borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
