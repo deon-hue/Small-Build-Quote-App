@@ -31,19 +31,22 @@ export function MaterialsListButtons({ lines, title, location, description, comp
 }) {
   const materials = lines.filter(l => l.category === 'materials')
   if (materials.length === 0) return null
+  // Solid, higher-contrast style — a faint outline button on a white card was easy to miss
+  // entirely. Keeps a short text label even in compact mode (bare icons aren't self-explanatory).
   const btnStyle: React.CSSProperties = {
-    fontSize: 11, padding: compact ? '4px 7px' : '5px 10px', borderRadius: 5, cursor: 'pointer',
-    border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontWeight: 600,
+    fontSize: 11, padding: compact ? '5px 9px' : '5px 10px', borderRadius: 5, cursor: 'pointer',
+    border: '1px solid #cbd5e1', background: '#eef2f6', color: '#1e293b', fontWeight: 700,
+    display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap',
   }
   return (
     <div style={{ display: 'flex', gap: 6 }}>
       <button type="button" style={btnStyle} title="Print the materials list — or save as PDF from the print dialog"
         onClick={() => openMaterialsPrintView(materials, { title, location, description })}>
-        🖨{compact ? '' : ' Materials List'}
+        🖨 {compact ? 'Print' : 'Materials List'}
       </button>
       <button type="button" style={btnStyle} title="Download the materials list as a CSV"
         onClick={() => downloadMaterialsCsv(title, materials)}>
-        ⬇{compact ? '' : ' CSV'}
+        ⬇ CSV
       </button>
     </div>
   )
