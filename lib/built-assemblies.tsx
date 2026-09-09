@@ -22,14 +22,22 @@ export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall'
  * the Back Office preview context, which has no quote to save into. */
 export interface AssemblySaveResult { name: string; qty: number; location: string; description: string; lines: CostedLine[] }
 
+export interface AssemblyRenderOpts {
+  onSave?: (result: AssemblySaveResult) => void
+  labourTrades?: BOLabourTrade[]
+  /** Take-off's traced line length (mm) — live-syncs into the calculator's own length field.
+   * Absent everywhere else (Back Office preview, QuoteWorkspace), which have no drawn line. */
+  externalLengthMm?: number
+}
+
 export const BUILT_ASSEMBLY_CANON_IDS: Record<string, {
   icon: AssemblyIcon
-  render: (opts?: { onSave?: (result: AssemblySaveResult) => void; labourTrades?: BOLabourTrade[] }) => React.ReactNode
+  render: (opts?: AssemblyRenderOpts) => React.ReactNode
 }> = {
-  'iw-stud-partition': { icon: 'stud-wall', render: opts => <AssemblyWallDemo system="timber" onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
-  'iw-metal-stud': { icon: 'metal-stud-wall', render: opts => <AssemblyWallDemo system="metal" onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
-  'iw-block-masonry': { icon: 'block-wall', render: opts => <AssemblyMasonryWallDemo context="partition" onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
-  'ew-blockwork-100': { icon: 'block-wall', render: opts => <AssemblyMasonryWallDemo context="external-wall" onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
+  'iw-stud-partition': { icon: 'stud-wall', render: opts => <AssemblyWallDemo system="timber" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
+  'iw-metal-stud': { icon: 'metal-stud-wall', render: opts => <AssemblyWallDemo system="metal" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
+  'iw-block-masonry': { icon: 'block-wall', render: opts => <AssemblyMasonryWallDemo context="partition" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
+  'ew-blockwork-100': { icon: 'block-wall', render: opts => <AssemblyMasonryWallDemo context="external-wall" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
 }
 
 export function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; size?: number }) {

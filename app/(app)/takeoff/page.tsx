@@ -6,8 +6,8 @@ import { createClient } from '@/lib/supabase/client'
 import { makeDebouncedSave, loadTakeoffFromSupabase } from '@/lib/takeoff-sync'
 import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchLabourTrades, fetchPhases, fetchSubPhases, fetchTasks } from '@/lib/back-office-queries'
 import type { BOLabourTrade, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
-import AssemblyWallDemo from '@/components/AssemblyWallDemo'
 import { BUILT_ASSEMBLY_CANON_IDS } from '@/lib/built-assemblies'
+import { WALL_MAKEUP_TO_SUBPHASE_CANONICAL } from '@/lib/built-assembly-ids'
 import LabourCostBuilder from './components/LabourCostBuilder'
 import ClientProjectModal from './components/ClientProjectModal'
 import ConstructionLayerModal, { saveLayerCostToBackOffice } from './components/ConstructionLayerModal'
@@ -2249,13 +2249,22 @@ export default function TakeoffPage() {
     const hasOpenings      = (isExtWall || isIntWall || isPlaster) && isLineBased
 
     // Internal Walls: does the selected sub-phase have a built assembly calculator?
-    // When it does, the assembly calculator has final say on measurements/materials/
-    // pricing, so all the old recipe-engine UI below is suppressed.
+    // Resolved via the real Back Office sub-phase (taskSubphaseId).
     const intWallSubs   = isIntWall ? getAllSubphasesForPhase('Internal Walls & Partitions') : []
     const intWallSelSub = intWallSubs.find(s => s.id === item.taskSubphaseId) ?? intWallSubs[0]
     const intWallBoSub  = intWallSelSub ? boSubPhases.find(sp => sp.id === intWallSelSub.id) : undefined
-    const builtAssembly = intWallBoSub?.canonical_id ? BUILT_ASSEMBLY_CANON_IDS[intWallBoSub.canonical_id] : undefined
-    const hideForBuiltAssembly = isIntWall && !!builtAssembly
+    const intWallBuiltAssembly = intWallBoSub?.canonical_id ? BUILT_ASSEMBLY_CANON_IDS[intWallBoSub.canonical_id] : undefined
+
+    // External Walls: does the selected Build-up Type have a built assembly calculator?
+    // That system is keyed by floorMakeupId (WALL_MAKEUPS/bo_wall_types) — a separate id
+    // space from bo_sub_phases, bridged by WALL_MAKEUP_TO_SUBPHASE_CANONICAL.
+    const extWallCanonical    = item.floorMakeupId ? WALL_MAKEUP_TO_SUBPHASE_CANONICAL[item.floorMakeupId] : undefined
+    const extWallBuiltAssembly = extWallCanonical ? BUILT_ASSEMBLY_CANON_IDS[extWallCanonical] : undefined
+
+    // When either phase's selected type has a calculator, it has final say on measurements/
+    // materials/pricing, so all the old recipe-engine/build-up UI below is suppressed.
+    const builtAssembly = isIntWall ? intWallBuiltAssembly : isExtWall ? extWallBuiltAssembly : undefined
+    const hideForBuiltAssembly = (isIntWall || isExtWall) && !!builtAssembly
 
     // ── 4. Computed wall measurements ──────────────────────────────────────
     const wallLength     = item.length ?? 0
@@ -2721,19 +2730,31 @@ export default function TakeoffPage() {
 
           {/* ── Type selector (phase-specific) — sits directly under Phase ── */}
 
-          {/* External Walls: Build-up Type */}
+          {/* External Walls: Build-up Type — picks between the layer build-up system (below)
+              and, for whichever wall types have one, the real assembly calculator instead.
+              This picker is keyed by floorMakeupId (a separate id space from bo_sub_phases —
+              see WALL_MAKEUP_TO_SUBPHASE_CANONICAL), unlike Internal Walls' Sub-Phase picker. */}
           {isExtWall && (() => {
             const _allWT   = allWallMakeups
             const _wMakeup = _allWT.find(m => m.id === item.floorMakeupId)
             const _builtIn = new Set(WALL_MAKEUPS.map(m => m.id))
+
+            function selectExtWallMakeup(makeupId: string) {
+              const nm = _allWT.find(m => m.id === makeupId)
+              const canonical = WALL_MAKEUP_TO_SUBPHASE_CANONICAL[makeupId]
+              const built = canonical ? BUILT_ASSEMBLY_CANON_IDS[canonical] : undefined
+              saveItemEdit({
+                ...item, floorMakeupId: makeupId, spec: nm?.clientDescription ?? item.spec,
+                floorLayerToggles: {}, floorLayerThicknesses: {},
+                ...(!built && { assemblyResult: undefined }),
+              })
+            }
+
             return (
               <div style={{ marginBottom: 10 }}>
                 <label style={labelStyle}>Build-up Type</label>
                 <select style={{ ...inputStyle, color: accent }} value={item.floorMakeupId ?? ''}
-                  onChange={e => {
-                    const nm = _allWT.find(m => m.id === e.target.value)
-                    saveItemEdit({ ...item, floorMakeupId: e.target.value, spec: nm?.clientDescription ?? item.spec, floorLayerToggles: {}, floorLayerThicknesses: {} })
-                  }}>
+                  onChange={e => selectExtWallMakeup(e.target.value)}>
                   <optgroup label="── Built-in Wall Types">
                     {WALL_MAKEUPS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                   </optgroup>
@@ -2743,10 +2764,21 @@ export default function TakeoffPage() {
                     </optgroup>
                   )}
                 </select>
-                {_wMakeup && (
+                {!builtAssembly && _wMakeup && (
                   <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 3, fontStyle: 'italic' }}>
                     {_builtIn.has(item.floorMakeupId ?? '') ? 'Built-in' : '★ Custom'} · {_wMakeup.layers.length} layer{_wMakeup.layers.length !== 1 ? 's' : ''}
                     {_wMakeup.labourHrsPerM2 > 0 && ` · ~${fmt2(netArea * _wMakeup.labourHrsPerM2)} hrs labour`}
+                  </div>
+                )}
+                {builtAssembly && (
+                  <div style={{ marginTop: 10 }}>
+                    {builtAssembly.render({
+                      externalLengthMm: wallLength > 0 ? Math.round(wallLength * 1000) : undefined,
+                      labourTrades,
+                      onSave: result => saveItemEdit({
+                        ...item, assemblyResult: result, name: result.name, roomName: result.location || item.roomName,
+                      }),
+                    })}
                   </div>
                 )}
               </div>
@@ -2789,14 +2821,14 @@ export default function TakeoffPage() {
 
                 {builtAssembly ? (
                   <div style={{ marginBottom: 10 }}>
-                    <AssemblyWallDemo
-                      externalLengthMm={wallLength > 0 ? Math.round(wallLength * 1000) : undefined}
-                      labourTrades={labourTrades}
-                      onSave={result => saveItemEdit({
+                    {builtAssembly.render({
+                      externalLengthMm: wallLength > 0 ? Math.round(wallLength * 1000) : undefined,
+                      labourTrades,
+                      onSave: result => saveItemEdit({
                         ...item, taskSubphaseId: selectedSub?.id, subPhase: selectedSub?.name,
                         assemblyResult: result, name: result.name, roomName: result.location || item.roomName,
-                      })}
-                    />
+                      }),
+                    })}
                   </div>
                 ) : (
                   <>
