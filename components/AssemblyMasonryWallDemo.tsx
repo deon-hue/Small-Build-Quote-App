@@ -1,17 +1,22 @@
 'use client'
 
 /**
- * Assembly Calculator — Masonry Block Partition.
+ * Assembly Calculator — Masonry Block Wall.
  *
- * Blockwork coursing replaces stud spacing: block count comes from the net area over a
- * standard block's coordinating size, cement and sand come from a standard mortar mix
- * (see MORTAR_MIX_NOTES below), and a precast lintel spans each opening instead of a header.
- * There's no stud/plate/noggin framing at all — see calculateMasonryGeometry in
+ * Two contexts share this one component, via the `context` prop:
+ *   - 'partition' (Internal Walls — Masonry Block Partitions): a single finish applied to
+ *     one or both faces via the existing sides toggle, no windows by default, no DPC.
+ *   - 'external-wall' (External Walls — Concrete Blockwork 100mm): two DIFFERENT faces —
+ *     an outside finish (render, brick slip, painted block) and an inside finish (the same
+ *     dot-and-dab/wet-plaster/battened options as a partition) — plus a DPC course, since
+ *     this one actually meets the ground. There's no "both faces" toggle here: the two
+ *     faces are never the same material, so each gets its own explicit choice instead.
+ *
+ * Blockwork coursing replaces stud spacing either way: block count comes from the net area
+ * over a standard block's coordinating size, cement and sand come from a standard mortar mix
+ * (see the mortar-mix comment below), and a precast lintel spans each opening instead of a
+ * header. There's no stud/plate/noggin framing at all — see calculateMasonryGeometry in
  * lib/assembly-calc.ts, the module built specifically for this construction method.
- *
- * Finish is a real choice on site, not just a rate: dot-and-dab + plasterboard, direct (wet)
- * plaster straight onto the block, or battened + plasterboard. Each swaps in a different
- * small set of layers rather than just a different rate on one line.
  */
 
 import React, { useMemo, useState, useRef, useEffect } from 'react'
@@ -53,6 +58,10 @@ function buildCoreLayers(wastePct: number, blockType: BlockType): AssemblyLayerD
   ]
 }
 
+export type MasonryContext = 'partition' | 'external-wall'
+
+// The internal-face finish — identical whether it's the only face (a partition) or the
+// inside face of an external wall.
 type FinishType = 'dot-dab' | 'wet-plaster' | 'battened'
 interface FinishTypeConfig { label: string; buildLayers: (wastePct: number) => AssemblyLayerDef[]; boardLayerId: string }
 const FINISH_TYPE_CONFIG: Record<FinishType, FinishTypeConfig> = {
@@ -81,20 +90,57 @@ const FINISH_TYPE_CONFIG: Record<FinishType, FinishTypeConfig> = {
   },
 }
 
-function sampleOpenings(): AssemblyOpening[] {
-  // No windows normally in a masonry partition — just allow for a standard internal door.
+// The outside face of an external wall — never the same material as the inside, so this is
+// its own separate choice rather than a "both faces" toggle on one finish.
+type ExternalFinishType = 'render' | 'brick-slip' | 'painted-block'
+interface ExternalFinishTypeConfig { label: string; buildLayers: (wastePct: number) => AssemblyLayerDef[] }
+const EXTERNAL_FINISH_CONFIG: Record<ExternalFinishType, ExternalFinishTypeConfig> = {
+  render: {
+    label: 'Two-coat render',
+    buildLayers: wastePct => [
+      { id: 'render_ext', name: 'External render (2-coat)', category: 'materials', source: 'netAreaM2', unit: 'm²', unitCost: 11.00, wastePct },
+    ],
+  },
+  'brick-slip': {
+    label: 'Brick slip cladding',
+    buildLayers: wastePct => [
+      { id: 'brick_slip', name: 'Brick slip cladding + adhesive', category: 'materials', source: 'netAreaM2', unit: 'm²', unitCost: 45.00, wastePct },
+    ],
+  },
+  'painted-block': {
+    label: 'Fair-faced block, painted',
+    buildLayers: wastePct => [
+      { id: 'masonry_paint', name: 'Masonry paint (2 coats)', category: 'materials', source: 'netAreaM2', unit: 'm²', unitCost: 3.50, wastePct },
+    ],
+  },
+}
+
+// One course of DPC along the base — only relevant where the wall actually meets the
+// ground, i.e. an external wall. Priced per linear metre, not by area.
+function buildDpcLayer(wastePct: number): AssemblyLayerDef {
+  return { id: 'dpc', name: 'DPC (damp-proof course)', category: 'materials', source: 'lengthM', unit: 'm', unitCost: 1.80, wastePct }
+}
+
+function sampleOpenings(context: MasonryContext): AssemblyOpening[] {
+  if (context === 'external-wall') {
+    // External walls have windows too — a partition normally doesn't.
+    return [{ id: newOpeningId(), kind: 'window', widthMm: 1200, heightMm: 1200, offsetMm: 2000, sillHeightMm: 900 }]
+  }
   return [{ id: newOpeningId(), kind: 'door', widthMm: 826, heightMm: 2040, offsetMm: 2000, sillHeightMm: 0 }]
 }
 
 interface Props {
+  /** Defaults to 'partition' for callers that predate this option (Internal Walls). */
+  context?: MasonryContext
   onClose?: () => void
   onSave?: (result: { name: string; qty: number; location: string; description: string; lines: CostedLine[] }) => void
   labourTrades?: BOLabourTrade[]
   externalLengthMm?: number
 }
 
-export default function AssemblyMasonryWallDemo({ onClose, onSave, labourTrades = [], externalLengthMm }: Props) {
-  const [name, setName]         = useState('Masonry Block Partition')
+export default function AssemblyMasonryWallDemo({ context = 'partition', onClose, onSave, labourTrades = [], externalLengthMm }: Props) {
+  const isExternal = context === 'external-wall'
+  const [name, setName]         = useState(isExternal ? '100mm Blockwork External Wall' : 'Masonry Block Partition')
   const [qty, setQty]           = useState(1)
   const [lengthMm, setLengthMm] = useState(externalLengthMm ?? 5000)
   useEffect(() => {
@@ -102,9 +148,12 @@ export default function AssemblyMasonryWallDemo({ onClose, onSave, labourTrades 
   }, [externalLengthMm])
   const [heightMm, setHeightMm] = useState(2400)
   const [blockType, setBlockType] = useState<BlockType>('concrete')
+  // For a partition, this is the wall's only finish. For an external wall, it's the inside
+  // face specifically — the outside face is externalFinish below.
   const [finishType, setFinishType] = useState<FinishType>('dot-dab')
+  const [externalFinish, setExternalFinish] = useState<ExternalFinishType>('render')
   const [wastePct, setWastePct] = useState(10)
-  const [openings, setOpenings] = useState<AssemblyOpening[]>(sampleOpenings)
+  const [openings, setOpenings] = useState<AssemblyOpening[]>(() => sampleOpenings(context))
   const [location, setLocation] = useState('')
   const [labourLines, setLabourLines] = useState<LabourLine[]>([
     { id: newLabourLineId(), tradeId: '', task: 'Build blockwork partition', hours: 6 },
@@ -133,21 +182,31 @@ export default function AssemblyMasonryWallDemo({ onClose, onSave, labourTrades 
   const [profitPct, setProfitPct] = useState(0)
   const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
 
-  // Only the finish's own board/plaster layer can go on one or both faces — blocks, mortar
-  // and the lintel exist once regardless of how many faces are finished.
+  // A partition's single finish can go on one or both faces — that toggle makes no sense
+  // for an external wall, where the two faces are always different materials by definition.
   const [layerSides, setLayerSides] = useState<Record<string, 1 | 2>>({})
   function setSides(layerId: string, sides: 1 | 2) {
     setLayerSides(prev => ({ ...prev, [layerId]: sides }))
   }
-  const sidesEligibleLayerIds = useMemo(() => new Set([FINISH_TYPE_CONFIG[finishType].boardLayerId]), [finishType])
+  const sidesEligibleLayerIds = useMemo(
+    () => isExternal ? new Set<string>() : new Set([FINISH_TYPE_CONFIG[finishType].boardLayerId]),
+    [isExternal, finishType]
+  )
 
   function buildAutoDescription(): string {
-    const parts = [
-      `${(lengthMm / 1000).toFixed(2)}m long × ${(heightMm / 1000).toFixed(2)}m high masonry block partition`,
-      BLOCK_TYPE_CONFIG[blockType].label.toLowerCase(),
-      `finished with ${FINISH_TYPE_CONFIG[finishType].label.toLowerCase()}`,
-    ]
-    if ((layerSides[FINISH_TYPE_CONFIG[finishType].boardLayerId] ?? 1) === 2) parts.push('both faces')
+    const parts = isExternal
+      ? [
+          `${(lengthMm / 1000).toFixed(2)}m long × ${(heightMm / 1000).toFixed(2)}m high external blockwork wall`,
+          BLOCK_TYPE_CONFIG[blockType].label.toLowerCase(),
+          `${EXTERNAL_FINISH_CONFIG[externalFinish].label.toLowerCase()} outside`,
+          `${FINISH_TYPE_CONFIG[finishType].label.toLowerCase()} inside`,
+        ]
+      : [
+          `${(lengthMm / 1000).toFixed(2)}m long × ${(heightMm / 1000).toFixed(2)}m high masonry block partition`,
+          BLOCK_TYPE_CONFIG[blockType].label.toLowerCase(),
+          `finished with ${FINISH_TYPE_CONFIG[finishType].label.toLowerCase()}`,
+        ]
+    if (!isExternal && (layerSides[FINISH_TYPE_CONFIG[finishType].boardLayerId] ?? 1) === 2) parts.push('both faces')
     let text = parts.join(', ') + '.'
     if (openings.length) {
       const list = openings.map(o => `${o.kind} (${o.widthMm}×${o.heightMm}mm)`).join(', ')
@@ -168,14 +227,19 @@ export default function AssemblyMasonryWallDemo({ onClose, onSave, labourTrades 
 
   const input: MasonryWallInput = { lengthMm, heightMm, openings }
   const layers = useMemo(() => {
-    const base = [...buildCoreLayers(wastePct, blockType), ...FINISH_TYPE_CONFIG[finishType].buildLayers(wastePct)]
+    const base = [
+      ...buildCoreLayers(wastePct, blockType),
+      ...FINISH_TYPE_CONFIG[finishType].buildLayers(wastePct),
+      ...(isExternal ? EXTERNAL_FINISH_CONFIG[externalFinish].buildLayers(wastePct) : []),
+      ...(isExternal ? [buildDpcLayer(wastePct)] : []),
+    ]
     return base.map(l => {
       let next = l
       if (rateOverrides[l.id] != null) next = { ...next, unitCost: rateOverrides[l.id] }
       if (sidesEligibleLayerIds.has(l.id)) next = { ...next, sidesMultiplier: layerSides[l.id] ?? 1 }
       return next
     })
-  }, [wastePct, blockType, finishType, rateOverrides, layerSides, sidesEligibleLayerIds])
+  }, [wastePct, blockType, finishType, isExternal, externalFinish, rateOverrides, layerSides, sidesEligibleLayerIds])
   function setRate(layerId: string, unitCost: number) {
     setRateOverrides(prev => ({ ...prev, [layerId]: Math.max(0, unitCost) }))
   }
@@ -231,7 +295,9 @@ export default function AssemblyMasonryWallDemo({ onClose, onSave, labourTrades 
     setOpenings(prev => prev.filter(o => o.id !== id))
   }
   function addOpening() {
-    setOpenings(prev => [...prev, { id: newOpeningId(), kind: 'door', widthMm: 826, heightMm: 2040, offsetMm: 0, sillHeightMm: 0 }])
+    setOpenings(prev => [...prev, isExternal
+      ? { id: newOpeningId(), kind: 'window', widthMm: 1200, heightMm: 1200, offsetMm: 0, sillHeightMm: 900 }
+      : { id: newOpeningId(), kind: 'door', widthMm: 826, heightMm: 2040, offsetMm: 0, sillHeightMm: 0 }])
   }
 
   return (
@@ -330,7 +396,16 @@ export default function AssemblyMasonryWallDemo({ onClose, onSave, labourTrades 
                 <option value="thermal">Thermal lightweight block</option>
               </select>
             </PropRow>
-            <PropRow label="Finish">
+            {isExternal && (
+              <PropRow label="External Finish">
+                <select value={externalFinish} onChange={e => setExternalFinish(e.target.value as ExternalFinishType)} style={propInput}>
+                  {(Object.entries(EXTERNAL_FINISH_CONFIG) as [ExternalFinishType, ExternalFinishTypeConfig][]).map(([k, v]) => (
+                    <option key={k} value={k}>{v.label}</option>
+                  ))}
+                </select>
+              </PropRow>
+            )}
+            <PropRow label={isExternal ? 'Internal Finish' : 'Finish'}>
               <select value={finishType} onChange={e => setFinishType(e.target.value as FinishType)} style={propInput}>
                 {(Object.entries(FINISH_TYPE_CONFIG) as [FinishType, FinishTypeConfig][]).map(([k, v]) => (
                   <option key={k} value={k}>{v.label}</option>

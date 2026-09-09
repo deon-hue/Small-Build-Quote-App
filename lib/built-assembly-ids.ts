@@ -7,4 +7,5 @@ export const BUILT_ASSEMBLY_CANONICAL_IDS = new Set<string>([
   'iw-stud-partition',
   'iw-metal-stud',
   'iw-block-masonry',
+  'ew-blockwork-100',
 ])

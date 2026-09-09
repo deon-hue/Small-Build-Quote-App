@@ -44,6 +44,7 @@ export type MasonryQuantitySource =
   | 'grossAreaM2'
   | 'blockCount'
   | 'lintelCount' // one per opening — the lintel itself, not its size
+  | 'lengthM'     // the wall's run — for a DPC course, coping, or anything else priced per linear metre
   | 'fixed'
 
 // Every AssemblyLayerDef/CostedLine carries a `source` from whichever module built it —
@@ -271,6 +272,7 @@ export interface MasonryWallInput {
 }
 
 export interface MasonryWallGeometry {
+  lengthM: number
   grossAreaM2: number
   openingAreaM2: number
   netAreaM2: number
@@ -319,7 +321,7 @@ export function calculateMasonryGeometry(input: MasonryWallInput): MasonryWallGe
     lintels.push({ openingId: o.id, spanMm: o.widthMm + bearing * 2 })
   }
 
-  return { grossAreaM2, openingAreaM2, netAreaM2, blockCount, lintels, warnings }
+  return { lengthM: toM(L), grossAreaM2, openingAreaM2, netAreaM2, blockCount, lintels, warnings }
 }
 
 function resolveMasonryRawQty(layer: AssemblyLayerDef, geometry: MasonryWallGeometry): number {
@@ -328,6 +330,7 @@ function resolveMasonryRawQty(layer: AssemblyLayerDef, geometry: MasonryWallGeom
     case 'grossAreaM2': return geometry.grossAreaM2
     case 'blockCount':  return geometry.blockCount
     case 'lintelCount': return geometry.lintels.length
+    case 'lengthM':     return geometry.lengthM
     case 'fixed':
       if (layer.fixedQty == null) throw new Error(`Layer "${layer.name}" uses a fixed quantity but none was given.`)
       return layer.fixedQty
