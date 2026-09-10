@@ -38,6 +38,16 @@ const STATUS_BADGE: Record<VariationStatus, string> = {
   invoiced:  'b-planning',
   paid:      'b-active',
 }
+// Deleting a variation the client has already approved is allowed (they can still be a
+// mistake — approved the wrong one, wrong amount, etc.) but gets a stronger warning since
+// it silently reduces the contract total everywhere that's computed live from variations.
+function variationDeleteWarning(v: Pick<Variation, 'ref' | 'status' | 'total'>): string {
+  if (v.status === 'approved') {
+    return `Delete variation ${v.ref}? The client has already approved this — deleting it will remove ${fmt(v.total)} from the contract total. This cannot be undone.`
+  }
+  return `Delete variation ${v.ref}? This cannot be undone.`
+}
+
 const ITEM_TYPES = [
   { value: 'labour',         label: 'Labour' },
   { value: 'materials',      label: 'Materials' },
@@ -229,9 +239,13 @@ export default function VariationModal({ job, onClose }: Props) {
 
   const handleDelete = useCallback(async () => {
     if (!editingVar) return
-    if (!confirm(`Delete variation ${editingVar.ref}? This cannot be undone.`)) return
-    await deleteVariation(editingVar.id)
-    backToList()
+    if (!confirm(variationDeleteWarning(editingVar))) return
+    try {
+      await deleteVariation(editingVar.id)
+      backToList()
+    } catch (err) {
+      reportError('delete this variation', err)
+    }
   }, [editingVar, deleteVariation])
 
   const handleCreateRevision = useCallback(() => {
@@ -347,11 +361,13 @@ export default function VariationModal({ job, onClose }: Props) {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                   <div style={{ color: 'var(--muted)', fontSize: 16 }}>›</div>
-                  {!v.locked && v.status !== 'invoiced' && v.status !== 'paid' && (
+                  {v.status !== 'invoiced' && v.status !== 'paid' && (
                     <button
                       onClick={e => {
                         e.stopPropagation()
-                        if (confirm(`Delete variation ${v.ref}? This cannot be undone.`)) deleteVariation(v.id)
+                        if (confirm(variationDeleteWarning(v))) {
+                          deleteVariation(v.id).catch(err => reportError('delete this variation', err))
+                        }
                       }}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c0392b', fontSize: 13, padding: '2px 4px', lineHeight: 1 }}
                       title="Delete variation"
@@ -695,8 +711,9 @@ export default function VariationModal({ job, onClose }: Props) {
 
         {/* Action buttons */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 8, borderTop: '1px solid var(--border)' }}>
-          {/* Delete — any non-approved/invoiced/paid variation */}
-          {editingVar && !isLocked && editingVar.status !== 'invoiced' && editingVar.status !== 'paid' && (
+          {/* Delete — anything except invoiced/paid, which have real billing behind them.
+              Approved is allowed (with a stronger warning) so a mistaken approval can be undone. */}
+          {editingVar && editingVar.status !== 'invoiced' && editingVar.status !== 'paid' && (
             <button className="btn btn-danger" onClick={handleDelete} style={{ marginRight: 'auto' }}>
               Delete
             </button>

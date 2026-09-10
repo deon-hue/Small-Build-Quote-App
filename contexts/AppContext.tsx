@@ -756,7 +756,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [supabase])
 
   const deleteVariation = useCallback(async (id: string) => {
-    await supabase.from('variations').delete().eq('id', id)
+    const { error } = await supabase.from('variations').delete().eq('id', id)
+    if (error) throw error
     setVariations(prev => prev.filter(v => v.id !== id))
   }, [supabase])
 
