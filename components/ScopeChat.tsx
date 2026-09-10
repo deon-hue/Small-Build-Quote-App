@@ -1,10 +1,8 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnySpeechRecognition = any
+import { useSpeechToText } from './useSpeechToText'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -194,8 +192,6 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
 
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
-  const [listening, setListening] = useState(false)
-  const recognitionRef = useRef<AnySpeechRecognition>(null)
   const [loading, setLoading] = useState(false)
   const [latestScope, setLatestScope] = useState<string | null>(null)
   const [readyToBuild, setReadyToBuild] = useState(false)
@@ -208,34 +204,13 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // ── Speech recognition ──────────────────────────────────────
-  const stopListening = useCallback(() => {
-    recognitionRef.current?.stop()
-    recognitionRef.current = null
-    setListening(false)
-  }, [])
-
-  const toggleMic = useCallback(() => {
-    if (listening) { stopListening(); return }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-    if (!SR) { alert('Voice input is not supported in this browser. Please use Chrome or Edge.'); return }
-    const rec: AnySpeechRecognition = new SR()
-    rec.lang = 'en-GB'; rec.continuous = true; rec.interimResults = true
-    rec.onstart = () => setListening(true)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    rec.onresult = (e: any) => {
-      const transcript = Array.from(e.results as ArrayLike<unknown>)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .map((r: any) => r[0].transcript).join('')
-      setInput(transcript)
-    }
-    rec.onend  = () => { setListening(false); recognitionRef.current = null; setTimeout(() => inputRef.current?.focus(), 50) }
-    rec.onerror = () => { setListening(false); recognitionRef.current = null }
-    recognitionRef.current = rec
-    rec.start()
-  }, [listening, stopListening])
-
-  useEffect(() => () => stopListening(), [stopListening])
+  const { listening, toggleMic } = useSpeechToText(setInput)
+  // Refocus the input once dictation stops — same behaviour the old inline version had.
+  const wasListening = useRef(false)
+  useEffect(() => {
+    if (wasListening.current && !listening) setTimeout(() => inputRef.current?.focus(), 50)
+    wasListening.current = listening
+  }, [listening])
 
   // ── Greeting ────────────────────────────────────────────────
   useEffect(() => {

@@ -53,7 +53,8 @@ interface AppContextType {
   updateInvoice: (inv: Invoice) => Promise<void>
   deleteInvoice: (id: string) => Promise<void>
 
-  addJobNote: (jobId: string, note: string) => Promise<JobNote>
+  addJobNote: (jobId: string, text: string, source?: 'typed' | 'voice') => Promise<JobNote>
+  updateJobNote: (note: JobNote) => Promise<void>
   deleteJobNote: (id: string) => Promise<void>
 
   jobPayments: JobPayment[]
@@ -313,7 +314,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       if (notesRes.data) {
         setJobNotes(notesRes.data.map(r => ({
-          id: r.id, jobId: r.job_id, note: r.note, createdAt: r.created_at,
+          id: r.id, jobId: r.job_id, note: r.note, rawNote: r.raw_note ?? undefined,
+          tag: r.tag ?? undefined, actionItems: r.action_items ?? [], source: r.source ?? 'typed',
+          createdAt: r.created_at,
         })))
       }
 
@@ -762,20 +765,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [supabase])
 
   // ── Job Notes ────────────────────────────────────────────────
-  const addJobNote = useCallback(async (jobId: string, note: string): Promise<JobNote> => {
+  // `note` and `raw_note` start identical — the raw text as typed/dictated. `note` gets
+  // overwritten (via updateJobNote) once /api/process-note returns a cleaned version;
+  // `raw_note` is kept untouched as a reference in case the AI gets something wrong.
+  const addJobNote = useCallback(async (jobId: string, text: string, source: 'typed' | 'voice' = 'typed'): Promise<JobNote> => {
     const { data: { user } } = await supabase.auth.getUser()
     const ownerId = dataOwnerIdRef.current || user!.id
     const { data, error } = await supabase.from('job_notes').insert({
-      user_id: ownerId, job_id: jobId, note,
+      user_id: ownerId, job_id: jobId, note: text, raw_note: text, source,
     }).select().single()
     if (error) throw error
-    const newNote: JobNote = { id: data.id, jobId: data.job_id, note: data.note, createdAt: data.created_at }
+    const newNote: JobNote = {
+      id: data.id, jobId: data.job_id, note: data.note, rawNote: data.raw_note ?? undefined,
+      tag: data.tag ?? undefined, actionItems: data.action_items ?? [], source: data.source ?? 'typed',
+      createdAt: data.created_at,
+    }
     setJobNotes(prev => [...prev, newNote])
     return newNote
   }, [supabase])
 
+  // Used both for the AI-enhancement write-back (cleaned text/tag/action items) and for
+  // toggling an action item's done state.
+  const updateJobNote = useCallback(async (note: JobNote) => {
+    const { error } = await supabase.from('job_notes').update({
+      note: note.note, tag: note.tag ?? null, action_items: note.actionItems ?? [],
+    }).eq('id', note.id)
+    if (error) throw error
+    setJobNotes(prev => prev.map(n => n.id === note.id ? note : n))
+  }, [supabase])
+
   const deleteJobNote = useCallback(async (id: string) => {
-    await supabase.from('job_notes').delete().eq('id', id)
+    const { error } = await supabase.from('job_notes').delete().eq('id', id)
+    if (error) throw error
     setJobNotes(prev => prev.filter(n => n.id !== id))
   }, [supabase])
 
@@ -1003,7 +1024,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       saveSettings,
       saveGanttState, getGanttState,
       addInvoice, updateInvoice, deleteInvoice,
-      addJobNote, deleteJobNote,
+      addJobNote, updateJobNote, deleteJobNote,
       addJobPayment, deleteJobPayment,
       addVariation, updateVariation, deleteVariation,
       bills, addBill, updateBill, deleteBill,

@@ -494,11 +494,35 @@ export interface Invoice {
   priorPaidTotal?: number
 }
 
+/** Snag/instruction/material/safety/general — picked by the AI when a note is processed. */
+export type NoteTag = 'snag' | 'instruction' | 'material' | 'safety' | 'general'
+
+export interface NoteActionItem {
+  id: string
+  text: string
+  done: boolean
+}
+
 export interface JobNote {
   id: string
   jobId: string
+  /** What's shown — starts as the raw text, gets overwritten with the AI-cleaned version
+   * once /api/process-note responds. */
   note: string
+  /** What was actually typed/dictated, preserved in case the AI cleanup gets something wrong. */
+  rawNote?: string
+  tag?: NoteTag
+  actionItems?: NoteActionItem[]
+  source?: 'typed' | 'voice'
   createdAt: string
+}
+
+export interface JobNotePhoto {
+  id: string
+  noteId: string
+  jobId: string
+  storagePath: string
+  createdAt?: string
 }
 
 export type PaymentMethod = 'cash' | 'cheque' | 'bank_transfer' | 'other'
