@@ -37,7 +37,7 @@ import { createClient } from '@/lib/supabase/server'
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface NotifyClientPayload {
-  type: 'variation_sent' | 'schedule_updated' | 'quote_sent'
+  type: 'variation_sent' | 'schedule_updated' | 'quote_sent' | 'job_report'
 
   // Recipient
   clientName:   string
@@ -58,6 +58,13 @@ export interface NotifyClientPayload {
   quoteRef?:   string
   quoteTotal?: number
   message?:    string   // optional personal message from the builder
+
+  // job_report fields — top-line figures only, for the email's at-a-glance summary card.
+  // Line-item detail (variations/invoices/payments) lives in the attached report, not here.
+  reportContractTotal?: number
+  reportInvoicedTotal?: number
+  reportPaidTotal?:     number
+  reportOutstanding?:   number
 
   // Company branding (passed from settings)
   companyName?:  string
@@ -207,6 +214,55 @@ function buildEmailHtml(payload: NotifyClientPayload, portalUrl: string): string
 </html>`
   }
 
+  if (payload.type === 'job_report') {
+    const fmtGbp = (n?: number) => n != null
+      ? `£${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : '—'
+    return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f4f0;font-family:Georgia,serif">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
+    <div style="background:#2b3a2b;padding:28px 32px">
+      <div style="color:#c8d8a8;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px">${company}</div>
+      <div style="color:#fff;font-size:22px;font-weight:700">Job Financial Summary</div>
+    </div>
+    <div style="padding:28px 32px">
+      <p style="margin:0 0 16px;font-size:15px;color:#2b2f33">Hi ${firstName},</p>
+      <p style="margin:0 0 20px;font-size:15px;color:#2b2f33;line-height:1.6">
+        Please find attached a financial summary for your <strong>${payload.jobType}</strong> project${payload.jobAddress ? ` at <strong>${payload.jobAddress}</strong>` : ''} —
+        covering the contract value, any variations, invoices raised, and payments received to date.
+        We'd really appreciate it if you could check these figures against your own records to confirm everything matches up on our side.
+      </p>
+      ${payload.message ? `<div style="background:#f8faf2;border-left:3px solid #7ab533;padding:12px 16px;margin-bottom:20px;border-radius:0 4px 4px 0"><p style="margin:0;font-size:14px;color:#2b2f33;line-height:1.6">${payload.message.replace(/\n/g, '<br>')}</p></div>` : ''}
+      <div style="background:#f8fafc;border:1px solid #dde1e5;border-radius:8px;padding:18px 20px;margin-bottom:24px">
+        <div style="font-weight:700;font-size:16px;color:#1e2022;margin-bottom:10px">${payload.jobType}</div>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:6px 16px;font-size:13px">
+          <span style="color:#6b7580">Contract total</span><span style="text-align:right;font-family:'DM Mono',monospace;font-weight:700">${fmtGbp(payload.reportContractTotal)}</span>
+          <span style="color:#6b7580">Invoiced to date</span><span style="text-align:right;font-family:'DM Mono',monospace">${fmtGbp(payload.reportInvoicedTotal)}</span>
+          <span style="color:#6b7580">Payments received</span><span style="text-align:right;font-family:'DM Mono',monospace;color:#4a7c1f">${fmtGbp(payload.reportPaidTotal)}</span>
+          <span style="color:#1e2022;font-weight:700;border-top:1px solid #dde1e5;padding-top:6px">Balance outstanding</span><span style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;border-top:1px solid #dde1e5;padding-top:6px;color:${(payload.reportOutstanding ?? 0) > 0 ? '#b45309' : '#4a7c1f'}">${fmtGbp(payload.reportOutstanding)}</span>
+        </div>
+      </div>
+      <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:12px 16px;margin-bottom:24px">
+        <p style="margin:0;font-size:13px;color:#5d4037;">
+          📎 <strong>The full breakdown is attached</strong> — including invoice-by-invoice and payment-by-payment detail. Please open the attachment to review it.
+        </p>
+      </div>
+      <p style="margin:0;font-size:13px;color:#6b7580;line-height:1.6">
+        If anything doesn't look right, just get in touch and we'll go through it together.
+        ${payload.companyPhone ? `<br><br>📞 <strong>${payload.companyPhone}</strong>` : ''}
+        ${payload.companyEmail ? `<br>✉ <strong>${payload.companyEmail}</strong>` : ''}
+      </p>
+    </div>
+    <div style="background:#f4f4f0;padding:16px 32px;border-top:1px solid #dde1e5">
+      <div style="font-size:11px;color:#9aa3ad">Kind regards · ${company}</div>
+    </div>
+  </div>
+</body>
+</html>`
+  }
+
   if (payload.type === 'variation_sent') {
     const total = payload.variationTotal != null
       ? `£${payload.variationTotal.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${payload.vatIncluded ? ' inc. VAT' : ''}`
@@ -335,6 +391,23 @@ function buildWhatsAppBody(payload: NotifyClientPayload, portalUrl: string): str
     ].filter(l => l !== undefined).join('\n').trim()
   }
 
+  if (payload.type === 'job_report') {
+    const total = payload.reportContractTotal != null
+      ? `£${payload.reportContractTotal.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : ''
+    return [
+      `Hi ${firstName} 👋`,
+      ``,
+      `${company} has sent you a financial summary for your ${payload.jobType} project${payload.jobAddress ? ` at ${payload.jobAddress}` : ''}.`,
+      ``,
+      total ? `💷 Contract total: ${total}` : '',
+      ``,
+      `We've emailed the full breakdown — please check it against your own records.`,
+      ``,
+      payload.companyPhone ? `Any questions? Call us on ${payload.companyPhone}` : '',
+    ].filter(l => l !== undefined).join('\n').trim()
+  }
+
   if (payload.type === 'variation_sent') {
     const total = payload.variationTotal != null
       ? `£${payload.variationTotal.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${payload.vatIncluded ? ' inc. VAT' : ''}`
@@ -381,6 +454,10 @@ function buildEmailSubject(payload: NotifyClientPayload): string {
   if (payload.type === 'variation_sent') {
     const ref = payload.variationRef ? ` (${clean(payload.variationRef)})` : ''
     return `${company}: Change order for your approval${ref}`
+  }
+  if (payload.type === 'job_report') {
+    const addr = payload.jobAddress ? ` for ${clean(payload.jobAddress).split(',')[0]}` : ''
+    return `${company}: Job Financial Summary${addr}`
   }
   return `${company}: Your project schedule has been updated`
 }

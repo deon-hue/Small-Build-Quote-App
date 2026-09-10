@@ -8,6 +8,7 @@ import type { JobCost, JobCostCategory, PaymentStatus, VariationLineItem, JobPay
 import type { ExtractedCostLine } from '@/lib/doc-extract/types'
 import { useApp } from '@/contexts/AppContext'
 import { buildJobReportHtml } from '@/lib/jobReportHtml'
+import SendJobReportModal from './SendJobReportModal'
 
 interface Props {
   jobId: string; jobLabel: string; budget?: CategoryBudget | null; revenue?: number
@@ -55,6 +56,7 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
   const localPayments = jobPayments.filter(p => p.jobId === jobId)
   const localInvoices = invoices.filter(i => i.jobId === jobId)
   const localVariations = variations.filter(v => v.jobId === jobId)
+  const [showSendReport, setShowSendReport] = useState(false)
 
   function handlePrintReport() {
     const html = buildJobReportHtml({
@@ -360,6 +362,8 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
                       style={{ ...btn, fontSize: 11, padding: '4px 10px' }}>🖨 Client Report</button>
                     <button onClick={handleDownloadReport} title="Download the same report as an HTML file"
                       style={{ ...btn, fontSize: 11, padding: '4px 10px' }}>⬇ Download</button>
+                    <button onClick={() => setShowSendReport(true)} title="Email the same report to the client"
+                      style={{ ...btn, fontSize: 11, padding: '4px 10px', background: '#2b3a2b', color: '#fff', border: 'none' }}>✉ Email to Client</button>
                   </div>
                 </div>
                 <div style={{ fontSize: 13 }}>
@@ -856,6 +860,18 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
           })()}
         </div>
       </div>
+      {showSendReport && (
+        <SendJobReportModal
+          clientName={clientName || jobLabel}
+          jobType={jobType || jobLabel}
+          jobAddress={jobAddress}
+          contractValue={contractValue ?? 0}
+          variations={localVariations}
+          invoices={localInvoices}
+          payments={localPayments}
+          onClose={() => setShowSendReport(false)}
+        />
+      )}
     </div>
   )
 }
