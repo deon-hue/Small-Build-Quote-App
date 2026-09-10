@@ -30,10 +30,21 @@ export function useSpeechToText(onTranscript: (text: string) => void) {
     rec.onstart = () => setListening(true)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     rec.onresult = (e: any) => {
-      const transcript = Array.from(e.results as ArrayLike<unknown>)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .map((r: any) => r[0].transcript).join('')
-      onTranscript(transcript)
+      // e.results grows as you speak — each entry is one recognized phrase, finalised
+      // (isFinal) once you pause. Joining every entry with '' (the old behaviour) ran
+      // finalised phrases straight into each other with no space, which is what looked
+      // "garbled/doubled up" — and re-joining the whole list on every interim tick meant
+      // already-settled text kept getting rewritten too. Finalised phrases are joined with
+      // a space and never touched again; only the one phrase still being spoken is unstable
+      // while the recognizer refines its guess for it.
+      let finalText = ''
+      let interimText = ''
+      for (let i = 0; i < e.results.length; i++) {
+        const r = e.results[i]
+        if (r.isFinal) finalText += r[0].transcript.trim() + ' '
+        else interimText += r[0].transcript
+      }
+      onTranscript((finalText + interimText).trim())
     }
     rec.onend   = () => { setListening(false); recognitionRef.current = null }
     rec.onerror = () => { setListening(false); recognitionRef.current = null }
