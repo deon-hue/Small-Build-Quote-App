@@ -7,6 +7,7 @@ import { AppProvider } from '@/contexts/AppContext'
 import { createClient } from '@/lib/supabase/client'
 import { useApp } from '@/contexts/AppContext'
 import type { UserPermissions } from '@/lib/types'
+import QuickNotesModal from '@/components/QuickNotesModal'
 
 // Routes that require a specific permission key
 const ROUTE_PERMISSIONS: Partial<Record<string, keyof UserPermissions>> = {
@@ -32,6 +33,7 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const supabase = createClient()
   const { settings, permissions, isOwner, currentMember } = useApp()
   const [currentTab, setCurrentTab] = useState<string | null>(null)
+  const [showQuickNotes, setShowQuickNotes] = useState(false)
 
   useEffect(() => {
     setCurrentTab(new URLSearchParams(window.location.search).get('tab'))
@@ -88,6 +90,11 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
           {can('invoices')&& navItem('/bills',           '📄', 'Bills')}
           {can('invoices')&& navItem('/subcontractors', '🔧', 'Subcontractors')}
           {can('jobs')    && navItem('/scan',      '📷', 'Scan to Job')}
+          {can('jobs') && (
+            <div className="nav-item" onClick={() => { setShowQuickNotes(true); onClose() }} style={{ cursor: 'pointer' }}>
+              <span className="nav-icon">📝</span> Notes
+            </div>
+          )}
           <div className="nav-section">People</div>
           {can('clients') && navItem('/clients', '○', 'Contacts')}
           <div className="nav-section">Settings</div>
@@ -101,6 +108,7 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
           </div>
         </nav>
       </aside>
+      {showQuickNotes && <QuickNotesModal onClose={() => setShowQuickNotes(false)} />}
     </>
   )
 }
