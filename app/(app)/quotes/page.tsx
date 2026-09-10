@@ -25,6 +25,7 @@ export default function SavedQuotesPage() {
   const [pushingVar, setPushingVar]       = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({})
+  const [downloadingPdfId, setDownloadingPdfId] = useState<string | null>(null)
   const router = useRouter()
 
   // Backfill quote item descriptions on load
@@ -211,6 +212,42 @@ export default function SavedQuotesPage() {
     a.click()
   }
 
+  async function downloadQuotePdf(q: Quote) {
+    const matchedClient = clients.find(
+      c => c.email && q.customer.email &&
+        c.email.toLowerCase() === q.customer.email.toLowerCase()
+    )
+    const clientSettings = matchedClient?.portalSettings ?? DEFAULT_CLIENT_PORTAL_SETTINGS
+    setDownloadingPdfId(q.id)
+    try {
+      const res = await fetch('/api/generate-quote-pdf', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quote: q, settings,
+          quoteView: clientSettings.quoteView,
+          showScope: clientSettings.showScope,
+          showPaymentTerms: clientSettings.showPaymentTerms,
+        }),
+      })
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}))
+        throw new Error(e.error || `PDF generation failed (${res.status})`)
+      }
+      const { pdf: pdfBase64 } = await res.json()
+      const bytes = Uint8Array.from(atob(pdfBase64), c => c.charCodeAt(0))
+      const blob = new Blob([bytes], { type: 'application/pdf' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `Quote-${q.ref || 'Draft'}-${(q.customer.name || 'Client').replace(/[^a-z0-9]/gi, '_')}.pdf`
+      a.click()
+      URL.revokeObjectURL(a.href)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not generate PDF. Please try again.')
+    } finally {
+      setDownloadingPdfId(null)
+    }
+  }
+
   function quoteExpiry(savedDate: string) {
     if (!savedDate) return ''
     const parts = savedDate.split('/')
@@ -358,6 +395,9 @@ export default function SavedQuotesPage() {
                     )}
                     <button className="btn-sm btn-outline" onClick={() => setPreviewQuote(q)}>View</button>
                     <button className="btn-sm btn-outline" onClick={() => downloadQuote(q)}>⬇ HTML</button>
+                    <button className="btn-sm btn-outline" onClick={() => downloadQuotePdf(q)} disabled={downloadingPdfId === q.id}>
+                      {downloadingPdfId === q.id ? '⏳ PDF…' : '⬇ PDF'}
+                    </button>
                     <button
                       className="btn-sm btn-email-pdf"
                       onClick={() => setEmailingQuote(q)}

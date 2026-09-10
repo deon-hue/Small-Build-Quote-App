@@ -54,6 +54,7 @@ export default function PortalQuoteDetailsModal({
   const mainModal = useDraggableModal()
   const printOptionsModal = useDraggableModal()
   const [showPrintOptions, setShowPrintOptions] = useState(false)
+  const [downloadingPdf, setDownloadingPdf] = useState(false)
   const [printOptions, setPrintOptions] = useState({
     includeScope: clientCanSeeScope,
     includePhases: clientCanSeePhases,
@@ -156,6 +157,37 @@ export default function PortalQuoteDetailsModal({
     setTimeout(() => printWindow.print(), 250)
   }
 
+  async function handleDownloadPdf() {
+    setDownloadingPdf(true)
+    try {
+      const res = await fetch('/api/generate-quote-pdf', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quote, settings,
+          quoteView: clientQuoteView,
+          showScope: clientCanSeeScope,
+          showPaymentTerms: true,
+        }),
+      })
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}))
+        throw new Error(e.error || `PDF generation failed (${res.status})`)
+      }
+      const { pdf: pdfBase64 } = await res.json()
+      const bytes = Uint8Array.from(atob(pdfBase64), c => c.charCodeAt(0))
+      const blob = new Blob([bytes], { type: 'application/pdf' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `Quote-${quote.ref || 'Draft'}.pdf`
+      a.click()
+      URL.revokeObjectURL(a.href)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not generate PDF. Please try again.')
+    } finally {
+      setDownloadingPdf(false)
+    }
+  }
+
   return (
     <div className="modal-overlay" onClick={e => mainModal.onOverlayClick(e, onClose)}>
       <div ref={mainModal.boxRef} className="portal-modal" style={{ maxHeight: '90vh', display: 'flex', flexDirection: 'column', ...mainModal.draggableStyle }}>
@@ -176,6 +208,18 @@ export default function PortalQuoteDetailsModal({
               title="Print quote"
             >
               🖨️ Print
+            </button>
+            <button
+              onClick={handleDownloadPdf}
+              disabled={downloadingPdf}
+              style={{
+                background: '#f0f2ee', border: '1px solid var(--border)', borderRadius: 4,
+                padding: '6px 12px', cursor: downloadingPdf ? 'wait' : 'pointer', fontSize: 13, fontWeight: 500,
+                opacity: downloadingPdf ? 0.6 : 1,
+              }}
+              title="Download quote as PDF"
+            >
+              {downloadingPdf ? '⏳ PDF…' : '⬇ PDF'}
             </button>
             <ModalMaximizeButton isMaximized={mainModal.isMaximized} onClick={mainModal.toggleMaximize} />
             <button className="modal-close" onClick={onClose}>×</button>
