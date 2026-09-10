@@ -7,8 +7,15 @@ import type { CategoryBudget } from '@/lib/job-costs'
 import type { JobCost, JobCostCategory, PaymentStatus, VariationLineItem, JobPayment, PaymentMethod } from '@/lib/types'
 import type { ExtractedCostLine } from '@/lib/doc-extract/types'
 import { useApp } from '@/contexts/AppContext'
+import { buildJobReportHtml } from '@/lib/jobReportHtml'
 
-interface Props { jobId: string; jobLabel: string; budget?: CategoryBudget | null; revenue?: number; contractValue?: number; variationsTotal?: number; invoicedTotal?: number; paidTotal?: number; cashReceived?: number; onClose: () => void }
+interface Props {
+  jobId: string; jobLabel: string; budget?: CategoryBudget | null; revenue?: number
+  contractValue?: number; variationsTotal?: number; invoicedTotal?: number; paidTotal?: number; cashReceived?: number
+  /** For the customer-facing report header — falls back to jobLabel if omitted. */
+  clientName?: string; jobType?: string; jobAddress?: string
+  onClose: () => void
+}
 
 const CATS: { value: JobCostCategory; label: string; emoji: string; color: string; bg: string }[] = [
   { value: 'labour',         label: 'Labour',         emoji: '🔨', color: '#1d4ed8', bg: '#eff6ff' },
@@ -42,11 +49,36 @@ const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   cash: '💵 Cash', cheque: '📝 Cheque', bank_transfer: '🏦 Bank Transfer', other: '📋 Other',
 }
 
-export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, contractValue, variationsTotal, invoicedTotal = 0, paidTotal = 0, cashReceived = 0, onClose }: Props) {
+export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, contractValue, variationsTotal, invoicedTotal = 0, paidTotal = 0, cashReceived = 0, clientName, jobType, jobAddress, onClose }: Props) {
   const sb = createClient()
-  const { suppliers, clients, addVariation, jobPayments, invoices } = useApp()
+  const { suppliers, clients, addVariation, jobPayments, invoices, variations, settings } = useApp()
   const localPayments = jobPayments.filter(p => p.jobId === jobId)
   const localInvoices = invoices.filter(i => i.jobId === jobId)
+  const localVariations = variations.filter(v => v.jobId === jobId)
+
+  function handlePrintReport() {
+    const html = buildJobReportHtml({
+      jobType: jobType || jobLabel, clientName: clientName || jobLabel, jobAddress,
+      contractValue: contractValue ?? 0, variations: localVariations, invoices: localInvoices, payments: localPayments,
+    }, settings)
+    const w = window.open('', '_blank')
+    if (!w) { alert('Pop-up blocked — please allow pop-ups.'); return }
+    w.document.write(html)
+    w.document.close()
+    setTimeout(() => w.print(), 500)
+  }
+
+  function handleDownloadReport() {
+    const html = buildJobReportHtml({
+      jobType: jobType || jobLabel, clientName: clientName || jobLabel, jobAddress,
+      contractValue: contractValue ?? 0, variations: localVariations, invoices: localInvoices, payments: localPayments,
+    }, settings)
+    const blob = new Blob([html], { type: 'text/html' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `Job-Report-${(clientName || jobLabel).replace(/[^a-z0-9]/gi, '_')}.html`
+    a.click()
+  }
   const [showInvoices, setShowInvoices] = useState(true)
   const [showPayments, setShowPayments] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
@@ -321,7 +353,15 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
             const varTotal = variationsTotal ?? 0
             return (
               <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 16, marginBottom: 16, background: '#fafbff' }}>
-                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12, color: '#1e293b' }}>📊 Financial Summary</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: '#1e293b' }}>📊 Financial Summary</div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={handlePrintReport} title="Print a customer-facing summary — quote, variations, invoices and payments, no cost detail"
+                      style={{ ...btn, fontSize: 11, padding: '4px 10px' }}>🖨 Client Report</button>
+                    <button onClick={handleDownloadReport} title="Download the same report as an HTML file"
+                      style={{ ...btn, fontSize: 11, padding: '4px 10px' }}>⬇ Download</button>
+                  </div>
+                </div>
                 <div style={{ fontSize: 13 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>
                     <span>Original contract</span>

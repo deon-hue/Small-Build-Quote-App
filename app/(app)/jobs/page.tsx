@@ -395,6 +395,9 @@ export default function JobsPage() {
             invoicedTotal={invoicedTotal}
             paidTotal={paidTotal}
             cashReceived={cashReceived}
+            clientName={docsJob.client}
+            jobType={docsJob.type}
+            jobAddress={docsJob.address}
             onClose={() => setDocsJob(null)}
           />
         )
