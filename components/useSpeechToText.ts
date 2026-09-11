@@ -8,7 +8,10 @@ type AnySpeechRecognition = any
 /**
  * Browser dictation via the Web Speech API — the same mechanism used by ScopeChat and the
  * public get-quote form, extracted so it's not duplicated a third time. `onTranscript` is
- * called with the live (interim + final) transcript on every result, same as those two.
+ * called only with finalised phrases (never the unstable in-progress guess) — Android's
+ * speech engine revises interim results much more aggressively than desktop Chrome's while
+ * you're mid-sentence, which read as "garbled" text flickering as you spoke. Text now lands
+ * in chunks as you pause, but never shows something wrong and then silently corrects itself.
  */
 export function useSpeechToText(onTranscript: (text: string) => void) {
   const [listening, setListening] = useState(false)
@@ -31,20 +34,14 @@ export function useSpeechToText(onTranscript: (text: string) => void) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     rec.onresult = (e: any) => {
       // e.results grows as you speak — each entry is one recognized phrase, finalised
-      // (isFinal) once you pause. Joining every entry with '' (the old behaviour) ran
-      // finalised phrases straight into each other with no space, which is what looked
-      // "garbled/doubled up" — and re-joining the whole list on every interim tick meant
-      // already-settled text kept getting rewritten too. Finalised phrases are joined with
-      // a space and never touched again; only the one phrase still being spoken is unstable
-      // while the recognizer refines its guess for it.
+      // (isFinal) once you pause. Only finalised phrases are surfaced; the one still being
+      // spoken is left out entirely rather than shown and then corrected.
       let finalText = ''
-      let interimText = ''
       for (let i = 0; i < e.results.length; i++) {
         const r = e.results[i]
         if (r.isFinal) finalText += r[0].transcript.trim() + ' '
-        else interimText += r[0].transcript
       }
-      onTranscript((finalText + interimText).trim())
+      if (finalText) onTranscript(finalText.trim())
     }
     rec.onend   = () => { setListening(false); recognitionRef.current = null }
     rec.onerror = () => { setListening(false); recognitionRef.current = null }
