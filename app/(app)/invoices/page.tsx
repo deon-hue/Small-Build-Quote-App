@@ -54,7 +54,6 @@ export default function InvoicesPage() {
   const [payPlanOn, setPayPlanOn] = useState(false)
   const [milestones, setMilestones] = useState<PaymentMilestone[]>([])
   const [selectedMilestoneIds, setSelectedMilestoneIds] = useState<Set<number>>(new Set())
-  const [milestoneInvMsg, setMilestoneInvMsg] = useState('')
 
   // Xero sync state
   const [syncToXero, setSyncToXero] = useState(false)
@@ -120,7 +119,7 @@ export default function InvoicesPage() {
     setDueDate(dueStr)
     setNotes(settings.invoiceDefaultNotes ?? '')
     setStatus('draft'); setFromJobId('')
-    setPayPlanOn(false); setMilestones([]); setSelectedMilestoneIds(new Set()); setMilestoneInvMsg('')
+    setPayPlanOn(false); setMilestones([]); setSelectedMilestoneIds(new Set())
     setSyncToXero(false); setXeroInvoiceId(''); setXeroError(null)
     setShowModal(true)
   }
@@ -134,7 +133,7 @@ export default function InvoicesPage() {
     const pp = inv.paymentPlan || []
     setPayPlanOn(pp.length > 0)
     setMilestones(pp.map(m => ({ ...m, id: ++milestoneCounter })))
-    setSelectedMilestoneIds(new Set()); setMilestoneInvMsg('')
+    setSelectedMilestoneIds(new Set())
     setSyncToXero(inv.syncToXero ?? false); setXeroInvoiceId(inv.xeroInvoiceId ?? ''); setXeroError(null)
     setShowModal(true)
   }
@@ -197,73 +196,6 @@ export default function InvoicesPage() {
     setMilestones(newMilestones.length ? newMilestones : [BLANK_MILESTONE()])
   }
 
-  async function createInvoiceFromMilestones() {
-    const selected = milestones.filter(m => selectedMilestoneIds.has(m.id))
-    if (!selected.length) return
-
-    // Milestone amounts from loadMilestonesFromPhases include VAT when vatOn=true.
-    // Strip VAT back out so the new invoice can display net + VAT correctly.
-    const subItems: InvoiceLineItem[] = selected.map(m => {
-      const unitP = vatOn
-        ? Math.round((m.amount / 1.2) * 100) / 100
-        : m.amount
-      return { id: ++lineCounter, desc: m.description || 'Payment milestone', qty: 1, unitPrice: unitP, total: unitP }
-    })
-
-    const subTotal = Math.round(subItems.reduce((s, l) => s + l.total, 0) * 100) / 100
-    const vatAmt   = vatOn ? Math.round(subTotal * 0.2 * 100) / 100 : 0
-    const invTotal = Math.round((subTotal + vatAmt) * 100) / 100
-
-    // Use earliest due date from selected milestones
-    const dueDates = selected.map(m => m.dueDate).filter(Boolean).sort()
-    const invDue   = dueDates[0] || dueDate
-
-    const newInv = await addInvoice({
-      jobId: fromJobId, quoteId: '',
-      clientName, clientAddress, clientEmail,
-      lineItems: subItems,
-      subtotal: subTotal, vatIncluded: vatOn, vatAmount: vatAmt, total: invTotal,
-      status: 'draft',
-      issueDate: todayStr(), dueDate: invDue,
-      notes: settings.invoiceDefaultNotes ?? '',
-      paymentPlan: null, syncToXero: xeroConnected,
-    })
-
-    setSelectedMilestoneIds(new Set())
-
-    // Any selected milestones pulled in from approved variations are now invoiced —
-    // move them out of 'approved' so they don't get offered again on the next build.
-    const invoicedVariationIds = selected.map(m => m.variationId).filter((id): id is string => !!id)
-    for (const vId of invoicedVariationIds) {
-      const v = variations.find(x => x.id === vId)
-      if (v) await updateVariation({ ...v, status: 'invoiced' })
-    }
-
-    // Push to Xero immediately if connected — mirrors what handleSave does
-    if (xeroConnected) {
-      try {
-        const res = await fetch('/api/xero/push-invoice', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ invoice: newInv }),
-        })
-        const result = await res.json() as { xeroInvoiceId?: string; error?: string }
-        if (result.xeroInvoiceId) {
-          await updateInvoice({ ...newInv, xeroInvoiceId: result.xeroInvoiceId })
-          setMilestoneInvMsg(`✓ ${newInv.ref} created and synced to Xero`)
-        } else {
-          setMilestoneInvMsg(`✓ ${newInv.ref} created — Xero sync failed: ${result.error ?? 'unknown error'}`)
-        }
-      } catch {
-        setMilestoneInvMsg(`✓ ${newInv.ref} created — could not reach Xero`)
-      }
-    } else {
-      setMilestoneInvMsg(`✓ ${newInv.ref} created — find it in the invoices list to send to the client`)
-    }
-
-    setTimeout(() => setMilestoneInvMsg(''), 7000)
-  }
-
   function updateLine(id: number, key: keyof InvoiceLineItem, val: string | number) {
     setLineItems(prev => prev.map(l => {
       if (l.id !== id) return l
@@ -287,11 +219,39 @@ export default function InvoicesPage() {
     setSaving(true)
     setXeroError(null)
     try {
-      const paymentPlan = payPlanOn && milestones.length > 0 ? milestones : null
+      // Ticking specific milestone rows (e.g. just one variation, out of an item + a
+      // variation) means "bill only these" — the invoice is scoped down to just the
+      // ticked items rather than the full Line Items total. With nothing ticked, it's
+      // a normal invoice, and any payment plan is just a schedule for that same total.
+      const selected = payPlanOn && selectedMilestoneIds.size > 0
+        ? milestones.filter(m => selectedMilestoneIds.has(m.id))
+        : null
+
+      let invLineItems = lineItems
+      let invSubtotal = subtotal
+      let invVatAmount = vatAmount
+      let invTotal = total
+      let invDue = dueDate
+
+      if (selected) {
+        // Milestone amounts include VAT when vatOn — strip it back out so the invoice
+        // displays net + VAT the same way as everywhere else in the app.
+        invLineItems = selected.map(m => {
+          const unitP = vatOn ? Math.round((m.amount / 1.2) * 100) / 100 : m.amount
+          return { id: ++lineCounter, desc: m.description || 'Payment milestone', qty: 1, unitPrice: unitP, total: unitP }
+        })
+        invSubtotal = Math.round(invLineItems.reduce((s, l) => s + l.total, 0) * 100) / 100
+        invVatAmount = vatOn ? Math.round(invSubtotal * 0.2 * 100) / 100 : 0
+        invTotal = Math.round((invSubtotal + invVatAmount) * 100) / 100
+        const dueDates = selected.map(m => m.dueDate).filter(Boolean).sort()
+        invDue = dueDates[0] || dueDate
+      }
+
+      const paymentPlan = !selected && payPlanOn && milestones.length > 0 ? milestones : null
       const invData = {
         jobId: fromJobId, quoteId: '', clientName, clientAddress, clientEmail,
-        lineItems, subtotal, vatIncluded: vatOn, vatAmount, total,
-        status, issueDate, dueDate, notes, paymentPlan,
+        lineItems: invLineItems, subtotal: invSubtotal, vatIncluded: vatOn, vatAmount: invVatAmount, total: invTotal,
+        status, issueDate, dueDate: invDue, notes, paymentPlan,
         syncToXero, xeroInvoiceId: xeroInvoiceId || undefined,
       }
 
@@ -302,6 +262,16 @@ export default function InvoicesPage() {
         savedInv = merged
       } else {
         savedInv = await addInvoice(invData)
+      }
+
+      // Any ticked milestones pulled in from approved variations are now invoiced —
+      // move them out of 'approved' so they don't get offered again next time.
+      if (selected) {
+        const invoicedVariationIds = selected.map(m => m.variationId).filter((id): id is string => !!id)
+        for (const vId of invoicedVariationIds) {
+          const v = variations.find(x => x.id === vId)
+          if (v) await updateVariation({ ...v, status: 'invoiced' })
+        }
       }
 
       // Push to Xero if toggle is ON, Xero is connected, and not already pushed
@@ -665,7 +635,7 @@ export default function InvoicesPage() {
                   />
                   <div>
                     <div style={{ fontWeight: 700, fontSize: 14 }}>Payment Plan</div>
-                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>Split this invoice into milestone payments</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>Split this invoice into milestone payments — or tick specific rows below to bill only those</div>
                   </div>
                 </label>
 
@@ -678,16 +648,11 @@ export default function InvoicesPage() {
                       <button className="btn-sm btn-outline" onClick={() => setMilestones(p => [...p, BLANK_MILESTONE()])}>
                         + Add milestone
                       </button>
-                      {selectedMilestoneIds.size > 0 && (
-                        <button className="btn-sm btn-primary" onClick={createInvoiceFromMilestones} style={{ marginLeft: 'auto' }}>
-                          📄 Invoice {selectedMilestoneIds.size} selected
-                        </button>
-                      )}
                     </div>
 
-                    {milestoneInvMsg && (
-                      <div style={{ marginBottom: 10, padding: '8px 12px', background: '#f0f7e6', border: '1px solid #b7dfa0', borderRadius: 6, fontSize: 12, color: '#2e6b1a', fontWeight: 600 }}>
-                        {milestoneInvMsg}
+                    {selectedMilestoneIds.size > 0 && (
+                      <div style={{ marginBottom: 10, padding: '8px 12px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 6, fontSize: 12, color: '#3730a3', fontWeight: 600 }}>
+                        ✓ {selectedMilestoneIds.size} row{selectedMilestoneIds.size > 1 ? 's' : ''} ticked — {editing ? 'Update Invoice' : 'Create Invoice'} below will bill only {selectedMilestoneIds.size > 1 ? 'these' : 'this'}, not the full Line Items total.
                       </div>
                     )}
 
@@ -767,17 +732,21 @@ export default function InvoicesPage() {
                       ))}
                     </div>
 
-                    {/* Running total check */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '6px 10px', borderRadius: 6, background: Math.abs(milestoneDiff) > 0.01 ? '#fff3cd' : '#f0f7e6' }}>
-                      <span style={{ color: 'var(--muted)' }}>
-                        Milestones total: <strong style={{ fontFamily: 'DM Mono, monospace' }}>{fmt(milestonesTotal)}</strong>
-                        {' · '}Invoice total: <strong style={{ fontFamily: 'DM Mono, monospace' }}>{fmt(total)}</strong>
-                      </span>
-                      {Math.abs(milestoneDiff) > 0.01
-                        ? <span style={{ color: '#856404', fontWeight: 600 }}>⚠ {fmt(Math.abs(milestoneDiff))} {milestoneDiff > 0 ? 'under' : 'over'}</span>
-                        : <span style={{ color: '#7ab533', fontWeight: 600 }}>✓ Balanced</span>
-                      }
-                    </div>
+                    {/* Running total check — only meaningful when nothing's ticked, i.e. this
+                        payment plan is meant to be a schedule for the full invoice total.
+                        With rows ticked, the green banner above already says what's billed. */}
+                    {selectedMilestoneIds.size === 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '6px 10px', borderRadius: 6, background: Math.abs(milestoneDiff) > 0.01 ? '#fff3cd' : '#f0f7e6' }}>
+                        <span style={{ color: 'var(--muted)' }}>
+                          Milestones total: <strong style={{ fontFamily: 'DM Mono, monospace' }}>{fmt(milestonesTotal)}</strong>
+                          {' · '}Invoice total: <strong style={{ fontFamily: 'DM Mono, monospace' }}>{fmt(total)}</strong>
+                        </span>
+                        {Math.abs(milestoneDiff) > 0.01
+                          ? <span style={{ color: '#856404', fontWeight: 600 }}>⚠ {fmt(Math.abs(milestoneDiff))} {milestoneDiff > 0 ? 'under' : 'over'}</span>
+                          : <span style={{ color: '#7ab533', fontWeight: 600 }}>✓ Balanced</span>
+                        }
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -859,7 +828,9 @@ export default function InvoicesPage() {
             <div className="form-modal-ft">
               <button className="btn btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={handleSave} disabled={saving || xeroPushing}>
-                {xeroPushing ? '🔗 Syncing to Xero…' : saving ? 'Saving…' : editing ? 'Update Invoice' : 'Create Invoice'}
+                {xeroPushing ? '🔗 Syncing to Xero…' : saving ? 'Saving…' : payPlanOn && selectedMilestoneIds.size > 0
+                  ? `📄 Invoice ${selectedMilestoneIds.size} selected`
+                  : editing ? 'Update Invoice' : 'Create Invoice'}
               </button>
             </div>
             {!isMaximized && <ModalResizeHandle onMouseDown={onResizeMouseDown} />}
