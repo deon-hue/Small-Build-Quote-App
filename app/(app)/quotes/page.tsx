@@ -326,14 +326,12 @@ export default function SavedQuotesPage() {
                 {(!isMultiVersion || isExpanded) && group.quotes.map((q, idx) => {
             const hasLinkedJob = jobs.some(j => j.quoteId === q.id)
             const pushedAsVariation = !!q.ref && variations.some(v => v.notes === `Added from quote ${q.ref}`)
-            const alreadyJob = q.convertedToJob || hasLinkedJob || pushedAsVariation || jobs.some(j => {
-              const jn = (j.client || '').toLowerCase()
-              const qn = (q.customer.name || '').toLowerCase()
-              return jn === qn || jn.includes(qn) || qn.includes(jn)
-            })
+            // "Already has a job" must reflect a real link — matching on client name alone
+            // falsely flagged unrelated jobs that happen to share a customer name (e.g. two
+            // different Joel Chan jobs) as if this quote had already been converted.
+            const alreadyJob = q.convertedToJob || hasLinkedJob || pushedAsVariation
             const isConverted = q.status === 'accepted' && alreadyJob
-            // Only hide the variation button when explicitly actioned — not just name-matched
-            const isActioned = q.status === 'accepted' && (hasLinkedJob || pushedAsVariation || q.convertedToJob)
+            const isActioned = isConverted
 
             return (
               <div key={q.id} className="sq-card" style={{
