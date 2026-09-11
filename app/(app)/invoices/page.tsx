@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { ContactPicker } from '@/components/ContactPicker'
 import { fmt, fmtK, calcPhaseSell } from '@/lib/utils'
-import { stripPhasePrefix } from '@/lib/gantt-utils'
 import { buildInvoiceHtml } from '@/lib/invoiceHtml'
 import type { Invoice, InvoiceLineItem, PaymentMilestone } from '@/lib/types'
 import { useDraggableModal } from '@/components/useDraggableModal'
@@ -27,18 +26,13 @@ const INV_LABEL: Record<string, string> = {
 }
 
 function todayStr() { return new Date().toISOString().split('T')[0] }
-function addDays(dateStr: string, days: number): string {
-  const d = new Date(dateStr)
-  d.setDate(d.getDate() + days)
-  return d.toISOString().split('T')[0]
-}
 function due30Str() {
   const d = new Date(); d.setDate(d.getDate() + 30)
   return d.toISOString().split('T')[0]
 }
 
 export default function InvoicesPage() {
-  const { invoices, jobs, quotes, clients, settings, jobPayments, variations, addInvoice, updateInvoice, deleteInvoice, updateVariation, loading, getGanttState } = useApp()
+  const { invoices, jobs, quotes, clients, settings, jobPayments, variations, addInvoice, updateInvoice, deleteInvoice, updateVariation, loading } = useApp()
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<Invoice | null>(null)
   const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown, onOverlayClick, isMaximized, toggleMaximize } = useDraggableModal()
@@ -170,7 +164,7 @@ export default function InvoicesPage() {
   }
 
   function loadMilestonesFromPhases() {
-    // Use line items as milestone basis
+    // Line items (quote phases) as the milestone basis…
     const newMilestones: PaymentMilestone[] = lineItems
       .filter(l => l.total > 0)
       .map(l => ({
@@ -181,136 +175,33 @@ export default function InvoicesPage() {
         paid: false,
         paidDate: '',
       }))
+
+    // …plus approved, not-yet-invoiced variations on the linked job, on the same VAT
+    // basis as the rest of this invoice.
+    if (fromJobId) {
+      const vatMult = vatOn ? 1.2 : 1
+      for (const v of variations.filter(x => x.jobId === fromJobId && x.status === 'approved')) {
+        const netAmount = v.vatIncluded ? v.total / 1.2 : v.total
+        newMilestones.push({
+          id: ++milestoneCounter,
+          description: `Variation — ${v.title}`,
+          amount: Math.round(netAmount * vatMult * 100) / 100,
+          dueDate: '',
+          paid: false,
+          paidDate: '',
+          variationId: v.id,
+        })
+      }
+    }
+
     setMilestones(newMilestones.length ? newMilestones : [BLANK_MILESTONE()])
-  }
-
-  function buildFromGantt() {
-    if (!fromJobId) {
-      alert('Please link this invoice to a job first using the "Fill from Job" picker.')
-      return
-    }
-    const job = jobs.find(j => j.id === fromJobId)
-    if (!job) return
-
-    const gantt = getGanttState(fromJobId)
-    if (!gantt || !gantt.phases.length) {
-      alert('No Gantt chart found for this job. Build the schedule on the Jobs page first.')
-      return
-    }
-
-    const quote = quotes.find(q => q.id === job.quoteId) ||
-      quotes.find(q => {
-        const qn = (q.customer.name || '').toLowerCase()
-        const jn = (job.client || '').toLowerCase()
-        return qn === jn || qn.includes(jn) || jn.includes(qn)
-      })
-
-    const mkp = quote?.markup ?? 0
-    const vatMult = vatOn ? 1.2 : 1
-    const jobStart = job.start || issueDate
-
-    const result: PaymentMilestone[] = []
-
-    // Parent-phase rows only (level 0)
-    const parentRows = gantt.phases.filter(gp => gp.level === 0)
-
-    for (const gp of parentRows) {
-      const phaseStart = addDays(jobStart, gp.startDay)
-      const phaseEnd = addDays(jobStart, gp.startDay + gp.durDays)
-
-      let matsSell = 0   // excl VAT
-      let restSell = 0   // excl VAT
-
-      if (quote) {
-        // Match quote phases by stripping "Phase N – " prefix from both sides
-        const strippedLabel = stripPhasePrefix(gp.label)
-        const qPhases = quote.phases.filter(qp =>
-          stripPhasePrefix(qp.parentPhase?.trim() || qp.phase.trim()) === strippedLabel
-        )
-
-        for (const qp of qPhases) {
-          const hasLabourTrades = (qp.labourTrades?.length ?? 0) > 0
-          for (const item of qp.items) {
-            const m = Number(item.materials) || 0
-            const l = Number(item.labour) || 0
-            const pl = Number(item.plantHire) || 0
-            const s = Number(item.subcontractors) || 0
-            const o = Number(item.other) || 0
-
-            matsSell += m * (1 + mkp / 100)
-
-            if (item.itemType === 'labour' && hasLabourTrades) {
-              restSell += l  // already at sell price — no double markup
-            } else {
-              restSell += l * (1 + mkp / 100)
-            }
-            restSell += (pl + s + o) * (1 + mkp / 100)
-          }
-          // Catalogue products → materials category
-          for (const pr of qp.products ?? []) {
-            if (pr.enabled !== false) matsSell += pr.sellPrice * pr.qty
-          }
-          // Plant hire catalogue → rest (plant)
-          for (const pl of qp.plantItems ?? []) {
-            if (pl.enabled !== false) restSell += pl.sellPrice * pl.qty
-          }
-        }
-      }
-
-      const matsTotal = Math.round(matsSell * vatMult * 100) / 100
-      const restTotal = Math.round(restSell * vatMult * 100) / 100
-
-      if (matsTotal > 0) {
-        result.push({
-          id: ++milestoneCounter,
-          description: `${gp.label} — Materials`,
-          amount: matsTotal,
-          dueDate: phaseStart,
-          paid: false,
-          paidDate: '',
-        })
-      }
-      if (restTotal > 0) {
-        result.push({
-          id: ++milestoneCounter,
-          description: `${gp.label} — Labour & Costs`,
-          amount: restTotal,
-          dueDate: phaseEnd,
-          paid: false,
-          paidDate: '',
-        })
-      }
-    }
-
-    // Approved variations not yet invoiced also need paying — pull them in as their own
-    // milestone rows, on the same VAT basis as the rest of this invoice.
-    for (const v of variations.filter(x => x.jobId === fromJobId && x.status === 'approved')) {
-      const netAmount = v.vatIncluded ? v.total / 1.2 : v.total
-      result.push({
-        id: ++milestoneCounter,
-        description: `Variation — ${v.title}`,
-        amount: Math.round(netAmount * vatMult * 100) / 100,
-        dueDate: v.clientApprovedAt ? v.clientApprovedAt.split('T')[0] : jobStart,
-        paid: false,
-        paidDate: '',
-        variationId: v.id,
-      })
-    }
-
-    if (result.length === 0) {
-      alert('Could not generate milestones. Make sure the job has a linked quote and a Gantt chart.')
-      return
-    }
-
-    setMilestones(result)
-    setPayPlanOn(true)
   }
 
   async function createInvoiceFromMilestones() {
     const selected = milestones.filter(m => selectedMilestoneIds.has(m.id))
     if (!selected.length) return
 
-    // Milestone amounts from buildFromGantt include VAT when vatOn=true.
+    // Milestone amounts from loadMilestonesFromPhases include VAT when vatOn=true.
     // Strip VAT back out so the new invoice can display net + VAT correctly.
     const subItems: InvoiceLineItem[] = selected.map(m => {
       const unitP = vatOn
@@ -781,14 +672,9 @@ export default function InvoicesPage() {
                 {payPlanOn && (
                   <div>
                     <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-                      <button className="btn-sm btn-sky" onClick={loadMilestonesFromPhases}>
+                      <button className="btn-sm btn-sky" onClick={loadMilestonesFromPhases} title="Line items, plus any approved variations on the linked job">
                         ↓ Load from line items
                       </button>
-                      {fromJobId && (
-                        <button className="btn-sm btn-sky" onClick={buildFromGantt} title="Materials at phase start, labour & costs at phase end">
-                          📅 Build from Gantt
-                        </button>
-                      )}
                       <button className="btn-sm btn-outline" onClick={() => setMilestones(p => [...p, BLANK_MILESTONE()])}>
                         + Add milestone
                       </button>
