@@ -149,12 +149,20 @@ export default function InvoicesPage() {
         const jn = (job.client || '').toLowerCase()
         return qn === jn || qn.includes(jn) || jn.includes(qn)
       })
+    // Phases already billed on a previous invoice for this job shouldn't be proposed
+    // again — matched by description, same as the "already invoiced" check below.
+    const alreadyInvoicedDescs = new Set(
+      invoices.filter(i => i.jobId === jobId).flatMap(i => i.lineItems.map(li => li.desc))
+    )
+
     if (linked) {
       setClientEmail(linked.customer.email || '')
-      const items: InvoiceLineItem[] = linked.phases.map(p => {
-        const sell = calcPhaseSell(p, linked.markup)
-        return { id: ++lineCounter, desc: p.phase, qty: 1, unitPrice: Math.round(sell * 100) / 100, total: Math.round(sell * 100) / 100 }
-      })
+      const items: InvoiceLineItem[] = linked.phases
+        .filter(p => !alreadyInvoicedDescs.has(p.phase))
+        .map(p => {
+          const sell = calcPhaseSell(p, linked.markup)
+          return { id: ++lineCounter, desc: p.phase, qty: 1, unitPrice: Math.round(sell * 100) / 100, total: Math.round(sell * 100) / 100 }
+        })
       setLineItems(items.length ? items : [BLANK_LINE()])
     } else {
       setLineItems([{ id: ++lineCounter, desc: job.type + ' works', qty: 1, unitPrice: job.value, total: job.value }])
@@ -518,14 +526,30 @@ export default function InvoicesPage() {
                 const priorTotal = priorInvs.reduce((s, i) => s + (i.total || 0), 0)
                 const priorPaid  = priorInvs.filter(i => i.status === 'paid').reduce((s, i) => s + (i.total || 0), 0)
                 const priorUnpaid = priorTotal - priorPaid
+                // Item-level breakdown — which specific phases/variations were already
+                // billed, on which invoice, and whether that invoice's been paid yet.
+                const priorItems = priorInvs.flatMap(i => i.lineItems.map(li => ({ ...li, invRef: i.ref, invStatus: i.status })))
                 return (
                   <div style={{ padding: '10px 14px', borderRadius: 6, background: '#f8f5f0', border: '1px solid var(--border)', fontSize: 12, marginBottom: 4 }}>
                     <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 6, color: 'var(--ink)' }}>Previously invoiced on this job</div>
-                    <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: priorItems.length ? 8 : 0 }}>
                       <span style={{ color: 'var(--muted)' }}>Invoiced to date: <strong style={{ color: 'var(--ink)', fontFamily: 'DM Mono, monospace' }}>{fmt(priorTotal)}</strong></span>
                       <span style={{ color: 'var(--muted)' }}>Paid: <strong style={{ color: '#7ab533', fontFamily: 'DM Mono, monospace' }}>{fmt(priorPaid)}</strong></span>
                       {priorUnpaid > 0 && <span style={{ color: 'var(--muted)' }}>Outstanding: <strong style={{ color: '#d97706', fontFamily: 'DM Mono, monospace' }}>{fmt(priorUnpaid)}</strong></span>}
                     </div>
+                    {priorItems.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, borderTop: '1px solid var(--border)', paddingTop: 6 }}>
+                        {priorItems.map((li, idx) => (
+                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+                            <span style={{ color: 'var(--ink)' }}>{li.desc || '—'} <span style={{ color: 'var(--muted)' }}>({li.invRef})</span></span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontFamily: 'DM Mono, monospace', color: 'var(--muted)' }}>{fmt(li.total)}</span>
+                              <span className={`badge ${INV_BADGE[li.invStatus] || 'b-complete'}`} style={{ fontSize: 9 }}>{INV_LABEL[li.invStatus] || li.invStatus}</span>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )
               })()}
