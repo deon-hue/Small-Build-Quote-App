@@ -38,7 +38,7 @@ function due30Str() {
 }
 
 export default function InvoicesPage() {
-  const { invoices, jobs, quotes, clients, settings, jobPayments, addInvoice, updateInvoice, deleteInvoice, loading, getGanttState } = useApp()
+  const { invoices, jobs, quotes, clients, settings, jobPayments, variations, addInvoice, updateInvoice, deleteInvoice, updateVariation, loading, getGanttState } = useApp()
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<Invoice | null>(null)
   const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown, onOverlayClick, isMaximized, toggleMaximize } = useDraggableModal()
@@ -282,6 +282,21 @@ export default function InvoicesPage() {
       }
     }
 
+    // Approved variations not yet invoiced also need paying — pull them in as their own
+    // milestone rows, on the same VAT basis as the rest of this invoice.
+    for (const v of variations.filter(x => x.jobId === fromJobId && x.status === 'approved')) {
+      const netAmount = v.vatIncluded ? v.total / 1.2 : v.total
+      result.push({
+        id: ++milestoneCounter,
+        description: `Variation — ${v.title}`,
+        amount: Math.round(netAmount * vatMult * 100) / 100,
+        dueDate: v.clientApprovedAt ? v.clientApprovedAt.split('T')[0] : jobStart,
+        paid: false,
+        paidDate: '',
+        variationId: v.id,
+      })
+    }
+
     if (result.length === 0) {
       alert('Could not generate milestones. Make sure the job has a linked quote and a Gantt chart.')
       return
@@ -324,6 +339,14 @@ export default function InvoicesPage() {
     })
 
     setSelectedMilestoneIds(new Set())
+
+    // Any selected milestones pulled in from approved variations are now invoiced —
+    // move them out of 'approved' so they don't get offered again on the next build.
+    const invoicedVariationIds = selected.map(m => m.variationId).filter((id): id is string => !!id)
+    for (const vId of invoicedVariationIds) {
+      const v = variations.find(x => x.id === vId)
+      if (v) await updateVariation({ ...v, status: 'invoiced' })
+    }
 
     // Push to Xero immediately if connected — mirrors what handleSave does
     if (xeroConnected) {

@@ -463,6 +463,9 @@ export interface PaymentMilestone {
   dueDate: string
   paid: boolean
   paidDate: string
+  /** Set when this milestone was pulled in from an approved variation — lets invoicing
+   *  it mark that variation as 'invoiced' rather than leaving it stuck at 'approved'. */
+  variationId?: string
 }
 
 export interface Invoice {
