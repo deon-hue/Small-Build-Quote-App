@@ -129,6 +129,7 @@ export default function SubcontractorsPage() {
   const [error, setError] = useState('')
   const [portalInviting, setPortalInviting] = useState<string | null>(null)
   const [portalInviteSent, setPortalInviteSent] = useState<Set<string>>(new Set())
+  const [linkCopiedId, setLinkCopiedId] = useState<string | null>(null)
 
   // Timesheet approval
   const [approvingEntry, setApprovingEntry] = useState<string | null>(null)
@@ -230,6 +231,16 @@ export default function SubcontractorsPage() {
     } finally {
       setPortalInviting(null)
     }
+  }
+
+  async function copySubPortalLink(contractId: string, contactId: string | null) {
+    const contact = clients.find(c => c.id === contactId)
+    const url = contact?.email
+      ? `${window.location.origin}/sub-portal/login?email=${encodeURIComponent(contact.email)}`
+      : `${window.location.origin}/sub-portal/login`
+    await navigator.clipboard.writeText(url)
+    setLinkCopiedId(contractId)
+    setTimeout(() => setLinkCopiedId(null), 3000)
   }
 
   async function approveEntry(entry: TimeEntry, contract: Contract) {
@@ -1207,6 +1218,13 @@ export default function SubcontractorsPage() {
                   style={{ fontSize: 11, padding: '3px 8px', border: '1px solid #d1d5db', borderRadius: 5, background: portalInviteSent.has(c.id) ? '#dcfce7' : '#fff', color: portalInviteSent.has(c.id) ? '#16a34a' : '#374151', cursor: 'pointer', fontWeight: 600 }}
                 >
                   {portalInviting === c.id ? '…' : portalInviteSent.has(c.id) ? '✓ Invited' : '🔗 Portal'}
+                </button>
+                <button
+                  title="Copy sub-portal sign-in link to send via text/WhatsApp"
+                  onClick={() => copySubPortalLink(c.id, c.contact_id)}
+                  style={{ fontSize: 11, padding: '3px 8px', border: '1px solid #d1d5db', borderRadius: 5, background: linkCopiedId === c.id ? '#dcfce7' : '#fff', color: linkCopiedId === c.id ? '#16a34a' : '#374151', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  {linkCopiedId === c.id ? '✓ Copied' : '📋 Copy Link'}
                 </button>
                 {btn('Edit', () => openEditContract(c), 'ghost', true)}
                 {btn('Del', () => deleteContract(c.id), 'danger', true)}

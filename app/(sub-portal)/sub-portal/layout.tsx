@@ -6,6 +6,15 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: 'The Small Build Co | Subcontractor Portal',
+  manifest: '/sub-portal-manifest.json',
+  icons: {
+    apple: '/portal-icon.png',
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'SBC Sub Portal',
+  },
   formatDetection: { telephone: false },
 }
 
