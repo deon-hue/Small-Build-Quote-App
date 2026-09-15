@@ -178,6 +178,25 @@ export default function SectionPhasesTasks({ userId, onEditViaAssemblies }: Prop
     await upsertSubPhase(sb, { ...sp, markup_pct })
   }
 
+  async function toggleSubPhaseAllowance(id: string, is_allowance: boolean) {
+    setSubPhases(prev => prev.map(sp => sp.id === id ? { ...sp, is_allowance } : sp))
+    const sp = subPhases.find(s => s.id === id)!
+    await upsertSubPhase(sb, { ...sp, is_allowance })
+  }
+
+  // Allowance sub-phases price from exactly one task — its description + other_cost
+  // are the whole story, no Labour/Materials/Plant/Subcontractors breakdown needed.
+  async function saveAllowanceTask(sp: BOSubPhase, patch: Partial<Pick<BOTask, 'description' | 'other_cost'>>) {
+    const existing = tasks.find(t => t.sub_phase_id === sp.id)
+    if (existing) {
+      await patchTask({ ...existing, ...patch })
+    } else {
+      const base = EMPTY_TASK(userId, sp.phase_id, sp.id, 0)
+      const saved = await upsertTask(sb, { ...base, name: sp.name, ...patch })
+      if (saved) setTasks(prev => [...prev, saved])
+    }
+  }
+
   async function moveSubPhase(subPhaseId: string, targetPhaseId: string) {
     // Update the sub-phase's phase_id
     const sp = subPhases.find(s => s.id === subPhaseId)
@@ -580,12 +599,26 @@ export default function SectionPhasesTasks({ userId, onEditViaAssemblies }: Prop
                           />
                           <span style={{ fontSize: 11, color: '#64748b' }}>%</span>
                         </div>
-                        <button
-                          onClick={e => { e.stopPropagation(); openNewTask(selectedPhase.id, sp.id) }}
-                          style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '3px 8px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 4, color: '#1d4ed8', fontSize: 11, cursor: 'pointer', flexShrink: 0 }}
+                        <label
+                          title="A single description + £ figure — no Labour/Materials/Plant/Subcontractors breakdown"
+                          style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: '#64748b', cursor: 'pointer', flexShrink: 0 }}
+                          onClick={e => e.stopPropagation()}
                         >
-                          <Plus size={11} /> {BUILDUP_PHASES.has(selectedPhase.name) ? 'Layer' : 'Task'}
-                        </button>
+                          <input
+                            type="checkbox" checked={!!sp.is_allowance}
+                            onChange={e => toggleSubPhaseAllowance(sp.id, e.target.checked)}
+                            style={{ width: 'auto', cursor: 'pointer' }}
+                          />
+                          Allowance
+                        </label>
+                        {!sp.is_allowance && (
+                          <button
+                            onClick={e => { e.stopPropagation(); openNewTask(selectedPhase.id, sp.id) }}
+                            style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '3px 8px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 4, color: '#1d4ed8', fontSize: 11, cursor: 'pointer', flexShrink: 0 }}
+                          >
+                            <Plus size={11} /> {BUILDUP_PHASES.has(selectedPhase.name) ? 'Layer' : 'Task'}
+                          </button>
+                        )}
                         <button
                           onClick={e => { e.stopPropagation(); removeSubPhase(sp.id) }}
                           style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#fca5a5', padding: 2, flexShrink: 0 }}
@@ -616,6 +649,13 @@ export default function SectionPhasesTasks({ userId, onEditViaAssemblies }: Prop
                             </div>
                           )}
                         </div>
+                      ) : sp.is_allowance ? (
+                        <AllowanceEditor
+                          task={spTasks[0] ?? null}
+                          extraTasks={spTasks.slice(1)}
+                          onSave={patch => saveAllowanceTask(sp, patch)}
+                          onDeleteExtra={removeTask}
+                        />
                       ) : spTasks.length > 0 ? (
                         <TaskTable tasks={spTasks} onEdit={openEditTask} onDelete={removeTask} onDuplicate={duplicateTask} onToggleActive={toggleTaskActive} onUpdate={patchTask} labourTrades={labourTrades} products={products} plantItems={plantItems} />
                       ) : (
@@ -702,6 +742,68 @@ const ROW_CATS: Array<{ cat: RowCat; field: keyof BOTask }> = [
 ]
 
 // ── Task list (rows: name left, cost-category card-buttons right) ─────────────
+
+// A simple flat allowance — one description + one £ figure, no cost-category
+// breakdown. Backed by a single task (auto-created on first save) whose
+// other_cost holds the amount, same field the quote builder already reads.
+function AllowanceEditor({ task, extraTasks, onSave, onDeleteExtra }: {
+  task: BOTask | null
+  extraTasks: BOTask[]
+  onSave: (patch: Partial<Pick<BOTask, 'description' | 'other_cost'>>) => void
+  onDeleteExtra: (id: string) => void
+}) {
+  const [description, setDescription] = useState(task?.description ?? '')
+  const [amount, setAmount] = useState(task?.other_cost ?? 0)
+
+  useEffect(() => {
+    setDescription(task?.description ?? '')
+    setAmount(task?.other_cost ?? 0)
+  }, [task?.id, task?.description, task?.other_cost])
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div>
+        <label style={{ display: 'block', fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Description</label>
+        <textarea
+          value={description}
+          onChange={e => setDescription(e.target.value)}
+          onBlur={() => { if (description !== (task?.description ?? '')) onSave({ description }) }}
+          placeholder="What this allowance covers…"
+          rows={2}
+          style={{ width: '100%', padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 12, color: '#1e293b', resize: 'vertical', boxSizing: 'border-box' }}
+        />
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <label style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Allowance £</label>
+        <input
+          type="number" min={0} value={amount || ''}
+          onChange={e => setAmount(+e.target.value)}
+          onBlur={() => { if (amount !== (task?.other_cost ?? 0)) onSave({ other_cost: amount }) }}
+          placeholder="0.00"
+          style={{ width: 120, padding: '5px 8px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 13, textAlign: 'right', fontFamily: 'DM Mono, monospace' }}
+        />
+      </div>
+      {extraTasks.length > 0 && (
+        <div style={{ marginTop: 4, padding: '8px 10px', background: '#fffbeb', border: '1px dashed #fde68a', borderRadius: 6 }}>
+          <div style={{ fontSize: 11, color: '#92400e', marginBottom: 6 }}>
+            This sub-phase also has {extraTasks.length} older task{extraTasks.length !== 1 ? 's' : ''} left over from before it was set to Allowance — these aren't priced from here any more:
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {extraTasks.map(t => (
+              <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: '#92400e' }}>
+                <span>{t.name}</span>
+                <button onClick={() => onDeleteExtra(t.id)}
+                  style={{ padding: '2px 8px', border: '1px solid #fca5a5', borderRadius: 4, background: '#fef2f2', color: '#dc2626', fontSize: 10, fontWeight: 600, cursor: 'pointer' }}>
+                  Delete
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function TaskTable({ tasks, onEdit, onDelete, onDuplicate, onToggleActive, onUpdate, labourTrades, products, plantItems }: {
   tasks: BOTask[]

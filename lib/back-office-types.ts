@@ -33,6 +33,10 @@ export interface BOSubPhase {
   display_order: number
   markup_pct: number
   active: boolean
+  /** Flat allowance mode — a single description + £ figure (its one task's
+   *  other_cost), no Labour/Materials/Plant/Subcontractors breakdown. Used for
+   *  General Preliminaries roles (Project Manager, QS, Foreman, etc.). */
+  is_allowance?: boolean
   created_at?: string
 }
 
