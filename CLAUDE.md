@@ -52,6 +52,45 @@ Response is mapped directly to the typed item structure.
 3. The user can add/edit/remove/rename main phases and sub-phases independently without changing the master template
 4. Cost tracking is per sub-phase, per cost type — never aggregate to a single number
 
+## Assembly Calculators (REQUIRED for every new calculator)
+
+Assembly calculators price a Back Office sub-phase from geometry (wall length/height, foundation, etc.).
+Built so far: internal stud/metal/block partitions, external cavity walls, 100mm and 215mm blockwork,
+timber garden room wall, dwarf wall, sleeper wall (block & beam floor). Every new one follows the same
+pattern, and **is used from Take-off in the same way** — do not invent a different one.
+
+**Build it**
+1. Engine: its own pure module in `lib/assembly-calc.ts` (geometry + `calculate…Cost`, reusing `costLayer`);
+   add its quantity-source type to the `AssemblyQuantitySource` union. Hand-work the numbers and test the
+   engine (`node file.mts` with `file:///` import URLs) before building the screen.
+2. Screen: `components/Assembly<Name>Demo.tsx`, props `{ onClose?, onSave?, labourTrades?, externalLengthMm? }`,
+   built from `components/assembly-ui.tsx`. Must have: the materials print/CSV list (`MaterialsListButtons`),
+   sample rates editable per line, labour section, misc materials, waste/profit, a quote description, and a
+   drawing. An engine error is shown as a **banner above the controls — never instead of them** (typing a
+   value digit by digit passes through invalid ones, and the controls must stay to correct it).
+3. Register: id in `lib/built-assembly-ids.ts` (`BUILT_ASSEMBLY_CANONICAL_IDS`), icon glyph + entry in
+   `lib/built-assemblies.tsx`, and the sub-phase itself in `lib/phase-tasks.ts` (an existing sub-phase is just
+   registered; a new one gets an entry in the right sub-phase array).
+
+**How Take-off uses it (already wired — registering is enough for walls)**
+- The calculator NEVER renders inline in Take-off's ~300px properties panel. The panel shows a summary card
+  (name, length, price, "Open calculator"); the calculator opens full size in a window over the drawing
+  (`AssemblyItemPanel` in `app/(app)/takeoff/components/AssemblyWindow.tsx`, called via `renderAssemblyPanel`).
+  It opens from the button, a Schedule row click, or double-clicking the wall. Save & Price closes it.
+- `resolveBuiltAssembly` (Take-off `page.tsx`) decides whether an item has a calculator. External walls:
+  the item's `taskSubphaseId` first, then its Build-up Type via `WALL_MAKEUP_TO_SUBPHASE_CANONICAL`
+  (`lib/built-assembly-ids.ts`). If the new calculator pairs with an existing Build-up Type, add that pairing;
+  if it has none, it appears automatically in the Build-up Type dropdown's "Calculators" group. Internal walls
+  resolve through the sub-phase picker.
+- A Sub-Phase picked in the panel *before* drawing carries onto the drawn wall (the queued-element effect in
+  `page.tsx`); a calculator sub-phase hides the empty Task dropdown and shows a note instead.
+- A calculator for a phase other than External/Internal Walls (floors, roof, plastering, ...) needs
+  `resolveBuiltAssembly`, the properties panel, and that carry-over extended to that phase — do it the same
+  way, don't fork a new pattern.
+- Take-off needs a login, so it can't be driven in the preview browser: test the screen on a temporary
+  `/get-quote/<name>-test` page (public per `middleware.ts`), delete it before committing, and ask the user to
+  check the Take-off flow live.
+
 ## Tech Stack
 - Next.js 14 App Router, TypeScript strict
 - Supabase PostgreSQL + RLS
