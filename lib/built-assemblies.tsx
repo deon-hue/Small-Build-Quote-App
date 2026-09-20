@@ -16,10 +16,11 @@ import AssemblyMasonryWallDemo from '@/components/AssemblyMasonryWallDemo'
 import AssemblyCavityWallDemo from '@/components/AssemblyCavityWallDemo'
 import AssemblySolidBlockWallDemo from '@/components/AssemblySolidBlockWallDemo'
 import AssemblyTimberFrameWallDemo from '@/components/AssemblyTimberFrameWallDemo'
+import AssemblyDwarfWallDemo from '@/components/AssemblyDwarfWallDemo'
 import type { CostedLine } from '@/lib/assembly-calc'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 
-export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall'
+export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall'
 
 /** Fired when a calculator's "Save & Price" is used from inside a real quote — absent in
  * the Back Office preview context, which has no quote to save into. */
@@ -43,6 +44,7 @@ export const BUILT_ASSEMBLY_CANON_IDS: Record<string, {
   'ew-blockwork-100': { icon: 'block-wall', render: opts => <AssemblyMasonryWallDemo context="external-wall" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'ew-blockwork-215': { icon: 'block-wall', render: opts => <AssemblySolidBlockWallDemo laidDefault="flat" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'ew-garden-room-timber': { icon: 'timber-frame-wall', render: opts => <AssemblyTimberFrameWallDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
+  'ew-dwarf-wall': { icon: 'dwarf-wall', render: opts => <AssemblyDwarfWallDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'ew-cav-partial': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="pir" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'ew-cav-full': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="wool" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
 }
@@ -85,6 +87,18 @@ export function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; siz
           <line x1="7" y1="9" x2="7" y2="15" stroke="#b45309" strokeWidth="1.4" />
           <line x1="17" y1="9" x2="17" y2="15" stroke="#b45309" strokeWidth="1.4" />
           <line x1="12" y1="15" x2="12" y2="21" stroke="#b45309" strokeWidth="1.4" />
+        </svg>
+      )
+    case 'dwarf-wall':
+      // A short wall on its foundation, in section — the wall above ground level (dashed) sitting
+      // on blockwork and a wider concrete footing, so it reads apart from the taller walls.
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="8" y="4" width="8" height="8" stroke="#a16207" strokeWidth="1.6" />
+          <line x1="8" y1="8" x2="16" y2="8" stroke="#a16207" strokeWidth="1.2" />
+          <line x1="1" y1="12" x2="23" y2="12" stroke="#a16207" strokeWidth="1.4" strokeDasharray="2.5 1.8" />
+          <rect x="8" y="12" width="8" height="5" stroke="#a16207" strokeWidth="1.6" />
+          <rect x="4" y="17" width="16" height="4" stroke="#a16207" strokeWidth="1.6" />
         </svg>
       )
     case 'timber-frame-wall':

@@ -69,9 +69,9 @@ export type CavityQuantitySource =
 
 // Every AssemblyLayerDef/CostedLine carries a `source` from whichever module built it —
 // widen this union rather than the wall module's own WallQuantitySource as more modules
-// (roof, foundations, ...) get their own quantity kinds. (SolidBlockQuantitySource and
-// TimberFrameQuantitySource are declared beside their own modules further down.)
-export type AssemblyQuantitySource = WallQuantitySource | MasonryQuantitySource | CavityQuantitySource | SolidBlockQuantitySource | TimberFrameQuantitySource
+// (roof, foundations, ...) get their own quantity kinds. (The solid block, timber frame and
+// dwarf wall modules declare theirs beside themselves, further down.)
+export type AssemblyQuantitySource = WallQuantitySource | MasonryQuantitySource | CavityQuantitySource | SolidBlockQuantitySource | TimberFrameQuantitySource | DwarfQuantitySource
 
 export interface AssemblyOpening {
   id: string
@@ -928,6 +928,262 @@ export interface TimberFrameWallCostResult {
 export function calculateTimberFrameWallCost(input: TimberFrameWallInput, layers: AssemblyLayerDef[]): TimberFrameWallCostResult {
   const geometry = calculateTimberFrameGeometry(input)
   const lines = layers.map(l => costLayer(l, resolveTimberFrameRawQty(l, geometry)))
+  const totalCost = +lines.reduce((s, l) => s + l.cost, 0).toFixed(2)
+  return { geometry, lines, totalCost }
+}
+
+// ── Dwarf wall module — a short masonry wall carrying a conservatory, garden room, timber frame
+// or glazed system, measured in metres run, from the foundation up to the top of the wall. Where
+// the cavity and solid block modules above start at the DPC, this one runs the whole way down:
+//   - excavation and the concrete foundation — a strip (concrete of a set thickness, blockwork
+//     on top) or trench fill (concrete filled to just below ground)
+//   - blockwork from the concrete up to the DPC, and the spoil that leaves site
+//   - the wall above the DPC — a brick-and-block or block-and-block cavity wall, a solid block
+//     wall (laid flat or on its side) or a solid engineering brick wall
+//   - DPC, closing the cavity at the top, an optional timber wall plate, and optional coping
+// A dwarf wall has no openings. Counts and prices only — the foundation size and the wall's
+// design are the engineer's; nothing here checks that they will carry the load above.
+//
+// Below the DPC a cavity wall is two 100mm block leaves with the cavity filled with concrete
+// (down to 225mm under the DPC), and a solid wall is solid blockwork. Mortar is worked out as a
+// volume so one bag and one tonne cover the same amount whatever mix of blocks and bricks are
+// used (0.013 m³ per m² of 100mm blockwork and 0.03 m³ per m² of a single brick skin, the same
+// figures the masonry and cavity calculators are calibrated to).
+
+export type DwarfWallType = 'cavity-brick-block' | 'cavity-block-block' | 'solid-block' | 'solid-brick'
+export type DwarfFoundationType = 'strip' | 'trench-fill'
+
+export interface DwarfWallInput {
+  lengthMm: number
+  heightMm: number                 // top of the wall above the DPC
+  type: DwarfWallType
+  laid?: BlockLaid                 // solid-block only; default 'flat' (a 215mm wall)
+  blockWidthMm?: number            // 100 or 140 — the block's thin dimension; default 100
+  cavityWidthMm?: number           // cavity types; default 100
+  insulation?: CavityInsulationType // cavity types; default 'none'
+  insulationThicknessMm?: number   // rigid board only — a full fill always fills the cavity
+  foundationType?: DwarfFoundationType // default 'strip'
+  trenchWidthMm?: number           // default 450
+  foundationDepthMm?: number       // ground level down to the underside of the concrete; default 750
+  concreteThicknessMm?: number     // strip only; default 200
+  concreteTopBelowGroundMm?: number // trench fill only — where the concrete stops; default 150
+  hardcoreThicknessMm?: number     // default 0 (none)
+  dpcAboveGroundMm?: number        // default 150
+  wallPlate?: boolean              // timber wall plate on top; default false
+  coping?: boolean                 // default false
+}
+
+export interface DwarfWallGeometry {
+  lengthM: number
+  thicknessMm: number              // the wall above the DPC
+  foundationWallThicknessMm: number // the blockwork below the DPC
+  concreteThicknessMm: number
+  foundationBlockHeightMm: number  // top of the concrete up to the DPC
+  excavationM3: number
+  spoilM3: number                  // bulked — what has to leave site
+  hardcoreM3: number
+  concreteM3: number
+  cavityFillM3: number             // concrete filling the cavity below the DPC (cavity walls)
+  foundationBlockCount: number
+  foundationBlockWidthMm: number
+  aboveAreaM2: number
+  innerBlockCount: number          // cavity types — the inner leaf
+  outerBlockCount: number          // cavity-block-block
+  brickCount: number
+  solidBlockCount: number          // solid-block
+  mortarM3: number
+  tieCount: number
+  tieLengthMm: number
+  insulationThicknessMm: number
+  retainedCavityMm: number
+  dpcLm: number                    // one run per leaf
+  headClosureLm: number            // closes the cavity at the top
+  wallPlateLm: number
+  copingLm: number
+  warnings: string[]
+}
+
+export type DwarfQuantitySource =
+  | 'lengthM'
+  | 'aboveAreaM2'
+  | 'excavationM3'
+  | 'spoilM3'
+  | 'hardcoreM3'
+  | 'concreteM3'
+  | 'cavityFillM3'
+  | 'foundationBlockCount'
+  | 'innerBlockCount'
+  | 'outerBlockCount'
+  | 'brickCount'
+  | 'solidBlockCount'
+  | 'mortarM3'
+  | 'tieCount'
+  | 'dpcLm'
+  | 'headClosureLm'
+  | 'wallPlateLm'
+  | 'copingLm'
+  | 'fixed'
+
+const MORTAR_M3_PER_M2_BLOCK = 0.013
+const MORTAR_M3_PER_M2_BRICK_SKIN = 0.03
+const DWARF_BULKING = 1.3            // excavated ground takes up about 30% more volume loose
+const DWARF_CAVITY_FILL_BELOW_DPC_MM = 225
+
+export function calculateDwarfWallGeometry(input: DwarfWallInput): DwarfWallGeometry {
+  const { lengthMm: L, heightMm: H, type } = input
+  const warnings: string[] = []
+  const W = input.blockWidthMm ?? 100
+  const cavity = input.cavityWidthMm ?? 100
+  const isCavity = type === 'cavity-brick-block' || type === 'cavity-block-block'
+  const laid: BlockLaid = input.laid ?? 'flat'
+  const foundationType = input.foundationType ?? 'strip'
+  const trenchWidth = input.trenchWidthMm ?? 450
+  const depth = input.foundationDepthMm ?? 750
+  const dpcAboveGround = input.dpcAboveGroundMm ?? 150
+  const hardcore = input.hardcoreThicknessMm ?? 0
+
+  if (L <= 0 || H <= 0) throw new Error('Wall length and height must be greater than zero.')
+  if (W <= 0) throw new Error('Block width must be greater than zero.')
+  if (isCavity && cavity <= 0) throw new Error('Cavity width must be greater than zero.')
+  if (trenchWidth <= 0 || depth <= 0) throw new Error('Foundation width and depth must be greater than zero.')
+
+  // Concrete: a strip has a set thickness; trench fill runs from the bottom up to just below ground.
+  const concreteThk = foundationType === 'strip'
+    ? (input.concreteThicknessMm ?? 200)
+    : depth - (input.concreteTopBelowGroundMm ?? 150)
+  if (concreteThk <= 0) throw new Error('The concrete would have no thickness — check the foundation depth and where the concrete stops.')
+  if (concreteThk > depth) throw new Error('The concrete is thicker than the foundation is deep — check the concrete thickness.')
+
+  const foundationBlockHeightMm = depth - concreteThk + dpcAboveGround
+  const belowGroundMasonryMm = depth - concreteThk
+
+  // The wall above the DPC.
+  const outerLeafMm = type === 'cavity-brick-block' ? BRICK_OUTER_LEAF_MM : BLOCK_OUTER_LEAF_MM
+  const solidBlock = type === 'solid-block'
+    ? calculateSolidBlockGeometry({ lengthMm: L, heightMm: H, blockWidthMm: W, laid, openings: [] })
+    : null
+  const thicknessMm = isCavity ? W + cavity + outerLeafMm
+    : type === 'solid-block' ? solidBlock!.thicknessMm
+    : 215
+  const aboveAreaM2 = toM(L) * toM(H)
+
+  const blockArea = toM(450) * toM(225)   // coordinating size of a 440 × 215 block
+  const brickArea = toM(225) * toM(75)    // coordinating size of a 215 × 65 brick
+  const innerBlockCount = isCavity ? aboveAreaM2 / blockArea : 0
+  const outerBlockCount = type === 'cavity-block-block' ? aboveAreaM2 / blockArea : 0
+  const brickCount = type === 'cavity-brick-block' ? aboveAreaM2 / brickArea
+    : type === 'solid-brick' ? (aboveAreaM2 * 2) / brickArea // two skins thick
+    : 0
+
+  let mortarM3 = 0
+  if (type === 'cavity-brick-block') mortarM3 += aboveAreaM2 * (MORTAR_M3_PER_M2_BRICK_SKIN + MORTAR_M3_PER_M2_BLOCK)
+  else if (type === 'cavity-block-block') mortarM3 += aboveAreaM2 * MORTAR_M3_PER_M2_BLOCK * 2
+  else if (type === 'solid-block') mortarM3 += solidBlock!.mortarAreaM2 * solidBlock!.mortarM3PerM2
+  else mortarM3 += aboveAreaM2 * (MORTAR_M3_PER_M2_BRICK_SKIN * 2 + 0.01) // two skins and the collar joint
+
+  // Cavity ties, insulation
+  let insulationThicknessMm = 0
+  if (isCavity) {
+    if (input.insulation === 'wool') insulationThicknessMm = cavity
+    else if (input.insulation === 'pir') {
+      const wanted = input.insulationThicknessMm ?? 50
+      insulationThicknessMm = Math.min(wanted, cavity)
+      if (wanted > cavity) warnings.push(`The insulation board (${wanted}mm) is thicker than the cavity (${cavity}mm) — it's been limited to the cavity width.`)
+    }
+  }
+  const retainedCavityMm = isCavity ? cavity - insulationThicknessMm : 0
+  if (isCavity && input.insulation === 'pir' && retainedCavityMm < 50) {
+    warnings.push(`Partial fill leaves only ${retainedCavityMm}mm of clear cavity — usually at least 50mm is kept clear. Widen the cavity or use thinner board.`)
+  }
+  const tieCount = isCavity ? Math.ceil(aboveAreaM2 * TIES_PER_M2) : 0
+  const tieLengthMm = isCavity ? (STANDARD_TIE_LENGTHS_MM.find(v => v >= cavity + 100) ?? cavity + 100) : 0
+
+  // Blockwork from the concrete up to the DPC.
+  let foundationBlockCount: number, foundationBlockWidthMm: number, foundationWallThicknessMm: number
+  let cavityFillM3 = 0
+  const foundationAreaM2 = toM(L) * toM(foundationBlockHeightMm)
+  if (isCavity) {
+    foundationBlockWidthMm = 100
+    foundationWallThicknessMm = 100 + cavity + 100
+    foundationBlockCount = (foundationAreaM2 * 2) / blockArea
+    mortarM3 += foundationAreaM2 * MORTAR_M3_PER_M2_BLOCK * 2
+    cavityFillM3 = toM(L) * toM(cavity) * toM(Math.max(0, foundationBlockHeightMm - DWARF_CAVITY_FILL_BELOW_DPC_MM))
+  } else {
+    // Solid blockwork, laid the same way as the wall above for a block wall, flat under a brick one.
+    const fLaid: BlockLaid = type === 'solid-block' ? laid : 'flat'
+    const fW = type === 'solid-block' ? W : 100
+    const f = calculateSolidBlockGeometry({ lengthMm: L, heightMm: foundationBlockHeightMm, blockWidthMm: fW, laid: fLaid, openings: [] })
+    foundationBlockCount = f.blockCount
+    foundationBlockWidthMm = fW
+    foundationWallThicknessMm = f.thicknessMm
+    mortarM3 += f.mortarAreaM2 * f.mortarM3PerM2
+  }
+  if (trenchWidth < foundationWallThicknessMm + 150) {
+    warnings.push(`The foundation (${trenchWidth}mm wide) is narrow for a ${foundationWallThicknessMm}mm wall — it should generally project at least 75mm each side. Check with the engineer.`)
+  }
+
+  // Ground works
+  const concreteM3 = toM(L) * toM(trenchWidth) * toM(concreteThk)
+  const excavationM3 = toM(L) * toM(trenchWidth) * toM(depth) + toM(L) * toM(trenchWidth) * toM(hardcore)
+  const belowGroundMasonryM3 = toM(L) * toM(foundationWallThicknessMm) * toM(belowGroundMasonryMm)
+  const spoilM3 = (concreteM3 + belowGroundMasonryM3 + toM(L) * toM(trenchWidth) * toM(hardcore)) * DWARF_BULKING
+  const hardcoreM3 = toM(L) * toM(trenchWidth) * toM(hardcore)
+
+  return {
+    lengthM: toM(L), thicknessMm, foundationWallThicknessMm,
+    concreteThicknessMm: concreteThk, foundationBlockHeightMm,
+    excavationM3: +excavationM3.toFixed(3), spoilM3: +spoilM3.toFixed(3), hardcoreM3: +hardcoreM3.toFixed(3),
+    concreteM3: +concreteM3.toFixed(3), cavityFillM3: +cavityFillM3.toFixed(3),
+    foundationBlockCount, foundationBlockWidthMm,
+    aboveAreaM2, innerBlockCount, outerBlockCount, brickCount,
+    solidBlockCount: solidBlock ? solidBlock.blockCount : 0,
+    mortarM3: +mortarM3.toFixed(4),
+    tieCount, tieLengthMm, insulationThicknessMm, retainedCavityMm,
+    dpcLm: toM(L) * (isCavity ? 2 : 1),
+    headClosureLm: isCavity ? toM(L) : 0,
+    wallPlateLm: input.wallPlate ? toM(L) : 0,
+    copingLm: input.coping ? toM(L) : 0,
+    warnings,
+  }
+}
+
+function resolveDwarfRawQty(layer: AssemblyLayerDef, g: DwarfWallGeometry): number {
+  switch (layer.source) {
+    case 'lengthM':              return g.lengthM
+    case 'aboveAreaM2':          return g.aboveAreaM2
+    case 'excavationM3':         return g.excavationM3
+    case 'spoilM3':              return g.spoilM3
+    case 'hardcoreM3':           return g.hardcoreM3
+    case 'concreteM3':           return g.concreteM3
+    case 'cavityFillM3':         return g.cavityFillM3
+    case 'foundationBlockCount': return g.foundationBlockCount
+    case 'innerBlockCount':      return g.innerBlockCount
+    case 'outerBlockCount':      return g.outerBlockCount
+    case 'brickCount':           return g.brickCount
+    case 'solidBlockCount':      return g.solidBlockCount
+    case 'mortarM3':             return g.mortarM3
+    case 'tieCount':             return g.tieCount
+    case 'dpcLm':                return g.dpcLm
+    case 'headClosureLm':        return g.headClosureLm
+    case 'wallPlateLm':          return g.wallPlateLm
+    case 'copingLm':             return g.copingLm
+    case 'fixed':
+      if (layer.fixedQty == null) throw new Error(`Layer "${layer.name}" uses a fixed quantity but none was given.`)
+      return layer.fixedQty
+    default:
+      throw new Error(`Layer "${layer.name}" uses a source ("${layer.source}") the dwarf wall module doesn't support.`)
+  }
+}
+
+export interface DwarfWallCostResult {
+  geometry: DwarfWallGeometry
+  lines: CostedLine[]
+  totalCost: number
+}
+
+export function calculateDwarfWallCost(input: DwarfWallInput, layers: AssemblyLayerDef[]): DwarfWallCostResult {
+  const geometry = calculateDwarfWallGeometry(input)
+  const lines = layers.map(l => costLayer(l, resolveDwarfRawQty(l, geometry)))
   const totalCost = +lines.reduce((s, l) => s + l.cost, 0).toFixed(2)
   return { geometry, lines, totalCost }
 }

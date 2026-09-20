@@ -419,11 +419,15 @@ export default function AssemblyTimberFrameWallDemo({ onClose, onSave, labourTra
           style={{ width: '100%', fontSize: 12, color: '#1e293b', padding: '6px 9px', border: '1px solid #e2e8f0', borderRadius: 5, boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }} />
       </div>
 
-      {!result.ok || !g ? (
-        <div style={{ color: '#c0392b', fontSize: 12, padding: 8 }}>⚠ {result.ok ? 'Could not calculate' : result.error}</div>
-      ) : (
+      {/* An error (e.g. a wall too low for its plates while a height is being typed) is shown here
+          with the controls still in place, so the value can be corrected — never in place of them. */}
+      {!result.ok && (
+        <div style={{ color: '#c0392b', fontSize: 12, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, padding: '6px 10px', marginBottom: 10 }}>⚠ {result.error}</div>
+      )}
+      {(
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16 }}>
           <div>
+            {g && (<>
             <WallElevationSvg
               input={{ lengthMm, heightMm, studCentresMm: centresMm, doubleTopPlate, openings }}
               studLabels={{ full: 'King stud', cut: 'Jack stud (doubled at each opening)' }}
@@ -445,6 +449,7 @@ export default function AssemblyTimberFrameWallDemo({ onClose, onSave, labourTra
               Net area {g.netAreaM2.toFixed(2)} m² · {g.totalStuds + g.cornerStuds} studs ({g.studLm.toFixed(1)}m of timber, studs are {g.studLengthMm}mm between the plates)
               {' '}· wall {totalThicknessMm.toFixed(0)}mm thick.
             </div>
+            </>)}
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -565,16 +570,18 @@ export default function AssemblyTimberFrameWallDemo({ onClose, onSave, labourTra
           <MiscMaterialsSection miscMaterialLines={miscMaterialLines}
             onAdd={addMiscMaterialLine} onUpdate={updateMiscMaterialLine} onRemove={removeMiscMaterialLine} />
 
-          <div style={{ gridColumn: '1 / -1', marginTop: 4 }}>
-            <BreakdownTable lines={materialLines} onRateChange={handleBreakdownRateChange} disabledLayerIds={disabledLayerIds} onToggleLayer={toggleLayer}
-              layerSides={{}} onSidesChange={() => {}} sidesEligibleLayerIds={noSidesLayers} />
-            {profitPct > 0 && (
-              <div style={{ fontSize: 11, color: '#64748b', marginTop: 6, textAlign: 'right' }}>
-                Cost: £{costSubtotal.toFixed(2)} + {profitPct}% profit (£{profitAmount.toFixed(2)}) ={' '}
-                <strong style={{ color: '#7ab533' }}>£{totalCost.toFixed(2)}</strong>
-              </div>
-            )}
-          </div>
+          {result.ok && (
+            <div style={{ gridColumn: '1 / -1', marginTop: 4 }}>
+              <BreakdownTable lines={materialLines} onRateChange={handleBreakdownRateChange} disabledLayerIds={disabledLayerIds} onToggleLayer={toggleLayer}
+                layerSides={{}} onSidesChange={() => {}} sidesEligibleLayerIds={noSidesLayers} />
+              {profitPct > 0 && (
+                <div style={{ fontSize: 11, color: '#64748b', marginTop: 6, textAlign: 'right' }}>
+                  Cost: £{costSubtotal.toFixed(2)} + {profitPct}% profit (£{profitAmount.toFixed(2)}) ={' '}
+                  <strong style={{ color: '#7ab533' }}>£{totalCost.toFixed(2)}</strong>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
