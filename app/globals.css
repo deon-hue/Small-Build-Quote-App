@@ -419,6 +419,7 @@ textarea{resize:vertical;min-height:56px}
 .launcher-hide{display:contents}
 .home-back{display:none}
 @media (hover:none) and (pointer:coarse){
+  .sidebar{display:none}
   .launcher{display:block;max-width:640px;margin:0 auto}
   .launcher-hide{display:none}
   .topbar-launcher{display:none}
