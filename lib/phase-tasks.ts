@@ -1195,6 +1195,21 @@ const externalWallsSubphases: PhaseSubphase[] = [
       t('ew-bk215-dpc',       'DPC to base of wall',                   'lm', 20, 0, 0, 0, 0, 0, 'Polythene DPC 215mm wide at base of blockwork wall'),
     ],
   },
+  {
+    id: 'ew-garden-room-timber',
+    phase: 'External Walls',
+    name: 'Timber Garden Room Wall',
+    markupPct: 20,
+    ukWarning: 'Timber frame needs a competent design (bracing, lintels, fixings). Breather membrane on the cold side, vapour control layer on the warm side; keep the sole plate on a DPC and clear of the ground.',
+    tasks: [
+      t('ew-gr-labour',       'Frame, board and clad labour',          'm²', 10, 0, 0, 0, 0, 0, 'Labour – erect stud frame, sheath, insulate, line and clad garden room wall'),
+      t('ew-gr-studs',        'Timber studwork',                       'lm', 40, 0, 0, 0, 0, 0, 'Studs, plates and noggins – 100×50 or 140×38 at 400mm centres'),
+      t('ew-gr-sheathing',    'OSB3 sheathing 11mm',                   'm²', 10, 0, 0, 0, 0, 0, 'OSB3 sheathing to external face'),
+      t('ew-gr-membrane',     'Breather membrane',                     'm²', 10, 0, 0, 0, 0, 0, 'Breather membrane over sheathing'),
+      t('ew-gr-insulation',   'Insulation between studs',              'm²', 10, 0, 0, 0, 0, 0, 'PIR or mineral wool between studs'),
+      t('ew-gr-cladding',     'Timber cladding on battens',            'm²', 10, 0, 0, 0, 0, 0, 'Shiplap or feather-edge cladding on treated battens'),
+    ],
+  },
 ]
 
 // ── EXTERNAL WALL CONSTRUCTION ────────────────────────────────────────────────

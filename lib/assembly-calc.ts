@@ -69,9 +69,9 @@ export type CavityQuantitySource =
 
 // Every AssemblyLayerDef/CostedLine carries a `source` from whichever module built it —
 // widen this union rather than the wall module's own WallQuantitySource as more modules
-// (roof, foundations, ...) get their own quantity kinds. (SolidBlockQuantitySource, the solid
-// block wall module's own kinds, is declared beside that module further down.)
-export type AssemblyQuantitySource = WallQuantitySource | MasonryQuantitySource | CavityQuantitySource | SolidBlockQuantitySource
+// (roof, foundations, ...) get their own quantity kinds. (SolidBlockQuantitySource and
+// TimberFrameQuantitySource are declared beside their own modules further down.)
+export type AssemblyQuantitySource = WallQuantitySource | MasonryQuantitySource | CavityQuantitySource | SolidBlockQuantitySource | TimberFrameQuantitySource
 
 export interface AssemblyOpening {
   id: string
@@ -772,6 +772,162 @@ export interface SolidBlockWallCostResult {
 export function calculateSolidBlockWallCost(input: SolidBlockWallInput, layers: AssemblyLayerDef[]): SolidBlockWallCostResult {
   const geometry = calculateSolidBlockGeometry(input)
   const lines = layers.map(l => costLayer(l, resolveSolidBlockRawQty(l, geometry)))
+  const totalCost = +lines.reduce((s, l) => s + l.cost, 0).toFixed(2)
+  return { geometry, lines, totalCost }
+}
+
+// ── Timber frame wall module — an external timber stud wall (garden room, outbuilding, ...).
+// The framing (studs at centres, doubled studs + header around each opening, plates, noggins)
+// comes from calculateWallGeometry unchanged; this module adds what an EXTERNAL wall needs on
+// top of it, and works timber out in linear metres rather than counting studs as "full height":
+//   - stud/cripple lengths that reflect the plates, and openings (a jack stud stops at the
+//     header, a sill cripple at the sill), so timber is priced by the metre actually used
+//   - extra studs at any external corner on this wall's ends
+//   - header timber as doubled members
+//   - cavity battens under the cladding, plus horizontal counter-battens when the boards run
+//     vertically
+//   - corner trims and opening reveal/cill trims
+// Everything else (sheathing, membrane, cladding, insulation, VCL, lining) is priced off the
+// wall's area, so it needs no geometry of its own.
+//
+// Counts and prices only — no structural design (bracing, uplift, lintel sizes). Cripple lengths
+// are approximate, same Stage-1 simplification as the framed-wall module above. Reuses
+// costLayer unchanged.
+
+export type CladdingOrientation = 'horizontal' | 'vertical'
+
+export interface TimberFrameWallInput {
+  lengthMm: number
+  heightMm: number              // overall frame height, plates included
+  studCentresMm: number
+  studThicknessMm?: number      // the stud's narrow face (38/45/50) — also the plate thickness; default 50
+  doubleTopPlate?: boolean
+  headerBearingMm?: number
+  headerDepthMm?: number        // default 140 — takes depth off the head cripples
+  nogginRows?: number
+  cornerEnds?: 0 | 1 | 2        // ends of this wall that are external corners; default 0
+  battenCentresMm?: number      // default 600
+  claddingOrientation?: CladdingOrientation // default 'horizontal'
+  openings: AssemblyOpening[]
+}
+
+export interface TimberFrameWallGeometry extends WallGeometry {
+  lengthM: number
+  studLengthMm: number         // a full-height stud, between the plates
+  studLm: number               // every stud, king, jack, cripple and corner stud, by length
+  cornerStuds: number
+  headerLm: number             // doubled members
+  cornerTrimLm: number
+  battenLm: number             // vertical cavity battens
+  counterBattenLm: number      // horizontal counter-battens — only when the boards run vertically
+  openingPerimeterLm: number   // reveal and cill trim around every opening
+}
+
+export type TimberFrameQuantitySource =
+  | 'netAreaM2'
+  | 'grossAreaM2'
+  | 'lengthM'
+  | 'plateLm'
+  | 'studLm'
+  | 'nogginCount'
+  | 'headerLm'
+  | 'cornerTrimLm'
+  | 'battenLm'
+  | 'counterBattenLm'
+  | 'openingPerimeterLm'
+  | 'fixed'
+
+export function calculateTimberFrameGeometry(input: TimberFrameWallInput): TimberFrameWallGeometry {
+  const { lengthMm: L, heightMm: H, studCentresMm: C, openings } = input
+  const T = input.studThicknessMm ?? 50
+  const headerDepth = input.headerDepthMm ?? 140
+  const cornerEnds = input.cornerEnds ?? 0
+  const battenCentres = input.battenCentresMm ?? 600
+
+  const base = calculateWallGeometry({
+    lengthMm: L, heightMm: H, studCentresMm: C, doubleTopPlate: input.doubleTopPlate,
+    headerBearingMm: input.headerBearingMm, nogginRows: input.nogginRows, openings,
+  })
+  const warnings = [...base.warnings]
+  if (battenCentres <= 0) throw new Error('Batten centres must be greater than zero.')
+
+  // Stud length between the sole plate and the underside of the top plate(s).
+  const topPlates = input.doubleTopPlate ? 2 : 1
+  const studLengthMm = H - T * (1 + topPlates)
+  if (studLengthMm <= 0) throw new Error('Wall height is too low for the plates — check the height.')
+  const studTopMm = H - T * topPlates // height above the floor of the underside of the top plate(s)
+
+  // Studs by length. Field studs and king studs run full length; each opening's jack studs stop
+  // at the header's underside, its sill cripples (windows only) fill below the sill, and its
+  // head cripples fill between the header and the top plate — the same counts as the framed-wall
+  // module, priced at their real lengths instead of as full studs.
+  let studMm = Math.max(0, base.fieldStudsBeforeOpenings - base.studsDisplacedByOpenings) * studLengthMm
+  studMm += base.kingStuds * studLengthMm
+  for (const o of openings) {
+    const headUnderside = o.sillHeightMm + o.heightMm
+    studMm += 2 * Math.max(0, headUnderside - T)
+    const crippleSpan = Math.max(0, Math.floor(o.widthMm / C) - 1)
+    if (o.sillHeightMm > 0) studMm += crippleSpan * Math.max(0, o.sillHeightMm - T)
+    studMm += crippleSpan * Math.max(0, studTopMm - headUnderside - headerDepth)
+  }
+  // A corner is three studs where a plain end is one — two extra per external corner.
+  const cornerStuds = cornerEnds * 2
+  studMm += cornerStuds * studLengthMm
+
+  const headerLm = +(base.headers.reduce((s, h) => s + toM(h.spanMm), 0) * 2).toFixed(3)
+  const openingPerimeterLm = +openings.reduce((s, o) => {
+    const sill = o.sillHeightMm > 0 ? toM(o.widthMm) : 0 // a door has no sill
+    return s + 2 * toM(o.heightMm) + toM(o.widthMm) + sill
+  }, 0).toFixed(3)
+
+  const battenLm = +(base.netAreaM2 / toM(battenCentres)).toFixed(3)
+  const counterBattenLm = (input.claddingOrientation ?? 'horizontal') === 'vertical' ? battenLm : 0
+
+  return {
+    ...base,
+    warnings,
+    lengthM: toM(L),
+    studLengthMm,
+    studLm: +toM(studMm).toFixed(3),
+    cornerStuds,
+    headerLm,
+    cornerTrimLm: +(cornerEnds * toM(H)).toFixed(3),
+    battenLm,
+    counterBattenLm,
+    openingPerimeterLm,
+  }
+}
+
+function resolveTimberFrameRawQty(layer: AssemblyLayerDef, g: TimberFrameWallGeometry): number {
+  switch (layer.source) {
+    case 'netAreaM2':          return g.netAreaM2
+    case 'grossAreaM2':        return g.grossAreaM2
+    case 'lengthM':            return g.lengthM
+    case 'plateLm':            return g.plateLm
+    case 'studLm':             return g.studLm
+    case 'nogginCount':        return g.nogginCount
+    case 'headerLm':           return g.headerLm
+    case 'cornerTrimLm':       return g.cornerTrimLm
+    case 'battenLm':           return g.battenLm
+    case 'counterBattenLm':    return g.counterBattenLm
+    case 'openingPerimeterLm': return g.openingPerimeterLm
+    case 'fixed':
+      if (layer.fixedQty == null) throw new Error(`Layer "${layer.name}" uses a fixed quantity but none was given.`)
+      return layer.fixedQty
+    default:
+      throw new Error(`Layer "${layer.name}" uses a source ("${layer.source}") the timber frame wall module doesn't support.`)
+  }
+}
+
+export interface TimberFrameWallCostResult {
+  geometry: TimberFrameWallGeometry
+  lines: CostedLine[]
+  totalCost: number
+}
+
+export function calculateTimberFrameWallCost(input: TimberFrameWallInput, layers: AssemblyLayerDef[]): TimberFrameWallCostResult {
+  const geometry = calculateTimberFrameGeometry(input)
+  const lines = layers.map(l => costLayer(l, resolveTimberFrameRawQty(l, geometry)))
   const totalCost = +lines.reduce((s, l) => s + l.cost, 0).toFixed(2)
   return { geometry, lines, totalCost }
 }

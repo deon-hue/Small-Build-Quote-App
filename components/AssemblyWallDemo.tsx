@@ -426,7 +426,7 @@ export default function AssemblyWallDemo({ system = 'timber', onClose, onSave, l
 // against it — labelled per wall system (king/jack for timber, jamb studs for metal) via
 // studLabels. Visual only — stud display positions approximate which field studs an opening
 // displaces (matched to the grid), none of this feeds the numbers in the breakdown.
-function WallElevationSvg({ input, studLabels, onOpeningOffsetChange }: {
+export function WallElevationSvg({ input, studLabels, onOpeningOffsetChange }: {
   input: WallInput
   studLabels: { full: string; cut: string }
   onOpeningOffsetChange: (id: string, offsetMm: number) => void

@@ -15,10 +15,11 @@ import AssemblyWallDemo from '@/components/AssemblyWallDemo'
 import AssemblyMasonryWallDemo from '@/components/AssemblyMasonryWallDemo'
 import AssemblyCavityWallDemo from '@/components/AssemblyCavityWallDemo'
 import AssemblySolidBlockWallDemo from '@/components/AssemblySolidBlockWallDemo'
+import AssemblyTimberFrameWallDemo from '@/components/AssemblyTimberFrameWallDemo'
 import type { CostedLine } from '@/lib/assembly-calc'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 
-export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall'
+export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall'
 
 /** Fired when a calculator's "Save & Price" is used from inside a real quote — absent in
  * the Back Office preview context, which has no quote to save into. */
@@ -41,6 +42,7 @@ export const BUILT_ASSEMBLY_CANON_IDS: Record<string, {
   'iw-block-masonry': { icon: 'block-wall', render: opts => <AssemblyMasonryWallDemo context="partition" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'ew-blockwork-100': { icon: 'block-wall', render: opts => <AssemblyMasonryWallDemo context="external-wall" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'ew-blockwork-215': { icon: 'block-wall', render: opts => <AssemblySolidBlockWallDemo laidDefault="flat" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
+  'ew-garden-room-timber': { icon: 'timber-frame-wall', render: opts => <AssemblyTimberFrameWallDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'ew-cav-partial': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="pir" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'ew-cav-full': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="wool" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
 }
@@ -83,6 +85,19 @@ export function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; siz
           <line x1="7" y1="9" x2="7" y2="15" stroke="#b45309" strokeWidth="1.4" />
           <line x1="17" y1="9" x2="17" y2="15" stroke="#b45309" strokeWidth="1.4" />
           <line x1="12" y1="15" x2="12" y2="21" stroke="#b45309" strokeWidth="1.4" />
+        </svg>
+      )
+    case 'timber-frame-wall':
+      // A wall in section, green to match the garden room — cladding boards on the outside,
+      // studs with insulation between, lining inside — distinct from the stud partition's frame.
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="2" y="3" width="3" height="18" stroke="#15803d" strokeWidth="1.6" />
+          <rect x="5" y="3" width="13" height="18" stroke="#15803d" strokeWidth="1.6" />
+          <line x1="7.5" y1="3" x2="7.5" y2="21" stroke="#15803d" strokeWidth="1.2" />
+          <line x1="12" y1="3" x2="12" y2="21" stroke="#15803d" strokeWidth="1.2" strokeDasharray="2 1.5" />
+          <line x1="16" y1="3" x2="16" y2="21" stroke="#15803d" strokeWidth="1.2" />
+          <rect x="18" y="3" width="4" height="18" stroke="#15803d" strokeWidth="1.6" />
         </svg>
       )
     case 'cavity-wall':
