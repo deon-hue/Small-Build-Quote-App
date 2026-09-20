@@ -862,6 +862,28 @@ export default function TakeoffPage() {
       item.unit = 'nr'
     }
 
+    // A Sub-Phase picked in the properties panel before drawing carries onto the wall it draws.
+    // Without this the wall screens ignored it and fell back to their own default (the first
+    // build-up type for external walls, the first sub-phase for internal walls). Only an explicit
+    // pick counts — the dropdown's un-touched default is what those screens already default to.
+    if (!taskSubphaseId && selectedTaskSubphaseId && el.type === 'line' &&
+        (item.phase === 'External Walls' || item.phase === 'Internal Walls & Partitions')) {
+      const bo = boSubPhases.find(sp => sp.id === selectedTaskSubphaseId)
+      const boPhaseName = bo ? boPhases.find(p => p.id === bo.phase_id)?.name : undefined
+      if (bo && boPhaseName === item.phase) {
+        item.taskSubphaseId = bo.id
+        item.subPhase = bo.name
+        if (item.phase === 'External Walls') {
+          // Some sub-phases pair with one of the Build-up Types (e.g. Cavity Wall – Full Fill) —
+          // set that too, so the wall arrives as that type rather than the default one.
+          const pairedMakeupId = Object.keys(WALL_MAKEUP_TO_SUBPHASE_CANONICAL)
+            .find(k => WALL_MAKEUP_TO_SUBPHASE_CANONICAL[k] === bo.canonical_id)
+          const pairedMakeup = pairedMakeupId ? allWallMakeups.find(m => m.id === pairedMakeupId) : undefined
+          if (pairedMakeup) { item.floorMakeupId = pairedMakeup.id; item.spec = pairedMakeup.clientDescription }
+        }
+      }
+    }
+
     // Apply phase defaults to the new item
     if (phaseDefaults) {
       // Copy over phase default properties (but keep element-specific ones)
@@ -1152,6 +1174,11 @@ export default function TakeoffPage() {
   // bo_sub_phases, bridged by WALL_MAKEUP_TO_SUBPHASE_CANONICAL.
   function resolveBuiltAssembly(it: TakeoffItem) {
     if (it.phase === 'External Walls') {
+      // A calculator picked by Sub-Phase (dwarf wall, sleeper wall, ...) — those have no Build-up
+      // Type of their own, so the sub-phase decides. Checked first; otherwise the Build-up Type.
+      const boSub = it.taskSubphaseId ? boSubPhases.find(sp => sp.id === it.taskSubphaseId) : undefined
+      const bySubPhase = boSub?.canonical_id ? BUILT_ASSEMBLY_CANON_IDS[boSub.canonical_id] : undefined
+      if (bySubPhase) return bySubPhase
       const canonical = it.floorMakeupId ? WALL_MAKEUP_TO_SUBPHASE_CANONICAL[it.floorMakeupId] : undefined
       return canonical ? BUILT_ASSEMBLY_CANON_IDS[canonical] : undefined
     }
@@ -1535,6 +1562,14 @@ export default function TakeoffPage() {
 
   // ── Send directly to New Quote (no file download) ─────────────────────────
   function sendToQuote() {
+    // A wall with a calculator that hasn't been priced would go to the quote as a plain build-up
+    // (e.g. the default cavity wall layers) rather than what it's labelled as — say so first.
+    const unpriced = project.items.filter(it => resolveBuiltAssembly(it) && !it.assemblyResult)
+    if (unpriced.length > 0 && !window.confirm(
+      `${unpriced.length} wall${unpriced.length !== 1 ? 's have' : ' has'} a calculator that hasn't been priced yet:\n\n` +
+      unpriced.map(it => `• ${it.name}${it.subPhase ? ` (${it.subPhase})` : ''}`).join('\n') +
+      `\n\nUnpriced walls are sent to the quote as a plain build-up, not from their calculator. Send anyway?`
+    )) return
     const { planImageUrl: _, ...rest } = project
     const data = { version: 1, ...rest }
     sessionStorage.setItem('sbc_takeoff_for_quote', JSON.stringify(data))
@@ -2798,28 +2833,56 @@ export default function TakeoffPage() {
             const _wMakeup = _allWT.find(m => m.id === item.floorMakeupId)
             const _builtIn = new Set(WALL_MAKEUPS.map(m => m.id))
 
+            // External-wall sub-phases that have a calculator but no Build-up Type of their own
+            // (dwarf wall, sleeper wall, garden room timber wall, ...). The ones that do pair with
+            // a Build-up Type (the cavity walls, ...) are already in the list above.
+            const _pairedCanonicals = new Set(Object.values(WALL_MAKEUP_TO_SUBPHASE_CANONICAL))
+            const _calcSubs = getAllSubphasesForPhase('External Walls').filter(sp => {
+              const c = boSubPhases.find(b => b.id === sp.id)?.canonical_id
+              return !!c && !!BUILT_ASSEMBLY_CANON_IDS[c] && !_pairedCanonicals.has(c)
+            })
+            const _calcSubSelected = _calcSubs.find(s => s.id === item.taskSubphaseId)
+
+            // Changing the wall type starts the calculator afresh: a result saved from one calculator
+            // must not carry over to another's price.
             function selectExtWallMakeup(makeupId: string) {
               const nm = _allWT.find(m => m.id === makeupId)
-              const canonical = WALL_MAKEUP_TO_SUBPHASE_CANONICAL[makeupId]
-              const built = canonical ? BUILT_ASSEMBLY_CANON_IDS[canonical] : undefined
               saveItemEdit({
                 ...item, floorMakeupId: makeupId, spec: nm?.clientDescription ?? item.spec,
                 floorLayerToggles: {}, floorLayerThicknesses: {},
-                ...(!built && { assemblyResult: undefined }),
+                // Back to a Build-up Type: drop any calculator that was picked by sub-phase.
+                taskSubphaseId: undefined, subPhase: undefined,
+                assemblyResult: undefined,
+              })
+            }
+            function selectExtWallCalculator(subId: string) {
+              const sub = _calcSubs.find(s => s.id === subId)
+              saveItemEdit({
+                ...item, taskSubphaseId: subId, subPhase: sub?.name,
+                floorLayerToggles: {}, floorLayerThicknesses: {},
+                assemblyResult: undefined,
               })
             }
 
             return (
               <div style={{ marginBottom: 10 }}>
                 <label style={labelStyle}>Build-up Type</label>
-                <select style={{ ...inputStyle, color: accent }} value={item.floorMakeupId ?? ''}
-                  onChange={e => selectExtWallMakeup(e.target.value)}>
+                <select style={{ ...inputStyle, color: accent }}
+                  value={_calcSubSelected ? `sub:${_calcSubSelected.id}` : (item.floorMakeupId ?? '')}
+                  onChange={e => e.target.value.startsWith('sub:')
+                    ? selectExtWallCalculator(e.target.value.slice(4))
+                    : selectExtWallMakeup(e.target.value)}>
                   <optgroup label="── Built-in Wall Types">
                     {WALL_MAKEUPS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                   </optgroup>
                   {customWallTypes.length > 0 && (
                     <optgroup label="── Custom Wall Types">
                       {customWallTypes.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    </optgroup>
+                  )}
+                  {_calcSubs.length > 0 && (
+                    <optgroup label="── Calculators">
+                      {_calcSubs.map(sp => <option key={sp.id} value={`sub:${sp.id}`}>{sp.name}</option>)}
                     </optgroup>
                   )}
                 </select>
@@ -3626,6 +3689,10 @@ export default function TakeoffPage() {
       const selectedSub = taskSubs.find(s => s.id === selectedTaskSubphaseId) ?? taskSubs[0]
       const taskList = selectedSub?.tasks ?? []
       const selectedTask = taskList.find(t => t.id === selectedTaskId)
+      // A sub-phase with a built calculator has no flat tasks to pick — it's priced by its calculator
+      // once the wall is drawn (see the drawing step, which carries this choice onto the wall).
+      const selectedSubCanonical = selectedSub ? boSubPhases.find(b => b.id === selectedSub.id)?.canonical_id : undefined
+      const selectedSubBuilt = !!(selectedSubCanonical && BUILT_ASSEMBLY_CANON_IDS[selectedSubCanonical])
 
       return (
         <div style={{ padding: '16px' }}>
@@ -3644,11 +3711,28 @@ export default function TakeoffPage() {
                     setSelectedTaskSubphaseId(e.target.value)
                     const sp = getAllSubphasesForPhase(activePhase).find(s => s.id === e.target.value)
                     if (sp?.tasks[0]) setSelectedTaskId(sp.tasks[0].id)
+                    else setSelectedTaskId(null)
+                    // A calculator sub-phase is drawn as a line, whatever the last task's tool was.
+                    const canon = boSubPhases.find(b => b.id === e.target.value)?.canonical_id
+                    if (canon && BUILT_ASSEMBLY_CANON_IDS[canon]) setTool(PHASE_DEFAULT_TOOL[activePhase] ?? 'line')
                   }}>
                   {taskSubs.map(sp => <option key={sp.id} value={sp.id}>{sp.name}</option>)}
                 </select>
               </div>
 
+              {selectedSubBuilt && (
+                <div style={{
+                  background: 'var(--to-alt)', padding: 10, borderRadius: 6, fontSize: 12,
+                  color: 'var(--to-text)', marginBottom: 12,
+                }}>
+                  <div style={{ fontWeight: 600, marginBottom: 4 }}>🧮 {selectedSub?.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--to-muted)' }}>
+                    Priced with its own calculator — there are no tasks to pick. Draw the wall, then open the calculator to price it.
+                  </div>
+                </div>
+              )}
+
+              {!selectedSubBuilt && (<>
               <div style={{ marginBottom: 10 }}>
                 <label style={labelStyle}>Task</label>
                 <select
@@ -3698,13 +3782,16 @@ export default function TakeoffPage() {
                   </div>
                 </div>
               )}
+              </>)}
             </>
           )}
 
           <div style={{ marginTop: 16, padding: '12px', background: 'var(--to-alt)', borderRadius: 6, fontSize: 12, color: 'var(--to-muted)' }}>
-            {selectedTask?.unit === 'nr'
-              ? '👈 Ready to click on canvas to place a marker'
-              : '👈 Ready to draw on canvas'}
+            {selectedSubBuilt
+              ? '👈 Ready to draw the wall on the canvas'
+              : selectedTask?.unit === 'nr'
+                ? '👈 Ready to click on canvas to place a marker'
+                : '👈 Ready to draw on canvas'}
           </div>
         </div>
       )
@@ -3817,7 +3904,7 @@ export default function TakeoffPage() {
                     {item.qty} {item.unit}
                   </span>
                   {item.floorMakeupId
-                    ? <span style={{ color: '#f39c12' }}> · {FLOOR_MAKEUPS.find(m => m.id === item.floorMakeupId)?.name ?? 'Floor'}</span>
+                    ? <span style={{ color: '#f39c12' }}> · {item.taskSubphaseId && item.subPhase ? item.subPhase : (FLOOR_MAKEUPS.find(m => m.id === item.floorMakeupId)?.name ?? 'Floor')}</span>
                     : item.spec ? ` · ${item.spec}` : ''}
                   {item.perimeter != null && (
                     <span style={{ color: '#6a8a6a' }}>, {fmt2(item.perimeter)}m perim</span>
