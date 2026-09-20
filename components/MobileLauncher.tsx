@@ -87,7 +87,7 @@ export default function MobileLauncher({ onOpenNotes }: { onOpenNotes: () => voi
                 {items.map(({ label, Icon, href, opensNotes }) => {
                   const inner = (
                     <>
-                      <span className="launcher-ico"><Icon size={26} strokeWidth={1.75} /></span>
+                      <span className="launcher-ico"><Icon size={27} strokeWidth={2} /></span>
                       <span className="launcher-label">{label}</span>
                     </>
                   )
