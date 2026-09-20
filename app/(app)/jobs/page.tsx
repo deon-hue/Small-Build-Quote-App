@@ -35,6 +35,8 @@ export default function JobsPage() {
   const [docsJob, setDocsJob] = useState<Job | null>(null)
   const [attachmentsJob, setAttachmentsJob] = useState<Job | null>(null)
   const [requestsJob, setRequestsJob] = useState<Job | null>(null)
+  // Phones only: which job card has its action buttons expanded (CSS ignores this on desktop)
+  const [openJobId, setOpenJobId] = useState<string | null>(null)
   const jobFormModal = useDraggableModal()
 
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
@@ -105,16 +107,18 @@ export default function JobsPage() {
   return (
     <>
       {/* Filter + Add button */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-        {['all','planning','active','onhold','complete'].map(f => (
-          <button key={f} onClick={() => setFilter(f)}
-            className={filter === f ? 'btn-sm btn-primary' : 'btn-sm btn-outline'}
-            style={{ textTransform: 'capitalize' }}>
-            {f === 'all' ? 'All' : STAGE_LABEL[f] || f}
-          </button>
-        ))}
-        <div style={{ flex: 1 }} />
-        <button className="btn btn-primary" onClick={openNew}>+ Add Job</button>
+      <div className="jobs-filter-row" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+        <div className="jobs-chips" style={{ display: 'contents' }}>
+          {['all','planning','active','onhold','complete'].map(f => (
+            <button key={f} onClick={() => setFilter(f)}
+              className={filter === f ? 'btn-sm btn-primary' : 'btn-sm btn-outline'}
+              style={{ textTransform: 'capitalize' }}>
+              {f === 'all' ? 'All' : STAGE_LABEL[f] || f}
+            </button>
+          ))}
+        </div>
+        <div className="jobs-spacer" style={{ flex: 1 }} />
+        <button className="btn btn-primary jobs-add" onClick={openNew}>+ Add Job</button>
       </div>
 
       {/* Jobs list */}
@@ -133,14 +137,15 @@ export default function JobsPage() {
             const sentVarCount = jobVars.filter(v => v.status === 'sent').length
             const effectiveValue = j.value + approvedVarTotal
             return (
-              <div key={j.id} className="card" style={{ marginBottom: 12 }}>
+              <div key={j.id} className={`card job-card${openJobId === j.id ? ' open' : ''}`} style={{ marginBottom: 12 }}>
                 <div className="job-card-inner">
-                  <div className="job-card-main">
+                  <div className="job-card-main" onClick={() => setOpenJobId(id => id === j.id ? null : j.id)}>
                     <div className="job-dot" style={{ background: col }} />
                     <div className="job-info">
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
                         <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'white', background: col, borderRadius: 4, padding: '2px 6px', letterSpacing: '0.5px' }}>{jobNum}</span>
                         <div className="job-name">{j.type} — {j.client}</div>
+                        <span className="job-card-toggle" aria-hidden="true">›</span>
                       </div>
                       <div className="job-meta">{j.address}{j.start ? ' · Started ' + new Date(j.start).toLocaleDateString('en-GB') : ''}</div>
                       <div className="progress" style={{ maxWidth: 240, marginTop: 6 }}>
@@ -150,7 +155,7 @@ export default function JobsPage() {
                         Week {j.done} of {j.weeks} · {pct}% complete
                       </div>
                     </div>
-                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <div className="job-value-col" style={{ textAlign: 'right', flexShrink: 0 }}>
                       <div className="mono" style={{ fontSize: 18, fontWeight: 600 }}>{fmt(effectiveValue)}</div>
                       {approvedVarTotal > 0 && (
                         <div style={{ fontSize: 10, color: '#27ae60', marginTop: 1 }}>
@@ -163,25 +168,25 @@ export default function JobsPage() {
                     </div>
                   </div>
                   <div className="job-card-actions">
-                    <button className="btn-sm btn-gold" onClick={() => setGanttJob(j)}>📋 Gantt</button>
-                    <button className="btn-sm btn-sky" onClick={() => setNotesJob(j)}>
+                    <button className="btn-sm btn-gold jb-gantt" onClick={() => setGanttJob(j)}>📋 Gantt</button>
+                    <button className="btn-sm btn-sky jb-notes" onClick={() => setNotesJob(j)}>
                       📝 Notes {jobNotes.filter(n => n.jobId === j.id).length > 0 ? `(${jobNotes.filter(n => n.jobId === j.id).length})` : ''}
                     </button>
                     <button
-                      className={sentVarCount > 0 ? 'btn-sm btn-primary' : 'btn-sm btn-outline'}
+                      className={`${sentVarCount > 0 ? 'btn-sm btn-primary' : 'btn-sm btn-outline'} jb-var`}
                       onClick={() => setVariationJob(j)}
                       title="Variations / change orders for this job"
                     >
                       ±&nbsp;Variations{jobVars.length > 0 ? ` (${jobVars.length})` : ''}
                       {sentVarCount > 0 ? ` · ${sentVarCount} pending` : ''}
                     </button>
-                    <button className="btn-sm btn-outline" onClick={() => setAttachmentsJob(j)} title="Plans, photos and documents shared with the client">📎 Files</button>
-                    <button className="btn-sm btn-outline" onClick={() => setDocsJob(j)} title="Scan/upload supplier docs and track costs">💷 Costs</button>
-                    <button className="btn-sm btn-outline" onClick={() => setRequestsJob(j)} title="Payment requests and received payments">
+                    <button className="btn-sm btn-outline jb-files" onClick={() => setAttachmentsJob(j)} title="Plans, photos and documents shared with the client">📎 Files</button>
+                    <button className="btn-sm btn-outline jb-costs" onClick={() => setDocsJob(j)} title="Scan/upload supplier docs and track costs">💷 Costs</button>
+                    <button className="btn-sm btn-outline jb-pay" onClick={() => setRequestsJob(j)} title="Payment requests and received payments">
                       💳 Payments{jobPayments.filter(p => p.jobId === j.id).length > 0 ? ` (${jobPayments.filter(p => p.jobId === j.id).length})` : ''}
                     </button>
-                    <button className="btn-sm btn-outline" onClick={() => openEdit(j)}>Edit</button>
-                    <button className="btn-sm btn-danger" onClick={() => handleDelete(j)}>✕</button>
+                    <button className="btn-sm btn-outline jb-edit" onClick={() => openEdit(j)}>Edit</button>
+                    <button className="btn-sm btn-danger jb-del" onClick={() => handleDelete(j)}>✕<span className="mob-label"> Delete job</span></button>
                   </div>
                 </div>
                 {j.notes && (

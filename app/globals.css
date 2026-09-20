@@ -338,6 +338,37 @@ textarea{resize:vertical;min-height:56px}
   .form-modal-ft > .btn{flex:1 1 auto}
 }
 
+/* ── Jobs page (phone) ── */
+/* Filters scroll sideways instead of overflowing; Add Job gets its own row;
+   long job names wrap; the eight action buttons collapse behind a tap on the
+   job (expanded as a two-column grid, site actions first). The chevron, the
+   "Delete job" label and all of this are touch-only — desktop keeps its
+   always-visible button row exactly as before. */
+.job-card-toggle,.mob-label{display:none}
+@media (hover:none) and (pointer:coarse){
+  .jobs-filter-row{flex-wrap:wrap}
+  .jobs-chips{display:flex!important;flex:0 0 100%;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+  .jobs-chips::-webkit-scrollbar{display:none}
+  .jobs-chips .btn-sm{flex:0 0 auto;border-radius:99px}
+  .jobs-spacer{display:none}
+  .jobs-add{flex:0 0 100%}
+  .job-card-inner{padding:14px 16px}
+  .job-card-main{flex-wrap:wrap;cursor:pointer}
+  .job-name{white-space:normal}
+  .job-card-toggle{display:inline-block;margin-left:auto;font-size:22px;line-height:1;color:var(--muted);transition:transform 0.15s}
+  .job-card.open .job-card-toggle{transform:rotate(90deg)}
+  .job-value-col{flex:0 0 100%;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;text-align:left!important}
+  .job-value-col .badge{order:2;margin-top:0!important;display:inline-block!important}
+  .job-value-col > div:nth-child(2){order:3;flex:0 0 100%}
+  .job-card-actions{display:none}
+  .job-card.open .job-card-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .job-card-actions .btn-sm{width:100%;white-space:normal;line-height:1.25}
+  .jb-notes{order:1}.jb-files{order:2}.jb-var{order:3}.jb-pay{order:4}.jb-costs{order:5}.jb-gantt{order:6}.jb-edit{order:7}
+  .jb-edit,.jb-del{grid-column:1/-1}
+  .jb-del{order:8}
+  .mob-label{display:inline}
+}
+
 /* ── Mobile Home launcher + back-to-Home button ── */
 /* Touch devices only, same rule as above. Narrow desktop windows keep the
    normal dashboard and the hamburger sidebar. On touch, the launcher
