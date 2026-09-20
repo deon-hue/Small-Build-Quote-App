@@ -27,6 +27,15 @@ import { MaterialsListButtons } from '@/components/assembly-ui'
 let _id = Date.now()
 const uid = () => ++_id
 
+// Placeholder labels given to rows that have no description. They're display fallbacks only, so
+// anything deriving a real "task name" from row descriptions must skip them.
+const GENERIC_ITEM_LABELS: Record<string, string> = {
+  labour: 'Labour', materials: 'Materials', plant: 'Plant Work',
+  subcontractors: 'Subcontractor Work', other: 'Other Cost',
+}
+const isGenericLabel = (d?: string) =>
+  !d?.trim() || d.trim() === 'Item' || Object.values(GENERIC_ITEM_LABELS).includes(d.trim())
+
 // Backfill descriptions for items missing them (match against boTasks by cost)
 function backfillItemDescriptions(phases: QuotePhase[], boTasks: BOTask[]): QuotePhase[] {
   return phases.map(p => ({
@@ -38,19 +47,23 @@ function backfillItemDescriptions(phases: QuotePhase[], boTasks: BOTask[]): Quot
         const match = boTasks.find(t => t.id === i.boTaskId)
         if (match) return { ...i, desc: match.name }
       }
-      // Try to find matching back office task by cost
-      const costMatch = boTasks.find(t =>
-        t.labour_cost === i.labour && t.materials_cost === i.materials &&
-        t.plant_cost === i.plantHire && t.subcontract_cost === i.subcontractors &&
-        t.other_cost === i.other
-      )
-      if (costMatch) return { ...i, desc: costMatch.name }
-      // Fallback: generate label from itemType
-      const labels: Record<string, string> = {
-        labour: 'Labour', materials: 'Materials', plant: 'Plant Work',
-        subcontractors: 'Subcontractor Work', other: 'Other Cost'
+      // Legacy rows with no boTaskId: guess the task from its costs — but only when the row
+      // has a real cost AND exactly one task matches. A blank row (all costs 0) used to match
+      // whichever zero-cost Back Office task came first, so every empty row in a new or
+      // task-less sub-phase (e.g. an Allowance sub-phase) got labelled with that task's name,
+      // like "Combi boiler (supply & commission)".
+      const hasCost = (i.labour ?? 0) > 0 || (i.materials ?? 0) > 0 || (i.plantHire ?? 0) > 0 ||
+        (i.subcontractors ?? 0) > 0 || (i.other ?? 0) > 0
+      if (hasCost) {
+        const costMatches = boTasks.filter(t =>
+          t.labour_cost === i.labour && t.materials_cost === i.materials &&
+          t.plant_cost === i.plantHire && t.subcontract_cost === i.subcontractors &&
+          t.other_cost === i.other
+        )
+        if (costMatches.length === 1) return { ...i, desc: costMatches[0].name }
       }
-      return { ...i, desc: (i.itemType ? labels[i.itemType] : undefined) || 'Item' }
+      // Fallback: generate label from itemType
+      return { ...i, desc: (i.itemType ? GENERIC_ITEM_LABELS[i.itemType] : undefined) || 'Item' }
     })
   }))
 }
@@ -751,8 +764,8 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
   const derivedTaskName =
     p.taskName?.trim() ||
     getTaskGroups(p.items).filter(Boolean).join(', ') ||
-    p.items.find(i => i.itemType === 'labour' && i.desc?.trim())?.desc?.trim() ||
-    p.items.find(i => i.desc?.trim())?.desc?.trim() ||
+    p.items.find(i => i.itemType === 'labour' && !isGenericLabel(i.desc))?.desc?.trim() ||
+    p.items.find(i => !isGenericLabel(i.desc))?.desc?.trim() ||
     ''
 
   // If this sub-phase came from a Back Office sub-phase that has a built assembly
