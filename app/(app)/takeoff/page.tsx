@@ -8,6 +8,7 @@ import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchLabourTrades, fetchP
 import type { BOLabourTrade, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
 import { BUILT_ASSEMBLY_CANON_IDS } from '@/lib/built-assemblies'
 import { WALL_MAKEUP_TO_SUBPHASE_CANONICAL } from '@/lib/built-assembly-ids'
+import AssemblyItemPanel from './components/AssemblyWindow'
 import LabourCostBuilder from './components/LabourCostBuilder'
 import ClientProjectModal from './components/ClientProjectModal'
 import ConstructionLayerModal, { saveLayerCostToBackOffice } from './components/ConstructionLayerModal'
@@ -599,6 +600,9 @@ export default function TakeoffPage() {
   const [editingItem, setEditingItem] = useState<TakeoffItem | null>(null)
   const [editingElement, setEditingElement] = useState<DrawnElement | null>(null)
   const [phaseDefaults, setPhaseDefaults] = useState<TakeoffItem | null>(null)
+  // The item whose assembly calculator window is open, if any. Tied to an item id so selecting a
+  // different wall closes it without any extra bookkeeping.
+  const [assemblyWindowItemId, setAssemblyWindowItemId] = useState<string | null>(null)
   const [selectedTaskSubphaseId, setSelectedTaskSubphaseId] = useState<string | null>(null)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
 
@@ -1141,6 +1145,38 @@ export default function TakeoffPage() {
     setEditingItem(null)
   }
 
+  // ── Assembly calculators ───────────────────────────────────────────────────
+  // Whether a drawn item has a real assembly calculator, and which. Internal walls resolve it
+  // through the real Back Office sub-phase (taskSubphaseId); external walls through the Build-up
+  // Type, which is keyed by floorMakeupId (WALL_MAKEUPS/bo_wall_types) — a separate id space from
+  // bo_sub_phases, bridged by WALL_MAKEUP_TO_SUBPHASE_CANONICAL.
+  function resolveBuiltAssembly(it: TakeoffItem) {
+    if (it.phase === 'External Walls') {
+      const canonical = it.floorMakeupId ? WALL_MAKEUP_TO_SUBPHASE_CANONICAL[it.floorMakeupId] : undefined
+      return canonical ? BUILT_ASSEMBLY_CANON_IDS[canonical] : undefined
+    }
+    const isLine = (it.elementId ? project.elements.find(e => e.id === it.elementId) : null)?.type === 'line'
+    if (it.phase === 'Internal Walls & Partitions' && isLine) {
+      const subs = getAllSubphasesForPhase('Internal Walls & Partitions')
+      const sel = subs.find(s => s.id === it.taskSubphaseId) ?? subs[0]
+      const bo = sel ? boSubPhases.find(sp => sp.id === sel.id) : undefined
+      return bo?.canonical_id ? BUILT_ASSEMBLY_CANON_IDS[bo.canonical_id] : undefined
+    }
+    return undefined
+  }
+
+  // Opens the calculator window for an item — only if it has a calculator.
+  function openAssemblyFor(it: TakeoffItem | null | undefined) {
+    if (it && resolveBuiltAssembly(it)) setAssemblyWindowItemId(it.id)
+  }
+
+  // Double-clicking a wall on the drawing (select tool — the other tools use a double-click to
+  // finish a shape) opens its calculator.
+  function openAssemblyFromElement(el: DrawnElement) {
+    if (tool !== 'select') return
+    openAssemblyFor(project.items.find(it => it.elementId === el.id))
+  }
+
   // ── Select element ─────────────────────────────────────────────────────────
   function selectElement(el: DrawnElement) {
     if (tool !== 'select') return
@@ -1508,6 +1544,13 @@ export default function TakeoffPage() {
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      // While a calculator window is open the drawing shortcuts are off: Delete/Backspace would
+      // otherwise remove the selected wall from behind it, and Space would start panning. Escape
+      // closes the window (which only hides it — nothing typed is lost).
+      if (assemblyWindowItemId) {
+        if (e.key === 'Escape') setAssemblyWindowItemId(null)
+        return
+      }
       if (e.key === ' ' && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
         e.preventDefault()
         setSpaceHeld(true)
@@ -1582,7 +1625,7 @@ export default function TakeoffPage() {
       const fillC  = sel ? WALL_LINE_COLOR + '44' : WALL_FILL_COLOR + '28'
       const caviC  = sel ? '#ffffff' : WALL_CAVI_COLOR
       return (
-        <g key={el.id} onClick={() => selectElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
+        <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
           <polygon points={bodyPts} fill={fillC} stroke="none" />
           <polyline points={outerPts} fill="none" stroke={faceC} strokeWidth={sel ? 2.5 : 2} strokeLinecap="square" strokeLinejoin="miter" />
           <polyline points={innerPts} fill="none" stroke={faceC} strokeWidth={sel ? 2.5 : 2} strokeLinecap="square" strokeLinejoin="miter" />
@@ -1606,7 +1649,7 @@ export default function TakeoffPage() {
       const mid = centroid(el.points)
       const wallStroke = sel ? '#fff' : WALL_LINE_COLOR
       return (
-        <g key={el.id} onClick={() => selectElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
+        <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
           <rect x={x} y={y} width={w} height={h} fill={WALL_FILL_COLOR + '20'} stroke={wallStroke} strokeWidth={wallSw} />
           {sel && <rect x={x} y={y} width={w} height={h} fill="none" stroke="#fff" strokeWidth={1} strokeOpacity={0.5} strokeDasharray="5 3" />}
           <text x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : WALL_LINE_COLOR} fontFamily="monospace" fontWeight={700}>
@@ -1627,7 +1670,7 @@ export default function TakeoffPage() {
       const wallSw = (linkedItem?.wallBandPx ?? 9) * 2
       const wallStroke = sel ? '#fff' : WALL_LINE_COLOR
       return (
-        <g key={el.id} onClick={() => selectElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
+        <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
           <polygon points={pts} fill={WALL_FILL_COLOR + '20'} stroke={wallStroke} strokeWidth={wallSw} strokeLinejoin="miter" />
           {sel && <polygon points={pts} fill="none" stroke="#fff" strokeWidth={1} strokeOpacity={0.5} strokeDasharray="5 3" />}
           <text x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : WALL_LINE_COLOR} fontFamily="monospace" fontWeight={700}>
@@ -1645,7 +1688,7 @@ export default function TakeoffPage() {
       const pts = el.points.map(p => `${p.x},${p.y}`).join(' ')
       const mid = centroid(el.points)
       return (
-        <g key={el.id} onClick={() => selectElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
+        <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
           <polyline points={pts} fill="none" stroke={stroke} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
           {sel && <polyline points={pts} fill="none" stroke="#fff" strokeWidth={1} strokeOpacity={0.4} strokeDasharray="4 3" />}
           <text x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : el.color} fontFamily="monospace" fontWeight={600}>
@@ -1661,7 +1704,7 @@ export default function TakeoffPage() {
     if (el.type === 'rect') {
       const { x, y, width: w, height: h } = rectAttrs(el.points)
       return (
-        <g key={el.id} onClick={() => selectElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
+        <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
           <rect x={x} y={y} width={w} height={h} fill={fill} stroke={stroke} strokeWidth={sw} />
           <text x={x + w / 2} y={y + h / 2 - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : el.color} fontFamily="monospace" fontWeight={600}>
             {el.label}
@@ -1677,7 +1720,7 @@ export default function TakeoffPage() {
       const pts = el.points.map(p => `${p.x},${p.y}`).join(' ')
       const mid = centroid(el.points)
       return (
-        <g key={el.id} onClick={() => selectElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
+        <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
           <polygon points={pts} fill={fill} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
           <text x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : el.color} fontFamily="monospace" fontWeight={600}>
             {el.label}
@@ -2248,23 +2291,39 @@ export default function TakeoffPage() {
     const showWallLine     = isLineBased && (isExtWall || isIntWall || isPlaster)
     const hasOpenings      = (isExtWall || isIntWall || isPlaster) && isLineBased
 
-    // Internal Walls: does the selected sub-phase have a built assembly calculator?
-    // Resolved via the real Back Office sub-phase (taskSubphaseId).
+    // Internal Walls: the selected sub-phase (live from Back Office, same as every other phase).
     const intWallSubs   = isIntWall ? getAllSubphasesForPhase('Internal Walls & Partitions') : []
     const intWallSelSub = intWallSubs.find(s => s.id === item.taskSubphaseId) ?? intWallSubs[0]
-    const intWallBoSub  = intWallSelSub ? boSubPhases.find(sp => sp.id === intWallSelSub.id) : undefined
-    const intWallBuiltAssembly = intWallBoSub?.canonical_id ? BUILT_ASSEMBLY_CANON_IDS[intWallBoSub.canonical_id] : undefined
 
-    // External Walls: does the selected Build-up Type have a built assembly calculator?
-    // That system is keyed by floorMakeupId (WALL_MAKEUPS/bo_wall_types) — a separate id
-    // space from bo_sub_phases, bridged by WALL_MAKEUP_TO_SUBPHASE_CANONICAL.
-    const extWallCanonical    = item.floorMakeupId ? WALL_MAKEUP_TO_SUBPHASE_CANONICAL[item.floorMakeupId] : undefined
-    const extWallBuiltAssembly = extWallCanonical ? BUILT_ASSEMBLY_CANON_IDS[extWallCanonical] : undefined
-
-    // When either phase's selected type has a calculator, it has final say on measurements/
+    // Does the selected sub-phase (internal) or Build-up Type (external) have a built assembly
+    // calculator? See resolveBuiltAssembly. When it does, it has final say on measurements/
     // materials/pricing, so all the old recipe-engine/build-up UI below is suppressed.
-    const builtAssembly = isIntWall ? intWallBuiltAssembly : isExtWall ? extWallBuiltAssembly : undefined
+    const builtAssembly = (isIntWall || isExtWall) ? resolveBuiltAssembly(item) : undefined
     const hideForBuiltAssembly = (isIntWall || isExtWall) && !!builtAssembly
+
+    // The calculator is too big for this ~300px panel, so the panel shows a summary card and the
+    // calculator itself opens full size in a window (see AssemblyWindow.tsx).
+    const renderAssemblyPanel = (savePatch: Partial<TakeoffItem>) => builtAssembly && (
+      <AssemblyItemPanel
+        name={item.name}
+        lengthM={item.length ?? 0}
+        saved={item.assemblyResult}
+        open={assemblyWindowItemId === item.id}
+        onOpen={() => setAssemblyWindowItemId(item.id)}
+        onClose={() => setAssemblyWindowItemId(null)}
+      >
+        {builtAssembly.render({
+          externalLengthMm: (item.length ?? 0) > 0 ? Math.round((item.length ?? 0) * 1000) : undefined,
+          labourTrades,
+          onSave: result => {
+            saveItemEdit({
+              ...item, ...savePatch, assemblyResult: result, name: result.name, roomName: result.location || item.roomName,
+            })
+            setAssemblyWindowItemId(null)
+          },
+        })}
+      </AssemblyItemPanel>
+    )
 
     // ── 4. Computed wall measurements ──────────────────────────────────────
     const wallLength     = item.length ?? 0
@@ -2772,13 +2831,7 @@ export default function TakeoffPage() {
                 )}
                 {builtAssembly && (
                   <div style={{ marginTop: 10 }}>
-                    {builtAssembly.render({
-                      externalLengthMm: wallLength > 0 ? Math.round(wallLength * 1000) : undefined,
-                      labourTrades,
-                      onSave: result => saveItemEdit({
-                        ...item, assemblyResult: result, name: result.name, roomName: result.location || item.roomName,
-                      }),
-                    })}
+                    {renderAssemblyPanel({})}
                   </div>
                 )}
               </div>
@@ -2821,14 +2874,7 @@ export default function TakeoffPage() {
 
                 {builtAssembly ? (
                   <div style={{ marginBottom: 10 }}>
-                    {builtAssembly.render({
-                      externalLengthMm: wallLength > 0 ? Math.round(wallLength * 1000) : undefined,
-                      labourTrades,
-                      onSave: result => saveItemEdit({
-                        ...item, taskSubphaseId: selectedSub?.id, subPhase: selectedSub?.name,
-                        assemblyResult: result, name: result.name, roomName: result.location || item.roomName,
-                      }),
-                    })}
+                    {renderAssemblyPanel({ taskSubphaseId: selectedSub?.id, subPhase: selectedSub?.name })}
                   </div>
                 ) : (
                   <>
@@ -3756,6 +3802,8 @@ export default function TakeoffPage() {
                   setEditingElement(el)
                   if (el) setSelectedId(el.id)
                   setPanelMode('properties')
+                  // A wall with a calculator opens it straight away — the panel is only its summary.
+                  openAssemblyFor(item)
                 }}
                 style={{
                   padding: '7px 14px', borderBottom: '1px solid var(--to-blt)',
