@@ -1302,22 +1302,36 @@ export function calculateSleeperWallCost(input: SleeperWallInput, layers: Assemb
   return { geometry, lines, totalCost }
 }
 
-// ── Flat roof module — a flat roof from its joists to its covering, with rooflights in it. Joists
-// span the roof's width and are spaced along its length; the roof falls along the joists (to the low
-// edge, where the gutter is) on firrings; one edge is usually the abutment against a house wall.
-//   - Rooflights (lanterns, roof windows, domes, access hatches) are openings in the plan. Each one
-//     takes its area out of the deck, insulation and membrane; cuts the joists that run through it
-//     short; needs the timber round it trimmed (headers and side trimmers, doubled or tripled up); and
-//     sits on a kerb that the membrane is dressed up.
-//   - Edges: the abutment gets an upstand and flashing; the rest (the free edges) gets trim or fascia;
-//     the gutter edge gets a gutter.
+// ── Flat roof module — a flat roof from its joists to its covering, with openings for rooflights.
+// Joists span the roof's width and are spaced along its length; the roof falls along them (to the low
+// edge) on firrings. Each of the four edges is one of:
+//   - abutment: against an existing wall — the membrane is turned up it, flashed, and the joists are
+//     fixed to it (below)
+//   - gutter:   the water leaves into a gutter — trim, and a gutter
+//   - parapet:  a masonry parapet wall stands on the edge — coping, a cavity tray, the membrane
+//     dressed up its inner face, and rainwater outlets (through gullies) and an overflow through it
+//   - free:     a plain edge — drip trim
+// Where the joists meet an existing wall square-on (the high or low edge is the abutment) they are
+// either hung from a ledger plate bolted to the wall (ledger, bolts at 600 centres, a hanger on every
+// joist) or bear on a wall plate strapped to it; where the abutment runs along the joists (the left or
+// right edge) the first joist is strapped to it instead. Every other bearing end sits on a wall plate.
+// Rooflights (lanterns, roof windows, domes, hatches) are OPENINGS only — the rooflight itself is
+// supplied and priced elsewhere. Each opening takes its area out of the deck, insulation and membrane,
+// cuts the joists it crosses short, needs its headers and side trimmers doubled or tripled up, and
+// needs a kerb the membrane is dressed up.
 // The joist section, warm or cold build-up, covering and rates are chosen in the calculator screen —
-// this module only works out the lengths, counts and areas. Counts and prices only: the joist size
-// for a span, the trimmers and the kerbs are the designer's/engineer's to confirm. Cripple/trimmer
-// lengths are approximate, the same Stage-1 simplification as the framed-wall module. Reuses costLayer.
+// this module only works out lengths, counts and areas. Counts and prices only: the joist size for the
+// span, the trimmers, the kerbs, the fixings to the wall and the parapet are the designer's/engineer's
+// to confirm. Trimmer lengths are approximate, the same Stage-1 simplification as the framed-wall
+// module. Reuses costLayer.
 
 export type RoofOpeningKind = 'lantern' | 'roof-window' | 'dome' | 'hatch'
 export type FlatRoofBuildUp = 'warm' | 'cold'
+export type FlatRoofEdge = 'abutment' | 'gutter' | 'parapet' | 'free'
+export type FlatRoofWallConnection = 'ledger' | 'bearing'
+export type ParapetType = 'cavity-brick-block' | 'solid-block'
+
+export interface FlatRoofEdges { high: FlatRoofEdge; low: FlatRoofEdge; left: FlatRoofEdge; right: FlatRoofEdge }
 
 export interface FlatRoofOpening {
   id: string
@@ -1336,40 +1350,55 @@ export interface FlatRoofInput {
   joistCentresMm: number
   buildUp?: FlatRoofBuildUp // default 'warm'
   fallRatio?: number        // 80 = a fall of 1 in 80; default 80
-  abutmentLengthMm?: number // edge against a wall — gets an upstand and flashing; default 0
-  gutterLengthMm?: number   // default 0
-  ledger?: boolean          // the high end hangs off a ledger on the house wall instead of a wall plate
-  upstandHeightMm?: number  // membrane turned up at the abutment; default 150
+  edges?: Partial<FlatRoofEdges> // default: high abutment, low gutter, left and right free
+  /** At an abutment on the high or low edge: hung from a ledger, or bearing on a wall plate. Default 'ledger'. */
+  wallConnection?: FlatRoofWallConnection
+  upstandHeightMm?: number  // membrane turned up at an abutment; default 150
+  parapetHeightMm?: number  // above the finished roof; default 450
+  /** From the top of the wall the roof sits on to the top of the parapet; default the parapet's height + 350. */
+  parapetMasonryHeightMm?: number
+  parapetType?: ParapetType // default 'cavity-brick-block'
+  gullyCount?: number       // rainwater outlets through the parapet
+  overflowCount?: number    // emergency overflow outlets through the parapet
   openings: FlatRoofOpening[]
 }
 
 export interface FlatRoofGeometry {
+  edges: FlatRoofEdges
   lengthM: number
   widthM: number
   grossAreaM2: number
   openingAreaM2: number
   netAreaM2: number
   joistCount: number        // positions along the roof, before any are cut short
-  joistLm: number           // joists at their real lengths, after the rooflights cut some short
-  trimLm: number            // headers and side trimmers round every rooflight
+  joistLm: number           // joists at their real lengths, after the openings cut some short
+  trimLm: number            // headers and side trimmers round every opening
   wallPlateLm: number
   ledgerLm: number
+  ledgerBoltCount: number
   hangerCount: number
+  strapCount: number        // lateral restraint straps to an existing wall
   strutRows: number
   strutCount: number
   firringLm: number
   fallMm: number            // the fall across the span — the depth of the firrings at the high end
   kerbLm: number
   kerbFaceAreaM2: number
-  membraneAreaM2: number    // net area, plus the upstand at the abutment and the kerb faces
+  membraneAreaM2: number    // net area, plus the upstand at an abutment, the parapet's face and the kerb faces
   perimeterM: number
   abutmentLm: number
-  edgeTrimLm: number        // the free edges — everything that isn't the abutment
   gutterLm: number
-  lanternAreaM2: number
-  roofWindowAreaM2: number
-  domeAreaM2: number
-  hatchCount: number
+  edgeTrimLm: number        // the free and gutter edges
+  parapetLm: number
+  parapetMasonryAreaM2: number
+  parapetBrickCount: number
+  parapetBlockCount: number
+  parapetTieCount: number
+  parapetMortarM3: number
+  parapetRenderAreaM2: number
+  gullyCount: number
+  overflowCount: number
+  openingCount: number
   warnings: string[]
 }
 
@@ -1381,28 +1410,44 @@ export type FlatRoofQuantitySource =
   | 'trimLm'
   | 'wallPlateLm'
   | 'ledgerLm'
+  | 'ledgerBoltCount'
   | 'hangerCount'
+  | 'strapCount'
   | 'strutCount'
   | 'firringLm'
   | 'kerbLm'
   | 'kerbFaceAreaM2'
   | 'membraneAreaM2'
   | 'abutmentLm'
-  | 'edgeTrimLm'
   | 'gutterLm'
-  | 'lanternAreaM2'
-  | 'roofWindowAreaM2'
-  | 'domeAreaM2'
-  | 'hatchCount'
+  | 'edgeTrimLm'
+  | 'parapetLm'
+  | 'parapetBrickCount'
+  | 'parapetBlockCount'
+  | 'parapetTieCount'
+  | 'parapetMortarM3'
+  | 'parapetRenderAreaM2'
+  | 'gullyCount'
+  | 'overflowCount'
   | 'fixed'
 
 const STRUT_SPACING_MM = 2500        // strutting rows at no more than this apart along the span
 const TRIMMER_HANGERS_PER_OPENING = 4 // a hanger at each end of the two headers
+const LEDGER_BOLT_CENTRES_MM = 600
+const RESTRAINT_STRAP_CENTRES_MM = 2000
+const PARAPET_BUILD_UP_MM = 350       // default masonry below the finished roof: the roof's build-up above the wall head
 
 export function calculateFlatRoofGeometry(input: FlatRoofInput): FlatRoofGeometry {
   const { lengthMm: L, widthMm: S, joistCentresMm: C, openings } = input
   const fallRatio = input.fallRatio ?? 80
   const upstand = input.upstandHeightMm ?? 150
+  const parapetHeight = input.parapetHeightMm ?? 450
+  const parapetMasonryHeight = input.parapetMasonryHeightMm ?? parapetHeight + PARAPET_BUILD_UP_MM
+  const parapetType: ParapetType = input.parapetType ?? 'cavity-brick-block'
+  const connection: FlatRoofWallConnection = input.wallConnection ?? 'ledger'
+  const edges: FlatRoofEdges = { high: 'abutment', low: 'gutter', left: 'free', right: 'free', ...input.edges }
+  const gullyCount = Math.max(0, Math.round(input.gullyCount ?? 0))
+  const overflowCount = Math.max(0, Math.round(input.overflowCount ?? 0))
   const warnings: string[] = []
 
   if (L <= 0 || S <= 0) throw new Error('Roof length and width must be greater than zero.')
@@ -1416,7 +1461,7 @@ export function calculateFlatRoofGeometry(input: FlatRoofInput): FlatRoofGeometr
   // Openings that don't fit, or overlap each other.
   for (let i = 0; i < openings.length; i++) {
     const o = openings[i]
-    if (o.widthMm <= 0 || o.depthMm <= 0) throw new Error('Every rooflight needs a width and a length greater than zero.')
+    if (o.widthMm <= 0 || o.depthMm <= 0) throw new Error('Every rooflight opening needs a width and a length greater than zero.')
     if (o.offsetMm < 0 || o.offsetMm + o.widthMm > L || o.offsetSpanMm < 0 || o.offsetSpanMm + o.depthMm > S) {
       warnings.push(`Rooflight ${i + 1} falls outside the roof — check its position and size.`)
     }
@@ -1428,9 +1473,9 @@ export function calculateFlatRoofGeometry(input: FlatRoofInput): FlatRoofGeometr
     }
   }
 
-  // Joists: one at every position along the roof; where a rooflight sits across a joist (strictly
-  // inside its width — a joist on the opening's edge is its side trimmer instead) that joist is
-  // cut short by the rooflight's length.
+  // Joists: one at every position along the roof; where an opening sits across a joist (strictly
+  // inside its width — a joist on the opening's edge is its side trimmer instead) that joist is cut
+  // short by the opening's length.
   const positions = studPositionsMm(L, C)
   let joistMm = 0
   for (const p of positions) {
@@ -1441,81 +1486,126 @@ export function calculateFlatRoofGeometry(input: FlatRoofInput): FlatRoofGeometr
     joistMm += Math.max(0, S - cut)
   }
 
-  // Trimming round each rooflight: two headers across the joists (each `trimmers` members, spanning
-  // to the joists either side, so the opening's width plus a joist spacing), and a side trimmer each
+  // Trimming round each opening: two headers across the joists (each `trimmers` members, spanning to
+  // the joists either side, so the opening's width plus a joist spacing), and a side trimmer each
   // side — the joist already there plus (trimmers - 1) more, over the opening's length and a header's
-  // seating either end. Doubled is 2, tripled 3.
+  // seating either end. Doubled is 2, tripled 3. Then the kerb.
   let trimMm = 0, kerbMm = 0, kerbFaceMm2 = 0
-  let lanternMm2 = 0, windowMm2 = 0, domeMm2 = 0, hatchCount = 0
   for (const o of openings) {
     const members = o.trimmers ?? 2
     trimMm += 2 * members * (o.widthMm + C) + 2 * (members - 1) * (o.depthMm + 200)
     const perimeterMm = 2 * (o.widthMm + o.depthMm)
     kerbMm += perimeterMm
     kerbFaceMm2 += perimeterMm * (o.kerbHeightMm ?? 200)
-    const area = o.widthMm * o.depthMm
-    if (o.kind === 'lantern') lanternMm2 += area
-    else if (o.kind === 'roof-window') windowMm2 += area
-    else if (o.kind === 'dome') domeMm2 += area
-    else hatchCount += 1
   }
 
   // Strutting between the joists at no more than 2.5m along the span.
   const strutRows = S > STRUT_SPACING_MM ? Math.ceil(S / STRUT_SPACING_MM) - 1 : 0
   const strutCount = strutRows * Math.max(0, positions.length - 1)
 
-  const abutmentLm = toM(Math.min(input.abutmentLengthMm ?? 0, 2 * (L + S)))
-  if ((input.abutmentLengthMm ?? 0) > 2 * (L + S)) warnings.push('The abutment is longer than the roof\'s whole edge — check its length.')
-  const perimeterM = toM(2 * (L + S))
+  // The four edges by type.
+  const edgeMm: Record<keyof FlatRoofEdges, number> = { high: L, low: L, left: S, right: S }
+  const sumEdges = (type: FlatRoofEdge) =>
+    (Object.keys(edges) as (keyof FlatRoofEdges)[]).filter(k => edges[k] === type).reduce((s, k) => s + edgeMm[k], 0)
+  const abutmentMm = sumEdges('abutment'), gutterMm = sumEdges('gutter'), parapetMm = sumEdges('parapet'), freeMm = sumEdges('free')
+
+  // How the joists are fixed at each end and along the sides.
+  let wallPlateMm = 0, ledgerMm = 0, ledgerBolts = 0, hangers = 0, straps = 0
+  for (const end of ['high', 'low'] as const) {
+    if (edges[end] === 'abutment' && connection === 'ledger') {
+      ledgerMm += L
+      ledgerBolts += Math.ceil(L / LEDGER_BOLT_CENTRES_MM) + 1
+      hangers += positions.length
+    } else {
+      wallPlateMm += L
+      if (edges[end] === 'abutment') straps += Math.ceil(L / RESTRAINT_STRAP_CENTRES_MM) + 1
+    }
+  }
+  for (const side of ['left', 'right'] as const) {
+    if (edges[side] === 'abutment') straps += Math.ceil(S / RESTRAINT_STRAP_CENTRES_MM) + 1
+  }
+  hangers += TRIMMER_HANGERS_PER_OPENING * openings.length
+
+  // The parapet: masonry from the wall head to its top, and the membrane up its inner face.
+  const parapetM = toM(parapetMm)
+  const parapetAreaM2 = parapetM * toM(parapetMasonryHeight)
+  const BLOCK_M2 = toM(450) * toM(225), BRICK_M2 = toM(225) * toM(75), FLAT_BLOCK_M2 = toM(450) * toM(110)
+  const cavity = parapetType === 'cavity-brick-block'
+  const parapetBrickCount = cavity ? parapetAreaM2 / BRICK_M2 : 0
+  const parapetBlockCount = cavity ? parapetAreaM2 / BLOCK_M2 : parapetAreaM2 / FLAT_BLOCK_M2
+  const parapetTieCount = cavity ? Math.ceil(parapetAreaM2 * TIES_PER_M2) : 0
+  // 0.013 m³ of mortar per m² of 100mm blockwork, 0.03 per brick skin, and 0.0473 for a 215mm wall of
+  // blocks laid flat — the same figures the masonry, cavity and solid block calculators use.
+  const parapetMortarM3 = cavity ? parapetAreaM2 * (0.03 + 0.013) : parapetAreaM2 * 0.0473
   const kerbFaceAreaM2 = kerbFaceMm2 / 1_000_000
+  const abutmentLm = toM(abutmentMm)
+
+  // Things worth the estimator's attention.
+  if (edges.low === 'abutment') warnings.push('The roof falls toward the existing wall — its low edge is the abutment. Check which edge is high.')
+  if (parapetMm > 0 && gullyCount === 0) warnings.push('A parapet roof needs rainwater outlets (through gullies) — none are counted.')
+  else if (parapetMm > 0 && overflowCount === 0) warnings.push('No overflow outlet is counted through the parapet — an overflow is normally needed too.')
+  if (gutterMm === 0 && gullyCount === 0) warnings.push('No gutter and no rainwater outlet — the water has nowhere to go.')
 
   return {
+    edges,
     lengthM: toM(L), widthM: toM(S), grossAreaM2, openingAreaM2, netAreaM2,
     joistCount: positions.length,
     joistLm: +toM(joistMm).toFixed(3),
     trimLm: +toM(trimMm).toFixed(3),
-    wallPlateLm: input.ledger ? toM(L) : toM(L) * 2,
-    ledgerLm: input.ledger ? toM(L) : 0,
-    hangerCount: (input.ledger ? positions.length : 0) + TRIMMER_HANGERS_PER_OPENING * openings.length,
+    wallPlateLm: +toM(wallPlateMm).toFixed(3),
+    ledgerLm: +toM(ledgerMm).toFixed(3),
+    ledgerBoltCount: ledgerBolts,
+    hangerCount: hangers,
+    strapCount: straps,
     strutRows, strutCount,
     firringLm: +toM(joistMm).toFixed(3),
     fallMm: +(S / fallRatio).toFixed(1),
     kerbLm: +toM(kerbMm).toFixed(3),
     kerbFaceAreaM2: +kerbFaceAreaM2.toFixed(4),
-    membraneAreaM2: +(netAreaM2 + abutmentLm * toM(upstand) + kerbFaceAreaM2).toFixed(3),
-    perimeterM, abutmentLm,
-    edgeTrimLm: +Math.max(0, perimeterM - abutmentLm).toFixed(3),
-    gutterLm: toM(input.gutterLengthMm ?? 0),
-    lanternAreaM2: +(lanternMm2 / 1_000_000).toFixed(4),
-    roofWindowAreaM2: +(windowMm2 / 1_000_000).toFixed(4),
-    domeAreaM2: +(domeMm2 / 1_000_000).toFixed(4),
-    hatchCount,
+    membraneAreaM2: +(netAreaM2 + abutmentLm * toM(upstand) + parapetM * toM(parapetHeight) + kerbFaceAreaM2).toFixed(3),
+    perimeterM: toM(2 * (L + S)),
+    abutmentLm,
+    gutterLm: toM(gutterMm),
+    edgeTrimLm: toM(freeMm + gutterMm),
+    parapetLm: parapetM,
+    parapetMasonryAreaM2: +parapetAreaM2.toFixed(4),
+    parapetBrickCount, parapetBlockCount, parapetTieCount,
+    parapetMortarM3: +parapetMortarM3.toFixed(4),
+    parapetRenderAreaM2: cavity ? 0 : +parapetAreaM2.toFixed(4),
+    gullyCount, overflowCount,
+    openingCount: openings.length,
     warnings,
   }
 }
 
 function resolveFlatRoofRawQty(layer: AssemblyLayerDef, g: FlatRoofGeometry): number {
   switch (layer.source) {
-    case 'netAreaM2':        return g.netAreaM2
-    case 'grossAreaM2':      return g.grossAreaM2
-    case 'lengthM':          return g.lengthM
-    case 'joistLm':          return g.joistLm
-    case 'trimLm':           return g.trimLm
-    case 'wallPlateLm':      return g.wallPlateLm
-    case 'ledgerLm':         return g.ledgerLm
-    case 'hangerCount':      return g.hangerCount
-    case 'strutCount':       return g.strutCount
-    case 'firringLm':        return g.firringLm
-    case 'kerbLm':           return g.kerbLm
-    case 'kerbFaceAreaM2':   return g.kerbFaceAreaM2
-    case 'membraneAreaM2':   return g.membraneAreaM2
-    case 'abutmentLm':       return g.abutmentLm
-    case 'edgeTrimLm':       return g.edgeTrimLm
-    case 'gutterLm':         return g.gutterLm
-    case 'lanternAreaM2':    return g.lanternAreaM2
-    case 'roofWindowAreaM2': return g.roofWindowAreaM2
-    case 'domeAreaM2':       return g.domeAreaM2
-    case 'hatchCount':       return g.hatchCount
+    case 'netAreaM2':            return g.netAreaM2
+    case 'grossAreaM2':          return g.grossAreaM2
+    case 'lengthM':              return g.lengthM
+    case 'joistLm':              return g.joistLm
+    case 'trimLm':               return g.trimLm
+    case 'wallPlateLm':          return g.wallPlateLm
+    case 'ledgerLm':             return g.ledgerLm
+    case 'ledgerBoltCount':      return g.ledgerBoltCount
+    case 'hangerCount':          return g.hangerCount
+    case 'strapCount':           return g.strapCount
+    case 'strutCount':           return g.strutCount
+    case 'firringLm':            return g.firringLm
+    case 'kerbLm':               return g.kerbLm
+    case 'kerbFaceAreaM2':       return g.kerbFaceAreaM2
+    case 'membraneAreaM2':       return g.membraneAreaM2
+    case 'abutmentLm':           return g.abutmentLm
+    case 'gutterLm':             return g.gutterLm
+    case 'edgeTrimLm':           return g.edgeTrimLm
+    case 'parapetLm':            return g.parapetLm
+    case 'parapetBrickCount':    return g.parapetBrickCount
+    case 'parapetBlockCount':    return g.parapetBlockCount
+    case 'parapetTieCount':      return g.parapetTieCount
+    case 'parapetMortarM3':      return g.parapetMortarM3
+    case 'parapetRenderAreaM2':  return g.parapetRenderAreaM2
+    case 'gullyCount':           return g.gullyCount
+    case 'overflowCount':        return g.overflowCount
     case 'fixed':
       if (layer.fixedQty == null) throw new Error(`Layer "${layer.name}" uses a fixed quantity but none was given.`)
       return layer.fixedQty
