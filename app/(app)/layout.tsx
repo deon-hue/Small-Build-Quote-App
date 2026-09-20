@@ -9,6 +9,7 @@ import { useApp } from '@/contexts/AppContext'
 import type { UserPermissions } from '@/lib/types'
 import QuickNotesModal from '@/components/QuickNotesModal'
 import MobileLauncher from '@/components/MobileLauncher'
+import BuildStamp from '@/components/BuildStamp'
 
 // Routes that require a specific permission key
 const ROUTE_PERMISSIONS: Partial<Record<string, keyof UserPermissions>> = {
@@ -148,6 +149,7 @@ function AppLayoutInner({ children, title, desktopOnly = false, launcher = false
             </>
           ) : children}
         </div>
+        <BuildStamp />
       </div>
       {launcherNotes && <QuickNotesModal onClose={() => setLauncherNotes(false)} />}
     </div>
