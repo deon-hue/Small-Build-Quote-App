@@ -184,11 +184,13 @@ export function MiscMaterialsSection({ miscMaterialLines, onAdd, onUpdate, onRem
 let _openingId = 0
 export const newOpeningId = () => `op-${++_openingId}`
 
-export function OpeningsEditor({ openings, onAdd, onUpdate, onRemove }: {
+export function OpeningsEditor({ openings, onAdd, onUpdate, onRemove, extraRow }: {
   openings: AssemblyOpening[]
   onAdd: () => void
   onUpdate: (id: string, patch: Partial<AssemblyOpening>) => void
   onRemove: (id: string) => void
+  /** Optional per-opening extra line under its row — e.g. the cavity wall's lintel type. */
+  extraRow?: (o: AssemblyOpening) => React.ReactNode
 }) {
   return (
     <div style={{ marginTop: 4 }}>
@@ -204,7 +206,8 @@ export function OpeningsEditor({ openings, onAdd, onUpdate, onRemove }: {
         </div>
       )}
       {openings.map(o => (
-        <div key={o.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr 20px', gap: 4, marginBottom: 4, alignItems: 'center' }}>
+        <React.Fragment key={o.id}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr 20px', gap: 4, marginBottom: 4, alignItems: 'center' }}>
           <select value={o.kind} onChange={e => onUpdate(o.id, { kind: e.target.value as AssemblyOpening['kind'], sillHeightMm: e.target.value === 'door' ? 0 : (o.sillHeightMm || 900) })} style={miniInput}>
             <option value="window">Window</option>
             <option value="door">Door</option>
@@ -217,6 +220,8 @@ export function OpeningsEditor({ openings, onAdd, onUpdate, onRemove }: {
           <button onClick={() => onRemove(o.id)} title="Remove opening"
             style={{ background: 'none', border: 'none', color: '#e74c3c', cursor: 'pointer', fontSize: 14 }}>×</button>
         </div>
+        {extraRow?.(o)}
+        </React.Fragment>
       ))}
       <button onClick={onAdd}
         style={{ fontSize: 11, border: '1px dashed #94a3b8', background: 'transparent', borderRadius: 4, color: '#64748b', padding: '3px 8px', cursor: 'pointer' }}>

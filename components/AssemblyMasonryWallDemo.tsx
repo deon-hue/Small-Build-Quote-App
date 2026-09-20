@@ -39,8 +39,8 @@ import {
 //   - cement @ 1440 kg/m³ in 25kg bags; sand @ 1600 kg/m³ sold by the tonne
 // That works out to ~3.1kg (0.125 bags) of cement and ~17.3kg (0.0173 tonnes) of sand per m²,
 // i.e. one bag of cement covers ~8.0m² and one tonne of sand covers ~57.7m².
-const CEMENT_M2_PER_BAG = 8.0
-const SAND_M2_PER_TONNE = 57.7
+export const CEMENT_M2_PER_BAG = 8.0
+export const SAND_M2_PER_TONNE = 57.7
 
 type BlockType = 'concrete' | 'thermal'
 const BLOCK_TYPE_CONFIG: Record<BlockType, { label: string; unitCost: number }> = {
@@ -62,9 +62,9 @@ export type MasonryContext = 'partition' | 'external-wall'
 
 // The internal-face finish — identical whether it's the only face (a partition) or the
 // inside face of an external wall.
-type FinishType = 'dot-dab' | 'wet-plaster' | 'battened'
-interface FinishTypeConfig { label: string; buildLayers: (wastePct: number) => AssemblyLayerDef[]; boardLayerId: string }
-const FINISH_TYPE_CONFIG: Record<FinishType, FinishTypeConfig> = {
+export type FinishType = 'dot-dab' | 'wet-plaster' | 'battened'
+export interface FinishTypeConfig { label: string; buildLayers: (wastePct: number) => AssemblyLayerDef[]; boardLayerId: string }
+export const FINISH_TYPE_CONFIG: Record<FinishType, FinishTypeConfig> = {
   'dot-dab': {
     label: 'Dot & dab + plasterboard',
     boardLayerId: 'lining',
@@ -92,9 +92,9 @@ const FINISH_TYPE_CONFIG: Record<FinishType, FinishTypeConfig> = {
 
 // The outside face of an external wall — never the same material as the inside, so this is
 // its own separate choice rather than a "both faces" toggle on one finish.
-type ExternalFinishType = 'render' | 'brick-slip' | 'painted-block'
-interface ExternalFinishTypeConfig { label: string; buildLayers: (wastePct: number) => AssemblyLayerDef[] }
-const EXTERNAL_FINISH_CONFIG: Record<ExternalFinishType, ExternalFinishTypeConfig> = {
+export type ExternalFinishType = 'render' | 'brick-slip' | 'painted-block'
+export interface ExternalFinishTypeConfig { label: string; buildLayers: (wastePct: number) => AssemblyLayerDef[] }
+export const EXTERNAL_FINISH_CONFIG: Record<ExternalFinishType, ExternalFinishTypeConfig> = {
   render: {
     label: 'Two-coat render',
     buildLayers: wastePct => [
@@ -447,7 +447,7 @@ export default function AssemblyMasonryWallDemo({ context = 'partition', onClose
 // ── Elevation SVG — a running-bond block grid instead of studs. The opening void gets a
 // lintel line (not a header — no jamb framing, masonry just closes up to the opening with
 // cut blocks) and the same drag-to-reposition handle as the framed-wall calculators.
-function MasonryElevationSvg({ input, onOpeningOffsetChange }: {
+export function MasonryElevationSvg({ input, onOpeningOffsetChange }: {
   input: MasonryWallInput
   onOpeningOffsetChange: (id: string, offsetMm: number) => void
 }) {

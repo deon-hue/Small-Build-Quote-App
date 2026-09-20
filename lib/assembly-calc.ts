@@ -47,10 +47,30 @@ export type MasonryQuantitySource =
   | 'lengthM'     // the wall's run — for a DPC course, coping, or anything else priced per linear metre
   | 'fixed'
 
+// The cavity wall module's quantities (DPC to wall plate — see calculateCavityGeometry below).
+export type CavityQuantitySource =
+  | 'netAreaM2'
+  | 'grossAreaM2'
+  | 'lengthM'
+  | 'innerBlockCount'
+  | 'outerBlockCount'
+  | 'brickCount'
+  | 'tieCount'
+  | 'steelCavityLintelCount'
+  | 'concreteLintelCount'
+  | 'steelAngleCount'
+  | 'trayCount'      // separate cavity trays — one per opening whose lintel doesn't carry its own
+  | 'weepCount'      // weep vents over every opening
+  | 'closerLm'       // cavity closers down each opening's two reveals
+  | 'headClosureLm'  // closing the cavity along the top of the wall
+  | 'wallPlateLm'
+  | 'strapCount'     // roof restraint straps along the wall plate
+  | 'fixed'
+
 // Every AssemblyLayerDef/CostedLine carries a `source` from whichever module built it —
 // widen this union rather than the wall module's own WallQuantitySource as more modules
 // (roof, foundations, ...) get their own quantity kinds.
-export type AssemblyQuantitySource = WallQuantitySource | MasonryQuantitySource
+export type AssemblyQuantitySource = WallQuantitySource | MasonryQuantitySource | CavityQuantitySource
 
 export interface AssemblyOpening {
   id: string
@@ -342,6 +362,219 @@ function resolveMasonryRawQty(layer: AssemblyLayerDef, geometry: MasonryWallGeom
 export function calculateMasonryWallCost(input: MasonryWallInput, layers: AssemblyLayerDef[]): MasonryWallCostResult {
   const geometry = calculateMasonryGeometry(input)
   const lines = layers.map(l => costLayer(l, resolveMasonryRawQty(l, geometry)))
+  const totalCost = +lines.reduce((s, l) => s + l.cost, 0).toFixed(2)
+  return { geometry, lines, totalCost }
+}
+
+// ── Cavity wall module — external cavity wall from DPC up to the wall plate. Two masonry
+// leaves either side of an adjustable cavity: an inner block leaf, and an outer leaf that's
+// either facing brick or block (block/block walls take a render or similar finish, priced by
+// the calculator screen). The cavity can be empty, partly filled with rigid board, or fully
+// filled with mineral wool. Each opening carries its own lintel type, which decides what gets
+// bought (one steel cavity lintel, two concrete lintels, or a concrete inner lintel plus a
+// steel angle carrying the brick). Everything below the DPC is a separate calculator.
+//
+// This module counts and prices what's drawn. It does not size lintels, design ties, or check
+// the wall against Building Regulations — those stay with the designer/engineer/manufacturer.
+// The few defaults here (2.5 ties per m², 900mm weep spacing, ties at 300mm down reveals) are
+// the usual site practice, so the quantities land where a bricklayer's take-off would.
+//
+// Reuses costLayer unchanged; only this geometry function and resolveCavityRawQty are
+// specific to the construction method.
+
+export type CavityLeafType = 'brick' | 'block'
+export type CavityInsulationType = 'none' | 'pir' | 'wool'
+export type LintelType = 'steel-cavity' | 'concrete-pair' | 'concrete-steel-angle'
+
+export interface CavityOpening extends AssemblyOpening {
+  lintelType: LintelType
+}
+
+export interface CavityWallInput {
+  lengthMm: number
+  heightMm: number            // DPC to wall plate
+  outerLeaf: CavityLeafType
+  innerLeafThicknessMm: number // 100 or 140
+  cavityWidthMm: number
+  insulation: CavityInsulationType
+  insulationThicknessMm?: number // rigid board only — a full fill always fills the cavity
+  openings: CavityOpening[]
+  blockLengthMm?: number  // coordinating size incl. one mortar joint; default 450
+  blockHeightMm?: number  // default 225
+  brickLengthMm?: number  // coordinating size incl. one mortar joint; default 225 (215 + 10)
+  brickHeightMm?: number  // default 75 (65 + 10)
+  lintelBearingMm?: number // bearing each side of an opening; default 150 — confirm on site
+}
+
+export const BRICK_OUTER_LEAF_MM = 102.5
+export const BLOCK_OUTER_LEAF_MM = 100
+export const TIES_PER_M2 = 2.5
+const STANDARD_TIE_LENGTHS_MM = [200, 225, 250, 275, 300]
+
+export interface CavityWallGeometry {
+  lengthM: number
+  grossAreaM2: number
+  openingAreaM2: number
+  netAreaM2: number
+  innerBlockCount: number
+  outerBlockCount: number
+  brickCount: number
+  outerLeafThicknessMm: number
+  insulationThicknessMm: number
+  retainedCavityMm: number
+  overallThicknessMm: number
+  tieCount: number
+  tieLengthMm: number
+  lintels: { openingId: string; lintelType: LintelType; spanMm: number }[]
+  steelCavityLintels: number
+  concreteLintels: number
+  steelAngles: number
+  trayCount: number
+  weepCount: number
+  closerLm: number
+  headClosureLm: number
+  wallPlateLm: number
+  strapCount: number
+  warnings: string[]
+}
+
+export function calculateCavityGeometry(input: CavityWallInput): CavityWallGeometry {
+  const { lengthMm: L, heightMm: H, openings } = input
+  const blockLengthMm = input.blockLengthMm ?? 450
+  const blockHeightMm = input.blockHeightMm ?? 225
+  const brickLengthMm = input.brickLengthMm ?? 225
+  const brickHeightMm = input.brickHeightMm ?? 75
+  const bearing = input.lintelBearingMm ?? 150
+  const cavity = input.cavityWidthMm
+  const warnings: string[] = []
+
+  if (L <= 0 || H <= 0) throw new Error('Wall length and height must be greater than zero.')
+  if (cavity <= 0) throw new Error('Cavity width must be greater than zero.')
+  if (input.innerLeafThicknessMm <= 0) throw new Error('Inner leaf thickness must be greater than zero.')
+  if (blockLengthMm <= 0 || blockHeightMm <= 0 || brickLengthMm <= 0 || brickHeightMm <= 0) {
+    throw new Error('Block and brick sizes must be greater than zero.')
+  }
+
+  const grossAreaM2 = toM(L) * toM(H)
+  const openingAreaM2 = openings.reduce((s, o) => s + toM(o.widthMm) * toM(o.heightMm), 0)
+  const netAreaM2 = Math.max(0, grossAreaM2 - openingAreaM2)
+
+  const blockAreaM2 = toM(blockLengthMm) * toM(blockHeightMm)
+  const brickAreaM2 = toM(brickLengthMm) * toM(brickHeightMm)
+  const innerBlockCount = netAreaM2 / blockAreaM2
+  const outerBlockCount = input.outerLeaf === 'block' ? netAreaM2 / blockAreaM2 : 0
+  const brickCount = input.outerLeaf === 'brick' ? netAreaM2 / brickAreaM2 : 0
+
+  const outerLeafThicknessMm = input.outerLeaf === 'brick' ? BRICK_OUTER_LEAF_MM : BLOCK_OUTER_LEAF_MM
+  let insulationThicknessMm = 0
+  if (input.insulation === 'wool') insulationThicknessMm = cavity
+  else if (input.insulation === 'pir') {
+    const wanted = input.insulationThicknessMm ?? 75
+    insulationThicknessMm = Math.min(wanted, cavity)
+    if (wanted > cavity) warnings.push(`The insulation board (${wanted}mm) is thicker than the cavity (${cavity}mm) — it's been limited to the cavity width.`)
+  }
+  const retainedCavityMm = cavity - insulationThicknessMm
+  if (input.insulation === 'pir' && retainedCavityMm < 50) {
+    warnings.push(`Partial fill leaves only ${retainedCavityMm}mm of clear cavity — usually at least 50mm is kept clear. Widen the cavity or use thinner board.`)
+  }
+
+  const sorted = [...openings].sort((a, b) => a.offsetMm - b.offsetMm)
+  const lintels: CavityWallGeometry['lintels'] = []
+  let steelCavityLintels = 0, concreteLintels = 0, steelAngles = 0
+  let trayCount = 0, weepCount = 0, closerLm = 0, revealTies = 0
+
+  for (let i = 0; i < sorted.length; i++) {
+    const o = sorted[i]
+    if (o.offsetMm < 0 || o.offsetMm + o.widthMm > L) {
+      warnings.push(`Opening "${o.id}" falls outside the wall — check its offset and width.`)
+    }
+    if (o.sillHeightMm + o.heightMm > H) {
+      warnings.push(`Opening "${o.id}" is taller than the wall above its sill — check sill height.`)
+    }
+    const next = sorted[i + 1]
+    if (next && o.offsetMm + o.widthMm > next.offsetMm) {
+      warnings.push(`Openings "${o.id}" and "${next.id}" overlap — check offsets and widths.`)
+    }
+
+    lintels.push({ openingId: o.id, lintelType: o.lintelType, spanMm: o.widthMm + bearing * 2 })
+    switch (o.lintelType) {
+      case 'steel-cavity':
+        steelCavityLintels += 1
+        break
+      case 'concrete-pair':
+        concreteLintels += 2 // one under each leaf
+        trayCount += 1
+        break
+      case 'concrete-steel-angle':
+        concreteLintels += 1 // inner leaf
+        steelAngles += 1     // carries the brick/block outer leaf
+        trayCount += 1
+        break
+    }
+
+    // A tray runs the length of the lintel; weep vents at 900mm centres, never fewer than two.
+    const trayLengthMm = o.widthMm + bearing * 2
+    weepCount += Math.max(2, Math.ceil(trayLengthMm / 900) + 1)
+
+    // Cavity closer down both reveals, and extra ties at 300mm centres up each reveal.
+    closerLm += (2 * o.heightMm) / 1000
+    revealTies += 2 * (Math.ceil(o.heightMm / 300) + 1)
+  }
+
+  const tieCount = Math.ceil(netAreaM2 * TIES_PER_M2 + revealTies)
+  // Ties are bedded 50mm into each leaf, so the tie is the cavity plus 100mm, rounded up to a
+  // stocked length.
+  const tieLengthMm = STANDARD_TIE_LENGTHS_MM.find(v => v >= cavity + 100) ?? cavity + 100
+
+  return {
+    lengthM: toM(L), grossAreaM2, openingAreaM2, netAreaM2,
+    innerBlockCount, outerBlockCount, brickCount,
+    outerLeafThicknessMm, insulationThicknessMm, retainedCavityMm,
+    overallThicknessMm: input.innerLeafThicknessMm + cavity + outerLeafThicknessMm,
+    tieCount, tieLengthMm,
+    lintels, steelCavityLintels, concreteLintels, steelAngles,
+    trayCount, weepCount, closerLm: +closerLm.toFixed(2),
+    headClosureLm: toM(L), wallPlateLm: toM(L),
+    strapCount: Math.ceil(L / 2000) + 1,
+    warnings,
+  }
+}
+
+function resolveCavityRawQty(layer: AssemblyLayerDef, g: CavityWallGeometry): number {
+  switch (layer.source) {
+    case 'netAreaM2':              return g.netAreaM2
+    case 'grossAreaM2':            return g.grossAreaM2
+    case 'lengthM':                return g.lengthM
+    case 'innerBlockCount':        return g.innerBlockCount
+    case 'outerBlockCount':        return g.outerBlockCount
+    case 'brickCount':             return g.brickCount
+    case 'tieCount':               return g.tieCount
+    case 'steelCavityLintelCount': return g.steelCavityLintels
+    case 'concreteLintelCount':    return g.concreteLintels
+    case 'steelAngleCount':        return g.steelAngles
+    case 'trayCount':              return g.trayCount
+    case 'weepCount':              return g.weepCount
+    case 'closerLm':               return g.closerLm
+    case 'headClosureLm':          return g.headClosureLm
+    case 'wallPlateLm':            return g.wallPlateLm
+    case 'strapCount':             return g.strapCount
+    case 'fixed':
+      if (layer.fixedQty == null) throw new Error(`Layer "${layer.name}" uses a fixed quantity but none was given.`)
+      return layer.fixedQty
+    default:
+      throw new Error(`Layer "${layer.name}" uses a source ("${layer.source}") the cavity wall module doesn't support.`)
+  }
+}
+
+export interface CavityWallCostResult {
+  geometry: CavityWallGeometry
+  lines: CostedLine[]
+  totalCost: number
+}
+
+export function calculateCavityWallCost(input: CavityWallInput, layers: AssemblyLayerDef[]): CavityWallCostResult {
+  const geometry = calculateCavityGeometry(input)
+  const lines = layers.map(l => costLayer(l, resolveCavityRawQty(l, geometry)))
   const totalCost = +lines.reduce((s, l) => s + l.cost, 0).toFixed(2)
   return { geometry, lines, totalCost }
 }
