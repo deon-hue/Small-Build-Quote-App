@@ -300,6 +300,30 @@ textarea{resize:vertical;min-height:56px}
   .desktop-only-notice .dn-text{font-size:14px;color:var(--muted);line-height:1.5}
 }
 
+/* ── Mobile Home launcher + back-to-Home button ── */
+/* Touch devices only, same rule as above. Narrow desktop windows keep the
+   normal dashboard and the hamburger sidebar. On touch, the launcher
+   replaces the hamburger, so it's hidden there. */
+.launcher{display:none}
+.launcher-hide{display:contents}
+.home-back{display:none}
+@media (hover:none) and (pointer:coarse){
+  .launcher{display:block;max-width:640px;margin:0 auto}
+  .launcher-hide{display:none}
+  .topbar-launcher{display:none}
+  .hamburger{display:none}
+  .home-back{display:inline-flex;align-items:center;font-size:15px;font-weight:500;color:var(--sky);text-decoration:none;padding:8px 14px 8px 0;margin-right:6px;min-height:44px}
+  .launcher-head{padding:6px 4px 16px}
+  .launcher-sub{font-size:13px;color:var(--muted)}
+  .launcher-title{font-size:28px;font-weight:600;line-height:1.2}
+  .launcher-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:20px 8px}
+  .launcher-item{display:flex;flex-direction:column;align-items:center;gap:7px;font:inherit;font-size:12px;line-height:1.2;text-align:center;color:var(--ink);text-decoration:none;background:none;border:none;padding:0;cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .launcher-ico{width:58px;height:58px;border-radius:15px;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid var(--border);color:var(--slate)}
+  .launcher-ico.main{background:rgba(74,144,164,0.14);border-color:transparent;color:var(--sky)}
+  .launcher-item:active .launcher-ico{transform:scale(0.95)}
+  .launcher-signout{display:flex;align-items:center;justify-content:center;gap:6px;margin:28px auto 0;font:inherit;font-size:14px;color:#c0392b;background:none;border:none;cursor:pointer;min-height:44px}
+}
+
 /* ═══════════════════════════════════════════════════════════
    CUSTOMER PORTAL
    ═══════════════════════════════════════════════════════════ */

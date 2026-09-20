@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useApp } from '@/contexts/AppContext'
 import type { UserPermissions } from '@/lib/types'
 import QuickNotesModal from '@/components/QuickNotesModal'
+import MobileLauncher from '@/components/MobileLauncher'
 
 // Routes that require a specific permission key
 const ROUTE_PERMISSIONS: Partial<Record<string, keyof UserPermissions>> = {
@@ -113,21 +114,31 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   )
 }
 
-function AppLayoutInner({ children, title, desktopOnly = false }: { children: React.ReactNode, title: string, desktopOnly?: boolean }) {
+// launcher: this is /dashboard — on touch devices show the icon Home screen instead of the
+// dashboard. homeBack: any other page — on touch devices show a "Home" back button.
+// Both are CSS-gated to touch hardware, so desktop and narrow desktop windows are unchanged.
+function AppLayoutInner({ children, title, desktopOnly = false, launcher = false, homeBack = false }: { children: React.ReactNode, title: string, desktopOnly?: boolean, launcher?: boolean, homeBack?: boolean }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [launcherNotes, setLauncherNotes] = useState(false)
 
   return (
     <div className="app">
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="main">
-        <div className="topbar">
+        <div className={`topbar${launcher ? ' topbar-launcher' : ''}`}>
           <button className="hamburger" onClick={() => setSidebarOpen(v => !v)} aria-label="Menu">
             <span /><span /><span />
           </button>
+          {homeBack && <Link href="/dashboard" className="home-back">‹ Home</Link>}
           <div className="topbar-title serif">{title}</div>
         </div>
         <div className="content">
-          {desktopOnly ? (
+          {launcher ? (
+            <>
+              <MobileLauncher onOpenNotes={() => setLauncherNotes(true)} />
+              <div className="launcher-hide">{children}</div>
+            </>
+          ) : desktopOnly ? (
             <>
               <div className="desktop-only-notice">
                 <div className="dn-title">{title} is desktop-only</div>
@@ -138,6 +149,7 @@ function AppLayoutInner({ children, title, desktopOnly = false }: { children: Re
           ) : children}
         </div>
       </div>
+      {launcherNotes && <QuickNotesModal onClose={() => setLauncherNotes(false)} />}
     </div>
   )
 }
@@ -222,7 +234,8 @@ function AppLayoutWrapper({ children }: { children: React.ReactNode }) {
   }
 
   const desktopOnly = pathname === '/takeoff' || pathname === '/back-office'
-  return <AppLayoutInner title={title} desktopOnly={desktopOnly}>{children}</AppLayoutInner>
+  const isHome = pathname === '/dashboard'
+  return <AppLayoutInner title={title} desktopOnly={desktopOnly} launcher={isHome} homeBack={!isHome}>{children}</AppLayoutInner>
 }
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
