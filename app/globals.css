@@ -285,6 +285,21 @@ textarea{resize:vertical;min-height:56px}
   .modal-close{padding:10px;font-size:26px}
 }
 
+/* ── Desktop-only areas (Take-off, Back Office) ── */
+/* Hidden on phones and tablets only. Deliberately touch-hardware only, not
+   width: a narrow or zoomed-in desktop browser window must never lose
+   access to these. .desktop-only-page is layout-neutral (display:contents)
+   on every non-touch device, so wrapping a page in it changes nothing. */
+.desktop-only-page{display:contents}
+.desktop-only-notice{display:none}
+@media (hover:none) and (pointer:coarse){
+  .desktop-only{display:none!important}
+  .desktop-only-page{display:none}
+  .desktop-only-notice{display:block;background:#fff;border:1px solid var(--border);border-radius:12px;padding:32px 20px;text-align:center}
+  .desktop-only-notice .dn-title{font-size:17px;font-weight:700;margin-bottom:6px}
+  .desktop-only-notice .dn-text{font-size:14px;color:var(--muted);line-height:1.5}
+}
+
 /* ═══════════════════════════════════════════════════════════
    CUSTOMER PORTAL
    ═══════════════════════════════════════════════════════════ */

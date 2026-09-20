@@ -157,6 +157,7 @@ export default function QuoteLandingWizard({ onSelect }: Props) {
         {CARDS.map(c => (
           <div
             key={c.mode}
+            className={c.mode === 'takeoff' ? 'desktop-only' : undefined}
             style={{
               ...card,
               borderColor: hovered === c.mode ? c.borderHover : '#e2e8f0',

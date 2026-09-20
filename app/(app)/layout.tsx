@@ -47,7 +47,7 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
 
   const can = (key: keyof UserPermissions) => isOwner || permissions[key]
 
-  const navItem = (href: string, icon: string, label: string) => {
+  const navItem = (href: string, icon: string, label: string, extraClass = '') => {
     const [hrefPath, hrefQuery] = href.split('?')
     const hrefParams = new URLSearchParams(hrefQuery || '')
     const hrefTab = hrefParams.get('tab')
@@ -58,7 +58,7 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
       active = !currentTab
     }
     return (
-      <Link href={href} className={`nav-item${active ? ' active' : ''}`} onClick={onClose}>
+      <Link href={href} className={`nav-item${active ? ' active' : ''}${extraClass ? ` ${extraClass}` : ''}`} onClick={onClose}>
         <span className="nav-icon">{icon}</span> {label}
       </Link>
     )
@@ -100,7 +100,7 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
           <div className="nav-section">Settings</div>
           {can('jobs')        && navItem('/documents',   '📥', 'Documents')}
           {can('settings')    && navItem('/settings',    '◇', 'Company Setup')}
-          {can('back_office') && navItem('/back-office', '⊞', 'Back Office')}
+          {can('back_office') && navItem('/back-office', '⊞', 'Back Office', 'desktop-only')}
           {can('team')        && navItem('/team',        '👥', 'Team')}
           <div className="nav-section">Account</div>
           <div className="nav-item" onClick={signOut} style={{ cursor: 'pointer' }}>
@@ -113,7 +113,7 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   )
 }
 
-function AppLayoutInner({ children, title }: { children: React.ReactNode, title: string }) {
+function AppLayoutInner({ children, title, desktopOnly = false }: { children: React.ReactNode, title: string, desktopOnly?: boolean }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
@@ -127,7 +127,15 @@ function AppLayoutInner({ children, title }: { children: React.ReactNode, title:
           <div className="topbar-title serif">{title}</div>
         </div>
         <div className="content">
-          {children}
+          {desktopOnly ? (
+            <>
+              <div className="desktop-only-notice">
+                <div className="dn-title">{title} is desktop-only</div>
+                <div className="dn-text">Open it on a computer to use it. It isn&apos;t available on phones and tablets.</div>
+              </div>
+              <div className="desktop-only-page">{children}</div>
+            </>
+          ) : children}
         </div>
       </div>
     </div>
@@ -213,7 +221,8 @@ function AppLayoutWrapper({ children }: { children: React.ReactNode }) {
     return null
   }
 
-  return <AppLayoutInner title={title}>{children}</AppLayoutInner>
+  const desktopOnly = pathname === '/takeoff' || pathname === '/back-office'
+  return <AppLayoutInner title={title} desktopOnly={desktopOnly}>{children}</AppLayoutInner>
 }
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
