@@ -344,22 +344,43 @@ textarea{resize:vertical;min-height:56px}
    job (expanded as a two-column grid, site actions first). The chevron, the
    "Delete job" label and all of this are touch-only — desktop keeps its
    always-visible button row exactly as before. */
-.job-card-toggle,.mob-label{display:none}
+/* Collapsed card on a phone: client name, "type · address", value + status, progress line.
+   Job colour is a slim left edge (no dot/badge). Job number, start date, week count, the
+   variations note and the quote note only show once the job is tapped open. */
+.job-card-toggle,.mob-label,.jm-type,.job-x-num{display:none}
 @media (hover:none) and (pointer:coarse){
-  .jobs-filter-row{flex-wrap:wrap}
-  .jobs-chips{display:flex!important;flex:0 0 100%;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+  .jobs-filter-row{flex-wrap:nowrap;gap:8px}
+  .jobs-chips{display:flex!important;flex:1 1 auto;min-width:0;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
   .jobs-chips::-webkit-scrollbar{display:none}
   .jobs-chips .btn-sm{flex:0 0 auto;border-radius:99px}
   .jobs-spacer{display:none}
-  .jobs-add{flex:0 0 100%}
-  .job-card-inner{padding:14px 16px}
-  .job-card-main{flex-wrap:wrap;cursor:pointer}
-  .job-name{white-space:normal}
+  .jobs-add{flex:0 0 auto;width:44px;height:44px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center}
+  .add-plus{font-size:24px;line-height:1;font-weight:400}
+  .add-label{display:none}
+  .job-card{position:relative}
+  .job-dot{position:absolute;left:0;top:0;bottom:0;width:5px;height:auto;border-radius:0}
+  .job-card-inner{padding:12px 14px 12px 18px}
+  .job-card-main{flex-wrap:wrap;gap:0;cursor:pointer}
+  .job-info{display:contents}
+  .job-code,.jn-type,.jn-sep,.jm-started{display:none}
+  .jm-type{display:inline}
+  .job-namerow{order:1;flex:0 0 100%;margin:0!important}
+  .job-name{flex:1;min-width:0;white-space:normal;font-size:15px}
+  .job-meta{order:2;flex:0 0 100%;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .job-value-col{order:3;flex:0 0 100%;margin-top:7px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;text-align:left!important}
+  .job-value-col .badge{order:2;margin-top:0!important;display:inline-block!important}
+  .job-value-col > div:nth-child(2){display:none;order:3;flex:0 0 100%}
+  .job-card.open .job-value-col > div:nth-child(2){display:block}
+  .progress{order:4;flex:0 0 100%;max-width:none!important;margin-top:8px!important}
+  .job-x-num,.job-progress-text{display:none;flex:0 0 100%;font-size:12px;color:var(--muted)}
+  .job-x-num{margin-top:8px}
+  .job-progress-text{margin-top:2px!important}
+  .job-card.open .job-x-num{display:block;order:5}
+  .job-card.open .job-progress-text{display:block;order:6}
+  .job-note{display:none}
+  .job-card.open .job-note{display:block}
   .job-card-toggle{display:inline-block;margin-left:auto;font-size:22px;line-height:1;color:var(--muted);transition:transform 0.15s}
   .job-card.open .job-card-toggle{transform:rotate(90deg)}
-  .job-value-col{flex:0 0 100%;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;text-align:left!important}
-  .job-value-col .badge{order:2;margin-top:0!important;display:inline-block!important}
-  .job-value-col > div:nth-child(2){order:3;flex:0 0 100%}
   .job-card-actions{display:none}
   .job-card.open .job-card-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .job-card-actions .btn-sm{width:100%;white-space:normal;line-height:1.25}

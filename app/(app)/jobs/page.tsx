@@ -118,7 +118,7 @@ export default function JobsPage() {
           ))}
         </div>
         <div className="jobs-spacer" style={{ flex: 1 }} />
-        <button className="btn btn-primary jobs-add" onClick={openNew}>+ Add Job</button>
+        <button className="btn btn-primary jobs-add" onClick={openNew} aria-label="Add job"><span className="add-plus">+</span><span className="add-label"> Add Job</span></button>
       </div>
 
       {/* Jobs list */}
@@ -142,16 +142,17 @@ export default function JobsPage() {
                   <div className="job-card-main" onClick={() => setOpenJobId(id => id === j.id ? null : j.id)}>
                     <div className="job-dot" style={{ background: col }} />
                     <div className="job-info">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                        <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'white', background: col, borderRadius: 4, padding: '2px 6px', letterSpacing: '0.5px' }}>{jobNum}</span>
-                        <div className="job-name">{j.type} — {j.client}</div>
+                      <div className="job-namerow" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                        <span className="mono job-code" style={{ fontSize: 10, fontWeight: 700, color: 'white', background: col, borderRadius: 4, padding: '2px 6px', letterSpacing: '0.5px' }}>{jobNum}</span>
+                        <div className="job-name"><span className="jn-type">{j.type}</span><span className="jn-sep"> — </span><span className="jn-client">{j.client}</span></div>
                         <span className="job-card-toggle" aria-hidden="true">›</span>
                       </div>
-                      <div className="job-meta">{j.address}{j.start ? ' · Started ' + new Date(j.start).toLocaleDateString('en-GB') : ''}</div>
+                      <div className="job-meta"><span className="jm-type">{j.type} · </span>{j.address}<span className="jm-started">{j.start ? ' · Started ' + new Date(j.start).toLocaleDateString('en-GB') : ''}</span></div>
                       <div className="progress" style={{ maxWidth: 240, marginTop: 6 }}>
                         <div className="progress-bar" style={{ width: pct + '%', background: col }} />
                       </div>
-                      <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
+                      <div className="job-x-num">{jobNum}{j.start ? ' · Started ' + new Date(j.start).toLocaleDateString('en-GB') : ''}</div>
+                      <div className="job-progress-text" style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
                         Week {j.done} of {j.weeks} · {pct}% complete
                       </div>
                     </div>
@@ -190,7 +191,7 @@ export default function JobsPage() {
                   </div>
                 </div>
                 {j.notes && (
-                  <div style={{ padding: '8px 20px 14px', fontSize: 12, color: 'var(--muted)', borderTop: '1px solid var(--border)' }}>
+                  <div className="job-note" style={{ padding: '8px 20px 14px', fontSize: 12, color: 'var(--muted)', borderTop: '1px solid var(--border)' }}>
                     {j.notes}
                   </div>
                 )}
