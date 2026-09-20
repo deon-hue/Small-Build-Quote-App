@@ -69,9 +69,9 @@ export type CavityQuantitySource =
 
 // Every AssemblyLayerDef/CostedLine carries a `source` from whichever module built it —
 // widen this union rather than the wall module's own WallQuantitySource as more modules
-// (roof, foundations, ...) get their own quantity kinds. (The solid block, timber frame and
-// dwarf wall modules declare theirs beside themselves, further down.)
-export type AssemblyQuantitySource = WallQuantitySource | MasonryQuantitySource | CavityQuantitySource | SolidBlockQuantitySource | TimberFrameQuantitySource | DwarfQuantitySource
+// (roof, foundations, ...) get their own quantity kinds. (The solid block, timber frame, dwarf and
+// sleeper wall modules declare theirs beside themselves, further down.)
+export type AssemblyQuantitySource = WallQuantitySource | MasonryQuantitySource | CavityQuantitySource | SolidBlockQuantitySource | TimberFrameQuantitySource | DwarfQuantitySource | SleeperQuantitySource
 
 export interface AssemblyOpening {
   id: string
@@ -1042,7 +1042,10 @@ export function calculateDwarfWallGeometry(input: DwarfWallInput): DwarfWallGeom
   const dpcAboveGround = input.dpcAboveGroundMm ?? 150
   const hardcore = input.hardcoreThicknessMm ?? 0
 
-  if (L <= 0 || H <= 0) throw new Error('Wall length and height must be greater than zero.')
+  // A height of 0 means nothing is built above the DPC — the wall stops at it. The sleeper wall
+  // calculator below uses that for a wall that only ever runs foundation-to-beam-bearing.
+  if (L <= 0) throw new Error('Wall length must be greater than zero.')
+  if (H < 0) throw new Error('Wall height cannot be negative.')
   if (W <= 0) throw new Error('Block width must be greater than zero.')
   if (isCavity && cavity <= 0) throw new Error('Cavity width must be greater than zero.')
   if (trenchWidth <= 0 || depth <= 0) throw new Error('Foundation width and depth must be greater than zero.')
@@ -1059,11 +1062,12 @@ export function calculateDwarfWallGeometry(input: DwarfWallInput): DwarfWallGeom
 
   // The wall above the DPC.
   const outerLeafMm = type === 'cavity-brick-block' ? BRICK_OUTER_LEAF_MM : BLOCK_OUTER_LEAF_MM
-  const solidBlock = type === 'solid-block'
+  const solidBlock = type === 'solid-block' && H > 0
     ? calculateSolidBlockGeometry({ lengthMm: L, heightMm: H, blockWidthMm: W, laid, openings: [] })
     : null
+  // A block wall laid flat is as thick as the block is high (215); on its side, as thick as it is wide.
   const thicknessMm = isCavity ? W + cavity + outerLeafMm
-    : type === 'solid-block' ? solidBlock!.thicknessMm
+    : type === 'solid-block' ? (laid === 'flat' ? 215 : W)
     : 215
   const aboveAreaM2 = toM(L) * toM(H)
 
@@ -1078,7 +1082,7 @@ export function calculateDwarfWallGeometry(input: DwarfWallInput): DwarfWallGeom
   let mortarM3 = 0
   if (type === 'cavity-brick-block') mortarM3 += aboveAreaM2 * (MORTAR_M3_PER_M2_BRICK_SKIN + MORTAR_M3_PER_M2_BLOCK)
   else if (type === 'cavity-block-block') mortarM3 += aboveAreaM2 * MORTAR_M3_PER_M2_BLOCK * 2
-  else if (type === 'solid-block') mortarM3 += solidBlock!.mortarAreaM2 * solidBlock!.mortarM3PerM2
+  else if (type === 'solid-block') mortarM3 += solidBlock ? solidBlock.mortarAreaM2 * solidBlock.mortarM3PerM2 : 0
   else mortarM3 += aboveAreaM2 * (MORTAR_M3_PER_M2_BRICK_SKIN * 2 + 0.01) // two skins and the collar joint
 
   // Cavity ties, insulation
@@ -1184,6 +1188,116 @@ export interface DwarfWallCostResult {
 export function calculateDwarfWallCost(input: DwarfWallInput, layers: AssemblyLayerDef[]): DwarfWallCostResult {
   const geometry = calculateDwarfWallGeometry(input)
   const lines = layers.map(l => costLayer(l, resolveDwarfRawQty(l, geometry)))
+  const totalCost = +lines.reduce((s, l) => s + l.cost, 0).toFixed(2)
+  return { geometry, lines, totalCost }
+}
+
+// ── Sleeper wall module — a dwarf wall that supports a block and beam floor. A single skin of
+// blockwork (a 100/140mm block on its side, or the block laid flat for a 215mm wall) that runs from
+// its foundation up to the underside of the beams, so it stays below the DPC and carries none of
+// its own: no wall above the DPC, no cavity, no wall plate or coping. The ground works and the
+// blockwork are the dwarf wall module's own (excavation, bulked spoil, strip or trench-fill
+// concrete, blocks, mortar) — this only adds what a sleeper wall needs on top:
+//   - ventilation through the wall, at a set spacing, so air can move across the underfloor void:
+//     a sleeved pipe (100mm) or a formed opening (215 × 65, no product). Each one takes its area out
+//     of the blockwork.
+// Counts and prices only — the foundation, the wall's height and how far it can span are the
+// designer's/engineer's, and how much ventilation the void needs is theirs too.
+
+export type SleeperVentType = 'pipe' | 'opening'
+
+export interface SleeperWallInput {
+  lengthMm: number
+  topAboveGroundMm: number        // underside of the beams, above the ground the wall stands on
+  laid?: BlockLaid                // default 'side' — a single-skin wall as thick as the block is wide
+  blockWidthMm?: number           // 100 or 140; default 100
+  foundationType?: DwarfFoundationType
+  trenchWidthMm?: number
+  foundationDepthMm?: number      // ground level down to the underside of the concrete
+  concreteThicknessMm?: number
+  concreteTopBelowGroundMm?: number
+  hardcoreThicknessMm?: number
+  ventSpacingMm?: number          // 0/absent = no ventilation holes
+  ventType?: SleeperVentType      // default 'pipe'
+}
+
+export interface SleeperWallGeometry extends DwarfWallGeometry {
+  wallHeightMm: number            // top of the concrete up to the underside of the beams
+  ventCount: number
+  ventHoleAreaM2: number          // total area the holes take out of the blockwork
+  ventOpeningAreaMm2: number      // total open area through the wall
+}
+
+export type SleeperQuantitySource = DwarfQuantitySource | 'ventCount'
+
+const VENT_PIPE_DIAMETER_MM = 100
+const VENT_OPENING_MM = { width: 215, height: 65 }
+
+export function calculateSleeperWallGeometry(input: SleeperWallInput): SleeperWallGeometry {
+  const { lengthMm: L, topAboveGroundMm: top } = input
+  if (top < 0) throw new Error('The top of the wall cannot be below ground level.')
+  const laid: BlockLaid = input.laid ?? 'side'
+  const W = input.blockWidthMm ?? 100
+
+  // The dwarf module already does the ground works and the blockwork from the concrete up to a
+  // "DPC" — here that level is simply the top of the wall, and nothing is built above it.
+  const dw = calculateDwarfWallGeometry({
+    lengthMm: L, heightMm: 0, type: 'solid-block', laid, blockWidthMm: W,
+    foundationType: input.foundationType, trenchWidthMm: input.trenchWidthMm,
+    foundationDepthMm: input.foundationDepthMm, concreteThicknessMm: input.concreteThicknessMm,
+    concreteTopBelowGroundMm: input.concreteTopBelowGroundMm, hardcoreThicknessMm: input.hardcoreThicknessMm,
+    dpcAboveGroundMm: top,
+  })
+  const warnings = [...dw.warnings]
+  const wallHeightMm = dw.foundationBlockHeightMm
+
+  // Ventilation holes
+  const spacing = input.ventSpacingMm ?? 0
+  const ventType = input.ventType ?? 'pipe'
+  const ventCount = spacing > 0 ? Math.max(1, Math.ceil(L / spacing)) : 0
+  const oneHoleMm2 = ventType === 'pipe'
+    ? Math.PI * (VENT_PIPE_DIAMETER_MM / 2) ** 2
+    : VENT_OPENING_MM.width * VENT_OPENING_MM.height
+  const ventHoleAreaM2 = ventCount * oneHoleMm2 / 1_000_000
+  const wallAreaM2 = toM(L) * toM(wallHeightMm)
+  const keep = wallAreaM2 > 0 ? Math.max(0, 1 - ventHoleAreaM2 / wallAreaM2) : 1
+  if (ventCount > 0) {
+    const oneHeight = ventType === 'pipe' ? VENT_PIPE_DIAMETER_MM : VENT_OPENING_MM.height
+    if (wallHeightMm < oneHeight + 100) {
+      warnings.push(`The wall is only ${wallHeightMm}mm high — too low for a ${oneHeight}mm ventilation hole with blockwork over it.`)
+    }
+    if (keep < 0.5) warnings.push('The ventilation holes take out over half the wall — check the spacing.')
+  }
+  if (laid === 'side' && wallHeightMm > 900) {
+    warnings.push(`A single-skin ${W}mm wall ${wallHeightMm}mm high is tall for its thickness — check it with the engineer, or lay the block flat.`)
+  }
+
+  return {
+    ...dw,
+    warnings,
+    wallHeightMm,
+    foundationBlockCount: dw.foundationBlockCount * keep,
+    mortarM3: +(dw.mortarM3 * keep).toFixed(4),
+    ventCount,
+    ventHoleAreaM2: +ventHoleAreaM2.toFixed(4),
+    ventOpeningAreaMm2: Math.round(ventCount * oneHoleMm2),
+  }
+}
+
+function resolveSleeperRawQty(layer: AssemblyLayerDef, g: SleeperWallGeometry): number {
+  if (layer.source === 'ventCount') return g.ventCount
+  return resolveDwarfRawQty(layer, g)
+}
+
+export interface SleeperWallCostResult {
+  geometry: SleeperWallGeometry
+  lines: CostedLine[]
+  totalCost: number
+}
+
+export function calculateSleeperWallCost(input: SleeperWallInput, layers: AssemblyLayerDef[]): SleeperWallCostResult {
+  const geometry = calculateSleeperWallGeometry(input)
+  const lines = layers.map(l => costLayer(l, resolveSleeperRawQty(l, geometry)))
   const totalCost = +lines.reduce((s, l) => s + l.cost, 0).toFixed(2)
   return { geometry, lines, totalCost }
 }

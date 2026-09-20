@@ -1325,6 +1325,19 @@ const dwarfWallSubphases: PhaseSubphase[] = [
       t('dw-inspection',       'Final inspection and snagging',            'nr',  1,  0,    0,    0,    0,    0,  'Final visual inspection, snagging and handover'),
     ],
   },
+  {
+    id: 'ew-sleeper-wall',
+    phase: 'External Walls',
+    name: 'Sleeper / Dwarf Wall (Block & Beam Floor)',
+    markupPct: 20,
+    ukWarning: 'Sleeper walls carry the beams of a block and beam floor and need the floor designer\'s/engineer\'s sign-off on foundation size, wall height and beam span. The underfloor void needs cross-ventilation.',
+    tasks: [
+      t('sl-excavate',         'Excavate foundation trench',               'lm', 10,  0,    0,    0,    0,    0,  'Excavate trench for sleeper wall foundation (rate per lm)'),
+      t('sl-concrete',         'Pour concrete foundation',                 'lm', 10,  0,    0,    0,    0,    0,  'C20/25 strip or trench-fill foundation (rate per lm)'),
+      t('sl-blockwork',        'Build single-skin blockwork',              'lm', 10,  0,    0,    0,    0,    0,  '100mm block on its side, or laid flat for a 215mm wall, up to underside of beams'),
+      t('sl-vents',            'Form ventilation holes',                   'nr',  4,  0,    0,    0,    0,    0,  'Ventilation sleeves or formed openings through the wall for cross-ventilation'),
+    ],
+  },
 ]
 
 // ── Master export ─────────────────────────────────────────────────────────────
