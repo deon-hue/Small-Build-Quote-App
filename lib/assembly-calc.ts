@@ -69,8 +69,9 @@ export type CavityQuantitySource =
 
 // Every AssemblyLayerDef/CostedLine carries a `source` from whichever module built it —
 // widen this union rather than the wall module's own WallQuantitySource as more modules
-// (roof, foundations, ...) get their own quantity kinds.
-export type AssemblyQuantitySource = WallQuantitySource | MasonryQuantitySource | CavityQuantitySource
+// (roof, foundations, ...) get their own quantity kinds. (SolidBlockQuantitySource, the solid
+// block wall module's own kinds, is declared beside that module further down.)
+export type AssemblyQuantitySource = WallQuantitySource | MasonryQuantitySource | CavityQuantitySource | SolidBlockQuantitySource
 
 export interface AssemblyOpening {
   id: string
@@ -575,6 +576,202 @@ export interface CavityWallCostResult {
 export function calculateCavityWallCost(input: CavityWallInput, layers: AssemblyLayerDef[]): CavityWallCostResult {
   const geometry = calculateCavityGeometry(input)
   const lines = layers.map(l => costLayer(l, resolveCavityRawQty(l, geometry)))
+  const totalCost = +lines.reduce((s, l) => s + l.cost, 0).toFixed(2)
+  return { geometry, lines, totalCost }
+}
+
+// ── Solid block wall module — an external single-leaf blockwork wall (no cavity). The block is
+// laid one of two ways, which decides the wall's thickness and the coursing:
+//   - on its side (the standard way): a 100mm block gives a 100mm wall, in 215mm courses;
+//   - flat: the block's 215mm height becomes the wall thickness, a 215mm wall built up in
+//     100mm courses (140mm blocks give 140mm courses).
+// Piers are optional — attached to the outside face, or to both — at a chosen spacing, with
+// blocks added course by course. Openings each get a lintel. Optional extras are movement
+// joints, bed-joint reinforcement, and coping with a cap on each pier.
+//
+// Counts and prices only: no wall-stability or pier design check — that stays with the
+// designer/engineer. Reuses costLayer unchanged.
+
+export type BlockLaid = 'side' | 'flat'
+
+export interface SolidBlockWallInput {
+  lengthMm: number
+  heightMm: number
+  blockWidthMm: number         // the block's thin dimension — 100 or 140
+  laid: BlockLaid
+  openings: AssemblyOpening[]
+  blockLengthMm?: number       // default 440
+  blockHeightMm?: number       // default 215
+  lintelBearingMm?: number     // bearing each side of an opening; default 150 — confirm on site
+  pierSpacingMm?: number       // maximum centres between piers; 0/absent = no piers
+  pierWidthMm?: number         // along the wall; default 440
+  pierProjectionMm?: number    // beyond the wall face; default 215
+  pierFaces?: 1 | 2            // 1 = outside face only, 2 = both faces; default 1
+  pierAtEnds?: boolean         // a pier at each end of the wall; default true
+  movementJointSpacingMm?: number // 0/absent = none
+  reinforceEveryNCourses?: number // 0/absent = none
+}
+
+export interface SolidBlockWallGeometry {
+  lengthM: number
+  grossAreaM2: number
+  openingAreaM2: number
+  netAreaM2: number
+  thicknessMm: number
+  courseHeightMm: number       // block height including one mortar joint
+  courseCount: number
+  wallBlockCount: number
+  pierCount: number
+  pierBlockCount: number
+  blockCount: number           // wall + piers
+  /** Wall area plus the equivalent face area of the pier blocks — what mortar is worked out over. */
+  mortarAreaM2: number
+  /** Mortar per m² of blockwork for this coursing — thicker/flatter walls use much more. */
+  mortarM3PerM2: number
+  externalFaceAreaM2: number   // wall face + pier faces on the outside
+  internalFaceAreaM2: number
+  lintels: { openingId: string; spanMm: number }[]
+  reinforcementLm: number
+  movementJointCount: number
+  movementJointLm: number
+  pierCapCount: number
+  warnings: string[]
+}
+
+export type SolidBlockQuantitySource =
+  | 'netAreaM2'
+  | 'grossAreaM2'
+  | 'lengthM'
+  | 'blockCount'
+  | 'lintelCount'
+  | 'mortarAreaM2'
+  | 'externalFaceAreaM2'
+  | 'internalFaceAreaM2'
+  | 'reinforcementLm'
+  | 'movementJointLm'
+  | 'pierCapCount'
+  | 'fixed'
+
+export function calculateSolidBlockGeometry(input: SolidBlockWallInput): SolidBlockWallGeometry {
+  const { lengthMm: L, heightMm: H, openings } = input
+  const blockLengthMm = input.blockLengthMm ?? 440
+  const blockHeightMm = input.blockHeightMm ?? 215
+  const W = input.blockWidthMm
+  const bearing = input.lintelBearingMm ?? 150
+  const warnings: string[] = []
+
+  if (L <= 0 || H <= 0) throw new Error('Wall length and height must be greater than zero.')
+  if (W <= 0 || blockLengthMm <= 0 || blockHeightMm <= 0) throw new Error('Block size must be greater than zero.')
+
+  // Which block dimension runs through the wall, and which stands vertical.
+  const thicknessMm = input.laid === 'flat' ? blockHeightMm : W
+  const verticalMm = input.laid === 'flat' ? W : blockHeightMm
+  const coordAlongMm = blockLengthMm + 10   // block length + one mortar joint
+  const courseHeightMm = verticalMm + 10
+
+  const grossAreaM2 = toM(L) * toM(H)
+  const openingAreaM2 = openings.reduce((s, o) => s + toM(o.widthMm) * toM(o.heightMm), 0)
+  const netAreaM2 = Math.max(0, grossAreaM2 - openingAreaM2)
+
+  const blockFaceM2 = toM(coordAlongMm) * toM(courseHeightMm)
+  const wallBlockCount = netAreaM2 / blockFaceM2
+  const courseCount = Math.ceil(H / courseHeightMm)
+
+  // Piers
+  const spacing = input.pierSpacingMm ?? 0
+  const pierWidth = input.pierWidthMm ?? 440
+  const projection = input.pierProjectionMm ?? 215
+  const faces = input.pierFaces ?? 1
+  const atEnds = input.pierAtEnds ?? true
+  let pierCount = 0
+  if (spacing > 0) {
+    pierCount = atEnds ? Math.ceil(L / spacing) + 1 : Math.max(0, Math.ceil(L / spacing) - 1)
+  }
+  // Extra plan area a pier adds beyond the wall, over the plan footprint of one block, rounded
+  // up to whole blocks per course.
+  const blockPlanMm2 = coordAlongMm * (thicknessMm + 10)
+  const blocksPerPierCourse = pierCount > 0 && projection > 0 && pierWidth > 0
+    ? Math.ceil((pierWidth * projection * faces) / blockPlanMm2)
+    : 0
+  const pierBlockCount = pierCount * courseCount * blocksPerPierCourse
+  const pierFaceAreaM2 = pierCount * toM(pierWidth + 2 * projection) * toM(H)
+
+  const sorted = [...openings].sort((a, b) => a.offsetMm - b.offsetMm)
+  const lintels: SolidBlockWallGeometry['lintels'] = []
+  for (let i = 0; i < sorted.length; i++) {
+    const o = sorted[i]
+    if (o.offsetMm < 0 || o.offsetMm + o.widthMm > L) {
+      warnings.push(`Opening "${o.id}" falls outside the wall — check its offset and width.`)
+    }
+    if (o.sillHeightMm + o.heightMm > H) {
+      warnings.push(`Opening "${o.id}" is taller than the wall above its sill — check sill height.`)
+    }
+    const next = sorted[i + 1]
+    if (next && o.offsetMm + o.widthMm > next.offsetMm) {
+      warnings.push(`Openings "${o.id}" and "${next.id}" overlap — check offsets and widths.`)
+    }
+    lintels.push({ openingId: o.id, spanMm: o.widthMm + bearing * 2 })
+  }
+
+  // Mortar: bed joints along every course plus the cross joints between blocks, scaled by 1.98
+  // to match the calibrated 0.013 m³/m² the masonry calculator uses for a 100mm block (it
+  // allows for waste, frogs and squeeze-out — see AssemblyMasonryWallDemo).
+  const tM = toM(thicknessMm), vM = toM(verticalMm)
+  const bed = (tM * 0.010) / toM(courseHeightMm)
+  const cross = (0.010 * tM * vM) / blockFaceM2
+  const mortarM3PerM2 = +((bed + cross) * 1.98).toFixed(5)
+
+  const reinforceN = input.reinforceEveryNCourses ?? 0
+  const reinforcementLm = reinforceN > 0 ? +(Math.floor(courseCount / reinforceN) * toM(L)).toFixed(2) : 0
+  const mjSpacing = input.movementJointSpacingMm ?? 0
+  const movementJointCount = mjSpacing > 0 ? Math.max(0, Math.floor((L - 1) / mjSpacing)) : 0
+
+  return {
+    lengthM: toM(L), grossAreaM2, openingAreaM2, netAreaM2,
+    thicknessMm, courseHeightMm, courseCount,
+    wallBlockCount, pierCount, pierBlockCount,
+    blockCount: wallBlockCount + pierBlockCount,
+    mortarAreaM2: netAreaM2 + pierBlockCount * blockFaceM2,
+    mortarM3PerM2,
+    externalFaceAreaM2: netAreaM2 + pierFaceAreaM2,
+    internalFaceAreaM2: netAreaM2 + (faces === 2 ? pierFaceAreaM2 : 0),
+    lintels, reinforcementLm,
+    movementJointCount, movementJointLm: +(movementJointCount * toM(H)).toFixed(2),
+    pierCapCount: pierCount,
+    warnings,
+  }
+}
+
+function resolveSolidBlockRawQty(layer: AssemblyLayerDef, g: SolidBlockWallGeometry): number {
+  switch (layer.source) {
+    case 'netAreaM2':          return g.netAreaM2
+    case 'grossAreaM2':        return g.grossAreaM2
+    case 'lengthM':            return g.lengthM
+    case 'blockCount':         return g.blockCount
+    case 'lintelCount':        return g.lintels.length
+    case 'mortarAreaM2':       return g.mortarAreaM2
+    case 'externalFaceAreaM2': return g.externalFaceAreaM2
+    case 'internalFaceAreaM2': return g.internalFaceAreaM2
+    case 'reinforcementLm':    return g.reinforcementLm
+    case 'movementJointLm':    return g.movementJointLm
+    case 'pierCapCount':       return g.pierCapCount
+    case 'fixed':
+      if (layer.fixedQty == null) throw new Error(`Layer "${layer.name}" uses a fixed quantity but none was given.`)
+      return layer.fixedQty
+    default:
+      throw new Error(`Layer "${layer.name}" uses a source ("${layer.source}") the solid block wall module doesn't support.`)
+  }
+}
+
+export interface SolidBlockWallCostResult {
+  geometry: SolidBlockWallGeometry
+  lines: CostedLine[]
+  totalCost: number
+}
+
+export function calculateSolidBlockWallCost(input: SolidBlockWallInput, layers: AssemblyLayerDef[]): SolidBlockWallCostResult {
+  const geometry = calculateSolidBlockGeometry(input)
+  const lines = layers.map(l => costLayer(l, resolveSolidBlockRawQty(l, geometry)))
   const totalCost = +lines.reduce((s, l) => s + l.cost, 0).toFixed(2)
   return { geometry, lines, totalCost }
 }

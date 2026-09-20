@@ -1184,6 +1184,17 @@ const externalWallsSubphases: PhaseSubphase[] = [
       t('ew-bk-dpc',          'DPC to base of wall',                   'lm', 20, 0, 0, 0, 0, 0, 'Polythene DPC at base of blockwork wall'),
     ],
   },
+  {
+    id: 'ew-blockwork-215',
+    phase: 'External Walls',
+    name: 'Concrete Blockwork 215mm (laid flat)',
+    markupPct: 20,
+    tasks: [
+      t('ew-bk215-labour',    'Blockwork labour',                      'm²', 20, 0, 0, 0, 0, 0, 'Labour – build 215mm concrete blockwork wall, 100mm block laid flat'),
+      t('ew-bk215-blocks',    'Dense concrete blocks 100mm (laid flat)', 'm²', 20, 0, 0, 0, 0, 0, '7.3N/mm² dense concrete block laid flat to give a 215mm wall, mortar-set'),
+      t('ew-bk215-dpc',       'DPC to base of wall',                   'lm', 20, 0, 0, 0, 0, 0, 'Polythene DPC 215mm wide at base of blockwork wall'),
+    ],
+  },
 ]
 
 // ── EXTERNAL WALL CONSTRUCTION ────────────────────────────────────────────────
