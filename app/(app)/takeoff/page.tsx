@@ -866,19 +866,25 @@ export default function TakeoffPage() {
     // Without this the wall screens ignored it and fell back to their own default (the first
     // build-up type for external walls, the first sub-phase for internal walls). Only an explicit
     // pick counts — the dropdown's un-touched default is what those screens already default to.
-    if (!taskSubphaseId && selectedTaskSubphaseId && el.type === 'line' &&
-        (item.phase === 'External Walls' || item.phase === 'Internal Walls & Partitions')) {
+    // Walls are lines; a roof is a shape, so any roof element qualifies — but a roof only carries a
+    // sub-phase that has a calculator (the others aren't used by the roof screen).
+    if (!taskSubphaseId && selectedTaskSubphaseId &&
+        ((el.type === 'line' && (item.phase === 'External Walls' || item.phase === 'Internal Walls & Partitions')) ||
+          item.phase === 'Roof')) {
       const bo = boSubPhases.find(sp => sp.id === selectedTaskSubphaseId)
       const boPhaseName = bo ? boPhases.find(p => p.id === bo.phase_id)?.name : undefined
-      if (bo && boPhaseName === item.phase) {
+      const hasCalculator = !!(bo?.canonical_id && BUILT_ASSEMBLY_CANON_IDS[bo.canonical_id])
+      if (bo && boPhaseName === item.phase && (item.phase !== 'Roof' || hasCalculator)) {
         item.taskSubphaseId = bo.id
         item.subPhase = bo.name
-        if (item.phase === 'External Walls') {
-          // Some sub-phases pair with one of the Build-up Types (e.g. Cavity Wall – Full Fill) —
-          // set that too, so the wall arrives as that type rather than the default one.
+        if (item.phase === 'External Walls' || item.phase === 'Roof') {
+          // Some sub-phases pair with one of the Build-up Types (e.g. Cavity Wall – Full Fill, Flat
+          // Roof) — set that too, so the item arrives as that type rather than the default one.
           const pairedMakeupId = Object.keys(WALL_MAKEUP_TO_SUBPHASE_CANONICAL)
             .find(k => WALL_MAKEUP_TO_SUBPHASE_CANONICAL[k] === bo.canonical_id)
-          const pairedMakeup = pairedMakeupId ? allWallMakeups.find(m => m.id === pairedMakeupId) : undefined
+          const pairedMakeup = pairedMakeupId
+            ? (item.phase === 'Roof' ? (PHASE_MAKEUPS['Roof'] ?? []) : allWallMakeups).find(m => m.id === pairedMakeupId)
+            : undefined
           if (pairedMakeup) { item.floorMakeupId = pairedMakeup.id; item.spec = pairedMakeup.clientDescription }
         }
       }
@@ -1173,7 +1179,8 @@ export default function TakeoffPage() {
   // Type, which is keyed by floorMakeupId (WALL_MAKEUPS/bo_wall_types) — a separate id space from
   // bo_sub_phases, bridged by WALL_MAKEUP_TO_SUBPHASE_CANONICAL.
   function resolveBuiltAssembly(it: TakeoffItem) {
-    if (it.phase === 'External Walls') {
+    // External walls and roofs both: a calculator picked by sub-phase, else the Build-up Type.
+    if (it.phase === 'External Walls' || it.phase === 'Roof') {
       // A calculator picked by Sub-Phase (dwarf wall, sleeper wall, ...) — those have no Build-up
       // Type of their own, so the sub-phase decides. Checked first; otherwise the Build-up Type.
       const boSub = it.taskSubphaseId ? boSubPhases.find(sp => sp.id === it.taskSubphaseId) : undefined
@@ -1190,6 +1197,19 @@ export default function TakeoffPage() {
       return bo?.canonical_id ? BUILT_ASSEMBLY_CANON_IDS[bo.canonical_id] : undefined
     }
     return undefined
+  }
+
+  // The box a drawn shape sits in, in mm: its longer side and its shorter. A roof calculator is sized
+  // from this (the joists span the shorter side); for a shape that isn't a rectangle it's the
+  // bounding box, so the calculator's own length and width are there to match it.
+  function drawnBoxMm(it: TakeoffItem): { lengthMm: number; widthMm: number } | undefined {
+    const el = it.elementId ? project.elements.find(e => e.id === it.elementId) : undefined
+    if (!el || el.points.length < 2) return undefined
+    const xs = el.points.map(p => p.x), ys = el.points.map(p => p.y)
+    const w = (Math.max(...xs) - Math.min(...xs)) * project.calibration.mpp * 1000
+    const h = (Math.max(...ys) - Math.min(...ys)) * project.calibration.mpp * 1000
+    const long = Math.max(w, h), short = Math.min(w, h)
+    return long > 0 ? { lengthMm: Math.round(long), widthMm: Math.round(short) } : undefined
   }
 
   // Opens the calculator window for an item — only if it has a calculator.
@@ -2333,22 +2353,29 @@ export default function TakeoffPage() {
     // Does the selected sub-phase (internal) or Build-up Type (external) have a built assembly
     // calculator? See resolveBuiltAssembly. When it does, it has final say on measurements/
     // materials/pricing, so all the old recipe-engine/build-up UI below is suppressed.
-    const builtAssembly = (isIntWall || isExtWall) ? resolveBuiltAssembly(item) : undefined
-    const hideForBuiltAssembly = (isIntWall || isExtWall) && !!builtAssembly
+    const isRoof = item.phase === 'Roof'
+    const builtAssembly = (isIntWall || isExtWall || isRoof) ? resolveBuiltAssembly(item) : undefined
+    const hideForBuiltAssembly = (isIntWall || isExtWall || isRoof) && !!builtAssembly
 
     // The calculator is too big for this ~300px panel, so the panel shows a summary card and the
-    // calculator itself opens full size in a window (see AssemblyWindow.tsx).
+    // calculator itself opens full size in a window (see AssemblyWindow.tsx). A wall is sized by its
+    // length; a roof by the box its drawn shape sits in.
+    const roofBox = isRoof ? drawnBoxMm(item) : undefined
     const renderAssemblyPanel = (savePatch: Partial<TakeoffItem>) => builtAssembly && (
       <AssemblyItemPanel
         name={item.name}
         lengthM={item.length ?? 0}
+        measureLabel={isRoof ? 'Size' : undefined}
+        measureText={isRoof ? (roofBox ? `${(roofBox.lengthMm / 1000).toFixed(2)} × ${(roofBox.widthMm / 1000).toFixed(2)} m` : 'Not drawn') : undefined}
         saved={item.assemblyResult}
         open={assemblyWindowItemId === item.id}
         onOpen={() => setAssemblyWindowItemId(item.id)}
         onClose={() => setAssemblyWindowItemId(null)}
       >
         {builtAssembly.render({
-          externalLengthMm: (item.length ?? 0) > 0 ? Math.round((item.length ?? 0) * 1000) : undefined,
+          externalLengthMm: isRoof ? roofBox?.lengthMm : ((item.length ?? 0) > 0 ? Math.round((item.length ?? 0) * 1000) : undefined),
+          externalWidthMm: isRoof ? roofBox?.widthMm : undefined,
+          variant: item.floorMakeupId === 'cold_flat_roof' ? 'cold' : undefined,
           labourTrades,
           onSave: result => {
             saveItemEdit({
@@ -3007,17 +3034,53 @@ export default function TakeoffPage() {
           {isBuildup && !isExtWall && !isPlaster && !isFoundationLine && (() => {
             const _bm = _phaseMakeups ?? FLOOR_MAKEUPS
             const _bMakeup = _bm.find(m => m.id === item.floorMakeupId)
+
+            // Roofs: calculator sub-phases that have no Build-Up Type of their own get a "Calculators"
+            // group here, exactly as for external walls (the flat roof pairs with the two build-up
+            // types, so it isn't listed separately). Nothing to list until a second roof calculator exists.
+            const _pairedCanonicals = new Set(Object.values(WALL_MAKEUP_TO_SUBPHASE_CANONICAL))
+            const _calcSubs = isRoof ? getAllSubphasesForPhase('Roof').filter(sp => {
+              const c = boSubPhases.find(b => b.id === sp.id)?.canonical_id
+              return !!c && !!BUILT_ASSEMBLY_CANON_IDS[c] && !_pairedCanonicals.has(c)
+            }) : []
+            const _calcSubSelected = _calcSubs.find(s => s.id === item.taskSubphaseId)
+
             return (
               <div style={{ marginBottom: 10 }}>
                 <label style={labelStyle}>Build-Up Type</label>
-                <select style={{ ...inputStyle, color: accent }} value={item.floorMakeupId ?? ''}
+                <select style={{ ...inputStyle, color: accent }}
+                  value={_calcSubSelected ? `sub:${_calcSubSelected.id}` : (item.floorMakeupId ?? '')}
                   onChange={e => {
-                    const nm = _bm.find(m => m.id === e.target.value)
-                    saveItemEdit({ ...item, floorMakeupId: e.target.value, spec: nm?.clientDescription ?? item.spec, floorLayerToggles: {}, floorLayerThicknesses: {} })
+                    const v = e.target.value
+                    if (v.startsWith('sub:')) {
+                      const sub = _calcSubs.find(s => s.id === v.slice(4))
+                      saveItemEdit({
+                        ...item, taskSubphaseId: v.slice(4), subPhase: sub?.name,
+                        floorLayerToggles: {}, floorLayerThicknesses: {}, assemblyResult: undefined,
+                      })
+                      return
+                    }
+                    const nm = _bm.find(m => m.id === v)
+                    saveItemEdit({
+                      ...item, floorMakeupId: v, spec: nm?.clientDescription ?? item.spec, floorLayerToggles: {}, floorLayerThicknesses: {},
+                      // Back to a Build-Up Type: drop any calculator picked by sub-phase, and a saved
+                      // result from the calculator that was there (roofs only — as for external walls).
+                      ...(isRoof && { taskSubphaseId: undefined, subPhase: undefined, assemblyResult: undefined }),
+                    })
                   }}>
                   {_bm.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  {_calcSubs.length > 0 && (
+                    <optgroup label="── Calculators">
+                      {_calcSubs.map(sp => <option key={sp.id} value={`sub:${sp.id}`}>{sp.name}</option>)}
+                    </optgroup>
+                  )}
                 </select>
-                {_bMakeup && (
+                {isRoof && builtAssembly && (
+                  <div style={{ marginTop: 10 }}>
+                    {renderAssemblyPanel({})}
+                  </div>
+                )}
+                {!builtAssembly && _bMakeup && (
                   <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 3, fontStyle: 'italic' }}>
                     {_bMakeup.layers.length} layer{_bMakeup.layers.length !== 1 ? 's' : ''}
                     {_bMakeup.labourHrsPerM2 > 0 && ` · ~${fmt2(buildArea * _bMakeup.labourHrsPerM2)} hrs labour`}
@@ -3904,7 +3967,7 @@ export default function TakeoffPage() {
                     {item.qty} {item.unit}
                   </span>
                   {item.floorMakeupId
-                    ? <span style={{ color: '#f39c12' }}> · {item.taskSubphaseId && item.subPhase ? item.subPhase : (FLOOR_MAKEUPS.find(m => m.id === item.floorMakeupId)?.name ?? 'Floor')}</span>
+                    ? <span style={{ color: '#f39c12' }}> · {item.taskSubphaseId && item.subPhase ? item.subPhase : ((PHASE_MAKEUPS[item.phase] ?? FLOOR_MAKEUPS).find(m => m.id === item.floorMakeupId)?.name ?? FLOOR_MAKEUPS.find(m => m.id === item.floorMakeupId)?.name ?? 'Floor')}</span>
                     : item.spec ? ` · ${item.spec}` : ''}
                   {item.perimeter != null && (
                     <span style={{ color: '#6a8a6a' }}>, {fmt2(item.perimeter)}m perim</span>

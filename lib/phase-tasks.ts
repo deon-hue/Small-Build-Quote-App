@@ -206,6 +206,20 @@ const structuralFrameSubphases: PhaseSubphase[] = [
 
 const roofSubphases: PhaseSubphase[] = [
   {
+    id: 'roof-flat',
+    phase: 'Roof',
+    name: 'Flat Roof (complete)',
+    markupPct: 20,
+    ukWarning: 'Flat roofs need adequate falls and, for cold roofs, a ventilated void. The joists (solid timber or Posi-joists), the trimming round rooflights and the rooflight kerbs need a competent design. Check the U-value of the whole build-up (Part L).',
+    tasks: [
+      t('rf-structure',      'Joists, wall plates, trimmers and deck', 'm²', 15, 0, 0, 0, 0, 0, 'Solid timber or Posi-joists at centres, trimmed round rooflights, firrings for the falls, deck'),
+      t('rf-insulation',     'Insulation and vapour control layer',    'm²', 15, 0, 0, 0, 0, 0, 'Warm roof PIR above the deck, or cold roof insulation between the joists'),
+      t('rf-covering',       'Covering, upstands and edges',           'm²', 15, 0, 0, 0, 0, 0, 'EPDM, GRP or single-ply, upstands, drip trim and flashing to the house wall'),
+      t('rf-rooflights',     'Lanterns, roof windows and hatches',     'nr',  2, 0, 0, 0, 0, 0, 'Supply and fit, with kerb and membrane dressed up the kerb'),
+      t('rf-drainage',       'Gutter and downpipes',                   'lm',  5, 0, 0, 0, 0, 0, 'uPVC half-round gutter and downpipe run'),
+    ],
+  },
+  {
     id: 'roof-structure',
     phase: 'Roof',
     name: 'Roof Structure',

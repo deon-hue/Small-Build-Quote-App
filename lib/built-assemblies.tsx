@@ -18,10 +18,11 @@ import AssemblySolidBlockWallDemo from '@/components/AssemblySolidBlockWallDemo'
 import AssemblyTimberFrameWallDemo from '@/components/AssemblyTimberFrameWallDemo'
 import AssemblyDwarfWallDemo from '@/components/AssemblyDwarfWallDemo'
 import AssemblySleeperWallDemo from '@/components/AssemblySleeperWallDemo'
+import AssemblyFlatRoofDemo from '@/components/AssemblyFlatRoofDemo'
 import type { CostedLine } from '@/lib/assembly-calc'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 
-export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall'
+export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof'
 
 /** Fired when a calculator's "Save & Price" is used from inside a real quote — absent in
  * the Back Office preview context, which has no quote to save into. */
@@ -33,6 +34,11 @@ export interface AssemblyRenderOpts {
   /** Take-off's traced line length (mm) — live-syncs into the calculator's own length field.
    * Absent everywhere else (Back Office preview, QuoteWorkspace), which have no drawn line. */
   externalLengthMm?: number
+  /** A roof's drawn width (the shorter side) — the joists span it. Only roofs use it; walls have no width. */
+  externalWidthMm?: number
+  /** Which variant the calculator opens on, where it has more than one — the flat roof's warm/cold,
+   * taken from the Take-off Build-Up Type. Ignored by calculators that have no variants. */
+  variant?: string
 }
 
 export const BUILT_ASSEMBLY_CANON_IDS: Record<string, {
@@ -47,6 +53,7 @@ export const BUILT_ASSEMBLY_CANON_IDS: Record<string, {
   'ew-garden-room-timber': { icon: 'timber-frame-wall', render: opts => <AssemblyTimberFrameWallDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'ew-dwarf-wall': { icon: 'dwarf-wall', render: opts => <AssemblyDwarfWallDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'ew-sleeper-wall': { icon: 'sleeper-wall', render: opts => <AssemblySleeperWallDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
+  'roof-flat': { icon: 'flat-roof', render: opts => <AssemblyFlatRoofDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} externalWidthMm={opts?.externalWidthMm} buildUpDefault={opts?.variant === 'cold' ? 'cold' : 'warm'} /> },
   'ew-cav-partial': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="pir" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'ew-cav-full': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="wool" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
 }
@@ -89,6 +96,20 @@ export function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; siz
           <line x1="7" y1="9" x2="7" y2="15" stroke="#b45309" strokeWidth="1.4" />
           <line x1="17" y1="9" x2="17" y2="15" stroke="#b45309" strokeWidth="1.4" />
           <line x1="12" y1="15" x2="12" y2="21" stroke="#b45309" strokeWidth="1.4" />
+        </svg>
+      )
+    case 'flat-roof':
+      // A roof in section: the covering line on top, the deck and joists beneath it, and a lantern
+      // standing on a kerb — blue, so a roof reads apart from the walls at a glance.
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <line x1="1.5" y1="9" x2="22.5" y2="9" stroke="#0369a1" strokeWidth="1.8" />
+          <rect x="1.5" y="9" width="21" height="2.5" stroke="#0369a1" strokeWidth="1.3" />
+          {[4.5, 9, 13.5, 18.5].map(x => (
+            <rect key={x} x={x} y="11.5" width="2" height="8" stroke="#0369a1" strokeWidth="1.3" />
+          ))}
+          <path d="M8 9 L10 4.5 L14 4.5 L16 9" stroke="#0369a1" strokeWidth="1.4" fill="none" />
+          <line x1="12" y1="4.5" x2="12" y2="9" stroke="#0369a1" strokeWidth="1" />
         </svg>
       )
     case 'sleeper-wall':

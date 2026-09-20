@@ -12,6 +12,7 @@ export const BUILT_ASSEMBLY_CANONICAL_IDS = new Set<string>([
   'ew-garden-room-timber',
   'ew-dwarf-wall',
   'ew-sleeper-wall',
+  'roof-flat',
   'ew-cav-partial',
   'ew-cav-full',
 ])
@@ -23,6 +24,10 @@ export const BUILT_ASSEMBLY_CANONICAL_IDS = new Set<string>([
 // Sub-Phase picker there is already keyed by the real bo_sub_phases id). Exists only so
 // Take-off can tell whether a given build-up type also has a real assembly calculator.
 export const WALL_MAKEUP_TO_SUBPHASE_CANONICAL: Record<string, string> = {
+  // Roof build-up types (ROOF_MAKEUPS) pair with the flat roof calculator the same way. Warm is listed
+  // first so that picking the "Flat Roof" sub-phase before drawing arrives as the warm roof.
+  warm_flat_roof: 'roof-flat',
+  cold_flat_roof: 'roof-flat',
   cav_wall_partial: 'ew-cav-partial',
   cav_wall_full: 'ew-cav-full',
   solid_brick_225: 'ew-solid-brick',

@@ -84,9 +84,12 @@ pattern, and **is used from Take-off in the same way** — do not invent a diffe
   resolve through the sub-phase picker.
 - A Sub-Phase picked in the panel *before* drawing carries onto the drawn wall (the queued-element effect in
   `page.tsx`); a calculator sub-phase hides the empty Task dropdown and shows a note instead.
-- A calculator for a phase other than External/Internal Walls (floors, roof, plastering, ...) needs
-  `resolveBuiltAssembly`, the properties panel, and that carry-over extended to that phase — do it the same
-  way, don't fork a new pattern.
+- Phases wired so far: External Walls, Internal Walls and **Roof** (the flat roof calculator, `roof-flat`,
+  pairs with the `cold_flat_roof`/`warm_flat_roof` Build-Up Types; a roof is sized from the bounding box of
+  the drawn shape via `drawnBoxMm`, passed as `externalLengthMm` + `externalWidthMm`, and the panel card
+  shows "Size" not "Length"). A calculator for any other phase (floors, plastering, ...) needs
+  `resolveBuiltAssembly`, the properties panel's Build-Up Type/sub-phase picker, the `hideForBuiltAssembly`
+  flag, and the carry-over extended to that phase — do it the same way, don't fork a new pattern.
 - Take-off needs a login, so it can't be driven in the preview browser: test the screen on a temporary
   `/get-quote/<name>-test` page (public per `middleware.ts`), delete it before committing, and ask the user to
   check the Take-off flow live.

@@ -69,9 +69,9 @@ export type CavityQuantitySource =
 
 // Every AssemblyLayerDef/CostedLine carries a `source` from whichever module built it —
 // widen this union rather than the wall module's own WallQuantitySource as more modules
-// (roof, foundations, ...) get their own quantity kinds. (The solid block, timber frame, dwarf and
-// sleeper wall modules declare theirs beside themselves, further down.)
-export type AssemblyQuantitySource = WallQuantitySource | MasonryQuantitySource | CavityQuantitySource | SolidBlockQuantitySource | TimberFrameQuantitySource | DwarfQuantitySource | SleeperQuantitySource
+// (roof, foundations, ...) get their own quantity kinds. (The solid block, timber frame, dwarf, sleeper and
+// flat roof modules declare theirs beside themselves, further down.)
+export type AssemblyQuantitySource = WallQuantitySource | MasonryQuantitySource | CavityQuantitySource | SolidBlockQuantitySource | TimberFrameQuantitySource | DwarfQuantitySource | SleeperQuantitySource | FlatRoofQuantitySource
 
 export interface AssemblyOpening {
   id: string
@@ -1298,6 +1298,241 @@ export interface SleeperWallCostResult {
 export function calculateSleeperWallCost(input: SleeperWallInput, layers: AssemblyLayerDef[]): SleeperWallCostResult {
   const geometry = calculateSleeperWallGeometry(input)
   const lines = layers.map(l => costLayer(l, resolveSleeperRawQty(l, geometry)))
+  const totalCost = +lines.reduce((s, l) => s + l.cost, 0).toFixed(2)
+  return { geometry, lines, totalCost }
+}
+
+// ── Flat roof module — a flat roof from its joists to its covering, with rooflights in it. Joists
+// span the roof's width and are spaced along its length; the roof falls along the joists (to the low
+// edge, where the gutter is) on firrings; one edge is usually the abutment against a house wall.
+//   - Rooflights (lanterns, roof windows, domes, access hatches) are openings in the plan. Each one
+//     takes its area out of the deck, insulation and membrane; cuts the joists that run through it
+//     short; needs the timber round it trimmed (headers and side trimmers, doubled or tripled up); and
+//     sits on a kerb that the membrane is dressed up.
+//   - Edges: the abutment gets an upstand and flashing; the rest (the free edges) gets trim or fascia;
+//     the gutter edge gets a gutter.
+// The joist section, warm or cold build-up, covering and rates are chosen in the calculator screen —
+// this module only works out the lengths, counts and areas. Counts and prices only: the joist size
+// for a span, the trimmers and the kerbs are the designer's/engineer's to confirm. Cripple/trimmer
+// lengths are approximate, the same Stage-1 simplification as the framed-wall module. Reuses costLayer.
+
+export type RoofOpeningKind = 'lantern' | 'roof-window' | 'dome' | 'hatch'
+export type FlatRoofBuildUp = 'warm' | 'cold'
+
+export interface FlatRoofOpening {
+  id: string
+  kind: RoofOpeningKind
+  widthMm: number         // along the roof's length — across the joists
+  depthMm: number         // along the joists' span
+  offsetMm: number        // from the left end of the roof to the opening's left edge
+  offsetSpanMm: number    // from the high edge of the roof to the opening's near edge
+  trimmers?: 2 | 3        // members in each header and side trimmer — doubled or tripled up; default 2
+  kerbHeightMm?: number   // default 200
+}
+
+export interface FlatRoofInput {
+  lengthMm: number          // along the wall plates — joists are spaced along this
+  widthMm: number           // the joists' span
+  joistCentresMm: number
+  buildUp?: FlatRoofBuildUp // default 'warm'
+  fallRatio?: number        // 80 = a fall of 1 in 80; default 80
+  abutmentLengthMm?: number // edge against a wall — gets an upstand and flashing; default 0
+  gutterLengthMm?: number   // default 0
+  ledger?: boolean          // the high end hangs off a ledger on the house wall instead of a wall plate
+  upstandHeightMm?: number  // membrane turned up at the abutment; default 150
+  openings: FlatRoofOpening[]
+}
+
+export interface FlatRoofGeometry {
+  lengthM: number
+  widthM: number
+  grossAreaM2: number
+  openingAreaM2: number
+  netAreaM2: number
+  joistCount: number        // positions along the roof, before any are cut short
+  joistLm: number           // joists at their real lengths, after the rooflights cut some short
+  trimLm: number            // headers and side trimmers round every rooflight
+  wallPlateLm: number
+  ledgerLm: number
+  hangerCount: number
+  strutRows: number
+  strutCount: number
+  firringLm: number
+  fallMm: number            // the fall across the span — the depth of the firrings at the high end
+  kerbLm: number
+  kerbFaceAreaM2: number
+  membraneAreaM2: number    // net area, plus the upstand at the abutment and the kerb faces
+  perimeterM: number
+  abutmentLm: number
+  edgeTrimLm: number        // the free edges — everything that isn't the abutment
+  gutterLm: number
+  lanternAreaM2: number
+  roofWindowAreaM2: number
+  domeAreaM2: number
+  hatchCount: number
+  warnings: string[]
+}
+
+export type FlatRoofQuantitySource =
+  | 'netAreaM2'
+  | 'grossAreaM2'
+  | 'lengthM'
+  | 'joistLm'
+  | 'trimLm'
+  | 'wallPlateLm'
+  | 'ledgerLm'
+  | 'hangerCount'
+  | 'strutCount'
+  | 'firringLm'
+  | 'kerbLm'
+  | 'kerbFaceAreaM2'
+  | 'membraneAreaM2'
+  | 'abutmentLm'
+  | 'edgeTrimLm'
+  | 'gutterLm'
+  | 'lanternAreaM2'
+  | 'roofWindowAreaM2'
+  | 'domeAreaM2'
+  | 'hatchCount'
+  | 'fixed'
+
+const STRUT_SPACING_MM = 2500        // strutting rows at no more than this apart along the span
+const TRIMMER_HANGERS_PER_OPENING = 4 // a hanger at each end of the two headers
+
+export function calculateFlatRoofGeometry(input: FlatRoofInput): FlatRoofGeometry {
+  const { lengthMm: L, widthMm: S, joistCentresMm: C, openings } = input
+  const fallRatio = input.fallRatio ?? 80
+  const upstand = input.upstandHeightMm ?? 150
+  const warnings: string[] = []
+
+  if (L <= 0 || S <= 0) throw new Error('Roof length and width must be greater than zero.')
+  if (C <= 0) throw new Error('Joist centres must be greater than zero.')
+  if (fallRatio <= 0) throw new Error('The fall must be greater than zero.')
+
+  const grossAreaM2 = toM(L) * toM(S)
+  const openingAreaM2 = openings.reduce((s, o) => s + toM(o.widthMm) * toM(o.depthMm), 0)
+  const netAreaM2 = Math.max(0, grossAreaM2 - openingAreaM2)
+
+  // Openings that don't fit, or overlap each other.
+  for (let i = 0; i < openings.length; i++) {
+    const o = openings[i]
+    if (o.widthMm <= 0 || o.depthMm <= 0) throw new Error('Every rooflight needs a width and a length greater than zero.')
+    if (o.offsetMm < 0 || o.offsetMm + o.widthMm > L || o.offsetSpanMm < 0 || o.offsetSpanMm + o.depthMm > S) {
+      warnings.push(`Rooflight ${i + 1} falls outside the roof — check its position and size.`)
+    }
+    for (let j = i + 1; j < openings.length; j++) {
+      const p = openings[j]
+      const overlapX = o.offsetMm < p.offsetMm + p.widthMm && p.offsetMm < o.offsetMm + o.widthMm
+      const overlapY = o.offsetSpanMm < p.offsetSpanMm + p.depthMm && p.offsetSpanMm < o.offsetSpanMm + o.depthMm
+      if (overlapX && overlapY) warnings.push(`Rooflights ${i + 1} and ${j + 1} overlap — check their positions.`)
+    }
+  }
+
+  // Joists: one at every position along the roof; where a rooflight sits across a joist (strictly
+  // inside its width — a joist on the opening's edge is its side trimmer instead) that joist is
+  // cut short by the rooflight's length.
+  const positions = studPositionsMm(L, C)
+  let joistMm = 0
+  for (const p of positions) {
+    let cut = 0
+    for (const o of openings) {
+      if (p > o.offsetMm && p < o.offsetMm + o.widthMm) cut += o.depthMm
+    }
+    joistMm += Math.max(0, S - cut)
+  }
+
+  // Trimming round each rooflight: two headers across the joists (each `trimmers` members, spanning
+  // to the joists either side, so the opening's width plus a joist spacing), and a side trimmer each
+  // side — the joist already there plus (trimmers - 1) more, over the opening's length and a header's
+  // seating either end. Doubled is 2, tripled 3.
+  let trimMm = 0, kerbMm = 0, kerbFaceMm2 = 0
+  let lanternMm2 = 0, windowMm2 = 0, domeMm2 = 0, hatchCount = 0
+  for (const o of openings) {
+    const members = o.trimmers ?? 2
+    trimMm += 2 * members * (o.widthMm + C) + 2 * (members - 1) * (o.depthMm + 200)
+    const perimeterMm = 2 * (o.widthMm + o.depthMm)
+    kerbMm += perimeterMm
+    kerbFaceMm2 += perimeterMm * (o.kerbHeightMm ?? 200)
+    const area = o.widthMm * o.depthMm
+    if (o.kind === 'lantern') lanternMm2 += area
+    else if (o.kind === 'roof-window') windowMm2 += area
+    else if (o.kind === 'dome') domeMm2 += area
+    else hatchCount += 1
+  }
+
+  // Strutting between the joists at no more than 2.5m along the span.
+  const strutRows = S > STRUT_SPACING_MM ? Math.ceil(S / STRUT_SPACING_MM) - 1 : 0
+  const strutCount = strutRows * Math.max(0, positions.length - 1)
+
+  const abutmentLm = toM(Math.min(input.abutmentLengthMm ?? 0, 2 * (L + S)))
+  if ((input.abutmentLengthMm ?? 0) > 2 * (L + S)) warnings.push('The abutment is longer than the roof\'s whole edge — check its length.')
+  const perimeterM = toM(2 * (L + S))
+  const kerbFaceAreaM2 = kerbFaceMm2 / 1_000_000
+
+  return {
+    lengthM: toM(L), widthM: toM(S), grossAreaM2, openingAreaM2, netAreaM2,
+    joistCount: positions.length,
+    joistLm: +toM(joistMm).toFixed(3),
+    trimLm: +toM(trimMm).toFixed(3),
+    wallPlateLm: input.ledger ? toM(L) : toM(L) * 2,
+    ledgerLm: input.ledger ? toM(L) : 0,
+    hangerCount: (input.ledger ? positions.length : 0) + TRIMMER_HANGERS_PER_OPENING * openings.length,
+    strutRows, strutCount,
+    firringLm: +toM(joistMm).toFixed(3),
+    fallMm: +(S / fallRatio).toFixed(1),
+    kerbLm: +toM(kerbMm).toFixed(3),
+    kerbFaceAreaM2: +kerbFaceAreaM2.toFixed(4),
+    membraneAreaM2: +(netAreaM2 + abutmentLm * toM(upstand) + kerbFaceAreaM2).toFixed(3),
+    perimeterM, abutmentLm,
+    edgeTrimLm: +Math.max(0, perimeterM - abutmentLm).toFixed(3),
+    gutterLm: toM(input.gutterLengthMm ?? 0),
+    lanternAreaM2: +(lanternMm2 / 1_000_000).toFixed(4),
+    roofWindowAreaM2: +(windowMm2 / 1_000_000).toFixed(4),
+    domeAreaM2: +(domeMm2 / 1_000_000).toFixed(4),
+    hatchCount,
+    warnings,
+  }
+}
+
+function resolveFlatRoofRawQty(layer: AssemblyLayerDef, g: FlatRoofGeometry): number {
+  switch (layer.source) {
+    case 'netAreaM2':        return g.netAreaM2
+    case 'grossAreaM2':      return g.grossAreaM2
+    case 'lengthM':          return g.lengthM
+    case 'joistLm':          return g.joistLm
+    case 'trimLm':           return g.trimLm
+    case 'wallPlateLm':      return g.wallPlateLm
+    case 'ledgerLm':         return g.ledgerLm
+    case 'hangerCount':      return g.hangerCount
+    case 'strutCount':       return g.strutCount
+    case 'firringLm':        return g.firringLm
+    case 'kerbLm':           return g.kerbLm
+    case 'kerbFaceAreaM2':   return g.kerbFaceAreaM2
+    case 'membraneAreaM2':   return g.membraneAreaM2
+    case 'abutmentLm':       return g.abutmentLm
+    case 'edgeTrimLm':       return g.edgeTrimLm
+    case 'gutterLm':         return g.gutterLm
+    case 'lanternAreaM2':    return g.lanternAreaM2
+    case 'roofWindowAreaM2': return g.roofWindowAreaM2
+    case 'domeAreaM2':       return g.domeAreaM2
+    case 'hatchCount':       return g.hatchCount
+    case 'fixed':
+      if (layer.fixedQty == null) throw new Error(`Layer "${layer.name}" uses a fixed quantity but none was given.`)
+      return layer.fixedQty
+    default:
+      throw new Error(`Layer "${layer.name}" uses a source ("${layer.source}") the flat roof module doesn't support.`)
+  }
+}
+
+export interface FlatRoofCostResult {
+  geometry: FlatRoofGeometry
+  lines: CostedLine[]
+  totalCost: number
+}
+
+export function calculateFlatRoofCost(input: FlatRoofInput, layers: AssemblyLayerDef[]): FlatRoofCostResult {
+  const geometry = calculateFlatRoofGeometry(input)
+  const lines = layers.map(l => costLayer(l, resolveFlatRoofRawQty(l, geometry)))
   const totalCost = +lines.reduce((s, l) => s + l.cost, 0).toFixed(2)
   return { geometry, lines, totalCost }
 }

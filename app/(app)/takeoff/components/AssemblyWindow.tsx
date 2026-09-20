@@ -22,6 +22,10 @@ interface Props {
   name: string
   /** The wall's traced length in metres — the calculator's length is driven from this. */
   lengthM: number
+  /** What is measured and how to show it, for things that aren't a single length — a roof is a size
+   * ("5.00 × 3.20 m"), not a run. Defaults to "Length" and the length in metres. */
+  measureLabel?: string
+  measureText?: string
   /** The calculator's saved result, once Save & Price has been used. */
   saved?: { lines: CostedLine[]; location?: string }
   open: boolean
@@ -31,7 +35,8 @@ interface Props {
   children: React.ReactNode
 }
 
-export default function AssemblyItemPanel({ name, lengthM, saved, open, onOpen, onClose, children }: Props) {
+export default function AssemblyItemPanel({ name, lengthM, measureLabel = 'Length', measureText, saved, open, onOpen, onClose, children }: Props) {
+  const measured = measureText ?? `${lengthM.toFixed(2)} m`
   // What goes to the quote is the sum of the saved lines' costs (see new-quote's assemblyResult branch).
   const total = saved ? saved.lines.reduce((s, l) => s + l.cost, 0) : 0
   const lineCount = saved ? saved.lines.filter(l => l.cost !== 0).length : 0
@@ -44,8 +49,8 @@ export default function AssemblyItemPanel({ name, lengthM, saved, open, onOpen, 
       }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--to-textb)', lineHeight: 1.3 }}>{name}</div>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-          <span style={{ color: 'var(--to-muted)' }}>Length</span>
-          <span style={{ color: 'var(--to-text)', fontFamily: 'monospace' }}>{lengthM.toFixed(2)} m</span>
+          <span style={{ color: 'var(--to-muted)' }}>{measureLabel}</span>
+          <span style={{ color: 'var(--to-text)', fontFamily: 'monospace' }}>{measured}</span>
         </div>
         {saved?.location?.trim() && (
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
@@ -90,7 +95,7 @@ export default function AssemblyItemPanel({ name, lengthM, saved, open, onOpen, 
             borderBottom: '1px solid var(--to-border)', flexShrink: 0,
           }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--to-textb)' }}>{name}</span>
-            <span style={{ fontSize: 12, color: 'var(--to-muted)' }}>· {lengthM.toFixed(2)} m from your drawing</span>
+            <span style={{ fontSize: 12, color: 'var(--to-muted)' }}>· {measured} from your drawing</span>
             <span style={{ flex: 1 }} />
             <button
               onClick={onClose} aria-label="Close calculator"
