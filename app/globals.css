@@ -300,6 +300,44 @@ textarea{resize:vertical;min-height:56px}
   .desktop-only-notice .dn-text{font-size:14px;color:var(--muted);line-height:1.5}
 }
 
+/* ── Phone design layer ── */
+/* One shared look for every phone/tablet screen: rounded cards, buttons and
+   inputs, a slim centred nav bar, and iOS-style bottom-sheet modals. Touch
+   hardware only (same rule as the launcher), and it only restyles the shared
+   classes above — no layout or logic — so desktop is untouched. Checkboxes
+   and radios are excluded from the input restyle so they keep their size. */
+@media (hover:none) and (pointer:coarse){
+  a,button,.btn,.btn-sm{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+
+  .topbar{background:rgba(255,255,255,0.94);border-bottom:1px solid var(--border);padding:6px 12px;min-height:52px;justify-content:flex-start}
+  .topbar-title{position:absolute;left:0;right:0;padding:0 90px;text-align:center;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+  .home-back{position:relative;z-index:1}
+
+  .card,.stat,.sq-card,.phase-block,.empty-dashed,.totals-box{border-radius:16px}
+  .card,.stat,.sq-card,.phase-block{border:1px solid rgba(0,0,0,0.06);box-shadow:none}
+  .pip-card{border-radius:12px}
+  .stat::before{display:none}
+  .card{margin-bottom:14px}
+  .card-hd{padding:14px 16px;font-size:15px}
+  .job-row{min-height:64px;padding:14px 16px}
+  .badge{padding:3px 10px;font-size:12px}
+
+  .btn,.btn-sm,.btn-locked,.btn-email-pdf,.btn-archive,.btn-reinstate{border-radius:12px}
+  .btn-outline{border-width:1px;background:#fff}
+  .sel-status,.sel-inline-sm{border-radius:10px}
+
+  input:not([type=checkbox]):not([type=radio]),select,textarea{border-width:1px;border-radius:12px;padding:12px 14px}
+  input:not([type=checkbox]):not([type=radio]):focus,select:focus,textarea:focus{border-color:var(--sky);box-shadow:0 0 0 3px rgba(74,144,164,0.18)}
+
+  .modal-overlay{background:rgba(0,0,0,0.42)}
+  .modal-box,.form-modal{border-radius:22px 22px 0 0;box-shadow:none}
+  .modal-box::before,.form-modal::before{content:'';display:block;width:38px;height:5px;border-radius:3px;background:#c8ced4;margin:8px auto 0;flex-shrink:0}
+  .modal-hd,.form-modal-hd{padding:14px 18px;border-bottom:1px solid var(--border)}
+  .form-modal-bd{padding:16px 18px}
+  .form-modal-ft{position:sticky;bottom:0;background:var(--cream);flex-wrap:wrap;gap:10px;padding:12px 18px calc(12px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--border)}
+  .form-modal-ft > .btn{flex:1 1 auto}
+}
+
 /* ── Mobile Home launcher + back-to-Home button ── */
 /* Touch devices only, same rule as above. Narrow desktop windows keep the
    normal dashboard and the hamburger sidebar. On touch, the launcher
