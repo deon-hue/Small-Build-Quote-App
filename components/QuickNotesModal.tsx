@@ -49,6 +49,7 @@ export default function QuickNotesModal({ onClose }: Props) {
           <div className="fg">
             <input
               autoFocus
+              className="qn-search"
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search jobs by client, type, or address…"
@@ -63,6 +64,7 @@ export default function QuickNotesModal({ onClose }: Props) {
             ) : filtered.map(j => (
               <button
                 key={j.id}
+                className="qn-job"
                 onClick={() => setSelectedJob(j)}
                 style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,

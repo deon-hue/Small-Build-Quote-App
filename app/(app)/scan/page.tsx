@@ -197,20 +197,20 @@ export default function ScanPage() {
   }
 
   return (
-    <div style={S.page}>
-      <div style={S.header}>
+    <div className="scan-page" style={S.page}>
+      <div className="scan-header" style={S.header}>
         {(step === 'preview' || step === 'pages') && (
-          <button onClick={step === 'preview' ? retakePage : reset} style={{ background: 'none', border: 'none', color: '#a8c484', fontSize: 22, cursor: 'pointer', padding: '0 4px 0 0', lineHeight: 1 }}>‹</button>
+          <button className="scan-back" onClick={step === 'preview' ? retakePage : reset} style={{ background: 'none', border: 'none', color: '#a8c484', fontSize: 22, cursor: 'pointer', padding: '0 4px 0 0', lineHeight: 1 }}>‹</button>
         )}
-        <div style={{ fontSize: 17, fontWeight: 700 }}>📷 Scan Document</div>
+        <div className="scan-title" style={{ fontSize: 17, fontWeight: 700 }}>📷 Scan Document</div>
         {step === 'pages' && pages.length > 0 && (
-          <span style={{ marginLeft: 'auto', fontSize: 13, color: '#a8c484', fontWeight: 600 }}>
+          <span className="scan-count" style={{ marginLeft: 'auto', fontSize: 13, color: '#a8c484', fontWeight: 600 }}>
             {pages.length} page{pages.length > 1 ? 's' : ''}
           </span>
         )}
       </div>
 
-      <div style={S.body}>
+      <div className="scan-body" style={S.body}>
 
         {/* ── Capture ── */}
         {step === 'capture' && (
@@ -296,6 +296,7 @@ export default function ScanPage() {
                     Page {i + 1}
                   </div>
                   <button
+                    className="scan-x"
                     onClick={() => removePage(i)}
                     style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.55)', border: 'none', color: '#fff', borderRadius: '50%', width: 22, height: 22, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
                   >×</button>
@@ -306,6 +307,7 @@ export default function ScanPage() {
             <div style={{ marginBottom: 20 }}>
               <label style={S.label}>Note (optional)</label>
               <input
+                className="scan-input"
                 style={S.input}
                 placeholder="e.g. Screwfix delivery note 12 June"
                 value={description}

@@ -158,6 +158,7 @@ export default function JobNotesModal({ job, onClose }: Props) {
                 style={{ flex: 1 }}
               />
               <button
+                className={`notes-mic${listening ? ' listening' : ''}`}
                 onClick={toggleMic}
                 title={listening ? 'Stop recording' : 'Dictate this note'}
                 type="button"
@@ -182,13 +183,13 @@ export default function JobNotesModal({ job, onClose }: Props) {
             {stagedPhotos.map((f, i) => (
               <span key={i} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 99, background: '#f0f2ee', display: 'flex', alignItems: 'center', gap: 4 }}>
                 {f.name.length > 18 ? f.name.slice(0, 15) + '…' : f.name}
-                <button type="button" onClick={() => setStagedPhotos(prev => prev.filter((_, idx) => idx !== i))}
+                <button type="button" className="notes-chip-x" onClick={() => setStagedPhotos(prev => prev.filter((_, idx) => idx !== i))}
                   style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#c0392b', fontSize: 12, padding: 0 }}>×</button>
               </span>
             ))}
           </div>
 
-          <button className="btn btn-primary" disabled={!newNote.trim() || addingNote} style={{ marginTop: 10 }}
+          <button className="btn btn-primary notes-add" disabled={!newNote.trim() || addingNote} style={{ marginTop: 10 }}
             onClick={handleAddNote}>
             {addingNote ? 'Adding…' : '+ Add Note'}
           </button>
@@ -208,13 +209,13 @@ export default function JobNotesModal({ job, onClose }: Props) {
                             {TAG_LABEL[n.tag]}
                           </span>
                         )}
-                        <div style={{ fontSize: 13, lineHeight: 1.5 }}>{n.note}</div>
+                        <div className="notes-text" style={{ fontSize: 13, lineHeight: 1.5 }}>{n.note}</div>
 
                         {n.actionItems && n.actionItems.length > 0 && (
                           <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
                             {n.actionItems.map(item => (
-                              <label key={item.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12, cursor: 'pointer' }}>
-                                <input type="checkbox" checked={item.done} onChange={() => toggleActionItem(n, item.id)} style={{ marginTop: 2 }} />
+                              <label key={item.id} className="notes-action" style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+                                <input type="checkbox" className="notes-check" checked={item.done} onChange={() => toggleActionItem(n, item.id)} style={{ marginTop: 2 }} />
                                 <span style={{ textDecoration: item.done ? 'line-through' : 'none', color: item.done ? 'var(--muted)' : 'inherit' }}>{item.text}</span>
                               </label>
                             ))}

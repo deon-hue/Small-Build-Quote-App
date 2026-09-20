@@ -168,6 +168,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/clients':      'Contacts',
   '/settings':     'Company Setup',
   '/documents':    'Documents',
+  '/scan':         'Scan to Job',
   '/back-office':      'Back Office',
   '/quote-requests':   'Quote Requests',
   '/portal-preview':   'Portal Preview',
