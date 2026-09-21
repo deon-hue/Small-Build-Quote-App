@@ -33,6 +33,9 @@ import {
   type AssemblyLayerDef, type CostedLine,
 } from '@/lib/assembly-calc'
 import { fmt } from '@/lib/utils'
+import {
+  checkFlatRoofJoist, flatRoofSpanChart, DEFAULT_JOIST_SPAN_LOADS, SPAN_CHART_CENTRES_MM, type JoistSpanLoads,
+} from '@/lib/flat-roof-joist-spans'
 import { describeFlatRoof, describeFlatRoofShort, type FlatRoofDescriptionInput } from '@/lib/flat-roof-description'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import {
@@ -59,21 +62,6 @@ const C16_PER_LM: Record<number, number> = { 100: 1.90, 125: 2.40, 150: 2.95, 17
 const C24_FACTOR = 1.10
 const POSI_PER_LM: Record<number, number> = { 200: 8.50, 250: 9.60, 300: 10.90, 350: 12.30 }
 
-// A ROUGH guide to the longest span (mm) each solid timber section manages in a flat roof at 400
-// centres. It's only there to help pick a starting size for pricing — it is not a design, and the
-// real answer comes from the span tables or an engineer. Wider centres take a little off.
-const INDICATIVE_MAX_SPAN_400: Record<'c16' | 'c24', Record<number, number>> = {
-  c16: { 100: 1600, 125: 2100, 150: 2600, 175: 3000, 200: 3500, 225: 3900, 250: 4300 },
-  c24: { 100: 1700, 125: 2250, 150: 2800, 175: 3300, 200: 3800, 225: 4200, 250: 4600 },
-}
-function indicativeMaxSpan(system: 'c16' | 'c24', depth: number, centres: number): number | undefined {
-  const base = INDICATIVE_MAX_SPAN_400[system][depth]
-  return base == null ? undefined : Math.round(base * (centres >= 600 ? 0.85 : 1))
-}
-function suggestedDepth(system: JoistSystem, span: number, centres: number): number | null {
-  if (system === 'posi') return null
-  return TIMBER_DEPTHS.find(d => (indicativeMaxSpan(system, d, centres) ?? 0) >= span) ?? null
-}
 function joistRate(system: JoistSystem, depth: number): number {
   if (system === 'posi') return POSI_PER_LM[depth] ?? POSI_PER_LM[200]
   const c16 = C16_PER_LM[depth] ?? C16_PER_LM[175]
@@ -330,7 +318,10 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   const [buildUp, setBuildUp] = useState<FlatRoofBuildUp>(buildUpDefault)
   const [joistSystem, setJoistSystem] = useState<JoistSystem>('c24')
   const [joistDepth, setJoistDepth] = useState(175)
+  // Until the section is picked by hand it follows the span chart: the smallest section that works for the span.
+  const [depthPicked, setDepthPicked] = useState(false)
   const [centresMm, setCentresMm] = useState(400)
+  const [spanLoads, setSpanLoads] = useState<JoistSpanLoads>(DEFAULT_JOIST_SPAN_LOADS)
   const [fallRatio, setFallRatio] = useState(80)
   // Warm roof: a PIR board on the deck. Cold roof: insulation between the joists, leaving a 50mm gap.
   const [insulationMm, setInsulationMm] = useState(buildUpDefault === 'cold' ? 125 : 120)
@@ -416,7 +407,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
     // Keep a depth the new system actually offers.
     const options = next === 'posi' ? POSI_DEPTHS : TIMBER_DEPTHS
     if (!options.includes(joistDepth)) {
-      setJoistDepth(next === 'posi' ? 250 : (suggestedDepth(next, widthMm, centresMm) ?? 175))
+      setJoistDepth(next === 'posi' ? 250 : (checkFlatRoofJoist({ grade: next, depthMm: 175, centresMm, spanMm: widthMm, loads: spanLoads }).suggestedDepthMm ?? 175))
     }
   }
   function changeBuildUp(next: FlatRoofBuildUp) {
@@ -481,17 +472,26 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
 
   const g = geometryResult.ok ? geometryResult.geometry : null
 
-  // A rough check of the chosen solid timber against the span — advice, not a design.
-  const suggested = suggestedDepth(joistSystem, widthMm, centresMm)
-  const chosenMax = joistSystem === 'posi' ? undefined : indicativeMaxSpan(joistSystem, joistDepth, centresMm)
-  const underSized = joistSystem !== 'posi' && chosenMax != null && chosenMax < widthMm
+  // The chosen solid timber against the span chart (lib/flat-roof-joist-spans.ts): the chart's suggestion is
+  // used until a section is picked by hand, and a section that's too small for the span raises the warning —
+  // which goes away as soon as the section (or the centres) is enough. Advice, not a design.
+  const spanCheck = joistSystem === 'posi' ? null
+    : checkFlatRoofJoist({ grade: joistSystem, depthMm: joistDepth, centresMm, spanMm: widthMm, loads: spanLoads })
+  const suggested = spanCheck?.suggestedDepthMm ?? null
+  const spanChart = useMemo(() => joistSystem === 'posi' ? [] : flatRoofSpanChart(joistSystem, spanLoads), [joistSystem, spanLoads])
+  useEffect(() => {
+    if (!depthPicked && suggested != null && suggested !== joistDepth) setJoistDepth(suggested)
+  }, [depthPicked, suggested, joistDepth])
+  const spanText = `${(widthMm / 1000).toFixed(2)}m span at ${centresMm}mm centres`
   const extraWarnings: string[] = []
   if (joistSystem === 'posi') {
     extraWarnings.push('Posi-joists are designed by the supplier to your span and loads, and so is the trimming round the rooflight openings — the trimmers here are an estimate to confirm with them.')
-  } else if (underSized) {
-    extraWarnings.push(suggested
-      ? `${joistLabel(joistSystem, joistDepth)} is under the rough guide for a ${(widthMm / 1000).toFixed(2)}m span at ${centresMm}mm centres (about 47×${suggested}) — check the span tables or an engineer.`
-      : `A ${(widthMm / 1000).toFixed(2)}m span is beyond what solid timber usually manages in a flat roof — consider Posi-joists or an engineer's design.`)
+  } else if (spanCheck?.status === 'under') {
+    extraWarnings.push(`${joistLabel(joistSystem, joistDepth)} is too small for a ${spanText}: the span chart gives it ${(spanCheck.maxSpanMm / 1000).toFixed(2)}m, so it needs 47×${suggested} or bigger — or check with the span tables or an engineer.`)
+  } else if (spanCheck?.status === 'beyond') {
+    extraWarnings.push(spanCheck.closerCentres
+      ? `A ${spanText} is beyond what solid timber manages in the span chart — it works at ${spanCheck.closerCentres.centresMm}mm centres in 47×${spanCheck.closerCentres.depthMm}, or use Posi-joists or an engineer's design.`
+      : `A ${spanText} is beyond what solid timber manages in the span chart — consider Posi-joists or an engineer's design.`)
   }
 
   // Which ends abut an existing wall square-on, and which sides run along one.
@@ -766,7 +766,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
             <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
               <div style={{ flex: 1 }}>
                 <PropRow label={joistSystem === 'posi' ? 'Depth' : 'Section'}>
-                  <select value={joistDepth} onChange={e => setJoistDepth(+e.target.value)} style={propInput}>
+                  <select value={joistDepth} onChange={e => { setJoistDepth(+e.target.value); setDepthPicked(true) }} style={propInput}>
                     {depthOptions.map(d => <option key={d} value={d}>{joistSystem === 'posi' ? `${d}mm` : `47 × ${d}`}</option>)}
                   </select>
                 </PropRow>
@@ -782,16 +782,14 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
             {joistSystem === 'posi' ? (
               <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>Posi-joists are sized by the supplier for the span — pick the depth they give you.</div>
             ) : (
-              <div style={{ fontSize: 11, color: underSized ? '#c0392b' : '#64748b', marginTop: 4, lineHeight: 1.4 }}>
-                Rough guide for a {(widthMm / 1000).toFixed(2)}m span at {centresMm}mm centres: {suggested ? `47×${suggested} ${joistSystem.toUpperCase()}` : 'beyond solid timber'}.
-                {suggested && suggested !== joistDepth && (
-                  <button onClick={() => setJoistDepth(suggested)}
-                    style={{ marginLeft: 6, fontSize: 11, background: 'none', border: 'none', color: '#0369a1', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
-                    Use it
-                  </button>
-                )}
-                <span style={{ color: '#94a3b8' }}> A pricing guide only — check the span tables or an engineer.</span>
-              </div>
+              <>
+                <SpanChartPanel
+                  chart={spanChart} check={spanCheck!} grade={joistSystem} spanMm={widthMm} centresMm={centresMm} depthMm={joistDepth}
+                  picked={depthPicked} loads={spanLoads} onLoads={setSpanLoads}
+                  onUse={() => { if (suggested) { setJoistDepth(suggested); setDepthPicked(false) } }}
+                  onPick={(depth, centres) => { setJoistDepth(depth); setDepthPicked(true); setCentresMm(centres) }}
+                />
+              </>
             )}
           </div>
 
@@ -997,6 +995,90 @@ const KIND_STYLE: Record<RoofOpeningKind, { fill: string; stroke: string }> = {
 }
 // Short names for the labels inside the drawn boxes, which can be small.
 const KIND_SHORT: Record<RoofOpeningKind, string> = { 'lantern': 'Lantern', 'roof-window': 'Window', 'dome': 'Dome', 'hatch': 'Hatch' }
+// ── The span chart: for the roof's joist span, which sections work at each centres. The chosen section's
+// row is marked, and cells that reach the span are green, so the answer reads straight off the chart.
+function SpanChartPanel({ chart, check, grade, spanMm, centresMm, depthMm, picked, loads, onLoads, onUse, onPick }: {
+  chart: ReturnType<typeof flatRoofSpanChart>
+  check: ReturnType<typeof checkFlatRoofJoist>
+  grade: 'c16' | 'c24'
+  spanMm: number
+  centresMm: number
+  depthMm: number
+  picked: boolean
+  loads: JoistSpanLoads
+  onLoads: (l: JoistSpanLoads) => void
+  onUse: () => void
+  onPick: (depthMm: number, centresMm: number) => void
+}) {
+  const span = (spanMm / 1000).toFixed(2)
+  const bad = check.status !== 'ok'
+  const cell = (spanOfCell: number, isChosen: boolean): React.CSSProperties => ({
+    padding: '2px 4px', textAlign: 'center', cursor: 'pointer',
+    background: spanOfCell >= spanMm ? '#dcfce7' : '#f8fafc',
+    color: spanOfCell >= spanMm ? '#166534' : '#94a3b8',
+    outline: isChosen ? '2px solid #0369a1' : 'none', outlineOffset: -2,
+    fontWeight: isChosen ? 700 : 400,
+  })
+  return (
+    <div style={{ marginTop: 4 }}>
+      <div style={{ fontSize: 11, lineHeight: 1.45, color: bad ? '#c0392b' : '#166534' }}>
+        {check.status === 'ok' && <>✓ 47×{depthMm} {grade.toUpperCase()} works for a {span}m span at {centresMm}mm centres (up to {(check.maxSpanMm / 1000).toFixed(2)}m).</>}
+        {check.status === 'under' && <>⚠ 47×{depthMm} {grade.toUpperCase()} is too small for a {span}m span at {centresMm}mm centres — it manages {(check.maxSpanMm / 1000).toFixed(2)}m. The chart says 47×{check.suggestedDepthMm}.</>}
+        {check.status === 'beyond' && <>⚠ A {span}m span at {centresMm}mm centres is beyond solid timber.{check.closerCentres ? <> It works at {check.closerCentres.centresMm}mm centres in 47×{check.closerCentres.depthMm}.</> : <> Use Posi-joists or an engineer's design.</>}</>}
+        {check.suggestedDepthMm != null && check.suggestedDepthMm !== depthMm && (
+          <button onClick={onUse}
+            style={{ marginLeft: 6, fontSize: 11, background: 'none', border: 'none', color: '#0369a1', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
+            Use 47×{check.suggestedDepthMm}
+          </button>
+        )}
+      </div>
+      {!picked && check.suggestedDepthMm != null && (
+        <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>The section follows the span chart until you pick one yourself.</div>
+      )}
+      <details style={{ marginTop: 6 }}>
+        <summary style={{ fontSize: 11, color: '#0369a1', cursor: 'pointer' }}>Span chart — {grade.toUpperCase()} joists, longest span in metres</summary>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, marginTop: 4 }}>
+          <thead>
+            <tr style={{ color: '#64748b' }}>
+              <th style={{ textAlign: 'left', fontWeight: 600, padding: '2px 4px' }}>Section</th>
+              {SPAN_CHART_CENTRES_MM.map(c => <th key={c} style={{ fontWeight: 600, padding: '2px 4px', background: c === centresMm ? '#e0f2fe' : 'none' }}>{c}mm</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {chart.map(row => (
+              <tr key={row.depthMm}>
+                <td style={{ padding: '2px 4px', fontWeight: row.depthMm === depthMm ? 700 : 400 }}>47×{row.depthMm}</td>
+                {SPAN_CHART_CENTRES_MM.map(c => (
+                  <td key={c} onClick={() => onPick(row.depthMm, c)} title={`Use 47×${row.depthMm} at ${c}mm centres`}
+                    style={cell(row.spansMm[c], row.depthMm === depthMm && c === centresMm)}>
+                    {(row.spansMm[c] / 1000).toFixed(2)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div style={{ fontSize: 10, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>
+          Green reaches your {span}m span. Click a cell to use that section and those centres. Span is between bearings.
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center', fontSize: 10, color: '#64748b' }}>
+          <label>Roof build-up load (kN/m²)
+            <input type="number" step={0.05} min={0.2} value={loads.deadKnM2} onChange={e => onLoads({ ...loads, deadKnM2: Math.max(0.2, +e.target.value || 0.2) })}
+              style={{ ...miniInput, width: 56, marginLeft: 4 }} />
+          </label>
+          <label>Snow / access (kN/m²)
+            <input type="number" step={0.05} min={0.25} value={loads.imposedKnM2} onChange={e => onLoads({ ...loads, imposedKnM2: Math.max(0.25, +e.target.value || 0.25) })}
+              style={{ ...miniInput, width: 56, marginLeft: 4 }} />
+          </label>
+        </div>
+        <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4, lineHeight: 1.4 }}>
+          Worked out cautiously from timber beam formulae (deflection to 0.003 × span, creep included) — a pricing guide, not a design. Check the span tables or an engineer.
+        </div>
+      </details>
+    </div>
+  )
+}
+
 const TRIMMER_COLOUR = '#b45309'
 const EDGE_BAR = 9
 
