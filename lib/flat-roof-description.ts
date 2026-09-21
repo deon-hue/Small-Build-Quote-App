@@ -31,6 +31,10 @@ export interface FlatRoofDescriptionInput {
   gutterLm: number
   parapet?: { lm: number; heightMm: number; type: 'cavity-brick-block' | 'solid-block'; rainwaterOutlets: number; overflowOutlets: number }
   openings: { kind: RoofOpeningKind; widthMm: number; depthMm: number; trimmers: 2 | 3 }[]
+  /** The GRP or EPDM system's make, when it's named on the quote — e.g. 'Cure It'. */
+  brand?: string
+  /** What covers the top of the upstand at an existing wall; 'lead' when not given. */
+  wallFlashing?: 'lead' | 'simulated' | 'cover' | 'none'
 }
 
 const metres = (mm: number) => (mm / 1000).toFixed(2)
@@ -98,14 +102,17 @@ export function describeFlatRoof(i: FlatRoofDescriptionInput): string {
   if (i.covering === 'epdm') {
     lines.push(`Roof covering: a 1.2mm EPDM rubber membrane, fully bonded to the roof with adhesive, with the seams taped and the corners patched${upTo}, so the whole roof is one waterproof surface.`)
   } else if (i.covering === 'grp') {
-    lines.push(`Roof covering: a fibreglass (GRP) roof — glass mat laminated in resin and finished with a topcoat to form a seamless waterproof surface${upTo}, with GRP edge trims.`)
+    lines.push(`Roof covering: a fibreglass (GRP) roof${i.brand ? ` using the ${i.brand} system` : ''} — glass mat laminated in resin and finished with a topcoat to form a seamless waterproof surface${upTo}, with GRP edge trims.`)
   } else {
     lines.push(`Roof covering: a single-ply TPO membrane, bonded to the roof with the seams heat-welded${upTo}.`)
   }
 
   // Edges and drainage
   const edgeBits: string[] = []
-  if (i.abutmentLm > 0) edgeBits.push('Where the roof meets the existing wall the covering is turned up as an upstand and protected with Code 4 lead flashing.')
+  if (i.abutmentLm > 0) {
+    const finish = { lead: ' and protected with Code 4 lead flashing', simulated: ' and finished with a lead-effect GRP flashing', cover: ' and finished with a cover flashing', none: '' }[i.wallFlashing ?? 'lead']
+    edgeBits.push(`Where the roof meets the existing wall the covering is turned up as an upstand${finish}.`)
+  }
   if (i.edgeTrimLm > 0) edgeBits.push(`The roof edges are finished with ${i.covering === 'grp' ? 'a GRP edge trim' : 'an aluminium drip trim'}${i.fascia ? ' and a uPVC fascia board' : ''}.`)
   if (i.gutterLm > 0) edgeBits.push(`A uPVC half-round gutter is fixed along the low edge${i.downpipes > 0 ? `, with ${i.downpipes} ${plural(i.downpipes, 'downpipe', 'downpipes')} to take the water away` : ''}.`)
   if (edgeBits.length) lines.push(`Edges and drainage: ${edgeBits.join(' ')}`)

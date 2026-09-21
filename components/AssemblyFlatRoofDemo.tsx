@@ -34,6 +34,10 @@ import {
 } from '@/lib/assembly-calc'
 import { fmt } from '@/lib/utils'
 import {
+  resolveTrimLines, cornerCounts, grpCoverage, trimSlotDefs, trimProduct, TRIM_CATALOGUE, CURE_IT, NONE,
+  type SlotId, type ExtraTrim, type TrimLine, type TrimRoofInput, type TrimSlotDef,
+} from '@/lib/flat-roof-covering-trims'
+import {
   checkFlatRoofJoist, flatRoofSpanChart, DEFAULT_JOIST_SPAN_LOADS, SPAN_CHART_CENTRES_MM, type JoistSpanLoads,
 } from '@/lib/flat-roof-joist-spans'
 import { describeFlatRoof, describeFlatRoofShort, type FlatRoofDescriptionInput } from '@/lib/flat-roof-description'
@@ -81,7 +85,7 @@ const DECK: Record<DeckType, { label: string; perSheet: number }> = {
 type CoveringType = 'epdm' | 'grp' | 'tpo'
 const COVERING_LABEL: Record<CoveringType, string> = {
   epdm: 'EPDM rubber — fully adhered',
-  grp:  'GRP fibreglass',
+  grp:  'GRP fibreglass — Cure It',
   tpo:  'Single-ply (TPO)',
 }
 const SHEET_M2 = 2.88
@@ -129,6 +133,8 @@ interface LayerOpts {
   fascia: boolean
   downpipes: number
   parapetType: ParapetType
+  /** The trims and accessories chosen for the covering (GRP and EPDM); TPO keeps its single edge trim and flashing. */
+  trimLines: TrimLine[]
   g: FlatRoofGeometry
 }
 
@@ -179,11 +185,16 @@ function buildFlatRoofLayers(o: LayerOpts): AssemblyLayerDef[] {
       { id: 'covering_seams', name: 'Seam tape and corner patches', category: 'materials', source: 'netAreaM2', unit: 'm²', unitCost: 0.70 },
     )
   } else if (o.covering === 'grp') {
+    // Cure It: a 20kg tin of resin laminates 13.5 m² with 450g mat, a 20kg tin of topcoat covers 40 m², and the
+    // hardener is about 2% of the resin — so the tins are worked out from the covering area.
     layers.push(
-      { id: 'covering_csm', name: 'GRP chopped strand mat 450g', category: 'materials', source: 'membraneAreaM2', unit: 'm²', unitCost: 2.60, wastePct: w },
-      { id: 'covering_resin', name: 'GRP laminating resin and catalyst', category: 'materials', source: 'membraneAreaM2', unit: 'm²', unitCost: 8.50, wastePct: w },
-      { id: 'covering_topcoat', name: 'GRP topcoat', category: 'materials', source: 'membraneAreaM2', unit: 'm²', unitCost: 5.40, wastePct: w },
+      { id: 'covering_csm', name: 'Cure It reinforcement mat 450g', category: 'materials', source: 'membraneAreaM2', unit: 'm²', unitCost: 2.60, wastePct: w },
+      { id: 'covering_resin', name: `Cure It roofing resin ${CURE_IT.resinTinKg}kg tin (${CURE_IT.resinTinM2} m² a tin)`, category: 'materials', source: 'membraneAreaM2', unit: 'tin', unitCost: 93.33, wastePct: w, coveragePerUnit: CURE_IT.resinTinM2, roundToWhole: true },
+      { id: 'covering_hardener', name: 'Cure It catalyst hardener 1kg (about 2% of the resin)', category: 'materials', source: 'membraneAreaM2', unit: 'kg', unitCost: 13.29, wastePct: w, coveragePerUnit: CURE_IT.resinTinM2 / (CURE_IT.resinTinKg * CURE_IT.hardenerPctOfResin / 100), roundToWhole: true },
+      { id: 'covering_topcoat', name: `Cure It roofing topcoat ${CURE_IT.topcoatTinKg}kg tin (${CURE_IT.topcoatTinM2} m² a tin)`, category: 'materials', source: 'membraneAreaM2', unit: 'tin', unitCost: 121.67, wastePct: w, coveragePerUnit: CURE_IT.topcoatTinM2, roundToWhole: true },
     )
+    const trimLm = o.trimLines.filter(l => l.product.unit !== 'nr' && l.product.code !== 'LEAD4').reduce((sum, l) => sum + l.qty, 0)
+    if (trimLm > 0) layers.push({ id: 'covering_bandage', name: 'Cure It reinforcement bandage 75mm × 75m (trim joints and details)', category: 'materials', source: 'fixed', fixedQty: +trimLm.toFixed(2), unit: 'roll', unitCost: 30.00, coveragePerUnit: 75, roundToWhole: true })
   } else {
     layers.push(
       { id: 'covering', name: 'Single-ply TPO membrane (incl. upstands, parapet face and kerbs)', category: 'materials', source: 'membraneAreaM2', unit: 'm²', unitCost: 12.50, wastePct: w },
@@ -191,14 +202,24 @@ function buildFlatRoofLayers(o: LayerOpts): AssemblyLayerDef[] {
     )
   }
 
-  // Edges
-  if (g.edgeTrimLm > 0) {
-    layers.push(o.covering === 'grp'
-      ? { id: 'edge_trim', name: 'GRP edge trim (free and gutter edges)', category: 'materials', source: 'edgeTrimLm', unit: 'lm', unitCost: 5.20, wastePct: w }
-      : { id: 'edge_trim', name: 'Aluminium drip trim (free and gutter edges)', category: 'materials', source: 'edgeTrimLm', unit: 'lm', unitCost: 6.50, wastePct: w })
-    if (o.fascia) layers.push({ id: 'fascia', name: 'uPVC fascia board 175mm (free and gutter edges)', category: 'materials', source: 'edgeTrimLm', unit: 'lm', unitCost: 10.00, wastePct: w })
+  // Edges, wall junctions, parapet and kerb trims. GRP and EPDM take the trims chosen for them; TPO keeps a single
+  // edge trim and a lead flashing.
+  if (o.covering === 'tpo') {
+    if (g.edgeTrimLm > 0) layers.push({ id: 'edge_trim', name: 'Aluminium drip trim (free and gutter edges)', category: 'materials', source: 'edgeTrimLm', unit: 'lm', unitCost: 6.50, wastePct: w })
+    if (g.abutmentLm > 0) layers.push({ id: 'flashing', name: 'Lead flashing to the existing wall (Code 4)', category: 'materials', source: 'abutmentLm', unit: 'lm', unitCost: 32.00, wastePct: 5 })
+  } else {
+    for (const t of o.trimLines) {
+      const p = t.product
+      if (p.unit === 'length') {
+        layers.push({ id: t.id, name: t.name, category: 'materials', source: 'fixed', fixedQty: t.qty, unit: `${p.packLm}m length`, unitCost: p.rate, coveragePerUnit: p.packLm, roundToWhole: true, wastePct: 5 })
+      } else if (p.unit === 'lm') {
+        layers.push({ id: t.id, name: t.name, category: 'materials', source: 'fixed', fixedQty: t.qty, unit: 'lm', unitCost: p.rate, wastePct: 5 })
+      } else {
+        layers.push({ id: t.id, name: t.name, category: 'materials', source: 'fixed', fixedQty: t.qty, unit: 'nr', unitCost: p.rate, roundToWhole: true })
+      }
+    }
   }
-  if (g.abutmentLm > 0) layers.push({ id: 'flashing', name: 'Lead flashing to the existing wall (Code 4)', category: 'materials', source: 'abutmentLm', unit: 'lm', unitCost: 32.00, wastePct: 5 })
+  if (g.edgeTrimLm > 0 && o.fascia) layers.push({ id: 'fascia', name: 'uPVC fascia board 175mm (free and gutter edges)', category: 'materials', source: 'edgeTrimLm', unit: 'lm', unitCost: 10.00, wastePct: w })
 
   // Parapet wall — masonry, coping, cavity tray, and the outlets through it
   if (g.parapetLm > 0) {
@@ -326,8 +347,11 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   // Warm roof: a PIR board on the deck. Cold roof: insulation between the joists, leaving a 50mm gap.
   const [insulationMm, setInsulationMm] = useState(buildUpDefault === 'cold' ? 125 : 120)
   const [deck, setDeck] = useState<DeckType>('ply')
-  const [covering, setCovering] = useState<CoveringType>('epdm')
+  const [covering, setCovering] = useState<CoveringType>('grp')   // most of the roofs are Cure It GRP
   const [fascia, setFascia] = useState(false)
+  // The trims chosen for each place, and any added by hand. Picks are per covering: changing the covering starts them afresh.
+  const [trimPicks, setTrimPicks] = useState<Partial<Record<SlotId, string>>>({})
+  const [extraTrims, setExtraTrims] = useState<ExtraTrim[]>([])
   const [downpipes, setDownpipes] = useState(1)
   const [wastePct, setWastePct] = useState(10)
   const [location, setLocation] = useState('')
@@ -499,6 +523,11 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   const sideAbuts = edges.left === 'abutment' || edges.right === 'abutment'
   const hasParapet = parapetEdgeLm > 0
 
+  // What goes at each edge and detail of the roof, from the covering's trim list (lib/flat-roof-covering-trims.ts).
+  const trimRoof: TrimRoofInput = { edges, lengthMm, widthMm, kerbLm: g?.kerbLm ?? 0, openingCount: openings.length }
+  const trims = resolveTrimLines(covering, trimRoof, trimPicks, extraTrims)
+  const trimKey = JSON.stringify(trims.lines.map(l => [l.id, l.qty]))
+
   // The customer-facing description, written from the roof as it's set now (lib/flat-roof-description.ts) —
   // one short paragraph per part of the roof. It follows the roof as it changes, so what's saved to the
   // quote never describes a covering or a parapet the roof no longer has, until it's edited by hand
@@ -507,6 +536,10 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
     buildUp, lengthMm, widthMm, fallRatio, joistSystem, joistDepth, centresMm,
     deckLabel: DECK[deck].label, strutting: joistSystem !== 'posi' && g.strutCount > 0,
     insulationMm, covering, fascia, downpipes, edges,
+    brand: covering === 'grp' ? 'Cure It' : undefined,
+    wallFlashing: trims.picks.abutment_flashing === NONE ? 'none'
+      : trims.picks.abutment_flashing === 'LEAD4' || trims.picks.abutment_flashing === undefined ? 'lead'
+      : trims.picks.abutment_flashing === 'EPDM-COVER' ? 'cover' : 'simulated',
     // How many ends hang from a ledger and how many bear on a wall plate, from the lengths counted.
     ledgerEnds: g.lengthM > 0 ? Math.round(g.ledgerLm / g.lengthM) : 0,
     wallPlateEnds: g.lengthM > 0 ? Math.round(g.wallPlateLm / g.lengthM) : 0,
@@ -528,10 +561,11 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   const layers = useMemo(() => {
     if (!geometryResult.ok) return []
     const base = buildFlatRoofLayers({
-      wastePct, buildUp, joistSystem, joistDepth, insulationMm, deck, covering, fascia, downpipes, parapetType, g: geometryResult.geometry,
+      wastePct, buildUp, joistSystem, joistDepth, insulationMm, deck, covering, fascia, downpipes, parapetType, trimLines: trims.lines, g: geometryResult.geometry,
     })
     return base.map(l => rateOverrides[l.id] != null ? { ...l, unitCost: rateOverrides[l.id] } : l)
-  }, [geometryResult, wastePct, buildUp, joistSystem, joistDepth, insulationMm, deck, covering, fascia, downpipes, parapetType, rateOverrides])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [geometryResult, wastePct, buildUp, joistSystem, joistDepth, insulationMm, deck, covering, fascia, downpipes, parapetType, trimKey, rateOverrides])
 
   function setRate(layerId: string, unitCost: number) {
     setRateOverrides(prev => ({ ...prev, [layerId]: Math.max(0, unitCost) }))
@@ -871,7 +905,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
           <div style={{ borderTop: '1px solid #bae6fd', paddingTop: 8 }}>
             {sectionHead('Covering and drainage')}
             <PropRow label="Covering">
-              <select value={covering} onChange={e => setCovering(e.target.value as CoveringType)} style={propInput}>
+              <select value={covering} onChange={e => { setCovering(e.target.value as CoveringType); setTrimPicks({}); setExtraTrims([]) }} style={propInput}>
                 {(Object.entries(COVERING_LABEL) as [CoveringType, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </PropRow>
@@ -887,6 +921,16 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
                 </label>
               )}
             </div>
+            {g && covering !== 'tpo' && (
+              <CoveringTrimsPanel
+                covering={covering} roof={trimRoof} trims={trims} areaM2={g.membraneAreaM2} wastePct={wastePct}
+                onPick={(slot, code) => setTrimPicks(prev => ({ ...prev, [slot]: code }))}
+                extras={extraTrims}
+                onAddExtra={(code, qty) => setExtraTrims(prev => [...prev, { id: `x${Date.now().toString(36)}${prev.length}`, code, qty }])}
+                onExtraQty={(id, qty) => setExtraTrims(prev => prev.map(x => x.id === id ? { ...x, qty } : x))}
+                onRemoveExtra={id => setExtraTrims(prev => prev.filter(x => x.id !== id))}
+              />
+            )}
           </div>
 
           <div style={{ borderTop: '1px solid #bae6fd', paddingTop: 8 }}>
@@ -995,6 +1039,114 @@ const KIND_STYLE: Record<RoofOpeningKind, { fill: string; stroke: string }> = {
 }
 // Short names for the labels inside the drawn boxes, which can be small.
 const KIND_SHORT: Record<RoofOpeningKind, string> = { 'lantern': 'Lantern', 'roof-window': 'Window', 'dome': 'Dome', 'hatch': 'Hatch' }
+// ── Covering trims and accessories ─────────────────────────────────────────────────
+// For GRP (Cure It) and EPDM: what goes at each edge and detail of the roof, in metres or numbers worked out from
+// the roof, with a choice of trim for each place, the covering's coverage (how many tins), and a way to add any other
+// trim from the range by hand. The choices become priced lines in the breakdown below.
+function trimOptionLabel(covering: CoveringType, code: string): string {
+  if (code === NONE) return 'None'
+  const p = trimProduct(covering, code)
+  if (!p) return code
+  return covering === 'grp' ? `${p.code} — ${p.use}` : p.name
+}
+function buyText(t: TrimLine, wastePct = 5): string {
+  const p = t.product
+  if (p.unit === 'length') return `${Math.ceil(t.qty * (1 + wastePct / 100) / (p.packLm ?? 3) - 1e-9)} × ${p.packLm}m lengths`
+  if (p.unit === 'lm') return `${(t.qty * (1 + wastePct / 100)).toFixed(1)} m`
+  return `${t.qty} nr`
+}
+
+function CoveringTrimsPanel({ covering, roof, trims, areaM2, wastePct, onPick, extras, onAddExtra, onExtraQty, onRemoveExtra }: {
+  covering: CoveringType
+  roof: TrimRoofInput
+  trims: ReturnType<typeof resolveTrimLines>
+  areaM2: number
+  wastePct: number
+  onPick: (slot: SlotId, code: string) => void
+  extras: ExtraTrim[]
+  onAddExtra: (code: string, qty: number) => void
+  onExtraQty: (id: string, qty: number) => void
+  onRemoveExtra: (id: string) => void
+}) {
+  const defs = trimSlotDefs(covering)
+  // A place is listed when the roof has something there (a corner place when it has such corners at all).
+  const possibleCorners = cornerCounts(roof, {})
+  const qtyFor = (d: TrimSlotDef): number =>
+    d.id in possibleCorners ? possibleCorners[d.id as keyof typeof possibleCorners] : trims.lengthsM[d.id as keyof typeof trims.lengthsM]
+  const rows = defs.filter(d => qtyFor(d) > 0)
+  const isCorner = (d: TrimSlotDef) => d.id in possibleCorners
+  const catalogue = TRIM_CATALOGUE[covering]
+  const [addCode, setAddCode] = useState('')
+  const [addQty, setAddQty] = useState(1)
+  const cov = covering === 'grp' ? grpCoverage(areaM2, wastePct) : null
+  const title = covering === 'grp' ? 'GRP trims and accessories — Cure It' : 'EPDM trims and accessories'
+  const line = (d: TrimSlotDef) => trims.lines.find(l => l.id.startsWith(`trim_${d.id}_`))
+  const selectStyle: React.CSSProperties = { ...miniInput, width: '100%' }
+
+  return (
+    <div style={{ marginTop: 10, padding: 8, background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 6 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#0c4a6e', textTransform: 'uppercase', letterSpacing: 0.4 }}>{title}</div>
+      {cov && (
+        <div style={{ fontSize: 11, color: '#334155', marginTop: 4, lineHeight: 1.45 }}>
+          Covering area <strong>{areaM2.toFixed(1)} m²</strong> (the roof, upstands, parapet face and kerbs; {cov.areaM2.toFixed(1)} m² with {wastePct}% waste):{' '}
+          <strong>{cov.resinTins}</strong> resin {cov.resinTins === 1 ? 'tin' : 'tins'} ({CURE_IT.resinTinM2} m² a tin), <strong>{cov.topcoatTins}</strong> topcoat {cov.topcoatTins === 1 ? 'tin' : 'tins'} ({CURE_IT.topcoatTinM2} m² a tin) and {cov.hardenerKg}kg hardener.
+        </div>
+      )}
+      {rows.length === 0 && (
+        <div style={{ fontSize: 11, color: '#64748b', marginTop: 6 }}>This roof has no edges or details that take a trim.</div>
+      )}
+      {rows.map(d => {
+        const chosen = trims.picks[d.id]
+        const l = line(d)
+        const qty = qtyFor(d)
+        return (
+          <div key={d.id} style={{ marginTop: 7 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, fontSize: 11, color: '#334155' }}>
+              <span><strong>{d.label}</strong> <span style={{ color: '#94a3b8' }}>— {d.where}</span></span>
+              <span style={{ whiteSpace: 'nowrap', color: '#0369a1' }}>{isCorner(d) ? `${qty} nr` : `${qty.toFixed(1)} lm`}</span>
+            </div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 2 }}>
+              <select value={chosen} onChange={e => onPick(d.id, e.target.value)} style={selectStyle}>
+                {d.options.map(c => <option key={c} value={c}>{trimOptionLabel(covering, c)}</option>)}
+                <option value={NONE}>None</option>
+              </select>
+              {l && <span style={{ fontSize: 10, color: '#64748b', whiteSpace: 'nowrap' }}>{buyText(l)}</span>}
+            </div>
+          </div>
+        )
+      })}
+      <div style={{ marginTop: 9, paddingTop: 7, borderTop: '1px solid #bae6fd' }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: '#334155' }}>Add another trim or accessory</div>
+        {extras.map(x => {
+          const p = trimProduct(covering, x.code)
+          if (!p) return null
+          return (
+            <div key={x.id} style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4, fontSize: 11, color: '#334155' }}>
+              <span style={{ flex: 1 }}>{trimOptionLabel(covering, x.code)}</span>
+              <input type="number" min={0} step={p.unit === 'nr' ? 1 : 0.5} value={x.qty} onChange={e => onExtraQty(x.id, Math.max(0, +e.target.value || 0))} style={{ ...miniInput, width: 56 }} />
+              <span style={{ width: 18 }}>{p.unit === 'nr' ? 'nr' : 'lm'}</span>
+              <button onClick={() => onRemoveExtra(x.id)} aria-label="Remove" style={{ background: 'none', border: 'none', color: '#c0392b', cursor: 'pointer', fontSize: 14, padding: '0 4px' }}>×</button>
+            </div>
+          )
+        })}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4 }}>
+          <select value={addCode} onChange={e => setAddCode(e.target.value)} style={selectStyle}>
+            <option value="">Choose a trim…</option>
+            {catalogue.map(p => <option key={p.code} value={p.code}>{trimOptionLabel(covering, p.code)}</option>)}
+          </select>
+          <input type="number" min={0} value={addQty} onChange={e => setAddQty(Math.max(0, +e.target.value || 0))} style={{ ...miniInput, width: 56 }} />
+          <button disabled={!addCode || !(addQty > 0)} onClick={() => { onAddExtra(addCode, addQty); setAddCode('') }}
+            style={{ fontSize: 11, padding: '3px 8px', border: '1px dashed #7dd3fc', borderRadius: 999, background: 'none', color: '#0369a1', cursor: addCode && addQty > 0 ? 'pointer' : 'default', opacity: addCode && addQty > 0 ? 1 : 0.5 }}>+ Add</button>
+        </div>
+      </div>
+      <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 6, lineHeight: 1.4 }}>
+        Lengths and corners are worked out from the roof; each trim is priced in the breakdown with a sample rate you can change.
+        {covering === 'grp' ? ' Check each trim against the Cure It details for the build-up.' : ' EPDM trims are generic — say which supplier you use and their range can go in.'}
+      </div>
+    </div>
+  )
+}
+
 // ── The span chart: for the roof's joist span, which sections work at each centres. The chosen section's
 // row is marked, and cells that reach the span are green, so the answer reads straight off the chart.
 function SpanChartPanel({ chart, check, grade, spanMm, centresMm, depthMm, picked, loads, onLoads, onUse, onPick }: {
