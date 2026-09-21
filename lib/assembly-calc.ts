@@ -1309,7 +1309,7 @@ export function calculateSleeperWallCost(input: SleeperWallInput, layers: Assemb
 //     fixed to it (below)
 //   - gutter:   the water leaves into a gutter — trim, and a gutter
 //   - parapet:  a masonry parapet wall stands on the edge — coping, a cavity tray, the membrane
-//     dressed up its inner face, and rainwater outlets (through gullies) and an overflow through it
+//     dressed up its inner face, and rainwater outlets and an overflow outlet through it
 //   - free:     a plain edge — drip trim
 // Where the joists meet an existing wall square-on (the high or low edge is the abutment) they are
 // either hung from a ledger plate bolted to the wall (ledger, bolts at 600 centres, a hanger on every
@@ -1334,7 +1334,8 @@ export type FlatRoofOutletKind = 'gully' | 'overflow'
 
 export interface FlatRoofEdges { high: FlatRoofEdge; low: FlatRoofEdge; left: FlatRoofEdge; right: FlatRoofEdge }
 
-/** A rainwater outlet through a parapet wall — a through gully, or an emergency overflow. Each is placed
+/** An outlet through a parapet wall — a rainwater outlet (kind 'gully'; the everyday drain, at roof level) or an
+ * emergency overflow outlet (kind 'overflow'; set higher, only used if the first blocks). Each is placed
  * individually, so there can be as many as are wanted, wherever they're wanted. */
 export interface FlatRoofOutlet {
   id: string
@@ -1379,7 +1380,7 @@ export interface FlatRoofInput {
   /** From the top of the wall the roof sits on to the top of the parapet; default the parapet's height + 350. */
   parapetMasonryHeightMm?: number
   parapetType?: ParapetType // default 'cavity-brick-block'
-  outlets?: FlatRoofOutlet[] // the gullies and overflows through the parapet, each placed on its edge
+  outlets?: FlatRoofOutlet[] // the rainwater and overflow outlets through the parapet, each placed on its edge
   openings: FlatRoofOpening[]
 }
 
@@ -1573,13 +1574,13 @@ export function calculateFlatRoofGeometry(input: FlatRoofInput): FlatRoofGeometr
 
   // Things worth the estimator's attention.
   outlets.forEach((o, i) => {
-    const label = o.kind === 'gully' ? 'gully' : 'overflow'
+    const label = o.kind === 'gully' ? 'rainwater outlet' : 'overflow outlet'
     if (edges[o.edge] !== 'parapet') warnings.push(`Outlet ${i + 1} (${label}) is on the ${o.edge} edge, which isn't a parapet — move it to a parapet edge.`)
     else if (o.positionMm < 0 || o.positionMm > edgeMm[o.edge]) warnings.push(`Outlet ${i + 1} (${label}) is beyond the end of its edge — check its position.`)
   })
   if (edges.low === 'abutment') warnings.push('The roof falls toward the existing wall — its low edge is the abutment. Check which edge is high.')
-  if (parapetMm > 0 && gullyCount === 0) warnings.push('A parapet roof needs rainwater outlets (through gullies) — none are counted.')
-  else if (parapetMm > 0 && overflowCount === 0) warnings.push('No overflow outlet is counted through the parapet — an overflow is normally needed too.')
+  if (parapetMm > 0 && gullyCount === 0) warnings.push('A parapet roof needs rainwater outlets through the wall — none are counted.')
+  else if (parapetMm > 0 && overflowCount === 0) warnings.push('No overflow outlet is counted through the parapet — one is normally needed as well.')
   if (gutterMm === 0 && gullyCount === 0) warnings.push('No gutter and no rainwater outlet — the water has nowhere to go.')
 
   return {

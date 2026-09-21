@@ -234,7 +234,7 @@ function buildFlatRoofLayers(o: LayerOpts): AssemblyLayerDef[] {
       { id: 'parapet_coping', name: 'Concrete coping (parapet)', category: 'materials', source: 'parapetLm', unit: 'lm', unitCost: 14.00, wastePct: w },
     )
   }
-  if (g.gullyCount > 0) layers.push({ id: 'gullies', name: 'Through-wall rainwater outlet (gully) with membrane flange', category: 'materials', source: 'gullyCount', unit: 'nr', unitCost: 48.00, roundToWhole: true })
+  if (g.gullyCount > 0) layers.push({ id: 'gullies', name: 'Rainwater outlet through the parapet (with membrane flange)', category: 'materials', source: 'gullyCount', unit: 'nr', unitCost: 48.00, roundToWhole: true })
   if (g.overflowCount > 0) layers.push({ id: 'overflows', name: 'Overflow outlet through the parapet', category: 'materials', source: 'overflowCount', unit: 'nr', unitCost: 36.00, roundToWhole: true })
 
   // Rooflight openings — the kerbs only; the rooflights themselves are priced elsewhere
@@ -259,11 +259,11 @@ type EdgeKey = keyof FlatRoofEdges
 // The order the low edge is preferred in: water falls to it, so that's where a parapet's outlets go first.
 const EDGE_ORDER: EdgeKey[] = ['low', 'high', 'right', 'left']
 const EDGE_NAME: Record<EdgeKey, string> = { high: 'High edge', low: 'Low edge', left: 'Left edge', right: 'Right edge' }
-const OUTLET_LABEL: Record<FlatRoofOutletKind, string> = { gully: 'Through gully', overflow: 'Overflow' }
+const OUTLET_LABEL: Record<FlatRoofOutletKind, string> = { gully: 'Rainwater outlet', overflow: 'Overflow outlet' }
 let _outletId = 0
 const newOutletId = () => `out-${++_outletId}`
 
-/** What a parapet starts with: enough gullies for its length (about one to every 5m) and an overflow,
+/** What a parapet starts with: enough rainwater outlets for its length (about one to every 5m) and an overflow outlet,
  * spread evenly along its first parapet edge. From then on the outlets are the user's to change. */
 function defaultOutlets(edges: FlatRoofEdges, lengthMm: number, widthMm: number): FlatRoofOutlet[] {
   const edgeLen: Record<EdgeKey, number> = { high: lengthMm, low: lengthMm, left: widthMm, right: widthMm }
@@ -520,7 +520,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
       : ' Joists bearing on a wall plate at the existing wall, strapped.'
     if (hasParapet) {
       const gullyN = outlets.filter(o => o.kind === 'gully').length, overflowN = outlets.length - gullyN
-      text += ` ${PARAPET_TYPE_LABEL[parapetType].toLowerCase()} parapet wall ${parapetHeightMm}mm above the roof with coping, ${gullyN} through ${gullyN === 1 ? 'gully' : 'gullies'} for the rainwater${overflowN ? ` and ${overflowN === 1 ? 'an overflow' : `${overflowN} overflows`}` : ''}.`
+      text += ` ${PARAPET_TYPE_LABEL[parapetType].toLowerCase()} parapet wall ${parapetHeightMm}mm above the roof with coping, ${gullyN} rainwater ${gullyN === 1 ? 'outlet' : 'outlets'} through it${overflowN ? ` and ${overflowN === 1 ? 'an overflow outlet' : `${overflowN} overflow outlets`}` : ''}.`
     }
     if (openings.length) {
       text += ` Openings formed for ${openings.map(o => `${KIND_LABEL[o.kind].toLowerCase()} ${o.widthMm}×${o.depthMm}mm (${o.trimmers === 3 ? 'tripled' : 'doubled'} trimmers)`).join(', ')} — rooflights supplied separately.`
@@ -803,12 +803,12 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
                 </div>
                 {/* Each outlet on its own: change its edge and position, delete it, or drag it on the plan. */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, marginBottom: 4 }}>
-                  <span style={{ fontSize: 11, color: '#64748b', flex: 1 }}>Rainwater outlets — {g ? g.gullyCount : 0} gully, {g ? g.overflowCount : 0} overflow</span>
+                  <span style={{ fontSize: 11, color: '#64748b', flex: 1 }}>Outlets through the parapet — {g ? g.gullyCount : 0} rainwater, {g ? g.overflowCount : 0} overflow</span>
                   <button onClick={autoPlaceOutlets} title="Start again with an even spread of outlets for this parapet"
                     style={{ fontSize: 10, color: '#0369a1', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>↻ Auto-place</button>
                 </div>
                 {outlets.length === 0 && (
-                  <div style={{ fontSize: 11, color: '#c0392b', marginBottom: 4 }}>No outlets — add a gully below.</div>
+                  <div style={{ fontSize: 11, color: '#c0392b', marginBottom: 4 }}>No outlets — add a rainwater outlet below.</div>
                 )}
                 {outlets.map((o, i) => (
                   <div key={o.id} style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 4 }}>
@@ -827,9 +827,9 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
                 ))}
                 <div style={{ display: 'flex', gap: 5, marginTop: 2 }}>
                   <button onClick={() => addOutlet('gully')}
-                    style={{ fontSize: 11, padding: '3px 8px', border: '1px dashed #93c5fd', borderRadius: 999, background: 'none', color: '#1d4ed8', cursor: 'pointer' }}>+ Gully</button>
+                    style={{ fontSize: 11, padding: '3px 8px', border: '1px dashed #93c5fd', borderRadius: 999, background: 'none', color: '#1d4ed8', cursor: 'pointer' }}>+ Rainwater outlet</button>
                   <button onClick={() => addOutlet('overflow')}
-                    style={{ fontSize: 11, padding: '3px 8px', border: '1px dashed #fcd34d', borderRadius: 999, background: 'none', color: '#b45309', cursor: 'pointer' }}>+ Overflow</button>
+                    style={{ fontSize: 11, padding: '3px 8px', border: '1px dashed #fcd34d', borderRadius: 999, background: 'none', color: '#b45309', cursor: 'pointer' }}>+ Overflow outlet</button>
                 </div>
                 <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>Position is in mm along the edge — from the left, or from the high edge for the sides. Drag one on the plan to move it.</div>
                 <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>Masonry from the wall head: {parapetMasonryHeightMm}mm ({roofBuildUpMm}mm of roof build-up + {parapetHeightMm}mm).</div>
@@ -979,7 +979,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
 
 // ── Plan view of the roof — joists at their centres (cut short where an opening crosses them), each of
 // the four edges drawn as what it is (existing wall, gutter, parapet, free), the ledger's bolts and the
-// joist hangers or wall-plate straps at an existing wall, the parapet's gullies, and each opening with
+// joist hangers or wall-plate straps at an existing wall, the parapet's outlets, and each opening with
 // its trimmers drawn as the two or three separate members they are. Drag an opening to position it
 // (snaps to 50mm). Visual only: the numbers in the breakdown come from the geometry, not this drawing.
 const KIND_STYLE: Record<RoofOpeningKind, { fill: string; stroke: string }> = {
@@ -1117,7 +1117,7 @@ function FlatRoofPlanSvg({ g, lengthMm, widthMm, centresMm, fallRatio, edges, wa
     }
   })
   labels.push(<text key="l-high" x={x0} y={y0 - EDGE_BAR - 4} fontSize={9} fill="#57534e">{edgeText('high')}</text>)
-  // Below the low edge, clear of the arrows a parapet's gullies draw there (they run about 20 down).
+  // Below the low edge, clear of the arrows a parapet's outlets draw there (they run about 20 down).
   labels.push(<text key="l-low" x={x0} y={y0 + h + EDGE_BAR + 36} fontSize={9} fill="#57534e">Low edge — {edgeText('low').toLowerCase()}</text>)
   labels.push(<text key="l-left" x={x0 - EDGE_BAR - 5} y={y0 + h / 2} fontSize={9} fill="#57534e" textAnchor="middle" transform={`rotate(-90 ${x0 - EDGE_BAR - 5} ${y0 + h / 2})`}>{`Left — ${edgeText('left').toLowerCase()}`}</text>)
   labels.push(<text key="l-right" x={x0 + w + EDGE_BAR + 12} y={y0 + h / 2} fontSize={9} fill="#57534e" textAnchor="middle" transform={`rotate(90 ${x0 + w + EDGE_BAR + 12} ${y0 + h / 2})`}>{`Right — ${edgeText('right').toLowerCase()}`}</text>)
@@ -1144,7 +1144,7 @@ function FlatRoofPlanSvg({ g, lengthMm, widthMm, centresMm, fallRatio, edges, wa
       <line key={`sst-${side}-${i}`} x1={side === 'left' ? x : x - 9} x2={side === 'left' ? x + 9 : x} y1={y0 + p * k} y2={y0 + p * k} stroke="#b45309" strokeWidth={2} />))
   }
 
-  // ── Rainwater outlets (gullies and overflows) on their parapet edges — each drawn where it's been
+  // ── Rainwater outlets and overflow outlets on their parapet edges — each drawn where it's been
   // placed and draggable along its own edge. One that isn't on a parapet edge is drawn faded.
   const gullyMarks: React.ReactNode[] = []
   outlets.forEach((o, i) => {
@@ -1247,8 +1247,8 @@ function FlatRoofPlanSvg({ g, lengthMm, widthMm, centresMm, fallRatio, edges, wa
         <circle cx={92} cy={-2} r={1.9} fill="#93c5fd" /><text x={98} y={0} fontSize={8} fill="#64748b">Ledger bolt</text>
         <rect x={148} y={-5} width={4} height={4} fill="#0f766e" /><text x={156} y={0} fontSize={8} fill="#64748b">Hanger</text>
         <line x1={190} x2={190} y1={-6} y2={1} stroke="#b45309" strokeWidth={2} /><text x={195} y={0} fontSize={8} fill="#64748b">Strap</text>
-        <rect x={224} y={-6} width={8} height={6} fill="#2563eb" /><text x={236} y={0} fontSize={8} fill="#64748b">Gully</text>
-        <rect x={266} y={-6} width={8} height={6} fill="#d97706" /><text x={278} y={0} fontSize={8} fill="#64748b">Overflow</text>
+        <rect x={224} y={-6} width={8} height={6} fill="#2563eb" /><text x={236} y={0} fontSize={8} fill="#64748b">Rainwater</text>
+        <rect x={284} y={-6} width={8} height={6} fill="#d97706" /><text x={296} y={0} fontSize={8} fill="#64748b">Overflow</text>
       </g>
     </svg>
   )

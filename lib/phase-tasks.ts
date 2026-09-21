@@ -216,7 +216,7 @@ const roofSubphases: PhaseSubphase[] = [
       t('rf-insulation',     'Insulation and vapour control layer',    'm²', 15, 0, 0, 0, 0, 0, 'Warm roof PIR above the deck, or cold roof insulation between the joists'),
       t('rf-covering',       'Covering, upstands and edges',           'm²', 15, 0, 0, 0, 0, 0, 'EPDM, GRP or single-ply, upstands, drip trim and flashing to the house wall'),
       t('rf-rooflights',     'Openings for rooflights',                'nr',  2, 0, 0, 0, 0, 0, 'Doubled or tripled trimmers, kerb and dressed membrane — the rooflight itself is priced separately'),
-      t('rf-parapet',        'Parapet wall, coping and through gullies', 'lm', 8, 0, 0, 0, 0, 0, 'Masonry parapet with coping, cavity tray, membrane up the face, rainwater outlets and overflow'),
+      t('rf-parapet',        'Parapet wall, coping and rainwater outlets', 'lm', 8, 0, 0, 0, 0, 0, 'Masonry parapet with coping, cavity tray, membrane up the face, rainwater outlets and overflow outlets'),
       t('rf-drainage',       'Gutter and downpipes',                   'lm',  5, 0, 0, 0, 0, 0, 'uPVC half-round gutter and downpipe run'),
     ],
   },
