@@ -1330,8 +1330,29 @@ export type FlatRoofBuildUp = 'warm' | 'cold'
 export type FlatRoofEdge = 'abutment' | 'gutter' | 'parapet' | 'free'
 export type FlatRoofWallConnection = 'ledger' | 'bearing'
 export type ParapetType = 'cavity-brick-block' | 'solid-block'
+export type FlatRoofOutletKind = 'gully' | 'overflow'
 
 export interface FlatRoofEdges { high: FlatRoofEdge; low: FlatRoofEdge; left: FlatRoofEdge; right: FlatRoofEdge }
+
+/** A rainwater outlet through a parapet wall — a through gully, or an emergency overflow. Each is placed
+ * individually, so there can be as many as are wanted, wherever they're wanted. */
+export interface FlatRoofOutlet {
+  id: string
+  kind: FlatRoofOutletKind
+  edge: keyof FlatRoofEdges // the parapet edge it goes through
+  positionMm: number        // along that edge: from the left for the high and low edges, from the high edge for left and right
+}
+
+/** How one opening is trimmed: the joists either side of it are its side trimmers (doubled or tripled up
+ * alongside, over the full span), and the headers run between them. */
+export interface FlatRoofOpeningTrim {
+  openingId: string
+  beforeMm: number        // position of the joist used as the left trimmer
+  afterMm: number         // position of the joist used as the right trimmer
+  headerLengthMm: number  // between them
+  leftOnJoist: boolean    // the opening's left edge sits right on that joist (otherwise there's a gap to it)
+  rightOnJoist: boolean
+}
 
 export interface FlatRoofOpening {
   id: string
@@ -1358,8 +1379,7 @@ export interface FlatRoofInput {
   /** From the top of the wall the roof sits on to the top of the parapet; default the parapet's height + 350. */
   parapetMasonryHeightMm?: number
   parapetType?: ParapetType // default 'cavity-brick-block'
-  gullyCount?: number       // rainwater outlets through the parapet
-  overflowCount?: number    // emergency overflow outlets through the parapet
+  outlets?: FlatRoofOutlet[] // the gullies and overflows through the parapet, each placed on its edge
   openings: FlatRoofOpening[]
 }
 
@@ -1399,6 +1419,7 @@ export interface FlatRoofGeometry {
   gullyCount: number
   overflowCount: number
   openingCount: number
+  openingTrims: FlatRoofOpeningTrim[]
   warnings: string[]
 }
 
@@ -1446,8 +1467,9 @@ export function calculateFlatRoofGeometry(input: FlatRoofInput): FlatRoofGeometr
   const parapetType: ParapetType = input.parapetType ?? 'cavity-brick-block'
   const connection: FlatRoofWallConnection = input.wallConnection ?? 'ledger'
   const edges: FlatRoofEdges = { high: 'abutment', low: 'gutter', left: 'free', right: 'free', ...input.edges }
-  const gullyCount = Math.max(0, Math.round(input.gullyCount ?? 0))
-  const overflowCount = Math.max(0, Math.round(input.overflowCount ?? 0))
+  const outlets = input.outlets ?? []
+  const gullyCount = outlets.filter(o => o.kind === 'gully').length
+  const overflowCount = outlets.length - gullyCount
   const warnings: string[] = []
 
   if (L <= 0 || S <= 0) throw new Error('Roof length and width must be greater than zero.')
@@ -1486,14 +1508,23 @@ export function calculateFlatRoofGeometry(input: FlatRoofInput): FlatRoofGeometr
     joistMm += Math.max(0, S - cut)
   }
 
-  // Trimming round each opening: two headers across the joists (each `trimmers` members, spanning to
-  // the joists either side, so the opening's width plus a joist spacing), and a side trimmer each
-  // side — the joist already there plus (trimmers - 1) more, over the opening's length and a header's
-  // seating either end. Doubled is 2, tripled 3. Then the kerb.
+  // Trimming round each opening. The joists either side of it are its side trimmers: the nearest joist at
+  // or beyond each side (the opening is usually set with its edges on joist lines, so that joist is used
+  // as one member of the doubled trimmer), with (trimmers - 1) more added alongside over the full span —
+  // doubled is 2 members, tripled 3. The two headers (also `trimmers` members each) run between those
+  // joists. Then the kerb.
   let trimMm = 0, kerbMm = 0, kerbFaceMm2 = 0
+  const openingTrims: FlatRoofOpeningTrim[] = []
   for (const o of openings) {
     const members = o.trimmers ?? 2
-    trimMm += 2 * members * (o.widthMm + C) + 2 * (members - 1) * (o.depthMm + 200)
+    const before = [...positions].reverse().find(p => p <= o.offsetMm) ?? 0
+    const after = positions.find(p => p >= o.offsetMm + o.widthMm) ?? L
+    const headerMm = Math.max(0, after - before)
+    trimMm += 2 * (members - 1) * S + 2 * members * headerMm
+    openingTrims.push({
+      openingId: o.id, beforeMm: before, afterMm: after, headerLengthMm: headerMm,
+      leftOnJoist: Math.abs(before - o.offsetMm) <= 1, rightOnJoist: Math.abs(after - (o.offsetMm + o.widthMm)) <= 1,
+    })
     const perimeterMm = 2 * (o.widthMm + o.depthMm)
     kerbMm += perimeterMm
     kerbFaceMm2 += perimeterMm * (o.kerbHeightMm ?? 200)
@@ -1541,6 +1572,11 @@ export function calculateFlatRoofGeometry(input: FlatRoofInput): FlatRoofGeometr
   const abutmentLm = toM(abutmentMm)
 
   // Things worth the estimator's attention.
+  outlets.forEach((o, i) => {
+    const label = o.kind === 'gully' ? 'gully' : 'overflow'
+    if (edges[o.edge] !== 'parapet') warnings.push(`Outlet ${i + 1} (${label}) is on the ${o.edge} edge, which isn't a parapet — move it to a parapet edge.`)
+    else if (o.positionMm < 0 || o.positionMm > edgeMm[o.edge]) warnings.push(`Outlet ${i + 1} (${label}) is beyond the end of its edge — check its position.`)
+  })
   if (edges.low === 'abutment') warnings.push('The roof falls toward the existing wall — its low edge is the abutment. Check which edge is high.')
   if (parapetMm > 0 && gullyCount === 0) warnings.push('A parapet roof needs rainwater outlets (through gullies) — none are counted.')
   else if (parapetMm > 0 && overflowCount === 0) warnings.push('No overflow outlet is counted through the parapet — an overflow is normally needed too.')
@@ -1574,6 +1610,7 @@ export function calculateFlatRoofGeometry(input: FlatRoofInput): FlatRoofGeometr
     parapetRenderAreaM2: cavity ? 0 : +parapetAreaM2.toFixed(4),
     gullyCount, overflowCount,
     openingCount: openings.length,
+    openingTrims,
     warnings,
   }
 }

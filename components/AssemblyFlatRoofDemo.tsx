@@ -29,6 +29,7 @@ import {
   calculateFlatRoofGeometry, calculateFlatRoofCost, studPositionsMm,
   type FlatRoofInput, type FlatRoofGeometry, type FlatRoofOpening, type FlatRoofBuildUp, type RoofOpeningKind,
   type FlatRoofEdge, type FlatRoofEdges, type FlatRoofWallConnection, type ParapetType,
+  type FlatRoofOutlet, type FlatRoofOutletKind,
   type AssemblyLayerDef, type CostedLine,
 } from '@/lib/assembly-calc'
 import { fmt } from '@/lib/utils'
@@ -253,20 +254,50 @@ function buildFlatRoofLayers(o: LayerOpts): AssemblyLayerDef[] {
   return layers
 }
 
+// ── Rainwater outlets ──────────────────────────────────────────────────────────
+type EdgeKey = keyof FlatRoofEdges
+// The order the low edge is preferred in: water falls to it, so that's where a parapet's outlets go first.
+const EDGE_ORDER: EdgeKey[] = ['low', 'high', 'right', 'left']
+const EDGE_NAME: Record<EdgeKey, string> = { high: 'High edge', low: 'Low edge', left: 'Left edge', right: 'Right edge' }
+const OUTLET_LABEL: Record<FlatRoofOutletKind, string> = { gully: 'Through gully', overflow: 'Overflow' }
+let _outletId = 0
+const newOutletId = () => `out-${++_outletId}`
+
+/** What a parapet starts with: enough gullies for its length (about one to every 5m) and an overflow,
+ * spread evenly along its first parapet edge. From then on the outlets are the user's to change. */
+function defaultOutlets(edges: FlatRoofEdges, lengthMm: number, widthMm: number): FlatRoofOutlet[] {
+  const edgeLen: Record<EdgeKey, number> = { high: lengthMm, low: lengthMm, left: widthMm, right: widthMm }
+  const parapetEdges = EDGE_ORDER.filter(e => edges[e] === 'parapet')
+  if (parapetEdges.length === 0) return []
+  const edge = parapetEdges[0]
+  const gullyCount = Math.max(1, Math.ceil(parapetEdges.reduce((s, e) => s + edgeLen[e], 0) / 1000 / 5))
+  const n = gullyCount + 1 // the last one is the overflow
+  return Array.from({ length: n }, (_, i) => ({
+    id: newOutletId(),
+    kind: (i < gullyCount ? 'gully' : 'overflow') as FlatRoofOutletKind,
+    edge,
+    positionMm: Math.round((edgeLen[edge] * (i + 0.5)) / n / 50) * 50,
+  }))
+}
+
 // A new opening goes in the first free spot: scanning along the roof from the left, then down from
 // the high edge, for a gap that clears every opening already there by 300mm (room for the trimmers
 // and kerbs). If the roof is too full it just goes at the default spot — the overlap warning says so.
-function newOpening(kind: RoofOpeningKind, existing: FlatRoofOpening[], lengthMm: number, widthMm: number): FlatRoofOpening {
+function newOpening(kind: RoofOpeningKind, existing: FlatRoofOpening[], lengthMm: number, widthMm: number, centresMm = 400): FlatRoofOpening {
   const d = KIND_DEFAULTS[kind]
   const gap = 300
   const maxX = Math.max(0, lengthMm - d.widthMm)
   const maxY = Math.max(0, widthMm - d.depthMm)
+  // Its left edge goes on a joist line, so that joist is used as a member of the doubled trimmer.
+  const joistXs = studPositionsMm(lengthMm, centresMm).filter(x => x <= maxX)
   const clashes = (x: number, y: number) => existing.some(o =>
     x < o.offsetMm + o.widthMm + gap && o.offsetMm < x + d.widthMm + gap &&
     y < o.offsetSpanMm + o.depthMm + gap && o.offsetSpanMm < y + d.depthMm + gap)
-  let spot = { x: Math.min(maxX, 300), y: Math.min(maxY, 800) }
+  const firstJoist = joistXs.find(x => x >= 300) ?? joistXs[joistXs.length - 1] ?? 0
+  let spot = { x: firstJoist, y: Math.min(maxY, 800) }
   search: for (let y = Math.min(maxY, 800); y <= maxY; y += 200) {
-    for (let x = Math.min(maxX, 300); x <= maxX; x += 100) {
+    for (const x of joistXs) {
+      if (x < 300 && joistXs.length > 1) continue // leave a little room from the end wall
       if (!clashes(x, y)) { spot = { x, y }; break search }
     }
   }
@@ -315,18 +346,52 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   const [wallConnection, setWallConnection] = useState<FlatRoofWallConnection>('ledger')
   const [parapetHeightMm, setParapetHeightMm] = useState(450)
   const [parapetType, setParapetType] = useState<ParapetType>('cavity-brick-block')
-  const [gullies, setGullies] = useState(0)
-  const [overflows, setOverflows] = useState(0)
-  const gulliesTouched = useRef(false)
-  const overflowsTouched = useRef(false)
+  // Rainwater outlets through the parapet — each one placed individually, so they can be added, deleted and
+  // moved wherever, and there can be as many as are needed. A parapet starts with enough for its length;
+  // once any is added, deleted or moved by hand they're left alone (until "Auto-place").
+  const [outlets, setOutlets] = useState<FlatRoofOutlet[]>([])
+  const outletsTouched = useRef(false)
 
-  // Metres of parapet along the edges as set — gullies and an overflow start from that, until typed over.
   const edgeLenMm: Record<keyof FlatRoofEdges, number> = { high: lengthMm, low: lengthMm, left: widthMm, right: widthMm }
-  const parapetEdgeLm = (Object.keys(edges) as (keyof FlatRoofEdges)[]).filter(k => edges[k] === 'parapet').reduce((s, k) => s + edgeLenMm[k], 0) / 1000
+  const parapetEdgeList = EDGE_ORDER.filter(e => edges[e] === 'parapet')
+  const parapetEdgeLm = parapetEdgeList.reduce((s, e) => s + edgeLenMm[e], 0) / 1000
+  const parapetEdgesKey = parapetEdgeList.join(',')
   useEffect(() => {
-    if (!gulliesTouched.current) setGullies(parapetEdgeLm > 0 ? Math.max(1, Math.ceil(parapetEdgeLm / 5)) : 0)
-    if (!overflowsTouched.current) setOverflows(parapetEdgeLm > 0 ? 1 : 0)
-  }, [parapetEdgeLm])
+    if (parapetEdgeList.length === 0) { outletsTouched.current = false; setOutlets([]); return }
+    if (!outletsTouched.current) setOutlets(defaultOutlets(edges, lengthMm, widthMm))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parapetEdgesKey, lengthMm, widthMm])
+  function addOutlet(kind: FlatRoofOutletKind) {
+    const edge = parapetEdgeList[0]
+    if (!edge) return
+    outletsTouched.current = true
+    // The middle of the widest gap between the ends of the edge and the outlets already on it.
+    const len = edgeLenMm[edge]
+    const marks = [0, ...outlets.filter(o => o.edge === edge).map(o => o.positionMm).sort((a, b) => a - b), len]
+    let best = { gap: -1, mid: len / 2 }
+    for (let i = 1; i < marks.length; i++) {
+      const gap = marks[i] - marks[i - 1]
+      if (gap > best.gap) best = { gap, mid: (marks[i] + marks[i - 1]) / 2 }
+    }
+    setOutlets(prev => [...prev, { id: newOutletId(), kind, edge, positionMm: Math.round(best.mid / 50) * 50 }])
+  }
+  function updateOutlet(id: string, patch: Partial<FlatRoofOutlet>) {
+    outletsTouched.current = true
+    setOutlets(prev => prev.map(o => {
+      if (o.id !== id) return o
+      const next = { ...o, ...patch }
+      // Moving to another edge keeps it on that edge's length.
+      return { ...next, positionMm: Math.max(0, Math.min(edgeLenMm[next.edge], next.positionMm)) }
+    }))
+  }
+  function removeOutlet(id: string) {
+    outletsTouched.current = true
+    setOutlets(prev => prev.filter(o => o.id !== id))
+  }
+  function autoPlaceOutlets() {
+    outletsTouched.current = false
+    setOutlets(defaultOutlets(edges, lengthMm, widthMm))
+  }
   function setEdge(which: keyof FlatRoofEdges, value: FlatRoofEdge) {
     setEdges(prev => ({ ...prev, [which]: value }))
   }
@@ -337,13 +402,24 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
     return [lantern, newOpening('roof-window', [lantern], L, S)]
   })
   function addOpening(kind: RoofOpeningKind) {
-    setOpenings(prev => [...prev, newOpening(kind, prev, lengthMm, widthMm)])
+    setOpenings(prev => [...prev, newOpening(kind, prev, lengthMm, widthMm, centresMm)])
   }
   function updateOpening(id: string, patch: Partial<FlatRoofOpening>) {
     setOpenings(prev => prev.map(o => o.id === id ? { ...o, ...patch } : o))
   }
   function removeOpening(id: string) {
     setOpenings(prev => prev.filter(o => o.id !== id))
+  }
+  // An opening is normally set with its edges on joist lines, so that the joist there is used as a
+  // member of its doubled trimmer. Dragging can snap to them; this snaps one that's been typed in.
+  const [snapToJoists, setSnapToJoists] = useState(true)
+  function alignOpeningToJoist(id: string) {
+    const joists = studPositionsMm(lengthMm, centresMm)
+    setOpenings(prev => prev.map(o => {
+      if (o.id !== id) return o
+      const nearest = joists.reduce((best, j) => Math.abs(j - o.offsetMm) < Math.abs(best - o.offsetMm) ? j : best, joists[0] ?? 0)
+      return { ...o, offsetMm: Math.max(0, Math.min(Math.max(0, lengthMm - o.widthMm), nearest)) }
+    }))
   }
 
   const depthOptions = joistSystem === 'posi' ? POSI_DEPTHS : TIMBER_DEPTHS
@@ -403,16 +479,17 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
 
   const input: FlatRoofInput = {
     lengthMm, widthMm, joistCentresMm: centresMm, buildUp, fallRatio, edges, wallConnection,
-    parapetHeightMm, parapetMasonryHeightMm, parapetType, gullyCount: gullies, overflowCount: overflows, openings,
+    parapetHeightMm, parapetMasonryHeightMm, parapetType, outlets, openings,
   }
   const openingsKey = JSON.stringify(openings)
   const edgesKey = JSON.stringify(edges)
+  const outletsKey = JSON.stringify(outlets)
 
   const geometryResult = useMemo(() => {
     try { return { ok: true as const, geometry: calculateFlatRoofGeometry(input) } }
     catch (e: any) { return { ok: false as const, error: e.message as string } }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lengthMm, widthMm, centresMm, buildUp, fallRatio, edgesKey, wallConnection, parapetHeightMm, parapetMasonryHeightMm, parapetType, gullies, overflows, openingsKey])
+  }, [lengthMm, widthMm, centresMm, buildUp, fallRatio, edgesKey, wallConnection, parapetHeightMm, parapetMasonryHeightMm, parapetType, outletsKey, openingsKey])
 
   const g = geometryResult.ok ? geometryResult.geometry : null
 
@@ -441,11 +518,14 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
     if (endAbuts) text += wallConnection === 'ledger'
       ? ' Joists hung from a ledger plate bolted to the existing wall on joist hangers.'
       : ' Joists bearing on a wall plate at the existing wall, strapped.'
-    if (hasParapet) text += ` ${PARAPET_TYPE_LABEL[parapetType].toLowerCase()} parapet wall ${parapetHeightMm}mm above the roof with coping, ${gullies} through gully${gullies !== 1 ? 'ies' : ''} for the rainwater${overflows ? ' and an overflow' : ''}.`
+    if (hasParapet) {
+      const gullyN = outlets.filter(o => o.kind === 'gully').length, overflowN = outlets.length - gullyN
+      text += ` ${PARAPET_TYPE_LABEL[parapetType].toLowerCase()} parapet wall ${parapetHeightMm}mm above the roof with coping, ${gullyN} through ${gullyN === 1 ? 'gully' : 'gullies'} for the rainwater${overflowN ? ` and ${overflowN === 1 ? 'an overflow' : `${overflowN} overflows`}` : ''}.`
+    }
     if (openings.length) {
       text += ` Openings formed for ${openings.map(o => `${KIND_LABEL[o.kind].toLowerCase()} ${o.widthMm}×${o.depthMm}mm (${o.trimmers === 3 ? 'tripled' : 'doubled'} trimmers)`).join(', ')} — rooflights supplied separately.`
     }
-    return text.replace('gullyies', 'gullies')
+    return text
   }
   const [description, setDescription] = useState(buildAutoDescription)
 
@@ -596,8 +676,9 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
           {g && (<>
             <FlatRoofPlanSvg
               g={g} lengthMm={lengthMm} widthMm={widthMm} centresMm={centresMm} fallRatio={fallRatio}
-              edges={edges} wallConnection={wallConnection} openings={openings}
+              edges={edges} wallConnection={wallConnection} openings={openings} outlets={outlets} snapToJoists={snapToJoists}
               onMoveOpening={(id, offsetMm, offsetSpanMm) => updateOpening(id, { offsetMm, offsetSpanMm })}
+              onMoveOutlet={(id, positionMm) => updateOutlet(id, { positionMm })}
             />
             {[...g.warnings, ...extraWarnings].length > 0 && (
               <div style={{ marginTop: 6 }}>
@@ -720,18 +801,37 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
                     </PropRow>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                  <div style={{ flex: 1 }}>
-                    <PropRow label="Through gullies">
-                      <input type="number" min={0} value={gullies} onChange={e => { gulliesTouched.current = true; setGullies(Math.max(0, +e.target.value || 0)) }} style={propInput} />
-                    </PropRow>
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <PropRow label="Overflows">
-                      <input type="number" min={0} value={overflows} onChange={e => { overflowsTouched.current = true; setOverflows(Math.max(0, +e.target.value || 0)) }} style={propInput} />
-                    </PropRow>
-                  </div>
+                {/* Each outlet on its own: change its edge and position, delete it, or drag it on the plan. */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, marginBottom: 4 }}>
+                  <span style={{ fontSize: 11, color: '#64748b', flex: 1 }}>Rainwater outlets — {g ? g.gullyCount : 0} gully, {g ? g.overflowCount : 0} overflow</span>
+                  <button onClick={autoPlaceOutlets} title="Start again with an even spread of outlets for this parapet"
+                    style={{ fontSize: 10, color: '#0369a1', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>↻ Auto-place</button>
                 </div>
+                {outlets.length === 0 && (
+                  <div style={{ fontSize: 11, color: '#c0392b', marginBottom: 4 }}>No outlets — add a gully below.</div>
+                )}
+                {outlets.map((o, i) => (
+                  <div key={o.id} style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 4 }}>
+                    <span style={{ fontSize: 11, color: '#64748b', width: 14 }}>{i + 1}</span>
+                    <select value={o.kind} onChange={e => updateOutlet(o.id, { kind: e.target.value as FlatRoofOutletKind })} style={{ ...miniInput, flex: 1.1 }}>
+                      {(Object.entries(OUTLET_LABEL) as [FlatRoofOutletKind, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    </select>
+                    <select value={o.edge} onChange={e => updateOutlet(o.id, { edge: e.target.value as EdgeKey })} style={{ ...miniInput, flex: 1.1 }}>
+                      {EDGE_ORDER.filter(e => edges[e] === 'parapet' || e === o.edge).map(e => <option key={e} value={e}>{EDGE_NAME[e]}</option>)}
+                    </select>
+                    <input type="number" min={0} value={o.positionMm} title={o.edge === 'left' || o.edge === 'right' ? 'mm from the high edge' : 'mm from the left'}
+                      onChange={e => updateOutlet(o.id, { positionMm: Math.max(0, +e.target.value || 0) })} style={{ ...miniInput, flex: 0.9 }} />
+                    <button onClick={() => removeOutlet(o.id)} aria-label={`Delete outlet ${i + 1}`}
+                      style={{ background: 'none', border: 'none', color: '#c0392b', cursor: 'pointer', fontSize: 14, padding: '0 4px' }}>×</button>
+                  </div>
+                ))}
+                <div style={{ display: 'flex', gap: 5, marginTop: 2 }}>
+                  <button onClick={() => addOutlet('gully')}
+                    style={{ fontSize: 11, padding: '3px 8px', border: '1px dashed #93c5fd', borderRadius: 999, background: 'none', color: '#1d4ed8', cursor: 'pointer' }}>+ Gully</button>
+                  <button onClick={() => addOutlet('overflow')}
+                    style={{ fontSize: 11, padding: '3px 8px', border: '1px dashed #fcd34d', borderRadius: 999, background: 'none', color: '#b45309', cursor: 'pointer' }}>+ Overflow</button>
+                </div>
+                <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>Position is in mm along the edge — from the left, or from the high edge for the sides. Drag one on the plan to move it.</div>
                 <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>Masonry from the wall head: {parapetMasonryHeightMm}mm ({roofBuildUpMm}mm of roof build-up + {parapetHeightMm}mm).</div>
               </div>
             )}
@@ -779,6 +879,10 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
             <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6, lineHeight: 1.4 }}>
               This forms the opening — trimmers, kerb and upstand. The rooflight itself is priced separately.
             </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#475569', marginBottom: 6, cursor: 'pointer' }}>
+              <input type="checkbox" checked={snapToJoists} onChange={e => setSnapToJoists(e.target.checked)} style={{ width: 'auto' }} />
+              Snap to joist lines when dragging, so a joist is used as the trimmer
+            </label>
             {openings.map((o, i) => (
               <div key={o.id} style={{ border: '1px solid #e2e8f0', borderRadius: 6, padding: 6, marginBottom: 6, background: '#fff' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
@@ -811,6 +915,25 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
                     {miniNum(o.kerbHeightMm ?? 200, n => updateOpening(o.id, { kerbHeightMm: n }))}
                   </div>
                 </div>
+                {/* Which joists this opening is trimmed off — the existing joists either side, doubled or tripled up */}
+                {(() => {
+                  const t = g?.openingTrims.find(tr => tr.openingId === o.id)
+                  if (!t) return null
+                  const members = o.trimmers ?? 2
+                  const offJoist = !t.leftOnJoist
+                  return (
+                    <div style={{ fontSize: 10, color: '#64748b', marginTop: 5, lineHeight: 1.4 }}>
+                      Trimmed off the joists at {t.beforeMm} and {t.afterMm}mm — each joist {members === 3 ? 'tripled' : 'doubled'} up over the full span, with a {members === 3 ? 'tripled' : 'doubled'} header {(t.headerLengthMm / 1000).toFixed(2)}m long at each end.
+                      {offJoist && (
+                        <span style={{ color: '#b45309' }}>
+                          {' '}The left edge isn't on a joist line.
+                          <button onClick={() => alignOpeningToJoist(o.id)}
+                            style={{ marginLeft: 4, fontSize: 10, background: 'none', border: 'none', color: '#0369a1', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>Align to a joist</button>
+                        </span>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
             ))}
             <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
@@ -870,7 +993,7 @@ const KIND_SHORT: Record<RoofOpeningKind, string> = { 'lantern': 'Lantern', 'roo
 const TRIMMER_COLOUR = '#b45309'
 const EDGE_BAR = 9
 
-function FlatRoofPlanSvg({ g, lengthMm, widthMm, centresMm, fallRatio, edges, wallConnection, openings, onMoveOpening }: {
+function FlatRoofPlanSvg({ g, lengthMm, widthMm, centresMm, fallRatio, edges, wallConnection, openings, outlets, snapToJoists, onMoveOpening, onMoveOutlet }: {
   g: FlatRoofGeometry
   lengthMm: number
   widthMm: number
@@ -879,14 +1002,20 @@ function FlatRoofPlanSvg({ g, lengthMm, widthMm, centresMm, fallRatio, edges, wa
   edges: FlatRoofEdges
   wallConnection: FlatRoofWallConnection
   openings: FlatRoofOpening[]
+  outlets: FlatRoofOutlet[]
+  /** While dragging an opening, its left edge jumps to the nearest joist line, so the joist is used as its trimmer. */
+  snapToJoists: boolean
   onMoveOpening: (id: string, offsetMm: number, offsetSpanMm: number) => void
+  onMoveOutlet: (id: string, positionMm: number) => void
 }) {
   const vbW = 430, vbH = 372
   const k = Math.min(310 / lengthMm, 180 / widthMm)
   const w = lengthMm * k, h = widthMm * k
   const x0 = 62 + (310 - w) / 2, y0 = 52
   const svgRef = useRef<SVGSVGElement>(null)
-  const [drag, setDrag] = useState<{ id: string; dx: number; dy: number } | null>(null)
+  // Either an opening (grabbed at an offset from its corner) or an outlet is being dragged.
+  const [drag, setDrag] = useState<{ type: 'opening'; id: string; dx: number; dy: number } | { type: 'outlet'; id: string } | null>(null)
+  const positions = studPositionsMm(lengthMm, centresMm)
 
   function pointerMm(e: React.PointerEvent): { x: number; y: number } | null {
     const svg = svgRef.current
@@ -897,25 +1026,42 @@ function FlatRoofPlanSvg({ g, lengthMm, widthMm, centresMm, fallRatio, edges, wa
     const p = pt.matrixTransform(ctm.inverse())
     return { x: (p.x - x0) / k, y: (p.y - y0) / k }
   }
+  // Capturing keeps the drag going if the pointer slips off the shape; not every input device allows it.
+  const capture = (e: React.PointerEvent) => { try { (e.target as Element).setPointerCapture(e.pointerId) } catch { /* the drag still works without it */ } }
   function onDown(e: React.PointerEvent, o: FlatRoofOpening) {
     const p = pointerMm(e)
     if (!p) return
-    // Capturing keeps the drag going if the pointer slips off the box; not every input device allows it.
-    try { (e.target as Element).setPointerCapture(e.pointerId) } catch { /* the drag still works without it */ }
-    setDrag({ id: o.id, dx: p.x - o.offsetMm, dy: p.y - o.offsetSpanMm })
+    capture(e)
+    setDrag({ type: 'opening', id: o.id, dx: p.x - o.offsetMm, dy: p.y - o.offsetSpanMm })
+  }
+  function onDownOutlet(e: React.PointerEvent, o: FlatRoofOutlet) {
+    capture(e)
+    setDrag({ type: 'outlet', id: o.id })
   }
   function onMove(e: React.PointerEvent) {
     if (!drag) return
-    const o = openings.find(op => op.id === drag.id)
     const p = pointerMm(e)
-    if (!o || !p) return
-    const snap = (n: number) => Math.round(n / 50) * 50
+    if (!p) return
+    const snap50 = (n: number) => Math.round(n / 50) * 50
+    if (drag.type === 'outlet') {
+      // Along its own edge only: from the left for the high and low edges, from the high edge for the sides.
+      const o = outlets.find(op => op.id === drag.id)
+      if (!o) return
+      const horizontal = o.edge === 'high' || o.edge === 'low'
+      const len = horizontal ? lengthMm : widthMm
+      onMoveOutlet(o.id, Math.max(0, Math.min(len, snap50(horizontal ? p.x : p.y))))
+      return
+    }
+    const o = openings.find(op => op.id === drag.id)
+    if (!o) return
+    let x = p.x - drag.dx
+    if (snapToJoists) x = positions.reduce((best, j) => Math.abs(j - x) < Math.abs(best - x) ? j : best, positions[0] ?? 0)
+    else x = snap50(x)
     onMoveOpening(o.id,
-      Math.max(0, Math.min(Math.max(0, lengthMm - o.widthMm), snap(p.x - drag.dx))),
-      Math.max(0, Math.min(Math.max(0, widthMm - o.depthMm), snap(p.y - drag.dy))))
+      Math.max(0, Math.min(Math.max(0, lengthMm - o.widthMm), x)),
+      Math.max(0, Math.min(Math.max(0, widthMm - o.depthMm), snap50(p.y - drag.dy))))
   }
 
-  const positions = studPositionsMm(lengthMm, centresMm)
   const joistLines: React.ReactNode[] = []
   for (const p of positions) {
     // Where an opening crosses this joist it's cut — draw the joist only in the gaps.
@@ -998,44 +1144,53 @@ function FlatRoofPlanSvg({ g, lengthMm, widthMm, centresMm, fallRatio, edges, wa
       <line key={`sst-${side}-${i}`} x1={side === 'left' ? x : x - 9} x2={side === 'left' ? x + 9 : x} y1={y0 + p * k} y2={y0 + p * k} stroke="#b45309" strokeWidth={2} />))
   }
 
-  // ── Through gullies (and overflows) along the parapet — the low edge if that's one, else the first.
+  // ── Rainwater outlets (gullies and overflows) on their parapet edges — each drawn where it's been
+  // placed and draggable along its own edge. One that isn't on a parapet edge is drawn faded.
   const gullyMarks: React.ReactNode[] = []
-  const parapetEdge = (['low', 'high', 'right', 'left'] as const).find(e => edges[e] === 'parapet')
-  const outlets = g.gullyCount + g.overflowCount
-  if (parapetEdge && outlets > 0) {
-    const r = rects[parapetEdge]
-    const horiz = parapetEdge === 'high' || parapetEdge === 'low'
-    for (let i = 0; i < outlets; i++) {
-      const t = (i + 0.5) / outlets
-      const isGully = i < g.gullyCount
-      const colour = isGully ? '#2563eb' : '#d97706'
-      const cx = horiz ? r.x + r.w * t : r.x + r.w / 2
-      const cy = horiz ? r.y + r.h / 2 : r.y + r.h * t
-      const out = parapetEdge === 'low' ? [0, 1] : parapetEdge === 'high' ? [0, -1] : parapetEdge === 'right' ? [1, 0] : [-1, 0]
-      gullyMarks.push(
-        <rect key={`gu-${i}`} x={cx - 6} y={cy - 4} width={12} height={8} fill={colour} />,
-        <line key={`gua-${i}`} x1={cx} y1={cy} x2={cx + out[0] * 20} y2={cy + out[1] * 20} stroke={colour} strokeWidth={1.6} markerEnd="url(#roofArrow)" />,
-      )
-    }
-  }
+  outlets.forEach((o, i) => {
+    const r = rects[o.edge]
+    const horiz = o.edge === 'high' || o.edge === 'low'
+    const t = Math.max(0, Math.min(1, o.positionMm / (horiz ? lengthMm : widthMm)))
+    const colour = o.kind === 'gully' ? '#2563eb' : '#d97706'
+    const cx = horiz ? r.x + r.w * t : r.x + r.w / 2
+    const cy = horiz ? r.y + r.h / 2 : r.y + r.h * t
+    const out = o.edge === 'low' ? [0, 1] : o.edge === 'high' ? [0, -1] : o.edge === 'right' ? [1, 0] : [-1, 0]
+    const dragging = drag?.type === 'outlet' && drag.id === o.id
+    gullyMarks.push(
+      <g key={`out-${o.id}`} cursor="grab" onPointerDown={e => onDownOutlet(e, o)} opacity={edges[o.edge] === 'parapet' ? 1 : 0.45}>
+        <line x1={cx} y1={cy} x2={cx + out[0] * 20} y2={cy + out[1] * 20} stroke={colour} strokeWidth={1.6} markerEnd="url(#roofArrow)" pointerEvents="none" />
+        <rect x={cx - 7} y={cy - 5} width={14} height={10} fill={colour} stroke={dragging ? '#0369a1' : 'none'} strokeWidth={2} />
+        <text x={cx} y={cy + 3} fontSize={7} textAnchor="middle" fill="#fff" pointerEvents="none">{i + 1}</text>
+      </g>,
+    )
+  })
 
-  // ── Trimmers: each member drawn separately, outside the opening — two lines doubled, three tripled.
+  // ── Trimmers. The joists either side of an opening are its side trimmers: the existing joist itself
+  // (drawn heavier, over its full span) with one or two more added beside it on the outside, and the
+  // headers run between them against the opening's near and far edges — two lines doubled, three tripled.
   const trimmerLines: React.ReactNode[] = []
   for (const o of openings) {
     const n = o.trimmers ?? 2
-    const rx = x0 + o.offsetMm * k, ry = y0 + o.offsetSpanMm * k
-    const rw = o.widthMm * k, rh = o.depthMm * k
-    // Headers run to the joists either side of the opening.
-    const before = [...positions].reverse().find(p => p <= o.offsetMm) ?? 0
-    const after = positions.find(p => p >= o.offsetMm + o.widthMm) ?? lengthMm
-    const hx1 = x0 + before * k, hx2 = x0 + after * k
+    const t = g.openingTrims.find(tr => tr.openingId === o.id)
+    if (!t) continue
+    const ry = y0 + o.offsetSpanMm * k, rh = o.depthMm * k
+    const xB = x0 + t.beforeMm * k, xA = x0 + t.afterMm * k
+    trimmerLines.push(
+      <line key={`${o.id}-jb`} x1={xB} x2={xB} y1={y0} y2={y0 + h} stroke={TRIMMER_COLOUR} strokeWidth={2.4} />,
+      <line key={`${o.id}-ja`} x1={xA} x2={xA} y1={y0} y2={y0 + h} stroke={TRIMMER_COLOUR} strokeWidth={2.4} />,
+    )
+    for (let i = 1; i < n; i++) {
+      const d = i * 2.8
+      trimmerLines.push(
+        <line key={`${o.id}-xb-${i}`} x1={xB - d} x2={xB - d} y1={y0} y2={y0 + h} stroke={TRIMMER_COLOUR} strokeWidth={1.5} />,
+        <line key={`${o.id}-xa-${i}`} x1={xA + d} x2={xA + d} y1={y0} y2={y0 + h} stroke={TRIMMER_COLOUR} strokeWidth={1.5} />,
+      )
+    }
     for (let i = 0; i < n; i++) {
       const d = 1.6 + i * 2.6
       trimmerLines.push(
-        <line key={`${o.id}-ht-${i}`} x1={hx1} x2={hx2} y1={ry - d} y2={ry - d} stroke={TRIMMER_COLOUR} strokeWidth={1.5} />,
-        <line key={`${o.id}-hb-${i}`} x1={hx1} x2={hx2} y1={ry + rh + d} y2={ry + rh + d} stroke={TRIMMER_COLOUR} strokeWidth={1.5} />,
-        <line key={`${o.id}-tl-${i}`} x1={rx - d} x2={rx - d} y1={ry - d} y2={ry + rh + d} stroke={TRIMMER_COLOUR} strokeWidth={1.5} />,
-        <line key={`${o.id}-tr-${i}`} x1={rx + rw + d} x2={rx + rw + d} y1={ry - d} y2={ry + rh + d} stroke={TRIMMER_COLOUR} strokeWidth={1.5} />,
+        <line key={`${o.id}-ht-${i}`} x1={xB} x2={xA} y1={ry - d} y2={ry - d} stroke={TRIMMER_COLOUR} strokeWidth={1.5} />,
+        <line key={`${o.id}-hb-${i}`} x1={xB} x2={xA} y1={ry + rh + d} y2={ry + rh + d} stroke={TRIMMER_COLOUR} strokeWidth={1.5} />,
       )
     }
   }
@@ -1065,7 +1220,7 @@ function FlatRoofPlanSvg({ g, lengthMm, widthMm, centresMm, fallRatio, edges, wa
         const st = KIND_STYLE[o.kind]
         const rx = x0 + o.offsetMm * k, ry = y0 + o.offsetSpanMm * k
         const rw = o.widthMm * k, rh = o.depthMm * k
-        const dragging = drag?.id === o.id
+        const dragging = drag?.type === 'opening' && drag.id === o.id
         return (
           <g key={o.id}>
             {o.kind === 'dome'
@@ -1088,12 +1243,12 @@ function FlatRoofPlanSvg({ g, lengthMm, widthMm, centresMm, fallRatio, edges, wa
       <text x={x0 + w / 2} y={y0 + h + EDGE_BAR + 50} fontSize={9} fill="#64748b" textAnchor="middle">{(lengthMm / 1000).toFixed(2)}m × {(widthMm / 1000).toFixed(2)}m span · {g.joistCount} joists at {centresMm}mm</text>
       <g transform={`translate(${x0}, ${vbH - 8})`}>
         <line x1={0} x2={16} y1={-3} y2={-3} stroke={TRIMMER_COLOUR} strokeWidth={1.5} /><line x1={0} x2={16} y1={0} y2={0} stroke={TRIMMER_COLOUR} strokeWidth={1.5} />
-        <text x={21} y={0} fontSize={8} fill="#64748b">Trimmers (2 or 3 members)</text>
-        <circle cx={128} cy={-2} r={1.9} fill="#93c5fd" /><text x={134} y={0} fontSize={8} fill="#64748b">Ledger bolt</text>
-        <rect x={188} y={-5} width={4} height={4} fill="#0f766e" /><text x={196} y={0} fontSize={8} fill="#64748b">Hanger</text>
-        <line x1={232} x2={232} y1={-6} y2={1} stroke="#b45309" strokeWidth={2} /><text x={237} y={0} fontSize={8} fill="#64748b">Strap</text>
-        <rect x={266} y={-6} width={8} height={6} fill="#2563eb" /><text x={278} y={0} fontSize={8} fill="#64748b">Gully</text>
-        <rect x={306} y={-6} width={8} height={6} fill="#d97706" /><text x={318} y={0} fontSize={8} fill="#64748b">Overflow</text>
+        <text x={21} y={0} fontSize={8} fill="#64748b">Trimmer joists</text>
+        <circle cx={92} cy={-2} r={1.9} fill="#93c5fd" /><text x={98} y={0} fontSize={8} fill="#64748b">Ledger bolt</text>
+        <rect x={148} y={-5} width={4} height={4} fill="#0f766e" /><text x={156} y={0} fontSize={8} fill="#64748b">Hanger</text>
+        <line x1={190} x2={190} y1={-6} y2={1} stroke="#b45309" strokeWidth={2} /><text x={195} y={0} fontSize={8} fill="#64748b">Strap</text>
+        <rect x={224} y={-6} width={8} height={6} fill="#2563eb" /><text x={236} y={0} fontSize={8} fill="#64748b">Gully</text>
+        <rect x={266} y={-6} width={8} height={6} fill="#d97706" /><text x={278} y={0} fontSize={8} fill="#64748b">Overflow</text>
       </g>
     </svg>
   )
