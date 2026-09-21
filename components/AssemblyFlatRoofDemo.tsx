@@ -33,6 +33,7 @@ import {
   type AssemblyLayerDef, type CostedLine,
 } from '@/lib/assembly-calc'
 import { fmt } from '@/lib/utils'
+import { describeFlatRoof } from '@/lib/flat-roof-description'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import {
   propInput, miniInput, PropRow, BreakdownTable,
@@ -511,23 +512,25 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   const sideAbuts = edges.left === 'abutment' || edges.right === 'abutment'
   const hasParapet = parapetEdgeLm > 0
 
-  function buildAutoDescription(): string {
-    const cover = covering === 'epdm' ? 'EPDM' : covering === 'grp' ? 'GRP fibreglass' : 'single-ply TPO'
-    const insulation = buildUp === 'warm' ? `${insulationMm}mm PIR above the deck` : `${insulationMm}mm mineral wool between the joists`
-    let text = `${(lengthMm / 1000).toFixed(2)} × ${(widthMm / 1000).toFixed(2)}m ${buildUp} flat roof, ${joistLabel(joistSystem, joistDepth, true)} at ${centresMm}mm centres spanning ${(widthMm / 1000).toFixed(2)}m, ${DECK[deck].label} deck, ${insulation}, ${cover} covering, fall 1:${fallRatio}.`
-    if (endAbuts) text += wallConnection === 'ledger'
-      ? ' Joists hung from a ledger plate bolted to the existing wall on joist hangers.'
-      : ' Joists bearing on a wall plate at the existing wall, strapped.'
-    if (hasParapet) {
-      const gullyN = outlets.filter(o => o.kind === 'gully').length, overflowN = outlets.length - gullyN
-      text += ` ${PARAPET_TYPE_LABEL[parapetType].toLowerCase()} parapet wall ${parapetHeightMm}mm above the roof with coping, ${gullyN} rainwater ${gullyN === 1 ? 'outlet' : 'outlets'} through it${overflowN ? ` and ${overflowN === 1 ? 'an overflow outlet' : `${overflowN} overflow outlets`}` : ''}.`
-    }
-    if (openings.length) {
-      text += ` Openings formed for ${openings.map(o => `${KIND_LABEL[o.kind].toLowerCase()} ${o.widthMm}×${o.depthMm}mm (${o.trimmers === 3 ? 'tripled' : 'doubled'} trimmers)`).join(', ')} — rooflights supplied separately.`
-    }
-    return text
-  }
-  const [description, setDescription] = useState(buildAutoDescription)
+  // The customer-facing description, written from the roof as it's set now (lib/flat-roof-description.ts) —
+  // one short paragraph per part of the roof. It follows the roof as it changes, so what's saved to the
+  // quote never describes a covering or a parapet the roof no longer has, until it's edited by hand
+  // (then that text is kept, and "Regenerate" goes back to following the roof).
+  const autoDescription = g ? describeFlatRoof({
+    buildUp, lengthMm, widthMm, fallRatio, joistSystem, joistDepth, centresMm,
+    deckLabel: DECK[deck].label, strutting: joistSystem !== 'posi' && g.strutCount > 0,
+    insulationMm, covering, fascia, downpipes, edges,
+    // How many ends hang from a ledger and how many bear on a wall plate, from the lengths counted.
+    ledgerEnds: g.lengthM > 0 ? Math.round(g.ledgerLm / g.lengthM) : 0,
+    wallPlateEnds: g.lengthM > 0 ? Math.round(g.wallPlateLm / g.lengthM) : 0,
+    endStraps: endAbuts && wallConnection === 'bearing',
+    sideStrapped: sideAbuts,
+    abutmentLm: g.abutmentLm, edgeTrimLm: g.edgeTrimLm, gutterLm: g.gutterLm,
+    parapet: hasParapet ? { lm: g.parapetLm, heightMm: parapetHeightMm, type: parapetType, rainwaterOutlets: g.gullyCount, overflowOutlets: g.overflowCount } : undefined,
+    openings: openings.map(o => ({ kind: o.kind, widthMm: o.widthMm, depthMm: o.depthMm, trimmers: o.trimmers ?? 2 })),
+  }) : ''
+  const [descriptionOverride, setDescriptionOverride] = useState<string | null>(null)
+  const description = descriptionOverride ?? autoDescription
 
   const layers = useMemo(() => {
     if (!geometryResult.ok) return []
@@ -656,15 +659,19 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
 
       <div style={{ marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-          <label style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4 }}>Description (for the quote)</label>
-          <button onClick={() => setDescription(buildAutoDescription())}
-            title="Regenerate from the current sizing — overwrites any edits below"
-            style={{ fontSize: 10, color: '#0369a1', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-            ↻ Regenerate
-          </button>
+          <label style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4 }}>Description (for the quote — what's included)</label>
+          {descriptionOverride === null
+            ? <span style={{ fontSize: 10, color: '#16a34a' }}>updates as you change the roof</span>
+            : (
+              <button onClick={() => setDescriptionOverride(null)}
+                title="Go back to the description written from the roof — overwrites your edits below"
+                style={{ fontSize: 10, color: '#0369a1', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                ↻ Edited by you — regenerate from the roof
+              </button>
+            )}
         </div>
-        <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3}
-          style={{ width: '100%', fontSize: 12, color: '#1e293b', padding: '6px 9px', border: '1px solid #e2e8f0', borderRadius: 5, boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }} />
+        <textarea value={description} onChange={e => setDescriptionOverride(e.target.value)} rows={9}
+          style={{ width: '100%', fontSize: 12, lineHeight: 1.5, color: '#1e293b', padding: '6px 9px', border: '1px solid #e2e8f0', borderRadius: 5, boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }} />
       </div>
 
       {/* An error is shown here with the controls still in place, so the value can be corrected. */}
