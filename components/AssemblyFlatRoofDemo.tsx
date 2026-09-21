@@ -1265,7 +1265,7 @@ function CoveringTrimsPanel({ covering, roof, trims, areaM2, wastePct, onPick, e
 // ── Suggested labour ───────────────────────────────────────────────────────────────
 // Which trades the roof as chosen needs, and roughly how long each takes, with the working for each. The hours go
 // straight into the labour section below (where they can be changed) and follow the roof until they are.
-function LabourSuggestionPanel({ suggestions, includeFitting, onIncludeFitting, unmatched, edited, onSuggestAgain, tradesFound }: {
+export function LabourSuggestionPanel({ suggestions, includeFitting, onIncludeFitting, unmatched, edited, onSuggestAgain, tradesFound }: {
   suggestions: LabourSuggestion[]
   includeFitting: boolean
   onIncludeFitting: (on: boolean) => void

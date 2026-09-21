@@ -268,6 +268,19 @@ const roofSubphases: PhaseSubphase[] = [
     ],
   },
   {
+    id: 'roof-rainwater',
+    phase: 'Roof',
+    name: 'Gutters & Downpipes',
+    markupPct: 20,
+    ukWarning: 'Gutters and downpipes must be sized for the roof area and the rainfall, and the water taken to a drain or soakaway. A parapet roof needs rainwater outlets and an overflow through the wall.',
+    tasks: [
+      t('rw-gutters',     'Gutters, brackets, stop ends and joints',   'lm',  20, 0, 0, 0, 0, 0, 'uPVC, aluminium or cast-iron effect, with brackets, stop ends, unions and angles'),
+      t('rw-downpipes',   'Downpipes, clips and shoes',                'lm',  10, 0, 0, 0, 0, 0, 'Each downpipe dropping from the gutter or a hopper head to the drain'),
+      t('rw-hoppers',     'Hopper heads and outlets through parapets', 'nr',   2, 0, 0, 0, 0, 0, 'Rainwater and overflow outlets through a parapet wall'),
+      t('rw-fascia',      'Fascia board',                              'lm',  20, 0, 0, 0, 0, 0, 'Board the gutters are fixed to'),
+    ],
+  },
+  {
     id: 'roof-fascia-soffit',
     phase: 'Roof',
     name: 'Fascias, Soffits & Barge Boards',
@@ -1338,6 +1351,19 @@ const dwarfWallSubphases: PhaseSubphase[] = [
       t('dw-make-good',        'Make good surrounding ground',             'lm', 10,  0,    0,    0,    0,    0,  'Backfill, compact and reinstate ground adjacent to wall'),
       t('dw-clean',            'Clean brickwork / blockwork',              'lm', 10,  0,    0,    0,    0,    0,  'Remove mortar splashes and clean all exposed faces'),
       t('dw-inspection',       'Final inspection and snagging',            'nr',  1,  0,    0,    0,    0,    0,  'Final visual inspection, snagging and handover'),
+    ],
+  },
+  {
+    id: 'ew-parapet-wall',
+    phase: 'External Walls',
+    name: 'Parapet Wall',
+    markupPct: 20,
+    ukWarning: 'A parapet needs a DPC and cavity tray where it meets the roof, and to be tied back to the structure. Parapets over about 600mm above the roof need checking for wind loading. The roof covering is dressed up the inner face by the roofer.',
+    tasks: [
+      t('pw-masonry',          'Build the parapet wall',                   'lm', 10,  0,    0,    0,    0,    0,  'Brick and block cavity, solid block rendered, or solid brick, from the wall head to the underside of the coping (rate per lm)'),
+      t('pw-tray',             'DPC and cavity tray at the base',          'lm', 10,  0,    0,    0,    0,    0,  'Where the roof meets the wall'),
+      t('pw-coping',           'Coping or capping',                        'lm', 10,  0,    0,    0,    0,    0,  'Concrete, stone, bricks on edge, aluminium or lead — with a drip'),
+      t('pw-outlets',          'Form outlet openings',                     'nr',  3,  0,    0,    0,    0,    0,  'Openings through the wall for rainwater and overflow outlets'),
     ],
   },
   {

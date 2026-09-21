@@ -27,7 +27,7 @@ export const LABOUR_TRADE_LABEL: Record<LabourTradeKind, string> = {
 export const LABOUR_RATES = {
   carpenter: { joist: 0.4, posiJoist: 0.3, ledgerLm: 0.3, wallPlateLm: 0.15, strutPair: 0.1, firringLm: 0.12, deckM2: 0.3, trimmerLm: 0.25, kerbLm: 0.5, fasciaLm: 0.4 },
   roofer: { insulationM2: 0.2, coveringM2: { grp: 0.55, epdm: 0.4, tpo: 0.45 }, trimLm: 0.3, cornerNr: 0.2, leadLm: 0.5, outletNr: 0.75, overflowNr: 0.5 },
-  bricklayer: { cavityM2: 1.4, solidM2: 1.0, copingLm: 0.35, trayLm: 0.15, outletOpeningNr: 0.5 },
+  bricklayer: { cavityM2: 1.4, solidM2: 1.0, solidBrickM2: 1.8, copingLm: 0.35, trayLm: 0.15, outletOpeningNr: 0.5 },
   renderer: { renderM2: 0.6 },
   plumber: { gutterLm: 0.3, fittingNr: 0.15, downpipeLm: 0.35, shoeNr: 0.15, hopperNr: 0.5, offsetNr: 0.3 },
   labourer: { carryM2: 0.15, bricklayerShare: 0.5 },
@@ -210,4 +210,24 @@ export function toLabourLines(
     lines.push({ id: `suggested-${s.key}`, tradeId: trade?.id ?? '', task: trade ? s.task : `${LABOUR_TRADE_LABEL[s.trade]} — ${s.task}`, hours: s.hours })
   }
   return { lines, unmatched }
+}
+
+/** The labour for a parapet wall priced on its own (External Walls → Parapet wall): the bricklayer, a labourer serving
+ * them, and a renderer if it's rendered. */
+export function suggestParapetLabour(p: {
+  lm: number; masonryAreaM2: number; build: 'cavity-brick-block' | 'solid-block' | 'solid-brick'; renderAreaM2: number; outletOpenings: number
+}): LabourSuggestion[] {
+  const b = LABOUR_RATES.bricklayer
+  const rate = p.build === 'cavity-brick-block' ? b.cavityM2 : p.build === 'solid-block' ? b.solidM2 : b.solidBrickM2
+  const what = p.build === 'cavity-brick-block' ? 'cavity wall' : p.build === 'solid-block' ? 'solid block wall' : 'solid brick wall'
+  const brick = line('brick-parapet', 'bricklayer', 'Build the parapet wall, the tray and the coping', [
+    { qty: p.masonryAreaM2, unit: 'm²', what, rate },
+    { qty: p.lm, unit: 'lm', what: 'coping', rate: b.copingLm },
+    { qty: p.lm, unit: 'lm', what: 'DPC and tray', rate: b.trayLm },
+    { qty: p.outletOpenings, unit: 'outlet openings', what: '', rate: b.outletOpeningNr },
+  ])
+  const out: (LabourSuggestion | null)[] = [brick]
+  out.push(line('lab-parapet', 'labourer', 'Mix and carry for the bricklayer', [{ qty: brick?.hours ?? 0, unit: 'h', what: 'bricklayer', rate: LABOUR_RATES.labourer.bricklayerShare }]))
+  if (p.build === 'solid-block') out.push(line('render-parapet', 'renderer', 'Render the parapet', [{ qty: p.renderAreaM2, unit: 'm²', what: 'render', rate: LABOUR_RATES.renderer.renderM2 }]))
+  return out.filter((x): x is LabourSuggestion => x !== null)
 }

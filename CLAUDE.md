@@ -56,7 +56,8 @@ Response is mapped directly to the typed item structure.
 
 Assembly calculators price a Back Office sub-phase from geometry (wall length/height, foundation, etc.).
 Built so far: internal stud/metal/block partitions, external cavity walls, 100mm and 215mm blockwork,
-timber garden room wall, dwarf wall, sleeper wall (block & beam floor). Every new one follows the same
+timber garden room wall, dwarf wall, sleeper wall (block & beam floor), parapet wall, and the Roof phase's
+structure, covering and gutters. Every new one follows the same
 pattern, and **is used from Take-off in the same way** — do not invent a different one.
 
 **Build it**
@@ -90,10 +91,18 @@ pattern, and **is used from Take-off in the same way** — do not invent a diffe
   resolve through the sub-phase picker.
 - A Sub-Phase picked in the panel *before* drawing carries onto the drawn wall (the queued-element effect in
   `page.tsx`); a calculator sub-phase hides the empty Task dropdown and shows a note instead.
-- Phases wired so far: External Walls, Internal Walls and **Roof** (the flat roof calculator, `roof-flat`,
-  pairs with the `cold_flat_roof`/`warm_flat_roof` Build-Up Types; a roof is sized from the bounding box of
-  the drawn shape via `drawnBoxMm`, passed as `externalLengthMm` + `externalWidthMm`, and the panel card
-  shows "Size" not "Length"). A calculator for any other phase (floors, plastering, ...) needs
+- Phases wired so far: External Walls, Internal Walls and **Roof**. **The roof is priced in its own sub-phases,
+  one calculator each, never one big screen**: `roof-structure` (Roof Structure — a roof type drop-down, flat
+  built; mono/lean-to, gable and hip are next, each its own calculator behind it), `roof-covering` (Roof
+  Coverings — flat GRP/EPDM/TPO with trims built; pitched tiles/slate next), `roof-rainwater` (Gutters &
+  Downpipes), and the parapet wall is `ew-parapet-wall` under External Walls (a line, like any wall). The three
+  roof parts are `AssemblyFlatRoofDemo` with a `part` prop ('structure' | 'covering' | 'gutters'; 'complete',
+  the old all-in-one `roof-flat`, is kept only until it's retired) — each shows only its own inputs, layers,
+  labour (`suggestFlatRoofLabour(…, scope)`) and description (`describeFlatRoof(…, part)`), and the parts'
+  totals add up to the complete roof's. `roof-structure` pairs with the `cold_flat_roof`/`warm_flat_roof`
+  Build-Up Types; the others appear under "Calculators". A roof is sized from the bounding box of the drawn
+  shape via `drawnBoxMm`, passed as `externalLengthMm` + `externalWidthMm`, and the panel card shows "Size"
+  not "Length". A calculator for any other phase (floors, plastering, ...) needs
   `resolveBuiltAssembly`, the properties panel's Build-Up Type/sub-phase picker, the `hideForBuiltAssembly`
   flag, and the carry-over extended to that phase — do it the same way, don't fork a new pattern.
 - Take-off needs a login, so it can't be driven in the preview browser: test the screen on a temporary

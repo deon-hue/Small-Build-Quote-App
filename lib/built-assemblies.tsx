@@ -19,10 +19,13 @@ import AssemblyTimberFrameWallDemo from '@/components/AssemblyTimberFrameWallDem
 import AssemblyDwarfWallDemo from '@/components/AssemblyDwarfWallDemo'
 import AssemblySleeperWallDemo from '@/components/AssemblySleeperWallDemo'
 import AssemblyFlatRoofDemo from '@/components/AssemblyFlatRoofDemo'
+import AssemblyParapetWallDemo from '@/components/AssemblyParapetWallDemo'
+import AssemblyRoofStructureDemo from '@/components/AssemblyRoofStructureDemo'
+import AssemblyRoofCoveringDemo from '@/components/AssemblyRoofCoveringDemo'
 import type { CostedLine } from '@/lib/assembly-calc'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 
-export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof'
+export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters'
 
 /** Fired when a calculator's "Save & Price" is used from inside a real quote — absent in
  * the Back Office preview context, which has no quote to save into. */
@@ -55,6 +58,10 @@ export const BUILT_ASSEMBLY_CANON_IDS: Record<string, {
   'ew-garden-room-timber': { icon: 'timber-frame-wall', render: opts => <AssemblyTimberFrameWallDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'ew-dwarf-wall': { icon: 'dwarf-wall', render: opts => <AssemblyDwarfWallDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'ew-sleeper-wall': { icon: 'sleeper-wall', render: opts => <AssemblySleeperWallDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
+  'ew-parapet-wall': { icon: 'parapet-wall', render: opts => <AssemblyParapetWallDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
+  'roof-structure': { icon: 'flat-roof', render: opts => <AssemblyRoofStructureDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} externalWidthMm={opts?.externalWidthMm} buildUpDefault={opts?.variant === 'cold' ? 'cold' : 'warm'} /> },
+  'roof-covering': { icon: 'roof-covering', render: opts => <AssemblyRoofCoveringDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} externalWidthMm={opts?.externalWidthMm} buildUpDefault={opts?.variant === 'cold' ? 'cold' : 'warm'} /> },
+  'roof-rainwater': { icon: 'gutters', render: opts => <AssemblyFlatRoofDemo part="gutters" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} externalWidthMm={opts?.externalWidthMm} /> },
   'roof-flat': { icon: 'flat-roof', render: opts => <AssemblyFlatRoofDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} externalWidthMm={opts?.externalWidthMm} buildUpDefault={opts?.variant === 'cold' ? 'cold' : 'warm'} /> },
   'ew-cav-partial': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="pir" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'ew-cav-full': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="wool" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
@@ -112,6 +119,38 @@ export function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; siz
           ))}
           <path d="M8 9 L10 4.5 L14 4.5 L16 9" stroke="#0369a1" strokeWidth="1.4" fill="none" />
           <line x1="12" y1="4.5" x2="12" y2="9" stroke="#0369a1" strokeWidth="1" />
+        </svg>
+      )
+    case 'roof-covering':
+      // Layers of a roof covering laid over a deck, with a trim at the edge — blue, like the flat roof.
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M2 8.5 L20 8.5 L22 6.5" stroke="#0369a1" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          <rect x="2" y="8.5" width="18" height="3" stroke="#0369a1" strokeWidth="1.4" />
+          <rect x="2" y="11.5" width="18" height="3" stroke="#0369a1" strokeWidth="1.4" />
+          <line x1="2" y1="19" x2="20" y2="19" stroke="#0369a1" strokeWidth="1.4" strokeDasharray="2.5 2" />
+          <line x1="2" y1="16.5" x2="20" y2="16.5" stroke="#0369a1" strokeWidth="1.4" />
+        </svg>
+      )
+    case 'gutters':
+      // A gutter trough along an eaves line with a downpipe dropping from it.
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M2 5 L2 8 Q2 10 4 10 L14 10 Q16 10 16 8 L16 5" stroke="#0369a1" strokeWidth="1.6" fill="none" />
+          <line x1="2" y1="5" x2="16" y2="5" stroke="#0369a1" strokeWidth="1.4" />
+          <rect x="17" y="8" width="3" height="13" stroke="#0369a1" strokeWidth="1.5" />
+          <line x1="14.5" y1="10" x2="18" y2="10" stroke="#0369a1" strokeWidth="1.4" />
+        </svg>
+      )
+    case 'parapet-wall':
+      // A wall standing above a roof line, with its coping stone on top and the tray at the roof — brown, like the masonry walls.
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="6" y="2.5" width="12" height="3" stroke="#b45309" strokeWidth="1.6" />
+          <rect x="8" y="5.5" width="8" height="9" stroke="#b45309" strokeWidth="1.6" />
+          <line x1="8" y1="10" x2="16" y2="10" stroke="#b45309" strokeWidth="1.2" />
+          <line x1="1.5" y1="14.5" x2="22.5" y2="14.5" stroke="#0f766e" strokeWidth="1.8" />
+          <rect x="8" y="14.5" width="8" height="6" stroke="#b45309" strokeWidth="1.6" />
         </svg>
       )
     case 'sleeper-wall':

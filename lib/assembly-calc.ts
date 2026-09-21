@@ -71,7 +71,7 @@ export type CavityQuantitySource =
 // widen this union rather than the wall module's own WallQuantitySource as more modules
 // (roof, foundations, ...) get their own quantity kinds. (The solid block, timber frame, dwarf, sleeper and
 // flat roof modules declare theirs beside themselves, further down.)
-export type AssemblyQuantitySource = WallQuantitySource | MasonryQuantitySource | CavityQuantitySource | SolidBlockQuantitySource | TimberFrameQuantitySource | DwarfQuantitySource | SleeperQuantitySource | FlatRoofQuantitySource
+export type AssemblyQuantitySource = WallQuantitySource | MasonryQuantitySource | CavityQuantitySource | SolidBlockQuantitySource | TimberFrameQuantitySource | DwarfQuantitySource | SleeperQuantitySource | FlatRoofQuantitySource | ParapetQuantitySource
 
 export interface AssemblyOpening {
   id: string
@@ -1714,6 +1714,120 @@ export interface FlatRoofCostResult {
 export function calculateFlatRoofCost(input: FlatRoofInput, layers: AssemblyLayerDef[]): FlatRoofCostResult {
   const geometry = calculateFlatRoofGeometry(input)
   const lines = layers.map(l => costLayer(l, resolveFlatRoofRawQty(l, geometry)))
+  const totalCost = +lines.reduce((s, l) => s + l.cost, 0).toFixed(2)
+  return { geometry, lines, totalCost }
+}
+
+// ── Parapet wall module — a masonry parapet round a roof, from the wall head to its coping, priced as an
+// external wall drawn as a line. Its build (brick and block cavity, solid block rendered, or solid brick), its
+// height above the finished roof and the masonry below it, the cavity tray at its base, the openings for the
+// rainwater outlets through it, and the coping or capping over it. Counts and areas only — the wall's
+// thickness, ties, restraint and how high it may safely stand are the designer's to confirm. Reuses costLayer.
+
+export type ParapetBuildType = 'cavity-brick-block' | 'solid-block' | 'solid-brick'
+
+export interface ParapetWallInput {
+  lengthMm: number
+  /** From the finished roof to the top of the masonry (under the coping). */
+  heightAboveRoofMm: number
+  /** Masonry below the finished roof: the roof's build-up above the wall head. Default 350mm. */
+  belowRoofMm?: number
+  build: ParapetBuildType
+  /** Openings formed through the wall for rainwater and overflow outlets. */
+  outletOpenings?: number
+}
+
+export interface ParapetWallGeometry {
+  lengthM: number
+  totalHeightMm: number
+  /** How thick the wall is, and so how wide its coping needs to be (the wall plus a 40mm overhang each side). */
+  wallThicknessMm: number
+  copingWidthMm: number
+  masonryAreaM2: number
+  brickCount: number
+  blockCount: number
+  tieCount: number
+  mortarM3: number
+  renderAreaM2: number
+  copingLm: number
+  /** Bricks laid on edge to cap the wall, when that's the coping. */
+  copingBrickCount: number
+  trayLm: number
+  outletOpenings: number
+  warnings: string[]
+}
+
+export type ParapetQuantitySource =
+  | 'lengthM' | 'masonryAreaM2' | 'brickCount' | 'blockCount' | 'tieCount' | 'mortarM3' | 'renderAreaM2'
+  | 'copingLm' | 'copingBrickCount' | 'trayLm' | 'outletOpenings' | 'fixed'
+
+const PARAPET_MAX_UNSUPPORTED_MM = 600 // above this a parapet is worth checking for wind
+
+export function calculateParapetWallGeometry(input: ParapetWallInput): ParapetWallGeometry {
+  const L = input.lengthMm
+  const above = input.heightAboveRoofMm
+  const below = input.belowRoofMm ?? 350
+  if (!(L > 0)) throw new Error('The parapet wall length must be greater than zero.')
+  if (!(above > 0)) throw new Error('The parapet must stand some height above the roof.')
+  if (below < 0) throw new Error('The masonry below the roof cannot be negative.')
+  const totalHeightMm = above + below
+  const area = toM(L) * toM(totalHeightMm)
+  const BLOCK_M2 = toM(450) * toM(225), BRICK_M2 = toM(225) * toM(75), FLAT_BLOCK_M2 = toM(450) * toM(110)
+  const cavity = input.build === 'cavity-brick-block'
+  const solidBlock = input.build === 'solid-block'
+  const wallThicknessMm = cavity ? 255 : 215
+  // Bricks and blocks, and mortar as a volume — the same calibration as the dwarf, sleeper and flat roof modules:
+  // 0.03 m³ per m² of brick skin, 0.013 per m² of 100mm blockwork, 0.0473 for a 215mm wall of blocks laid flat.
+  const brickCount = cavity ? area / BRICK_M2 : solidBlock ? 0 : 2 * area / BRICK_M2
+  const blockCount = cavity ? area / BLOCK_M2 : solidBlock ? area / FLAT_BLOCK_M2 : 0
+  const mortarM3 = cavity ? area * (0.03 + 0.013) : solidBlock ? area * 0.0473 : area * 0.06
+  const warnings: string[] = []
+  if (above > PARAPET_MAX_UNSUPPORTED_MM) warnings.push(`A parapet ${above}mm above the roof is worth checking for wind loading — tie it back to the structure and confirm with the designer.`)
+  return {
+    lengthM: toM(L), totalHeightMm, wallThicknessMm, copingWidthMm: wallThicknessMm + 80,
+    masonryAreaM2: +area.toFixed(4),
+    brickCount, blockCount,
+    tieCount: cavity ? Math.ceil(area * TIES_PER_M2) : 0,
+    mortarM3: +mortarM3.toFixed(4),
+    renderAreaM2: solidBlock ? +area.toFixed(4) : 0,
+    copingLm: toM(L),
+    copingBrickCount: Math.ceil(toM(L) / 0.1025 - 1e-9),
+    trayLm: toM(L),
+    outletOpenings: Math.max(0, Math.floor(input.outletOpenings ?? 0)),
+    warnings,
+  }
+}
+
+function resolveParapetRawQty(layer: AssemblyLayerDef, g: ParapetWallGeometry): number {
+  switch (layer.source) {
+    case 'lengthM':          return g.lengthM
+    case 'masonryAreaM2':    return g.masonryAreaM2
+    case 'brickCount':       return g.brickCount
+    case 'blockCount':       return g.blockCount
+    case 'tieCount':         return g.tieCount
+    case 'mortarM3':         return g.mortarM3
+    case 'renderAreaM2':     return g.renderAreaM2
+    case 'copingLm':         return g.copingLm
+    case 'copingBrickCount': return g.copingBrickCount
+    case 'trayLm':           return g.trayLm
+    case 'outletOpenings':   return g.outletOpenings
+    case 'fixed':
+      if (layer.fixedQty == null) throw new Error(`Layer "${layer.name}" uses a fixed quantity but none was given.`)
+      return layer.fixedQty
+    default:
+      throw new Error(`Layer "${layer.name}" uses a source ("${layer.source}") the parapet wall module doesn't support.`)
+  }
+}
+
+export interface ParapetWallCostResult {
+  geometry: ParapetWallGeometry
+  lines: CostedLine[]
+  totalCost: number
+}
+
+export function calculateParapetWallCost(input: ParapetWallInput, layers: AssemblyLayerDef[]): ParapetWallCostResult {
+  const geometry = calculateParapetWallGeometry(input)
+  const lines = layers.map(l => costLayer(l, resolveParapetRawQty(l, geometry)))
   const totalCost = +lines.reduce((s, l) => s + l.cost, 0).toFixed(2)
   return { geometry, lines, totalCost }
 }
