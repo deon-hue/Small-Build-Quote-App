@@ -136,6 +136,14 @@ function lineToLayer(l: { id: string; name: string; product: { unit: 'length' | 
   return { ...base, unit: 'nr', roundToWhole: true }
 }
 
+// The layers that are the roof's structure; the gutters' are the drainage lines and the fascia; the rest is the covering.
+const STRUCTURE_LAYER_IDS = new Set(['joists', 'trimmers', 'wall_plate', 'ledger', 'ledger_bolts', 'hangers', 'straps', 'strutting', 'firrings', 'deck', 'eaves_vents', 'kerb_timber', 'kerb_cladding'])
+function layersForPart(layers: AssemblyLayerDef[], part: FlatRoofPart): AssemblyLayerDef[] {
+  if (part === 'complete') return layers
+  const isGutter = (id: string) => id.startsWith('drain_') || id === 'fascia'
+  return layers.filter(l => part === 'structure' ? STRUCTURE_LAYER_IDS.has(l.id) : part === 'gutters' ? isGutter(l.id) : !STRUCTURE_LAYER_IDS.has(l.id) && !isGutter(l.id))
+}
+
 interface LayerOpts {
   wastePct: number
   buildUp: FlatRoofBuildUp
@@ -148,6 +156,8 @@ interface LayerOpts {
   downpipes: number
   parapetType: ParapetType
   /** The trims and accessories chosen for the covering (GRP and EPDM); TPO keeps its single edge trim and flashing. */
+  /** Whether the parapet's masonry, coping and outlets are priced here (only in the complete roof). */
+  includeParapet: boolean
   trimLines: TrimLine[]
   /** The gutters, downpipes and parapet outlets chosen under Drainage. */
   drainLines: DrainLine[]
@@ -229,7 +239,7 @@ function buildFlatRoofLayers(o: LayerOpts): AssemblyLayerDef[] {
   if (g.edgeTrimLm > 0 && o.fascia) layers.push({ id: 'fascia', name: 'uPVC fascia board 175mm (free and gutter edges)', category: 'materials', source: 'edgeTrimLm', unit: 'lm', unitCost: 10.00, wastePct: w })
 
   // Parapet wall — masonry, coping, cavity tray, and the outlets through it
-  if (g.parapetLm > 0) {
+  if (o.includeParapet && g.parapetLm > 0) {
     if (o.parapetType === 'cavity-brick-block') {
       layers.push(
         { id: 'parapet_bricks', name: 'Facing bricks (parapet outer leaf)', category: 'materials', source: 'parapetBrickCount', unit: 'nr', unitCost: 0.75, roundToWhole: true, wastePct: w },
@@ -318,8 +328,14 @@ function newOpening(kind: RoofOpeningKind, existing: FlatRoofOpening[], lengthMm
   }
 }
 
+/** Which part of a flat roof the calculator prices. 'complete' is the whole roof in one; the others are the roof's phases
+ * on their own — its structure (joists, deck, openings), its covering (insulation, membrane, trims) or its gutters — each
+ * showing only its own inputs, materials, labour and description. */
+export type FlatRoofPart = 'complete' | 'structure' | 'covering' | 'gutters'
+
 interface Props {
   onClose?: () => void
+  part?: FlatRoofPart
   onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }) => void
   labourTrades?: BOLabourTrade[]
   /** Take-off's drawn roof: its length (the longer side) and width (the shorter), in mm — the joists
@@ -330,8 +346,15 @@ interface Props {
   buildUpDefault?: FlatRoofBuildUp
 }
 
-export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [], externalLengthMm, externalWidthMm, buildUpDefault = 'warm' }: Props) {
-  const [name, setName]         = useState('Flat Roof')
+const PART_NAME: Record<FlatRoofPart, string> = { complete: 'Flat Roof', structure: 'Flat roof structure', covering: 'Flat roof covering', gutters: 'Gutters and downpipes' }
+
+export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [], externalLengthMm, externalWidthMm, buildUpDefault = 'warm', part = 'complete' }: Props) {
+  // What this calculator shows: the roof's structure, its covering, its gutters — or all of it.
+  const showStructure = part === 'complete' || part === 'structure'
+  const showCovering = part === 'complete' || part === 'covering'
+  const showGutters = part === 'complete' || part === 'gutters'
+  const showParapetBuild = part === 'complete'   // the parapet's masonry belongs to External Walls → Parapet wall
+  const [name, setName]         = useState(PART_NAME[part])
   const [qty, setQty]           = useState(1)
   const [lengthMm, setLengthMm] = useState(externalLengthMm ?? 5000)
   const [widthMm, setWidthMm]   = useState(externalWidthMm ?? 3200)
@@ -520,7 +543,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   }, [depthPicked, suggested, joistDepth])
   const spanText = `${(widthMm / 1000).toFixed(2)}m span at ${centresMm}mm centres`
   const extraWarnings: string[] = []
-  if (joistSystem === 'posi') {
+  if (!showStructure) { /* joist warnings belong to the structure */ } else if (joistSystem === 'posi') {
     extraWarnings.push('Posi-joists are designed by the supplier to your span and loads, and so is the trimming round the rooflight openings — the trimmers here are an estimate to confirm with them.')
   } else if (spanCheck?.status === 'under') {
     extraWarnings.push(`${joistLabel(joistSystem, joistDepth)} is too small for a ${spanText}: the span chart gives it ${(spanCheck.maxSpanMm / 1000).toFixed(2)}m, so it needs 47×${suggested} or bigger — or check with the span tables or an engineer.`)
@@ -529,6 +552,10 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
       ? `A ${spanText} is beyond what solid timber manages in the span chart — it works at ${spanCheck.closerCentres.centresMm}mm centres in 47×${spanCheck.closerCentres.depthMm}, or use Posi-joists or an engineer's design.`
       : `A ${spanText} is beyond what solid timber manages in the span chart — consider Posi-joists or an engineer's design.`)
   }
+
+  // Warnings about drainage belong to the gutters; the rest to the structure and covering.
+  const isDrainageWarning = (w: string) => /outlet|nowhere to go|parapet roof needs/i.test(w)
+  const partWarnings = [...(g?.warnings ?? []), ...extraWarnings].filter(w => part === 'complete' || (part === 'gutters' ? isDrainageWarning(w) : !isDrainageWarning(w)))
 
   // Which ends abut an existing wall square-on, and which sides run along one.
   const endAbuts = edges.high === 'abutment' || edges.low === 'abutment'
@@ -565,7 +592,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
       hoppers: qtyOfLines(drain.lines, l => l.product.slot === 'hopper'),
       offsets: qtyOfLines(drain.lines, l => l.product.slot === 'offset'),
     },
-  }) : []
+  }, part === 'complete' ? 'complete' : part) : []
   const suggestedLabour = toLabourLines(labourSuggestions, labourTrades, includeFitting)
   suggestedLinesRef.current = suggestedLabour.lines
   const labourLines: LabourLine[] = labourOverride ?? suggestedLabour.lines
@@ -594,8 +621,8 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   } : null
   // Two levels: a one-line description for the quote's phase line (`description`, printed everywhere) and the
   // full part-by-part text (`detail`, shown on the online quote behind a "What's included" toggle).
-  const autoDescription = descriptionInput ? describeFlatRoofShort(descriptionInput) : ''
-  const autoDetail = descriptionInput ? describeFlatRoof(descriptionInput) : ''
+  const autoDescription = descriptionInput ? describeFlatRoofShort(descriptionInput, part) : ''
+  const autoDetail = descriptionInput ? describeFlatRoof(descriptionInput, part) : ''
   const [descriptionOverride, setDescriptionOverride] = useState<string | null>(null)
   const [detailOverride, setDetailOverride] = useState<string | null>(null)
   const description = descriptionOverride ?? autoDescription
@@ -604,9 +631,9 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   const layers = useMemo(() => {
     if (!geometryResult.ok) return []
     const base = buildFlatRoofLayers({
-      wastePct, buildUp, joistSystem, joistDepth, insulationMm, deck, covering, fascia, downpipes, parapetType, trimLines: trims.lines, drainLines: drain.lines, g: geometryResult.geometry,
+      wastePct, buildUp, joistSystem, joistDepth, insulationMm, deck, covering, fascia, downpipes, parapetType, includeParapet: showParapetBuild, trimLines: trims.lines, drainLines: drain.lines, g: geometryResult.geometry,
     })
-    return base.map(l => rateOverrides[l.id] != null ? { ...l, unitCost: rateOverrides[l.id] } : l)
+    return layersForPart(base, part).map(l => rateOverrides[l.id] != null ? { ...l, unitCost: rateOverrides[l.id] } : l)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [geometryResult, wastePct, buildUp, joistSystem, joistDepth, insulationMm, deck, covering, fascia, downpipes, parapetType, trimKey, drainKey, rateOverrides])
 
@@ -770,13 +797,13 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
           {g && (<>
             <FlatRoofPlanSvg
               g={g} lengthMm={lengthMm} widthMm={widthMm} centresMm={centresMm} fallRatio={fallRatio}
-              edges={edges} wallConnection={wallConnection} openings={openings} outlets={outlets}
+              edges={edges} wallConnection={wallConnection} openings={openings} outlets={outlets} part={part}
               onMoveOpening={(id, offsetMm, offsetSpanMm) => updateOpening(id, { offsetMm, offsetSpanMm })}
               onMoveOutlet={(id, positionMm) => updateOutlet(id, { positionMm })}
             />
-            {[...g.warnings, ...extraWarnings].length > 0 && (
+            {partWarnings.length > 0 && (
               <div style={{ marginTop: 6 }}>
-                {[...g.warnings, ...extraWarnings].map((w, i) => (
+                {partWarnings.map((w, i) => (
                   <div key={i} style={{ fontSize: 11, color: '#c0392b', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, padding: '4px 8px', marginBottom: 3 }}>
                     ⚠ {w}
                   </div>
@@ -785,54 +812,64 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
             )}
             <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 8, lineHeight: 1.5 }}>
               {(lengthMm / 1000).toFixed(2)} × {(widthMm / 1000).toFixed(2)}m roof, {g.netAreaM2.toFixed(2)} m² of covering after {g.openingAreaM2.toFixed(2)} m² of openings.
-              {' '}{g.joistCount} joists ({g.joistLm.toFixed(1)}m of timber after the openings cut some short) plus {g.trimLm.toFixed(1)}m of trimmers.
-              {' '}Firrings up to {Math.round(g.fallMm)}mm at the high end. Drag an opening on the plan to move it.
+              {showStructure && <>{' '}{g.joistCount} joists ({g.joistLm.toFixed(1)}m of timber after the openings cut some short) plus {g.trimLm.toFixed(1)}m of trimmers.
+              {' '}Firrings up to {Math.round(g.fallMm)}mm at the high end. Drag an opening on the plan to move it.</>}
+              {part === 'covering' && <>{' '}Covering {g.membraneAreaM2.toFixed(2)} m² including the upstands, parapet face and kerbs.</>}
             </div>
             {/* What holds the joists to the walls — counted, so it can be checked */}
-            <div style={{ fontSize: 11, color: '#475569', marginTop: 6, lineHeight: 1.5, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 5, padding: '6px 8px' }}>
+            {showStructure && <div style={{ fontSize: 11, color: '#475569', marginTop: 6, lineHeight: 1.5, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 5, padding: '6px 8px' }}>
               <strong style={{ fontWeight: 600 }}>Fixing to the walls:</strong>{' '}
               {g.ledgerLm > 0 && <>ledger plate {g.ledgerLm.toFixed(1)}m bolted with {g.ledgerBoltCount} anchors at 600 centres · </>}
               {g.wallPlateLm > 0 && <>wall plate {g.wallPlateLm.toFixed(1)}m · </>}
               {g.hangerCount} joist hangers{g.strapCount > 0 && <> · {g.strapCount} restraint straps</>}.
-            </div>
+            </div>}
           </>)}
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', gap: 6 }}>
             <div style={{ flex: 1 }}><PropRow label="Length (mm)">{numInput(lengthMm, setLengthMm, 1)}</PropRow></div>
-            <div style={{ flex: 1 }}><PropRow label="Width — joist span (mm)">{numInput(widthMm, setWidthMm, 1)}</PropRow></div>
+            <div style={{ flex: 1 }}><PropRow label={showStructure ? 'Width — joist span (mm)' : 'Width (mm)'}>{numInput(widthMm, setWidthMm, 1)}</PropRow></div>
           </div>
 
+          {(showStructure || showCovering) && (
           <div style={{ borderTop: '1px solid #bae6fd', paddingTop: 8, marginTop: 2 }}>
-            {sectionHead('Build-up')}
+            {sectionHead(part === 'structure' ? 'Roof type' : part === 'covering' ? 'Build-up' : 'Build-up')}
             <PropRow label="Roof">
               <select value={buildUp} onChange={e => changeBuildUp(e.target.value as FlatRoofBuildUp)} style={propInput}>
                 <option value="warm">Warm roof — PIR above the deck</option>
                 <option value="cold">Cold roof — insulation between the joists</option>
               </select>
             </PropRow>
-            <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-              <div style={{ flex: 1 }}><PropRow label={buildUp === 'warm' ? 'PIR (mm)' : 'Wool (mm)'}>{numInput(insulationMm, setInsulationMm)}</PropRow></div>
-              <div style={{ flex: 1 }}>
-                <PropRow label="Fall">
-                  <select value={fallRatio} onChange={e => setFallRatio(+e.target.value)} style={propInput}>
-                    <option value={40}>1 in 40</option>
-                    <option value={60}>1 in 60</option>
-                    <option value={80}>1 in 80</option>
+            {(showCovering || showStructure) && (
+              <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                {showCovering && <div style={{ flex: 1 }}><PropRow label={buildUp === 'warm' ? 'PIR (mm)' : 'Wool (mm)'}>{numInput(insulationMm, setInsulationMm)}</PropRow></div>}
+                {showStructure && (
+                  <div style={{ flex: 1 }}>
+                    <PropRow label="Fall">
+                      <select value={fallRatio} onChange={e => setFallRatio(+e.target.value)} style={propInput}>
+                        <option value={40}>1 in 40</option>
+                        <option value={60}>1 in 60</option>
+                        <option value={80}>1 in 80</option>
+                      </select>
+                    </PropRow>
+                  </div>
+                )}
+              </div>
+            )}
+            {showStructure && (
+              <div style={{ marginTop: 6 }}>
+                <PropRow label="Deck">
+                  <select value={deck} onChange={e => setDeck(e.target.value as DeckType)} style={propInput}>
+                    {(Object.entries(DECK) as [DeckType, { label: string }][]).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                   </select>
                 </PropRow>
               </div>
-            </div>
-            <div style={{ marginTop: 6 }}>
-              <PropRow label="Deck">
-                <select value={deck} onChange={e => setDeck(e.target.value as DeckType)} style={propInput}>
-                  {(Object.entries(DECK) as [DeckType, { label: string }][]).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                </select>
-              </PropRow>
-            </div>
+            )}
           </div>
+          )}
 
+          {showStructure && (
           <div style={{ borderTop: '1px solid #bae6fd', paddingTop: 8 }}>
             {sectionHead('Joists')}
             <PropRow label="Joist type">
@@ -869,6 +906,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
               </>
             )}
           </div>
+          )}
 
           <div style={{ borderTop: '1px solid #bae6fd', paddingTop: 8 }}>
             {sectionHead('Edges')}
@@ -880,19 +918,20 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
               {edgeSelect('left', 'Left')}
               {edgeSelect('right', 'Right')}
             </div>
-            {hasParapet && (
+            {hasParapet && part !== 'structure' && (
               <div style={{ marginTop: 8, padding: 6, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6 }}>
-                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Parapet wall — {parapetEdgeLm.toFixed(1)}m</div>
+                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Parapet wall — {parapetEdgeLm.toFixed(1)}m{!showParapetBuild && ' (built under External Walls → Parapet wall)'}</div>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <div style={{ flex: 1 }}><PropRow label="Height above roof (mm)">{numInput(parapetHeightMm, setParapetHeightMm, 1)}</PropRow></div>
-                  <div style={{ flex: 1 }}>
+                  {(showCovering) && <div style={{ flex: 1 }}><PropRow label="Height above roof (mm)">{numInput(parapetHeightMm, setParapetHeightMm, 1)}</PropRow></div>}
+                  {showParapetBuild && <div style={{ flex: 1 }}>
                     <PropRow label="Built as">
                       <select value={parapetType} onChange={e => setParapetType(e.target.value as ParapetType)} style={propInput}>
                         {(Object.entries(PARAPET_TYPE_LABEL) as [ParapetType, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                       </select>
                     </PropRow>
-                  </div>
+                  </div>}
                 </div>
+                {showGutters && <>
                 {/* Each outlet on its own: change its edge and position, delete it, or drag it on the plan. */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, marginBottom: 4 }}>
                   <span style={{ fontSize: 11, color: '#64748b', flex: 1 }}>Outlets through the parapet — {g ? g.gullyCount : 0} rainwater, {g ? g.overflowCount : 0} overflow</span>
@@ -924,10 +963,11 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
                     style={{ fontSize: 11, padding: '3px 8px', border: '1px dashed #fcd34d', borderRadius: 999, background: 'none', color: '#b45309', cursor: 'pointer' }}>+ Overflow outlet</button>
                 </div>
                 <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>Position is in mm along the edge — from the left, or from the high edge for the sides. Drag one on the plan to move it.</div>
-                <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>Masonry from the wall head: {parapetMasonryHeightMm}mm ({roofBuildUpMm}mm of roof build-up + {parapetHeightMm}mm).</div>
+                {showParapetBuild && <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>Masonry from the wall head: {parapetMasonryHeightMm}mm ({roofBuildUpMm}mm of roof build-up + {parapetHeightMm}mm).</div>}
+                </>}
               </div>
             )}
-            {endAbuts && (
+            {showStructure && endAbuts && (
               <div style={{ marginTop: 8 }}>
                 <PropRow label="Joists at the existing wall">
                   <select value={wallConnection} onChange={e => setWallConnection(e.target.value as FlatRoofWallConnection)} style={propInput}>
@@ -937,14 +977,15 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
                 </PropRow>
               </div>
             )}
-            {sideAbuts && (
+            {showStructure && sideAbuts && (
               <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>The joists run parallel to the existing wall at the side, so the first joist is strapped to it.</div>
             )}
-            {!endAbuts && !sideAbuts && (
+            {showStructure && !endAbuts && !sideAbuts && (
               <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>No existing wall — the joists bear on a wall plate at each end.</div>
             )}
           </div>
 
+          {showCovering && (
           <div style={{ borderTop: '1px solid #bae6fd', paddingTop: 8 }}>
             {sectionHead('Roof covering')}
             <PropRow label="Covering">
@@ -964,7 +1005,9 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
               />
             )}
           </div>
+          )}
 
+          {showGutters && (
           <div style={{ borderTop: '1px solid #bae6fd', paddingTop: 8 }}>
             {sectionHead('Drainage')}
             <PropRow label="Gutter and downpipe system">
@@ -995,11 +1038,13 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
               onRemoveExtra={id => setExtraDrain(prev => prev.filter(x => x.id !== id))}
             />
           </div>
+          )}
 
+          {(showStructure || showCovering) && (
           <div style={{ borderTop: '1px solid #bae6fd', paddingTop: 8 }}>
-            {sectionHead('Rooflight openings')}
+            {sectionHead(showStructure ? 'Rooflight openings' : 'Rooflight kerbs')}
             <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6, lineHeight: 1.4 }}>
-              This forms the opening — trimmers, kerb and upstand. The rooflight itself is priced separately.
+              {showStructure ? 'This forms the opening — trimmers and kerb.' : 'The covering is dressed up each kerb.'} The rooflight itself is priced separately.
             </div>
             {openings.map((o, i) => (
               <div key={o.id} style={{ border: '1px solid #e2e8f0', borderRadius: 6, padding: 6, marginBottom: 6, background: '#fff' }}>
@@ -1014,27 +1059,27 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
                   <button onClick={() => removeOpening(o.id)} aria-label={`Remove opening ${i + 1}`}
                     style={{ background: 'none', border: 'none', color: '#c0392b', cursor: 'pointer', fontSize: 14, padding: '0 4px' }}>×</button>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: showStructure ? 'repeat(4, 1fr)' : 'repeat(2, 1fr)', gap: 4 }}>
                   <div><div style={{ fontSize: 9, color: '#94a3b8' }}>Width</div>{miniNum(o.widthMm, n => updateOpening(o.id, { widthMm: n }), 1)}</div>
                   <div><div style={{ fontSize: 9, color: '#94a3b8' }}>Length</div>{miniNum(o.depthMm, n => updateOpening(o.id, { depthMm: n }), 1)}</div>
-                  <div><div style={{ fontSize: 9, color: '#94a3b8' }}>From left</div>{miniNum(o.offsetMm, n => updateOpening(o.id, { offsetMm: n }))}</div>
-                  <div><div style={{ fontSize: 9, color: '#94a3b8' }}>From high edge</div>{miniNum(o.offsetSpanMm, n => updateOpening(o.id, { offsetSpanMm: n }))}</div>
+                  {showStructure && <div><div style={{ fontSize: 9, color: '#94a3b8' }}>From left</div>{miniNum(o.offsetMm, n => updateOpening(o.id, { offsetMm: n }))}</div>}
+                  {showStructure && <div><div style={{ fontSize: 9, color: '#94a3b8' }}>From high edge</div>{miniNum(o.offsetSpanMm, n => updateOpening(o.id, { offsetSpanMm: n }))}</div>}
                 </div>
                 <div style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'flex-end' }}>
-                  <div style={{ flex: 1 }}>
+                  {showStructure && <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 9, color: '#94a3b8' }}>Trimmers and headers</div>
                     <select value={o.trimmers ?? 2} onChange={e => updateOpening(o.id, { trimmers: +e.target.value as 2 | 3 })} style={miniInput}>
                       <option value={2}>Doubled up</option>
                       <option value={3}>Tripled up</option>
                     </select>
-                  </div>
+                  </div>}
                   <div style={{ width: 70 }}>
                     <div style={{ fontSize: 9, color: '#94a3b8' }}>Kerb (mm)</div>
                     {miniNum(o.kerbHeightMm ?? 200, n => updateOpening(o.id, { kerbHeightMm: n }))}
                   </div>
                 </div>
                 {/* How this opening is trimmed: at its own sides, so it doesn't matter where the joists fall */}
-                {(() => {
+                {showStructure && (() => {
                   const t = g?.openingTrims.find(tr => tr.openingId === o.id)
                   if (!t) return null
                   const word = t.members === 3 ? 'tripled' : 'doubled'
@@ -1057,6 +1102,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
               ))}
             </div>
           </div>
+          )}
 
           <PropRow label={`Waste % (${wastePct}%)`}>
             <input type="range" min={0} max={25} value={wastePct} onChange={e => setWastePct(+e.target.value)} style={{ width: '100%' }} />
@@ -1465,7 +1511,8 @@ function SpanChartPanel({ chart, check, grade, spanMm, centresMm, depthMm, picke
 const TRIMMER_COLOUR = '#b45309'
 const EDGE_BAR = 9
 
-function FlatRoofPlanSvg({ g, lengthMm, widthMm, centresMm, fallRatio, edges, wallConnection, openings, outlets, onMoveOpening, onMoveOutlet }: {
+function FlatRoofPlanSvg({ g, lengthMm, widthMm, centresMm, fallRatio, edges, wallConnection, openings, outlets, part, onMoveOpening, onMoveOutlet }: {
+  part: FlatRoofPart
   g: FlatRoofGeometry
   lengthMm: number
   widthMm: number
@@ -1657,21 +1704,21 @@ function FlatRoofPlanSvg({ g, lengthMm, widthMm, centresMm, fallRatio, edges, wa
         <marker id="roofArrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="context-stroke" /></marker>
       </defs>
       <rect x={x0} y={y0} width={w} height={h} fill="#fafaf9" stroke="#78716c" strokeWidth={1.2} />
-      {joistLines}
+      {(part === 'complete' || part === 'structure') && joistLines}
       {bars}
       {labels}
-      {fixings}
-      {gullyMarks}
+      {(part === 'complete' || part === 'structure') && fixings}
+      {(part === 'complete' || part === 'gutters') && gullyMarks}
 
       {/* Fall */}
       <line x1={x0 + w - 10} x2={x0 + w - 10} y1={y0 + 14} y2={y0 + h - 16} stroke="#2563eb" strokeWidth={1.2} />
       <polygon points={`${x0 + w - 10},${y0 + h - 6} ${x0 + w - 15},${y0 + h - 17} ${x0 + w - 5},${y0 + h - 17}`} fill="#2563eb" />
       <text x={x0 + w - 10} y={y0 + 10} fontSize={9} fill="#2563eb" textAnchor="middle">1:{fallRatio}</text>
 
-      {trimmerLines}
+      {(part === 'complete' || part === 'structure') && trimmerLines}
 
       {/* Openings, drawn over their trimmers */}
-      {openings.map((o, i) => {
+      {part !== 'gutters' && openings.map((o, i) => {
         const st = KIND_STYLE[o.kind]
         const rx = x0 + o.offsetMm * k, ry = y0 + o.offsetSpanMm * k
         const rw = o.widthMm * k, rh = o.depthMm * k
@@ -1695,8 +1742,8 @@ function FlatRoofPlanSvg({ g, lengthMm, widthMm, centresMm, fallRatio, edges, wa
       })}
 
       {/* Overall dimensions and key */}
-      <text x={x0 + w / 2} y={y0 + h + EDGE_BAR + 50} fontSize={9} fill="#64748b" textAnchor="middle">{(lengthMm / 1000).toFixed(2)}m × {(widthMm / 1000).toFixed(2)}m span · {g.joistCount} joists at {centresMm}mm</text>
-      <g transform={`translate(${x0}, ${vbH - 8})`}>
+      <text x={x0 + w / 2} y={y0 + h + EDGE_BAR + 50} fontSize={9} fill="#64748b" textAnchor="middle">{(lengthMm / 1000).toFixed(2)}m × {(widthMm / 1000).toFixed(2)}m{(part === 'complete' || part === 'structure') ? ` span · ${g.joistCount} joists at ${centresMm}mm` : ''}</text>
+      {(part === 'complete' || part === 'structure') && <g transform={`translate(${x0}, ${vbH - 8})`}>
         <line x1={0} x2={16} y1={-3} y2={-3} stroke={TRIMMER_COLOUR} strokeWidth={1.5} /><line x1={0} x2={16} y1={0} y2={0} stroke={TRIMMER_COLOUR} strokeWidth={1.5} />
         <text x={21} y={0} fontSize={8} fill="#64748b">Trimmer joists</text>
         <circle cx={92} cy={-2} r={1.9} fill="#93c5fd" /><text x={98} y={0} fontSize={8} fill="#64748b">Ledger bolt</text>
@@ -1704,7 +1751,7 @@ function FlatRoofPlanSvg({ g, lengthMm, widthMm, centresMm, fallRatio, edges, wa
         <line x1={190} x2={190} y1={-6} y2={1} stroke="#b45309" strokeWidth={2} /><text x={195} y={0} fontSize={8} fill="#64748b">Strap</text>
         <rect x={224} y={-6} width={8} height={6} fill="#2563eb" /><text x={236} y={0} fontSize={8} fill="#64748b">Rainwater</text>
         <rect x={284} y={-6} width={8} height={6} fill="#d97706" /><text x={296} y={0} fontSize={8} fill="#64748b">Overflow</text>
-      </g>
+      </g>}
     </svg>
   )
 }

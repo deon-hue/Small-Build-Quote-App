@@ -58,6 +58,17 @@ export interface FlatRoofLabourInput {
   drainage: { gutterLm: number; gutterFittings: number; downpipeLm: number; shoes: number; hoppers: number; offsets: number }
 }
 
+/** Which part of a roof the suggestion is for, when the roof is priced in parts: the structure (carpenter), the covering
+ * (roofer and labourer), the gutters (plumber and fascia), the parapet (bricklayer, renderer). 'complete' is all of it. */
+export type LabourScope = 'complete' | 'structure' | 'covering' | 'gutters' | 'parapet'
+
+const SCOPE_OF_KEY: Record<string, Exclude<LabourScope, 'complete'>> = {
+  'carp-joists': 'structure', 'carp-deck': 'structure', 'carp-openings': 'structure', 'fit-rooflights': 'structure',
+  'roof-insulation': 'covering', 'roof-covering': 'covering', 'roof-trims': 'covering', 'lab-general': 'covering',
+  'plumb-drainage': 'gutters', 'carp-fascia': 'gutters',
+  'brick-parapet': 'parapet', 'render-parapet': 'parapet',
+}
+
 export interface LabourSuggestion {
   /** Stable, so an edited line can be told from a fresh suggestion. */
   key: string
@@ -89,7 +100,7 @@ function line(key: string, trade: LabourTradeKind, task: string, parts: Part[], 
 
 const COVERING_TASK = { grp: 'Lay the GRP covering (Cure It)', epdm: 'Lay the EPDM covering', tpo: 'Lay the TPO covering' } as const
 
-export function suggestFlatRoofLabour(i: FlatRoofLabourInput): LabourSuggestion[] {
+export function suggestFlatRoofLabour(i: FlatRoofLabourInput, scope: LabourScope = 'complete'): LabourSuggestion[] {
   const c = LABOUR_RATES.carpenter, r = LABOUR_RATES.roofer, b = LABOUR_RATES.bricklayer, p = LABOUR_RATES.plumber
   const out: (LabourSuggestion | null)[] = []
 
@@ -163,7 +174,7 @@ export function suggestFlatRoofLabour(i: FlatRoofLabourInput): LabourSuggestion[
   out.push(line('fit-rooflights', 'fitter', 'Fit the rooflights (supplied separately)',
     kinds.map(k => ({ qty: i.openings.filter(o => o.kind === k).length, unit: k === 'roof-window' ? 'roof windows' : `${k}s`, what: '', rate: f[k] })), true))
 
-  return out.filter((x): x is LabourSuggestion => x !== null)
+  return out.filter((x): x is LabourSuggestion => x !== null && (scope === 'complete' || SCOPE_OF_KEY[x.key] === scope))
 }
 
 // ── Matching a trade to Back Office's own list ─────────────────────────────────

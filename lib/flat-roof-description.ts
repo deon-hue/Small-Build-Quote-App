@@ -50,12 +50,31 @@ const KIND_PHRASE: Record<RoofOpeningKind, string> = {
   'hatch': 'an access hatch',
 }
 
+/** Which part of the roof the description is for, when the roof is priced in parts: its structure, its covering, or its
+ * gutters. 'complete' describes all of it. */
+export type DescribePart = 'complete' | 'structure' | 'covering' | 'gutters'
+
 const COVERING_SHORT = { epdm: 'EPDM rubber', grp: 'GRP fibreglass', tpo: 'TPO single-ply' } as const
 
 /** The one-line version for the quote's phase line, e.g. "Warm flat roof, 5.00 × 3.20m (16.0 m²) — EPDM rubber
  * covering, parapet wall and 2 rooflight openings." The full part-by-part text is `describeFlatRoof`. */
-export function describeFlatRoofShort(i: FlatRoofDescriptionInput): string {
+export function describeFlatRoofShort(i: FlatRoofDescriptionInput, part: DescribePart = 'complete'): string {
   const area = (i.lengthMm / 1000) * (i.widthMm / 1000)
+  if (part === 'structure') {
+    const joists = i.joistSystem === 'posi' ? `${i.joistDepth}mm Posi-joists` : `47×${i.joistDepth} ${i.joistSystem.toUpperCase()} joists`
+    const openings = i.openings.length ? ` and ${i.openings.length} rooflight ${plural(i.openings.length, 'opening', 'openings')}` : ''
+    return `Flat roof structure, ${metres(i.lengthMm)} × ${metres(i.widthMm)}m — ${joists} at ${i.centresMm}mm centres, firrings and deck${openings}.`
+  }
+  if (part === 'covering') {
+    const brand = i.covering === 'grp' && i.brand ? ` (${i.brand})` : ''
+    return `Flat roof covering, ${area.toFixed(1)} m² — ${COVERING_SHORT[i.covering]}${brand} covering with ${i.buildUp} roof insulation and edge trims.`
+  }
+  if (part === 'gutters') {
+    const label = i.gutterLabel ?? 'uPVC half-round'
+    return i.gutterLm > 0
+      ? `Gutters and downpipes — ${label} gutter, ${i.gutterLm.toFixed(1)}m, with ${i.downpipes} ${plural(i.downpipes, 'downpipe', 'downpipes')}.`
+      : `Rainwater downpipes — ${i.downpipes} ${plural(i.downpipes, 'downpipe', 'downpipes')}, ${label}.`
+  }
   const also: string[] = []
   if (i.parapet && i.parapet.lm > 0) also.push('parapet wall')
   if (i.openings.length) also.push(`${i.openings.length} rooflight ${plural(i.openings.length, 'opening', 'openings')}`)
@@ -64,13 +83,21 @@ export function describeFlatRoofShort(i: FlatRoofDescriptionInput): string {
   return `${head} — ${COVERING_SHORT[i.covering]} covering${extras}.`
 }
 
-export function describeFlatRoof(i: FlatRoofDescriptionInput): string {
+export function describeFlatRoof(i: FlatRoofDescriptionInput, part: DescribePart = 'complete'): string {
   const lines: string[] = []
   const area = (i.lengthMm / 1000) * (i.widthMm / 1000)
+  const whole = part === 'complete'
+  const doStructure = whole || part === 'structure'
+  const doCovering = whole || part === 'covering'
+  const doGutters = whole || part === 'gutters'
 
-  lines.push(`Supply and construct a ${i.buildUp} flat roof, ${metres(i.lengthMm)} × ${metres(i.widthMm)}m (${area.toFixed(1)} m²), falling 1 in ${i.fallRatio} towards its low edge.`)
+  if (whole) lines.push(`Supply and construct a ${i.buildUp} flat roof, ${metres(i.lengthMm)} × ${metres(i.widthMm)}m (${area.toFixed(1)} m²), falling 1 in ${i.fallRatio} towards its low edge.`)
+  else if (part === 'structure') lines.push(`Supply and construct the structure of a flat roof, ${metres(i.lengthMm)} × ${metres(i.widthMm)}m (${area.toFixed(1)} m²), falling 1 in ${i.fallRatio} towards its low edge.`)
+  else if (part === 'covering') lines.push(`Supply and lay the insulation and waterproof covering of a ${i.buildUp} flat roof, ${metres(i.lengthMm)} × ${metres(i.widthMm)}m (${area.toFixed(1)} m²).`)
+  else lines.push('Supply and fix the rainwater goods to the flat roof.')
 
   // Structure
+  if (doStructure) {
   const joists = i.joistSystem === 'posi'
     ? `${i.joistDepth}mm deep Posi-joists supplied to length`
     : `47×${i.joistDepth} ${i.joistSystem.toUpperCase()} solid timber joists`
@@ -82,9 +109,10 @@ export function describeFlatRoof(i: FlatRoofDescriptionInput): string {
   }
   if (i.sideStrapped) structure += ' The first joist is strapped to the existing wall that runs alongside it.'
   lines.push(structure)
+  }
 
   // Insulation
-  if (i.buildUp === 'warm') {
+  if (!doCovering) { /* the insulation and covering belong to the covering */ } else if (i.buildUp === 'warm') {
     lines.push(i.insulationMm > 0
       ? `Insulation: a vapour control layer over the deck, with ${i.insulationMm}mm rigid PIR insulation bonded above it — the insulation sits on top of the structure, keeping it warm and dry (a warm roof).`
       : 'Insulation: a vapour control layer over the deck.')
@@ -101,7 +129,7 @@ export function describeFlatRoof(i: FlatRoofDescriptionInput): string {
     i.openings.length ? (i.openings.length === 1 ? 'the rooflight kerb' : 'the rooflight kerbs') : '',
   ].filter(Boolean)
   const upTo = takenUp.length === 0 ? '' : `, taken up ${takenUp.length === 1 ? takenUp[0] : `${takenUp.slice(0, -1).join(', ')} and ${takenUp[takenUp.length - 1]}`}`
-  if (i.covering === 'epdm') {
+  if (!doCovering) { /* no covering paragraph */ } else if (i.covering === 'epdm') {
     lines.push(`Roof covering: a 1.2mm EPDM rubber membrane, fully bonded to the roof with adhesive, with the seams taped and the corners patched${upTo}, so the whole roof is one waterproof surface.`)
   } else if (i.covering === 'grp') {
     lines.push(`Roof covering: a fibreglass (GRP) roof${i.brand ? ` using the ${i.brand} system` : ''} — glass mat laminated in resin and finished with a topcoat to form a seamless waterproof surface${upTo}, with GRP edge trims.`)
@@ -111,16 +139,17 @@ export function describeFlatRoof(i: FlatRoofDescriptionInput): string {
 
   // Edges and drainage
   const edgeBits: string[] = []
-  if (i.abutmentLm > 0) {
+  if (doCovering && i.abutmentLm > 0) {
     const finish = { lead: ' and protected with Code 4 lead flashing', simulated: ' and finished with a lead-effect GRP flashing', cover: ' and finished with a cover flashing', none: '' }[i.wallFlashing ?? 'lead']
     edgeBits.push(`Where the roof meets the existing wall the covering is turned up as an upstand${finish}.`)
   }
-  if (i.edgeTrimLm > 0) edgeBits.push(`The roof edges are finished with ${i.covering === 'grp' ? 'a GRP edge trim' : 'an aluminium drip trim'}${i.fascia ? ' and a uPVC fascia board' : ''}.`)
-  if (i.gutterLm > 0) edgeBits.push(`${/^[aeio]/i.test(i.gutterLabel ?? '') ? 'An' : 'A'} ${i.gutterLabel ?? 'uPVC half-round'} gutter is fixed along the low edge${i.downpipes > 0 ? `, with ${i.downpipes} ${plural(i.downpipes, 'downpipe', 'downpipes')} to take the water away` : ''}.`)
-  if (edgeBits.length) lines.push(`Edges and drainage: ${edgeBits.join(' ')}`)
+  if (i.edgeTrimLm > 0 && doCovering) edgeBits.push(`The roof edges are finished with ${i.covering === 'grp' ? 'a GRP edge trim' : 'an aluminium drip trim'}${whole && i.fascia ? ' and a uPVC fascia board' : ''}.`)
+  if (i.edgeTrimLm > 0 && part === 'gutters' && i.fascia) edgeBits.push('A uPVC fascia board is fixed to the roof edges.')
+  if (doGutters && i.gutterLm > 0) edgeBits.push(`${/^[aeio]/i.test(i.gutterLabel ?? '') ? 'An' : 'A'} ${i.gutterLabel ?? 'uPVC half-round'} gutter is fixed along the low edge${i.downpipes > 0 ? `, with ${i.downpipes} ${plural(i.downpipes, 'downpipe', 'downpipes')} to take the water away` : ''}.`)
+  if (edgeBits.length) lines.push(`${part === 'covering' ? 'Edges' : part === 'gutters' ? 'Drainage' : 'Edges and drainage'}: ${edgeBits.join(' ')}`)
 
   // Parapet
-  if (i.parapet && i.parapet.lm > 0) {
+  if (whole && i.parapet && i.parapet.lm > 0) {
     const p = i.parapet
     const build = p.type === 'cavity-brick-block' ? 'in brick and block cavity construction' : 'in solid blockwork, rendered'
     let text = `Parapet wall: ${p.lm.toFixed(1)}m of parapet wall built ${build}, ${p.heightMm}mm above the finished roof, with concrete coping over, a DPC and cavity tray at its base, and the roof covering dressed up its inner face.`
@@ -135,12 +164,15 @@ export function describeFlatRoof(i: FlatRoofDescriptionInput): string {
   }
 
   // Rooflight openings
-  if (i.openings.length) {
+  if (doStructure && i.openings.length) {
     const list = i.openings.map(o => `${KIND_PHRASE[o.kind]} (${o.widthMm} × ${o.depthMm}mm, ${o.trimmers === 3 ? 'tripled' : 'doubled'} trimmers)`)
     const joined = list.length === 1 ? list[0] : `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}`
-    lines.push(`Rooflight openings: ${plural(i.openings.length, 'an opening is', 'openings are')} formed in the roof for ${joined}. ${plural(i.openings.length, 'It is', 'Each is')} framed with the extra joists and headers described, built up with a clad timber kerb, and the roof covering is dressed up the kerb, ready for the rooflight to be fitted. The rooflights themselves are supplied and fitted separately.`)
+    lines.push(`Rooflight openings: ${plural(i.openings.length, 'an opening is', 'openings are')} formed in the roof for ${joined}. ${plural(i.openings.length, 'It is', 'Each is')} framed with the extra joists and headers described, built up with a clad timber kerb${whole ? ', and the roof covering is dressed up the kerb' : ''}, ready for the rooflight to be fitted. The rooflights themselves are supplied and fitted separately.`)
   }
 
-  lines.push(`Not included: ${i.openings.length ? 'the rooflights themselves, ' : ''}ceiling and internal finishes below the roof.`)
+  if (whole) lines.push(`Not included: ${i.openings.length ? 'the rooflights themselves, ' : ''}ceiling and internal finishes below the roof.`)
+  else if (part === 'structure') lines.push(`Not included: ${i.openings.length ? 'the rooflights themselves, ' : ''}the insulation, covering and drainage, which are priced separately.`)
+  else if (part === 'covering') lines.push('Not included: the roof structure and the drainage, which are priced separately, and ceiling and internal finishes below the roof.')
+  else lines.push('Not included: connecting the downpipes to the underground drainage.')
   return lines.join('\n')
 }
