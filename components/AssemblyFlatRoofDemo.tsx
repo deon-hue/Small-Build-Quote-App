@@ -33,7 +33,7 @@ import {
   type AssemblyLayerDef, type CostedLine,
 } from '@/lib/assembly-calc'
 import { fmt } from '@/lib/utils'
-import { describeFlatRoof } from '@/lib/flat-roof-description'
+import { describeFlatRoof, describeFlatRoofShort, type FlatRoofDescriptionInput } from '@/lib/flat-roof-description'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import {
   propInput, miniInput, PropRow, BreakdownTable,
@@ -310,7 +310,7 @@ function newOpening(kind: RoofOpeningKind, existing: FlatRoofOpening[], lengthMm
 
 interface Props {
   onClose?: () => void
-  onSave?: (result: { name: string; qty: number; location: string; description: string; lines: CostedLine[] }) => void
+  onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }) => void
   labourTrades?: BOLabourTrade[]
   /** Take-off's drawn roof: its length (the longer side) and width (the shorter), in mm — the joists
    * span the width. Whenever they change they overwrite the calculator's own, still editable by hand. */
@@ -516,7 +516,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   // one short paragraph per part of the roof. It follows the roof as it changes, so what's saved to the
   // quote never describes a covering or a parapet the roof no longer has, until it's edited by hand
   // (then that text is kept, and "Regenerate" goes back to following the roof).
-  const autoDescription = g ? describeFlatRoof({
+  const descriptionInput: FlatRoofDescriptionInput | null = g ? {
     buildUp, lengthMm, widthMm, fallRatio, joistSystem, joistDepth, centresMm,
     deckLabel: DECK[deck].label, strutting: joistSystem !== 'posi' && g.strutCount > 0,
     insulationMm, covering, fascia, downpipes, edges,
@@ -528,9 +528,15 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
     abutmentLm: g.abutmentLm, edgeTrimLm: g.edgeTrimLm, gutterLm: g.gutterLm,
     parapet: hasParapet ? { lm: g.parapetLm, heightMm: parapetHeightMm, type: parapetType, rainwaterOutlets: g.gullyCount, overflowOutlets: g.overflowCount } : undefined,
     openings: openings.map(o => ({ kind: o.kind, widthMm: o.widthMm, depthMm: o.depthMm, trimmers: o.trimmers ?? 2 })),
-  }) : ''
+  } : null
+  // Two levels: a one-line description for the quote's phase line (`description`, printed everywhere) and the
+  // full part-by-part text (`detail`, shown on the online quote behind a "What's included" toggle).
+  const autoDescription = descriptionInput ? describeFlatRoofShort(descriptionInput) : ''
+  const autoDetail = descriptionInput ? describeFlatRoof(descriptionInput) : ''
   const [descriptionOverride, setDescriptionOverride] = useState<string | null>(null)
+  const [detailOverride, setDetailOverride] = useState<string | null>(null)
   const description = descriptionOverride ?? autoDescription
+  const detail = detailOverride ?? autoDetail
 
   const layers = useMemo(() => {
     if (!geometryResult.ok) return []
@@ -649,7 +655,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
         )}
         {onSave && result.ok && (
           <button
-            onClick={() => onSave({ name, qty, location, description, lines: [...enabledMaterialLines, ...labourCostedLines, ...(profitLine ? [profitLine] : [])] })}
+            onClick={() => onSave({ name, qty, location, description, detail, lines: [...enabledMaterialLines, ...labourCostedLines, ...(profitLine ? [profitLine] : [])] })}
             title="Replace this sub-phase's cost items with this calculation's costed lines"
             style={{ background: '#16a34a', border: 'none', borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: '6px 12px' }}>
             💾 Save &amp; Price
@@ -659,18 +665,35 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
 
       <div style={{ marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-          <label style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4 }}>Description (for the quote — what's included)</label>
+          <label style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4 }}>Quote line (short — printed on the quote)</label>
           {descriptionOverride === null
             ? <span style={{ fontSize: 10, color: '#16a34a' }}>updates as you change the roof</span>
             : (
               <button onClick={() => setDescriptionOverride(null)}
+                title="Go back to the line written from the roof — overwrites your edits below"
+                style={{ fontSize: 10, color: '#0369a1', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                ↻ Edited by you — regenerate from the roof
+              </button>
+            )}
+        </div>
+        <textarea value={description} onChange={e => setDescriptionOverride(e.target.value)} rows={2}
+          style={{ width: '100%', fontSize: 12, lineHeight: 1.5, color: '#1e293b', padding: '6px 9px', border: '1px solid #e2e8f0', borderRadius: 5, boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }} />
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+          <label style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4 }}>What's included (full — shown on the online quote)</label>
+          {detailOverride === null
+            ? <span style={{ fontSize: 10, color: '#16a34a' }}>updates as you change the roof</span>
+            : (
+              <button onClick={() => setDetailOverride(null)}
                 title="Go back to the description written from the roof — overwrites your edits below"
                 style={{ fontSize: 10, color: '#0369a1', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                 ↻ Edited by you — regenerate from the roof
               </button>
             )}
         </div>
-        <textarea value={description} onChange={e => setDescriptionOverride(e.target.value)} rows={9}
+        <textarea value={detail} onChange={e => setDetailOverride(e.target.value)} rows={9}
           style={{ width: '100%', fontSize: 12, lineHeight: 1.5, color: '#1e293b', padding: '6px 9px', border: '1px solid #e2e8f0', borderRadius: 5, boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }} />
       </div>
 

@@ -80,6 +80,12 @@ export interface QuotePhase {
   roomLabel?: string
   /** Free-text task name / description shown in the quote builder to explain what this sub-phase covers */
   taskName?: string
+  /** The full, part-by-part "What's included" description for the customer — several short paragraphs.
+   * Written by an assembly calculator (e.g. the flat roof) alongside the one-line `taskName`, which stays
+   * the short version shown everywhere. The quote screen edits it; the online quote and the HTML quote show
+   * it behind a "What's included" toggle, and printing leaves it out unless asked. Optional and absent on
+   * every existing quote and phase, so nothing changes for those. */
+  scopeDetail?: string
   items: QuoteItem[]
   estimatorItems?: EstimatorItem[]
   useEstimator?: boolean  // true = lump sums auto-computed from estimatorItems

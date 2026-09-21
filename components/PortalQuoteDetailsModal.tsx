@@ -19,6 +19,8 @@ interface Props {
   clientSettings?: { quoteView?: 'full' | 'phases' | 'total_only'; showScope?: boolean }
 }
 
+const escHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
 function fmtDateTime(iso: string) {
   try {
     return new Date(iso).toLocaleDateString('en-GB', {
@@ -59,12 +61,28 @@ export default function PortalQuoteDetailsModal({
     includeScope: clientCanSeeScope,
     includePhases: clientCanSeePhases,
     includeCosts: clientCanSeeCosts,
+    includeDescriptions: false,   // the full "What's included" text — off by default, printouts stay short
   })
 
   const subtotal = quote.phases.reduce((s, p) => s + calcPhaseSell(p, quote.markup), 0)
   const vatAmount = quote.vatIncluded ? subtotal * 0.20 : 0
   const total = subtotal + vatAmount
   const isApproved = quote.status === 'accepted'
+
+  const hasFullDescriptions = quote.phases.some(p => p.scopeDetail?.trim())
+
+  // A phase's short description under its heading in the printout; with "full descriptions" ticked, the
+  // part-by-part text too. Nothing at all for a phase with neither (so existing quotes print as before).
+  function phaseDescriptionRow(phase: Quote['phases'][number]) {
+    if (!printOptions.includePhases) return ''
+    const short = phase.taskName?.trim()
+    const full = printOptions.includeDescriptions ? phase.scopeDetail?.trim() : ''
+    if (!short && !full) return ''
+    return `
+      <tr style="background: #fff;">
+        <td colspan="${printOptions.includeCosts ? 2 : 1}" style="padding: 8px 10px; border: 1px solid #ddd; font-size: 12px; color: #555; line-height: 1.5; white-space: pre-line;">${short ? escHtml(short) : ''}${short && full ? '<div style="height: 6px;"></div>' : ''}${full ? `<div style="color: #222;">${escHtml(full)}</div>` : ''}</td>
+      </tr>`
+  }
 
   function handlePrint() {
     const printWindow = window.open('', '_blank')
@@ -78,6 +96,7 @@ export default function PortalQuoteDetailsModal({
             <td style="padding: 10px; font-weight: 700; border: 1px solid #ddd;">${pi + 1}. ${phase.phase}</td>
             ${printOptions.includeCosts ? `<td style="padding: 10px; text-align: right; font-weight: 700; border: 1px solid #ddd;">${fmt(calcPhaseSell(phase, quote.markup))}</td>` : ''}
           </tr>
+          ${phaseDescriptionRow(phase)}
           ${printOptions.includePhases ? phase.items.filter(item => calcItemSell(item, quote.markup) > 0).map(item => `
             <tr style="background: #fff;">
               <td style="padding: 8px; border: 1px solid #ddd;">${item.desc} (${item.qty} ${item.unit})</td>
@@ -333,6 +352,23 @@ export default function PortalQuoteDetailsModal({
                     )}
                   </div>
 
+                  {/* Short description, and the full part-by-part "What's included" behind a toggle */}
+                  {(phase.taskName?.trim() || phase.scopeDetail?.trim()) && (
+                    <div style={{ padding: '8px 16px', background: '#fff', borderTop: '1px solid var(--border)' }}>
+                      {phase.taskName?.trim() && (
+                        <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, whiteSpace: 'pre-line' }}>{phase.taskName.trim()}</div>
+                      )}
+                      {phase.scopeDetail?.trim() && (
+                        <details style={{ marginTop: phase.taskName?.trim() ? 6 : 0 }}>
+                          <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 600, color: 'var(--moss)' }}>What&apos;s included</summary>
+                          <div style={{ fontSize: 12, color: 'var(--ink)', lineHeight: 1.6, whiteSpace: 'pre-line', marginTop: 6, padding: '8px 10px', background: '#fafaf8', border: '1px solid var(--border)', borderRadius: 6 }}>
+                            {phase.scopeDetail.trim()}
+                          </div>
+                        </details>
+                      )}
+                    </div>
+                  )}
+
                   {/* Line items — shown for 'full' and 'phases' quoteView; 'phases' hides the price */}
                   {(quoteView === 'full' || quoteView === 'phases') && phase.items.filter(item => calcItemSell(item, quote.markup) > 0).map((item, ii) => {
                     // Backfill description if missing
@@ -468,6 +504,21 @@ export default function PortalQuoteDetailsModal({
                   />
                   <span style={{ fontSize: 14, lineHeight: 1.5 }}>
                     Include Phases Breakdown
+                  </span>
+                </label>
+              )}
+
+              {clientCanSeePhases && hasFullDescriptions && (
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginBottom: 16, padding: 0 }}>
+                  <input
+                    type="checkbox"
+                    checked={printOptions.includeDescriptions}
+                    onChange={e => setPrintOptions(p => ({ ...p, includeDescriptions: e.target.checked }))}
+                    style={{ marginTop: 2, flexShrink: 0, width: 16, height: 16 }}
+                  />
+                  <span style={{ fontSize: 14, lineHeight: 1.5 }}>
+                    Include full &ldquo;What&rsquo;s included&rdquo; descriptions
+                    <span style={{ display: 'block', fontSize: 12, color: 'var(--muted)' }}>Otherwise each phase prints its short description only.</span>
                   </span>
                 </label>
               )}

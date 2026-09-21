@@ -44,6 +44,20 @@ const KIND_PHRASE: Record<RoofOpeningKind, string> = {
   'hatch': 'an access hatch',
 }
 
+const COVERING_SHORT = { epdm: 'EPDM rubber', grp: 'GRP fibreglass', tpo: 'TPO single-ply' } as const
+
+/** The one-line version for the quote's phase line, e.g. "Warm flat roof, 5.00 × 3.20m (16.0 m²) — EPDM rubber
+ * covering, parapet wall and 2 rooflight openings." The full part-by-part text is `describeFlatRoof`. */
+export function describeFlatRoofShort(i: FlatRoofDescriptionInput): string {
+  const area = (i.lengthMm / 1000) * (i.widthMm / 1000)
+  const also: string[] = []
+  if (i.parapet && i.parapet.lm > 0) also.push('parapet wall')
+  if (i.openings.length) also.push(`${i.openings.length} rooflight ${plural(i.openings.length, 'opening', 'openings')}`)
+  const extras = also.length === 0 ? '' : also.length === 1 ? ` and ${also[0]}` : `, ${also.join(' and ')}`
+  const head = `${i.buildUp === 'warm' ? 'Warm' : 'Cold'} flat roof, ${metres(i.lengthMm)} × ${metres(i.widthMm)}m (${area.toFixed(1)} m²)`
+  return `${head} — ${COVERING_SHORT[i.covering]} covering${extras}.`
+}
+
 export function describeFlatRoof(i: FlatRoofDescriptionInput): string {
   const lines: string[] = []
   const area = (i.lengthMm / 1000) * (i.widthMm / 1000)

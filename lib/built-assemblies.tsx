@@ -26,7 +26,9 @@ export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cav
 
 /** Fired when a calculator's "Save & Price" is used from inside a real quote — absent in
  * the Back Office preview context, which has no quote to save into. */
-export interface AssemblySaveResult { name: string; qty: number; location: string; description: string; lines: CostedLine[] }
+// `description` is the short line for the quote; `detail` (only some calculators write one) is the full
+// part-by-part "What's included" text kept as the phase's `scopeDetail`.
+export interface AssemblySaveResult { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }
 
 export interface AssemblyRenderOpts {
   onSave?: (result: AssemblySaveResult) => void

@@ -858,6 +858,8 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
       })
     onUpdate(markEdited({
       ...p, items: newItems, taskName: result.description, assemblyLines: result.lines,
+      // Always set (even to undefined): re-saving a calculator that no longer writes a detail must not leave a stale one.
+      scopeDetail: result.detail,
       ...(result.location.trim() && { roomLabel: result.location.trim() }),
     }))
     setShowAssemblyCalc(false)
@@ -1404,6 +1406,26 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
               }}
             />
           </div>
+
+          {/* Full "What's included" text — written by a calculator; shown on the online quote behind a toggle */}
+          {(p.scopeDetail || '').length > 0 && (
+            <div style={{ marginBottom: 8 }}>
+              <label style={{ display: 'block', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#94a3b8', marginBottom: 3 }}>
+                What&apos;s included (full description — online quote)
+              </label>
+              <textarea
+                value={p.scopeDetail}
+                readOnly={isLocked}
+                rows={Math.min(12, Math.max(4, (p.scopeDetail || '').split('\n').length + 1))}
+                onChange={e => onUpdate({ ...p, scopeDetail: e.target.value || undefined })}
+                style={{
+                  width: '100%', fontSize: 12, lineHeight: 1.5, color: '#334155',
+                  background: isLocked ? '#f8fafc' : '#fff', border: '1px solid #cbd5e1',
+                  borderRadius: 5, padding: '7px 9px', boxSizing: 'border-box', outline: 'none', resize: 'vertical', fontFamily: 'inherit',
+                }}
+              />
+            </div>
+          )}
 
           {/* Needs-review banner */}
           {p.needsReview && p.reviewNote && (

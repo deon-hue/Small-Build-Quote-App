@@ -11,7 +11,24 @@ export interface HtmlOpts {
   showScope?: boolean
   showPaymentTerms?: boolean
   quoteView?: 'full' | 'phases' | 'total_only'
+  /** Open every phase's "What's included" text so it prints in full. Off by default: a printed page can't be
+   * clicked open, so the toggle stays closed and the phase shows only its short description. */
+  expandDescriptions?: boolean
 }
+
+// A phase's full part-by-part description (`scopeDetail`) as a native collapsible <details> — it works in an
+// emailed or downloaded HTML file with no script. Empty string for a phase that has none.
+function scopeDetailHtml(detail: string | undefined, open: boolean, margin: string): string {
+  const text = (detail || '').trim()
+  if (!text) return ''
+  return `<details class="whats-included"${open ? ' open' : ''} style="margin:${margin}">
+      <summary>What's included</summary>
+      <div class="whats-included-text">${esc(text)}</div>
+    </details>`
+}
+
+const WHATS_INCLUDED_CSS = `.whats-included summary{cursor:pointer;font-size:12px;font-weight:600;color:#5a8a20;padding:2px 0}
+.whats-included-text{font-size:12px;color:#334155;line-height:1.6;white-space:pre-line;margin-top:6px;padding:10px 12px;background:#fff;border:1px solid #e2e8f0;border-radius:4px}`
 
 export function buildHtml(q: Quote, settings: Settings, opts: HtmlOpts = {}, boTasks: any[] = []): string {
   const showScope        = opts.showScope        ?? true
@@ -71,7 +88,8 @@ export function buildHtml(q: Quote, settings: Settings, opts: HtmlOpts = {}, boT
           </div>
           <div style="font-size:16px;font-weight:700;color:#7ab533;font-family:'DM Mono',monospace">£${phaseTotal.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>
         </div>
-        ${p.taskName ? `<div style="font-size:12px;color:#64748b;margin-bottom:12px">${esc(p.taskName)}</div>` : ''}
+        ${p.taskName ? `<div style="font-size:12px;color:#64748b;margin-bottom:${p.scopeDetail?.trim() ? '6px' : '12px'};white-space:pre-line">${esc(p.taskName)}</div>` : ''}
+        ${scopeDetailHtml(p.scopeDetail, !!opts.expandDescriptions, '0 0 12px')}
         <div style="background:white;border-radius:4px;overflow:hidden">
           ${itemRows}${productRows}${plantRows}
         </div>
@@ -110,6 +128,7 @@ body{font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,san
 .terms-box p{font-size:12px;color:#444;line-height:1.6;margin-bottom:5px}
 .footer{padding:30px 40px;background:#1e293b;color:rgba(255,255,255,0.7);font-size:12px;text-align:center;line-height:1.6}
 .footer-divider{height:1px;background:rgba(255,255,255,0.2);margin-bottom:20px}
+${WHATS_INCLUDED_CSS}
 </style></head><body>
 <div class="container">
   <div class="header">
@@ -276,10 +295,11 @@ export function buildHtmlClientView(q: Quote, settings: Settings, opts: HtmlOpts
           <div style="font-weight:700;font-size:13px;color:#1e293b">
             ${p.roomLabel ? `<span style="font-size:11px;font-weight:700;color:#16a34a;margin-right:6px">📍 ${esc(p.roomLabel)}</span>` : ''}${esc(p.phase)}
           </div>
-          ${p.taskName ? `<div style="font-size:11px;color:#64748b;margin-top:2px">${esc(p.taskName)}</div>` : ''}
+          ${p.taskName ? `<div style="font-size:11px;color:#64748b;margin-top:2px;white-space:pre-line">${esc(p.taskName)}</div>` : ''}
         </div>
         ${priceHtml}
       </div>
+      ${p.scopeDetail?.trim() ? `<div style="padding:0 14px 12px">${scopeDetailHtml(p.scopeDetail, !!opts.expandDescriptions, '0')}</div>` : ''}
       ${itemRowsHtml ? `<div style="border-top:1px solid #e2e8f0">${itemRowsHtml}</div>` : ''}
     </div>`
   }).join('')
@@ -316,6 +336,7 @@ body{font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,san
 .terms-box p{font-size:12px;color:#444;line-height:1.6;margin-bottom:5px}
 .footer{padding:30px 40px;background:#1e293b;color:rgba(255,255,255,0.7);font-size:12px;text-align:center;line-height:1.6}
 .footer-divider{height:1px;background:rgba(255,255,255,0.2);margin-bottom:20px}
+${WHATS_INCLUDED_CSS}
 </style></head><body>
 <div class="container">
   <div class="header">

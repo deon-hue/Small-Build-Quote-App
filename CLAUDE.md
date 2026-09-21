@@ -68,6 +68,12 @@ pattern, and **is used from Take-off in the same way** — do not invent a diffe
    sample rates editable per line, labour section, misc materials, waste/profit, a quote description, and a
    drawing. An engine error is shown as a **banner above the controls — never instead of them** (typing a
    value digit by digit passes through invalid ones, and the controls must stay to correct it).
+   **Quote description is two-tier**: `onSave` passes a short one-line `description` (becomes the phase's
+   `taskName`, printed everywhere) and may pass a full part-by-part `detail` (becomes `QuotePhase.scopeDetail`,
+   shown on the online/HTML quote behind a "What's included" toggle and on paper only if "full descriptions"
+   is ticked). Write both with pure functions in `lib/<name>-description.ts` (see `lib/flat-roof-description.ts`:
+   `describeFlatRoofShort` / `describeFlatRoof`, tested) so they follow the inputs until hand-edited — never a
+   snapshot taken when the calculator opens. `detail` is optional; a calculator with only `description` is fine.
 3. Register: id in `lib/built-assembly-ids.ts` (`BUILT_ASSEMBLY_CANONICAL_IDS`), icon glyph + entry in
    `lib/built-assemblies.tsx`, and the sub-phase itself in `lib/phase-tasks.ts` (an existing sub-phase is just
    registered; a new one gets an entry in the right sub-phase array).

@@ -20,6 +20,7 @@ export default function QuotePreviewModal({ quote, onClose, boTasks = [] }: Prop
   const { settings, clients } = useApp()
   const [view, setView] = useState<'detailed' | 'client'>('detailed')
   const frameRef = useRef<HTMLIFrameElement>(null)
+  const [printFullDescriptions, setPrintFullDescriptions] = useState(false)
   const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown, isInteracting, onOverlayClick, isMaximized, toggleMaximize } = useDraggableModal()
 
   // Look up this client's portal settings so "Client View" here matches what
@@ -32,18 +33,23 @@ export default function QuotePreviewModal({ quote, onClose, boTasks = [] }: Prop
   )
   const clientSettings = matchedClient?.portalSettings ?? DEFAULT_CLIENT_PORTAL_SETTINGS
 
-  const html = view === 'detailed'
-    ? buildHtml(quote, settings, {}, boTasks)
+  // The preview and the downloaded file keep each phase's full "What's included" behind a toggle (closed);
+  // Print can open them all, since a printed page can't be clicked.
+  const buildFor = (expandDescriptions: boolean) => view === 'detailed'
+    ? buildHtml(quote, settings, { expandDescriptions }, boTasks)
     : buildHtmlClientView(quote, settings, {
         quoteView:        clientSettings.quoteView,
         showScope:        clientSettings.showScope,
         showPaymentTerms: clientSettings.showPaymentTerms,
+        expandDescriptions,
       }, boTasks)
+  const html = buildFor(false)
+  const hasFullDescriptions = quote.phases.some(p => p.scopeDetail?.trim())
 
   function handlePrint() {
     const w = window.open('', '_blank')
     if (!w) { alert('Pop-up blocked — please allow pop-ups and try again.'); return }
-    w.document.write(html)
+    w.document.write(buildFor(printFullDescriptions))
     w.document.close()
     setTimeout(() => w.print(), 500)
   }
@@ -84,6 +90,12 @@ export default function QuotePreviewModal({ quote, onClose, boTasks = [] }: Prop
                 Client View
               </button>
             </div>
+            {hasFullDescriptions && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, cursor: 'pointer', color: 'var(--muted)' }} title="Off: each phase prints its short description only">
+                <input type="checkbox" checked={printFullDescriptions} onChange={e => setPrintFullDescriptions(e.target.checked)} />
+                Full descriptions
+              </label>
+            )}
             <button className="btn-sm btn-outline" onClick={handlePrint}>🖨 Print / PDF</button>
             <button className="btn-sm btn-outline" onClick={handleDownload}>⬇ Download</button>
             <ModalMaximizeButton isMaximized={isMaximized} onClick={toggleMaximize} />
