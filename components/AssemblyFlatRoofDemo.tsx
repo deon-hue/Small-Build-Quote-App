@@ -33,6 +33,7 @@ import {
   type AssemblyLayerDef, type CostedLine,
 } from '@/lib/assembly-calc'
 import { fmt } from '@/lib/utils'
+import { suggestFlatRoofLabour, toLabourLines, LABOUR_TRADE_LABEL, type LabourSuggestion, type LabourTradeKind } from '@/lib/flat-roof-labour'
 import {
   resolveDrainage, drainOptions, drainProduct, DRAIN_SLOTS, DRAIN_PRODUCTS, DRAIN_SYSTEMS, DRAIN_SYSTEM_LABEL, DRAIN_SYSTEM_DESCRIPTION,
   NONE as DRAIN_NONE, type DrainSystem, type DrainSlotId, type DrainExtra, type DrainLine, type DrainRoofInput,
@@ -445,17 +446,22 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
     setInsulationMm(next === 'warm' ? 120 : Math.max(50, joistDepth - 50))
   }
 
-  const [labourLines, setLabourLines] = useState<LabourLine[]>([
-    { id: newLabourLineId(), tradeId: '', task: 'Form deck, insulate and lay the covering', hours: 24 },
-  ])
+  // Labour is suggested from the roof (lib/flat-roof-labour.ts) and follows it — the trades, the tasks and the hours —
+  // until it is edited; then the estimator's own lines are kept, and "Suggest again" goes back to following the roof.
+  const [labourOverride, setLabourOverride] = useState<LabourLine[] | null>(null)
+  const [includeFitting, setIncludeFitting] = useState(false)
+  const suggestedLinesRef = useRef<LabourLine[]>([])
   function addLabourLine() {
-    setLabourLines(prev => [...prev, { id: newLabourLineId(), tradeId: prev[0]?.tradeId ?? '', task: '', hours: 0 }])
+    setLabourOverride(prev => {
+      const base = prev ?? suggestedLinesRef.current
+      return [...base, { id: newLabourLineId(), tradeId: base[0]?.tradeId ?? '', task: '', hours: 0 }]
+    })
   }
   function updateLabourLine(id: string, patch: Partial<LabourLine>) {
-    setLabourLines(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l))
+    setLabourOverride(prev => (prev ?? suggestedLinesRef.current).map(l => l.id === id ? { ...l, ...patch } : l))
   }
   function removeLabourLine(id: string) {
-    setLabourLines(prev => prev.filter(l => l.id !== id))
+    setLabourOverride(prev => (prev ?? suggestedLinesRef.current).filter(l => l.id !== id))
   }
 
   const [miscMaterialLines, setMiscMaterialLines] = useState<MiscMaterialLine[]>([])
@@ -537,6 +543,32 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   const drainRoof: DrainRoofInput = { edges, lengthMm, widthMm, downpipes, dropM, gullyCount: g?.gullyCount ?? 0, overflowCount: g?.overflowCount ?? 0 }
   const drain = resolveDrainage(drainRoof, drainSystem, drainPicks, extraDrain)
   const drainKey = JSON.stringify(drain.lines.map(l => [l.id, l.qty]))
+
+  // The trades this roof needs and roughly how long each takes.
+  const qtyOfLines = (lines: { product: { slot?: string; unit: string; code: string }; id: string; qty: number }[], test: (l: { product: { slot?: string; unit: string; code: string }; id: string; qty: number }) => boolean) =>
+    lines.filter(test).reduce((sum, l) => sum + l.qty, 0)
+  const labourSuggestions: LabourSuggestion[] = g ? suggestFlatRoofLabour({
+    buildUp, covering, joistSystem,
+    netAreaM2: g.netAreaM2, membraneAreaM2: g.membraneAreaM2, joistCount: g.joistCount, ledgerLm: g.ledgerLm, wallPlateLm: g.wallPlateLm,
+    strutCount: g.strutCount, firringLm: g.firringLm, trimmerLm: g.trimLm, kerbLm: g.kerbLm,
+    openings: openings.map(o => ({ kind: o.kind })),
+    fasciaLm: fascia ? g.edgeTrimLm : 0,
+    coveringTrimLm: covering === 'tpo' ? g.edgeTrimLm : qtyOfLines(trims.lines, l => l.product.unit !== 'nr' && l.product.code !== 'LEAD4'),
+    coveringCorners: qtyOfLines(trims.lines, l => l.id.startsWith('trim_corner')),
+    leadLm: covering === 'tpo' ? g.abutmentLm : qtyOfLines(trims.lines, l => l.product.code === 'LEAD4'),
+    parapet: hasParapet ? { lm: g.parapetLm, masonryAreaM2: g.parapetMasonryAreaM2, type: parapetType, renderAreaM2: g.parapetRenderAreaM2, rainwaterOutlets: g.gullyCount, overflowOutlets: g.overflowCount } : undefined,
+    drainage: {
+      gutterLm: qtyOfLines(drain.lines, l => l.product.slot === 'gutter'),
+      gutterFittings: qtyOfLines(drain.lines, l => ['running_outlet', 'angle', 'stop_end', 'union'].includes(l.product.slot ?? '')),
+      downpipeLm: qtyOfLines(drain.lines, l => l.product.slot === 'downpipe'),
+      shoes: qtyOfLines(drain.lines, l => l.product.slot === 'shoe'),
+      hoppers: qtyOfLines(drain.lines, l => l.product.slot === 'hopper'),
+      offsets: qtyOfLines(drain.lines, l => l.product.slot === 'offset'),
+    },
+  }) : []
+  const suggestedLabour = toLabourLines(labourSuggestions, labourTrades, includeFitting)
+  suggestedLinesRef.current = suggestedLabour.lines
+  const labourLines: LabourLine[] = labourOverride ?? suggestedLabour.lines
 
   // The customer-facing description, written from the roof as it's set now (lib/flat-roof-description.ts) —
   // one short paragraph per part of the roof. It follows the roof as it changes, so what's saved to the
@@ -1034,6 +1066,12 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
           </PropRow>
         </div>
 
+        <LabourSuggestionPanel
+          suggestions={labourSuggestions} includeFitting={includeFitting} onIncludeFitting={setIncludeFitting}
+          unmatched={suggestedLabour.unmatched} edited={labourOverride !== null} onSuggestAgain={() => setLabourOverride(null)}
+          tradesFound={labourTrades.length > 0}
+        />
+
         <LabourSection labourLines={labourLines} labourTrades={labourTrades}
           onAdd={addLabourLine} onUpdate={updateLabourLine} onRemove={removeLabourLine} />
 
@@ -1174,6 +1212,68 @@ function CoveringTrimsPanel({ covering, roof, trims, areaM2, wastePct, onPick, e
         Lengths and corners are worked out from the roof; each trim is priced in the breakdown with a sample rate you can change.
         {covering === 'grp' ? ' Check each trim against the Cure It details for the build-up.' : ' EPDM trims are generic — say which supplier you use and their range can go in.'}
       </div>
+    </div>
+  )
+}
+
+// ── Suggested labour ───────────────────────────────────────────────────────────────
+// Which trades the roof as chosen needs, and roughly how long each takes, with the working for each. The hours go
+// straight into the labour section below (where they can be changed) and follow the roof until they are.
+function LabourSuggestionPanel({ suggestions, includeFitting, onIncludeFitting, unmatched, edited, onSuggestAgain, tradesFound }: {
+  suggestions: LabourSuggestion[]
+  includeFitting: boolean
+  onIncludeFitting: (on: boolean) => void
+  unmatched: LabourTradeKind[]
+  edited: boolean
+  onSuggestAgain: () => void
+  tradesFound: boolean
+}) {
+  const shown = suggestions.filter(x => !x.optional || includeFitting)
+  const fitting = suggestions.find(x => x.optional)
+  const total = shown.reduce((sum, x) => sum + x.hours, 0)
+  const byTrade = (Object.keys(LABOUR_TRADE_LABEL) as LabourTradeKind[])
+    .map(k => ({ k, hours: shown.filter(x => x.trade === k).reduce((sum, x) => sum + x.hours, 0) }))
+    .filter(t => t.hours > 0)
+  return (
+    <div style={{ gridColumn: '1 / -1', marginTop: 4, padding: 8, background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#0c4a6e', textTransform: 'uppercase', letterSpacing: 0.4 }}>Suggested labour for this roof</div>
+        {edited
+          ? <button onClick={onSuggestAgain} title="Go back to the labour suggested from the roof — replaces the labour lines below"
+              style={{ fontSize: 10, color: '#0369a1', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>↻ Edited by you — suggest again from the roof</button>
+          : <span style={{ fontSize: 10, color: '#16a34a' }}>updates as you change the roof</span>}
+      </div>
+      <div style={{ fontSize: 12, color: '#334155', marginTop: 4, lineHeight: 1.5 }}>
+        <strong>{total} hours</strong> in all:{' '}
+        {byTrade.map((t, i) => <span key={t.k}>{i > 0 ? ', ' : ''}{LABOUR_TRADE_LABEL[t.k].toLowerCase()} {t.hours}h</span>)}.
+      </div>
+      {unmatched.length > 0 && (
+        <div style={{ fontSize: 11, color: '#b45309', marginTop: 4, lineHeight: 1.45 }}>
+          {tradesFound
+            ? <>Back Office has no trade that looks like {unmatched.map(k => LABOUR_TRADE_LABEL[k].toLowerCase()).join(', ')} — those lines are left without a trade. Pick one from the list, or add it under Back Office → Labour &amp; Trades.</>
+            : <>Add your trades under Back Office → Labour &amp; Trades and these hours will be priced.</>}
+        </div>
+      )}
+      {fitting && (
+        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11, color: '#475569', marginTop: 6, cursor: 'pointer' }}>
+          <input type="checkbox" checked={includeFitting} onChange={e => onIncludeFitting(e.target.checked)} style={{ width: 'auto', marginTop: 2 }} />
+          <span>Include fitting the rooflights ({fitting.hours}h). Leave it off if they're priced fitted with the rooflights themselves.{edited ? ' Applies when you suggest again.' : ''}</span>
+        </label>
+      )}
+      <details style={{ marginTop: 6 }}>
+        <summary style={{ fontSize: 11, color: '#0369a1', cursor: 'pointer' }}>How the hours are worked out</summary>
+        <div style={{ marginTop: 4 }}>
+          {shown.map(x => (
+            <div key={x.key} style={{ fontSize: 11, color: '#334155', padding: '3px 0', borderTop: '1px solid #e0f2fe', lineHeight: 1.45 }}>
+              <strong>{LABOUR_TRADE_LABEL[x.trade]}</strong> — {x.task}: <strong>{x.hours}h</strong>
+              <div style={{ color: '#64748b' }}>{x.basis}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4, lineHeight: 1.4 }}>
+          Rough hours per unit for a small, easily reached roof — one operative. Change any line in the labour section below. Allow more for difficult access, height or weather.
+        </div>
+      </details>
     </div>
   )
 }
