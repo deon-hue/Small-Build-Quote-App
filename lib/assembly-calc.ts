@@ -1344,15 +1344,69 @@ export interface FlatRoofOutlet {
   positionMm: number        // along that edge: from the left for the high and low edges, from the high edge for left and right
 }
 
-/** How one opening is trimmed: the joists either side of it are its side trimmers (doubled or tripled up
- * alongside, over the full span), and the headers run between them. */
+/** The thickness of a joist, and so of each member of a doubled or tripled trimmer or header. */
+export const JOIST_THICKNESS_MM = 47
+
+/** How far a trimmer or header group reaches outside its opening: its members side by side, each a joist thick. */
+export function openingTrimZoneMm(o: { trimmers?: 2 | 3 }): number {
+  return (o.trimmers ?? 2) * JOIST_THICKNESS_MM
+}
+
+/** How one opening is trimmed. The trimmers are put tight to the opening's own sides — whatever the joist
+ * centres — as `members` joists side by side over the full span; the headers run between them, tight to
+ * the opening's top and bottom, so the framed opening is exactly the size asked for. Any standard joist that
+ * falls where a trimmer or header goes is replaced by it, and those inside the opening are cut short. */
 export interface FlatRoofOpeningTrim {
   openingId: string
-  beforeMm: number        // position of the joist used as the left trimmer
-  afterMm: number         // position of the joist used as the right trimmer
-  headerLengthMm: number  // between them
-  leftOnJoist: boolean    // the opening's left edge sits right on that joist (otherwise there's a gap to it)
-  rightOnJoist: boolean
+  members: number         // 2 doubled, 3 tripled
+  zoneMm: number          // how far the members reach out from the opening's edge
+  leftMm: number          // the opening's left edge — the inner face of the left trimmer
+  rightMm: number         // the opening's right edge — the inner face of the right trimmer
+  headerLengthMm: number  // the opening's width: the headers run between the side trimmers
+  joistsReplaced: number  // standard joists that fell where a trimmer goes, and so aren't used
+  joistsCut: number       // standard joists cut short because they cross the opening
+}
+
+/** One standard joist in the layout: at its position along the roof, where an opening makes it `replaced` (a
+ * trimmer takes its place) or cuts it short (the spans of its length that are missing, measured from the high edge). */
+export interface FlatRoofJoist {
+  positionMm: number
+  replaced: boolean
+  cuts: [number, number][]
+}
+
+function joistVsOpening(p: number, o: FlatRoofOpening): 'clear' | 'replaced' | 'cut' {
+  const z = openingTrimZoneMm(o), h = JOIST_THICKNESS_MM / 2
+  const left = o.offsetMm, right = o.offsetMm + o.widthMm
+  if (p + h > left - z && p - h < left) return 'replaced'
+  if (p + h > right && p - h < right + z) return 'replaced'
+  if (p - h >= left && p + h <= right) return 'cut'
+  return 'clear'
+}
+
+/** The standard joists at their centres, with what each opening does to them — used for both the counts and the drawing. */
+export function flatRoofJoistLayout(lengthMm: number, widthMm: number, centresMm: number, openings: FlatRoofOpening[]): FlatRoofJoist[] {
+  return studPositionsMm(lengthMm, centresMm).map(positionMm => {
+    let replaced = false
+    const raw: [number, number][] = []
+    for (const o of openings) {
+      const v = joistVsOpening(positionMm, o)
+      if (v === 'replaced') replaced = true
+      else if (v === 'cut') {
+        // The joist stops at the outer face of the header at each end of the opening.
+        const z = openingTrimZoneMm(o)
+        raw.push([Math.max(0, o.offsetSpanMm - z), Math.min(widthMm, o.offsetSpanMm + o.depthMm + z)])
+      }
+    }
+    raw.sort((a, b) => a[0] - b[0])
+    const cuts: [number, number][] = []
+    for (const [a, b] of raw) {
+      const last = cuts[cuts.length - 1]
+      if (last && a <= last[1]) last[1] = Math.max(last[1], b)
+      else cuts.push([a, b])
+    }
+    return { positionMm, replaced, cuts }
+  })
 }
 
 export interface FlatRoofOpening {
@@ -1488,6 +1542,10 @@ export function calculateFlatRoofGeometry(input: FlatRoofInput): FlatRoofGeometr
     if (o.offsetMm < 0 || o.offsetMm + o.widthMm > L || o.offsetSpanMm < 0 || o.offsetSpanMm + o.depthMm > S) {
       warnings.push(`Rooflight ${i + 1} falls outside the roof — check its position and size.`)
     }
+    const z = openingTrimZoneMm(o)
+    if (o.offsetMm - z < 0 || o.offsetMm + o.widthMm + z > L || o.offsetSpanMm - z < 0 || o.offsetSpanMm + o.depthMm + z > S) {
+      warnings.push(`Rooflight ${i + 1} is too close to the edge of the roof — its trimmers and headers need ${z}mm all round it.`)
+    }
     for (let j = i + 1; j < openings.length; j++) {
       const p = openings[j]
       const overlapX = o.offsetMm < p.offsetMm + p.widthMm && p.offsetMm < o.offsetMm + o.widthMm
@@ -1496,35 +1554,30 @@ export function calculateFlatRoofGeometry(input: FlatRoofInput): FlatRoofGeometr
     }
   }
 
-  // Joists: one at every position along the roof; where an opening sits across a joist (strictly
-  // inside its width — a joist on the opening's edge is its side trimmer instead) that joist is cut
-  // short by the opening's length.
-  const positions = studPositionsMm(L, C)
+  // Joists: one at every position along the roof. Where an opening sits across a joist that joist is cut
+  // short (it stops at the header); where a trimmer goes, the joist there is replaced by the trimmer.
+  const layout = flatRoofJoistLayout(L, S, C, openings)
+  const positions = layout.map(j => j.positionMm)
   let joistMm = 0
-  for (const p of positions) {
-    let cut = 0
-    for (const o of openings) {
-      if (p > o.offsetMm && p < o.offsetMm + o.widthMm) cut += o.depthMm
-    }
-    joistMm += Math.max(0, S - cut)
+  for (const j of layout) {
+    if (j.replaced) continue
+    joistMm += Math.max(0, S - j.cuts.reduce((sum, [from, to]) => sum + (to - from), 0))
   }
 
-  // Trimming round each opening. The joists either side of it are its side trimmers: the nearest joist at
-  // or beyond each side (the opening is usually set with its edges on joist lines, so that joist is used
-  // as one member of the doubled trimmer), with (trimmers - 1) more added alongside over the full span —
-  // doubled is 2 members, tripled 3. The two headers (also `trimmers` members each) run between those
-  // joists. Then the kerb.
+  // Trimming round each opening. The side trimmers are put tight to the opening's own sides — whatever the
+  // joist centres — as 'trimmers' joists side by side (doubled is 2, tripled 3) over the full span, and the
+  // two headers, also 'trimmers' members each, run between them against the opening's near and far edges.
+  // So the trimmed opening is exactly the size asked for. Then the kerb.
   let trimMm = 0, kerbMm = 0, kerbFaceMm2 = 0
   const openingTrims: FlatRoofOpeningTrim[] = []
   for (const o of openings) {
     const members = o.trimmers ?? 2
-    const before = [...positions].reverse().find(p => p <= o.offsetMm) ?? 0
-    const after = positions.find(p => p >= o.offsetMm + o.widthMm) ?? L
-    const headerMm = Math.max(0, after - before)
-    trimMm += 2 * (members - 1) * S + 2 * members * headerMm
+    trimMm += 2 * members * S + 2 * members * o.widthMm
     openingTrims.push({
-      openingId: o.id, beforeMm: before, afterMm: after, headerLengthMm: headerMm,
-      leftOnJoist: Math.abs(before - o.offsetMm) <= 1, rightOnJoist: Math.abs(after - (o.offsetMm + o.widthMm)) <= 1,
+      openingId: o.id, members, zoneMm: openingTrimZoneMm(o),
+      leftMm: o.offsetMm, rightMm: o.offsetMm + o.widthMm, headerLengthMm: o.widthMm,
+      joistsReplaced: positions.filter(p => joistVsOpening(p, o) === 'replaced').length,
+      joistsCut: positions.filter(p => joistVsOpening(p, o) === 'cut').length,
     })
     const perimeterMm = 2 * (o.widthMm + o.depthMm)
     kerbMm += perimeterMm

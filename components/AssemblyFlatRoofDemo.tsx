@@ -26,7 +26,7 @@
 
 import React, { useMemo, useState, useEffect, useRef } from 'react'
 import {
-  calculateFlatRoofGeometry, calculateFlatRoofCost, studPositionsMm,
+  calculateFlatRoofGeometry, calculateFlatRoofCost, studPositionsMm, flatRoofJoistLayout, openingTrimZoneMm, JOIST_THICKNESS_MM,
   type FlatRoofInput, type FlatRoofGeometry, type FlatRoofOpening, type FlatRoofBuildUp, type RoofOpeningKind,
   type FlatRoofEdge, type FlatRoofEdges, type FlatRoofWallConnection, type ParapetType,
   type FlatRoofOutlet, type FlatRoofOutletKind,
@@ -283,22 +283,21 @@ function defaultOutlets(edges: FlatRoofEdges, lengthMm: number, widthMm: number)
 
 // A new opening goes in the first free spot: scanning along the roof from the left, then down from
 // the high edge, for a gap that clears every opening already there by 300mm (room for the trimmers
-// and kerbs). If the roof is too full it just goes at the default spot — the overlap warning says so.
-function newOpening(kind: RoofOpeningKind, existing: FlatRoofOpening[], lengthMm: number, widthMm: number, centresMm = 400): FlatRoofOpening {
+// and kerbs). Its trimmers are put tight to its own sides, so it doesn't need to line up with the joists.
+// If the roof is too full it just goes at the default spot — the overlap warning says so.
+function newOpening(kind: RoofOpeningKind, existing: FlatRoofOpening[], lengthMm: number, widthMm: number): FlatRoofOpening {
   const d = KIND_DEFAULTS[kind]
   const gap = 300
-  const maxX = Math.max(0, lengthMm - d.widthMm)
-  const maxY = Math.max(0, widthMm - d.depthMm)
-  // Its left edge goes on a joist line, so that joist is used as a member of the doubled trimmer.
-  const joistXs = studPositionsMm(lengthMm, centresMm).filter(x => x <= maxX)
+  const room = openingTrimZoneMm({ trimmers: d.trimmers }) + 100   // the trimmers, and a little clearance from the roof edge
+  const maxX = Math.max(0, lengthMm - d.widthMm - room)
+  const maxY = Math.max(0, widthMm - d.depthMm - room)
   const clashes = (x: number, y: number) => existing.some(o =>
     x < o.offsetMm + o.widthMm + gap && o.offsetMm < x + d.widthMm + gap &&
     y < o.offsetSpanMm + o.depthMm + gap && o.offsetSpanMm < y + d.depthMm + gap)
-  const firstJoist = joistXs.find(x => x >= 300) ?? joistXs[joistXs.length - 1] ?? 0
-  let spot = { x: firstJoist, y: Math.min(maxY, 800) }
-  search: for (let y = Math.min(maxY, 800); y <= maxY; y += 200) {
-    for (const x of joistXs) {
-      if (x < 300 && joistXs.length > 1) continue // leave a little room from the end wall
+  const startY = Math.max(room, Math.min(maxY, 800))
+  let spot = { x: Math.min(maxX, 300), y: Math.min(maxY, startY) }
+  search: for (let y = startY; y <= maxY; y += 200) {
+    for (let x = 300; x <= maxX; x += 100) {
       if (!clashes(x, y)) { spot = { x, y }; break search }
     }
   }
@@ -403,7 +402,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
     return [lantern, newOpening('roof-window', [lantern], L, S)]
   })
   function addOpening(kind: RoofOpeningKind) {
-    setOpenings(prev => [...prev, newOpening(kind, prev, lengthMm, widthMm, centresMm)])
+    setOpenings(prev => [...prev, newOpening(kind, prev, lengthMm, widthMm)])
   }
   function updateOpening(id: string, patch: Partial<FlatRoofOpening>) {
     setOpenings(prev => prev.map(o => o.id === id ? { ...o, ...patch } : o))
@@ -411,18 +410,6 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   function removeOpening(id: string) {
     setOpenings(prev => prev.filter(o => o.id !== id))
   }
-  // An opening is normally set with its edges on joist lines, so that the joist there is used as a
-  // member of its doubled trimmer. Dragging can snap to them; this snaps one that's been typed in.
-  const [snapToJoists, setSnapToJoists] = useState(true)
-  function alignOpeningToJoist(id: string) {
-    const joists = studPositionsMm(lengthMm, centresMm)
-    setOpenings(prev => prev.map(o => {
-      if (o.id !== id) return o
-      const nearest = joists.reduce((best, j) => Math.abs(j - o.offsetMm) < Math.abs(best - o.offsetMm) ? j : best, joists[0] ?? 0)
-      return { ...o, offsetMm: Math.max(0, Math.min(Math.max(0, lengthMm - o.widthMm), nearest)) }
-    }))
-  }
-
   const depthOptions = joistSystem === 'posi' ? POSI_DEPTHS : TIMBER_DEPTHS
   function changeSystem(next: JoistSystem) {
     setJoistSystem(next)
@@ -706,7 +693,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
           {g && (<>
             <FlatRoofPlanSvg
               g={g} lengthMm={lengthMm} widthMm={widthMm} centresMm={centresMm} fallRatio={fallRatio}
-              edges={edges} wallConnection={wallConnection} openings={openings} outlets={outlets} snapToJoists={snapToJoists}
+              edges={edges} wallConnection={wallConnection} openings={openings} outlets={outlets}
               onMoveOpening={(id, offsetMm, offsetSpanMm) => updateOpening(id, { offsetMm, offsetSpanMm })}
               onMoveOutlet={(id, positionMm) => updateOutlet(id, { positionMm })}
             />
@@ -909,10 +896,6 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
             <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6, lineHeight: 1.4 }}>
               This forms the opening — trimmers, kerb and upstand. The rooflight itself is priced separately.
             </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#475569', marginBottom: 6, cursor: 'pointer' }}>
-              <input type="checkbox" checked={snapToJoists} onChange={e => setSnapToJoists(e.target.checked)} style={{ width: 'auto' }} />
-              Snap to joist lines when dragging, so a joist is used as the trimmer
-            </label>
             {openings.map((o, i) => (
               <div key={o.id} style={{ border: '1px solid #e2e8f0', borderRadius: 6, padding: 6, marginBottom: 6, background: '#fff' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
@@ -945,22 +928,16 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
                     {miniNum(o.kerbHeightMm ?? 200, n => updateOpening(o.id, { kerbHeightMm: n }))}
                   </div>
                 </div>
-                {/* Which joists this opening is trimmed off — the existing joists either side, doubled or tripled up */}
+                {/* How this opening is trimmed: at its own sides, so it doesn't matter where the joists fall */}
                 {(() => {
                   const t = g?.openingTrims.find(tr => tr.openingId === o.id)
                   if (!t) return null
-                  const members = o.trimmers ?? 2
-                  const offJoist = !t.leftOnJoist
+                  const word = t.members === 3 ? 'tripled' : 'doubled'
                   return (
                     <div style={{ fontSize: 10, color: '#64748b', marginTop: 5, lineHeight: 1.4 }}>
-                      Trimmed off the joists at {t.beforeMm} and {t.afterMm}mm — each joist {members === 3 ? 'tripled' : 'doubled'} up over the full span, with a {members === 3 ? 'tripled' : 'doubled'} header {(t.headerLengthMm / 1000).toFixed(2)}m long at each end.
-                      {offJoist && (
-                        <span style={{ color: '#b45309' }}>
-                          {' '}The left edge isn't on a joist line.
-                          <button onClick={() => alignOpeningToJoist(o.id)}
-                            style={{ marginLeft: 4, fontSize: 10, background: 'none', border: 'none', color: '#0369a1', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>Align to a joist</button>
-                        </span>
-                      )}
+                      {word[0].toUpperCase() + word.slice(1)} trimmers tight to each side of the opening, full span, with {word} headers {(t.headerLengthMm / 1000).toFixed(2)}m long above and below it — so the opening is exactly {o.widthMm} × {o.depthMm}mm. The trimmers take {t.zoneMm}mm each side.
+                      {t.joistsReplaced > 0 && <> {t.joistsReplaced} standard {t.joistsReplaced === 1 ? 'joist falls' : 'joists fall'} where a trimmer goes and {t.joistsReplaced === 1 ? 'is' : 'are'} left out.</>}
+                      {t.joistsCut > 0 && <> {t.joistsCut} {t.joistsCut === 1 ? 'joist is' : 'joists are'} cut short by it.</>}
                     </div>
                   )
                 })()}
@@ -1023,7 +1000,7 @@ const KIND_SHORT: Record<RoofOpeningKind, string> = { 'lantern': 'Lantern', 'roo
 const TRIMMER_COLOUR = '#b45309'
 const EDGE_BAR = 9
 
-function FlatRoofPlanSvg({ g, lengthMm, widthMm, centresMm, fallRatio, edges, wallConnection, openings, outlets, snapToJoists, onMoveOpening, onMoveOutlet }: {
+function FlatRoofPlanSvg({ g, lengthMm, widthMm, centresMm, fallRatio, edges, wallConnection, openings, outlets, onMoveOpening, onMoveOutlet }: {
   g: FlatRoofGeometry
   lengthMm: number
   widthMm: number
@@ -1033,8 +1010,6 @@ function FlatRoofPlanSvg({ g, lengthMm, widthMm, centresMm, fallRatio, edges, wa
   wallConnection: FlatRoofWallConnection
   openings: FlatRoofOpening[]
   outlets: FlatRoofOutlet[]
-  /** While dragging an opening, its left edge jumps to the nearest joist line, so the joist is used as its trimmer. */
-  snapToJoists: boolean
   onMoveOpening: (id: string, offsetMm: number, offsetSpanMm: number) => void
   onMoveOutlet: (id: string, positionMm: number) => void
 }) {
@@ -1084,27 +1059,22 @@ function FlatRoofPlanSvg({ g, lengthMm, widthMm, centresMm, fallRatio, edges, wa
     }
     const o = openings.find(op => op.id === drag.id)
     if (!o) return
-    let x = p.x - drag.dx
-    if (snapToJoists) x = positions.reduce((best, j) => Math.abs(j - x) < Math.abs(best - x) ? j : best, positions[0] ?? 0)
-    else x = snap50(x)
     onMoveOpening(o.id,
-      Math.max(0, Math.min(Math.max(0, lengthMm - o.widthMm), x)),
+      Math.max(0, Math.min(Math.max(0, lengthMm - o.widthMm), snap50(p.x - drag.dx))),
       Math.max(0, Math.min(Math.max(0, widthMm - o.depthMm), snap50(p.y - drag.dy))))
   }
 
+  // The standard joists: one that falls where an opening's trimmer goes is left out (the trimmer takes its
+  // place), and one the opening crosses is drawn only where it's there — stopping at the headers.
   const joistLines: React.ReactNode[] = []
-  for (const p of positions) {
-    // Where an opening crosses this joist it's cut — draw the joist only in the gaps.
-    const cuts = openings
-      .filter(o => p > o.offsetMm && p < o.offsetMm + o.widthMm)
-      .map(o => [o.offsetSpanMm, o.offsetSpanMm + o.depthMm] as const)
-      .sort((a, b) => a[0] - b[0])
-    let from = 0
+  for (const j of flatRoofJoistLayout(lengthMm, widthMm, centresMm, openings)) {
+    if (j.replaced) continue
     const segments: [number, number][] = []
-    for (const [a, b] of cuts) { if (a > from) segments.push([from, a]); from = Math.max(from, b) }
+    let from = 0
+    for (const [a, b] of j.cuts) { if (a > from) segments.push([from, a]); from = Math.max(from, b) }
     if (from < widthMm) segments.push([from, widthMm])
     segments.forEach(([a, b], i) => joistLines.push(
-      <line key={`${p}-${i}`} x1={x0 + p * k} x2={x0 + p * k} y1={y0 + a * k} y2={y0 + b * k} stroke="#b4b2a9" strokeWidth={1} />,
+      <line key={`${j.positionMm}-${i}`} x1={x0 + j.positionMm * k} x2={x0 + j.positionMm * k} y1={y0 + a * k} y2={y0 + b * k} stroke="#b4b2a9" strokeWidth={1} />,
     ))
   }
 
@@ -1195,32 +1165,22 @@ function FlatRoofPlanSvg({ g, lengthMm, widthMm, centresMm, fallRatio, edges, wa
     )
   })
 
-  // ── Trimmers. The joists either side of an opening are its side trimmers: the existing joist itself
-  // (drawn heavier, over its full span) with one or two more added beside it on the outside, and the
-  // headers run between them against the opening's near and far edges — two lines doubled, three tripled.
+  // ── Trimmers. They go tight to the opening's own sides, whatever the joist centres: `members` joists side by
+  // side (each 47mm, drawn to scale) over the full span, with the headers between them against the opening's
+  // near and far edges — two members doubled, three tripled.
   const trimmerLines: React.ReactNode[] = []
+  const T = JOIST_THICKNESS_MM
+  const member = (key: string, x: number, y: number, wd: number, ht: number) =>
+    <rect key={key} x={x} y={y} width={Math.max(0.8, wd)} height={Math.max(0.8, ht)} fill={TRIMMER_COLOUR} stroke="#fff" strokeWidth={0.4} />
   for (const o of openings) {
     const n = o.trimmers ?? 2
-    const t = g.openingTrims.find(tr => tr.openingId === o.id)
-    if (!t) continue
-    const ry = y0 + o.offsetSpanMm * k, rh = o.depthMm * k
-    const xB = x0 + t.beforeMm * k, xA = x0 + t.afterMm * k
-    trimmerLines.push(
-      <line key={`${o.id}-jb`} x1={xB} x2={xB} y1={y0} y2={y0 + h} stroke={TRIMMER_COLOUR} strokeWidth={2.4} />,
-      <line key={`${o.id}-ja`} x1={xA} x2={xA} y1={y0} y2={y0 + h} stroke={TRIMMER_COLOUR} strokeWidth={2.4} />,
-    )
-    for (let i = 1; i < n; i++) {
-      const d = i * 2.8
-      trimmerLines.push(
-        <line key={`${o.id}-xb-${i}`} x1={xB - d} x2={xB - d} y1={y0} y2={y0 + h} stroke={TRIMMER_COLOUR} strokeWidth={1.5} />,
-        <line key={`${o.id}-xa-${i}`} x1={xA + d} x2={xA + d} y1={y0} y2={y0 + h} stroke={TRIMMER_COLOUR} strokeWidth={1.5} />,
-      )
-    }
+    const right = o.offsetMm + o.widthMm, bottom = o.offsetSpanMm + o.depthMm
     for (let i = 0; i < n; i++) {
-      const d = 1.6 + i * 2.6
       trimmerLines.push(
-        <line key={`${o.id}-ht-${i}`} x1={xB} x2={xA} y1={ry - d} y2={ry - d} stroke={TRIMMER_COLOUR} strokeWidth={1.5} />,
-        <line key={`${o.id}-hb-${i}`} x1={xB} x2={xA} y1={ry + rh + d} y2={ry + rh + d} stroke={TRIMMER_COLOUR} strokeWidth={1.5} />,
+        member(`${o.id}-tl-${i}`, x0 + (o.offsetMm - (i + 1) * T) * k, y0, T * k, h),
+        member(`${o.id}-tr-${i}`, x0 + (right + i * T) * k, y0, T * k, h),
+        member(`${o.id}-ht-${i}`, x0 + o.offsetMm * k, y0 + (o.offsetSpanMm - (i + 1) * T) * k, o.widthMm * k, T * k),
+        member(`${o.id}-hb-${i}`, x0 + o.offsetMm * k, y0 + (bottom + i * T) * k, o.widthMm * k, T * k),
       )
     }
   }
@@ -1262,7 +1222,7 @@ function FlatRoofPlanSvg({ g, lengthMm, widthMm, centresMm, fallRatio, edges, wa
             </>}
             {o.kind === 'hatch' && <line x1={rx} y1={ry} x2={rx + rw} y2={ry + rh} stroke={st.stroke} strokeWidth={0.8} pointerEvents="none" />}
             <text x={rx + rw / 2} y={ry + rh / 2 + 3} fontSize={9} textAnchor="middle" fill={st.stroke} pointerEvents="none">{i + 1} {KIND_SHORT[o.kind]}</text>
-            <text x={rx + rw / 2} y={ry + rh + 18} fontSize={8} textAnchor="middle" fill="#78716c" pointerEvents="none">
+            <text x={rx + rw / 2} y={ry + rh + 18} fontSize={8} textAnchor="middle" fill="#78716c" stroke="#fff" strokeWidth={3} paintOrder="stroke" pointerEvents="none">
               {o.widthMm}×{o.depthMm} · {(o.trimmers ?? 2) === 3 ? 'tripled' : 'doubled'}
             </text>
           </g>
