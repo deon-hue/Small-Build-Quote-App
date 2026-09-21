@@ -33,6 +33,8 @@ export interface FlatRoofDescriptionInput {
   openings: { kind: RoofOpeningKind; widthMm: number; depthMm: number; trimmers: 2 | 3 }[]
   /** The GRP or EPDM system's make, when it's named on the quote — e.g. 'Cure It'. */
   brand?: string
+  /** The gutter's material as it reads on the quote, e.g. 'aluminium'; 'uPVC half-round' when not given. */
+  gutterLabel?: string
   /** What covers the top of the upstand at an existing wall; 'lead' when not given. */
   wallFlashing?: 'lead' | 'simulated' | 'cover' | 'none'
 }
@@ -114,7 +116,7 @@ export function describeFlatRoof(i: FlatRoofDescriptionInput): string {
     edgeBits.push(`Where the roof meets the existing wall the covering is turned up as an upstand${finish}.`)
   }
   if (i.edgeTrimLm > 0) edgeBits.push(`The roof edges are finished with ${i.covering === 'grp' ? 'a GRP edge trim' : 'an aluminium drip trim'}${i.fascia ? ' and a uPVC fascia board' : ''}.`)
-  if (i.gutterLm > 0) edgeBits.push(`A uPVC half-round gutter is fixed along the low edge${i.downpipes > 0 ? `, with ${i.downpipes} ${plural(i.downpipes, 'downpipe', 'downpipes')} to take the water away` : ''}.`)
+  if (i.gutterLm > 0) edgeBits.push(`${/^[aeio]/i.test(i.gutterLabel ?? '') ? 'An' : 'A'} ${i.gutterLabel ?? 'uPVC half-round'} gutter is fixed along the low edge${i.downpipes > 0 ? `, with ${i.downpipes} ${plural(i.downpipes, 'downpipe', 'downpipes')} to take the water away` : ''}.`)
   if (edgeBits.length) lines.push(`Edges and drainage: ${edgeBits.join(' ')}`)
 
   // Parapet

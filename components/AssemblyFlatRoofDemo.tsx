@@ -34,6 +34,10 @@ import {
 } from '@/lib/assembly-calc'
 import { fmt } from '@/lib/utils'
 import {
+  resolveDrainage, drainOptions, drainProduct, DRAIN_SLOTS, DRAIN_PRODUCTS, DRAIN_SYSTEMS, DRAIN_SYSTEM_LABEL, DRAIN_SYSTEM_DESCRIPTION,
+  NONE as DRAIN_NONE, type DrainSystem, type DrainSlotId, type DrainExtra, type DrainLine, type DrainRoofInput,
+} from '@/lib/flat-roof-drainage'
+import {
   resolveTrimLines, cornerCounts, grpCoverage, trimSlotDefs, trimProduct, TRIM_CATALOGUE, CURE_IT, NONE,
   type SlotId, type ExtraTrim, type TrimLine, type TrimRoofInput, type TrimSlotDef,
 } from '@/lib/flat-roof-covering-trims'
@@ -122,6 +126,15 @@ const KIND_DEFAULTS: Record<RoofOpeningKind, { widthMm: number; depthMm: number;
   'hatch':       { widthMm: 600,  depthMm: 600,  trimmers: 2, kerbHeightMm: 150 },
 }
 
+/** A trim or a drainage part becomes a priced line: in lengths, by the metre, or each. */
+function lineToLayer(l: { id: string; name: string; product: { unit: 'length' | 'lm' | 'nr'; packLm?: number; rate: number }; qty: number }): AssemblyLayerDef {
+  const p = l.product
+  const base = { id: l.id, name: l.name, category: 'materials' as const, source: 'fixed' as const, fixedQty: l.qty, unitCost: p.rate }
+  if (p.unit === 'length') return { ...base, unit: `${p.packLm}m length`, coveragePerUnit: p.packLm, roundToWhole: true, wastePct: 5 }
+  if (p.unit === 'lm') return { ...base, unit: 'lm', wastePct: 5 }
+  return { ...base, unit: 'nr', roundToWhole: true }
+}
+
 interface LayerOpts {
   wastePct: number
   buildUp: FlatRoofBuildUp
@@ -135,6 +148,8 @@ interface LayerOpts {
   parapetType: ParapetType
   /** The trims and accessories chosen for the covering (GRP and EPDM); TPO keeps its single edge trim and flashing. */
   trimLines: TrimLine[]
+  /** The gutters, downpipes and parapet outlets chosen under Drainage. */
+  drainLines: DrainLine[]
   g: FlatRoofGeometry
 }
 
@@ -208,16 +223,7 @@ function buildFlatRoofLayers(o: LayerOpts): AssemblyLayerDef[] {
     if (g.edgeTrimLm > 0) layers.push({ id: 'edge_trim', name: 'Aluminium drip trim (free and gutter edges)', category: 'materials', source: 'edgeTrimLm', unit: 'lm', unitCost: 6.50, wastePct: w })
     if (g.abutmentLm > 0) layers.push({ id: 'flashing', name: 'Lead flashing to the existing wall (Code 4)', category: 'materials', source: 'abutmentLm', unit: 'lm', unitCost: 32.00, wastePct: 5 })
   } else {
-    for (const t of o.trimLines) {
-      const p = t.product
-      if (p.unit === 'length') {
-        layers.push({ id: t.id, name: t.name, category: 'materials', source: 'fixed', fixedQty: t.qty, unit: `${p.packLm}m length`, unitCost: p.rate, coveragePerUnit: p.packLm, roundToWhole: true, wastePct: 5 })
-      } else if (p.unit === 'lm') {
-        layers.push({ id: t.id, name: t.name, category: 'materials', source: 'fixed', fixedQty: t.qty, unit: 'lm', unitCost: p.rate, wastePct: 5 })
-      } else {
-        layers.push({ id: t.id, name: t.name, category: 'materials', source: 'fixed', fixedQty: t.qty, unit: 'nr', unitCost: p.rate, roundToWhole: true })
-      }
-    }
+    for (const t of o.trimLines) layers.push(lineToLayer(t))
   }
   if (g.edgeTrimLm > 0 && o.fascia) layers.push({ id: 'fascia', name: 'uPVC fascia board 175mm (free and gutter edges)', category: 'materials', source: 'edgeTrimLm', unit: 'lm', unitCost: 10.00, wastePct: w })
 
@@ -244,8 +250,6 @@ function buildFlatRoofLayers(o: LayerOpts): AssemblyLayerDef[] {
       { id: 'parapet_coping', name: 'Concrete coping (parapet)', category: 'materials', source: 'parapetLm', unit: 'lm', unitCost: 14.00, wastePct: w },
     )
   }
-  if (g.gullyCount > 0) layers.push({ id: 'gullies', name: 'Rainwater outlet through the parapet (with membrane flange)', category: 'materials', source: 'gullyCount', unit: 'nr', unitCost: 48.00, roundToWhole: true })
-  if (g.overflowCount > 0) layers.push({ id: 'overflows', name: 'Overflow outlet through the parapet', category: 'materials', source: 'overflowCount', unit: 'nr', unitCost: 36.00, roundToWhole: true })
 
   // Rooflight openings — the kerbs only; the rooflights themselves are priced elsewhere
   if (g.kerbLm > 0) {
@@ -255,11 +259,8 @@ function buildFlatRoofLayers(o: LayerOpts): AssemblyLayerDef[] {
     )
   }
 
-  // Drainage
-  if (g.gutterLm > 0) layers.push({ id: 'gutter', name: 'uPVC gutter 112mm half-round', category: 'materials', source: 'gutterLm', unit: 'lm', unitCost: 8.00, wastePct: w })
-  if ((g.gutterLm > 0 || g.gullyCount > 0) && o.downpipes > 0) {
-    layers.push({ id: 'downpipes', name: 'uPVC downpipe run and fittings', category: 'materials', source: 'fixed', fixedQty: o.downpipes, unit: 'nr', unitCost: 55.00 })
-  }
+  // Drainage — the gutters, downpipes and outlets chosen for the edges set as a gutter or a parapet
+  for (const d of o.drainLines) layers.push(lineToLayer(d))
   layers.push({ id: 'sundries', name: 'Fixings, tapes, sealant and sundries', category: 'materials', source: 'netAreaM2', unit: 'm²', unitCost: 1.10 })
   return layers
 }
@@ -353,6 +354,11 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   const [trimPicks, setTrimPicks] = useState<Partial<Record<SlotId, string>>>({})
   const [extraTrims, setExtraTrims] = useState<ExtraTrim[]>([])
   const [downpipes, setDownpipes] = useState(1)
+  // Drainage is separate from the covering: a system for the gutters and downpipes, with a part-by-part choice like the trims.
+  const [dropM, setDropM] = useState(2.6)
+  const [drainSystem, setDrainSystem] = useState<DrainSystem>('upvc-hr')
+  const [drainPicks, setDrainPicks] = useState<Partial<Record<DrainSlotId, string>>>({})
+  const [extraDrain, setExtraDrain] = useState<DrainExtra[]>([])
   const [wastePct, setWastePct] = useState(10)
   const [location, setLocation] = useState('')
 
@@ -527,6 +533,10 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   const trimRoof: TrimRoofInput = { edges, lengthMm, widthMm, kerbLm: g?.kerbLm ?? 0, openingCount: openings.length }
   const trims = resolveTrimLines(covering, trimRoof, trimPicks, extraTrims)
   const trimKey = JSON.stringify(trims.lines.map(l => [l.id, l.qty]))
+  // ...and what the edges set as a gutter, and any parapet outlets, need for drainage.
+  const drainRoof: DrainRoofInput = { edges, lengthMm, widthMm, downpipes, dropM, gullyCount: g?.gullyCount ?? 0, overflowCount: g?.overflowCount ?? 0 }
+  const drain = resolveDrainage(drainRoof, drainSystem, drainPicks, extraDrain)
+  const drainKey = JSON.stringify(drain.lines.map(l => [l.id, l.qty]))
 
   // The customer-facing description, written from the roof as it's set now (lib/flat-roof-description.ts) —
   // one short paragraph per part of the roof. It follows the roof as it changes, so what's saved to the
@@ -537,6 +547,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
     deckLabel: DECK[deck].label, strutting: joistSystem !== 'posi' && g.strutCount > 0,
     insulationMm, covering, fascia, downpipes, edges,
     brand: covering === 'grp' ? 'Cure It' : undefined,
+    gutterLabel: DRAIN_SYSTEM_DESCRIPTION[drainSystem],
     wallFlashing: trims.picks.abutment_flashing === NONE ? 'none'
       : trims.picks.abutment_flashing === 'LEAD4' || trims.picks.abutment_flashing === undefined ? 'lead'
       : trims.picks.abutment_flashing === 'EPDM-COVER' ? 'cover' : 'simulated',
@@ -545,7 +556,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
     wallPlateEnds: g.lengthM > 0 ? Math.round(g.wallPlateLm / g.lengthM) : 0,
     endStraps: endAbuts && wallConnection === 'bearing',
     sideStrapped: sideAbuts,
-    abutmentLm: g.abutmentLm, edgeTrimLm: g.edgeTrimLm, gutterLm: g.gutterLm,
+    abutmentLm: g.abutmentLm, edgeTrimLm: g.edgeTrimLm, gutterLm: drain.picks.gutter === DRAIN_NONE ? 0 : g.gutterLm,
     parapet: hasParapet ? { lm: g.parapetLm, heightMm: parapetHeightMm, type: parapetType, rainwaterOutlets: g.gullyCount, overflowOutlets: g.overflowCount } : undefined,
     openings: openings.map(o => ({ kind: o.kind, widthMm: o.widthMm, depthMm: o.depthMm, trimmers: o.trimmers ?? 2 })),
   } : null
@@ -561,11 +572,11 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   const layers = useMemo(() => {
     if (!geometryResult.ok) return []
     const base = buildFlatRoofLayers({
-      wastePct, buildUp, joistSystem, joistDepth, insulationMm, deck, covering, fascia, downpipes, parapetType, trimLines: trims.lines, g: geometryResult.geometry,
+      wastePct, buildUp, joistSystem, joistDepth, insulationMm, deck, covering, fascia, downpipes, parapetType, trimLines: trims.lines, drainLines: drain.lines, g: geometryResult.geometry,
     })
     return base.map(l => rateOverrides[l.id] != null ? { ...l, unitCost: rateOverrides[l.id] } : l)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [geometryResult, wastePct, buildUp, joistSystem, joistDepth, insulationMm, deck, covering, fascia, downpipes, parapetType, trimKey, rateOverrides])
+  }, [geometryResult, wastePct, buildUp, joistSystem, joistDepth, insulationMm, deck, covering, fascia, downpipes, parapetType, trimKey, drainKey, rateOverrides])
 
   function setRate(layerId: string, unitCost: number) {
     setRateOverrides(prev => ({ ...prev, [layerId]: Math.max(0, unitCost) }))
@@ -903,24 +914,13 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
           </div>
 
           <div style={{ borderTop: '1px solid #bae6fd', paddingTop: 8 }}>
-            {sectionHead('Covering and drainage')}
+            {sectionHead('Roof covering')}
             <PropRow label="Covering">
               <select value={covering} onChange={e => { setCovering(e.target.value as CoveringType); setTrimPicks({}); setExtraTrims([]) }} style={propInput}>
                 {(Object.entries(COVERING_LABEL) as [CoveringType, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </PropRow>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 6 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#475569', cursor: 'pointer' }}>
-                <input type="checkbox" checked={fascia} onChange={e => setFascia(e.target.checked)} style={{ width: 'auto' }} />
-                Fascia
-              </label>
-              {(g && (g.gutterLm > 0 || g.gullyCount > 0)) && (
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#475569' }}>
-                  Downpipes
-                  <input type="number" min={0} value={downpipes} onChange={e => setDownpipes(Math.max(0, +e.target.value || 0))} style={{ ...miniInput, width: 48 }} />
-                </label>
-              )}
-            </div>
+            <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>The trims below follow the edges set above.</div>
             {g && covering !== 'tpo' && (
               <CoveringTrimsPanel
                 covering={covering} roof={trimRoof} trims={trims} areaM2={g.membraneAreaM2} wastePct={wastePct}
@@ -931,6 +931,37 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
                 onRemoveExtra={id => setExtraTrims(prev => prev.filter(x => x.id !== id))}
               />
             )}
+          </div>
+
+          <div style={{ borderTop: '1px solid #bae6fd', paddingTop: 8 }}>
+            {sectionHead('Drainage')}
+            <PropRow label="Gutter and downpipe system">
+              <select value={drainSystem} onChange={e => { setDrainSystem(e.target.value as DrainSystem); setDrainPicks({}) }} style={propInput}>
+                {DRAIN_SYSTEMS.map(k => <option key={k} value={k}>{DRAIN_SYSTEM_LABEL[k]}</option>)}
+              </select>
+            </PropRow>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#475569' }}>
+                Downpipes
+                <input type="number" min={0} value={downpipes} onChange={e => setDownpipes(Math.max(0, +e.target.value || 0))} style={{ ...miniInput, width: 48 }} />
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#475569' }}>
+                Drop (m)
+                <input type="number" min={0.5} step={0.1} value={dropM} onChange={e => setDropM(Math.max(0.5, +e.target.value || 0.5))} style={{ ...miniInput, width: 56 }} />
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#475569', cursor: 'pointer' }}>
+                <input type="checkbox" checked={fascia} onChange={e => setFascia(e.target.checked)} style={{ width: 'auto' }} />
+                Fascia board
+              </label>
+            </div>
+            <DrainagePanel
+              roof={drainRoof} drain={drain}
+              onPick={(slot, code) => setDrainPicks(prev => ({ ...prev, [slot]: code }))}
+              extras={extraDrain}
+              onAddExtra={(code, qty) => setExtraDrain(prev => [...prev, { id: `d${Date.now().toString(36)}${prev.length}`, code, qty }])}
+              onExtraQty={(id, qty) => setExtraDrain(prev => prev.map(x => x.id === id ? { ...x, qty } : x))}
+              onRemoveExtra={id => setExtraDrain(prev => prev.filter(x => x.id !== id))}
+            />
           </div>
 
           <div style={{ borderTop: '1px solid #bae6fd', paddingTop: 8 }}>
@@ -1142,6 +1173,106 @@ function CoveringTrimsPanel({ covering, roof, trims, areaM2, wastePct, onPick, e
       <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 6, lineHeight: 1.4 }}>
         Lengths and corners are worked out from the roof; each trim is priced in the breakdown with a sample rate you can change.
         {covering === 'grp' ? ' Check each trim against the Cure It details for the build-up.' : ' EPDM trims are generic — say which supplier you use and their range can go in.'}
+      </div>
+    </div>
+  )
+}
+
+// ── Drainage ───────────────────────────────────────────────────────────────────────
+// What the edges set as a gutter, and any outlets through a parapet, need: the gutter, its brackets, stop ends,
+// running outlets, unions and angles, the downpipes and their clips and shoes, hopper heads and the parapet outlets —
+// each with a choice of material (uPVC, aluminium, cast-iron effect) and a length or count worked out from the roof.
+function drainBuyText(l: DrainLine, wastePct = 5): string {
+  const p = l.product
+  if (p.unit === 'length') return `${Math.ceil(l.qty * (1 + wastePct / 100) / (p.packLm ?? 3) - 1e-9)} × ${p.packLm}m lengths`
+  if (p.unit === 'lm') return `${(l.qty * (1 + wastePct / 100)).toFixed(1)} m`
+  return `${l.qty} nr`
+}
+
+function DrainagePanel({ roof, drain, onPick, extras, onAddExtra, onExtraQty, onRemoveExtra }: {
+  roof: DrainRoofInput
+  drain: ReturnType<typeof resolveDrainage>
+  onPick: (slot: DrainSlotId, code: string) => void
+  extras: DrainExtra[]
+  onAddExtra: (code: string, qty: number) => void
+  onExtraQty: (id: string, qty: number) => void
+  onRemoveExtra: (id: string) => void
+}) {
+  const q = drain.quantities
+  const nothing = q.gutterLm === 0 && roof.gullyCount === 0
+  const qtyOf: Record<DrainSlotId, number> = {
+    gutter: q.gutterLm, gutter_bracket: q.brackets, stop_end: q.stopEnds, running_outlet: q.runningOutlets,
+    union: drain.lines.find(l => l.product.slot === 'union')?.qty ?? 0, angle: q.corners,
+    hopper: q.hoppers, parapet_outlet: q.parapetOutlets, overflow_outlet: q.overflowOutlets,
+    downpipe: q.downpipeLm, pipe_clip: q.clips, shoe: q.shoes, offset: Math.floor(roof.downpipes),
+  }
+  const isLm = (id: DrainSlotId) => id === 'gutter' || id === 'downpipe'
+  // A part is listed when the roof has something for it; offsets are listed whenever there are downpipes, so they can be switched on.
+  const rows = nothing ? [] : DRAIN_SLOTS.filter(d => qtyOf[d.id] > 0)
+  const [addCode, setAddCode] = useState('')
+  const [addQty, setAddQty] = useState(1)
+  const selectStyle: React.CSSProperties = { ...miniInput, width: '100%' }
+  const edgeNames = (Object.keys(roof.edges) as (keyof FlatRoofEdges)[]).filter(k => roof.edges[k] === 'gutter').map(k => EDGE_NAME[k].toLowerCase())
+
+  return (
+    <div style={{ marginTop: 10, padding: 8, background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 6 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#0c4a6e', textTransform: 'uppercase', letterSpacing: 0.4 }}>Gutters, downpipes and outlets</div>
+      {nothing ? (
+        <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.45 }}>
+          No edge is set as a gutter and there are no rainwater outlets through a parapet. Set an edge to Gutter, or a parapet edge with outlets, above and the parts to drain it appear here.
+        </div>
+      ) : (
+        <div style={{ fontSize: 11, color: '#334155', marginTop: 4, lineHeight: 1.45 }}>
+          {q.gutterLm > 0 && <>Gutter on the <strong>{edgeNames.join(' and ')}</strong> ({q.gutterLm.toFixed(1)}m). </>}
+          {roof.gullyCount > 0 && <>{roof.gullyCount} rainwater and {roof.overflowCount} overflow outlet{roof.gullyCount + roof.overflowCount === 1 ? '' : 's'} through the parapet. </>}
+          {Math.floor(roof.downpipes)} downpipe{Math.floor(roof.downpipes) === 1 ? '' : 's'}, each dropping {roof.dropM}m.
+        </div>
+      )}
+      {drain.warnings.map((w, i) => <div key={i} style={{ fontSize: 11, color: '#c0392b', marginTop: 4 }}>⚠ {w}</div>)}
+      {rows.map(d => {
+        const l = drain.lines.find(x => x.product.slot === d.id)
+        return (
+          <div key={d.id} style={{ marginTop: 7 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, fontSize: 11, color: '#334155' }}>
+              <span><strong>{d.label}</strong> <span style={{ color: '#94a3b8' }}>— {d.where}</span></span>
+              <span style={{ whiteSpace: 'nowrap', color: '#0369a1' }}>{isLm(d.id) ? `${qtyOf[d.id].toFixed(1)} lm` : `${qtyOf[d.id]} nr`}</span>
+            </div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 2 }}>
+              <select value={drain.picks[d.id]} onChange={e => onPick(d.id, e.target.value)} style={selectStyle}>
+                {drainOptions(d.id).map(p => <option key={p.code} value={p.code}>{p.name}</option>)}
+                <option value={DRAIN_NONE}>None</option>
+              </select>
+              {l && <span style={{ fontSize: 10, color: '#64748b', whiteSpace: 'nowrap' }}>{drainBuyText(l)}</span>}
+            </div>
+          </div>
+        )
+      })}
+      <div style={{ marginTop: 9, paddingTop: 7, borderTop: '1px solid #bae6fd' }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: '#334155' }}>Add another part</div>
+        {extras.map(x => {
+          const p = drainProduct(x.code)
+          if (!p) return null
+          return (
+            <div key={x.id} style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4, fontSize: 11, color: '#334155' }}>
+              <span style={{ flex: 1 }}>{p.name}</span>
+              <input type="number" min={0} step={p.unit === 'nr' ? 1 : 0.5} value={x.qty} onChange={e => onExtraQty(x.id, Math.max(0, +e.target.value || 0))} style={{ ...miniInput, width: 56 }} />
+              <span style={{ width: 18 }}>{p.unit === 'nr' ? 'nr' : 'lm'}</span>
+              <button onClick={() => onRemoveExtra(x.id)} aria-label="Remove" style={{ background: 'none', border: 'none', color: '#c0392b', cursor: 'pointer', fontSize: 14, padding: '0 4px' }}>×</button>
+            </div>
+          )
+        })}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4 }}>
+          <select value={addCode} onChange={e => setAddCode(e.target.value)} style={selectStyle}>
+            <option value="">Choose a part…</option>
+            {DRAIN_PRODUCTS.map(p => <option key={p.code} value={p.code}>{p.name}</option>)}
+          </select>
+          <input type="number" min={0} value={addQty} onChange={e => setAddQty(Math.max(0, +e.target.value || 0))} style={{ ...miniInput, width: 56 }} />
+          <button disabled={!addCode || !(addQty > 0)} onClick={() => { onAddExtra(addCode, addQty); setAddCode('') }}
+            style={{ fontSize: 11, padding: '3px 8px', border: '1px dashed #7dd3fc', borderRadius: 999, background: 'none', color: '#0369a1', cursor: addCode && addQty > 0 ? 'pointer' : 'default', opacity: addCode && addQty > 0 ? 1 : 0.5 }}>+ Add</button>
+        </div>
+      </div>
+      <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 6, lineHeight: 1.4 }}>
+        Generic parts, not a make — each is priced in the breakdown with a sample rate you can change. Say which supplier you use and their range can go in.
       </div>
     </div>
   )
