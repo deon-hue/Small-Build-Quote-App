@@ -23,7 +23,7 @@ import {
 import { fmt } from '@/lib/utils'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import {
-  propInput, PropRow, BreakdownTable,
+  propInput, PropRow, BreakdownTable, CollapsibleSection,
   LabourSection, type LabourLine, newLabourLineId, hourlyRate,
   MiscMaterialsSection, type MiscMaterialLine, newMiscMaterialLineId,
   MaterialsListButtons,
@@ -324,8 +324,7 @@ export default function AssemblySleeperWallDemo({ onClose, onSave, labourTrades 
           <PropRow label="Length (mm)">{numInput(lengthMm, setLengthMm, 1)}</PropRow>
           <PropRow label="Underside of beams above ground (mm)">{numInput(topAboveGroundMm, setTopAboveGroundMm)}</PropRow>
 
-          <div style={{ borderTop: '1px solid #a5e3f0', paddingTop: 8, marginTop: 2 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 }}>Wall</div>
+          <CollapsibleSection title="Wall" borderColor="#a5e3f0">
             <PropRow label="How the block is laid">
               <select value={laid} onChange={e => setLaid(e.target.value as BlockLaid)} style={propInput}>
                 <option value="side">On its side — {blockWidthMm}mm single skin</option>
@@ -340,10 +339,9 @@ export default function AssemblySleeperWallDemo({ onClose, onSave, labourTrades 
                 </select>
               </PropRow>
             </div>
-          </div>
+          </CollapsibleSection>
 
-          <div style={{ borderTop: '1px solid #a5e3f0', paddingTop: 8 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 }}>Ventilation holes</div>
+          <CollapsibleSection title="Ventilation holes" borderColor="#a5e3f0">
             <PropRow label="Spacing — up to (mm, 0 = none)">{numInput(ventSpacingMm, setVentSpacingMm)}</PropRow>
             {ventSpacingMm > 0 && (
               <div style={{ marginTop: 6 }}>
@@ -354,10 +352,9 @@ export default function AssemblySleeperWallDemo({ onClose, onSave, labourTrades 
                 </PropRow>
               </div>
             )}
-          </div>
+          </CollapsibleSection>
 
-          <div style={{ borderTop: '1px solid #a5e3f0', paddingTop: 8 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 }}>Foundation</div>
+          <CollapsibleSection title="Foundation" borderColor="#a5e3f0">
             <PropRow label="Type">
               <select value={foundationType} onChange={e => setFoundationType(e.target.value as DwarfFoundationType)} style={propInput}>
                 <option value="strip">Strip — concrete, then blockwork</option>
@@ -376,7 +373,7 @@ export default function AssemblySleeperWallDemo({ onClose, onSave, labourTrades 
               </div>
               <div style={{ flex: 1 }}><PropRow label="Hardcore bed (mm, 0 = none)">{numInput(hardcoreThicknessMm, setHardcoreThicknessMm)}</PropRow></div>
             </div>
-          </div>
+          </CollapsibleSection>
 
           <PropRow label={`Waste % (${wastePct}%)`}>
             <input type="range" min={0} max={25} value={wastePct} onChange={e => setWastePct(+e.target.value)} style={{ width: '100%' }} />

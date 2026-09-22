@@ -72,7 +72,10 @@ pattern, and **is used from Take-off in the same way** — do not invent a diffe
    **Defaults**: profit margin defaults to **20%** (`useState(20)` for `profitPct`), not 0. Optional extras the
    job may not have (rooflight openings, and anything similar in future calculators) start **empty/off** —
    never pre-seeded with a sample one — so the price starts at what's actually there and the estimator adds
-   what the job needs.
+   what the job needs. Every named block of properties (Build-up, Joists, Edges, Foundation, Piers, ...) is a
+   `CollapsibleSection` (`components/assembly-ui.tsx`) — **collapsed by default**, so the panel opens showing
+   only the length/height and the section headings, not every control at once. Never use a plain `<div>` +
+   heading for a properties block again.
    **Quote description is two-tier**: `onSave` passes a short one-line `description` (becomes the phase's
    `taskName`, printed everywhere) and may pass a full part-by-part `detail` (becomes `QuotePhase.scopeDetail`,
    shown on the online/HTML quote behind a "What's included" toggle and on paper only if "full descriptions"

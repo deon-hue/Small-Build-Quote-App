@@ -48,7 +48,7 @@ import {
 import { describeFlatRoof, describeFlatRoofShort, type FlatRoofDescriptionInput } from '@/lib/flat-roof-description'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import {
-  propInput, miniInput, PropRow, BreakdownTable,
+  propInput, miniInput, PropRow, BreakdownTable, CollapsibleSection,
   LabourSection, type LabourLine, newLabourLineId, hourlyRate,
   MiscMaterialsSection, type MiscMaterialLine, newMiscMaterialLineId,
   newOpeningId, MaterialsListButtons,
@@ -690,9 +690,6 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   const miniNum = (v: number, set: (n: number) => void, min = 0) => (
     <input type="number" min={min} value={v} onChange={e => set(Math.max(min, +e.target.value || 0))} style={miniInput} />
   )
-  const sectionHead = (text: string) => (
-    <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 }}>{text}</div>
-  )
   const edgeSelect = (which: keyof FlatRoofEdges, label: string) => (
     <div style={{ flex: 1 }}>
       <PropRow label={label}>
@@ -830,8 +827,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
           </div>
 
           {(showStructure || showCovering) && (
-          <div style={{ borderTop: '1px solid #bae6fd', paddingTop: 8, marginTop: 2 }}>
-            {sectionHead(part === 'structure' ? 'Roof type' : part === 'covering' ? 'Build-up' : 'Build-up')}
+          <CollapsibleSection title={part === 'structure' ? 'Roof type' : 'Build-up'} borderColor="#bae6fd">
             <PropRow label="Roof">
               <select value={buildUp} onChange={e => changeBuildUp(e.target.value as FlatRoofBuildUp)} style={propInput}>
                 <option value="warm">Warm roof — PIR above the deck</option>
@@ -863,12 +859,11 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
                 </PropRow>
               </div>
             )}
-          </div>
+          </CollapsibleSection>
           )}
 
           {showStructure && (
-          <div style={{ borderTop: '1px solid #bae6fd', paddingTop: 8 }}>
-            {sectionHead('Joists')}
+          <CollapsibleSection title="Joists" borderColor="#bae6fd">
             <PropRow label="Joist type">
               <select value={joistSystem} onChange={e => changeSystem(e.target.value as JoistSystem)} style={propInput}>
                 {(Object.entries(JOIST_SYSTEM_LABEL) as [JoistSystem, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -902,11 +897,10 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
                 />
               </>
             )}
-          </div>
+          </CollapsibleSection>
           )}
 
-          <div style={{ borderTop: '1px solid #bae6fd', paddingTop: 8 }}>
-            {sectionHead('Edges')}
+          <CollapsibleSection title="Edges" borderColor="#bae6fd">
             <div style={{ display: 'flex', gap: 6 }}>
               {edgeSelect('high', 'High edge (top)')}
               {edgeSelect('low', 'Low edge (bottom)')}
@@ -980,11 +974,10 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
             {showStructure && !endAbuts && !sideAbuts && (
               <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>No existing wall — the joists bear on a wall plate at each end.</div>
             )}
-          </div>
+          </CollapsibleSection>
 
           {showCovering && (
-          <div style={{ borderTop: '1px solid #bae6fd', paddingTop: 8 }}>
-            {sectionHead('Roof covering')}
+          <CollapsibleSection title="Roof covering" borderColor="#bae6fd">
             <PropRow label="Covering">
               <select value={covering} onChange={e => { setCovering(e.target.value as CoveringType); setTrimPicks({}); setExtraTrims([]) }} style={propInput}>
                 {(Object.entries(COVERING_LABEL) as [CoveringType, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -1001,12 +994,11 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
                 onRemoveExtra={id => setExtraTrims(prev => prev.filter(x => x.id !== id))}
               />
             )}
-          </div>
+          </CollapsibleSection>
           )}
 
           {showGutters && (
-          <div style={{ borderTop: '1px solid #bae6fd', paddingTop: 8 }}>
-            {sectionHead('Drainage')}
+          <CollapsibleSection title="Drainage" borderColor="#bae6fd">
             <PropRow label="Gutter and downpipe system">
               <select value={drainSystem} onChange={e => { setDrainSystem(e.target.value as DrainSystem); setDrainPicks({}) }} style={propInput}>
                 {DRAIN_SYSTEMS.map(k => <option key={k} value={k}>{DRAIN_SYSTEM_LABEL[k]}</option>)}
@@ -1034,12 +1026,11 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
               onExtraQty={(id, qty) => setExtraDrain(prev => prev.map(x => x.id === id ? { ...x, qty } : x))}
               onRemoveExtra={id => setExtraDrain(prev => prev.filter(x => x.id !== id))}
             />
-          </div>
+          </CollapsibleSection>
           )}
 
           {(showStructure || showCovering) && (
-          <div style={{ borderTop: '1px solid #bae6fd', paddingTop: 8 }}>
-            {sectionHead(showStructure ? 'Rooflight openings' : 'Rooflight kerbs')}
+          <CollapsibleSection title={showStructure ? 'Rooflight openings' : 'Rooflight kerbs'} borderColor="#bae6fd">
             <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6, lineHeight: 1.4 }}>
               {showStructure ? 'This forms the opening — trimmers and kerb.' : 'The covering is dressed up each kerb.'} The rooflight itself is priced separately.
             </div>
@@ -1098,7 +1089,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
                 </button>
               ))}
             </div>
-          </div>
+          </CollapsibleSection>
           )}
 
           <PropRow label={`Waste % (${wastePct}%)`}>

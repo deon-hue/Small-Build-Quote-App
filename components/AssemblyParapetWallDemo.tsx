@@ -22,7 +22,7 @@ import {
 import { suggestParapetLabour, toLabourLines, type LabourSuggestion } from '@/lib/flat-roof-labour'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import {
-  propInput, PropRow, BreakdownTable,
+  propInput, PropRow, BreakdownTable, CollapsibleSection,
   LabourSection, type LabourLine, newLabourLineId, hourlyRate,
   MiscMaterialsSection, type MiscMaterialLine, newMiscMaterialLineId,
   MaterialsListButtons,
@@ -190,9 +190,6 @@ export default function AssemblyParapetWallDemo({ onClose, onSave, labourTrades 
   const numInput = (v: number, set: (n: number) => void, min = 0) => (
     <input type="number" min={min} value={v} onChange={e => set(Math.max(min, +e.target.value || 0))} style={propInput} />
   )
-  const sectionHead = (text: string) => (
-    <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 }}>{text}</div>
-  )
   const box: React.CSSProperties = { width: '100%', fontSize: 12, lineHeight: 1.5, color: '#1e293b', padding: '6px 9px', border: '1px solid #e2e8f0', borderRadius: 5, boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }
   const following = (override: string | null, reset: () => void, what: string) => override === null
     ? <span style={{ fontSize: 10, color: '#16a34a' }}>updates as you change the wall</span>
@@ -262,17 +259,15 @@ export default function AssemblyParapetWallDemo({ onClose, onSave, labourTrades 
           </div>
           <div style={{ fontSize: 10, color: '#94a3b8', marginTop: -4 }}>Below the roof is the roof's build-up above the wall head (joists, deck, insulation, covering).</div>
 
-          <div style={{ borderTop: '1px solid #bae6fd', paddingTop: 8 }}>
-            {sectionHead('Build')}
+          <CollapsibleSection title="Build" borderColor="#bae6fd">
             <PropRow label="Built as">
               <select value={build} onChange={e => setBuild(e.target.value as ParapetBuildType)} style={propInput}>
                 {(Object.entries(BUILD_LABEL) as [ParapetBuildType, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </PropRow>
-          </div>
+          </CollapsibleSection>
 
-          <div style={{ borderTop: '1px solid #bae6fd', paddingTop: 8 }}>
-            {sectionHead('Coping or capping')}
+          <CollapsibleSection title="Coping or capping" borderColor="#bae6fd">
             <PropRow label="Cap the wall with">
               <select value={coping} onChange={e => setCoping(e.target.value as CopingType)} style={propInput}>
                 {COPING_TYPES.map(k => <option key={k} value={k}>{COPING_LABEL[k]}</option>)}
@@ -281,13 +276,12 @@ export default function AssemblyParapetWallDemo({ onClose, onSave, labourTrades 
             <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>
               A coping {g ? g.copingWidthMm : '—'}mm wide overhangs the wall by 40mm each side, with a drip. Each capping is priced as its own set of lines.
             </div>
-          </div>
+          </CollapsibleSection>
 
-          <div style={{ borderTop: '1px solid #bae6fd', paddingTop: 8 }}>
-            {sectionHead('Outlets through the wall')}
+          <CollapsibleSection title="Outlets through the wall" borderColor="#bae6fd">
             <PropRow label="Openings for rainwater and overflow outlets">{numInput(outlets, setOutlets, 0)}</PropRow>
             <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>Only the openings are formed here. The outlets themselves are priced with the roof drainage.</div>
-          </div>
+          </CollapsibleSection>
 
           <PropRow label={`Waste % (${wastePct}%)`}><input type="range" min={0} max={25} value={wastePct} onChange={e => setWastePct(+e.target.value)} style={{ width: '100%' }} /></PropRow>
           <PropRow label={`Profit % (${profitPct}%)`}><input type="range" min={0} max={50} value={profitPct} onChange={e => setProfitPct(+e.target.value)} style={{ width: '100%' }} /></PropRow>

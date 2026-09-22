@@ -21,7 +21,7 @@ import {
 import { fmt } from '@/lib/utils'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import {
-  propInput, PropRow, BreakdownTable,
+  propInput, PropRow, BreakdownTable, CollapsibleSection,
   LabourSection, type LabourLine, newLabourLineId, hourlyRate,
   MiscMaterialsSection, type MiscMaterialLine, newMiscMaterialLineId,
   OpeningsEditor, newOpeningId, MaterialsListButtons,
@@ -410,8 +410,7 @@ export default function AssemblySolidBlockWallDemo({ laidDefault = 'flat', onClo
               </select>
             </PropRow>
 
-            <div style={{ borderTop: '1px solid #fde68a', paddingTop: 8, marginTop: 2 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 }}>Piers</div>
+            <CollapsibleSection title="Piers" borderColor="#fde68a">
               <PropRow label="Spacing — up to (mm, 0 = no piers)">{numInput(pierSpacingMm, setPierSpacingMm)}</PropRow>
               {pierSpacingMm > 0 && (
                 <>
@@ -433,7 +432,7 @@ export default function AssemblySolidBlockWallDemo({ laidDefault = 'flat', onClo
                   </label>
                 </>
               )}
-            </div>
+            </CollapsibleSection>
 
             <PropRow label="Movement joint every (mm, 0 = none)">{numInput(movementJointSpacingMm, setMovementJointSpacingMm)}</PropRow>
             <PropRow label="Bed-joint reinforcement every (courses, 0 = none)">{numInput(reinforceEveryNCourses, setReinforceEveryNCourses)}</PropRow>

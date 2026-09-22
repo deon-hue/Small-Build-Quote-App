@@ -23,7 +23,7 @@ import {
 import { fmt } from '@/lib/utils'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import {
-  propInput, PropRow, BreakdownTable,
+  propInput, PropRow, BreakdownTable, CollapsibleSection,
   LabourSection, type LabourLine, newLabourLineId, hourlyRate,
   MiscMaterialsSection, type MiscMaterialLine, newMiscMaterialLineId,
   MaterialsListButtons,
@@ -398,8 +398,7 @@ export default function AssemblyDwarfWallDemo({ onClose, onSave, labourTrades = 
             <PropRow label="Length (mm)">{numInput(lengthMm, setLengthMm, 1)}</PropRow>
             <PropRow label="Height above the DPC (mm)">{numInput(heightMm, setHeightMm, 1)}</PropRow>
 
-            <div style={{ borderTop: '1px solid #fde68a', paddingTop: 8, marginTop: 2 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 }}>Wall above the DPC</div>
+            <CollapsibleSection title="Wall above the DPC" borderColor="#fde68a">
               <PropRow label="Construction">
                 <select value={type} onChange={e => setType(e.target.value as DwarfWallType)} style={propInput}>
                   {(Object.entries(WALL_TYPE_LABEL) as [DwarfWallType, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -472,10 +471,9 @@ export default function AssemblyDwarfWallDemo({ onClose, onSave, labourTrades = 
                   Coping
                 </label>
               </div>
-            </div>
+            </CollapsibleSection>
 
-            <div style={{ borderTop: '1px solid #fde68a', paddingTop: 8 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 }}>Foundation</div>
+            <CollapsibleSection title="Foundation" borderColor="#fde68a">
               <PropRow label="Type">
                 <select value={foundationType} onChange={e => setFoundationType(e.target.value as DwarfFoundationType)} style={propInput}>
                   <option value="strip">Strip — concrete, then blockwork</option>
@@ -497,7 +495,7 @@ export default function AssemblyDwarfWallDemo({ onClose, onSave, labourTrades = 
               <div style={{ marginTop: 6 }}>
                 <PropRow label="Hardcore bed (mm, 0 = none)">{numInput(hardcoreThicknessMm, setHardcoreThicknessMm)}</PropRow>
               </div>
-            </div>
+            </CollapsibleSection>
 
             <PropRow label={`Waste % (${wastePct}%)`}>
               <input type="range" min={0} max={25} value={wastePct} onChange={e => setWastePct(+e.target.value)} style={{ width: '100%' }} />

@@ -22,7 +22,7 @@ import {
 import { fmt } from '@/lib/utils'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import {
-  propInput, PropRow, BreakdownTable,
+  propInput, PropRow, BreakdownTable, CollapsibleSection,
   LabourSection, type LabourLine, newLabourLineId, hourlyRate,
   MiscMaterialsSection, type MiscMaterialLine, newMiscMaterialLineId,
   OpeningsEditor, newOpeningId, MaterialsListButtons,
@@ -456,8 +456,7 @@ export default function AssemblyTimberFrameWallDemo({ onClose, onSave, labourTra
             <PropRow label="Length (mm)">{numInput(lengthMm, setLengthMm, 1)}</PropRow>
             <PropRow label="Height (mm)">{numInput(heightMm, setHeightMm, 1)}</PropRow>
 
-            <div style={{ borderTop: '1px solid #bbf7d0', paddingTop: 8, marginTop: 2 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 }}>Frame</div>
+            <CollapsibleSection title="Frame" borderColor="#bbf7d0">
               <PropRow label="Stud size">
                 <select value={sectionKey} onChange={e => changeSection(e.target.value)} style={propInput}>
                   {Object.entries(STUD_SECTIONS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
@@ -485,10 +484,9 @@ export default function AssemblyTimberFrameWallDemo({ onClose, onSave, labourTra
                 <input type="checkbox" checked={doubleTopPlate} onChange={e => setDoubleTopPlate(e.target.checked)} style={{ width: 'auto' }} />
                 Double top plate
               </label>
-            </div>
+            </CollapsibleSection>
 
-            <div style={{ borderTop: '1px solid #bbf7d0', paddingTop: 8 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 }}>Outside</div>
+            <CollapsibleSection title="Outside" borderColor="#bbf7d0">
               <PropRow label="Cladding">
                 <select value={cladding} onChange={e => setCladding(e.target.value as CladdingType)} style={propInput}>
                   {(Object.entries(CLADDING) as [CladdingType, { label: string }][]).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
@@ -520,10 +518,9 @@ export default function AssemblyTimberFrameWallDemo({ onClose, onSave, labourTra
                   </select>
                 </PropRow>
               </div>
-            </div>
+            </CollapsibleSection>
 
-            <div style={{ borderTop: '1px solid #bbf7d0', paddingTop: 8 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 }}>Insulation &amp; inside</div>
+            <CollapsibleSection title="Insulation & inside" borderColor="#bbf7d0">
               <PropRow label="Between the studs">
                 <select value={insulation} onChange={e => setInsulation(e.target.value as InsulationType)} style={propInput}>
                   {(Object.entries(INSULATION) as [InsulationType, { label: string }][]).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
@@ -552,7 +549,7 @@ export default function AssemblyTimberFrameWallDemo({ onClose, onSave, labourTra
                   </select>
                 </PropRow>
               </div>
-            </div>
+            </CollapsibleSection>
 
             <PropRow label={`Waste % (${wastePct}%)`}>
               <input type="range" min={0} max={25} value={wastePct} onChange={e => setWastePct(+e.target.value)} style={{ width: '100%' }} />

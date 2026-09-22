@@ -17,6 +17,33 @@ export const CATEGORY_LABEL: Record<string, string> = { materials: 'Materials', 
 export const propInput: React.CSSProperties = { width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #e2e8f0', borderRadius: 4, boxSizing: 'border-box' }
 export const miniInput: React.CSSProperties = { width: '100%', fontSize: 11, padding: '3px 4px', border: '1px solid #e2e8f0', borderRadius: 4, boxSizing: 'border-box' }
 
+// A named block of a calculator's properties panel (Build-up, Joists, Edges, Piers, Foundation, ...) that
+// opens and closes by clicking its heading — closed by default whenever the calculator opens, so a job with
+// nothing unusual about its foundation, say, doesn't force the estimator to scroll past it to reach the
+// sections they actually need to look at. `defaultOpen` is read once, on mount, so switching sub-phases or
+// reopening the calculator collapses everything again rather than remembering the last state.
+export function CollapsibleSection({ title, borderColor = '#bae6fd', defaultOpen = false, children }: {
+  title: string
+  borderColor?: string
+  defaultOpen?: boolean
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = React.useState(defaultOpen)
+  return (
+    <div style={{ borderTop: `1px solid ${borderColor}`, paddingTop: 8 }}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 5, width: '100%', background: 'none', border: 'none',
+          padding: 0, marginBottom: open ? 4 : 0, cursor: 'pointer', textAlign: 'left',
+        }}>
+        <span style={{ fontSize: 9, color: '#94a3b8', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.1s', display: 'inline-block', width: 10 }}>▶</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>{title}</span>
+      </button>
+      {open && children}
+    </div>
+  )
+}
+
 // Print + CSV export for a materials list — used both inside a calculator (the current,
 // possibly-unsaved calculation) and on a quote's sub-phase (its last-saved snapshot). Only
 // materials-category lines make sense here (labour/profit aren't something you buy), so
