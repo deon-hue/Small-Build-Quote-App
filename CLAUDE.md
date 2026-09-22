@@ -76,6 +76,9 @@ pattern, and **is used from Take-off in the same way** — do not invent a diffe
    `CollapsibleSection` (`components/assembly-ui.tsx`) — **collapsed by default**, so the panel opens showing
    only the length/height and the section headings, not every control at once. Never use a plain `<div>` +
    heading for a properties block again.
+   Back Office's own **Assemblies list** (`app/(app)/back-office/components/SectionAssemblies.tsx`) follows the
+   same rule: every phase group starts collapsed, whether or not it has a built calculator — don't special-case
+   "phases with a built assembly start open" again.
    **Quote description is two-tier**: `onSave` passes a short one-line `description` (becomes the phase's
    `taskName`, printed everywhere) and may pass a full part-by-part `detail` (becomes `QuotePhase.scopeDetail`,
    shown on the online/HTML quote behind a "What's included" toggle and on paper only if "full descriptions"

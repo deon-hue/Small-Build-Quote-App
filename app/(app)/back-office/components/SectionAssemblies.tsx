@@ -53,15 +53,9 @@ export default function SectionAssemblies({ userId, openSubPhaseId }: Props) {
     const counts: Record<string, number> = {}
     for (const t of tasks) { if (t.sub_phase_id) counts[t.sub_phase_id] = (counts[t.sub_phase_id] ?? 0) + 1 }
     setTaskCounts(counts)
-    // Default-collapse every phase except ones containing a built assembly — only on first
-    // load, so refetching after an add/delete doesn't undo the user's own toggling.
-    setCollapsed(prev => {
-      if (prev !== null) return prev
-      const builtPhaseIds = new Set(
-        sp.filter(s => s.canonical_id && BUILT_ASSEMBLY_CANON_IDS[s.canonical_id]).map(s => s.phase_id)
-      )
-      return new Set(ph.filter(p => !builtPhaseIds.has(p.id)).map(p => p.id))
-    })
+    // Default-collapse every phase — only on first load, so refetching after an add/delete
+    // doesn't undo the user's own toggling. A deep link (below) still expands its own phase.
+    setCollapsed(prev => (prev !== null ? prev : new Set(ph.map(p => p.id))))
     setLoading(false)
   }, [userId]) // eslint-disable-line react-hooks/exhaustive-deps
 
