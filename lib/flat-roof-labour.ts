@@ -231,3 +231,15 @@ export function suggestParapetLabour(p: {
   if (p.build === 'solid-block') out.push(line('render-parapet', 'renderer', 'Render the parapet', [{ qty: p.renderAreaM2, unit: 'm²', what: 'render', rate: LABOUR_RATES.renderer.renderM2 }]))
   return out.filter((x): x is LabourSuggestion => x !== null)
 }
+
+/** The labour for the rooflight units themselves (Roof → Rooflights & Dormers): the fitter's time, from a
+ * total already worked out per kind by the caller (so this file, like every `lib/*-labour.ts` module, stays
+ * a type-only import away from the engine it's costing — see `priceRooflightItem` in `rooflight-units.ts`)
+ * — grouped so the working reads plainly ("2 roof windows × 3.0h + 1 roof lantern × 4.0h"). */
+export function suggestRooflightLabour(groups: { label: string; qty: number; hours: number }[]): LabourSuggestion[] {
+  const used = groups.filter(g => g.qty > 0 && g.hours > 0)
+  const totalHours = used.reduce((s, g) => s + g.hours, 0)
+  if (totalHours <= 0) return []
+  const basis = used.map(g => `${n1(g.qty)} ${g.label.toLowerCase()}${g.qty === 1 ? '' : 's'} × ${(g.hours / g.qty).toFixed(1)}h`).join(' + ')
+  return [{ key: 'fit-rooflight-units', trade: 'fitter', task: 'Fit the rooflights and dress the flashings', hours: hoursOf(totalHours), basis }]
+}

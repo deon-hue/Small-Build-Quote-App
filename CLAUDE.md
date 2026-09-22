@@ -61,9 +61,22 @@ structure, covering and gutters. Every new one follows the same
 pattern, and **is used from Take-off in the same way** — do not invent a different one.
 
 **Build it**
-1. Engine: its own pure module in `lib/assembly-calc.ts` (geometry + `calculate…Cost`, reusing `costLayer`);
-   add its quantity-source type to the `AssemblyQuantitySource` union. Hand-work the numbers and test the
-   engine (`node file.mts` with `file:///` import URLs) before building the screen.
+1. Engine: its own pure module — in `lib/assembly-calc.ts` for a wall/roof costed from drawn geometry
+   (geometry + `calculate…Cost`, reusing `costLayer`; add its quantity-source type to the
+   `AssemblyQuantitySource` union), or its own `lib/<name>-units.ts` for a calculator priced from a list of
+   items rather than a drawn length/height (see `lib/rooflight-units.ts`: `priceRooflightItem` for one item's
+   parts, a `resolve…Materials` that combines several into lines, `costLayer` called directly with
+   `layer.fixedQty` as the raw quantity — no geometry object to thread through). A companion `lib/<name>-labour.ts`
+   / `lib/<name>-description.ts` may live alongside an engine that already has one (`lib/flat-roof-labour.ts`,
+   `lib/flat-roof-description.ts`) rather than each calculator inventing its own. Hand-work the numbers and
+   test the engine (`node file.mts` with `file:///` import URLs) before building the screen.
+   **Every `lib/*-description.ts` and `lib/*-labour.ts` module takes only *type* imports from the engine file
+   it describes/costs** (`import type { … } from './x-units'`), never a runtime value import — this repo's
+   extension-less relative imports (`moduleResolution: "bundler"`) can't be resolved by plain Node at
+   `node --experimental-strip-types` test time, only by the bundler. If a description/labour function needs a
+   label map or a pricing function from the engine, give it its own small local copy (see `KIND_LABEL` in
+   `lib/rooflight-description.ts`, `KIND_PHRASE` in `lib/flat-roof-description.ts`) or have the caller (the
+   screen, which has no such constraint) pass the already-computed numbers in.
 2. Screen: `components/Assembly<Name>Demo.tsx`, props `{ onClose?, onSave?, labourTrades?, externalLengthMm? }`,
    built from `components/assembly-ui.tsx`. Must have: the materials print/CSV list (`MaterialsListButtons`),
    sample rates editable per line, labour section, misc materials, waste/profit, a quote description, and a
@@ -105,14 +118,20 @@ pattern, and **is used from Take-off in the same way** — do not invent a diffe
   one calculator each, never one big screen**: `roof-structure` (Roof Structure — a roof type drop-down, flat
   built; mono/lean-to, gable and hip are next, each its own calculator behind it), `roof-covering` (Roof
   Coverings — flat GRP/EPDM/TPO with trims built; pitched tiles/slate next), `roof-rainwater` (Gutters &
-  Downpipes), and the parapet wall is `ew-parapet-wall` under External Walls (a line, like any wall). The three
-  roof parts are `AssemblyFlatRoofDemo` with a `part` prop ('structure' | 'covering' | 'gutters'; 'complete',
-  the old all-in-one `roof-flat`, is kept only until it's retired) — each shows only its own inputs, layers,
-  labour (`suggestFlatRoofLabour(…, scope)`) and description (`describeFlatRoof(…, part)`), and the parts'
-  totals add up to the complete roof's. `roof-structure` pairs with the `cold_flat_roof`/`warm_flat_roof`
-  Build-Up Types; the others appear under "Calculators". A roof is sized from the bounding box of the drawn
-  shape via `drawnBoxMm`, passed as `externalLengthMm` + `externalWidthMm`, and the panel card shows "Size"
-  not "Length". A calculator for any other phase (floors, plastering, ...) needs
+  Downpipes), `roof-rooflights` (Rooflights & Dormers — the glazed units/hatches themselves: lantern, roof
+  window, fixed flat rooflight, dome, hatch; its own module `lib/rooflight-units.ts` + `lib/rooflight-description.ts`,
+  no drawn geometry, no items pre-added — see the calculator defaults rule above), and the parapet wall is
+  `ew-parapet-wall` under External Walls (a line, like any wall). The three flat-roof parts are
+  `AssemblyFlatRoofDemo` with a `part` prop ('structure' | 'covering' | 'gutters'; 'complete', the old
+  all-in-one `roof-flat`, is kept only until it's retired) — each shows only its own inputs, layers, labour
+  (`suggestFlatRoofLabour(…, scope)`) and description (`describeFlatRoof(…, part)`), and the parts' totals add
+  up to the complete roof's. `roof-structure`'s "Include fitting the rooflights" optional labour line points
+  the estimator at `roof-rooflights` instead of duplicating it — a new calculator that also fits something
+  another one prices should do the same, not silently double-count. `roof-structure` pairs with the
+  `cold_flat_roof`/`warm_flat_roof` Build-Up Types; the others appear under "Calculators". A roof is sized
+  from the bounding box of the drawn shape via `drawnBoxMm`, passed as `externalLengthMm` + `externalWidthMm`,
+  and the panel card shows "Size" not "Length" — `roof-rooflights` ignores both (it has no drawn geometry; any
+  small shape drawn for it is just a placemarker). A calculator for any other phase (floors, plastering, ...) needs
   `resolveBuiltAssembly`, the properties panel's Build-Up Type/sub-phase picker, the `hideForBuiltAssembly`
   flag, and the carry-over extended to that phase — do it the same way, don't fork a new pattern.
 - Take-off needs a login, so it can't be driven in the preview browser: test the screen on a temporary

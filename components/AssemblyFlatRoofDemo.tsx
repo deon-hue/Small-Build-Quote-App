@@ -1291,7 +1291,7 @@ export function LabourSuggestionPanel({ suggestions, includeFitting, onIncludeFi
       {fitting && (
         <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11, color: '#475569', marginTop: 6, cursor: 'pointer' }}>
           <input type="checkbox" checked={includeFitting} onChange={e => onIncludeFitting(e.target.checked)} style={{ width: 'auto', marginTop: 2 }} />
-          <span>Include fitting the rooflights ({fitting.hours}h). Leave it off if they're priced fitted with the rooflights themselves.{edited ? ' Applies when you suggest again.' : ''}</span>
+          <span>Include fitting the rooflights ({fitting.hours}h). Leave it off — the fitter's time is priced under Roof → Rooflights &amp; Dormers instead.{edited ? ' Applies when you suggest again.' : ''}</span>
         </label>
       )}
       <details style={{ marginTop: 6 }}>

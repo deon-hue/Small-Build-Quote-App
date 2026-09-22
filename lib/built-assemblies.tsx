@@ -22,10 +22,11 @@ import AssemblyFlatRoofDemo from '@/components/AssemblyFlatRoofDemo'
 import AssemblyParapetWallDemo from '@/components/AssemblyParapetWallDemo'
 import AssemblyRoofStructureDemo from '@/components/AssemblyRoofStructureDemo'
 import AssemblyRoofCoveringDemo from '@/components/AssemblyRoofCoveringDemo'
+import AssemblyRooflightsDemo from '@/components/AssemblyRooflightsDemo'
 import type { CostedLine } from '@/lib/assembly-calc'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 
-export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters'
+export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights'
 
 /** Fired when a calculator's "Save & Price" is used from inside a real quote — absent in
  * the Back Office preview context, which has no quote to save into. */
@@ -62,6 +63,7 @@ export const BUILT_ASSEMBLY_CANON_IDS: Record<string, {
   'roof-structure': { icon: 'flat-roof', render: opts => <AssemblyRoofStructureDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} externalWidthMm={opts?.externalWidthMm} buildUpDefault={opts?.variant === 'cold' ? 'cold' : 'warm'} /> },
   'roof-covering': { icon: 'roof-covering', render: opts => <AssemblyRoofCoveringDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} externalWidthMm={opts?.externalWidthMm} buildUpDefault={opts?.variant === 'cold' ? 'cold' : 'warm'} /> },
   'roof-rainwater': { icon: 'gutters', render: opts => <AssemblyFlatRoofDemo part="gutters" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} externalWidthMm={opts?.externalWidthMm} /> },
+  'roof-rooflights': { icon: 'rooflights', render: opts => <AssemblyRooflightsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'roof-flat': { icon: 'flat-roof', render: opts => <AssemblyFlatRoofDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} externalWidthMm={opts?.externalWidthMm} buildUpDefault={opts?.variant === 'cold' ? 'cold' : 'warm'} /> },
   'ew-cav-partial': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="pir" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'ew-cav-full': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="wool" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
@@ -140,6 +142,17 @@ export function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; siz
           <line x1="2" y1="5" x2="16" y2="5" stroke="#0369a1" strokeWidth="1.4" />
           <rect x="17" y="8" width="3" height="13" stroke="#0369a1" strokeWidth="1.5" />
           <line x1="14.5" y1="10" x2="18" y2="10" stroke="#0369a1" strokeWidth="1.4" />
+        </svg>
+      )
+    case 'rooflights':
+      // A pitched glazed lantern sat in an opening — blue, like the other roof icons, distinguished by shape.
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M4 10 L12 4 L20 10 Z" stroke="#0369a1" strokeWidth="1.6" strokeLinejoin="round" />
+          <line x1="12" y1="4" x2="12" y2="10" stroke="#0369a1" strokeWidth="1.2" />
+          <line x1="8" y1="7" x2="8" y2="10" stroke="#0369a1" strokeWidth="1" />
+          <line x1="16" y1="7" x2="16" y2="10" stroke="#0369a1" strokeWidth="1" />
+          <rect x="4" y="10" width="16" height="9" stroke="#0369a1" strokeWidth="1.6" />
         </svg>
       )
     case 'parapet-wall':

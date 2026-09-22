@@ -16,6 +16,7 @@ export const BUILT_ASSEMBLY_CANONICAL_IDS = new Set<string>([
   'roof-structure',
   'roof-covering',
   'roof-rainwater',
+  'roof-rooflights',
   'ew-parapet-wall',
   'ew-cav-partial',
   'ew-cav-full',
