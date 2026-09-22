@@ -69,6 +69,10 @@ pattern, and **is used from Take-off in the same way** — do not invent a diffe
    sample rates editable per line, labour section, misc materials, waste/profit, a quote description, and a
    drawing. An engine error is shown as a **banner above the controls — never instead of them** (typing a
    value digit by digit passes through invalid ones, and the controls must stay to correct it).
+   **Defaults**: profit margin defaults to **20%** (`useState(20)` for `profitPct`), not 0. Optional extras the
+   job may not have (rooflight openings, and anything similar in future calculators) start **empty/off** —
+   never pre-seeded with a sample one — so the price starts at what's actually there and the estimator adds
+   what the job needs.
    **Quote description is two-tier**: `onSave` passes a short one-line `description` (becomes the phase's
    `taskName`, printed everywhere) and may pass a full part-by-part `detail` (becomes `QuotePhase.scopeDetail`,
    shown on the online/HTML quote behind a "What's included" toggle and on paper only if "full descriptions"

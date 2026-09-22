@@ -113,7 +113,7 @@ export default function AssemblyParapetWallDemo({ onClose, onSave, labourTrades 
   const [coping, setCoping]     = useState<CopingType>('concrete')
   const [outlets, setOutlets]   = useState(0)
   const [wastePct, setWastePct] = useState(10)
-  const [profitPct, setProfitPct] = useState(0)
+  const [profitPct, setProfitPct] = useState(20)   // default profit margin
   const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
   const [disabledLayerIds, setDisabledLayerIds] = useState<Set<string>>(new Set())
   function toggleLayer(id: string) { setDisabledLayerIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }

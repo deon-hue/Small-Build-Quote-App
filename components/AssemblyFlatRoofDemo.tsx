@@ -441,11 +441,8 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
     setEdges(prev => ({ ...prev, [which]: value }))
   }
 
-  const [openings, setOpenings] = useState<FlatRoofOpening[]>(() => {
-    const L = externalLengthMm ?? 5000, S = externalWidthMm ?? 3200
-    const lantern = newOpening('lantern', [], L, S)
-    return [lantern, newOpening('roof-window', [lantern], L, S)]
-  })
+  // No rooflights by default — added by hand once the job actually has a lantern or roof window.
+  const [openings, setOpenings] = useState<FlatRoofOpening[]>([])
   function addOpening(kind: RoofOpeningKind) {
     setOpenings(prev => [...prev, newOpening(kind, prev, lengthMm, widthMm)])
   }
@@ -498,7 +495,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
     setMiscMaterialLines(prev => prev.filter(m => m.id !== id))
   }
 
-  const [profitPct, setProfitPct] = useState(0)
+  const [profitPct, setProfitPct] = useState(20)   // default profit margin
   const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
   const [disabledLayerIds, setDisabledLayerIds] = useState<Set<string>>(new Set())
   function toggleLayer(layerId: string) {

@@ -219,7 +219,7 @@ export default function AssemblyTimberFrameWallDemo({ onClose, onSave, labourTra
     setMiscMaterialLines(prev => prev.filter(m => m.id !== id))
   }
 
-  const [profitPct, setProfitPct] = useState(0)
+  const [profitPct, setProfitPct] = useState(20)   // default profit margin
   const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
   const [disabledLayerIds, setDisabledLayerIds] = useState<Set<string>>(new Set())
   function toggleLayer(layerId: string) {

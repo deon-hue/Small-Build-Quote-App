@@ -179,7 +179,7 @@ export default function AssemblyMasonryWallDemo({ context = 'partition', onClose
     setMiscMaterialLines(prev => prev.filter(m => m.id !== id))
   }
 
-  const [profitPct, setProfitPct] = useState(0)
+  const [profitPct, setProfitPct] = useState(20)   // default profit margin
   const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
 
   // A partition's single finish can go on one or both faces — that toggle makes no sense

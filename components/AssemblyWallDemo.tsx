@@ -161,7 +161,7 @@ export default function AssemblyWallDemo({ system = 'timber', onClose, onSave, l
 
   // Profit % — applied to the whole calculation (materials + labour + misc), shown as its
   // own line in the breakdown and folded into the total price and Save & Price.
-  const [profitPct, setProfitPct] = useState(0)
+  const [profitPct, setProfitPct] = useState(20)   // default profit margin
 
   // Sample rates the user has overridden in this session — keyed by layer id. Still not
   // linked to real Products/Labour/Plant records, but editable here in the meantime.
