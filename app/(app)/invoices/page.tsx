@@ -628,11 +628,11 @@ export default function InvoicesPage() {
                   <button className="btn-sm btn-outline" onClick={() => setLineItems(p => [...p, BLANK_LINE()])}>+ Add Line</button>
                 </div>
                 <div style={{ border: '1.5px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 50px 80px 70px 60px 90px 28px', gap: 0, background: '#f0f2f4', padding: '6px 10px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 50px 80px 70px 90px 28px', gap: 8, background: '#f0f2f4', padding: '6px 10px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)' }}>
                     <span>Description</span><span style={{ textAlign: 'center' }}>Qty</span><span style={{ textAlign: 'right' }}>Unit Price</span><span style={{ textAlign: 'center' }}>%</span><span style={{ textAlign: 'right' }}>Total</span><span />
                   </div>
                   {lineItems.map(l => (
-                    <div key={l.id} style={{ display: 'grid', gridTemplateColumns: '1fr 50px 80px 70px 60px 90px 28px', gap: 0, borderTop: '1px solid var(--border)', padding: '4px 6px', alignItems: 'center' }}>
+                    <div key={l.id} style={{ display: 'grid', gridTemplateColumns: '1fr 50px 80px 70px 90px 28px', gap: 8, borderTop: '1px solid var(--border)', padding: '4px 6px', alignItems: 'center' }}>
                       <input value={l.desc} onChange={e => updateLine(l.id, 'desc', e.target.value)} placeholder="Description" style={{ border: 'none', outline: 'none', fontSize: 13, padding: '4px 4px' }} />
                       <input type="number" value={l.qty} onChange={e => updateLine(l.id, 'qty', Number(e.target.value))} style={{ border: 'none', outline: 'none', fontSize: 13, textAlign: 'center', padding: '4px 2px' }} />
                       <input type="number" value={l.unitPrice} onChange={e => updateLine(l.id, 'unitPrice', Number(e.target.value))} style={{ border: 'none', outline: 'none', fontSize: 13, textAlign: 'right', padding: '4px 4px' }} />
