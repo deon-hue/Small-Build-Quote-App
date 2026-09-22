@@ -141,7 +141,16 @@ pattern, and **is used from Take-off in the same way** — do not invent a diffe
   in `lib/mono-pitch-roof.ts`, a self-contained copy of `flatRoofJoistLayout`'s logic): a member running
   parallel to the rafters (a side trimmer, or a kerb side up the slope) is true (sloped) length, one running
   parallel to the eaves (a header, or a kerb side across the slope) is horizontal and unscaled. The rooflight
-  units themselves are still priced separately, under `roof-rooflights`. `roof-structure`'s "Include fitting the rooflights" optional
+  units themselves are still priced separately, under `roof-rooflights`. Gable structure is its own component,
+  `AssemblyGableRoofDemo.tsx` (engine `lib/gable-roof.ts`, description `lib/gable-roof-description.ts`, labour
+  `suggestGableRoofLabour` in `lib/flat-roof-labour.ts`) — two rafter faces to a ridge, a wall plate + straps
+  at each of the two eaves walls (always standalone, no ledger option — a gable roof doesn't bear on an
+  existing wall the way a lean-to does), and ceiling joists tying the rafter feet together across the full
+  span; the gable end walls themselves are priced under External Walls, not here. Its rafter section reuses
+  the same span chart the same way (true sloped length = half the span plus the overhang, over cos(pitch));
+  ceiling joists get a section picker but no span-chart check (a long span needs a binder or an engineer's
+  design — noted, not modelled). No roof-window openings yet (mono-pitch's plan-view/trimmer pattern in
+  `lib/mono-pitch-roof.ts` is ready to reuse there when asked). `roof-structure`'s "Include fitting the rooflights" optional
   labour line points the estimator at `roof-rooflights` instead of duplicating it — a new calculator that also
   fits something another one prices should do the same, not silently double-count. `roof-structure` pairs with
   the `cold_flat_roof`/`warm_flat_roof` Build-Up Types (flat only so far); the others appear under

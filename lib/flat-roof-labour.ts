@@ -25,7 +25,7 @@ export const LABOUR_TRADE_LABEL: Record<LabourTradeKind, string> = {
 
 /** Hours per unit — rough estimates, one operative. */
 export const LABOUR_RATES = {
-  carpenter: { joist: 0.4, posiJoist: 0.3, ledgerLm: 0.3, wallPlateLm: 0.15, strutPair: 0.1, firringLm: 0.12, deckM2: 0.3, trimmerLm: 0.25, kerbLm: 0.5, fasciaLm: 0.4, soffitLm: 0.3, bargeLm: 0.35, cornerNr: 0.2, endCapNr: 0.1, rafter: 0.45, hangerNr: 0.1, strapNr: 0.1 },
+  carpenter: { joist: 0.4, posiJoist: 0.3, ledgerLm: 0.3, wallPlateLm: 0.15, strutPair: 0.1, firringLm: 0.12, deckM2: 0.3, trimmerLm: 0.25, kerbLm: 0.5, fasciaLm: 0.4, soffitLm: 0.3, bargeLm: 0.35, cornerNr: 0.2, endCapNr: 0.1, rafter: 0.45, hangerNr: 0.1, strapNr: 0.1, ridgeLm: 0.3, ceilingJoist: 0.35 },
   roofer: { insulationM2: 0.2, coveringM2: { grp: 0.55, epdm: 0.4, tpo: 0.45 }, trimLm: 0.3, cornerNr: 0.2, leadLm: 0.5, outletNr: 0.75, overflowNr: 0.5 },
   bricklayer: { cavityM2: 1.4, solidM2: 1.0, solidBrickM2: 1.8, copingLm: 0.35, trayLm: 0.15, outletOpeningNr: 0.5 },
   renderer: { renderM2: 0.6 },
@@ -270,6 +270,25 @@ export function suggestMonoPitchRoofLabour(g: {
   out.push(line('mono-fit-rooflights', 'fitter', 'Fit the rooflights (supplied separately)',
     kinds.map(k => ({ qty: g.openings.filter(o => o.kind === k).length, unit: k === 'roof-window' ? 'roof windows' : `${k}s`, what: '', rate: f[k] })), true))
   return out.filter((x): x is LabourSuggestion => x !== null)
+}
+
+/** The labour for a gable roof structure priced on its own (Roof → Roof Structure, gable ends): the carpenter
+ * fixing the wall plates, cutting and fixing the rafters to the ridge, and fitting the ceiling joists, from
+ * the counts already worked out by the engine. */
+export function suggestGableRoofLabour(g: {
+  rafterCount: number; ridgeLm: number; wallPlateLm: number; strapCount: number; ceilingJoistCount: number
+}): LabourSuggestion[] {
+  const c = LABOUR_RATES.carpenter
+  const line1 = line('gable-carp-structure', 'carpenter', 'Fix the wall plates and ridge board, and cut and fix the rafters', [
+    { qty: g.rafterCount, unit: 'rafters', what: '', rate: c.rafter },
+    { qty: g.ridgeLm, unit: 'lm', what: 'ridge', rate: c.ridgeLm },
+    { qty: g.wallPlateLm, unit: 'lm', what: 'wall plate', rate: c.wallPlateLm },
+    { qty: g.strapCount, unit: 'straps', what: '', rate: c.strapNr },
+  ])
+  const line2 = line('gable-carp-joists', 'carpenter', 'Fit the ceiling joists', [
+    { qty: g.ceilingJoistCount, unit: 'joists', what: '', rate: c.ceilingJoist },
+  ])
+  return [line1, line2].filter((x): x is LabourSuggestion => x !== null)
 }
 
 /** The labour for fascia, soffit and barge boards priced on their own (Roof → Fascias, Soffits & Barge

@@ -4,14 +4,15 @@
  * Assembly Calculator — Roof Structure (Roof → Roof Structure).
  *
  * The roof's structure only: for a flat roof its joists, ledger and wall plates, trimmers, firrings, deck and
- * rooflight kerbs. The roof type is chosen here; each type designs its own structure. Flat roofs are built;
- * mono-pitch (lean-to), gable and hip roofs are the next to come, each with its own calculator behind this
- * same drop-down. The covering, the gutters and the parapet wall are separate calculators.
+ * rooflight kerbs. The roof type is chosen here; each type designs its own structure. Flat, mono-pitch
+ * (lean-to) and gable roofs are built; hip is next, its own calculator behind this same drop-down. The
+ * covering, the gutters and the parapet wall are separate calculators.
  */
 
 import React, { useState } from 'react'
 import AssemblyFlatRoofDemo from '@/components/AssemblyFlatRoofDemo'
 import AssemblyMonoPitchRoofDemo from '@/components/AssemblyMonoPitchRoofDemo'
+import AssemblyGableRoofDemo from '@/components/AssemblyGableRoofDemo'
 import type { CostedLine } from '@/lib/assembly-calc'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import { propInput } from '@/components/assembly-ui'
@@ -21,7 +22,7 @@ export type RoofStructureType = 'flat' | 'mono' | 'gable' | 'hip'
 const ROOF_TYPES: { id: RoofStructureType; label: string; built: boolean }[] = [
   { id: 'flat',  label: 'Flat roof', built: true },
   { id: 'mono',  label: 'Mono-pitch / lean-to roof', built: true },
-  { id: 'gable', label: 'Pitched roof — gable ends (coming next)', built: false },
+  { id: 'gable', label: 'Pitched roof — gable ends', built: true },
   { id: 'hip',   label: 'Pitched roof — hipped (coming next)', built: false },
 ]
 
@@ -46,6 +47,7 @@ export default function AssemblyRoofStructureDemo(props: Props) {
       </div>
       {type === 'flat' && <AssemblyFlatRoofDemo part="structure" {...props} />}
       {type === 'mono' && <AssemblyMonoPitchRoofDemo {...props} />}
+      {type === 'gable' && <AssemblyGableRoofDemo {...props} />}
     </div>
   )
 }
