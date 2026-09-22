@@ -116,8 +116,8 @@ pattern, and **is used from Take-off in the same way** — do not invent a diffe
   `page.tsx`); a calculator sub-phase hides the empty Task dropdown and shows a note instead.
 - Phases wired so far: External Walls, Internal Walls and **Roof**. **The roof is priced in its own sub-phases,
   one calculator each, never one big screen**: `roof-structure` (Roof Structure — a roof type drop-down, flat
-  built; mono/lean-to, gable and hip are next, each its own calculator behind it), `roof-covering` (Roof
-  Coverings — flat GRP/EPDM/TPO with trims built; pitched tiles/slate next), `roof-rainwater` (Gutters &
+  and mono-pitch/lean-to built; gable and hip are next, each its own calculator behind it), `roof-covering`
+  (Roof Coverings — flat GRP/EPDM/TPO with trims built; pitched tiles/slate next), `roof-rainwater` (Gutters &
   Downpipes), `roof-rooflights` (Rooflights & Dormers — the glazed units/hatches themselves: lantern, roof
   window, fixed flat rooflight, dome, hatch; its own module `lib/rooflight-units.ts` + `lib/rooflight-description.ts`,
   no drawn geometry, no items pre-added — see the calculator defaults rule above), `roof-fascia-soffit`
@@ -128,13 +128,21 @@ pattern, and **is used from Take-off in the same way** — do not invent a diffe
   `AssemblyFlatRoofDemo` with a `part` prop ('structure' | 'covering' | 'gutters'; 'complete', the old
   all-in-one `roof-flat`, is kept only until it's retired) — each shows only its own inputs, layers, labour
   (`suggestFlatRoofLabour(…, scope)`) and description (`describeFlatRoof(…, part)`), and the parts' totals add
-  up to the complete roof's. `roof-structure`'s "Include fitting the rooflights" optional labour line points
-  the estimator at `roof-rooflights` instead of duplicating it — a new calculator that also fits something
-  another one prices should do the same, not silently double-count. `roof-structure` pairs with the
-  `cold_flat_roof`/`warm_flat_roof` Build-Up Types; the others appear under "Calculators". A roof is sized
-  from the bounding box of the drawn shape via `drawnBoxMm`, passed as `externalLengthMm` + `externalWidthMm`,
-  and the panel card shows "Size" not "Length" — `roof-rooflights` ignores both (it has no drawn geometry; any
-  small shape drawn for it is just a placemarker). A calculator for any other phase (floors, plastering, ...) needs
+  up to the complete roof's. Mono-pitch/lean-to structure is its own component, `AssemblyMonoPitchRoofDemo.tsx`
+  (engine `lib/mono-pitch-roof.ts`, description `lib/mono-pitch-roof-description.ts`, labour
+  `suggestMonoPitchRoofLabour` in `lib/flat-roof-labour.ts`) — rafters, a wall plate at the low (eaves) wall
+  always, and a ledger+hangers or a wall plate+straps at the high wall (the same choice the flat roof offers
+  at an existing wall), with a Swap button for length/span if the roof was drawn the other way round. Its
+  rafter section reuses the flat roof's own span chart (`lib/flat-roof-joist-spans.ts`,
+  `checkFlatRoofJoist`/`flatRoofSpanChart`), passing the roof's true sloped rafter length in as the span,
+  rather than duplicating the span-chart physics. `roof-structure`'s "Include fitting the rooflights" optional
+  labour line points the estimator at `roof-rooflights` instead of duplicating it — a new calculator that also
+  fits something another one prices should do the same, not silently double-count. `roof-structure` pairs with
+  the `cold_flat_roof`/`warm_flat_roof` Build-Up Types (flat only so far); the others appear under
+  "Calculators". A roof is sized from the bounding box of the drawn shape via `drawnBoxMm`, passed as
+  `externalLengthMm` + `externalWidthMm`, and the panel card shows "Size" not "Length" — `roof-rooflights`
+  ignores both (it has no drawn geometry; any small shape drawn for it is just a placemarker). A calculator
+  for any other phase (floors, plastering, ...) needs
   `resolveBuiltAssembly`, the properties panel's Build-Up Type/sub-phase picker, the `hideForBuiltAssembly`
   flag, and the carry-over extended to that phase — do it the same way, don't fork a new pattern.
 - Take-off needs a login, so it can't be driven in the preview browser: test the screen on a temporary

@@ -11,6 +11,7 @@
 
 import React, { useState } from 'react'
 import AssemblyFlatRoofDemo from '@/components/AssemblyFlatRoofDemo'
+import AssemblyMonoPitchRoofDemo from '@/components/AssemblyMonoPitchRoofDemo'
 import type { CostedLine } from '@/lib/assembly-calc'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import { propInput } from '@/components/assembly-ui'
@@ -19,7 +20,7 @@ export type RoofStructureType = 'flat' | 'mono' | 'gable' | 'hip'
 
 const ROOF_TYPES: { id: RoofStructureType; label: string; built: boolean }[] = [
   { id: 'flat',  label: 'Flat roof', built: true },
-  { id: 'mono',  label: 'Mono-pitch / lean-to roof (coming next)', built: false },
+  { id: 'mono',  label: 'Mono-pitch / lean-to roof', built: true },
   { id: 'gable', label: 'Pitched roof — gable ends (coming next)', built: false },
   { id: 'hip',   label: 'Pitched roof — hipped (coming next)', built: false },
 ]
@@ -44,6 +45,7 @@ export default function AssemblyRoofStructureDemo(props: Props) {
         </select>
       </div>
       {type === 'flat' && <AssemblyFlatRoofDemo part="structure" {...props} />}
+      {type === 'mono' && <AssemblyMonoPitchRoofDemo {...props} />}
     </div>
   )
 }
