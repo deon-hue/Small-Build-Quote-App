@@ -120,8 +120,11 @@ pattern, and **is used from Take-off in the same way** — do not invent a diffe
   Coverings — flat GRP/EPDM/TPO with trims built; pitched tiles/slate next), `roof-rainwater` (Gutters &
   Downpipes), `roof-rooflights` (Rooflights & Dormers — the glazed units/hatches themselves: lantern, roof
   window, fixed flat rooflight, dome, hatch; its own module `lib/rooflight-units.ts` + `lib/rooflight-description.ts`,
-  no drawn geometry, no items pre-added — see the calculator defaults rule above), and the parapet wall is
-  `ew-parapet-wall` under External Walls (a line, like any wall). The three flat-roof parts are
+  no drawn geometry, no items pre-added — see the calculator defaults rule above), `roof-fascia-soffit`
+  (Fascias, Soffits & Barge Boards — sized from the drawn bounding box like structure/covering/gutters, with
+  its own Edges classifying each of the four sides as eaves/verge/none; `lib/fascia-soffit-units.ts` +
+  `lib/fascia-soffit-description.ts`), and the parapet wall is `ew-parapet-wall` under External Walls (a line,
+  like any wall). The three flat-roof parts are
   `AssemblyFlatRoofDemo` with a `part` prop ('structure' | 'covering' | 'gutters'; 'complete', the old
   all-in-one `roof-flat`, is kept only until it's retired) — each shows only its own inputs, layers, labour
   (`suggestFlatRoofLabour(…, scope)`) and description (`describeFlatRoof(…, part)`), and the parts' totals add

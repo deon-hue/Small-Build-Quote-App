@@ -25,7 +25,7 @@ export const LABOUR_TRADE_LABEL: Record<LabourTradeKind, string> = {
 
 /** Hours per unit — rough estimates, one operative. */
 export const LABOUR_RATES = {
-  carpenter: { joist: 0.4, posiJoist: 0.3, ledgerLm: 0.3, wallPlateLm: 0.15, strutPair: 0.1, firringLm: 0.12, deckM2: 0.3, trimmerLm: 0.25, kerbLm: 0.5, fasciaLm: 0.4 },
+  carpenter: { joist: 0.4, posiJoist: 0.3, ledgerLm: 0.3, wallPlateLm: 0.15, strutPair: 0.1, firringLm: 0.12, deckM2: 0.3, trimmerLm: 0.25, kerbLm: 0.5, fasciaLm: 0.4, soffitLm: 0.3, bargeLm: 0.35, cornerNr: 0.2, endCapNr: 0.1 },
   roofer: { insulationM2: 0.2, coveringM2: { grp: 0.55, epdm: 0.4, tpo: 0.45 }, trimLm: 0.3, cornerNr: 0.2, leadLm: 0.5, outletNr: 0.75, overflowNr: 0.5 },
   bricklayer: { cavityM2: 1.4, solidM2: 1.0, solidBrickM2: 1.8, copingLm: 0.35, trayLm: 0.15, outletOpeningNr: 0.5 },
   renderer: { renderM2: 0.6 },
@@ -242,4 +242,19 @@ export function suggestRooflightLabour(groups: { label: string; qty: number; hou
   if (totalHours <= 0) return []
   const basis = used.map(g => `${n1(g.qty)} ${g.label.toLowerCase()}${g.qty === 1 ? '' : 's'} × ${(g.hours / g.qty).toFixed(1)}h`).join(' + ')
   return [{ key: 'fit-rooflight-units', trade: 'fitter', task: 'Fit the rooflights and dress the flashings', hours: hoursOf(totalHours), basis }]
+}
+
+/** The labour for fascia, soffit and barge boards priced on their own (Roof → Fascias, Soffits & Barge
+ * Boards): the carpenter fixing them, from the lengths and counts already worked out by the engine. */
+export function suggestFasciaSoffitLabour(g: {
+  eavesLm: number; vergeLm: number; cornerCount: number; eaveStopEnds: number; vergeStopEnds: number
+}): LabourSuggestion[] {
+  const c = LABOUR_RATES.carpenter
+  const line1 = line('fix-fascia-soffit', 'carpenter', 'Fix the fascia, soffit and barge boards', [
+    { qty: g.eavesLm, unit: 'lm', what: 'fascia and soffit', rate: c.fasciaLm + c.soffitLm },
+    { qty: g.vergeLm, unit: 'lm', what: 'barge board', rate: c.bargeLm },
+    { qty: g.cornerCount, unit: 'corners', what: '', rate: c.cornerNr },
+    { qty: g.eaveStopEnds + g.vergeStopEnds, unit: 'end caps', what: '', rate: c.endCapNr },
+  ])
+  return line1 ? [line1] : []
 }
