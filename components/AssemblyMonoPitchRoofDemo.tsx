@@ -10,11 +10,12 @@
  * the same span-chart module every flat-roof joist already uses. See lib/mono-pitch-roof.ts for the geometry.
  */
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
 import { fmt } from '@/lib/utils'
 import {
-  calculateMonoPitchRoofGeometry, type MonoPitchWallConnection, type MonoPitchRoofGeometry,
+  calculateMonoPitchRoofGeometry, monoPitchRafterLayout, openingTrimZoneMm, RAFTER_THICKNESS_MM,
+  type MonoPitchWallConnection, type MonoPitchRoofGeometry, type MonoPitchOpening, type MonoPitchOpeningKind,
 } from '@/lib/mono-pitch-roof'
 import { describeMonoPitchRoof, describeMonoPitchRoofShort } from '@/lib/mono-pitch-roof-description'
 import { suggestMonoPitchRoofLabour, toLabourLines, type LabourSuggestion } from '@/lib/flat-roof-labour'
@@ -28,7 +29,7 @@ import {
   propInput, miniInput, PropRow, BreakdownTable, CollapsibleSection,
   LabourSection, type LabourLine, newLabourLineId, hourlyRate,
   MiscMaterialsSection, type MiscMaterialLine, newMiscMaterialLineId,
-  MaterialsListButtons,
+  MaterialsListButtons, newOpeningId,
 } from '@/components/assembly-ui'
 
 interface Props {
@@ -55,6 +56,55 @@ const WALL_CONNECTION_LABEL: Record<MonoPitchWallConnection, string> = {
   bearing: 'Rafters bear on their own wall plate, strapped',
 }
 
+// Roof windows and the like — the units themselves are supplied and fitted under Roof → Rooflights &
+// Dormers; this calculator only forms the opening (trimmed rafters and a kerb). Same kinds and starting
+// sizes as the flat roof, and the same plan-position convention: widthMm across the rafters, depthMm up
+// the (plan) slope, offsetMm from the left, offsetSpanMm from the low (eaves) wall.
+const KIND_LABEL: Record<MonoPitchOpeningKind, string> = {
+  lantern: 'Lantern', 'roof-window': 'Roof window', dome: 'Dome rooflight', hatch: 'Access hatch',
+}
+const KIND_SHORT: Record<MonoPitchOpeningKind, string> = {
+  lantern: 'Lantern', 'roof-window': 'Window', dome: 'Dome', hatch: 'Hatch',
+}
+const KIND_STYLE: Record<MonoPitchOpeningKind, { fill: string; stroke: string }> = {
+  lantern: { fill: '#ccfbf1', stroke: '#0f766e' },
+  'roof-window': { fill: '#dbeafe', stroke: '#1d4ed8' },
+  dome: { fill: '#fef3c7', stroke: '#b45309' },
+  hatch: { fill: '#e5e7eb', stroke: '#4b5563' },
+}
+const KIND_DEFAULTS: Record<MonoPitchOpeningKind, { widthMm: number; depthMm: number; trimmers: 2 | 3; kerbHeightMm: number }> = {
+  lantern: { widthMm: 1500, depthMm: 1000, trimmers: 3, kerbHeightMm: 200 },
+  'roof-window': { widthMm: 900, depthMm: 900, trimmers: 2, kerbHeightMm: 150 },
+  dome: { widthMm: 900, depthMm: 900, trimmers: 2, kerbHeightMm: 150 },
+  hatch: { widthMm: 600, depthMm: 600, trimmers: 2, kerbHeightMm: 150 },
+}
+const TRIMMER_COLOUR = '#b45309'
+
+// A new opening goes in the first free spot: scanning along the eaves, then up the span, for a gap that
+// clears every opening already there by 300mm (room for the trimmers and kerbs) — same approach as the
+// flat roof's own newOpening.
+function newMonoPitchOpening(kind: MonoPitchOpeningKind, existing: MonoPitchOpening[], lengthMm: number, spanMm: number): MonoPitchOpening {
+  const d = KIND_DEFAULTS[kind]
+  const gap = 300
+  const room = openingTrimZoneMm({ trimmers: d.trimmers }) + 100
+  const maxX = Math.max(0, lengthMm - d.widthMm - room)
+  const maxY = Math.max(0, spanMm - d.depthMm - room)
+  const clashes = (x: number, y: number) => existing.some(o =>
+    x < o.offsetMm + o.widthMm + gap && o.offsetMm < x + d.widthMm + gap &&
+    y < o.offsetSpanMm + o.depthMm + gap && o.offsetSpanMm < y + d.depthMm + gap)
+  const startY = Math.max(room, Math.min(maxY, 600))
+  let spot = { x: Math.min(maxX, 300), y: Math.min(maxY, startY) }
+  search: for (let y = startY; y <= maxY; y += 200) {
+    for (let x = 300; x <= maxX; x += 100) {
+      if (!clashes(x, y)) { spot = { x, y }; break search }
+    }
+  }
+  return {
+    id: newOpeningId(), kind, widthMm: d.widthMm, depthMm: d.depthMm,
+    offsetMm: spot.x, offsetSpanMm: spot.y, trimmers: d.trimmers, kerbHeightMm: d.kerbHeightMm,
+  }
+}
+
 export default function AssemblyMonoPitchRoofDemo({ onClose, onSave, labourTrades = [], externalLengthMm, externalWidthMm }: Props) {
   const [name, setName]         = useState('Mono-Pitch Roof Structure')
   const [location, setLocation] = useState('')
@@ -75,10 +125,16 @@ export default function AssemblyMonoPitchRoofDemo({ onClose, onSave, labourTrade
   const [spanLoads, setSpanLoads] = useState<JoistSpanLoads>(DEFAULT_JOIST_SPAN_LOADS)
   const [depthPicked, setDepthPicked] = useState(false)
 
+  // Roof windows — start empty, never pre-seeded (the calculator defaults rule).
+  const [openings, setOpenings] = useState<MonoPitchOpening[]>([])
+  function addOpening(kind: MonoPitchOpeningKind) { setOpenings(prev => [...prev, newMonoPitchOpening(kind, prev, lengthMm, spanMm)]) }
+  function updateOpening(id: string, patch: Partial<MonoPitchOpening>) { setOpenings(prev => prev.map(o => o.id === id ? { ...o, ...patch } : o)) }
+  function removeOpening(id: string) { setOpenings(prev => prev.filter(o => o.id !== id)) }
+
   const geometryResult = useMemo(() => {
-    try { return { ok: true as const, geometry: calculateMonoPitchRoofGeometry({ lengthMm, spanMm, pitchDeg, rafterCentresMm, eavesOverhangMm, highWallConnection }) } }
+    try { return { ok: true as const, geometry: calculateMonoPitchRoofGeometry({ lengthMm, spanMm, pitchDeg, rafterCentresMm, eavesOverhangMm, highWallConnection, openings }) } }
     catch (e: any) { return { ok: false as const, error: e.message as string } }
-  }, [lengthMm, spanMm, pitchDeg, rafterCentresMm, eavesOverhangMm, highWallConnection])
+  }, [lengthMm, spanMm, pitchDeg, rafterCentresMm, eavesOverhangMm, highWallConnection, openings])
   const g: MonoPitchRoofGeometry | null = geometryResult.ok ? geometryResult.geometry : null
 
   const spanChart = useMemo(() => flatRoofSpanChart(rafterGrade, spanLoads), [rafterGrade, spanLoads])
@@ -113,6 +169,11 @@ export default function AssemblyMonoPitchRoofDemo({ onClose, onSave, labourTrade
     }
     if (g.hangerCount > 0) out.push({ id: 'hangers', name: 'Joist hangers', category: 'materials', source: 'fixed', fixedQty: g.hangerCount, unit: 'nr', unitCost: 2.40, roundToWhole: true })
     if (g.strapCount > 0) out.push({ id: 'straps', name: 'Lateral restraint straps', category: 'materials', source: 'fixed', fixedQty: g.strapCount, unit: 'nr', unitCost: 4.20, roundToWhole: true })
+    if (g.trimLm > 0) out.push({ id: 'trimmers', name: `${rafterSectionLabel} — trimmers and headers round the rooflight openings`, category: 'materials', source: 'fixed', fixedQty: g.trimLm, unit: 'lm', unitCost: rafterRate, wastePct })
+    if (g.kerbLm > 0) {
+      out.push({ id: 'kerb_timber', name: 'Kerb timber 47×150 (rooflight kerbs)', category: 'materials', source: 'fixed', fixedQty: g.kerbLm, unit: 'lm', unitCost: 3.60, wastePct })
+      out.push({ id: 'kerb_cladding', name: 'Kerb cladding 18mm ply', category: 'materials', source: 'fixed', fixedQty: g.kerbFaceAreaM2, unit: 'm²', unitCost: 7.50, wastePct })
+    }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [g, rafterSectionLabel, rafterRate, rafterDepthMm, wastePct])
@@ -138,11 +199,14 @@ export default function AssemblyMonoPitchRoofDemo({ onClose, onSave, labourTrade
   const allMaterialLines = [...costedLines, ...miscCostedLines]
   const enabledLines = [...enabledMaterialLines, ...miscCostedLines]
 
-  // Labour — the carpenter fixing the wall plate/ledger and rafters, following the roof until edited by hand
-  const labourSuggestions: LabourSuggestion[] = g ? suggestMonoPitchRoofLabour(g) : []
-  const suggestedLabour = toLabourLines(labourSuggestions, labourTrades, false)
+  // Labour — the carpenter fixing the wall plate/ledger, rafters, trimmers and kerbs, following the roof
+  // until edited by hand. Fitting the rooflights themselves is optional — off by default, since it's
+  // normally priced under Roof → Rooflights & Dormers instead.
+  const [includeFitting, setIncludeFitting] = useState(false)
+  const labourSuggestions: LabourSuggestion[] = g ? suggestMonoPitchRoofLabour({ ...g, openings }) : []
+  const suggestedLabour = toLabourLines(labourSuggestions, labourTrades, includeFitting)
   const [labourOverride, setLabourOverride] = useState<LabourLine[] | null>(null)
-  const suggestedRef = React.useRef<LabourLine[]>([])
+  const suggestedRef = useRef<LabourLine[]>([])
   suggestedRef.current = suggestedLabour.lines
   const labourLines: LabourLine[] = labourOverride ?? suggestedLabour.lines
   const addLabour = () => setLabourOverride(prev => { const b = prev ?? suggestedRef.current; return [...b, { id: newLabourLineId(), tradeId: b[0]?.tradeId ?? '', task: '', hours: 0 }] })
@@ -164,7 +228,10 @@ export default function AssemblyMonoPitchRoofDemo({ onClose, onSave, labourTrade
   const totalCost = costSubtotal + profitAmount
 
   // The customer's description follows the roof until it's edited by hand
-  const descInput = g ? { lengthM: g.lengthM, spanM: g.spanM, pitchDeg: g.pitchDeg, rafterCount: g.rafterCount, rafterSectionLabel, highWallConnection, slopeAreaM2: g.slopeAreaM2 } : null
+  const descInput = g ? {
+    lengthM: g.lengthM, spanM: g.spanM, pitchDeg: g.pitchDeg, rafterCount: g.rafterCount, rafterSectionLabel, highWallConnection, slopeAreaM2: g.slopeAreaM2,
+    openings: openings.map(o => ({ kind: o.kind, widthMm: o.widthMm, depthMm: o.depthMm, trimmers: o.trimmers ?? 2 })),
+  } : null
   const [descriptionOverride, setDescriptionOverride] = useState<string | null>(null)
   const [detailOverride, setDetailOverride] = useState<string | null>(null)
   const description = descriptionOverride ?? (descInput ? describeMonoPitchRoofShort(descInput) : '')
@@ -222,6 +289,12 @@ export default function AssemblyMonoPitchRoofDemo({ onClose, onSave, labourTrade
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16 }}>
         <div>
           {g && (<>
+            <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 3 }}>Plan — drag a rooflight to move it</div>
+            <MonoPitchPlanSvg
+              lengthMm={lengthMm} spanMm={spanMm} centresMm={rafterCentresMm} openings={openings}
+              onMoveOpening={(id, offsetMm, offsetSpanMm) => updateOpening(id, { offsetMm, offsetSpanMm })}
+            />
+            <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 10, marginBottom: 3 }}>Section</div>
             <MonoPitchSectionSvg g={g} eavesOverhangMm={eavesOverhangMm} highWallConnection={highWallConnection} />
             {g.warnings.map((w, i) => (
               <div key={i} style={{ fontSize: 11, color: '#c0392b', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, padding: '4px 8px', marginTop: 6 }}>⚠ {w}</div>
@@ -282,6 +355,54 @@ export default function AssemblyMonoPitchRoofDemo({ onClose, onSave, labourTrade
             <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>The low (eaves) wall always gets a wall plate. This is only for the high wall — an existing wall the lean-to is built against.</div>
           </CollapsibleSection>
 
+          <CollapsibleSection title="Rooflight openings" borderColor="#bae6fd">
+            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6, lineHeight: 1.4 }}>
+              This forms the opening — trimmed rafters and a kerb. The rooflight itself is priced separately, under Roof → Rooflights &amp; Dormers.
+            </div>
+            {openings.map((o, i) => (
+              <div key={o.id} style={{ border: '1px solid #e2e8f0', borderRadius: 5, padding: 6, marginBottom: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <span style={{ fontSize: 10, color: '#94a3b8', minWidth: 14 }}>{i + 1}</span>
+                  <select value={o.kind} onChange={e => {
+                    const kind = e.target.value as MonoPitchOpeningKind
+                    updateOpening(o.id, { kind, trimmers: KIND_DEFAULTS[kind].trimmers, kerbHeightMm: KIND_DEFAULTS[kind].kerbHeightMm })
+                  }} style={{ ...miniInput, flex: 1 }}>
+                    {(Object.entries(KIND_LABEL) as [MonoPitchOpeningKind, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                  <button onClick={() => removeOpening(o.id)} aria-label={`Remove opening ${i + 1}`}
+                    style={{ background: 'none', border: 'none', color: '#c0392b', cursor: 'pointer', fontSize: 14, padding: '0 4px' }}>×</button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4 }}>
+                  <div><div style={{ fontSize: 9, color: '#94a3b8' }}>Width</div>
+                    <input type="number" min={1} value={o.widthMm} onChange={e => updateOpening(o.id, { widthMm: Math.max(1, +e.target.value || 0) })} style={miniInput} /></div>
+                  <div><div style={{ fontSize: 9, color: '#94a3b8' }}>Length</div>
+                    <input type="number" min={1} value={o.depthMm} onChange={e => updateOpening(o.id, { depthMm: Math.max(1, +e.target.value || 0) })} style={miniInput} /></div>
+                  <div><div style={{ fontSize: 9, color: '#94a3b8' }}>From left</div>
+                    <input type="number" min={0} value={o.offsetMm} onChange={e => updateOpening(o.id, { offsetMm: Math.max(0, +e.target.value || 0) })} style={miniInput} /></div>
+                  <div><div style={{ fontSize: 9, color: '#94a3b8' }}>From low wall</div>
+                    <input type="number" min={0} value={o.offsetSpanMm} onChange={e => updateOpening(o.id, { offsetSpanMm: Math.max(0, +e.target.value || 0) })} style={miniInput} /></div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'center' }}>
+                  <label style={{ fontSize: 9, color: '#94a3b8' }}>Trimmers</label>
+                  <select value={o.trimmers ?? 2} onChange={e => updateOpening(o.id, { trimmers: +e.target.value as 2 | 3 })} style={miniInput}>
+                    <option value={2}>Doubled</option>
+                    <option value={3}>Tripled</option>
+                  </select>
+                  <label style={{ fontSize: 9, color: '#94a3b8' }}>Kerb (mm)</label>
+                  <input type="number" min={0} value={o.kerbHeightMm ?? 200} onChange={e => updateOpening(o.id, { kerbHeightMm: Math.max(0, +e.target.value || 0) })} style={miniInput} />
+                </div>
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+              {(Object.keys(KIND_LABEL) as MonoPitchOpeningKind[]).map(k => (
+                <button key={k} onClick={() => addOpening(k)}
+                  style={{ fontSize: 11, padding: '3px 8px', border: '1px dashed #7dd3fc', borderRadius: 999, background: 'none', color: '#0369a1', cursor: 'pointer' }}>
+                  + {KIND_LABEL[k]}
+                </button>
+              ))}
+            </div>
+          </CollapsibleSection>
+
           <PropRow label={`Waste % (${wastePct}%)`}>
             <input type="range" min={0} max={25} value={wastePct} onChange={e => setWastePct(+e.target.value)} style={{ width: '100%' }} />
           </PropRow>
@@ -291,7 +412,7 @@ export default function AssemblyMonoPitchRoofDemo({ onClose, onSave, labourTrade
         </div>
 
         <LabourSuggestionPanel
-          suggestions={labourSuggestions} includeFitting={false} onIncludeFitting={() => {}}
+          suggestions={labourSuggestions} includeFitting={includeFitting} onIncludeFitting={setIncludeFitting}
           unmatched={suggestedLabour.unmatched} edited={labourOverride !== null} onSuggestAgain={() => setLabourOverride(null)}
           tradesFound={labourTrades.length > 0}
         />
@@ -396,6 +517,116 @@ function RafterSpanPanel({ chart, check, grade, spanMm, centresMm, depthMm, pick
         </div>
       </details>
     </div>
+  )
+}
+
+// ── The roof in plan: the eaves length across, the plan span down (low/eaves wall at the bottom, high wall
+// at the top — the natural way round to read it, roughly as the roof would appear from the garden). Rafters
+// are drawn from the engine's own layout, so a rafter an opening cuts short is drawn only where it's there;
+// each opening's trimmers (doubled or tripled, to scale) are drawn round it. An opening can be dragged to a
+// new spot, snapped to the nearest 50mm — the same convention the flat roof's own plan view uses. ──
+function MonoPitchPlanSvg({ lengthMm, spanMm, centresMm, openings, onMoveOpening }: {
+  lengthMm: number
+  spanMm: number
+  centresMm: number
+  openings: MonoPitchOpening[]
+  onMoveOpening: (id: string, offsetMm: number, offsetSpanMm: number) => void
+}) {
+  const vbW = 430, vbH = 300
+  const k = Math.min(340 / lengthMm, 200 / spanMm)
+  const w = lengthMm * k, h = spanMm * k
+  const x0 = (vbW - w) / 2, y0 = 40
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [drag, setDrag] = useState<{ id: string; dx: number; dy: number } | null>(null)
+
+  function pointerMm(e: React.PointerEvent): { x: number; y: number } | null {
+    const svg = svgRef.current
+    const ctm = svg?.getScreenCTM()
+    if (!svg || !ctm) return null
+    const pt = svg.createSVGPoint()
+    pt.x = e.clientX; pt.y = e.clientY
+    const p = pt.matrixTransform(ctm.inverse())
+    // x: distance from the left. y: distance from the low (eaves) wall, drawn at the bottom.
+    return { x: (p.x - x0) / k, y: (y0 + h - p.y) / k }
+  }
+  const capture = (e: React.PointerEvent) => { try { (e.target as Element).setPointerCapture(e.pointerId) } catch { /* the drag still works without it */ } }
+  function onDown(e: React.PointerEvent, o: MonoPitchOpening) {
+    const p = pointerMm(e)
+    if (!p) return
+    capture(e)
+    setDrag({ id: o.id, dx: p.x - o.offsetMm, dy: p.y - o.offsetSpanMm })
+  }
+  function onMove(e: React.PointerEvent) {
+    if (!drag) return
+    const p = pointerMm(e)
+    if (!p) return
+    const o = openings.find(op => op.id === drag.id)
+    if (!o) return
+    const snap50 = (n: number) => Math.round(n / 50) * 50
+    onMoveOpening(o.id,
+      Math.max(0, Math.min(Math.max(0, lengthMm - o.widthMm), snap50(p.x - drag.dx))),
+      Math.max(0, Math.min(Math.max(0, spanMm - o.depthMm), snap50(p.y - drag.dy))))
+  }
+
+  const rafterLines: React.ReactNode[] = []
+  for (const r of monoPitchRafterLayout(lengthMm, spanMm, centresMm, openings)) {
+    if (r.replaced) continue
+    const segments: [number, number][] = []
+    let from = 0
+    for (const [a, b] of r.cuts) { if (a > from) segments.push([from, a]); from = Math.max(from, b) }
+    if (from < spanMm) segments.push([from, spanMm])
+    segments.forEach(([a, b], i) => rafterLines.push(
+      <line key={`${r.positionMm}-${i}`} x1={x0 + r.positionMm * k} x2={x0 + r.positionMm * k} y1={y0 + h - b * k} y2={y0 + h - a * k} stroke="#b4b2a9" strokeWidth={1} />,
+    ))
+  }
+
+  const T = RAFTER_THICKNESS_MM
+  const trimmerShapes: React.ReactNode[] = []
+  const member = (key: string, x: number, y: number, wd: number, ht: number) =>
+    <rect key={key} x={x} y={y} width={Math.max(0.8, wd)} height={Math.max(0.8, ht)} fill={TRIMMER_COLOUR} stroke="#fff" strokeWidth={0.4} />
+  for (const o of openings) {
+    const n = o.trimmers ?? 2
+    const right = o.offsetMm + o.widthMm
+    const nearY = y0 + h - o.offsetSpanMm * k                    // toward the low wall
+    const farY = y0 + h - (o.offsetSpanMm + o.depthMm) * k       // toward the high wall
+    for (let i = 0; i < n; i++) {
+      trimmerShapes.push(
+        member(`${o.id}-tl-${i}`, x0 + (o.offsetMm - (i + 1) * T) * k, y0, T * k, h),
+        member(`${o.id}-tr-${i}`, x0 + (right + i * T) * k, y0, T * k, h),
+        member(`${o.id}-hn-${i}`, x0 + o.offsetMm * k, nearY + i * T * k, o.widthMm * k, T * k),
+        member(`${o.id}-hf-${i}`, x0 + o.offsetMm * k, farY - (i + 1) * T * k, o.widthMm * k, T * k),
+      )
+    }
+  }
+
+  return (
+    <svg ref={svgRef} viewBox={`0 0 ${vbW} ${vbH}`} onPointerMove={onMove} onPointerUp={() => setDrag(null)} onPointerLeave={() => setDrag(null)}
+      style={{ width: '100%', height: 260, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, touchAction: 'none' }}>
+      <rect x={x0} y={y0} width={w} height={h} fill="#fafaf9" stroke="#78716c" strokeWidth={1.2} />
+      {rafterLines}
+      {trimmerShapes}
+      {openings.map((o, i) => {
+        const st = KIND_STYLE[o.kind]
+        const rx = x0 + o.offsetMm * k, rw = o.widthMm * k
+        const ry = y0 + h - (o.offsetSpanMm + o.depthMm) * k, rh = o.depthMm * k
+        const dragging = drag?.id === o.id
+        return (
+          <g key={o.id}>
+            {o.kind === 'dome'
+              ? <ellipse cx={rx + rw / 2} cy={ry + rh / 2} rx={rw / 2} ry={rh / 2} fill={st.fill} stroke={dragging ? '#0369a1' : st.stroke} strokeWidth={dragging ? 2.5 : 1.5} cursor="grab" onPointerDown={e => onDown(e, o)} />
+              : <rect x={rx} y={ry} width={rw} height={rh} fill={st.fill} stroke={dragging ? '#0369a1' : st.stroke} strokeWidth={dragging ? 2.5 : 1.5} cursor="grab" onPointerDown={e => onDown(e, o)} />}
+            <text x={rx + rw / 2} y={ry + rh / 2 + 3} fontSize={9} textAnchor="middle" fill={st.stroke} pointerEvents="none">{i + 1} {KIND_SHORT[o.kind]}</text>
+          </g>
+        )
+      })}
+      <text x={x0 + w / 2} y={y0 - 8} fontSize={9} fill="#57534e" textAnchor="middle">High wall</text>
+      <text x={x0 + w / 2} y={y0 + h + 16} fontSize={9} fill="#57534e" textAnchor="middle">Low wall — eaves</text>
+      <text x={x0 + w / 2} y={y0 + h + 30} fontSize={9} fill="#64748b" textAnchor="middle">{(lengthMm / 1000).toFixed(2)}m × {(spanMm / 1000).toFixed(2)}m plan · {centresMm}mm rafter centres</text>
+      {openings.length > 0 && <g transform={`translate(${x0}, ${vbH - 8})`}>
+        <line x1={0} x2={16} y1={-3} y2={-3} stroke={TRIMMER_COLOUR} strokeWidth={1.5} /><line x1={0} x2={16} y1={0} y2={0} stroke={TRIMMER_COLOUR} strokeWidth={1.5} />
+        <text x={21} y={0} fontSize={8} fill="#64748b">Trimmer rafters</text>
+      </g>}
+    </svg>
   )
 }
 

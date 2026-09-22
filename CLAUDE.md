@@ -135,7 +135,13 @@ pattern, and **is used from Take-off in the same way** — do not invent a diffe
   at an existing wall), with a Swap button for length/span if the roof was drawn the other way round. Its
   rafter section reuses the flat roof's own span chart (`lib/flat-roof-joist-spans.ts`,
   `checkFlatRoofJoist`/`flatRoofSpanChart`), passing the roof's true sloped rafter length in as the span,
-  rather than duplicating the span-chart physics. `roof-structure`'s "Include fitting the rooflights" optional
+  rather than duplicating the span-chart physics. It also has its own roof-window openings — trimmed rafters
+  (doubled/tripled) and a kerb, positioned in plan and draggable on a plan-view SVG (shown above the
+  cross-section) — mirroring the flat roof's own opening system (`monoPitchRafterLayout`/`openingTrimZoneMm`
+  in `lib/mono-pitch-roof.ts`, a self-contained copy of `flatRoofJoistLayout`'s logic): a member running
+  parallel to the rafters (a side trimmer, or a kerb side up the slope) is true (sloped) length, one running
+  parallel to the eaves (a header, or a kerb side across the slope) is horizontal and unscaled. The rooflight
+  units themselves are still priced separately, under `roof-rooflights`. `roof-structure`'s "Include fitting the rooflights" optional
   labour line points the estimator at `roof-rooflights` instead of duplicating it — a new calculator that also
   fits something another one prices should do the same, not silently double-count. `roof-structure` pairs with
   the `cold_flat_roof`/`warm_flat_roof` Build-Up Types (flat only so far); the others appear under

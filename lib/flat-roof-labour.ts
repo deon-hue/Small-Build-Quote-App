@@ -245,20 +245,31 @@ export function suggestRooflightLabour(groups: { label: string; qty: number; hou
 }
 
 /** The labour for a mono-pitch (lean-to) roof structure priced on its own (Roof → Roof Structure, mono-pitch):
- * the carpenter fixing the wall plate/ledger and hanging the rafters, from the counts already worked out by
- * the engine. */
+ * the carpenter fixing the wall plate/ledger and hanging the rafters, trimming any rooflight openings and
+ * building their kerbs, from the counts already worked out by the engine — and, only if asked for, the
+ * fitter's time to install the rooflights themselves (normally priced under Roof → Rooflights & Dormers
+ * instead, same as the flat roof). */
 export function suggestMonoPitchRoofLabour(g: {
   rafterCount: number; ledgerLm: number; ledgerBoltCount: number; wallPlateLm: number; hangerCount: number; strapCount: number
+  trimLm: number; kerbLm: number; openings: { kind: RoofOpeningKind }[]
 }): LabourSuggestion[] {
-  const c = LABOUR_RATES.carpenter
-  const line1 = line('mono-carp-structure', 'carpenter', 'Fix the wall plate and ledger, and cut and fix the rafters', [
+  const c = LABOUR_RATES.carpenter, f = LABOUR_RATES.fitter
+  const out: (LabourSuggestion | null)[] = []
+  out.push(line('mono-carp-structure', 'carpenter', 'Fix the wall plate and ledger, and cut and fix the rafters', [
     { qty: g.rafterCount, unit: 'rafters', what: '', rate: c.rafter },
     { qty: g.ledgerLm, unit: 'lm', what: 'ledger', rate: c.ledgerLm },
     { qty: g.wallPlateLm, unit: 'lm', what: 'wall plate', rate: c.wallPlateLm },
     { qty: g.hangerCount, unit: 'hangers', what: '', rate: c.hangerNr },
     { qty: g.strapCount, unit: 'straps', what: '', rate: c.strapNr },
-  ])
-  return line1 ? [line1] : []
+  ]))
+  out.push(line('mono-carp-openings', 'carpenter', 'Trim the rooflight openings and build the kerbs', [
+    { qty: g.trimLm, unit: 'lm', what: 'trimmers and headers', rate: c.trimmerLm },
+    { qty: g.kerbLm, unit: 'lm', what: 'kerb', rate: c.kerbLm },
+  ]))
+  const kinds = (['lantern', 'roof-window', 'dome', 'hatch'] as RoofOpeningKind[])
+  out.push(line('mono-fit-rooflights', 'fitter', 'Fit the rooflights (supplied separately)',
+    kinds.map(k => ({ qty: g.openings.filter(o => o.kind === k).length, unit: k === 'roof-window' ? 'roof windows' : `${k}s`, what: '', rate: f[k] })), true))
+  return out.filter((x): x is LabourSuggestion => x !== null)
 }
 
 /** The labour for fascia, soffit and barge boards priced on their own (Roof → Fascias, Soffits & Barge
