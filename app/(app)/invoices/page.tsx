@@ -521,21 +521,40 @@ export default function InvoicesPage() {
 
               {/* Previously invoiced summary */}
               {fromJobId && (() => {
+                const job = jobs.find(j => j.id === fromJobId)
                 const priorInvs = invoices.filter(i => i.jobId === fromJobId && i.id !== editing?.id)
-                if (priorInvs.length === 0) return null
+                // The job's true contract value: the base value plus any variations that have been
+                // approved (or gone on to be invoiced/paid) — matches VariationModal's "Effective Total".
+                const approvedVariations = variations
+                  .filter(v => v.jobId === fromJobId && (v.status === 'approved' || v.status === 'invoiced' || v.status === 'paid'))
+                  .reduce((s, v) => s + (v.total || 0), 0)
+                const jobTotal = (job?.value || 0) + approvedVariations
+                // Paid to date across the whole job: invoices marked paid, plus any cash/cheque/bank
+                // payments recorded directly against the job (CashPaymentModal) — the same two sources
+                // withPriorTotals() combines for the printed invoice's "paid to date" line.
+                const cashPaid = jobPayments.filter(p => p.jobId === fromJobId).reduce((s, p) => s + (p.amount || 0), 0)
+                const paidToDate = priorInvs.filter(i => i.status === 'paid').reduce((s, i) => s + (i.total || 0), 0) + cashPaid
+                const balanceDue = Math.max(0, jobTotal - paidToDate)
+                if (priorInvs.length === 0 && !job) return null
                 const priorTotal = priorInvs.reduce((s, i) => s + (i.total || 0), 0)
-                const priorPaid  = priorInvs.filter(i => i.status === 'paid').reduce((s, i) => s + (i.total || 0), 0)
-                const priorUnpaid = priorTotal - priorPaid
+                const priorUnpaid = priorTotal - (priorInvs.filter(i => i.status === 'paid').reduce((s, i) => s + (i.total || 0), 0))
                 // Item-level breakdown — which specific phases/variations were already
                 // billed, on which invoice, and whether that invoice's been paid yet.
                 const priorItems = priorInvs.flatMap(i => i.lineItems.map(li => ({ ...li, invRef: i.ref, invStatus: i.status })))
                 return (
                   <div style={{ padding: '10px 14px', borderRadius: 6, background: '#f8f5f0', border: '1px solid var(--border)', fontSize: 12, marginBottom: 4 }}>
-                    <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 6, color: 'var(--ink)' }}>Previously invoiced on this job</div>
+                    <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 6, color: 'var(--ink)' }}>{priorInvs.length > 0 ? 'Previously invoiced on this job' : 'This job'}</div>
                     <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: priorItems.length ? 8 : 0 }}>
+                      {job && <span style={{ color: 'var(--muted)' }}>Job total: <strong style={{ color: 'var(--ink)', fontFamily: 'DM Mono, monospace' }}>{fmt(jobTotal)}</strong></span>}
                       <span style={{ color: 'var(--muted)' }}>Invoiced to date: <strong style={{ color: 'var(--ink)', fontFamily: 'DM Mono, monospace' }}>{fmt(priorTotal)}</strong></span>
-                      <span style={{ color: 'var(--muted)' }}>Paid: <strong style={{ color: '#7ab533', fontFamily: 'DM Mono, monospace' }}>{fmt(priorPaid)}</strong></span>
-                      {priorUnpaid > 0 && <span style={{ color: 'var(--muted)' }}>Outstanding: <strong style={{ color: '#d97706', fontFamily: 'DM Mono, monospace' }}>{fmt(priorUnpaid)}</strong></span>}
+                      <span style={{ color: 'var(--muted)' }}>Paid: <strong style={{ color: '#7ab533', fontFamily: 'DM Mono, monospace' }}>{fmt(paidToDate)}</strong></span>
+                      {priorUnpaid > 0 && <span style={{ color: 'var(--muted)' }}>Outstanding on invoices: <strong style={{ color: '#d97706', fontFamily: 'DM Mono, monospace' }}>{fmt(priorUnpaid)}</strong></span>}
+                      {job && (
+                        <span style={{ color: 'var(--muted)' }}>
+                          Balance due on the job — total:{' '}
+                          <strong style={{ color: balanceDue > 0 ? '#c0392b' : '#7ab533', fontFamily: 'DM Mono, monospace' }}>{fmt(balanceDue)}</strong>
+                        </span>
+                      )}
                     </div>
                     {priorItems.length > 0 && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 3, borderTop: '1px solid var(--border)', paddingTop: 6 }}>
