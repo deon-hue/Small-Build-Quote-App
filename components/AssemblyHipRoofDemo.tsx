@@ -16,7 +16,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
 import { fmt } from '@/lib/utils'
-import { calculateHipRoofGeometry, type HipRoofGeometry } from '@/lib/hip-roof'
+import { calculateHipRoofGeometry, type HipRoofGeometry, type HipEndTreatment } from '@/lib/hip-roof'
 import { describeHipRoof, describeHipRoofShort } from '@/lib/hip-roof-description'
 import { suggestHipRoofLabour, toLabourLines, type LabourSuggestion } from '@/lib/flat-roof-labour'
 import {
@@ -50,6 +50,12 @@ function timberRate(grade: SolidJoistGrade, depthMm: number): number {
   return +(grade === 'c24' ? c16 * C24_FACTOR : c16).toFixed(2)
 }
 
+const END_TREATMENT_LABEL: Record<HipEndTreatment, string> = {
+  hip: 'Hipped',
+  gable: 'Gable end (new wall, priced under External Walls)',
+  'existing-wall': 'Against an existing wall — no new wall needed',
+}
+
 export default function AssemblyHipRoofDemo({ onClose, onSave, labourTrades = [], externalLengthMm, externalWidthMm }: Props) {
   const [name, setName]         = useState('Hip Roof Structure')
   const [location, setLocation] = useState('')
@@ -64,6 +70,12 @@ export default function AssemblyHipRoofDemo({ onClose, onSave, labourTrades = []
   const [rafterCentresMm, setRafterCentresMm] = useState(400)
   const [eavesOverhangMm, setEavesOverhangMm] = useState(300)
 
+  // Each end — at the start and the far end of the ridge-direction length — is independently hipped, a
+  // gable, or built against an existing wall (a common real case: hipped at the garden end, tied into the
+  // house at the other). Default to a full hip, the ordinary case.
+  const [endA, setEndA] = useState<HipEndTreatment>('hip')
+  const [endB, setEndB] = useState<HipEndTreatment>('hip')
+
   const [rafterGrade, setRafterGrade] = useState<SolidJoistGrade>('c24')
   const [rafterDepthMm, setRafterDepthMm] = useState(150)
   const [spanLoads, setSpanLoads] = useState<JoistSpanLoads>(DEFAULT_JOIST_SPAN_LOADS)
@@ -72,9 +84,9 @@ export default function AssemblyHipRoofDemo({ onClose, onSave, labourTrades = []
   const [ceilingJoistDepthMm, setCeilingJoistDepthMm] = useState(100)
 
   const geometryResult = useMemo(() => {
-    try { return { ok: true as const, geometry: calculateHipRoofGeometry({ lengthMm, spanMm, pitchDeg, rafterCentresMm, eavesOverhangMm }) } }
+    try { return { ok: true as const, geometry: calculateHipRoofGeometry({ lengthMm, spanMm, pitchDeg, rafterCentresMm, eavesOverhangMm, endA, endB }) } }
     catch (e: any) { return { ok: false as const, error: e.message as string } }
-  }, [lengthMm, spanMm, pitchDeg, rafterCentresMm, eavesOverhangMm])
+  }, [lengthMm, spanMm, pitchDeg, rafterCentresMm, eavesOverhangMm, endA, endB])
   const g: HipRoofGeometry | null = geometryResult.ok ? geometryResult.geometry : null
 
   const spanChart = useMemo(() => flatRoofSpanChart(rafterGrade, spanLoads), [rafterGrade, spanLoads])
@@ -105,10 +117,10 @@ export default function AssemblyHipRoofDemo({ onClose, onSave, labourTrades = []
     if (!g) return []
     const out: AssemblyLayerDef[] = []
     if (g.commonRafterLm > 0) out.push({ id: 'common_rafters', name: `${rafterSectionLabel} common rafters`, category: 'materials', source: 'fixed', fixedQty: g.commonRafterLm, unit: 'lm', unitCost: rafterRate, wastePct })
-    out.push({ id: 'hip_rafters', name: `Hip rafters 47×${hipDepthMm} C24`, category: 'materials', source: 'fixed', fixedQty: g.hipRafterLm, unit: 'lm', unitCost: hipRate, wastePct })
+    if (g.hipRafterLm > 0) out.push({ id: 'hip_rafters', name: `Hip rafters 47×${hipDepthMm} C24`, category: 'materials', source: 'fixed', fixedQty: g.hipRafterLm, unit: 'lm', unitCost: hipRate, wastePct })
     if (g.jackRafterLm > 0) out.push({ id: 'jack_rafters', name: `${rafterSectionLabel} jack rafters`, category: 'materials', source: 'fixed', fixedQty: g.jackRafterLm, unit: 'lm', unitCost: rafterRate, wastePct })
     if (g.ridgeLm > 0) out.push({ id: 'ridge', name: `Ridge board 47×${hipDepthMm} C24`, category: 'materials', source: 'fixed', fixedQty: g.ridgeLm, unit: 'lm', unitCost: ridgeRate, wastePct })
-    out.push({ id: 'wall_plate', name: 'Wall plate 100×50 treated, full perimeter', category: 'materials', source: 'fixed', fixedQty: g.wallPlateLm, unit: 'lm', unitCost: 2.80, wastePct })
+    if (g.wallPlateLm > 0) out.push({ id: 'wall_plate', name: 'Wall plate 100×50 treated', category: 'materials', source: 'fixed', fixedQty: g.wallPlateLm, unit: 'lm', unitCost: 2.80, wastePct })
     if (g.strapCount > 0) out.push({ id: 'straps', name: 'Lateral restraint straps', category: 'materials', source: 'fixed', fixedQty: g.strapCount, unit: 'nr', unitCost: 4.20, roundToWhole: true })
     out.push({ id: 'ceiling_joists', name: `Ceiling joists 47×${ceilingJoistDepthMm} C16`, category: 'materials', source: 'fixed', fixedQty: g.ceilingJoistLm, unit: 'lm', unitCost: ceilingJoistRate, wastePct })
     return out
@@ -164,7 +176,7 @@ export default function AssemblyHipRoofDemo({ onClose, onSave, labourTrades = []
 
   // The customer's description follows the roof until it's edited by hand
   const descInput = g ? {
-    lengthM: g.lengthM, spanM: g.spanM, pitchDeg: g.pitchDeg, isPyramid: g.isPyramid, ridgeLm: g.ridgeLm, rafterSectionLabel,
+    lengthM: g.lengthM, spanM: g.spanM, pitchDeg: g.pitchDeg, endA: g.endA, endB: g.endB, isPyramid: g.isPyramid, ridgeLm: g.ridgeLm, rafterSectionLabel,
     commonRafterCount: g.commonRafterCount, hipRafterCount: g.hipRafterCount, jackRafterCount: g.jackRafterCount,
     ceilingJoistCount: g.ceilingJoistCount, slopeAreaM2: g.slopeAreaM2,
   } : null
@@ -226,14 +238,14 @@ export default function AssemblyHipRoofDemo({ onClose, onSave, labourTrades = []
         <div>
           {g && (<>
             <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 3 }}>Plan</div>
-            <HipRoofPlanSvg lengthMm={lengthMm} spanMm={spanMm} centresMm={rafterCentresMm} isPyramid={g.isPyramid} ridgeLm={g.ridgeLm} />
+            <HipRoofPlanSvg lengthMm={lengthMm} spanMm={spanMm} centresMm={rafterCentresMm} isPyramid={g.isPyramid} ridgeLm={g.ridgeLm} endA={endA} endB={endB} />
             <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 10, marginBottom: 3 }}>Section — through the {g.isPyramid ? 'apex' : 'ridge'}</div>
             <HipRoofSectionSvg g={g} eavesOverhangMm={eavesOverhangMm} />
             {g.warnings.map((w, i) => (
               <div key={i} style={{ fontSize: 11, color: '#c0392b', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, padding: '4px 8px', marginTop: 6 }}>⚠ {w}</div>
             ))}
             <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 8, lineHeight: 1.5 }}>
-              {g.commonRafterCount} common rafters, true length {(g.commonRafterRunMm / 1000).toFixed(2)}m each. 4 hip rafters, true length {(g.hipRafterRunMm / 1000).toFixed(2)}m each. {g.jackRafterCount} jack rafters. {g.isPyramid ? 'No ridge — a pyramid hip.' : `Ridge ${g.ridgeLm.toFixed(1)}m.`} Rise {(g.riseMm / 1000).toFixed(2)}m. Slope area {g.slopeAreaM2.toFixed(1)}m². {g.ceilingJoistCount} ceiling joists.
+              {g.commonRafterCount} common rafters, true length {(g.commonRafterRunMm / 1000).toFixed(2)}m each.{g.hipRafterCount > 0 && <> {g.hipRafterCount} hip rafters, true length {(g.hipRafterRunMm / 1000).toFixed(2)}m each. {g.jackRafterCount} jack rafters.</>} {g.isPyramid ? 'No ridge — a pyramid hip.' : `Ridge ${g.ridgeLm.toFixed(1)}m.`} Rise {(g.riseMm / 1000).toFixed(2)}m. Slope area {g.slopeAreaM2.toFixed(1)}m². {g.ceilingJoistCount} ceiling joists.
             </div>
             <RafterSpanPanel
               chart={spanChart} check={rafterCheck} grade={rafterGrade} spanMm={g.commonRafterRunMm} centresMm={rafterCentresMm} depthMm={rafterDepthMm}
@@ -278,6 +290,24 @@ export default function AssemblyHipRoofDemo({ onClose, onSave, labourTrades = []
               </PropRow></div>
             </div>
             <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>Common and jack rafters use this section. Hip rafters and the ridge board use the next size up.</div>
+          </CollapsibleSection>
+
+          <CollapsibleSection title="Roof ends" borderColor="#bae6fd">
+            <div style={{ display: 'flex', gap: 6 }}>
+              <div style={{ flex: 1 }}><PropRow label="Start end">
+                <select value={endA} onChange={e => setEndA(e.target.value as HipEndTreatment)} style={propInput}>
+                  {(Object.entries(END_TREATMENT_LABEL) as [HipEndTreatment, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </PropRow></div>
+              <div style={{ flex: 1 }}><PropRow label="Far end">
+                <select value={endB} onChange={e => setEndB(e.target.value as HipEndTreatment)} style={propInput}>
+                  {(Object.entries(END_TREATMENT_LABEL) as [HipEndTreatment, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </PropRow></div>
+            </div>
+            <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>
+              Each end of the ridge run — the two ends along the length, not the long eaves — can be hipped, a new gable wall, or built against an existing wall (a rear extension tied into the house at one end, say). A gabled or existing-wall end gets no hip or jack rafters — the ridge and common rafters simply run the full way to it. An existing-wall end also gets no new wall plate there, only restraint straps.
+            </div>
           </CollapsibleSection>
 
           <CollapsibleSection title="Ceiling joists" borderColor="#bae6fd">
@@ -400,19 +430,22 @@ function RafterSpanPanel({ chart, check, grade, spanMm, centresMm, depthMm, pick
   )
 }
 
-// ── The roof in plan: common rafters in the ridge zone (centred), the ridge line itself (or, for a pyramid,
-// nothing — the hips simply meet), and the four hip lines running diagonally from each corner up to a ridge
-// end or the apex, with short jack-rafter ticks filling each hip triangle, getting longer toward the ridge.
-// No roof-window openings yet — see the mono-pitch roof's own plan view for that pattern, ready to reuse
-// when this one needs it. ──
-function HipRoofPlanSvg({ lengthMm, spanMm, centresMm, isPyramid, ridgeLm }: { lengthMm: number; spanMm: number; centresMm: number; isPyramid: boolean; ridgeLm: number }) {
+// ── The roof in plan: common rafters in the ridge zone, the ridge line itself (or, for a pyramid, nothing —
+// the hips simply meet), and a hip line at each corner of a hipped end, with short jack-rafter ticks filling
+// its triangle. A gabled end is drawn as a solid dark bar (a new wall to build); an existing-wall end as a
+// hatched bar (nothing new to build there). No roof-window openings yet — see the mono-pitch roof's own plan
+// view for that pattern, ready to reuse when this one needs it. ──
+function HipRoofPlanSvg({ lengthMm, spanMm, centresMm, isPyramid, ridgeLm, endA, endB }: {
+  lengthMm: number; spanMm: number; centresMm: number; isPyramid: boolean; ridgeLm: number; endA: HipEndTreatment; endB: HipEndTreatment
+}) {
   const vbW = 430, vbH = 260
   const k = Math.min(340 / lengthMm, 170 / spanMm)
   const w = lengthMm * k, h = spanMm * k
   const x0 = (vbW - w) / 2, y0 = 40
   const halfSpanMm = spanMm / 2
   const ridgeMm = ridgeLm * 1000
-  const xRidgeStart = x0 + halfSpanMm * k, xRidgeEnd = x0 + (halfSpanMm + ridgeMm) * k
+  const ridgeStartMm = endA === 'hip' ? halfSpanMm : 0
+  const xRidgeStart = x0 + ridgeStartMm * k, xRidgeEnd = x0 + (ridgeStartMm + ridgeMm) * k
   const yMid = y0 + h / 2
 
   const commonPositions: number[] = []
@@ -423,38 +456,56 @@ function HipRoofPlanSvg({ lengthMm, spanMm, centresMm, isPyramid, ridgeLm }: { l
   for (let d = 0; d <= halfSpanMm; d += centresMm) jackPositions.push(d)
   const interiorJacks = jackPositions.slice(1, -1)
 
+  const endBar = (end: HipEndTreatment, atRight: boolean) => {
+    if (end === 'hip') return null
+    const barX = atRight ? x0 + w - 4 : x0
+    const fill = end === 'gable' ? '#44403c' : 'url(#hipExistingWallHatch)'
+    return <rect x={barX} y={y0} width={4} height={h} fill={fill} stroke={end === 'gable' ? 'none' : '#78716c'} strokeWidth={end === 'gable' ? 0 : 0.6} />
+  }
+
   return (
     <svg viewBox={`0 0 ${vbW} ${vbH}`} style={{ width: '100%', height: 220, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6 }}>
+      <defs>
+        <pattern id="hipExistingWallHatch" patternUnits="userSpaceOnUse" width={5} height={5} patternTransform="rotate(45)">
+          <rect width={5} height={5} fill="#e7e5e4" />
+          <line x1={0} y1={0} x2={0} y2={5} stroke="#a8a29e" strokeWidth={1.5} />
+        </pattern>
+      </defs>
       <rect x={x0} y={y0} width={w} height={h} fill="#fafaf9" stroke="#78716c" strokeWidth={1.2} />
       {/* Common rafters in the ridge zone */}
       {commonPositions.map((p, i) => (
         <line key={`c${i}`} x1={xRidgeStart + p * k} x2={xRidgeStart + p * k} y1={y0} y2={y0 + h} stroke="#b4b2a9" strokeWidth={1} />
       ))}
-      {/* Hips, at each corner */}
-      <line x1={x0} y1={y0} x2={xRidgeStart} y2={yMid} stroke="#b45309" strokeWidth={2} />
-      <line x1={x0} y1={y0 + h} x2={xRidgeStart} y2={yMid} stroke="#b45309" strokeWidth={2} />
-      <line x1={x0 + w} y1={y0} x2={xRidgeEnd} y2={yMid} stroke="#b45309" strokeWidth={2} />
-      <line x1={x0 + w} y1={y0 + h} x2={xRidgeEnd} y2={yMid} stroke="#b45309" strokeWidth={2} />
-      {/* Jacks, both hip ends, both sides — short ticks from the eave in to the hip line */}
+      {/* Hips, at each hipped end's corners */}
+      {endA === 'hip' && <>
+        <line x1={x0} y1={y0} x2={xRidgeStart} y2={yMid} stroke="#b45309" strokeWidth={2} />
+        <line x1={x0} y1={y0 + h} x2={xRidgeStart} y2={yMid} stroke="#b45309" strokeWidth={2} />
+      </>}
+      {endB === 'hip' && <>
+        <line x1={x0 + w} y1={y0} x2={xRidgeEnd} y2={yMid} stroke="#b45309" strokeWidth={2} />
+        <line x1={x0 + w} y1={y0 + h} x2={xRidgeEnd} y2={yMid} stroke="#b45309" strokeWidth={2} />
+      </>}
+      {/* Jacks — only on a hipped end's two faces */}
       {interiorJacks.map((d, i) => {
-        const t = d / halfSpanMm
-        // Left end
-        const xLeftTop = x0 + d * k, yLeftTop = y0 + d * (h / 2 / halfSpanMm)
-        const xLeftBot = x0 + d * k, yLeftBot = y0 + h - d * (h / 2 / halfSpanMm)
-        // Right end
-        const xRightTop = x0 + w - d * k, yRightTop = y0 + d * (h / 2 / halfSpanMm)
-        const xRightBot = x0 + w - d * k, yRightBot = y0 + h - d * (h / 2 / halfSpanMm)
+        const yTop = y0 + d * (h / 2 / halfSpanMm), yBot = y0 + h - d * (h / 2 / halfSpanMm)
         return (
           <React.Fragment key={`j${i}`}>
-            <line x1={xLeftTop} x2={xLeftTop} y1={y0} y2={yLeftTop} stroke="#b4b2a9" strokeWidth={1} />
-            <line x1={xLeftBot} x2={xLeftBot} y1={y0 + h} y2={yLeftBot} stroke="#b4b2a9" strokeWidth={1} />
-            <line x1={xRightTop} x2={xRightTop} y1={y0} y2={yRightTop} stroke="#b4b2a9" strokeWidth={1} />
-            <line x1={xRightBot} x2={xRightBot} y1={y0 + h} y2={yRightBot} stroke="#b4b2a9" strokeWidth={1} />
+            {endA === 'hip' && <>
+              <line x1={x0 + d * k} x2={x0 + d * k} y1={y0} y2={yTop} stroke="#b4b2a9" strokeWidth={1} />
+              <line x1={x0 + d * k} x2={x0 + d * k} y1={y0 + h} y2={yBot} stroke="#b4b2a9" strokeWidth={1} />
+            </>}
+            {endB === 'hip' && <>
+              <line x1={x0 + w - d * k} x2={x0 + w - d * k} y1={y0} y2={yTop} stroke="#b4b2a9" strokeWidth={1} />
+              <line x1={x0 + w - d * k} x2={x0 + w - d * k} y1={y0 + h} y2={yBot} stroke="#b4b2a9" strokeWidth={1} />
+            </>}
           </React.Fragment>
         )
       })}
       {/* Ridge */}
       {!isPyramid && <line x1={xRidgeStart} y1={yMid} x2={xRidgeEnd} y2={yMid} stroke="#0369a1" strokeWidth={2.5} />}
+      {/* A gabled or existing-wall end, drawn as a bar at that end */}
+      {endBar(endA, false)}
+      {endBar(endB, true)}
       <text x={x0 + w / 2} y={y0 - 8} fontSize={9} fill="#57534e" textAnchor="middle">Eaves wall</text>
       <text x={x0 + w / 2} y={y0 + h + 16} fontSize={9} fill="#57534e" textAnchor="middle">Eaves wall</text>
       <text x={x0 + w / 2} y={y0 + h + 30} fontSize={9} fill="#64748b" textAnchor="middle">
@@ -463,6 +514,8 @@ function HipRoofPlanSvg({ lengthMm, spanMm, centresMm, isPyramid, ridgeLm }: { l
       <g transform={`translate(20, ${vbH - 6})`}>
         <line x1={0} x2={16} y1={-3} y2={-3} stroke="#b45309" strokeWidth={2} /><text x={21} y={0} fontSize={8} fill="#64748b">Hip</text>
         <line x1={70} x2={86} y1={-3} y2={-3} stroke="#0369a1" strokeWidth={2} /><text x={91} y={0} fontSize={8} fill="#64748b">Ridge</text>
+        <rect x={140} y={-6} width={8} height={6} fill="#44403c" /><text x={152} y={0} fontSize={8} fill="#64748b">Gable end</text>
+        <rect x={220} y={-6} width={8} height={6} fill="url(#hipExistingWallHatch)" stroke="#78716c" strokeWidth={0.6} /><text x={232} y={0} fontSize={8} fill="#64748b">Existing wall</text>
       </g>
     </svg>
   )

@@ -167,7 +167,18 @@ pattern, and **is used from Take-off in the same way** — do not invent a diffe
   own run is on the diagonal (a 45° hip, stretched by √2), reaching the same rise, so its length comes from
   Pythagoras rather than the roof's pitch angle directly. Only the common-rafter length is checked against the
   span chart; hip and jack rafters (and the ridge board) take the next timber size up, same convention as the
-  ledger/kerb sizing elsewhere. No roof-window openings yet, same as gable. `roof-structure`'s "Include fitting the rooflights" optional
+  ledger/kerb sizing elsewhere. No roof-window openings yet, same as gable. Each of the hip roof's two ends
+  (along the ridge direction, not the long eaves) is independently `'hip' | 'gable' | 'existing-wall'`
+  (`HipEndTreatment`) — a real case: hipped at the garden end, tied into the house at the other. A gabled or
+  existing-wall end gets no hip/jack rafters at all (the ridge and common rafters simply run the full way to
+  it, exactly like a gable roof's), and only an existing-wall end skips the wall-plate credit there (nothing
+  new is built — still gets restraint straps back to it, same as every other end). Both ends non-hip and the
+  ridge runs the full length, same numbers a gable roof would give for that length/span — a good consistency
+  check when extending an engine like this. `isPyramid` only applies when *both* ends are `'hip'` and the
+  ridge would go to zero; a single hip end reaching zero (too short a length for even its own half-span) is a
+  different, genuine problem, warned separately. If a gable roof ever needs the same per-end treatment (one
+  gable end against an existing wall instead of a new wall), this is the pattern to copy — `lib/gable-roof.ts`
+  doesn't have it yet. `roof-structure`'s "Include fitting the rooflights" optional
   labour line points the estimator at `roof-rooflights` instead of duplicating it — a new calculator that also
   fits something another one prices should do the same, not silently double-count. `roof-structure` pairs with
   the `cold_flat_roof`/`warm_flat_roof` Build-Up Types (flat only so far); the others appear under
