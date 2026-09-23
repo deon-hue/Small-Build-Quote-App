@@ -25,7 +25,7 @@ export const LABOUR_TRADE_LABEL: Record<LabourTradeKind, string> = {
 
 /** Hours per unit — rough estimates, one operative. */
 export const LABOUR_RATES = {
-  carpenter: { joist: 0.4, posiJoist: 0.3, ledgerLm: 0.3, wallPlateLm: 0.15, strutPair: 0.1, firringLm: 0.12, deckM2: 0.3, trimmerLm: 0.25, kerbLm: 0.5, fasciaLm: 0.4, soffitLm: 0.3, bargeLm: 0.35, cornerNr: 0.2, endCapNr: 0.1, rafter: 0.45, hangerNr: 0.1, strapNr: 0.1, ridgeLm: 0.3, ceilingJoist: 0.35 },
+  carpenter: { joist: 0.4, posiJoist: 0.3, ledgerLm: 0.3, wallPlateLm: 0.15, strutPair: 0.1, firringLm: 0.12, deckM2: 0.3, trimmerLm: 0.25, kerbLm: 0.5, fasciaLm: 0.4, soffitLm: 0.3, bargeLm: 0.35, cornerNr: 0.2, endCapNr: 0.1, rafter: 0.45, hangerNr: 0.1, strapNr: 0.1, ridgeLm: 0.3, ceilingJoist: 0.35, hipRafter: 0.6, jackRafter: 0.35 },
   roofer: { insulationM2: 0.2, coveringM2: { grp: 0.55, epdm: 0.4, tpo: 0.45 }, trimLm: 0.3, cornerNr: 0.2, leadLm: 0.5, outletNr: 0.75, overflowNr: 0.5 },
   bricklayer: { cavityM2: 1.4, solidM2: 1.0, solidBrickM2: 1.8, copingLm: 0.35, trayLm: 0.15, outletOpeningNr: 0.5 },
   renderer: { renderM2: 0.6 },
@@ -286,6 +286,30 @@ export function suggestGableRoofLabour(g: {
     { qty: g.strapCount, unit: 'straps', what: '', rate: c.strapNr },
   ])
   const line2 = line('gable-carp-joists', 'carpenter', 'Fit the ceiling joists', [
+    { qty: g.ceilingJoistCount, unit: 'joists', what: '', rate: c.ceilingJoist },
+  ])
+  return [line1, line2].filter((x): x is LabourSuggestion => x !== null)
+}
+
+/** The labour for a hip roof structure priced on its own (Roof → Roof Structure, hipped): the carpenter
+ * fixing the wall plates and ridge (if there is one), cutting and fixing the common, hip and jack rafters,
+ * and fitting the ceiling joists, from the counts already worked out by the engine. Hip and jack rafters
+ * each take their own rate — the compound bevel cuts take longer per rafter than a common rafter's plain
+ * cut, jack rafters more so per metre since there are more of them, shorter each. */
+export function suggestHipRoofLabour(g: {
+  commonRafterCount: number; hipRafterCount: number; jackRafterCount: number
+  ridgeLm: number; wallPlateLm: number; strapCount: number; ceilingJoistCount: number
+}): LabourSuggestion[] {
+  const c = LABOUR_RATES.carpenter
+  const line1 = line('hip-carp-structure', 'carpenter', 'Fix the wall plates and ridge, and cut and fix the common, hip and jack rafters', [
+    { qty: g.commonRafterCount, unit: 'common rafters', what: '', rate: c.rafter },
+    { qty: g.hipRafterCount, unit: 'hip rafters', what: '', rate: c.hipRafter },
+    { qty: g.jackRafterCount, unit: 'jack rafters', what: '', rate: c.jackRafter },
+    { qty: g.ridgeLm, unit: 'lm', what: 'ridge', rate: c.ridgeLm },
+    { qty: g.wallPlateLm, unit: 'lm', what: 'wall plate', rate: c.wallPlateLm },
+    { qty: g.strapCount, unit: 'straps', what: '', rate: c.strapNr },
+  ])
+  const line2 = line('hip-carp-joists', 'carpenter', 'Fit the ceiling joists', [
     { qty: g.ceilingJoistCount, unit: 'joists', what: '', rate: c.ceilingJoist },
   ])
   return [line1, line2].filter((x): x is LabourSuggestion => x !== null)

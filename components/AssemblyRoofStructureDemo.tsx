@@ -5,14 +5,15 @@
  *
  * The roof's structure only: for a flat roof its joists, ledger and wall plates, trimmers, firrings, deck and
  * rooflight kerbs. The roof type is chosen here; each type designs its own structure. Flat, mono-pitch
- * (lean-to) and gable roofs are built; hip is next, its own calculator behind this same drop-down. The
- * covering, the gutters and the parapet wall are separate calculators.
+ * (lean-to), gable and hip roofs are all built, each its own calculator behind this drop-down. The covering,
+ * the gutters and the parapet wall are separate calculators.
  */
 
 import React, { useState } from 'react'
 import AssemblyFlatRoofDemo from '@/components/AssemblyFlatRoofDemo'
 import AssemblyMonoPitchRoofDemo from '@/components/AssemblyMonoPitchRoofDemo'
 import AssemblyGableRoofDemo from '@/components/AssemblyGableRoofDemo'
+import AssemblyHipRoofDemo from '@/components/AssemblyHipRoofDemo'
 import type { CostedLine } from '@/lib/assembly-calc'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import { propInput } from '@/components/assembly-ui'
@@ -23,7 +24,7 @@ const ROOF_TYPES: { id: RoofStructureType; label: string; built: boolean }[] = [
   { id: 'flat',  label: 'Flat roof', built: true },
   { id: 'mono',  label: 'Mono-pitch / lean-to roof', built: true },
   { id: 'gable', label: 'Pitched roof — gable ends', built: true },
-  { id: 'hip',   label: 'Pitched roof — hipped (coming next)', built: false },
+  { id: 'hip',   label: 'Pitched roof — hipped', built: true },
 ]
 
 interface Props {
@@ -48,6 +49,7 @@ export default function AssemblyRoofStructureDemo(props: Props) {
       {type === 'flat' && <AssemblyFlatRoofDemo part="structure" {...props} />}
       {type === 'mono' && <AssemblyMonoPitchRoofDemo {...props} />}
       {type === 'gable' && <AssemblyGableRoofDemo {...props} />}
+      {type === 'hip' && <AssemblyHipRoofDemo {...props} />}
     </div>
   )
 }

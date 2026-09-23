@@ -115,8 +115,8 @@ pattern, and **is used from Take-off in the same way** — do not invent a diffe
 - A Sub-Phase picked in the panel *before* drawing carries onto the drawn wall (the queued-element effect in
   `page.tsx`); a calculator sub-phase hides the empty Task dropdown and shows a note instead.
 - Phases wired so far: External Walls, Internal Walls and **Roof**. **The roof is priced in its own sub-phases,
-  one calculator each, never one big screen**: `roof-structure` (Roof Structure — a roof type drop-down, flat
-  and mono-pitch/lean-to built; gable and hip are next, each its own calculator behind it), `roof-covering`
+  one calculator each, never one big screen**: `roof-structure` (Roof Structure — a roof type drop-down; flat,
+  mono-pitch/lean-to, gable and hip are all built, each its own calculator behind it), `roof-covering`
   (Roof Coverings — flat GRP/EPDM/TPO with trims built; pitched tiles/slate next), `roof-rainwater` (Gutters &
   Downpipes), `roof-rooflights` (Rooflights & Dormers — the glazed units/hatches themselves: lantern, roof
   window, fixed flat rooflight, dome, hatch; its own module `lib/rooflight-units.ts` + `lib/rooflight-description.ts`,
@@ -150,7 +150,24 @@ pattern, and **is used from Take-off in the same way** — do not invent a diffe
   the same span chart the same way (true sloped length = half the span plus the overhang, over cos(pitch));
   ceiling joists get a section picker but no span-chart check (a long span needs a binder or an engineer's
   design — noted, not modelled). No roof-window openings yet (mono-pitch's plan-view/trimmer pattern in
-  `lib/mono-pitch-roof.ts` is ready to reuse there when asked). `roof-structure`'s "Include fitting the rooflights" optional
+  `lib/mono-pitch-roof.ts` is ready to reuse there when asked). Hip structure is its own component,
+  `AssemblyHipRoofDemo.tsx` (engine `lib/hip-roof.ts`, description `lib/hip-roof-description.ts`, labour
+  `suggestHipRoofLabour` in `lib/flat-roof-labour.ts`) — common rafters along the ridge zone on the two long
+  sides, four hip rafters at 45° from each corner to a ridge end, jack rafters filling each hip triangle, a
+  wall plate + straps round the full perimeter (every wall is an eaves wall on a hip roof — no gable ends to
+  price under External Walls here), and ceiling joists across the full length. If the span is at least as
+  long as the ridge-direction length the ridge length comes out at zero — a pyramid hip, no ridge board, the
+  four hips meeting at a single apex instead; the engine and screen both handle this without a special case
+  breaking (`isPyramid` flag, checked everywhere a ridge would otherwise be priced or drawn). The roof surface
+  is one uniform pitch everywhere (commons, hips and jacks all lie in the same sloped planes), so the slope
+  area is simply the overhung plan area over cos(pitch) — no need to sum every rafter's own strip, and a
+  cleaner formula than the flat/mono-pitch/gable roofs use, worth carrying back to them if they ever need it.
+  A jack rafter shares its roof plane's pitch with the common rafters it's parallel to, so it uses the very
+  same true-length formula, just with its own (shorter) distance in from the corner as the run; a hip rafter's
+  own run is on the diagonal (a 45° hip, stretched by √2), reaching the same rise, so its length comes from
+  Pythagoras rather than the roof's pitch angle directly. Only the common-rafter length is checked against the
+  span chart; hip and jack rafters (and the ridge board) take the next timber size up, same convention as the
+  ledger/kerb sizing elsewhere. No roof-window openings yet, same as gable. `roof-structure`'s "Include fitting the rooflights" optional
   labour line points the estimator at `roof-rooflights` instead of duplicating it — a new calculator that also
   fits something another one prices should do the same, not silently double-count. `roof-structure` pairs with
   the `cold_flat_roof`/`warm_flat_roof` Build-Up Types (flat only so far); the others appear under
