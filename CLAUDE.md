@@ -117,7 +117,8 @@ pattern, and **is used from Take-off in the same way** — do not invent a diffe
 - Phases wired so far: External Walls, Internal Walls and **Roof**. **The roof is priced in its own sub-phases,
   one calculator each, never one big screen**: `roof-structure` (Roof Structure — a roof type drop-down; flat,
   mono-pitch/lean-to, gable and hip are all built, each its own calculator behind it), `roof-covering`
-  (Roof Coverings — flat GRP/EPDM/TPO with trims built; pitched tiles/slate next), `roof-rainwater` (Gutters &
+  (Roof Coverings — a family drop-down; flat GRP/EPDM/TPO with trims built, and pitched tiles/slate now too),
+  `roof-rainwater` (Gutters &
   Downpipes), `roof-rooflights` (Rooflights & Dormers — the glazed units/hatches themselves: lantern, roof
   window, fixed flat rooflight, dome, hatch; its own module `lib/rooflight-units.ts` + `lib/rooflight-description.ts`,
   no drawn geometry, no items pre-added — see the calculator defaults rule above), `roof-fascia-soffit`
@@ -174,7 +175,28 @@ pattern, and **is used from Take-off in the same way** — do not invent a diffe
   own run is on the diagonal (a 45° hip, stretched by √2), reaching the same rise, so its length comes from
   Pythagoras rather than the roof's pitch angle directly. Only the common-rafter length is checked against the
   span chart; hip and jack rafters (and the ridge board) take the next timber size up, same convention as the
-  ledger/kerb sizing elsewhere. No roof-window openings yet, same as gable. Each of the hip roof's two ends
+  ledger/kerb sizing elsewhere. No roof-window openings yet, same as gable.
+
+  **Pitched roof covering** (`roof-covering`'s `pitched` family, `AssemblyPitchedRoofCoveringDemo.tsx`, engine
+  `lib/pitched-roof-covering.ts`, description `lib/pitched-roof-covering-description.ts`, labour
+  `suggestPitchedRoofCoveringLabour` in `lib/flat-roof-labour.ts`) is a different pattern from every other
+  covering/structure calculator: `lib/pitched-roof-covering.ts` itself is roof-shape-agnostic — it only takes
+  already-worked-out edge lengths (slope area, ridge/hip/verge/abutment/eaves lm) and adds the one covering-
+  specific number, the batten run (`slopeAreaM2 × 1000 / gaugeMm` — an area/gauge identity that holds for a
+  hip's trapezoidal faces too, not just a plain rectangle, since a batten course's length is proportional to
+  local face width and courses are evenly spaced). Which roof type (mono/gable/hip) and which per-end choice
+  gives which edge lengths is worked out by the **screen**, calling `calculateMonoPitchRoofGeometry`/
+  `calculateGableRoofGeometry`/`calculateHipRoofGeometry` **directly at runtime** — screens have no
+  type-only-import restriction, only `lib/*-description.ts`/`lib/*-labour.ts` modules do, so this is fine and
+  reuses the already-tested structure trig rather than re-deriving it a third time. The mapping: a ridge only
+  exists for gable/hip; a hip cap follows the hip rafters' own line (`hipRafterLm`, reused directly); a verge
+  runs up the slope (the true rafter length) at any new-wall gable end, or a hip's non-hipped `'gable'` end;
+  an abutment (lead flashing) runs wherever the roof meets an **existing** wall instead — always at a
+  mono-pitch's high wall (whichever way it's fixed there), or any gable/hip end set to `'existing-wall'`;
+  eaves are simply wherever the structure's own geometry credits a wall plate (`wallPlateLm`, or `lengthM` for
+  mono's one low wall) — "eaves" and "gets a wall plate" are the same thing in every one of these engines, so
+  it's reused rather than re-derived. If a future covering calculator needs the same shape-agnostic-engine
+  pattern, this is the one to copy — not the structure calculators' own self-contained-engine pattern. Each of the hip roof's two ends
   (along the ridge direction, not the long eaves) is independently `'hip' | 'gable' | 'existing-wall'`
   (`HipEndTreatment`) — a real case: hipped at the garden end, tied into the house at the other. A gabled or
   existing-wall end gets no hip/jack rafters at all (the ridge and common rafters simply run the full way to

@@ -26,7 +26,11 @@ export const LABOUR_TRADE_LABEL: Record<LabourTradeKind, string> = {
 /** Hours per unit — rough estimates, one operative. */
 export const LABOUR_RATES = {
   carpenter: { joist: 0.4, posiJoist: 0.3, ledgerLm: 0.3, wallPlateLm: 0.15, strutPair: 0.1, firringLm: 0.12, deckM2: 0.3, trimmerLm: 0.25, kerbLm: 0.5, fasciaLm: 0.4, soffitLm: 0.3, bargeLm: 0.35, cornerNr: 0.2, endCapNr: 0.1, rafter: 0.45, hangerNr: 0.1, strapNr: 0.1, ridgeLm: 0.3, ceilingJoist: 0.35, hipRafter: 0.6, jackRafter: 0.35 },
-  roofer: { insulationM2: 0.2, coveringM2: { grp: 0.55, epdm: 0.4, tpo: 0.45 }, trimLm: 0.3, cornerNr: 0.2, leadLm: 0.5, outletNr: 0.75, overflowNr: 0.5 },
+  roofer: {
+    insulationM2: 0.2, coveringM2: { grp: 0.55, epdm: 0.4, tpo: 0.45, 'concrete-tile': 0.5, 'clay-tile': 0.7, 'natural-slate': 0.8, 'fibre-cement-slate': 0.6 } as Record<string, number>,
+    trimLm: 0.3, cornerNr: 0.2, leadLm: 0.5, outletNr: 0.75, overflowNr: 0.5,
+    membraneM2: 0.15, battenLm: 0.08, ridgeLm: 0.35, hipLm: 0.4, vergeLm: 0.3, abutmentLm: 0.4, eavesLm: 0.15,
+  },
   bricklayer: { cavityM2: 1.4, solidM2: 1.0, solidBrickM2: 1.8, copingLm: 0.35, trayLm: 0.15, outletOpeningNr: 0.5 },
   renderer: { renderM2: 0.6 },
   plumber: { gutterLm: 0.3, fittingNr: 0.15, downpipeLm: 0.35, shoeNr: 0.15, hopperNr: 0.5, offsetNr: 0.3 },
@@ -313,6 +317,30 @@ export function suggestHipRoofLabour(g: {
     { qty: g.ceilingJoistCount, unit: 'joists', what: '', rate: c.ceilingJoist },
   ])
   return [line1, line2].filter((x): x is LabourSuggestion => x !== null)
+}
+
+/** The labour for a pitched roof covering priced on its own (Roof → Roof Coverings, pitched): the roofer
+ * laying the membrane, fixing the battens, then the tiles or slates, and dressing the ridge, hip, verge and
+ * abutment trims, from the lengths and area already worked out by the engine. */
+export function suggestPitchedRoofCoveringLabour(g: {
+  material: string; slopeAreaM2: number; battenLm: number; ridgeLm: number; hipLm: number; vergeLm: number; abutmentLm: number; eavesLm: number
+}): LabourSuggestion[] {
+  const r = LABOUR_RATES.roofer
+  const line1 = line('pitch-cov-membrane-batten', 'roofer', 'Lay the breather membrane and fix the battens', [
+    { qty: g.slopeAreaM2, unit: 'm²', what: 'membrane', rate: r.membraneM2 },
+    { qty: g.battenLm, unit: 'lm', what: 'battens', rate: r.battenLm },
+  ])
+  const line2 = line('pitch-cov-tiling', 'roofer', 'Lay the tiles or slates', [
+    { qty: g.slopeAreaM2, unit: 'm²', what: '', rate: r.coveringM2[g.material] ?? r.coveringM2['concrete-tile'] },
+  ])
+  const line3 = line('pitch-cov-trims', 'roofer', 'Dress the ridge, hip, verge and abutment trims', [
+    { qty: g.ridgeLm, unit: 'lm', what: 'ridge', rate: r.ridgeLm },
+    { qty: g.hipLm, unit: 'lm', what: 'hip', rate: r.hipLm },
+    { qty: g.vergeLm, unit: 'lm', what: 'verge', rate: r.vergeLm },
+    { qty: g.abutmentLm, unit: 'lm', what: 'abutment flashing', rate: r.abutmentLm },
+    { qty: g.eavesLm, unit: 'lm', what: 'eaves', rate: r.eavesLm },
+  ])
+  return [line1, line2, line3].filter((x): x is LabourSuggestion => x !== null)
 }
 
 /** The labour for fascia, soffit and barge boards priced on their own (Roof → Fascias, Soffits & Barge

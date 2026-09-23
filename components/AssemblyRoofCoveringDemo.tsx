@@ -4,13 +4,15 @@
  * Assembly Calculator — Roof Coverings (Roof → Roof Coverings).
  *
  * The roof's insulation and covering. Flat roof coverings are built — GRP (Cure It), EPDM and single-ply, with
- * their trims, edgings and accessories worked out from the roof's edges. Pitched roof coverings (tiles and slate
- * with their battens, felt, ridge, hips and verges) are next, behind this same drop-down. The structure, the
- * gutters and the parapet wall are separate calculators.
+ * their trims, edgings and accessories worked out from the roof's edges. Pitched roof coverings (tiles and
+ * slate with their battens, felt, ridge, hips and verges) are built too, matching the pitched structure
+ * calculators' own roof-shape and per-end choices. The structure, the gutters and the parapet wall are
+ * separate calculators.
  */
 
 import React, { useState } from 'react'
 import AssemblyFlatRoofDemo from '@/components/AssemblyFlatRoofDemo'
+import AssemblyPitchedRoofCoveringDemo from '@/components/AssemblyPitchedRoofCoveringDemo'
 import type { CostedLine } from '@/lib/assembly-calc'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import { propInput } from '@/components/assembly-ui'
@@ -19,7 +21,7 @@ export type RoofCoveringFamily = 'flat' | 'pitched'
 
 const FAMILIES: { id: RoofCoveringFamily; label: string; built: boolean }[] = [
   { id: 'flat',    label: 'Flat roof covering — GRP, EPDM, single-ply', built: true },
-  { id: 'pitched', label: 'Pitched roof covering — tiles and slate (coming next)', built: false },
+  { id: 'pitched', label: 'Pitched roof covering — tiles and slate', built: true },
 ]
 
 interface Props {
@@ -42,6 +44,7 @@ export default function AssemblyRoofCoveringDemo(props: Props) {
         </select>
       </div>
       {family === 'flat' && <AssemblyFlatRoofDemo part="covering" {...props} />}
+      {family === 'pitched' && <AssemblyPitchedRoofCoveringDemo {...props} />}
     </div>
   )
 }
