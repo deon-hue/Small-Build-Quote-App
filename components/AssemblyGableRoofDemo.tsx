@@ -15,7 +15,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
 import { fmt } from '@/lib/utils'
-import { calculateGableRoofGeometry, type GableRoofGeometry } from '@/lib/gable-roof'
+import { calculateGableRoofGeometry, type GableRoofGeometry, type GableEndTreatment } from '@/lib/gable-roof'
 import { describeGableRoof, describeGableRoofShort } from '@/lib/gable-roof-description'
 import { suggestGableRoofLabour, toLabourLines, type LabourSuggestion } from '@/lib/flat-roof-labour'
 import {
@@ -49,6 +49,11 @@ function timberRate(grade: SolidJoistGrade, depthMm: number): number {
   return +(grade === 'c24' ? c16 * C24_FACTOR : c16).toFixed(2)
 }
 
+const END_TREATMENT_LABEL: Record<GableEndTreatment, string> = {
+  gable: 'New gable wall (priced under External Walls)',
+  'existing-wall': 'Against an existing wall — no new wall needed',
+}
+
 export default function AssemblyGableRoofDemo({ onClose, onSave, labourTrades = [], externalLengthMm, externalWidthMm }: Props) {
   const [name, setName]         = useState('Gable Roof Structure')
   const [location, setLocation] = useState('')
@@ -63,6 +68,12 @@ export default function AssemblyGableRoofDemo({ onClose, onSave, labourTrades = 
   const [rafterCentresMm, setRafterCentresMm] = useState(400)
   const [eavesOverhangMm, setEavesOverhangMm] = useState(300)
 
+  // Each gable end — at the start and the far end of the ridge — is independently a new gable wall or built
+  // against an existing wall (a rear extension tied into the house at one end, say — the same real case the
+  // hip roof's per-end treatment handles). Default to a new gable wall at both, the ordinary case.
+  const [endA, setEndA] = useState<GableEndTreatment>('gable')
+  const [endB, setEndB] = useState<GableEndTreatment>('gable')
+
   const [rafterGrade, setRafterGrade] = useState<SolidJoistGrade>('c24')
   const [rafterDepthMm, setRafterDepthMm] = useState(150)
   const [spanLoads, setSpanLoads] = useState<JoistSpanLoads>(DEFAULT_JOIST_SPAN_LOADS)
@@ -71,9 +82,9 @@ export default function AssemblyGableRoofDemo({ onClose, onSave, labourTrades = 
   const [ceilingJoistDepthMm, setCeilingJoistDepthMm] = useState(100)
 
   const geometryResult = useMemo(() => {
-    try { return { ok: true as const, geometry: calculateGableRoofGeometry({ lengthMm, spanMm, pitchDeg, rafterCentresMm, eavesOverhangMm }) } }
+    try { return { ok: true as const, geometry: calculateGableRoofGeometry({ lengthMm, spanMm, pitchDeg, rafterCentresMm, eavesOverhangMm, endA, endB }) } }
     catch (e: any) { return { ok: false as const, error: e.message as string } }
-  }, [lengthMm, spanMm, pitchDeg, rafterCentresMm, eavesOverhangMm])
+  }, [lengthMm, spanMm, pitchDeg, rafterCentresMm, eavesOverhangMm, endA, endB])
   const g: GableRoofGeometry | null = geometryResult.ok ? geometryResult.geometry : null
 
   const spanChart = useMemo(() => flatRoofSpanChart(rafterGrade, spanLoads), [rafterGrade, spanLoads])
@@ -159,7 +170,7 @@ export default function AssemblyGableRoofDemo({ onClose, onSave, labourTrades = 
   const totalCost = costSubtotal + profitAmount
 
   // The customer's description follows the roof until it's edited by hand
-  const descInput = g ? { lengthM: g.lengthM, spanM: g.spanM, pitchDeg: g.pitchDeg, rafterCount: g.rafterCount, rafterSectionLabel, ridgeLm: g.ridgeLm, ceilingJoistCount: g.ceilingJoistCount, slopeAreaM2: g.slopeAreaM2 } : null
+  const descInput = g ? { lengthM: g.lengthM, spanM: g.spanM, pitchDeg: g.pitchDeg, endA: g.endA, endB: g.endB, rafterCount: g.rafterCount, rafterSectionLabel, ridgeLm: g.ridgeLm, ceilingJoistCount: g.ceilingJoistCount, slopeAreaM2: g.slopeAreaM2 } : null
   const [descriptionOverride, setDescriptionOverride] = useState<string | null>(null)
   const [detailOverride, setDetailOverride] = useState<string | null>(null)
   const description = descriptionOverride ?? (descInput ? describeGableRoofShort(descInput) : '')
@@ -218,7 +229,7 @@ export default function AssemblyGableRoofDemo({ onClose, onSave, labourTrades = 
         <div>
           {g && (<>
             <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 3 }}>Plan</div>
-            <GableRoofPlanSvg lengthMm={lengthMm} spanMm={spanMm} centresMm={rafterCentresMm} />
+            <GableRoofPlanSvg lengthMm={lengthMm} spanMm={spanMm} centresMm={rafterCentresMm} endA={endA} endB={endB} />
             <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 10, marginBottom: 3 }}>Section</div>
             <GableRoofSectionSvg g={g} eavesOverhangMm={eavesOverhangMm} />
             {g.warnings.map((w, i) => (
@@ -268,6 +279,24 @@ export default function AssemblyGableRoofDemo({ onClose, onSave, labourTrades = 
                   {TIMBER_DEPTHS_MM.map(d => <option key={d} value={d}>47×{d}</option>)}
                 </select>
               </PropRow></div>
+            </div>
+          </CollapsibleSection>
+
+          <CollapsibleSection title="Gable ends" borderColor="#bae6fd">
+            <div style={{ display: 'flex', gap: 6 }}>
+              <div style={{ flex: 1 }}><PropRow label="Start end">
+                <select value={endA} onChange={e => setEndA(e.target.value as GableEndTreatment)} style={propInput}>
+                  {(Object.entries(END_TREATMENT_LABEL) as [GableEndTreatment, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </PropRow></div>
+              <div style={{ flex: 1 }}><PropRow label="Far end">
+                <select value={endB} onChange={e => setEndB(e.target.value as GableEndTreatment)} style={propInput}>
+                  {(Object.entries(END_TREATMENT_LABEL) as [GableEndTreatment, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </PropRow></div>
+            </div>
+            <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>
+              Each end — at the ridge's two ends, not the long eaves — is a new gable wall (priced under External Walls, not here) or built against an existing wall (a rear extension tied into the house at one end, say). The rafter framing is the same either way; an existing-wall end just gets restraint straps instead of a new wall to bear on.
             </div>
           </CollapsibleSection>
 
@@ -392,9 +421,11 @@ function RafterSpanPanel({ chart, check, grade, spanMm, centresMm, depthMm, pick
 }
 
 // ── The roof in plan: the ridge length across, the overall span down, with a centre ridge line and rafters
-// drawn both sides of it at their centres — a simple stand-in until roof windows are added here too (see
-// the mono-pitch roof's own plan view for that pattern, ready to reuse when this one needs it). ──
-function GableRoofPlanSvg({ lengthMm, spanMm, centresMm }: { lengthMm: number; spanMm: number; centresMm: number }) {
+// drawn both sides of it at their centres. Each end is drawn as a bar: solid dark for a new gable wall to
+// build, hatched for one built against an existing wall (nothing new there) — same convention the hip roof's
+// plan view uses. No roof-window openings yet — see the mono-pitch roof's own plan view for that pattern,
+// ready to reuse when this one needs it. ──
+function GableRoofPlanSvg({ lengthMm, spanMm, centresMm, endA, endB }: { lengthMm: number; spanMm: number; centresMm: number; endA: GableEndTreatment; endB: GableEndTreatment }) {
   const vbW = 430, vbH = 260
   const k = Math.min(340 / lengthMm, 170 / spanMm)
   const w = lengthMm * k, h = spanMm * k
@@ -402,17 +433,34 @@ function GableRoofPlanSvg({ lengthMm, spanMm, centresMm }: { lengthMm: number; s
   const positions: number[] = []
   for (let x = 0; x <= lengthMm; x += centresMm) positions.push(x)
   if (positions[positions.length - 1] !== lengthMm) positions.push(lengthMm)
+  const endBar = (end: GableEndTreatment, atRight: boolean) => {
+    const barX = atRight ? x0 + w - 4 : x0
+    const fill = end === 'gable' ? '#44403c' : 'url(#gableExistingWallHatch)'
+    return <rect x={barX} y={y0} width={4} height={h} fill={fill} stroke={end === 'gable' ? 'none' : '#78716c'} strokeWidth={end === 'gable' ? 0 : 0.6} />
+  }
   return (
     <svg viewBox={`0 0 ${vbW} ${vbH}`} style={{ width: '100%', height: 220, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6 }}>
+      <defs>
+        <pattern id="gableExistingWallHatch" patternUnits="userSpaceOnUse" width={5} height={5} patternTransform="rotate(45)">
+          <rect width={5} height={5} fill="#e7e5e4" />
+          <line x1={0} y1={0} x2={0} y2={5} stroke="#a8a29e" strokeWidth={1.5} />
+        </pattern>
+      </defs>
       <rect x={x0} y={y0} width={w} height={h} fill="#fafaf9" stroke="#78716c" strokeWidth={1.2} />
       {positions.map((p, i) => (
         <line key={i} x1={x0 + p * k} x2={x0 + p * k} y1={y0} y2={y0 + h} stroke="#b4b2a9" strokeWidth={1} />
       ))}
       <line x1={x0} x2={x0 + w} y1={y0 + h / 2} y2={y0 + h / 2} stroke="#0f766e" strokeWidth={2.5} />
+      {endBar(endA, false)}
+      {endBar(endB, true)}
       <text x={x0 + w / 2} y={y0 - 8} fontSize={9} fill="#57534e" textAnchor="middle">Eaves wall</text>
       <text x={x0 + w / 2} y={y0 + h + 16} fontSize={9} fill="#57534e" textAnchor="middle">Eaves wall</text>
       <text x={x0 - 6} y={y0 + h / 2 - 4} fontSize={9} fill="#0f766e" textAnchor="end">Ridge</text>
       <text x={x0 + w / 2} y={y0 + h + 30} fontSize={9} fill="#64748b" textAnchor="middle">{(lengthMm / 1000).toFixed(2)}m × {(spanMm / 1000).toFixed(2)}m plan · {centresMm}mm rafter centres</text>
+      <g transform={`translate(20, ${vbH - 6})`}>
+        <rect x={0} y={-6} width={8} height={6} fill="#44403c" /><text x={12} y={0} fontSize={8} fill="#64748b">Gable end</text>
+        <rect x={80} y={-6} width={8} height={6} fill="url(#gableExistingWallHatch)" stroke="#78716c" strokeWidth={0.6} /><text x={92} y={0} fontSize={8} fill="#64748b">Existing wall</text>
+      </g>
     </svg>
   )
 }

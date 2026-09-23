@@ -146,11 +146,18 @@ pattern, and **is used from Take-off in the same way** — do not invent a diffe
   `suggestGableRoofLabour` in `lib/flat-roof-labour.ts`) — two rafter faces to a ridge, a wall plate + straps
   at each of the two eaves walls (always standalone, no ledger option — a gable roof doesn't bear on an
   existing wall the way a lean-to does), and ceiling joists tying the rafter feet together across the full
-  span; the gable end walls themselves are priced under External Walls, not here. Its rafter section reuses
+  span; a new gable end wall is priced under External Walls, not here. Its rafter section reuses
   the same span chart the same way (true sloped length = half the span plus the overhang, over cos(pitch));
   ceiling joists get a section picker but no span-chart check (a long span needs a binder or an engineer's
   design — noted, not modelled). No roof-window openings yet (mono-pitch's plan-view/trimmer pattern in
-  `lib/mono-pitch-roof.ts` is ready to reuse there when asked). Hip structure is its own component,
+  `lib/mono-pitch-roof.ts` is ready to reuse there when asked). Each of the gable roof's two ends is
+  independently `'gable' | 'existing-wall'` (`GableEndTreatment`), same real case as the hip roof's per-end
+  treatment (a rear extension tied into the house at one end). Unlike hip, a gable end never got a wall-plate
+  credit either way (that was already true before this — the new wall's own top plate is its own build's
+  scope), so `'existing-wall'` only *adds* restraint straps tying the ridge and end rafters back to it — the
+  default (both `'gable'`) case is priced byte-for-byte the same as before this was added, confirmed by
+  re-running the original hand-test unchanged. Rafter/ridge framing is identical for either end treatment
+  (the ridge always runs the full length on a gable roof, unlike a hip's). Hip structure is its own component,
   `AssemblyHipRoofDemo.tsx` (engine `lib/hip-roof.ts`, description `lib/hip-roof-description.ts`, labour
   `suggestHipRoofLabour` in `lib/flat-roof-labour.ts`) — common rafters along the ridge zone on the two long
   sides, four hip rafters at 45° from each corner to a ridge end, jack rafters filling each hip triangle, a
@@ -176,9 +183,7 @@ pattern, and **is used from Take-off in the same way** — do not invent a diffe
   ridge runs the full length, same numbers a gable roof would give for that length/span — a good consistency
   check when extending an engine like this. `isPyramid` only applies when *both* ends are `'hip'` and the
   ridge would go to zero; a single hip end reaching zero (too short a length for even its own half-span) is a
-  different, genuine problem, warned separately. If a gable roof ever needs the same per-end treatment (one
-  gable end against an existing wall instead of a new wall), this is the pattern to copy — `lib/gable-roof.ts`
-  doesn't have it yet. `roof-structure`'s "Include fitting the rooflights" optional
+  different, genuine problem, warned separately. `roof-structure`'s "Include fitting the rooflights" optional
   labour line points the estimator at `roof-rooflights` instead of duplicating it — a new calculator that also
   fits something another one prices should do the same, not silently double-count. `roof-structure` pairs with
   the `cold_flat_roof`/`warm_flat_roof` Build-Up Types (flat only so far); the others appear under
