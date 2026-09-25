@@ -1530,6 +1530,11 @@ export default function SubcontractorsPage() {
                           <button onClick={() => deleteWeek(contactId, ws)} style={{ fontSize: 11, padding: '3px 10px', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 6, cursor: 'pointer' }}>Delete</button>
                         </div>
                       </div>
+                      {isPaye(contactId) && (
+                        <div style={{ padding: '6px 14px', background: '#eef2ff', borderTop: '1px solid #e0e7ff', fontSize: 11, color: '#4338ca', lineHeight: 1.4 }}>
+                          Payroll employee — hours are tracked to the job but never sent to Xero. If {subName} invoices you instead, click <strong>Labour</strong> above to switch to <strong>Sub</strong>.
+                        </div>
+                      )}
                       {isExpanded && (
                         <div>
                           {[...logs].sort((a, b) => a.entry_date.localeCompare(b.entry_date)).map((log) => {
