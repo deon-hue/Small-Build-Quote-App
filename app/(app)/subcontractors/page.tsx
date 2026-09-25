@@ -700,6 +700,8 @@ export default function SubcontractorsPage() {
   }
 
   async function sendToBills(contactId: string, ws: string) {
+    // PAYE employees are paid through payroll, so their hours never become a bill.
+    if (isPaye(contactId)) return
     const key = `${contactId}_${ws}`
     setSendingToBills(key)
     try {
@@ -1508,7 +1510,7 @@ export default function SubcontractorsPage() {
                                   ? <button onClick={() => markWeekPaidCash(contactId, ws)} style={{ fontSize: 11, padding: '3px 10px', background: '#fff', border: '1px solid #d1d5db', color: '#374151', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>💵 Cash paid</button>
                                   : null
                           }
-                          {billableCount > 0 && !wb && (
+                          {billableCount > 0 && !wb && !isPaye(contactId) && (
                             <button
                               onClick={() => sendToBills(contactId, ws)}
                               disabled={sendingToBills === key}

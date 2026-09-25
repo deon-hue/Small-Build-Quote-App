@@ -33,7 +33,9 @@ export async function POST(req: NextRequest) {
     // Look up subcontractor's Xero contact
     let contact: Record<string, unknown> = { Name: 'Unknown Subcontractor' }
     if (contract.contact_id) {
-      const { data: sub } = await sb.from('clients').select('xero_contact_id, name').eq('id', contract.contact_id).single()
+      const { data: sub } = await sb.from('clients').select('xero_contact_id, name, is_paye').eq('id', contract.contact_id).single()
+      // PAYE employees are paid through payroll, not bills.
+      if (sub?.is_paye) return NextResponse.json({ error: `${sub.name ?? 'This worker'} is on PAYE payroll — payments aren't sent to Xero as a bill.` }, { status: 400 })
       if (sub?.xero_contact_id) contact = { ContactID: sub.xero_contact_id }
       else if (sub?.name) contact = { Name: sub.name }
     }
