@@ -744,9 +744,12 @@ export default function SubcontractorsPage() {
       for (const l of billableLogs) if (l.job_id) jobCounts.set(l.job_id, (jobCounts.get(l.job_id) ?? 0) + 1)
       const dominantJobId = [...jobCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? ''
       const weekEnd = new Date(ws + 'T12:00:00'); weekEnd.setDate(weekEnd.getDate() + 6)
+      // The bill deliberately carries NO job: each timesheet day already has its own job cost (against the right
+      // job, even when the week spans several), so a job on the bill would add a second, duplicate cost.
+      void dominantJobId
       await addBill({
         supplierId: contactId, supplierName: contactName(contactId),
-        jobId: dominantJobId,
+        jobId: '',
         billDate: weekEnd.toISOString().slice(0, 10), dueDate: '',
         description: `Week of ${fmtWeekRange(ws)}`,
         lineItems, labourAmount: total, materialsAmount: 0, plantAmount: 0, otherAmount: 0,

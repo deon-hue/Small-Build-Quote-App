@@ -337,8 +337,26 @@ export default function BillsPage() {
     await syncTimeLogsForBill(b, 'paid')
   }
 
+  // A bill made from a weekly timesheet ("→ Bills") stands for that week's non-cash days. Those days keep their
+  // own job costs, so deleting the bill must take them out of the job and put the days back to pending.
+  async function timesheetDaysForBill(b: Bill) {
+    if (!b.supplierId || !b.billDate || !b.description.startsWith('Week of ')) return []
+    const start = new Date(b.billDate + 'T12:00:00'); start.setDate(start.getDate() - 6)
+    const { data } = await sb.from('sub_admin_time_logs').select('id, job_cost_id')
+      .eq('contact_id', b.supplierId).eq('status', 'approved').is('xero_bill_id', null)
+      .gte('entry_date', start.toISOString().slice(0, 10)).lte('entry_date', b.billDate)
+    return (data ?? []) as { id: string; job_cost_id: string | null }[]
+  }
+
   async function del(b: Bill) {
-    if (!confirm(`Delete bill ${b.ref}? This cannot be undone.`)) return
+    const days = await timesheetDaysForBill(b)
+    const extra = days.length > 0
+      ? `\n\nThis also removes the job cost for ${days.length} timesheet day${days.length !== 1 ? 's' : ''} and sets ${days.length !== 1 ? 'them' : 'it'} back to pending.`
+      : ''
+    if (!confirm(`Delete bill ${b.ref}? This cannot be undone.${extra}`)) return
+    const costIds = days.map(d => d.job_cost_id).filter(Boolean) as string[]
+    if (costIds.length > 0) await sb.from('job_costs').delete().in('id', costIds)
+    if (days.length > 0) await sb.from('sub_admin_time_logs').update({ status: 'pending', job_cost_id: null }).in('id', days.map(d => d.id))
     await deleteBill(b.id)
   }
 

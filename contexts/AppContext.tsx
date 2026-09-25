@@ -945,7 +945,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const deleteBill = useCallback(async (id: string) => {
     // Fetch the document link before deleting
     const { data: billRow } = await supabase.from('bills').select('document_id').eq('id', id).single()
-    // Delete bill (job_costs linked via bill_id FK cascade automatically)
+    // Remove the bill's cost lines explicitly (don't rely on the FK cascade), then the bill itself
+    await supabase.from('job_costs').delete().eq('bill_id', id)
     await supabase.from('bills').delete().eq('id', id)
     // Clean up document-allocated job_costs (linked via document_id, no cascade) and reset document to inbox
     if (billRow?.document_id) {
