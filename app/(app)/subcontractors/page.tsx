@@ -93,6 +93,8 @@ interface DayRow {
   notes: string
   paidCash: boolean
   existingId?: string
+  /** The second job on a split day — a separate time log on the same date. */
+  secondary?: boolean
 }
 
 const fmt = (n: number) => `£${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -604,10 +606,30 @@ export default function SubcontractorsPage() {
     const contact = clients.find(c => c.id === contactId)
     const defType: AdminTimeLog['rate_type'] = contact?.subDayRate ? 'day' : contact?.subHalfDayRate ? 'half_day' : contact?.subHourlyRate ? 'hourly' : 'day'
     const defRate = (contact?.subDayRate ?? contact?.subHalfDayRate ?? contact?.subHourlyRate ?? 0).toString()
-    return getWeekDays(ws).map(date => {
-      const ex = existingLogs.find(l => l.contact_id === contactId && l.entry_date === date)
-      if (ex) return { date, active: true, jobId: ex.job_id ?? '', rateType: ex.rate_type, rateAmount: ex.rate_amount.toString(), hours: ex.total_hours?.toString() ?? '', notes: ex.notes, paidCash: ex.status === 'paid', existingId: ex.id }
-      return { date, active: false, jobId: '', rateType: defType, rateAmount: defRate, hours: '', notes: '', paidCash: false }
+    // A day is one row, or two when the sub worked on two jobs (a split day — two logs on the same date).
+    return getWeekDays(ws).flatMap((date): DayRow[] => {
+      const found = existingLogs.filter(l => l.contact_id === contactId && l.entry_date === date)
+      const toRow = (ex: AdminTimeLog, secondary?: boolean): DayRow => ({ date, active: true, jobId: ex.job_id ?? '', rateType: ex.rate_type, rateAmount: ex.rate_amount.toString(), hours: ex.total_hours?.toString() ?? '', notes: ex.notes, paidCash: ex.status === 'paid', existingId: ex.id, secondary })
+      if (found.length === 0) return [{ date, active: false, jobId: '', rateType: defType, rateAmount: defRate, hours: '', notes: '', paidCash: false }]
+      return found.slice(0, 2).map((ex, n) => toRow(ex, n === 1))
+    })
+  }
+
+  // Tick "split day": add a second job to that day. Both halves default to a half-day rate; untick to remove it.
+  function toggleSplitDay(date: string, on: boolean) {
+    const contact = clients.find(c => c.id === weekSub)
+    setWeekRows(rows => {
+      const idx = rows.findIndex(r => r.date === date && !r.secondary)
+      if (idx < 0) return rows
+      const primary = rows[idx]
+      const existing2 = rows.findIndex(r => r.date === date && r.secondary)
+      if (!on) return rows.map((r, n) => n === existing2 ? { ...r, active: false } : r)
+      const half = contact?.subHalfDayRate ?? (primary.rateType === 'day' ? (Number(primary.rateAmount) || 0) / 2 : Number(primary.rateAmount) || 0)
+      const halfRow = { rateType: 'half_day' as const, rateAmount: half.toString(), hours: '' }
+      const next = rows.map((r, n) => n === idx && r.rateType === 'day' ? { ...r, ...halfRow } : r)
+      if (existing2 >= 0) return next.map((r, n) => n === existing2 ? { ...r, active: true } : r)
+      const second: DayRow = { date, active: true, jobId: '', notes: '', paidCash: false, secondary: true, ...halfRow }
+      return [...next.slice(0, idx + 1), second, ...next.slice(idx + 1)]
     })
   }
 
@@ -691,6 +713,9 @@ export default function SubcontractorsPage() {
           }
         }
       } else if (row.existingId) {
+        // Removing a day (or the second half of a split day) also removes the job cost it made
+        const gone = timeLogs.find(l => l.id === row.existingId)
+        if (gone?.job_cost_id) await sb.from('job_costs').delete().eq('id', gone.job_cost_id)
         await sb.from('sub_admin_time_logs').delete().eq('id', row.existingId)
       }
     }
@@ -1845,19 +1870,31 @@ export default function SubcontractorsPage() {
                 </thead>
                 <tbody>
                   {weekRows.map((row, i) => {
-                    const dayLabel = DAY_LABELS[i]
+                    if (row.secondary && !row.active) return null   // an un-split day has no second row to show
+                    const dayLabel = DAY_LABELS[(new Date(row.date + 'T12:00:00').getDay() + 6) % 7]
                     const dateLabel = new Date(row.date + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
                     const rowAmt = row.active ? (row.rateType === 'hourly' ? (Number(row.rateAmount) || 0) * (Number(row.hours) || 0) : (Number(row.rateAmount) || 0)) : 0
+                    const hasSplit = weekRows.some(r => r.date === row.date && r.secondary && r.active)
                     return (
-                      <tr key={row.date} style={{ borderBottom: i < 6 ? '1px solid #f3f4f6' : 'none', background: row.active ? '#fff' : '#fafafa' }}>
+                      <tr key={`${row.date}-${row.secondary ? 2 : 1}`} style={{ borderBottom: i < weekRows.length - 1 ? '1px solid #f3f4f6' : 'none', background: row.active ? '#fff' : '#fafafa' }}>
                         <td style={{ padding: '7px 10px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                            <input type="checkbox" checked={row.active} onChange={e => setWeekRows(rows => rows.map((r, idx) => idx === i ? { ...r, active: e.target.checked } : r))} />
-                            <div>
-                              <div style={{ fontWeight: row.active ? 600 : 400, color: row.active ? '#111827' : '#9ca3af', fontSize: 12 }}>{dayLabel}</div>
-                              <div style={{ fontSize: 11, color: '#9ca3af' }}>{dateLabel}</div>
+                          {row.secondary ? (
+                            <div style={{ fontSize: 11, color: '#6b7280', paddingLeft: 4 }}>↳ 2nd job, {dayLabel}</div>
+                          ) : (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                              <input type="checkbox" checked={row.active} onChange={e => setWeekRows(rows => rows.map((r, idx) => (idx === i || (!e.target.checked && r.date === row.date)) ? { ...r, active: e.target.checked } : r))} />
+                              <div>
+                                <div style={{ fontWeight: row.active ? 600 : 400, color: row.active ? '#111827' : '#9ca3af', fontSize: 12 }}>{dayLabel}</div>
+                                <div style={{ fontSize: 11, color: '#9ca3af' }}>{dateLabel}</div>
+                                {row.active && (
+                                  <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#6b7280', marginTop: 2, cursor: 'pointer' }} title="Worked on two jobs this day — adds a second job line">
+                                    <input type="checkbox" checked={hasSplit} onChange={e => toggleSplitDay(row.date, e.target.checked)} style={{ width: 12, height: 12 }} />
+                                    Split day
+                                  </label>
+                                )}
+                              </div>
                             </div>
-                          </div>
+                          )}
                         </td>
                         <td style={{ padding: '6px 8px' }}>
                           {row.active ? (
@@ -1925,7 +1962,7 @@ export default function SubcontractorsPage() {
                 <tfoot>
                   <tr style={{ background: '#f9fafb', borderTop: '2px solid #e5e7eb' }}>
                     <td colSpan={3} style={{ padding: '10px', fontWeight: 600, fontSize: 13, color: '#374151' }}>
-                      Total · {weekRows.filter(r => r.active).length} day{weekRows.filter(r => r.active).length === 1 ? '' : 's'} worked
+                      Total · {new Set(weekRows.filter(r => r.active).map(r => r.date)).size} day{new Set(weekRows.filter(r => r.active).map(r => r.date)).size === 1 ? '' : 's'} worked
                       {weekRows.some(r => r.active && r.paidCash) && (
                         <span style={{ marginLeft: 10, fontSize: 11, color: '#16a34a', fontWeight: 500 }}>
                           · {weekRows.filter(r => r.active && r.paidCash).length} cash paid
