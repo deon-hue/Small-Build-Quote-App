@@ -805,6 +805,53 @@ export default function SubcontractorsPage() {
     await load()
   }
 
+  async function markWeekPaidCash(contactId: string, ws: string) {
+    const { data: { user } } = await sb.auth.getUser()
+    if (!user) return
+    const weekLogs = timeLogs.filter(l => l.contact_id === contactId && (l.week_start ?? getWeekStart(l.entry_date)) === ws)
+    for (const log of weekLogs) {
+      await sb.from('sub_admin_time_logs').update({ status: 'paid', paid_date: new Date().toISOString().slice(0, 10) }).eq('id', log.id)
+      if (log.job_id) {
+        if (log.job_cost_id) {
+          await sb.from('job_costs').update({ payment_status: 'paid' }).eq('id', log.job_cost_id)
+        } else {
+          const cost = await insertJobCost(sb, user.id, {
+            jobId: log.job_id, source: 'timesheet', costCategory: isPaye(log.contact_id) ? 'labour' : 'subcontractors',
+            supplier: contactName(log.contact_id),
+            description: log.notes || `Sub time — ${log.entry_date}`,
+            docDate: log.entry_date, docNumber: '',
+            netAmount: log.amount, vatAmount: 0, grossAmount: log.amount,
+            paymentStatus: 'paid', chargeToClient: false,
+          })
+          if (cost?.id) await sb.from('sub_admin_time_logs').update({ job_cost_id: cost.id }).eq('id', log.id)
+        }
+      }
+    }
+    await load()
+  }
+
+  async function markDayCash(log: AdminTimeLog) {
+    const { data: { user } } = await sb.auth.getUser()
+    if (!user) return
+    await sb.from('sub_admin_time_logs').update({ status: 'paid', paid_date: new Date().toISOString().slice(0, 10) }).eq('id', log.id)
+    if (log.job_id) {
+      if (log.job_cost_id) {
+        await sb.from('job_costs').update({ payment_status: 'paid' }).eq('id', log.job_cost_id)
+      } else {
+        const cost = await insertJobCost(sb, user.id, {
+          jobId: log.job_id, source: 'timesheet', costCategory: isPaye(log.contact_id) ? 'labour' : 'subcontractors',
+          supplier: contactName(log.contact_id),
+          description: log.notes || `Sub time — ${log.entry_date}`,
+          docDate: log.entry_date, docNumber: '',
+          netAmount: log.amount, vatAmount: 0, grossAmount: log.amount,
+          paymentStatus: 'paid', chargeToClient: false,
+        })
+        if (cost?.id) await sb.from('sub_admin_time_logs').update({ job_cost_id: cost.id }).eq('id', log.id)
+      }
+    }
+    await load()
+  }
+
   async function pushDayToXero(log: AdminTimeLog) {
     setXeroPushingLog(log.id)
     setError('')
@@ -1459,7 +1506,9 @@ export default function SubcontractorsPage() {
                               ? null
                               : allPaid
                                 ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#f3f4f6', color: '#374151', fontWeight: 600 }}>✓ Cash paid</span>
-                                : null
+                                : billableCount > 0 && !wb && isPaye(contactId)
+                                  ? <button onClick={() => markWeekPaidCash(contactId, ws)} style={{ fontSize: 11, padding: '3px 10px', background: '#fff', border: '1px solid #d1d5db', color: '#374151', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>💵 Cash paid</button>
+                                  : null
                           }
                           {billableCount > 0 && !wb && !isPaye(contactId) && (
                             <button
@@ -1506,7 +1555,10 @@ export default function SubcontractorsPage() {
                                       ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>✓ Bill paid</span>
                                       : billSent
                                         ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#ede9fe', color: '#6d28d9', fontWeight: 600 }}>↗ In bills</span>
-                                        : <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#fef9c3', color: '#854d0e', fontWeight: 600 }}>⏳ Pending</span>
+                                        : <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                                            <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#fef9c3', color: '#854d0e', fontWeight: 600 }}>⏳ Pending</span>
+                                            {isPaye(log.contact_id) && <button onClick={() => markDayCash(log)} style={{ fontSize: 10, padding: '2px 7px', background: '#f9fafb', border: '1px solid #d1d5db', color: '#374151', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>💵 Cash</button>}
+                                          </div>
                                 }
                               </div>
                             )
