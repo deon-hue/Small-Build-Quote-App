@@ -550,3 +550,72 @@ textarea{resize:vertical;min-height:56px}
   .portal-login-card{padding:28px 20px}
   .portal-main{padding:18px 14px 60px}
 }
+
+/* ── Touch page design (Jobs, Quotes; more pages to follow) ── */
+/* Same look as the Home overview: soft green canvas, white rounded cards, a page
+   header with one main button, a strip of headline numbers and pill filter chips.
+   The header/numbers/chips are extra markup that is hidden everywhere except touch
+   hardware, and every rule below is touch-only, so desktop is unchanged. */
+.tp-head,.tp-stats,.tp-chips{display:none}
+@media (hover:none) and (pointer:coarse){
+  body,.app,.main,.content{background:#f0f3ec}
+  .topbar{background:#fff}
+  body:has(.tp-head) .topbar-title{display:none}
+  .content{padding:14px 16px 90px}
+  .tp-hide{display:none!important}
+
+  .tp-head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;margin:2px 0 16px}
+  .tp-kicker{font-size:12px;font-weight:700;letter-spacing:1.3px;text-transform:uppercase;color:#41660a}
+  .tp-title{font-size:30px;line-height:1.1;font-weight:700;letter-spacing:-0.6px;margin-top:4px;color:#1f2a24;font-family:'DM Sans',sans-serif}
+  .tp-head-btns{display:flex;gap:10px}
+  .tp-btn{min-height:48px;padding:0 22px;border:none;border-radius:14px;background:#b9dd55;color:#233208;font:inherit;font-size:15px;font-weight:700;cursor:pointer}
+  .tp-btn-light{background:#fff;color:#1f2a24;border:1px solid #e0e6d8}
+  .tp-btn:active{transform:scale(.98)}
+
+  .tp-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px}
+  .tp-stat{background:#fff;border:1px solid #e0e6d8;border-radius:18px;padding:14px 16px;display:flex;flex-direction:column;min-width:0}
+  .tp-stat span{font-size:13px;font-weight:600;color:#5d6b62}
+  .tp-stat b{font-size:26px;line-height:1.15;font-weight:700;letter-spacing:-0.6px;margin-top:4px;color:#1f2a24;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tp-stat em{font-style:normal;font-size:12.5px;color:#5d6b62;margin-top:4px}
+  .tp-chips{display:flex;gap:8px;overflow-x:auto;padding:2px 0 14px;scrollbar-width:none}
+  .tp-chips::-webkit-scrollbar{display:none}
+  .tp-chip{flex:none;min-height:44px;padding:0 16px;border:1px solid #e0e6d8;border-radius:999px;background:#fff;color:#44524a;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+  .tp-chip.on{background:#eaf2d3;border-color:#c9dc95;color:#41660a}
+
+  /* Cards on the green canvas */
+  .card,.sq-card,.empty-dashed{background:#fff;border:1px solid #e0e6d8;border-radius:20px}
+
+  /* Jobs */
+  .jobs-filter-row{margin-bottom:14px!important}
+  .jobs-chips .btn-sm{border-radius:999px;border:1px solid #e0e6d8;background:#fff;color:#44524a;font-weight:600}
+  .jobs-chips .btn-sm.btn-primary{background:#eaf2d3;border-color:#c9dc95;color:#41660a}
+  .jobs-grid{display:grid;grid-template-columns:1fr;gap:12px;align-items:start}
+  .jobs-grid .job-card{margin:0!important}
+  .job-card-actions .btn-sm{border-radius:12px}
+
+  /* Quotes: each quote is a compact card — tap it to reveal the action buttons */
+  .sq-card{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"ref badge" "info val" "signed signed" "actions actions";gap:6px 12px;align-items:center;padding:14px 16px;cursor:pointer;margin-bottom:10px}
+  .sq-ref{grid-area:ref;min-width:0;font-size:12px}
+  .sq-info{grid-area:info;min-width:0}
+  .sq-title{font-size:16px}
+  .sq-sub{line-height:1.4}
+  .sq-val{grid-area:val;min-width:0;font-size:20px;font-weight:600;text-align:right}
+  .sq-side{display:contents}
+  .sq-badge{grid-area:badge;justify-self:end}
+  .sq-signed{grid-area:signed;margin:0!important;text-align:left}
+  .sq-actions{grid-area:actions;display:none;margin:6px 0 0!important;padding-top:12px;border-top:1px solid #eef1e8}
+  .sq-card.open .sq-actions{display:flex}
+  .sq-card.sq-group{display:flex;flex-wrap:wrap}
+  .sq-card.sq-group > div:last-child{min-width:0!important}
+}
+@media (hover:none) and (pointer:coarse) and (min-width:700px){
+  .content{padding:20px 28px 90px}
+  .tp-title{font-size:34px}
+  .jobs-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .add-label{display:inline}
+}
+@media (hover:none) and (pointer:coarse) and (max-width:520px){
+  .tp-stats{grid-template-columns:1fr}
+  .tp-head-btns{width:100%}
+  .tp-head-btns .tp-btn{flex:1}
+}

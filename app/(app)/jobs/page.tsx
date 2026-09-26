@@ -104,8 +104,27 @@ export default function JobsPage() {
     return best ? best.phases : []
   }
 
+  const activeCount = jobs.filter(j => j.stage === 'active').length
+  const planningCount = jobs.filter(j => j.stage === 'planning').length
+  const heldCount = jobs.filter(j => j.stage === 'onhold').length
+  const activeValue = jobs.filter(j => j.stage === 'active').reduce((s, j) => s + j.value, 0)
+
   return (
     <>
+      {/* Phone/tablet header + headline numbers (hidden on desktop by CSS) */}
+      <div className="tp-head">
+        <div>
+          <div className="tp-kicker">Your work</div>
+          <h1 className="tp-title">Jobs</h1>
+        </div>
+        <button className="tp-btn" onClick={openNew}>+ New job</button>
+      </div>
+      <div className="tp-stats">
+        <div className="tp-stat"><span>On site</span><b>{activeCount}</b><em>{fmt(activeValue)} contract value</em></div>
+        <div className="tp-stat"><span>Planning</span><b>{planningCount}</b><em>Not started yet</em></div>
+        <div className="tp-stat"><span>On hold</span><b>{heldCount}</b><em>{heldCount ? 'Needs a decision' : 'None'}</em></div>
+      </div>
+
       {/* Filter + Add button */}
       <div className="jobs-filter-row" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
         <div className="jobs-chips" style={{ display: 'contents' }}>
@@ -118,7 +137,7 @@ export default function JobsPage() {
           ))}
         </div>
         <div className="jobs-spacer" style={{ flex: 1 }} />
-        <button className="btn btn-primary jobs-add" onClick={openNew} aria-label="Add job"><span className="add-plus">+</span><span className="add-label"> Add Job</span></button>
+        <button className="btn btn-primary jobs-add tp-hide" onClick={openNew} aria-label="Add job"><span className="add-plus">+</span><span className="add-label"> Add Job</span></button>
       </div>
 
       {/* Jobs list */}
@@ -126,7 +145,7 @@ export default function JobsPage() {
         ? <div className="empty-dashed"><div style={{ fontSize: 14, marginBottom: 6 }}>No jobs yet</div>
             <div style={{ fontSize: 12, marginBottom: 14 }}>Add your first job above.</div>
           </div>
-        : filtered.map(j => {
+        : <div className="jobs-grid">{filtered.map(j => {
             const jobNum = (() => { const idx = jobs.findIndex(x => x.id === j.id); return idx >= 0 ? `JOB-${String(idx + 1).padStart(3, '0')}` : '' })()
             const pct = j.weeks ? Math.min(100, Math.round((j.done / j.weeks) * 100)) : 0
             const col = jobColor(j.id)
@@ -197,7 +216,7 @@ export default function JobsPage() {
                 )}
               </div>
             )
-          })
+          })}</div>
       }
 
       {/* Job add/edit modal */}

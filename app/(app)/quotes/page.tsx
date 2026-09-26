@@ -26,6 +26,9 @@ export default function SavedQuotesPage() {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({})
   const [downloadingPdfId, setDownloadingPdfId] = useState<string | null>(null)
+  // Phone/tablet only (the chips and tap-to-open are hidden/ignored on desktop by CSS)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'sent' | 'accepted' | 'declined'>('all')
+  const [openQuoteId, setOpenQuoteId] = useState<string | null>(null)
   const router = useRouter()
 
   // Backfill quote item descriptions on load
@@ -70,6 +73,17 @@ export default function SavedQuotesPage() {
       .map(([id, quoteGroup]) => ({ groupId: id, quotes: quoteGroup }))
       .reverse()
   })()
+
+  const STATUS_GROUP: Record<string, typeof statusFilter> = {
+    draft: 'draft', pending: 'draft', 'in-progress': 'draft', review: 'draft', sent: 'sent',
+    accepted: 'accepted', approved: 'accepted', declined: 'declined', rejected: 'declined',
+  }
+  const countFor = (f: typeof statusFilter) => f === 'all' ? active.length : active.filter(q => STATUS_GROUP[q.status] === f).length
+  const visibleGroups = statusFilter === 'all'
+    ? groupedQuotes
+    : groupedQuotes.filter(g => g.quotes.some(q => STATUS_GROUP[q.status] === statusFilter))
+  const sentCount = active.filter(q => q.status === 'sent').length
+  const wonValue = active.filter(q => q.status === 'accepted' || q.status === 'approved').reduce((s, q) => s + quoteTotal(q), 0)
 
   async function handleStatusChange(quote: Quote, status: Quote['status']) {
     await updateQuote({ ...quote, status })
@@ -268,7 +282,29 @@ export default function SavedQuotesPage() {
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+      {/* Phone/tablet header, numbers and status chips (hidden on desktop by CSS) */}
+      <div className="tp-head">
+        <div>
+          <div className="tp-kicker">Sales</div>
+          <h1 className="tp-title">Quotes</h1>
+        </div>
+        <div className="tp-head-btns">
+          <button className="tp-btn tp-btn-light" onClick={() => router.push('/quick-quote')}>Quick quote</button>
+          <button className="tp-btn" onClick={() => router.push('/new-quote')}>+ New quote</button>
+        </div>
+      </div>
+      <div className="tp-stats">
+        <div className="tp-stat"><span>Open value</span><b>{fmt(pipeline)}</b><em>{open.length} open quotes</em></div>
+        <div className="tp-stat"><span>Awaiting reply</span><b>{sentCount}</b><em>Sent to clients</em></div>
+        <div className="tp-stat"><span>Accepted</span><b>{fmt(wonValue)}</b><em>Total won</em></div>
+      </div>
+      <div className="tp-chips">
+        {([['all', 'All'], ['draft', 'Draft'], ['sent', 'Sent'], ['accepted', 'Accepted'], ['declined', 'Declined']] as const).map(([k, label]) => (
+          <button key={k} className={`tp-chip${statusFilter === k ? ' on' : ''}`} onClick={() => setStatusFilter(k)}>{label} {countFor(k)}</button>
+        ))}
+      </div>
+
+      <div className="tp-hide" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
         <div style={{ fontSize: 13, color: 'var(--muted)' }}>
           {active.length
             ? `${open.length} open · ${fmt(pipeline)} pipeline · ${active.length} total${archived.length ? ` · ${archived.length} archived` : ''}`
@@ -295,7 +331,7 @@ export default function SavedQuotesPage() {
             <div style={{ fontSize: 14, marginBottom: 6 }}>No quotes yet</div>
             <div style={{ fontSize: 12, marginBottom: 14 }}>Create your first quote using New Quote.</div>
           </div>
-        : groupedQuotes.map(group => {
+        : visibleGroups.map(group => {
             const isMultiVersion = group.quotes.length > 1
             const isExpanded = expandedGroups[group.groupId]
             const rootQuote = group.quotes[0] // First in sorted order (v1)
@@ -303,7 +339,7 @@ export default function SavedQuotesPage() {
             return (
               <div key={group.groupId}>
                 {isMultiVersion && (
-                  <div className="sq-card" style={{ cursor: 'pointer', position: 'relative' }} onClick={() => setExpandedGroups(prev => ({ ...prev, [group.groupId]: !prev[group.groupId] }))}>
+                  <div className="sq-card sq-group" style={{ cursor: 'pointer', position: 'relative' }} onClick={() => setExpandedGroups(prev => ({ ...prev, [group.groupId]: !prev[group.groupId] }))}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', fontSize: 14, width: 20, textAlign: 'center' }}>
                       {isExpanded ? '▾' : '▸'}
                     </div>
@@ -334,7 +370,7 @@ export default function SavedQuotesPage() {
             const isActioned = isConverted
 
             return (
-              <div key={q.id} className="sq-card" style={{
+              <div key={q.id} className={`sq-card${openQuoteId === q.id ? ' open' : ''}`} onClick={() => setOpenQuoteId(id => id === q.id ? null : q.id)} style={{
                 ...(q.status === 'accepted' ? { borderLeft: '3px solid #7ab533' } : {}),
                 ...(q.versionNumber && isMultiVersion ? { marginLeft: 20 } : {}),
               }}>
@@ -364,16 +400,16 @@ export default function SavedQuotesPage() {
                   </div>
                 </div>
                 <div className="sq-val">{fmt(quoteTotal(q))}</div>
-                <div style={{ textAlign: 'center', minWidth: 200 }}>
-                  <span className={`badge ${Q_BADGE[q.status] || 'b-pending'}`}>{Q_LABEL[q.status] || q.status}</span>
+                <div className="sq-side" style={{ textAlign: 'center', minWidth: 200 }}>
+                  <span className={`badge sq-badge ${Q_BADGE[q.status] || 'b-pending'}`}>{Q_LABEL[q.status] || q.status}</span>
                   {q.clientApprovedBy && (
-                    <div style={{ marginTop: 4 }} title={`Approved ${q.clientApprovedAt ? new Date(q.clientApprovedAt).toLocaleString('en-GB') : ''}`}>
+                    <div className="sq-signed" style={{ marginTop: 4 }} title={`Approved ${q.clientApprovedAt ? new Date(q.clientApprovedAt).toLocaleString('en-GB') : ''}`}>
                       <span style={{ fontSize: 10, background: '#f0f9e8', color: '#4a7c1f', border: '1px solid #b8e08a', borderRadius: 4, padding: '2px 6px', fontWeight: 600 }}>
                         ✅ Signed by {q.clientApprovedBy}
                       </span>
                     </div>
                   )}
-                  <div className="sq-actions" style={{ marginTop: 6 }}>
+                  <div className="sq-actions" onClick={e => e.stopPropagation()} style={{ marginTop: 6 }}>
                     {q.status === 'accepted' ? (
                       <button
                         className="btn-sm btn-locked"
