@@ -62,6 +62,7 @@ function ClientsPageInner() {
   const [saving, setSaving] = useState(false)
   const router = useRouter()
   const [filter, setFilter] = useState<'all' | 'client' | 'supplier' | 'subcontractor'>('all')
+  const [search, setSearch] = useState('') // phone/tablet only: the search box is hidden on desktop by CSS
   const BLANK_SUB_RATES = { subHourlyRate: '', subDayRate: '', subHalfDayRate: '', cisRegistered: false, cisPercentage: '', subPaymentType: 'invoice', isPaye: false }
   const [formSubRates, setFormSubRates] = useState(BLANK_SUB_RATES)
   const detailModal = useDraggableModal()
@@ -347,11 +348,31 @@ function ClientsPageInner() {
   const TYPE_LABEL: Record<string, string> = { client: 'Client', supplier: 'Supplier', subcontractor: 'Sub' }
   const TYPE_COLOR: Record<string, string> = { client: '#2563eb', supplier: '#7c3aed', subcontractor: '#b45309' }
 
-  const filtered = filter === 'all' ? clients : clients.filter(c => (c.clientType || 'client') === filter)
+  const term = search.trim().toLowerCase()
+  const filtered = (filter === 'all' ? clients : clients.filter(c => (c.clientType || 'client') === filter))
+    .filter(c => !term || [c.name, c.email, c.phone].some(v => (v || '').toLowerCase().includes(term)))
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+      {/* Phone/tablet header, search and type chips (hidden on desktop by CSS) */}
+      <div className="tp-head">
+        <div>
+          <div className="tp-kicker">Office</div>
+          <h1 className="tp-title">Contacts</h1>
+        </div>
+        <button className="tp-btn" onClick={openNew}>+ New contact</button>
+      </div>
+      <input className="tp-search" type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, email or phone" />
+      <div className="tp-chips">
+        {(['all', 'client', 'supplier', 'subcontractor'] as const).map(f => (
+          <button key={f} className={`tp-chip${filter === f ? ' on' : ''}`} onClick={() => setFilter(f)}>
+            {f === 'all' ? 'All' : f === 'client' ? 'Clients' : f === 'supplier' ? 'Suppliers' : 'Subcontractors'}{' '}
+            {f === 'all' ? clients.length : clients.filter(c => (c.clientType || 'client') === f).length}
+          </button>
+        ))}
+      </div>
+
+      <div className="tp-hide" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <div style={{ display: 'flex', gap: 6 }}>
           {(['all', 'client', 'supplier', 'subcontractor'] as const).map(f => (
             <button key={f} onClick={() => setFilter(f)} style={{
@@ -374,8 +395,8 @@ function ClientsPageInner() {
         </div>
       )}
 
-      <div className="card">
-        <table className="tbl tbl-responsive">
+      <div className="card tp-plain">
+        <table className="tbl tbl-responsive tbl-cards">
           <thead>
             <tr>
               <th className="col-hide-mobile">Type</th>

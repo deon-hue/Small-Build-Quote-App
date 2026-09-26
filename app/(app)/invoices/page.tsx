@@ -49,6 +49,9 @@ export default function InvoicesPage() {
   const [status, setStatus] = useState<Invoice['status']>('draft')
   const [fromJobId, setFromJobId] = useState('')
   const [saving, setSaving] = useState(false)
+  // Phone/tablet only (chips are hidden on desktop by CSS)
+  const [invFilter, setInvFilter] = useState<'all' | 'draft' | 'sent' | 'paid' | 'overdue'>('all')
+  const [openInvId, setOpenInvId] = useState<string | null>(null)
 
   // Payment plan state
   const [payPlanOn, setPayPlanOn] = useState(false)
@@ -402,6 +405,22 @@ export default function InvoicesPage() {
           ⟳ Syncing invoice statuses with Xero…
         </div>
       )}
+      {/* Phone/tablet header + status chips (hidden on desktop by CSS) */}
+      <div className="tp-head">
+        <div>
+          <div className="tp-kicker">Money</div>
+          <h1 className="tp-title">Invoices</h1>
+        </div>
+        <button className="tp-btn" onClick={openNew}>+ New invoice</button>
+      </div>
+      <div className="tp-chips">
+        {(['all', 'draft', 'sent', 'paid', 'overdue'] as const).map(k => (
+          <button key={k} className={`tp-chip${invFilter === k ? ' on' : ''}`} onClick={() => setInvFilter(k)}>
+            {k === 'all' ? 'All' : INV_LABEL[k] || k} {k === 'all' ? invoices.length : invoices.filter(i => i.status === k).length}
+          </button>
+        ))}
+      </div>
+
       {/* Stats */}
       <div className="stats-grid" style={{ marginBottom: 20 }}>
         <div className="stat green">
@@ -426,7 +445,7 @@ export default function InvoicesPage() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+      <div className="tp-hide" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
         <button className="btn btn-primary" onClick={openNew}>+ New Invoice</button>
       </div>
 
@@ -436,8 +455,8 @@ export default function InvoicesPage() {
             <div style={{ fontSize: 12, marginBottom: 14 }}>Create your first invoice from a job or from scratch.</div>
             <button className="btn btn-primary" onClick={openNew}>+ New Invoice</button>
           </div>
-        : invoices.map(inv => (
-            <div key={inv.id} className="sq-card" style={
+        : invoices.filter(i => invFilter === 'all' || i.status === invFilter).map(inv => (
+            <div key={inv.id} className={`sq-card${openInvId === inv.id ? ' open' : ''}`} onClick={() => setOpenInvId(id => id === inv.id ? null : inv.id)} style={
               inv.status === 'paid' ? { borderLeft: '3px solid #7ab533' } :
               inv.status === 'overdue' ? { borderLeft: '3px solid #c0392b' } : {}
             }>
@@ -455,8 +474,8 @@ export default function InvoicesPage() {
                 </div>
               </div>
               <div className="sq-val">{fmt(inv.total)}</div>
-              <div style={{ textAlign: 'center', minWidth: 220 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <div className="sq-side" style={{ textAlign: 'center', minWidth: 220 }}>
+                <div className="sq-badge" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <span className={`badge ${INV_BADGE[inv.status] || 'b-complete'}`}>{INV_LABEL[inv.status] || inv.status}</span>
                   {inv.syncToXero && (
                     inv.xeroInvoiceId
@@ -477,7 +496,7 @@ export default function InvoicesPage() {
                         </button>
                   )}
                 </div>
-                <div className="sq-actions" style={{ marginTop: 6 }}>
+                <div className="sq-actions" onClick={e => e.stopPropagation()} style={{ marginTop: 6 }}>
                   <button className="btn-sm btn-primary" onClick={() => openEdit(inv)}>✎ Edit</button>
                   <button className="btn-sm btn-outline" onClick={() => handlePrint(inv)}>🖨 Print</button>
                   <button className="btn-sm btn-outline" onClick={() => handleDownload(inv)}>⬇ PDF</button>
