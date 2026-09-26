@@ -1,0 +1,122 @@
+/* HomeOverview — everything is scoped to .ho. Not limited to touch hardware here: the wrapper that shows the
+   component (.launcher in globals.css) is what restricts it to phones and tablets. Layout responds to width. */
+
+.ho{
+  --ho-ink:#1f2a24; --ho-muted:#5d6b62; --ho-bg:#f0f3ec; --ho-card:#ffffff; --ho-border:#e0e6d8;
+  --ho-tint:#eaf2d3; --ho-green:#41660a; --ho-lime:#b9dd55; --ho-lime-ink:#233208;
+  display:flex;min-height:100vh;background:var(--ho-bg);color:var(--ho-ink);font-family:'DM Sans',sans-serif;
+  -webkit-tap-highlight-color:transparent;
+}
+.ho a{color:inherit;text-decoration:none}
+.ho button{font:inherit;color:inherit}
+
+/* ── Brand ── */
+.ho-brand{display:flex;align-items:center;gap:10px}
+.ho-brand-mark{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:10px;background:#26332b;color:#fff;font-weight:700;font-size:18px}
+.ho-brand-name{font-size:22px;font-weight:700;letter-spacing:-0.4px}
+.ho-brand-name span{color:#6b9a12}
+
+/* ── Rail (wide screens only) ── */
+.ho-side{display:none;width:262px;flex:none;position:sticky;top:0;align-self:flex-start;height:100vh;overflow-y:auto;background:#fff;border-right:1px solid var(--ho-border);padding:20px 16px;flex-direction:column;gap:6px}
+.ho-workspace{display:flex;align-items:center;gap:12px;margin:18px 0 12px;padding:12px;border:1px solid var(--ho-border);border-radius:14px;background:#f6f8f1}
+.ho-workspace-ico{display:flex;align-items:center;justify-content:center;flex:none;width:38px;height:38px;border-radius:10px;background:var(--ho-tint);color:var(--ho-green);font-size:13px;font-weight:700}
+.ho-workspace-text,.ho-user-text{display:flex;flex-direction:column;min-width:0}
+.ho-workspace-name,.ho-user-name{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ho-workspace-sub,.ho-user-sub{font-size:12px;color:var(--ho-muted)}
+.ho-side-label{font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--ho-muted);margin:10px 8px 6px}
+.ho-nav{display:flex;flex-direction:column;gap:2px}
+.ho-nav-item{display:flex;align-items:center;gap:14px;min-height:48px;padding:0 14px;border-radius:12px;font-size:15px;font-weight:600;color:#44524a}
+.ho-nav-item.is-active{background:var(--ho-tint);color:var(--ho-green)}
+.ho-nav-item:active{background:#e6ecda}
+.ho-side-foot{margin-top:auto;padding-top:14px;border-top:1px solid var(--ho-border);display:flex;flex-direction:column;gap:2px}
+.ho-user{display:flex;align-items:center;gap:12px;margin-top:8px;padding:8px 6px 4px 8px}
+.ho-user-ico{display:flex;align-items:center;justify-content:center;flex:none;width:38px;height:38px;border-radius:50%;background:#26332b;color:#fff;font-size:13px;font-weight:700}
+.ho-user-text{flex:1}
+.ho-icon-btn{display:flex;align-items:center;justify-content:center;flex:none;width:44px;height:44px;border:none;border-radius:12px;background:none;color:#8a3325;cursor:pointer}
+
+/* ── Main column ── */
+.ho-main{flex:1;min-width:0;padding:16px 18px 40px}
+.ho-compact{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.ho-compact-co{font-size:13px;color:var(--ho-muted);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ho-chips{display:flex;gap:8px;overflow-x:auto;padding:2px 0 14px;margin:0 -18px;padding-left:18px;padding-right:18px;scrollbar-width:none}
+.ho-chips::-webkit-scrollbar{display:none}
+.ho-chip{display:inline-flex;align-items:center;gap:8px;flex:none;min-height:44px;padding:0 16px;border:1px solid var(--ho-border);border-radius:999px;background:#fff;font-size:14px;font-weight:600;color:#44524a;cursor:pointer}
+.ho-chip-out{color:#8a3325}
+.ho-crumb{display:none;font-size:14px;font-weight:600;color:var(--ho-muted);gap:10px;margin-bottom:18px}
+.ho-crumb strong{color:var(--ho-ink)}
+.ho-crumb-sep{opacity:.6}
+
+.ho-hello{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:22px}
+.ho-kicker{font-size:12px;font-weight:700;letter-spacing:1.3px;text-transform:uppercase;color:var(--ho-green)}
+.ho-title{font-size:30px;line-height:1.12;font-weight:700;letter-spacing:-0.6px;margin-top:6px}
+.ho-lead{margin-top:8px;font-size:15px;color:var(--ho-muted)}
+.ho-actions{display:flex;gap:10px;flex-wrap:wrap}
+.ho-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 22px;border-radius:14px;font-size:15px;font-weight:700}
+.ho-btn-light{background:#fff;border:1px solid var(--ho-border)}
+.ho-btn-lime{background:var(--ho-lime);color:var(--ho-lime-ink)}
+.ho-btn:active{transform:scale(.98)}
+
+/* ── Cards ── */
+.ho-card{background:var(--ho-card);border:1px solid var(--ho-border);border-radius:20px}
+.ho-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.ho-stat{position:relative;display:flex;flex-direction:column;padding:16px 16px 14px;min-height:132px}
+.ho-stat:active{background:#f8faf3}
+.ho-stat-ico{position:absolute;top:14px;right:14px;display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:11px;background:var(--ho-tint);color:var(--ho-green)}
+.ho-stat-label{font-size:14px;font-weight:600;color:var(--ho-muted);padding-right:48px}
+.ho-stat-value{font-size:38px;line-height:1.1;font-weight:700;letter-spacing:-1px;margin-top:6px}
+.ho-stat-hint{margin-top:auto;padding-top:10px;font-size:13px;color:var(--ho-muted)}
+
+.ho-two{display:grid;grid-template-columns:1fr;gap:16px;margin-bottom:22px}
+.ho-panel{padding:18px 18px 8px}
+.ho-h2{font-size:19px;font-weight:700;letter-spacing:-0.3px}
+.ho-sub{margin-top:3px;font-size:13.5px;color:var(--ho-muted)}
+.ho-panel-head{margin-bottom:10px}
+.ho-list{display:flex;flex-direction:column}
+.ho-row{display:flex;align-items:center;gap:14px;min-height:68px;padding:12px 0;border-top:1px solid #eef1e8}
+.ho-row:active{background:#f8faf3}
+.ho-row-ico{display:flex;align-items:center;justify-content:center;flex:none;width:40px;height:40px;border-radius:11px;background:var(--ho-tint);color:var(--ho-green)}
+.ho-row-text{display:flex;flex-direction:column;flex:1;min-width:0}
+.ho-row-title{font-size:15px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ho-row-sub{margin-top:2px;font-size:13px;color:var(--ho-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ho-row-go{flex:none;color:#9aa89e}
+.ho-empty{padding:22px 0 26px;font-size:14px;color:var(--ho-muted)}
+.ho-pill{flex:none;padding:6px 12px;border-radius:9px;font-size:12px;font-weight:700}
+.tone-draft{background:#f4ebdc;color:#74500e}
+.tone-live{background:#e3eeb9;color:#3f5f08}
+.tone-sent{background:#e1ecf7;color:#26557f}
+.tone-stop{background:#f6e2dd;color:#87301f}
+.tone-done{background:#e8ebe6;color:#4a5750}
+
+.ho-quick{display:flex;flex-direction:column;gap:14px}
+.ho-quick-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ho-quick-item{display:flex;align-items:center;gap:12px;min-height:60px;padding:0 18px;font-size:15px;font-weight:700;color:var(--ho-ink);cursor:pointer;text-align:left}
+.ho-quick-item svg{color:var(--ho-green);flex:none}
+.ho-quick-item:active{background:#f8faf3}
+
+/* ── Phones ── */
+@media (max-width:520px){
+  .ho-stats{grid-template-columns:1fr}
+  .ho-stat{min-height:0;padding-bottom:12px}
+  .ho-stat-hint{margin-top:6px;padding-top:0}
+  .ho-title{font-size:26px}
+  .ho-actions{width:100%}
+  .ho-actions .ho-btn{flex:1}
+}
+
+/* ── Tablet portrait ── */
+@media (min-width:700px){
+  .ho-main{padding:22px 28px 44px}
+  .ho-chips{margin:0 -28px;padding-left:28px;padding-right:28px}
+  .ho-title{font-size:34px}
+  .ho-quick-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+
+/* ── Wide (tablet landscape): the rail replaces the brand + chips ── */
+@media (min-width:960px){
+  .ho-side{display:flex}
+  .ho-compact,.ho-chips{display:none}
+  .ho-crumb{display:flex}
+  .ho-main{padding:26px 34px 48px}
+  .ho-title{font-size:40px}
+  .ho-two{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)}
+}

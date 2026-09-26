@@ -441,50 +441,11 @@ textarea{resize:vertical;min-height:56px}
 .home-back{display:none}
 @media (hover:none) and (pointer:coarse){
   .sidebar{display:none}
-  .launcher{display:block;margin:0 auto}
+  .launcher{display:block}
   .launcher-hide{display:none}
   .topbar-launcher{display:none}
   .hamburger{display:none}
   .home-back{display:inline-flex;align-items:center;font-size:15px;font-weight:500;color:var(--sky);text-decoration:none;padding:8px 14px 8px 0;margin-right:6px;min-height:44px}
-  .launcher-head{padding:6px 4px 16px}
-  .launcher-sub{font-size:13px;color:var(--muted)}
-  .launcher-title{font-size:28px;font-weight:600;line-height:1.2}
-  /* Icons are grouped by purpose, one colour per group. Tiles use block layout
-     with fixed sizes (not flex) because iOS Safari squashed flex-column tiles. */
-  .launcher-group-title{font-size:12px;font-weight:500;color:var(--muted);margin:16px 4px 8px}
-  .launcher-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px 4px}
-  .launcher-item{display:block;width:100%;font:inherit;text-align:center;color:var(--ink);text-decoration:none;background:none;border:none;padding:0;cursor:pointer;-webkit-tap-highlight-color:transparent}
-  .launcher-ico{display:flex;align-items:center;justify-content:center;flex:none;width:58px;height:58px;min-width:58px;min-height:58px;margin:0 auto 6px;border-radius:16px}
-  .launcher-label{display:block;font-size:11.5px;line-height:1.2;padding:0 2px}
-  .launcher-item:active .launcher-ico{transform:scale(0.95)}
-  /* Bold app-icon style: saturated tile (light-to-deep gradient) with a white icon,
-     and the group heading in the same hue. */
-  .launcher-ico{color:#fff;box-shadow:0 3px 8px rgba(30,32,34,0.18)}
-  .launcher-group-title{font-weight:600}
-  .g-site .launcher-ico{background:linear-gradient(160deg,#4aa8f0,#1f6fd0)}
-  .g-quotes .launcher-ico{background:linear-gradient(160deg,#a07bff,#6a3fdb)}
-  .g-money .launcher-ico{background:linear-gradient(160deg,#84c93b,#4a9120)}
-  .g-office .launcher-ico{background:linear-gradient(160deg,#7d8a99,#4b5663)}
-  .g-site .launcher-group-title{color:#1f6fd0}
-  .g-quotes .launcher-group-title{color:#6a3fdb}
-  .g-money .launcher-group-title{color:#4a9120}
-  .g-office .launcher-group-title{color:#4b5663}
-  .launcher-signout{display:flex;align-items:center;justify-content:center;gap:6px;margin:28px auto 0;font:inherit;font-size:14px;color:#c0392b;background:none;border:none;cursor:pointer;min-height:44px}
-}
-/* Tablets (and phones held sideways): bigger icons, the groups become cards. */
-@media (hover:none) and (pointer:coarse) and (min-width:700px){
-  .launcher{max-width:900px}
-  .launcher-title{font-size:34px}
-  .launcher-groups{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
-  .launcher-group{background:#fff;border:1px solid rgba(0,0,0,0.06);border-radius:20px;padding:14px 14px 18px}
-  .launcher-group-title{font-size:14px;font-weight:600;color:var(--ink);margin:0 4px 12px}
-  .launcher-grid{grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:16px 6px}
-  .launcher-ico{width:68px;height:68px;min-width:68px;min-height:68px;border-radius:19px}
-  .launcher-label{font-size:12.5px}
-}
-@media (hover:none) and (pointer:coarse) and (min-width:1000px){
-  .launcher{max-width:1200px}
-  .launcher-groups{grid-template-columns:repeat(4,minmax(0,1fr))}
 }
 
 /* ═══════════════════════════════════════════════════════════
