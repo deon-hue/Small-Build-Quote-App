@@ -1,0 +1,95 @@
+/* Subcontractors — touch (phone/tablet) layout. Every rule that changes the look is
+   inside the touch-hardware media query; outside it only new touch-only markup is hidden. */
+.wk-lbl{display:none}
+
+@media (hover:none) and (pointer:coarse){
+  .sub-page{padding:0!important}
+  .sub-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+
+  /* Toolbar: search full width, filters + buttons as big tap targets */
+  .sub-toolbar{gap:10px!important;margin-bottom:16px!important}
+  .sub-toolbar input,.sub-toolbar select{min-height:48px;font-size:16px!important;border-radius:14px!important;border:1px solid #e0e6d8!important;background:#fff;padding:0 14px!important;flex:1 1 100%!important;min-width:0!important}
+  .sub-toolbar select{flex:1 1 calc(50% - 5px)!important}
+  .sub-toolbar button{min-height:48px;font-size:14px!important;font-weight:700;border-radius:14px!important;padding:0 18px!important;flex:1 1 auto}
+
+  /* Contracts as cards */
+  .sub-contract{border:1px solid #e0e6d8!important;border-radius:20px!important;background:#fff!important;margin-bottom:12px!important}
+  .sub-ch{flex-wrap:wrap!important;padding:14px 16px!important;row-gap:10px!important}
+  .sub-ch > div:nth-child(2){flex:1 1 60%!important}
+  .sub-ch-btns{flex:1 1 100%;display:flex!important;gap:8px!important}
+  .sub-ch-btns button{flex:1;min-height:44px;font-size:14px!important;border-radius:12px!important}
+  .sub-exp{background:#f7f9f3!important;border-top:1px solid #e0e6d8!important}
+  .sub-exp button{min-height:44px;font-size:14px!important;border-radius:12px!important;padding:0 14px!important}
+  .sub-exp table{display:block;overflow-x:auto;font-size:14px!important}
+  .sub-exp input{font-size:16px!important;min-height:44px}
+
+  /* Weekly timesheets: week cards */
+  .sub-weeks{border-top:none!important;margin-top:24px!important;padding-top:0!important}
+  .sub-weeks select{min-height:48px;font-size:16px!important;border-radius:14px!important;border:1px solid #e0e6d8!important;background:#fff}
+  .tsw-card{border:1px solid #e0e6d8!important;border-radius:20px!important;background:#fff}
+  .tsw-head{display:flex!important;flex-direction:column;align-items:stretch!important;gap:12px!important;padding:14px 16px!important;background:#fff!important}
+  .tsw-left{gap:8px!important;font-size:15px}
+  .tsw-left > span{font-size:14px!important}
+  .tsw-left > span:nth-child(3){font-size:17px!important}
+  .tsw-left > button{min-height:36px;padding:0 14px!important;font-size:13px!important}
+  .tsw-left > span[style*="border-radius: 10"],.tsw-left > span[style*="border-radius:10"]{font-size:13px!important;padding:4px 10px!important}
+  .tsw-right{gap:8px!important;justify-content:flex-start;padding-top:10px;border-top:1px solid #eef1e8}
+  .tsw-total{font-size:22px!important;letter-spacing:-.4px;flex:1 1 100%}
+  .tsw-right button{min-height:48px;padding:0 18px!important;font-size:15px!important;font-weight:700!important;border-radius:14px!important;flex:1 1 auto}
+  .tsw-right > span:not(.tsw-total){font-size:14px!important;padding:8px 14px!important;border-radius:999px!important}
+
+  /* Day rows inside a week: stacked cards */
+  .tsd-row{display:grid!important;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px!important;padding:12px 16px!important;font-size:15px!important;align-items:center!important}
+  .tsd-row > *{min-width:0!important}
+  .tsd-row > span:first-child{grid-column:1;font-weight:700;color:#1f2a24!important;font-size:14px!important}
+  .tsd-row > span:nth-child(4){grid-column:2;grid-row:1;font-size:16px}
+  .tsd-job{grid-column:1/-1;flex:none!important}
+  .tsd-row > span:nth-child(3){grid-column:1/-1;font-size:13px!important}
+  .tsd-row > div,.tsd-row > span:nth-child(n+5){grid-column:1/-1;justify-self:start}
+  .tsd-row > div{align-items:center!important;gap:8px!important}
+  .tsd-row button{min-height:44px;padding:0 16px!important;font-size:14px!important;border-radius:12px!important}
+
+  /* Log-time sheet: full-screen, scrolling, day rows as cards */
+  .wk-overlay{padding:0!important;align-items:stretch!important}
+  .wk-panel{max-width:none!important;max-height:none!important;height:100%;border-radius:0!important;padding:18px 16px 24px!important;background:#f0f3ec!important}
+  .wk-panel h3{font-size:24px!important;letter-spacing:-.5px;color:#1f2a24}
+  .wk-panel input,.wk-panel select{font-size:16px!important;min-height:48px;border-radius:12px!important;border:1px solid #e0e6d8!important;background:#fff}
+  .wk-top{grid-template-columns:1fr!important}
+  .wk-top input[type=date]{padding:0 12px!important}
+  .wk-box{border:none!important;background:none;border-radius:0!important;overflow:visible!important}
+  .wk-table,.wk-table tbody,.wk-table tfoot{display:block;width:100%}
+  .wk-table thead{display:none}
+  .wk-row{display:grid!important;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"day amt" "job job" "rate rate" "cash cash" "notes notes";gap:10px 12px;background:#fff!important;border:1px solid #e0e6d8;border-radius:18px;padding:14px 16px;margin-bottom:10px;align-items:center}
+  .wk-row.wk-off{background:#f7f9f3!important;grid-template-areas:"day amt"}
+  .wk-row.wk-off > td:nth-child(n+2){display:none}
+  .wk-row > td{display:block;padding:0!important;border:none!important;min-width:0}
+  .wk-row > td:nth-child(1){grid-area:day}
+  .wk-row > td:nth-child(2){grid-area:job}
+  .wk-row > td:nth-child(3){grid-area:rate}
+  .wk-row > td:nth-child(4){grid-area:amt;font-size:20px!important;text-align:right;color:#1f2a24!important}
+  .wk-row > td:nth-child(5){grid-area:cash;text-align:left!important}
+  .wk-row > td:nth-child(6){grid-area:notes}
+  .wk-row > td:nth-child(1) input[type=checkbox]{width:28px!important;height:28px!important;flex:none;min-height:0;accent-color:#41660a}
+  .wk-row > td:nth-child(1) > div{gap:12px!important}
+  .wk-row > td:nth-child(1) > div > div > div:first-child{font-size:17px!important}
+  .wk-row > td:nth-child(1) > div > div > div:nth-child(2){font-size:13px!important}
+  .wk-row > td:nth-child(1) > div[style*="paddingLeft"],.wk-row.wk-second > td:nth-child(1) > div{font-size:14px!important}
+  .wk-row.wk-second > td:nth-child(1) > div{padding-left:0!important;line-height:1.3}
+  .wk-row > td:nth-child(1) > div:first-child{align-items:flex-start!important}
+  .wk-split{font-size:14px!important;gap:10px!important;margin-top:6px!important;min-height:44px;color:#44524a!important;font-weight:600}
+  .wk-split input{width:26px!important;height:26px!important;min-height:0!important;accent-color:#41660a}
+  .wk-rate{gap:8px!important;flex-wrap:wrap}
+  .wk-rate select{flex:1 1 110px!important}
+  .wk-rate input{flex:1 1 110px!important;width:auto!important;min-width:0}
+  .wk-cash{display:flex!important;align-items:center;gap:12px;min-height:44px}
+  .wk-cash .wk-lbl{display:inline;font-size:15px;font-weight:600;color:#44524a}
+  .wk-cash input{width:28px!important;height:28px!important;min-height:0!important;order:-1;accent-color:#41660a}
+  .wk-row > td:nth-child(6) input{width:100%!important}
+  .wk-foot{display:grid!important;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;background:#fff!important;border:1px solid #e0e6d8;border-radius:18px;padding:14px 16px;align-items:center}
+  .wk-foot > td{display:block;padding:0!important}
+  .wk-foot > td:nth-child(3){display:none}
+  .wk-foot > td:nth-child(2){font-size:22px!important}
+  .wk-actions{position:sticky;bottom:0;background:#f0f3ec;padding:12px 0 4px;margin:0 -2px;gap:10px!important}
+  .wk-actions button{flex:1;min-height:52px;font-size:16px!important;font-weight:700;border-radius:14px!important}
+  .wk-actions button:last-child{background:#b9dd55!important;color:#233208!important;border:none!important}
+}

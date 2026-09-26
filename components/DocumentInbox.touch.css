@@ -1,0 +1,9 @@
+/* Document inbox: phone/tablet touch layout only. */
+@media (hover:none) and (pointer:coarse){
+  .di-body{padding:0!important}
+  .di-row{flex-wrap:wrap;padding:14px 16px!important;border-radius:18px!important;border-color:#e0e6d8!important;gap:8px 12px!important}
+  .di-main{flex:1 1 60%!important}
+  .di-main > div:first-child{font-size:16px!important;font-weight:700!important}
+  .di-row .btn-sm{min-height:44px;min-width:44px;border-radius:12px;font-size:14px;padding:0 14px}
+  .di-body > div:last-child{gap:10px!important}
+}

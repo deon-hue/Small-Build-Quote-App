@@ -10,6 +10,7 @@ import DocumentReviewModal from './DocumentReviewModal'
 import type { InboxDocument, Job } from '@/lib/types'
 import { useApp } from '@/contexts/AppContext'
 import { fmtDate } from '@/lib/utils'
+import './DocumentInbox.touch.css'
 
 interface Props { jobs: Job[] }
 
@@ -135,16 +136,37 @@ export default function DocumentInbox({ jobs }: Props) {
   const unallocatedCount = docs.filter(d => d.status === 'unallocated').length
 
   return (
-    <div className="card">
-      <div className="card-hd" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+    <div className="card tp-plain">
+      {/* Phone/tablet header, numbers, search and chips (hidden on desktop by CSS) */}
+      <div className="tp-head">
+        <div>
+          <div className="tp-kicker">Money</div>
+          <h1 className="tp-title">Documents</h1>
+        </div>
+        <button className="tp-btn" onClick={() => fileRef.current?.click()} disabled={uploading > 0}>
+          {uploading > 0 ? `Uploading ${uploading}…` : '📷 Scan / upload'}
+        </button>
+      </div>
+      <div className="tp-stats">
+        <div className="tp-stat"><span>To allocate</span><b>{unallocatedCount}</b><em>Unallocated documents</em></div>
+        <div className="tp-stat"><span>Showing</span><b>{shown.length}</b><em>{filter === 'all' ? 'archived' : filter}</em></div>
+        <div className="tp-stat"><span>Total</span><b>{fmt(shownTotal)}</b><em>Of shown documents</em></div>
+      </div>
+      <input className="tp-search" type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search supplier, date, job…" />
+      <div className="tp-chips">
+        {(['all', 'unallocated', 'allocated', 'archived'] as const).map(fk => (
+          <button key={fk} className={`tp-chip${filter === fk ? ' on' : ''}`} onClick={() => setFilter(fk)} style={{ textTransform: 'capitalize' }}>{fk}</button>
+        ))}
+      </div>
+      <div className="card-hd tp-hide" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span>📥 Document Inbox{unallocatedCount > 0 ? ` · ${unallocatedCount} to allocate` : ''}</span>
       </div>
-      <div style={{ padding: '16px 20px' }}>
-        <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--muted)' }}>
+      <div className="di-body" style={{ padding: '16px 20px' }}>
+        <p className="tp-hide" style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--muted)' }}>
           Scan or upload supplier invoices, receipts and delivery notes here. Open each one to check the details and allocate it to a job.
         </p>
 
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+        <div className="tp-hide" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
           <input ref={fileRef} type="file" accept="image/*,application/pdf" multiple style={{ display: 'none' }}
             onChange={e => { const fs = e.target.files ? Array.from(e.target.files) : []; e.target.value = ''; if (fs.length) handleFiles(fs) }} />
           <button className="btn btn-primary" onClick={() => fileRef.current?.click()} disabled={uploading > 0}>
@@ -164,7 +186,7 @@ export default function DocumentInbox({ jobs }: Props) {
         {error && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', borderRadius: 6, padding: '8px 10px', fontSize: 12, marginBottom: 12 }}>{error}</div>}
 
         {!loading && shown.length > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 16, marginBottom: 10, fontSize: 13, color: 'var(--muted)' }}>
+          <div className="tp-hide" style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 16, marginBottom: 10, fontSize: 13, color: 'var(--muted)' }}>
             <span>{shown.length} document{shown.length !== 1 ? 's' : ''}</span>
             {shownTotal > 0 && <span style={{ fontWeight: 700, color: '#1e293b' }}>Total: {fmt(shownTotal)}</span>}
           </div>
@@ -182,9 +204,9 @@ export default function DocumentInbox({ jobs }: Props) {
               const s = summary(doc)
               const isPdf = doc.mimeType === 'application/pdf'
               return (
-                <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 8, background: '#fff' }}>
+                <div key={doc.id} className="di-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 8, background: '#fff' }}>
                   <span style={{ fontSize: 20 }}>{isPdf ? '📄' : '🧾'}</span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="di-main" style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: 13, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.supplier}</div>
                     <div style={{ fontSize: 13, color: '#334155', marginTop: 2, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                       <span style={{ fontWeight: 500 }}>{fmtDate(s.date) || '—'}</span>

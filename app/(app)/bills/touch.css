@@ -1,0 +1,26 @@
+/* Bills: phone/tablet touch layout only. Every rule sits inside the touch media query. */
+.tp-xero{display:none}
+@media (hover:none) and (pointer:coarse){
+  .tp-xero{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#5d6b62;margin:-6px 0 12px}
+  .tp-xero-dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+
+  .bills-cards{min-width:0!important;width:100%!important;table-layout:auto!important;border-collapse:separate!important}
+  .bills-cards colgroup,.bills-cards thead{display:none}
+  .bills-cards tbody{display:grid;grid-template-columns:1fr;gap:10px}
+  .bills-cards tr{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"supplier status" "ref payable" "job date" "actions actions";gap:4px 12px;align-items:center;background:#fff;border:1px solid #e0e6d8!important;border-radius:18px;padding:14px 16px;cursor:pointer}
+  .bills-cards td{display:block;padding:0!important;border:none;min-width:0;white-space:normal!important}
+  .bills-cards td:nth-child(1){grid-area:ref;font-size:13px;color:#5d6b62}
+  .bills-cards td:nth-child(1) > div:first-child{font-weight:600}
+  .bills-cards td:nth-child(2){grid-area:supplier;font-size:16px;font-weight:700;color:#1f2a24;overflow:hidden;text-overflow:ellipsis;white-space:nowrap!important}
+  .bills-cards td:nth-child(3){grid-area:job;font-size:13px;color:#5d6b62;overflow:hidden;text-overflow:ellipsis;white-space:nowrap!important}
+  .bills-cards td:nth-child(4){grid-area:date;justify-self:end;font-size:13px;color:#5d6b62!important;font-weight:500}
+  .bills-cards td:nth-child(5),.bills-cards td:nth-child(6){display:none}
+  .bills-cards td:nth-child(7){grid-area:payable;justify-self:end;font-size:20px;font-weight:600;color:#1f2a24}
+  .bills-cards td:nth-child(8){grid-area:status;justify-self:end}
+  .bills-cards td:nth-child(9){grid-area:actions;display:none;flex-wrap:wrap;gap:8px;margin-top:6px;padding-top:12px!important;border-top:1px solid #eef1e8}
+  .bills-cards tr.open td:nth-child(9){display:flex}
+  .bills-cards td:nth-child(9) .btn{min-height:44px;margin:0!important;border-radius:12px}
+}
+@media (hover:none) and (pointer:coarse) and (min-width:700px){
+  .bills-cards tbody{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
+}

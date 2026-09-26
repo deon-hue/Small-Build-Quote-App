@@ -1,0 +1,30 @@
+.cal-agenda{display:none}
+@media (hover:none) and (pointer:coarse){
+  /* Month/week grids are unusable at finger size: show the agenda list instead (day view is already cards) */
+  .cal-grid-wrap{display:none}
+  .cal-agenda{display:flex;flex-direction:column;gap:10px}
+  .cal-agenda-empty{background:#fff;border:1px solid #e0e6d8;border-radius:18px;padding:28px 16px;text-align:center;color:#5d6b62;font-size:14px}
+  .cal-ag-item{display:flex;align-items:center;gap:14px;background:#fff;border:1px solid #e0e6d8;border-left:6px solid #7ab533;border-radius:18px;padding:14px 16px;min-height:64px;cursor:pointer}
+  .cal-ag-when{flex:none;width:84px;display:flex;flex-direction:column;font-size:12.5px;color:#5d6b62}
+  .cal-ag-when b{font-size:14px;color:#1f2a24}
+  .cal-ag-main{flex:1;min-width:0}
+  .cal-ag-title{font-size:16px;font-weight:700;color:#1f2a24;line-height:1.25}
+  .cal-ag-sub{font-size:13px;color:#5d6b62;margin-top:3px;line-height:1.35}
+  .cal-ag-dur{flex:none;font-size:13px;font-weight:700;color:#41660a;background:#eaf2d3;border-radius:999px;padding:4px 10px}
+
+  /* Toolbar: view switcher on its own row, then prev / label / next */
+  .cal-toolbar{display:grid!important;grid-template-columns:auto 1fr auto;gap:10px!important}
+  .cal-views{grid-column:1/-1;border-radius:14px!important;border-color:#e0e6d8!important;background:#fff}
+  .cal-views button{flex:1;min-height:46px;font-size:15px!important;padding:0 14px!important}
+  .cal-views button[style*="var(--ink)"]{background:#eaf2d3!important;color:#41660a!important}
+  .cal-prev{grid-row:2;grid-column:1}
+  .cal-label{grid-row:2;grid-column:2;font-size:19px!important;white-space:normal!important}
+  .cal-next{grid-row:2;grid-column:3}
+  .cal-toolbar .btn-sm{min-height:46px;padding:0 16px;border-radius:14px;font-size:14px;background:#fff;border:1px solid #e0e6d8;color:#1f2a24}
+  .cal-page .card{border-radius:20px}
+  .cal-page .modal-overlay > div{width:100vw!important;max-width:100vw!important}
+}
+@media (hover:none) and (pointer:coarse) and (min-width:700px){
+  .cal-agenda{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .cal-agenda-empty{grid-column:1/-1}
+}

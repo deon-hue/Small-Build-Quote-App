@@ -7,6 +7,7 @@ import { useApp } from '@/contexts/AppContext'
 import { ContactPicker } from '@/components/ContactPicker'
 import { signedDocUrl, insertJobCost, updateJobCost, deleteJobCost } from '@/lib/job-costs'
 import type { PaymentMethod } from '@/lib/types'
+import './touch.css'
 
 const STAGE_PAYMENT_METHODS: Record<PaymentMethod, string> = {
   cash: '💵 Cash',
@@ -1048,9 +1049,23 @@ export default function SubcontractorsPage() {
   const hasJobCosts = timeLogs.some(l => l.job_id && (l.status === 'approved' || l.status === 'paid'))
 
   return (
-    <div style={{ padding: '24px 24px 80px' }}>
+    <div className="sub-page" style={{ padding: '24px 24px 80px' }}>
+      {/* Touch-only header + numbers (hidden on desktop) */}
+      <div className="tp-head">
+        <div>
+          <div className="tp-kicker">Small Build Company</div>
+          <h1 className="tp-title">Subcontractors</h1>
+        </div>
+        <button className="tp-btn" onClick={() => openWeekSheet()}>+ Log Time</button>
+      </div>
+      <div className="tp-stats sub-stats">
+        <div className="tp-stat"><span>Active contracts</span><b>{activeContracts.length}</b><em>sub contracts</em></div>
+        <div className="tp-stat"><span>Contracted</span><b>{fmt(totalFixedContracted)}</b><em>{fmt(totalFixedPaid)} paid</em></div>
+        <div className="tp-stat"><span>Outstanding</span><b>{fmt(totalFixedContracted - totalFixedPaid)}</b><em>unpaid stages</em></div>
+        <div className="tp-stat"><span>Rate logged</span><b>{fmt(totalRateLogged)}</b><em>from time entries</em></div>
+      </div>
       {/* Summary */}
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
+      <div className="tp-hide" style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
         {card('Active Contracts', String(activeContracts.length), 'sub contracts')}
         {card('Fixed — Contracted', fmt(totalFixedContracted), `${fmt(totalFixedPaid)} paid`)}
         {card('Fixed — Outstanding', fmt(totalFixedContracted - totalFixedPaid), 'unpaid stages')}
@@ -1058,7 +1073,7 @@ export default function SubcontractorsPage() {
       </div>
 
       {/* Toolbar */}
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 20 }}>
+      <div className="sub-toolbar" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 20 }}>
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search subcontractor / job…"
           style={{ flex: 1, minWidth: 180, padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13 }} />
 
@@ -1089,7 +1104,7 @@ export default function SubcontractorsPage() {
         <button onClick={openNewContract} style={{ padding: '8px 16px', background: '#111827', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
           📋 Fixed Quote
         </button>
-        <button onClick={() => openWeekSheet()} style={{ padding: '8px 16px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+        <button className="tp-hide" onClick={() => openWeekSheet()} style={{ padding: '8px 16px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
           ⏱ Log Time
         </button>
         {hasJobCosts && (
@@ -1199,9 +1214,9 @@ export default function SubcontractorsPage() {
         const statusTextColors: Record<string, string> = { active: '#16a34a', completed: '#2563eb', cancelled: '#6b7280' }
 
         return (
-          <div key={c.id} style={{ border: '1px solid #e5e7eb', borderRadius: 8, marginBottom: 12, background: '#fff', overflow: 'hidden' }}>
+          <div key={c.id} className="sub-contract" style={{ border: '1px solid #e5e7eb', borderRadius: 8, marginBottom: 12, background: '#fff', overflow: 'hidden' }}>
             {/* Contract header row */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', cursor: 'pointer' }} onClick={() => toggle(c.id)}>
+            <div className="sub-ch" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', cursor: 'pointer' }} onClick={() => toggle(c.id)}>
               <span style={{ color: '#9ca3af', fontSize: 16, transform: isOpen ? 'rotate(90deg)' : 'none', display: 'inline-block', transition: 'transform 0.15s' }}>▶</span>
 
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -1229,7 +1244,7 @@ export default function SubcontractorsPage() {
                 {c.status}
               </span>
 
-              <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
+              <div className="sub-ch-btns" style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
                 <button
                   title="Send subcontractor portal invite"
                   disabled={portalInviting === c.id}
@@ -1245,7 +1260,7 @@ export default function SubcontractorsPage() {
 
             {/* Expanded content */}
             {isOpen && (
-              <div style={{ borderTop: '1px solid #f3f4f6', padding: '14px 16px', background: '#fafafa' }}>
+              <div className="sub-exp" style={{ borderTop: '1px solid #f3f4f6', padding: '14px 16px', background: '#fafafa' }}>
                 {c.type === 'rate' ? (
                   <>
                     {/* ── Pending Review section ────────────────────────── */}
@@ -1467,7 +1482,7 @@ export default function SubcontractorsPage() {
         }
         const weekGroups = [...weekGroupMap.values()].sort((a, b) => b.ws.localeCompare(a.ws))
         return (
-          <div style={{ marginTop: 40, borderTop: '2px solid #e5e7eb', paddingTop: 28 }}>
+          <div className="sub-weeks" style={{ marginTop: 40, borderTop: '2px solid #e5e7eb', paddingTop: 28 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
               <div>
                 <div style={{ fontSize: 16, fontWeight: 700, color: '#111827' }}>⏱ Weekly Timesheets</div>
@@ -1504,12 +1519,13 @@ export default function SubcontractorsPage() {
                   const billableCount = logs.filter(l => l.status !== 'paid' && !l.xero_bill_id).length
                   const isExpanded = expandedWeeks.has(key)
                   return (
-                    <div key={key} style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+                    <div key={key} className="tsw-card" style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
                       <div
+                        className="tsw-head"
                         style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 14px', background: '#f9fafb', cursor: 'pointer', flexWrap: 'wrap', gap: 8 }}
                         onClick={() => setExpandedWeeks(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <div className="tsw-left" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                           <span style={{ fontSize: 11, color: '#9ca3af' }}>{isExpanded ? '▲' : '▼'}</span>
                           <span style={{ fontWeight: 700, color: '#111827' }}>{subName}</span>
                           <button
@@ -1526,8 +1542,8 @@ export default function SubcontractorsPage() {
                           {billPaid && approvedCount > 0 && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>✓ Bill paid</span>}
                           {billSent && !billPaid && approvedCount > 0 && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#ede9fe', color: '#6d28d9', fontWeight: 600 }}>↗ In bills</span>}
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
-                          <span style={{ fontWeight: 700, fontSize: 14 }}>{fmt(total)}</span>
+                        <div className="tsw-right" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
+                          <span className="tsw-total" style={{ fontWeight: 700, fontSize: 14 }}>{fmt(total)}</span>
                           {anyXero
                             ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#dbeafe', color: '#1e40af', fontWeight: 600 }}>✓ Xero</span>
                             : billPaid
@@ -1568,9 +1584,9 @@ export default function SubcontractorsPage() {
                             const hasXero = !!log.xero_bill_id
                             const isPaid = log.status === 'paid'
                             return (
-                              <div key={log.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderTop: '1px solid #f3f4f6', fontSize: 13, flexWrap: 'wrap' }}>
+                              <div key={log.id} className="tsd-row" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderTop: '1px solid #f3f4f6', fontSize: 13, flexWrap: 'wrap' }}>
                                 <span style={{ color: '#6b7280', minWidth: 90, fontSize: 12 }}>{dayLabel} {new Date(log.entry_date + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
-                                <span style={{ color: '#374151', flex: 1, minWidth: 100 }}>{jName}</span>
+                                <span className="tsd-job" style={{ color: '#374151', flex: 1, minWidth: 100 }}>{jName}</span>
                                 <span style={{ color: '#6b7280', fontSize: 12 }}>{rateLabel[log.rate_type]} · {fmt(log.rate_amount)}</span>
                                 <span style={{ fontWeight: 600, minWidth: 64, textAlign: 'right' }}>{fmt(log.amount)}</span>
                                 {log.notes && <span title={log.notes} style={{ cursor: 'default' }}>📝</span>}
@@ -1821,11 +1837,11 @@ export default function SubcontractorsPage() {
 
       {/* ── Weekly Timesheet Modal ────────────────────────────────── */}
       {weekModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ background: '#fff', borderRadius: 10, padding: 24, width: '100%', maxWidth: 740, maxHeight: '92vh', overflow: 'auto' }}>
+        <div className="wk-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div className="wk-panel" style={{ background: '#fff', borderRadius: 10, padding: 24, width: '100%', maxWidth: 740, maxHeight: '92vh', overflow: 'auto' }}>
             <h3 style={{ margin: '0 0 20px', fontSize: 16, fontWeight: 700 }}>⏱ Weekly Timesheet</h3>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
+            <div className="wk-top" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Subcontractor *</label>
                 <ContactPicker
@@ -1851,8 +1867,8 @@ export default function SubcontractorsPage() {
               </div>
             </div>
 
-            <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <div className="wk-box" style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
+              <table className="wk-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
                     <th style={{ padding: '8px 10px', textAlign: 'left', width: 110, fontWeight: 600, color: '#374151', fontSize: 11 }}>Day</th>
@@ -1871,7 +1887,7 @@ export default function SubcontractorsPage() {
                     const rowAmt = row.active ? (row.rateType === 'hourly' ? (Number(row.rateAmount) || 0) * (Number(row.hours) || 0) : (Number(row.rateAmount) || 0)) : 0
                     const hasSplit = weekRows.some(r => r.date === row.date && r.secondary && r.active)
                     return (
-                      <tr key={`${row.date}-${row.secondary ? 2 : 1}`} style={{ borderBottom: i < weekRows.length - 1 ? '1px solid #f3f4f6' : 'none', background: row.active ? '#fff' : '#fafafa' }}>
+                      <tr key={`${row.date}-${row.secondary ? 2 : 1}`} className={`wk-row${row.active ? '' : ' wk-off'}${row.secondary ? ' wk-second' : ''}`} style={{ borderBottom: i < weekRows.length - 1 ? '1px solid #f3f4f6' : 'none', background: row.active ? '#fff' : '#fafafa' }}>
                         <td style={{ padding: '7px 10px' }}>
                           {row.secondary ? (
                             <div style={{ fontSize: 11, color: '#6b7280', paddingLeft: 4 }}>↳ 2nd job, {dayLabel}</div>
@@ -1882,7 +1898,7 @@ export default function SubcontractorsPage() {
                                 <div style={{ fontWeight: row.active ? 600 : 400, color: row.active ? '#111827' : '#9ca3af', fontSize: 12 }}>{dayLabel}</div>
                                 <div style={{ fontSize: 11, color: '#9ca3af' }}>{dateLabel}</div>
                                 {row.active && (
-                                  <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#6b7280', marginTop: 2, cursor: 'pointer' }} title="Worked on two jobs this day — adds a second job line">
+                                  <label className="wk-split" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#6b7280', marginTop: 2, cursor: 'pointer' }} title="Worked on two jobs this day — adds a second job line">
                                     <input type="checkbox" checked={hasSplit} onChange={e => toggleSplitDay(row.date, e.target.checked)} style={{ width: 12, height: 12 }} />
                                     Split day
                                   </label>
@@ -1902,7 +1918,7 @@ export default function SubcontractorsPage() {
                         </td>
                         <td style={{ padding: '6px 8px' }}>
                           {row.active ? (
-                            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                            <div className="wk-rate" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                               <select value={row.rateType} onChange={e => setWeekRows(rows => rows.map((r, idx) => {
                                 if (idx !== i) return r
                                 const rt = e.target.value as AdminTimeLog['rate_type']
@@ -1932,8 +1948,9 @@ export default function SubcontractorsPage() {
                         <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, fontSize: 12, color: row.active ? '#111827' : '#d1d5db' }}>
                           {row.active ? fmt(rowAmt) : '—'}
                         </td>
-                        <td style={{ padding: '6px 8px', textAlign: 'center' }}>
-                          {row.active ? (
+                        <td className="wk-cash" style={{ padding: '6px 8px', textAlign: 'center' }}>
+                          {row.active ? (<>
+                            <span className="wk-lbl">Cash paid</span>
                             <input
                               type="checkbox"
                               checked={row.paidCash}
@@ -1941,7 +1958,7 @@ export default function SubcontractorsPage() {
                               onChange={e => setWeekRows(rows => rows.map((r, idx) => idx === i ? { ...r, paidCash: e.target.checked } : r))}
                               style={{ accentColor: '#16a34a', width: 16, height: 16, cursor: 'pointer' }}
                             />
-                          ) : <span style={{ color: '#d1d5db', fontSize: 12 }}>—</span>}
+                          </>) : <span style={{ color: '#d1d5db', fontSize: 12 }}>—</span>}
                         </td>
                         <td style={{ padding: '6px 8px' }}>
                           {row.active ? (
@@ -1955,7 +1972,7 @@ export default function SubcontractorsPage() {
                   })}
                 </tbody>
                 <tfoot>
-                  <tr style={{ background: '#f9fafb', borderTop: '2px solid #e5e7eb' }}>
+                  <tr className="wk-foot" style={{ background: '#f9fafb', borderTop: '2px solid #e5e7eb' }}>
                     <td colSpan={3} style={{ padding: '10px', fontWeight: 600, fontSize: 13, color: '#374151' }}>
                       Total · {new Set(weekRows.filter(r => r.active).map(r => r.date)).size} day{new Set(weekRows.filter(r => r.active).map(r => r.date)).size === 1 ? '' : 's'} worked
                       {weekRows.some(r => r.active && r.paidCash) && (
@@ -1974,7 +1991,7 @@ export default function SubcontractorsPage() {
             </div>
 
             {error && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 12 }}>{error}</div>}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <div className="wk-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
               <button onClick={() => { setWeekModal(false); setError('') }} style={{ padding: '8px 16px', background: '#f9fafb', color: '#374151', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, cursor: 'pointer' }}>Cancel</button>
               <button onClick={saveWeekSheet} disabled={saving} style={{ padding: '8px 20px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
                 {saving ? 'Saving…' : 'Save Timesheet'}

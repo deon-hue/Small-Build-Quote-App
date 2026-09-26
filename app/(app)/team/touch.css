@@ -1,0 +1,19 @@
+@media (hover:none) and (pointer:coarse){
+  .tm-page .card{margin-bottom:10px!important}
+  .tm-row{flex-wrap:wrap;padding:16px!important;gap:12px!important;align-items:flex-start!important}
+  .tm-row > div:nth-child(2){flex:1 1 0;min-width:0}
+  .tm-row > div:nth-child(2) > div:first-child{font-size:16px!important}
+  .tm-row > div:nth-child(2) > div:nth-child(2){font-size:13px!important;line-height:1.4;word-break:break-word}
+  .tm-pills{gap:6px!important;margin-top:10px!important}
+  .tm-pills span{font-size:12px!important;padding:3px 10px!important;background:#eaf2d3!important;border-color:#c9dc95!important;color:#41660a!important;border-radius:999px!important}
+  .tm-side{flex:1 1 100%;flex-direction:row-reverse!important;justify-content:space-between;align-items:center!important;padding-top:12px;border-top:1px solid #eef1e8}
+  .tm-actions{flex-wrap:wrap;gap:8px!important;justify-content:flex-end}
+  .tm-actions .btn-sm,.tm-invite .btn-sm{min-height:44px;padding:0 16px;border-radius:12px;font-size:14px}
+  .tm-invite{flex-wrap:wrap;padding:12px 16px 14px!important}
+  .tm-invite > span:nth-child(2){flex:1 1 100%!important;order:3}
+  .tm-page .modal-overlay .form-modal{width:100vw!important;max-height:96vh!important}
+  .tm-perms{grid-template-columns:1fr!important}
+  .tm-perms > div{min-height:48px}
+  .tm-page .form-modal input,.tm-page .form-modal textarea{font-size:16px!important}
+  .tm-page .form-modal .btn-sm,.tm-page .form-modal .btn{min-height:44px}
+}

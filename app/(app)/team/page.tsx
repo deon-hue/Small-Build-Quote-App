@@ -54,6 +54,8 @@ interface InviteModalState {
   permissions: UserPermissions
 }
 
+import './touch.css'
+
 export default function TeamPage() {
   const {
     teamMembers, isOwner, loading,
@@ -154,9 +156,18 @@ export default function TeamPage() {
   }
 
   return (
-    <>
+    <div className="tm-page">
+      {/* Touch header (phone/tablet only) */}
+      <div className="tp-head">
+        <div>
+          <div className="tp-kicker">{teamMembers.length} team member{teamMembers.length !== 1 ? 's' : ''}</div>
+          <h1 className="tp-title">Team</h1>
+        </div>
+        <button className="tp-btn" onClick={openNew}>+ Invite user</button>
+      </div>
+
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+      <div className="tp-hide" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>
             {teamMembers.length} team member{teamMembers.length !== 1 ? 's' : ''}
@@ -167,7 +178,7 @@ export default function TeamPage() {
 
       {/* Owner row */}
       <div className="card" style={{ marginBottom: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px' }}>
+        <div className="tm-row" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px' }}>
           <div style={{
             width: 36, height: 36, borderRadius: '50%', background: 'var(--accent)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -193,7 +204,7 @@ export default function TeamPage() {
         const inviteUrl = m.status === 'invited' ? getInviteUrl(m) : null
         return (
           <div key={m.id} className="card" style={{ marginBottom: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px' }}>
+            <div className="tm-row" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px' }}>
               <div style={{
                 width: 36, height: 36, borderRadius: '50%', background: 'var(--border)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -218,7 +229,7 @@ export default function TeamPage() {
                   )}
                 </div>
                 {/* Permission pills */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                <div className="tm-pills" style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
                   {PERMISSION_LABELS.filter(p => m.permissions[p.key]).map(p => (
                     <span key={p.key} style={{
                       fontSize: 10, padding: '1px 6px', borderRadius: 10,
@@ -229,9 +240,9 @@ export default function TeamPage() {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+              <div className="tm-side" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
                 <span className={`badge ${STATUS_BADGE[m.status]}`}>{STATUS_LABEL[m.status]}</span>
-                <div style={{ display: 'flex', gap: 5 }}>
+                <div className="tm-actions" style={{ display: 'flex', gap: 5 }}>
                   {m.status === 'invited' && (
                     <button className="btn-sm btn-outline" onClick={() => handleResend(m)} title="Resend invite link">
                       ↺ Resend
@@ -255,7 +266,7 @@ export default function TeamPage() {
 
             {/* Show invite link directly under invited members */}
             {inviteUrl && m.status === 'invited' && (
-              <div style={{
+              <div className="tm-invite" style={{
                 padding: '8px 20px 12px', borderTop: '1px solid var(--border)',
                 fontSize: 12, color: 'var(--muted)', display: 'flex', gap: 10, alignItems: 'center'
               }}>
@@ -374,7 +385,7 @@ export default function TeamPage() {
                 {/* Permissions grid */}
                 <div className="fg">
                   <label>Permissions</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 4 }}>
+                  <div className="tm-perms" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 4 }}>
                     {PERMISSION_LABELS.map(({ key, label }) => {
                       const enabled = modal.permissions[key]
                       const isFixed = key === 'dashboard'
@@ -421,6 +432,6 @@ export default function TeamPage() {
           </div>
         </div>
       )}
-    </>
+    </div>
   )
 }

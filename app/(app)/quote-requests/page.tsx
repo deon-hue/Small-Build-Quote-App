@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useDraggableModal } from '@/components/useDraggableModal'
 import ModalResizeHandle from '@/components/ModalResizeHandle'
 import ModalMaximizeButton from '@/components/ModalMaximizeButton'
+import './touch.css'
 
 interface ClientFile { name: string; url: string; isImage: boolean }
 
@@ -120,9 +121,25 @@ export default function QuoteRequestsPage() {
   }
 
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 1100, margin: '0 auto' }}>
+    <div className="qr-page" style={{ padding: '28px 32px', maxWidth: 1100, margin: '0 auto' }}>
+      {/* Touch header (phone/tablet only) */}
+      <div className="tp-head">
+        <div>
+          <div className="tp-kicker">Enquiries{pendingCount > 0 ? ` · ${pendingCount} new` : ''}</div>
+          <h1 className="tp-title">Quote requests</h1>
+        </div>
+        <a className="tp-btn tp-btn-light qr-client-link" href="/get-quote" target="_blank">↗ Client page</a>
+      </div>
+      <div className="tp-chips">
+        {(['all', 'pending', 'reviewing', 'accepted', 'declined'] as const).map(f => (
+          <button key={f} className={`tp-chip${filter === f ? ' on' : ''}`} onClick={() => setFilter(f)}>
+            {f === 'all' ? `All (${requests.length})` : `${STATUS_LABEL[f]} (${requests.filter(r => r.status === f).length})`}
+          </button>
+        ))}
+      </div>
+
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 24, flexWrap: 'wrap' }}>
+      <div className="tp-hide" style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 24, flexWrap: 'wrap' }}>
         <div>
           <div className="serif" style={{ fontSize: 22 }}>Quote Requests</div>
           <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
@@ -146,7 +163,7 @@ export default function QuoteRequestsPage() {
       </div>
 
       {/* Filter tabs */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 20, flexWrap: 'wrap' }}>
+      <div className="tp-hide" style={{ display: 'flex', gap: 6, marginBottom: 20, flexWrap: 'wrap' }}>
         {(['all', 'pending', 'reviewing', 'accepted', 'declined'] as const).map(f => (
           <button key={f} onClick={() => setFilter(f)} style={{
             padding: '5px 14px', borderRadius: 20, border: '1px solid var(--border)',
@@ -175,10 +192,11 @@ export default function QuoteRequestsPage() {
           </div>
         </div>
       ) : (
-        <div style={{ background: '#fff', borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
+        <div className="qr-list" style={{ background: '#fff', borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
           {filtered.map((r, i) => (
             <div
               key={r.id}
+              className={`qr-row${r.status === 'pending' ? ' new' : ''}`}
               onClick={() => openRequest(r)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px',
@@ -190,22 +208,22 @@ export default function QuoteRequestsPage() {
               onMouseLeave={e => (e.currentTarget.style.background = r.status === 'pending' ? '#fffbf0' : '#fff')}
             >
               {r.status === 'pending' && (
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#e67e22', flexShrink: 0 }} />
+                <div className="qr-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: '#e67e22', flexShrink: 0 }} />
               )}
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="qr-main" style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 14 }}>{r.client_name}</div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {r.project_type} · {r.project_address}
                 </div>
               </div>
-              <div style={{ fontSize: 13, color: 'var(--muted)', whiteSpace: 'nowrap' }}>{r.client_email}</div>
-              <div style={{ fontWeight: 700, fontSize: 15, minWidth: 90, textAlign: 'right', color: '#2b5a2b' }}>
+              <div className="qr-email" style={{ fontSize: 13, color: 'var(--muted)', whiteSpace: 'nowrap' }}>{r.client_email}</div>
+              <div className="qr-total" style={{ fontWeight: 700, fontSize: 15, minWidth: 90, textAlign: 'right', color: '#2b5a2b' }}>
                 {fmt(r.estimated_total)}
               </div>
-              <span className={`badge ${STATUS_BADGE[r.status] || 'b-pending'}`} style={{ minWidth: 72, textAlign: 'center' }}>
+              <span className={`badge qr-badge ${STATUS_BADGE[r.status] || 'b-pending'}`} style={{ minWidth: 72, textAlign: 'center' }}>
                 {STATUS_LABEL[r.status]}
               </span>
-              <div style={{ fontSize: 11, color: 'var(--muted)', minWidth: 52, textAlign: 'right' }}>
+              <div className="qr-date" style={{ fontSize: 11, color: 'var(--muted)', minWidth: 52, textAlign: 'right' }}>
                 {relativeDate(r.created_at)}
               </div>
             </div>

@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { signedDocUrlById } from '@/lib/job-costs'
 import type { Bill, BillLineItem, BillStatus } from '@/lib/types'
 import { ContactPicker } from '@/components/ContactPicker'
+import './touch.css'
 import { useDraggableModal } from '@/components/useDraggableModal'
 import ModalResizeHandle from '@/components/ModalResizeHandle'
 import ModalMaximizeButton from '@/components/ModalMaximizeButton'
@@ -68,6 +69,7 @@ export default function BillsPage() {
   const [editing, setEditing]         = useState<Bill | null>(null)
   const [filterStatus, setFilterStatus] = useState<'all' | BillStatus>('all')
   const [search, setSearch]           = useState('')
+  const [openBillId, setOpenBillId]   = useState<string | null>(null)
 
   // Form state
   const [supplierId, setSupplierId]   = useState('')
@@ -367,8 +369,36 @@ export default function BillsPage() {
 
   return (
     <>
+      {/* Phone/tablet header, numbers, search and status chips (hidden on desktop by CSS) */}
+      <div className="tp-head">
+        <div>
+          <div className="tp-kicker">Money</div>
+          <h1 className="tp-title">Bills</h1>
+        </div>
+        <button className="tp-btn" onClick={openNew}>+ Add bill</button>
+      </div>
+      {xeroConnected && (autoSyncing || lastSynced !== null) && (
+        <div className="tp-xero">
+          <span className="tp-xero-dot" style={{ background: autoSyncing ? '#facc15' : '#22c55e' }} />
+          {autoSyncing ? 'Syncing Xero…' : 'Xero synced'}
+        </div>
+      )}
+      <div className="tp-stats">
+        <div className="tp-stat"><span>Outstanding</span><b>{fmt(outstanding)}</b><em>{bills.filter(b => b.status !== 'paid').length} to pay</em></div>
+        <div className="tp-stat"><span>Paid</span><b>{fmt(paid)}</b><em>{bills.filter(b => b.status === 'paid').length} bills</em></div>
+        <div className="tp-stat"><span>CIS deducted</span><b>{fmt(cisTotal)}</b><em>Total bills {fmt(totalBills)}</em></div>
+      </div>
+      <input className="tp-search" type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search supplier, ref or description" />
+      <div className="tp-chips">
+        {(['all', 'draft', 'approved', 'paid'] as const).map(k => (
+          <button key={k} className={`tp-chip${filterStatus === k ? ' on' : ''}`} onClick={() => setFilterStatus(k)}>
+            {k === 'all' ? 'All' : BILL_LABEL[k]} {k === 'all' ? bills.length : bills.filter(b => b.status === k).length}
+          </button>
+        ))}
+      </div>
+
       {/* Summary cards */}
-      <div className="fin-snapshot" style={{ marginBottom: 20 }}>
+      <div className="fin-snapshot tp-hide" style={{ marginBottom: 20 }}>
         <div className="fin-card">
           <div className="fin-label">Total Bills</div>
           <div className="fin-value">{fmt(totalBills)}</div>
@@ -388,7 +418,7 @@ export default function BillsPage() {
       </div>
 
       {/* Toolbar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+      <div className="tp-hide" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         <input placeholder="Search bills…" value={search} onChange={e => setSearch(e.target.value)}
           style={{ padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13, minWidth: 200 }} />
         <div style={{ display: 'flex', gap: 6 }}>
@@ -420,8 +450,8 @@ export default function BillsPage() {
           {!q && filterStatus === 'all' && <div style={{ fontSize: 12 }}>Record supplier invoices and subcontractor bills here.</div>}
         </div>
       ) : (
-        <div className="card" style={{ overflow: 'auto' }}>
-          <table style={{ minWidth: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed' }}>
+        <div className="card tp-plain" style={{ overflow: 'auto' }}>
+          <table className="bills-cards" style={{ minWidth: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed' }}>
             <colgroup>
               {COL_KEYS.map(k => <col key={k} style={{ width: colWidths[k] }} />)}
             </colgroup>
@@ -442,7 +472,7 @@ export default function BillsPage() {
             </thead>
             <tbody>
               {filtered.map(b => (
-                <tr key={b.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                <tr key={b.id} className={openBillId === b.id ? 'open' : ''} onClick={() => setOpenBillId(id => id === b.id ? null : b.id)} style={{ borderBottom: '1px solid var(--border)' }}>
                   <td style={{ padding: '10px 14px' }}>
                     <div style={{ fontWeight: 600 }}>{b.ref}</div>
                     {b.xeroBillId && (
@@ -472,7 +502,7 @@ export default function BillsPage() {
                       <span className={`badge ${BILL_BADGE[b.status]}`}>{BILL_LABEL[b.status]}</span>
                     )}
                   </td>
-                  <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                  <td onClick={e => e.stopPropagation()} style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
                     <button className="btn btn-sm btn-outline" style={{ marginRight: 4 }} onClick={() => openEdit(b)}>Edit</button>
                     {!b.documentId && (
                       <button className="btn btn-sm btn-outline" style={{ marginRight: 4 }}

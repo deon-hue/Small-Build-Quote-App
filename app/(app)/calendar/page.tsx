@@ -76,6 +76,8 @@ function layoutWeek(events: CalEvent[], weekStart: Date): WeekSlot[] {
 }
 
 // ── Main component ─────────────────────────────────────────────
+import './touch.css'
+
 export default function CalendarPage() {
   const { jobs, quotes, ganttStates, loading } = useApp()
   const router = useRouter()
@@ -563,8 +565,26 @@ export default function CalendarPage() {
     else setAnchor(new Date(d))
   }
 
+  const agendaEvents = [...eventsInView].sort((a, b) => a.startDate.getTime() - b.startDate.getTime() || a.phaseIdx - b.phaseIdx)
+
   return (
-    <>
+    <div className="cal-page">
+      {/* Touch header (phone/tablet only) */}
+      <div className="tp-head">
+        <div>
+          <div className="tp-kicker">Schedule</div>
+          <h1 className="tp-title">Calendar</h1>
+        </div>
+        <button className="tp-btn" onClick={goToday}>Today</button>
+      </div>
+      {jobsOnCalendar > 0 && (
+        <div className="tp-stats">
+          <div className="tp-stat"><span>Jobs on calendar</span><b>{jobsOnCalendar}</b></div>
+          <div className="tp-stat"><span>Active jobs</span><b>{activeCount}</b></div>
+          <div className="tp-stat"><span>Total phases</span><b>{calEvents.length}</b></div>
+        </div>
+      )}
+
       {/* No-start-date warning */}
       {jobsNoStart.length > 0 && (
         <div style={{
@@ -592,9 +612,9 @@ export default function CalendarPage() {
       )}
 
       {/* Toolbar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+      <div className="cal-toolbar" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         {/* View switcher */}
-        <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+        <div className="cal-views" style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
           {(['month', 'week', 'day'] as const).map(v => (
             <button
               key={v}
@@ -610,17 +630,17 @@ export default function CalendarPage() {
           ))}
         </div>
 
-        <button className="btn-sm btn-outline" onClick={prev}>← Prev</button>
-        <div style={{ flex: 1, textAlign: 'center', fontFamily: 'DM Serif Display, serif', fontSize: view === 'month' ? 22 : 17, whiteSpace: 'nowrap' }}>
+        <button className="btn-sm btn-outline cal-prev" onClick={prev}>← Prev</button>
+        <div className="cal-label" style={{ flex: 1, textAlign: 'center', fontFamily: 'DM Serif Display, serif', fontSize: view === 'month' ? 22 : 17, whiteSpace: 'nowrap' }}>
           {headerLabel()}
         </div>
-        <button className="btn-sm btn-outline" onClick={next}>Next →</button>
-        <button className="btn-sm btn-outline" onClick={goToday}>Today</button>
+        <button className="btn-sm btn-outline cal-next" onClick={next}>Next →</button>
+        <button className="btn-sm btn-outline tp-hide" onClick={goToday}>Today</button>
       </div>
 
       {/* Stats */}
       {jobsOnCalendar > 0 && (
-        <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+        <div className="tp-hide" style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
           <StatChip value={jobsOnCalendar} label="jobs on calendar" color="#4a90a4" />
           <StatChip value={activeCount}    label="active jobs"      color="#7ab533" />
           <StatChip value={calEvents.length} label="total phases"   color="#9b59b6" />
@@ -654,8 +674,32 @@ export default function CalendarPage() {
       )}
 
       {/* Calendar body */}
-      {jobs.length > 0 && view === 'month' && renderMonth()}
-      {jobs.length > 0 && view === 'week'  && renderWeek()}
+      {jobs.length > 0 && view === 'month' && <div className="cal-grid-wrap">{renderMonth()}</div>}
+      {jobs.length > 0 && view === 'week'  && <div className="cal-grid-wrap">{renderWeek()}</div>}
+
+      {/* Touch agenda: a tappable list of this month/week's phases (the grid is hidden on touch) */}
+      {jobs.length > 0 && view !== 'day' && (
+        <div className="cal-agenda">
+          {agendaEvents.length === 0 ? (
+            <div className="cal-agenda-empty">No phases scheduled this {view}</div>
+          ) : agendaEvents.map(evt => {
+            const durDays = daysBetween(evt.startDate, evt.endDate)
+            return (
+              <div key={evt.id} className="cal-ag-item" onClick={() => setSelected(evt)} style={{ borderLeftColor: evt.color, opacity: barOpacity(evt.job.id) }}>
+                <div className="cal-ag-when">
+                  <b>{fmtShort(evt.startDate)}</b>
+                  <span>→ {fmtShort(addDays(evt.endDate, -1))}</span>
+                </div>
+                <div className="cal-ag-main">
+                  <div className="cal-ag-title">{evt.phaseLabel}</div>
+                  <div className="cal-ag-sub">{getJobNum(evt.job.id)} · {evt.job.client} · {evt.job.type}</div>
+                </div>
+                <div className="cal-ag-dur">{Math.ceil(durDays / 7 * 10) / 10}w</div>
+              </div>
+            )
+          })}
+        </div>
+      )}
       {jobs.length > 0 && view === 'day'   && renderDay()}
 
       {/* Job legend + highlight toggles */}
@@ -703,7 +747,7 @@ export default function CalendarPage() {
       )}
 
       {renderDetail()}
-    </>
+    </div>
   )
 }
 

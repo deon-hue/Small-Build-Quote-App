@@ -5,6 +5,7 @@ import { useApp } from '@/contexts/AppContext'
 import type { Settings } from '@/lib/types'
 import XeroConnectionCard from '@/components/XeroConnectionCard'
 import XeroAccountMapping from '@/components/XeroAccountMapping'
+import './touch.css'
 
 export default function SettingsPage() {
   const { settings, saveSettings, loading } = useApp()
@@ -43,11 +44,19 @@ export default function SettingsPage() {
   })
 
   return (
-    <div style={{ maxWidth: 720 }}>
+    <div className="st-page" style={{ maxWidth: 720 }}>
+      {/* Touch header (phone/tablet only) */}
+      <div className="tp-head">
+        <div>
+          <div className="tp-kicker">Company</div>
+          <h1 className="tp-title">Settings</h1>
+        </div>
+      </div>
+
       {/* Company logo */}
       <div className="card">
         <div className="card-hd">Company Logo</div>
-        <div style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 20 }}>
+        <div className="st-logo" style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 20 }}>
           {form.logo
             ? <div>
                 <img src={form.logo} alt="Logo" style={{ height: 64, maxWidth: 200, objectFit: 'contain', border: '1px solid var(--border)', borderRadius: 4 }} />
@@ -222,7 +231,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div className="st-save" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
           {saving ? 'Saving…' : '💾 Save Settings'}
         </button>

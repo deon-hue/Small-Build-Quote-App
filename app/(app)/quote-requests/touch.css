@@ -1,0 +1,24 @@
+@media (hover:none) and (pointer:coarse){
+  .qr-page{padding:0!important;max-width:none!important}
+  .qr-client-link{display:inline-flex;align-items:center;text-decoration:none}
+  .qr-list{background:none!important;border:none!important;border-radius:0!important;overflow:visible!important;display:grid;grid-template-columns:1fr;gap:10px}
+  .qr-row{display:grid!important;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"main badge" "email total" "date date";gap:6px 12px!important;align-items:center!important;padding:14px 16px!important;border:1px solid #e0e6d8!important;border-bottom:1px solid #e0e6d8!important;border-radius:18px;background:#fff!important;min-height:44px}
+  .qr-row.new{background:#fbfdf3!important;border-color:#c9dc95!important}
+  .qr-dot{display:none}
+  .qr-main{grid-area:main}
+  .qr-main > div:first-child{font-size:16px!important}
+  .qr-main > div:last-child{white-space:normal!important;line-height:1.4}
+  .qr-badge{grid-area:badge;justify-self:end;min-width:0!important}
+  .qr-email{grid-area:email;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .qr-total{grid-area:total;min-width:0!important;font-size:20px!important;color:#41660a!important}
+  .qr-date{grid-area:date;text-align:left!important;font-size:12px!important}
+
+  /* Review modal: full-width, big controls */
+  .qr-page .modal-overlay > div{width:100vw!important;max-height:96vh!important}
+  .qr-page .form-modal-bd > div:first-child{grid-template-columns:1fr!important}
+  .qr-page .form-modal-ft .btn,.qr-page .form-modal-ft .btn-sm{min-height:44px;font-size:14px!important}
+  .qr-page textarea{font-size:16px!important}
+}
+@media (hover:none) and (pointer:coarse) and (min-width:700px){
+  .qr-list{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
