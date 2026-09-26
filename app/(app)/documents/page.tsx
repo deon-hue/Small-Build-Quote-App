@@ -7,7 +7,7 @@ export default function DocumentsPage() {
   const { jobs, loading } = useApp()
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
   return (
-    <div style={{ maxWidth: 900 }}>
+    <div className="doc-page" style={{ maxWidth: 900 }}>
       <DocumentInbox jobs={jobs} />
     </div>
   )
