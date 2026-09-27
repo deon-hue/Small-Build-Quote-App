@@ -48,6 +48,10 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
   const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown, onOverlayClick } = useDraggableModal()
   // dirty = true means the chart has been dragged since the last save
   const [dirty, setDirty] = useState(false)
+  // Mirrors `dirty` for the unmount/job-change cleanups below, which close over a stale
+  // `dirty` from whenever the effect last ran otherwise — a ref always reads the latest.
+  const dirtyRef = useRef(false)
+  useEffect(() => { dirtyRef.current = dirty }, [dirty])
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const router = useRouter()
 
@@ -126,6 +130,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
   // Re-render the chart when job props or view mode changes.
   // Reset dirty/status when a different job is opened.
   useEffect(() => {
+    const priorJob = job
     extraWeeksRef.current = 0
     setDirty(false)
     setSaveStatus('idle')
@@ -133,6 +138,15 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     stateRef.current = state
     renderGantt(state, viewMode)
     return () => {
+      // Flush a still-unsaved drag/edit before this job is swapped out from under it (or
+      // the modal unmounts) — the 1.5s autosave debounce otherwise gets cleared here with
+      // the edit never having been written, silently reverting it. Read stateRef.current
+      // fresh here (not a copy taken above) — it's mutated in place by drags for as long
+      // as this job's been showing, so only its value *at cleanup time* is current.
+      // Fire-and-forget is fine: saveGanttState writes into AppContext and Supabase
+      // directly, independent of this component's own lifecycle, so it completes
+      // correctly even after unmount.
+      if (dirtyRef.current && stateRef.current) saveGanttState(priorJob.id, stateRef.current)
       // Clean up drag listeners when effect re-runs or component unmounts
       cleanupDragRef.current?.()
       cleanupDragRef.current = null
