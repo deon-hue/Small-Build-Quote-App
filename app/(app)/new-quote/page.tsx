@@ -216,6 +216,7 @@ export default function NewQuotePage() {
   const [custEmail, setCustEmail] = useState('')
   const [custPhone, setCustPhone] = useState('')
   const [jobType, setJobType] = useState('Rear Extension')
+  const [jobTitle, setJobTitle] = useState('')
   const [markup, setMarkup] = useState(15)
   const [vatOn, setVatOn] = useState(true)
   const [scope, setScope] = useState('')
@@ -455,7 +456,7 @@ export default function NewQuotePage() {
         const customer = { name: custName, address: custAddr, email: custEmail, phone: custPhone }
         const qData = {
           status: existing.status,
-          jobType, markup, vatIncluded: vatOn, scope, photo,
+          jobType, title: jobTitle, markup, vatIncluded: vatOn, scope, photo,
           convertedToJob: existing.convertedToJob ?? false,
           lastEdited: new Date().toISOString(),
           customer,
@@ -469,7 +470,7 @@ export default function NewQuotePage() {
     }, 2000)
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phases, custName, custAddr, custEmail, custPhone, jobType, markup, vatOn, scope, photo, editingId])
+  }, [phases, custName, custAddr, custEmail, custPhone, jobType, jobTitle, markup, vatOn, scope, photo, editingId])
 
   // ── Load from Back Office (primary path for manual quotes) ───────────────────
   // Fetches live bo_phases → bo_sub_phases → bo_tasks for the selected job type
@@ -686,6 +687,7 @@ export default function NewQuotePage() {
     setCustEmail(q.customer.email || '')
     setCustPhone(q.customer.phone || '')
     setJobType(q.jobType || 'Rear Extension')
+    setJobTitle(q.title || '')
     setMarkup(q.markup || 15)
     setVatOn(q.vatIncluded !== false)
     setScope(q.scope || '')
@@ -787,7 +789,7 @@ export default function NewQuotePage() {
     setSaving(true)
     try {
       const customer = { name: custName, address: custAddr, email: custEmail, phone: custPhone }
-      const qData = { status: 'draft' as const, jobType, markup, vatIncluded: vatOn, scope, photo, convertedToJob: false, lastEdited: '', customer, phases: JSON.parse(JSON.stringify(phases)), quoteSource: quoteSource ?? undefined }
+      const qData = { status: 'draft' as const, jobType, title: jobTitle, markup, vatIncluded: vatOn, scope, photo, convertedToJob: false, lastEdited: '', customer, phases: JSON.parse(JSON.stringify(phases)), quoteSource: quoteSource ?? undefined }
       if (editingId) {
         const existing = quotes.find(q => q.id === editingId)!
         if (!phases.length && existing.phases.length > 0) {
@@ -1423,7 +1425,7 @@ export default function NewQuotePage() {
     setSaving(true)
     try {
       const customer = { name: custName, address: custAddr, email: custEmail, phone: custPhone }
-      const qData = { status: 'pending' as const, jobType, markup, vatIncluded: vatOn, scope, photo, convertedToJob: false, lastEdited: '', customer, phases: JSON.parse(JSON.stringify(phases)), quoteSource: quoteSource ?? undefined }
+      const qData = { status: 'pending' as const, jobType, title: jobTitle, markup, vatIncluded: vatOn, scope, photo, convertedToJob: false, lastEdited: '', customer, phases: JSON.parse(JSON.stringify(phases)), quoteSource: quoteSource ?? undefined }
       if (editingId) {
         const existing = quotes.find(q => q.id === editingId)!
         await updateQuote({ ...existing, ...qData })
@@ -1532,7 +1534,7 @@ export default function NewQuotePage() {
   const previewQuote: Quote = {
     id: editingId || 'preview', ref: 'PREVIEW',
     savedDate: new Date().toLocaleDateString('en-GB'), lastEdited: '',
-    status: 'pending', jobType, markup, vatIncluded: vatOn, scope, photo,
+    status: 'pending', jobType, title: jobTitle, markup, vatIncluded: vatOn, scope, photo,
     convertedToJob: false,
     customer: { name: custName, address: custAddr, email: custEmail, phone: custPhone },
     phases: JSON.parse(JSON.stringify(phases)),
@@ -1837,6 +1839,15 @@ export default function NewQuotePage() {
                   ＋ Save &ldquo;{custName}&rdquo; as new contact
                 </button>
               )}
+              <div className="fg">
+                <label>Job Title</label>
+                <input
+                  value={jobTitle}
+                  onChange={e => setJobTitle(e.target.value)}
+                  placeholder="Give the job a name — carries over to the job once converted"
+                  style={{ width: '100%', padding: '7px 10px', border: '1.5px solid var(--border)', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
+                />
+              </div>
               <div className="fg">
                 <label>Job Type</label>
                 <select

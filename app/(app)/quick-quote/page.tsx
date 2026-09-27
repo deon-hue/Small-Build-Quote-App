@@ -38,6 +38,7 @@ export default function QuickQuotePage() {
 
   // ── Job ───────────────────────────────────────────────────────────────────
   const [jobType, setJobType] = useState('Rear Extension')
+  const [jobTitle, setJobTitle] = useState('')
   const [notes,   setNotes]   = useState('')   // user's brief description (optional)
 
   // ── AI scope ──────────────────────────────────────────────────────────────
@@ -169,6 +170,7 @@ export default function QuickQuotePage() {
       const newQuote = await addQuote({
         status:         'pending',
         jobType,
+        title:          jobTitle,
         markup:         markupPct,
         vatIncluded:    vatOn,
         scope,
@@ -307,6 +309,15 @@ export default function QuickQuotePage() {
       <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: '20px 24px', marginBottom: 16 }}>
         <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94a3b8', marginBottom: 14 }}>
           Job Details
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 5 }}>Job Title</label>
+          <input
+            value={jobTitle}
+            onChange={e => setJobTitle(e.target.value)}
+            placeholder="Give the job a name — carries over to the job once converted"
+            style={{ width: '100%', padding: '8px 10px', fontSize: 13, boxSizing: 'border-box', border: '1px solid var(--border)', borderRadius: 6, fontFamily: 'inherit' }}
+          />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div>

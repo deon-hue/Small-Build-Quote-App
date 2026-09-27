@@ -151,7 +151,7 @@ export default function SavedQuotesPage() {
     )
     if (!confirmed) return
     const newJob = await addJob({
-      client: q.customer.name, type: q.jobType, title: '', address: q.customer.address,
+      client: q.customer.name, type: q.jobType, title: q.title || '', address: q.customer.address,
       value: Math.round(total), stage: 'planning', start: today,
       weeks: estWeeks, done: 0,
       notes: `Converted from quote ${q.ref}. ${q.phases.length} phases.`,

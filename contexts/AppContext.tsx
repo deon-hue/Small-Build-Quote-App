@@ -224,7 +224,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (quotesRes.data) {
         setQuotes(quotesRes.data.map(r => ({
           id: r.id, ref: r.ref, savedDate: r.saved_date, lastEdited: r.last_edited,
-          status: r.status, jobType: r.job_type, markup: Number(r.markup),
+          status: r.status, jobType: r.job_type, title: r.title || '', markup: Number(r.markup),
           vatIncluded: r.vat_included, scope: r.scope, photo: r.photo,
           convertedToJob: r.converted_to_job, customer: r.customer, phases: r.phases,
           quoteSource: r.quote_source || undefined,
@@ -432,7 +432,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const savedDate = new Date().toLocaleDateString('en-GB')
     const { data, error } = await supabase.from('quotes').insert({
       user_id: ownerId, ref, saved_date: savedDate, last_edited: '',
-      status: q.status || 'pending', job_type: q.jobType, markup: q.markup,
+      status: q.status || 'pending', job_type: q.jobType, title: q.title || '', markup: q.markup,
       vat_included: q.vatIncluded, scope: q.scope, photo: q.photo,
       converted_to_job: false, customer: q.customer, phases: q.phases,
       quote_source: q.quoteSource || null,
@@ -440,7 +440,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (error) throw error
     const newQuote: Quote = {
       id: data.id, ref: data.ref, savedDate: data.saved_date, lastEdited: data.last_edited,
-      status: data.status, jobType: data.job_type, markup: Number(data.markup),
+      status: data.status, jobType: data.job_type, title: data.title || '', markup: Number(data.markup),
       vatIncluded: data.vat_included, scope: data.scope, photo: data.photo,
       convertedToJob: data.converted_to_job, customer: data.customer, phases: data.phases,
       quoteSource: data.quote_source || undefined,
@@ -451,7 +451,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updateQuote = useCallback(async (q: Quote) => {
     await supabase.from('quotes').update({
-      status: q.status, job_type: q.jobType, markup: q.markup,
+      status: q.status, job_type: q.jobType, title: q.title || '', markup: q.markup,
       vat_included: q.vatIncluded, scope: q.scope, photo: q.photo,
       converted_to_job: q.convertedToJob, customer: q.customer, phases: q.phases,
       quote_source: q.quoteSource || null,

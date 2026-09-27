@@ -149,6 +149,9 @@ export interface Quote {
   /** How the quote was created */
   quoteSource?: 'takeoff' | 'ai' | 'manual' | 'quick'
   jobType: string
+  /** A free-text job name, captured up front alongside Job Type. Carried straight over
+   *  to Job.title when the quote is converted, so it never needs typing twice. */
+  title: string
   markup: number
   vatIncluded: boolean
   scope: string
