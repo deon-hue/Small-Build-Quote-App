@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import type { Job, QuotePhase, GanttState, GanttPhase } from '@/lib/types'
 import type { Quote } from '@/lib/types'
-import { fmt, quoteTotal, Q_BADGE, Q_LABEL, jobDisplayTitle } from '@/lib/utils'
+import { fmt, quoteTotal, Q_BADGE, Q_LABEL, jobDisplayTitle, quoteDisplayTitle } from '@/lib/utils'
 import { formatGanttDuration, buildGanttFromQuote, stripPhasePrefix } from '@/lib/gantt-utils'
 import { notifyClient } from '@/lib/notify'
 import { useRouter } from 'next/navigation'
@@ -1192,7 +1192,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
                   <div key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
                     <span className="mono" style={{ fontSize: 11, color: 'var(--muted)', minWidth: 70 }}>{q.ref || '—'}</span>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 500 }}>{q.jobType}</div>
+                      <div style={{ fontWeight: 500 }}>{quoteDisplayTitle(q)}</div>
                       <div style={{ fontSize: 11, color: 'var(--muted)' }}>{q.savedDate}</div>
                     </div>
                     <div className="serif" style={{ fontSize: 17 }}>{fmt(quoteTotal(q))}</div>

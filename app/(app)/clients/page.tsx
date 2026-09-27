@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { createClient } from '@/lib/supabase/client'
-import { fmt, quoteTotal, STAGE_COLOR, STAGE_LABEL, Q_BADGE, Q_LABEL, jobDisplayTitle } from '@/lib/utils'
+import { fmt, quoteTotal, STAGE_COLOR, STAGE_LABEL, Q_BADGE, Q_LABEL, jobDisplayTitle, quoteDisplayTitle } from '@/lib/utils'
 import type { Client, PortalStatus, ClientPortalSettings } from '@/lib/types'
 import { DEFAULT_CLIENT_PORTAL_SETTINGS, PAYMENT_TERMS_OPTIONS } from '@/lib/types'
 import { useRouter } from 'next/navigation'
@@ -612,7 +612,7 @@ function ClientsPageInner() {
                       <div key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
                         <span className="mono" style={{ fontSize: 11, color: 'var(--muted)', minWidth: 70 }}>{q.ref || '—'}</span>
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 500, fontSize: 13 }}>{q.jobType}</div>
+                          <div style={{ fontWeight: 500, fontSize: 13 }}>{quoteDisplayTitle(q)}</div>
                           <div style={{ fontSize: 11, color: 'var(--muted)' }}>{q.savedDate}</div>
                         </div>
                         <div style={{ textAlign: 'right' }}>

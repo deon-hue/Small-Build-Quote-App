@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useApp } from '@/contexts/AppContext'
-import { fmt, fmtK, quoteTotal, STAGE_COLOR, Q_BADGE, Q_LABEL, jobDisplayTitle } from '@/lib/utils'
+import { fmt, fmtK, quoteTotal, STAGE_COLOR, Q_BADGE, Q_LABEL, jobDisplayTitle, quoteDisplayTitle } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { quoteBudget } from '@/lib/job-costs'
 
@@ -278,7 +278,7 @@ export default function DashboardPage() {
                   <div key={q.id} style={{ padding: '12px 18px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 13, fontWeight: 600 }}>{q.customer.name || '—'}</div>
-                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>{q.jobType}</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>{quoteDisplayTitle(q)}</div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <div className="mono" style={{ fontSize: 13 }}>{fmt(quoteTotal(q))}</div>
