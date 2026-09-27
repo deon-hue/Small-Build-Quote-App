@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { useApp } from '@/contexts/AppContext'
-import { STAGE_COLOR, STAGE_LABEL, fmt, JOB_COLORS, jobColor, jobDisplayTitle } from '@/lib/utils'
+import { STAGE_COLOR, STAGE_LABEL, fmt, JOB_COLORS, jobColor, jobDisplayTitle, findLinkedQuote } from '@/lib/utils'
 import { resolveGanttState } from '@/lib/gantt-utils'
 import type { Job, GanttPhase, GanttState } from '@/lib/types'
 
@@ -128,15 +128,7 @@ export default function CalendarPage() {
   // Same "find the linked quote" matching logic GanttModal / the Jobs page use, so the
   // schedule Calendar resolves for a job is built from exactly the same phases.
   function linkedQuotePhasesFor(job: Job) {
-    const linked = job.quoteId
-      ? quotes.filter(q => q.id === job.quoteId)
-      : quotes.filter(q => {
-          const qn = (q.customer.name || '').toLowerCase()
-          const jn = (job.client || '').toLowerCase()
-          return qn === jn || qn.includes(jn) || jn.includes(qn)
-        })
-    const best = linked.find(q => q.status === 'accepted') || linked.find(q => q.status === 'sent') || linked[0]
-    return best?.phases ?? []
+    return findLinkedQuote(job, quotes)?.phases ?? []
   }
 
   // Moves/resizes one task and saves it back through the exact same saveGanttState the

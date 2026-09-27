@@ -3,8 +3,8 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useApp } from '@/contexts/AppContext'
-import { fmt, jobColor, jobDisplayTitle, STAGE_BADGE, STAGE_LABEL, JOB_TYPES } from '@/lib/utils'
-import type { Job } from '@/lib/types'
+import { fmt, jobColor, jobDisplayTitle, findLinkedQuote, jobNumber, STAGE_BADGE, STAGE_LABEL, JOB_TYPES } from '@/lib/utils'
+import type { Job, Quote } from '@/lib/types'
 import { quoteBudget } from '@/lib/job-costs'
 import GanttModal from '@/components/GanttModal'
 import { ContactPicker } from '@/components/ContactPicker'
@@ -13,6 +13,7 @@ import JobDocumentsModal from '@/components/JobDocumentsModal'
 import JobNotesModal from '@/components/JobNotesModal'
 import JobAttachmentsModal from '@/components/JobAttachmentsModal'
 import PaymentRequestsModal from '@/components/PaymentRequestsModal'
+import QuotePreviewModal from '@/components/QuotePreviewModal'
 import { useDraggableModal } from '@/components/useDraggableModal'
 import ModalResizeHandle from '@/components/ModalResizeHandle'
 import ModalMaximizeButton from '@/components/ModalMaximizeButton'
@@ -38,6 +39,7 @@ function JobsPageInner() {
   const [docsJob, setDocsJob] = useState<Job | null>(null)
   const [attachmentsJob, setAttachmentsJob] = useState<Job | null>(null)
   const [requestsJob, setRequestsJob] = useState<Job | null>(null)
+  const [viewQuote, setViewQuote] = useState<Quote | null>(null)
   // Phones only: which job card has its action buttons expanded (CSS ignores this on desktop)
   const [openJobId, setOpenJobId] = useState<string | null>(null)
   const [archiveOpen, setArchiveOpen] = useState(false)
@@ -142,15 +144,7 @@ function JobsPageInner() {
   }
 
   function getLinkedQuotePhases(job: Job) {
-    const linked = job.quoteId
-      ? quotes.filter(q => q.id === job.quoteId)
-      : quotes.filter(q => {
-          const qn = (q.customer.name || '').toLowerCase()
-          const jn = (job.client || '').toLowerCase()
-          return qn === jn || qn.includes(jn) || jn.includes(qn)
-        })
-    const best = linked.find(q => q.status === 'accepted') || linked.find(q => q.status === 'sent') || linked[0]
-    return best ? best.phases : []
+    return findLinkedQuote(job, quotes)?.phases ?? []
   }
 
   const activeCount = jobs.filter(j => j.stage === 'active').length
@@ -162,9 +156,11 @@ function JobsPageInner() {
   // every one of these buttons (Notes, Files, Costs, Payments, Variations, Gantt) so nothing
   // it's linked to becomes harder to find; only the Edit/Delete row is swapped for Reinstate.
   function renderJobCard(j: Job) {
-    const jobNum = (() => { const idx = jobs.findIndex(x => x.id === j.id); return idx >= 0 ? `JOB-${String(idx + 1).padStart(3, '0')}` : '' })()
+    const jobNum = jobNumber(jobs, j.id)
     const pct = j.weeks ? Math.min(100, Math.round((j.done / j.weeks) * 100)) : 0
     const col = jobColor(j.id)
+    const linkedQuote = findLinkedQuote(j, quotes)
+    const quoteLocked = linkedQuote && (linkedQuote.status === 'accepted' || linkedQuote.status === 'approved')
     const jobVars = variations.filter(v => v.jobId === j.id)
     const approvedVarTotal = jobVars
       .filter(v => v.status === 'approved' || v.status === 'invoiced' || v.status === 'paid')
@@ -188,6 +184,21 @@ function JobsPageInner() {
                 <span className="job-card-toggle" aria-hidden="true">›</span>
               </div>
               <div className="job-meta"><span className="jm-type">{jobDisplayTitle(j)} · </span>{j.address}<span className="jm-started">{j.start ? ' · Started ' + new Date(j.start).toLocaleDateString('en-GB') : ''}</span></div>
+              {linkedQuote && (
+                <div style={{ fontSize: 11, marginTop: 3 }}>
+                  {quoteLocked ? (
+                    <button
+                      onClick={e => { e.stopPropagation(); setViewQuote(linkedQuote) }}
+                      style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: 'var(--sky)', cursor: 'pointer', textDecoration: 'underline' }}
+                      title="View the locked, client-accepted quote this job was created from"
+                    >
+                      🔒 View {linkedQuote.ref}
+                    </button>
+                  ) : (
+                    <span style={{ color: 'var(--muted)' }}>📄 {linkedQuote.ref} (not yet accepted)</span>
+                  )}
+                </div>
+              )}
               <div className="progress" style={{ maxWidth: 240, marginTop: 6 }}>
                 <div className="progress-bar" style={{ width: pct + '%', background: col }} />
               </div>
@@ -440,6 +451,9 @@ function JobsPageInner() {
       {requestsJob && (
         <PaymentRequestsModal job={requestsJob} onClose={() => setRequestsJob(null)} />
       )}
+
+      {/* View the linked, client-locked quote — read-only, same preview used on the Quotes page */}
+      {viewQuote && <QuotePreviewModal quote={viewQuote} onClose={() => setViewQuote(null)} />}
 
 
       {/* Documents & Costs modal */}

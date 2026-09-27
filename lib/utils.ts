@@ -105,6 +105,27 @@ export function quoteDisplayTitle(quote: Pick<Quote, 'title' | 'jobType'>): stri
   return quote.title?.trim() || quote.jobType
 }
 
+/** The best quote linked to a job — by job.quoteId if it's set, otherwise a best-effort
+ *  match by customer name (an accepted quote wins, then sent, then whatever's first).
+ *  Shared so this matching never drifts between the Jobs page, Calendar and the Job
+ *  card's own "which quote is this" link. */
+export function findLinkedQuote(job: Pick<Job, 'quoteId' | 'client'>, quotes: Quote[]): Quote | undefined {
+  const linked = job.quoteId
+    ? quotes.filter(q => q.id === job.quoteId)
+    : quotes.filter(q => {
+        const qn = (q.customer.name || '').toLowerCase()
+        const jn = (job.client || '').toLowerCase()
+        return qn === jn || qn.includes(jn) || jn.includes(qn)
+      })
+  return linked.find(q => q.status === 'accepted') || linked.find(q => q.status === 'sent') || linked[0]
+}
+
+/** "JOB-007" style number based on a job's position in creation order. */
+export function jobNumber(jobs: Pick<Job, 'id'>[], jobId: string): string {
+  const idx = jobs.findIndex(j => j.id === jobId)
+  return idx >= 0 ? `JOB-${String(idx + 1).padStart(3, '0')}` : ''
+}
+
 export const STAGE_COLOR: Record<string, string> = {
   planning: '#4a90a4', active: '#7ab533', onhold: '#e67e22', complete: '#9aa3ad',
 }

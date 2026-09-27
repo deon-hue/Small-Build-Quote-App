@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useApp } from '@/contexts/AppContext'
-import { fmt, quoteTotal, STAGE_LABEL, Q_BADGE, Q_LABEL, jobDisplayTitle, quoteDisplayTitle } from '@/lib/utils'
+import { fmt, quoteTotal, STAGE_LABEL, Q_BADGE, Q_LABEL, jobDisplayTitle, quoteDisplayTitle, jobNumber } from '@/lib/utils'
 import { buildHtmlClientView } from '@/lib/quoteHtml'
 import { buildGanttFromQuote } from '@/lib/gantt-utils'
 import { backfillQuoteItemDescriptions } from '@/lib/back-office-queries'
@@ -360,7 +360,8 @@ export default function SavedQuotesPage() {
                 )}
 
                 {(!isMultiVersion || isExpanded) && group.quotes.map((q, idx) => {
-            const hasLinkedJob = jobs.some(j => j.quoteId === q.id)
+            const linkedJob = jobs.find(j => j.quoteId === q.id)
+            const hasLinkedJob = !!linkedJob
             const pushedAsVariation = !!q.ref && variations.some(v => v.notes === `Added from quote ${q.ref}`)
             // "Already has a job" must reflect a real link — matching on client name alone
             // falsely flagged unrelated jobs that happen to share a customer name (e.g. two
@@ -395,6 +396,11 @@ export default function SavedQuotesPage() {
                     {!!commentCounts[q.id] && (
                       <span style={{ marginLeft: 6, fontSize: 11, background: '#dbeafe', color: '#1d4ed8', padding: '1px 7px', borderRadius: 10, fontWeight: 600 }}>
                         💬 {commentCounts[q.id]}
+                      </span>
+                    )}
+                    {linkedJob && (
+                      <span style={{ marginLeft: 6, fontSize: 11, background: '#eaf2d3', color: '#3f5f08', padding: '1px 7px', borderRadius: 10, fontWeight: 600 }} title="The job converted from this quote — open it from Jobs to see it">
+                        → {jobNumber(jobs, linkedJob.id)}
                       </span>
                     )}
                   </div>
