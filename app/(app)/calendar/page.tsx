@@ -905,8 +905,10 @@ export default function CalendarPage() {
       )}
       {jobs.length > 0 && view === 'day'   && renderDay()}
 
-      {/* Job legend + highlight toggles */}
-      {jobs.filter(j => j.start).length > 0 && (
+      {/* Job legend + highlight toggles — on-site jobs only. A planning/on-hold/complete
+          job isn't currently being worked, so highlighting it on the calendar isn't
+          useful; Complete ones don't even have bars to highlight any more. */}
+      {jobs.filter(j => j.start && j.stage === 'active').length > 0 && (
         <div style={{ marginTop: 14 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>Jobs:</span>
@@ -920,7 +922,7 @@ export default function CalendarPage() {
             )}
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {jobs.filter(j => j.start).map(j => {
+            {jobs.filter(j => j.start && j.stage === 'active').map(j => {
               const color    = resolveJobColor(j)
               const isLit    = highlightJobId === j.id
               const jobNum   = getJobNum(j.id)
