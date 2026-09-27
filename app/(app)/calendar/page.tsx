@@ -35,6 +35,7 @@ interface CalEvent {
   startDate: Date
   endDate: Date   // exclusive end (startDay + durDays)
   color: string
+  isComplete: boolean
 }
 
 interface WeekSlot {
@@ -277,10 +278,14 @@ export default function CalendarPage() {
       const phases = gs.phases.filter(p => (p.level ?? 1) === 1)
 
       phases.forEach((ph, i) => {
-        const phaseColor = (ph as GanttPhase).isComplete ? '#7ab533' : color
         events.push({
           id: `${job.id}-${ph.id ?? i}`,
-          job, phaseLabel: ph.label, phaseIdx: i, phaseId: ph.id, color: phaseColor,
+          // One consistent colour per job everywhere — a completed task is marked with
+          // the ✓ shown wherever its label appears, not a different bar colour, so the
+          // same job doesn't look like several different colours depending on which of
+          // its tasks happen to be done.
+          job, phaseLabel: ph.label, phaseIdx: i, phaseId: ph.id, color,
+          isComplete: !!(ph as GanttPhase).isComplete,
           startDate: addDays(jobStart, ph.startDay),
           endDate:   addDays(jobStart, ph.startDay + ph.durDays),
         })
@@ -397,7 +402,7 @@ export default function CalendarPage() {
                   key={slot.event.id}
                   onClick={() => { if (suppressClickRef.current) return; setSelected(slot.event) }}
                   onMouseDown={e => startDrag(e, slot.event, 'move', 'month', numWeeks)}
-                  title={`${getJobNum(slot.event.job.id)} · ${slot.event.job.client} · ${jobDisplayTitle(slot.event.job)}\n${slot.event.phaseLabel}\n${fmtShort(slot.event.startDate)} – ${fmtShort(addDays(slot.event.endDate, -1))}`}
+                  title={`${getJobNum(slot.event.job.id)} · ${slot.event.job.client} · ${jobDisplayTitle(slot.event.job)}\n${slot.event.isComplete ? '✓ ' : ''}${slot.event.phaseLabel}\n${fmtShort(slot.event.startDate)} – ${fmtShort(addDays(slot.event.endDate, -1))}`}
                   style={{
                     position: 'absolute',
                     top: DATE_H + slot.row * EVT_H + 1,
@@ -418,7 +423,7 @@ export default function CalendarPage() {
                 >
                   {slot.startsHere && (
                     <span style={{ fontSize: 10, color: 'white', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {getJobNum(slot.event.job.id)} · {slot.event.job.client} · {slot.event.phaseLabel}
+                      {getJobNum(slot.event.job.id)} · {slot.event.job.client} · {slot.event.isComplete ? '✓ ' : ''}{slot.event.phaseLabel}
                     </span>
                   )}
                   {slot.startsHere && (
@@ -514,7 +519,7 @@ export default function CalendarPage() {
                 key={slot.event.id}
                 onClick={() => { if (suppressClickRef.current) return; setSelected(slot.event) }}
                 onMouseDown={e => startDrag(e, slot.event, 'move', 'week', 1)}
-                title={`${getJobNum(slot.event.job.id)} · ${slot.event.job.client} · ${slot.event.phaseLabel}`}
+                title={`${getJobNum(slot.event.job.id)} · ${slot.event.job.client} · ${slot.event.isComplete ? '✓ ' : ''}${slot.event.phaseLabel}`}
                 style={{
                   position: 'absolute',
                   top: 8 + slot.row * 40,
@@ -535,7 +540,7 @@ export default function CalendarPage() {
               >
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {slot.event.phaseLabel}
+                    {slot.event.isComplete ? '✓ ' : ''}{slot.event.phaseLabel}
                   </div>
                   {slot.startsHere && (
                     <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.85)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -599,7 +604,7 @@ export default function CalendarPage() {
                   <span style={{ fontSize: 10, fontWeight: 700, color: 'white', background: evt.color, borderRadius: 3, padding: '1px 5px', flexShrink: 0 }}>
                     {getJobNum(evt.job.id)}
                   </span>
-                  <div style={{ fontWeight: 700, fontSize: 14 }}>{evt.phaseLabel}</div>
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>{evt.isComplete ? '✓ ' : ''}{evt.phaseLabel}</div>
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
                   {evt.job.client} · {jobDisplayTitle(evt.job)}
@@ -638,7 +643,12 @@ export default function CalendarPage() {
           <div style={{ padding: '16px 18px 12px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
             <div style={{ width: 12, height: 12, borderRadius: 3, background: evt.color, flexShrink: 0, marginTop: 4 }} />
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 700, fontSize: 16 }}>{evt.phaseLabel}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ fontWeight: 700, fontSize: 16 }}>{evt.phaseLabel}</div>
+                {evt.isComplete && (
+                  <span style={{ fontSize: 10, fontWeight: 700, color: 'white', background: '#5e8f20', borderRadius: 10, padding: '2px 8px' }}>✓ Complete</span>
+                )}
+              </div>
               <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>Phase {evt.phaseIdx + 1}</div>
             </div>
             <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--muted)', lineHeight: 1, padding: 0 }}>×</button>
@@ -874,7 +884,7 @@ export default function CalendarPage() {
                   <span>→ {fmtShort(addDays(evt.endDate, -1))}</span>
                 </div>
                 <div className="cal-ag-main">
-                  <div className="cal-ag-title">{evt.phaseLabel}</div>
+                  <div className="cal-ag-title">{evt.isComplete ? '✓ ' : ''}{evt.phaseLabel}</div>
                   <div className="cal-ag-sub">{getJobNum(evt.job.id)} · {evt.job.client} · {jobDisplayTitle(evt.job)}</div>
                 </div>
                 <div className="cal-ag-dur">{Math.ceil(durDays / 7 * 10) / 10}w</div>

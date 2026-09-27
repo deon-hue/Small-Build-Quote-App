@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import type { Job, QuotePhase, GanttState, GanttPhase } from '@/lib/types'
 import type { Quote } from '@/lib/types'
-import { fmt, quoteTotal, Q_BADGE, Q_LABEL, jobDisplayTitle, quoteDisplayTitle } from '@/lib/utils'
+import { fmt, quoteTotal, Q_BADGE, Q_LABEL, jobDisplayTitle, quoteDisplayTitle, jobColor } from '@/lib/utils'
 import { formatGanttDuration, buildGanttFromQuote, stripPhasePrefix, resolveGanttState } from '@/lib/gantt-utils'
 import { notifyClient } from '@/lib/notify'
 import { useRouter } from 'next/navigation'
@@ -333,10 +333,12 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       const phEndDay = ph.startDay + ph.durDays
       const isDone = phEndDay <= doneWeeks * 7
       const isActive = ph.startDay < doneWeeks * 7 && phEndDay > doneWeeks * 7
-      const barColor = level === 2
-        ? (ph.isComplete || isDone ? '#5a9e2a' : isActive ? '#3a7a94' : '#a8c4d4')
-        : (ph.isComplete || isDone ? '#7ab533' : isActive ? '#4a90a4' : '#c8d8e8')
-      const textColor = (ph.isComplete || isDone || isActive) ? 'white' : '#2b2f33'
+      // One consistent colour per job, everywhere (this chart, Calendar, phone, tablet) —
+      // completion is shown with the ✓ prefix below instead of a different bar colour,
+      // which used to make the same job look like several different colours depending on
+      // which tasks happened to be done.
+      const barColor = jobColor(job.id)
+      const textColor = 'white'
       const pct = ph.percentComplete ?? 0
       const startD = fmtDateShort(addDays(startDate, ph.startDay))
       const endD = fmtDateShort(addDays(startDate, phEndDay))
@@ -401,9 +403,8 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
             <button id="gv-week" onclick="window.__ganttView('week')" style="padding:4px 10px;border:none;cursor:pointer;font-family:inherit;font-size:11px;background:${mode === 'week' ? '#2b2f33' : 'white'};color:${mode === 'week' ? 'white' : '#2b2f33'};border-right:1px solid #dde1e5">Week</button>
             <button id="gv-month" onclick="window.__ganttView('month')" style="padding:4px 10px;border:none;cursor:pointer;font-family:inherit;font-size:11px;background:${mode === 'month' ? '#2b2f33' : 'white'};color:${mode === 'month' ? 'white' : '#2b2f33'}">Month</button>
           </div>
-          <span style="display:flex;align-items:center;gap:4px;font-size:10px"><span style="width:10px;height:10px;border-radius:2px;background:#7ab533;display:inline-block"></span>Complete</span>
-          <span style="display:flex;align-items:center;gap:4px;font-size:10px"><span style="width:10px;height:10px;border-radius:2px;background:#4a90a4;display:inline-block"></span>Active</span>
-          <span style="display:flex;align-items:center;gap:4px;font-size:10px"><span style="width:10px;height:10px;border-radius:2px;background:#c8d8e8;display:inline-block"></span>Upcoming</span>
+          <span style="display:flex;align-items:center;gap:4px;font-size:10px;color:#6b7580"><span style="width:10px;height:10px;border-radius:2px;background:${esc(jobColor(job.id))};display:inline-block"></span>This job</span>
+          <span style="display:flex;align-items:center;gap:4px;font-size:10px;color:#6b7580">✓ Complete · ▶ In progress</span>
           ${hasHierarchy ? `<button onclick="window.__ganttExpandAll()" style="font-size:10px;background:transparent;border:1px solid #dde1e5;border-radius:3px;padding:2px 8px;cursor:pointer;color:#6b7580" title="Expand all groups">▼ All</button><button onclick="window.__ganttCollapseAll()" style="font-size:10px;background:transparent;border:1px solid #dde1e5;border-radius:3px;padding:2px 8px;cursor:pointer;color:#6b7580" title="Collapse all groups">▶ All</button>` : ''}
           ${hasHierarchy && parentPhaseIds.length > 1 ? `<button onclick="window.__ganttSortByDate()" style="font-size:10px;background:transparent;border:1px solid #dde1e5;border-radius:3px;padding:2px 8px;cursor:pointer;color:#6b7580" title="Sort phases into date order">↕ Sort by date</button>` : ''}
           <button onclick="window.__ganttReset()" style="font-size:10px;background:transparent;border:1px solid #dde1e5;border-radius:3px;padding:2px 8px;cursor:pointer;color:#6b7580">Reset to default</button>
