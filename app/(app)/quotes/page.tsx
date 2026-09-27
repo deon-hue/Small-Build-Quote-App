@@ -467,7 +467,7 @@ export default function SavedQuotesPage() {
                             className="sel-inline-sm"
                           >
                             <option value="">Select job…</option>
-                            {jobs.map(j => <option key={j.id} value={j.id}>{jobDisplayTitle(j)} — {j.client}</option>)}
+                            {jobs.filter(j => !j.archived).map(j => <option key={j.id} value={j.id}>{jobDisplayTitle(j)} — {j.client}</option>)}
                           </select>
                           <button
                             className="btn-sm btn-primary"

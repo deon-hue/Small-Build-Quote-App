@@ -1,7 +1,14 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+/* This app is light-only — no dark theme exists yet ([[project_theme_plan]] is paused).
+   Without this, a device set to system Dark Mode still renders *native* controls (a
+   <select>'s own dropdown list, date pickers, etc.) in dark appearance by default, even
+   though every other element here is explicitly styled light — which is exactly what
+   made a job-picker's dropdown show up as a dark box with white text on an iPad set to
+   Dark Mode. This tells the browser this page is light-only, full stop. */
 :root{
+  color-scheme:light;
   --ink:#1e2022;
   --paper:#f0f2f4;
   --warm:#e4e8ec;

@@ -533,7 +533,7 @@ export default function InvoicesPage() {
                   <label>Fill from Job (optional)</label>
                   <select value={fromJobId} onChange={e => { setFromJobId(e.target.value); if (e.target.value) loadFromJob(e.target.value) }}>
                     <option value="">— Select a job —</option>
-                    {jobs.map(j => <option key={j.id} value={j.id}>{jobDisplayTitle(j)} — {j.client}</option>)}
+                    {jobs.filter(j => !j.archived).map(j => <option key={j.id} value={j.id}>{jobDisplayTitle(j)} — {j.client}</option>)}
                   </select>
                 </div>
               )}

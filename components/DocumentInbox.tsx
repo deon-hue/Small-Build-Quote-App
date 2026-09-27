@@ -41,8 +41,13 @@ export default function DocumentInbox({ jobs }: Props) {
   const [error, setError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
+  // Unfiltered — an already-assigned document must still show its job's real name even
+  // if that job has since been archived.
   const jobOptions = jobs.map(j => ({ id: j.id, label: `${jobDisplayTitle(j)} — ${j.client}` }))
   const jobLabel = (id?: string) => id ? (jobOptions.find(j => j.id === id)?.label ?? 'job') : ''
+  // What actually appears in the "assign to a job" dropdown — an archived (completed)
+  // job has nothing new to allocate a document to.
+  const assignableJobOptions = jobs.filter(j => !j.archived).map(j => ({ id: j.id, label: `${jobDisplayTitle(j)} — ${j.client}` }))
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -238,7 +243,12 @@ export default function DocumentInbox({ jobs }: Props) {
       {openDoc && userId && (
         <DocumentReviewModal
           doc={openDoc}
-          jobs={jobOptions}
+          // Assignable jobs, plus this document's own current job even if it's since been
+          // archived — otherwise an already-allocated document would show no job selected
+          // at all, rather than the (correct) archived one it's actually assigned to.
+          jobs={openDoc.jobId && !assignableJobOptions.some(j => j.id === openDoc.jobId)
+            ? [...assignableJobOptions, ...jobOptions.filter(j => j.id === openDoc.jobId)]
+            : assignableJobOptions}
           userId={userId}
           onClose={() => setOpenDoc(null)}
           onSaved={() => { setOpenDoc(null); load() }}
