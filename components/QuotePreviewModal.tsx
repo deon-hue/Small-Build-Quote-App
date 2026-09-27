@@ -5,7 +5,6 @@ import { useApp } from '@/contexts/AppContext'
 import { buildHtml, buildHtmlClientView } from '@/lib/quoteHtml'
 import type { Quote } from '@/lib/types'
 import { DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
-import QuoteCommentsSection from './QuoteCommentsSection'
 import { useDraggableModal } from './useDraggableModal'
 import ModalResizeHandle from './ModalResizeHandle'
 import ModalMaximizeButton from './ModalMaximizeButton'
@@ -102,17 +101,14 @@ export default function QuotePreviewModal({ quote, onClose, boTasks = [] }: Prop
             <button className="modal-close" onClick={onClose}>×</button>
           </div>
         </div>
-        <div style={{ display: 'flex', flex: 1, minHeight: 0, flexDirection: 'column', gap: 0 }}>
+        <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
           <iframe
             ref={frameRef}
             className="modal-iframe"
             srcDoc={html}
-            style={{ flex: 0.7, border: 'none', minHeight: 400, pointerEvents: isInteracting ? 'none' : 'auto' }}
+            style={{ flex: 1, border: 'none', minHeight: 400, pointerEvents: isInteracting ? 'none' : 'auto' }}
             title="Quote Preview"
           />
-          <div style={{ flex: 0.3, overflowY: 'auto', borderTop: '1px solid var(--border)', paddingTop: 16, paddingLeft: 16, paddingRight: 16, paddingBottom: 16 }}>
-            <QuoteCommentsSection quoteId={quote.id} phases={quote.phases.map(p => p.phase)} />
-          </div>
         </div>
         {!isMaximized && <ModalResizeHandle onMouseDown={onResizeMouseDown} />}
       </div>

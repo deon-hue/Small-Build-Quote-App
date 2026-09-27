@@ -9,6 +9,7 @@ import { backfillQuoteItemDescriptions } from '@/lib/back-office-queries'
 import type { Quote } from '@/lib/types'
 import { DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
 import QuotePreviewModal from '@/components/QuotePreviewModal'
+import QuoteCommentsModal from '@/components/QuoteCommentsModal'
 import SendQuoteModal from '@/components/SendQuoteModal'
 import QuoteCommentsSection from '@/components/QuoteCommentsSection'
 import { useRouter } from 'next/navigation'
@@ -18,6 +19,7 @@ import { extractQuoteIntelligence } from '@/lib/quote-intelligence'
 export default function SavedQuotesPage() {
   const { quotes, jobs, variations, settings, clients, updateQuote, deleteQuote, deleteJob, addJob, addVariation, saveGanttState, loading } = useApp()
   const [previewQuote, setPreviewQuote]   = useState<Quote | null>(null)
+  const [commentsQuote, setCommentsQuote] = useState<Quote | null>(null)
   const [emailingQuote, setEmailingQuote] = useState<Quote | null>(null)
   const [archiveOpen, setArchiveOpen]     = useState(false)
   const [pushVarQuote, setPushVarQuote]   = useState<Quote | null>(null)
@@ -393,11 +395,13 @@ export default function SavedQuotesPage() {
                         · {isExpired(q.savedDate) ? '⚠ Expired' : 'Expires'} {quoteExpiry(q.savedDate)}
                       </span>
                     )}
-                    {!!commentCounts[q.id] && (
-                      <span style={{ marginLeft: 6, fontSize: 11, background: '#dbeafe', color: '#1d4ed8', padding: '1px 7px', borderRadius: 10, fontWeight: 600 }}>
-                        💬 {commentCounts[q.id]}
-                      </span>
-                    )}
+                    <button
+                      onClick={e => { e.stopPropagation(); setCommentsQuote(q) }}
+                      style={{ marginLeft: 6, fontSize: 11, background: '#dbeafe', color: '#1d4ed8', padding: '1px 7px', borderRadius: 10, fontWeight: 600, border: 'none', cursor: 'pointer', font: 'inherit' }}
+                      title="Questions and replies for this quote"
+                    >
+                      💬{commentCounts[q.id] ? ` ${commentCounts[q.id]}` : ''}
+                    </button>
                     {linkedJob && (
                       <span style={{ marginLeft: 6, fontSize: 11, background: '#eaf2d3', color: '#3f5f08', padding: '1px 7px', borderRadius: 10, fontWeight: 600 }} title="The job converted from this quote — open it from Jobs to see it">
                         → {jobNumber(jobs, linkedJob.id)}
@@ -582,6 +586,10 @@ export default function SavedQuotesPage() {
 
       {previewQuote && (
         <QuotePreviewModal quote={previewQuote} onClose={() => setPreviewQuote(null)} />
+      )}
+
+      {commentsQuote && (
+        <QuoteCommentsModal quote={commentsQuote} onClose={() => setCommentsQuote(null)} />
       )}
 
       {emailingQuote && (

@@ -14,6 +14,7 @@ import JobNotesModal from '@/components/JobNotesModal'
 import JobAttachmentsModal from '@/components/JobAttachmentsModal'
 import PaymentRequestsModal from '@/components/PaymentRequestsModal'
 import QuotePreviewModal from '@/components/QuotePreviewModal'
+import QuoteCommentsModal from '@/components/QuoteCommentsModal'
 import { useDraggableModal } from '@/components/useDraggableModal'
 import ModalResizeHandle from '@/components/ModalResizeHandle'
 import ModalMaximizeButton from '@/components/ModalMaximizeButton'
@@ -40,6 +41,7 @@ function JobsPageInner() {
   const [attachmentsJob, setAttachmentsJob] = useState<Job | null>(null)
   const [requestsJob, setRequestsJob] = useState<Job | null>(null)
   const [viewQuote, setViewQuote] = useState<Quote | null>(null)
+  const [commentsQuote, setCommentsQuote] = useState<Quote | null>(null)
   // Phones only: which job card has its action buttons expanded (CSS ignores this on desktop)
   const [openJobId, setOpenJobId] = useState<string | null>(null)
   const [archiveOpen, setArchiveOpen] = useState(false)
@@ -233,6 +235,9 @@ function JobsPageInner() {
               {sentVarCount > 0 ? ` · ${sentVarCount} pending` : ''}
             </button>
             <button className="btn-sm btn-outline jb-files" onClick={() => setAttachmentsJob(j)} title="Plans, photos and documents shared with the client">📎 Files</button>
+            {linkedQuote && (
+              <button className="btn-sm btn-outline jb-qa" onClick={() => setCommentsQuote(linkedQuote)} title="Questions and replies for this job's quote">💬 Quote Q&amp;A</button>
+            )}
             <button className="btn-sm btn-outline jb-costs" onClick={() => setDocsJob(j)} title="Scan/upload supplier docs and track costs">💷 Costs</button>
             <button className="btn-sm btn-outline jb-pay" onClick={() => setRequestsJob(j)} title="Payment requests and received payments">
               💳 Payments{jobPayments.filter(p => p.jobId === j.id).length > 0 ? ` (${jobPayments.filter(p => p.jobId === j.id).length})` : ''}
@@ -454,6 +459,9 @@ function JobsPageInner() {
 
       {/* View the linked, client-locked quote — read-only, same preview used on the Quotes page */}
       {viewQuote && <QuotePreviewModal quote={viewQuote} onClose={() => setViewQuote(null)} />}
+
+      {/* This job's quote Q&A — its own modal, not tacked onto the quote preview */}
+      {commentsQuote && <QuoteCommentsModal quote={commentsQuote} onClose={() => setCommentsQuote(null)} />}
 
 
       {/* Documents & Costs modal */}
