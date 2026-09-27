@@ -15,6 +15,15 @@
   .cal-ag-sub{font-size:13px;color:rgba(255,255,255,0.85);margin-top:3px;line-height:1.35}
   .cal-ag-dur{flex:none;font-size:13px;font-weight:700;color:#1f2a24;background:rgba(255,255,255,0.92);border-radius:999px;padding:4px 10px}
 
+  /* Day view's own cards — same fully-coloured treatment. On desktop these keep the
+     original left-edge-only look (a plain, non-touch-gated rule sets that), so only the
+     background/text/badge colours below are new here. */
+  .cal-day-item{background:var(--job-color,#fff);border-left:none!important}
+  .cal-day-code{background:rgba(255,255,255,0.25)!important}
+  .cal-day-title{color:#fff!important}
+  .cal-day-sub{color:rgba(255,255,255,0.85)!important}
+  .cal-day-badge{background:rgba(255,255,255,0.92)!important;color:#1f2a24!important}
+
   /* Toolbar: view switcher on its own row, then prev / label / next */
   .cal-toolbar{display:grid!important;grid-template-columns:auto 1fr auto;gap:10px!important}
   .cal-views{grid-column:1/-1;border-radius:14px!important;border-color:#e0e6d8!important;background:#fff}

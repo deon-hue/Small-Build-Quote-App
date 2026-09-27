@@ -683,32 +683,33 @@ export default function CalendarPage() {
             <div
               key={evt.id}
               onClick={() => setSelected(evt)}
-              className="card"
+              className="card cal-day-item"
               style={{
-                padding: '14px 16px', cursor: 'pointer', borderLeft: `4px solid ${evt.color}`,
+                padding: '14px 16px', cursor: 'pointer', borderLeft: '4px solid var(--job-color)',
                 display: 'flex', alignItems: 'center', gap: 16,
                 opacity: barOpacity(evt.job.id), transition: 'opacity 0.2s',
-              }}
+                '--job-color': evt.color,
+              } as React.CSSProperties}
             >
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 2 }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: 'white', background: evt.color, borderRadius: 3, padding: '1px 5px', flexShrink: 0 }}>
+                  <span className="cal-day-code" style={{ fontSize: 10, fontWeight: 700, color: 'white', background: evt.color, borderRadius: 3, padding: '1px 5px', flexShrink: 0 }}>
                     {getJobNum(evt.job.id)}
                   </span>
-                  <div style={{ fontWeight: 700, fontSize: 14 }}>{evt.isComplete ? '✓ Complete ' : ''}{evt.phaseLabel}</div>
+                  <div className="cal-day-title" style={{ fontWeight: 700, fontSize: 14 }}>{evt.isComplete ? '✓ Complete ' : ''}{evt.phaseLabel}</div>
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                <div className="cal-day-sub" style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
                   {evt.job.client} · {jobDisplayTitle(evt.job)}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                <div className="cal-day-sub" style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
                   {evt.job.address}
                 </div>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 600 }}>{fmtShort(evt.startDate)} → {fmtShort(addDays(evt.endDate, -1))}</div>
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{Math.ceil(durDays / 7 * 10) / 10} weeks</div>
+                <div className="cal-day-title" style={{ fontSize: 12, fontWeight: 600 }}>{fmtShort(evt.startDate)} → {fmtShort(addDays(evt.endDate, -1))}</div>
+                <div className="cal-day-sub" style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{Math.ceil(durDays / 7 * 10) / 10} weeks</div>
               </div>
-              <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 10, background: stageColor + '22', color: stageColor, flexShrink: 0 }}>
+              <span className="cal-day-badge" style={{ fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 10, background: stageColor + '22', color: stageColor, flexShrink: 0 }}>
                 {STAGE_LABEL[evt.job.stage] || evt.job.stage}
               </span>
             </div>
