@@ -384,6 +384,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
           <button onclick="window.__ganttReset()" style="font-size:10px;background:transparent;border:1px solid #dde1e5;border-radius:3px;padding:2px 8px;cursor:pointer;color:#6b7580">Reset to default</button>
         </div>
       </div>
+      <div style="font-size:10px;color:#9aa3ad;margin:-4px 0 8px">💡 Need to split a task or sub-phase into two (e.g. work pauses then resumes later)? Click its ✎ edit icon, then Split.</div>
       <div style="overflow-x:auto">
         <div style="min-width:${innerMinW}px">
           <div data-hdr-offset="1" style="display:flex;margin-left:${LABEL_W + 9}px;margin-bottom:0">${monthRowHtml}</div>
