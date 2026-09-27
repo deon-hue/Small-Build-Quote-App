@@ -115,6 +115,17 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     }
   }, [job, clients, settings, saveGanttState, updateJob])
 
+  // Awaited by every explicit close path (× button, clicking the overlay, the linked-
+  // quote "Email" button) before it actually closes — the fire-and-forget flush in the
+  // job-change effect below guarantees an edit eventually saves, but doesn't stop the
+  // very next action (closing, then straight to Calendar) from reading/writing stale
+  // ganttStates before that save has actually landed. Awaiting here closes that window
+  // for every deliberate close, which is how this modal is normally left.
+  async function flushBeforeClose() {
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+    if (dirtyRef.current) await handleSave(undefined, true)
+  }
+
   // ── Auto-save 1.5s after any edit ───────────────────────────
   useEffect(() => {
     if (!dirty) return
@@ -1026,7 +1037,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
   }
 
   return (
-    <div className="modal-overlay" onMouseDown={e => onOverlayClick(e, onClose)}>
+    <div className="modal-overlay" onMouseDown={e => onOverlayClick(e, () => { flushBeforeClose().then(onClose) })}>
       <div ref={boxRef} style={fullscreen
         ? { background: 'var(--cream)', borderRadius: 0, width: '100vw', height: '100vh', maxHeight: '100vh', display: 'flex', flexDirection: 'column', boxShadow: 'none' }
         : { background: 'var(--cream)', borderRadius: 8, width: 'min(980px,96vw)', maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 80px rgba(0,0,0,0.25)', position: 'relative', ...draggableStyle }
@@ -1044,7 +1055,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
             >
               {fullscreen ? '⤡' : '⛶'}
             </button>
-            <button className="modal-close" onClick={onClose}>×</button>
+            <button className="modal-close" onClick={() => { flushBeforeClose().then(onClose) }}>×</button>
           </div>
         </div>
 
@@ -1198,8 +1209,10 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
                     <div className="serif" style={{ fontSize: 17 }}>{fmt(quoteTotal(q))}</div>
                     <span className={`badge ${Q_BADGE[q.status] || 'b-pending'}`}>{Q_LABEL[q.status] || q.status}</span>
                     <button className="btn-sm btn-gold" onClick={() => {
-                      onClose()
-                      router.push('/quotes')
+                      flushBeforeClose().then(() => {
+                        onClose()
+                        router.push('/quotes')
+                      })
                     }}>✉ Email</button>
                   </div>
                 ))
