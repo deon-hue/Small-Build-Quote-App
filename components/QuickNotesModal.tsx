@@ -15,7 +15,7 @@
 import { useState } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import type { Job } from '@/lib/types'
-import { jobColor, jobDisplayTitle } from '@/lib/utils'
+import { resolveJobColor, jobDisplayTitle } from '@/lib/utils'
 import JobNotesModal from './JobNotesModal'
 import { useDraggableModal } from './useDraggableModal'
 import ModalResizeHandle from './ModalResizeHandle'
@@ -34,7 +34,7 @@ function JobRow({ job, onPick }: { job: Job; onPick: (j: Job) => void }) {
         background: 'none', cursor: 'pointer', textAlign: 'left', font: 'inherit',
       }}
     >
-      <span style={{ width: 6, height: 28, borderRadius: 3, background: jobColor(job.id), flexShrink: 0 }} />
+      <span style={{ width: 6, height: 28, borderRadius: 3, background: resolveJobColor(job), flexShrink: 0 }} />
       <span style={{ minWidth: 0, flex: 1 }}>
         <span style={{ display: 'block', fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{job.client}</span>
         <span style={{ display: 'block', fontSize: 11.5, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{jobDisplayTitle(job)}</span>

@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { useApp } from '@/contexts/AppContext'
-import { STAGE_COLOR, STAGE_LABEL, fmt, JOB_COLORS, jobColor, jobDisplayTitle, findLinkedQuote } from '@/lib/utils'
+import { STAGE_COLOR, STAGE_LABEL, fmt, resolveJobColor, jobDisplayTitle, findLinkedQuote } from '@/lib/utils'
 import { resolveGanttState } from '@/lib/gantt-utils'
 import type { Job, GanttPhase, GanttState } from '@/lib/types'
 
@@ -48,7 +48,6 @@ interface WeekSlot {
 }
 
 // ── Constants ──────────────────────────────────────────────────
-// JOB_COLORS is imported from lib/utils (shared with Jobs page)
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const MAX_ROWS = 3  // max event rows visible per week strip in month view
 const DATE_H   = 26 // px – date-number strip height
@@ -276,7 +275,7 @@ export default function CalendarPage() {
       const jobStart = new Date(job.start)
       jobStart.setHours(0, 0, 0, 0)
 
-      const color = jobColor(job.id)
+      const color = resolveJobColor(job)
 
       // The exact same schedule GanttModal would show for this job — a saved layout if
       // one exists, otherwise the same quote-derived or generic placeholder it would
@@ -922,7 +921,7 @@ export default function CalendarPage() {
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {jobs.filter(j => j.start).map(j => {
-              const color    = jobColor(j.id)
+              const color    = resolveJobColor(j)
               const isLit    = highlightJobId === j.id
               const jobNum   = getJobNum(j.id)
               return (

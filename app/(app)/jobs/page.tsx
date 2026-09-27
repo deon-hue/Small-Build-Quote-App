@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useApp } from '@/contexts/AppContext'
-import { fmt, jobColor, jobDisplayTitle, findLinkedQuote, jobNumber, STAGE_BADGE, STAGE_LABEL, JOB_TYPES } from '@/lib/utils'
+import { fmt, resolveJobColor, JOB_COLORS, jobDisplayTitle, findLinkedQuote, jobNumber, STAGE_BADGE, STAGE_LABEL, JOB_TYPES } from '@/lib/utils'
 import type { Job, Quote } from '@/lib/types'
 import { quoteBudget } from '@/lib/job-costs'
 import GanttModal from '@/components/GanttModal'
@@ -88,7 +88,7 @@ function JobsPageInner() {
   function openEdit(job: Job) {
     setEditJob(job)
     setForm({ client: job.client, type: job.type, title: job.title, address: job.address, value: job.value,
-      stage: job.stage, start: job.start, weeks: job.weeks, done: job.done, notes: job.notes })
+      stage: job.stage, start: job.start, weeks: job.weeks, done: job.done, notes: job.notes, color: job.color })
     setShowModal(true)
   }
 
@@ -160,7 +160,7 @@ function JobsPageInner() {
   function renderJobCard(j: Job) {
     const jobNum = jobNumber(jobs, j.id)
     const pct = j.weeks ? Math.min(100, Math.round((j.done / j.weeks) * 100)) : 0
-    const col = jobColor(j.id)
+    const col = resolveJobColor(j)
     const linkedQuote = findLinkedQuote(j, quotes)
     const quoteLocked = linkedQuote && (linkedQuote.status === 'accepted' || linkedQuote.status === 'approved')
     const jobVars = variations.filter(v => v.jobId === j.id)
@@ -371,6 +371,40 @@ function JobsPageInner() {
                   onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
                   placeholder="Give the job a name — shown everywhere instead of the Job Type"
                 />
+              </div>
+              <div className="fg">
+                <label>Colour</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, color: undefined }))}
+                    title="Automatic — a stable colour based on the job, from the same 10"
+                    style={{
+                      width: 28, height: 28, borderRadius: '50%', cursor: 'pointer', background: '#fff',
+                      border: !form.color ? '2px solid #1e2022' : '1px solid var(--border)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 9, color: 'var(--muted)', fontWeight: 700, padding: 0,
+                    }}
+                  >
+                    Auto
+                  </button>
+                  {JOB_COLORS.map(c => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, color: c }))}
+                      title={c}
+                      style={{
+                        width: 28, height: 28, borderRadius: '50%', cursor: 'pointer', background: c, padding: 0,
+                        border: form.color === c ? '2px solid #1e2022' : '2px solid transparent',
+                        boxShadow: form.color === c ? 'none' : '0 0 0 1px var(--border)',
+                        color: '#fff', fontSize: 13, fontWeight: 700, lineHeight: 1,
+                      }}
+                    >
+                      {form.color === c ? '✓' : ''}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="fg">
                 <label>Address</label>

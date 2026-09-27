@@ -202,6 +202,10 @@ export interface Job {
   /** Set once a completed job is archived — hides it from the Jobs list but keeps every
    *  linked record (notes, documents, payments, variations, invoices, Gantt) intact. */
   archived?: boolean
+  /** One of the 10 JOB_COLORS swatches, picked by the estimator on the job's own edit
+   *  form — overrides the automatic per-id colour everywhere the job is shown in colour.
+   *  Empty/unset falls back to that automatic colour (see resolveJobColor in lib/utils). */
+  color?: string
 }
 
 // ── Job attachments (client-visible: plans, photos, documents) ───────────────

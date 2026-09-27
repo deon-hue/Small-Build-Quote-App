@@ -79,17 +79,37 @@ export function quoteTotal(q: Quote): number {
 // ── Per-job unique colours (matches calendar view) ───────────────────────────
 // Each job gets a persistent colour derived from its ID so the dot / badge on
 // the Jobs list page uses the same colour the user sees on the Calendar page.
+// Ten hand-picked, deliberately spread-out hues — the old palette had two near-duplicate
+// pairs (a teal next to a near-identical darker teal, a red next to a near-identical
+// darker red), which is exactly what made two different jobs look like the same colour.
 export const JOB_COLORS = [
-  '#4a90a4', '#7ab533', '#e07b22', '#9b59b6', '#2980b9',
-  '#e74c3c', '#1abc9c', '#b5870a', '#16a085', '#c0392b',
+  '#2E86C1', // blue
+  '#27AE60', // green
+  '#E67E22', // orange
+  '#8E44AD', // purple
+  '#C0392B', // red
+  '#16A085', // teal
+  '#B7950B', // gold / mustard
+  '#D81B60', // pink / magenta
+  '#34495E', // navy / slate
+  '#6D4C41', // brown
 ]
 function _hashCode(s: string): number {
   let h = 0
   for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0
   return h
 }
+/** The automatic colour a job gets if nobody's picked one — stable per job id, from
+ *  JOB_COLORS. Prefer resolveJobColor() wherever a Job object is at hand; this is the
+ *  fallback resolveJobColor() itself uses, and the source for the picker's 10 swatches. */
 export function jobColor(jobId: string): string {
   return JOB_COLORS[Math.abs(_hashCode(jobId)) % JOB_COLORS.length]
+}
+/** The colour to actually show for a job everywhere (Jobs list, Gantt chart, Calendar,
+ *  Notes picker) — the estimator's own pick from JOB_COLORS if they've set one on the
+ *  job, otherwise the same automatic per-id colour as before. */
+export function resolveJobColor(job: Pick<Job, 'id' | 'color'>): string {
+  return job.color || jobColor(job.id)
 }
 
 /** The name to show for a job anywhere in the app: the estimator's own title if they've

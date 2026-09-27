@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import type { Job, QuotePhase, GanttState, GanttPhase } from '@/lib/types'
 import type { Quote } from '@/lib/types'
-import { fmt, quoteTotal, Q_BADGE, Q_LABEL, jobDisplayTitle, quoteDisplayTitle, jobColor } from '@/lib/utils'
+import { fmt, quoteTotal, Q_BADGE, Q_LABEL, jobDisplayTitle, quoteDisplayTitle, resolveJobColor } from '@/lib/utils'
 import { formatGanttDuration, buildGanttFromQuote, stripPhasePrefix, resolveGanttState } from '@/lib/gantt-utils'
 import { notifyClient } from '@/lib/notify'
 import { useRouter } from 'next/navigation'
@@ -337,7 +337,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       // completion is shown with the ✓ prefix below instead of a different bar colour,
       // which used to make the same job look like several different colours depending on
       // which tasks happened to be done.
-      const barColor = jobColor(job.id)
+      const barColor = resolveJobColor(job)
       const textColor = 'white'
       // A completed bar keeps the same job colour but gets a diagonal hatch layered over
       // it (a background-image, so it never dims the text on top) — much easier to spot
@@ -410,7 +410,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
             <button id="gv-week" onclick="window.__ganttView('week')" style="padding:4px 10px;border:none;cursor:pointer;font-family:inherit;font-size:11px;background:${mode === 'week' ? '#2b2f33' : 'white'};color:${mode === 'week' ? 'white' : '#2b2f33'};border-right:1px solid #dde1e5">Week</button>
             <button id="gv-month" onclick="window.__ganttView('month')" style="padding:4px 10px;border:none;cursor:pointer;font-family:inherit;font-size:11px;background:${mode === 'month' ? '#2b2f33' : 'white'};color:${mode === 'month' ? 'white' : '#2b2f33'}">Month</button>
           </div>
-          <span style="display:flex;align-items:center;gap:4px;font-size:10px;color:#6b7580"><span style="width:10px;height:10px;border-radius:2px;background:${esc(jobColor(job.id))};display:inline-block"></span>This job</span>
+          <span style="display:flex;align-items:center;gap:4px;font-size:10px;color:#6b7580"><span style="width:10px;height:10px;border-radius:2px;background:${esc(resolveJobColor(job))};display:inline-block"></span>This job</span>
           <span style="display:flex;align-items:center;gap:4px;font-size:10px;color:#6b7580">✓ Complete · ▶ In progress</span>
           ${hasHierarchy ? `<button onclick="window.__ganttExpandAll()" style="font-size:10px;background:transparent;border:1px solid #dde1e5;border-radius:3px;padding:2px 8px;cursor:pointer;color:#6b7580" title="Expand all groups">▼ All</button><button onclick="window.__ganttCollapseAll()" style="font-size:10px;background:transparent;border:1px solid #dde1e5;border-radius:3px;padding:2px 8px;cursor:pointer;color:#6b7580" title="Collapse all groups">▶ All</button>` : ''}
           ${hasHierarchy && parentPhaseIds.length > 1 ? `<button onclick="window.__ganttSortByDate()" style="font-size:10px;background:transparent;border:1px solid #dde1e5;border-radius:3px;padding:2px 8px;cursor:pointer;color:#6b7580" title="Sort phases into date order">↕ Sort by date</button>` : ''}
