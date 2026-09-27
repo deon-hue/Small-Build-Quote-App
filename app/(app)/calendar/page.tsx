@@ -92,8 +92,8 @@ export default function CalendarPage() {
   const router = useRouter()
 
   const today = useMemo(() => new Date(new Date().setHours(0, 0, 0, 0)), [])
-  const [view,            setView]           = useState<'month' | 'week' | 'day'>('month')
-  const [anchor,          setAnchor]         = useState<Date>(() => new Date(today.getFullYear(), today.getMonth(), 1))
+  const [view,            setView]           = useState<'month' | 'week' | 'day'>('day')
+  const [anchor,          setAnchor]         = useState<Date>(() => today)
   const [selected,        setSelected]       = useState<CalEvent | null>(null)
   const [highlightJobId,  setHighlightJobId] = useState<string | null>(null)
   // Task edit fields in the detail panel — reset whenever a different event is selected.
