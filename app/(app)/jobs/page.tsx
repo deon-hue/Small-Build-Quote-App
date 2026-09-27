@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useApp } from '@/contexts/AppContext'
-import { fmt, jobColor, STAGE_BADGE, STAGE_LABEL, JOB_TYPES } from '@/lib/utils'
+import { fmt, jobColor, jobDisplayTitle, STAGE_BADGE, STAGE_LABEL, JOB_TYPES } from '@/lib/utils'
 import type { Job } from '@/lib/types'
 import { quoteBudget } from '@/lib/job-costs'
 import GanttModal from '@/components/GanttModal'
@@ -17,7 +17,7 @@ import ModalResizeHandle from '@/components/ModalResizeHandle'
 import ModalMaximizeButton from '@/components/ModalMaximizeButton'
 
 const BLANK_JOB: Omit<Job, 'id'> = {
-  client: '', type: 'Rear Extension', address: '', value: 0,
+  client: '', type: 'Rear Extension', title: '', address: '', value: 0,
   stage: 'planning', start: '', weeks: 8, done: 0, notes: '',
 }
 
@@ -57,7 +57,7 @@ export default function JobsPage() {
 
   function openEdit(job: Job) {
     setEditJob(job)
-    setForm({ client: job.client, type: job.type, address: job.address, value: job.value,
+    setForm({ client: job.client, type: job.type, title: job.title, address: job.address, value: job.value,
       stage: job.stage, start: job.start, weeks: job.weeks, done: job.done, notes: job.notes })
     setShowModal(true)
   }
@@ -94,7 +94,7 @@ export default function JobsPage() {
 
   async function handleDelete(job: Job) {
     const linkedQuote = job.quoteId ? quotes.find(q => q.id === job.quoteId) : null
-    let msg = `Delete job: ${job.type} — ${job.client}?`
+    let msg = `Delete job: ${jobDisplayTitle(job)} — ${job.client}?`
     if (linkedQuote) msg += `\n\nThis will also unlink quote ${linkedQuote.ref}.`
     msg += '\n\nThis cannot be undone.'
     if (!confirm(msg)) return
@@ -103,7 +103,7 @@ export default function JobsPage() {
 
   async function handleArchive(job: Job) {
     if (!confirm(
-      `Archive job: ${job.type} — ${job.client}?\n\n` +
+      `Archive job: ${jobDisplayTitle(job)} — ${job.client}?\n\n` +
       `It will move out of the Jobs list into Archived Jobs. Nothing is deleted — notes, ` +
       `files, costs, payments and variations all stay exactly as they are, and you can ` +
       `reinstate it any time.`
@@ -153,10 +153,10 @@ export default function JobsPage() {
             <div className="job-info">
               <div className="job-namerow" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
                 <span className="mono job-code" style={{ fontSize: 10, fontWeight: 700, color: 'white', background: col, borderRadius: 4, padding: '2px 6px', letterSpacing: '0.5px' }}>{jobNum}</span>
-                <div className="job-name"><span className="jn-type">{j.type}</span><span className="jn-sep"> — </span><span className="jn-client">{j.client}</span></div>
+                <div className="job-name"><span className="jn-type">{jobDisplayTitle(j)}</span><span className="jn-sep"> — </span><span className="jn-client">{j.client}</span></div>
                 <span className="job-card-toggle" aria-hidden="true">›</span>
               </div>
-              <div className="job-meta"><span className="jm-type">{j.type} · </span>{j.address}<span className="jm-started">{j.start ? ' · Started ' + new Date(j.start).toLocaleDateString('en-GB') : ''}</span></div>
+              <div className="job-meta"><span className="jm-type">{jobDisplayTitle(j)} · </span>{j.address}<span className="jm-started">{j.start ? ' · Started ' + new Date(j.start).toLocaleDateString('en-GB') : ''}</span></div>
               <div className="progress" style={{ maxWidth: 240, marginTop: 6 }}>
                 <div className="progress-bar" style={{ width: pct + '%', background: col }} />
               </div>
@@ -318,6 +318,14 @@ export default function JobsPage() {
                 </div>
               </div>
               <div className="fg">
+                <label>Job Title</label>
+                <input
+                  value={form.title}
+                  onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                  placeholder="Give the job a name — shown everywhere instead of the Job Type"
+                />
+              </div>
+              <div className="fg">
                 <label>Address</label>
                 <input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="14 Thornton Road, London" />
               </div>
@@ -417,7 +425,7 @@ export default function JobsPage() {
         return (
           <JobDocumentsModal
             jobId={docsJob.id}
-            jobLabel={`${docsJob.type} — ${docsJob.client}`}
+            jobLabel={`${jobDisplayTitle(docsJob)} — ${docsJob.client}`}
             budget={budget}
             revenue={docsJob.value + approved}
             contractValue={docsJob.value}
@@ -426,7 +434,7 @@ export default function JobsPage() {
             paidTotal={paidTotal}
             cashReceived={cashReceived}
             clientName={docsJob.client}
-            jobType={docsJob.type}
+            jobType={jobDisplayTitle(docsJob)}
             jobAddress={docsJob.address}
             onClose={() => setDocsJob(null)}
           />

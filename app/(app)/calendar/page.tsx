@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { useApp } from '@/contexts/AppContext'
-import { STAGE_COLOR, STAGE_LABEL, fmt, JOB_COLORS, jobColor } from '@/lib/utils'
+import { STAGE_COLOR, STAGE_LABEL, fmt, JOB_COLORS, jobColor, jobDisplayTitle } from '@/lib/utils'
 import type { Job, GanttPhase } from '@/lib/types'
 
 // ── Date helpers ───────────────────────────────────────────────
@@ -275,7 +275,7 @@ export default function CalendarPage() {
                 <div
                   key={slot.event.id}
                   onClick={() => setSelected(slot.event)}
-                  title={`${getJobNum(slot.event.job.id)} · ${slot.event.job.client} · ${slot.event.job.type}\n${slot.event.phaseLabel}\n${fmtShort(slot.event.startDate)} – ${fmtShort(addDays(slot.event.endDate, -1))}`}
+                  title={`${getJobNum(slot.event.job.id)} · ${slot.event.job.client} · ${jobDisplayTitle(slot.event.job)}\n${slot.event.phaseLabel}\n${fmtShort(slot.event.startDate)} – ${fmtShort(addDays(slot.event.endDate, -1))}`}
                   style={{
                     position: 'absolute',
                     top: DATE_H + slot.row * EVT_H + 1,
@@ -402,7 +402,7 @@ export default function CalendarPage() {
                   </div>
                   {slot.startsHere && (
                     <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.85)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {getJobNum(slot.event.job.id)} · {slot.event.job.client} · {slot.event.job.type} · {Math.ceil(durDays / 7 * 10) / 10}w
+                      {getJobNum(slot.event.job.id)} · {slot.event.job.client} · {jobDisplayTitle(slot.event.job)} · {Math.ceil(durDays / 7 * 10) / 10}w
                     </div>
                   )}
                 </div>
@@ -453,7 +453,7 @@ export default function CalendarPage() {
                   <div style={{ fontWeight: 700, fontSize: 14 }}>{evt.phaseLabel}</div>
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
-                  {evt.job.client} · {evt.job.type}
+                  {evt.job.client} · {jobDisplayTitle(evt.job)}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
                   {evt.job.address}
@@ -500,7 +500,7 @@ export default function CalendarPage() {
           <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <DetailRow label="Job ref"    value={<span className="mono" style={{ fontWeight: 700 }}>{getJobNum(evt.job.id)}</span>} />
             <DetailRow label="Customer"   value={evt.job.client} />
-            <DetailRow label="Job type"   value={evt.job.type} />
+            <DetailRow label="Job"        value={jobDisplayTitle(evt.job)} />
             <DetailRow label="Address"    value={evt.job.address} />
             <DetailRow label="Start"      value={fmtFull(evt.startDate)} />
             <DetailRow label="End"        value={fmtFull(addDays(evt.endDate, -1))} />
@@ -598,7 +598,7 @@ export default function CalendarPage() {
               {jobsNoStart.length} job{jobsNoStart.length > 1 ? 's' : ''} {jobsNoStart.length > 1 ? 'have' : 'has'} no start date — set one in Jobs to show {jobsNoStart.length > 1 ? 'them' : 'it'} here
             </div>
             <div style={{ fontSize: 11, color: '#b45309', marginTop: 3 }}>
-              {jobsNoStart.map(j => j.client + ' · ' + j.type).join('  |  ')}
+              {jobsNoStart.map(j => j.client + ' · ' + jobDisplayTitle(j)).join('  |  ')}
             </div>
           </div>
           <button
@@ -692,7 +692,7 @@ export default function CalendarPage() {
                 </div>
                 <div className="cal-ag-main">
                   <div className="cal-ag-title">{evt.phaseLabel}</div>
-                  <div className="cal-ag-sub">{getJobNum(evt.job.id)} · {evt.job.client} · {evt.job.type}</div>
+                  <div className="cal-ag-sub">{getJobNum(evt.job.id)} · {evt.job.client} · {jobDisplayTitle(evt.job)}</div>
                 </div>
                 <div className="cal-ag-dur">{Math.ceil(durDays / 7 * 10) / 10}w</div>
               </div>
@@ -737,7 +737,7 @@ export default function CalendarPage() {
                 >
                   <div style={{ width: 10, height: 10, borderRadius: 2, background: isLit ? 'white' : color, flexShrink: 0 }} />
                   <span style={{ fontSize: 11, fontWeight: 700, color: isLit ? 'white' : 'var(--ink)', fontFamily: 'monospace' }}>{jobNum}</span>
-                  <span style={{ fontSize: 11, color: isLit ? 'rgba(255,255,255,0.9)' : 'var(--muted)' }}>{j.client} · {j.type}</span>
+                  <span style={{ fontSize: 11, color: isLit ? 'rgba(255,255,255,0.9)' : 'var(--muted)' }}>{j.client} · {jobDisplayTitle(j)}</span>
                   <span style={{ fontSize: 10, color: isLit ? 'rgba(255,255,255,0.75)' : 'var(--muted)', marginLeft: 2 }}>{isLit ? '● highlighted' : '○ highlight'}</span>
                 </div>
               )

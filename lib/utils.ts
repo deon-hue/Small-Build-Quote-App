@@ -1,4 +1,4 @@
-import type { Quote, QuotePhase, QuoteItem, TemplatePhaseData } from './types'
+import type { Quote, QuotePhase, QuoteItem, TemplatePhaseData, Job } from './types'
 import { getPhaseEstimatorDefaults } from './estimatorDefaults'
 
 export const VAT = 0.20
@@ -90,6 +90,13 @@ function _hashCode(s: string): number {
 }
 export function jobColor(jobId: string): string {
   return JOB_COLORS[Math.abs(_hashCode(jobId)) % JOB_COLORS.length]
+}
+
+/** The name to show for a job anywhere in the app: the estimator's own title if they've
+ *  given it one, otherwise the job's Type (the template category) as a fallback so older
+ *  jobs without a title still show something sensible. */
+export function jobDisplayTitle(job: Pick<Job, 'title' | 'type'>): string {
+  return job.title?.trim() || job.type
 }
 
 export const STAGE_COLOR: Record<string, string> = {

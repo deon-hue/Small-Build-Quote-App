@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import type { Job, Variation, VariationLineItem, VariationStatus } from '@/lib/types'
-import { fmt } from '@/lib/utils'
+import { fmt, jobDisplayTitle } from '@/lib/utils'
 import { notifyClient } from '@/lib/notify'
 import { useDraggableModal } from './useDraggableModal'
 import ModalResizeHandle from './ModalResizeHandle'
@@ -768,7 +768,7 @@ export default function VariationModal({ job, onClose }: Props) {
                     clientName:     client.name || job.client,
                     clientPhone:    client.phone || undefined,
                     clientEmail:    client.email || undefined,
-                    jobType:        job.type,
+                    jobType:        jobDisplayTitle(job),
                     jobAddress:     job.address,
                     variationRef:   savedRef,
                     variationTitle: form.title,
@@ -819,7 +819,7 @@ export default function VariationModal({ job, onClose }: Props) {
                     clientName:     client.name || job.client,
                     clientPhone:    client.phone || undefined,
                     clientEmail:    client.email || undefined,
-                    jobType:        job.type,
+                    jobType:        jobDisplayTitle(job),
                     jobAddress:     job.address,
                     variationRef:   editingVar.ref,
                     variationTitle: editingVar.title,
@@ -977,7 +977,7 @@ export default function VariationModal({ job, onClose }: Props) {
               </div>
             ) : (
               <div>
-                <div className="serif" style={{ fontSize: 20 }}>Variations — {job.type}</div>
+                <div className="serif" style={{ fontSize: 20 }}>Variations — {jobDisplayTitle(job)}</div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
                   {job.client} · {job.address}
                 </div>

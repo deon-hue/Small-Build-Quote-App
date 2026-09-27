@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useApp } from '@/contexts/AppContext'
-import { fmt, fmtK, quoteTotal, STAGE_COLOR, Q_BADGE, Q_LABEL } from '@/lib/utils'
+import { fmt, fmtK, quoteTotal, STAGE_COLOR, Q_BADGE, Q_LABEL, jobDisplayTitle } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { quoteBudget } from '@/lib/job-costs'
 
@@ -233,7 +233,7 @@ export default function DashboardPage() {
                     <div key={j.id} className="job-row">
                       <div className="job-dot" style={{ background: col }} />
                       <div className="job-info">
-                        <div className="job-name">{j.type} — {j.client}</div>
+                        <div className="job-name">{jobDisplayTitle(j)} — {j.client}</div>
                         <div className="job-meta">{j.address}</div>
                         <div className="progress">
                           <div className="progress-bar" style={{ width: pct + '%', background: col }} />
@@ -254,7 +254,7 @@ export default function DashboardPage() {
                 </div>
                 {upcomingJobs.map(j => (
                   <div key={j.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
-                    <span>{j.type} — {j.client}</span>
+                    <span>{jobDisplayTitle(j)} — {j.client}</span>
                     <span style={{ color: 'var(--sky)', fontWeight: 600 }}>
                       {new Date(j.start).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
                     </span>
@@ -303,7 +303,7 @@ export default function DashboardPage() {
                 : stageJobs.map(j => (
                     <div key={j.id} className="pip-card">
                       <div className="pip-card-name">{j.client}</div>
-                      <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 3 }}>{j.type}</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 3 }}>{jobDisplayTitle(j)}</div>
                       <div className="pip-card-val">{fmt(j.value)}</div>
                     </div>
                   ))
@@ -384,7 +384,7 @@ export default function DashboardPage() {
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                     <div style={{ width: 7, height: 7, borderRadius: '50%', background: stageCol, marginTop: 5, flexShrink: 0 }} />
                     <div>
-                      <div style={{ fontSize: 13, fontWeight: 600 }}>{r.job.type} — {r.job.client}</div>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>{jobDisplayTitle(r.job)} — {r.job.client}</div>
                       <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>{r.job.address}</div>
                     </div>
                   </div>

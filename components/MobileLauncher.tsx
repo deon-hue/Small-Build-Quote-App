@@ -17,6 +17,7 @@ import {
 import { useApp } from '@/contexts/AppContext'
 import { createClient } from '@/lib/supabase/client'
 import type { UserPermissions } from '@/lib/types'
+import { jobDisplayTitle } from '@/lib/utils'
 import HomeOverview, {
   type HomeLink, type HomeStat, type HomeRecent, type HomeAttention, type HomeQuick, type PillTone,
 } from './HomeOverview'
@@ -116,7 +117,7 @@ export default function MobileLauncher({ onOpenNotes }: { onOpenNotes: () => voi
     for (const j of visibleJobs) {
       const pill = JOB_PILL[j.stage] ?? { text: j.stage, tone: 'done' as PillTone }
       recentAll.push({
-        id: `j-${j.id}`, title: j.client || j.type, subtitle: [j.type, j.address].filter(Boolean).join(' · '),
+        id: `j-${j.id}`, title: j.client || jobDisplayTitle(j), subtitle: [jobDisplayTitle(j), j.address].filter(Boolean).join(' · '),
         pill: pill.text, tone: pill.tone, href: '/jobs', Icon: Briefcase, at: time(j.start),
       })
     }

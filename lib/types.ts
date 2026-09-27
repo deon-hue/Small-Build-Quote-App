@@ -183,6 +183,11 @@ export interface Job {
   id: string
   client: string
   type: string
+  /** A free-text name the estimator gives the job (e.g. "Rear extension for the
+   *  Pattersons"), separate from `type` (the template category). Wherever the app
+   *  shows a job's "name", use `jobDisplayTitle()` from lib/utils — it falls back
+   *  to `type` for jobs that don't have a title set yet. */
+  title: string
   address: string
   value: number
   stage: 'planning' | 'active' | 'onhold' | 'complete'

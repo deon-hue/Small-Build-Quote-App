@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { ContactPicker } from '@/components/ContactPicker'
-import { fmt, fmtK, calcPhaseSell } from '@/lib/utils'
+import { fmt, fmtK, calcPhaseSell, jobDisplayTitle } from '@/lib/utils'
 import { buildInvoiceHtml } from '@/lib/invoiceHtml'
 import type { Invoice, InvoiceLineItem, PaymentMilestone } from '@/lib/types'
 import { useDraggableModal } from '@/components/useDraggableModal'
@@ -168,7 +168,7 @@ export default function InvoicesPage() {
         })
       setLineItems(items.length ? items : [BLANK_LINE()])
     } else {
-      setLineItems([{ id: ++lineCounter, desc: job.type + ' works', qty: 1, unitPrice: job.value, total: job.value }])
+      setLineItems([{ id: ++lineCounter, desc: jobDisplayTitle(job) + ' works', qty: 1, unitPrice: job.value, total: job.value }])
     }
     setFromJobId(jobId)
   }
@@ -533,7 +533,7 @@ export default function InvoicesPage() {
                   <label>Fill from Job (optional)</label>
                   <select value={fromJobId} onChange={e => { setFromJobId(e.target.value); if (e.target.value) loadFromJob(e.target.value) }}>
                     <option value="">— Select a job —</option>
-                    {jobs.map(j => <option key={j.id} value={j.id}>{j.type} — {j.client}</option>)}
+                    {jobs.map(j => <option key={j.id} value={j.id}>{jobDisplayTitle(j)} — {j.client}</option>)}
                   </select>
                 </div>
               )}

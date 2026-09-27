@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import type { Job, JobPayment, PaymentMethod } from '@/lib/types'
+import { jobDisplayTitle } from '@/lib/utils'
 
 interface Props {
   job: Job
@@ -64,7 +65,7 @@ export default function CashPaymentModal({ job, onClose }: Props) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: '1px solid #e2e8f0' }}>
           <div>
             <div style={{ fontWeight: 700, fontSize: 15 }}>Record Payment</div>
-            <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{job.type} — {job.client}</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{jobDisplayTitle(job)} — {job.client}</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8' }}>×</button>
         </div>

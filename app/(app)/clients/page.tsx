@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { createClient } from '@/lib/supabase/client'
-import { fmt, quoteTotal, STAGE_COLOR, STAGE_LABEL, Q_BADGE, Q_LABEL } from '@/lib/utils'
+import { fmt, quoteTotal, STAGE_COLOR, STAGE_LABEL, Q_BADGE, Q_LABEL, jobDisplayTitle } from '@/lib/utils'
 import type { Client, PortalStatus, ClientPortalSettings } from '@/lib/types'
 import { DEFAULT_CLIENT_PORTAL_SETTINGS, PAYMENT_TERMS_OPTIONS } from '@/lib/types'
 import { useRouter } from 'next/navigation'
@@ -644,7 +644,7 @@ function ClientsPageInner() {
                         <div key={j.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
                           <div style={{ width: 8, height: 8, borderRadius: '50%', background: col, flexShrink: 0 }} />
                           <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 500, fontSize: 13 }}>{j.type} — {j.address}</div>
+                            <div style={{ fontWeight: 500, fontSize: 13 }}>{jobDisplayTitle(j)} — {j.address}</div>
                             <div style={{ fontSize: 11, color: 'var(--muted)' }}>{STAGE_LABEL[j.stage] || j.stage}{j.weeks ? ` · Week ${j.done} of ${j.weeks}` : ''}</div>
                             <div style={{ height: 3, background: 'var(--warm)', borderRadius: 2, marginTop: 4, maxWidth: 180, overflow: 'hidden' }}>
                               <div style={{ height: '100%', width: pct + '%', background: col, borderRadius: 2 }} />

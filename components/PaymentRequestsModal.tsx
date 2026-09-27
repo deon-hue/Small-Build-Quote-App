@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useApp } from '@/contexts/AppContext'
 import type { Job, JobPayment, PaymentMethod } from '@/lib/types'
+import { jobDisplayTitle } from '@/lib/utils'
 
 interface PaymentRequest {
   id: string
@@ -121,7 +122,7 @@ export default function PaymentRequestsModal({ job, onClose }: Props) {
 
   async function sendRequest(req: PaymentRequest) {
     const to = clientContact?.email ?? ''
-    const subject = encodeURIComponent(`Payment Request — ${job.type ?? 'Works'} at ${job.address ?? ''}`)
+    const subject = encodeURIComponent(`Payment Request — ${jobDisplayTitle(job) || 'Works'} at ${job.address ?? ''}`)
     const dueStr = req.due_date ? ` by ${new Date(req.due_date).toLocaleDateString('en-GB')}` : ''
     const body = encodeURIComponent(
       `Dear ${job.client ?? 'Client'},\n\nPlease find below a payment request for works carried out at ${job.address ?? 'your property'}.\n\n` +

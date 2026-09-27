@@ -15,7 +15,7 @@
 import { useState } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import type { Job } from '@/lib/types'
-import { jobColor } from '@/lib/utils'
+import { jobColor, jobDisplayTitle } from '@/lib/utils'
 import JobNotesModal from './JobNotesModal'
 import { useDraggableModal } from './useDraggableModal'
 import ModalResizeHandle from './ModalResizeHandle'
@@ -37,7 +37,7 @@ function JobRow({ job, onPick }: { job: Job; onPick: (j: Job) => void }) {
       <span style={{ width: 6, height: 28, borderRadius: 3, background: jobColor(job.id), flexShrink: 0 }} />
       <span style={{ minWidth: 0, flex: 1 }}>
         <span style={{ display: 'block', fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{job.client}</span>
-        <span style={{ display: 'block', fontSize: 11.5, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{job.type}</span>
+        <span style={{ display: 'block', fontSize: 11.5, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{jobDisplayTitle(job)}</span>
       </span>
       <span style={{ color: 'var(--muted)', fontSize: 16, flexShrink: 0 }}>›</span>
     </button>
@@ -58,7 +58,7 @@ export default function QuickNotesModal({ onClose }: Props) {
   const q = query.trim().toLowerCase()
   const openJobs = jobs.filter(j => !j.archived)
   const filtered = q
-    ? openJobs.filter(j => j.client.toLowerCase().includes(q) || j.type.toLowerCase().includes(q) || j.address.toLowerCase().includes(q))
+    ? openJobs.filter(j => j.client.toLowerCase().includes(q) || jobDisplayTitle(j).toLowerCase().includes(q) || j.address.toLowerCase().includes(q))
     : openJobs
   const activeJobs = filtered.filter(j => j.stage === 'active')
   const otherJobs = filtered.filter(j => j.stage !== 'active')

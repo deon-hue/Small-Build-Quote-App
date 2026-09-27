@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useApp } from '@/contexts/AppContext'
-import { fmt, quoteTotal, STAGE_LABEL, Q_BADGE, Q_LABEL } from '@/lib/utils'
+import { fmt, quoteTotal, STAGE_LABEL, Q_BADGE, Q_LABEL, jobDisplayTitle } from '@/lib/utils'
 import { buildHtmlClientView } from '@/lib/quoteHtml'
 import { buildGanttFromQuote } from '@/lib/gantt-utils'
 import { backfillQuoteItemDescriptions } from '@/lib/back-office-queries'
@@ -124,7 +124,7 @@ export default function SavedQuotesPage() {
 
     let deleteLinkedJobs = false
     if (linkedJobs.length) {
-      const jobList = linkedJobs.map(j => `• ${j.type} — ${j.address} (${STAGE_LABEL[j.stage] || j.stage})`).join('\n')
+      const jobList = linkedJobs.map(j => `• ${jobDisplayTitle(j)} — ${j.address} (${STAGE_LABEL[j.stage] || j.stage})`).join('\n')
       const choice = confirm(
         `Deleting quote ${q.ref || q.id} for ${q.customer.name || 'this client'}.\n\n` +
         `Linked job${linkedJobs.length > 1 ? 's' : ''}:\n${jobList}\n\n` +
@@ -151,7 +151,7 @@ export default function SavedQuotesPage() {
     )
     if (!confirmed) return
     const newJob = await addJob({
-      client: q.customer.name, type: q.jobType, address: q.customer.address,
+      client: q.customer.name, type: q.jobType, title: '', address: q.customer.address,
       value: Math.round(total), stage: 'planning', start: today,
       weeks: estWeeks, done: 0,
       notes: `Converted from quote ${q.ref}. ${q.phases.length} phases.`,
@@ -180,7 +180,7 @@ export default function SavedQuotesPage() {
     const total = quoteTotal(q)
     const job = jobs.find(j => j.id === jobId)
     if (!job) return
-    if (!confirm(`Add "${q.ref}" as an approved variation on "${job.type} — ${job.client}"?\n\nAmount: ${fmt(total)}\n\nThis will immediately update that job's contract value.`)) return
+    if (!confirm(`Add "${q.ref}" as an approved variation on "${jobDisplayTitle(job)} — ${job.client}"?\n\nAmount: ${fmt(total)}\n\nThis will immediately update that job's contract value.`)) return
     setPushingVar(true)
     try {
       await addVariation(jobId, {
@@ -202,7 +202,7 @@ export default function SavedQuotesPage() {
       await updateQuote({ ...q, convertedToJob: true })
       setPushVarQuote(null)
       setPushVarJobId('')
-      alert(`Done — variation added to "${job.type} — ${job.client}". The contract value has been updated.`)
+      alert(`Done — variation added to "${jobDisplayTitle(job)} — ${job.client}". The contract value has been updated.`)
     } finally {
       setPushingVar(false)
     }
@@ -457,7 +457,7 @@ export default function SavedQuotesPage() {
                             className="sel-inline-sm"
                           >
                             <option value="">Select job…</option>
-                            {jobs.map(j => <option key={j.id} value={j.id}>{j.type} — {j.client}</option>)}
+                            {jobs.map(j => <option key={j.id} value={j.id}>{jobDisplayTitle(j)} — {j.client}</option>)}
                           </select>
                           <button
                             className="btn-sm btn-primary"

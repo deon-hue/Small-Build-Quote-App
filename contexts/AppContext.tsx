@@ -214,7 +214,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       if (jobsRes.data) {
         setJobs(jobsRes.data.map(r => ({
-          id: r.id, client: r.client, type: r.type, address: r.address,
+          id: r.id, client: r.client, type: r.type, title: r.title || '', address: r.address,
           value: Number(r.value), stage: r.stage, start: r.start_date || '',
           weeks: r.weeks, done: r.done, notes: r.notes, quoteId: r.quote_id || undefined,
           archived: !!r.archived,
@@ -383,13 +383,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const { data: { user } } = await supabase.auth.getUser()
     const ownerId = dataOwnerIdRef.current || user!.id
     const { data, error } = await supabase.from('jobs').insert({
-      user_id: ownerId, client: job.client, type: job.type, address: job.address,
+      user_id: ownerId, client: job.client, type: job.type, title: job.title || '', address: job.address,
       value: job.value, stage: job.stage, start_date: job.start || null,
       weeks: job.weeks, done: job.done, notes: job.notes, quote_id: job.quoteId || null,
     }).select().single()
     if (error) throw error
     const newJob: Job = {
-      id: data.id, client: data.client, type: data.type, address: data.address,
+      id: data.id, client: data.client, type: data.type, title: data.title || '', address: data.address,
       value: Number(data.value), stage: data.stage, start: data.start_date || '',
       weeks: data.weeks, done: data.done, notes: data.notes, quoteId: data.quote_id || undefined,
       archived: !!data.archived,
@@ -400,7 +400,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updateJob = useCallback(async (job: Job) => {
     await supabase.from('jobs').update({
-      client: job.client, type: job.type, address: job.address, value: job.value,
+      client: job.client, type: job.type, title: job.title || '', address: job.address, value: job.value,
       stage: job.stage, start_date: job.start || null, weeks: job.weeks,
       done: job.done, notes: job.notes, quote_id: job.quoteId || null,
       archived: !!job.archived,

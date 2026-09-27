@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import type { Job, QuotePhase, GanttState, GanttPhase } from '@/lib/types'
 import type { Quote } from '@/lib/types'
-import { fmt, quoteTotal, Q_BADGE, Q_LABEL } from '@/lib/utils'
+import { fmt, quoteTotal, Q_BADGE, Q_LABEL, jobDisplayTitle } from '@/lib/utils'
 import { formatGanttDuration, buildGanttFromQuote, stripPhasePrefix } from '@/lib/gantt-utils'
 import { notifyClient } from '@/lib/notify'
 import { useRouter } from 'next/navigation'
@@ -109,7 +109,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
             clientName:   client.name || job.client,
             clientPhone:  client.phone || undefined,
             clientEmail:  client.email || undefined,
-            jobType:      job.type,
+            jobType:      jobDisplayTitle(job),
             jobAddress:   job.address,
             companyName:  settings?.name,
             companyPhone: settings?.phone,
@@ -382,7 +382,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     container.innerHTML = `
       <div style="margin-bottom:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         <div>
-          <span style="font-size:12px;font-weight:600">${esc(job.type)} · ${esc(job.client)}</span>
+          <span style="font-size:12px;font-weight:600">${esc(jobDisplayTitle(job))} · ${esc(job.client)}</span>
           <span style="font-size:11px;color:#6b7580;margin-left:10px">${fmtDate(startDate)} → ${fmtDate(endDate)} · ${totalWeeks} weeks</span>
         </div>
         <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
@@ -1033,7 +1033,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       }>
         <div className="form-modal-hd" onMouseDown={fullscreen ? undefined : onHeaderMouseDown}>
           <div>
-            <div className="serif" style={{ fontSize: 20 }}>{job.type} — {job.address}</div>
+            <div className="serif" style={{ fontSize: 20 }}>{jobDisplayTitle(job)} — {job.address}</div>
             <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{job.client}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

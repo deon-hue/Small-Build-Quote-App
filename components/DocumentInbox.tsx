@@ -9,7 +9,7 @@ import {
 import DocumentReviewModal from './DocumentReviewModal'
 import type { InboxDocument, Job } from '@/lib/types'
 import { useApp } from '@/contexts/AppContext'
-import { fmtDate } from '@/lib/utils'
+import { fmtDate, jobDisplayTitle } from '@/lib/utils'
 import './DocumentInbox.touch.css'
 
 interface Props { jobs: Job[] }
@@ -41,7 +41,7 @@ export default function DocumentInbox({ jobs }: Props) {
   const [error, setError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const jobOptions = jobs.map(j => ({ id: j.id, label: `${j.type} — ${j.client}` }))
+  const jobOptions = jobs.map(j => ({ id: j.id, label: `${jobDisplayTitle(j)} — ${j.client}` }))
   const jobLabel = (id?: string) => id ? (jobOptions.find(j => j.id === id)?.label ?? 'job') : ''
 
   const load = useCallback(async () => {

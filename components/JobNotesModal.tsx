@@ -12,6 +12,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useApp } from '@/contexts/AppContext'
 import type { Job, JobNote, JobNotePhoto, NoteTag } from '@/lib/types'
+import { jobDisplayTitle } from '@/lib/utils'
 import { uploadNotePhoto, fetchNotePhotosForJob, deleteNotePhoto, signedNotePhotoUrl } from '@/lib/job-note-photos'
 import { useSpeechToText } from './useSpeechToText'
 import { useDraggableModal } from './useDraggableModal'
@@ -138,7 +139,7 @@ export default function JobNotesModal({ job, onClose }: Props) {
         <div className="form-modal-hd" onMouseDown={notesModal.onHeaderMouseDown}>
           <div>
             <div style={{ fontWeight: 700, fontSize: 17 }}>Activity Log</div>
-            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{job.type} — {job.client}</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{jobDisplayTitle(job)} — {job.client}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <ModalMaximizeButton isMaximized={notesModal.isMaximized} onClick={notesModal.toggleMaximize} />

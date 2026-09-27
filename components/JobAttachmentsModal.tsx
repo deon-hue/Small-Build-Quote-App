@@ -6,6 +6,7 @@ import {
   uploadAttachment, fetchAttachments, deleteAttachment, signedAttachmentUrl,
 } from '@/lib/job-attachments'
 import type { Job, JobAttachment, AttachmentCategory } from '@/lib/types'
+import { jobDisplayTitle } from '@/lib/utils'
 import { useDraggableModal } from './useDraggableModal'
 import ModalResizeHandle from './ModalResizeHandle'
 import ModalMaximizeButton from './ModalMaximizeButton'
@@ -106,7 +107,7 @@ export default function JobAttachmentsModal({ job, onClose }: Props) {
             <div>
               <div style={{ fontWeight: 700, fontSize: 17 }}>📎 Job Attachments</div>
               <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
-                {job.type} — {job.client} · {job.address}
+                {jobDisplayTitle(job)} — {job.client} · {job.address}
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
