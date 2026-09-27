@@ -17,7 +17,7 @@ import {
 import { useApp } from '@/contexts/AppContext'
 import { createClient } from '@/lib/supabase/client'
 import type { UserPermissions } from '@/lib/types'
-import { jobDisplayTitle } from '@/lib/utils'
+import { jobDisplayTitle, quoteDisplayTitle } from '@/lib/utils'
 import HomeOverview, {
   type HomeLink, type HomeStat, type HomeRecent, type HomeAttention, type HomeQuick, type PillTone,
 } from './HomeOverview'
@@ -107,7 +107,7 @@ export default function MobileLauncher({ onOpenNotes }: { onOpenNotes: () => voi
     for (const q of quotes) {
       const pill = QUOTE_PILL[q.status] ?? { text: q.status, tone: 'done' as PillTone }
       recentAll.push({
-        id: `q-${q.id}`, title: q.customer?.name || q.ref, subtitle: `${q.ref} · ${q.jobType || 'Quote'}`,
+        id: `q-${q.id}`, title: q.customer?.name || q.ref, subtitle: `${q.ref} · ${quoteDisplayTitle(q) || 'Quote'}`,
         pill: pill.text, tone: pill.tone, href: '/quotes', Icon: FileText,
         at: time(q.lastEdited) || time(q.savedDate),
       })
