@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { useApp } from '@/contexts/AppContext'
 import { fmt, jobColor, jobDisplayTitle, STAGE_BADGE, STAGE_LABEL, JOB_TYPES } from '@/lib/utils'
 import type { Job } from '@/lib/types'
@@ -21,8 +22,10 @@ const BLANK_JOB: Omit<Job, 'id'> = {
   stage: 'planning', start: '', weeks: 8, done: 0, notes: '',
 }
 
-export default function JobsPage() {
+function JobsPageInner() {
   const { jobs, quotes, clients, jobNotes, jobPayments, variations, invoices, addJob, updateJob, deleteJob, updateQuote, loading } = useApp()
+  const searchParams = useSearchParams()
+  const router = useRouter()
   const [filter, setFilter] = useState('all')
   const [showModal, setShowModal] = useState(false)
   const [editJob, setEditJob] = useState<Job | null>(null)
@@ -38,15 +41,36 @@ export default function JobsPage() {
   // Phones only: which job card has its action buttons expanded (CSS ignores this on desktop)
   const [openJobId, setOpenJobId] = useState<string | null>(null)
   const [archiveOpen, setArchiveOpen] = useState(false)
+  // Set when arriving via a "?open=<jobId>" link (e.g. Calendar's "Open in Jobs" button)
+  // so the target card gets scrolled to and briefly highlighted rather than just landing
+  // on the unfiltered list somewhere the job may not even be visible.
+  const [highlightId, setHighlightId] = useState<string | null>(null)
   const jobFormModal = useDraggableModal()
-
-  if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
 
   // Archived jobs are hidden from the main list and every filter, but nothing about them
   // is deleted — see handleArchive. They only ever reach here with stage 'complete'.
   const visibleJobs = jobs.filter(j => !j.archived)
   const archivedJobs = jobs.filter(j => j.archived)
   const filtered = filter === 'all' ? visibleJobs : visibleJobs.filter(j => j.stage === filter)
+
+  useEffect(() => {
+    const openId = searchParams.get('open')
+    if (!openId || loading || !jobs.some(j => j.id === openId)) return
+    const isArchived = jobs.find(j => j.id === openId)?.archived
+    if (isArchived) setArchiveOpen(true)
+    setFilter('all')
+    setOpenJobId(openId)
+    setHighlightId(openId)
+    const scrollTimer = setTimeout(() => {
+      document.getElementById(`job-${openId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 60)
+    const clearTimer = setTimeout(() => setHighlightId(null), 2200)
+    router.replace('/jobs')
+    return () => { clearTimeout(scrollTimer); clearTimeout(clearTimer) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, searchParams])
+
+  if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
 
   function openNew() {
     setEditJob(null)
@@ -146,7 +170,12 @@ export default function JobsPage() {
     const sentVarCount = jobVars.filter(v => v.status === 'sent').length
     const effectiveValue = j.value + approvedVarTotal
     return (
-      <div key={j.id} className={`card job-card${openJobId === j.id ? ' open' : ''}`} style={{ marginBottom: 12 }}>
+      <div
+        key={j.id}
+        id={`job-${j.id}`}
+        className={`card job-card${openJobId === j.id ? ' open' : ''}${highlightId === j.id ? ' job-highlight' : ''}`}
+        style={{ marginBottom: 12 }}
+      >
         <div className="job-card-inner">
           <div className="job-card-main" onClick={() => setOpenJobId(id => id === j.id ? null : j.id)}>
             <div className="job-dot" style={{ background: col }} />
@@ -441,6 +470,14 @@ export default function JobsPage() {
         )
       })()}
     </>
+  )
+}
+
+export default function JobsPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>}>
+      <JobsPageInner />
+    </Suspense>
   )
 }
 

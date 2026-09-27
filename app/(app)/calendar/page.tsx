@@ -518,7 +518,7 @@ export default function CalendarPage() {
             <button
               className="btn btn-primary"
               style={{ flex: 1, fontSize: 13 }}
-              onClick={() => { router.push('/jobs'); setSelected(null) }}
+              onClick={() => { router.push(`/jobs?open=${evt.job.id}`); setSelected(null) }}
             >
               Open in Jobs →
             </button>

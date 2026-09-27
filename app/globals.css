@@ -98,6 +98,10 @@ textarea{resize:vertical;min-height:56px}
 .b-draft{background:rgba(148,163,184,0.15);color:#64748b}
 
 /* ── Job rows ── */
+/* Briefly flashed on the specific job a "?open=<id>" link (e.g. Calendar's "Open in
+   Jobs" button) scrolls to, so it's obvious which card on the list it landed on. */
+@keyframes job-highlight-flash{0%,100%{box-shadow:none}30%{box-shadow:0 0 0 3px var(--moss)}}
+.job-highlight{animation:job-highlight-flash 2.1s ease-out}
 .job-row{display:flex;align-items:center;gap:14px;padding:16px 20px;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.1s}
 .job-row:hover{background:var(--warm)}
 .job-row:last-child{border-bottom:none}
