@@ -217,6 +217,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           id: r.id, client: r.client, type: r.type, address: r.address,
           value: Number(r.value), stage: r.stage, start: r.start_date || '',
           weeks: r.weeks, done: r.done, notes: r.notes, quoteId: r.quote_id || undefined,
+          archived: !!r.archived,
         })))
       }
 
@@ -391,6 +392,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       id: data.id, client: data.client, type: data.type, address: data.address,
       value: Number(data.value), stage: data.stage, start: data.start_date || '',
       weeks: data.weeks, done: data.done, notes: data.notes, quoteId: data.quote_id || undefined,
+      archived: !!data.archived,
     }
     setJobs(prev => [...prev, newJob])
     return newJob
@@ -401,6 +403,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       client: job.client, type: job.type, address: job.address, value: job.value,
       stage: job.stage, start_date: job.start || null, weeks: job.weeks,
       done: job.done, notes: job.notes, quote_id: job.quoteId || null,
+      archived: !!job.archived,
     }).eq('id', job.id)
     setJobs(prev => prev.map(j => j.id === job.id ? job : j))
   }, [supabase])

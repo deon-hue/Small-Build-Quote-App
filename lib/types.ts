@@ -191,6 +191,9 @@ export interface Job {
   done: number
   notes: string
   quoteId?: string
+  /** Set once a completed job is archived — hides it from the Jobs list but keeps every
+   *  linked record (notes, documents, payments, variations, invoices, Gantt) intact. */
+  archived?: boolean
 }
 
 // ── Job attachments (client-visible: plans, photos, documents) ───────────────

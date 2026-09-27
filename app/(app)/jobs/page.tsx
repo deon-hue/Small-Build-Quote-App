@@ -37,11 +37,16 @@ export default function JobsPage() {
   const [requestsJob, setRequestsJob] = useState<Job | null>(null)
   // Phones only: which job card has its action buttons expanded (CSS ignores this on desktop)
   const [openJobId, setOpenJobId] = useState<string | null>(null)
+  const [archiveOpen, setArchiveOpen] = useState(false)
   const jobFormModal = useDraggableModal()
 
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
 
-  const filtered = filter === 'all' ? jobs : jobs.filter(j => j.stage === filter)
+  // Archived jobs are hidden from the main list and every filter, but nothing about them
+  // is deleted — see handleArchive. They only ever reach here with stage 'complete'.
+  const visibleJobs = jobs.filter(j => !j.archived)
+  const archivedJobs = jobs.filter(j => j.archived)
+  const filtered = filter === 'all' ? visibleJobs : visibleJobs.filter(j => j.stage === filter)
 
   function openNew() {
     setEditJob(null)
@@ -62,7 +67,11 @@ export default function JobsPage() {
     setSaving(true)
     try {
       if (editJob) {
-        await updateJob({ ...editJob, ...form })
+        // Archiving only ever happens from the "complete" stage (see handleArchive) — if the
+        // stage is edited away from complete, an archived job must come back off the shelf
+        // rather than stay hidden with a stage the archive rule no longer allows.
+        const archived = editJob.archived && form.stage !== 'complete' ? false : editJob.archived
+        await updateJob({ ...editJob, ...form, archived })
       } else {
         const newJob = await addJob({ ...form, quoteId: prefillQuoteId || undefined })
         // Mark quote as converted if we have a quoteId
@@ -92,6 +101,20 @@ export default function JobsPage() {
     await deleteJob(job.id)
   }
 
+  async function handleArchive(job: Job) {
+    if (!confirm(
+      `Archive job: ${job.type} — ${job.client}?\n\n` +
+      `It will move out of the Jobs list into Archived Jobs. Nothing is deleted — notes, ` +
+      `files, costs, payments and variations all stay exactly as they are, and you can ` +
+      `reinstate it any time.`
+    )) return
+    await updateJob({ ...job, archived: true })
+  }
+
+  async function handleReinstate(job: Job) {
+    await updateJob({ ...job, archived: false })
+  }
+
   function getLinkedQuotePhases(job: Job) {
     const linked = job.quoteId
       ? quotes.filter(q => q.id === job.quoteId)
@@ -108,6 +131,87 @@ export default function JobsPage() {
   const planningCount = jobs.filter(j => j.stage === 'planning').length
   const heldCount = jobs.filter(j => j.stage === 'onhold').length
   const activeValue = jobs.filter(j => j.stage === 'active').reduce((s, j) => s + j.value, 0)
+
+  // Shared by the main grid and the Archived Jobs section below — an archived job keeps
+  // every one of these buttons (Notes, Files, Costs, Payments, Variations, Gantt) so nothing
+  // it's linked to becomes harder to find; only the Edit/Delete row is swapped for Reinstate.
+  function renderJobCard(j: Job) {
+    const jobNum = (() => { const idx = jobs.findIndex(x => x.id === j.id); return idx >= 0 ? `JOB-${String(idx + 1).padStart(3, '0')}` : '' })()
+    const pct = j.weeks ? Math.min(100, Math.round((j.done / j.weeks) * 100)) : 0
+    const col = jobColor(j.id)
+    const jobVars = variations.filter(v => v.jobId === j.id)
+    const approvedVarTotal = jobVars
+      .filter(v => v.status === 'approved' || v.status === 'invoiced' || v.status === 'paid')
+      .reduce((s, v) => s + v.total, 0)
+    const sentVarCount = jobVars.filter(v => v.status === 'sent').length
+    const effectiveValue = j.value + approvedVarTotal
+    return (
+      <div key={j.id} className={`card job-card${openJobId === j.id ? ' open' : ''}`} style={{ marginBottom: 12 }}>
+        <div className="job-card-inner">
+          <div className="job-card-main" onClick={() => setOpenJobId(id => id === j.id ? null : j.id)}>
+            <div className="job-dot" style={{ background: col }} />
+            <div className="job-info">
+              <div className="job-namerow" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                <span className="mono job-code" style={{ fontSize: 10, fontWeight: 700, color: 'white', background: col, borderRadius: 4, padding: '2px 6px', letterSpacing: '0.5px' }}>{jobNum}</span>
+                <div className="job-name"><span className="jn-type">{j.type}</span><span className="jn-sep"> — </span><span className="jn-client">{j.client}</span></div>
+                <span className="job-card-toggle" aria-hidden="true">›</span>
+              </div>
+              <div className="job-meta"><span className="jm-type">{j.type} · </span>{j.address}<span className="jm-started">{j.start ? ' · Started ' + new Date(j.start).toLocaleDateString('en-GB') : ''}</span></div>
+              <div className="progress" style={{ maxWidth: 240, marginTop: 6 }}>
+                <div className="progress-bar" style={{ width: pct + '%', background: col }} />
+              </div>
+              <div className="job-x-num">{jobNum}{j.start ? ' · Started ' + new Date(j.start).toLocaleDateString('en-GB') : ''}</div>
+              <div className="job-progress-text" style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
+                Week {j.done} of {j.weeks} · {pct}% complete
+              </div>
+            </div>
+            <div className="job-value-col" style={{ textAlign: 'right', flexShrink: 0 }}>
+              <div className="mono" style={{ fontSize: 18, fontWeight: 600 }}>{fmt(effectiveValue)}</div>
+              {approvedVarTotal > 0 && (
+                <div style={{ fontSize: 10, color: '#27ae60', marginTop: 1 }}>
+                  Base {fmt(j.value)} +{fmt(approvedVarTotal)} variations
+                </div>
+              )}
+              <span className={`badge ${STAGE_BADGE[j.stage] || 'b-planning'}`} style={{ marginTop: 4, display: 'block' }}>
+                {STAGE_LABEL[j.stage] || j.stage}
+              </span>
+            </div>
+          </div>
+          <div className="job-card-actions">
+            <button className="btn-sm btn-gold jb-gantt" onClick={() => setGanttJob(j)}>📋 Gantt</button>
+            <button className="btn-sm btn-sky jb-notes" onClick={() => setNotesJob(j)}>
+              📝 Notes {jobNotes.filter(n => n.jobId === j.id).length > 0 ? `(${jobNotes.filter(n => n.jobId === j.id).length})` : ''}
+            </button>
+            <button
+              className={`${sentVarCount > 0 ? 'btn-sm btn-primary' : 'btn-sm btn-outline'} jb-var`}
+              onClick={() => setVariationJob(j)}
+              title="Variations / change orders for this job"
+            >
+              ±&nbsp;Variations{jobVars.length > 0 ? ` (${jobVars.length})` : ''}
+              {sentVarCount > 0 ? ` · ${sentVarCount} pending` : ''}
+            </button>
+            <button className="btn-sm btn-outline jb-files" onClick={() => setAttachmentsJob(j)} title="Plans, photos and documents shared with the client">📎 Files</button>
+            <button className="btn-sm btn-outline jb-costs" onClick={() => setDocsJob(j)} title="Scan/upload supplier docs and track costs">💷 Costs</button>
+            <button className="btn-sm btn-outline jb-pay" onClick={() => setRequestsJob(j)} title="Payment requests and received payments">
+              💳 Payments{jobPayments.filter(p => p.jobId === j.id).length > 0 ? ` (${jobPayments.filter(p => p.jobId === j.id).length})` : ''}
+            </button>
+            {j.archived ? (
+              <button className="btn-sm btn-reinstate jb-archive" onClick={() => handleReinstate(j)} title="Bring this job back into the Jobs list">↩ Reinstate</button>
+            ) : j.stage === 'complete' ? (
+              <button className="btn-sm btn-archive jb-archive" onClick={() => handleArchive(j)} title="Move to Archived Jobs — keeps all notes, files and costs">📁 Archive</button>
+            ) : null}
+            <button className="btn-sm btn-outline jb-edit" onClick={() => openEdit(j)}>Edit</button>
+            <button className="btn-sm btn-danger jb-del" onClick={() => handleDelete(j)}>✕<span className="mob-label"> Delete job</span></button>
+          </div>
+        </div>
+        {j.notes && (
+          <div className="job-note" style={{ padding: '8px 20px 14px', fontSize: 12, color: 'var(--muted)', borderTop: '1px solid var(--border)' }}>
+            {j.notes}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <>
@@ -145,79 +249,33 @@ export default function JobsPage() {
         ? <div className="empty-dashed"><div style={{ fontSize: 14, marginBottom: 6 }}>No jobs yet</div>
             <div style={{ fontSize: 12, marginBottom: 14 }}>Add your first job above.</div>
           </div>
-        : <div className="jobs-grid">{filtered.map(j => {
-            const jobNum = (() => { const idx = jobs.findIndex(x => x.id === j.id); return idx >= 0 ? `JOB-${String(idx + 1).padStart(3, '0')}` : '' })()
-            const pct = j.weeks ? Math.min(100, Math.round((j.done / j.weeks) * 100)) : 0
-            const col = jobColor(j.id)
-            const jobVars = variations.filter(v => v.jobId === j.id)
-            const approvedVarTotal = jobVars
-              .filter(v => v.status === 'approved' || v.status === 'invoiced' || v.status === 'paid')
-              .reduce((s, v) => s + v.total, 0)
-            const sentVarCount = jobVars.filter(v => v.status === 'sent').length
-            const effectiveValue = j.value + approvedVarTotal
-            return (
-              <div key={j.id} className={`card job-card${openJobId === j.id ? ' open' : ''}`} style={{ marginBottom: 12 }}>
-                <div className="job-card-inner">
-                  <div className="job-card-main" onClick={() => setOpenJobId(id => id === j.id ? null : j.id)}>
-                    <div className="job-dot" style={{ background: col }} />
-                    <div className="job-info">
-                      <div className="job-namerow" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                        <span className="mono job-code" style={{ fontSize: 10, fontWeight: 700, color: 'white', background: col, borderRadius: 4, padding: '2px 6px', letterSpacing: '0.5px' }}>{jobNum}</span>
-                        <div className="job-name"><span className="jn-type">{j.type}</span><span className="jn-sep"> — </span><span className="jn-client">{j.client}</span></div>
-                        <span className="job-card-toggle" aria-hidden="true">›</span>
-                      </div>
-                      <div className="job-meta"><span className="jm-type">{j.type} · </span>{j.address}<span className="jm-started">{j.start ? ' · Started ' + new Date(j.start).toLocaleDateString('en-GB') : ''}</span></div>
-                      <div className="progress" style={{ maxWidth: 240, marginTop: 6 }}>
-                        <div className="progress-bar" style={{ width: pct + '%', background: col }} />
-                      </div>
-                      <div className="job-x-num">{jobNum}{j.start ? ' · Started ' + new Date(j.start).toLocaleDateString('en-GB') : ''}</div>
-                      <div className="job-progress-text" style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
-                        Week {j.done} of {j.weeks} · {pct}% complete
-                      </div>
-                    </div>
-                    <div className="job-value-col" style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <div className="mono" style={{ fontSize: 18, fontWeight: 600 }}>{fmt(effectiveValue)}</div>
-                      {approvedVarTotal > 0 && (
-                        <div style={{ fontSize: 10, color: '#27ae60', marginTop: 1 }}>
-                          Base {fmt(j.value)} +{fmt(approvedVarTotal)} variations
-                        </div>
-                      )}
-                      <span className={`badge ${STAGE_BADGE[j.stage] || 'b-planning'}`} style={{ marginTop: 4, display: 'block' }}>
-                        {STAGE_LABEL[j.stage] || j.stage}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="job-card-actions">
-                    <button className="btn-sm btn-gold jb-gantt" onClick={() => setGanttJob(j)}>📋 Gantt</button>
-                    <button className="btn-sm btn-sky jb-notes" onClick={() => setNotesJob(j)}>
-                      📝 Notes {jobNotes.filter(n => n.jobId === j.id).length > 0 ? `(${jobNotes.filter(n => n.jobId === j.id).length})` : ''}
-                    </button>
-                    <button
-                      className={`${sentVarCount > 0 ? 'btn-sm btn-primary' : 'btn-sm btn-outline'} jb-var`}
-                      onClick={() => setVariationJob(j)}
-                      title="Variations / change orders for this job"
-                    >
-                      ±&nbsp;Variations{jobVars.length > 0 ? ` (${jobVars.length})` : ''}
-                      {sentVarCount > 0 ? ` · ${sentVarCount} pending` : ''}
-                    </button>
-                    <button className="btn-sm btn-outline jb-files" onClick={() => setAttachmentsJob(j)} title="Plans, photos and documents shared with the client">📎 Files</button>
-                    <button className="btn-sm btn-outline jb-costs" onClick={() => setDocsJob(j)} title="Scan/upload supplier docs and track costs">💷 Costs</button>
-                    <button className="btn-sm btn-outline jb-pay" onClick={() => setRequestsJob(j)} title="Payment requests and received payments">
-                      💳 Payments{jobPayments.filter(p => p.jobId === j.id).length > 0 ? ` (${jobPayments.filter(p => p.jobId === j.id).length})` : ''}
-                    </button>
-                    <button className="btn-sm btn-outline jb-edit" onClick={() => openEdit(j)}>Edit</button>
-                    <button className="btn-sm btn-danger jb-del" onClick={() => handleDelete(j)}>✕<span className="mob-label"> Delete job</span></button>
-                  </div>
-                </div>
-                {j.notes && (
-                  <div className="job-note" style={{ padding: '8px 20px 14px', fontSize: 12, color: 'var(--muted)', borderTop: '1px solid var(--border)' }}>
-                    {j.notes}
-                  </div>
-                )}
-              </div>
-            )
-          })}</div>
+        : <div className="jobs-grid">{filtered.map(renderJobCard)}</div>
       }
+
+      {/* Archived jobs — completed jobs the estimator has archived. Collapsed by default so
+          they stay out of the way; nothing here has been deleted, and Reinstate brings a job
+          straight back into the list above. */}
+      {archivedJobs.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <button
+            onClick={() => setArchiveOpen(o => !o)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              background: 'none', border: '1px solid var(--border)', borderRadius: 6,
+              padding: '8px 14px', fontSize: 12, fontWeight: 600,
+              color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit',
+              width: '100%', marginBottom: archiveOpen ? 10 : 0,
+            }}
+          >
+            <span style={{ fontSize: 14 }}>{archiveOpen ? '▾' : '▸'}</span>
+            📁 Archived Jobs ({archivedJobs.length})
+            <span style={{ marginLeft: 'auto', fontWeight: 400, fontSize: 11 }}>
+              {archiveOpen ? 'Hide' : 'Show'}
+            </span>
+          </button>
+          {archiveOpen && <div className="jobs-grid">{archivedJobs.map(renderJobCard)}</div>}
+        </div>
+      )}
 
       {/* Job add/edit modal */}
       {showModal && (

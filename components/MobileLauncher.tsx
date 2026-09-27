@@ -85,17 +85,18 @@ export default function MobileLauncher({ onOpenNotes }: { onOpenNotes: () => voi
   const nav = NAV.filter(i => can(i.perm)).map(toLink)
   const footerNav = FOOTER_NAV.filter(i => can(i.perm)).map(toLink)
 
-  // Headline numbers
-  const activeJobs = jobs.filter(j => j.stage === 'active')
+  // Headline numbers — archived jobs are excluded everywhere here, same as the Jobs list itself.
+  const visibleJobs = jobs.filter(j => !j.archived)
+  const activeJobs = visibleJobs.filter(j => j.stage === 'active')
   const openQuotes = quotes.filter(q => OPEN_QUOTE.has(q.status))
   const unpaid = invoices.filter(i => i.status === 'sent' || i.status === 'overdue')
   const overdue = invoices.filter(i => i.status === 'overdue')
   const sentQuotes = quotes.filter(q => q.status === 'sent')
   const draftQuotes = quotes.filter(q => q.status === 'draft')
-  const heldJobs = jobs.filter(j => j.stage === 'onhold')
+  const heldJobs = visibleJobs.filter(j => j.stage === 'onhold')
 
   const stats: HomeStat[] = []
-  if (can('jobs')) stats.push({ label: 'Active jobs', value: activeJobs.length, hint: `${plural(jobs.length, 'job')} in total`, href: '/jobs', Icon: Briefcase })
+  if (can('jobs')) stats.push({ label: 'Active jobs', value: activeJobs.length, hint: `${plural(visibleJobs.length, 'job')} in total`, href: '/jobs', Icon: Briefcase })
   if (can('quotes')) stats.push({ label: 'Open quotes', value: openQuotes.length, hint: `${sentQuotes.length} waiting on a reply`, href: '/quotes', Icon: FileText })
   if (can('invoices')) stats.push({ label: 'Unpaid invoices', value: unpaid.length, hint: overdue.length ? `${overdue.length} overdue` : 'None overdue', href: '/invoices', Icon: Receipt })
 
@@ -112,7 +113,7 @@ export default function MobileLauncher({ onOpenNotes }: { onOpenNotes: () => voi
     }
   }
   if (can('jobs')) {
-    for (const j of jobs) {
+    for (const j of visibleJobs) {
       const pill = JOB_PILL[j.stage] ?? { text: j.stage, tone: 'done' as PillTone }
       recentAll.push({
         id: `j-${j.id}`, title: j.client || j.type, subtitle: [j.type, j.address].filter(Boolean).join(' · '),
