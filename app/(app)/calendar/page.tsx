@@ -36,6 +36,7 @@ interface CalEvent {
   endDate: Date   // exclusive end (startDay + durDays)
   color: string
   isComplete: boolean
+  percentComplete: number
 }
 
 interface WeekSlot {
@@ -99,6 +100,7 @@ export default function CalendarPage() {
   // Task edit fields in the detail panel — reset whenever a different event is selected.
   const [editStart, setEditStart] = useState('')
   const [editDur,   setEditDur]   = useState(1)
+  const [editPct,   setEditPct]   = useState(0)
   const [taskSaving, setTaskSaving] = useState(false)
   const [taskSaved,  setTaskSaved]  = useState(false)
 
@@ -106,8 +108,48 @@ export default function CalendarPage() {
     if (!selected) return
     setEditStart(toISODate(selected.startDate))
     setEditDur(Math.max(1, daysBetween(selected.startDate, selected.endDate)))
+    setEditPct(selected.percentComplete)
     setTaskSaved(false)
   }, [selected])
+
+  // ── New task, created straight from the calendar (like adding an event in Outlook)
+  // and assigned to a job — appends a task to that job's own Gantt state, so it's
+  // immediately visible in the job's own Gantt chart too. ─────────────────────────
+  const [showNewTask,   setShowNewTask]   = useState(false)
+  const [newTaskJobId,  setNewTaskJobId]  = useState('')
+  const [newTaskLabel,  setNewTaskLabel]  = useState('')
+  const [newTaskStart,  setNewTaskStart]  = useState('')
+  const [newTaskDur,    setNewTaskDur]    = useState(5)
+  const [newTaskSaving, setNewTaskSaving] = useState(false)
+
+  function openNewTask() {
+    setNewTaskJobId('')
+    setNewTaskLabel('')
+    setNewTaskStart(toISODate(anchor))
+    setNewTaskDur(5)
+    setShowNewTask(true)
+  }
+
+  async function createTask() {
+    const job = jobs.find(j => j.id === newTaskJobId)
+    if (!job || !job.start || !newTaskLabel.trim()) return
+    const jobStart = new Date(job.start); jobStart.setHours(0, 0, 0, 0)
+    const chosen = new Date(newTaskStart); chosen.setHours(0, 0, 0, 0)
+    const startDay = Math.max(0, daysBetween(jobStart, chosen))
+    const durDays = Math.max(1, newTaskDur)
+    const gs = resolveGanttState(job, linkedQuotePhasesFor(job), ganttStates[job.id])
+    const newPhase: GanttPhase = { id: `ph-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, label: newTaskLabel.trim(), startDay, durDays }
+    const phases = [...gs.phases, newPhase]
+    const maxEndDay = Math.max(...phases.map(p => p.startDay + p.durDays))
+    setNewTaskSaving(true)
+    const ok = await saveGanttState(job.id, { phases, totalDays: Math.max(gs.totalDays, maxEndDay) })
+    setNewTaskSaving(false)
+    if (ok) {
+      const neededWeeks = Math.ceil(maxEndDay / 7)
+      if (neededWeeks > (job.weeks || 12)) await updateJob({ ...job, weeks: neededWeeks })
+      setShowNewTask(false)
+    }
+  }
 
   // ── Job number helper (JOB-001 based on creation order) ──────
   function getJobNum(jobId: string): string {
@@ -145,12 +187,23 @@ export default function CalendarPage() {
   // Moves/resizes one task and saves it back through the exact same saveGanttState the
   // Job's own Gantt chart uses — so opening that job's Gantt afterward shows the change,
   // and dragging it there afterward keeps starting from what got set here.
-  async function saveTaskChange(evt: CalEvent, newStartDay: number, newDurDays: number) {
+  async function saveTaskChange(evt: CalEvent, updates: { startDay?: number; durDays?: number; percentComplete?: number }) {
     if (!evt.phaseId) return false
     const gs = resolveGanttState(evt.job, linkedQuotePhasesFor(evt.job), ganttStates[evt.job.id])
-    const startDay = Math.max(0, newStartDay)
-    const durDays = Math.max(1, newDurDays)
-    const phases = gs.phases.map(p => p.id === evt.phaseId ? { ...p, startDay, durDays } : p)
+    const phases = gs.phases.map(p => {
+      if (p.id !== evt.phaseId) return p
+      const next: GanttPhase = {
+        ...p,
+        startDay: updates.startDay !== undefined ? Math.max(0, updates.startDay) : p.startDay,
+        durDays:  updates.durDays !== undefined ? Math.max(1, updates.durDays) : p.durDays,
+      }
+      // Same "100% = complete" rule GanttModal's own % complete setter uses.
+      if (updates.percentComplete !== undefined) {
+        next.percentComplete = Math.max(0, Math.min(100, updates.percentComplete))
+        next.isComplete = next.percentComplete === 100
+      }
+      return next
+    })
     const maxEndDay = Math.max(...phases.map(p => p.startDay + p.durDays))
     const newState: GanttState = { phases, totalDays: Math.max(gs.totalDays, maxEndDay) }
     setTaskSaving(true)
@@ -162,6 +215,33 @@ export default function CalendarPage() {
       const neededWeeks = Math.ceil(maxEndDay / 7)
       if (neededWeeks > (evt.job.weeks || 12)) await updateJob({ ...evt.job, weeks: neededWeeks })
     }
+    return ok
+  }
+
+  // Splits a task into two adjacent halves — same operation as the Gantt chart's own
+  // Split button (lib logic mirrored here, since GanttModal's lives in its own closure
+  // with no exported version to call). Saves immediately and closes the panel, since the
+  // original task's own duration has changed and a second one now exists alongside it.
+  async function splitTask(evt: CalEvent) {
+    if (!evt.phaseId) return
+    const gs = resolveGanttState(evt.job, linkedQuotePhasesFor(evt.job), ganttStates[evt.job.id])
+    const idx = gs.phases.findIndex(p => p.id === evt.phaseId)
+    if (idx < 0) return
+    const ph = gs.phases[idx]
+    const dur1 = Math.max(1, Math.floor(ph.durDays / 2))
+    const dur2 = Math.max(1, ph.durDays - dur1)
+    const part2: GanttPhase = {
+      id: `ph-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      label: ph.label, startDay: ph.startDay + dur1, durDays: dur2,
+      level: ph.level, parentId: ph.parentId,
+    }
+    const phases = [...gs.phases]
+    phases[idx] = { ...ph, durDays: dur1 }
+    phases.splice(idx + 1, 0, part2)
+    setTaskSaving(true)
+    const ok = await saveGanttState(evt.job.id, { phases, totalDays: gs.totalDays })
+    setTaskSaving(false)
+    if (ok) setSelected(null)
     return ok
   }
 
@@ -253,7 +333,7 @@ export default function CalendarPage() {
       setDragPreview(null)
       document.body.style.cursor = ''
       const { startDay, durDays } = computeDragDays(d, e.clientX, e.clientY)
-      if (startDay !== d.origStartDay || durDays !== d.origDurDays) await saveTaskChange(d.event, startDay, durDays)
+      if (startDay !== d.origStartDay || durDays !== d.origDurDays) await saveTaskChange(d.event, { startDay, durDays })
       // Cleared after the click that would follow this mouseup has had a chance to run
       // and see it — not immediately, or a genuine drag's own click would slip through.
       setTimeout(() => { suppressClickRef.current = false }, 0)
@@ -296,6 +376,7 @@ export default function CalendarPage() {
           // its tasks happen to be done.
           job, phaseLabel: ph.label, phaseIdx: i, phaseId: ph.id, color,
           isComplete: !!(ph as GanttPhase).isComplete,
+          percentComplete: (ph as GanttPhase).percentComplete ?? 0,
           startDate: addDays(jobStart, ph.startDay),
           endDate:   addDays(jobStart, ph.startDay + ph.durDays),
         })
@@ -690,6 +771,19 @@ export default function CalendarPage() {
                 days
               </span>
             } />
+            <DetailRow label="% complete" value={
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={editPct}
+                  onChange={e => { setEditPct(Math.max(0, Math.min(100, Number(e.target.value) || 0))); setTaskSaved(false) }}
+                  style={{ font: 'inherit', fontWeight: 600, fontSize: 13, width: 52, border: '1px solid var(--border)', borderRadius: 6, padding: '3px 6px' }}
+                />
+                % {editPct === 100 ? '· marks it complete' : ''}
+              </span>
+            } />
             <DetailRow label="Job value"  value={fmt(evt.job.value)} />
             <DetailRow label="Status"     value={
               <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 10, background: stageColor + '22', color: stageColor }}>
@@ -709,10 +803,19 @@ export default function CalendarPage() {
               onClick={async () => {
                 const newStartDate = new Date(editStart); newStartDate.setHours(0, 0, 0, 0)
                 const jobStart = new Date(evt.job.start); jobStart.setHours(0, 0, 0, 0)
-                await saveTaskChange(evt, daysBetween(jobStart, newStartDate), editDur)
+                await saveTaskChange(evt, { startDay: daysBetween(jobStart, newStartDate), durDays: editDur, percentComplete: editPct })
               }}
             >
               {taskSaving ? 'Saving…' : taskSaved ? '✓ Saved' : 'Save changes'}
+            </button>
+            <button
+              className="btn-sm btn-outline"
+              disabled={taskSaving || !evt.phaseId}
+              style={{ width: '100%', fontSize: 13, marginTop: 8 }}
+              title="Splits this task into two equal halves, right next to each other — drag the second one out if there's a gap before it resumes"
+              onClick={() => splitTask(evt)}
+            >
+              ✂ Split task
             </button>
           </div>
 
@@ -732,6 +835,75 @@ export default function CalendarPage() {
             >
               Close
             </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── New task modal — pick a job, name it, give it a start date and duration; saves
+  // straight into that job's Gantt state, same as everything else here. ────────────
+  function renderNewTaskModal() {
+    if (!showNewTask) return null
+    const eligibleJobs = jobs
+      .filter(j => j.start && !j.archived && j.stage !== 'complete')
+      .sort((a, b) => (a.client || '').localeCompare(b.client || ''))
+    return (
+      <div
+        style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end', padding: 16, background: 'rgba(0,0,0,0.25)' }}
+        onClick={e => { if (e.target === e.currentTarget) setShowNewTask(false) }}
+      >
+        <div style={{ background: 'var(--cream)', borderRadius: 12, width: 'min(420px,100%)', maxHeight: '85vh', overflow: 'auto', boxShadow: '0 24px 64px rgba(0,0,0,0.3)', animation: 'slideUp 0.2s ease' }}>
+          <div style={{ padding: '16px 18px 12px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>+ New task</div>
+            <button onClick={() => setShowNewTask(false)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--muted)', lineHeight: 1, padding: 0 }}>×</button>
+          </div>
+          <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {eligibleJobs.length === 0 ? (
+              <div style={{ fontSize: 13, color: 'var(--muted)' }}>No on-site jobs with a start date to add a task to yet.</div>
+            ) : (
+              <>
+                <div className="fg" style={{ margin: 0 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Job</label>
+                  <select value={newTaskJobId} onChange={e => setNewTaskJobId(e.target.value)} style={{ width: '100%' }}>
+                    <option value="">Select a job…</option>
+                    {eligibleJobs.map(j => (
+                      <option key={j.id} value={j.id}>{getJobNum(j.id)} · {j.client} · {jobDisplayTitle(j)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="fg" style={{ margin: 0 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Task name</label>
+                  <input
+                    value={newTaskLabel}
+                    onChange={e => setNewTaskLabel(e.target.value)}
+                    placeholder="e.g. Second fix electrics"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <div className="fg" style={{ margin: 0, flex: 1 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Start date</label>
+                    <input type="date" value={newTaskStart} onChange={e => setNewTaskStart(e.target.value)} style={{ width: '100%' }} />
+                  </div>
+                  <div className="fg" style={{ margin: 0, width: 90 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Days</label>
+                    <input type="number" min={1} value={newTaskDur} onChange={e => setNewTaskDur(Math.max(1, Number(e.target.value) || 1))} style={{ width: '100%' }} />
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+          <div style={{ padding: '10px 18px 16px', display: 'flex', gap: 8, borderTop: '1px solid var(--border)' }}>
+            <button
+              className="btn btn-primary"
+              style={{ flex: 1, fontSize: 13 }}
+              disabled={newTaskSaving || !newTaskJobId || !newTaskLabel.trim() || !newTaskStart}
+              onClick={createTask}
+            >
+              {newTaskSaving ? 'Creating…' : 'Create task'}
+            </button>
+            <button className="btn-sm btn-outline" style={{ fontSize: 13, padding: '8px 14px' }} onClick={() => setShowNewTask(false)}>Cancel</button>
           </div>
         </div>
       </div>
@@ -778,7 +950,10 @@ export default function CalendarPage() {
           <div className="tp-kicker">Schedule</div>
           <h1 className="tp-title">Calendar</h1>
         </div>
-        <button className="tp-btn" onClick={goToday}>Today</button>
+        <div className="tp-head-btns">
+          <button className="tp-btn tp-btn-light" onClick={goToday}>Today</button>
+          <button className="tp-btn" onClick={openNewTask}>+ New task</button>
+        </div>
       </div>
       {jobsOnCalendar > 0 && (
         <div className="tp-stats">
@@ -839,6 +1014,7 @@ export default function CalendarPage() {
         </div>
         <button className="btn-sm btn-outline cal-next" onClick={next}>Next →</button>
         <button className="btn-sm btn-outline tp-hide" onClick={goToday}>Today</button>
+        <button className="btn-sm btn-primary tp-hide" onClick={openNewTask}>+ New task</button>
       </div>
 
       {/* Stats */}
@@ -952,6 +1128,7 @@ export default function CalendarPage() {
       )}
 
       {renderDetail()}
+      {renderNewTaskModal()}
     </div>
   )
 }
