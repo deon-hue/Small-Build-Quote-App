@@ -7,6 +7,7 @@ import { useApp } from '@/contexts/AppContext'
 import { ContactPicker } from '@/components/ContactPicker'
 import { signedDocUrl, insertJobCost, updateJobCost, deleteJobCost } from '@/lib/job-costs'
 import type { PaymentMethod } from '@/lib/types'
+import { jobDisplayTitle } from '@/lib/utils'
 import './touch.css'
 
 const STAGE_PAYMENT_METHODS: Record<PaymentMethod, string> = {
@@ -352,7 +353,12 @@ export default function SubcontractorsPage() {
       await sb.from('job_costs').update({ cost_category: newCategory }).eq('supplier', contact.name).eq('source', 'timesheet')
     }
   }
-  const jobName = (id: string | null) => id ? (jobs.find(j => j.id === id)?.client ?? jobs.find(j => j.id === id)?.address ?? '—') : '—'
+  const jobName = (id: string | null) => {
+    if (!id) return '—'
+    const j = jobs.find(x => x.id === id)
+    if (!j) return '—'
+    return j.client ? `${j.client} — ${jobDisplayTitle(j)}` : jobDisplayTitle(j)
+  }
   const contractEntries = (cid: string) => timeEntries.filter(e => e.sub_contract_id === cid)
   const contractStages = (cid: string) => stages.filter(s => s.sub_contract_id === cid)
 
@@ -1080,7 +1086,7 @@ export default function SubcontractorsPage() {
         <select value={jobFilter} onChange={e => setJobFilter(e.target.value)}
           style={{ padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13 }}>
           <option value="">All Jobs</option>
-          {jobs.map(j => <option key={j.id} value={j.id}>{j.client || j.address}</option>)}
+          {jobs.map(j => <option key={j.id} value={j.id}>{j.client ? `${j.client} — ${jobDisplayTitle(j)}` : jobDisplayTitle(j)}</option>)}
         </select>
 
         <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
@@ -1704,7 +1710,7 @@ export default function SubcontractorsPage() {
                 <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Job</label>
                 <select value={form.jobId} onChange={e => setForm(f => ({ ...f, jobId: e.target.value }))} style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13 }}>
                   <option value="">No specific job</option>
-                  {jobs.map(j => <option key={j.id} value={j.id}>{j.client || j.address} — {j.address}</option>)}
+                  {jobs.map(j => <option key={j.id} value={j.id}>{j.client ? `${j.client} — ${jobDisplayTitle(j)}` : jobDisplayTitle(j)}</option>)}
                 </select>
               </div>
 
@@ -1912,7 +1918,7 @@ export default function SubcontractorsPage() {
                             <select value={row.jobId} onChange={e => setWeekRows(rows => rows.map((r, idx) => idx === i ? { ...r, jobId: e.target.value } : r))}
                               style={{ width: '100%', padding: '5px 6px', border: '1px solid #d1d5db', borderRadius: 5, fontSize: 12 }}>
                               <option value="">No job</option>
-                              {jobs.map(j => <option key={j.id} value={j.id}>{j.client || j.address}</option>)}
+                              {jobs.map(j => <option key={j.id} value={j.id}>{j.client ? `${j.client} — ${jobDisplayTitle(j)}` : jobDisplayTitle(j)}</option>)}
                             </select>
                           ) : <span style={{ color: '#d1d5db', fontSize: 12 }}>—</span>}
                         </td>

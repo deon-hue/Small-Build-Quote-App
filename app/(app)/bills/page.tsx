@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useApp } from '@/contexts/AppContext'
-import { fmt, fmtDate } from '@/lib/utils'
+import { fmt, fmtDate, jobDisplayTitle } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { signedDocUrlById } from '@/lib/job-costs'
 import type { Bill, BillLineItem, BillStatus } from '@/lib/types'
@@ -364,7 +364,7 @@ export default function BillsPage() {
 
   const jobLabel = (id: string) => {
     const j = jobs.find(x => x.id === id)
-    return j ? `${j.client}` : '—'
+    return j ? (j.client ? `${j.client} — ${jobDisplayTitle(j)}` : jobDisplayTitle(j)) : '—'
   }
 
   return (
@@ -579,7 +579,7 @@ export default function BillsPage() {
                     style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}>
                     <option value="">— No job linked —</option>
                     {jobs.filter(j => j.stage !== 'complete').map(j => (
-                      <option key={j.id} value={j.id}>{j.client} — {j.address}</option>
+                      <option key={j.id} value={j.id}>{j.client ? `${j.client} — ${jobDisplayTitle(j)}` : jobDisplayTitle(j)}</option>
                     ))}
                   </select>
                 </div>
