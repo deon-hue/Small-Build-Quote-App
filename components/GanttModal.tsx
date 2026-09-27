@@ -339,6 +339,13 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       // which tasks happened to be done.
       const barColor = jobColor(job.id)
       const textColor = 'white'
+      // A completed bar keeps the same job colour but gets a diagonal hatch layered over
+      // it (a background-image, so it never dims the text on top) — much easier to spot
+      // at a glance than the small ✓ alone, without losing which job it belongs to.
+      const isCompleteRow = ph.isComplete || isDone
+      const barBg = isCompleteRow
+        ? `background-color:${barColor};background-image:repeating-linear-gradient(135deg,rgba(255,255,255,0.4) 0px,rgba(255,255,255,0.4) 5px,transparent 5px,transparent 10px)`
+        : `background:${barColor}`
       const pct = ph.percentComplete ?? 0
       const startD = fmtDateShort(addDays(startDate, ph.startDay))
       const endD = fmtDateShort(addDays(startDate, phEndDay))
@@ -364,9 +371,9 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
         <div class="gantt-col-divider" style="width:5px;flex-shrink:0;align-self:stretch;cursor:col-resize;background:transparent;border-left:2px dashed #c8d0d8;margin-right:4px" title="Drag to resize label column"></div>
         <div class="gantt-track" style="flex:1;position:relative;height:${rowH - 6}px;background:#f0f2f4;border-radius:3px;cursor:default;overflow:hidden">
           ${trackWeekendHtml}
-          <div class="gantt-bar" data-idx="${i}" style="position:absolute;left:${leftPct}%;width:${widthPct}%;height:100%;background:${barColor};border-radius:3px;cursor:grab;user-select:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;box-shadow:0 1px 3px rgba(0,0,0,0.15);min-width:6px;z-index:1;overflow:hidden">
+          <div class="gantt-bar" data-idx="${i}" style="position:absolute;left:${leftPct}%;width:${widthPct}%;height:100%;${barBg};border-radius:3px;cursor:grab;user-select:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;box-shadow:0 1px 3px rgba(0,0,0,0.15);min-width:6px;z-index:1;overflow:hidden">
             ${pct > 0 && !ph.isComplete ? `<div style="position:absolute;left:0;top:0;height:100%;width:${pct}%;background:rgba(0,0,0,0.13);pointer-events:none;z-index:0"></div>` : ''}
-            <span style="font-size:${level === 2 ? '8px' : '9px'};color:${textColor};white-space:nowrap;overflow:hidden;flex:1;position:relative;z-index:1">${ph.isComplete || isDone ? '✓ ' : isActive ? '▶ ' : ''}<span class="bar-dates" style="opacity:0.85">${startD}–${endD}</span>${pct > 0 && !ph.isComplete ? `<span style="opacity:0.9;margin-left:3px">${pct}%</span>` : ''}</span>
+            <span style="font-size:${level === 2 ? '8px' : '9px'};color:${textColor};white-space:nowrap;overflow:hidden;flex:1;position:relative;z-index:1">${isCompleteRow ? '✓ Complete  ' : isActive ? '▶ ' : ''}<span class="bar-dates" style="opacity:0.85">${startD}–${endD}</span>${pct > 0 && !ph.isComplete ? `<span style="opacity:0.9;margin-left:3px">${pct}%</span>` : ''}</span>
             <div class="gantt-resize-handle" data-idx="${i}" style="width:8px;height:100%;cursor:ew-resize;flex-shrink:0;display:flex;align-items:center;justify-content:center;opacity:0.6;position:relative;z-index:1"><div style="width:3px;height:60%;background:${textColor};border-radius:2px"></div></div>
           </div>
         </div>
