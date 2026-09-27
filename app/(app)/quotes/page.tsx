@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useApp } from '@/contexts/AppContext'
-import { fmt, quoteTotal, STAGE_LABEL, Q_BADGE, Q_LABEL, jobDisplayTitle } from '@/lib/utils'
+import { fmt, quoteTotal, STAGE_LABEL, Q_BADGE, Q_LABEL, jobDisplayTitle, quoteDisplayTitle } from '@/lib/utils'
 import { buildHtmlClientView } from '@/lib/quoteHtml'
 import { buildGanttFromQuote } from '@/lib/gantt-utils'
 import { backfillQuoteItemDescriptions } from '@/lib/back-office-queries'
@@ -147,7 +147,7 @@ export default function SavedQuotesPage() {
     const estWeeks = Math.max(4, Math.floor(q.phases.length * 1.5))
     const today = new Date().toISOString().split('T')[0]
     const confirmed = confirm(
-      `Convert quote ${q.ref} to a job?\n\nThis will create a new job:\n• Client: ${q.customer.name}\n• Type: ${q.jobType}\n• Value: ${fmt(total)}\n• Estimated duration: ${estWeeks} weeks`
+      `Convert quote ${q.ref} to a job?\n\nThis will create a new job:\n• Client: ${q.customer.name}\n• Job: ${quoteDisplayTitle(q)}\n• Value: ${fmt(total)}\n• Estimated duration: ${estWeeks} weeks`
     )
     if (!confirmed) return
     const newJob = await addJob({
@@ -345,7 +345,7 @@ export default function SavedQuotesPage() {
                     </div>
                     <div className="sq-ref" style={{ paddingLeft: 36 }}>{rootQuote.ref || '—'}</div>
                     <div className="sq-info" style={{ paddingLeft: 36 }}>
-                      <div className="sq-title">{rootQuote.jobType} — {rootQuote.customer.name || '—'}</div>
+                      <div className="sq-title">{quoteDisplayTitle(rootQuote)} — {rootQuote.customer.name || '—'}</div>
                       <div className="sq-sub">
                         {rootQuote.customer.address || ''} · Saved {rootQuote.savedDate || '—'}
                       </div>
@@ -383,7 +383,7 @@ export default function SavedQuotesPage() {
                   )}
                 </div>
                 <div className="sq-info">
-                  <div className="sq-title">{q.jobType} — {q.customer.name || '—'}</div>
+                  <div className="sq-title">{quoteDisplayTitle(q)} — {q.customer.name || '—'}</div>
                   <div className="sq-sub">
                     {q.customer.address || ''} · Saved {q.savedDate || '—'}
                     {q.lastEdited ? ' · Edited ' + q.lastEdited : ''}
@@ -535,7 +535,7 @@ export default function SavedQuotesPage() {
             <div key={q.id} className="sq-card" style={{ borderLeft: '3px solid #94a3b8', opacity: 0.85 }}>
               <div className="sq-ref" style={{ color: 'var(--muted)' }}>{q.ref || '—'}</div>
               <div className="sq-info">
-                <div className="sq-title" style={{ color: 'var(--muted)' }}>{q.jobType} — {q.customer.name || '—'}</div>
+                <div className="sq-title" style={{ color: 'var(--muted)' }}>{quoteDisplayTitle(q)} — {q.customer.name || '—'}</div>
                 <div className="sq-sub">{q.customer.address || ''} · Saved {q.savedDate || '—'}</div>
               </div>
               <div className="sq-val" style={{ color: 'var(--muted)' }}>{fmt(quoteTotal(q))}</div>

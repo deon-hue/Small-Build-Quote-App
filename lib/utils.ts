@@ -99,6 +99,12 @@ export function jobDisplayTitle(job: Pick<Job, 'title' | 'type'>): string {
   return job.title?.trim() || job.type
 }
 
+/** Same idea as jobDisplayTitle, for a quote's own title (captured in New Quote/Quick
+ *  Quote) — falls back to Job Type for quotes saved before the title field existed. */
+export function quoteDisplayTitle(quote: Pick<Quote, 'title' | 'jobType'>): string {
+  return quote.title?.trim() || quote.jobType
+}
+
 export const STAGE_COLOR: Record<string, string> = {
   planning: '#4a90a4', active: '#7ab533', onhold: '#e67e22', complete: '#9aa3ad',
 }
