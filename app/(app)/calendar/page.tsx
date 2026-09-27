@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { useApp } from '@/contexts/AppContext'
@@ -162,6 +162,96 @@ export default function CalendarPage() {
     return ok
   }
 
+  // ── Drag / resize a task bar (desktop Month & Week view only — touch shows agenda
+  // cards instead, so this code simply never runs there). Uses day-cell hit testing
+  // (which strip/column the pointer is physically over) rather than raw pixel deltas,
+  // so it stays correct across Month view's week-row wrapping. Saves through the same
+  // saveTaskChange() the panel's Start/Duration fields use. ─────────────────────────
+  interface DragInfo {
+    event: CalEvent
+    mode: 'move' | 'resize-start' | 'resize-end'
+    origStartDay: number
+    origDurDays: number
+    jobStart: Date
+    view: 'month' | 'week'
+    numWeeks: number
+    originGlobalDay: number
+  }
+  const dragRef = useRef<DragInfo | null>(null)
+  const monthStripRefs = useRef<(HTMLDivElement | null)[]>([])
+  const weekTrackRef = useRef<HTMLDivElement | null>(null)
+  const [dragPreview, setDragPreview] = useState<{ eventId: string; startDate: Date; endDate: Date } | null>(null)
+  const [isDragging,  setIsDragging]  = useState(false)
+
+  // Global day index (relative to calStart for month, weekStart for week) the pointer
+  // is currently over.
+  function hitTestMonth(clientX: number, clientY: number, numWeeks: number): number {
+    let wi = 0
+    for (let i = 0; i < numWeeks; i++) {
+      const el = monthStripRefs.current[i]
+      if (!el) continue
+      wi = i
+      if (clientY < el.getBoundingClientRect().bottom) break
+    }
+    const el = monthStripRefs.current[wi]
+    if (!el) return 0
+    const r = el.getBoundingClientRect()
+    const col = Math.min(6, Math.max(0, Math.floor(((clientX - r.left) / r.width) * 7)))
+    return wi * 7 + col
+  }
+  function hitTestWeek(clientX: number): number {
+    const el = weekTrackRef.current
+    if (!el) return 0
+    const r = el.getBoundingClientRect()
+    return Math.min(6, Math.max(0, Math.floor(((clientX - r.left) / r.width) * 7)))
+  }
+  function computeDragDays(d: DragInfo, clientX: number, clientY: number): { startDay: number; durDays: number } {
+    const globalDay = d.view === 'month' ? hitTestMonth(clientX, clientY, d.numWeeks) : hitTestWeek(clientX)
+    const dayDelta = globalDay - d.originGlobalDay
+    if (d.mode === 'move') return { startDay: Math.max(0, d.origStartDay + dayDelta), durDays: d.origDurDays }
+    if (d.mode === 'resize-end') return { startDay: d.origStartDay, durDays: Math.max(1, d.origDurDays + dayDelta) }
+    const end = d.origStartDay + d.origDurDays
+    const startDay = Math.max(0, Math.min(end - 1, d.origStartDay + dayDelta))
+    return { startDay, durDays: Math.max(1, end - startDay) }
+  }
+  function startDrag(e: React.MouseEvent, event: CalEvent, mode: DragInfo['mode'], view: 'month' | 'week', numWeeks: number) {
+    if (e.button !== 0) return
+    e.preventDefault()
+    e.stopPropagation()
+    const jobStart = new Date(event.job.start); jobStart.setHours(0, 0, 0, 0)
+    const info: DragInfo = {
+      event, mode, view, numWeeks, jobStart,
+      origStartDay: daysBetween(jobStart, event.startDate),
+      origDurDays:  daysBetween(event.startDate, event.endDate),
+      originGlobalDay: view === 'month' ? hitTestMonth(e.clientX, e.clientY, numWeeks) : hitTestWeek(e.clientX),
+    }
+    dragRef.current = info
+    setIsDragging(true)
+    document.body.style.cursor = mode === 'move' ? 'grabbing' : 'ew-resize'
+  }
+  useEffect(() => {
+    function onMove(e: MouseEvent) {
+      const d = dragRef.current
+      if (!d) return
+      const { startDay, durDays } = computeDragDays(d, e.clientX, e.clientY)
+      setDragPreview({ eventId: d.event.id, startDate: addDays(d.jobStart, startDay), endDate: addDays(d.jobStart, startDay + durDays) })
+    }
+    async function onUp(e: MouseEvent) {
+      const d = dragRef.current
+      if (!d) return
+      dragRef.current = null
+      setIsDragging(false)
+      setDragPreview(null)
+      document.body.style.cursor = ''
+      const { startDay, durDays } = computeDragDays(d, e.clientX, e.clientY)
+      if (startDay !== d.origStartDay || durDays !== d.origDurDays) await saveTaskChange(d.event, startDay, durDays)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    return () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // ── Build calendar events from all jobs + Gantt states ───────
   const calEvents = useMemo((): CalEvent[] => {
     const events: CalEvent[] = []
@@ -194,6 +284,14 @@ export default function CalendarPage() {
     }
     return events.sort((a, b) => a.startDate.getTime() - b.startDate.getTime())
   }, [jobs, quotes, ganttStates])
+
+  // Month/Week view render from this instead of calEvents directly, so the bar being
+  // dragged reflows live (including Month view's week-row wrapping and +N more overflow)
+  // using the exact same layoutWeek() logic — no separate "ghost" element to keep in sync.
+  const eventsForRender = useMemo(() => {
+    if (!dragPreview) return calEvents
+    return calEvents.map(e => e.id === dragPreview.eventId ? { ...e, startDate: dragPreview.startDate, endDate: dragPreview.endDate } : e)
+  }, [calEvents, dragPreview])
 
   // ── Navigation ───────────────────────────────────────────────
   function prev() {
@@ -247,13 +345,17 @@ export default function CalendarPage() {
         {/* Week strips */}
         {Array.from({ length: numWeeks }, (_, wi) => {
           const weekStart = addDays(calStart, wi * 7)
-          const slots     = layoutWeek(calEvents, weekStart)
+          const slots     = layoutWeek(eventsForRender, weekStart)
           const overflowByCol = Array.from({ length: 7 }, (_, col) =>
             slots.filter(s => s.row >= MAX_ROWS && s.startCol <= col && s.endCol > col).length
           )
 
           return (
-            <div key={wi} style={{ position: 'relative', height: stripH, borderBottom: wi < numWeeks - 1 ? '1px solid var(--border)' : 'none' }}>
+            <div
+              key={wi}
+              ref={el => { monthStripRefs.current[wi] = el }}
+              style={{ position: 'relative', height: stripH, borderBottom: wi < numWeeks - 1 ? '1px solid var(--border)' : 'none' }}
+            >
               {/* Date numbers */}
               <div style={{ display: 'flex', height: DATE_H }}>
                 {Array.from({ length: 7 }, (_, col) => {
@@ -290,6 +392,7 @@ export default function CalendarPage() {
                 <div
                   key={slot.event.id}
                   onClick={() => setSelected(slot.event)}
+                  onMouseDown={e => startDrag(e, slot.event, 'move', 'month', numWeeks)}
                   title={`${getJobNum(slot.event.job.id)} · ${slot.event.job.client} · ${jobDisplayTitle(slot.event.job)}\n${slot.event.phaseLabel}\n${fmtShort(slot.event.startDate)} – ${fmtShort(addDays(slot.event.endDate, -1))}`}
                   style={{
                     position: 'absolute',
@@ -299,19 +402,32 @@ export default function CalendarPage() {
                     height: EVT_H - 3,
                     background: slot.event.color,
                     borderRadius: `${slot.startsHere ? 3 : 0}px ${slot.endsHere ? 3 : 0}px ${slot.endsHere ? 3 : 0}px ${slot.startsHere ? 3 : 0}px`,
-                    cursor: 'pointer', overflow: 'hidden',
+                    cursor: isDragging ? 'grabbing' : 'grab', overflow: 'hidden',
                     zIndex: highlightJobId === slot.event.job.id ? 3 : 1,
                     opacity: barOpacity(slot.event.job.id),
                     boxShadow: barShadow(slot.event.job.id, slot.event.color),
                     display: 'flex', alignItems: 'center',
                     paddingLeft: slot.startsHere ? 5 : 2, paddingRight: 2,
                     transition: 'opacity 0.2s, box-shadow 0.2s',
+                    userSelect: 'none',
                   }}
                 >
                   {slot.startsHere && (
                     <span style={{ fontSize: 10, color: 'white', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {getJobNum(slot.event.job.id)} · {slot.event.job.client} · {slot.event.phaseLabel}
                     </span>
+                  )}
+                  {slot.startsHere && (
+                    <div
+                      onMouseDown={e => startDrag(e, slot.event, 'resize-start', 'month', numWeeks)}
+                      style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 6, cursor: 'ew-resize' }}
+                    />
+                  )}
+                  {slot.endsHere && (
+                    <div
+                      onMouseDown={e => startDrag(e, slot.event, 'resize-end', 'month', numWeeks)}
+                      style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 6, cursor: 'ew-resize' }}
+                    />
                   )}
                 </div>
               ))}
@@ -339,7 +455,7 @@ export default function CalendarPage() {
   // ── Week view ─────────────────────────────────────────────────
   function renderWeek() {
     const weekStart = getMonday(anchor)
-    const slots  = layoutWeek(calEvents, weekStart)
+    const slots  = layoutWeek(eventsForRender, weekStart)
     const maxRow = slots.length > 0 ? Math.max(...slots.map(s => s.row)) + 1 : 0
     const minH   = Math.max(120, maxRow * 40 + 24)
 
@@ -375,7 +491,7 @@ export default function CalendarPage() {
         </div>
 
         {/* Timeline */}
-        <div style={{ position: 'relative', minHeight: minH, padding: '8px 0' }}>
+        <div ref={weekTrackRef} style={{ position: 'relative', minHeight: minH, padding: '8px 0' }}>
           {/* Column stripe backgrounds */}
           <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', pointerEvents: 'none' }}>
             {Array.from({ length: 7 }, (_, col) => (
@@ -393,6 +509,7 @@ export default function CalendarPage() {
               <div
                 key={slot.event.id}
                 onClick={() => setSelected(slot.event)}
+                onMouseDown={e => startDrag(e, slot.event, 'move', 'week', 1)}
                 title={`${getJobNum(slot.event.job.id)} · ${slot.event.job.client} · ${slot.event.phaseLabel}`}
                 style={{
                   position: 'absolute',
@@ -402,13 +519,14 @@ export default function CalendarPage() {
                   height: 34,
                   background: slot.event.color,
                   borderRadius: `${slot.startsHere ? 4 : 0}px ${slot.endsHere ? 4 : 0}px ${slot.endsHere ? 4 : 0}px ${slot.startsHere ? 4 : 0}px`,
-                  cursor: 'pointer', overflow: 'hidden',
+                  cursor: isDragging ? 'grabbing' : 'grab', overflow: 'hidden',
                   zIndex: highlightJobId === slot.event.job.id ? 3 : 1,
                   opacity: barOpacity(slot.event.job.id),
                   boxShadow: barShadow(slot.event.job.id, slot.event.color),
                   display: 'flex', alignItems: 'center',
                   paddingLeft: slot.startsHere ? 8 : 4, paddingRight: 4,
                   transition: 'opacity 0.2s, box-shadow 0.2s',
+                  userSelect: 'none',
                 }}
               >
                 <div style={{ minWidth: 0, flex: 1 }}>
@@ -421,6 +539,18 @@ export default function CalendarPage() {
                     </div>
                   )}
                 </div>
+                {slot.startsHere && (
+                  <div
+                    onMouseDown={e => startDrag(e, slot.event, 'resize-start', 'week', 1)}
+                    style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 8, cursor: 'ew-resize' }}
+                  />
+                )}
+                {slot.endsHere && (
+                  <div
+                    onMouseDown={e => startDrag(e, slot.event, 'resize-end', 'week', 1)}
+                    style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 8, cursor: 'ew-resize' }}
+                  />
+                )}
               </div>
             )
           })}
