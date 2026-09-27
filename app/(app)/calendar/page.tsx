@@ -257,7 +257,10 @@ export default function CalendarPage() {
   const calEvents = useMemo((): CalEvent[] => {
     const events: CalEvent[] = []
     for (const job of jobs) {
-      if (!job.start) continue
+      // A finished job has nothing left to schedule — leave it off the calendar rather
+      // than have its old phases clutter every view indefinitely. Also naturally excludes
+      // archived jobs, since only a completed job can be archived in the first place.
+      if (!job.start || job.stage === 'complete') continue
       const jobStart = new Date(job.start)
       jobStart.setHours(0, 0, 0, 0)
 
@@ -718,8 +721,8 @@ export default function CalendarPage() {
   // ── Render ─────────────────────────────────────────────────────
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
 
-  const jobsOnCalendar = jobs.filter(j => j.start).length
-  const jobsNoStart    = jobs.filter(j => !j.start)
+  const jobsOnCalendar = jobs.filter(j => j.start && j.stage !== 'complete').length
+  const jobsNoStart    = jobs.filter(j => !j.start && j.stage !== 'complete')
   const activeCount    = jobs.filter(j => j.stage === 'active').length
   const firstEvent     = calEvents[0] ?? null
   const lastEvent      = calEvents[calEvents.length - 1] ?? null
