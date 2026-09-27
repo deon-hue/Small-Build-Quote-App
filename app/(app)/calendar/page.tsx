@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { useApp } from '@/contexts/AppContext'
 import { STAGE_COLOR, STAGE_LABEL, fmt, JOB_COLORS, jobColor, jobDisplayTitle } from '@/lib/utils'
-import type { Job, GanttPhase } from '@/lib/types'
+import { resolveGanttState } from '@/lib/gantt-utils'
+import type { Job, GanttPhase, GanttState } from '@/lib/types'
 
 // ── Date helpers ───────────────────────────────────────────────
 function addDays(d: Date, n: number): Date { const r = new Date(d); r.setDate(r.getDate() + n); return r }
@@ -13,6 +14,10 @@ function daysBetween(a: Date, b: Date): number { return Math.round((b.getTime() 
 function sameDay(a: Date, b: Date): boolean { return a.toDateString() === b.toDateString() }
 function fmtShort(d: Date): string { return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) }
 function fmtFull(d: Date): string { return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) }
+function toISODate(d: Date): string {
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 function getMonday(d: Date): Date {
   const day = d.getDay()
   return addDays(new Date(d.getFullYear(), d.getMonth(), d.getDate()), day === 0 ? -6 : 1 - day)
@@ -23,6 +28,10 @@ interface CalEvent {
   job: Job
   phaseLabel: string
   phaseIdx: number
+  /** Stable id of the underlying GanttPhase — always set (resolveGanttState guarantees
+   *  every row has one), so editing/dragging a task can find it again after a save
+   *  regardless of how the phases list happens to be filtered or re-ordered. */
+  phaseId?: string
   startDate: Date
   endDate: Date   // exclusive end (startDay + durDays)
   color: string
@@ -79,7 +88,7 @@ function layoutWeek(events: CalEvent[], weekStart: Date): WeekSlot[] {
 import './touch.css'
 
 export default function CalendarPage() {
-  const { jobs, quotes, ganttStates, loading } = useApp()
+  const { jobs, quotes, ganttStates, saveGanttState, updateJob, loading } = useApp()
   const router = useRouter()
 
   const today = useMemo(() => new Date(new Date().setHours(0, 0, 0, 0)), [])
@@ -87,6 +96,18 @@ export default function CalendarPage() {
   const [anchor,          setAnchor]         = useState<Date>(() => new Date(today.getFullYear(), today.getMonth(), 1))
   const [selected,        setSelected]       = useState<CalEvent | null>(null)
   const [highlightJobId,  setHighlightJobId] = useState<string | null>(null)
+  // Task edit fields in the detail panel — reset whenever a different event is selected.
+  const [editStart, setEditStart] = useState('')
+  const [editDur,   setEditDur]   = useState(1)
+  const [taskSaving, setTaskSaving] = useState(false)
+  const [taskSaved,  setTaskSaved]  = useState(false)
+
+  useEffect(() => {
+    if (!selected) return
+    setEditStart(toISODate(selected.startDate))
+    setEditDur(Math.max(1, daysBetween(selected.startDate, selected.endDate)))
+    setTaskSaved(false)
+  }, [selected])
 
   // ── Job number helper (JOB-001 based on creation order) ──────
   function getJobNum(jobId: string): string {
@@ -104,6 +125,43 @@ export default function CalendarPage() {
     return `0 0 0 2px white, 0 0 0 4px ${baseColor}, 0 2px 8px rgba(0,0,0,0.25)`
   }
 
+  // Same "find the linked quote" matching logic GanttModal / the Jobs page use, so the
+  // schedule Calendar resolves for a job is built from exactly the same phases.
+  function linkedQuotePhasesFor(job: Job) {
+    const linked = job.quoteId
+      ? quotes.filter(q => q.id === job.quoteId)
+      : quotes.filter(q => {
+          const qn = (q.customer.name || '').toLowerCase()
+          const jn = (job.client || '').toLowerCase()
+          return qn === jn || qn.includes(jn) || jn.includes(qn)
+        })
+    const best = linked.find(q => q.status === 'accepted') || linked.find(q => q.status === 'sent') || linked[0]
+    return best?.phases ?? []
+  }
+
+  // Moves/resizes one task and saves it back through the exact same saveGanttState the
+  // Job's own Gantt chart uses — so opening that job's Gantt afterward shows the change,
+  // and dragging it there afterward keeps starting from what got set here.
+  async function saveTaskChange(evt: CalEvent, newStartDay: number, newDurDays: number) {
+    if (!evt.phaseId) return false
+    const gs = resolveGanttState(evt.job, linkedQuotePhasesFor(evt.job), ganttStates[evt.job.id])
+    const startDay = Math.max(0, newStartDay)
+    const durDays = Math.max(1, newDurDays)
+    const phases = gs.phases.map(p => p.id === evt.phaseId ? { ...p, startDay, durDays } : p)
+    const maxEndDay = Math.max(...phases.map(p => p.startDay + p.durDays))
+    const newState: GanttState = { phases, totalDays: Math.max(gs.totalDays, maxEndDay) }
+    setTaskSaving(true)
+    const ok = await saveGanttState(evt.job.id, newState)
+    setTaskSaving(false)
+    if (ok) {
+      setTaskSaved(true)
+      // Same "grow the job to fit" behaviour GanttModal applies after a drag.
+      const neededWeeks = Math.ceil(maxEndDay / 7)
+      if (neededWeeks > (evt.job.weeks || 12)) await updateJob({ ...evt.job, weeks: neededWeeks })
+    }
+    return ok
+  }
+
   // ── Build calendar events from all jobs + Gantt states ───────
   const calEvents = useMemo((): CalEvent[] => {
     const events: CalEvent[] = []
@@ -113,65 +171,22 @@ export default function CalendarPage() {
       jobStart.setHours(0, 0, 0, 0)
 
       const color = jobColor(job.id)
-      const gs    = ganttStates[job.id]
 
-      // Calendar phase priority:
-      //  1. Saved Gantt state — user has explicitly scheduled these phases by dragging;
-      //     always use it when present so calendar reflects actual planned dates.
-      //  2. Quote sub-phases spread evenly — initial layout before user touches the Gantt.
-      //  3. 5 generic fallback phases — job has no quote and no saved Gantt layout.
-      //
-      // Always ensure totalDays reaches at least today + 14 days so that jobs
-      // which started in the past but have no saved Gantt layout still appear
-      // on the current calendar view instead of silently disappearing.
-      const daysSinceStart = Math.max(0, daysBetween(jobStart, today))
-      const totalDays = Math.max((job.weeks || 12) * 7, daysSinceStart + 14)
+      // The exact same schedule GanttModal would show for this job — a saved layout if
+      // one exists, otherwise the same quote-derived or generic placeholder it would
+      // build. Editing a task here saves back through this, so the two are never showing
+      // (or silently saving) two different placeholder schedules for the same job.
+      const gs = resolveGanttState(job, linkedQuotePhasesFor(job), ganttStates[job.id])
 
-      // Find the best linked quote (same matching logic as GanttModal / jobs page)
-      const linked = job.quoteId
-        ? quotes.filter(q => q.id === job.quoteId)
-        : quotes.filter(q => {
-            const qn = (q.customer.name || '').toLowerCase()
-            const jn = (job.client || '').toLowerCase()
-            return qn === jn || qn.includes(jn) || jn.includes(qn)
-          })
-      const best = linked.find(q => q.status === 'accepted')
-        || linked.find(q => q.status === 'sent')
-        || linked[0]
-
-      // Deduplicate sub-phase names (quote can repeat names across cost-type rows)
-      const rawSubPhases = (best?.phases?.length ?? 0) > 0
-        ? best!.phases.map(p => p.phase).filter((v, i, a) => a.indexOf(v) === i)
-        : null
-
-      const phases = (gs?.phases?.length ?? 0) > 0
-        // Only show level-1 phase bars (skip level-0 group headers and level-2 task bars).
-        // Level undefined = legacy flat phases with no hierarchy — show those too.
-        ? gs!.phases.filter(p => (p.level ?? 1) === 1)
-        : rawSubPhases
-          ? (() => {
-              const n = rawSubPhases.length
-              return rawSubPhases.map((label, i) => ({
-                label,
-                startDay: Math.round((i / n) * totalDays),
-                durDays:  Math.max(1, Math.round(((i + 1) / n) * totalDays) - Math.round((i / n) * totalDays)),
-              }))
-            })()
-          : (() => {
-              const lbls = ['Preliminaries', 'Structural Works', 'First Fix', 'Second Fix', 'Completion & Snagging']
-              const n = lbls.length
-              return lbls.map((label, i) => ({
-                label,
-                startDay: Math.round((i / n) * totalDays),
-                durDays:  Math.max(1, Math.round(((i + 1) / n) * totalDays) - Math.round((i / n) * totalDays)),
-              }))
-            })()
+      // Only show level-1 phase bars (skip level-0 group headers and level-2 task bars).
+      // Level undefined = legacy flat phases with no hierarchy — show those too.
+      const phases = gs.phases.filter(p => (p.level ?? 1) === 1)
 
       phases.forEach((ph, i) => {
         const phaseColor = (ph as GanttPhase).isComplete ? '#7ab533' : color
         events.push({
-          id: `${job.id}-${i}`,
-          job, phaseLabel: ph.label, phaseIdx: i, color: phaseColor,
+          id: `${job.id}-${ph.id ?? i}`,
+          job, phaseLabel: ph.label, phaseIdx: i, phaseId: ph.id, color: phaseColor,
           startDate: addDays(jobStart, ph.startDay),
           endDate:   addDays(jobStart, ph.startDay + ph.durDays),
         })
@@ -477,7 +492,6 @@ export default function CalendarPage() {
   function renderDetail() {
     if (!selected) return null
     const evt       = selected
-    const durDays   = daysBetween(evt.startDate, evt.endDate)
     const stageColor = STAGE_COLOR[evt.job.stage] || '#888'
 
     return (
@@ -502,15 +516,50 @@ export default function CalendarPage() {
             <DetailRow label="Customer"   value={evt.job.client} />
             <DetailRow label="Job"        value={jobDisplayTitle(evt.job)} />
             <DetailRow label="Address"    value={evt.job.address} />
-            <DetailRow label="Start"      value={fmtFull(evt.startDate)} />
-            <DetailRow label="End"        value={fmtFull(addDays(evt.endDate, -1))} />
-            <DetailRow label="Duration"   value={`${durDays} days (${Math.ceil(durDays / 7 * 10) / 10} weeks)`} />
+            <DetailRow label="Start" value={
+              <input
+                type="date"
+                value={editStart}
+                onChange={e => { setEditStart(e.target.value); setTaskSaved(false) }}
+                style={{ font: 'inherit', fontWeight: 600, fontSize: 13, border: '1px solid var(--border)', borderRadius: 6, padding: '3px 6px' }}
+              />
+            } />
+            <DetailRow label="Duration" value={
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input
+                  type="number"
+                  min={1}
+                  value={editDur}
+                  onChange={e => { setEditDur(Math.max(1, Number(e.target.value) || 1)); setTaskSaved(false) }}
+                  style={{ font: 'inherit', fontWeight: 600, fontSize: 13, width: 52, border: '1px solid var(--border)', borderRadius: 6, padding: '3px 6px' }}
+                />
+                days
+              </span>
+            } />
             <DetailRow label="Job value"  value={fmt(evt.job.value)} />
             <DetailRow label="Status"     value={
               <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 10, background: stageColor + '22', color: stageColor }}>
                 {STAGE_LABEL[evt.job.stage] || evt.job.stage}
               </span>
             } />
+          </div>
+
+          {/* Task edit — same save path the Job's own Gantt chart uses, so a change here
+              shows up there and vice versa. Works the same on a phone or tablet (there's
+              no drag/resize here, just these fields) as it does on desktop. */}
+          <div style={{ padding: '0 18px 12px' }}>
+            <button
+              className="btn btn-primary"
+              disabled={taskSaving || !evt.phaseId}
+              style={{ width: '100%', fontSize: 13 }}
+              onClick={async () => {
+                const newStartDate = new Date(editStart); newStartDate.setHours(0, 0, 0, 0)
+                const jobStart = new Date(evt.job.start); jobStart.setHours(0, 0, 0, 0)
+                await saveTaskChange(evt, daysBetween(jobStart, newStartDate), editDur)
+              }}
+            >
+              {taskSaving ? 'Saving…' : taskSaved ? '✓ Saved' : 'Save changes'}
+            </button>
           </div>
 
           {/* Actions */}

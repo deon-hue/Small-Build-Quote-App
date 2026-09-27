@@ -5,7 +5,7 @@ import { useApp } from '@/contexts/AppContext'
 import type { Job, QuotePhase, GanttState, GanttPhase } from '@/lib/types'
 import type { Quote } from '@/lib/types'
 import { fmt, quoteTotal, Q_BADGE, Q_LABEL, jobDisplayTitle, quoteDisplayTitle } from '@/lib/utils'
-import { formatGanttDuration, buildGanttFromQuote, stripPhasePrefix } from '@/lib/gantt-utils'
+import { formatGanttDuration, buildGanttFromQuote, stripPhasePrefix, resolveGanttState } from '@/lib/gantt-utils'
 import { notifyClient } from '@/lib/notify'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -60,22 +60,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
   const [boSearch, setBoSearch] = useState('')
 
   function buildState(): GanttState {
-    // Use any previously saved layout — never silently discard a custom arrangement.
-    const saved = getGanttState(job.id)
-    if (saved && saved.phases && saved.phases.length > 0) return saved
-
-    // No saved state → build hierarchical Gantt from quote phases if available.
-    if (phases.length) {
-      return buildGanttFromQuote(phases, job.weeks || 12)
-    }
-
-    // Fallback for jobs with no linked quote phases — flat generic list.
-    const totalDays = (job.weeks || 12) * 7
-    const ganttPhases: GanttPhase[] = [
-      'Preliminaries','Demolition & Enabling','Foundations','Structure','Roof',
-      'External Doors & Windows','First Fix','Insulation','Plastering','Second Fix','External Works',
-    ].map(label => ({ label, startDay: 0, durDays: 2 }))
-    return { phases: ganttPhases, totalDays }
+    return resolveGanttState(job, phases, getGanttState(job.id))
   }
 
   // ── Save handler — silent=true skips the client notification ──

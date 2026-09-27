@@ -1,4 +1,4 @@
-import type { QuotePhase, GanttPhase, GanttState } from './types'
+import type { QuotePhase, GanttPhase, GanttState, Job } from './types'
 
 /** Strip "Phase N – " or "Phase N - " prefixes from group header labels. */
 export function stripPhasePrefix(label: string): string {
@@ -103,6 +103,45 @@ export function buildGanttFromQuote(
   const totalDays = Math.max(cursor, minDays)
 
   return { phases: rows, totalDays }
+}
+
+/** Flat fallback labels for a job with no linked quote phases at all — used only when
+ *  there's nothing else to build a schedule from. Every row gets a stable `id` so
+ *  anything that edits one (Calendar's task editor, drag/resize) can find it again
+ *  after a save, the same way buildGanttFromQuote's rows already can. */
+const GENERIC_FALLBACK_LABELS = [
+  'Preliminaries', 'Demolition & Enabling', 'Foundations', 'Structure', 'Roof',
+  'External Doors & Windows', 'First Fix', 'Insulation', 'Plastering', 'Second Fix', 'External Works',
+]
+
+/**
+ * The single canonical way to get a job's Gantt schedule, used by both the Gantt chart
+ * (GanttModal) and the Calendar page, so the two never show — or silently save — two
+ * different placeholder layouts for the same unscheduled job.
+ *
+ * Priority:
+ *   1. A previously saved layout — never discard a custom arrangement someone dragged.
+ *   2. A hierarchical schedule built from the linked quote's phases, if there is one.
+ *   3. A flat, generic 11-row fallback for a job with no linked quote at all.
+ */
+export function resolveGanttState(
+  job: Pick<Job, 'weeks'>,
+  linkedQuotePhases: QuotePhase[],
+  savedState: GanttState | null | undefined,
+): GanttState {
+  if (savedState && savedState.phases && savedState.phases.length > 0) return savedState
+  if (linkedQuotePhases.length) return buildGanttFromQuote(linkedQuotePhases, job.weeks || 12)
+  // Spread evenly across the job's planned length rather than stacking every row at
+  // day 0 — this is what a job with no quote actually looks like before anyone has
+  // opened its Gantt chart to lay it out by hand.
+  const totalDays = (job.weeks || 12) * 7
+  const n = GENERIC_FALLBACK_LABELS.length
+  const ganttPhases: GanttPhase[] = GENERIC_FALLBACK_LABELS.map((label, i) => {
+    const startDay = Math.round((i / n) * totalDays)
+    const durDays = Math.max(1, Math.round(((i + 1) / n) * totalDays) - startDay)
+    return { id: `ph-generic-${i}`, label, startDay, durDays }
+  })
+  return { phases: ganttPhases, totalDays }
 }
 
 /**
