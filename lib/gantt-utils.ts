@@ -44,8 +44,14 @@ export function buildGanttFromQuote(
   }
 
   for (const groupLabel of groupOrder) {
-    const groupId = `grp-${groupLabel.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
     const groupPhases = groupMap[groupLabel]
+    // Deterministic — anchored on the group's first sub-phase's own stable numeric id
+    // (assigned once by the quote builder, persisted with the quote), not Date.now()/
+    // Math.random(). Calling this function twice for the same quote phases must always
+    // produce the same ids — GanttModal only ever calls it once per session and freezes
+    // the result, but Calendar's task editor calls it independently to both display a
+    // task and to save it, and a random id would make those two calls agree on nothing.
+    const groupId = `grp-${groupPhases[0].id}`
 
     // Level 0 — group header row (spans duration of all its children)
     const groupStartDay = cursor
@@ -60,7 +66,7 @@ export function buildGanttFromQuote(
     })
 
     for (const qp of groupPhases) {
-      const phaseId = `ph-${qp.phase.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+      const phaseId = `ph-${qp.id}`
       const phaseStart = cursor
 
       // Collect task names from estimatorItems (if any)
@@ -80,9 +86,9 @@ export function buildGanttFromQuote(
 
       // Level 2 — task rows (sequential within phase)
       let taskCursor = phaseStart
-      for (const task of tasks) {
+      tasks.forEach((task, ti) => {
         rows.push({
-          id: `task-${task.id ?? Math.random().toString(36).slice(2, 8)}`,
+          id: `task-${task.id ?? `${qp.id}-${ti}`}`,
           label: task.name || task.description || 'Task',
           level: 2,
           parentId: phaseId,
@@ -90,7 +96,7 @@ export function buildGanttFromQuote(
           durDays: TASK_DAYS,
         })
         taskCursor += TASK_DAYS
-      }
+      })
 
       cursor = phaseStart + phaseDur
     }

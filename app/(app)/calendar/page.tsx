@@ -182,6 +182,11 @@ export default function CalendarPage() {
   const weekTrackRef = useRef<HTMLDivElement | null>(null)
   const [dragPreview, setDragPreview] = useState<{ eventId: string; startDate: Date; endDate: Date } | null>(null)
   const [isDragging,  setIsDragging]  = useState(false)
+  // A real drag (the pointer actually crossed into a different day) must not also open
+  // the detail panel — set true the moment a drag moves anything, checked and cleared by
+  // each bar's onClick so a genuine click (mousedown+mouseup with no movement) still opens
+  // it exactly as before.
+  const suppressClickRef = useRef(false)
 
   // Global day index (relative to calStart for month, weekStart for week) the pointer
   // is currently over.
@@ -234,6 +239,7 @@ export default function CalendarPage() {
       const d = dragRef.current
       if (!d) return
       const { startDay, durDays } = computeDragDays(d, e.clientX, e.clientY)
+      if (startDay !== d.origStartDay || durDays !== d.origDurDays) suppressClickRef.current = true
       setDragPreview({ eventId: d.event.id, startDate: addDays(d.jobStart, startDay), endDate: addDays(d.jobStart, startDay + durDays) })
     }
     async function onUp(e: MouseEvent) {
@@ -245,6 +251,9 @@ export default function CalendarPage() {
       document.body.style.cursor = ''
       const { startDay, durDays } = computeDragDays(d, e.clientX, e.clientY)
       if (startDay !== d.origStartDay || durDays !== d.origDurDays) await saveTaskChange(d.event, startDay, durDays)
+      // Cleared after the click that would follow this mouseup has had a chance to run
+      // and see it — not immediately, or a genuine drag's own click would slip through.
+      setTimeout(() => { suppressClickRef.current = false }, 0)
     }
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
@@ -391,7 +400,7 @@ export default function CalendarPage() {
               {slots.filter(s => s.row < MAX_ROWS).map(slot => (
                 <div
                   key={slot.event.id}
-                  onClick={() => setSelected(slot.event)}
+                  onClick={() => { if (suppressClickRef.current) return; setSelected(slot.event) }}
                   onMouseDown={e => startDrag(e, slot.event, 'move', 'month', numWeeks)}
                   title={`${getJobNum(slot.event.job.id)} · ${slot.event.job.client} · ${jobDisplayTitle(slot.event.job)}\n${slot.event.phaseLabel}\n${fmtShort(slot.event.startDate)} – ${fmtShort(addDays(slot.event.endDate, -1))}`}
                   style={{
@@ -508,7 +517,7 @@ export default function CalendarPage() {
             return (
               <div
                 key={slot.event.id}
-                onClick={() => setSelected(slot.event)}
+                onClick={() => { if (suppressClickRef.current) return; setSelected(slot.event) }}
                 onMouseDown={e => startDrag(e, slot.event, 'move', 'week', 1)}
                 title={`${getJobNum(slot.event.job.id)} · ${slot.event.job.client} · ${slot.event.phaseLabel}`}
                 style={{
