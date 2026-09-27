@@ -174,7 +174,7 @@ function JobsPageInner() {
         key={j.id}
         id={`job-${j.id}`}
         className={`card job-card${openJobId === j.id ? ' open' : ''}${highlightId === j.id ? ' job-highlight' : ''}`}
-        style={{ marginBottom: 12 }}
+        style={{ marginBottom: 12, '--job-color': col } as React.CSSProperties}
       >
         <div className="job-card-inner">
           <div className="job-card-main" onClick={() => setOpenJobId(id => id === j.id ? null : j.id)}>

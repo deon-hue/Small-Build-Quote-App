@@ -392,6 +392,20 @@ textarea{resize:vertical;min-height:56px}
   .jb-archive,.jb-edit,.jb-del{grid-column:1/-1}
   .jb-del{order:10}
   .mob-label{display:inline}
+
+  /* Fully coloured card (not just the old left-edge strip) — the job colour set as a CSS
+     variable on the card itself (see the inline style in renderJobCard), so this is one
+     rule instead of a colour prop threaded through every element. The collapsed header
+     reads in white against it; once opened, the action buttons and any note sit on their
+     own white panel rather than needing every button re-themed for a coloured backdrop. */
+  .job-card{background:var(--job-color,#fff);overflow:hidden}
+  .job-dot{display:none}
+  .job-name,.jn-client,.job-meta,.jm-type,.job-x-num,.job-progress-text,.job-card-toggle,.job-value-col>.mono{color:#fff}
+  .job-value-col .badge{background:rgba(255,255,255,0.92)!important;color:#1f2a24!important}
+  .progress{background:rgba(255,255,255,0.3)}
+  .progress-bar{background:rgba(255,255,255,0.95)!important}
+  .job-card-actions{background:#fff;border-radius:12px;padding:10px;margin-top:6px}
+  .job-note{background:#fff}
 }
 
 /* ── Scan to Job + Notes (phone) ── */

@@ -1064,7 +1064,7 @@ export default function CalendarPage() {
           ) : agendaEvents.map(evt => {
             const durDays = daysBetween(evt.startDate, evt.endDate)
             return (
-              <div key={evt.id} className="cal-ag-item" onClick={() => setSelected(evt)} style={{ borderLeftColor: evt.color, opacity: barOpacity(evt.job.id) }}>
+              <div key={evt.id} className="cal-ag-item" onClick={() => setSelected(evt)} style={{ '--job-color': evt.color, opacity: barOpacity(evt.job.id) } as React.CSSProperties}>
                 <div className="cal-ag-when">
                   <b>{fmtShort(evt.startDate)}</b>
                   <span>→ {fmtShort(addDays(evt.endDate, -1))}</span>

@@ -4,13 +4,16 @@
   .cal-grid-wrap{display:none}
   .cal-agenda{display:flex;flex-direction:column;gap:10px}
   .cal-agenda-empty{background:#fff;border:1px solid #e0e6d8;border-radius:18px;padding:28px 16px;text-align:center;color:#5d6b62;font-size:14px}
-  .cal-ag-item{display:flex;align-items:center;gap:14px;background:#fff;border:1px solid #e0e6d8;border-left:6px solid #7ab533;border-radius:18px;padding:14px 16px;min-height:64px;cursor:pointer}
-  .cal-ag-when{flex:none;width:84px;display:flex;flex-direction:column;font-size:12.5px;color:#5d6b62}
-  .cal-ag-when b{font-size:14px;color:#1f2a24}
+  /* Fully coloured with the job's own colour (a CSS variable set inline, see the JSX) —
+     not just a left-edge strip — so text/pills here are white-on-colour instead of the
+     usual dark-on-white, matching the same treatment as the Jobs list's cards. */
+  .cal-ag-item{display:flex;align-items:center;gap:14px;background:var(--job-color,#fff);border:1px solid rgba(0,0,0,0.06);border-radius:18px;padding:14px 16px;min-height:64px;cursor:pointer}
+  .cal-ag-when{flex:none;width:84px;display:flex;flex-direction:column;font-size:12.5px;color:rgba(255,255,255,0.85)}
+  .cal-ag-when b{font-size:14px;color:#fff}
   .cal-ag-main{flex:1;min-width:0}
-  .cal-ag-title{font-size:16px;font-weight:700;color:#1f2a24;line-height:1.25}
-  .cal-ag-sub{font-size:13px;color:#5d6b62;margin-top:3px;line-height:1.35}
-  .cal-ag-dur{flex:none;font-size:13px;font-weight:700;color:#41660a;background:#eaf2d3;border-radius:999px;padding:4px 10px}
+  .cal-ag-title{font-size:16px;font-weight:700;color:#fff;line-height:1.25}
+  .cal-ag-sub{font-size:13px;color:rgba(255,255,255,0.85);margin-top:3px;line-height:1.35}
+  .cal-ag-dur{flex:none;font-size:13px;font-weight:700;color:#1f2a24;background:rgba(255,255,255,0.92);border-radius:999px;padding:4px 10px}
 
   /* Toolbar: view switcher on its own row, then prev / label / next */
   .cal-toolbar{display:grid!important;grid-template-columns:auto 1fr auto;gap:10px!important}
