@@ -398,7 +398,11 @@ textarea{resize:vertical;min-height:56px}
      rule instead of a colour prop threaded through every element. The collapsed header
      reads in white against it; once opened, the action buttons and any note sit on their
      own white panel rather than needing every button re-themed for a coloured backdrop. */
-  .job-card{background:var(--job-color,#fff);overflow:hidden}
+  /* Scoped to .jobs-grid (not just .job-card alone) so this reliably beats the later,
+     equal-specificity ".card{background:#fff}" touch rule regardless of source order —
+     that's exactly what was silently winning and leaving every card plain white. */
+  .jobs-grid .job-card{background:var(--job-color,#fff)}
+  .job-card{overflow:hidden}
   .job-dot{display:none}
   .job-name,.jn-client,.job-meta,.jm-type,.job-x-num,.job-progress-text,.job-card-toggle,.job-value-col>.mono{color:#fff}
   .job-value-col .badge{background:rgba(255,255,255,0.92)!important;color:#1f2a24!important}
