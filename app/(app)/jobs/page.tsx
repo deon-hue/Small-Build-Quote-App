@@ -41,9 +41,10 @@ function JobsPageInner() {
   // Phones only: which job card has its action buttons expanded (CSS ignores this on desktop)
   const [openJobId, setOpenJobId] = useState<string | null>(null)
   const [archiveOpen, setArchiveOpen] = useState(false)
-  // Set when arriving via a "?open=<jobId>" link (e.g. Calendar's "Open in Jobs" button)
-  // so the target card gets scrolled to and briefly highlighted rather than just landing
-  // on the unfiltered list somewhere the job may not even be visible.
+  // Set when arriving via a "?open=<jobId>" link (e.g. Calendar's "Open in Jobs" button) —
+  // see the effect below, which also opens that job's Gantt chart and scrolls its card
+  // into view with a brief highlight, so the link lands on the schedule itself rather
+  // than just somewhere on the unfiltered list.
   const [highlightId, setHighlightId] = useState<string | null>(null)
   const jobFormModal = useDraggableModal()
 
@@ -55,12 +56,13 @@ function JobsPageInner() {
 
   useEffect(() => {
     const openId = searchParams.get('open')
-    if (!openId || loading || !jobs.some(j => j.id === openId)) return
-    const isArchived = jobs.find(j => j.id === openId)?.archived
-    if (isArchived) setArchiveOpen(true)
+    const openJob = jobs.find(j => j.id === openId)
+    if (!openId || loading || !openJob) return
+    if (openJob.archived) setArchiveOpen(true)
     setFilter('all')
     setOpenJobId(openId)
     setHighlightId(openId)
+    setGanttJob(openJob)
     const scrollTimer = setTimeout(() => {
       document.getElementById(`job-${openId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }, 60)
