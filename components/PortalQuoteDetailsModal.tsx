@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { calcItemSell, calcPhaseSell, fmt } from '@/lib/utils'
 import type { Quote } from '@/lib/types'
 import QuoteCommentsSection from './QuoteCommentsSection'
+import PortalQuoteAttachments from './PortalQuoteAttachments'
 import { useDraggableModal } from './useDraggableModal'
 import ModalResizeHandle from './ModalResizeHandle'
 import ModalMaximizeButton from './ModalMaximizeButton'
@@ -328,6 +329,9 @@ export default function PortalQuoteDetailsModal({
               </div>
             </div>
           )}
+
+          {/* ── Attachments ──────────────────────────── */}
+          {!isPreview && <PortalQuoteAttachments quoteId={quote.id} />}
 
           {/* ── Phases & line items ─────────────────── */}
           {quote.phases.length > 0 && quoteView !== 'total_only' && (

@@ -2,24 +2,23 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/supabase/service-role'
 
-const BUCKET = 'job-documents'
+const BUCKET = 'quote-documents'
 
 export async function GET(req: NextRequest) {
   const sb = await createClient()
   const { data: { user } } = await sb.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
 
-  const jobId = req.nextUrl.searchParams.get('jobId')
-  if (!jobId) return NextResponse.json({ error: 'Missing jobId' }, { status: 400 })
+  const quoteId = req.nextUrl.searchParams.get('quoteId')
+  if (!quoteId) return NextResponse.json({ error: 'Missing quoteId' }, { status: 400 })
 
-  const { data: rows, error } = await sb.rpc('get_job_attachments_for_portal', { p_job_id: jobId })
+  const { data: rows, error } = await sb.rpc('get_quote_documents_for_portal', { p_quote_id: quoteId })
   if (error || !Array.isArray(rows)) return NextResponse.json([])
 
-  // Sign with the service-role client, not the portal customer's own session — the
-  // job-documents bucket's storage RLS only allows the file's own owner (the contractor)
-  // to read it, so createSignedUrl would silently fail (return null) for a portal
-  // customer under the regular client, even though the RPC above already confirmed they
-  // may see this job's files. Same fix as job-contracts/quote-documents' portal routes.
+  // Sign with the service-role client — the quote-documents bucket's storage RLS only
+  // allows the file's own owner (the contractor) to read it, so the portal customer's
+  // own session could never generate a signed URL for it directly. The RPC above already
+  // confirmed this customer may see this quote's files.
   const svc = createServiceRoleClient()
 
   const result = await Promise.all(

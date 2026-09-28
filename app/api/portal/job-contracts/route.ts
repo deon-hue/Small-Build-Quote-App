@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createServiceRoleClient } from '@/lib/supabase/service-role'
 
 const BUCKET = 'job-documents'
 
@@ -14,12 +15,21 @@ export async function GET(req: NextRequest) {
   const { data: rows, error } = await sb.rpc('get_job_contracts_for_portal', { p_job_id: jobId })
   if (error || !Array.isArray(rows)) return NextResponse.json([])
 
+  // Sign with the service-role client, not the portal customer's own session — the
+  // job-documents bucket's storage RLS only allows the file's own owner (the contractor,
+  // storage_path's first folder segment) to read it, so createSignedUrl would silently
+  // fail (return no signedUrl) for a portal customer under the regular client. The RPC
+  // above already verified this customer may see this job's contracts, so signing here
+  // doesn't skip any check — it just performs the one step that customer's own session
+  // was never going to be allowed to do itself.
+  const svc = createServiceRoleClient()
+
   const result = await Promise.all(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (rows as any[]).map(async r => {
       const [draftUrl, signedUrl] = await Promise.all([
-        r.draft_storage_path ? signedUrl_(sb, r.draft_storage_path) : Promise.resolve(null),
-        r.signed_storage_path ? signedUrl_(sb, r.signed_storage_path) : Promise.resolve(null),
+        r.draft_storage_path ? signedUrl_(svc, r.draft_storage_path) : Promise.resolve(null),
+        r.signed_storage_path ? signedUrl_(svc, r.signed_storage_path) : Promise.resolve(null),
       ])
       return {
         id: r.id,
