@@ -3,8 +3,10 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useApp } from '@/contexts/AppContext'
-import { fmt, VAT, JOB_TYPES, calcPhase, calcPhaseSell } from '@/lib/utils'
-import type { QuotePhase, QuoteItem, Quote, TakeoffPhaseMeta } from '@/lib/types'
+import { fmt, VAT, JOB_TYPES, calcPhase, calcPhaseSell, uid } from '@/lib/utils'
+import type { QuotePhase, QuoteItem, Quote, TakeoffPhaseMeta, QuoteDocument } from '@/lib/types'
+import QuoteAttachments from '@/components/QuoteAttachments'
+import { reassignQuoteDocuments } from '@/lib/quote-documents'
 import { itemFromTemplate, estimatorAggregates } from '@/lib/estimator'
 import type { EstimatorItem, EstimatorItemTemplate, MeasurementType } from '@/lib/estimator'
 import { getPhaseEstimatorDefaults } from '@/lib/estimatorDefaults'
@@ -223,6 +225,10 @@ export default function NewQuotePage() {
   const [photo, setPhoto] = useState('')
   const [phases, setPhases] = useState<QuotePhase[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [attachments, setAttachments] = useState<QuoteDocument[]>([])
+  // Per-session key so a brand-new, not-yet-saved quote's attachments never collide with
+  // a different abandoned draft's — see lib/quote-documents.ts.
+  const [draftKey] = useState(() => 'draft-' + uid())
   const [isLockedQuote, setIsLockedQuote] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -801,6 +807,7 @@ export default function NewQuotePage() {
       } else {
         const newQuote = await addQuote(qData)
         await upsertClientFromQuote(customer)
+        if (attachments.length) await reassignQuoteDocuments(createClient(), attachments.map(a => a.id), newQuote.id)
         alert('Saved as draft — ref: ' + newQuote.ref)
       }
     } finally {
@@ -1434,10 +1441,11 @@ export default function NewQuotePage() {
       } else {
         const newQuote = await addQuote(qData)
         await upsertClientFromQuote(customer)
+        if (attachments.length) await reassignQuoteDocuments(createClient(), attachments.map(a => a.id), newQuote.id)
         alert('Quote saved! Reference: ' + newQuote.ref)
       }
       setCustName(''); setCustAddr(''); setCustEmail(''); setCustPhone('')
-      setScope(''); setPhoto('')
+      setScope(''); setPhoto(''); setAttachments([])
       loadTemplate(jobType)
     } finally {
       setSaving(false)
@@ -1464,7 +1472,7 @@ export default function NewQuotePage() {
     setEditingId(null)
     setIsLockedQuote(false)
     setCustName(''); setCustAddr(''); setCustEmail(''); setCustPhone('')
-    setScope(''); setPhoto('')
+    setScope(''); setPhoto(''); setAttachments([])
     loadTemplate(jobType)
   }
 
@@ -1888,6 +1896,13 @@ export default function NewQuotePage() {
                       onChange={e => { const f = e.target.files?.[0]; if (f) handlePhotoFile(f) }} />
                   </div>
               }
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-hd">Attachments</div>
+            <div style={{ padding: '14px 16px' }}>
+              <QuoteAttachments quoteId={editingId || draftKey} attachments={attachments} onAttachmentsChange={setAttachments} />
             </div>
           </div>
 

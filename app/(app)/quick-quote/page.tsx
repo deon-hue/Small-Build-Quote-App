@@ -17,15 +17,23 @@
 
 import { useState } from 'react'
 import { useApp } from '@/contexts/AppContext'
-import { JOB_TYPES, fmt } from '@/lib/utils'
+import { JOB_TYPES, fmt, uid } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import ScopeChat from '@/components/ScopeChat'
+import QuoteAttachments from '@/components/QuoteAttachments'
+import { reassignQuoteDocuments } from '@/lib/quote-documents'
+import type { QuoteDocument } from '@/lib/types'
 
 let itemId = 1000
 
 export default function QuickQuotePage() {
   const { clients, addQuote, upsertClientFromQuote, loading } = useApp()
   const router = useRouter()
+  const [attachments, setAttachments] = useState<QuoteDocument[]>([])
+  // Per-session key so a brand-new, not-yet-saved quote's attachments never collide with
+  // a different abandoned draft's — see lib/quote-documents.ts.
+  const [draftKey] = useState(() => 'draft-' + uid())
 
   // ── Customer ──────────────────────────────────────────────────────────────
   const [custName,  setCustName]  = useState('')
@@ -186,6 +194,7 @@ export default function QuickQuotePage() {
         quoteSource:    'quick',
       })
       await upsertClientFromQuote(customer)
+      if (attachments.length) await reassignQuoteDocuments(createClient(), attachments.map(a => a.id), newQuote.id)
       alert(`Quick quote saved! Reference: ${newQuote.ref}`)
       router.push('/quotes')
     } catch (err) {
@@ -407,6 +416,14 @@ export default function QuickQuotePage() {
             resize: 'vertical', minHeight: 100, lineHeight: 1.6,
           }}
         />
+      </div>
+
+      {/* ── Section 3b: Attachments ── */}
+      <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 10, padding: '20px 24px', marginBottom: 16 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94a3b8', marginBottom: 14 }}>
+          Attachments
+        </div>
+        <QuoteAttachments quoteId={draftKey} attachments={attachments} onAttachmentsChange={setAttachments} />
       </div>
 
       {/* ── Section 4: Pricing ── */}

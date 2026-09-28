@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     // Fetch all plan files attached to this quote
     const { data: docs } = await sb
       .from('quote_documents')
-      .select('filename, storage_path, mime_type, file_size')
+      .select('filename, storage_path, mime_type, file_size, category, label')
       .eq('user_id', user.id)
       .eq('quote_id', quoteId)
 
@@ -54,7 +54,9 @@ export async function POST(req: NextRequest) {
           continue
         }
 
-        // Insert into job_attachments
+        // Insert into job_attachments — carries over the category the estimator tagged it
+        // with on the quote (older quote_documents rows predate that column, so those
+        // still fall back to 'plan' — this route's original, single behaviour)
         await sb.from('job_attachments').insert({
           user_id:      user.id,
           job_id:       jobId,
@@ -62,8 +64,8 @@ export async function POST(req: NextRequest) {
           storage_path: uploadData.path,
           mime_type:    doc.mime_type,
           file_size:    doc.file_size,
-          category:     'plan',
-          label:        doc.filename.replace(/\.[^.]+$/, ''), // filename without extension
+          category:     doc.category || 'plan',
+          label:        doc.label || doc.filename.replace(/\.[^.]+$/, ''), // filename without extension
         })
 
         copied++

@@ -230,6 +230,24 @@ export interface JobAttachment {
   createdAt?: string
 }
 
+/** A file attached while building a quote — 'document' | 'plan' | 'photo' only, never
+ *  'contract' (that only ever exists on a job, generated after acceptance). Carries over to
+ *  job_attachments automatically when the quote is converted (app/api/copy-quote-plans). */
+export interface QuoteDocument {
+  id: string
+  /** The quote's real id, or 'draft' for one attached before the quote has ever been
+   *  saved — reassigned to the real id the first time that quote is saved, see
+   *  reassignQuoteDocuments() in lib/quote-documents.ts. */
+  quoteId: string
+  fileName: string
+  storagePath: string
+  mimeType: string
+  fileSize: number
+  category: Exclude<AttachmentCategory, 'contract'>
+  label: string
+  createdAt?: string
+}
+
 // ── FMB contract (fill, send, digitally sign) ────────────────────────────────
 
 /** A single payment milestone in a staged payment schedule (contract page 16). */
