@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import { fetchQuoteDocuments, signedQuoteDocumentUrl } from '@/lib/quote-documents'
 
 type QuoteFile = { id: string; fileName: string; mimeType: string; fileSize: number; category: string; label: string; url: string | null }
 
@@ -10,17 +12,43 @@ function fmtSize(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-export default function PortalQuoteAttachments({ quoteId }: { quoteId: string }) {
+interface Props {
+  quoteId: string
+  /** True from the "View Portal" admin preview (app/(app)/portal-preview) — that page runs
+   *  as the contractor's own authenticated session, not a portal-customer one, so it can
+   *  read quote_documents directly (RLS already allows the owner) instead of going through
+   *  the portal-customer-scoped /api/portal/quote-documents route, which would return
+   *  nothing for a contractor session (it isn't the quote's customer). */
+  useOwnerSession?: boolean
+}
+
+export default function PortalQuoteAttachments({ quoteId, useOwnerSession }: Props) {
   const [files, setFiles] = useState<QuoteFile[] | 'loading'>('loading')
 
   useEffect(() => {
     let cancelled = false
+
+    if (useOwnerSession) {
+      const sb = createClient()
+      fetchQuoteDocuments(sb, quoteId)
+        .then(async docs => {
+          const withUrls = await Promise.all(docs.map(async d => ({
+            id: d.id, fileName: d.fileName, mimeType: d.mimeType, fileSize: d.fileSize,
+            category: d.category, label: d.label,
+            url: await signedQuoteDocumentUrl(sb, d.storagePath),
+          })))
+          if (!cancelled) setFiles(withUrls)
+        })
+        .catch(() => { if (!cancelled) setFiles([]) })
+      return () => { cancelled = true }
+    }
+
     fetch(`/api/portal/quote-documents?quoteId=${quoteId}`)
       .then(res => res.ok ? res.json() : [])
       .then((data: QuoteFile[]) => { if (!cancelled) setFiles(data) })
       .catch(() => { if (!cancelled) setFiles([]) })
     return () => { cancelled = true }
-  }, [quoteId])
+  }, [quoteId, useOwnerSession])
 
   if (files === 'loading' || files.length === 0) return null
 

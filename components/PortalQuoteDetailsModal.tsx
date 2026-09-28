@@ -331,7 +331,7 @@ export default function PortalQuoteDetailsModal({
           )}
 
           {/* ── Attachments ──────────────────────────── */}
-          {!isPreview && <PortalQuoteAttachments quoteId={quote.id} />}
+          <PortalQuoteAttachments quoteId={quote.id} useOwnerSession={isPreview} />
 
           {/* ── Phases & line items ─────────────────── */}
           {quote.phases.length > 0 && quoteView !== 'total_only' && (
