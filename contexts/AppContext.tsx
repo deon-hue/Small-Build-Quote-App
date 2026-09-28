@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Job, Quote, Client, Supplier, Settings, GanttState, Invoice, JobNote, JobPayment, PaymentMethod, PortalStatus, TemplatePhaseData, Variation, VariationStatus, TeamMember, TeamMemberRole, UserPermissions, ClientPortalSettings, Bill, BillStatus, XeroAccountCodes } from '@/lib/types'
+import type { Job, Quote, Client, Supplier, Settings, GanttState, Invoice, JobNote, JobPayment, PaymentMethod, PortalStatus, TemplatePhaseData, Variation, VariationStatus, TeamMember, TeamMemberRole, UserPermissions, ClientPortalSettings, Bill, BillStatus, XeroAccountCodes, Contract } from '@/lib/types'
 import { FULL_PERMISSIONS, DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
 import { uid, JOB_TEMPLATES } from '@/lib/utils'
 
@@ -64,6 +64,11 @@ interface AppContextType {
   addVariation: (jobId: string, v: Omit<Variation, 'id' | 'ref' | 'createdAt' | 'jobId'>) => Promise<Variation>
   updateVariation: (v: Variation) => Promise<void>
   deleteVariation: (id: string) => Promise<void>
+
+  contracts: Contract[]
+  addContract: (jobId: string, quoteId: string | null) => Promise<Contract>
+  updateContract: (c: Contract) => Promise<void>
+  deleteContract: (id: string) => Promise<void>
 
   bills: Bill[]
   addBill: (bill: Omit<Bill, 'id' | 'ref' | 'createdAt'>) => Promise<Bill>
@@ -139,6 +144,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [jobNotes, setJobNotes] = useState<JobNote[]>([])
   const [jobPayments, setJobPayments] = useState<JobPayment[]>([])
   const [variations, setVariations] = useState<Variation[]>([])
+  const [contracts, setContracts] = useState<Contract[]>([])
   const [customTemplates, setCustomTemplates] = useState<Record<string, TemplatePhaseData[]>>({})
   const [bills, setBills] = useState<Bill[]>([])
   const [loading, setLoading] = useState(true)
@@ -190,7 +196,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       } catch { /* phase10.sql not run yet — single-user mode */ }
 
-      const [jobsRes, quotesRes, clientsRes, settingsRes, ganttRes, invoicesRes, notesRes, variationsRes, billsRes, paymentsRes, portalStatusRes, templatesRes] = await Promise.all([
+      const [jobsRes, quotesRes, clientsRes, settingsRes, ganttRes, invoicesRes, notesRes, variationsRes, billsRes, paymentsRes, portalStatusRes, templatesRes, contractsRes] = await Promise.all([
         supabase.from('jobs').select('*').order('created_at', { ascending: true }),
         supabase.from('quotes').select('*').order('created_at', { ascending: true }),
         supabase.from('clients').select('*').order('created_at', { ascending: true }),
@@ -203,6 +209,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         (async () => { try { return await supabase.from('job_payments').select('*').order('payment_date', { ascending: false }) } catch { return { data: null } } })(),
         (async () => { try { return await supabase.rpc('get_clients_with_portal_status') } catch { return { data: null } } })(),
         (async () => { try { return await supabase.from('job_type_templates').select('*') } catch { return { data: null } } })(),
+        (async () => { try { return await supabase.from('contracts').select('*').order('created_at', { ascending: true }) } catch { return { data: null } } })(),
       ])
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -344,6 +351,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
           sentAt: r.sent_at || null,
           resentAt: r.resent_at || null,
           createdAt: r.created_at,
+        })))
+      }
+
+      if (contractsRes.data) {
+        setContracts(contractsRes.data.map(r => ({
+          id: r.id, jobId: r.job_id, quoteId: r.quote_id || null,
+          status: r.status, fields: r.fields || {},
+          paymentMode: r.payment_mode || 'simple', paymentSchedule: r.payment_schedule || [],
+          secondClientName: r.second_client_name || null,
+          draftAttachmentId: r.draft_attachment_id || null,
+          signedAttachmentId: r.signed_attachment_id || null,
+          builderSignedAt: r.builder_signed_at || null, builderSignedBy: r.builder_signed_by || null,
+          clientSignedAt: r.client_signed_at || null, clientSignedBy: r.client_signed_by || null,
+          client2SignedAt: r.client2_signed_at || null, client2SignedBy: r.client2_signed_by || null,
+          createdAt: r.created_at, updatedAt: r.updated_at,
         })))
       }
 
@@ -774,6 +796,53 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setVariations(prev => prev.filter(v => v.id !== id))
   }, [supabase])
 
+  // ── Contracts ────────────────────────────────────────────────
+  const addContract = useCallback(async (jobId: string, quoteId: string | null): Promise<Contract> => {
+    const { data: { user } } = await supabase.auth.getUser()
+    const ownerId = dataOwnerIdRef.current || user!.id
+    const { data, error } = await supabase.from('contracts').insert({
+      user_id: ownerId, job_id: jobId, quote_id: quoteId,
+      status: 'draft', fields: {}, payment_mode: 'simple', payment_schedule: [],
+    }).select().single()
+    if (error) throw error
+    const newContract: Contract = {
+      id: data.id, jobId: data.job_id, quoteId: data.quote_id || null,
+      status: data.status, fields: data.fields || {},
+      paymentMode: data.payment_mode || 'simple', paymentSchedule: data.payment_schedule || [],
+      secondClientName: data.second_client_name || null,
+      draftAttachmentId: data.draft_attachment_id || null,
+      signedAttachmentId: data.signed_attachment_id || null,
+      builderSignedAt: data.builder_signed_at || null, builderSignedBy: data.builder_signed_by || null,
+      clientSignedAt: data.client_signed_at || null, clientSignedBy: data.client_signed_by || null,
+      client2SignedAt: data.client2_signed_at || null, client2SignedBy: data.client2_signed_by || null,
+      createdAt: data.created_at, updatedAt: data.updated_at,
+    }
+    setContracts(prev => [...prev, newContract])
+    return newContract
+  }, [supabase])
+
+  const updateContract = useCallback(async (c: Contract) => {
+    const { error } = await supabase.from('contracts').update({
+      status: c.status, fields: c.fields,
+      payment_mode: c.paymentMode, payment_schedule: c.paymentSchedule,
+      second_client_name: c.secondClientName || null,
+      draft_attachment_id: c.draftAttachmentId || null,
+      signed_attachment_id: c.signedAttachmentId || null,
+      builder_signed_at: c.builderSignedAt || null, builder_signed_by: c.builderSignedBy || null,
+      client_signed_at: c.clientSignedAt || null, client_signed_by: c.clientSignedBy || null,
+      client2_signed_at: c.client2SignedAt || null, client2_signed_by: c.client2SignedBy || null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', c.id)
+    if (error) throw error
+    setContracts(prev => prev.map(x => x.id === c.id ? c : x))
+  }, [supabase])
+
+  const deleteContract = useCallback(async (id: string) => {
+    const { error } = await supabase.from('contracts').delete().eq('id', id)
+    if (error) throw error
+    setContracts(prev => prev.filter(c => c.id !== id))
+  }, [supabase])
+
   // ── Job Notes ────────────────────────────────────────────────
   // `note` and `raw_note` start identical — the raw text as typed/dictated. `note` gets
   // overwritten (via updateJobNote) once /api/process-note returns a cleaned version;
@@ -1026,7 +1095,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider value={{
-      jobs, quotes, clients, settings, ganttStates, invoices, jobNotes, jobPayments, variations, customTemplates, loading, pageTitle, setPageTitle,
+      jobs, quotes, clients, settings, ganttStates, invoices, jobNotes, jobPayments, variations, contracts, customTemplates, loading, pageTitle, setPageTitle,
       teamMembers, currentMember, isOwner, permissions,
       addJob, updateJob, deleteJob,
       addQuote, updateQuote, deleteQuote,
@@ -1038,6 +1107,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addJobNote, updateJobNote, deleteJobNote,
       addJobPayment, deleteJobPayment,
       addVariation, updateVariation, deleteVariation,
+      addContract, updateContract, deleteContract,
       bills, addBill, updateBill, deleteBill,
       saveJobTypeTemplate, resetJobTypeTemplate, getTemplate,
       nextQuoteRef,

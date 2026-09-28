@@ -15,11 +15,13 @@ const CATEGORY_LABEL: Record<AttachmentCategory, string> = {
   photo:    '📷 Photo',
   plan:     '📐 Plan',
   document: '📄 Document',
+  contract: '📝 Contract',
 }
 const CATEGORY_COLOR: Record<AttachmentCategory, string> = {
   photo:    '#4a90a4',
   plan:     '#7c3aed',
   document: '#e67e22',
+  contract: '#2b3a2b',
 }
 
 function fmtSize(bytes: number) {

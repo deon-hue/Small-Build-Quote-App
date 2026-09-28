@@ -216,7 +216,7 @@ export interface Job {
 
 // ── Job attachments (client-visible: plans, photos, documents) ───────────────
 
-export type AttachmentCategory = 'document' | 'plan' | 'photo'
+export type AttachmentCategory = 'document' | 'plan' | 'photo' | 'contract'
 
 export interface JobAttachment {
   id: string
@@ -228,6 +228,43 @@ export interface JobAttachment {
   category: AttachmentCategory
   label: string
   createdAt?: string
+}
+
+// ── FMB contract (fill, send, digitally sign) ────────────────────────────────
+
+/** A single payment milestone in a staged payment schedule (contract page 16). */
+export interface ContractPaymentStage {
+  date: string    // dd/mm/yyyy
+  amount: number
+}
+
+/** Every value the estimator fills in on the contract's own pages (3-4), keyed by
+ *  the field names lib/fmb-contract.ts uses — a mix auto-filled from the quote/job/
+ *  settings and manually entered (drawings/spec references, CDM roles, liability
+ *  period, site facilities, etc). Free-form on purpose — see lib/fmb-contract.ts
+ *  for the definitive list of keys this can hold. */
+export type ContractFields = Record<string, string | boolean>
+
+export interface Contract {
+  id: string
+  jobId: string
+  quoteId?: string | null
+  status: 'draft' | 'sent' | 'signed'
+  fields: ContractFields
+  paymentMode: 'simple' | 'staged'
+  paymentSchedule: ContractPaymentStage[]
+  /** Set when there's a second (joint) client who also needs to sign. */
+  secondClientName?: string | null
+  draftAttachmentId?: string | null
+  signedAttachmentId?: string | null
+  builderSignedAt?: string | null
+  builderSignedBy?: string | null
+  clientSignedAt?: string | null
+  clientSignedBy?: string | null
+  client2SignedAt?: string | null
+  client2SignedBy?: string | null
+  createdAt?: string
+  updatedAt?: string
 }
 
 // ── Job documents & cost ledger (doc-scan feature) ────────────────────────────

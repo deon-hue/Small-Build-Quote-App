@@ -15,6 +15,7 @@ import JobAttachmentsModal from '@/components/JobAttachmentsModal'
 import PaymentRequestsModal from '@/components/PaymentRequestsModal'
 import QuotePreviewModal from '@/components/QuotePreviewModal'
 import QuoteCommentsModal from '@/components/QuoteCommentsModal'
+import ContractBuilderModal from '@/components/ContractBuilderModal'
 import { useDraggableModal } from '@/components/useDraggableModal'
 import ModalResizeHandle from '@/components/ModalResizeHandle'
 import ModalMaximizeButton from '@/components/ModalMaximizeButton'
@@ -42,6 +43,7 @@ function JobsPageInner() {
   const [requestsJob, setRequestsJob] = useState<Job | null>(null)
   const [viewQuote, setViewQuote] = useState<Quote | null>(null)
   const [commentsQuote, setCommentsQuote] = useState<Quote | null>(null)
+  const [contractJob, setContractJob] = useState<Job | null>(null)
   // Phones only: which job card has its action buttons expanded (CSS ignores this on desktop)
   const [openJobId, setOpenJobId] = useState<string | null>(null)
   const [archiveOpen, setArchiveOpen] = useState(false)
@@ -238,6 +240,7 @@ function JobsPageInner() {
             {linkedQuote && (
               <button className="btn-sm btn-outline jb-qa" onClick={() => setCommentsQuote(linkedQuote)} title="Questions and replies for this job's quote">💬 Quote Q&amp;A</button>
             )}
+            <button className="btn-sm btn-outline jb-contract" onClick={() => setContractJob(j)} title="Fill, send and track the signed FMB contract for this job">📝 Contract</button>
             <button className="btn-sm btn-outline jb-costs" onClick={() => setDocsJob(j)} title="Scan/upload supplier docs and track costs">💷 Costs</button>
             <button className="btn-sm btn-outline jb-pay" onClick={() => setRequestsJob(j)} title="Payment requests and received payments">
               💳 Payments{jobPayments.filter(p => p.jobId === j.id).length > 0 ? ` (${jobPayments.filter(p => p.jobId === j.id).length})` : ''}
@@ -496,6 +499,14 @@ function JobsPageInner() {
 
       {/* This job's quote Q&A — its own modal, not tacked onto the quote preview */}
       {commentsQuote && <QuoteCommentsModal quote={commentsQuote} onClose={() => setCommentsQuote(null)} />}
+
+      {contractJob && (
+        <ContractBuilderModal
+          job={contractJob}
+          quote={findLinkedQuote(contractJob, quotes)}
+          onClose={() => setContractJob(null)}
+        />
+      )}
 
 
       {/* Documents & Costs modal */}
