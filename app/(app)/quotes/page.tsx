@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useApp } from '@/contexts/AppContext'
-import { fmt, quoteTotal, STAGE_LABEL, Q_BADGE, Q_LABEL, jobDisplayTitle, quoteDisplayTitle, jobNumber } from '@/lib/utils'
+import { fmt, quoteTotal, STAGE_LABEL, Q_BADGE, Q_LABEL, jobDisplayTitle, quoteDisplayTitle, jobNumber, quoteExpiryDays, quoteExpiryDate, isQuoteExpired } from '@/lib/utils'
 import { buildHtmlClientView } from '@/lib/quoteHtml'
 import { buildGanttFromQuote } from '@/lib/gantt-utils'
 import { backfillQuoteItemDescriptions } from '@/lib/back-office-queries'
@@ -28,6 +28,8 @@ export default function SavedQuotesPage() {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({})
   const [downloadingPdfId, setDownloadingPdfId] = useState<string | null>(null)
+  const [editingExpiryId, setEditingExpiryId] = useState<string | null>(null)
+  const [editExpiryDays, setEditExpiryDays] = useState('')
   // Phone/tablet only (the chips and tap-to-open are hidden/ignored on desktop by CSS)
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'sent' | 'accepted' | 'declined'>('all')
   const [openQuoteId, setOpenQuoteId] = useState<string | null>(null)
@@ -59,6 +61,7 @@ export default function SavedQuotesPage() {
   const open     = quotes.filter(q => ['draft','pending','in-progress','review','sent'].includes(q.status))
   const active   = quotes.filter(q => q.status !== 'archived')
   const archived = quotes.filter(q => q.status === 'archived')
+  const expiredActive = active.filter(q => isQuoteExpired(q))
   const pipeline = open.reduce((s, q) => s + quoteTotal(q), 0)
 
   // Group quotes by version: root quotes + their versions
@@ -108,12 +111,13 @@ export default function SavedQuotesPage() {
 
   async function handleArchive(q: Quote) {
     if (!confirm(`Archive quote ${q.ref || ''}?\n\nIt will move to the Archived section and can be reinstated at any time.`)) return
-    await updateQuote({ ...q, status: 'archived' })
+    await updateQuote({ ...q, status: 'archived', preArchiveStatus: q.status })
   }
 
   async function handleReinstate(q: Quote) {
-    if (!confirm(`Reinstate quote ${q.ref || ''}?\n\nIt will move back to Saved Quotes with Accepted status.`)) return
-    await updateQuote({ ...q, status: 'accepted' })
+    const restoreTo = q.preArchiveStatus || 'accepted'
+    if (!confirm(`Reinstate quote ${q.ref || ''}?\n\nIt will move back to Saved Quotes with ${Q_LABEL[restoreTo] || restoreTo} status.`)) return
+    await updateQuote({ ...q, status: restoreTo, preArchiveStatus: null })
   }
 
   async function handleDelete(q: Quote) {
@@ -264,22 +268,20 @@ export default function SavedQuotesPage() {
     }
   }
 
-  function quoteExpiry(savedDate: string) {
-    if (!savedDate) return ''
-    const parts = savedDate.split('/')
-    if (parts.length !== 3) return ''
-    const d = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]))
-    d.setDate(d.getDate() + 30)
-    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+  function quoteExpiry(q: Quote) {
+    const d = quoteExpiryDate(q)
+    return d ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
   }
 
-  function isExpired(savedDate: string) {
-    if (!savedDate) return false
-    const parts = savedDate.split('/')
-    if (parts.length !== 3) return false
-    const d = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]))
-    d.setDate(d.getDate() + 30)
-    return d < new Date()
+  async function handleSetExpiryDays(q: Quote, days: number) {
+    await updateQuote({ ...q, expiryDays: days > 0 ? days : null })
+    setEditingExpiryId(null)
+  }
+
+  async function handleArchiveExpired() {
+    if (!expiredActive.length) return
+    if (!confirm(`Archive ${expiredActive.length} expired quote${expiredActive.length > 1 ? 's' : ''}?\n\nThey'll move to the Archived section and can be reinstated at any time.`)) return
+    for (const q of expiredActive) await updateQuote({ ...q, status: 'archived', preArchiveStatus: q.status })
   }
 
   return (
@@ -312,20 +314,36 @@ export default function SavedQuotesPage() {
             ? `${open.length} open · ${fmt(pipeline)} pipeline · ${active.length} total${archived.length ? ` · ${archived.length} archived` : ''}`
             : 'No quotes saved yet'}
         </div>
-        <button
-          onClick={() => router.push('/quick-quote')}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '7px 16px', fontSize: 12, fontWeight: 600, borderRadius: 6,
-            border: '1.5px solid #7c3aed', background: '#fdf4ff', color: '#7c3aed',
-            cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-            transition: 'all 0.15s',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.background = '#7c3aed'; e.currentTarget.style.color = '#fff' }}
-          onMouseLeave={e => { e.currentTarget.style.background = '#fdf4ff'; e.currentTarget.style.color = '#7c3aed' }}
-        >
-          ⚡ Quick Quote
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {expiredActive.length > 0 && (
+            <button
+              onClick={handleArchiveExpired}
+              title="Move every expired quote below into the Archived section"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '7px 16px', fontSize: 12, fontWeight: 600, borderRadius: 6,
+                border: '1.5px solid #c0392b', background: '#fdf2f2', color: '#c0392b',
+                cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+              }}
+            >
+              📁 Archive expired ({expiredActive.length})
+            </button>
+          )}
+          <button
+            onClick={() => router.push('/quick-quote')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '7px 16px', fontSize: 12, fontWeight: 600, borderRadius: 6,
+              border: '1.5px solid #7c3aed', background: '#fdf4ff', color: '#7c3aed',
+              cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#7c3aed'; e.currentTarget.style.color = '#fff' }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#fdf4ff'; e.currentTarget.style.color = '#7c3aed' }}
+          >
+            ⚡ Quick Quote
+          </button>
+        </div>
       </div>
 
       {!active.length
@@ -390,9 +408,33 @@ export default function SavedQuotesPage() {
                   <div className="sq-sub">
                     {q.customer.address || ''} · Saved {q.savedDate || '—'}
                     {q.lastEdited ? ' · Edited ' + q.lastEdited : ''}
-                    {quoteExpiry(q.savedDate) && (
-                      <span style={{ marginLeft: 6, color: isExpired(q.savedDate) ? 'var(--terra)' : 'var(--muted)' }}>
-                        · {isExpired(q.savedDate) ? '⚠ Expired' : 'Expires'} {quoteExpiry(q.savedDate)}
+                    {quoteExpiry(q) && (
+                      <span style={{ marginLeft: 6, color: isQuoteExpired(q) ? 'var(--terra)' : 'var(--muted)' }}>
+                        · {isQuoteExpired(q) ? '⚠ Expired' : 'Expires'} {quoteExpiry(q)}
+                        {editingExpiryId === q.id ? (
+                          <span onClick={e => e.stopPropagation()} style={{ marginLeft: 4 }}>
+                            (
+                            <input
+                              type="number"
+                              min={1}
+                              autoFocus
+                              value={editExpiryDays}
+                              onChange={e => setEditExpiryDays(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') handleSetExpiryDays(q, Number(editExpiryDays)); if (e.key === 'Escape') setEditingExpiryId(null) }}
+                              onBlur={() => handleSetExpiryDays(q, Number(editExpiryDays))}
+                              style={{ width: 40, fontSize: 11, padding: '0 3px' }}
+                            /> days
+                            )
+                          </span>
+                        ) : (
+                          <span
+                            onClick={e => { e.stopPropagation(); setEditingExpiryId(q.id); setEditExpiryDays(String(quoteExpiryDays(q))) }}
+                            title="Change how many days this quote is valid for"
+                            style={{ marginLeft: 4, cursor: 'pointer', textDecoration: 'underline dotted' }}
+                          >
+                            ({quoteExpiryDays(q)}d ✎)
+                          </span>
+                        )}
                       </span>
                     )}
                     <button
@@ -500,15 +542,14 @@ export default function SavedQuotesPage() {
                         <option value="declined">Declined</option>
                       </select>
                     )}
-                    {isConverted ? (
-                      <button
-                        className="btn-sm btn-archive"
-                        onClick={() => handleArchive(q)}
-                        title="Move to archive — quote is locked and job already created"
-                      >
-                        📁 Archive
-                      </button>
-                    ) : (
+                    <button
+                      className="btn-sm btn-archive"
+                      onClick={() => handleArchive(q)}
+                      title={isConverted ? 'Move to archive — quote is locked and job already created' : 'Move to archive — can be reinstated at any time'}
+                    >
+                      📁 Archive
+                    </button>
+                    {!isConverted && (
                       <button className="btn-sm btn-danger" onClick={() => handleDelete(q)}>✕</button>
                     )}
                   </div>

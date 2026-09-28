@@ -165,6 +165,12 @@ export interface Quote {
   versionNumber?: number           // Version number within this quote series (1, 2, 3, etc)
   parentQuoteId?: string | null    // Parent quote ID if this is a version; null if original
   createdFromVersionId?: string | null  // Which version this was created from
+  /** How many days after savedDate this quote's price is valid for. Per-quote override —
+   *  falls back to 30 when unset. Use quoteExpiryDays()/isQuoteExpired() from lib/utils. */
+  expiryDays?: number | null
+  /** The status this quote had right before it was archived, so Reinstate can restore it
+   *  instead of always assuming it had been accepted. Cleared once reinstated. */
+  preArchiveStatus?: Quote['status'] | null
 }
 
 // ── Quote Comments — client/contractor communication on quotes ──────────────

@@ -233,6 +233,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           versionNumber: r.version_number || undefined,
           parentQuoteId: r.parent_quote_id || null,
           createdFromVersionId: r.created_from_version_id || null,
+          expiryDays: r.expiry_days ?? null,
+          preArchiveStatus: r.pre_archive_status || null,
         })))
       }
 
@@ -437,6 +439,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       vat_included: q.vatIncluded, scope: q.scope, photo: q.photo,
       converted_to_job: false, customer: q.customer, phases: q.phases,
       quote_source: q.quoteSource || null,
+      expiry_days: q.expiryDays ?? null,
     }).select().single()
     if (error) throw error
     const newQuote: Quote = {
@@ -445,6 +448,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       vatIncluded: data.vat_included, scope: data.scope, photo: data.photo,
       convertedToJob: data.converted_to_job, customer: data.customer, phases: data.phases,
       quoteSource: data.quote_source || undefined,
+      expiryDays: data.expiry_days ?? null,
     }
     setQuotes(prev => [...prev, newQuote])
     return newQuote
@@ -456,6 +460,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       vat_included: q.vatIncluded, scope: q.scope, photo: q.photo,
       converted_to_job: q.convertedToJob, customer: q.customer, phases: q.phases,
       quote_source: q.quoteSource || null,
+      expiry_days: q.expiryDays ?? null,
+      pre_archive_status: q.preArchiveStatus || null,
       last_edited: new Date().toLocaleDateString('en-GB'),
     }).eq('id', q.id)
     setQuotes(prev => prev.map(x => x.id === q.id ? { ...q, lastEdited: new Date().toLocaleDateString('en-GB') } : x))

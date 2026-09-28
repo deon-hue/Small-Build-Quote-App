@@ -1,0 +1,3 @@
+ALTER TABLE quotes
+  ADD COLUMN IF NOT EXISTS expiry_days INTEGER,
+  ADD COLUMN IF NOT EXISTS pre_archive_status TEXT;

@@ -125,6 +125,30 @@ export function quoteDisplayTitle(quote: Pick<Quote, 'title' | 'jobType'>): stri
   return quote.title?.trim() || quote.jobType
 }
 
+export const DEFAULT_QUOTE_EXPIRY_DAYS = 30
+
+/** How many days this quote's price is held for — the estimator's own per-quote override
+ *  if they've set one, otherwise DEFAULT_QUOTE_EXPIRY_DAYS. */
+export function quoteExpiryDays(q: Pick<Quote, 'expiryDays'>): number {
+  return q.expiryDays && q.expiryDays > 0 ? q.expiryDays : DEFAULT_QUOTE_EXPIRY_DAYS
+}
+
+/** The date this quote's price stops being valid (savedDate + its expiry days), or null
+ *  if savedDate hasn't been set yet. savedDate is stored dd/mm/yyyy. */
+export function quoteExpiryDate(q: Pick<Quote, 'savedDate' | 'expiryDays'>): Date | null {
+  if (!q.savedDate) return null
+  const parts = q.savedDate.split('/')
+  if (parts.length !== 3) return null
+  const d = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]))
+  d.setDate(d.getDate() + quoteExpiryDays(q))
+  return d
+}
+
+export function isQuoteExpired(q: Pick<Quote, 'savedDate' | 'expiryDays'>): boolean {
+  const d = quoteExpiryDate(q)
+  return !!d && d < new Date()
+}
+
 /** The best quote linked to a job — by job.quoteId if it's set, otherwise a best-effort
  *  match by customer name (an accepted quote wins, then sent, then whatever's first).
  *  Shared so this matching never drifts between the Jobs page, Calendar and the Job
