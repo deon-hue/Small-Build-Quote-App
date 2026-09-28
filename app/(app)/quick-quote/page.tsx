@@ -68,7 +68,9 @@ export default function QuickQuotePage() {
   const canSave = !!(custName.trim() && sellNum !== 0 && scope.trim() && (sellNum < 0 || costNum > 0))
 
   // ── Client autocomplete ───────────────────────────────────────────────────
-  const customers = clients.filter(c => !c.clientType || c.clientType === 'client')
+  const customers = clients
+    .filter(c => !c.clientType || c.clientType === 'client')
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
 
   const filteredClients = clientSearch.trim()
     ? customers.filter(c => {
@@ -76,7 +78,7 @@ export default function QuickQuotePage() {
         return (c.name || '').toLowerCase().includes(q)
           || (c.email || '').toLowerCase().includes(q)
       })
-    : customers.slice(0, 8)
+    : customers
 
   function selectClient(cid: string) {
     const c = clients.find(x => x.id === cid)
