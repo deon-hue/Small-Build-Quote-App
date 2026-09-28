@@ -1476,13 +1476,15 @@ export default function NewQuotePage() {
     reader.readAsDataURL(file)
   }
 
+  const customers = clients.filter(c => !c.clientType || c.clientType === 'client')
+
   const filteredClients = clientSearch.trim()
-    ? clients.filter(c => {
+    ? customers.filter(c => {
         const n = c.name || ''
         const q = clientSearch.toLowerCase()
         return n.toLowerCase().includes(q) || (c.email || '').toLowerCase().includes(q) || (c.phone || '').includes(q)
       })
-    : clients
+    : customers
 
   function selectClient(cid: string) {
     const c = clients.find(x => x.id === cid)
