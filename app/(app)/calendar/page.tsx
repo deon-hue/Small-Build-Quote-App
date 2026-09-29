@@ -481,19 +481,27 @@ export default function CalendarPage() {
               ref={el => { monthStripRefs.current[wi] = el }}
               style={{ position: 'relative', height: stripH, borderBottom: wi < numWeeks - 1 ? '1px solid var(--border)' : 'none' }}
             >
+              {/* Weekend column shading — spans the whole strip (date row + bars), not just
+                  the date-number row, so Sat/Sun read as non-working days at a glance even
+                  where a bar is sitting on top of them. Drawn first/behind everything else. */}
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', pointerEvents: 'none', zIndex: 0 }}>
+                {Array.from({ length: 7 }, (_, col) => (
+                  <div key={col} style={{ flex: 1, background: col >= 5 ? 'var(--weekend-tint)' : 'transparent' }} />
+                ))}
+              </div>
+
               {/* Date numbers */}
-              <div style={{ display: 'flex', height: DATE_H }}>
+              <div style={{ display: 'flex', height: DATE_H, position: 'relative' }}>
                 {Array.from({ length: 7 }, (_, col) => {
                   const d         = addDays(weekStart, col)
                   const isToday   = sameDay(d, today)
                   const inMonth   = d.getMonth() === month
-                  const isWeekend = col >= 5
                   return (
                     <div key={col} style={{
                       flex: 1,
                       borderRight: col < 6 ? '1px solid var(--border)' : 'none',
                       padding: '3px 5px',
-                      background: isWeekend && inMonth ? '#fafafa' : !inMonth ? '#f4f5f3' : 'white',
+                      background: !inMonth ? 'rgba(244,245,243,0.85)' : 'transparent',
                     }}>
                       <span
                         onClick={() => { setView('day'); setAnchor(new Date(d)) }}
@@ -537,11 +545,17 @@ export default function CalendarPage() {
                     userSelect: 'none',
                   }}
                 >
-                  {slot.startsHere && (
-                    <span style={{ fontSize: 10, color: 'white', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {getJobNum(slot.event.job.id)} · {slot.event.job.client} · {slot.event.isComplete ? '✓ Complete ' : ''}{slot.event.phaseLabel}
-                    </span>
-                  )}
+                  {/* A continuation segment (this task started in an earlier week's row and
+                      just carries on into this one) still gets a label — just the task name,
+                      not the full "JOB-NNN · client · task" detail — so it never renders as a
+                      bare, unlabelled colour bar. Matches how Week view already always shows
+                      at least the task name regardless of where a bar starts. */}
+                  <span style={{ fontSize: 10, color: 'white', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {slot.startsHere
+                      ? <>{getJobNum(slot.event.job.id)} · {slot.event.job.client} · {slot.event.isComplete ? '✓ Complete ' : ''}{slot.event.phaseLabel}</>
+                      : <>{slot.event.isComplete ? '✓ Complete ' : ''}{slot.event.phaseLabel}</>
+                    }
+                  </span>
                   {slot.startsHere && (
                     <div
                       onMouseDown={e => startDrag(e, slot.event, 'resize-start', 'month', numWeeks)}
@@ -595,7 +609,7 @@ export default function CalendarPage() {
             return (
               <div key={col} style={{
                 padding: '6px 4px', textAlign: 'center',
-                background: isWeekend ? '#fafafa' : 'white',
+                background: isWeekend ? 'var(--weekend-tint)' : 'white',
                 borderRight: col < 6 ? '1px solid var(--border)' : 'none',
               }}>
                 <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: isToday ? '#7ab533' : 'var(--muted)' }}>
@@ -620,7 +634,7 @@ export default function CalendarPage() {
           {/* Column stripe backgrounds */}
           <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', pointerEvents: 'none' }}>
             {Array.from({ length: 7 }, (_, col) => (
-              <div key={col} style={{ borderRight: col < 6 ? '1px solid #f0f2ee' : 'none', background: col >= 5 ? '#fafafa' : 'transparent' }} />
+              <div key={col} style={{ borderRight: col < 6 ? '1px solid #f0f2ee' : 'none', background: col >= 5 ? 'var(--weekend-tint)' : 'transparent' }} />
             ))}
           </div>
 

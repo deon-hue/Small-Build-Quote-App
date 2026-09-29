@@ -22,6 +22,9 @@
   --border:#dde1e5;
   --accent:#7ab533;
   --accent-dark:#5e8f20;
+  /* Calendar weekend (Sat/Sun) column shading — Month + Week views. Was #fafafa, barely
+     distinguishable from white; needs to read as "non-working day" at a glance. */
+  --weekend-tint:#eef0e8;
 }
 body{font-family:'DM Sans',sans-serif;background:var(--paper);color:var(--ink);font-size:15px;height:100vh;overflow:hidden}
 ::-webkit-scrollbar{width:4px;height:4px}
