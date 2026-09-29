@@ -98,6 +98,7 @@ export default function CalendarPage() {
   const [selected,        setSelected]       = useState<CalEvent | null>(null)
   const [highlightJobId,  setHighlightJobId] = useState<string | null>(null)
   // Task edit fields in the detail panel — reset whenever a different event is selected.
+  const [editLabel, setEditLabel] = useState('')
   const [editStart, setEditStart] = useState('')
   const [editDur,   setEditDur]   = useState(1)
   const [editPct,   setEditPct]   = useState(0)
@@ -106,6 +107,7 @@ export default function CalendarPage() {
 
   useEffect(() => {
     if (!selected) return
+    setEditLabel(selected.phaseLabel)
     setEditStart(toISODate(selected.startDate))
     setEditDur(Math.max(1, daysBetween(selected.startDate, selected.endDate)))
     setEditPct(selected.percentComplete)
@@ -187,13 +189,14 @@ export default function CalendarPage() {
   // Moves/resizes one task and saves it back through the exact same saveGanttState the
   // Job's own Gantt chart uses — so opening that job's Gantt afterward shows the change,
   // and dragging it there afterward keeps starting from what got set here.
-  async function saveTaskChange(evt: CalEvent, updates: { startDay?: number; durDays?: number; percentComplete?: number }) {
+  async function saveTaskChange(evt: CalEvent, updates: { label?: string; startDay?: number; durDays?: number; percentComplete?: number }) {
     if (!evt.phaseId) return false
     const gs = resolveGanttState(evt.job, linkedQuotePhasesFor(evt.job), ganttStates[evt.job.id])
     const phases = gs.phases.map(p => {
       if (p.id !== evt.phaseId) return p
       const next: GanttPhase = {
         ...p,
+        label:    updates.label !== undefined ? (updates.label.trim() || p.label) : p.label,
         startDay: updates.startDay !== undefined ? Math.max(0, updates.startDay) : p.startDay,
         durDays:  updates.durDays !== undefined ? Math.max(1, updates.durDays) : p.durDays,
       }
@@ -736,7 +739,7 @@ export default function CalendarPage() {
             <div style={{ width: 12, height: 12, borderRadius: 3, background: evt.color, flexShrink: 0, marginTop: 4 }} />
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ fontWeight: 700, fontSize: 16 }}>{evt.phaseLabel}</div>
+                <div style={{ fontWeight: 700, fontSize: 16 }}>{editLabel || evt.phaseLabel}</div>
                 {evt.isComplete && (
                   <span style={{ fontSize: 10, fontWeight: 700, color: 'white', background: '#5e8f20', borderRadius: 10, padding: '2px 8px' }}>✓ Complete</span>
                 )}
@@ -752,6 +755,14 @@ export default function CalendarPage() {
             <DetailRow label="Customer"   value={evt.job.client} />
             <DetailRow label="Job"        value={jobDisplayTitle(evt.job)} />
             <DetailRow label="Address"    value={evt.job.address} />
+            <DetailRow label="Name" value={
+              <input
+                type="text"
+                value={editLabel}
+                onChange={e => { setEditLabel(e.target.value); setTaskSaved(false) }}
+                style={{ font: 'inherit', fontWeight: 600, fontSize: 13, width: '100%', boxSizing: 'border-box', border: '1px solid var(--border)', borderRadius: 6, padding: '3px 6px' }}
+              />
+            } />
             <DetailRow label="Start" value={
               <input
                 type="date"
@@ -804,7 +815,7 @@ export default function CalendarPage() {
               onClick={async () => {
                 const newStartDate = new Date(editStart); newStartDate.setHours(0, 0, 0, 0)
                 const jobStart = new Date(evt.job.start); jobStart.setHours(0, 0, 0, 0)
-                await saveTaskChange(evt, { startDay: daysBetween(jobStart, newStartDate), durDays: editDur, percentComplete: editPct })
+                await saveTaskChange(evt, { label: editLabel, startDay: daysBetween(jobStart, newStartDate), durDays: editDur, percentComplete: editPct })
               }}
             >
               {taskSaving ? 'Saving…' : taskSaved ? '✓ Saved' : 'Save changes'}
