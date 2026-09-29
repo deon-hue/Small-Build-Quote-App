@@ -196,21 +196,55 @@ export function formatGanttDuration(durDays: number, mode: GanttMode): string {
 }
 
 /**
- * Count working days (Mon–Fri) between two dates (exclusive of endDate).
+ * Count working days (Mon–Fri, or Mon–Sat when `allowSaturday`) between two dates
+ * (exclusive of endDate).
  *
- * Example: Monday 2025-01-06 → Friday 2025-01-10 = 5 working days.
- * Useful for an optional "working days" tooltip line alongside calendar days.
+ * Example: Monday 2025-01-06 → Friday 2025-01-10 = 4 working days (exclusive end).
+ * Doubles as the inverse of workingDaySpanInCalendarDays() — used to re-derive how many
+ * working days an already-saved task's calendar-day span represents, so its duration field
+ * can be pre-filled with the right number when it's opened for editing again, rather than
+ * the raw (weekend-inclusive) calendar-day count.
  */
-export function countWorkingDays(startDate: Date, endDate: Date): number {
+export function countWorkingDays(startDate: Date, endDate: Date, allowSaturday = false): number {
   let count = 0
   const d = new Date(startDate)
   d.setHours(0, 0, 0, 0)
   const end = new Date(endDate)
   end.setHours(0, 0, 0, 0)
   while (d < end) {
-    const dow = d.getDay()
-    if (dow !== 0 && dow !== 6) count++
+    if (!isNonWorkingDay(d, allowSaturday)) count++
     d.setDate(d.getDate() + 1)
   }
   return count
+}
+
+/** Sunday is never a working day. Saturday only counts as one when `allowSaturday` is set —
+ *  a per-task choice, not a global one (see GanttPhase.allowSaturday). */
+export function isNonWorkingDay(d: Date, allowSaturday: boolean): boolean {
+  const day = d.getDay()
+  if (day === 0) return true
+  if (day === 6) return !allowSaturday
+  return false
+}
+
+/**
+ * How many calendar days `workingDays` working days spans, starting from `start` inclusive.
+ *
+ * Example: start=Wednesday, workingDays=5, allowSaturday=false -> 7
+ * (Wed,Thu,Fri,Sat,Sun,Mon,Tue — the last of which is the 5th working day).
+ *
+ * If `start` itself falls on a non-working day, that day still counts toward the calendar
+ * span but never toward the working-day count — deliberately: the rule holds even for a task
+ * someone explicitly starts on one, pushing its real work into the next working day.
+ */
+export function workingDaySpanInCalendarDays(start: Date, workingDays: number, allowSaturday = false): number {
+  if (workingDays <= 0) return 1
+  const cursor = new Date(start)
+  let span = 0, worked = 0
+  while (worked < workingDays) {
+    if (!isNonWorkingDay(cursor, allowSaturday)) worked++
+    span++
+    if (worked < workingDays) cursor.setDate(cursor.getDate() + 1)
+  }
+  return span
 }

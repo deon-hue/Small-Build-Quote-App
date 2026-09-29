@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { useApp } from '@/contexts/AppContext'
 import { STAGE_COLOR, STAGE_LABEL, fmt, resolveJobColor, jobDisplayTitle, findLinkedQuote } from '@/lib/utils'
-import { resolveGanttState } from '@/lib/gantt-utils'
+import { resolveGanttState, workingDaySpanInCalendarDays, countWorkingDays } from '@/lib/gantt-utils'
 import type { Job, GanttPhase, GanttState } from '@/lib/types'
 
 // ── Date helpers ───────────────────────────────────────────────
@@ -37,6 +37,8 @@ interface CalEvent {
   color: string
   isComplete: boolean
   percentComplete: number
+  /** This task's own "allow Saturday working" override — see GanttPhase.allowSaturday. */
+  allowSaturday: boolean
 }
 
 interface WeekSlot {
@@ -102,6 +104,7 @@ export default function CalendarPage() {
   const [editStart, setEditStart] = useState('')
   const [editDur,   setEditDur]   = useState(1)
   const [editPct,   setEditPct]   = useState(0)
+  const [editAllowSaturday, setEditAllowSaturday] = useState(false)
   const [taskSaving, setTaskSaving] = useState(false)
   const [taskSaved,  setTaskSaved]  = useState(false)
 
@@ -109,8 +112,12 @@ export default function CalendarPage() {
     if (!selected) return
     setEditLabel(selected.phaseLabel)
     setEditStart(toISODate(selected.startDate))
-    setEditDur(Math.max(1, daysBetween(selected.startDate, selected.endDate)))
+    // Duration (working days) field, editable — pre-filled with the working-day count the
+    // task's already-saved calendar-day span represents (not that raw span itself), so
+    // re-saving without touching this field doesn't silently inflate the duration.
+    setEditDur(Math.max(1, countWorkingDays(selected.startDate, selected.endDate, selected.allowSaturday)))
     setEditPct(selected.percentComplete)
+    setEditAllowSaturday(selected.allowSaturday)
     setTaskSaved(false)
   }, [selected])
 
@@ -122,6 +129,7 @@ export default function CalendarPage() {
   const [newTaskLabel,  setNewTaskLabel]  = useState('')
   const [newTaskStart,  setNewTaskStart]  = useState('')
   const [newTaskDur,    setNewTaskDur]    = useState(5)
+  const [newTaskAllowSaturday, setNewTaskAllowSaturday] = useState(false)
   const [newTaskSaving, setNewTaskSaving] = useState(false)
 
   function openNewTask() {
@@ -129,6 +137,7 @@ export default function CalendarPage() {
     setNewTaskLabel('')
     setNewTaskStart(toISODate(anchor))
     setNewTaskDur(5)
+    setNewTaskAllowSaturday(false)
     setShowNewTask(true)
   }
 
@@ -138,9 +147,9 @@ export default function CalendarPage() {
     const jobStart = new Date(job.start); jobStart.setHours(0, 0, 0, 0)
     const chosen = new Date(newTaskStart); chosen.setHours(0, 0, 0, 0)
     const startDay = Math.max(0, daysBetween(jobStart, chosen))
-    const durDays = Math.max(1, newTaskDur)
+    const durDays = workingDaySpanInCalendarDays(chosen, Math.max(1, newTaskDur), newTaskAllowSaturday)
     const gs = resolveGanttState(job, linkedQuotePhasesFor(job), ganttStates[job.id])
-    const newPhase: GanttPhase = { id: `ph-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, label: newTaskLabel.trim(), startDay, durDays }
+    const newPhase: GanttPhase = { id: `ph-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, label: newTaskLabel.trim(), startDay, durDays, allowSaturday: newTaskAllowSaturday }
     const phases = [...gs.phases, newPhase]
     const maxEndDay = Math.max(...phases.map(p => p.startDay + p.durDays))
     setNewTaskSaving(true)
@@ -189,16 +198,17 @@ export default function CalendarPage() {
   // Moves/resizes one task and saves it back through the exact same saveGanttState the
   // Job's own Gantt chart uses — so opening that job's Gantt afterward shows the change,
   // and dragging it there afterward keeps starting from what got set here.
-  async function saveTaskChange(evt: CalEvent, updates: { label?: string; startDay?: number; durDays?: number; percentComplete?: number }) {
+  async function saveTaskChange(evt: CalEvent, updates: { label?: string; startDay?: number; durDays?: number; percentComplete?: number; allowSaturday?: boolean }) {
     if (!evt.phaseId) return false
     const gs = resolveGanttState(evt.job, linkedQuotePhasesFor(evt.job), ganttStates[evt.job.id])
     const phases = gs.phases.map(p => {
       if (p.id !== evt.phaseId) return p
       const next: GanttPhase = {
         ...p,
-        label:    updates.label !== undefined ? (updates.label.trim() || p.label) : p.label,
-        startDay: updates.startDay !== undefined ? Math.max(0, updates.startDay) : p.startDay,
-        durDays:  updates.durDays !== undefined ? Math.max(1, updates.durDays) : p.durDays,
+        label:         updates.label !== undefined ? (updates.label.trim() || p.label) : p.label,
+        startDay:      updates.startDay !== undefined ? Math.max(0, updates.startDay) : p.startDay,
+        durDays:       updates.durDays !== undefined ? Math.max(1, updates.durDays) : p.durDays,
+        allowSaturday: updates.allowSaturday !== undefined ? updates.allowSaturday : p.allowSaturday,
       }
       // Same "100% = complete" rule GanttModal's own % complete setter uses.
       if (updates.percentComplete !== undefined) {
@@ -247,7 +257,7 @@ export default function CalendarPage() {
     const part2: GanttPhase = {
       id: `ph-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       label: ph.label, startDay: ph.startDay + dur1, durDays: dur2,
-      level: ph.level, parentId: ph.parentId,
+      level: ph.level, parentId: ph.parentId, allowSaturday: ph.allowSaturday,
     }
     const phases = [...gs.phases]
     phases[idx] = { ...ph, durDays: dur1 }
@@ -391,6 +401,7 @@ export default function CalendarPage() {
           job, phaseLabel: ph.label, phaseIdx: i, phaseId: ph.id, color,
           isComplete: !!(ph as GanttPhase).isComplete,
           percentComplete: (ph as GanttPhase).percentComplete ?? 0,
+          allowSaturday: !!(ph as GanttPhase).allowSaturday,
           startDate: addDays(jobStart, ph.startDay),
           endDate:   addDays(jobStart, ph.startDay + ph.durDays),
         })
@@ -782,7 +793,7 @@ export default function CalendarPage() {
                 style={{ font: 'inherit', fontWeight: 600, fontSize: 13, border: '1px solid var(--border)', borderRadius: 6, padding: '3px 6px' }}
               />
             } />
-            <DetailRow label="Duration" value={
+            <DetailRow label="Duration (working days)" value={
               <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <input
                   type="number"
@@ -793,6 +804,16 @@ export default function CalendarPage() {
                 />
                 days
               </span>
+            } />
+            <DetailRow label="" value={
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={editAllowSaturday}
+                  onChange={e => { setEditAllowSaturday(e.target.checked); setTaskSaved(false) }}
+                />
+                Allow Saturday working (Sunday is never a working day)
+              </label>
             } />
             <DetailRow label="% complete" value={
               <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -826,7 +847,11 @@ export default function CalendarPage() {
               onClick={async () => {
                 const newStartDate = new Date(editStart); newStartDate.setHours(0, 0, 0, 0)
                 const jobStart = new Date(evt.job.start); jobStart.setHours(0, 0, 0, 0)
-                await saveTaskChange(evt, { label: editLabel, startDay: daysBetween(jobStart, newStartDate), durDays: editDur, percentComplete: editPct })
+                const durDays = workingDaySpanInCalendarDays(newStartDate, editDur, editAllowSaturday)
+                await saveTaskChange(evt, {
+                  label: editLabel, startDay: daysBetween(jobStart, newStartDate), durDays,
+                  percentComplete: editPct, allowSaturday: editAllowSaturday,
+                })
               }}
             >
               {taskSaving ? 'Saving…' : taskSaved ? '✓ Saved' : 'Save changes'}
@@ -910,10 +935,14 @@ export default function CalendarPage() {
                     <input type="date" value={newTaskStart} onChange={e => setNewTaskStart(e.target.value)} style={{ width: '100%' }} />
                   </div>
                   <div className="fg" style={{ margin: 0, width: 90 }}>
-                    <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Days</label>
+                    <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Working days</label>
                     <input type="number" min={1} value={newTaskDur} onChange={e => setNewTaskDur(Math.max(1, Number(e.target.value) || 1))} style={{ width: '100%' }} />
                   </div>
                 </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={newTaskAllowSaturday} onChange={e => setNewTaskAllowSaturday(e.target.checked)} />
+                  Allow Saturday working (Sunday is never a working day)
+                </label>
               </>
             )}
           </div>

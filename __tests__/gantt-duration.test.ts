@@ -8,7 +8,7 @@
  */
 
 import assert from 'node:assert/strict'
-import { formatGanttDuration, countWorkingDays } from '../lib/gantt-utils'
+import { formatGanttDuration, countWorkingDays, isNonWorkingDay, workingDaySpanInCalendarDays } from '../lib/gantt-utils'
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -137,6 +137,66 @@ test('Mon → Mon (7 days span) = 5 working days', () => {
   const start = new Date('2025-01-06') // Monday
   const end   = new Date('2025-01-13') // Next Monday
   assert.equal(countWorkingDays(start, end), 5)
+})
+
+// ─── isNonWorkingDay / workingDaySpanInCalendarDays ────────────────────────────
+// Reproduces the reported bug: a 5-day task starting Wednesday spanned Wed–Sun
+// (weekend included) instead of pushing the last two days into the following week.
+
+console.log('\nisNonWorkingDay')
+
+test('Sunday is never a working day, allowSaturday or not', () => {
+  const sun = new Date('2026-10-04') // Sunday
+  assert.equal(isNonWorkingDay(sun, false), true)
+  assert.equal(isNonWorkingDay(sun, true), true)
+})
+
+test('Saturday is non-working unless allowSaturday is set', () => {
+  const sat = new Date('2026-10-03') // Saturday
+  assert.equal(isNonWorkingDay(sat, false), true)
+  assert.equal(isNonWorkingDay(sat, true), false)
+})
+
+test('Weekdays are always working days', () => {
+  assert.equal(isNonWorkingDay(new Date('2026-09-30'), false), false) // Wednesday
+})
+
+console.log('\nworkingDaySpanInCalendarDays')
+
+test('Wed + 5 working days, no Saturday -> 7 calendar days (pushes weekend to next Mon/Tue)', () => {
+  assert.equal(workingDaySpanInCalendarDays(new Date('2026-09-30'), 5, false), 7)
+})
+
+test('Wed + 5 working days, allowSaturday -> 6 calendar days (Sat counts, Sun still skipped)', () => {
+  assert.equal(workingDaySpanInCalendarDays(new Date('2026-09-30'), 5, true), 6)
+})
+
+test('Mon + 5 working days -> 5 (no weekend crossed)', () => {
+  assert.equal(workingDaySpanInCalendarDays(new Date('2026-09-28'), 5, false), 5)
+})
+
+test('Fri + 1 working day -> 1', () => {
+  assert.equal(workingDaySpanInCalendarDays(new Date('2026-10-02'), 1, false), 1)
+})
+
+test('Starting on a Sunday pushes the 1 working day to Monday -> 2 calendar days', () => {
+  assert.equal(workingDaySpanInCalendarDays(new Date('2026-10-04'), 1, false), 2)
+})
+
+test('Starting on a Saturday with allowSaturday counts that day itself -> 1', () => {
+  assert.equal(workingDaySpanInCalendarDays(new Date('2026-10-03'), 1, true), 1)
+})
+
+test('Starting on a Saturday without allowSaturday pushes to Monday -> 3 calendar days', () => {
+  assert.equal(workingDaySpanInCalendarDays(new Date('2026-10-03'), 1, false), 3)
+})
+
+test('workingDaySpanInCalendarDays is the inverse of countWorkingDays', () => {
+  const start = new Date('2026-09-30') // Wednesday
+  const span = workingDaySpanInCalendarDays(start, 5, false) // 7
+  const end = new Date(start)
+  end.setDate(end.getDate() + span)
+  assert.equal(countWorkingDays(start, end, false), 5)
 })
 
 // ─── Summary ─────────────────────────────────────────────────────────────────

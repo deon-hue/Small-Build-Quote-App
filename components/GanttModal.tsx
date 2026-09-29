@@ -5,7 +5,7 @@ import { useApp } from '@/contexts/AppContext'
 import type { Job, QuotePhase, GanttState, GanttPhase } from '@/lib/types'
 import type { Quote } from '@/lib/types'
 import { fmt, quoteTotal, Q_BADGE, Q_LABEL, jobDisplayTitle, quoteDisplayTitle, resolveJobColor } from '@/lib/utils'
-import { formatGanttDuration, buildGanttFromQuote, stripPhasePrefix, resolveGanttState } from '@/lib/gantt-utils'
+import { formatGanttDuration, buildGanttFromQuote, stripPhasePrefix, resolveGanttState, workingDaySpanInCalendarDays, countWorkingDays } from '@/lib/gantt-utils'
 import { notifyClient } from '@/lib/notify'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -56,7 +56,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
   const router = useRouter()
 
   // ── Row editing / BO picker state ────────────────────────────
-  interface EditingRow { id: string; label: string; startDay: number; durDays: number }
+  interface EditingRow { id: string; label: string; startDay: number; durDays: number; allowSaturday: boolean }
   const [editingRow, setEditingRow] = useState<EditingRow | null>(null)
   const [showBoPanel, setShowBoPanel] = useState(false)
   const [boPhaseList, setBoPhaseList] = useState<Array<{ phaseName: string; subPhaseName: string }>>([])
@@ -735,7 +735,19 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       if (!s) return
       const ph = s.phases.find(p => p.id === id)
       if (!ph) return
-      setEditingRow({ id, label: ph.label, startDay: ph.startDay, durDays: ph.durDays })
+      // Duration field shows working days, not the raw calendar-day span already saved —
+      // pre-filled with the working-day count that span represents (see
+      // workingDaySpanInCalendarDays in lib/gantt-utils.ts), so re-applying without
+      // touching it doesn't silently inflate the duration.
+      const jobStart = job.start ? new Date(job.start) : new Date()
+      jobStart.setHours(0, 0, 0, 0)
+      const phaseStart = addDays(jobStart, ph.startDay)
+      const phaseEnd = addDays(jobStart, ph.startDay + ph.durDays)
+      setEditingRow({
+        id, label: ph.label, startDay: ph.startDay,
+        durDays: Math.max(1, countWorkingDays(phaseStart, phaseEnd, !!ph.allowSaturday)),
+        allowSaturday: !!ph.allowSaturday,
+      })
     }
 
     win.__ganttAddChild = (parentId: string) => {
@@ -755,7 +767,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       stateRef.current = s
       setDirty(true)
       renderGantt(s, viewMode)
-      setEditingRow({ id: newId, label: 'New Task', startDay: newStartDay, durDays: 1 })
+      setEditingRow({ id: newId, label: 'New Task', startDay: newStartDay, durDays: 1, allowSaturday: false })
     }
 
     win.__ganttCompleteToggle = (id: string) => {
@@ -906,9 +918,12 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     if (!s) return
     const ph = s.phases.find(p => p.id === editingRow.id)
     if (!ph) return
-    ph.label    = editingRow.label.trim() || ph.label
-    ph.startDay = editingRow.startDay
-    ph.durDays  = Math.max(1, editingRow.durDays)
+    const jobStart = job.start ? new Date(job.start) : new Date()
+    jobStart.setHours(0, 0, 0, 0)
+    ph.label         = editingRow.label.trim() || ph.label
+    ph.startDay      = editingRow.startDay
+    ph.allowSaturday = editingRow.allowSaturday
+    ph.durDays       = workingDaySpanInCalendarDays(addDays(jobStart, editingRow.startDay), Math.max(1, editingRow.durDays), editingRow.allowSaturday)
     // If this is a level-0 header, stretch it to cover its children
     if ((ph.level ?? 1) === 0) {
       const children = s.phases.filter(p => p.parentId === ph.id)
@@ -940,6 +955,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       durDays: dur2,
       level: ph.level,
       parentId: ph.parentId,
+      allowSaturday: ph.allowSaturday,
     }
     s.phases.splice(idx + 1, 0, part2)
     stateRef.current = s
@@ -984,7 +1000,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     stateRef.current = s
     setDirty(true)
     renderGantt(s, viewMode)
-    setEditingRow({ id: phaseId, label: 'New Phase', startDay, durDays: 5 })
+    setEditingRow({ id: phaseId, label: 'New Phase', startDay, durDays: 5, allowSaturday: false })
   }
 
   async function openBoPanel() {
@@ -1131,7 +1147,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
                   />
                 </div>
                 <div style={{ flex: 1, minWidth: 90 }}>
-                  <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', marginBottom: 3 }}>Duration (days)</div>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', marginBottom: 3 }}>Duration (working days)</div>
                   <input
                     type="number" min={1}
                     value={editingRow.durDays}
@@ -1139,6 +1155,14 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
                     style={{ width: '100%', fontSize: 12, padding: '5px 8px', border: '1px solid #c8d0d8', borderRadius: 4, fontFamily: 'inherit' }}
                   />
                 </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }} title="Sunday is never a working day">
+                  <input
+                    type="checkbox"
+                    checked={editingRow.allowSaturday}
+                    onChange={e => setEditingRow(r => r ? { ...r, allowSaturday: e.target.checked } : r)}
+                  />
+                  Allow Sat
+                </label>
                 <div style={{ display: 'flex', gap: 6 }}>
                   <button onClick={applyEdit} style={{ fontSize: 12, padding: '6px 14px', background: 'var(--moss)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>Apply</button>
                   <button onClick={() => setEditingRow(null)} style={{ fontSize: 12, padding: '6px 10px', background: '#e8eaec', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Cancel</button>

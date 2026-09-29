@@ -522,6 +522,10 @@ export interface GanttPhase {
   collapsed?: boolean
   percentComplete?: number  // 0–100
   isComplete?: boolean      // forces green bar colour regardless of date position
+  /** This task's own override: counts Saturday as a working day for its duration math.
+   *  Off by default — Sunday is never workable, Saturday only when a task explicitly opts in.
+   *  See workingDaySpanInCalendarDays() in lib/gantt-utils.ts. */
+  allowSaturday?: boolean
 }
 
 export interface GanttState {
