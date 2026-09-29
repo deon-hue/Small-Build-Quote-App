@@ -220,6 +220,17 @@ export default function CalendarPage() {
     }
     return ok
   }
+  // The drag effect below registers its document mousemove/mouseup listeners once, at
+  // mount, and never re-subscribes — so those handlers would otherwise keep calling the
+  // very first render's saveTaskChange forever, which closes over that same first render's
+  // ganttStates. Every drag after the first then recomputed its save from that stale,
+  // out-of-date snapshot, silently discarding whatever the previous drag (or anything else)
+  // had just saved — the reported "moving one task scatters the others" bug. Mirroring the
+  // latest saveTaskChange into a ref (same stateRef.current pattern GanttModal already uses
+  // for its own closures) and calling through the ref fixes it without having to tear down
+  // and rebuild the listeners on every ganttStates change.
+  const saveTaskChangeRef = useRef(saveTaskChange)
+  saveTaskChangeRef.current = saveTaskChange
 
   // Splits a task into two adjacent halves — same operation as the Gantt chart's own
   // Split button (lib logic mirrored here, since GanttModal's lives in its own closure
@@ -336,7 +347,7 @@ export default function CalendarPage() {
       setDragPreview(null)
       document.body.style.cursor = ''
       const { startDay, durDays } = computeDragDays(d, e.clientX, e.clientY)
-      if (startDay !== d.origStartDay || durDays !== d.origDurDays) await saveTaskChange(d.event, { startDay, durDays })
+      if (startDay !== d.origStartDay || durDays !== d.origDurDays) await saveTaskChangeRef.current(d.event, { startDay, durDays })
       // Cleared after the click that would follow this mouseup has had a chance to run
       // and see it — not immediately, or a genuine drag's own click would slip through.
       setTimeout(() => { suppressClickRef.current = false }, 0)
