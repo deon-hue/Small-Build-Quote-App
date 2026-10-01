@@ -388,7 +388,7 @@ function buildWhatsAppBody(payload: NotifyClientPayload, portalUrl: string): str
       `📋 *${payload.quoteRef || 'Quotation'}*${total ? `\n💷 ${total}` : ''}`,
       ``,
       payload.message ? `${payload.message}\n` : '',
-      `We've also sent a PDF copy to your email.`,
+      `We've also sent a PDF copy to your email — if you don't see it in your inbox, please check your spam/junk folder.`,
       ``,
       payload.companyPhone ? `Any questions? Call us on ${payload.companyPhone}` : '',
     ].filter(l => l !== undefined).join('\n').trim()

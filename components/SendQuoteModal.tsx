@@ -89,6 +89,7 @@ export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
         clientName:   quote.customer.name || 'Customer',
         clientEmail:  toEmail.trim(),
         clientId:     recipientClient?.id,
+        clientPhone:  recipientClient?.phone || undefined,
         jobType:      quote.jobType || '',
         jobAddress:   quote.customer.address || '',
         quoteRef:     quote.ref || '',
