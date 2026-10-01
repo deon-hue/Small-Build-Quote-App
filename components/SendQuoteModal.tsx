@@ -79,10 +79,16 @@ export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
       const filename = `Quote-${quote.ref || 'Draft'}-${(quote.customer.name || 'Client').replace(/[^a-z0-9]/gi, '_')}.pdf`
 
       const portalUrl = `${window.location.origin}/portal/login?email=${encodeURIComponent(toEmail.trim())}`
+      // Look up by the actual recipient address (toEmail can be edited away from the
+      // quote's own customer.email, unlike matchedClient above which is fixed to it).
+      const recipientClient = clients.find(
+        c => c.email && c.email.toLowerCase() === toEmail.trim().toLowerCase()
+      )
       const payload: NotifyClientPayload = {
         type:         'quote_sent',
         clientName:   quote.customer.name || 'Customer',
         clientEmail:  toEmail.trim(),
+        clientId:     recipientClient?.id,
         jobType:      quote.jobType || '',
         jobAddress:   quote.customer.address || '',
         quoteRef:     quote.ref || '',
@@ -118,7 +124,13 @@ export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
       onSent?.()
 
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+      // Supabase errors are plain objects, not Error instances — extract .message from
+      // anything error-shaped instead of only real Error instances (see Quick Quote fix).
+      const msg = err instanceof Error ? err.message
+        : (err && typeof err === 'object' && 'message' in err) ? String((err as { message: unknown }).message)
+        : 'Something went wrong. Please try again.'
+      setError(msg)
+      console.error('Send quote failed:', err)
     } finally {
       setBusy(null)
     }
