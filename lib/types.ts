@@ -36,6 +36,20 @@ export interface QuotePlantItem {
   enabled?:     boolean
 }
 
+/** An ad-hoc line item within a quote sub-phase — free-text description with its own
+ *  cost and markup %, for one-off costs that don't fit the structured labour/materials/
+ *  plant/subcontractors/other rows or any Back Office catalogue. Sell price is always
+ *  derived as cost × (1 + markupPct/100) — never stored/overridden separately, so it
+ *  can never go stale relative to cost/markup. */
+export interface QuoteMiscItem {
+  id:          string     // local uid
+  desc:        string     // free-text description
+  cost:        number     // cost (£)
+  markupPct:   number     // markup %
+  notes?:      string
+  enabled?:    boolean    // toggle in/out of totals (default true)
+}
+
 /** A product/material line item within a quote sub-phase, sourced from Back Office products */
 export interface QuoteProduct {
   id:           string     // local uid
@@ -117,6 +131,8 @@ export interface QuotePhase {
   products?: QuoteProduct[]
   /** Plant & equipment hire items from Back Office plant database */
   plantItems?: QuotePlantItem[]
+  /** Ad-hoc miscellaneous cost lines that don't fit any structured item type or BO catalogue */
+  miscItems?: QuoteMiscItem[]
   /** Set true when the AI phase-review has been run and "Complete Phase" clicked */
   aiReviewed?: boolean
   /** Visual assigned during AI phase review — shown in workspace + client quote */

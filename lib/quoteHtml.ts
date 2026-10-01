@@ -1,6 +1,6 @@
 import type { Quote } from './types'
 import type { Settings } from './types'
-import { VAT, calcItemSell, calcPhaseSell } from './utils'
+import { VAT, calcItemSell, calcPhaseSell, calcMiscItemSell } from './utils'
 import { getPhaseVisual } from './phase-visuals'
 
 function esc(s: string): string {
@@ -80,6 +80,8 @@ export function buildHtml(q: Quote, settings: Settings, opts: HtmlOpts = {}, boT
       .map(pr => itemRow(pr.name, pr.qty, pr.unit, pr.notes, pr.sellPrice * pr.qty)).join('')
     const plantRows = (p.plantItems ?? []).filter(pl => pl.enabled !== false)
       .map(pl => itemRow(pl.name, pl.qty, pl.unit, pl.notes, pl.sellPrice * pl.qty)).join('')
+    const miscRows = (p.miscItems ?? []).filter(mi => mi.enabled !== false)
+      .map(mi => itemRow(mi.desc || 'Item', undefined, undefined, mi.notes, calcMiscItemSell(mi))).join('')
     return `
       <div style="margin-bottom:20px;border-left:4px solid #7ab533;background:#f8fafc;padding:16px;border-radius:4px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${p.taskName ? '4px' : '12px'}">
@@ -91,7 +93,7 @@ export function buildHtml(q: Quote, settings: Settings, opts: HtmlOpts = {}, boT
         ${p.taskName ? `<div style="font-size:12px;color:#64748b;margin-bottom:${p.scopeDetail?.trim() ? '6px' : '12px'};white-space:pre-line">${esc(p.taskName)}</div>` : ''}
         ${scopeDetailHtml(p.scopeDetail, !!opts.expandDescriptions, '0 0 12px')}
         <div style="background:white;border-radius:4px;overflow:hidden">
-          ${itemRows}${productRows}${plantRows}
+          ${itemRows}${productRows}${plantRows}${miscRows}
         </div>
       </div>`
   }).join('')
@@ -267,7 +269,7 @@ export function buildHtmlClientView(q: Quote, settings: Settings, opts: HtmlOpts
     // Combine generic items with BO catalogue products/plant-hire — all three
     // feed calcPhaseSell(), so all three need a visible row or the list
     // undercounts the phase total shown above it.
-    type LineEntry = { desc: string; qty: number; unit: string; sell: number }
+    type LineEntry = { desc: string; qty?: number; unit?: string; sell: number }
     const visibleItems: LineEntry[] = (quoteView === 'full' || quoteView === 'phases')
       ? [
           ...p.items.filter(i => calcItemSell(i, qMkp) > 0)
@@ -276,13 +278,15 @@ export function buildHtmlClientView(q: Quote, settings: Settings, opts: HtmlOpts
             .map(pr => ({ desc: pr.name, qty: pr.qty, unit: pr.unit, sell: pr.sellPrice * pr.qty })),
           ...(p.plantItems ?? []).filter(pl => pl.enabled !== false)
             .map(pl => ({ desc: pl.name, qty: pl.qty, unit: pl.unit, sell: pl.sellPrice * pl.qty })),
+          ...(p.miscItems ?? []).filter(mi => mi.enabled !== false)
+            .map(mi => ({ desc: mi.desc || 'Item', sell: calcMiscItemSell(mi) })),
         ]
       : []
     const itemRowsHtml = visibleItems.map(entry => {
       return `<div style="display:flex;justify-content:space-between;align-items:baseline;padding:10px 16px;border-bottom:1px solid #e2e8f0;background:white">
         <div>
           <span style="font-size:12px;color:#334155">${esc(entry.desc)}</span>
-          <span style="font-size:11px;color:#94a3b8;margin-left:8px">${entry.qty} ${esc(entry.unit)}</span>
+          ${entry.qty !== undefined ? `<span style="font-size:11px;color:#94a3b8;margin-left:8px">${entry.qty} ${esc(entry.unit || '')}</span>` : ''}
         </div>
         ${quoteView === 'full' ? `<span style="font-size:12px;font-weight:600;color:#2b2f33;font-family:'DM Mono',monospace;white-space:nowrap">£${entry.sell.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</span>` : ''}
       </div>`

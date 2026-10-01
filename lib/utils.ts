@@ -1,4 +1,4 @@
-import type { Quote, QuotePhase, QuoteItem, TemplatePhaseData, Job } from './types'
+import type { Quote, QuotePhase, QuoteItem, QuoteMiscItem, TemplatePhaseData, Job } from './types'
 import { getPhaseEstimatorDefaults } from './estimatorDefaults'
 
 export const VAT = 0.20
@@ -48,6 +48,10 @@ export function calcItemSell(i: QuoteItem, mkp: number): number {
   return calcItem(i) * (1 + mkp / 100)
 }
 
+export function calcMiscItemSell(mi: QuoteMiscItem): number {
+  return mi.cost * (1 + (mi.markupPct || 0) / 100)
+}
+
 export function calcPhaseSell(p: QuotePhase, mkp: number): number {
   // When a phase uses explicit labour trades, the labour QuoteItem already holds
   // the trade sell price (cost + per-trade markup). Applying global markup on top
@@ -64,7 +68,9 @@ export function calcPhaseSell(p: QuotePhase, mkp: number): number {
     (s, pr) => (pr.enabled === false ? s : s + pr.sellPrice * pr.qty), 0)
   const plantSell = (p.plantItems ?? []).reduce(
     (s, pl) => (pl.enabled === false ? s : s + pl.sellPrice * pl.qty), 0)
-  return itemsSell + productsSell + plantSell
+  const miscSell = (p.miscItems ?? []).reduce(
+    (s, mi) => (mi.enabled === false ? s : s + calcMiscItemSell(mi)), 0)
+  return itemsSell + productsSell + plantSell + miscSell
 }
 
 export function quoteTotal(q: Quote): number {

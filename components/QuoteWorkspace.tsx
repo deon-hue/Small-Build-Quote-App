@@ -14,9 +14,9 @@
  */
 
 import React, { useState, useCallback } from 'react'
-import type { QuotePhase, QuoteItem, QuoteProduct, QuotePlantItem } from '@/lib/types'
+import type { QuotePhase, QuoteItem, QuoteProduct, QuotePlantItem, QuoteMiscItem } from '@/lib/types'
 import type { BOLabourTrade, BOProduct, BOPlantItem, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
-import { fmt, calcPhase, calcPhaseSell } from '@/lib/utils'
+import { fmt, calcPhase, calcPhaseSell, calcMiscItemSell } from '@/lib/utils'
 import ProductPicker      from '@/components/ProductPicker'
 import PlantPicker        from '@/components/PlantPicker'
 import PhaseReviewModal   from '@/components/PhaseReviewModal'
@@ -235,6 +235,11 @@ function productLineSell(prod: QuoteProduct): number {
 function plantLineSell(pl: QuotePlantItem): number {
   if (pl.enabled === false) return 0
   return +(pl.sellPrice * pl.qty).toFixed(2)
+}
+
+function miscLineSell(mi: QuoteMiscItem): number {
+  if (mi.enabled === false) return 0
+  return +calcMiscItemSell(mi).toFixed(2)
 }
 
 function subPhaseTotalSell(p: QuotePhase, markup: number): number {
@@ -819,6 +824,21 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
     onUpdate({ ...p, plantItems: (p.plantItems ?? []).map(x => x.id === id ? { ...x, enabled: x.enabled === false ? true : false } : x) })
   }
 
+  // Misc item CRUD
+  function addMiscItem() {
+    const mi: QuoteMiscItem = { id: `${Date.now()}`, desc: '', cost: 0, markupPct: markup, enabled: true }
+    onUpdate({ ...p, miscItems: [...(p.miscItems ?? []), mi] })
+  }
+  function updateMiscItem(mi: QuoteMiscItem) {
+    onUpdate({ ...p, miscItems: (p.miscItems ?? []).map(x => x.id === mi.id ? mi : x) })
+  }
+  function removeMiscItem(id: string) {
+    onUpdate({ ...p, miscItems: (p.miscItems ?? []).filter(x => x.id !== id) })
+  }
+  function toggleMiscItem(id: string) {
+    onUpdate({ ...p, miscItems: (p.miscItems ?? []).map(x => x.id === id ? { ...x, enabled: x.enabled === false ? true : false } : x) })
+  }
+
   // Mark phase as 'edited' when any cost field changes from a bo-default baseline
   function markEdited(updated: QuotePhase) {
     if (updated.itemStatus === 'bo-default') {
@@ -891,19 +911,20 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
   const typeItemsCost = (t: ItemType) => itemsOfType(t).reduce((s, i) => s + itemCost(i), 0)
   const productsCost  = (p.products   ?? []).reduce((s, pr) => s + (pr.enabled === false ? 0 : pr.costPrice * pr.qty), 0)
   const plantCost     = (p.plantItems ?? []).reduce((s, pl) => s + (pl.enabled === false ? 0 : pl.costPrice * pl.qty), 0)
+  const miscCost      = (p.miscItems  ?? []).reduce((s, mi) => s + (mi.enabled === false ? 0 : mi.cost), 0)
   const cardCost: Record<ItemType, number> = {
     labour:         typeItemsCost('labour'),
     materials:      typeItemsCost('materials') + productsCost,
     plant:          typeItemsCost('plant') + plantCost,
     subcontractors: typeItemsCost('subcontractors'),
-    other:          typeItemsCost('other'),
+    other:          typeItemsCost('other') + miscCost,
   }
   const cardCount: Record<ItemType, number> = {
     labour:         itemsOfType('labour').length,
     materials:      itemsOfType('materials').length + (p.products   ?? []).length,
     plant:          itemsOfType('plant').length      + (p.plantItems ?? []).length,
     subcontractors: itemsOfType('subcontractors').length,
-    other:          itemsOfType('other').length,
+    other:          itemsOfType('other').length + (p.miscItems ?? []).length,
   }
   const totalCost = ITEM_TYPES.reduce((s, t) => s + cardCost[t], 0)
   const totalSell = sell
@@ -1131,6 +1152,81 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
     )
   }
 
+  // ── Miscellaneous items table (free-text ad-hoc lines: cost + markup % → sell) ──
+  function renderMiscItemsTable() {
+    return (
+      <>
+        {(p.miscItems ?? []).length > 0 && (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                <th style={{ width: 20 }} />
+                <th style={{ padding: '3px 6px', textAlign: 'left', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Description</th>
+                <th style={{ padding: '3px 6px', width: 72, textAlign: 'right', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Cost</th>
+                <th style={{ padding: '3px 6px', width: 60, textAlign: 'right', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Markup %</th>
+                <th style={{ padding: '3px 6px', width: 72, textAlign: 'right', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Sell</th>
+                <th style={{ width: 24 }} />
+              </tr>
+            </thead>
+            <tbody>
+              {(p.miscItems ?? []).map(mi => {
+                const en = mi.enabled !== false
+                const sell = calcMiscItemSell(mi)
+                return (
+                  <tr key={mi.id} style={{ borderBottom: '1px solid #f1f5f9', opacity: en ? 1 : 0.45 }}>
+                    <td style={{ padding: '4px 4px', textAlign: 'center' }}>
+                      <button onClick={() => toggleMiscItem(mi.id)} disabled={isLocked}
+                        style={{ background: 'none', border: 'none', cursor: isLocked ? 'default' : 'pointer', fontSize: 12, color: en ? '#475569' : '#cbd5e1', padding: 0, lineHeight: 1 }}>
+                        {en ? '●' : '○'}
+                      </button>
+                    </td>
+                    <td style={{ padding: '4px 6px' }}>
+                      <input value={mi.desc} readOnly={isLocked} placeholder="Describe this item…"
+                        onChange={e => updateMiscItem({ ...mi, desc: e.target.value })}
+                        style={{ ...fldStyle, fontSize: 12, fontWeight: 500 }} />
+                    </td>
+                    <td style={{ padding: '4px 6px' }}>
+                      <div style={{ position: 'relative' }}>
+                        <span style={{ position: 'absolute', left: 3, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: '#cbd5e1' }}>£</span>
+                        <input type="number" min={0} step={0.01} value={mi.cost} readOnly={isLocked}
+                          onChange={e => updateMiscItem({ ...mi, cost: Math.max(0, +e.target.value) })}
+                          style={{ ...cellInp, paddingLeft: 12, width: '100%' }} />
+                      </div>
+                    </td>
+                    <td style={{ padding: '4px 6px' }}>
+                      <input type="number" min={0} step={1} value={mi.markupPct} readOnly={isLocked}
+                        onChange={e => updateMiscItem({ ...mi, markupPct: Math.max(0, +e.target.value) })}
+                        style={{ ...cellInp, width: '100%' }} />
+                    </td>
+                    <td style={{ padding: '4px 6px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 600, color: en ? '#475569' : '#94a3b8' }}>
+                      £{sell.toFixed(2)}
+                    </td>
+                    <td style={{ padding: '4px 2px', textAlign: 'right' }}>
+                      {!isLocked && <button onClick={() => removeMiscItem(mi.id)} className="icon-btn-touch" style={iconBtn('#e74c3c')} title="Remove">×</button>}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        )}
+        {(p.miscItems ?? []).length > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '4px 6px', borderTop: '1px solid #e2e8f0', marginTop: 2 }}>
+            <span style={{ fontSize: 11, color: '#64748b', marginRight: 8 }}>Misc items sell total:</span>
+            <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 12, color: '#475569' }}>
+              £{(p.miscItems ?? []).reduce((s, mi) => s + miscLineSell(mi), 0).toFixed(2)}
+            </span>
+          </div>
+        )}
+        {!isLocked && (
+          <div style={{ marginTop: 6, marginBottom: (p.miscItems ?? []).length > 0 ? 12 : 0 }}>
+            <button style={addBtn} onClick={addMiscItem}>+ Add Misc Item</button>
+          </div>
+        )}
+      </>
+    )
+  }
+
   // ── Dispatch: editable body for the open card ──
   function renderCardBody(type: ItemType) {
 
@@ -1281,6 +1377,16 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
           )}
           {renderPlantTable()}
           {renderItemsCardBody('plant')}
+        </>
+      )
+    }
+
+    // ── Other: free-text miscellaneous ad-hoc items ───────────────────────────
+    if (type === 'other') {
+      return (
+        <>
+          {renderMiscItemsTable()}
+          {renderItemsCardBody('other')}
         </>
       )
     }
@@ -1628,7 +1734,10 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
             const subDescs = p.items.filter(i => i.itemType === 'subcontractors' && i.enabled !== false && i.desc?.trim()).map(i => i.desc.trim())
             if (subDescs.length) lines.push({ icon: CARD_META.subcontractors.icon, color: CARD_META.subcontractors.accent, text: subDescs.join('  ·  ') })
 
-            const otherDescs = p.items.filter(i => i.itemType === 'other' && i.enabled !== false && i.desc?.trim()).map(i => i.desc.trim())
+            const otherDescs = [
+              ...(p.miscItems ?? []).filter(mi => mi.enabled !== false && mi.desc?.trim()).map(mi => mi.desc.trim()),
+              ...p.items.filter(i => i.itemType === 'other' && i.enabled !== false && i.desc?.trim()).map(i => i.desc.trim()),
+            ]
             if (otherDescs.length) lines.push({ icon: CARD_META.other.icon, color: CARD_META.other.accent, text: otherDescs.join('  ·  ') })
 
             if (!lines.length) return null
@@ -2273,6 +2382,7 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
             }
             for (const pr of p.products  ?? []) { if (pr.enabled !== false) t.materials += pr.sellPrice * pr.qty }
             for (const pl of p.plantItems ?? []) { if (pl.enabled !== false) t.plant     += pl.sellPrice * pl.qty }
+            for (const mi of p.miscItems  ?? []) { if (mi.enabled !== false) t.other     += calcMiscItemSell(mi) }
           }
           const total = CHART_TYPES.reduce((s, k) => s + t[k], 0)
           return { name: mp, t, total }
@@ -2310,6 +2420,7 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
           }
           for (const pr of p.products  ?? []) { if (pr.enabled !== false) { catSell.materials += pr.sellPrice * pr.qty } }
           for (const pl of p.plantItems ?? []) { if (pl.enabled !== false) { catSell.plant     += pl.sellPrice * pl.qty } }
+          for (const mi of p.miscItems  ?? []) { if (mi.enabled !== false) { catCost.other += mi.cost; catSell.other += calcMiscItemSell(mi) } }
         }
         const activeCats = CHART_TYPES.filter(k => catSell[k] > 0)
 
