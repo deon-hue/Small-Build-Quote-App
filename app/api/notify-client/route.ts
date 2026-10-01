@@ -479,6 +479,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Bad request' }, { status: 400 })
   }
 
+  // Everything below is wrapped in one top-level try/catch: an uncaught exception anywhere
+  // here used to fall through to Next.js's own generic error page (not JSON), which made
+  // the client's notifyRes.json().catch(() => ({})) silently produce an empty object and
+  // show "No error detail returned" — hiding whatever actually broke. Catching here instead
+  // keeps the response shape the client already expects, with the real error inside it.
+  try {
+
   const { clientPhone, clientEmail } = payload
 
   const twilioSid   = process.env.TWILIO_ACCOUNT_SID
@@ -568,4 +575,12 @@ export async function POST(req: NextRequest) {
 
   // Always 200 — notifications are non-fatal
   return NextResponse.json({ sent: results })
+
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[notify-client] Uncaught exception:', err)
+    return NextResponse.json({
+      sent: { whatsapp: false, email: false, errors: [`Server exception: ${msg}`] },
+    })
+  }
 }
