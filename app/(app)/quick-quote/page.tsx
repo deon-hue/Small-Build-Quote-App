@@ -175,7 +175,14 @@ export default function QuickQuotePage() {
       alert(`Quick quote saved! Reference: ${newQuote.ref}`)
       router.push('/quotes')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save quote.')
+      // Supabase errors are plain objects (PostgrestError), not Error instances —
+      // `err instanceof Error` misses them and hides the real reason. Pull `.message`
+      // off anything error-shaped before falling back to the generic text.
+      const msg = err instanceof Error ? err.message
+        : (err && typeof err === 'object' && 'message' in err) ? String((err as { message: unknown }).message)
+        : 'Failed to save quote.'
+      setError(msg)
+      console.error('Quick quote save failed:', err)
     } finally {
       setSaving(false)
     }
