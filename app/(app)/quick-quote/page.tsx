@@ -7,12 +7,12 @@
  *   1. Customer details (name required; address, email, phone optional)
  *   2. Job type
  *   3. Brief notes → AI writes scope of works
- *   4. Enter sell price + estimated cost (both required)
+ *   4. Add one or more items, each with its own cost + markup %
  *   5. Save → single "Project Works / Lump Sum" phase quote
  *
- * No phase breakdown is generated. Cost tracking works via:
- *   estCost stored as the `other` item value;
- *   markup back-calculated so calcPhaseSell == sellPrice.
+ * No phase breakdown is generated. Cost tracking works via the lump phase's
+ * own `miscItems` (QuoteMiscItem[]) — each item's sell is derived as
+ * cost × (1+markupPct/100); calcPhaseSell/calcPhase sum them generically.
  */
 
 import { useState } from 'react'
@@ -22,8 +22,9 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import ScopeChat from '@/components/ScopeChat'
 import QuoteAttachments from '@/components/QuoteAttachments'
+import QuickQuoteItemsEditor, { quickItemsTotals } from '@/components/QuickQuoteItemsEditor'
 import { reassignQuoteDocuments } from '@/lib/quote-documents'
-import type { QuoteDocument } from '@/lib/types'
+import type { QuoteDocument, QuoteMiscItem } from '@/lib/types'
 
 let itemId = 1000
 
@@ -55,9 +56,8 @@ export default function QuickQuotePage() {
   const [scopeGenerated,  setScopeGenerated]  = useState(false)
 
   // ── Pricing ───────────────────────────────────────────────────────────────
-  const [sellPriceStr, setSellPriceStr] = useState('')
-  const [estCostStr,   setEstCostStr]   = useState('')
-  const [vatOn,        setVatOn]        = useState(true)
+  const [items, setItems] = useState<QuoteMiscItem[]>([])
+  const [vatOn, setVatOn] = useState(true)
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [saving,   setSaving]   = useState(false)
@@ -65,15 +65,9 @@ export default function QuickQuotePage() {
   const [showChat, setShowChat] = useState(false)
 
   // ── Derived numbers ───────────────────────────────────────────────────────
-  const sellNum  = parseFloat(sellPriceStr.replace(/,/g, '')) || 0
-  const costNum  = parseFloat(estCostStr.replace(/,/g, ''))   || 0
-  const markup   = costNum > 0 ? ((sellNum / costNum) - 1) * 100 : 0
-  const margin   = sellNum - costNum
-  const marginPct = sellNum > 0 ? (margin / sellNum) * 100 : 0
-  const vatAmt   = vatOn ? sellNum * 0.2 : 0
-  const totalInc = sellNum + vatAmt
+  const { totalCost: costNum, totalSell: sellNum } = quickItemsTotals(items)
 
-  const canSave = !!(custName.trim() && sellNum !== 0 && scope.trim() && (sellNum < 0 || costNum > 0))
+  const canSave = !!(custName.trim() && scope.trim() && items.length > 0 && sellNum !== 0)
 
   // ── Client autocomplete ───────────────────────────────────────────────────
   const customers = clients
@@ -152,29 +146,12 @@ export default function QuickQuotePage() {
     try {
       const customer = { name: custName.trim(), address: custAddr.trim(), email: custEmail.trim(), phone: custPhone.trim() }
 
-      // For a discount (negative sell), store sellNum directly as `other` with markup 0 so
-      // quoteTotal() returns the correct negative value. For regular quotes, use the normal
-      // cost-in-other + back-calculated markup approach.
-      const isDiscount = sellNum < 0
-      const markupPct = isDiscount ? 0 : (costNum > 0 ? ((sellNum / costNum) - 1) * 100 : 0)
-      const otherAmount = isDiscount ? sellNum : costNum
-      const costNotes = isDiscount
-        ? `Discount: −£${Math.abs(sellNum).toLocaleString('en-GB', { minimumFractionDigits: 2 })}`
-        : `Sell £${sellNum.toLocaleString('en-GB', { minimumFractionDigits: 2 })} | Cost £${costNum.toLocaleString('en-GB', { minimumFractionDigits: 2 })} | Margin ${marginPct.toFixed(1)}%`
-
       const lumpPhase = {
         id: ++itemId,
         phase: 'Lump Sum',
         parentPhase: 'Project Works',
-        items: [
-          { id: ++itemId, desc: 'Labour',                  qty: 1, unit: 'Item', labour: 0,       materials: 0, plantHire: 0, subcontractors: 0, other: 0,           notes: '', itemType: 'labour'         as const },
-          { id: ++itemId, desc: 'Materials',               qty: 1, unit: 'Item', labour: 0,       materials: 0, plantHire: 0, subcontractors: 0, other: 0,           notes: '', itemType: 'materials'      as const },
-          { id: ++itemId, desc: 'Plant Hire',              qty: 1, unit: 'Item', labour: 0,       materials: 0, plantHire: 0, subcontractors: 0, other: 0,           notes: '', itemType: 'plant'          as const },
-          { id: ++itemId, desc: 'Subcontractors',          qty: 1, unit: 'Item', labour: 0,       materials: 0, plantHire: 0, subcontractors: 0, other: 0,           notes: '', itemType: 'subcontractors' as const },
-          { id: ++itemId, desc: isDiscount ? 'Discount'  : 'Estimated Project Cost',
-            qty: 1, unit: 'Item', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: otherAmount,
-            notes: costNotes, itemType: 'other' as const },
-        ],
+        items: [],
+        miscItems: items,
         estimatorItems: [],
         useEstimator:   false as const,
       }
@@ -183,7 +160,7 @@ export default function QuickQuotePage() {
         status:         'pending',
         jobType,
         title:          jobTitle,
-        markup:         markupPct,
+        markup:         0,
         vatIncluded:    vatOn,
         scope,
         photo:          '',
@@ -432,76 +409,7 @@ export default function QuickQuotePage() {
           Pricing
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-          {/* Sell price */}
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 5 }}>
-              Quote Price (ex. VAT) <span style={{ color: '#e74c3c' }}>*</span>
-            </label>
-            <div style={{ position: 'relative' }}>
-              <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', fontWeight: 600, color: 'var(--muted)', fontSize: 13 }}>£</span>
-              <input
-                type="number"
-                step="100"
-                value={sellPriceStr}
-                onChange={e => setSellPriceStr(e.target.value)}
-                placeholder="0.00"
-                style={{ width: '100%', padding: '8px 10px 8px 24px', fontSize: 14, fontWeight: 700, boxSizing: 'border-box', border: '1px solid var(--border)', borderRadius: 6, fontFamily: 'DM Mono, monospace' }}
-              />
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
-              The price shown to the client
-            </div>
-          </div>
-
-          {/* Estimated cost */}
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 5 }}>
-              Estimated Cost (ex. VAT) <span style={{ color: '#e74c3c' }}>*</span>
-            </label>
-            <div style={{ position: 'relative' }}>
-              <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', fontWeight: 600, color: 'var(--muted)', fontSize: 13 }}>£</span>
-              <input
-                type="number"
-                min="0"
-                step="100"
-                value={estCostStr}
-                onChange={e => setEstCostStr(e.target.value)}
-                placeholder="0.00"
-                style={{ width: '100%', padding: '8px 10px 8px 24px', fontSize: 14, fontWeight: 700, boxSizing: 'border-box', border: '1px solid var(--border)', borderRadius: 6, fontFamily: 'DM Mono, monospace' }}
-              />
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
-              Your internal cost estimate
-            </div>
-          </div>
-        </div>
-
-        {/* Live margin / VAT summary */}
-        {sellNum > 0 && costNum > 0 && (
-          <div style={{ background: margin >= 0 ? '#f8faf2' : '#fff0ef', border: `1px solid ${margin >= 0 ? '#c8e89a' : '#ffb0b0'}`, borderRadius: 8, padding: '14px 16px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b', marginBottom: 4 }}>Sell Price</div>
-              <div style={{ fontFamily: 'DM Mono, monospace', fontWeight: 700, fontSize: 15, color: 'var(--ink)' }}>{fmt(sellNum)}</div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b', marginBottom: 4 }}>Est. Cost</div>
-              <div style={{ fontFamily: 'DM Mono, monospace', fontWeight: 700, fontSize: 15, color: 'var(--ink)' }}>{fmt(costNum)}</div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b', marginBottom: 4 }}>Gross Margin</div>
-              <div style={{ fontFamily: 'DM Mono, monospace', fontWeight: 700, fontSize: 15, color: margin >= 0 ? '#4a7c1f' : '#c0392b' }}>
-                {fmt(margin)} <span style={{ fontSize: 11, fontWeight: 400 }}>({marginPct.toFixed(1)}%)</span>
-              </div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b', marginBottom: 4 }}>Total inc. VAT</div>
-              <div style={{ fontFamily: 'DM Mono, monospace', fontWeight: 700, fontSize: 15, color: 'var(--ink)' }}>
-                {vatOn ? fmt(totalInc) : <span style={{ color: 'var(--muted)', fontSize: 12 }}>No VAT</span>}
-              </div>
-            </div>
-          </div>
-        )}
+        <QuickQuoteItemsEditor items={items} onChange={setItems} vatOn={vatOn} />
 
         {/* VAT toggle */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14 }}>
@@ -530,8 +438,8 @@ export default function QuickQuotePage() {
           Required:
           {!custName.trim() && <span style={{ marginLeft: 8 }}>✗ client name</span>}
           {!scope.trim() && <span style={{ marginLeft: 8 }}>✗ scope of works</span>}
-          {sellNum === 0 && <span style={{ marginLeft: 8 }}>✗ sell price</span>}
-          {sellNum >= 0 && !(costNum > 0) && <span style={{ marginLeft: 8 }}>✗ estimated cost</span>}
+          {items.length === 0 && <span style={{ marginLeft: 8 }}>✗ at least one item</span>}
+          {items.length > 0 && sellNum === 0 && <span style={{ marginLeft: 8 }}>✗ sell price</span>}
         </div>
       )}
 

@@ -41,7 +41,11 @@ export function calcItem(i: QuoteItem): number {
 }
 
 export function calcPhase(p: QuotePhase): number {
-  return p.items.reduce((s, i) => s + calcItem(i), 0)
+  const itemsCost    = p.items.reduce((s, i) => s + calcItem(i), 0)
+  const productsCost = (p.products   ?? []).reduce((s, pr) => s + (pr.enabled === false ? 0 : pr.costPrice * pr.qty), 0)
+  const plantCost    = (p.plantItems ?? []).reduce((s, pl) => s + (pl.enabled === false ? 0 : pl.costPrice * pl.qty), 0)
+  const miscCost     = (p.miscItems  ?? []).reduce((s, mi) => s + (mi.enabled === false ? 0 : mi.cost), 0)
+  return itemsCost + productsCost + plantCost + miscCost
 }
 
 export function calcItemSell(i: QuoteItem, mkp: number): number {

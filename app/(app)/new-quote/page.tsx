@@ -4,8 +4,9 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useApp } from '@/contexts/AppContext'
 import { fmt, VAT, JOB_TYPES, calcPhase, calcPhaseSell, uid } from '@/lib/utils'
-import type { QuotePhase, QuoteItem, Quote, TakeoffPhaseMeta, QuoteDocument } from '@/lib/types'
+import type { QuotePhase, QuoteItem, Quote, TakeoffPhaseMeta, QuoteDocument, QuoteMiscItem } from '@/lib/types'
 import QuoteAttachments from '@/components/QuoteAttachments'
+import QuickQuoteItemsEditor from '@/components/QuickQuoteItemsEditor'
 import { reassignQuoteDocuments } from '@/lib/quote-documents'
 import { itemFromTemplate, estimatorAggregates } from '@/lib/estimator'
 import type { EstimatorItem, EstimatorItemTemplate, MeasurementType } from '@/lib/estimator'
@@ -246,8 +247,7 @@ export default function NewQuotePage() {
   const [showScopeChat, setShowScopeChat] = useState(false)
   const [buildingEstimate, setBuildingEstimate] = useState(false)
   // Quick Quote pricing (only used when quoteSource === 'quick')
-  const [quickSellStr, setQuickSellStr] = useState('')
-  const [quickCostStr, setQuickCostStr] = useState('')
+  const [quickItems, setQuickItems] = useState<QuoteMiscItem[]>([])
   const [loadingBO, setLoadingBO] = useState(false)   // true while fetching BO defaults for manual quotes
   const [estimateUsedDB, setEstimateUsedDB] = useState(false)
   const [showScopeHelp, setShowScopeHelp] = useState(false)
@@ -705,15 +705,25 @@ export default function NewQuotePage() {
       q.phases[0]?.phase === 'Lump Sum'
     const resolvedSource = q.quoteSource ?? (isQuickByStructure ? 'quick' : 'manual')
     setQuoteSource(resolvedSource)
-    // Quick Quote: extract sell price + cost from the lump-sum phase
-    // Sum ALL item types — the cost may be split across labour/materials/other in legacy saves
+    // Quick Quote: load its items — the current miscItems-based shape directly, or
+    // synthesize one item from a legacy single-"other"-row save (cost may be split
+    // across labour/materials/other in very old legacy saves, so sum every type)
     if (resolvedSource === 'quick' && q.phases.length > 0) {
       const lump = q.phases[0]
-      const costVal = lump.items.reduce((sum: number, i: QuoteItem) =>
-        sum + (i.labour || 0) + (i.materials || 0) + (i.plantHire || 0) + (i.subcontractors || 0) + (i.other || 0), 0)
-      const sellVal = calcPhaseSell(lump, q.markup || 0)
-      setQuickCostStr(costVal > 0 ? String(Math.round(costVal)) : '')
-      setQuickSellStr(sellVal > 0 ? String(Math.round(sellVal)) : '')
+      if (lump.miscItems && lump.miscItems.length > 0) {
+        setQuickItems(lump.miscItems)
+      } else {
+        const costVal = lump.items.reduce((sum: number, i: QuoteItem) =>
+          sum + (i.labour || 0) + (i.materials || 0) + (i.plantHire || 0) + (i.subcontractors || 0) + (i.other || 0), 0)
+        const sellVal = calcPhaseSell(lump, q.markup || 0)
+        const legacyDesc = lump.items.find(i => i.itemType === 'other')?.desc || ''
+        // A legacy discount save stores the (negative) sell directly as cost with
+        // markup 0 — costVal is 0 in that case, so fall back to sellVal as the cost.
+        setQuickItems(costVal > 0 || sellVal !== 0
+          ? [{ id: uid(), desc: legacyDesc, cost: costVal > 0 ? costVal : sellVal,
+               markupPct: costVal > 0 ? ((sellVal / costVal) - 1) * 100 : 0 }]
+          : [])
+      }
     }
     setPhases(JSON.parse(JSON.stringify(q.phases)).map((p: QuotePhase) => ({
       ...p, id: ++phaseCounter,
@@ -723,31 +733,10 @@ export default function NewQuotePage() {
     setIsLockedQuote(q.status === 'accepted')
   }
 
-  // ── Quick Quote pricing update ─────────────────────────────────────────────
-  function applyQuickPricing(sellStr: string, costStr: string) {
-    const sellNum = parseFloat(sellStr.replace(/,/g, '')) || 0
-    const costNum = parseFloat(costStr.replace(/,/g, '')) || 0
-    if (sellNum <= 0 || costNum <= 0) return
-    const newMarkup = ((sellNum / costNum) - 1) * 100
-    const marginPct = ((sellNum - costNum) / sellNum * 100).toFixed(1)
-    setMarkup(newMarkup)
-    setPhases(prev => prev.map((p, idx) => {
-      if (idx !== 0) return p
-      return {
-        ...p,
-        items: p.items.map(i => {
-          // Consolidate everything into the 'other' row — zero out all other types
-          // so the Quick Quote panel is the single source of truth for cost
-          if (i.itemType === 'other') {
-            return { ...i, other: costNum, labour: 0, materials: 0, plantHire: 0, subcontractors: 0,
-              desc: 'Estimated Project Cost',
-              notes: `Sell £${sellNum.toLocaleString('en-GB', { minimumFractionDigits: 2 })} | Cost £${costNum.toLocaleString('en-GB', { minimumFractionDigits: 2 })} | Margin ${marginPct}%` }
-          }
-          // Zero out all other typed rows so they don't double-count
-          return { ...i, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0 }
-        }),
-      }
-    }))
+  // ── Quick Quote items update ──────────────────────────────────────────────
+  function onQuickItemsChange(next: QuoteMiscItem[]) {
+    setQuickItems(next)
+    setPhases(prev => prev.map((p, idx) => idx === 0 ? { ...p, items: [], miscItems: next } : p))
   }
 
   function onJobTypeChange(type: string) {
@@ -1708,86 +1697,14 @@ export default function NewQuotePage() {
       )}
 
       {/* ── Quick Quote Pricing ── only shown for quick-source quotes ── */}
-      {quoteSource === 'quick' && (() => {
-        const qSell = parseFloat(quickSellStr.replace(/,/g, '')) || 0
-        const qCost = parseFloat(quickCostStr.replace(/,/g, '')) || 0
-        const qMargin = qSell - qCost
-        const qMarginPct = qSell > 0 ? (qMargin / qSell) * 100 : 0
-        const qVatAmt = vatOn ? qSell * 0.2 : 0
-        const qTotal = qSell + qVatAmt
-        return (
-          <div style={{ background: 'var(--cream)', border: '1.5px solid var(--border)', borderRadius: 8, padding: '14px 18px', marginBottom: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
-              ⚡ Quick Quote Pricing
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: qSell > 0 && qCost > 0 ? 12 : 0 }}>
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>Quote Price (ex. VAT) <span style={{ color: '#e74c3c' }}>*</span></label>
-                <div style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', fontSize: 13, fontWeight: 600 }}>£</span>
-                  <input
-                    type="number" min="0" step="100"
-                    value={quickSellStr}
-                    onChange={e => {
-                      setQuickSellStr(e.target.value)
-                      applyQuickPricing(e.target.value, quickCostStr)
-                    }}
-                    placeholder="0"
-                    style={{ width: '100%', padding: '8px 10px 8px 22px', fontSize: 14, fontWeight: 700, boxSizing: 'border-box', border: '1.5px solid var(--border)', borderRadius: 6, fontFamily: 'DM Mono, monospace' }}
-                  />
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>Price shown to the client</div>
-              </div>
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 5 }}>Estimated Cost (ex. VAT) <span style={{ color: '#e74c3c' }}>*</span></label>
-                <div style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', fontSize: 13, fontWeight: 600 }}>£</span>
-                  <input
-                    type="number" min="0" step="100"
-                    value={quickCostStr}
-                    onChange={e => {
-                      setQuickCostStr(e.target.value)
-                      applyQuickPricing(quickSellStr, e.target.value)
-                    }}
-                    placeholder="0"
-                    style={{ width: '100%', padding: '8px 10px 8px 22px', fontSize: 14, fontWeight: 700, boxSizing: 'border-box', border: '1.5px solid var(--border)', borderRadius: 6, fontFamily: 'DM Mono, monospace' }}
-                  />
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>Your internal cost estimate</div>
-              </div>
-            </div>
-            {qSell > 0 && qCost > 0 && (
-              <div style={{ background: qMargin >= 0 ? '#f0f7e6' : '#fff0ef', border: `1px solid ${qMargin >= 0 ? '#c8e89a' : '#ffb0b0'}`, borderRadius: 6, padding: '10px 14px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b', marginBottom: 3 }}>Sell</div>
-                  <div style={{ fontFamily: 'DM Mono, monospace', fontWeight: 700, fontSize: 14 }}>{fmt(qSell)}</div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b', marginBottom: 3 }}>Cost</div>
-                  <div style={{ fontFamily: 'DM Mono, monospace', fontWeight: 700, fontSize: 14 }}>{fmt(qCost)}</div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b', marginBottom: 3 }}>Margin</div>
-                  <div style={{ fontFamily: 'DM Mono, monospace', fontWeight: 700, fontSize: 14, color: qMargin >= 0 ? '#4a7c1f' : '#c0392b' }}>
-                    {fmt(qMargin)} <span style={{ fontSize: 11, fontWeight: 400 }}>({qMarginPct.toFixed(1)}%)</span>
-                  </div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b', marginBottom: 3 }}>Total inc. VAT</div>
-                  <div style={{ fontFamily: 'DM Mono, monospace', fontWeight: 700, fontSize: 14 }}>
-                    {vatOn ? fmt(qTotal) : <span style={{ color: 'var(--muted)', fontSize: 12 }}>No VAT</span>}
-                  </div>
-                </div>
-              </div>
-            )}
-            {qCost > 0 && qSell > 0 && qCost >= qSell && (
-              <div style={{ marginTop: 8, fontSize: 12, color: '#c0392b', fontWeight: 600 }}>
-                ⚠ Estimated cost equals or exceeds the sell price — no profit margin.
-              </div>
-            )}
+      {quoteSource === 'quick' && (
+        <div style={{ background: 'var(--cream)', border: '1.5px solid var(--border)', borderRadius: 8, padding: '14px 18px', marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
+            ⚡ Quick Quote Pricing
           </div>
-        )
-      })()}
+          <QuickQuoteItemsEditor items={quickItems} onChange={onQuickItemsChange} vatOn={vatOn} locked={isLockedQuote} />
+        </div>
+      )}
 
       <div className="qb-grid" style={{ gridTemplateColumns: '270px 1fr' }}>
         {/* Left panel */}
@@ -1913,7 +1830,7 @@ export default function NewQuotePage() {
               <span className="mono" style={{ marginLeft: 10, fontSize: 16, color: '#7ab533' }}>{fmt(total)}</span>
             </div>
             <div className="tot-row"><span>Your Cost</span><span className="mono" style={{ color: '#e67e22' }}>{fmt(cost)}</span></div>
-            <div className="tot-row"><span>Markup ({markup}%)</span><span className="mono" style={{ color: '#7ab533' }}>{fmt(mu)}</span></div>
+            {quoteSource !== 'quick' && <div className="tot-row"><span>Markup ({markup}%)</span><span className="mono" style={{ color: '#7ab533' }}>{fmt(mu)}</span></div>}
             <div className="tot-row"><span>Sell Price (ex-VAT)</span><span className="mono">{fmt(sell)}</span></div>
             {vatOn && <div className="tot-row"><span>VAT (20%)</span><span className="mono" style={{ color: '#4a90a4' }}>{fmt(vatAmt)}</span></div>}
             <div className="tot-final">
@@ -1923,10 +1840,14 @@ export default function NewQuotePage() {
           </div>
 
           <div style={{ marginTop: 14, background: 'var(--cream)', border: '1.5px solid var(--border)', borderRadius: 8, padding: '14px 16px' }}>
-            <div className="fg" style={{ marginBottom: 8 }}>
-              <label>Markup: {markup}%</label>
-              <input type="range" min={0} max={40} value={markup} onChange={e => setMarkup(Number(e.target.value))} style={{ padding: 0, border: 'none', background: 'none' }} />
-            </div>
+            {quoteSource === 'quick' ? (
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>Markup is set per item above.</div>
+            ) : (
+              <div className="fg" style={{ marginBottom: 8 }}>
+                <label>Markup: {markup}%</label>
+                <input type="range" min={0} max={40} value={markup} onChange={e => setMarkup(Number(e.target.value))} style={{ padding: 0, border: 'none', background: 'none' }} />
+              </div>
+            )}
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14 }}>
               <input type="checkbox" checked={vatOn} onChange={e => setVatOn(e.target.checked)} style={{ width: 'auto' }} />
               Include VAT (20%)
