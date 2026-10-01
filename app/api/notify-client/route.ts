@@ -571,6 +571,12 @@ export async function POST(req: NextRequest) {
       results.errors.push(`Email exception: ${err}`)
       console.error('[notify-client] Email exception:', err)
     }
+  } else if (clientEmail && !resendKey) {
+    // Previously a silent no-op: shouldEmail false with no error ever recorded, which is
+    // exactly what produced the unhelpful "No error detail returned" fallback client-side —
+    // make the actual reason explicit instead of leaving results.errors empty.
+    results.errors.push('Email: RESEND_API_KEY is not set in this environment')
+    console.error('[notify-client] RESEND_API_KEY missing — email not attempted')
   }
 
   // Always 200 — notifications are non-fatal
