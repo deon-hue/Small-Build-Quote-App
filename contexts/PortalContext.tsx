@@ -65,6 +65,8 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
   const silentPollRef = useRef(false)
+  const lastLoadRef = useRef(0)       // when the last refresh started, so tab switches don't re-download needlessly
+  const profileReadyRef = useRef(false) // create_customer_profile only needs to succeed once per visit
 
   function reload() {
     setError(null)
@@ -72,10 +74,12 @@ export function PortalProvider({ children }: { children: ReactNode }) {
     setTick(t => t + 1)
   }
 
-  // Auto-refresh when client switches back to the tab
+  // Refresh when the client switches back to the tab — but quietly (no spinner), and only if the
+  // data is more than 30 s old, so flicking between apps doesn't re-download everything each time.
   useEffect(() => {
     function handleVisibility() {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === 'visible' && Date.now() - lastLoadRef.current > 30_000) {
+        silentPollRef.current = true
         setTick(t => t + 1)
       }
     }
@@ -83,15 +87,16 @@ export function PortalProvider({ children }: { children: ReactNode }) {
     return () => document.removeEventListener('visibilitychange', handleVisibility)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Silent background poll every 30 s — picks up Gantt changes, job progress
-  // updates, etc. made by the admin without flashing the loading spinner
+  // Silent background poll every 60 s — picks up Gantt changes, job progress
+  // updates, etc. made by the admin without flashing the loading spinner. (Each poll re-fetches
+  // the customer's whole portal, so this is deliberately not any more frequent.)
   useEffect(() => {
     const timer = setInterval(() => {
       if (document.visibilityState === 'visible') {
         silentPollRef.current = true
         setTick(t => t + 1)
       }
-    }, 15_000)
+    }, 60_000)
     return () => clearInterval(timer)
   }, [])
 
@@ -99,6 +104,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
     async function load() {
       const silent = silentPollRef.current
       silentPollRef.current = false
+      lastLoadRef.current = Date.now()
       if (!silent) setLoading(true)
       setError(null)
 
@@ -107,13 +113,17 @@ export function PortalProvider({ children }: { children: ReactNode }) {
 
       setUserEmail(user.email || '')
 
-      // Always ensure a profile exists — safe to call every time (no-op if already set up)
-      const { error: profileErr } = await supabase.rpc('create_customer_profile')
-      if (profileErr) {
-        // RPC doesn't exist yet → phase3.sql not run
-        setError('setup_required')
-        setLoading(false)
-        return
+      // Make sure a profile exists (no-op if already set up). Once it has succeeded there's no
+      // need to ask again on every background refresh.
+      if (!profileReadyRef.current) {
+        const { error: profileErr } = await supabase.rpc('create_customer_profile')
+        if (profileErr) {
+          // RPC doesn't exist yet → phase3.sql not run
+          setError('setup_required')
+          setLoading(false)
+          return
+        }
+        profileReadyRef.current = true
       }
 
       // Fetch all portal data in one call

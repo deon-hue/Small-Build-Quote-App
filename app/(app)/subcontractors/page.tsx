@@ -309,8 +309,9 @@ export default function SubcontractorsPage() {
   const contractLabel = (c: Contract) => c.description || (c.type === 'rate' ? `${c.rate_type} rate` : 'fixed price')
   const toggleNotes = (id: string) => setNotesOpen(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
 
+  // Only the first load shows the full-page "Loading…" screen (loading starts true). Every reload
+  // after an approve/pay/delete is silent, so the page keeps its scroll position and open popups.
   const load = useCallback(async () => {
-    setLoading(true)
     const { data: { user } } = await sb.auth.getUser()
     if (!user) { setLoading(false); return }
 
