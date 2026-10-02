@@ -226,28 +226,22 @@ function ClientsPageInner() {
     setInviteSending(true)
     setInviteError('')
     try {
-      // Send a Supabase magic link — proper HTML email with a real clickable button.
-      // This does NOT affect the admin's current session.
-      const { error: otpErr } = await supabase.auth.signInWithOtp({
-        email: c.email,
-        options: {
-          shouldCreateUser: true,
-          emailRedirectTo: `${window.location.origin}/auth/callback?next=/portal`,
-        },
+      // Our own branded invite (one-click sign-in button + what the portal is for + how to add
+      // it to a home screen), rather than Supabase's generic magic-link email.
+      const res = await fetch('/api/portal/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientName: c.name, clientEmail: c.email, clientPhone: c.phone || undefined,
+          companyName: settings.name, companyPhone: settings.phone, companyEmail: settings.email,
+        }),
       })
-      if (otpErr) {
-        const msg = otpErr.message || ''
-        if (!msg || msg === '{}' || msg.trim() === '') {
-          setInviteError('Email failed to send — your Supabase Custom SMTP may be misconfigured. Disable it in Supabase → Project Settings → Authentication → SMTP Settings, or use the Copy Link option below.')
-        } else if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('email rate') || msg.toLowerCase().includes('too many') || msg.toLowerCase().includes('sending magic link')) {
-          setInviteError('Supabase email rate limit hit — free tier allows ~4 emails/hour. Use the Copy Link option below to share the portal link directly, or wait an hour and try again.')
-        } else {
-          setInviteError(msg)
-        }
-        return
-      }
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { setInviteError(data?.error || `Invite failed (${res.status})`); return }
       await markPortalInvite(c.id)
       setInviteSent(true)
+    } catch (err) {
+      setInviteError(err instanceof Error ? err.message : 'Could not send the invite. Please try again.')
     } finally {
       setInviteSending(false)
     }

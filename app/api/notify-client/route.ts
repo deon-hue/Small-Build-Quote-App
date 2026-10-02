@@ -34,6 +34,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/supabase/service-role'
+import { portalExplainerHtml, portalWhatsAppLines } from '@/lib/portal-welcome'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -203,6 +204,7 @@ function buildEmailHtml(payload: NotifyClientPayload, portalUrl: string): string
         </a>
         <p style="margin:10px 0 0;font-size:12px;color:#9aa3ad">View, track and communicate with us through your secure client portal.</p>
       </div>` : ''}
+      ${portalUrl ? portalExplainerHtml() : ''}
       <p style="margin:0;font-size:13px;color:#6b7580;line-height:1.6">
         This quotation is valid for 30 days. Please do not hesitate to contact us if you have any questions or would like to discuss anything.
         ${payload.companyPhone ? `<br><br>📞 <strong>${payload.companyPhone}</strong>` : ''}
@@ -390,6 +392,8 @@ function buildWhatsAppBody(payload: NotifyClientPayload, portalUrl: string): str
       payload.message ? `${payload.message}\n` : '',
       `We've also sent a PDF copy to your email — if you don't see it in your inbox, please check your spam/junk folder.`,
       ``,
+      ...portalWhatsAppLines(portalUrl),
+      ``,
       payload.companyPhone ? `Any questions? Call us on ${payload.companyPhone}` : '',
     ].filter(l => l !== undefined).join('\n').trim()
   }
@@ -533,7 +537,10 @@ export async function POST(req: NextRequest) {
   // ── 1. WhatsApp ──────────────────────────────────────────────
   if (clientPhone && twilioSid && twilioToken && twilioFrom) {
     try {
-      const body   = buildWhatsAppBody(payload, portalUrl)
+      // A quote's email carries a one-time magic link, so WhatsApp gets the reusable login-page
+      // link instead — if both used the one-time link, whichever was opened second would fail.
+      const waPortalUrl = payload.type === 'quote_sent' ? (payload.portalUrl || (appUrl ? `${appUrl}/portal/login` : '')) : portalUrl
+      const body   = buildWhatsAppBody(payload, waPortalUrl)
       const result = await sendWhatsApp(clientPhone, body, twilioSid, twilioToken, twilioFrom)
       results.whatsapp = result.ok
       if (!result.ok) {
