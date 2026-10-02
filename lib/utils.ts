@@ -9,6 +9,27 @@ export function uid(): string {
   return Date.now() + '-' + Math.floor(Math.random() * 10000)
 }
 
+/** How far through a job is, worked out from its start date and duration — replaces the old
+ *  hand-typed "Weeks Done" number (Job.done, now unused). A job marked complete is 100%,
+ *  one that hasn't started (or has no start date) is 0%. */
+export function jobProgress(job: Pick<Job, 'start' | 'weeks' | 'stage'>, now: Date = new Date()) {
+  const weeks = Number(job.weeks) || 0
+  const totalDays = weeks * 7
+  let daysElapsed = 0
+  if (job.stage === 'complete') {
+    daysElapsed = totalDays
+  } else if (job.start && totalDays > 0) {
+    const start = new Date(job.start); start.setHours(0, 0, 0, 0)
+    const today = new Date(now);       today.setHours(0, 0, 0, 0)
+    daysElapsed = Math.min(totalDays, Math.max(0, Math.floor((today.getTime() - start.getTime()) / 86400000)))
+  }
+  const started = daysElapsed > 0
+  const pct = totalDays > 0 ? Math.min(100, Math.round((daysElapsed / totalDays) * 100)) : 0
+  const weeksDone = Math.floor(daysElapsed / 7)
+  const weekNo = started ? Math.min(weeks, weeksDone + 1) : 0
+  return { weeks, daysElapsed, pct, weeksDone, weekNo, started }
+}
+
 export function fmt(n: number): string {
   return '£' + Number(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }

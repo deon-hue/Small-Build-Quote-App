@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { usePortal } from '@/contexts/PortalContext'
-import { STAGE_COLOR, STAGE_LABEL, fmt } from '@/lib/utils'
+import { STAGE_COLOR, STAGE_LABEL, fmt, jobProgress } from '@/lib/utils'
 import PortalGanttChart from '@/components/PortalGanttChart'
 import { createClient } from '@/lib/supabase/client'
 import type { Variation, VariationLineItem, VariationStatus } from '@/lib/types'
@@ -255,7 +255,8 @@ export default function PortalJobsPage() {
         </div>
       ) : (
         jobs.map(j => {
-          const pct = j.weeks ? Math.min(100, Math.round((j.done / j.weeks) * 100)) : 0
+          const prog = jobProgress(j)
+          const pct = prog.pct
           const col = STAGE_COLOR[j.stage] || '#888'
           const ganttState   = ganttStates[j.id] || null
           const ganttOpen    = expandedGantt === j.id
@@ -297,7 +298,7 @@ export default function PortalJobsPage() {
                 <div className="portal-progress-bar" style={{ width: pct + '%', background: col }} />
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--muted)', marginTop: 5 }}>
-                <span>Week {j.done} of {j.weeks}</span>
+                <span>{prog.started ? `Week ${prog.weekNo} of ${j.weeks}` : `${j.weeks} weeks planned`}</span>
                 <span style={{ fontWeight: 600 }}>{pct}% complete</span>
               </div>
 

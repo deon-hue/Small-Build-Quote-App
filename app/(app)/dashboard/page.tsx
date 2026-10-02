@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useApp } from '@/contexts/AppContext'
-import { fmt, fmtK, quoteTotal, STAGE_COLOR, Q_BADGE, Q_LABEL, jobDisplayTitle, quoteDisplayTitle } from '@/lib/utils'
+import { fmt, fmtK, quoteTotal, STAGE_COLOR, Q_BADGE, Q_LABEL, jobDisplayTitle, quoteDisplayTitle, jobProgress } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { quoteBudget } from '@/lib/job-costs'
 
@@ -227,7 +227,7 @@ export default function DashboardPage() {
             {!active.length
               ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No active jobs — add one in Jobs</div>
               : active.slice(0, 4).map(j => {
-                  const pct = j.weeks ? Math.min(100, Math.round((j.done / j.weeks) * 100)) : 0
+                  const pct = jobProgress(j).pct
                   const col = STAGE_COLOR[j.stage] || 'var(--muted)'
                   return (
                     <div key={j.id} className="job-row">

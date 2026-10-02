@@ -22,8 +22,8 @@ export default function BuildPlanPage() {
     )
   }
 
-  const activeJobs = jobs.filter(j => !j.done)
-  const completedJobs = jobs.filter(j => j.done)
+  const activeJobs = jobs.filter(j => j.stage !== 'complete')
+  const completedJobs = jobs.filter(j => j.stage === 'complete')
 
   if (jobs.length === 0) {
     return (

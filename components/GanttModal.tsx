@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import type { Job, QuotePhase, GanttState, GanttPhase } from '@/lib/types'
 import type { Quote } from '@/lib/types'
-import { fmt, quoteTotal, Q_BADGE, Q_LABEL, jobDisplayTitle, quoteDisplayTitle, resolveJobColor } from '@/lib/utils'
+import { fmt, quoteTotal, Q_BADGE, Q_LABEL, jobDisplayTitle, quoteDisplayTitle, resolveJobColor, jobProgress } from '@/lib/utils'
 import { formatGanttDuration, buildGanttFromQuote, stripPhasePrefix, resolveGanttState, workingDaySpanInCalendarDays, countWorkingDays } from '@/lib/gantt-utils'
 import { notifyClient } from '@/lib/notify'
 import { useRouter } from 'next/navigation'
@@ -180,7 +180,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     const totalDays = totalWeeks * 7
     const endDate = addDays(startDate, totalDays)
     const todayDate = new Date(); todayDate.setHours(0, 0, 0, 0)
-    const doneWeeks = Math.min(job.done || 0, totalWeeks)
+    const doneDays = jobProgress(job).daysElapsed
 
     const LABEL_W = parseInt(container.dataset.labelW || '220') || 220
     const ROW_H = 36
@@ -331,8 +331,8 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       const leftPct = dayToPct(ph.startDay)
       const widthPct = dayToPct(ph.startDay + ph.durDays) - dayToPct(ph.startDay)
       const phEndDay = ph.startDay + ph.durDays
-      const isDone = phEndDay <= doneWeeks * 7
-      const isActive = ph.startDay < doneWeeks * 7 && phEndDay > doneWeeks * 7
+      const isDone = phEndDay <= doneDays
+      const isActive = ph.startDay < doneDays && phEndDay > doneDays
       // One consistent colour per job, everywhere (this chart, Calendar, phone, tablet) —
       // completion is shown with the ✓ prefix below instead of a different bar colour,
       // which used to make the same job look like several different colours depending on

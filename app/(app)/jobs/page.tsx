@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useApp } from '@/contexts/AppContext'
-import { fmt, resolveJobColor, JOB_COLORS, jobDisplayTitle, findLinkedQuote, jobNumber, STAGE_BADGE, STAGE_LABEL, JOB_TYPES } from '@/lib/utils'
+import { fmt, resolveJobColor, JOB_COLORS, jobDisplayTitle, findLinkedQuote, jobNumber, STAGE_BADGE, STAGE_LABEL, JOB_TYPES, jobProgress } from '@/lib/utils'
 import type { Job, Quote } from '@/lib/types'
 import { quoteBudget } from '@/lib/job-costs'
 import GanttModal from '@/components/GanttModal'
@@ -161,7 +161,8 @@ function JobsPageInner() {
   // it's linked to becomes harder to find; only the Edit/Delete row is swapped for Reinstate.
   function renderJobCard(j: Job) {
     const jobNum = jobNumber(jobs, j.id)
-    const pct = j.weeks ? Math.min(100, Math.round((j.done / j.weeks) * 100)) : 0
+    const prog = jobProgress(j)
+    const pct = prog.pct
     const col = resolveJobColor(j)
     const linkedQuote = findLinkedQuote(j, quotes)
     const quoteLocked = linkedQuote && (linkedQuote.status === 'accepted' || linkedQuote.status === 'approved')
@@ -208,7 +209,7 @@ function JobsPageInner() {
               </div>
               <div className="job-x-num">{jobNum}{j.start ? ' · Started ' + new Date(j.start).toLocaleDateString('en-GB') : ''}</div>
               <div className="job-progress-text" style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
-                Week {j.done} of {j.weeks} · {pct}% complete
+                {prog.started ? `Week ${prog.weekNo} of ${prog.weeks} · ${pct}% complete` : `Not started · ${prog.weeks} weeks planned`}
               </div>
             </div>
             <div className="job-value-col" style={{ textAlign: 'right', flexShrink: 0 }}>
@@ -437,10 +438,6 @@ function JobsPageInner() {
                   <label>Duration (weeks)</label>
                   <input type="number" value={form.weeks} onChange={e => setForm(f => ({ ...f, weeks: Number(e.target.value) }))} min={1} />
                 </div>
-              </div>
-              <div className="fg">
-                <label>Weeks Done</label>
-                <input type="number" value={form.done} onChange={e => setForm(f => ({ ...f, done: Number(e.target.value) }))} min={0} max={form.weeks} />
               </div>
               <div className="fg">
                 <label>Notes</label>

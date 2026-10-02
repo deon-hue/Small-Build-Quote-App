@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Job, QuotePhase, GanttState, GanttPhase } from '@/lib/types'
 import { stripPhasePrefix } from '@/lib/gantt-utils'
+import { jobProgress } from '@/lib/utils'
 
 interface Props {
   job: Job
@@ -64,7 +65,7 @@ export default function PortalGanttChart({ job, phases, ganttState }: Props) {
     startDate.setHours(0, 0, 0, 0)
     const totalDays = totalWeeks * 7
     const todayDate = new Date(); todayDate.setHours(0, 0, 0, 0)
-    const doneWeeks = Math.min(job.done || 0, totalWeeks)
+    const doneDays = jobProgress(job).daysElapsed
     const LABEL_W = 200
     const ROW_H = 34
 
@@ -158,8 +159,8 @@ export default function PortalGanttChart({ job, phases, ganttState }: Props) {
         const leftPct = dayToPct(ph.startDay)
         const widthPct = dayToPct(ph.startDay + ph.durDays) - dayToPct(ph.startDay)
         const phEndDay = ph.startDay + ph.durDays
-        const isDone = phEndDay <= doneWeeks * 7
-        const isActive = ph.startDay < doneWeeks * 7 && phEndDay > doneWeeks * 7
+        const isDone = phEndDay <= doneDays
+        const isActive = ph.startDay < doneDays && phEndDay > doneDays
         const barColor = (ph.isComplete || isDone) ? '#7ab533' : isActive ? '#4a90a4' : '#c8d8e8'
         const textColor = (ph.isComplete || isDone || isActive) ? 'white' : '#2b2f33'
         const startD = fmtDateShort(addDays(startDate, ph.startDay))
