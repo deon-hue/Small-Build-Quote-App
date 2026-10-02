@@ -138,6 +138,15 @@ export default function PortalBuildPlan({ job, ganttState }: Props) {
         </div>
       </div>
 
+      <p className="bp-note">
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+          <circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" strokeWidth="1.3" />
+          <path d="M8 7.2v3.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          <circle cx="8" cy="5.2" r=".85" fill="currentColor" />
+        </svg>
+        <span>This is an estimated plan and will change from time to time. It is an indication of what is happening and when, not a fixed schedule.</span>
+      </p>
+
       {stages.map((g, gi) => g.status === 'done' ? (
         <details className="bp-done-stage" key={`${g.name}-${gi}`}>
           <summary>
