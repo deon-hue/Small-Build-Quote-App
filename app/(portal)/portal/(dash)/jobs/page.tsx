@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { usePortal } from '@/contexts/PortalContext'
 import { STAGE_COLOR, STAGE_LABEL, fmt, jobProgress } from '@/lib/utils'
-import PortalGanttChart from '@/components/PortalGanttChart'
+import PortalBuildPlan from '@/components/PortalBuildPlan'
 import { createClient } from '@/lib/supabase/client'
 import type { Variation, VariationLineItem, VariationStatus } from '@/lib/types'
 import { useDraggableModal } from '@/components/useDraggableModal'
@@ -424,7 +424,7 @@ export default function PortalJobsPage() {
                 </div>
               )}
 
-              {/* Programme / Gantt toggle — hidden if admin disabled it */}
+              {/* Build plan toggle — hidden if admin disabled it */}
               {clientSettings.showProgramme && (
                 <div style={{ marginTop: 14, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
                   <button
@@ -432,10 +432,10 @@ export default function PortalJobsPage() {
                     style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 12px', fontSize: 12, fontWeight: 600, color: 'var(--ink)', cursor: 'pointer', fontFamily: 'inherit' }}
                   >
                     <span>📋</span>
-                    {ganttOpen ? 'Hide Programme ▲' : 'View Programme ▼'}
+                    {ganttOpen ? 'Hide Build Plan ▲' : 'View Build Plan ▼'}
                   </button>
                   {ganttOpen && (
-                    <PortalGanttChart job={j} phases={[]} ganttState={ganttState} />
+                    <div style={{ marginTop: 14 }}><PortalBuildPlan job={j} ganttState={ganttState} /></div>
                   )}
                 </div>
               )}

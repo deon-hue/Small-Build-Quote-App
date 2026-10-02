@@ -9,6 +9,15 @@ export function uid(): string {
   return Date.now() + '-' + Math.floor(Math.random() * 10000)
 }
 
+/** A 'YYYY-MM-DD' job date as local midnight — `new Date('2026-09-07')` is UTC midnight, which is the
+ *  previous evening (and so the wrong day) anywhere west of Greenwich. */
+export function parseLocalDay(s: string): Date {
+  const m = /^(d{4})-(d{2})-(d{2})/.exec(s)
+  const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(s)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
 /** How far through a job is, worked out from its start date and duration — replaces the old
  *  hand-typed "Weeks Done" number (Job.done, now unused). A job marked complete is 100%,
  *  one that hasn't started (or has no start date) is 0%. */
@@ -19,7 +28,7 @@ export function jobProgress(job: Pick<Job, 'start' | 'weeks' | 'stage'>, now: Da
   if (job.stage === 'complete') {
     daysElapsed = totalDays
   } else if (job.start && totalDays > 0) {
-    const start = new Date(job.start); start.setHours(0, 0, 0, 0)
+    const start = parseLocalDay(job.start)
     const today = new Date(now);       today.setHours(0, 0, 0, 0)
     daysElapsed = Math.min(totalDays, Math.max(0, Math.floor((today.getTime() - start.getTime()) / 86400000)))
   }

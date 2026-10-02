@@ -1,7 +1,8 @@
 'use client'
 
 import { usePortal } from '@/contexts/PortalContext'
-import PortalGanttChart from '@/components/PortalGanttChart'
+import PortalBuildPlan from '@/components/PortalBuildPlan'
+import { jobDisplayTitle } from '@/lib/utils'
 
 export default function BuildPlanPage() {
   const { jobs, ganttStates, loading, error } = usePortal()
@@ -42,13 +43,13 @@ export default function BuildPlanPage() {
       <div key={j.id} style={{ marginBottom: 32 }}>
         <div style={{ marginBottom: 12 }}>
           <h3 style={{ fontSize: 16, fontWeight: 500, margin: '0 0 2px' }}>
-            {j.type || 'Building Works'}
+            {jobDisplayTitle(j) || 'Building Works'}
           </h3>
           {j.address && (
             <p style={{ fontSize: 13, color: '#888', margin: 0 }}>{j.address}</p>
           )}
         </div>
-        <PortalGanttChart job={j} phases={[]} ganttState={ganttState} />
+        <PortalBuildPlan job={j} ganttState={ganttState} />
       </div>
     )
   }

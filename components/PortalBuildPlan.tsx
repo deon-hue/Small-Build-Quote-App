@@ -1,0 +1,165 @@
+'use client'
+
+/**
+ * PortalBuildPlan — the customer portal's view of a job's programme: a stage timeline
+ * (done / on site now / up next) built from the job's saved Gantt state. Replaces the old
+ * Gantt chart in the portal. Customers only ever see stages (level 0) and phases (level 1),
+ * never the individual tasks (level 2).
+ */
+
+import './PortalBuildPlan.css'
+import type { Job, GanttState, GanttPhase } from '@/lib/types'
+import { stripPhasePrefix } from '@/lib/gantt-utils'
+import { jobProgress, parseLocalDay } from '@/lib/utils'
+
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+function addDays(d: Date, n: number): Date { const x = new Date(d); x.setDate(x.getDate() + n); return x }
+const fmt = (d: Date) => `${d.getDate()} ${MON[d.getMonth()]}`
+const fmtDay = (d: Date) => `${DAY[d.getDay()]} ${fmt(d)}`
+const weeksOf = (start: Date, end: Date) => Math.max(1, Math.round(((end.getTime() - start.getTime()) / 86400000 + 3) / 7))
+
+type Status = 'done' | 'now' | 'next'
+interface Item { key: string; name: string; start: Date; end: Date; pct: number; status: Status }
+interface Stage { name: string; items: Item[]; status: Status; start: Date; end: Date }
+
+function buildStages(job: Job, state: GanttState | null | undefined, today: Date): Stage[] {
+  if (!job.start || !state?.phases?.length) return []
+  const jobStart = parseLocalDay(job.start)
+  const jobComplete = job.stage === 'complete'
+
+  const groups: { name: string; phases: GanttPhase[] }[] = []
+  for (const ph of state.phases) {
+    const level = ph.level ?? 1
+    if (level >= 2) continue
+    if (level === 0) { groups.push({ name: stripPhasePrefix(ph.label), phases: [] }); continue }
+    if (!groups.length) groups.push({ name: '', phases: [] })
+    groups[groups.length - 1].phases.push(ph)
+  }
+
+  return groups.filter(g => g.phases.length > 0).map((g, gi) => {
+    const items: Item[] = g.phases.map((ph, i) => {
+      const start = addDays(jobStart, ph.startDay)
+      const end = addDays(jobStart, ph.startDay + Math.max(1, ph.durDays) - 1)
+      const pct = ph.isComplete ? 100 : Math.max(0, Math.min(100, ph.percentComplete ?? 0))
+      const status: Status = jobComplete || pct >= 100 || end < today ? 'done' : start <= today ? 'now' : 'next'
+      return { key: ph.id ?? `${gi}-${i}`, name: stripPhasePrefix(ph.label), start, end, pct, status }
+    })
+    const status: Status = items.every(p => p.status === 'done') ? 'done' : items.some(p => p.status === 'now') ? 'now' : 'next'
+    const start = items.reduce((m, p) => (p.start < m ? p.start : m), items[0].start)
+    const end = items.reduce((m, p) => (p.end > m ? p.end : m), items[0].end)
+    return { name: g.name, items, status, start, end }
+  })
+}
+
+const Check = () => (
+  <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+    <path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+
+function Node({ p, upNext }: { p: Item; upNext: boolean }) {
+  return (
+    <div className={`bp-node bp-${p.status}`}>
+      <div className="bp-dot">{p.status === 'done' && <Check />}</div>
+      <div className="bp-card">
+        <div className="bp-nm">{p.name}</div>
+        {p.status === 'now' && (
+          <>
+            <div className="bp-meta">
+              <span className="bp-pill bp-pill-now">ON SITE NOW</span>
+              <span>{fmt(p.start)} to {fmt(p.end)}</span>
+              <span className="bp-chip">{weeksOf(p.start, p.end)} {weeksOf(p.start, p.end) === 1 ? 'wk' : 'wks'}</span>
+            </div>
+            {p.pct > 0 && (
+              <div className="bp-bar" role="img" aria-label={`${Math.round(p.pct)} percent complete`}><i style={{ width: `${p.pct}%` }} /></div>
+            )}
+            <div className="bp-bar-note">
+              <span>{p.pct > 0 ? `${Math.round(p.pct)}% done` : ''}</span>
+              <span>Finishes {fmtDay(p.end)}</span>
+            </div>
+          </>
+        )}
+        {p.status === 'done' && (
+          <div className="bp-meta"><span>{fmt(p.start)} to {fmt(p.end)}</span></div>
+        )}
+        {p.status === 'next' && (
+          <div className="bp-meta">
+            {upNext && <span className="bp-pill bp-pill-next">UP NEXT</span>}
+            <span>Starts {fmtDay(p.start)}</span>
+            <span className="bp-chip">{weeksOf(p.start, p.end)} {weeksOf(p.start, p.end) === 1 ? 'wk' : 'wks'}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+interface Props {
+  job: Job
+  ganttState?: GanttState | null
+}
+
+export default function PortalBuildPlan({ job, ganttState }: Props) {
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const stages = buildStages(job, ganttState, today)
+
+  if (!stages.length) {
+    return (
+      <p className="portal-empty">
+        {job.start ? "Your builder hasn't added a programme for this job yet." : 'The programme will appear here once a start date is set.'}
+      </p>
+    )
+  }
+
+  const all = stages.flatMap(s => s.items)
+  const finish = all.reduce((m, p) => (p.end > m ? p.end : m), all[0].end)
+  const firstStart = all.reduce((m, p) => (p.start < m ? p.start : m), all[0].start)
+  const upNext = all.filter(p => p.status === 'next').sort((a, b) => a.start.getTime() - b.start.getTime())[0]
+  const prog = jobProgress(job)
+  const complete = job.stage === 'complete'
+
+  const main = complete ? 'Complete'
+    : prog.started && prog.weeks ? `Week ${prog.weekNo} of ${prog.weeks}`
+    : prog.started ? 'In progress'
+    : `Starts ${fmtDay(firstStart)}`
+  const sub = complete ? `Finished ${fmtDay(finish)}` : `Finishing around ${fmtDay(finish)}`
+
+  return (
+    <div className="bp">
+      <div className="bp-card bp-summary">
+        <div className="bp-ring" style={{ background: `conic-gradient(#7ab533 ${prog.pct * 3.6}deg, #dde1e5 0)` }}>
+          <span>{prog.pct}%</span>
+        </div>
+        <div>
+          <div className="bp-sum-main">{main}</div>
+          <div className="bp-sum-sub">{sub}</div>
+        </div>
+      </div>
+
+      {stages.map((g, gi) => g.status === 'done' ? (
+        <details className="bp-done-stage" key={`${g.name}-${gi}`}>
+          <summary>
+            <span className="bp-tick"><Check /></span>
+            <span>
+              <div className="bp-sn">{g.name || 'Programme'}</div>
+              <div className="bp-ss">Complete, {fmt(g.start)} to {fmt(g.end)}</div>
+            </span>
+            <svg className="bp-chev" viewBox="0 0 12 12" width="14" height="14" aria-hidden="true">
+              <path d="M2.5 4.5L6 8l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </summary>
+          <div className="bp-tl">{g.items.map(p => <Node key={p.key} p={p} upNext={false} />)}</div>
+        </details>
+      ) : (
+        <div key={`${g.name}-${gi}`}>
+          {g.name && (
+            <div className="bp-stage-h"><span>{g.name}</span><span className="bp-rng">{fmt(g.start)} to {fmt(g.end)}</span></div>
+          )}
+          <div className="bp-tl">{g.items.map(p => <Node key={p.key} p={p} upNext={p === upNext} />)}</div>
+        </div>
+      ))}
+    </div>
+  )
+}

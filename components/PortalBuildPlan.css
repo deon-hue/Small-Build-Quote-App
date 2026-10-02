@@ -1,0 +1,52 @@
+/* Customer portal Build Plan — stage timeline. Palette matches the portal (charcoal header,
+   #7ab533 green, white cards on a pale grey page). Light-only, like the rest of the portal. */
+.bp { --bp-bg: #f5f6f8; --bp-card: #ffffff; --bp-line: #dde1e5; --bp-ink: #1e2022; --bp-muted: #6b7580;
+  --bp-green: #7ab533; --bp-green-d: #5e8f20; --bp-tint: #f0f7e2; --bp-tint-line: #c9e09b; color: var(--bp-ink); }
+
+.bp-card { background: var(--bp-card); border: 1.5px solid var(--bp-line); border-radius: 8px; padding: 16px 18px; box-shadow: 0 1px 4px rgba(0,0,0,.04); }
+
+.bp-summary { display: flex; align-items: center; gap: 16px; }
+.bp-ring { flex: none; width: 72px; height: 72px; border-radius: 50%; display: grid; place-items: center; }
+.bp-ring span { width: 55px; height: 55px; border-radius: 50%; background: var(--bp-card); display: grid; place-items: center; font-weight: 700; font-size: 15px; }
+.bp-sum-main { font-weight: 700; font-size: 17px; }
+.bp-sum-sub { color: var(--bp-muted); font-size: 13px; margin-top: 2px; line-height: 1.4; }
+
+.bp-stage-h { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin: 22px 2px 8px; font-size: 11px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--bp-muted); }
+.bp-stage-h .bp-rng { text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 12.5px; }
+
+.bp-tl { position: relative; padding-left: 30px; margin-top: 14px; }
+.bp-stage-h + .bp-tl { margin-top: 0; }
+.bp-tl::before { content: ""; position: absolute; left: 9px; top: 10px; bottom: 22px; width: 2px; background: var(--bp-line); }
+.bp-node { position: relative; margin-bottom: 10px; }
+.bp-dot { position: absolute; left: -30px; top: 15px; width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--bp-line); background: var(--bp-bg); display: grid; place-items: center; color: #fff; }
+.bp-done .bp-dot { background: var(--bp-green); border-color: var(--bp-green); }
+.bp-now .bp-dot { background: #fff; border-color: var(--bp-green); box-shadow: 0 0 0 4px rgba(122,181,51,.22); }
+.bp-now .bp-dot::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--bp-green); }
+@media (prefers-reduced-motion: no-preference) {
+  .bp-now .bp-dot { animation: bp-pulse 2.2s ease-in-out infinite; }
+  @keyframes bp-pulse { 50% { box-shadow: 0 0 0 7px rgba(122,181,51,0); } }
+}
+.bp-node .bp-card { padding: 12px 14px; }
+.bp-now .bp-card { background: var(--bp-tint); border-color: var(--bp-tint-line); padding: 14px 16px 15px; }
+.bp-done .bp-card { padding: 10px 14px; }
+.bp-nm { font-weight: 600; font-size: 15px; line-height: 1.3; }
+.bp-now .bp-nm { font-family: 'DM Serif Display', Georgia, serif; font-weight: 400; font-size: 20px; }
+.bp-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 6px; font-size: 13px; color: var(--bp-muted); }
+.bp-chip { background: var(--bp-bg); border: 1px solid var(--bp-line); padding: 1px 8px; border-radius: 99px; font-size: 11.5px; font-weight: 600; color: var(--bp-ink); }
+.bp-now .bp-chip { background: #fff; }
+.bp-pill { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: .4px; white-space: nowrap; }
+.bp-pill-now { background: var(--bp-green); color: #fff; }
+.bp-pill-next { background: var(--bp-tint); color: var(--bp-green-d); border: 1px solid var(--bp-tint-line); }
+.bp-bar { height: 6px; border-radius: 3px; background: #fff; border: 1px solid var(--bp-tint-line); margin-top: 12px; overflow: hidden; }
+.bp-bar i { display: block; height: 100%; background: var(--bp-green); }
+.bp-bar-note { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--bp-muted); margin-top: 5px; }
+
+.bp-done-stage { margin-top: 18px; }
+.bp-done-stage summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; background: var(--bp-card); border: 1.5px solid var(--bp-line); border-radius: 8px; padding: 11px 14px; }
+.bp-done-stage summary::-webkit-details-marker { display: none; }
+.bp-done-stage summary:focus-visible { outline: 2px solid var(--bp-green); outline-offset: 2px; }
+.bp-tick { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--bp-green); color: #fff; display: grid; place-items: center; }
+.bp-sn { font-weight: 600; font-size: 15px; }
+.bp-ss { color: var(--bp-muted); font-size: 12.5px; }
+.bp-chev { margin-left: auto; color: var(--bp-muted); transition: transform .15s; }
+.bp-done-stage[open] .bp-chev { transform: rotate(180deg); }

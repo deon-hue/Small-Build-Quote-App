@@ -4,7 +4,7 @@ import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { GanttState, Job, Quote } from '@/lib/types'
-import PortalGanttChart from '@/components/PortalGanttChart'
+import PortalBuildPlan from '@/components/PortalBuildPlan'
 import PortalQuoteDetailsModal from '@/components/PortalQuoteDetailsModal'
 import { fmt, Q_BADGE, Q_LABEL, calcPhaseSell, calcItemSell } from '@/lib/utils'
 import type { QuotePhase, QuoteItem } from '@/lib/types'
@@ -557,11 +557,7 @@ function PortalPreviewInner() {
                     <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 2px' }}>{j.type || 'Building Works'}</h3>
                     {j.address && <p style={{ fontSize: 13, color: 'var(--muted)', margin: 0 }}>{j.address}</p>}
                   </div>
-                  <PortalGanttChart
-                    job={j as unknown as Job}
-                    phases={[]}
-                    ganttState={j.ganttState}
-                  />
+                  <PortalBuildPlan job={j as unknown as Job} ganttState={j.ganttState} />
                 </div>
               ))
             )}
