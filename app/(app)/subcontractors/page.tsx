@@ -1543,7 +1543,7 @@ export default function SubcontractorsPage() {
                           </button>
                           <span style={{ fontSize: 13, color: '#6b7280' }}>Week of {fmtWeekRange(ws)}</span>
                           <span style={{ fontSize: 12, color: '#9ca3af' }}>· {logs.length} day{logs.length !== 1 ? 's' : ''}</span>
-                          {cashCount > 0 && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>💵 {cashCount} cash</span>}
+                          {cashCount > 0 && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>{isPaye(contactId) ? `✓ ${cashCount} paid` : `💵 ${cashCount} cash`}</span>}
                           {pendingCount > 0 && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#fef9c3', color: '#854d0e', fontWeight: 600 }}>⏳ {pendingCount} pending</span>}
                           {billPaid && approvedCount > 0 && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>✓ Bill paid</span>}
                           {billSent && !billPaid && approvedCount > 0 && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#ede9fe', color: '#6d28d9', fontWeight: 600 }}>↗ In bills</span>}
@@ -1555,9 +1555,9 @@ export default function SubcontractorsPage() {
                             : billPaid
                               ? null
                               : allPaid
-                                ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#f3f4f6', color: '#374151', fontWeight: 600 }}>✓ Cash paid</span>
+                                ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#f3f4f6', color: '#374151', fontWeight: 600 }}>{isPaye(contactId) ? '✓ Paid' : '✓ Cash paid'}</span>
                                 : billableCount > 0 && !wb && isPaye(contactId)
-                                  ? <button onClick={() => markWeekPaidCash(contactId, ws)} style={{ fontSize: 11, padding: '3px 10px', background: '#fff', border: '1px solid #d1d5db', color: '#374151', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>💵 Cash paid</button>
+                                  ? <button onClick={() => markWeekPaidCash(contactId, ws)} title="Marks every day this week as paid and records it on the job. Nothing is sent to Xero." style={{ fontSize: 11, padding: '3px 10px', background: '#fff', border: '1px solid #d1d5db', color: '#374151', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>Mark paid</button>
                                   : null
                           }
                           {billableCount > 0 && !wb && !isPaye(contactId) && (
@@ -1600,14 +1600,14 @@ export default function SubcontractorsPage() {
                                 {hasXero
                                   ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#dbeafe', color: '#1e40af', fontWeight: 600 }}>✓ Xero</span>
                                   : isPaid
-                                    ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#f3f4f6', color: '#374151', fontWeight: 600 }}>✓ Cash</span>
+                                    ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#f3f4f6', color: '#374151', fontWeight: 600 }}>{isPaye(log.contact_id) ? '✓ Paid' : '✓ Cash'}</span>
                                     : billPaid
                                       ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>✓ Bill paid</span>
                                       : billSent
                                         ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#ede9fe', color: '#6d28d9', fontWeight: 600 }}>↗ In bills</span>
                                         : <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                                             <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#fef9c3', color: '#854d0e', fontWeight: 600 }}>⏳ Pending</span>
-                                            {isPaye(log.contact_id) && <button onClick={() => markDayCash(log)} style={{ fontSize: 10, padding: '2px 7px', background: '#f9fafb', border: '1px solid #d1d5db', color: '#374151', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>💵 Cash</button>}
+                                            {isPaye(log.contact_id) && <button onClick={() => markDayCash(log)} title="Mark this day as paid and record it on the job (nothing goes to Xero)" style={{ fontSize: 10, padding: '2px 7px', background: '#f9fafb', border: '1px solid #d1d5db', color: '#374151', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>Mark paid</button>}
                                           </div>
                                 }
                               </div>
@@ -1881,7 +1881,7 @@ export default function SubcontractorsPage() {
                     <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', fontSize: 11 }}>Job</th>
                     <th style={{ padding: '8px 10px', textAlign: 'left', width: 160, fontWeight: 600, color: '#374151', fontSize: 11 }}>Rate</th>
                     <th style={{ padding: '8px 10px', textAlign: 'right', width: 80, fontWeight: 600, color: '#374151', fontSize: 11 }}>Amount</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'center', width: 72, fontWeight: 600, color: '#374151', fontSize: 11 }}>Cash paid?</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'center', width: 72, fontWeight: 600, color: '#374151', fontSize: 11 }}>{isPaye(weekSub) ? 'Paid?' : 'Cash paid?'}</th>
                     <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', fontSize: 11 }}>Notes</th>
                   </tr>
                 </thead>
@@ -1956,11 +1956,11 @@ export default function SubcontractorsPage() {
                         </td>
                         <td className="wk-cash" style={{ padding: '6px 8px', textAlign: 'center' }}>
                           {row.active ? (<>
-                            <span className="wk-lbl">Cash paid</span>
+                            <span className="wk-lbl">{isPaye(weekSub) ? 'Paid' : 'Cash paid'}</span>
                             <input
                               type="checkbox"
                               checked={row.paidCash}
-                              title={row.paidCash ? 'Paid in cash — will be linked to job, not sent to Xero' : 'Not yet paid — will generate a Xero bill'}
+                              title={isPaye(weekSub) ? (row.paidCash ? 'Paid — recorded on the job, not sent to Xero' : 'Not yet paid') : (row.paidCash ? 'Paid in cash — will be linked to job, not sent to Xero' : 'Not yet paid — will generate a Xero bill')}
                               onChange={e => setWeekRows(rows => rows.map((r, idx) => idx === i ? { ...r, paidCash: e.target.checked } : r))}
                               style={{ accentColor: '#16a34a', width: 16, height: 16, cursor: 'pointer' }}
                             />
@@ -1983,7 +1983,7 @@ export default function SubcontractorsPage() {
                       Total · {new Set(weekRows.filter(r => r.active).map(r => r.date)).size} day{new Set(weekRows.filter(r => r.active).map(r => r.date)).size === 1 ? '' : 's'} worked
                       {weekRows.some(r => r.active && r.paidCash) && (
                         <span style={{ marginLeft: 10, fontSize: 11, color: '#16a34a', fontWeight: 500 }}>
-                          · {weekRows.filter(r => r.active && r.paidCash).length} cash paid
+                          · {weekRows.filter(r => r.active && r.paidCash).length} {isPaye(weekSub) ? 'paid' : 'cash paid'}
                         </span>
                       )}
                     </td>
