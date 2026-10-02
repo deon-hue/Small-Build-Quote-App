@@ -6,7 +6,7 @@ import type { Job, QuotePhase, GanttState, GanttPhase } from '@/lib/types'
 import type { Quote } from '@/lib/types'
 import { fmt, quoteTotal, Q_BADGE, Q_LABEL, jobDisplayTitle, quoteDisplayTitle, resolveJobColor, jobProgress } from '@/lib/utils'
 import { formatGanttDuration, buildGanttFromQuote, stripPhasePrefix, resolveGanttState, workingDaySpanInCalendarDays, countWorkingDays, tidyGanttPhases } from '@/lib/gantt-utils'
-import { notifyClient } from '@/lib/notify'
+import type { NotifyClientPayload } from '@/lib/notify'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useDraggableModal } from './useDraggableModal'
@@ -53,6 +53,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
   const dirtyRef = useRef(false)
   useEffect(() => { dirtyRef.current = dirty }, [dirty])
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [notifyStatus, setNotifyStatus] = useState<'idle' | 'sending' | 'sent'>('idle')
   const router = useRouter()
 
   // ── Row editing / BO picker state ────────────────────────────
@@ -67,8 +68,8 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     return resolveGanttState(job, phases, getGanttState(job.id))
   }
 
-  // ── Save handler — silent=true skips the client notification ──
-  const handleSave = useCallback(async (overrideState?: GanttState, silent = false) => {
+  // ── Save handler — saving never notifies the client; that is the separate "Notify client" button ──
+  const handleSave = useCallback(async (overrideState?: GanttState) => {
     const s = overrideState ?? stateRef.current
     if (!s) return
     setSaveStatus('saving')
@@ -87,33 +88,11 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
           updateJob({ ...job, weeks: neededWeeks })
         }
       }
-
-      if (!silent) {
-        const client = clients.find(c =>
-          c.name?.toLowerCase() === job.client?.toLowerCase()
-        )
-        if (client?.phone || client?.email) {
-          notifyClient({
-            type:         'schedule_updated',
-            clientName:   client.name || job.client,
-            clientPhone:  client.phone || undefined,
-            clientEmail:  client.email || undefined,
-            jobType:      jobDisplayTitle(job),
-            jobAddress:   job.address,
-            companyName:  settings?.name,
-            companyPhone: settings?.phone,
-            companyEmail: settings?.email,
-            portalUrl:    typeof window !== 'undefined'
-                            ? window.location.origin + '/portal'
-                            : undefined,
-          })
-        }
-      }
     } else {
       setSaveStatus('error')
       setTimeout(() => setSaveStatus('idle'), 5000)
     }
-  }, [job, clients, settings, saveGanttState, updateJob])
+  }, [job, saveGanttState, updateJob])
 
   // Awaited by every explicit close path (× button, clicking the overlay, the linked-
   // quote "Email" button) before it actually closes — the fire-and-forget flush in the
@@ -123,7 +102,45 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
   // for every deliberate close, which is how this modal is normally left.
   async function flushBeforeClose() {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
-    if (dirtyRef.current) await handleSave(undefined, true)
+    if (dirtyRef.current) await handleSave()
+  }
+
+  // "Notify client" — its own button, independent of saving (autosave saves within ~1.5s of every edit,
+  // so tying it to "unsaved changes" left it greyed out almost immediately). Asks first, makes sure any
+  // pending edit is saved, then sends ONE message and reports honestly if nothing could be sent.
+  async function handleNotify() {
+    const client = clients.find(c => c.name?.toLowerCase() === job.client?.toLowerCase())
+    if (!client?.phone && !client?.email) {
+      window.alert('There is no email address or phone number saved for this client, so there is nobody to notify.')
+      return
+    }
+    if (!window.confirm(`Tell ${client.name || job.client} that their programme has been updated? They'll be sent a message with a link to their build plan.`)) return
+    setNotifyStatus('sending')
+    await flushBeforeClose()
+    const payload: NotifyClientPayload = {
+      type:         'schedule_updated',
+      clientName:   client.name || job.client,
+      clientPhone:  client.phone || undefined,
+      clientEmail:  client.email || undefined,
+      jobType:      jobDisplayTitle(job),
+      jobAddress:   job.address,
+      companyName:  settings?.name,
+      companyPhone: settings?.phone,
+      companyEmail: settings?.email,
+      portalUrl:    typeof window !== 'undefined' ? window.location.origin + '/portal/build-plan' : undefined,
+    }
+    let sent: { email?: boolean; whatsapp?: boolean; errors?: string[] } | undefined
+    try {
+      const res = await fetch('/api/notify-client', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      sent = (await res.json().catch(() => ({})))?.sent
+    } catch { /* handled below */ }
+    if (!sent || (!sent.email && !sent.whatsapp)) {
+      setNotifyStatus('idle')
+      window.alert('The client could not be notified.' + (sent?.errors?.length ? '\n\n' + sent.errors.join('\n') : ''))
+      return
+    }
+    setNotifyStatus('sent')
+    setTimeout(() => setNotifyStatus('idle'), 4000)
   }
 
   // ── Auto-save 1.5s after any edit ───────────────────────────
@@ -131,7 +148,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     if (!dirty) return
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
     autoSaveTimerRef.current = setTimeout(() => {
-      handleSave(undefined, true)
+      handleSave()
     }, 1500)
     return () => {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
@@ -878,24 +895,19 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     }
   }) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Save button label / colour helpers ──────────────────────
-  function saveBtnLabel() {
-    if (saveStatus === 'saving') return 'Saving…'
-    if (saveStatus === 'saved')  return '✓ Saved'
-    if (saveStatus === 'error')  return '⚠ Save failed'
-    return 'Save & Notify Client'
+  // ── Toolbar helpers ──────────────────────────────────────────
+  function statusChip(color: string, bg: string, border: string): React.CSSProperties {
+    return { fontSize: 11, fontWeight: 600, color, background: bg, border: `1px solid ${border}`, borderRadius: 20, padding: '3px 10px', whiteSpace: 'nowrap' }
   }
-  function saveBtnStyle(): React.CSSProperties {
+  function notifyBtnStyle(): React.CSSProperties {
     const base: React.CSSProperties = {
       border: 'none', borderRadius: 5, padding: '7px 18px',
       fontSize: 12, fontWeight: 700, cursor: 'pointer',
       fontFamily: 'inherit', transition: 'background 0.2s, opacity 0.2s',
     }
-    if (saveStatus === 'saving')       return { ...base, background: '#888', color: '#fff', cursor: 'default' }
-    if (saveStatus === 'saved')        return { ...base, background: '#7ab533', color: '#fff', cursor: 'default' }
-    if (saveStatus === 'error')        return { ...base, background: '#c0392b', color: '#fff' }
-    if (dirty)                         return { ...base, background: 'var(--moss)', color: '#fff' }
-    return { ...base, background: '#e0e3e0', color: '#888', cursor: 'default' }
+    if (notifyStatus === 'sending') return { ...base, background: '#888', color: '#fff', cursor: 'default' }
+    if (notifyStatus === 'sent')    return { ...base, background: '#7ab533', color: '#fff', cursor: 'default' }
+    return { ...base, background: 'var(--moss)', color: '#fff' }
   }
 
   // ── Edit row helpers ─────────────────────────────────────────
@@ -1082,25 +1094,28 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
                 </span>
               </div>
 
-              {/* Unsaved-changes pill */}
+              {/* Save status — autosave does the saving; nothing in this group ever notifies the client */}
+              {saveStatus === 'saving' && <span style={statusChip('#6b7580', '#f4f5f7', '#dde1e5')}>Saving…</span>}
+              {saveStatus === 'saved'  && <span style={statusChip('#4a7c1f', '#f0f7e2', '#c9e09b')}>✓ Saved</span>}
+              {saveStatus === 'error'  && <span style={statusChip('#c0392b', '#fdecea', '#f5b7b1')}>⚠ Save failed</span>}
               {dirty && saveStatus === 'idle' && (
-                <span style={{
-                  fontSize: 11, fontWeight: 600, color: '#e67e22',
-                  background: '#fff8ee', border: '1px solid #f5c77a',
-                  borderRadius: 20, padding: '3px 10px',
-                  display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap',
-                }}>
-                  ● Unsaved changes
-                </span>
+                <button
+                  onClick={() => handleSave()}
+                  title="Save now (changes also save by themselves a moment after you make them)"
+                  style={{ ...statusChip('#e67e22', '#fff8ee', '#f5c77a'), cursor: 'pointer', fontFamily: 'inherit' }}
+                >
+                  ● Unsaved changes · Save now
+                </button>
               )}
 
-              {/* Save button */}
+              {/* Notify the client — separate from saving, so it is always available */}
               <button
-                onClick={() => handleSave()}
-                disabled={!dirty || saveStatus === 'saving' || saveStatus === 'saved'}
-                style={saveBtnStyle()}
+                onClick={handleNotify}
+                disabled={notifyStatus === 'sending'}
+                style={notifyBtnStyle()}
+                title="Sends the client one message (email, and WhatsApp if set up) saying their programme has been updated"
               >
-                {saveBtnLabel()}
+                {notifyStatus === 'sending' ? 'Sending…' : notifyStatus === 'sent' ? '✓ Client notified' : 'Notify client'}
               </button>
             </div>
 
