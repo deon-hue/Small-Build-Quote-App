@@ -80,10 +80,14 @@ interface AdminTimeLog {
   notes: string
   entry_type: 'payable' | 'billable' | 'internal'
   status: 'pending' | 'approved' | 'paid'
+  paid_method?: PaidMethod | null
   xero_bill_id: string | null
   job_cost_id: string | null
   created_at: string
 }
+
+/** How a PAYE worker's day was paid: in cash, or through payroll. */
+type PaidMethod = 'cash' | 'paye'
 
 interface DayRow {
   date: string
@@ -94,6 +98,7 @@ interface DayRow {
   hours: string
   notes: string
   paidCash: boolean
+  paidMethod?: PaidMethod | ''
   existingId?: string
   /** The second job on a split day — a separate time log on the same date. */
   secondary?: boolean
@@ -616,7 +621,7 @@ export default function SubcontractorsPage() {
     // A day is one row, or two when the sub worked on two jobs (a split day — two logs on the same date).
     return getWeekDays(ws).flatMap((date): DayRow[] => {
       const found = existingLogs.filter(l => l.contact_id === contactId && l.entry_date === date)
-      const toRow = (ex: AdminTimeLog, secondary?: boolean): DayRow => ({ date, active: true, jobId: ex.job_id ?? '', rateType: ex.rate_type, rateAmount: ex.rate_amount.toString(), hours: ex.total_hours?.toString() ?? '', notes: ex.notes, paidCash: ex.status === 'paid', existingId: ex.id, secondary })
+      const toRow = (ex: AdminTimeLog, secondary?: boolean): DayRow => ({ date, active: true, jobId: ex.job_id ?? '', rateType: ex.rate_type, rateAmount: ex.rate_amount.toString(), hours: ex.total_hours?.toString() ?? '', notes: ex.notes, paidCash: ex.status === 'paid', paidMethod: ex.paid_method ?? '', existingId: ex.id, secondary })
       if (found.length === 0) return [{ date, active: false, jobId: '', rateType: defType, rateAmount: defRate, hours: '', notes: '', paidCash: false }]
       return found.slice(0, 2).map((ex, n) => toRow(ex, n === 1))
     })
@@ -695,6 +700,7 @@ export default function SubcontractorsPage() {
 
         if (row.paidCash && logId) {
           await sb.from('sub_admin_time_logs').update({ status: 'paid', paid_date: new Date().toISOString().slice(0, 10) }).eq('id', logId)
+          if (row.paidMethod) await recordPaidMethod([logId], row.paidMethod)
           if (row.jobId) {
             const existingLog = timeLogs.find(l => l.id === logId)
             if (existingLog?.job_cost_id) {
@@ -840,10 +846,20 @@ export default function SubcontractorsPage() {
     await load()
   }
 
-  async function markWeekPaidCash(contactId: string, ws: string) {
+  // PAYE staff can be marked paid two ways and the screen keeps them apart: in cash, or through
+  // payroll ("PAYE"). The method is a separate update so a day can still be marked paid before the
+  // paid_method column exists — it then says so, instead of failing silently.
+  async function recordPaidMethod(ids: string[], method: PaidMethod) {
+    if (ids.length === 0) return
+    const { error } = await sb.from('sub_admin_time_logs').update({ paid_method: method }).in('id', ids)
+    if (error) setError(`Marked as paid, but couldn't record that it was paid ${method === 'cash' ? 'in cash' : 'through PAYE'}. Run supabase/time-log-paid-method.sql in the Supabase SQL Editor, then mark it again.`)
+  }
+
+  async function markWeekPaid(contactId: string, ws: string, method: PaidMethod) {
     const { data: { user } } = await sb.auth.getUser()
     if (!user) return
-    const weekLogs = timeLogs.filter(l => l.contact_id === contactId && (l.week_start ?? getWeekStart(l.entry_date)) === ws)
+    // Only days not already paid, so an earlier day paid a different way keeps its own method.
+    const weekLogs = timeLogs.filter(l => l.contact_id === contactId && (l.week_start ?? getWeekStart(l.entry_date)) === ws && l.status !== 'paid')
     for (const log of weekLogs) {
       await sb.from('sub_admin_time_logs').update({ status: 'paid', paid_date: new Date().toISOString().slice(0, 10) }).eq('id', log.id)
       if (log.job_id) {
@@ -862,10 +878,11 @@ export default function SubcontractorsPage() {
         }
       }
     }
+    await recordPaidMethod(weekLogs.map(l => l.id), method)
     await load()
   }
 
-  async function markDayCash(log: AdminTimeLog) {
+  async function markDayPaid(log: AdminTimeLog, method: PaidMethod) {
     const { data: { user } } = await sb.auth.getUser()
     if (!user) return
     await sb.from('sub_admin_time_logs').update({ status: 'paid', paid_date: new Date().toISOString().slice(0, 10) }).eq('id', log.id)
@@ -884,6 +901,7 @@ export default function SubcontractorsPage() {
         if (cost?.id) await sb.from('sub_admin_time_logs').update({ job_cost_id: cost.id }).eq('id', log.id)
       }
     }
+    await recordPaidMethod([log.id], method)
     await load()
   }
 
@@ -1520,6 +1538,7 @@ export default function SubcontractorsPage() {
                   const billPaid = wb?.status === 'paid'
                   const billSent = !!wb && wb.status !== 'paid'
                   const cashCount = logs.filter(l => l.status === 'paid' && !l.xero_bill_id).length
+                  const paidBy = (m: PaidMethod | null) => logs.filter(l => l.status === 'paid' && !l.xero_bill_id && (l.paid_method ?? null) === m).length
                   const pendingCount = logs.filter(l => l.status === 'pending').length
                   const approvedCount = logs.filter(l => l.status === 'approved' && !l.xero_bill_id).length
                   const billableCount = logs.filter(l => l.status !== 'paid' && !l.xero_bill_id).length
@@ -1543,7 +1562,15 @@ export default function SubcontractorsPage() {
                           </button>
                           <span style={{ fontSize: 13, color: '#6b7280' }}>Week of {fmtWeekRange(ws)}</span>
                           <span style={{ fontSize: 12, color: '#9ca3af' }}>· {logs.length} day{logs.length !== 1 ? 's' : ''}</span>
-                          {cashCount > 0 && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>{isPaye(contactId) ? `✓ ${cashCount} paid` : `💵 ${cashCount} cash`}</span>}
+                          {isPaye(contactId) ? (
+                            <>
+                              {paidBy('cash') > 0 && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>💵 {paidBy('cash')} cash</span>}
+                              {paidBy('paye') > 0 && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#e0e7ff', color: '#4338ca', fontWeight: 600 }}>✓ {paidBy('paye')} PAYE</span>}
+                              {paidBy(null) > 0 && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>✓ {paidBy(null)} paid</span>}
+                            </>
+                          ) : (
+                            cashCount > 0 && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>💵 {cashCount} cash</span>
+                          )}
                           {pendingCount > 0 && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#fef9c3', color: '#854d0e', fontWeight: 600 }}>⏳ {pendingCount} pending</span>}
                           {billPaid && approvedCount > 0 && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>✓ Bill paid</span>}
                           {billSent && !billPaid && approvedCount > 0 && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#ede9fe', color: '#6d28d9', fontWeight: 600 }}>↗ In bills</span>}
@@ -1557,7 +1584,10 @@ export default function SubcontractorsPage() {
                               : allPaid
                                 ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#f3f4f6', color: '#374151', fontWeight: 600 }}>{isPaye(contactId) ? '✓ Paid' : '✓ Cash paid'}</span>
                                 : billableCount > 0 && !wb && isPaye(contactId)
-                                  ? <button onClick={() => markWeekPaidCash(contactId, ws)} title="Marks every day this week as paid and records it on the job. Nothing is sent to Xero." style={{ fontSize: 11, padding: '3px 10px', background: '#fff', border: '1px solid #d1d5db', color: '#374151', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>Mark paid</button>
+                                  ? <>
+                                      <button onClick={() => markWeekPaid(contactId, ws, 'cash')} title="Marks every unpaid day this week as paid in cash and records it on the job. Nothing is sent to Xero." style={{ fontSize: 11, padding: '3px 10px', background: '#fff', border: '1px solid #d1d5db', color: '#374151', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>💵 All cash</button>
+                                      <button onClick={() => markWeekPaid(contactId, ws, 'paye')} title="Marks every unpaid day this week as paid through PAYE and records it on the job. Nothing is sent to Xero." style={{ fontSize: 11, padding: '3px 10px', background: '#fff', border: '1px solid #d1d5db', color: '#374151', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>All PAYE</button>
+                                    </>
                                   : null
                           }
                           {billableCount > 0 && !wb && !isPaye(contactId) && (
@@ -1600,14 +1630,19 @@ export default function SubcontractorsPage() {
                                 {hasXero
                                   ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#dbeafe', color: '#1e40af', fontWeight: 600 }}>✓ Xero</span>
                                   : isPaid
-                                    ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#f3f4f6', color: '#374151', fontWeight: 600 }}>{isPaye(log.contact_id) ? '✓ Paid' : '✓ Cash'}</span>
+                                    ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#f3f4f6', color: '#374151', fontWeight: 600 }}>{isPaye(log.contact_id) ? (log.paid_method === 'cash' ? '✓ Cash' : log.paid_method === 'paye' ? '✓ PAYE' : '✓ Paid') : '✓ Cash'}</span>
                                     : billPaid
                                       ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>✓ Bill paid</span>
                                       : billSent
                                         ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#ede9fe', color: '#6d28d9', fontWeight: 600 }}>↗ In bills</span>
                                         : <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                                             <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#fef9c3', color: '#854d0e', fontWeight: 600 }}>⏳ Pending</span>
-                                            {isPaye(log.contact_id) && <button onClick={() => markDayCash(log)} title="Mark this day as paid and record it on the job (nothing goes to Xero)" style={{ fontSize: 10, padding: '2px 7px', background: '#f9fafb', border: '1px solid #d1d5db', color: '#374151', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>Mark paid</button>}
+                                            {isPaye(log.contact_id) && (
+                                              <>
+                                                <button onClick={() => markDayPaid(log, 'cash')} title="Paid in cash — records it on the job (nothing goes to Xero)" style={{ fontSize: 10, padding: '2px 7px', background: '#f9fafb', border: '1px solid #d1d5db', color: '#374151', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>💵 Cash</button>
+                                                <button onClick={() => markDayPaid(log, 'paye')} title="Paid through PAYE — records it on the job (nothing goes to Xero)" style={{ fontSize: 10, padding: '2px 7px', background: '#f9fafb', border: '1px solid #d1d5db', color: '#374151', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>PAYE</button>
+                                              </>
+                                            )}
                                           </div>
                                 }
                               </div>
@@ -1957,13 +1992,30 @@ export default function SubcontractorsPage() {
                         <td className="wk-cash" style={{ padding: '6px 8px', textAlign: 'center' }}>
                           {row.active ? (<>
                             <span className="wk-lbl">{isPaye(weekSub) ? 'Paid' : 'Cash paid'}</span>
-                            <input
-                              type="checkbox"
-                              checked={row.paidCash}
-                              title={isPaye(weekSub) ? (row.paidCash ? 'Paid — recorded on the job, not sent to Xero' : 'Not yet paid') : (row.paidCash ? 'Paid in cash — will be linked to job, not sent to Xero' : 'Not yet paid — will generate a Xero bill')}
-                              onChange={e => setWeekRows(rows => rows.map((r, idx) => idx === i ? { ...r, paidCash: e.target.checked } : r))}
-                              style={{ accentColor: '#16a34a', width: 16, height: 16, cursor: 'pointer' }}
-                            />
+                            {isPaye(weekSub) ? (
+                              <select
+                                value={row.paidCash ? (row.paidMethod || 'paid') : ''}
+                                title="How this day was paid — recorded on the job, nothing is sent to Xero"
+                                onChange={e => {
+                                  const v = e.target.value
+                                  setWeekRows(rows => rows.map((r, idx) => idx === i ? { ...r, paidCash: v !== '', paidMethod: v === 'cash' || v === 'paye' ? v : '' } : r))
+                                }}
+                                style={{ fontSize: 12, padding: '3px 4px', minWidth: 78 }}
+                              >
+                                <option value="">Not paid</option>
+                                <option value="cash">💵 Cash</option>
+                                <option value="paye">PAYE</option>
+                                {row.paidCash && !row.paidMethod && <option value="paid">Paid</option>}
+                              </select>
+                            ) : (
+                              <input
+                                type="checkbox"
+                                checked={row.paidCash}
+                                title={row.paidCash ? 'Paid in cash — will be linked to job, not sent to Xero' : 'Not yet paid — will generate a Xero bill'}
+                                onChange={e => setWeekRows(rows => rows.map((r, idx) => idx === i ? { ...r, paidCash: e.target.checked } : r))}
+                                style={{ accentColor: '#16a34a', width: 16, height: 16, cursor: 'pointer' }}
+                              />
+                            )}
                           </>) : <span style={{ color: '#d1d5db', fontSize: 12 }}>—</span>}
                         </td>
                         <td style={{ padding: '6px 8px' }}>
