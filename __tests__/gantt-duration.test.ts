@@ -8,7 +8,8 @@
  */
 
 import assert from 'node:assert/strict'
-import { formatGanttDuration, countWorkingDays, isNonWorkingDay, workingDaySpanInCalendarDays } from '../lib/gantt-utils'
+import { formatGanttDuration, countWorkingDays, isNonWorkingDay, workingDaySpanInCalendarDays, tidyGanttPhases } from '../lib/gantt-utils'
+import type { GanttPhase } from '../lib/types'
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -197,6 +198,83 @@ test('workingDaySpanInCalendarDays is the inverse of countWorkingDays', () => {
   const end = new Date(start)
   end.setDate(end.getDate() + span)
   assert.equal(countWorkingDays(start, end, false), 5)
+})
+
+// ─── tidyGanttPhases ────────────────────────────────────────────────────────
+
+console.log('\ntidyGanttPhases')
+
+const ph = (id: string, label: string, startDay: number, durDays: number, level: 0 | 1 | 2, parentId?: string): GanttPhase =>
+  ({ id, label, startDay, durDays, level, ...(parentId ? { parentId } : {}) })
+const ids = (r: { phases: GanttPhase[] }) => r.phases.map(p => p.id).join(',')
+
+// Two stages in the wrong order, tasks out of order inside a stage, and a stage bar that no longer
+// matches its tasks (as happens after tasks are dragged around in the Calendar).
+const messy: GanttPhase[] = [
+  ph('S2', 'Inside', 30, 10, 0),
+  ph('p3', 'Plaster', 35, 5, 1, 'S2'),
+  ph('p2', 'First fix', 30, 5, 1, 'S2'),
+  ph('S1', 'Structure', 0, 10, 0),
+  ph('p1b', 'Roof', 20, 8, 1, 'S1'),
+  ph('t1', 'Rafters', 20, 3, 2, 'p1b'),
+  ph('p1a', 'Walls', 0, 10, 1, 'S1'),
+]
+
+test('sorts stages, phases and tasks into date order, children staying under their parent', () => {
+  assert.equal(ids(tidyGanttPhases(messy)), 'S1,p1a,p1b,t1,S2,p2,p3')
+})
+
+test('re-fits each stage to cover its phases', () => {
+  const r = tidyGanttPhases(messy)
+  const s1 = r.phases.find(p => p.id === 'S1')!
+  assert.equal(s1.startDay, 0)
+  assert.equal(s1.durDays, 28)   // Walls 0-10, Roof 20-28
+  assert.equal(r.refitted, 1)    // Inside (30-40) already matched, Structure did not
+  assert.equal(r.reordered, true)
+})
+
+test('never changes a phase or task start or duration', () => {
+  const r = tidyGanttPhases(messy)
+  for (const p of messy.filter(m => (m.level ?? 1) > 0)) {
+    const after = r.phases.find(q => q.id === p.id)!
+    assert.equal(after.startDay, p.startDay)
+    assert.equal(after.durDays, p.durDays)
+  }
+})
+
+test('leaves the input untouched', () => {
+  const before = JSON.stringify(messy)
+  tidyGanttPhases(messy)
+  assert.equal(JSON.stringify(messy), before)
+})
+
+test('an already-tidy programme reports no change', () => {
+  const first = tidyGanttPhases(messy)
+  const again = tidyGanttPhases(first.phases)
+  assert.equal(again.reordered, false)
+  assert.equal(again.refitted, 0)
+  assert.equal(ids(again), ids(first))
+})
+
+test('rows with no parentId attach to the nearest row above them one level up', () => {
+  const legacy: GanttPhase[] = [
+    ph('A', 'Stage B', 10, 5, 0),
+    ph('a1', 'Later', 12, 3, 1),
+    ph('a2', 'Earlier', 10, 2, 1),
+    ph('B', 'Stage A', 0, 4, 0),
+    ph('b1', 'Only', 0, 4, 1),
+  ]
+  assert.equal(ids(tidyGanttPhases(legacy)), 'B,b1,A,a2,a1')
+})
+
+test('equal start days keep their existing order', () => {
+  const same: GanttPhase[] = [ph('x', 'X', 5, 2, 1), ph('y', 'Y', 5, 2, 1), ph('z', 'Z', 5, 2, 1)]
+  assert.equal(ids(tidyGanttPhases(same)), 'x,y,z')
+})
+
+test('a flat programme with no stages is sorted by start day', () => {
+  const flat: GanttPhase[] = [ph('c', 'C', 20, 2, 1), ph('a', 'A', 0, 2, 1), ph('b', 'B', 10, 2, 1)]
+  assert.equal(ids(tidyGanttPhases(flat)), 'a,b,c')
 })
 
 // ─── Summary ─────────────────────────────────────────────────────────────────

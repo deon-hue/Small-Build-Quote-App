@@ -248,3 +248,65 @@ export function workingDaySpanInCalendarDays(start: Date, workingDays: number, a
   }
   return span
 }
+
+/**
+ * "Tidy up" for a job's programme: after tasks have been moved around (in the Calendar or the Gantt),
+ * puts the rows back into date order and re-fits each stage to its tasks.
+ *
+ *  - Stages (level 0), the phases inside each stage, and the tasks inside each phase are each sorted
+ *    by start day (ties keep their existing order), and every child stays directly under its parent.
+ *  - Each stage's own bar is re-fitted to cover its phases, since only editing a stage ever did that.
+ *  - No phase or task's own start or duration is ever changed, so nothing moves on the Calendar.
+ *
+ * Rows are matched to their parent by `parentId`; older rows without one fall back to position
+ * (the nearest earlier row one level up). `reordered` / `refitted` say whether anything changed.
+ */
+export function tidyGanttPhases(phases: GanttPhase[]): { phases: GanttPhase[]; reordered: boolean; refitted: number } {
+  type Node = { ph: GanttPhase; idx: number; children: Node[] }
+  const nodes: Node[] = phases.map((ph, idx) => ({ ph: { ...ph }, idx, children: [] }))
+  const byId = new Map<string, Node>()
+  nodes.forEach(n => { if (n.ph.id) byId.set(n.ph.id, n) })
+
+  const roots: Node[] = []
+  const lastAtLevel: Node[] = []
+  for (const n of nodes) {
+    const level = n.ph.level ?? 1
+    let parent: Node | undefined = n.ph.parentId ? byId.get(n.ph.parentId) : undefined
+    // A parent has to sit a level above its child — anything else is a bad link, so treat it as none.
+    if (parent && (parent === n || (parent.ph.level ?? 1) >= level)) parent = undefined
+    if (!parent && !n.ph.parentId) {
+      for (let l = level - 1; l >= 0 && !parent; l--) parent = lastAtLevel[l]
+    }
+    if (parent) parent.children.push(n); else roots.push(n)
+    lastAtLevel[level] = n
+    lastAtLevel.length = level + 1
+  }
+
+  const byStart = (a: Node, b: Node) => a.ph.startDay - b.ph.startDay || a.idx - b.idx
+  let refitted = 0
+  const prepare = (n: Node) => {
+    n.children.forEach(prepare)
+    n.children.sort(byStart)
+    if ((n.ph.level ?? 1) === 0 && n.children.length) {
+      const start = Math.min(...n.children.map(c => c.ph.startDay))
+      const end = Math.max(...n.children.map(c => c.ph.startDay + c.ph.durDays))
+      if (start !== n.ph.startDay || end - start !== n.ph.durDays) {
+        n.ph.startDay = start
+        n.ph.durDays = end - start
+        refitted++
+      }
+    }
+  }
+  roots.forEach(prepare)
+  roots.sort(byStart)
+
+  const out: Node[] = []
+  const flatten = (n: Node) => { out.push(n); n.children.forEach(flatten) }
+  roots.forEach(flatten)
+
+  return {
+    phases: out.map(n => n.ph),
+    reordered: out.some((n, i) => n.idx !== i),
+    refitted,
+  }
+}

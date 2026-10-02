@@ -5,7 +5,7 @@ import { useApp } from '@/contexts/AppContext'
 import type { Job, QuotePhase, GanttState, GanttPhase } from '@/lib/types'
 import type { Quote } from '@/lib/types'
 import { fmt, quoteTotal, Q_BADGE, Q_LABEL, jobDisplayTitle, quoteDisplayTitle, resolveJobColor, jobProgress } from '@/lib/utils'
-import { formatGanttDuration, buildGanttFromQuote, stripPhasePrefix, resolveGanttState, workingDaySpanInCalendarDays, countWorkingDays } from '@/lib/gantt-utils'
+import { formatGanttDuration, buildGanttFromQuote, stripPhasePrefix, resolveGanttState, workingDaySpanInCalendarDays, countWorkingDays, tidyGanttPhases } from '@/lib/gantt-utils'
 import { notifyClient } from '@/lib/notify'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -413,7 +413,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
           <span style="display:flex;align-items:center;gap:4px;font-size:10px;color:#6b7580"><span style="width:10px;height:10px;border-radius:2px;background:${esc(resolveJobColor(job))};display:inline-block"></span>This job</span>
           <span style="display:flex;align-items:center;gap:4px;font-size:10px;color:#6b7580">✓ Complete · ▶ In progress</span>
           ${hasHierarchy ? `<button onclick="window.__ganttExpandAll()" style="font-size:10px;background:transparent;border:1px solid #dde1e5;border-radius:3px;padding:2px 8px;cursor:pointer;color:#6b7580" title="Expand all groups">▼ All</button><button onclick="window.__ganttCollapseAll()" style="font-size:10px;background:transparent;border:1px solid #dde1e5;border-radius:3px;padding:2px 8px;cursor:pointer;color:#6b7580" title="Collapse all groups">▶ All</button>` : ''}
-          ${hasHierarchy && parentPhaseIds.length > 1 ? `<button onclick="window.__ganttSortByDate()" style="font-size:10px;background:transparent;border:1px solid #dde1e5;border-radius:3px;padding:2px 8px;cursor:pointer;color:#6b7580" title="Sort phases into date order">↕ Sort by date</button>` : ''}
+          ${state.phases.length > 1 ? `<button onclick="window.__ganttTidy()" style="font-size:10px;background:transparent;border:1px solid #dde1e5;border-radius:3px;padding:2px 8px;cursor:pointer;color:#6b7580" title="Put stages and tasks back into date order and re-fit each stage to its tasks. No task dates change.">↕ Tidy up</button>` : ''}
           <button onclick="window.__ganttReset()" style="font-size:10px;background:transparent;border:1px solid #dde1e5;border-radius:3px;padding:2px 8px;cursor:pointer;color:#6b7580">Reset to default</button>
         </div>
       </div>
@@ -829,30 +829,17 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       renderGantt(s, viewMode)
     }
 
-    win.__ganttSortByDate = () => {
+    // Tidy up: stages, phases and tasks back into date order, and each stage re-fitted to its
+    // phases. Never changes a phase or task's own dates (see tidyGanttPhases).
+    win.__ganttTidy = () => {
       const s = stateRef.current
       if (!s) return
-
-      // Split flat array into ordered groups
-      type Group = { header: GanttPhase; children: GanttPhase[] }
-      const groups: Group[] = []
-      const orphans: GanttPhase[] = []
-      let cur: Group | null = null
-
-      for (const ph of s.phases) {
-        if ((ph.level ?? 1) === 0) {
-          cur = { header: ph, children: [] }
-          groups.push(cur)
-        } else if (cur) {
-          cur.children.push(ph)
-        } else {
-          orphans.push(ph)
-        }
+      const result = tidyGanttPhases(s.phases)
+      if (!result.reordered && result.refitted === 0) {
+        window.alert('Everything is already in date order.')
+        return
       }
-
-      groups.sort((a, b) => a.header.startDay - b.header.startDay)
-      s.phases = [...orphans, ...groups.flatMap(g => [g.header, ...g.children])]
-
+      s.phases = result.phases
       stateRef.current = s
       setDirty(true)
       renderGantt(s, viewMode)
@@ -887,7 +874,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       delete win.__ganttCompleteToggle
       delete win.__ganttSetPct
       delete win.__ganttMoveGroup
-      delete win.__ganttSortByDate
+      delete win.__ganttTidy
     }
   }) // eslint-disable-line react-hooks/exhaustive-deps
 
