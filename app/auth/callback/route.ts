@@ -1,16 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import type { EmailOtpType } from '@supabase/supabase-js'
 
-// Handles the magic link / OTP redirect from Supabase.
-// Supabase sends the user here with ?code=XXX — we exchange it for a session,
-// then redirect them to their destination (default: /portal).
+const OTP_TYPES: EmailOtpType[] = ['magiclink', 'signup', 'invite', 'recovery', 'email', 'email_change']
+
+// Handles the sign-in redirect for both kinds of link we send:
+//  • ?code=XXX            — links from Supabase's own emails (signInWithOtp): exchanged for a session
+//  • ?token_hash=…&type=… — links we build ourselves from admin generateLink (quote emails and
+//                           portal invites, see lib/portal-magic-link.ts): verified server-side
+// Either way the session is set in cookies here and the user is sent straight to `next`
+// (default: /portal).
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
+  const tokenHash = searchParams.get('token_hash')
+  const type = searchParams.get('type') as EmailOtpType | null
   const next = searchParams.get('next') ?? '/portal'
 
-  if (code) {
+  const hasTokenHash = !!tokenHash && !!type && OTP_TYPES.includes(type)
+
+  if (code || hasTokenHash) {
     const cookieStore = await cookies()
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -32,7 +42,10 @@ export async function GET(request: NextRequest) {
       }
     )
 
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+    const { data, error } = code
+      ? await supabase.auth.exchangeCodeForSession(code)
+      : await supabase.auth.verifyOtp({ type: type as EmailOtpType, token_hash: tokenHash as string })
+
     if (!error) {
       const email = data.session?.user?.email
       if (email) {

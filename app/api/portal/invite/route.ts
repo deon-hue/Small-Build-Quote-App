@@ -12,7 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createServiceRoleClient } from '@/lib/supabase/service-role'
+import { createPortalSignInLink } from '@/lib/portal-magic-link'
 import { portalExplainerHtml, portalWhatsAppLines } from '@/lib/portal-welcome'
 
 function esc(s: string): string {
@@ -101,12 +101,8 @@ export async function POST(req: NextRequest) {
     const firstName = (body.clientName || '').split(' ')[0] || body.clientName || 'there'
     const loginUrl = `${appUrl}/portal/login?email=${encodeURIComponent(clientEmail)}`
 
-    const { data, error: linkErr } = await createServiceRoleClient().auth.admin.generateLink({
-      type: 'magiclink',
-      email: clientEmail,
-      options: { redirectTo: `${appUrl}/auth/callback?next=/portal` },
-    })
-    if (linkErr) return NextResponse.json({ error: `Could not create the sign-in link: ${linkErr.message}` }, { status: 500 })
+    const link = await createPortalSignInLink(clientEmail, appUrl, '/portal')
+    if ('error' in link) return NextResponse.json({ error: `Could not create the sign-in link: ${link.error}` }, { status: 500 })
 
     const emailRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -115,7 +111,7 @@ export async function POST(req: NextRequest) {
         from: fromEmail,
         to: clientEmail,
         subject: `${company}: Your client portal`,
-        html: buildEmail({ firstName, company, signInUrl: data.properties.action_link, loginUrl, companyPhone, companyEmail }),
+        html: buildEmail({ firstName, company, signInUrl: link.url, loginUrl, companyPhone, companyEmail }),
         ...(companyEmail ? { reply_to: companyEmail } : {}),
       }),
     })

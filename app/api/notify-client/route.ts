@@ -33,7 +33,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createServiceRoleClient } from '@/lib/supabase/service-role'
+import { createPortalSignInLink } from '@/lib/portal-magic-link'
 import { portalExplainerHtml, portalWhatsAppLines } from '@/lib/portal-welcome'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -508,17 +508,11 @@ export async function POST(req: NextRequest) {
   let magicPortalUrl: string | null = null
   if (payload.type === 'quote_sent' && clientEmail) {
     try {
-      const svc = createServiceRoleClient()
-      const redirectTo = `${appUrl}/auth/callback?next=/portal/quotes`
-      const { data, error } = await svc.auth.admin.generateLink({
-        type: 'magiclink',
-        email: clientEmail,
-        options: { redirectTo },
-      })
-      if (error) {
-        console.error('[notify-client] generateLink failed:', error.message)
+      const link = await createPortalSignInLink(clientEmail, appUrl, '/portal/quotes')
+      if ('error' in link) {
+        console.error('[notify-client] sign-in link failed:', link.error)
       } else {
-        magicPortalUrl = data.properties.action_link
+        magicPortalUrl = link.url
         if (payload.clientId) {
           await sb.rpc('mark_portal_invite', { p_client_id: payload.clientId })
         }
