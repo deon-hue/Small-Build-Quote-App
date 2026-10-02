@@ -269,6 +269,36 @@ export default function CalendarPage() {
     return ok
   }
 
+  // Deletes a task (and any child tasks under it) — same operation as the Gantt chart's own
+  // Delete button, saved through the same shared state so the job's Gantt chart and every
+  // other Calendar view drop it at the same time. Refuses to remove a job's very last task:
+  // resolveGanttState treats an empty saved state as "nothing saved" and would quietly
+  // regenerate placeholder tasks in its place.
+  async function deleteTask(evt: CalEvent) {
+    if (!evt.phaseId) return
+    const gs = resolveGanttState(evt.job, linkedQuotePhasesFor(evt.job), ganttStates[evt.job.id])
+    const toRemove = new Set<string>()
+    const collect = (id: string) => {
+      toRemove.add(id)
+      gs.phases.filter(p => p.parentId === id).forEach(c => { if (c.id) collect(c.id) })
+    }
+    collect(evt.phaseId)
+    const remaining = gs.phases.filter(p => !p.id || !toRemove.has(p.id))
+    if (remaining.length === 0) {
+      alert("A job needs at least one task on its programme, so the last one can't be deleted.")
+      return
+    }
+    const kids = toRemove.size - 1
+    const what = kids > 0 ? `"${evt.phaseLabel}" and its ${kids} sub-task${kids === 1 ? '' : 's'}` : `"${evt.phaseLabel}"`
+    if (!confirm(`Delete ${what}? This also removes it from the job's Gantt chart.`)) return
+    setTaskSaving(true)
+    const ok = await saveGanttState(evt.job.id, { phases: remaining, totalDays: gs.totalDays })
+    setTaskSaving(false)
+    if (ok) setSelected(null)
+    else alert('Could not delete the task. Please try again.')
+    return ok
+  }
+
   // ── Drag / resize a task bar (desktop Month & Week view only — touch shows agenda
   // cards instead, so this code simply never runs there). Uses day-cell hit testing
   // (which strip/column the pointer is physically over) rather than raw pixel deltas,
@@ -878,6 +908,15 @@ export default function CalendarPage() {
               onClick={() => splitTask(evt)}
             >
               ✂ Split task
+            </button>
+            <button
+              className="btn-sm btn-outline"
+              disabled={taskSaving || !evt.phaseId}
+              style={{ width: '100%', fontSize: 13, marginTop: 8, color: '#c0392b', borderColor: '#f1b8b8' }}
+              title="Removes this task from the Calendar and from the job's Gantt chart"
+              onClick={() => deleteTask(evt)}
+            >
+              🗑 Delete task
             </button>
           </div>
 
