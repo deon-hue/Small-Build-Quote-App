@@ -819,24 +819,36 @@ export default function SubcontractorsPage() {
     await load()
   }
 
+  // Approves one pending day and records it as a job cost (Labour for PAYE staff, Subcontractors
+  // otherwise) — unpaid, and never sent anywhere. PAYE staff have no "→ Bills" step, so this is
+  // how their pending days reach the job's costs without being marked cash-paid.
+  async function approveLog(userId: string, log: AdminTimeLog) {
+    await sb.from('sub_admin_time_logs').update({ status: 'approved' }).eq('id', log.id)
+    if (log.job_id && !log.job_cost_id) {
+      const cost = await insertJobCost(sb, userId, {
+        jobId: log.job_id, source: 'timesheet', costCategory: isPaye(log.contact_id) ? 'labour' : 'subcontractors',
+        supplier: contactName(log.contact_id),
+        description: log.notes || `Sub time — ${log.entry_date}`,
+        docDate: log.entry_date, docNumber: '',
+        netAmount: log.amount, vatAmount: 0, grossAmount: log.amount,
+        paymentStatus: 'unpaid', chargeToClient: false,
+      })
+      if (cost?.id) await sb.from('sub_admin_time_logs').update({ job_cost_id: cost.id }).eq('id', log.id)
+    }
+  }
+
   async function approveWeek(contactId: string, ws: string) {
     const { data: { user } } = await sb.auth.getUser()
     if (!user) return
     const pending = timeLogs.filter(l => l.contact_id === contactId && (l.week_start ?? getWeekStart(l.entry_date)) === ws && l.status === 'pending')
-    for (const log of pending) {
-      await sb.from('sub_admin_time_logs').update({ status: 'approved' }).eq('id', log.id)
-      if (log.job_id && !log.job_cost_id) {
-        const cost = await insertJobCost(sb, user.id, {
-          jobId: log.job_id, source: 'timesheet', costCategory: isPaye(log.contact_id) ? 'labour' : 'subcontractors',
-          supplier: contactName(log.contact_id),
-          description: log.notes || `Sub time — ${log.entry_date}`,
-          docDate: log.entry_date, docNumber: '',
-          netAmount: log.amount, vatAmount: 0, grossAmount: log.amount,
-          paymentStatus: 'unpaid', chargeToClient: false,
-        })
-        if (cost?.id) await sb.from('sub_admin_time_logs').update({ job_cost_id: cost.id }).eq('id', log.id)
-      }
-    }
+    for (const log of pending) await approveLog(user.id, log)
+    await load()
+  }
+
+  async function approveDay(log: AdminTimeLog) {
+    const { data: { user } } = await sb.auth.getUser()
+    if (!user) return
+    await approveLog(user.id, log)
     await load()
   }
 
@@ -1557,7 +1569,12 @@ export default function SubcontractorsPage() {
                               : allPaid
                                 ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#f3f4f6', color: '#374151', fontWeight: 600 }}>✓ Cash paid</span>
                                 : billableCount > 0 && !wb && isPaye(contactId)
-                                  ? <button onClick={() => markWeekPaidCash(contactId, ws)} style={{ fontSize: 11, padding: '3px 10px', background: '#fff', border: '1px solid #d1d5db', color: '#374151', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>💵 Cash paid</button>
+                                  ? <>
+                                      {pendingCount > 0 && (
+                                        <button onClick={() => approveWeek(contactId, ws)} title="Records these days as Labour on the job. Doesn't mark them paid, and nothing goes to Xero." style={{ fontSize: 11, padding: '3px 10px', background: '#eef2ff', border: '1px solid #c7d2fe', color: '#4338ca', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>+ Job costs</button>
+                                      )}
+                                      <button onClick={() => markWeekPaidCash(contactId, ws)} style={{ fontSize: 11, padding: '3px 10px', background: '#fff', border: '1px solid #d1d5db', color: '#374151', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>💵 Cash paid</button>
+                                    </>
                                   : null
                           }
                           {billableCount > 0 && !wb && !isPaye(contactId) && (
@@ -1607,6 +1624,7 @@ export default function SubcontractorsPage() {
                                         ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#ede9fe', color: '#6d28d9', fontWeight: 600 }}>↗ In bills</span>
                                         : <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                                             <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#fef9c3', color: '#854d0e', fontWeight: 600 }}>⏳ Pending</span>
+                                            {isPaye(log.contact_id) && <button onClick={() => approveDay(log)} title="Record this day as Labour on the job (not marked paid, nothing goes to Xero)" style={{ fontSize: 10, padding: '2px 7px', background: '#eef2ff', border: '1px solid #c7d2fe', color: '#4338ca', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>+ Cost</button>}
                                             {isPaye(log.contact_id) && <button onClick={() => markDayCash(log)} style={{ fontSize: 10, padding: '2px 7px', background: '#f9fafb', border: '1px solid #d1d5db', color: '#374151', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>💵 Cash</button>}
                                           </div>
                                 }
