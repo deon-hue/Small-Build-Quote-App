@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { usageGuard } from '@/lib/usage'
 import { JOB_TEMPLATES } from '@/lib/utils'
 
 export const maxDuration = 300
@@ -175,17 +176,19 @@ function buildLibraryFromStatic(jobType: string): {
 // ── Route ──────────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  const sb = await createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  const limited = await usageGuard(sb, 'ai', 'scope-to-quote')
+  if (limited) return limited
+
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return NextResponse.json({ error: 'API key not configured' }, { status: 500 })
 
   const { scope, jobType } = await req.json()
   if (!scope?.trim()) return NextResponse.json({ error: 'No scope provided' }, { status: 400 })
 
-  // Get the current user so we can query their Back Office data
-  const sb = await createClient()
-  const { data: { user } } = await sb.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
-
+  // (the signed-in user was checked at the top, so their Back Office data can be queried below)
   let phaseTaskMap: Record<string, string[]>
   let parentPhaseMap: Record<string, string>
   let rateMap: Record<string, Partial<TaskLibEntry>>

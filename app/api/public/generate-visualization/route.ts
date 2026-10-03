@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { publicGuard } from '@/lib/public-guard'
 
 export const maxDuration = 60
 
 // Generates an AI architectural concept image.
 // Requires OPENAI_API_KEY in env. Returns { imageUrl } or { error }.
 export async function POST(req: NextRequest) {
+  const limited = await publicGuard(req, 'ai')
+  if (limited) return limited
+
   const openAiKey  = process.env.OPENAI_API_KEY
   const anthropicKey = process.env.ANTHROPIC_API_KEY
 

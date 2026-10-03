@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { usageGuard } from '@/lib/usage'
 
 export const maxDuration = 60
 
@@ -7,6 +8,8 @@ export async function POST(req: NextRequest) {
   const sb = await createClient()
   const { data: { user } } = await sb.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  const limited = await usageGuard(sb, 'ai', 'generate-scope')
+  if (limited) return limited
 
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {

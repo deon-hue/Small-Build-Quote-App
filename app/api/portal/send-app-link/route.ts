@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { senderFrom, withPoweredBy } from '@/lib/email-brand'
+import { senderFrom, withPoweredBy, escapeHtml } from '@/lib/email-brand'
+import { callerIsPortalOnly } from '@/lib/caller-role'
+import { usageGuard } from '@/lib/usage'
 
 function toE164(raw: string): string | null {
   let n = raw.trim().replace(/[\s\-().]/g, '')
@@ -34,6 +36,9 @@ export async function POST(req: NextRequest) {
   const sb = await createClient()
   const { data: { user } } = await sb.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  if (await callerIsPortalOnly(sb, user.id)) return NextResponse.json({ error: 'Only contractor accounts can send portal links.' }, { status: 403 })
+  const limited = await usageGuard(sb, 'send', 'send-app-link')
+  if (limited) return limited
 
   let body: { clientName: string; clientEmail?: string; clientPhone?: string; companyName?: string; companyEmail?: string }
   try { body = await req.json() } catch {
@@ -67,7 +72,7 @@ export async function POST(req: NextRequest) {
         from: senderFrom(fromEmail, companyName),
         to: clientEmail,
         subject: `${company}: Access your client portal on your phone`,
-        html: withPoweredBy(buildEmail({ firstName, company, portalUrl })),
+        html: withPoweredBy(buildEmail({ firstName: escapeHtml(firstName), company: escapeHtml(company), portalUrl })),
         ...(body.companyEmail ? { reply_to: body.companyEmail } : {}),
       }),
     })

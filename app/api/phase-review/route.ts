@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient }              from '@/lib/supabase/server'
+import { usageGuard } from '@/lib/usage'
 import { fetchSimilarPhases }        from '@/lib/quote-intelligence'
 import type { QuotePhase }           from '@/lib/types'
 
@@ -26,12 +27,14 @@ export interface PhaseReviewResult {
 }
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return NextResponse.json({ error: 'ANTHROPIC_API_KEY not set' }, { status: 500 })
-
   const sb = await createClient()
   const { data: { user } } = await sb.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  const limited = await usageGuard(sb, 'ai', 'phase-review')
+  if (limited) return limited
+
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) return NextResponse.json({ error: 'ANTHROPIC_API_KEY not set' }, { status: 500 })
 
   const { phase, jobType, markup } = await req.json() as PhaseReviewRequest
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { usageGuard } from '@/lib/usage'
 
 export const maxDuration = 300  // 5 minutes for complex scopes
 
@@ -118,6 +119,12 @@ async function fetchReferenceRates(userId: string): Promise<{ block: string; pla
 // ── Route ──────────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  const sb = await createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  const limited = await usageGuard(sb, 'ai', 'generate-phases')
+  if (limited) return limited
+
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
     return NextResponse.json({ error: 'API key not configured' }, { status: 500 })
@@ -130,10 +137,6 @@ export async function POST(req: NextRequest) {
   }
 
   // Fetch user's Back Office rates for cost grounding (non-fatal — fall back to standard rates)
-  const sb = await createClient()
-  const { data: { user } } = await sb.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
-
   let ratesBlock = ''
   let plantByKey: Record<string, PlantDefault> = {}
   try {

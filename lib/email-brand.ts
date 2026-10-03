@@ -12,6 +12,18 @@ export function senderFrom(fromEmail: string, companyName?: string): string {
   return `"${display}" <${fromEmail}>`
 }
 
+/** Escapes text for safe use inside HTML (email bodies). */
+export function escapeHtml(s: unknown): string {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+/** A copy of an object with every top-level string value HTML-escaped (numbers, booleans and nested values are left alone). */
+export function escapeStrings<T extends object>(o: T): T {
+  const out: Record<string, unknown> = { ...(o as Record<string, unknown>) }
+  for (const k of Object.keys(out)) if (typeof out[k] === 'string') out[k] = escapeHtml(out[k])
+  return out as T
+}
+
 const POWERED_BY = `<p style="text-align:center;font-size:11px;color:#9a9ea1;margin:16px 0 24px;font-family:Arial,Helvetica,sans-serif">Powered by <strong style="color:#7da826">${PRODUCT_NAME}</strong></p>`
 
 /** Adds the "Powered by" line just before the closing </body> (or at the end if there isn't one). */

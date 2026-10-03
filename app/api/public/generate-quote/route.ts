@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { publicGuard } from '@/lib/public-guard'
 import { createServiceRoleClient } from '@/lib/supabase/service-role'
 
 export const maxDuration = 30
@@ -97,6 +98,9 @@ async function fetchBuilderRates(): Promise<BuilderConfig> {
 }
 
 export async function POST(req: NextRequest) {
+  const limited = await publicGuard(req, 'ai')
+  if (limited) return limited
+
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
     return NextResponse.json({ error: 'Quote service unavailable' }, { status: 500 })

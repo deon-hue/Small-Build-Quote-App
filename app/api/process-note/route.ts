@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { usageGuard } from '@/lib/usage'
 import type { NoteTag } from '@/lib/types'
 
 const VALID_TAGS: NoteTag[] = ['snag', 'instruction', 'material', 'safety', 'general']
@@ -30,6 +31,8 @@ export async function POST(req: NextRequest) {
   const sb = await createClient()
   const { data: { user } } = await sb.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  const limited = await usageGuard(sb, 'ai', 'process-note')
+  if (limited) return limited
 
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return NextResponse.json({ error: 'Note processing not configured' }, { status: 500 })

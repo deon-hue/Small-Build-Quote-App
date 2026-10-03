@@ -1,14 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { publicGuard } from '@/lib/public-guard'
 import { createServiceRoleClient } from '@/lib/supabase/service-role'
 
 export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
+  const limited = await publicGuard(req, 'upload')
+  if (limited) return limited
+
   const body = await req.json()
   const { clientName, clientEmail, clientPhone, projectType, projectAddress, scopeText, aiPhases, estimatedTotal, clientFiles } = body
 
   if (!clientName?.trim() || !clientEmail?.trim()) {
     return NextResponse.json({ error: 'Name and email are required' }, { status: 400 })
+  }
+
+  // Field-length caps: this is a public form that writes into the inbox
+  const tooLong = (v: unknown, max: number) => typeof v === 'string' && v.length > max
+  if (tooLong(clientName, 200) || tooLong(clientEmail, 320) || tooLong(clientPhone, 60) || tooLong(projectType, 200) ||
+      tooLong(projectAddress, 500) || tooLong(scopeText, 30_000) ||
+      (Array.isArray(aiPhases) && aiPhases.length > 100) || (Array.isArray(clientFiles) && clientFiles.length > 25)) {
+    return NextResponse.json({ error: 'Some of the information is too long. Please shorten it and try again.' }, { status: 413 })
   }
 
   let sb

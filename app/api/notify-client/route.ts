@@ -33,7 +33,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { senderFrom, withPoweredBy } from '@/lib/email-brand'
+import { senderFrom, withPoweredBy, escapeStrings } from '@/lib/email-brand'
+import { usageGuard } from '@/lib/usage'
 import { callerIsPortalOnly } from '@/lib/caller-role'
 import { createPortalSignInLink } from '@/lib/portal-magic-link'
 import { portalExplainerHtml, portalWhatsAppLines } from '@/lib/portal-welcome'
@@ -162,7 +163,9 @@ async function sendWhatsApp(
 
 // ── Email (Resend) ────────────────────────────────────────────────────────────
 
-function buildEmailHtml(payload: NotifyClientPayload, portalUrl: string): string {
+function buildEmailHtml(rawPayload: NotifyClientPayload, portalUrl: string): string {
+  // Everything the sender typed is HTML-escaped before it goes into an email body
+  const payload = escapeStrings(rawPayload)
   const company = payload.companyName || 'Your Builder'
   const firstName = payload.clientName.split(' ')[0] || payload.clientName
 
@@ -478,6 +481,12 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await sb.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   if (await callerIsPortalOnly(sb, user.id)) return NextResponse.json({ error: 'Only contractor accounts can send client messages.' }, { status: 403 })
+  const limited = await usageGuard(sb, 'send', 'notify-client')
+  if (limited) {
+    // the Gantt "Notify client" button reads `sent.errors`, so put the reason there too
+    const body = await limited.json()
+    return NextResponse.json({ ...body, sent: { email: false, whatsapp: false, errors: [body.error] } }, { status: limited.status })
+  }
 
   let payload: NotifyClientPayload
   try {

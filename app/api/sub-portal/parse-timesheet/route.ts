@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { usageGuard } from '@/lib/usage'
 
 export const maxDuration = 60
 
@@ -13,12 +14,14 @@ interface ContractSummary {
 }
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return NextResponse.json({ error: 'AI not configured' }, { status: 500 })
-
   const sb = await createClient()
   const { data: { user } } = await sb.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  const limited = await usageGuard(sb, 'ai', 'parse-timesheet', { allowPortal: true })
+  if (limited) return limited
+
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) return NextResponse.json({ error: 'AI not configured' }, { status: 500 })
 
   const { text, contracts, today } = await req.json() as {
     text: string

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { publicGuard } from '@/lib/public-guard'
 
 // Public version of scope-chat — no auth required.
 // Called by the client-facing /get-quote wizard.
@@ -24,6 +25,9 @@ interface PdfBase64 {
 }
 
 export async function POST(req: NextRequest) {
+  const limited = await publicGuard(req, 'ai')
+  if (limited) return limited
+
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
     return NextResponse.json({ reply: 'Quote service is temporarily unavailable. Please call us directly.' })
@@ -39,6 +43,14 @@ export async function POST(req: NextRequest) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { messages, context, rawInput, attachments, imageRefs, pdfBase64s } = body as any
   const { jobType, address, clientName } = context || {}
+
+  // Caps on what a signed-out visitor can send (cost and abuse protection)
+  if (Array.isArray(messages) && messages.length > 40) {
+    return NextResponse.json({ reply: 'This conversation has got quite long. Please start a new one, or call us directly.' })
+  }
+  if (JSON.stringify(messages ?? '').length > 80_000) {
+    return NextResponse.json({ reply: 'That message is too long. Please shorten it and try again.' }, { status: 413 })
+  }
 
   const hasNewFiles = (Array.isArray(imageRefs) && imageRefs.length > 0) ||
                       (Array.isArray(pdfBase64s) && pdfBase64s.length > 0)
@@ -231,11 +243,15 @@ IMPORTANT: Never output [READY_TO_BUILD] without a complete [SCOPE] block. Only 
 
     // New approach: imageRefs are Supabase Storage URLs — fetch server-side to avoid client body limits
     if (Array.isArray(imageRefs) && imageRefs.length > 0) {
-      await Promise.all((imageRefs as ImageRef[]).map(async (imgRef) => {
+      const allowedPrefix = `${(process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/+$/, '')}/storage/v1/object/public/client-uploads/`
+      await Promise.all((imageRefs as ImageRef[]).slice(0, 6).map(async (imgRef) => {
         try {
+          // Only our own upload bucket: never fetch an address a visitor made up
+          if (typeof imgRef?.url !== 'string' || !process.env.NEXT_PUBLIC_SUPABASE_URL || !imgRef.url.startsWith(allowedPrefix)) return
           const imgRes = await fetch(imgRef.url)
           if (!imgRes.ok) return
           const imgBuf = await imgRes.arrayBuffer()
+          if (imgBuf.byteLength > 8 * 1024 * 1024) return
           const imgBase64 = Buffer.from(imgBuf).toString('base64')
           const contentType = imgRes.headers.get('content-type') || 'image/jpeg'
           contentItems.push({
@@ -248,7 +264,8 @@ IMPORTANT: Never output [READY_TO_BUILD] without a complete [SCOPE] block. Only 
 
     // PDFs sent as base64 directly (they're typically small)
     if (Array.isArray(pdfBase64s) && pdfBase64s.length > 0) {
-      for (const pdf of (pdfBase64s as PdfBase64[])) {
+      for (const pdf of (pdfBase64s as PdfBase64[]).slice(0, 3)) {
+        if (typeof pdf?.dataBase64 !== 'string' || pdf.dataBase64.length > 11_000_000) continue
         contentItems.push({
           type: 'document',
           source: { type: 'base64', media_type: 'application/pdf', data: pdf.dataBase64 },

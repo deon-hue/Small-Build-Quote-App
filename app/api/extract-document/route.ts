@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { usageGuard } from '@/lib/usage'
 import { extractDocument } from '@/lib/doc-extract'
 
 export const maxDuration = 60
@@ -8,6 +9,8 @@ export async function POST(req: NextRequest) {
   const sb = await createClient()
   const { data: { user } } = await sb.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  const limited = await usageGuard(sb, 'ai', 'extract-document')
+  if (limited) return limited
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json({ error: 'Extraction not configured' }, { status: 500 })

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { publicGuard } from '@/lib/public-guard'
 import { randomUUID } from 'crypto'
 import { createServiceRoleClient } from '@/lib/supabase/service-role'
 
@@ -21,6 +22,9 @@ const EXT_BY_MIME: Record<string, string> = {
 // every upload goes into its own random folder with no overwrite — nobody can replace someone else's file or
 // guess where it is.
 export async function POST(req: NextRequest) {
+  const limited = await publicGuard(req, 'upload')
+  if (limited) return limited
+
   let body: { sessionId?: string; name?: string; mimeType?: string; dataBase64?: string; isImage?: boolean }
   try {
     body = await req.json()
