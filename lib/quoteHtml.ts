@@ -2,6 +2,7 @@ import type { Quote } from './types'
 import type { Settings } from './types'
 import { VAT, calcItemSell, calcPhaseSell, calcMiscItemSell } from './utils'
 import { getPhaseVisual } from './phase-visuals'
+import { companyLegalParts } from './company-legal'
 
 function esc(s: string): string {
   return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
@@ -17,7 +18,7 @@ function companyHeaderLines(co: Settings): string {
   const lines = [
     co.tagline ? esc(co.tagline) : '',
     co.address ? `📍 ${esc(co.address)}` : '',
-    [co.email ? `📧 ${esc(co.email)}` : '', co.phone ? `📞 ${esc(co.phone)}` : ''].filter(Boolean).join(' · '),
+    [co.email ? `📧 ${esc(co.email)}` : '', co.phone ? `📞 ${esc(co.phone)}` : '', co.website ? `🌐 ${esc(co.website)}` : ''].filter(Boolean).join(' · '),
   ].filter(Boolean)
   return lines.join('<br>\n      ')
 }
@@ -222,7 +223,7 @@ ${WHATS_INCLUDED_CSS}
   <div class="footer">
     <div class="footer-divider"></div>
     <p><strong>${esc(co.name || '')}</strong><br>
-    ${esc(co.address || '')} · Registered in England &amp; Wales<br>
+    ${esc([co.address, ...companyLegalParts(co)].filter(Boolean).join(' · '))}<br>
     This quotation is valid for 30 days from the date of issue.</p>
   </div>
 </div>
@@ -430,7 +431,7 @@ ${WHATS_INCLUDED_CSS}
   <div class="footer">
     <div class="footer-divider"></div>
     <p><strong>${esc(co.name || '')}</strong><br>
-    ${esc(co.address || '')} · Registered in England &amp; Wales<br>
+    ${esc([co.address, ...companyLegalParts(co)].filter(Boolean).join(' · '))}<br>
     This quotation is valid for 30 days from the date of issue.</p>
   </div>
 </div>

@@ -289,6 +289,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           email: sd.email, address: sd.address,
           terms: sd.terms, extra: sd.extra,
           logo: sd.logo,
+          vatNumber:     sd.vat_number     ?? '',
+          companyNumber: sd.company_number ?? '',
+          website:       sd.website        ?? '',
           invoiceVatDefault:      sd.invoice_vat_default     ?? true,
           invoicePaymentDays:     sd.invoice_payment_days    ?? 30,
           invoicePaymentMethods:  sd.invoice_payment_methods ?? ['Bank Transfer'],
@@ -667,6 +670,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       xero_account_codes:       s.xeroAccountCodes      ?? null,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id' })
+    // Registration details live in their own save: if supabase/company-details.sql hasn't been run yet,
+    // only these three fields fail to save — everything above still does.
+    const { error: legalErr } = await supabase.from('settings').update({
+      vat_number: s.vatNumber ?? '', company_number: s.companyNumber ?? '', website: s.website ?? '',
+    }).eq('user_id', ownerId)
+    if (legalErr) console.error('[saveSettings] VAT/company number/website not saved — run supabase/company-details.sql:', legalErr.message)
     setSettings(s)
   }, [supabase])
 

@@ -11,6 +11,7 @@ import { PDFDocument, PDFFont, rgb, StandardFonts, PDFPage } from 'pdf-lib'
 import type { Quote, Settings } from './types'
 import { calcPhaseSell, calcItemSell, VAT } from './utils'
 import { PRODUCT_NAME } from './product-config'
+import { companyLegalParts } from './company-legal'
 
 // ── Colour helpers ────────────────────────────────────────────────────────────
 
@@ -451,7 +452,7 @@ export async function buildQuotePdf(
   function drawFooter(pg: PDFPage) {
     drawRect(pg, 0, 0, A4_W, 36, C.charcoal)
     drawText(pg, safe(co.name || 'Your Company'), MARGIN, 13, 7.5, fontRegular, C.footerText)
-    const footerRight = safe(`${co.address || ''} · Registered in England & Wales`)
+    const footerRight = safe([co.address, ...companyLegalParts(co)].filter(Boolean).join(' · '))
     const frW = fontRegular.widthOfTextAtSize(footerRight, 7.5)
     drawText(pg, footerRight, A4_W - MARGIN - frW - 80, 13, 7.5, fontRegular, C.footerText)
   }

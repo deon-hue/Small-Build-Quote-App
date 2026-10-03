@@ -516,6 +516,10 @@ export interface Settings {
   terms: string
   extra: string
   logo: string
+  // Registration details printed on quotes/invoices — each line only appears when filled in
+  vatNumber?: string
+  companyNumber?: string
+  website?: string
   // Invoice defaults
   invoiceVatDefault?: boolean        // pre-tick VAT on new invoices (default true)
   invoicePaymentDays?: number        // days until due date on new invoices (default 30)

@@ -52,6 +52,9 @@ export function buildInvoiceHtml(inv: Invoice, settings: Settings): string {
         ${settings.address ? settings.address.replace(/\n/g, '<br>') : ''}
         ${settings.phone ? `<br>${settings.phone}` : ''}
         ${settings.email ? `<br>${settings.email}` : ''}
+        ${settings.website ? `<br>${settings.website}` : ''}
+        ${settings.companyNumber ? `<br>Company No. ${settings.companyNumber}` : ''}
+        ${settings.vatNumber ? `<br>VAT No. ${settings.vatNumber}` : ''}
       </div>
     </div>
     <div style="text-align:right">

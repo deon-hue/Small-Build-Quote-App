@@ -91,6 +91,11 @@ export default function SettingsPage() {
             <div className="fg"><label>Phone</label><input {...f('phone')} placeholder="01234 567890" /></div>
           </div>
           <div className="fg"><label>Email</label><input type="email" {...f('email')} placeholder="info@company.co.uk" /></div>
+          <div className="row2">
+            <div className="fg"><label>Website</label><input {...f('website')} placeholder="www.yourcompany.co.uk" /></div>
+            <div className="fg"><label>VAT Number</label><input {...f('vatNumber')} placeholder="Leave blank if not VAT registered" /></div>
+          </div>
+          <div className="fg"><label>Company Number</label><input {...f('companyNumber')} placeholder="Limited companies only — leave blank for sole traders" /></div>
           <div className="fg"><label>Address</label><textarea value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} rows={2} placeholder="123 High Street&#10;London EC1A 1BB" /></div>
         </div>
       </div>
