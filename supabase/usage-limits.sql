@@ -3,7 +3,7 @@
 -- changes no existing data. Safe to run twice.
 --
 --  • ai_usage / consume_usage()     per-company daily counter for signed-in features. 'ai' = AI features, 'send' = emails/WhatsApp.
---                                   Default 40 AI uses and 60 messages a day per company; override per company with
+--                                   Default 100 AI uses and 60 messages a day per company; override per company with
 --                                   settings.ai_daily_limit / settings.send_daily_limit.
 --  • public_usage / consume_public_use()   per-visitor (hashed IP) and whole-site daily counters for the public, signed-out pages.
 --
@@ -12,7 +12,7 @@
 
 BEGIN;
 
-ALTER TABLE settings ADD COLUMN IF NOT EXISTS ai_daily_limit   INTEGER;   -- NULL = platform default (40)
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS ai_daily_limit   INTEGER;   -- NULL = platform default (100)
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS send_daily_limit INTEGER;   -- NULL = platform default (60)
 
 -- ── Signed-in usage ──────────────────────────────────────────────────────────
@@ -60,9 +60,9 @@ BEGIN
   -- One request at a time per company, so two quick clicks can't both slip under the limit
   PERFORM pg_advisory_xact_lock(hashtextextended('usage:' || v_owner::text, 0));
 
-  SELECT CASE WHEN p_kind = 'ai' THEN COALESCE(ai_daily_limit, 40) ELSE COALESCE(send_daily_limit, 60) END
+  SELECT CASE WHEN p_kind = 'ai' THEN COALESCE(ai_daily_limit, 100) ELSE COALESCE(send_daily_limit, 60) END
     INTO v_limit FROM settings WHERE user_id = v_owner;
-  v_limit := COALESCE(v_limit, CASE WHEN p_kind = 'ai' THEN 40 ELSE 60 END);
+  v_limit := COALESCE(v_limit, CASE WHEN p_kind = 'ai' THEN 100 ELSE 60 END);
 
   SELECT COALESCE(SUM(count), 0) INTO v_used FROM ai_usage WHERE owner_id = v_owner AND day = v_day AND kind = p_kind;
   IF v_used >= v_limit THEN

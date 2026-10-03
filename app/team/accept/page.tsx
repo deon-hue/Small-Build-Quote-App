@@ -25,6 +25,7 @@ function AcceptInviteForm() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
+  const [needsConfirm, setNeedsConfirm] = useState(false)
 
   const supabase = createClient()
 
@@ -57,12 +58,12 @@ function AcceptInviteForm() {
 
     setSubmitting(true)
     try {
-      const { error: signUpError } = await supabase.auth.signUp({
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: invite.email,
         password,
         options: {
-          // Prevent sending a confirmation email for team invites
-          emailRedirectTo: `${window.location.origin}/dashboard`,
+          // If email confirmation is on, the link in the email signs them in through /auth/callback and lands on the dashboard
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
           // Proves the person signing up holds the invite link, not just the invited email address
           data: { invite_token: token },
         },
@@ -78,9 +79,13 @@ function AcceptInviteForm() {
         return
       }
 
-      setSuccess(true)
-      // Redirect to login after a short delay
-      setTimeout(() => router.push('/login'), 3000)
+      if (signUpData.session) {
+        // Email confirmation is off for this project: they are already signed in
+        setSuccess(true)
+        setTimeout(() => router.push('/dashboard'), 2000)
+      } else {
+        setNeedsConfirm(true)
+      }
     } catch {
       setError('Something went wrong. Please try again.')
       setSubmitting(false)
@@ -113,6 +118,20 @@ function AcceptInviteForm() {
     )
   }
 
+  // ── Confirm your email ───────────────────────────────────────
+  if (needsConfirm) {
+    return (
+      <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+        <div style={{ fontSize: 40, marginBottom: 16 }}>✉️</div>
+        <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>Check your email</div>
+        <div style={{ color: 'var(--muted)', lineHeight: 1.6 }}>
+          We&apos;ve sent a confirmation link to <strong>{invite?.email}</strong>. Click it to finish setting up your account.
+          <br />Nothing after a few minutes? Check your junk folder.
+        </div>
+      </div>
+    )
+  }
+
   // ── Success ──────────────────────────────────────────────────
   if (success) {
     return (
@@ -120,7 +139,7 @@ function AcceptInviteForm() {
         <div style={{ fontSize: 40, marginBottom: 16 }}>✅</div>
         <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>Account Created!</div>
         <div style={{ color: 'var(--muted)' }}>
-          Your account has been set up. Redirecting to login…
+          Your account has been set up. Taking you to your dashboard…
         </div>
       </div>
     )
