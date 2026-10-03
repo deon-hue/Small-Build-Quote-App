@@ -4,16 +4,14 @@
   "description": "Scan receipts and job documents on site — review and extract costs back in the office.",
   "start_url": "/scan",
   "display": "standalone",
-  "background_color": "#f5f4f1",
-  "theme_color": "#2b3a2b",
+  "background_color": "#ffffff",
+  "theme_color": "#3a4149",
   "orientation": "portrait-primary",
   "icons": [
-    {
-      "src": "/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    }
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ],
   "shortcuts": [
     {

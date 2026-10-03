@@ -74,5 +74,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/|auth/|builder-game.html|portal-manifest\\.json|portal-icon\\.png|portal-icon\\.svg|manifest\\.json|sw\\.js|icon\\.svg|icon-192\\.png|icon-512\\.png|apple-touch-icon\\.png).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/|auth/|builder-game.html|portal-manifest\\.json|portal-icon\\.png|portal-icon\\.svg|manifest\\.json|sw\\.js|icon\\.svg|icon-192\\.png|icon-512\\.png|icon-maskable-512\\.png|icon-maskable\\.svg|favicon-48\\.png|apple-touch-icon\\.png).*)'],
 }

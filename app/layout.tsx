@@ -7,6 +7,13 @@ export const metadata: Metadata = {
   title: PRODUCT_NAME,
   description: `${PRODUCT_NAME} — quoting, jobs and client portals for builders.`,
   manifest: '/manifest.json',
+  icons: {
+    icon: [
+      { url: '/icon.svg', type: 'image/svg+xml' },
+      { url: '/favicon-48.png', sizes: '48x48', type: 'image/png' },
+    ],
+    apple: '/apple-touch-icon.png',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
@@ -18,7 +25,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: '#2b3a2b',
+  themeColor: '#3a4149',
   width: 'device-width',
   initialScale: 1,
 }
