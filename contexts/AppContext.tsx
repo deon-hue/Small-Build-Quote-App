@@ -181,9 +181,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setIsOwner(false)
           setPermissions(member.permissions || FULL_PERMISSIONS)
           // fire-and-forget — don't block the data load
-          supabase.from('team_members')
-            .update({ last_active_at: new Date().toISOString() })
-            .eq('id', memberRow.id)
+          // (a database function, so members never need write access to their own team record)
+          supabase.rpc('touch_team_member_activity').then(() => {}, () => {})
         } else {
           setIsOwner(true)
           setPermissions(FULL_PERMISSIONS)

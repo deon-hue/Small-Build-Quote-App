@@ -130,16 +130,16 @@ export async function POST(req: NextRequest) {
   }
 
   // Fetch user's Back Office rates for cost grounding (non-fatal — fall back to standard rates)
+  const sb = await createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+
   let ratesBlock = ''
   let plantByKey: Record<string, PlantDefault> = {}
   try {
-    const sb = await createClient()
-    const { data: { user } } = await sb.auth.getUser()
-    if (user) {
-      const rates = await fetchReferenceRates(user.id)
-      ratesBlock = rates.block
-      plantByKey = rates.plantByKey
-    }
+    const rates = await fetchReferenceRates(user.id)
+    ratesBlock = rates.block
+    plantByKey = rates.plantByKey
   } catch {
     // proceed with standard rates
   }

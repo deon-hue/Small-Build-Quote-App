@@ -63,6 +63,8 @@ function AcceptInviteForm() {
         options: {
           // Prevent sending a confirmation email for team invites
           emailRedirectTo: `${window.location.origin}/dashboard`,
+          // Proves the person signing up holds the invite link, not just the invited email address
+          data: { invite_token: token },
         },
       })
 

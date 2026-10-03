@@ -2,8 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import type { EmailOtpType } from '@supabase/supabase-js'
+import { logPortalActivity } from '@/lib/portal-activity'
 
 const OTP_TYPES: EmailOtpType[] = ['magiclink', 'signup', 'invite', 'recovery', 'email', 'email_change']
+
+// `next` comes from the link, so it must be a path on this site. Anything else (//host, /\host, user@host) would
+// turn a genuine sign-in link into a redirect to someone else's website.
+function safeNext(raw: string | null): string {
+  const fallback = '/portal'
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return fallback
+  if (/[\\@\u0000-\u001f]/.test(raw)) return fallback
+  return raw
+}
 
 // Handles the sign-in redirect for both kinds of link we send:
 //  • ?code=XXX            — links from Supabase's own emails (signInWithOtp): exchanged for a session
@@ -16,7 +26,7 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get('code')
   const tokenHash = searchParams.get('token_hash')
   const type = searchParams.get('type') as EmailOtpType | null
-  const next = searchParams.get('next') ?? '/portal'
+  const next = safeNext(searchParams.get('next'))
 
   const hasTokenHash = !!tokenHash && !!type && OTP_TYPES.includes(type)
 
@@ -49,11 +59,7 @@ export async function GET(request: NextRequest) {
     if (!error) {
       const email = data.session?.user?.email
       if (email) {
-        fetch(`${origin}/api/portal/log-activity`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, eventType: 'sign_in' }),
-        }).catch(() => {})
+        try { await logPortalActivity(email, 'sign_in') } catch { /* logging must never block a sign-in */ }
       }
       return NextResponse.redirect(`${origin}${next}`)
     }

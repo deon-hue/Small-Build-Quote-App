@@ -184,6 +184,7 @@ export async function POST(req: NextRequest) {
   // Get the current user so we can query their Back Office data
   const sb = await createClient()
   const { data: { user } } = await sb.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
 
   let phaseTaskMap: Record<string, string[]>
   let parentPhaseMap: Record<string, string>

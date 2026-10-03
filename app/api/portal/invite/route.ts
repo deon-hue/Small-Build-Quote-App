@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { senderFrom, withPoweredBy } from '@/lib/email-brand'
+import { callerIsPortalOnly } from '@/lib/caller-role'
 import { createPortalSignInLink } from '@/lib/portal-magic-link'
 import { portalExplainerHtml, portalWhatsAppLines } from '@/lib/portal-welcome'
 
@@ -87,6 +88,7 @@ export async function POST(req: NextRequest) {
     const sb = await createClient()
     const { data: { user } } = await sb.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    if (await callerIsPortalOnly(sb, user.id)) return NextResponse.json({ error: 'Only contractor accounts can send portal invites.' }, { status: 403 })
 
     let body: { clientName?: string; clientEmail?: string; clientPhone?: string; companyName?: string; companyPhone?: string; companyEmail?: string }
     try { body = await req.json() } catch { return NextResponse.json({ error: 'Bad request' }, { status: 400 }) }
