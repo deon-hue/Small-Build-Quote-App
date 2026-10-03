@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import PWARegister from '@/components/PWARegister'
+import EnvGuard from '@/components/EnvGuard'
 import { PRODUCT_NAME } from '@/lib/product-config'
 
 export const metadata: Metadata = {
@@ -21,6 +22,8 @@ export const metadata: Metadata = {
   other: {
     'mobile-web-app-capable': 'yes',
   },
+  // The staging copy must never appear in search results
+  ...(process.env.NEXT_PUBLIC_APP_ENV === 'staging' ? { robots: { index: false, follow: false } } : {}),
 }
 
 export const viewport: Viewport = {
@@ -33,6 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
+        <EnvGuard />
         <PWARegister />
         {children}
       </body>
