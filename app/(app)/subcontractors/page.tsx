@@ -124,7 +124,7 @@ function fmtWeekRange(ws: string): string {
 export default function SubcontractorsPage() {
   const sb = createClient()
   const router = useRouter()
-  const { jobs, clients, bills, updateClient, addClient, addBill } = useApp()
+  const { jobs, clients, bills, settings, updateClient, addClient, addBill } = useApp()
   const subs = clients.filter(c => c.clientType === 'subcontractor')
 
   const [contracts, setContracts] = useState<Contract[]>([])
@@ -1078,7 +1078,7 @@ export default function SubcontractorsPage() {
       {/* Touch-only header + numbers (hidden on desktop) */}
       <div className="tp-head">
         <div>
-          <div className="tp-kicker">Small Build Company</div>
+          <div className="tp-kicker">{settings.name}</div>
           <h1 className="tp-title">Subcontractors</h1>
         </div>
         <button className="tp-btn" onClick={() => openWeekSheet()}>+ Log Time</button>

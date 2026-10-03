@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
 
   const portalUrl  = `${appUrl}/portal`
   const firstName  = clientName.split(' ')[0] || clientName
-  const company    = companyName || 'The Small Build Co'
+  const company    = companyName || 'Your contractor'
 
   const results: { email: boolean; whatsapp: boolean; errors: string[] } = {
     email: false, whatsapp: false, errors: [],

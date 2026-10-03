@@ -7,6 +7,21 @@ function esc(s: string): string {
   return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
 }
 
+// Logo tile text when a company has no logo: its initials, never another company's.
+function companyInitials(name?: string): string {
+  return (name || '').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase()
+}
+
+// Tagline / address / contact lines of the quote header — only what this company has filled in.
+function companyHeaderLines(co: Settings): string {
+  const lines = [
+    co.tagline ? esc(co.tagline) : '',
+    co.address ? `📍 ${esc(co.address)}` : '',
+    [co.email ? `📧 ${esc(co.email)}` : '', co.phone ? `📞 ${esc(co.phone)}` : ''].filter(Boolean).join(' · '),
+  ].filter(Boolean)
+  return lines.join('<br>\n      ')
+}
+
 export interface HtmlOpts {
   showScope?: boolean
   showPaymentTerms?: boolean
@@ -134,12 +149,10 @@ ${WHATS_INCLUDED_CSS}
 </style></head><body>
 <div class="container">
   <div class="header">
-    ${co.logo ? `<img src="${co.logo}" alt="Logo" style="height:80px;max-width:160px;object-fit:contain;flex-shrink:0">` : `<div class="logo">SBC</div>`}
+    ${co.logo ? `<img src="${co.logo}" alt="Logo" style="height:80px;max-width:160px;object-fit:contain;flex-shrink:0">` : `<div class="logo">${esc(companyInitials(co.name))}</div>`}
     <div class="company-info">
-      <h1>${esc(co.name || 'Small Build Company')}</h1>
-      <p>${esc(co.tagline || 'Building Extensions & Renovations')}<br>
-      📍 ${esc(co.address || '123 High Street, London, UK')}<br>
-      📧 ${esc(co.email || 'info@company.co.uk')} · 📞 ${esc(co.phone || '')}</p>
+      <h1>${esc(co.name || '')}</h1>
+      <p>${companyHeaderLines(co)}</p>
     </div>
   </div>
 
@@ -208,7 +221,7 @@ ${WHATS_INCLUDED_CSS}
 
   <div class="footer">
     <div class="footer-divider"></div>
-    <p><strong>${esc(co.name || 'Small Build Company')}</strong><br>
+    <p><strong>${esc(co.name || '')}</strong><br>
     ${esc(co.address || '')} · Registered in England &amp; Wales<br>
     This quotation is valid for 30 days from the date of issue.</p>
   </div>
@@ -344,12 +357,10 @@ ${WHATS_INCLUDED_CSS}
 </style></head><body>
 <div class="container">
   <div class="header">
-    ${co.logo ? `<img src="${co.logo}" alt="Logo" style="height:80px;max-width:160px;object-fit:contain;flex-shrink:0">` : `<div class="logo">SBC</div>`}
+    ${co.logo ? `<img src="${co.logo}" alt="Logo" style="height:80px;max-width:160px;object-fit:contain;flex-shrink:0">` : `<div class="logo">${esc(companyInitials(co.name))}</div>`}
     <div class="company-info">
-      <h1>${esc(co.name || 'Small Build Company')}</h1>
-      <p>${esc(co.tagline || 'Building Extensions & Renovations')}<br>
-      📍 ${esc(co.address || '123 High Street, London, UK')}<br>
-      📧 ${esc(co.email || 'info@company.co.uk')} · 📞 ${esc(co.phone || '')}</p>
+      <h1>${esc(co.name || '')}</h1>
+      <p>${companyHeaderLines(co)}</p>
     </div>
   </div>
 
@@ -418,7 +429,7 @@ ${WHATS_INCLUDED_CSS}
 
   <div class="footer">
     <div class="footer-divider"></div>
-    <p><strong>${esc(co.name || 'Small Build Company')}</strong><br>
+    <p><strong>${esc(co.name || '')}</strong><br>
     ${esc(co.address || '')} · Registered in England &amp; Wales<br>
     This quotation is valid for 30 days from the date of issue.</p>
   </div>

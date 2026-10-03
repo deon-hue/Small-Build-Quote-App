@@ -126,7 +126,7 @@ export function buildJobReportHtml(data: JobReportData, settings: Settings): str
   <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px">
     <div>
       ${logoHtml}
-      <div style="font-size:20px;font-weight:700;color:#2b2f33">${settings.name || 'Company Name'}</div>
+      <div style="font-size:20px;font-weight:700;color:#2b2f33">${settings.name || ''}</div>
       ${settings.tagline ? `<div style="font-size:12px;color:#888;margin-top:2px">${settings.tagline}</div>` : ''}
       <div style="font-size:12px;color:#666;margin-top:10px;line-height:1.6">
         ${settings.address ? settings.address.replace(/\n/g, '<br>') : ''}

@@ -5,7 +5,7 @@ export const viewport: Viewport = {
 }
 
 export const metadata: Metadata = {
-  title: 'The Small Build Co | Subcontractor Portal',
+  title: 'Subcontractor Portal',
   formatDetection: { telephone: false },
 }
 
