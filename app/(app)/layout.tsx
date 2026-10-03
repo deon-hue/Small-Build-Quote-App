@@ -72,7 +72,9 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
       {open && <div className="sidebar-overlay" onClick={onClose} />}
       <aside className={`sidebar${open ? ' open' : ''}`}>
         <div className="sidebar-logo">
-          <div className="logo-name">{PRODUCT_NAME}</div>
+          <div style={{ background: '#fff', borderRadius: 8, padding: '8px 10px', marginBottom: 12 }}>
+            <img src="/buildospro-logo.png" alt={PRODUCT_NAME} style={{ display: 'block', width: '100%', height: 'auto' }} />
+          </div>
           <div className="logo-sub">{settings.name || 'Management System'}</div>
           {currentMember && (
             <div style={{ fontSize: 11, opacity: 0.75, marginTop: 3, color: 'var(--muted)' }}>{currentMember.name || currentMember.email}</div>
