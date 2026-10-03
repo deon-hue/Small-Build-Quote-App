@@ -1,4 +1,8 @@
-# Small Build Company Ltd — App Handover Document
+# BuildOS Pro — App Handover Document
+
+> BuildOS Pro is the product (app.buildospro.ai). Small Build Company Ltd is the first contractor using it.
+> The notes below are the original handover for that company and may be out of date — the app is now a
+> Next.js + Supabase project (see SETUP.md and CLAUDE.md).
 ## For Claude Code / Developer Handover
 
 ---

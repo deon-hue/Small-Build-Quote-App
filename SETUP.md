@@ -1,4 +1,4 @@
-# Setup Guide — Small Build Company (Next.js + Supabase)
+# Setup Guide — BuildOS Pro (Next.js + Supabase)
 
 ## Step 1 — Install Node.js
 

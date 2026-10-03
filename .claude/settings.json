@@ -2,6 +2,7 @@
   "permissions": {
     "allow": [
       "mcp__Claude_in_Chrome__navigate(smallbuildquoteapp.netlify.app*)",
+      "mcp__Claude_in_Chrome__navigate(app.buildospro.ai*)",
       "mcp__Claude_in_Chrome__screenshot",
       "mcp__Claude_in_Chrome__find",
       "mcp__Claude_in_Chrome__javascript_tool",
