@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { exchangeCode, fetchFirstTenant } from '@/lib/xero'
+import { siteOrigin } from '@/lib/site-origin'
 
 export async function GET(req: NextRequest) {
-  const origin = req.nextUrl.origin
+  const origin = siteOrigin(req)
   const url = req.nextUrl
   const code = url.searchParams.get('code')
   const state = url.searchParams.get('state')

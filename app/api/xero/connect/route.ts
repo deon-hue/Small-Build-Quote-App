@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { authorizeUrl, xeroConfigured } from '@/lib/xero'
+import { siteOrigin } from '@/lib/site-origin'
 
 export async function GET(req: NextRequest) {
-  const origin = req.nextUrl.origin
+  const origin = siteOrigin(req)
   const sb = await createClient()
   const { data: { user } } = await sb.auth.getUser()
   if (!user) return NextResponse.redirect(new URL('/login', origin))

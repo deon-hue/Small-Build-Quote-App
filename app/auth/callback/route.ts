@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import type { EmailOtpType } from '@supabase/supabase-js'
 import { logPortalActivity } from '@/lib/portal-activity'
+import { siteOrigin } from '@/lib/site-origin'
 
 const OTP_TYPES: EmailOtpType[] = ['magiclink', 'signup', 'invite', 'recovery', 'email', 'email_change']
 
@@ -22,7 +23,8 @@ function safeNext(raw: string | null): string {
 // Either way the session is set in cookies here and the user is sent straight to `next`
 // (default: /portal).
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url)
+  const { searchParams } = new URL(request.url)
+  const origin = siteOrigin(request)
   const code = searchParams.get('code')
   const tokenHash = searchParams.get('token_hash')
   const type = searchParams.get('type') as EmailOtpType | null
