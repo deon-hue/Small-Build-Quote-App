@@ -182,7 +182,7 @@ const PAGE_TITLES: Record<string, string> = {
 function AppLayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { permissions, isOwner, loading, currentMember, pageTitle, setPageTitle } = useApp()
+  const { permissions, isOwner, loading, hasCompany, currentMember, pageTitle, setPageTitle } = useApp()
   const [tab, setTab] = useState<string | null>(null)
 
   useEffect(() => {
@@ -200,6 +200,11 @@ function AppLayoutWrapper({ children }: { children: React.ReactNode }) {
 
   // Route-level permission guard
   const requiredPermission = ROUTE_PERMISSIONS[pathname]
+
+  // Signed in but not a contractor (a new registrant, a customer or a subcontractor): the onboarding page sorts out where they belong
+  useEffect(() => {
+    if (!loading && hasCompany === false) router.replace('/onboarding')
+  }, [loading, hasCompany, router])
   useEffect(() => {
     if (loading) return
     // Disabled team members see nothing
@@ -232,6 +237,8 @@ function AppLayoutWrapper({ children }: { children: React.ReactNode }) {
       </AppLayoutInner>
     )
   }
+
+  if (!loading && hasCompany === false) return null
 
   // Suppress content while redirecting (prevents flash)
   if (!loading && !isOwner && requiredPermission && !permissions[requiredPermission]) {

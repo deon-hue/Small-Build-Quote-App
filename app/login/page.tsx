@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { PRODUCT_NAME } from '@/lib/product-config'
@@ -14,6 +15,13 @@ export default function LoginPage() {
   const [showReset, setShowReset] = useState(false)
   const router = useRouter()
   const supabase = createClient()
+
+  // A sign-in or confirmation link that didn't work lands back here with ?error=auth
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('error') === 'auth') {
+      setError('That link has expired or was already used. If you have already confirmed your email, just sign in below.')
+    }
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -155,6 +163,9 @@ export default function LoginPage() {
           >
             Forgot password?
           </button>
+        </div>
+        <div style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', marginTop: 14 }}>
+          Have an invite code? <Link href="/register" style={{ color: 'inherit', textDecoration: 'underline' }}>Create your account</Link>
         </div>
       </div>
     </div>

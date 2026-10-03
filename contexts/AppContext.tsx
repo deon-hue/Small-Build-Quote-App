@@ -24,6 +24,8 @@ interface AppContextType {
   teamMembers: TeamMember[]
   currentMember: TeamMember | null   // null = this user is the owner
   isOwner: boolean
+  /** null until the first load finishes; false = signed in but has no company yet (customer, subcontractor, or a new registrant) */
+  hasCompany: boolean | null
   permissions: UserPermissions
 
   addJob: (job: Omit<Job, 'id'>) => Promise<Job>
@@ -153,6 +155,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [currentMember, setCurrentMember] = useState<TeamMember | null>(null)
   const [isOwner, setIsOwner] = useState(true)
+  const [hasCompany, setHasCompany] = useState<boolean | null>(null)
   const [permissions, setPermissions] = useState<UserPermissions>(FULL_PERMISSIONS)
   // Resolved owner ID used for all data inserts (ref avoids stale-closure in callbacks)
   const dataOwnerIdRef = useRef<string | null>(null)
@@ -305,6 +308,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           xeroAccountCodes: (sd.xero_account_codes as XeroAccountCodes | null) ?? undefined,
         })
       }
+
+      // "Has a company": a settings row, or (older accounts) any existing jobs/quotes/clients. If the settings lookup itself
+      // failed we assume yes — never send an established owner to onboarding because of a transient error.
+      setHasCompany(settingsRes.error ? true : !!settingsRes.data || !!jobsRes.data?.length || !!quotesRes.data?.length || !!clientsRes.data?.length)
 
       if (ganttRes.data) {
         const map: Record<string, GanttState> = {}
@@ -1108,7 +1115,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <AppContext.Provider value={{
       jobs, quotes, clients, settings, ganttStates, invoices, jobNotes, jobPayments, variations, contracts, customTemplates, loading, pageTitle, setPageTitle,
-      teamMembers, currentMember, isOwner, permissions,
+      teamMembers, currentMember, isOwner, hasCompany, permissions,
       addJob, updateJob, deleteJob,
       addQuote, updateQuote, deleteQuote,
       addClient, updateClient, deleteClient, upsertClientFromQuote, markPortalInvite,

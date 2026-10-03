@@ -1408,3 +1408,50 @@ export async function backfillQuoteItemDescriptions(sb: SupabaseClient, userId: 
     }
   }
 }
+
+// ── Starter data for a brand-new company (called once, from onboarding) ─────────────────────────────────
+// Gives a new account a usable Back Office: the standard phases/sub-phases/tasks and wall types (the same idempotent sync the
+// Back Office page runs), standard labour trades, a starter plant & equipment list and starter materials. Placeholder UK rates
+// only — nothing is copied from another company. Every step skips what already exists, so it is safe to run twice.
+// Returns the steps that failed (empty = all good); a failed step never stops the later ones.
+export async function seedStarterData(
+  sb: SupabaseClient,
+  userId: string,
+  onStep?: (message: string) => void,
+): Promise<string[]> {
+  const failed: string[] = []
+  const step = async (message: string, run: () => Promise<void>) => {
+    onStep?.(message)
+    try { await run() } catch (err) { console.error('[seedStarterData]', message, err); failed.push(message) }
+  }
+
+  await step('Setting up phases, tasks and wall types…', async () => { await syncBackOfficeFromProduct(sb, userId) })
+
+  await step('Adding standard labour rates…', async () => {
+    const { count } = await sb.from('bo_labour_trades').select('*', { count: 'exact', head: true }).eq('user_id', userId)
+    if (count) return
+    const { error } = await sb.from('bo_labour_trades').insert(
+      DEFAULT_LABOUR.map((t, i) => ({ user_id: userId, name: t.name, day_rate: t.day_rate, markup_pct: t.markup, display_order: i }))
+    )
+    if (error) throw error
+  })
+
+  await step('Adding a starter plant and equipment list…', async () => {
+    const existing = await fetchPlantItems(sb, userId)
+    await seedPlantLibrary(sb, userId, existing)
+  })
+
+  await step('Adding starter materials…', async () => {
+    const { count } = await sb.from('bo_products').select('*', { count: 'exact', head: true }).eq('user_id', userId)
+    if (count) return
+    const { error } = await sb.from('bo_products').insert(
+      DEFAULT_PRODUCTS.map(p => ({
+        user_id: userId, name: p.name, category: p.category, unit: p.unit,
+        default_cost: p.cost, supplier: p.supplier, waste_pct: p.waste, markup_pct: p.markup,
+      }))
+    )
+    if (error) throw error
+  })
+
+  return failed
+}

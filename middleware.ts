@@ -13,6 +13,7 @@ export async function middleware(request: NextRequest) {
   const isAdminLogin     = pathname === '/login'
   const isTeamAccept     = pathname.startsWith('/team/accept')  // invite acceptance — no auth needed
   const isPublicRoute    = pathname.startsWith('/get-quote')    // public client-facing pages — no auth needed
+    || pathname === '/register' || pathname === '/terms' || pathname === '/privacy'
 
   let supabaseResponse = NextResponse.next({ request })
 
