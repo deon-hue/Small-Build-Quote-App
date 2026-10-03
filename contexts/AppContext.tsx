@@ -291,6 +291,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           vatNumber:     sd.vat_number     ?? '',
           companyNumber: sd.company_number ?? '',
           website:       sd.website        ?? '',
+          defaultMarkup: sd.default_markup != null ? Number(sd.default_markup) : 20,
+          vatRegistered: sd.vat_registered ?? false,
+          vatRate:       sd.vat_rate != null ? Number(sd.vat_rate) : 20,
           invoiceVatDefault:      sd.invoice_vat_default     ?? true,
           invoicePaymentDays:     sd.invoice_payment_days    ?? 30,
           invoicePaymentMethods:  sd.invoice_payment_methods ?? ['Bank Transfer'],
@@ -673,6 +676,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // only these three fields fail to save — everything above still does.
     const { error: legalErr } = await supabase.from('settings').update({
       vat_number: s.vatNumber ?? '', company_number: s.companyNumber ?? '', website: s.website ?? '',
+      default_markup: s.defaultMarkup ?? 20, vat_registered: s.vatRegistered ?? false, vat_rate: s.vatRate ?? 20,
     }).eq('user_id', ownerId)
     if (legalErr) console.error('[saveSettings] VAT/company number/website not saved — run supabase/company-details.sql:', legalErr.message)
     setSettings(s)

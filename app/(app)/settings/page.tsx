@@ -100,6 +100,41 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* Public Get-a-Quote estimate */}
+      <div className="card">
+        <div className="card-hd">Get-a-Quote Page Estimate</div>
+        <div style={{ padding: '18px 20px' }}>
+          <div style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 14, lineHeight: 1.5 }}>
+            The instant estimate your website visitors see. It starts from your Back Office rates, adds your markup, then adds VAT on top if you are VAT registered.
+          </div>
+          <div className="row2">
+            <div className="fg">
+              <label>Markup on costs (%)</label>
+              <input type="number" min={0} max={200} step={0.5}
+                value={form.defaultMarkup ?? 20}
+                onChange={e => setForm(p => ({ ...p, defaultMarkup: e.target.value === '' ? 0 : Number(e.target.value) }))} />
+            </div>
+            <div className="fg">
+              <label>VAT rate (%)</label>
+              <input type="number" min={0} max={100} step={0.5}
+                value={form.vatRate ?? 20} disabled={!form.vatRegistered}
+                onChange={e => setForm(p => ({ ...p, vatRate: e.target.value === '' ? 0 : Number(e.target.value) }))} />
+            </div>
+          </div>
+          <div className="fg">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={form.vatRegistered ?? false}
+                onChange={e => setForm(p => ({ ...p, vatRegistered: e.target.checked }))}
+                style={{ width: 'auto', accentColor: 'var(--moss)' }}
+              />
+              <span>We are VAT registered — add VAT to the website estimate</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
       {/* Terms */}
       <div className="card">
         <div className="card-hd">Payment Terms</div>

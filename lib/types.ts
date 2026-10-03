@@ -520,6 +520,10 @@ export interface Settings {
   vatNumber?: string
   companyNumber?: string
   website?: string
+  // Public Get-a-Quote estimate: markup added to the AI's costs, and whether/how VAT is added on top
+  defaultMarkup?: number   // % (default 20)
+  vatRegistered?: boolean
+  vatRate?: number         // % (default 20)
   // Invoice defaults
   invoiceVatDefault?: boolean        // pre-tick VAT on new invoices (default true)
   invoicePaymentDays?: number        // days until due date on new invoices (default 30)
