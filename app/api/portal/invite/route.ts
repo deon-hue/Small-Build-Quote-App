@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { senderFrom, withPoweredBy } from '@/lib/email-brand'
 import { createPortalSignInLink } from '@/lib/portal-magic-link'
 import { portalExplainerHtml, portalWhatsAppLines } from '@/lib/portal-welcome'
 
@@ -108,10 +109,10 @@ export async function POST(req: NextRequest) {
       method: 'POST',
       headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        from: fromEmail,
+        from: senderFrom(fromEmail, body.companyName),
         to: clientEmail,
         subject: `${company}: Your client portal`,
-        html: buildEmail({ firstName, company, signInUrl: link.url, loginUrl, companyPhone, companyEmail }),
+        html: withPoweredBy(buildEmail({ firstName, company, signInUrl: link.url, loginUrl, companyPhone, companyEmail })),
         ...(companyEmail ? { reply_to: companyEmail } : {}),
       }),
     })

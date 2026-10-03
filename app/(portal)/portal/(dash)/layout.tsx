@@ -1,11 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { PortalProvider, usePortal } from '@/contexts/PortalContext'
 import { createClient } from '@/lib/supabase/client'
 import PortalInstallBanner from '@/components/PortalInstallBanner'
+import { PRODUCT_NAME } from '@/lib/product-config'
 
 function PortalNav() {
   const pathname = usePathname()
@@ -13,6 +14,11 @@ function PortalNav() {
   const supabase = createClient()
   const { settings, clientSettings } = usePortal()
   const [menuOpen, setMenuOpen] = useState(false)
+
+  // Tab title shows the contractor's name once their settings have loaded
+  useEffect(() => {
+    if (settings.name) document.title = `${settings.name} | Client Portal`
+  }, [settings.name])
 
   async function signOut() {
     await supabase.auth.signOut()
@@ -70,6 +76,9 @@ function PortalLayoutInner({ children }: { children: React.ReactNode }) {
       <main className="portal-main">
         {children}
       </main>
+      <div style={{ textAlign: 'center', fontSize: 11, color: '#9a9ea1', padding: '8px 0 28px' }}>
+        Powered by <strong style={{ color: '#7da826' }}>{PRODUCT_NAME}</strong>
+      </div>
       <PortalInstallBanner />
     </div>
   )

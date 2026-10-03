@@ -33,6 +33,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { senderFrom, withPoweredBy } from '@/lib/email-brand'
 import { createPortalSignInLink } from '@/lib/portal-magic-link'
 import { portalExplainerHtml, portalWhatsAppLines } from '@/lib/portal-welcome'
 
@@ -352,7 +353,7 @@ async function sendEmail(
   attachment?: { filename: string; content: string } | null,
   replyTo?: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const payload: Record<string, unknown> = { from, to, subject, html }
+  const payload: Record<string, unknown> = { from, to, subject, html: withPoweredBy(html) }
   if (replyTo) payload.reply_to = replyTo
   if (attachment) {
     payload.attachments = [{
@@ -562,7 +563,7 @@ export async function POST(req: NextRequest) {
 
       // Route any client reply straight to the real business inbox rather
       // than the no-reply sending address, so nothing gets lost.
-      const result = await sendEmail(clientEmail, subject, html, resendKey, fromEmail, attachment, payload.companyEmail || undefined)
+      const result = await sendEmail(clientEmail, subject, html, resendKey, senderFrom(fromEmail, payload.companyName), attachment, payload.companyEmail || undefined)
       results.email = result.ok
       if (!result.ok) {
         results.errors.push(`Email: ${result.error}`)

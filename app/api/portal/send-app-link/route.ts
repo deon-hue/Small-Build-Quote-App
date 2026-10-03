@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { senderFrom, withPoweredBy } from '@/lib/email-brand'
 
 function toE164(raw: string): string | null {
   let n = raw.trim().replace(/[\s\-().]/g, '')
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await sb.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
 
-  let body: { clientName: string; clientEmail?: string; clientPhone?: string; companyName?: string }
+  let body: { clientName: string; clientEmail?: string; clientPhone?: string; companyName?: string; companyEmail?: string }
   try { body = await req.json() } catch {
     return NextResponse.json({ error: 'Bad request' }, { status: 400 })
   }
@@ -63,10 +64,11 @@ export async function POST(req: NextRequest) {
       method: 'POST',
       headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        from: fromEmail,
+        from: senderFrom(fromEmail, companyName),
         to: clientEmail,
         subject: `${company}: Access your client portal on your phone`,
-        html: buildEmail({ firstName, company, portalUrl }),
+        html: withPoweredBy(buildEmail({ firstName, company, portalUrl })),
+        ...(body.companyEmail ? { reply_to: body.companyEmail } : {}),
       }),
     })
     results.email = res.ok
