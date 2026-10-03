@@ -52,7 +52,7 @@ export default function LoginPage() {
       <div className="login-page">
         <div className="login-box">
           <div style={{ marginBottom: 28, textAlign: 'center' }}>
-            <div className="logo-name" style={{ fontSize: 22, marginBottom: 4 }}>{PRODUCT_NAME}</div>
+            <img src="/buildospro-logo.png" alt={PRODUCT_NAME} style={{ width: 230, maxWidth: '80%', height: 'auto', marginBottom: 6 }} />
             <div className="logo-sub" style={{ color: 'var(--muted)' }}>Reset Password</div>
           </div>
 
@@ -98,9 +98,7 @@ export default function LoginPage() {
     <div className="login-page">
       <div className="login-box">
         <div style={{ marginBottom: 28, textAlign: 'center' }}>
-          <div className="logo-name" style={{ fontSize: 22, marginBottom: 4 }}>
-            {PRODUCT_NAME}
-          </div>
+          <img src="/buildospro-logo.png" alt={PRODUCT_NAME} style={{ width: 230, maxWidth: '80%', height: 'auto', marginBottom: 6 }} />
           <div className="logo-sub" style={{ color: 'var(--muted)' }}>Management System</div>
         </div>
 
