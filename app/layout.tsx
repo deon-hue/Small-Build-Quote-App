@@ -1,14 +1,16 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import PWARegister from '@/components/PWARegister'
+import { PRODUCT_NAME } from '@/lib/product-config'
 
 export const metadata: Metadata = {
-  title: 'The Small Build Co',
+  title: PRODUCT_NAME,
+  description: `${PRODUCT_NAME} — quoting, jobs and client portals for builders.`,
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'Small Build',
+    title: PRODUCT_NAME,
   },
   other: {
     'mobile-web-app-capable': 'yes',

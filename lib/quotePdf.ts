@@ -10,6 +10,7 @@
 import { PDFDocument, PDFFont, rgb, StandardFonts, PDFPage } from 'pdf-lib'
 import type { Quote, Settings } from './types'
 import { calcPhaseSell, calcItemSell, VAT } from './utils'
+import { PRODUCT_NAME } from './product-config'
 
 // ── Colour helpers ────────────────────────────────────────────────────────────
 
@@ -145,8 +146,8 @@ export async function buildQuotePdf(
   // ── Create document and embed fonts ──────────────────────────────────────
   const pdfDoc = await PDFDocument.create()
   pdfDoc.setTitle(`Quote ${quote.ref || ''} — ${quote.customer.name || ''}`)
-  pdfDoc.setAuthor(co.name || 'Buildospro')
-  pdfDoc.setCreator('Buildospro Quote Builder')
+  pdfDoc.setAuthor(co.name || PRODUCT_NAME)
+  pdfDoc.setCreator(`${PRODUCT_NAME} Quote Builder`)
 
   const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica)
   const fontBold    = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
@@ -209,7 +210,7 @@ export async function buildQuotePdf(
   y = A4_H - HEADER_H
 
   // Company name + tagline
-  drawText(page, safe(co.name || 'Buildospro Ltd'), MARGIN, y + 40, 18, fontBold, C.white)
+  drawText(page, safe(co.name || 'Your Company'), MARGIN, y + 40, 18, fontBold, C.white)
   drawText(page, safe(co.tagline || 'Building Extensions & Renovations').toUpperCase(), MARGIN, y + 22, 7.5, fontRegular, C.lightGreen)
 
   // Quote ref (right side)
@@ -449,7 +450,7 @@ export async function buildQuotePdf(
   // ── Footer helper ──────────────────────────────────────────────────────────
   function drawFooter(pg: PDFPage) {
     drawRect(pg, 0, 0, A4_W, 36, C.charcoal)
-    drawText(pg, safe(co.name || 'Buildospro Ltd'), MARGIN, 13, 7.5, fontRegular, C.footerText)
+    drawText(pg, safe(co.name || 'Your Company'), MARGIN, 13, 7.5, fontRegular, C.footerText)
     const footerRight = safe(`${co.address || ''} · Registered in England & Wales`)
     const frW = fontRegular.widthOfTextAtSize(footerRight, 7.5)
     drawText(pg, footerRight, A4_W - MARGIN - frW - 80, 13, 7.5, fontRegular, C.footerText)

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { PRODUCT_NAME } from '@/lib/product-config'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -35,7 +36,7 @@ export default function LoginPage() {
     setLoading(true)
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+        redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
       })
       if (error) throw error
       setResetSent(true)
@@ -51,7 +52,7 @@ export default function LoginPage() {
       <div className="login-page">
         <div className="login-box">
           <div style={{ marginBottom: 28, textAlign: 'center' }}>
-            <div className="logo-name" style={{ fontSize: 22, marginBottom: 4 }}>Buildospro</div>
+            <div className="logo-name" style={{ fontSize: 22, marginBottom: 4 }}>{PRODUCT_NAME}</div>
             <div className="logo-sub" style={{ color: 'var(--muted)' }}>Reset Password</div>
           </div>
 
@@ -98,7 +99,7 @@ export default function LoginPage() {
       <div className="login-box">
         <div style={{ marginBottom: 28, textAlign: 'center' }}>
           <div className="logo-name" style={{ fontSize: 22, marginBottom: 4 }}>
-            Buildospro
+            {PRODUCT_NAME}
           </div>
           <div className="logo-sub" style={{ color: 'var(--muted)' }}>Management System</div>
         </div>

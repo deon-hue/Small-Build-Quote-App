@@ -10,6 +10,7 @@ import type { UserPermissions } from '@/lib/types'
 import QuickNotesModal from '@/components/QuickNotesModal'
 import MobileLauncher from '@/components/MobileLauncher'
 import BuildStamp from '@/components/BuildStamp'
+import { PRODUCT_NAME } from '@/lib/product-config'
 
 // Routes that require a specific permission key
 const ROUTE_PERMISSIONS: Partial<Record<string, keyof UserPermissions>> = {
@@ -71,12 +72,11 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
       {open && <div className="sidebar-overlay" onClick={onClose} />}
       <aside className={`sidebar${open ? ' open' : ''}`}>
         <div className="sidebar-logo">
-          <div className="logo-name">{settings.name || 'Buildospro'}</div>
-          <div className="logo-sub">
-            {currentMember
-              ? <span style={{ fontSize: 11, opacity: 0.75 }}>{currentMember.name || currentMember.email}</span>
-              : settings.tagline || 'Management System'}
-          </div>
+          <div className="logo-name">{PRODUCT_NAME}</div>
+          <div className="logo-sub">{settings.name || 'Management System'}</div>
+          {currentMember && (
+            <div style={{ fontSize: 11, opacity: 0.75, marginTop: 3, color: 'var(--muted)' }}>{currentMember.name || currentMember.email}</div>
+          )}
         </div>
         <nav className="nav">
           <div className="nav-section">Overview</div>

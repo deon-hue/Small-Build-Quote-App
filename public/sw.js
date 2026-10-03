@@ -1,7 +1,7 @@
-// Small Build Company — Service Worker
+// BuildOS Pro — Service Worker
 // Minimal: network-first for all requests, caches /scan for offline fallback.
 
-const CACHE = 'sbc-shell-v1'
+const CACHE = 'bos-shell-v1'
 const SHELL = ['/scan']
 
 self.addEventListener('install', e => {

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useApp } from '@/contexts/AppContext'
 import { fmt, VAT, JOB_TYPES, calcPhase, calcPhaseSell, uid } from '@/lib/utils'
+import { PRODUCT_NAME } from '@/lib/product-config'
 import type { QuotePhase, QuoteItem, Quote, TakeoffPhaseMeta, QuoteDocument, QuoteMiscItem } from '@/lib/types'
 import QuoteAttachments from '@/components/QuoteAttachments'
 import QuickQuoteItemsEditor from '@/components/QuickQuoteItemsEditor'
@@ -432,10 +433,10 @@ export default function NewQuotePage() {
     if (editingId) {
       const quote = quotes.find(q => q.id === editingId)
       setPageTitle(`Editing: ${quote?.ref || 'Quote'}`)
-      document.title = `Editing: ${quote?.ref || 'Quote'} - Small Build Quote App`
+      document.title = `Editing: ${quote?.ref || 'Quote'} - ${PRODUCT_NAME}`
     } else {
       setPageTitle(null)
-      document.title = 'New Quote - Small Build Quote App'
+      document.title = `New Quote - ${PRODUCT_NAME}`
     }
   }, [editingId, quotes, setPageTitle])
 
