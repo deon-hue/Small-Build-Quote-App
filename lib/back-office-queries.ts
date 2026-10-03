@@ -178,7 +178,9 @@ export async function upsertTask(sb: SupabaseClient, task: Partial<BOTask> & { u
 export async function upsertTaskWithError(sb: SupabaseClient, task: Partial<BOTask> & { user_id: string }): Promise<{ data: BOTask | null; error: string | null }> {
   // Strip empty id (causes "invalid uuid" error) and empty timestamp strings
   // (empty string is invalid for TIMESTAMPTZ — same root cause as the product save bug).
-  const { id, created_at, updated_at: _u, recipe_items: _r, ...rest } = task as BOTask & { created_at?: string; updated_at?: string; recipe_items?: unknown }
+  // recipe_items (the per-line labour/material/plant breakdown) is saved too now that supabase/phase15.sql has been
+  // run; it used to be stripped because the column didn't exist on the live database.
+  const { id, created_at, updated_at: _u, ...rest } = task as BOTask & { created_at?: string; updated_at?: string }
   const payload: Record<string, unknown> = { ...rest, updated_at: new Date().toISOString() }
   if (id)         payload.id         = id
   if (created_at) payload.created_at = created_at

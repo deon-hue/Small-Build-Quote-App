@@ -124,8 +124,8 @@ Rules:
 - For unlisted items use realistic UK 2024 contractor rates (ex-VAT)
 - labour = direct labour; materials = components; plant = machinery/scaffold/skips; subcontractors = specialists; other = fees/provisional sums
 - All cost fields must be numbers
-- Notes fields max 6 words or empty string
-- Aim for 15 to 25 sub-phases; keep the JSON compact
+- Leave every Notes field as an empty string (they are not shown to the visitor)
+- Aim for 15 to 20 sub-phases; keep the JSON compact
 - Do not include profit, markup or VAT${ratesBlock}`
 
   const userMessage = `Job type: ${jobType || 'general building works'}
@@ -148,7 +148,7 @@ Generate a full phase cost breakdown scaled to this scope.`
         // Haiku, like the contractor-side tools: Netlify cuts a request off at ~30s, and Sonnet writing a full
         // breakdown (it used to ask for up to 8192 tokens) ran past that and the visitor saw "Failed to generate".
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 5000,
+        max_tokens: 4500,
         system,
         messages: [
           { role: 'user', content: userMessage },
