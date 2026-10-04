@@ -7,6 +7,7 @@ export const metadata = { title: `Privacy notice — ${PRODUCT_NAME}` }
 // contact details) before any wider launch.
 export default function PrivacyPage() {
   return (
+    <div style={{ height: '100vh', overflowY: 'auto' }}>
     <div style={{ maxWidth: 720, margin: '0 auto', padding: '40px 20px 80px', lineHeight: 1.65, fontSize: 15 }}>
       <h1 style={{ fontSize: 26, marginBottom: 4 }}>Privacy notice</h1>
       <p style={{ color: '#6b7580', marginTop: 0 }}>{PRODUCT_NAME} private beta. Draft. Last updated October 2026.</p>
@@ -32,6 +33,7 @@ export default function PrivacyPage() {
       <p>You can ask to see, correct, export or delete your information at any time, and we can close your account. Contact the person who invited you to the beta.</p>
 
       <p style={{ marginTop: 32 }}><Link href="/register">← Back to registration</Link></p>
+    </div>
     </div>
   )
 }
