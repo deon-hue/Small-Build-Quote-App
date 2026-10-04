@@ -365,6 +365,24 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
                   ⚠️ {error}
                 </div>
               )}
+              {!quote && (
+                <div style={{ background: 'rgba(0,0,0,0.04)', borderRadius: 8, padding: '10px 14px', fontSize: 12 }}>
+                  This job has no linked quote, so the scope of works can&rsquo;t follow a quote. Type it into &ldquo;Works provided&rdquo; under Site, Scope &amp; Documents.
+                </div>
+              )}
+              {scopeNote === 'updated' && quote && (
+                <div style={{ background: 'rgba(122,181,51,0.12)', border: '1px solid rgba(122,181,51,0.45)', borderRadius: 8, padding: '10px 14px', fontSize: 12 }}>
+                  ✓ The scope of works on quote <strong>{quote.ref}</strong> had changed, so the contract&rsquo;s &ldquo;Works provided&rdquo; has been updated to match it.
+                </div>
+              )}
+              {scopeNote === 'changed' && quote && (
+                <div style={{ background: '#fff8e1', border: '1px solid #ffe082', borderRadius: 8, padding: '10px 14px', fontSize: 12, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ flex: 1 }}>
+                    ⚠️ The scope of works on quote <strong>{quote.ref}</strong> is different from the &ldquo;Works provided&rdquo; on this contract. The contract still has its own wording.
+                  </span>
+                  <button type="button" className="btn-sm btn-primary" onClick={() => { setFields(prev => ({ ...prev, [F.worksProvided]: quote.scope || '', [SCOPE_SNAPSHOT]: quote.scope || '' })); setScopeNote('') }}>Use the quote&rsquo;s scope</button>
+                </div>
+              )}
 
               <CollapsibleSection title="Client & Builder" defaultOpen>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
@@ -399,17 +417,7 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
                 <div style={{ marginBottom: 10 }}>
                   <Field label="Works provided (scope)" value={String(fields[F.worksProvided] || '')} onChange={v => { set(F.worksProvided, v); setScopeNote('') }} textarea rows={8}
                     hint="Comes from the quote's Scope of Works. A scope too long for the contract's one-line box is printed in full on a Schedule 1 page at the end of the contract." />
-                  {scopeNote === 'updated' && (
-                    <div style={{ fontSize: 12, marginTop: 6, padding: '6px 10px', background: 'rgba(122,181,51,0.12)', borderRadius: 6 }}>
-                      ✓ The quote&rsquo;s scope of works had changed, so this has been updated to match it.
-                    </div>
-                  )}
-                  {scopeNote === 'changed' && quote && (
-                    <div style={{ fontSize: 12, marginTop: 6, padding: '8px 10px', background: '#fff8e1', border: '1px solid #ffe082', borderRadius: 6, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                      <span style={{ flex: 1 }}>The quote&rsquo;s scope of works is different from this. Your wording above has been kept.</span>
-                      <button type="button" className="btn-sm btn-outline" onClick={() => { setFields(prev => ({ ...prev, [F.worksProvided]: quote.scope || '', [SCOPE_SNAPSHOT]: quote.scope || '' })); setScopeNote('') }}>Use the quote&rsquo;s scope</button>
-                    </div>
-                  )}
+
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   <Field label="Drawings referenced" value={String(fields[F.drawings] || '')} onChange={v => set(F.drawings, v)} />
