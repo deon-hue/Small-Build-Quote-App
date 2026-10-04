@@ -6,6 +6,10 @@ import { createClient } from '@/lib/supabase/client'
 import type { GanttState, Job, Quote } from '@/lib/types'
 import PortalBuildPlan from '@/components/PortalBuildPlan'
 import PortalQuoteDetailsModal from '@/components/PortalQuoteDetailsModal'
+import PortalContractsView, { PortalFileList, type PortalJobFile } from '@/components/PortalContractsView'
+import type { PortalContract } from '@/contexts/PortalContext'
+import { useApp } from '@/contexts/AppContext'
+import { signedAttachmentUrl } from '@/lib/job-attachments'
 import { fmt, Q_BADGE, Q_LABEL, calcPhaseSell, calcItemSell } from '@/lib/utils'
 import type { QuotePhase, QuoteItem } from '@/lib/types'
 
@@ -38,7 +42,7 @@ interface PreviewSettings {
   name: string; tagline: string; email: string; phone: string; address: string; logo: string
 }
 
-type Tab = 'dashboard' | 'quotes' | 'variations' | 'invoices' | 'build-plan'
+type Tab = 'dashboard' | 'quotes' | 'variations' | 'invoices' | 'contracts' | 'build-plan'
 
 // ── Status maps ──────────────────────────────────────────────
 const QUOTE_STATUS_LABEL: Record<string, string> = {
@@ -93,6 +97,44 @@ function PortalPreviewInner() {
   const [clientSettings, setClientSettings] = useState<{ quoteView?: 'full' | 'phases' | 'total_only'; showScope?: boolean }>({})
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null)
+
+  // Contracts and the job's plans/documents: read with the builder's own session (they own these rows), shaped exactly like what the
+  // client's portal receives, and shown by the same component the real portal uses (components/PortalContractsView.tsx).
+  const { contracts: appContracts } = useApp()
+  const [previewContracts, setPreviewContracts] = useState<PortalContract[]>([])
+  const [filesByJob, setFilesByJob] = useState<Record<string, PortalJobFile[]>>({})
+  useEffect(() => {
+    if (!jobs.length) return
+    let live = true
+    ;(async () => {
+      const jobIds = jobs.map(j => j.id)
+      const mine = appContracts.filter(c => jobIds.includes(c.jobId) && (c.status === 'sent' || c.status === 'signed'))
+      const { data: atts } = await supabase.from('job_attachments')
+        .select('id, job_id, storage_path, file_name, mime_type, file_size, category, label')
+        .in('job_id', jobIds)
+      const rows = (atts ?? []) as AnyRecord[]
+      const wanted = new Set<string>()
+      mine.forEach(c => { if (c.draftAttachmentId) wanted.add(c.draftAttachmentId); if (c.signedAttachmentId) wanted.add(c.signedAttachmentId) })
+      rows.forEach(r => { if (r.category === 'plan' || r.category === 'document') wanted.add(r.id) })
+      const urls = new Map<string, string | null>()
+      await Promise.all(rows.filter(r => wanted.has(r.id)).map(async r => { urls.set(r.id, await signedAttachmentUrl(supabase, r.storage_path)) }))
+      if (!live) return
+      setPreviewContracts(mine.map(c => ({
+        id: c.id, jobId: c.jobId, status: c.status, secondClientName: c.secondClientName ?? null,
+        clientSignedAt: c.clientSignedAt ?? null, clientSignedBy: c.clientSignedBy ?? null,
+        client2SignedAt: c.client2SignedAt ?? null, client2SignedBy: c.client2SignedBy ?? null,
+        createdAt: c.createdAt || '',
+        draftUrl: c.draftAttachmentId ? urls.get(c.draftAttachmentId) ?? null : null,
+        signedUrl: c.signedAttachmentId ? urls.get(c.signedAttachmentId) ?? null : null,
+      })))
+      const byJob: Record<string, PortalJobFile[]> = {}
+      rows.filter(r => r.category === 'plan' || r.category === 'document').forEach(r => {
+        (byJob[r.job_id] ||= []).push({ id: r.id, fileName: r.file_name || '', mimeType: r.mime_type || '', fileSize: Number(r.file_size) || 0, category: r.category, label: r.label || '', url: urls.get(r.id) ?? null })
+      })
+      setFilesByJob(byJob)
+    })()
+    return () => { live = false }
+  }, [jobs, appContracts]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!clientId) { setError('No client specified.'); setLoading(false); return }
@@ -207,7 +249,7 @@ function PortalPreviewInner() {
   )
 
   const TAB_LABELS: Record<Tab, string> = {
-    dashboard: 'Dashboard', quotes: 'Quotes', variations: 'Variations', invoices: 'Invoices', 'build-plan': 'Build Plan',
+    dashboard: 'Dashboard', quotes: 'Quotes', variations: 'Variations', invoices: 'Invoices', contracts: 'Contracts', 'build-plan': 'Build Plan',
   }
 
   return (
@@ -225,7 +267,7 @@ function PortalPreviewInner() {
           {/* inline display:flex overrides the @media(max-width:640px) display:none rule */}
           {/* Admin preview shows every tab, regardless of the client's hidden-tab settings */}
           <nav className="portal-nav" style={{ display: 'flex' }}>
-            {(['dashboard', 'quotes', 'variations', 'invoices', 'build-plan'] as Tab[]).map(tab => (
+            {(['dashboard', 'quotes', 'variations', 'invoices', 'contracts', 'build-plan'] as Tab[]).map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -271,6 +313,16 @@ function PortalPreviewInner() {
           ].filter(Boolean).join(' + ')
           return (
           <>
+            {previewContracts.some(c => c.status === 'sent') && (
+              <button onClick={() => setActiveTab('contracts')} style={{ all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', background: '#fff8e1', border: '1px solid #ffe082', borderRadius: 8, padding: '14px 18px', marginBottom: 20, boxSizing: 'border-box', width: '100%' } as React.CSSProperties}>
+                <span>
+                  <span style={{ display: 'block', fontWeight: 700, fontSize: 15 }}>📝 Your building contract is ready to sign</span>
+                  <span style={{ display: 'block', fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>Read it and sign it online.</span>
+                </span>
+                <span className="btn btn-primary">Review &amp; Sign →</span>
+              </button>
+            )}
+
             {/* Welcome strip */}
             <div style={{ background: 'var(--cream)', border: '1px solid var(--border)', borderRadius: 8, padding: '16px 20px', marginBottom: 20 }}>
               <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 2 }}>Welcome, {clientName}</div>
@@ -536,6 +588,20 @@ function PortalPreviewInner() {
         {/* ══════════════════════════════════════════════
             BUILD PLAN TAB
         ══════════════════════════════════════════════ */}
+        {activeTab === 'contracts' && (
+          <>
+            <div style={{ background: '#1e2022', color: '#f0c040', borderRadius: 8, padding: '10px 16px', fontSize: 12, fontWeight: 600, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+              👁 Preview mode — signing is switched off
+            </div>
+            <PortalContractsView
+              contracts={previewContracts}
+              jobs={jobs}
+              renderFiles={jobId => <PortalFileList files={filesByJob[jobId] || []} />}
+              preview
+            />
+          </>
+        )}
+
         {activeTab === 'build-plan' && (
           <>
             <div className="portal-page-hd">
