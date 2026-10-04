@@ -3,7 +3,7 @@
 // A small "Report a problem" button for contractors. The message goes to the platform owner's Feedback page tagged with the
 // company, the person and the page they were on (database function submit_feedback — limited to 20 a day per person).
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
@@ -38,6 +38,13 @@ export default function FeedbackButton() {
   }
 
   function close() { setOpen(false); setDone(false); setError('') }
+
+  // Lets other screens (the Help page) open this same form: window.dispatchEvent(new Event('open-feedback'))
+  useEffect(() => {
+    const openIt = () => setOpen(true)
+    window.addEventListener('open-feedback', openIt)
+    return () => window.removeEventListener('open-feedback', openIt)
+  }, [])
 
   return (
     <>

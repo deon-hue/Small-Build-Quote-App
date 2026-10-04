@@ -128,7 +128,7 @@ FROM (VALUES
   ('Your account', 'Is my information private from other builders?',
    E'Yes. Every company''s quotes, jobs, clients, prices and documents are kept completely separate. No other builder can see yours.', 10),
   ('Your account', 'Something is not working. How do I tell you?',
-   E'Use the "Report a problem" button in the corner of the screen and tell us what you were doing and what you expected to happen. It goes straight to us, along with the page you were on.', 20)
+   E'Click the round ? button in the bottom-right corner of the screen (or the button at the bottom of the Help page) and tell us what you were doing and what you expected to happen. It goes straight to us, along with the page you were on.', 20)
 ) AS v(category, title, body, sort_order)
 WHERE NOT EXISTS (SELECT 1 FROM help_items);
 

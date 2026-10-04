@@ -148,8 +148,9 @@ export default function HelpView({ items, failed }: { items: HelpItem[] | null; 
         </section>
       )}
 
-      <div style={{ fontSize: 13, color: 'var(--muted)', padding: '4px 2px 24px' }}>
-        Can&rsquo;t find what you need? Use the <strong>Report a problem</strong> button in the corner of the screen and tell us what you were trying to do.
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontSize: 13, color: 'var(--muted)', padding: '4px 2px 24px' }}>
+        <span>Can&rsquo;t find what you need, or something isn&rsquo;t working? Tell us what you were trying to do.</span>
+        <button type="button" className="btn btn-primary" onClick={() => window.dispatchEvent(new Event('open-feedback'))}>Report a problem or suggest something</button>
       </div>
     </div>
   )
