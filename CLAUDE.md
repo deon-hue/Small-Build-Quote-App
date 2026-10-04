@@ -221,11 +221,11 @@ pattern, and **is used from Take-off in the same way** — do not invent a diffe
 
 ## Client portal: keep the builder's Preview in step (REQUIRED)
 
-The builder's "preview what the client sees" page (, reached from a client's Contacts card) is a
+The builder's "preview what the client sees" page (`app/(app)/portal-preview/page.tsx`, reached from a client's Contacts card) is a
 separate, hand-built copy of the client portal, so a new portal tab or section does NOT appear in it by itself — that is why
-"the preview is missing X" keeps coming back. Whenever you add or change anything in the client portal ():
-1. Put the screen in a shared display component (see ) used by BOTH the real portal page and the preview, rather than writing it twice.
-2. Add the tab/section to the preview (tab list, , any dashboard banner) with signing/approving switched off ().
+"the preview is missing X" keeps coming back. Whenever you add or change anything in the client portal (`app/(portal)/portal/**`):
+1. Put the screen in a shared display component (see `components/PortalContractsView.tsx`) used by BOTH the real portal page and the preview, rather than writing it twice.
+2. Add the tab/section to the preview (tab list, `TAB_LABELS`, any dashboard banner) with signing/approving switched off (`preview` prop).
 3. Fetch the preview's data with the builder's own session (they own the rows), shaped like what the client's portal receives.
 Existing tabs not yet shared this way: Quotes, Variations, Invoices, Build Plan (Quotes/Build Plan reuse their own components) — convert to shared components when next touched.
 
