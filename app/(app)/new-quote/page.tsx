@@ -224,6 +224,8 @@ export default function NewQuotePage() {
   const [markup, setMarkup] = useState(15)
   const [vatOn, setVatOn] = useState(true)
   const [scope, setScope] = useState('')
+  // Dated notes on changes to the scope agreed after acceptance (undefined = database column not added yet)
+  const [scopeNotes, setScopeNotes] = useState<string | undefined>(undefined)
   const [photo, setPhoto] = useState('')
   const [phases, setPhases] = useState<QuotePhase[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -698,6 +700,7 @@ export default function NewQuotePage() {
     setMarkup(q.markup || 15)
     setVatOn(q.vatIncluded !== false)
     setScope(q.scope || '')
+    setScopeNotes(q.scopeNotes)
     setPhoto(q.photo || '')
     // Detect Quick Quotes by structure when quoteSource wasn't persisted (legacy saves)
     const isQuickByStructure =
@@ -1422,7 +1425,8 @@ export default function NewQuotePage() {
     setSaving(true)
     try {
       const customer = { name: custName, address: custAddr, email: custEmail, phone: custPhone }
-      const qData = { status: 'pending' as const, jobType, title: jobTitle, markup, vatIncluded: vatOn, scope, photo, convertedToJob: false, lastEdited: '', customer, phases: JSON.parse(JSON.stringify(phases)), quoteSource: quoteSource ?? undefined }
+      const qData = { status: 'pending' as const, jobType, title: jobTitle, markup, vatIncluded: vatOn, scope, photo, convertedToJob: false, lastEdited: '', customer, phases: JSON.parse(JSON.stringify(phases)), quoteSource: quoteSource ?? undefined,
+        ...(editingId && scopeNotes !== undefined ? { scopeNotes } : {}) }
       if (editingId) {
         const existing = quotes.find(q => q.id === editingId)!
         await updateQuote({ ...existing, ...qData })
@@ -1458,9 +1462,35 @@ export default function NewQuotePage() {
     }
   }
 
+  // The scope-changes notes can always be saved, even on an accepted (locked) quote: the original scope and the prices stay untouched.
+  async function saveScopeNotesOnly() {
+    if (!editingId) return
+    const existing = quotes.find(q => q.id === editingId)
+    if (!existing) return
+    if (existing.scopeNotes === undefined) {
+      alert('This needs a one-off database update first (supabase/quote-scope-notes.sql). Ask Claude for the steps.')
+      return
+    }
+    setSaving(true)
+    try {
+      await updateQuote({ ...existing, scopeNotes: (scopeNotes ?? '').trim() })
+      setScopeNotes((scopeNotes ?? '').trim())
+      alert('Changes to the scope saved. They will show on the quote, the client portal and the contract.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Starts a new dated entry in the notes box, e.g. "12 October 2026 — "
+  function addScopeNoteEntry() {
+    const d = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+    setScopeNotes(prev => ((prev ?? '').trim() ? (prev ?? '').trimEnd() + '\n\n' : '') + d + ' — ')
+  }
+
   function cancelEdit() {
     setEditingId(null)
     setIsLockedQuote(false)
+    setScopeNotes(undefined)
     setCustName(''); setCustAddr(''); setCustEmail(''); setCustPhone('')
     setScope(''); setPhoto(''); setAttachments([])
     loadTemplate(jobType)
@@ -1690,8 +1720,33 @@ export default function NewQuotePage() {
           <textarea
             value={scope}
             onChange={e => setScope(e.target.value)}
+            readOnly={isLockedQuote}
             rows={6}
             placeholder={quoteSource === 'ai' ? 'AI-generated scope will appear here — you can edit it freely.' : 'Describe the scope of works… or click "Write with AI" to build it conversationally'}
+            style={{ width: '100%', resize: 'vertical', fontSize: 13, padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 6, boxSizing: 'border-box', fontFamily: 'inherit', color: 'var(--text)', lineHeight: 1.6 }}
+          />
+        </div>
+      )}
+
+      {/* ── Changes to the scope — agreed after the quote; the original scope above stays exactly as the client accepted it ── */}
+      {editingId && scopeNotes !== undefined && (
+        <div style={{ background: '#fffdf5', border: '1.5px solid #f0d080', borderRadius: 8, padding: '14px 18px', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, flexWrap: 'wrap', gap: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>📝 Changes to the scope</span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" className="btn-sm btn-outline" onClick={addScopeNoteEntry}>+ Add dated entry</button>
+              <button type="button" className="btn-sm btn-primary" onClick={saveScopeNotesOnly} disabled={saving}>{saving ? 'Saving…' : '💾 Save scope changes'}</button>
+            </div>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8, lineHeight: 1.5 }}>
+            Changes agreed after the quote was accepted. The scope above stays as the client approved it; these notes are shown underneath it on the quote, in the client portal and on the contract.
+            Anything that changes the price should be a Variation.
+          </div>
+          <textarea
+            value={scopeNotes}
+            onChange={e => setScopeNotes(e.target.value)}
+            rows={4}
+            placeholder="e.g. 12 October 2026 — Omit the bay window; add a rear French door (client request)."
             style={{ width: '100%', resize: 'vertical', fontSize: 13, padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 6, boxSizing: 'border-box', fontFamily: 'inherit', color: 'var(--text)', lineHeight: 1.6 }}
           />
         </div>

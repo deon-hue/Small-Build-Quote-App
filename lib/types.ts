@@ -171,6 +171,9 @@ export interface Quote {
   markup: number
   vatIncluded: boolean
   scope: string
+  /** Dated notes describing changes to the scope agreed after the quote was accepted. The original `scope` is never altered.
+   *  undefined = the database column doesn't exist yet (supabase/quote-scope-notes.sql not run) — then the feature stays hidden. */
+  scopeNotes?: string
   photo: string
   convertedToJob: boolean
   customer: QuoteCustomer

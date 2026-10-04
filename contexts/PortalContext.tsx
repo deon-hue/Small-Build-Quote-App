@@ -179,7 +179,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
           id: r.id, ref: r.ref, savedDate: r.saved_date || '',
           lastEdited: r.last_edited || '', status: r.status,
           jobType: r.job_type, markup: Number(r.markup),
-          vatIncluded: r.vat_included, scope: r.scope || '', photo: r.photo || '',
+          vatIncluded: r.vat_included, scope: r.scope || '', scopeNotes: r.scope_notes || '', photo: r.photo || '',
           convertedToJob: r.converted_to_job,
           customer: r.customer || { name: '', address: '', email: '', phone: '' },
           phases: r.phases || [],

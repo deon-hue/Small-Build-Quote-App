@@ -51,6 +51,7 @@ export async function appendScopeSchedule(
   pdf: PDFDocument,
   scope: string,
   header: { clientName?: string; site?: string; builderName?: string },
+  changes = '',                  // dated notes on changes agreed after the quote was accepted; printed under the scope
 ): Promise<number> {
   const font = await pdf.embedFont(StandardFonts.Helvetica)
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold)
@@ -61,6 +62,8 @@ export async function appendScopeSchedule(
   const before = pdf.getPageCount()
 
   const paragraphs = toPdfSafeText(scope).split('\n').map(p => p.trim())
+  const changeParagraphs = toPdfSafeText(changes).split('\n').map(p => p.trim())
+  const hasChanges = changeParagraphs.some(p => p !== '')
   let page = pdf.addPage([W, H])
   let y = H - MARGIN
 
@@ -75,18 +78,31 @@ export async function appendScopeSchedule(
   page.drawLine({ start: { x: MARGIN, y: y + 2 }, end: { x: W - MARGIN, y: y + 2 }, thickness: 0.6, color: rgb(0.7, 0.72, 0.74) })
   y -= 16
 
-  for (const para of paragraphs) {
-    if (para === '') { y -= LEAD * 0.5; continue }
-    for (const l of wrapParagraph(para, font, BODY, textWidth)) {
-      if (y < MARGIN) {            // next page; carries the heading so each page stands alone when printed
-        page = pdf.addPage([W, H]); y = H - MARGIN
-        title('Schedule 1 - Scope of Works (continued)', 12)
-        y -= 6
+  const writeParagraphs = (list: string[]) => {
+    for (const para of list) {
+      if (para === '') { y -= LEAD * 0.5; continue }
+      for (const l of wrapParagraph(para, font, BODY, textWidth)) {
+        if (y < MARGIN) {            // next page; carries the heading so each page stands alone when printed
+          page = pdf.addPage([W, H]); y = H - MARGIN
+          title('Schedule 1 - Scope of Works (continued)', 12)
+          y -= 6
+        }
+        page.drawText(l, { x: MARGIN, y, size: BODY, font, color: rgb(0.1, 0.12, 0.13) })
+        y -= LEAD
       }
-      page.drawText(l, { x: MARGIN, y, size: BODY, font, color: rgb(0.1, 0.12, 0.13) })
-      y -= LEAD
+      y -= 4
     }
-    y -= 4
+  }
+
+  writeParagraphs(paragraphs)
+
+  if (hasChanges) {
+    y -= 14
+    if (y < MARGIN + 60) { page = pdf.addPage([W, H]); y = H - MARGIN; title('Schedule 1 - Scope of Works (continued)', 12); y -= 6 }
+    title('Changes agreed to the scope', 13)
+    page.drawText('Agreed after the original scope of works above was accepted. Where they differ, these changes apply.', { x: MARGIN, y, size: 9, font, color: rgb(0.35, 0.38, 0.4) })
+    y -= 18
+    writeParagraphs(changeParagraphs)
   }
   return pdf.getPageCount() - before
 }

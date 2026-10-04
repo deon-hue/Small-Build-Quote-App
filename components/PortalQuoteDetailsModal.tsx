@@ -115,6 +115,13 @@ export default function PortalQuoteDetailsModal({
       </div>
     ` : ''
 
+    const notesContent = printOptions.includeScope && quote.scopeNotes?.trim() ? `
+      <h3 style="margin-top: 20px; margin-bottom: 12px; font-size: 16px; font-weight: 700;">Changes to the Scope</h3>
+      <div style="white-space: pre-wrap; line-height: 1.7; padding: 12px; background: #fffdf5; border: 1px solid #f0d080; border-radius: 4px;">
+        ${quote.scopeNotes}
+      </div>
+    ` : ''
+
     const costContent = printOptions.includeCosts ? `
       <div style="margin-top: 24px; border: 1px solid #ddd; border-radius: 4px; overflow: hidden;">
         ${quote.phases.length > 0 ? `
@@ -161,6 +168,7 @@ export default function PortalQuoteDetailsModal({
         </div>
 
         ${scopeContent}
+        ${notesContent}
         ${phaseContent}
         ${costContent}
 
@@ -326,6 +334,18 @@ export default function PortalQuoteDetailsModal({
                     {para.trim()}
                   </p>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Changes to the scope, agreed after acceptance ───────── */}
+          {quote.scopeNotes?.trim() && (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }}>
+                Changes to the Scope
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.8, padding: '14px 16px', background: '#fffdf5', border: '1px solid #f0d080', borderRadius: 8, whiteSpace: 'pre-wrap' }}>
+                {quote.scopeNotes.trim()}
               </div>
             </div>
           )}

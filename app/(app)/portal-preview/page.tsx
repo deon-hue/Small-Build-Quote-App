@@ -143,7 +143,7 @@ function PortalPreviewInner() {
           status: r.status, jobType: r.job_type,
           customer: r.customer || {}, phases: r.phases || [],
           markup: Number(r.markup), vatIncluded: r.vat_included,
-          scope: r.scope || '',
+          scope: r.scope || '', scopeNotes: r.scope_notes || '',
           versionNumber: r.version_number, parentQuoteId: r.parent_quote_id,
         })))
       }

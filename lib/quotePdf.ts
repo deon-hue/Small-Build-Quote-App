@@ -281,6 +281,26 @@ export async function buildQuotePdf(
     y -= boxH + 12
   }
 
+  // ── Changes to the scope (agreed after acceptance) — a second box under the original scope ──
+  if (showScope && quote.scopeNotes?.trim()) {
+    const lineH = 13
+    const noteLines: string[] = []
+    for (const para of quote.scopeNotes.trim().split(/\n+/)) {
+      noteLines.push(...(await wrapText(safe(para), fontRegular, 8.5, CONTENT_W - 24)))
+    }
+    const boxH = 18 + noteLines.length * lineH + 14
+    ensureSpace(boxH + 10)
+    drawRect(page, MARGIN, y - boxH, CONTENT_W, boxH, rgb(1, 0.992, 0.961))
+    drawRect(page, MARGIN, y - boxH, 3, boxH, rgb(0.878, 0.69, 0.125))
+    drawText(page, 'CHANGES TO THE SCOPE', MARGIN + 10, y - 13, 6.5, fontBold, rgb(0.541, 0.416, 0.063))
+    let ny = y - 26
+    for (const line of noteLines) {
+      drawText(page, line, MARGIN + 10, ny, 8.5, fontRegular, C.body)
+      ny -= lineH
+    }
+    y -= boxH + 12
+  }
+
   // ── Table heading + phase/item table — skipped entirely for 'total_only' ──
   if (showPhaseSection) {
     ensureSpace(30)

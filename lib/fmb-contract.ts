@@ -19,6 +19,10 @@ import { appendScopeSchedule, scopeFitsBox, SCOPE_BOX_POINTER } from './contract
 
 // ── Field names ───────────────────────────────────────────────────────────────
 
+/** Not a PDF field: the contract's own record of the changes to the scope (copied from the quote, editable), kept in the same saved
+ *  fields object. Names starting "_" are skipped when the PDF form is filled; this one is printed on the Schedule 1 page instead. */
+export const SCOPE_CHANGES_KEY = '_scopeChanges'
+
 export const FIELD = {
   contractDate: 'Contract date 2',
   clientName: 'Client name 2',
@@ -175,6 +179,7 @@ export function autoFillContractFields(job: Job, quote: Quote | undefined, setti
     fields[FIELD.clientAddress] = quote.customer.address || ''
     fields[FIELD.clientTelephone] = quote.customer.phone || ''
     fields[FIELD.worksProvided] = quote.scope || ''
+    if (quote.scopeNotes?.trim()) fields[SCOPE_CHANGES_KEY] = quote.scopeNotes.trim()
     fields[FIELD.price] = fmtGBP(quoteTotal(quote))
     fields[FIELD.clientNameFront] = quote.customer.name || ''
   } else {
@@ -210,10 +215,11 @@ export async function fillContractPdf(
 
   // Works provided: the template's box is a single short line, so a real scope of works goes on a Schedule 1 page at the end
   const scope = typeof fields[FIELD.worksProvided] === 'string' ? String(fields[FIELD.worksProvided]).trim() : ''
+  const scopeChanges = typeof fields[SCOPE_CHANGES_KEY] === 'string' ? String(fields[SCOPE_CHANGES_KEY]).trim() : ''   // dated changes agreed after the quote was accepted
   let scopeSchedule = false
-  if (scope) {
+  if (scope || scopeChanges) {
     const measure = await pdf.embedFont(StandardFonts.Helvetica)
-    if (scopeFitsBox(scope, measure)) setText(form, FIELD.worksProvided, scope)
+    if (scope && !scopeChanges && scopeFitsBox(scope, measure)) setText(form, FIELD.worksProvided, scope)
     else { setText(form, FIELD.worksProvided, SCOPE_BOX_POINTER); scopeSchedule = true }
   }
 
@@ -239,7 +245,7 @@ export async function fillContractPdf(
   if (scopeSchedule) {
     await appendScopeSchedule(pdf, scope, {
       clientName: String(fields[FIELD.clientName] || ''), site: String(fields[FIELD.projectSite] || ''), builderName: String(fields[FIELD.builderName] || ''),
-    })
+    }, scopeChanges)
   }
 
   return pdf.save()

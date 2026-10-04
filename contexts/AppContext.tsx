@@ -238,6 +238,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           id: r.id, ref: r.ref, savedDate: r.saved_date, lastEdited: r.last_edited,
           status: r.status, jobType: r.job_type, title: r.title || '', markup: Number(r.markup),
           vatIncluded: r.vat_included, scope: r.scope, photo: r.photo,
+          scopeNotes: 'scope_notes' in r ? (r.scope_notes || '') : undefined,   // undefined = column not added yet
           convertedToJob: r.converted_to_job, customer: r.customer, phases: r.phases,
           quoteSource: r.quote_source || undefined,
           clientApprovedAt: r.client_approved_at || null,
@@ -501,6 +502,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       quote_source: q.quoteSource || null,
       expiry_days: q.expiryDays ?? null,
       pre_archive_status: q.preArchiveStatus || null,
+      // only sent when the column is known to exist, so an update never fails on a database that hasn't had quote-scope-notes.sql run
+      ...(q.scopeNotes !== undefined ? { scope_notes: q.scopeNotes } : {}),
       last_edited: new Date().toLocaleDateString('en-GB'),
     }).eq('id', q.id)
     setQuotes(prev => prev.map(x => x.id === q.id ? { ...q, lastEdited: new Date().toLocaleDateString('en-GB') } : x))

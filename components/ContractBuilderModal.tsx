@@ -8,6 +8,7 @@ import { fmt, jobDisplayTitle, quoteTotal } from '@/lib/utils'
 import type { Job, Quote, Contract, ContractFields, ContractPaymentStage } from '@/lib/types'
 import { CollapsibleSection } from './assembly-ui'
 import { useDraggableModal } from './useDraggableModal'
+import { syncFromQuote } from '@/lib/contract-sync'
 import ModalResizeHandle from './ModalResizeHandle'
 import ModalMaximizeButton from './ModalMaximizeButton'
 
@@ -43,6 +44,9 @@ const MAX_STAGE_PAYMENTS = 28
 // Remembers which quote scope the contract's "Works provided" was last copied from, so a later change to the quote can be
 // told apart from the builder's own edits to the contract. (Not a PDF field: the contract filler ignores names starting with "_".)
 const SCOPE_SNAPSHOT = '_quoteScopeSnapshot'
+// Dated changes to the scope agreed after the quote was accepted (copied from the quote's "Changes to the scope"; printed on Schedule 1)
+const CHANGES = '_scopeChanges'
+const CHANGES_SNAPSHOT = '_quoteScopeChangesSnapshot'
 
 function completionDateFromJob(job: Job): string {
   if (!job.start || !job.weeks) return ''
@@ -65,6 +69,8 @@ function autoFill(job: Job, quote: Quote | undefined, settings: { name: string; 
     f[F.clientTelephone] = quote.customer.phone || ''
     f[F.worksProvided] = quote.scope || ''
     f[SCOPE_SNAPSHOT] = quote.scope || ''
+    f[CHANGES] = quote.scopeNotes?.trim() || ''
+    f[CHANGES_SNAPSHOT] = quote.scopeNotes?.trim() || ''
     f[F.price] = fmt(quoteTotal(quote))
   } else {
     f[F.clientName] = job.client || ''
@@ -122,6 +128,7 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
   const [error, setError] = useState('')
   // The quote's scope of works vs the contract's: 'updated' = copied across automatically, 'changed' = the quote has changed but the contract's text was edited by hand
   const [scopeNote, setScopeNote] = useState<'' | 'updated' | 'changed'>('')
+  const [changesNote, setChangesNote] = useState<'' | 'updated' | 'changed'>('')   // same, for the changes-to-the-scope notes
   const [signedUrl, setSignedUrl] = useState<string | null>(null)
   const initedRef = useRef(false)
 
@@ -142,18 +149,16 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
       // Keep "Works provided" in step with the quote's scope of works. A contract made before the quote's scope was
       // changed would otherwise keep the old text for ever.
       if (quote) {
-        const qScope = (quote.scope || '').trim()
-        const cur = String(seeded[F.worksProvided] || '').trim()
-        const snap = typeof seeded[SCOPE_SNAPSHOT] === 'string' ? String(seeded[SCOPE_SNAPSHOT]).trim() : undefined
-        if (qScope && cur === qScope) {
-          seeded = { ...seeded, [SCOPE_SNAPSHOT]: qScope }                                   // already the same
-        } else if (qScope && !cur) {
-          seeded = { ...seeded, [F.worksProvided]: qScope, [SCOPE_SNAPSHOT]: qScope }        // empty: fill it in
-        } else if (qScope && snap !== undefined && cur === snap) {
-          seeded = { ...seeded, [F.worksProvided]: qScope, [SCOPE_SNAPSHOT]: qScope }        // untouched since copied: follow the quote
-          setScopeNote('updated')
-        } else if (qScope && qScope !== (snap ?? '')) {
-          setScopeNote('changed')                                                            // edited by hand (or unknown): ask, don't overwrite
+        const strOf = (k: string) => (typeof seeded[k] === 'string' ? String(seeded[k]) : undefined)
+        const sc = syncFromQuote(strOf(F.worksProvided) ?? '', quote.scope || '', strOf(SCOPE_SNAPSHOT))
+        seeded = { ...seeded, [F.worksProvided]: sc.value, [SCOPE_SNAPSHOT]: sc.snapshot }
+        if (sc.status === 'followed') setScopeNote('updated'); else if (sc.status === 'differs') setScopeNote('changed')
+
+        // Changes to the scope: only when the database has the column (scopeNotes undefined = not added yet)
+        if (quote.scopeNotes !== undefined) {
+          const ch = syncFromQuote(strOf(CHANGES) ?? '', quote.scopeNotes || '', strOf(CHANGES_SNAPSHOT))
+          seeded = { ...seeded, [CHANGES]: ch.value, [CHANGES_SNAPSHOT]: ch.snapshot }
+          if (ch.status === 'followed' || ch.status === 'filled') { if (ch.value) setChangesNote('updated') } else if (ch.status === 'differs') setChangesNote('changed')
         }
       }
       setFields(seeded)
@@ -365,6 +370,19 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
                   ⚠️ {error}
                 </div>
               )}
+              {changesNote === 'updated' && quote && (
+                <div style={{ background: 'rgba(122,181,51,0.12)', border: '1px solid rgba(122,181,51,0.45)', borderRadius: 8, padding: '10px 14px', fontSize: 12 }}>
+                  ✓ The &ldquo;Changes to the scope&rdquo; from quote <strong>{quote.ref}</strong> have been added to this contract. They print under the scope on Schedule 1.
+                </div>
+              )}
+              {changesNote === 'changed' && quote && (
+                <div style={{ background: '#fff8e1', border: '1px solid #ffe082', borderRadius: 8, padding: '10px 14px', fontSize: 12, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ flex: 1 }}>
+                    ⚠️ The &ldquo;Changes to the scope&rdquo; on quote <strong>{quote.ref}</strong> are different from the ones on this contract. The contract still has its own wording.
+                  </span>
+                  <button type="button" className="btn-sm btn-primary" onClick={() => { setFields(prev => ({ ...prev, [CHANGES]: quote.scopeNotes?.trim() || '', [CHANGES_SNAPSHOT]: quote.scopeNotes?.trim() || '' })); setChangesNote('') }}>Use the quote&rsquo;s changes</button>
+                </div>
+              )}
               {!quote && (
                 <div style={{ background: 'rgba(0,0,0,0.04)', borderRadius: 8, padding: '10px 14px', fontSize: 12 }}>
                   This job has no linked quote, so the scope of works can&rsquo;t follow a quote. Type it into &ldquo;Works provided&rdquo; under Site, Scope &amp; Documents.
@@ -417,7 +435,10 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
                 <div style={{ marginBottom: 10 }}>
                   <Field label="Works provided (scope)" value={String(fields[F.worksProvided] || '')} onChange={v => { set(F.worksProvided, v); setScopeNote('') }} textarea rows={8}
                     hint="Comes from the quote's Scope of Works. A scope too long for the contract's one-line box is printed in full on a Schedule 1 page at the end of the contract." />
-
+                </div>
+                <div style={{ marginBottom: 10 }}>
+                  <Field label="Changes to the scope (agreed after the quote was accepted)" value={String(fields[CHANGES] || '')} onChange={v => { set(CHANGES, v); setChangesNote('') }} textarea rows={4}
+                    hint="Printed under the scope on Schedule 1. Comes from the quote's Changes to the scope box; you can also type here. Leave empty if there are none." />
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   <Field label="Drawings referenced" value={String(fields[F.drawings] || '')} onChange={v => set(F.drawings, v)} />
