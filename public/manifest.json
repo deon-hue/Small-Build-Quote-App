@@ -1,8 +1,8 @@
 {
   "name": "BuildOS Pro",
   "short_name": "BuildOS Pro",
-  "description": "Scan receipts and job documents on site — review and extract costs back in the office.",
-  "start_url": "/scan",
+  "description": "Quotes, jobs and client portals for builders — and scan receipts and job documents on site.",
+  "start_url": "/dashboard",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#3a4149",
