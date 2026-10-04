@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { CURRENT_TERMS_VERSION } from '@/lib/legal'
 import type { Job, Quote, Client, Supplier, Settings, GanttState, Invoice, JobNote, JobPayment, PaymentMethod, PortalStatus, TemplatePhaseData, Variation, VariationStatus, TeamMember, TeamMemberRole, UserPermissions, ClientPortalSettings, Bill, BillStatus, XeroAccountCodes, Contract } from '@/lib/types'
 import { FULL_PERMISSIONS, DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
 import { uid, JOB_TEMPLATES } from '@/lib/utils'
@@ -48,6 +49,8 @@ interface AppContextType {
   deleteSupplier: (id: string) => Promise<void>
 
   saveSettings: (s: Settings) => Promise<void>
+  /** Record that the company's owner accepted the current terms version */
+  acceptTerms: () => Promise<void>
   saveGanttState: (jobId: string, state: GanttState) => Promise<boolean>
   getGanttState: (jobId: string) => GanttState | null
 
@@ -294,6 +297,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           vatNumber:     sd.vat_number     ?? '',
           companyNumber: sd.company_number ?? '',
           website:       sd.website        ?? '',
+          paused:        sd.paused === true,
+          termsVersion:  sd.terms_version,
           defaultMarkup: sd.default_markup != null ? Number(sd.default_markup) : 20,
           vatRegistered: sd.vat_registered ?? false,
           vatRate:       sd.vat_rate != null ? Number(sd.vat_rate) : 20,
@@ -661,6 +666,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [supabase])
 
   // ── Settings ─────────────────────────────────────────────────
+  const acceptTerms = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    const ownerId = dataOwnerIdRef.current || user!.id
+    const { error } = await supabase.from('settings')
+      .update({ terms_version: CURRENT_TERMS_VERSION, terms_accepted_at: new Date().toISOString() })
+      .eq('user_id', ownerId)
+    if (error) throw error
+    setSettings(prev => ({ ...prev, termsVersion: CURRENT_TERMS_VERSION }))
+  }, [supabase])
+
   const saveSettings = useCallback(async (s: Settings) => {
     const { data: { user } } = await supabase.auth.getUser()
     const ownerId = dataOwnerIdRef.current || user!.id
@@ -1121,6 +1136,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addClient, updateClient, deleteClient, upsertClientFromQuote, markPortalInvite,
       suppliers, addSupplier, updateSupplier, deleteSupplier,
       saveSettings,
+      acceptTerms,
       saveGanttState, getGanttState,
       addInvoice, updateInvoice, deleteInvoice,
       addJobNote, updateJobNote, deleteJobNote,

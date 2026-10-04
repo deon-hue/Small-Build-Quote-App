@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { PRODUCT_NAME } from '@/lib/product-config'
+import { CURRENT_TERMS_VERSION } from '@/lib/legal'
 
 export const metadata = { title: `Beta terms — ${PRODUCT_NAME}` }
 
@@ -10,7 +11,7 @@ export default function TermsPage() {
     <div style={{ height: '100vh', overflowY: 'auto' }}>
     <div style={{ maxWidth: 720, margin: '0 auto', padding: '40px 20px 80px', lineHeight: 1.65, fontSize: 15 }}>
       <h1 style={{ fontSize: 26, marginBottom: 4 }}>{PRODUCT_NAME} — beta terms</h1>
-      <p style={{ color: '#6b7580', marginTop: 0 }}>Draft for the private beta. Last updated October 2026.</p>
+      <p style={{ color: '#6b7580', marginTop: 0 }}>Draft for the private beta. Version {CURRENT_TERMS_VERSION}. Last updated October 2026.</p>
 
       <h2 style={{ fontSize: 18 }}>What this is</h2>
       <p>{PRODUCT_NAME} is a quoting and job-management tool for builders. During the beta it is free, it is still being built,

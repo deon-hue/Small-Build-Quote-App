@@ -520,6 +520,10 @@ export interface Settings {
   vatNumber?: string
   companyNumber?: string
   website?: string
+  /** Platform owner has paused this company (set from the owner area) */
+  paused?: boolean
+  /** Terms version this company accepted: undefined = not loaded / column missing, null = never recorded */
+  termsVersion?: string | null
   // Public Get-a-Quote estimate: markup added to the AI's costs, and whether/how VAT is added on top
   defaultMarkup?: number   // % (default 20)
   vatRegistered?: boolean

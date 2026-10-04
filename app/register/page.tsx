@@ -9,6 +9,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { PRODUCT_NAME } from '@/lib/product-config'
+import { CURRENT_TERMS_VERSION } from '@/lib/legal'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -42,6 +43,7 @@ export default function RegisterPage() {
             invite_code: inviteCode.trim(),
             company_name: companyName.trim(),
             terms_accepted_at: new Date().toISOString(),
+            terms_version: CURRENT_TERMS_VERSION,
           },
         },
       })

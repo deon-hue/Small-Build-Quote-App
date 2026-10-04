@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { PRODUCT_NAME } from '@/lib/product-config'
+import { CURRENT_TERMS_VERSION } from '@/lib/legal'
 
 export const metadata = { title: `Privacy notice — ${PRODUCT_NAME}` }
 
@@ -10,7 +11,7 @@ export default function PrivacyPage() {
     <div style={{ height: '100vh', overflowY: 'auto' }}>
     <div style={{ maxWidth: 720, margin: '0 auto', padding: '40px 20px 80px', lineHeight: 1.65, fontSize: 15 }}>
       <h1 style={{ fontSize: 26, marginBottom: 4 }}>Privacy notice</h1>
-      <p style={{ color: '#6b7580', marginTop: 0 }}>{PRODUCT_NAME} private beta. Draft. Last updated October 2026.</p>
+      <p style={{ color: '#6b7580', marginTop: 0 }}>{PRODUCT_NAME} private beta. Draft. Version {CURRENT_TERMS_VERSION}. Last updated October 2026.</p>
 
       <h2 style={{ fontSize: 18 }}>What we hold</h2>
       <ul>

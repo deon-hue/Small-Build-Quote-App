@@ -84,6 +84,10 @@ function OnboardingInner() {
       const meta = (user.user_metadata || {}) as Record<string, string | undefined>
       const wantsToJoin = !!meta.invite_code || params.get('join') === '1'
 
+      // The platform owner has no company: send them to the owner area (it asks for two-step sign-in there)
+      const { data: isOwnerListed } = await supabase.rpc('is_platform_admin_listed')
+      if (isOwnerListed === true) { router.replace('/owner'); return }
+
       const { data: isContractor, error: rpcErr } = await supabase.rpc('is_contractor')
       if (rpcErr) { setStage('unavailable'); return }
       if (isContractor === true) { router.replace('/dashboard'); return }

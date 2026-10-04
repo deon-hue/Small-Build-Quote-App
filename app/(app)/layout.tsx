@@ -10,6 +10,8 @@ import type { UserPermissions } from '@/lib/types'
 import QuickNotesModal from '@/components/QuickNotesModal'
 import MobileLauncher from '@/components/MobileLauncher'
 import BuildStamp from '@/components/BuildStamp'
+import FeedbackButton from '@/components/FeedbackButton'
+import TermsUpdateModal from '@/components/TermsUpdateModal'
 import { PRODUCT_NAME } from '@/lib/product-config'
 
 // Routes that require a specific permission key
@@ -182,7 +184,7 @@ const PAGE_TITLES: Record<string, string> = {
 function AppLayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { permissions, isOwner, loading, hasCompany, currentMember, pageTitle, setPageTitle } = useApp()
+  const { permissions, isOwner, loading, hasCompany, settings, currentMember, pageTitle, setPageTitle } = useApp()
   const [tab, setTab] = useState<string | null>(null)
 
   useEffect(() => {
@@ -240,6 +242,20 @@ function AppLayoutWrapper({ children }: { children: React.ReactNode }) {
 
   if (!loading && hasCompany === false) return null
 
+  // The platform owner has paused this company (nothing is deleted; they can be re-opened)
+  if (!loading && hasCompany && settings.paused === true) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, textAlign: 'center' }}>
+        <div style={{ maxWidth: 420 }}>
+          <div style={{ fontSize: 40, marginBottom: 14 }}>⏸️</div>
+          <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>Your account is paused</div>
+          <div style={{ color: 'var(--muted)', marginBottom: 22, lineHeight: 1.6 }}>Your data is safe and nothing has been deleted. Please get in touch with the person who invited you to have it re-opened.</div>
+          <button className="btn btn-outline" onClick={async () => { const supabase = createClient(); await supabase.auth.signOut(); router.push('/login') }}>Sign out</button>
+        </div>
+      </div>
+    )
+  }
+
   // Suppress content while redirecting (prevents flash)
   if (!loading && !isOwner && requiredPermission && !permissions[requiredPermission]) {
     return null
@@ -247,7 +263,13 @@ function AppLayoutWrapper({ children }: { children: React.ReactNode }) {
 
   const desktopOnly = pathname === '/takeoff' || pathname === '/back-office'
   const isHome = pathname === '/dashboard'
-  return <AppLayoutInner title={title} desktopOnly={desktopOnly} launcher={isHome} homeBack={!isHome}>{children}</AppLayoutInner>
+  return (
+    <>
+      <AppLayoutInner title={title} desktopOnly={desktopOnly} launcher={isHome} homeBack={!isHome}>{children}</AppLayoutInner>
+      {!loading && hasCompany && <FeedbackButton />}
+      <TermsUpdateModal />
+    </>
+  )
 }
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {

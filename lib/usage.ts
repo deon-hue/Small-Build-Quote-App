@@ -46,5 +46,6 @@ export async function usageGuard(
       { limitReached: true },
     )
   }
+  if (r.reason === 'paused') return respond('This account is paused. Please get in touch to have it re-opened.', 403)
   return respond('This feature is only available to contractor accounts.', 403)
 }
