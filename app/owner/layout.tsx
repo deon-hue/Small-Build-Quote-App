@@ -18,6 +18,7 @@ const NAV = [
   { href: '/owner/companies', label: 'Companies' },
   { href: '/owner/invites', label: 'Invite codes' },
   { href: '/owner/feedback', label: 'Feedback' },
+  { href: '/owner/help', label: 'Help content' },
   { href: '/owner/audit', label: 'Audit log' },
 ]
 

@@ -109,6 +109,7 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
           {can('back_office') && navItem('/back-office', '⊞', 'Back Office', 'desktop-only')}
           {can('team')        && navItem('/team',        '👥', 'Team')}
           <div className="nav-section">Account</div>
+          {navItem('/help', '❓', 'Help & Guides')}
           <div className="nav-item" onClick={signOut} style={{ cursor: 'pointer' }}>
             <span className="nav-icon">⏻</span> Sign Out
           </div>
@@ -179,6 +180,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/quote-requests':   'Quote Requests',
   '/portal-preview':   'Portal Preview',
   '/team':         'Team',
+  '/help':         'Help & Guides',
 }
 
 function AppLayoutWrapper({ children }: { children: React.ReactNode }) {
