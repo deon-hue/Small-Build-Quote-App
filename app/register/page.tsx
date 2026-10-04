@@ -78,11 +78,19 @@ export default function RegisterPage() {
             <div style={{ fontSize: 40, marginBottom: 12 }}>✉️</div>
             <div style={{ fontWeight: 700, color: 'var(--text, inherit)', marginBottom: 8 }}>Check your email</div>
             We&apos;ve sent a confirmation link to <strong>{sentTo}</strong>. Click it to finish setting up your account.
-            <div style={{ marginTop: 14, fontSize: 12.5 }}>
-              Nothing there after a few minutes? Check your junk folder, or <button
-                onClick={() => setSentTo('')}
-                style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', textDecoration: 'underline', fontSize: 12.5, padding: 0 }}
-              >go back and try again</button>.
+            <div style={{ marginTop: 16, fontSize: 12.5, textAlign: 'left', background: 'rgba(0,0,0,0.035)', borderRadius: 8, padding: '12px 14px' }}>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>Nothing after a few minutes?</div>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                <li>Check your junk or spam folder.</li>
+                <li>If you&apos;ve used this email with {PRODUCT_NAME} before, we don&apos;t send a second confirmation. <strong>Sign in</strong> with your existing password instead, or use <strong>Forgot password</strong> on the sign-in page.</li>
+                <li>Typed it wrong? <button
+                  onClick={() => setSentTo('')}
+                  style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', textDecoration: 'underline', fontSize: 12.5, padding: 0 }}
+                >Go back and try again</button>.</li>
+              </ul>
+            </div>
+            <div style={{ marginTop: 14 }}>
+              <Link href="/login" className="btn btn-primary" style={{ display: 'inline-block', textDecoration: 'none' }}>Go to sign in</Link>
             </div>
           </div>
         ) : (
