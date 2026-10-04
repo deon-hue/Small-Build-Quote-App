@@ -97,7 +97,7 @@ interface Props { job: Job; quote: Quote | undefined; onClose: () => void }
 
 export default function ContractBuilderModal({ job, quote, onClose }: Props) {
   const sb = createClient()
-  const { contracts, settings, addContract, updateContract } = useApp()
+  const { contracts, settings, clients, addContract, updateContract } = useApp()
   const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown, onOverlayClick, isMaximized, toggleMaximize } = useDraggableModal()
 
   const existing = contracts
@@ -243,6 +243,38 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
         builderSignedAt: new Date().toISOString(),
         builderSignedBy: signName.trim(),
       })
+
+      // Tell the client by email (with a one-click link into their portal) and WhatsApp where that's set up.
+      // The contract is already sent and visible in their portal, so a problem here only needs reporting, not undoing.
+      const savedClient = clients.find(c => c.name?.toLowerCase() === (job.client || '').toLowerCase())
+      const clientEmail = savedClient?.email || quote?.customer?.email || ''
+      const clientPhone = savedClient?.phone || quote?.customer?.phone || ''
+      let told = false
+      let reason = ''
+      if (!clientEmail && !clientPhone) {
+        reason = 'there is no email address or phone number saved for the client'
+      } else {
+        try {
+          const res = await fetch('/api/notify-client', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'contract_sent',
+              clientName: savedClient?.name || job.client || quote?.customer?.name || 'there',
+              clientEmail: clientEmail || undefined, clientPhone: clientPhone || undefined, clientId: savedClient?.id,
+              jobType: jobDisplayTitle(job), jobAddress: job.address,
+              secondClientName: secondClientOn ? (secondClientName.trim() || undefined) : undefined,
+              companyName: settings.name, companyPhone: settings.phone, companyEmail: settings.email,
+              portalUrl: window.location.origin + '/portal/login',
+            }),
+          })
+          const body = await res.json().catch(() => ({}))
+          told = !!(body?.sent?.email || body?.sent?.whatsapp)
+          if (!told) reason = (body?.sent?.errors?.length ? body.sent.errors.join('; ') : body?.error) || 'the message could not be sent'
+        } catch { reason = 'the message could not be sent' }
+      }
+      if (!told) {
+        window.alert('The contract has been sent and is waiting in the client’s portal, but they have NOT been emailed: ' + reason + '.\n\nPlease tell them to open their portal to review and sign it.')
+      }
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong sending the contract')

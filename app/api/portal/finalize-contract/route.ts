@@ -16,6 +16,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/supabase/service-role'
 import { signContractPdf } from '@/lib/fmb-contract'
+import { notifyBuilderContractSigned } from '@/lib/contract-notify'
+import { siteOrigin } from '@/lib/site-origin'
 
 const BUCKET = 'job-documents'
 
@@ -89,6 +91,9 @@ export async function POST(req: NextRequest) {
   if (insErr || !newAtt) return NextResponse.json({ error: insErr?.message || 'Failed to save signed contract' }, { status: 500 })
 
   await sb.from('contracts').update({ signed_attachment_id: newAtt.id, updated_at: new Date().toISOString() }).eq('id', contractId)
+
+  // Tell the builder it's signed (an email problem never undoes a signed contract)
+  await notifyBuilderContractSigned(sb, contract, job, process.env.NEXT_PUBLIC_APP_URL || siteOrigin(req))
 
   return NextResponse.json({ ok: true })
 }

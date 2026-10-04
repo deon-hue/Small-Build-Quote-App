@@ -42,7 +42,7 @@ import { portalExplainerHtml, portalWhatsAppLines } from '@/lib/portal-welcome'
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface NotifyClientPayload {
-  type: 'variation_sent' | 'schedule_updated' | 'quote_sent' | 'job_report'
+  type: 'variation_sent' | 'schedule_updated' | 'quote_sent' | 'job_report' | 'contract_sent'
 
   // Recipient
   clientName:   string
@@ -60,6 +60,9 @@ export interface NotifyClientPayload {
   variationTitle?: string
   variationTotal?: number
   vatIncluded?:    boolean
+
+  // contract_sent fields (jobType / jobAddress / message are shared with the others)
+  secondClientName?: string   // a joint client who also has to sign
 
   // quote_sent fields
   quoteRef?:   string
@@ -313,6 +316,45 @@ function buildEmailHtml(rawPayload: NotifyClientPayload, portalUrl: string): str
 </html>`
   }
 
+  if (payload.type === 'contract_sent') {
+    return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f4f0;font-family:Georgia,serif">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
+    <div style="background:#2b3a2b;padding:28px 32px">
+      <div style="color:#c8d8a8;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px">${company}</div>
+      <div style="color:#fff;font-size:22px;font-weight:700">Your Building Contract Is Ready to Sign</div>
+    </div>
+    <div style="padding:28px 32px">
+      <p style="margin:0 0 16px;font-size:15px;color:#2b2f33">Dear ${firstName},</p>
+      <p style="margin:0 0 20px;font-size:15px;color:#2b2f33;line-height:1.6">
+        ${company} has sent you the building contract for the works${payload.jobAddress ? ` at <strong>${payload.jobAddress}</strong>` : ''}.
+        Please read it carefully. You can view it and sign it online in your portal.${payload.secondClientName ? ` Both you and <strong>${payload.secondClientName}</strong> need to sign.` : ''}
+      </p>
+      ${payload.message ? `<div style="background:#f8faf2;border-left:3px solid #7ab533;padding:12px 16px;margin-bottom:20px;border-radius:0 4px 4px 0;font-size:14px;color:#2b2f33;line-height:1.6">${payload.message}</div>` : ''}
+      <div style="background:#f8fafc;border:1px solid #dde1e5;border-radius:8px;padding:18px 20px;margin-bottom:24px">
+        <div style="font-weight:700;font-size:16px;color:#1e2022;margin-bottom:6px">${payload.jobType}</div>
+        <div style="font-size:13px;color:#6b7580">${payload.jobAddress || ''}</div>
+      </div>
+      ${portalUrl ? `<div style="margin-bottom:24px">
+        <a href="${portalUrl}" style="display:inline-block;background:#2b3a2b;color:#fff;text-decoration:none;padding:13px 28px;border-radius:6px;font-size:14px;font-weight:700">Review &amp; Sign Contract →</a>
+      </div>` : ''}
+      ${portalUrl ? portalExplainerHtml() : ''}
+      <p style="margin:0;font-size:13px;color:#6b7580;line-height:1.6">
+        If you have any questions before signing, please get in touch.
+        ${payload.companyPhone ? `<br><br>📞 <strong>${payload.companyPhone}</strong>` : ''}
+        ${payload.companyEmail ? `<br>✉ <strong>${payload.companyEmail}</strong>` : ''}
+      </p>
+    </div>
+    <div style="background:#f4f4f0;padding:16px 32px;border-top:1px solid #dde1e5">
+      <div style="font-size:11px;color:#9aa3ad">Kind regards · ${company}</div>
+    </div>
+  </div>
+</body>
+</html>`
+  }
+
   // schedule_updated
   return `<!DOCTYPE html>
 <html>
@@ -439,6 +481,20 @@ function buildWhatsAppBody(payload: NotifyClientPayload, portalUrl: string): str
     ].filter(l => l !== undefined).join('\n').trim()
   }
 
+  if (payload.type === 'contract_sent') {
+    return [
+      `Hi ${firstName} 👋`,
+      ``,
+      `${company} has sent you the building contract for the ${payload.jobType} works${payload.jobAddress ? ` at ${payload.jobAddress}` : ''}.`,
+      payload.secondClientName ? `Both you and ${payload.secondClientName} need to sign it.` : '',
+      ``,
+      `📝 Please read it and sign it online in your portal:`,
+      ...portalWhatsAppLines(portalUrl),
+      ``,
+      payload.companyPhone ? `Any questions? Call us on ${payload.companyPhone}` : '',
+    ].filter(l => l !== undefined).join('\n').trim()
+  }
+
   // schedule_updated
   return [
     `Hi ${firstName} 👋`,
@@ -470,6 +526,10 @@ function buildEmailSubject(payload: NotifyClientPayload): string {
   if (payload.type === 'job_report') {
     const addr = payload.jobAddress ? ` for ${clean(payload.jobAddress).split(',')[0]}` : ''
     return `${company}: Job Financial Summary${addr}`
+  }
+  if (payload.type === 'contract_sent') {
+    const addr = payload.jobAddress ? ` for ${clean(payload.jobAddress).split(',')[0]}` : ''
+    return `${company}: Your building contract is ready to sign${addr}`
   }
   return `${company}: Your project schedule has been updated`
 }
@@ -518,9 +578,9 @@ export async function POST(req: NextRequest) {
   // this never risks Supabase's own outbound-email rate limit, and never sends a second,
   // separately-branded email alongside the one built here.
   let magicPortalUrl: string | null = null
-  if (payload.type === 'quote_sent' && clientEmail) {
+  if ((payload.type === 'quote_sent' || payload.type === 'contract_sent') && clientEmail) {
     try {
-      const link = await createPortalSignInLink(clientEmail, appUrl, '/portal/quotes')
+      const link = await createPortalSignInLink(clientEmail, appUrl, payload.type === 'contract_sent' ? '/portal/jobs' : '/portal/quotes')
       if ('error' in link) {
         console.error('[notify-client] sign-in link failed:', link.error)
       } else {
@@ -545,7 +605,7 @@ export async function POST(req: NextRequest) {
     try {
       // A quote's email carries a one-time magic link, so WhatsApp gets the reusable login-page
       // link instead — if both used the one-time link, whichever was opened second would fail.
-      const waPortalUrl = payload.type === 'quote_sent' ? (payload.portalUrl || (appUrl ? `${appUrl}/portal/login` : '')) : portalUrl
+      const waPortalUrl = (payload.type === 'quote_sent' || payload.type === 'contract_sent') ? (payload.portalUrl || (appUrl ? `${appUrl}/portal/login` : '')) : portalUrl
       const body   = buildWhatsAppBody(payload, waPortalUrl)
       const result = await sendWhatsApp(clientPhone, body, twilioSid, twilioToken, twilioFrom)
       results.whatsapp = result.ok
