@@ -441,7 +441,7 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
                     hint="Printed under the scope on Schedule 1. Comes from the quote's Changes to the scope box; you can also type here. Leave empty if there are none." />
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <Field label="Drawings referenced" value={String(fields[F.drawings] || '')} onChange={v => set(F.drawings, v)} />
+                  <Field label="Drawings referenced" value={String(fields[F.drawings] || '')} onChange={v => set(F.drawings, v)} hint="Plans and documents uploaded to this job (Files on the Jobs page) show beside the contract on the client's Contracts tab." />
                   <Field label="Estimate referenced" value={String(fields[F.estimate] || '')} onChange={v => set(F.estimate, v)} />
                   <Field label="Specification referenced" value={String(fields[F.specification] || '')} onChange={v => set(F.specification, v)} />
                   <Field label="Other documents" value={String(fields[F.otherDocuments] || '')} onChange={v => set(F.otherDocuments, v)} />

@@ -1,7 +1,6 @@
 'use client'
 
-import { useState } from 'react'
-import Link from 'next/link'
+import { useEffect, useState } from 'react'
 import { usePortal, type PortalContract } from '@/contexts/PortalContext'
 import { jobDisplayTitle } from '@/lib/utils'
 import PortalSignContractModal from '@/components/PortalSignContractModal'
@@ -10,6 +9,46 @@ function fmtDate(iso: string | null | undefined): string {
   if (!iso) return ''
   try { return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) }
   catch { return '' }
+}
+
+type JobFile = { id: string; fileName: string; mimeType: string; fileSize: number; category: string; label: string; url: string | null }
+
+/** The plans and documents the builder has uploaded to this job, shown with the contract so the client can read them before signing.
+ *  Photos and the contract's own PDFs are left out (the contract has its own buttons). Shows nothing when there are none. */
+function ContractFiles({ jobId }: { jobId: string }) {
+  const [files, setFiles] = useState<JobFile[] | null>(null)
+  useEffect(() => {
+    let live = true
+    fetch(`/api/portal/job-attachments?jobId=${jobId}`)
+      .then(r => (r.ok ? r.json() : []))
+      .then((d: JobFile[]) => { if (live) setFiles(Array.isArray(d) ? d : []) })
+      .catch(() => { if (live) setFiles([]) })
+    return () => { live = false }
+  }, [jobId])
+
+  const shown = (files || []).filter(f => f.category === 'plan' || f.category === 'document')
+  if (shown.length === 0) return null
+  const size = (n: number) => (n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB')
+  return (
+    <div style={{ marginTop: 14, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.7px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }}>
+        Plans &amp; documents for this contract
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {shown.map(f => (
+          <div key={f.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 12px', background: 'var(--warm, #f8f8f4)', borderRadius: 7, flexWrap: 'wrap' }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{f.category === 'plan' ? '📐' : '📄'} {f.label || f.fileName}</div>
+              <div style={{ fontSize: 11, color: 'var(--muted)' }}>{f.label ? f.fileName + ' · ' : ''}{size(f.fileSize)}</div>
+            </div>
+            {f.url
+              ? <a className="btn-sm btn-outline" href={f.url} target="_blank" rel="noreferrer">Open</a>
+              : <span style={{ fontSize: 11, color: 'var(--muted)' }}>Unavailable</span>}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 export default function PortalContractsPage() {
@@ -73,8 +112,8 @@ export default function PortalContractsPage() {
               {c.draftUrl && <a className="btn btn-outline" href={c.draftUrl} target="_blank" rel="noreferrer">Contract as sent to you</a>}
             </>
           )}
-          {job && <Link href="/portal/jobs" className="btn btn-outline">Plans &amp; documents for this job →</Link>}
         </div>
+        <ContractFiles jobId={c.jobId} />
       </div>
     )
   }
