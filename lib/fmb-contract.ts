@@ -14,6 +14,7 @@
 import { PDFDocument, PDFForm, PDFCheckBox, PDFTextField } from 'pdf-lib'
 import type { Contract, ContractFields, ContractPaymentStage, Job, Quote, Settings } from './types'
 import { quoteTotal } from './utils'
+import { toPdfSafeText } from './pdf-text'
 
 // ── Field names ───────────────────────────────────────────────────────────────
 
@@ -138,7 +139,13 @@ function completionDateFromJob(job: Pick<Job, 'start' | 'weeks'>): string {
 
 function setText(form: PDFForm, name: string, value: string | undefined | null) {
   if (!value) return
-  try { (form.getField(name) as PDFTextField).setText(value) } catch { /* field not in this template version */ }
+  // The form's standard fonts can't draw symbols such as ≤ ≥ → or emoji (pdf-lib throws "WinAnsi cannot encode…" and the whole contract fails),
+  // so the printed text is cleaned first. What is saved in the app is not changed.
+  const safe = toPdfSafeText(value)
+  if (!safe) return
+  let field: PDFTextField
+  try { field = form.getField(name) as PDFTextField } catch { return /* field not in this template version */ }
+  field.setText(safe)
 }
 
 function setCheck(form: PDFForm, name: string, checked: boolean) {
