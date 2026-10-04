@@ -40,6 +40,10 @@ const F = {
 
 const MAX_STAGE_PAYMENTS = 28
 
+// Remembers which quote scope the contract's "Works provided" was last copied from, so a later change to the quote can be
+// told apart from the builder's own edits to the contract. (Not a PDF field: the contract filler ignores names starting with "_".)
+const SCOPE_SNAPSHOT = '_quoteScopeSnapshot'
+
 function completionDateFromJob(job: Job): string {
   if (!job.start || !job.weeks) return ''
   const parts = job.start.split('/').map(Number)
@@ -60,6 +64,7 @@ function autoFill(job: Job, quote: Quote | undefined, settings: { name: string; 
     f[F.clientAddress] = quote.customer.address || ''
     f[F.clientTelephone] = quote.customer.phone || ''
     f[F.worksProvided] = quote.scope || ''
+    f[SCOPE_SNAPSHOT] = quote.scope || ''
     f[F.price] = fmt(quoteTotal(quote))
   } else {
     f[F.clientName] = job.client || ''
@@ -67,14 +72,14 @@ function autoFill(job: Job, quote: Quote | undefined, settings: { name: string; 
   return f
 }
 
-function Field({ label, value, onChange, textarea, hint }: {
-  label: string; value: string; onChange: (v: string) => void; textarea?: boolean; hint?: string
+function Field({ label, value, onChange, textarea, hint, rows }: {
+  label: string; value: string; onChange: (v: string) => void; textarea?: boolean; hint?: string; rows?: number
 }) {
   return (
     <div className="fg" style={{ margin: 0 }}>
       <label style={{ fontSize: 11 }}>{label}</label>
       {textarea ? (
-        <textarea value={value} onChange={e => onChange(e.target.value)} rows={3} style={{ width: '100%', fontSize: 13, fontFamily: 'inherit' }} />
+        <textarea value={value} onChange={e => onChange(e.target.value)} rows={rows ?? 3} style={{ width: '100%', fontSize: 13, fontFamily: 'inherit' }} />
       ) : (
         <input value={value} onChange={e => onChange(e.target.value)} style={{ width: '100%', padding: '7px 9px', fontSize: 13, boxSizing: 'border-box' }} />
       )}
@@ -115,6 +120,8 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
   const [creating, setCreating] = useState(false)
   const [busy, setBusy] = useState<'preview' | 'send' | 'save' | null>(null)
   const [error, setError] = useState('')
+  // The quote's scope of works vs the contract's: 'updated' = copied across automatically, 'changed' = the quote has changed but the contract's text was edited by hand
+  const [scopeNote, setScopeNote] = useState<'' | 'updated' | 'changed'>('')
   const [signedUrl, setSignedUrl] = useState<string | null>(null)
   const initedRef = useRef(false)
 
@@ -130,7 +137,25 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
         setContract(c)
         setCreating(false)
       }
-      const seeded = Object.keys(c.fields || {}).length ? c.fields : autoFill(job, quote, settings)
+      let seeded = Object.keys(c.fields || {}).length ? c.fields : autoFill(job, quote, settings)
+
+      // Keep "Works provided" in step with the quote's scope of works. A contract made before the quote's scope was
+      // changed would otherwise keep the old text for ever.
+      if (quote) {
+        const qScope = (quote.scope || '').trim()
+        const cur = String(seeded[F.worksProvided] || '').trim()
+        const snap = typeof seeded[SCOPE_SNAPSHOT] === 'string' ? String(seeded[SCOPE_SNAPSHOT]).trim() : undefined
+        if (qScope && cur === qScope) {
+          seeded = { ...seeded, [SCOPE_SNAPSHOT]: qScope }                                   // already the same
+        } else if (qScope && !cur) {
+          seeded = { ...seeded, [F.worksProvided]: qScope, [SCOPE_SNAPSHOT]: qScope }        // empty: fill it in
+        } else if (qScope && snap !== undefined && cur === snap) {
+          seeded = { ...seeded, [F.worksProvided]: qScope, [SCOPE_SNAPSHOT]: qScope }        // untouched since copied: follow the quote
+          setScopeNote('updated')
+        } else if (qScope && qScope !== (snap ?? '')) {
+          setScopeNote('changed')                                                            // edited by hand (or unknown): ask, don't overwrite
+        }
+      }
       setFields(seeded)
       setPaymentMode(c.paymentMode)
       setSchedule(c.paymentSchedule || [])
@@ -372,7 +397,19 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
                   <Field label="Project site" value={String(fields[F.projectSite] || '')} onChange={v => set(F.projectSite, v)} />
                 </div>
                 <div style={{ marginBottom: 10 }}>
-                  <Field label="Works provided (scope)" value={String(fields[F.worksProvided] || '')} onChange={v => set(F.worksProvided, v)} textarea />
+                  <Field label="Works provided (scope)" value={String(fields[F.worksProvided] || '')} onChange={v => { set(F.worksProvided, v); setScopeNote('') }} textarea rows={8}
+                    hint="Comes from the quote's Scope of Works. A scope too long for the contract's one-line box is printed in full on a Schedule 1 page at the end of the contract." />
+                  {scopeNote === 'updated' && (
+                    <div style={{ fontSize: 12, marginTop: 6, padding: '6px 10px', background: 'rgba(122,181,51,0.12)', borderRadius: 6 }}>
+                      ✓ The quote&rsquo;s scope of works had changed, so this has been updated to match it.
+                    </div>
+                  )}
+                  {scopeNote === 'changed' && quote && (
+                    <div style={{ fontSize: 12, marginTop: 6, padding: '8px 10px', background: '#fff8e1', border: '1px solid #ffe082', borderRadius: 6, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <span style={{ flex: 1 }}>The quote&rsquo;s scope of works is different from this. Your wording above has been kept.</span>
+                      <button type="button" className="btn-sm btn-outline" onClick={() => { setFields(prev => ({ ...prev, [F.worksProvided]: quote.scope || '', [SCOPE_SNAPSHOT]: quote.scope || '' })); setScopeNote('') }}>Use the quote&rsquo;s scope</button>
+                    </div>
+                  )}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   <Field label="Drawings referenced" value={String(fields[F.drawings] || '')} onChange={v => set(F.drawings, v)} />

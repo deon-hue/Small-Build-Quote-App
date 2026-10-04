@@ -11,10 +11,11 @@
  * route (server-side; the template file isn't public).
  */
 
-import { PDFDocument, PDFForm, PDFCheckBox, PDFTextField } from 'pdf-lib'
+import { PDFDocument, PDFForm, PDFCheckBox, PDFTextField, StandardFonts } from 'pdf-lib'
 import type { Contract, ContractFields, ContractPaymentStage, Job, Quote, Settings } from './types'
 import { quoteTotal } from './utils'
 import { toPdfSafeText } from './pdf-text'
+import { appendScopeSchedule, scopeFitsBox, SCOPE_BOX_POINTER } from './contract-scope-page'
 
 // ── Field names ───────────────────────────────────────────────────────────────
 
@@ -202,8 +203,18 @@ export async function fillContractPdf(
   const form = pdf.getForm()
 
   for (const [name, value] of Object.entries(fields)) {
+    if (name === FIELD.worksProvided || name.startsWith('_')) continue   // the scope is handled below; '_' keys are the app's own bookkeeping
     if (typeof value === 'boolean') setCheck(form, name, value)
     else setText(form, name, value)
+  }
+
+  // Works provided: the template's box is a single short line, so a real scope of works goes on a Schedule 1 page at the end
+  const scope = typeof fields[FIELD.worksProvided] === 'string' ? String(fields[FIELD.worksProvided]).trim() : ''
+  let scopeSchedule = false
+  if (scope) {
+    const measure = await pdf.embedFont(StandardFonts.Helvetica)
+    if (scopeFitsBox(scope, measure)) setText(form, FIELD.worksProvided, scope)
+    else { setText(form, FIELD.worksProvided, SCOPE_BOX_POINTER); scopeSchedule = true }
   }
 
   if (paymentMode === 'staged') {
@@ -223,6 +234,12 @@ export async function fillContractPdf(
   if (builderSignature?.name?.trim()) {
     setText(form, FIELD.builderSignName, builderSignature.name.trim())
     setText(form, FIELD.builderSignature, `${builderSignature.name.trim()} (signed electronically ${builderSignature.signedAt})`)
+  }
+
+  if (scopeSchedule) {
+    await appendScopeSchedule(pdf, scope, {
+      clientName: String(fields[FIELD.clientName] || ''), site: String(fields[FIELD.projectSite] || ''), builderName: String(fields[FIELD.builderName] || ''),
+    })
   }
 
   return pdf.save()
