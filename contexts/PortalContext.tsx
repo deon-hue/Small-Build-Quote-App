@@ -23,7 +23,17 @@ export interface PortalPayment {
   notes: string
 }
 
+/** A building contract as the client sees it in the portal */
+export interface PortalContract {
+  id: string; jobId: string; status: 'draft' | 'sent' | 'signed'; secondClientName: string | null
+  clientSignedAt: string | null; clientSignedBy: string | null
+  client2SignedAt: string | null; client2SignedBy: string | null
+  createdAt: string; draftUrl: string | null; signedUrl: string | null
+}
+
 interface PortalContextType {
+  contracts: PortalContract[]
+  reloadContracts: () => Promise<void>
   quotes: Quote[]
   jobs: Job[]
   invoices: Invoice[]
@@ -61,12 +71,30 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<PortalSettings>(DEFAULT_SETTINGS)
   const [clientSettings, setClientSettings] = useState<ClientPortalSettings>(DEFAULT_CLIENT_PORTAL_SETTINGS)
   const [userEmail, setUserEmail] = useState('')
+  const [contracts, setContracts] = useState<PortalContract[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
   const silentPollRef = useRef(false)
   const lastLoadRef = useRef(0)       // when the last refresh started, so tab switches don't re-download needlessly
   const profileReadyRef = useRef(false) // create_customer_profile only needs to succeed once per visit
+
+  // Every contract on every one of this client's jobs (one request per job). Drafts are never shown to the client.
+  async function reloadContracts(jobList: Job[] = jobs) {
+    const lists = await Promise.all(jobList.map(async j => {
+      try {
+        const res = await fetch(`/api/portal/job-contracts?jobId=${j.id}`)
+        const data = res.ok ? await res.json() : []
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return (Array.isArray(data) ? data : []).map((c: any) => ({ ...c, jobId: j.id } as PortalContract))
+      } catch { return null }   // network trouble: keep what we had for this job
+    }))
+    setContracts(prev => {
+      const next: PortalContract[] = []
+      jobList.forEach((j, i) => { next.push(...(lists[i] ?? prev.filter(c => c.jobId === j.id))) })
+      return next
+    })
+  }
 
   function reload() {
     setError(null)
@@ -163,12 +191,14 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       // Map jobs
       if (Array.isArray(result?.jobs)) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        setJobs(result.jobs.map((r: any) => ({
+        const mappedJobs = result.jobs.map((r: any) => ({
           id: r.id, client: r.client, type: r.type, address: r.address || '',
           value: Number(r.value), stage: r.stage,
           start: r.start_date || '', weeks: r.weeks, done: r.done,
           notes: r.notes || '',
-        })))
+        }))
+        setJobs(mappedJobs)
+        reloadContracts(mappedJobs)   // not awaited: the portal shows now, contracts fill in a moment later
       }
 
       // Fetch gantt states via dedicated function (works regardless of whether
@@ -265,7 +295,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   }, [tick]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <PortalContext.Provider value={{ quotes, jobs, invoices, variations, payments, ganttStates, settings, clientSettings, userEmail, loading, error, reload }}>
+    <PortalContext.Provider value={{ contracts, reloadContracts: () => reloadContracts(), quotes, jobs, invoices, variations, payments, ganttStates, settings, clientSettings, userEmail, loading, error, reload }}>
       {children}
     </PortalContext.Provider>
   )

@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { usePortal } from '@/contexts/PortalContext'
+import { usePortal, type PortalContract } from '@/contexts/PortalContext'
+import PortalSignContractModal from '@/components/PortalSignContractModal'
 import { STAGE_COLOR, STAGE_LABEL, fmt, jobProgress } from '@/lib/utils'
 import PortalBuildPlan from '@/components/PortalBuildPlan'
 import { createClient } from '@/lib/supabase/client'
@@ -85,68 +86,12 @@ export default function PortalJobsPage() {
     if (!fileCache[jobId]) loadAttachments(jobId)
   }
 
-  // Contracts per job — loaded eagerly (not behind a toggle) since "awaiting your
-  // signature" is important enough to surface without an extra click, same as an
-  // unapproved variation already is on this page.
-  type PortalContract = {
-    id: string; status: 'draft' | 'sent' | 'signed'; secondClientName: string | null
-    clientSignedAt: string | null; clientSignedBy: string | null
-    client2SignedAt: string | null; client2SignedBy: string | null
-    createdAt: string; draftUrl: string | null; signedUrl: string | null
-  }
-  const [contractsByJob, setContractsByJob] = useState<Record<string, PortalContract[]>>({})
-
-  async function reloadContracts() {
-    for (const j of jobs) {
-      try {
-        const res = await fetch(`/api/portal/job-contracts?jobId=${j.id}`)
-        const data: PortalContract[] = res.ok ? await res.json() : []
-        setContractsByJob(prev => ({ ...prev, [j.id]: data }))
-      } catch { /* leave whatever was cached */ }
-    }
-  }
-  useEffect(() => { if (jobs.length) reloadContracts() }, [jobs.length]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const [signingContract, setSigningContract]   = useState<PortalContract | null>(null)
-  const [contractSigName, setContractSigName]   = useState('')
-  const [contractSig2Name, setContractSig2Name] = useState('')
-  const [contractAgreed, setContractAgreed]     = useState(false)
-  const [contractSubmitting, setContractSubmitting] = useState(false)
-  const [contractError, setContractError]       = useState('')
-  const signContractModal = useDraggableModal()
-
-  function openSignContract(c: PortalContract) {
-    setSigningContract(c); setContractSigName(''); setContractSig2Name(''); setContractAgreed(false); setContractError('')
-  }
-
-  async function handleSignContract() {
-    if (!signingContract || !contractSigName.trim() || !contractAgreed) return
-    if (signingContract.secondClientName && !contractSig2Name.trim()) return
-    setContractSubmitting(true); setContractError('')
-    try {
-      const { data, error: rpcErr } = await supabase.rpc('sign_contract', {
-        p_contract_id: signingContract.id, p_role: 'client', p_signature: contractSigName.trim(),
-      })
-      if (rpcErr || data?.error) { setContractError(rpcErr?.message || data?.error || 'Something went wrong.'); return }
-
-      if (signingContract.secondClientName) {
-        const { data: data2, error: rpcErr2 } = await supabase.rpc('sign_contract', {
-          p_contract_id: signingContract.id, p_role: 'client2', p_signature: contractSig2Name.trim(),
-        })
-        if (rpcErr2 || data2?.error) { setContractError(rpcErr2?.message || data2?.error || 'Something went wrong.'); return }
-      }
-
-      // Flatten + store the final signed PDF now that every needed signature is in —
-      // harmless to call even if it's already been finalized (the route is idempotent).
-      await fetch('/api/portal/finalize-contract', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contractId: signingContract.id }),
-      }).catch(() => {})
-
-      setSigningContract(null)
-      reloadContracts()
-    } finally { setContractSubmitting(false) }
-  }
+  // Contracts come from the shared portal data (also used by the Contracts tab); signing uses the shared window
+  const { contracts, reloadContracts } = usePortal()
+  const contractsByJob: Record<string, PortalContract[]> = {}
+  contracts.forEach(c => { (contractsByJob[c.jobId] ||= []).push(c) })
+  const [signingContract, setSigningContract] = useState<PortalContract | null>(null)
+  function openSignContract(c: PortalContract) { setSigningContract(c) }
 
   // Payments per job
   type PortalPayment = { id: string; amount: number; payment_date: string; method: string; notes?: string }
@@ -798,87 +743,11 @@ export default function PortalJobsPage() {
 
       {/* ── Sign contract modal ─────────────────────────────── */}
       {signingContract && (
-        <div className="modal-overlay" onClick={e => signContractModal.onOverlayClick(e, () => setSigningContract(null))}>
-          <div ref={signContractModal.boxRef} className="portal-modal" style={signContractModal.draggableStyle}>
-            <div className="portal-modal-hd" onMouseDown={signContractModal.onHeaderMouseDown}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 18 }}>Sign Contract</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>Your FMB building contract</div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <ModalMaximizeButton isMaximized={signContractModal.isMaximized} onClick={signContractModal.toggleMaximize} />
-                <button className="modal-close" onClick={() => setSigningContract(null)}>×</button>
-              </div>
-            </div>
-            <div className="portal-modal-bd">
-              {signingContract.draftUrl && (
-                <a className="btn btn-outline" href={signingContract.draftUrl} target="_blank" rel="noreferrer" style={{ marginBottom: 20, display: 'inline-block' }}>
-                  📄 Open the contract to read in full
-                </a>
-              )}
-
-              <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.7, marginBottom: 20, padding: '14px 16px', background: '#fffbf0', border: '1px solid #f0d080', borderRadius: 8 }}>
-                <strong>Please read the contract before signing:</strong><br />
-                By signing you agree to be bound by the terms of this contract. This is a legally
-                binding agreement and cannot be undone.
-              </div>
-
-              <div className="fg" style={{ marginBottom: 16 }}>
-                <label style={{ fontWeight: 600 }}>Your Full Name <span style={{ color: '#c0392b' }}>*</span></label>
-                <input
-                  type="text"
-                  value={contractSigName}
-                  onChange={e => setContractSigName(e.target.value)}
-                  placeholder="Type your full name to sign"
-                  autoFocus
-                  style={{ fontSize: 15 }}
-                />
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>This acts as your electronic signature</div>
-              </div>
-
-              {signingContract.secondClientName && (
-                <div className="fg" style={{ marginBottom: 16 }}>
-                  <label style={{ fontWeight: 600 }}>{signingContract.secondClientName}&rsquo;s Full Name <span style={{ color: '#c0392b' }}>*</span></label>
-                  <input
-                    type="text"
-                    value={contractSig2Name}
-                    onChange={e => setContractSig2Name(e.target.value)}
-                    placeholder={`Type ${signingContract.secondClientName}'s full name to sign`}
-                    style={{ fontSize: 15 }}
-                  />
-                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
-                    This contract needs both clients&rsquo; signatures — enter both while you&rsquo;re signing together
-                  </div>
-                </div>
-              )}
-
-              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginBottom: 8 }}>
-                <input type="checkbox" checked={contractAgreed} onChange={e => setContractAgreed(e.target.checked)} style={{ marginTop: 2, flexShrink: 0, width: 16, height: 16 }} />
-                <span style={{ fontSize: 13, lineHeight: 1.5 }}>
-                  I have read and agree to the contract{signingContract.secondClientName ? ' on behalf of both of us' : ''}
-                </span>
-              </label>
-
-              {contractError && (
-                <div style={{ color: '#c0392b', fontSize: 13, marginTop: 12, padding: '8px 12px', background: '#fdf0ef', borderRadius: 6 }}>
-                  {contractError}
-                </div>
-              )}
-            </div>
-            <div className="portal-modal-ft">
-              <button className="btn btn-outline" onClick={() => setSigningContract(null)} disabled={contractSubmitting}>Cancel</button>
-              <button
-                className="btn btn-primary"
-                onClick={handleSignContract}
-                disabled={contractSubmitting || !contractSigName.trim() || !contractAgreed || (!!signingContract.secondClientName && !contractSig2Name.trim())}
-                style={{ minWidth: 180 }}
-              >
-                {contractSubmitting ? 'Signing…' : '✍️ Sign Contract'}
-              </button>
-            </div>
-            {!signContractModal.isMaximized && <ModalResizeHandle onMouseDown={signContractModal.onResizeMouseDown} />}
-          </div>
-        </div>
+        <PortalSignContractModal
+          contract={signingContract}
+          onClose={() => setSigningContract(null)}
+          onSigned={() => { setSigningContract(null); reloadContracts() }}
+        />
       )}
 
       {/* ── Reject modal ────────────────────────────────────── */}

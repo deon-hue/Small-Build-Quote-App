@@ -66,7 +66,7 @@ function PortalError({ error, userEmail, reload }: { error: string; userEmail: s
 }
 
 export default function PortalDashboard() {
-  const { invoices, variations, jobs, payments, settings, userEmail, loading, error, reload } = usePortal()
+  const { invoices, variations, jobs, payments, contracts, settings, userEmail, loading, error, reload } = usePortal()
 
   if (loading) {
     return (
@@ -81,6 +81,7 @@ export default function PortalDashboard() {
     return <PortalError error={error} userEmail={userEmail} reload={reload} />
   }
 
+  const contractsToSign = contracts.filter(c => c.status === 'sent')
   const unpaidInvoices = invoices.filter(i => i.status === 'sent' || i.status === 'overdue')
 
   // Financial snapshot
@@ -104,6 +105,16 @@ export default function PortalDashboard() {
         <h1>Welcome back</h1>
         {settings.name && <p className="portal-company-name">{settings.name}</p>}
       </div>
+
+      {contractsToSign.length > 0 && (
+        <Link href="/portal/contracts" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', background: '#fff8e1', border: '1px solid #ffe082', borderRadius: 8, padding: '14px 18px', marginBottom: 20, textDecoration: 'none', color: 'inherit' }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 15 }}>📝 {contractsToSign.length === 1 ? 'Your building contract is ready to sign' : contractsToSign.length + ' contracts are ready to sign'}</div>
+            <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>Read it and sign it online.</div>
+          </div>
+          <span className="btn btn-primary">Review &amp; Sign →</span>
+        </Link>
+      )}
 
       {/* ── Portal intro ── */}
       <div style={{ background: '#f8faf2', border: '1px solid #d4e8b0', borderLeft: '4px solid #b8cc00', borderRadius: 8, padding: '14px 18px', marginBottom: 20 }}>

@@ -12,7 +12,9 @@ function PortalNav() {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
-  const { settings, clientSettings } = usePortal()
+  const { settings, clientSettings, contracts } = usePortal()
+  const visibleContracts = contracts.filter(c => c.status === 'sent' || c.status === 'signed')
+  const awaitingContracts = contracts.filter(c => c.status === 'sent').length
   const [menuOpen, setMenuOpen] = useState(false)
 
   // Tab title shows the contractor's name once their settings have loaded
@@ -26,7 +28,7 @@ function PortalNav() {
     router.refresh()
   }
 
-  const navLink = (href: string, label: string) => {
+  const navLink = (href: string, label: string, badge = 0) => {
     const active = pathname === href
     return (
       <Link
@@ -35,6 +37,7 @@ function PortalNav() {
         onClick={() => setMenuOpen(false)}
       >
         {label}
+        {badge > 0 && <span style={{ marginLeft: 6, background: '#e67e22', color: '#fff', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 6px' }}>{badge}</span>}
       </Link>
     )
   }
@@ -53,6 +56,7 @@ function PortalNav() {
           {clientSettings.showQuotesTab     && navLink('/portal/quotes',      'Quotes')}
           {clientSettings.showVariationsTab && navLink('/portal/variations',  'Variations')}
           {clientSettings.showInvoicesTab   && navLink('/portal/invoices',    'Invoices')}
+          {visibleContracts.length > 0 && navLink('/portal/contracts', 'Contracts', awaitingContracts)}
           {navLink('/portal/build-plan', 'Build Plan')}
           <button className="portal-signout-btn" onClick={signOut}>Sign Out</button>
         </nav>

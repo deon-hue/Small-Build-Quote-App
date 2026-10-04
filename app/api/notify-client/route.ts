@@ -580,7 +580,7 @@ export async function POST(req: NextRequest) {
   let magicPortalUrl: string | null = null
   if ((payload.type === 'quote_sent' || payload.type === 'contract_sent') && clientEmail) {
     try {
-      const link = await createPortalSignInLink(clientEmail, appUrl, payload.type === 'contract_sent' ? '/portal/jobs' : '/portal/quotes')
+      const link = await createPortalSignInLink(clientEmail, appUrl, payload.type === 'contract_sent' ? '/portal/contracts' : '/portal/quotes')
       if ('error' in link) {
         console.error('[notify-client] sign-in link failed:', link.error)
       } else {
