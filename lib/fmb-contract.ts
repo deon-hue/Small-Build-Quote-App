@@ -185,11 +185,18 @@ export function autoFillContractFields(job: Job, quote: Quote | undefined, setti
 
 // ── Fill (draft/preview) ──────────────────────────────────────────────────────
 
+/** The builder's electronic signature as it should appear on the contract (name typed by the builder + the date they signed). */
+export interface BuilderSignature {
+  name: string
+  signedAt: string  // display date, e.g. "4 October 2026"
+}
+
 export async function fillContractPdf(
   templateBytes: Uint8Array | ArrayBuffer,
   fields: ContractFields,
   paymentMode: 'simple' | 'staged',
   paymentSchedule: ContractPaymentStage[],
+  builderSignature?: BuilderSignature,
 ): Promise<Uint8Array> {
   const pdf = await PDFDocument.load(templateBytes, { ignoreEncryption: true })
   const form = pdf.getForm()
@@ -210,6 +217,12 @@ export async function fillContractPdf(
   } else {
     setCheck(form, FIELD.regularBillsTick, false)
     setCheck(form, FIELD.stagedBillsTick, false)
+  }
+
+  // The builder signs before sending, so the client receives a contract that already carries the builder's signature
+  if (builderSignature?.name?.trim()) {
+    setText(form, FIELD.builderSignName, builderSignature.name.trim())
+    setText(form, FIELD.builderSignature, `${builderSignature.name.trim()} (signed electronically ${builderSignature.signedAt})`)
   }
 
   return pdf.save()

@@ -23,8 +23,13 @@ export async function POST(req: NextRequest) {
       fields: ContractFields
       paymentMode: 'simple' | 'staged'
       paymentSchedule: ContractPaymentStage[]
+      builderSignature?: { name?: string; signedAt?: string }
     }
     const { fields, paymentMode, paymentSchedule } = body
+    const sig = body.builderSignature
+    const builderSignature = sig && typeof sig.name === 'string' && sig.name.trim() && sig.name.length <= 120
+      ? { name: sig.name, signedAt: typeof sig.signedAt === 'string' ? sig.signedAt.slice(0, 40) : '' }
+      : undefined
     if (!fields) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
 
     let templateBytes: Buffer
@@ -37,7 +42,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const filled = await fillContractPdf(templateBytes, fields, paymentMode ?? 'simple', paymentSchedule ?? [])
+    const filled = await fillContractPdf(templateBytes, fields, paymentMode ?? 'simple', paymentSchedule ?? [], builderSignature)
     const base64 = Buffer.from(filled).toString('base64')
 
     return NextResponse.json({ pdf: base64 })

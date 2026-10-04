@@ -110,6 +110,8 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
   const [schedule, setSchedule] = useState<ContractPaymentStage[]>([])
   const [secondClientOn, setSecondClientOn] = useState(false)
   const [secondClientName, setSecondClientName] = useState('')
+  const [signName, setSignName] = useState('')
+  const [signConfirmed, setSignConfirmed] = useState(false)
   const [creating, setCreating] = useState(false)
   const [busy, setBusy] = useState<'preview' | 'send' | 'save' | null>(null)
   const [error, setError] = useState('')
@@ -134,8 +136,16 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
       setSchedule(c.paymentSchedule || [])
       setSecondClientOn(!!c.secondClientName)
       setSecondClientName(c.secondClientName || '')
+      setSignName(c.builderSignedBy || settings.contact || '')
     })()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Any change to the contract clears the signature tick: the builder must confirm they are signing the changed version
+  const signTickReady = useRef(false)
+  useEffect(() => {
+    if (!signTickReady.current) { signTickReady.current = true; return }
+    setSignConfirmed(false)
+  }, [fields, paymentMode, schedule, secondClientOn, secondClientName])
 
   // If the most recent contract for this job is already signed, show that instead of a builder.
   useEffect(() => {
@@ -180,10 +190,14 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
     return updated
   }
 
+  // The builder's signature: their own typed name + today's date, once they have ticked to confirm. Shown in the preview and on the copy sent to the client.
+  const todayDisplay = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+  const builderSignature = signName.trim() && signConfirmed ? { name: signName.trim(), signedAt: todayDisplay } : undefined
+
   async function generatePdf(fieldsToUse: ContractFields) {
     const res = await fetch('/api/generate-contract-pdf', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields: fieldsToUse, paymentMode, paymentSchedule: paymentMode === 'staged' ? schedule : [] }),
+      body: JSON.stringify({ fields: fieldsToUse, paymentMode, paymentSchedule: paymentMode === 'staged' ? schedule : [], builderSignature }),
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data?.error || 'Failed to generate the contract PDF')
@@ -211,6 +225,7 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
 
   async function handleSend() {
     if (!contract) return
+    if (!signName.trim() || !signConfirmed) { setError('Please sign as builder first: type your name and tick the confirmation box.'); return }
     setError(''); setBusy('send')
     try {
       const { data: { user } } = await sb.auth.getUser()
@@ -226,7 +241,7 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
       await persist('sent', {
         draftAttachmentId: result.attachment.id,
         builderSignedAt: new Date().toISOString(),
-        builderSignedBy: settings.name || 'Builder',
+        builderSignedBy: signName.trim(),
       })
       onClose()
     } catch (err) {
@@ -416,6 +431,19 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
                 <Field label="Additional notes" value={String(fields[F.additionalNotes] || '')} onChange={v => set(F.additionalNotes, v)} textarea />
               </CollapsibleSection>
 
+              <div style={{ border: '1.5px solid var(--border)', borderRadius: 8, padding: '12px 14px', margin: '14px 0 12px', background: signConfirmed && signName.trim() ? 'rgba(122,181,51,0.10)' : 'rgba(0,0,0,0.02)' }}>
+                <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>✍️ Sign as builder</div>
+                <Field label="Your full name (this is your signature)" value={signName} onChange={setSignName} />
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12.5, margin: '8px 0 4px', cursor: 'pointer', lineHeight: 1.45 }}>
+                  <input type="checkbox" checked={signConfirmed} onChange={e => setSignConfirmed(e.target.checked)} style={{ marginTop: 2 }} />
+                  <span>I have checked the contract details and I sign this contract as the builder, electronically, on {todayDisplay}.</span>
+                </label>
+                <div style={{ fontSize: 11.5, color: 'var(--muted)' }}>
+                  {builderSignature ? <>The contract will show: <strong>{builderSignature.name} (signed electronically {builderSignature.signedAt})</strong>. Use “Generate &amp; Preview” to see it before sending.</>
+                    : 'Type your name and tick the box to sign. “Send for signature” unlocks once you have. If you change anything afterwards, you’ll be asked to tick again.'}
+                </div>
+              </div>
+
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', paddingTop: 6, borderTop: '1px solid var(--border)' }}>
                 <button className="btn-sm btn-outline" onClick={handleSaveDraft} disabled={busy !== null}>
                   {busy === 'save' ? '…' : '💾 Save draft'}
@@ -423,7 +451,7 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
                 <button className="btn-sm btn-outline" onClick={handlePreview} disabled={busy !== null}>
                   {busy === 'preview' ? '⏳ Generating…' : '👁 Generate & Preview'}
                 </button>
-                <button className="btn-sm btn-primary" onClick={handleSend} disabled={busy !== null}>
+                <button className="btn-sm btn-primary" onClick={handleSend} disabled={busy !== null || !builderSignature} title={builderSignature ? '' : 'Sign as builder first'}>
                   {busy === 'send' ? '⏳ Sending…' : '📤 Send for signature'}
                 </button>
               </div>
