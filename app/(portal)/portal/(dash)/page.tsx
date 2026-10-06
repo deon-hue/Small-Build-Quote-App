@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import PortalDashboardCards from '@/components/PortalDashboardCards'
+import PortalIntro from '@/components/PortalIntro'
 import { usePortal } from '@/contexts/PortalContext'
 import { fmt } from '@/lib/utils'
 
@@ -120,11 +121,11 @@ export default function PortalDashboard() {
       )}
 
       {/* ── Portal intro ── */}
-      <div style={{ background: '#f8faf2', border: '1px solid #d4e8b0', borderLeft: '4px solid #b8cc00', borderRadius: 8, padding: '14px 18px', marginBottom: 20 }}>
-        <p style={{ margin: 0, fontSize: 14, color: 'var(--ink)', lineHeight: 1.7 }}>
-          This is your project portal — a private space where you can <strong>view your quotes</strong>, <strong>approve or reject change orders</strong>, <strong>check invoices</strong> and stay up to date with your build. Your builder keeps everything updated here so you&apos;re always in the loop.
-        </p>
-      </div>
+      <PortalIntro
+        companyName={settings.name} phone={settings.phone} email={settings.email}
+        showQuotes={clientSettings.showQuotesTab} showVariations={clientSettings.showVariationsTab} showInvoices={clientSettings.showInvoicesTab}
+        showContracts={contracts.some(c => c.status === 'sent' || c.status === 'signed')}
+      />
 
       {/* ── Financial snapshot ── */}
       <div className="fin-snapshot">

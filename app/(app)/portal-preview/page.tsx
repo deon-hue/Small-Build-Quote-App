@@ -8,6 +8,7 @@ import PortalBuildPlan from '@/components/PortalBuildPlan'
 import PortalQuoteDetailsModal from '@/components/PortalQuoteDetailsModal'
 import PortalContractsView, { PortalFileList, type PortalJobFile } from '@/components/PortalContractsView'
 import PortalDashboardCards from '@/components/PortalDashboardCards'
+import PortalIntro from '@/components/PortalIntro'
 import type { PortalContract } from '@/contexts/PortalContext'
 import { useApp } from '@/contexts/AppContext'
 import { signedAttachmentUrl } from '@/lib/job-attachments'
@@ -96,7 +97,7 @@ function PortalPreviewInner() {
   const [variations, setVariations] = useState<PreviewVariation[]>([])
   const [payments, setPayments] = useState<PreviewPayment[]>([])
   const [settings, setSettings] = useState<PreviewSettings | null>(null)
-  const [clientSettings, setClientSettings] = useState<{ quoteView?: 'full' | 'phases' | 'total_only'; showScope?: boolean; showDashboardProgress?: boolean }>({})
+  const [clientSettings, setClientSettings] = useState<{ quoteView?: 'full' | 'phases' | 'total_only'; showScope?: boolean; showDashboardProgress?: boolean; showQuotesTab?: boolean; showVariationsTab?: boolean; showInvoicesTab?: boolean }>({})
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null)
 
@@ -171,6 +172,9 @@ function PortalPreviewInner() {
           quoteView: d.client_settings.quoteView || 'full',
           showScope: d.client_settings.showScope !== false,
           showDashboardProgress: d.client_settings.showDashboardProgress !== false,
+          showQuotesTab: d.client_settings.showQuotesTab !== false,
+          showVariationsTab: d.client_settings.showVariationsTab !== false,
+          showInvoicesTab: d.client_settings.showInvoicesTab !== false,
         })
       }
 
@@ -326,6 +330,12 @@ function PortalPreviewInner() {
                 <span className="btn btn-primary">Review &amp; Sign →</span>
               </button>
             )}
+
+            <PortalIntro
+              companyName={settings?.name} phone={settings?.phone} email={settings?.email}
+              showQuotes={clientSettings.showQuotesTab !== false} showVariations={clientSettings.showVariationsTab !== false} showInvoices={clientSettings.showInvoicesTab !== false}
+              showContracts={previewContracts.length > 0}
+            />
 
             {/* Welcome strip */}
             <div style={{ background: 'var(--cream)', border: '1px solid var(--border)', borderRadius: 8, padding: '16px 20px', marginBottom: 20 }}>
