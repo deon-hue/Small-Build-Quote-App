@@ -546,6 +546,17 @@ export interface Settings {
   xeroAccountCodes?: XeroAccountCodes
 }
 
+/** A subcontractor / worker (a Contact) booked on one row of a job's schedule. Private to the contractor — never sent to the client portal. */
+export interface TaskAssignment {
+  id: string
+  jobId: string
+  /** id of the schedule row (GanttPhase.id) this person is booked on */
+  phaseId: string
+  /** the Contact; null when that contact has since been deleted (the name is kept) */
+  assigneeId: string | null
+  assigneeName: string
+}
+
 export interface GanttPhase {
   label: string
   startDay: number

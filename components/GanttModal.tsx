@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useDraggableModal } from './useDraggableModal'
 import ModalResizeHandle from './ModalResizeHandle'
+import { assignableContacts, assignmentFor, shortName } from '@/lib/task-assignments'
 
 interface Props {
   job: Job
@@ -35,7 +36,10 @@ function esc(s: string): string {
 }
 
 export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props) {
-  const { getGanttState, saveGanttState, updateJob, clients, settings } = useApp()
+  const { getGanttState, saveGanttState, updateJob, clients, settings, taskAssignments, taskAssignmentsReady, setTaskAssignee } = useApp()
+  // always read the latest bookings from inside the chart's HTML builder and window handlers
+  const assignRef = useRef(taskAssignments)
+  assignRef.current = taskAssignments
   const containerRef = useRef<HTMLDivElement>(null)
   const stateRef = useRef<GanttState | null>(null)
   // Stores the cleanup fn for the current drag event listeners so we
@@ -57,7 +61,8 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
   const router = useRouter()
 
   // ── Row editing / BO picker state ────────────────────────────
-  interface EditingRow { id: string; label: string; startDay: number; durDays: number; allowSaturday: boolean }
+  // assignee: '' = nobody, a Contact's id, or '__keep' = the person already booked (their contact has since been deleted); undefined = not touched
+  interface EditingRow { id: string; label: string; startDay: number; durDays: number; allowSaturday: boolean; assignee?: string }
   const [editingRow, setEditingRow] = useState<EditingRow | null>(null)
   const [showBoPanel, setShowBoPanel] = useState(false)
   const [boPhaseList, setBoPhaseList] = useState<Array<{ phaseName: string; subPhaseName: string }>>([])
@@ -186,6 +191,11 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     if (!stateRef.current) return
     renderGantt(stateRef.current, viewMode)
   }, [fullscreen]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // redraw the chart when a booking is added, changed or removed
+  useEffect(() => {
+    if (stateRef.current) renderGantt(stateRef.current, viewMode)
+  }, [taskAssignments]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function renderGantt(state: GanttState, mode: 'day' | 'week' | 'month') {
     const container = containerRef.current
@@ -375,12 +385,15 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       const pctBg = ph.isComplete ? '#7ab533' : pct > 0 ? '#dbeafe' : '#eef0f2'
       const pctTxt = ph.isComplete ? '#fff' : pct > 0 ? '#1d4ed8' : '#9ba3ae'
       const showCtrl = !!ph.id
+      const asg = assignmentFor(assignRef.current, job.id, ph.id)
+      const asgChip = asg ? `<span title="Booked: ${esc(asg.assigneeName)}" style="font-size:9px;background:#eef6dd;color:#3e6b12;border-radius:8px;padding:1px 6px;flex-shrink:0;max-width:84px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">👷 ${esc(shortName(asg.assigneeName, 12))}</span>` : ''
       return `<div class="gantt-row" ${idAttr} ${parentAttr} data-level="${level}" style="display:${displayStyle};align-items:center;height:${rowH}px;margin-bottom:3px">
         <div class="gantt-label-cell" style="width:${LABEL_W}px;flex-shrink:0;font-size:${level === 2 ? '10px' : '11px'};font-weight:${level === 2 ? '400' : '500'};color:#1e2022;padding:0 6px 0 ${indentPx}px;display:flex;align-items:center;gap:3px;height:${rowH}px" title="${esc(ph.label)}">
           ${hasChildren
             ? `<span class="gantt-toggle" data-for="${esc(ph.id ?? '')}" onclick="window.__ganttToggle('${esc(ph.id ?? '')}')" style="cursor:pointer;font-size:8px;opacity:0.55;user-select:none;flex-shrink:0;line-height:1">${toggleIcon}</span>`
             : (level === 1 ? '<span style="display:inline-block;width:10px;flex-shrink:0"></span>' : '')}
           <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${esc(ph.label)}</span>
+          ${asgChip}
           ${showCtrl && level === 1 ? `<span onclick="window.__ganttAddChild('${esc(ph.id!)}')" title="Add task" style="font-size:12px;cursor:pointer;opacity:0.4;flex-shrink:0;user-select:none;padding:0 2px;line-height:1">+</span>` : ''}
           ${showCtrl ? `<span onclick="window.__ganttSetPct('${esc(ph.id!)}')" title="Set % complete" style="font-size:9px;cursor:pointer;background:${pctBg};color:${pctTxt};border-radius:3px;padding:1px 4px;flex-shrink:0;min-width:28px;text-align:center;user-select:none;font-weight:600">${pct}%</span><span onclick="window.__ganttCompleteToggle('${esc(ph.id!)}')" title="${ph.isComplete ? 'Mark incomplete' : 'Mark complete'}" style="font-size:13px;cursor:pointer;flex-shrink:0;color:${ph.isComplete ? '#7ab533' : '#c8d0d8'};user-select:none;line-height:1;padding:0 1px">${ph.isComplete ? '✓' : '○'}</span>` : ''}
           ${showCtrl ? `<span onclick="window.__ganttEdit('${esc(ph.id!)}')" title="Edit row" style="cursor:pointer;font-size:11px;opacity:0.4;flex-shrink:0;user-select:none;padding:0 2px">✎</span>` : ''}
@@ -760,10 +773,12 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       jobStart.setHours(0, 0, 0, 0)
       const phaseStart = addDays(jobStart, ph.startDay)
       const phaseEnd = addDays(jobStart, ph.startDay + ph.durDays)
+      const cur = assignmentFor(assignRef.current, job.id, id)
       setEditingRow({
         id, label: ph.label, startDay: ph.startDay,
         durDays: Math.max(1, countWorkingDays(phaseStart, phaseEnd, !!ph.allowSaturday)),
         allowSaturday: !!ph.allowSaturday,
+        assignee: cur ? (cur.assigneeId && clients.some(c => c.id === cur.assigneeId) ? cur.assigneeId : '__keep') : '',
       })
     }
 
@@ -934,6 +949,15 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     stateRef.current = s
     setDirty(true)
     renderGantt(s, viewMode)
+    // Booking a subcontractor/worker on this row is saved straight away to its own private table (not inside the schedule the client portal reads)
+    if (taskAssignmentsReady && editingRow.assignee !== undefined && editingRow.assignee !== '__keep') {
+      const cur = assignmentFor(assignRef.current, job.id, editingRow.id)
+      if (editingRow.assignee === '') { if (cur) void setTaskAssignee(job.id, editingRow.id, null) }
+      else {
+        const c = clients.find(x => x.id === editingRow.assignee)
+        if (c && (!cur || cur.assigneeId !== c.id || cur.assigneeName !== c.name)) void setTaskAssignee(job.id, editingRow.id, { id: c.id, name: c.name })
+      }
+    }
     setEditingRow(null)
   }
 
@@ -1157,6 +1181,21 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
                     style={{ width: '100%', fontSize: 12, padding: '5px 8px', border: '1px solid #c8d0d8', borderRadius: 4, fontFamily: 'inherit' }}
                   />
                 </div>
+                {taskAssignmentsReady && (
+                  <div style={{ flex: 1, minWidth: 150 }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', marginBottom: 3 }}>Assigned to</div>
+                    <select
+                      value={editingRow.assignee ?? ''}
+                      onChange={e => setEditingRow(r => r ? { ...r, assignee: e.target.value } : r)}
+                      style={{ width: '100%', fontSize: 12, padding: '5px 8px', border: '1px solid #c8d0d8', borderRadius: 4, fontFamily: 'inherit', background: '#fff' }}
+                    >
+                      <option value="">Nobody yet</option>
+                      {assignableContacts(clients).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      {editingRow.assignee === '__keep' && (() => { const cur = assignmentFor(assignRef.current, job.id, editingRow.id); return cur ? <option value="__keep">{cur.assigneeName} (contact removed)</option> : null })()}
+                    </select>
+                    {assignableContacts(clients).length === 0 && <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 3 }}>Save subcontractors in Contacts to book them here.</div>}
+                  </div>
+                )}
                 <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }} title="Sunday is never a working day">
                   <input
                     type="checkbox"

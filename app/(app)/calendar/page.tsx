@@ -7,6 +7,7 @@ import { useApp } from '@/contexts/AppContext'
 import { STAGE_COLOR, STAGE_LABEL, fmt, resolveJobColor, jobDisplayTitle, findLinkedQuote } from '@/lib/utils'
 import { resolveGanttState, workingDaySpanInCalendarDays, countWorkingDays } from '@/lib/gantt-utils'
 import type { Job, GanttPhase, GanttState } from '@/lib/types'
+import { assignableContacts, assignmentFor, assigneesForRow, allAssignees, type AssigneeTag } from '@/lib/task-assignments'
 
 // ── Date helpers ───────────────────────────────────────────────
 function addDays(d: Date, n: number): Date { const r = new Date(d); r.setDate(r.getDate() + n); return r }
@@ -39,6 +40,8 @@ interface CalEvent {
   percentComplete: number
   /** This task's own "allow Saturday working" override — see GanttPhase.allowSaturday. */
   allowSaturday: boolean
+  /** Subcontractors / workers booked on this task or on its sub-tasks */
+  assignees: AssigneeTag[]
 }
 
 interface WeekSlot {
@@ -91,7 +94,7 @@ function layoutWeek(events: CalEvent[], weekStart: Date): WeekSlot[] {
 import './touch.css'
 
 export default function CalendarPage() {
-  const { jobs, quotes, ganttStates, saveGanttState, updateJob, loading } = useApp()
+  const { jobs, quotes, ganttStates, saveGanttState, updateJob, loading, clients, taskAssignments, taskAssignmentsReady, setTaskAssignee } = useApp()
   const router = useRouter()
 
   const today = useMemo(() => new Date(new Date().setHours(0, 0, 0, 0)), [])
@@ -99,6 +102,8 @@ export default function CalendarPage() {
   const [anchor,          setAnchor]         = useState<Date>(() => today)
   const [selected,        setSelected]       = useState<CalEvent | null>(null)
   const [highlightJobId,  setHighlightJobId] = useState<string | null>(null)
+  // Show only the tasks one person is booked on ('' = everyone)
+  const [personFilter, setPersonFilter] = useState('')
   // Task edit fields in the detail panel — reset whenever a different event is selected.
   const [editLabel, setEditLabel] = useState('')
   const [editStart, setEditStart] = useState('')
@@ -432,13 +437,15 @@ export default function CalendarPage() {
           isComplete: !!(ph as GanttPhase).isComplete,
           percentComplete: (ph as GanttPhase).percentComplete ?? 0,
           allowSaturday: !!(ph as GanttPhase).allowSaturday,
+          assignees: assigneesForRow(taskAssignments, job.id, ph.id, gs.phases.filter(p => p.parentId && p.parentId === ph.id).map(p => p.id)),
           startDate: addDays(jobStart, ph.startDay),
           endDate:   addDays(jobStart, ph.startDay + ph.durDays),
         })
       })
     }
-    return events.sort((a, b) => a.startDate.getTime() - b.startDate.getTime())
-  }, [jobs, quotes, ganttStates])
+    const shown = personFilter ? events.filter(e => e.assignees.some(a => a.key === personFilter)) : events
+    return shown.sort((a, b) => a.startDate.getTime() - b.startDate.getTime())
+  }, [jobs, quotes, ganttStates, taskAssignments, personFilter])
 
   // Month/Week view render from this instead of calEvents directly, so the bar being
   // dragged reflows live (including Month view's week-row wrapping and +N more overflow)
@@ -704,7 +711,7 @@ export default function CalendarPage() {
                   </div>
                   {slot.startsHere && (
                     <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.85)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {getJobNum(slot.event.job.id)} · {slot.event.job.client} · {jobDisplayTitle(slot.event.job)} · {Math.ceil(durDays / 7 * 10) / 10}w
+                      {getJobNum(slot.event.job.id)} · {slot.event.job.client} · {jobDisplayTitle(slot.event.job)} · {Math.ceil(durDays / 7 * 10) / 10}w{slot.event.assignees.length ? ` · 👷 ${slot.event.assignees.map(a => a.name).join(', ')}` : ''}
                     </div>
                   )}
                 </div>
@@ -773,6 +780,9 @@ export default function CalendarPage() {
                 <div className="cal-day-sub" style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
                   {evt.job.address}
                 </div>
+                {evt.assignees.length > 0 && (
+                  <div className="cal-day-sub" style={{ fontSize: 11.5, color: '#3e6b12', marginTop: 3, fontWeight: 600 }}>👷 {evt.assignees.map(a => a.name).join(', ')}</div>
+                )}
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div className="cal-day-title" style={{ fontSize: 12, fontWeight: 600 }}>{fmtShort(evt.startDate)} → {fmtShort(addDays(evt.endDate, -1))}</div>
@@ -821,6 +831,33 @@ export default function CalendarPage() {
             <DetailRow label="Customer"   value={evt.job.client} />
             <DetailRow label="Job"        value={jobDisplayTitle(evt.job)} />
             <DetailRow label="Address"    value={evt.job.address} />
+            {taskAssignmentsReady && evt.phaseId && (
+              <DetailRow label="Assigned to" value={(() => {
+                const phaseId = evt.phaseId as string
+                const cur = assignmentFor(taskAssignments, evt.job.id, phaseId)
+                const contacts = assignableContacts(clients)
+                const value = cur ? (cur.assigneeId && contacts.some(c => c.id === cur.assigneeId) ? cur.assigneeId : '__keep') : ''
+                return (
+                  <select
+                    value={value}
+                    onChange={async e => {
+                      const v = e.target.value
+                      if (v === '__keep') return
+                      if (v === '') await setTaskAssignee(evt.job.id, phaseId, null)
+                      else { const c = contacts.find(x => x.id === v); if (c) await setTaskAssignee(evt.job.id, phaseId, { id: c.id, name: c.name }) }
+                    }}
+                    style={{ font: 'inherit', fontWeight: 600, fontSize: 13, width: '100%', boxSizing: 'border-box', border: '1px solid var(--border)', borderRadius: 6, padding: '3px 6px', background: '#fff' }}
+                  >
+                    <option value="">Nobody yet</option>
+                    {contacts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    {value === '__keep' && cur && <option value="__keep">{cur.assigneeName} (contact removed)</option>}
+                  </select>
+                )
+              })()} />
+            )}
+            {evt.assignees.length > 1 && (
+              <DetailRow label="Also booked" value={evt.assignees.map(a => a.name).join(', ')} />
+            )}
             <DetailRow label="Name" value={
               <input
                 type="text"
@@ -1121,6 +1158,22 @@ export default function CalendarPage() {
         <button className="btn-sm btn-outline tp-hide" onClick={goToday}>Today</button>
         <button className="btn-sm btn-primary tp-hide" onClick={openNewTask}>+ New task</button>
       </div>
+
+      {taskAssignmentsReady && allAssignees(taskAssignments).length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>👷 Show:</span>
+          <select
+            value={personFilter}
+            onChange={e => setPersonFilter(e.target.value)}
+            aria-label="Show only one person's tasks"
+            style={{ fontSize: 13, padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 6, background: '#fff', fontFamily: 'inherit' }}
+          >
+            <option value="">Everyone</option>
+            {allAssignees(taskAssignments).map(a => <option key={a.key} value={a.key}>{a.name}</option>)}
+          </select>
+          {personFilter && <button className="btn-sm btn-outline" onClick={() => setPersonFilter('')}>✕ Show everyone</button>}
+        </div>
+      )}
 
       {/* Stats */}
       {jobsOnCalendar > 0 && (

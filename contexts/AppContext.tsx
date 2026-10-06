@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { CURRENT_TERMS_VERSION } from '@/lib/legal'
-import type { Job, Quote, Client, Supplier, Settings, GanttState, Invoice, JobNote, JobPayment, PaymentMethod, PortalStatus, TemplatePhaseData, Variation, VariationStatus, TeamMember, TeamMemberRole, UserPermissions, ClientPortalSettings, Bill, BillStatus, XeroAccountCodes, Contract } from '@/lib/types'
+import type { Job, Quote, Client, Supplier, Settings, GanttState, Invoice, JobNote, JobPayment, PaymentMethod, PortalStatus, TemplatePhaseData, Variation, VariationStatus, TeamMember, TeamMemberRole, UserPermissions, ClientPortalSettings, Bill, BillStatus, XeroAccountCodes, Contract, TaskAssignment } from '@/lib/types'
 import { FULL_PERMISSIONS, DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
 import { uid, JOB_TEMPLATES } from '@/lib/utils'
 
@@ -69,6 +69,11 @@ interface AppContextType {
   addVariation: (jobId: string, v: Omit<Variation, 'id' | 'ref' | 'createdAt' | 'jobId'>) => Promise<Variation>
   updateVariation: (v: Variation) => Promise<void>
   deleteVariation: (id: string) => Promise<void>
+
+  /** Who is booked on which task. Empty and 'not ready' until supabase/task-assignments.sql has been run. */
+  taskAssignments: TaskAssignment[]
+  taskAssignmentsReady: boolean
+  setTaskAssignee: (jobId: string, phaseId: string, pick: { id: string | null; name: string } | null) => Promise<boolean>
 
   contracts: Contract[]
   addContract: (jobId: string, quoteId: string | null) => Promise<Contract>
@@ -150,6 +155,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [jobPayments, setJobPayments] = useState<JobPayment[]>([])
   const [variations, setVariations] = useState<Variation[]>([])
   const [contracts, setContracts] = useState<Contract[]>([])
+  const [taskAssignments, setTaskAssignments] = useState<TaskAssignment[]>([])
+  const [taskAssignmentsReady, setTaskAssignmentsReady] = useState(false)
   const [customTemplates, setCustomTemplates] = useState<Record<string, TemplatePhaseData[]>>({})
   const [bills, setBills] = useState<Bill[]>([])
   const [loading, setLoading] = useState(true)
@@ -201,7 +208,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       } catch { /* phase10.sql not run yet — single-user mode */ }
 
-      const [jobsRes, quotesRes, clientsRes, settingsRes, ganttRes, invoicesRes, notesRes, variationsRes, billsRes, paymentsRes, portalStatusRes, templatesRes, contractsRes] = await Promise.all([
+      const [jobsRes, quotesRes, clientsRes, settingsRes, ganttRes, invoicesRes, notesRes, variationsRes, billsRes, paymentsRes, portalStatusRes, templatesRes, contractsRes, assignRes] = await Promise.all([
         supabase.from('jobs').select('*').order('created_at', { ascending: true }),
         supabase.from('quotes').select('*').order('created_at', { ascending: true }),
         supabase.from('clients').select('*').order('created_at', { ascending: true }),
@@ -215,7 +222,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         (async () => { try { return await supabase.rpc('get_clients_with_portal_status') } catch { return { data: null } } })(),
         (async () => { try { return await supabase.from('job_type_templates').select('*') } catch { return { data: null } } })(),
         (async () => { try { return await supabase.from('contracts').select('*').order('created_at', { ascending: true }) } catch { return { data: null } } })(),
+        (async () => { try { return await supabase.from('task_assignments').select('*') } catch { return { data: null, error: { message: 'unavailable' } } } })(),
       ])
+
+      // task_assignments only exists once supabase/task-assignments.sql has been run; until then the feature stays switched off
+      if (assignRes && !('error' in assignRes && assignRes.error) && Array.isArray(assignRes.data)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setTaskAssignments((assignRes.data as any[]).map(r => ({ id: r.id, jobId: r.job_id, phaseId: r.phase_id, assigneeId: r.assignee_id || null, assigneeName: r.assignee_name })))
+        setTaskAssignmentsReady(true)
+      } else {
+        setTaskAssignmentsReady(false)
+      }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const portalStatusMap: Record<string, any> = {}
@@ -833,6 +850,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setVariations(prev => prev.filter(v => v.id !== id))
   }, [supabase])
 
+  // ── Task assignments ─────────────────────────────────────────
+  // One person per schedule row. pick = null removes the booking.
+  const setTaskAssignee = useCallback(async (jobId: string, phaseId: string, pick: { id: string | null; name: string } | null): Promise<boolean> => {
+    if (!phaseId) return false
+    if (pick === null) {
+      const { error } = await supabase.from('task_assignments').delete().eq('job_id', jobId).eq('phase_id', phaseId)
+      if (error) return false
+      setTaskAssignments(prev => prev.filter(a => !(a.jobId === jobId && a.phaseId === phaseId)))
+      return true
+    }
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return false
+    const ownerId = dataOwnerIdRef.current || user.id
+    const { data, error } = await supabase.from('task_assignments').upsert({
+      user_id: ownerId, job_id: jobId, phase_id: phaseId, assignee_id: pick.id, assignee_name: pick.name.trim(), updated_at: new Date().toISOString(),
+    }, { onConflict: 'job_id,phase_id' }).select().single()
+    if (error || !data) return false
+    const row: TaskAssignment = { id: data.id, jobId: data.job_id, phaseId: data.phase_id, assigneeId: data.assignee_id || null, assigneeName: data.assignee_name }
+    setTaskAssignments(prev => [...prev.filter(a => !(a.jobId === jobId && a.phaseId === phaseId)), row])
+    return true
+  }, [supabase])
+
   // ── Contracts ────────────────────────────────────────────────
   const addContract = useCallback(async (jobId: string, quoteId: string | null): Promise<Contract> => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -1146,6 +1185,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addJobPayment, deleteJobPayment,
       addVariation, updateVariation, deleteVariation,
       addContract, updateContract, deleteContract,
+      taskAssignments, taskAssignmentsReady, setTaskAssignee,
       bills, addBill, updateBill, deleteBill,
       saveJobTypeTemplate, resetJobTypeTemplate, getTemplate,
       nextQuoteRef,
