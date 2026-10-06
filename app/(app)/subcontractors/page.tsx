@@ -210,6 +210,7 @@ export default function SubcontractorsPage() {
   const [stageModal, setStageModal] = useState(false)
   const [stageContractId, setStageContractId] = useState('')
   const [editingStage, setEditingStage] = useState<PaymentStage | null>(null)
+  const [markingPaid, setMarkingPaid] = useState(false)   // the box was opened from a row's "Mark paid" button
   const [stageForm, setStageForm] = useState(emptyStage)
 
   // Admin time log — weekly timesheets
@@ -465,7 +466,7 @@ export default function SubcontractorsPage() {
   }
 
   async function deleteContract(id: string) {
-    if (!confirm('Delete this sub contract and all its entries/stages?')) return
+    if (!confirm('Delete this sub contract and all its entries/payments?')) return
     await sb.from('sub_contracts').delete().eq('id', id)
     await load()
   }
@@ -567,6 +568,7 @@ export default function SubcontractorsPage() {
   }
 
   function openNewStage(contractId: string) {
+    setMarkingPaid(false)
     setStageContractId(contractId)
     setEditingStage(null)
     setStageForm(emptyStage)
@@ -574,7 +576,20 @@ export default function SubcontractorsPage() {
     setStageModal(true)
   }
 
+  // One-click shortcut for an unpaid payment: opens the box with today's date and bank transfer filled in; Save records it as paid.
+  function openMarkPaid(stage: PaymentStage) {
+    const d = new Date()
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    setStageContractId(stage.sub_contract_id)
+    setEditingStage(stage)
+    setMarkingPaid(true)
+    setStageForm({ description: stage.description, amount: stage.amount.toString(), dueDate: stage.due_date ?? '', paidDate: today, paymentMethod: 'bank_transfer' })
+    setError('')
+    setStageModal(true)
+  }
+
   function openEditStage(stage: PaymentStage) {
+    setMarkingPaid(false)
     setStageContractId(stage.sub_contract_id)
     setEditingStage(stage)
     setStageForm({ description: stage.description, amount: stage.amount.toString(), dueDate: stage.due_date ?? '', paidDate: stage.paid_date ?? '', paymentMethod: stage.payment_method ?? '' })
@@ -583,7 +598,7 @@ export default function SubcontractorsPage() {
   }
 
   async function deleteStage(stage: PaymentStage) {
-    if (!confirm('Delete this payment stage?')) return
+    if (!confirm('Delete this payment?')) return
     if (stage.job_cost_id) await deleteJobCost(sb, stage.job_cost_id)
     await sb.from('sub_payment_stages').delete().eq('id', stage.id)
     await load()
@@ -1089,14 +1104,14 @@ export default function SubcontractorsPage() {
       <div className="tp-stats sub-stats">
         <div className="tp-stat"><span>Active contracts</span><b>{activeContracts.length}</b><em>sub contracts</em></div>
         <div className="tp-stat"><span>Contracted</span><b>{fmt(totalFixedContracted)}</b><em>{fmt(totalFixedPaid)} paid</em></div>
-        <div className="tp-stat"><span>Outstanding</span><b>{fmt(totalFixedContracted - totalFixedPaid)}</b><em>unpaid stages</em></div>
+        <div className="tp-stat"><span>Outstanding</span><b>{fmt(totalFixedContracted - totalFixedPaid)}</b><em>unpaid payments</em></div>
         <div className="tp-stat"><span>Rate logged</span><b>{fmt(totalRateLogged)}</b><em>from time entries</em></div>
       </div>
       {/* Summary */}
       <div className="tp-hide" style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
         {card('Active Contracts', String(activeContracts.length), 'sub contracts')}
         {card('Fixed — Contracted', fmt(totalFixedContracted), `${fmt(totalFixedPaid)} paid`)}
-        {card('Fixed — Outstanding', fmt(totalFixedContracted - totalFixedPaid), 'unpaid stages')}
+        {card('Fixed — Outstanding', fmt(totalFixedContracted - totalFixedPaid), 'unpaid payments')}
         {card('Rate — Logged', fmt(totalRateLogged), 'from time entries')}
       </div>
 
@@ -1264,7 +1279,7 @@ export default function SubcontractorsPage() {
                       : fmt(c.quoted_amount ?? 0)}
                 </div>
                 <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
-                  {c.type === 'rate' ? `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}` : `${cStages.length} stage${cStages.length === 1 ? '' : 's'}`}
+                  {c.type === 'rate' ? `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}` : `${cStages.length} payment${cStages.length === 1 ? '' : 's'}`}
                 </div>
               </div>
 
@@ -1404,10 +1419,10 @@ export default function SubcontractorsPage() {
                 ) : (
                   <>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>Payment Stages</div>
-                      <button onClick={() => openNewStage(c.id)} style={{ fontSize: 11, padding: '4px 10px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: 5, cursor: 'pointer' }}>+ Add Stage</button>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>Payments</div>
+                      <button onClick={() => openNewStage(c.id)} style={{ fontSize: 11, padding: '4px 10px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: 5, cursor: 'pointer' }}>+ Add Payment</button>
                     </div>
-                    {cStages.length === 0 && <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 8 }}>No stages yet.</div>}
+                    {cStages.length === 0 && <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 8 }}>No payments yet. Click "+ Add Payment" to plan one, or to record one you have already made.</div>}
                     {cStages.length > 0 && (
                       <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse', marginBottom: 10 }}>
                         <thead>
@@ -1443,7 +1458,7 @@ export default function SubcontractorsPage() {
                                       )}
                                     </span>
                                   )
-                                  : <span style={{ color: '#9ca3af' }}>—</span>}
+                                  : <button onClick={() => openMarkPaid(s)} title="Record this payment as paid" style={{ fontSize: 11, padding: '2px 8px', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>Mark paid</button>}
                               </td>
                               <td style={{ padding: '5px 8px', textAlign: 'center' }}>
                                 {s.xero_bill_id
@@ -2067,7 +2082,7 @@ export default function SubcontractorsPage() {
       {stageModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: '#fff', borderRadius: 10, padding: 24, width: '100%', maxWidth: 420 }}>
-            <h3 style={{ margin: '0 0 20px', fontSize: 16, fontWeight: 700 }}>{editingStage ? 'Edit Stage' : 'Add Payment Stage'}</h3>
+            <h3 style={{ margin: '0 0 20px', fontSize: 16, fontWeight: 700 }}>{editingStage ? (markingPaid ? 'Mark Payment as Paid' : 'Edit Payment') : 'Add Payment'}</h3>
             <div style={{ display: 'grid', gap: 14 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Description *</label>
@@ -2108,7 +2123,7 @@ export default function SubcontractorsPage() {
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
               <button onClick={() => { setStageModal(false); setError('') }} style={{ padding: '8px 16px', background: '#f9fafb', color: '#374151', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, cursor: 'pointer' }}>Cancel</button>
               <button onClick={saveStage} disabled={saving} style={{ padding: '8px 20px', background: '#111827', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
-                {saving ? 'Saving…' : editingStage ? 'Save Stage' : 'Add Stage'}
+                {saving ? 'Saving…' : editingStage ? (markingPaid ? 'Mark as Paid' : 'Save Payment') : 'Add Payment'}
               </button>
             </div>
           </div>
