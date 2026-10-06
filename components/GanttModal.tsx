@@ -11,7 +11,8 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useDraggableModal } from './useDraggableModal'
 import ModalResizeHandle from './ModalResizeHandle'
-import { assignableContacts, assignmentFor, shortName } from '@/lib/task-assignments'
+import { assignableContacts, assignmentsFor, assignmentKey, shortName } from '@/lib/task-assignments'
+import AssigneePicker, { picksFromKeys } from './AssigneePicker'
 
 interface Props {
   job: Job
@@ -36,7 +37,7 @@ function esc(s: string): string {
 }
 
 export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props) {
-  const { getGanttState, saveGanttState, updateJob, clients, settings, taskAssignments, taskAssignmentsReady, setTaskAssignee } = useApp()
+  const { getGanttState, saveGanttState, updateJob, clients, settings, taskAssignments, taskAssignmentsReady, setTaskAssignees } = useApp()
   // always read the latest bookings from inside the chart's HTML builder and window handlers
   const assignRef = useRef(taskAssignments)
   assignRef.current = taskAssignments
@@ -61,8 +62,8 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
   const router = useRouter()
 
   // ── Row editing / BO picker state ────────────────────────────
-  // assignee: '' = nobody, a Contact's id, or '__keep' = the person already booked (their contact has since been deleted); undefined = not touched
-  interface EditingRow { id: string; label: string; startDay: number; durDays: number; allowSaturday: boolean; assignee?: string }
+  // assignees: the people booked on this row, as keys (a Contact's id, or "name:..." for someone whose contact has been deleted); undefined = not touched
+  interface EditingRow { id: string; label: string; startDay: number; durDays: number; allowSaturday: boolean; assignees?: string[] }
   const [editingRow, setEditingRow] = useState<EditingRow | null>(null)
   const [showBoPanel, setShowBoPanel] = useState(false)
   const [boPhaseList, setBoPhaseList] = useState<Array<{ phaseName: string; subPhaseName: string }>>([])
@@ -385,8 +386,8 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       const pctBg = ph.isComplete ? '#7ab533' : pct > 0 ? '#dbeafe' : '#eef0f2'
       const pctTxt = ph.isComplete ? '#fff' : pct > 0 ? '#1d4ed8' : '#9ba3ae'
       const showCtrl = !!ph.id
-      const asg = assignmentFor(assignRef.current, job.id, ph.id)
-      const asgChip = asg ? `<span title="Booked: ${esc(asg.assigneeName)}" style="font-size:9px;background:#eef6dd;color:#3e6b12;border-radius:8px;padding:1px 6px;flex-shrink:0;max-width:84px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">👷 ${esc(shortName(asg.assigneeName, 12))}</span>` : ''
+      const asgs = assignmentsFor(assignRef.current, job.id, ph.id)
+      const asgChip = asgs.length ? `<span title="Booked: ${esc(asgs.map(a => a.assigneeName).join(', '))}" style="font-size:9px;background:#eef6dd;color:#3e6b12;border-radius:8px;padding:1px 6px;flex-shrink:0;max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">👷 ${esc(shortName(asgs[0].assigneeName, 11))}${asgs.length > 1 ? ` +${asgs.length - 1}` : ''}</span>` : ''
       return `<div class="gantt-row" ${idAttr} ${parentAttr} data-level="${level}" style="display:${displayStyle};align-items:center;height:${rowH}px;margin-bottom:3px">
         <div class="gantt-label-cell" style="width:${LABEL_W}px;flex-shrink:0;font-size:${level === 2 ? '10px' : '11px'};font-weight:${level === 2 ? '400' : '500'};color:#1e2022;padding:0 6px 0 ${indentPx}px;display:flex;align-items:center;gap:3px;height:${rowH}px" title="${esc(ph.label)}">
           ${hasChildren
@@ -773,12 +774,11 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
       jobStart.setHours(0, 0, 0, 0)
       const phaseStart = addDays(jobStart, ph.startDay)
       const phaseEnd = addDays(jobStart, ph.startDay + ph.durDays)
-      const cur = assignmentFor(assignRef.current, job.id, id)
       setEditingRow({
         id, label: ph.label, startDay: ph.startDay,
         durDays: Math.max(1, countWorkingDays(phaseStart, phaseEnd, !!ph.allowSaturday)),
         allowSaturday: !!ph.allowSaturday,
-        assignee: cur ? (cur.assigneeId && clients.some(c => c.id === cur.assigneeId) ? cur.assigneeId : '__keep') : '',
+        assignees: assignmentsFor(assignRef.current, job.id, id).map(assignmentKey),
       })
     }
 
@@ -950,13 +950,10 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     setDirty(true)
     renderGantt(s, viewMode)
     // Booking a subcontractor/worker on this row is saved straight away to its own private table (not inside the schedule the client portal reads)
-    if (taskAssignmentsReady && editingRow.assignee !== undefined && editingRow.assignee !== '__keep') {
-      const cur = assignmentFor(assignRef.current, job.id, editingRow.id)
-      if (editingRow.assignee === '') { if (cur) void setTaskAssignee(job.id, editingRow.id, null) }
-      else {
-        const c = clients.find(x => x.id === editingRow.assignee)
-        if (c && (!cur || cur.assigneeId !== c.id || cur.assigneeName !== c.name)) void setTaskAssignee(job.id, editingRow.id, { id: c.id, name: c.name })
-      }
+    if (taskAssignmentsReady && editingRow.assignees !== undefined) {
+      const here = assignmentsFor(assignRef.current, job.id, editingRow.id)
+      const extras = here.filter(a => !a.assigneeId).map(a => ({ key: assignmentKey(a), name: a.assigneeName }))
+      void setTaskAssignees(job.id, editingRow.id, picksFromKeys(editingRow.assignees, assignableContacts(clients), extras)).then(saved => { if (!saved) window.alert('Could not save who is booked on this task. If you have just updated the app, the one-off database update (supabase/task-assignments-multi.sql) may not have been run yet.') })
     }
     setEditingRow(null)
   }
@@ -1182,18 +1179,14 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
                   />
                 </div>
                 {taskAssignmentsReady && (
-                  <div style={{ flex: 1, minWidth: 150 }}>
-                    <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', marginBottom: 3 }}>Assigned to</div>
-                    <select
-                      value={editingRow.assignee ?? ''}
-                      onChange={e => setEditingRow(r => r ? { ...r, assignee: e.target.value } : r)}
-                      style={{ width: '100%', fontSize: 12, padding: '5px 8px', border: '1px solid #c8d0d8', borderRadius: 4, fontFamily: 'inherit', background: '#fff' }}
-                    >
-                      <option value="">Nobody yet</option>
-                      {assignableContacts(clients).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                      {editingRow.assignee === '__keep' && (() => { const cur = assignmentFor(assignRef.current, job.id, editingRow.id); return cur ? <option value="__keep">{cur.assigneeName} (contact removed)</option> : null })()}
-                    </select>
-                    {assignableContacts(clients).length === 0 && <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 3 }}>Save subcontractors in Contacts to book them here.</div>}
+                  <div style={{ flexBasis: '100%', minWidth: 200 }}>
+                    <AssigneePicker
+                      label="Booked on this (tap to add or remove — several allowed)"
+                      contacts={assignableContacts(clients)}
+                      extras={assignmentsFor(assignRef.current, job.id, editingRow.id).filter(a => !a.assigneeId).map(a => ({ key: assignmentKey(a), name: a.assigneeName }))}
+                      selected={editingRow.assignees ?? []}
+                      onChange={keys => setEditingRow(r => r ? { ...r, assignees: keys } : r)}
+                    />
                   </div>
                 )}
                 <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }} title="Sunday is never a working day">

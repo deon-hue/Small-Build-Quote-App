@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { CURRENT_TERMS_VERSION } from '@/lib/legal'
 import type { Job, Quote, Client, Supplier, Settings, GanttState, Invoice, JobNote, JobPayment, PaymentMethod, PortalStatus, TemplatePhaseData, Variation, VariationStatus, TeamMember, TeamMemberRole, UserPermissions, ClientPortalSettings, Bill, BillStatus, XeroAccountCodes, Contract, TaskAssignment } from '@/lib/types'
 import { FULL_PERMISSIONS, DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
+import { assignmentsFor, diffAssignments, type AssigneePick } from '@/lib/task-assignments'
 import { uid, JOB_TEMPLATES } from '@/lib/utils'
 
 interface AppContextType {
@@ -73,7 +74,7 @@ interface AppContextType {
   /** Who is booked on which task. Empty and 'not ready' until supabase/task-assignments.sql has been run. */
   taskAssignments: TaskAssignment[]
   taskAssignmentsReady: boolean
-  setTaskAssignee: (jobId: string, phaseId: string, pick: { id: string | null; name: string } | null) => Promise<boolean>
+  setTaskAssignees: (jobId: string, phaseId: string, picks: AssigneePick[]) => Promise<boolean>
 
   contracts: Contract[]
   addContract: (jobId: string, quoteId: string | null) => Promise<Contract>
@@ -157,6 +158,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [contracts, setContracts] = useState<Contract[]>([])
   const [taskAssignments, setTaskAssignments] = useState<TaskAssignment[]>([])
   const [taskAssignmentsReady, setTaskAssignmentsReady] = useState(false)
+  const taskAssignmentsRef = useRef<TaskAssignment[]>([])
+  taskAssignmentsRef.current = taskAssignments   // the latest bookings, for the save function below
   const [customTemplates, setCustomTemplates] = useState<Record<string, TemplatePhaseData[]>>({})
   const [bills, setBills] = useState<Bill[]>([])
   const [loading, setLoading] = useState(true)
@@ -851,25 +854,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [supabase])
 
   // ── Task assignments ─────────────────────────────────────────
-  // One person per schedule row. pick = null removes the booking.
-  const setTaskAssignee = useCallback(async (jobId: string, phaseId: string, pick: { id: string | null; name: string } | null): Promise<boolean> => {
+  // Several people can be booked on one task. This sets the whole list for a row: people no longer wanted are removed, new ones added.
+  const setTaskAssignees = useCallback(async (jobId: string, phaseId: string, picks: AssigneePick[]): Promise<boolean> => {
     if (!phaseId) return false
-    if (pick === null) {
-      const { error } = await supabase.from('task_assignments').delete().eq('job_id', jobId).eq('phase_id', phaseId)
-      if (error) return false
-      setTaskAssignments(prev => prev.filter(a => !(a.jobId === jobId && a.phaseId === phaseId)))
-      return true
-    }
+    const current = assignmentsFor(taskAssignmentsRef.current, jobId, phaseId)
+    const { remove, add } = diffAssignments(current, picks)
+    if (remove.length === 0 && add.length === 0) return true
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return false
     const ownerId = dataOwnerIdRef.current || user.id
-    const { data, error } = await supabase.from('task_assignments').upsert({
-      user_id: ownerId, job_id: jobId, phase_id: phaseId, assignee_id: pick.id, assignee_name: pick.name.trim(), updated_at: new Date().toISOString(),
-    }, { onConflict: 'job_id,phase_id' }).select().single()
-    if (error || !data) return false
-    const row: TaskAssignment = { id: data.id, jobId: data.job_id, phaseId: data.phase_id, assigneeId: data.assignee_id || null, assigneeName: data.assignee_name }
-    setTaskAssignments(prev => [...prev.filter(a => !(a.jobId === jobId && a.phaseId === phaseId)), row])
-    return true
+    let ok = true
+    if (remove.length) {
+      const { error } = await supabase.from('task_assignments').delete().in('id', remove.map(r => r.id))
+      if (error) ok = false
+      else setTaskAssignments(prev => prev.filter(a => !remove.some(r => r.id === a.id)))
+    }
+    if (add.length) {
+      const { data, error } = await supabase.from('task_assignments')
+        .insert(add.map(a => ({ user_id: ownerId, job_id: jobId, phase_id: phaseId, assignee_id: a.id, assignee_name: a.name })))
+        .select()
+      if (error || !data) ok = false
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      else setTaskAssignments(prev => [...prev, ...(data as any[]).map(r => ({ id: r.id, jobId: r.job_id, phaseId: r.phase_id, assigneeId: r.assignee_id || null, assigneeName: r.assignee_name }))])
+    }
+    return ok
   }, [supabase])
 
   // ── Contracts ────────────────────────────────────────────────
@@ -1185,7 +1193,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addJobPayment, deleteJobPayment,
       addVariation, updateVariation, deleteVariation,
       addContract, updateContract, deleteContract,
-      taskAssignments, taskAssignmentsReady, setTaskAssignee,
+      taskAssignments, taskAssignmentsReady, setTaskAssignees,
       bills, addBill, updateBill, deleteBill,
       saveJobTypeTemplate, resetJobTypeTemplate, getTemplate,
       nextQuoteRef,

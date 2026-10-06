@@ -18,9 +18,12 @@ CREATE TABLE IF NOT EXISTS task_assignments (
   assignee_id   UUID REFERENCES clients(id) ON DELETE SET NULL,   -- the Contact; null if that contact was later deleted
   assignee_name TEXT NOT NULL CHECK (char_length(assignee_name) BETWEEN 1 AND 160),
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (job_id, phase_id)
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Several people can be booked on one task, but the same person only once per task
+CREATE UNIQUE INDEX IF NOT EXISTS task_assignments_one_per_person
+  ON task_assignments (job_id, phase_id, (COALESCE(assignee_id::text, 'name:' || lower(assignee_name))));
 
 ALTER TABLE task_assignments ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON task_assignments FROM anon;

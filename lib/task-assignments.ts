@@ -10,9 +10,32 @@ export function assignableContacts(clients: Pick<Client, 'id' | 'name' | 'client
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
-export function assignmentFor(list: TaskAssignment[], jobId: string, phaseId: string | undefined): TaskAssignment | undefined {
-  if (!phaseId) return undefined
-  return list.find(a => a.jobId === jobId && a.phaseId === phaseId)
+/** Everyone booked on one schedule row (several people can share a task) */
+export function assignmentsFor(list: TaskAssignment[], jobId: string, phaseId: string | undefined): TaskAssignment[] {
+  if (!phaseId) return []
+  return list.filter(a => a.jobId === jobId && a.phaseId === phaseId)
+}
+
+/** Same person = same key: their Contact id, or their name when the contact has since been deleted */
+export function assignmentKey(a: { assigneeId: string | null; assigneeName: string }): string {
+  return a.assigneeId || `name:${a.assigneeName.toLowerCase()}`
+}
+
+export interface AssigneePick { id: string | null; name: string }
+
+/** What has to change to turn the people currently booked on a row into the wanted list: who to remove, who to add. */
+export function diffAssignments(current: TaskAssignment[], wanted: AssigneePick[]): { remove: TaskAssignment[]; add: AssigneePick[] } {
+  const wantKeys = new Set(wanted.map(w => assignmentKey({ assigneeId: w.id, assigneeName: w.name })))
+  const haveKeys = new Set(current.map(assignmentKey))
+  const seen = new Set<string>()
+  const add: AssigneePick[] = []
+  for (const w of wanted) {
+    const k = assignmentKey({ assigneeId: w.id, assigneeName: w.name })
+    if (haveKeys.has(k) || seen.has(k) || !w.name.trim()) continue
+    seen.add(k)
+    add.push({ id: w.id, name: w.name.trim() })
+  }
+  return { remove: current.filter(a => !wantKeys.has(assignmentKey(a))), add }
 }
 
 export interface AssigneeTag { key: string; name: string }
@@ -23,12 +46,12 @@ export function assigneesForRow(list: TaskAssignment[], jobId: string, rowId: st
   const out: AssigneeTag[] = []
   const seen = new Set<string>()
   for (const id of ids) {
-    const a = assignmentFor(list, jobId, id)
-    if (!a) continue
-    const key = a.assigneeId || `name:${a.assigneeName.toLowerCase()}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    out.push({ key, name: a.assigneeName })
+    for (const a of assignmentsFor(list, jobId, id)) {
+      const key = assignmentKey(a)
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({ key, name: a.assigneeName })
+    }
   }
   return out
 }
@@ -37,7 +60,7 @@ export function assigneesForRow(list: TaskAssignment[], jobId: string, rowId: st
 export function allAssignees(list: TaskAssignment[]): AssigneeTag[] {
   const map = new Map<string, AssigneeTag>()
   for (const a of list) {
-    const key = a.assigneeId || `name:${a.assigneeName.toLowerCase()}`
+    const key = assignmentKey(a)
     if (!map.has(key)) map.set(key, { key, name: a.assigneeName })
   }
   return [...map.values()].sort((x, y) => x.name.localeCompare(y.name))

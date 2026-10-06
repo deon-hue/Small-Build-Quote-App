@@ -7,7 +7,8 @@ import { useApp } from '@/contexts/AppContext'
 import { STAGE_COLOR, STAGE_LABEL, fmt, resolveJobColor, jobDisplayTitle, findLinkedQuote } from '@/lib/utils'
 import { resolveGanttState, workingDaySpanInCalendarDays, countWorkingDays } from '@/lib/gantt-utils'
 import type { Job, GanttPhase, GanttState } from '@/lib/types'
-import { assignableContacts, assignmentFor, assigneesForRow, allAssignees, type AssigneeTag } from '@/lib/task-assignments'
+import { assignableContacts, assignmentsFor, assignmentKey, assigneesForRow, allAssignees, type AssigneeTag } from '@/lib/task-assignments'
+import AssigneePicker, { picksFromKeys } from '@/components/AssigneePicker'
 
 // ── Date helpers ───────────────────────────────────────────────
 function addDays(d: Date, n: number): Date { const r = new Date(d); r.setDate(r.getDate() + n); return r }
@@ -94,7 +95,7 @@ function layoutWeek(events: CalEvent[], weekStart: Date): WeekSlot[] {
 import './touch.css'
 
 export default function CalendarPage() {
-  const { jobs, quotes, ganttStates, saveGanttState, updateJob, loading, clients, taskAssignments, taskAssignmentsReady, setTaskAssignee } = useApp()
+  const { jobs, quotes, ganttStates, saveGanttState, updateJob, loading, clients, taskAssignments, taskAssignmentsReady, setTaskAssignees } = useApp()
   const router = useRouter()
 
   const today = useMemo(() => new Date(new Date().setHours(0, 0, 0, 0)), [])
@@ -832,31 +833,24 @@ export default function CalendarPage() {
             <DetailRow label="Job"        value={jobDisplayTitle(evt.job)} />
             <DetailRow label="Address"    value={evt.job.address} />
             {taskAssignmentsReady && evt.phaseId && (
-              <DetailRow label="Assigned to" value={(() => {
+              <DetailRow label="Booked on it" value={(() => {
                 const phaseId = evt.phaseId as string
-                const cur = assignmentFor(taskAssignments, evt.job.id, phaseId)
+                const here = assignmentsFor(taskAssignments, evt.job.id, phaseId)
                 const contacts = assignableContacts(clients)
-                const value = cur ? (cur.assigneeId && contacts.some(c => c.id === cur.assigneeId) ? cur.assigneeId : '__keep') : ''
+                const extras = here.filter(a => !a.assigneeId).map(a => ({ key: assignmentKey(a), name: a.assigneeName }))
                 return (
-                  <select
-                    value={value}
-                    onChange={async e => {
-                      const v = e.target.value
-                      if (v === '__keep') return
-                      if (v === '') await setTaskAssignee(evt.job.id, phaseId, null)
-                      else { const c = contacts.find(x => x.id === v); if (c) await setTaskAssignee(evt.job.id, phaseId, { id: c.id, name: c.name }) }
-                    }}
-                    style={{ font: 'inherit', fontWeight: 600, fontSize: 13, width: '100%', boxSizing: 'border-box', border: '1px solid var(--border)', borderRadius: 6, padding: '3px 6px', background: '#fff' }}
-                  >
-                    <option value="">Nobody yet</option>
-                    {contacts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    {value === '__keep' && cur && <option value="__keep">{cur.assigneeName} (contact removed)</option>}
-                  </select>
+                  <AssigneePicker
+                    label="Tap to add or remove — several allowed"
+                    contacts={contacts}
+                    extras={extras}
+                    selected={here.map(assignmentKey)}
+                    onChange={keys => { void setTaskAssignees(evt.job.id, phaseId, picksFromKeys(keys, contacts, extras)).then(saved => { if (!saved) window.alert('Could not save who is booked on this task. If you have just updated the app, the one-off database update (supabase/task-assignments-multi.sql) may not have been run yet.') }) }}
+                  />
                 )
               })()} />
             )}
-            {evt.assignees.length > 1 && (
-              <DetailRow label="Also booked" value={evt.assignees.map(a => a.name).join(', ')} />
+            {evt.assignees.some(a => !assignmentsFor(taskAssignments, evt.job.id, evt.phaseId).some(x => assignmentKey(x) === a.key)) && (
+              <DetailRow label="Also booked" value={evt.assignees.filter(a => !assignmentsFor(taskAssignments, evt.job.id, evt.phaseId).some(x => assignmentKey(x) === a.key)).map(a => a.name).join(', ') + ' (on its sub-tasks)'} />
             )}
             <DetailRow label="Name" value={
               <input
