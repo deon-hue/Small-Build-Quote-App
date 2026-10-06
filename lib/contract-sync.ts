@@ -9,6 +9,23 @@
 //     and the quote has moved on                         -> keep the contract's wording and ask
 // Pure function, no imports, so it can be tested with plain Node.
 
+/** A short fingerprint of everything on a contract that ends up in the PDF the client reads. Saved when the contract is sent, and compared later:
+ *  if it no longer matches, the contract has been changed since the client was sent it (they still hold the earlier copy). Keys starting
+ *  with "_" are the app's own bookkeeping and are left out, except those listed in alsoInclude (e.g. the changes-to-the-scope notes). */
+export function contractFingerprint(
+  fields: Record<string, string | boolean>, paymentMode: string, schedule: unknown, secondClientName: string | null | undefined, alsoInclude: string[] = [],
+): string {
+  const pairs = Object.entries(fields)
+    .filter(([k]) => !k.startsWith('_') || alsoInclude.includes(k))
+    .map(([k, v]) => [k, typeof v === 'string' ? v.trim() : v] as [string, string | boolean])
+    .filter(([, v]) => v !== '' && v !== false)           // an empty box and an unticked box are the same as "not set"
+    .sort((a, b) => a[0].localeCompare(b[0]))
+  const text = JSON.stringify([pairs, paymentMode, schedule ?? [], (secondClientName || '').trim()])
+  let h = 5381
+  for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0
+  return String(h >>> 0)
+}
+
 export type SyncStatus = 'same' | 'filled' | 'followed' | 'differs' | 'none'
 
 export interface SyncResult {

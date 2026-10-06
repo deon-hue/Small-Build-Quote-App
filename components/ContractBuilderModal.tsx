@@ -8,7 +8,7 @@ import { fmt, jobDisplayTitle, quoteTotal } from '@/lib/utils'
 import type { Job, Quote, Contract, ContractFields, ContractPaymentStage } from '@/lib/types'
 import { CollapsibleSection } from './assembly-ui'
 import { useDraggableModal } from './useDraggableModal'
-import { syncFromQuote } from '@/lib/contract-sync'
+import { syncFromQuote, contractFingerprint } from '@/lib/contract-sync'
 import ModalResizeHandle from './ModalResizeHandle'
 import ModalMaximizeButton from './ModalMaximizeButton'
 
@@ -47,6 +47,8 @@ const SCOPE_SNAPSHOT = '_quoteScopeSnapshot'
 // Dated changes to the scope agreed after the quote was accepted (copied from the quote's "Changes to the scope"; printed on Schedule 1)
 const CHANGES = '_scopeChanges'
 const CHANGES_SNAPSHOT = '_quoteScopeChangesSnapshot'
+// What the contract looked like when it was last sent to the client (a fingerprint), so the window can say when it has been changed since
+const SENT_FP = '_sentFingerprint'
 
 function completionDateFromJob(job: Job): string {
   if (!job.start || !job.weeks) return ''
@@ -268,7 +270,12 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
       const result = await uploadAttachment(sb, user.id, job.id, file, 'contract', 'Contract — awaiting signature')
       if ('error' in result) throw new Error(result.error)
 
+      // remember exactly what the client now holds, so a later change can be flagged as "not sent yet"
+      const fp = contractFingerprint(fields, paymentMode, paymentMode === 'staged' ? schedule : [], secondClientOn ? secondClientName : null, [CHANGES])
+      const sentFields: ContractFields = { ...fields, [SENT_FP]: fp }
+      setFields(sentFields)
       await persist('sent', {
+        fields: sentFields,
         draftAttachmentId: result.attachment.id,
         builderSignedAt: new Date().toISOString(),
         builderSignedBy: signName.trim(),
@@ -368,6 +375,11 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
               {error && (
                 <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 6, padding: '10px 14px', fontSize: 12, color: '#991b1b' }}>
                   ⚠️ {error}
+                </div>
+              )}
+              {contract.status === 'sent' && typeof fields[SENT_FP] === 'string' && fields[SENT_FP] !== contractFingerprint(fields, paymentMode, paymentMode === 'staged' ? schedule : [], secondClientOn ? secondClientName : null, [CHANGES]) && (
+                <div style={{ background: '#fff3cd', border: '1px solid #ffda6a', borderRadius: 8, padding: '10px 14px', fontSize: 12.5, color: '#664d03', lineHeight: 1.5 }}>
+                  ⚠️ <strong>You have changed this contract since you sent it.</strong> Your client still has the earlier copy in their portal. The changes only reach them when you click <strong>Send for signature</strong> again (sign as builder, tick the box, then send).
                 </div>
               )}
               {changesNote === 'updated' && quote && (
