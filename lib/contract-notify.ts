@@ -3,6 +3,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { senderFrom, withPoweredBy, escapeHtml } from '@/lib/email-brand'
+import { BRAND, emailShell, emailPara, emailButton } from '@/lib/email-layout'
 
 interface ContractRow {
   client_signed_by?: string | null
@@ -37,21 +38,14 @@ export async function notifyBuilderContractSigned(
     const when = new Date().toLocaleString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
     const link = appUrl ? `${appUrl.replace(/\/+$/, '')}/jobs` : ''
 
-    const html = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f4f4f0;font-family:Georgia,serif">
-  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
-    <div style="background:#2b3a2b;padding:26px 32px">
-      <div style="color:#c8d8a8;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px">${escapeHtml(company)}</div>
-      <div style="color:#fff;font-size:22px;font-weight:700">✅ Contract signed</div>
-    </div>
-    <div style="padding:26px 32px">
-      <p style="margin:0 0 14px;font-size:15px;color:#2b2f33;line-height:1.6"><strong>${escapeHtml(who)}</strong> has signed the building contract for <strong>${escapeHtml(jobName)}</strong>.</p>
-      <p style="margin:0 0 20px;font-size:13px;color:#6b7580">Signed on ${escapeHtml(when)}. The final signed copy, with both signatures, is saved with the job.</p>
-      ${link ? `<a href="${escapeHtml(link)}" style="display:inline-block;background:#2b3a2b;color:#fff;text-decoration:none;padding:12px 26px;border-radius:6px;font-size:14px;font-weight:700">Open your jobs →</a>` : ''}
-    </div>
-  </div>
-</body></html>`
+    const html = emailShell({
+      company: escapeHtml(company), kicker: 'Contract', title: '✅ Contract signed',
+      body: [
+        emailPara(`<strong>${escapeHtml(who)}</strong> has signed the building contract for <strong>${escapeHtml(jobName)}</strong>.`, 14),
+        `<p style="margin:0 0 22px;font-size:13px;color:${BRAND.muted};line-height:1.6">Signed on ${escapeHtml(when)}. The final signed copy, with both signatures, is saved with the job.</p>`,
+        link ? emailButton(escapeHtml(link), 'Open your jobs →') : '',
+      ].join('\n      '),
+    })
 
     await fetch('https://api.resend.com/emails', {
       method: 'POST',

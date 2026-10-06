@@ -38,6 +38,7 @@ import { usageGuard } from '@/lib/usage'
 import { callerIsPortalOnly } from '@/lib/caller-role'
 import { createPortalSignInLink } from '@/lib/portal-magic-link'
 import { portalExplainerHtml, portalWhatsAppLines } from '@/lib/portal-welcome'
+import { BRAND, emailShell, emailPara, emailButton, emailCard, emailCallout, emailNotice, emailContact } from '@/lib/email-layout'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -171,223 +172,114 @@ function buildEmailHtml(rawPayload: NotifyClientPayload, portalUrl: string): str
   const payload = escapeStrings(rawPayload)
   const company = payload.companyName || 'Your Builder'
   const firstName = payload.clientName.split(' ')[0] || payload.clientName
+  const money = (n?: number, vat = false) => n != null
+    ? `£${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${vat ? ' inc. VAT' : ''}`
+    : ''
+  // the builder's own optional note, set off with the lime bar
+  const message = payload.message
+    ? emailCallout(`<p style="margin:0;font-size:14px;line-height:1.6;color:${BRAND.ink}">${payload.message.replace(/\n/g, '<br>')}</p>`)
+    : ''
+  const small = (t: string) => `<div style="font-size:11px;color:${BRAND.muted};letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">${t}</div>`
+  const amount = (t: string) => `<div style="font-size:22px;font-weight:700;color:${BRAND.ink};margin-top:12px;font-family:'DM Mono',monospace">${t}</div>`
+  const footerLink = (href: string, label: string) => `<a href="${href}" style="color:#a3d65c;text-decoration:none">${label}</a>`
 
   if (payload.type === 'quote_sent') {
-    const total = payload.quoteTotal != null
-      ? `£${payload.quoteTotal.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${payload.vatIncluded ? ' inc. VAT' : ''}`
-      : ''
-    return `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f4f4f0;font-family:Georgia,serif">
-  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
-    <div style="background:#2b3a2b;padding:28px 32px;display:flex;justify-content:space-between;align-items:flex-end">
-      <div>
-        <div style="color:#c8d8a8;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px">${company}</div>
-        <div style="color:#fff;font-size:22px;font-weight:700">Your Quotation</div>
-      </div>
-      ${payload.quoteRef ? `<div style="color:#c8d8a8;font-size:14px;font-weight:600">${payload.quoteRef}</div>` : ''}
-    </div>
-    <div style="padding:28px 32px">
-      <p style="margin:0 0 16px;font-size:15px;color:#2b2f33">Dear ${firstName},</p>
-      <p style="margin:0 0 20px;font-size:15px;color:#2b2f33;line-height:1.6">
-        Thank you for the opportunity to quote for the works${payload.jobAddress ? ` at <strong>${payload.jobAddress}</strong>` : ''}.
-        Please find attached our detailed quotation for the <strong>${payload.jobType}</strong> works.
-      </p>
-      ${payload.message ? `<div style="background:#f8faf2;border-left:3px solid #7ab533;padding:12px 16px;margin-bottom:20px;border-radius:0 4px 4px 0"><p style="margin:0;font-size:14px;color:#2b2f33;line-height:1.6">${payload.message.replace(/\n/g, '<br>')}</p></div>` : ''}
-      <div style="background:#f8fafc;border:1px solid #dde1e5;border-radius:8px;padding:18px 20px;margin-bottom:24px">
-        ${payload.quoteRef ? `<div style="font-size:11px;color:#6b7580;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">${payload.quoteRef}</div>` : ''}
-        <div style="font-weight:700;font-size:16px;color:#1e2022;margin-bottom:6px">${payload.jobType}</div>
-        <div style="font-size:13px;color:#6b7580">${payload.jobAddress || ''}</div>
-        ${total ? `<div style="font-size:22px;font-weight:700;color:#2b3a2b;margin-top:12px;font-family:'DM Mono',monospace">${total}</div>` : ''}
-      </div>
-      <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:12px 16px;margin-bottom:24px">
-        <p style="margin:0;font-size:13px;color:#5d4037;">
-          📎 <strong>Your quotation PDF is attached</strong> to this email. Please open the attachment to view the full breakdown.
-        </p>
-      </div>
-      ${portalUrl ? `<div style="margin-bottom:24px">
-        <a href="${portalUrl}" style="display:inline-block;background:#2b3a2b;color:#fff;text-decoration:none;padding:13px 28px;border-radius:6px;font-size:14px;font-weight:700">
-          View your quote online →
-        </a>
-        <p style="margin:10px 0 0;font-size:12px;color:#9aa3ad">View, track and communicate with us through your secure client portal.</p>
-      </div>` : ''}
-      ${portalUrl ? portalExplainerHtml() : ''}
-      <p style="margin:0;font-size:13px;color:#6b7580;line-height:1.6">
-        This quotation is valid for 30 days. Please do not hesitate to contact us if you have any questions or would like to discuss anything.
-        ${payload.companyPhone ? `<br><br>📞 <strong>${payload.companyPhone}</strong>` : ''}
-        ${payload.companyEmail ? `<br>✉ <strong>${payload.companyEmail}</strong>` : ''}
-      </p>
-    </div>
-    <div style="background:#f4f4f0;padding:16px 32px;border-top:1px solid #dde1e5">
-      <div style="font-size:11px;color:#9aa3ad">Kind regards · ${company}${portalUrl ? ` · <a href="${portalUrl}" style="color:#4a7c1f;text-decoration:none">Client portal</a>` : ''}</div>
-    </div>
-  </div>
-</body>
-</html>`
+    const total = payload.quoteTotal != null ? money(payload.quoteTotal, !!payload.vatIncluded) : ''
+    return emailShell({
+      company, kicker: 'Quotation', title: 'Your Quotation', ref: payload.quoteRef,
+      body: [
+        emailPara(`Dear ${firstName},`),
+        emailPara(`Thank you for the opportunity to quote for the works${payload.jobAddress ? ` at <strong>${payload.jobAddress}</strong>` : ''}.
+        Please find attached our detailed quotation for the <strong>${payload.jobType}</strong> works.`),
+        message,
+        emailCard(`${payload.quoteRef ? small(payload.quoteRef) : ''}
+        <div style="font-weight:700;font-size:16px;color:${BRAND.ink};margin-bottom:6px">${payload.jobType}</div>
+        <div style="font-size:13px;color:${BRAND.muted}">${payload.jobAddress || ''}</div>
+        ${total ? amount(total) : ''}`),
+        emailNotice(`📎 <strong>Your quotation PDF is attached</strong> to this email. Please open the attachment to view the full breakdown.`),
+        portalUrl ? emailButton(portalUrl, 'View your quote online →', 'View, track and communicate with us through your secure client portal.') : '',
+        portalUrl ? portalExplainerHtml() : '',
+        emailContact('This quotation is valid for 30 days. Please do not hesitate to contact us if you have any questions or would like to discuss anything.', payload.companyPhone, payload.companyEmail),
+      ].join('\n      '),
+      footerHtml: `Kind regards · ${company}${portalUrl ? ` · ${footerLink(portalUrl, 'Client portal')}` : ''}`,
+    })
   }
 
   if (payload.type === 'job_report') {
-    const fmtGbp = (n?: number) => n != null
-      ? `£${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-      : '—'
-    return `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f4f4f0;font-family:Georgia,serif">
-  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
-    <div style="background:#2b3a2b;padding:28px 32px">
-      <div style="color:#c8d8a8;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px">${company}</div>
-      <div style="color:#fff;font-size:22px;font-weight:700">Job Financial Summary</div>
-    </div>
-    <div style="padding:28px 32px">
-      <p style="margin:0 0 16px;font-size:15px;color:#2b2f33">Hi ${firstName},</p>
-      <p style="margin:0 0 20px;font-size:15px;color:#2b2f33;line-height:1.6">
-        Please find attached a financial summary for your <strong>${payload.jobType}</strong> project${payload.jobAddress ? ` at <strong>${payload.jobAddress}</strong>` : ''} —
+    const fmtGbp = (n?: number) => (n != null ? money(n) : '—')
+    const row = (label: string, value: string, extra = '') =>
+      `<tr><td style="padding:3px 0;color:${BRAND.muted};font-size:13px;${extra}">${label}</td><td style="padding:3px 0;text-align:right;font-family:'DM Mono',monospace;font-size:13px;${extra}">${value}</td></tr>`
+    const outstandingColour = (payload.reportOutstanding ?? 0) > 0 ? '#b45309' : BRAND.limeDark
+    return emailShell({
+      company, kicker: 'Financial summary', title: 'Job Financial Summary',
+      body: [
+        emailPara(`Hi ${firstName},`),
+        emailPara(`Please find attached a financial summary for your <strong>${payload.jobType}</strong> project${payload.jobAddress ? ` at <strong>${payload.jobAddress}</strong>` : ''} —
         covering the contract value, any variations, invoices raised, and payments received to date.
-        We'd really appreciate it if you could check these figures against your own records to confirm everything matches up on our side.
-      </p>
-      ${payload.message ? `<div style="background:#f8faf2;border-left:3px solid #7ab533;padding:12px 16px;margin-bottom:20px;border-radius:0 4px 4px 0"><p style="margin:0;font-size:14px;color:#2b2f33;line-height:1.6">${payload.message.replace(/\n/g, '<br>')}</p></div>` : ''}
-      <div style="background:#f8fafc;border:1px solid #dde1e5;border-radius:8px;padding:18px 20px;margin-bottom:24px">
-        <div style="font-weight:700;font-size:16px;color:#1e2022;margin-bottom:10px">${payload.jobType}</div>
-        <div style="display:grid;grid-template-columns:1fr auto;gap:6px 16px;font-size:13px">
-          <span style="color:#6b7580">Contract total</span><span style="text-align:right;font-family:'DM Mono',monospace;font-weight:700">${fmtGbp(payload.reportContractTotal)}</span>
-          <span style="color:#6b7580">Invoiced to date</span><span style="text-align:right;font-family:'DM Mono',monospace">${fmtGbp(payload.reportInvoicedTotal)}</span>
-          <span style="color:#6b7580">Payments received</span><span style="text-align:right;font-family:'DM Mono',monospace;color:#4a7c1f">${fmtGbp(payload.reportPaidTotal)}</span>
-          <span style="color:#1e2022;font-weight:700;border-top:1px solid #dde1e5;padding-top:6px">Balance outstanding</span><span style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;border-top:1px solid #dde1e5;padding-top:6px;color:${(payload.reportOutstanding ?? 0) > 0 ? '#b45309' : '#4a7c1f'}">${fmtGbp(payload.reportOutstanding)}</span>
-        </div>
-      </div>
-      <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:12px 16px;margin-bottom:24px">
-        <p style="margin:0;font-size:13px;color:#5d4037;">
-          📎 <strong>The full breakdown is attached</strong> — including invoice-by-invoice and payment-by-payment detail. Please open the attachment to review it.
-        </p>
-      </div>
-      <p style="margin:0;font-size:13px;color:#6b7580;line-height:1.6">
-        If anything doesn't look right, just get in touch and we'll go through it together.
-        ${payload.companyPhone ? `<br><br>📞 <strong>${payload.companyPhone}</strong>` : ''}
-        ${payload.companyEmail ? `<br>✉ <strong>${payload.companyEmail}</strong>` : ''}
-      </p>
-    </div>
-    <div style="background:#f4f4f0;padding:16px 32px;border-top:1px solid #dde1e5">
-      <div style="font-size:11px;color:#9aa3ad">Kind regards · ${company}</div>
-    </div>
-  </div>
-</body>
-</html>`
+        We'd really appreciate it if you could check these figures against your own records to confirm everything matches up on our side.`),
+        message,
+        emailCard(`<div style="font-weight:700;font-size:16px;color:${BRAND.ink};margin-bottom:10px">${payload.jobType}</div>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+          ${row('Contract total', fmtGbp(payload.reportContractTotal), `font-weight:700;color:${BRAND.ink};`)}
+          ${row('Invoiced to date', fmtGbp(payload.reportInvoicedTotal))}
+          ${row('Payments received', fmtGbp(payload.reportPaidTotal), `color:${BRAND.limeDark};`)}
+          <tr><td colspan="2" style="border-top:1px solid ${BRAND.line};padding-top:6px"></td></tr>
+          ${row('Balance outstanding', fmtGbp(payload.reportOutstanding), `font-weight:700;color:${outstandingColour};`)}
+        </table>`),
+        emailNotice(`📎 <strong>The full breakdown is attached</strong> — including invoice-by-invoice and payment-by-payment detail. Please open the attachment to review it.`),
+        emailContact(`If anything doesn't look right, just get in touch and we'll go through it together.`, payload.companyPhone, payload.companyEmail),
+      ].join('\n      '),
+    })
   }
 
   if (payload.type === 'variation_sent') {
-    const total = payload.variationTotal != null
-      ? `£${payload.variationTotal.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${payload.vatIncluded ? ' inc. VAT' : ''}`
-      : ''
-    return `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f4f4f0;font-family:Georgia,serif">
-  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
-    <div style="background:#2b3a2b;padding:28px 32px">
-      <div style="color:#c8d8a8;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px">${company}</div>
-      <div style="color:#fff;font-size:22px;font-weight:700">Change Order for Approval</div>
-    </div>
-    <div style="padding:28px 32px">
-      <p style="margin:0 0 16px;font-size:15px;color:#2b2f33">Hi ${firstName},</p>
-      <p style="margin:0 0 20px;font-size:15px;color:#2b2f33;line-height:1.6">
-        ${company} has submitted a change order on your project that requires your approval.
-      </p>
-      <div style="background:#f8fafc;border:1px solid #dde1e5;border-radius:8px;padding:18px 20px;margin-bottom:24px">
-        ${payload.variationRef ? `<div style="font-size:11px;color:#6b7580;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">${payload.variationRef}</div>` : ''}
-        <div style="font-weight:700;font-size:16px;color:#1e2022;margin-bottom:6px">${payload.variationTitle || 'Change Order'}</div>
-        <div style="font-size:13px;color:#6b7580">${payload.jobType} · ${payload.jobAddress}</div>
-        ${total ? `<div style="font-size:22px;font-weight:700;color:#2b3a2b;margin-top:12px;font-family:'DM Mono',monospace">${total}</div>` : ''}
-      </div>
-      <a href="${portalUrl}" style="display:inline-block;background:#2b3a2b;color:#fff;text-decoration:none;padding:13px 28px;border-radius:6px;font-size:14px;font-weight:700;margin-bottom:24px">
-        Review &amp; Approve →
-      </a>
-      <p style="margin:0;font-size:13px;color:#6b7580;line-height:1.6">
-        Log in to your client portal to view the full details, ask questions, approve or reject this change.
-        ${payload.companyPhone ? `<br>Questions? Call us on <strong>${payload.companyPhone}</strong>` : ''}
-      </p>
-    </div>
-    <div style="background:#f4f4f0;padding:16px 32px;border-top:1px solid #dde1e5">
-      <div style="font-size:11px;color:#9aa3ad">This notification was sent by ${company}. Log in at <a href="${portalUrl}" style="color:#4a7c1f">${portalUrl}</a></div>
-    </div>
-  </div>
-</body>
-</html>`
+    const total = payload.variationTotal != null ? money(payload.variationTotal, !!payload.vatIncluded) : ''
+    return emailShell({
+      company, kicker: 'Change order', title: 'Change Order for Approval',
+      body: [
+        emailPara(`Hi ${firstName},`),
+        emailPara(`${company} has submitted a change order on your project that requires your approval.`),
+        emailCard(`${payload.variationRef ? small(payload.variationRef) : ''}
+        <div style="font-weight:700;font-size:16px;color:${BRAND.ink};margin-bottom:6px">${payload.variationTitle || 'Change Order'}</div>
+        <div style="font-size:13px;color:${BRAND.muted}">${payload.jobType} · ${payload.jobAddress}</div>
+        ${total ? amount(total) : ''}`),
+        emailButton(portalUrl, 'Review &amp; Approve →'),
+        emailContact('Log in to your client portal to view the full details, ask questions, approve or reject this change.', payload.companyPhone ? `${payload.companyPhone}` : undefined, undefined),
+      ].join('\n      '),
+      footerHtml: `This notification was sent by ${company}. Log in at ${footerLink(portalUrl, portalUrl)}`,
+    })
   }
 
   if (payload.type === 'contract_sent') {
-    return `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f4f4f0;font-family:Georgia,serif">
-  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
-    <div style="background:#2b3a2b;padding:28px 32px">
-      <div style="color:#c8d8a8;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px">${company}</div>
-      <div style="color:#fff;font-size:22px;font-weight:700">Your Building Contract Is Ready to Sign</div>
-    </div>
-    <div style="padding:28px 32px">
-      <p style="margin:0 0 16px;font-size:15px;color:#2b2f33">Dear ${firstName},</p>
-      <p style="margin:0 0 20px;font-size:15px;color:#2b2f33;line-height:1.6">
-        ${company} has sent you the building contract for the works${payload.jobAddress ? ` at <strong>${payload.jobAddress}</strong>` : ''}.
-        Please read it carefully. You can view it and sign it online in your portal.${payload.secondClientName ? ` Both you and <strong>${payload.secondClientName}</strong> need to sign.` : ''}
-      </p>
-      ${payload.message ? `<div style="background:#f8faf2;border-left:3px solid #7ab533;padding:12px 16px;margin-bottom:20px;border-radius:0 4px 4px 0;font-size:14px;color:#2b2f33;line-height:1.6">${payload.message}</div>` : ''}
-      <div style="background:#f8fafc;border:1px solid #dde1e5;border-radius:8px;padding:18px 20px;margin-bottom:24px">
-        <div style="font-weight:700;font-size:16px;color:#1e2022;margin-bottom:6px">${payload.jobType}</div>
-        <div style="font-size:13px;color:#6b7580">${payload.jobAddress || ''}</div>
-      </div>
-      ${portalUrl ? `<div style="margin-bottom:24px">
-        <a href="${portalUrl}" style="display:inline-block;background:#2b3a2b;color:#fff;text-decoration:none;padding:13px 28px;border-radius:6px;font-size:14px;font-weight:700">Review &amp; Sign Contract →</a>
-      </div>` : ''}
-      ${portalUrl ? portalExplainerHtml() : ''}
-      <p style="margin:0;font-size:13px;color:#6b7580;line-height:1.6">
-        If you have any questions before signing, please get in touch.
-        ${payload.companyPhone ? `<br><br>📞 <strong>${payload.companyPhone}</strong>` : ''}
-        ${payload.companyEmail ? `<br>✉ <strong>${payload.companyEmail}</strong>` : ''}
-      </p>
-    </div>
-    <div style="background:#f4f4f0;padding:16px 32px;border-top:1px solid #dde1e5">
-      <div style="font-size:11px;color:#9aa3ad">Kind regards · ${company}</div>
-    </div>
-  </div>
-</body>
-</html>`
+    return emailShell({
+      company, kicker: 'Building contract', title: 'Your Building Contract Is Ready to Sign',
+      body: [
+        emailPara(`Dear ${firstName},`),
+        emailPara(`${company} has sent you the building contract for the works${payload.jobAddress ? ` at <strong>${payload.jobAddress}</strong>` : ''}.
+        Please read it carefully. You can view it and sign it online in your portal.${payload.secondClientName ? ` Both you and <strong>${payload.secondClientName}</strong> need to sign.` : ''}`),
+        message,
+        emailCard(`<div style="font-weight:700;font-size:16px;color:${BRAND.ink};margin-bottom:6px">${payload.jobType}</div>
+        <div style="font-size:13px;color:${BRAND.muted}">${payload.jobAddress || ''}</div>`),
+        portalUrl ? emailButton(portalUrl, 'Review &amp; Sign Contract →') : '',
+        portalUrl ? portalExplainerHtml() : '',
+        emailContact('If you have any questions before signing, please get in touch.', payload.companyPhone, payload.companyEmail),
+      ].join('\n      '),
+    })
   }
 
   // schedule_updated
-  return `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f4f4f0;font-family:Georgia,serif">
-  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
-    <div style="background:#2b3a2b;padding:28px 32px">
-      <div style="color:#c8d8a8;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px">${company}</div>
-      <div style="color:#fff;font-size:22px;font-weight:700">Your Project Schedule Has Been Updated</div>
-    </div>
-    <div style="padding:28px 32px">
-      <p style="margin:0 0 16px;font-size:15px;color:#2b2f33">Hi ${firstName},</p>
-      <p style="margin:0 0 20px;font-size:15px;color:#2b2f33;line-height:1.6">
-        ${company} has updated the programme for your project.
-      </p>
-      <div style="background:#f8fafc;border:1px solid #dde1e5;border-radius:8px;padding:18px 20px;margin-bottom:24px">
-        <div style="font-weight:700;font-size:16px;color:#1e2022;margin-bottom:4px">${payload.jobType}</div>
-        <div style="font-size:13px;color:#6b7580">${payload.jobAddress}</div>
-      </div>
-      <a href="${portalUrl}" style="display:inline-block;background:#2b3a2b;color:#fff;text-decoration:none;padding:13px 28px;border-radius:6px;font-size:14px;font-weight:700;margin-bottom:24px">
-        View Updated Schedule →
-      </a>
-      <p style="margin:0;font-size:13px;color:#6b7580;line-height:1.6">
-        Log in to your portal to see the latest programme and progress update.
-        ${payload.companyPhone ? `<br>Questions? Call us on <strong>${payload.companyPhone}</strong>` : ''}
-      </p>
-    </div>
-    <div style="background:#f4f4f0;padding:16px 32px;border-top:1px solid #dde1e5">
-      <div style="font-size:11px;color:#9aa3ad">This notification was sent by ${company}. Log in at <a href="${portalUrl}" style="color:#4a7c1f">${portalUrl}</a></div>
-    </div>
-  </div>
-</body>
-</html>`
+  return emailShell({
+    company, kicker: 'Programme update', title: 'Your Project Schedule Has Been Updated',
+    body: [
+      emailPara(`Hi ${firstName},`),
+      emailPara(`${company} has updated the programme for your project.`),
+      emailCard(`<div style="font-weight:700;font-size:16px;color:${BRAND.ink};margin-bottom:4px">${payload.jobType}</div>
+        <div style="font-size:13px;color:${BRAND.muted}">${payload.jobAddress}</div>`),
+      emailButton(portalUrl, 'View Updated Schedule →'),
+      emailContact('Log in to your portal to see the latest programme and progress update.', payload.companyPhone, undefined),
+    ].join('\n      '),
+    footerHtml: `This notification was sent by ${company}. Log in at ${footerLink(portalUrl, portalUrl)}`,
+  })
 }
 
 async function sendEmail(

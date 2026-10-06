@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { senderFrom, withPoweredBy, escapeHtml } from '@/lib/email-brand'
+import { BRAND, emailShell, emailPara, emailButton, emailCallout, emailContact } from '@/lib/email-layout'
 import { callerIsPortalOnly } from '@/lib/caller-role'
 import { usageGuard } from '@/lib/usage'
 
@@ -116,61 +117,20 @@ function buildWhatsAppMessage({ firstName, company, portalUrl }: { firstName: st
 }
 
 function buildEmail({ firstName, company, portalUrl }: { firstName: string; company: string; portalUrl: string }): string {
-  return `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f4f4f0;font-family:Georgia,serif">
-  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
-    <div style="background:#484f5a;padding:28px 32px;border-bottom:3px solid #b8cc00">
-      <div style="color:#b8cc00;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px">${company}</div>
-      <div style="color:#fff;font-size:22px;font-weight:700">Access your portal on your phone</div>
-    </div>
-    <div style="padding:28px 32px">
-      <p style="margin:0 0 16px;font-size:15px;color:#2b2f33">Hi ${firstName},</p>
-      <p style="margin:0 0 24px;font-size:15px;color:#2b2f33;line-height:1.6">
-        You can now add your project portal to your phone's home screen — it works just like a downloaded app,
-        with no App Store required. One tap and you're straight in.
-      </p>
-
-      <div style="text-align:center;margin-bottom:28px">
-        <a href="${portalUrl}" style="display:inline-block;background:#484f5a;color:#fff;text-decoration:none;padding:16px 36px;border-radius:8px;font-size:16px;font-weight:700;border-bottom:3px solid #b8cc00">
-          Open your portal →
-        </a>
-      </div>
-
-      <div style="background:#f8fafc;border:1px solid #dde1e5;border-radius:8px;padding:20px 22px;margin-bottom:24px">
-        <div style="font-weight:700;font-size:13px;color:#1e2022;margin-bottom:14px">📱 How to install — takes 10 seconds:</div>
-
-        <div style="margin-bottom:16px">
-          <div style="display:inline-block;background:#484f5a;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;margin-bottom:6px">iPhone</div>
-          <ol style="margin:0;padding-left:20px;font-size:13px;color:#4a5568;line-height:2">
-            <li>Open the link above in <strong>Safari</strong></li>
-            <li>Tap the <strong>Share</strong> button (square with arrow at the bottom)</li>
-            <li>Tap <strong>"Add to Home Screen"</strong></li>
-            <li>Tap <strong>Add</strong></li>
-          </ol>
-        </div>
-
-        <div>
-          <div style="display:inline-block;background:#484f5a;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;margin-bottom:6px">Android</div>
-          <ol style="margin:0;padding-left:20px;font-size:13px;color:#4a5568;line-height:2">
-            <li>Open the link above in <strong>Chrome</strong></li>
-            <li>Tap the <strong>⋮ menu</strong> (top right corner)</li>
-            <li>Tap <strong>"Add to Home Screen"</strong></li>
-            <li>Tap <strong>Add</strong></li>
-          </ol>
-        </div>
-      </div>
-
-      <p style="margin:0;font-size:13px;color:#6b7580;line-height:1.6">
-        Once installed, the portal icon will appear on your home screen. Use it any time to check your
-        quotes, variations, and invoices — or to approve change orders on site.
-      </p>
-    </div>
-    <div style="background:#f4f4f0;padding:16px 32px;border-top:1px solid #dde1e5">
-      <div style="font-size:11px;color:#9aa3ad">${company} · <a href="${portalUrl}" style="color:#484f5a;text-decoration:none">Open portal</a></div>
-    </div>
-  </div>
-</body>
-</html>`
+  const tag = (t: string) => `<div style="display:inline-block;background:${BRAND.lime};color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;margin-bottom:6px">${t}</div>`
+  const steps = (items: string[]) => `<ol style="margin:0;padding-left:20px;font-size:13px;color:#4a5568;line-height:2">${items.map(i => `<li>${i}</li>`).join('')}</ol>`
+  return emailShell({
+    company, kicker: 'Client portal', title: 'Access your portal on your phone',
+    body: [
+      emailPara(`Hi ${firstName},`),
+      emailPara(`You can now add your project portal to your phone's home screen — it works just like a downloaded app, with no App Store required. One tap and you're straight in.`, 24),
+      emailButton(portalUrl, 'Open your portal →'),
+      emailCallout(
+        `<div style="margin-bottom:16px">${tag('iPhone')}${steps(['Open the link above in <strong>Safari</strong>', 'Tap the <strong>Share</strong> button (square with arrow at the bottom)', 'Tap <strong>"Add to Home Screen"</strong>', 'Tap <strong>Add</strong>'])}</div>
+        <div>${tag('Android')}${steps(['Open the link above in <strong>Chrome</strong>', 'Tap the <strong>⋮ menu</strong> (top right corner)', 'Tap <strong>"Add to Home Screen"</strong>', 'Tap <strong>Add</strong>'])}</div>`,
+        '📱 How to install — takes 10 seconds'),
+      emailContact('Once installed, the portal icon will appear on your home screen. Use it any time to check your quotes, variations, and invoices — or to approve change orders on site.'),
+    ].join('\n      '),
+    footerHtml: `${company} · <a href="${portalUrl}" style="color:#a3d65c;text-decoration:none">Open portal</a>`,
+  })
 }

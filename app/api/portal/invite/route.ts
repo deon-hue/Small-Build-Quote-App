@@ -17,6 +17,7 @@ import { callerIsPortalOnly } from '@/lib/caller-role'
 import { usageGuard } from '@/lib/usage'
 import { createPortalSignInLink } from '@/lib/portal-magic-link'
 import { portalExplainerHtml, portalWhatsAppLines } from '@/lib/portal-welcome'
+import { emailShell, emailPara, emailButton, emailContact, emailLink } from '@/lib/email-layout'
 
 function esc(s: string): string {
   return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -46,42 +47,17 @@ async function sendWhatsApp(to: string, body: string, sid: string, token: string
 
 function buildEmail(o: { firstName: string; company: string; signInUrl: string; loginUrl: string; companyPhone?: string; companyEmail?: string }): string {
   const company = esc(o.company)
-  return `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f4f4f0;font-family:Georgia,serif">
-  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
-    <div style="background:#2b3a2b;padding:28px 32px">
-      <div style="color:#c8d8a8;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px">${company}</div>
-      <div style="color:#fff;font-size:22px;font-weight:700">Your client portal</div>
-    </div>
-    <div style="padding:28px 32px">
-      <p style="margin:0 0 16px;font-size:15px;color:#2b2f33">Dear ${esc(o.firstName)},</p>
-      <p style="margin:0 0 20px;font-size:15px;color:#2b2f33;line-height:1.6">
-        ${company} has set up a secure client portal for you. Press the button below to sign in. There is no password to remember.
-      </p>
-      <div style="margin-bottom:24px">
-        <a href="${o.signInUrl}" style="display:inline-block;background:#2b3a2b;color:#fff;text-decoration:none;padding:13px 28px;border-radius:6px;font-size:14px;font-weight:700">
-          Open your portal →
-        </a>
-        <p style="margin:10px 0 0;font-size:12px;color:#9aa3ad;line-height:1.5">
-          This button signs you in once and then expires. If it has stopped working, go to
-          <a href="${o.loginUrl}" style="color:#4a7c1f">the portal sign-in page</a> and choose &ldquo;Send sign-in link&rdquo; for a fresh one.
-        </p>
-      </div>
-      ${portalExplainerHtml()}
-      <p style="margin:0;font-size:13px;color:#6b7580;line-height:1.6">
-        If anything is unclear, just get in touch.
-        ${o.companyPhone ? `<br><br>📞 <strong>${esc(o.companyPhone)}</strong>` : ''}
-        ${o.companyEmail ? `<br>✉ <strong>${esc(o.companyEmail)}</strong>` : ''}
-      </p>
-    </div>
-    <div style="background:#f4f4f0;padding:16px 32px;border-top:1px solid #dde1e5">
-      <div style="font-size:11px;color:#9aa3ad">Kind regards · ${company}</div>
-    </div>
-  </div>
-</body>
-</html>`
+  return emailShell({
+    company, kicker: 'Client portal', title: 'Your client portal',
+    body: [
+      emailPara(`Dear ${esc(o.firstName)},`),
+      emailPara(`${company} has set up a secure client portal for you. Press the button below to sign in. There is no password to remember.`, 22),
+      emailButton(o.signInUrl, 'Open your portal →',
+        `This button signs you in once and then expires. If it has stopped working, go to ${emailLink(o.loginUrl, 'the portal sign-in page')} and choose &ldquo;Send sign-in link&rdquo; for a fresh one.`),
+      portalExplainerHtml(),
+      emailContact('If anything is unclear, just get in touch.', o.companyPhone ? esc(o.companyPhone) : undefined, o.companyEmail ? esc(o.companyEmail) : undefined),
+    ].join('\n      '),
+  })
 }
 
 export async function POST(req: NextRequest) {
