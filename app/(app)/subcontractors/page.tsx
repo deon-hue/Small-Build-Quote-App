@@ -229,11 +229,14 @@ export default function SubcontractorsPage() {
     if (!contact?.email) { alert(`This subcontractor has no email address on file. Add one on the Contacts page first.`); return }
     setPortalInviting(contractId)
     try {
-      const { error: otpErr } = await sb.auth.signInWithOtp({
-        email: contact.email,
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=/sub-portal` },
+      // Our own branded invite rather than Supabase's generic magic-link email
+      const res = await fetch('/api/portal/invite-sub', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: contact.name, email: contact.email, companyName: settings.name, companyPhone: settings.phone, companyEmail: settings.email }),
       })
-      if (otpErr) { alert(`Failed to send invite: ${otpErr.message}`); return }
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { alert(`Failed to send invite: ${data?.error || res.status}`); return }
       await sb.rpc('mark_sub_portal_invite', { p_client_id: contactId })
       setPortalInviteSent(prev => new Set(prev).add(contractId))
     } finally {

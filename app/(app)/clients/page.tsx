@@ -258,19 +258,15 @@ function ClientsPageInner() {
     setSubInviteSendingId(c.id)
     setSubInviteErrors(prev => { const n = { ...prev }; delete n[c.id]; return n })
     try {
-      const { error: otpErr } = await supabase.auth.signInWithOtp({
-        email: c.email,
-        options: {
-          shouldCreateUser: true,
-          emailRedirectTo: `${window.location.origin}/auth/callback?next=/sub-portal`,
-        },
+      // Our own branded invite (the builder's name, what the portal is for, a one-click sign-in button) rather than Supabase's generic email.
+      const res = await fetch('/api/portal/invite-sub', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: c.name, email: c.email, companyName: settings.name, companyPhone: settings.phone, companyEmail: settings.email }),
       })
-      if (otpErr) {
-        const msg = otpErr.message || ''
-        const friendly = msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('too many') || msg.toLowerCase().includes('sending magic link')
-          ? 'Email rate limit — wait a minute and try again.'
-          : msg || 'Failed to send invite'
-        setSubInviteErrors(prev => ({ ...prev, [c.id]: friendly }))
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setSubInviteErrors(prev => ({ ...prev, [c.id]: data?.error || `Failed to send invite (${res.status})` }))
         return
       }
       setSubInviteSentId(c.id)
