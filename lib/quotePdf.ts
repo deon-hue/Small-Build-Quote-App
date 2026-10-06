@@ -11,22 +11,23 @@ import { PDFDocument, PDFFont, rgb, StandardFonts, PDFPage } from 'pdf-lib'
 import type { Quote, Settings } from './types'
 import { calcPhaseSell, calcItemSell, VAT } from './utils'
 import { PRODUCT_NAME } from './product-config'
+import { toPdfSafeText } from './pdf-text'
 import { companyLegalParts } from './company-legal'
 
 // ── Colour helpers ────────────────────────────────────────────────────────────
 
+// Same brand as the HTML quote, the website and the emails (lib/email-layout.ts): lime accents on white, slate for the dark bars.
 const C = {
-  darkGreen:  rgb(0.169, 0.227, 0.169),   // #2b3a2b
-  charcoal:   rgb(0.169, 0.184, 0.2),     // #2b2f33
-  lightGreen: rgb(0.784, 0.847, 0.604),   // #c8d8a8
-  moss:       rgb(0.478, 0.784, 0.117),   // #7ab533  (scope border)
+  charcoal:   rgb(0.118, 0.161, 0.231),   // #1e293b  slate: table header, totals bar, footer
+  moss:       rgb(0.478, 0.71, 0.2),      // #7ab533  lime (header rule, monogram, scope border)
   white:      rgb(1, 1, 1),
-  cream:      rgb(0.973, 0.961, 0.941),   // #f8f5f0
-  lightBlue:  rgb(0.91, 0.925, 0.941),    // #e8ecf0 (phase row)
-  muted:      rgb(0.541, 0.51, 0.471),    // #8a8278
+  headerBg:   rgb(0.973, 0.98, 0.973),    // #f8faf8  header band
+  cream:      rgb(0.973, 0.98, 0.988),    // #f8fafc  info grid / alternate rows / terms
+  lightBlue:  rgb(0.91, 0.925, 0.941),    // #e8ecf0  (phase row)
+  muted:      rgb(0.392, 0.455, 0.545),   // #64748b
   body:       rgb(0.118, 0.125, 0.133),   // #1e2022
-  border:     rgb(0.906, 0.878, 0.816),   // #e8e0d0
-  footerText: rgb(0.75, 0.75, 0.75),      // light grey on dark footer
+  border:     rgb(0.886, 0.91, 0.941),    // #e2e8f0
+  footerText: rgb(0.75, 0.78, 0.82),      // light grey on the slate footer
 }
 
 // ── A4 layout constants ───────────────────────────────────────────────────────
@@ -46,17 +47,17 @@ function dateStr(d: Date): string {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
-/** Clamp string to avoid pdf-lib crashing on unsupported characters */
+/** Makes text safe for the PDF's standard fonts. Dashes, curly quotes, bullets, € and £ ARE drawable (Windows-1252) and are kept — an
+ *  earlier version turned every en/em dash into a "?" ("Phase 1 ? Groundworks"). Symbols that can't be drawn become a plain-text equivalent
+ *  (<=, ->, Yes…) or "?". See lib/pdf-text.ts. */
 function safe(s: string | undefined | null): string {
-  return (s ?? '')
-    .replace(/[\x00-\x1F\x7F]/g, ' ')
-    // Replace Unicode math symbols with ASCII equivalents
-    .replace(/≈/g, '~')
-    .replace(/±/g, '+/-')
-    .replace(/×/g, 'x')
-    .replace(/÷/g, '/')
-    .replace(/[^\x20-\x7E\xA0-\xFF]/g, '?')  // Replace any other non-WinAnsi chars with ?
-    .trim()
+  return toPdfSafeText(
+    (s ?? '')
+      .replace(/[\x00-\x1F\x7F]/g, ' ')
+      .replace(/±/g, '+/-')
+      .replace(/×/g, 'x')
+      .replace(/÷/g, '/'),
+  ).trim()
 }
 
 /**
@@ -207,19 +208,26 @@ export async function buildQuotePdf(
 
   // ── Header ────────────────────────────────────────────────────────────────
   const HEADER_H = 70
-  drawRect(page, 0, A4_H - HEADER_H, A4_W, HEADER_H, C.darkGreen)
+  drawRect(page, 0, A4_H - HEADER_H, A4_W, HEADER_H, C.headerBg)
+  drawRect(page, 0, A4_H - HEADER_H, A4_W, 3, C.moss)               // lime rule under the header
   y = A4_H - HEADER_H
 
-  // Company name + tagline
-  drawText(page, safe(co.name || 'Your Company'), MARGIN, y + 40, 18, fontBold, C.white)
-  drawText(page, safe(co.tagline || 'Building Extensions & Renovations').toUpperCase(), MARGIN, y + 22, 7.5, fontRegular, C.lightGreen)
+  // Lime square with the company's initial, then name + tagline
+  const MONO = 40
+  const initial = (safe(co.name || 'B').charAt(0) || 'B').toUpperCase()
+  drawRect(page, MARGIN, y + 15, MONO, MONO, C.moss)
+  const initW = fontBold.widthOfTextAtSize(initial, 20)
+  drawText(page, initial, MARGIN + (MONO - initW) / 2, y + 15 + 12, 20, fontBold, C.white)
+  const NAME_X = MARGIN + MONO + 12
+  drawText(page, safe(co.name || 'Your Company'), NAME_X, y + 38, 18, fontBold, C.body, CONTENT_W - MONO - 140)
+  drawText(page, safe(co.tagline || 'Building Extensions & Renovations').toUpperCase(), NAME_X, y + 22, 7.5, fontRegular, C.muted, CONTENT_W - MONO - 140)
 
   // Quote ref (right side)
   const refLabel = 'QUOTATION'
   const refVal   = safe(quote.ref || 'DRAFT')
   const refValW  = fontBold.widthOfTextAtSize(refVal, 16)
-  drawText(page, refLabel, A4_W - MARGIN - refValW - 2, y + 22, 7.5, fontRegular, C.lightGreen)
-  drawText(page, refVal, A4_W - MARGIN - refValW, y + 36, 16, fontBold, C.white)
+  drawText(page, refLabel, A4_W - MARGIN - refValW - 2, y + 22, 7.5, fontRegular, C.muted)
+  drawText(page, refVal, A4_W - MARGIN - refValW, y + 36, 16, fontBold, C.body)
 
   y -= 20  // gap below header
 
@@ -400,7 +408,7 @@ export async function buildQuotePdf(
     // 'total_only': grand total only — no subtotal breakdown
     const vatNote = qVat ? ' (inc. VAT)' : ' (ex-VAT)'
     ensureSpace(TROW_H + 20)
-    drawRect(page, TOTALS_X, y - TROW_H - 2, TOTALS_W, TROW_H + 2, C.darkGreen)
+    drawRect(page, TOTALS_X, y - TROW_H - 2, TOTALS_W, TROW_H + 2, C.charcoal)
     drawText(page, `TOTAL${vatNote}`, TOTALS_X + 6, y - 13, 10, fontBold, C.white)
     const totalStr = fmtGBP(total)
     drawText(page, totalStr, TOTALS_X + TOTALS_W - fontBold.widthOfTextAtSize(totalStr, 10) - 6, y - 13, 10, fontBold, C.white)
@@ -418,7 +426,7 @@ export async function buildQuotePdf(
       if (value) drawText(page, value, TOTALS_X + TOTALS_W - fontBold.widthOfTextAtSize(value, 8.5) - 6, y - 11, 8.5, fontBold, C.body)
       y -= TROW_H
     }
-    drawRect(page, TOTALS_X, y - TROW_H - 2, TOTALS_W, TROW_H + 2, C.darkGreen)
+    drawRect(page, TOTALS_X, y - TROW_H - 2, TOTALS_W, TROW_H + 2, C.charcoal)
     drawText(page, 'TOTAL', TOTALS_X + 6, y - 13, 10, fontBold, C.white)
     const totalStr = fmtGBP(total)
     drawText(page, totalStr, TOTALS_X + TOTALS_W - fontBold.widthOfTextAtSize(totalStr, 10) - 6, y - 13, 10, fontBold, C.white)
