@@ -1,6 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import PortalDashboardCards from '@/components/PortalDashboardCards'
 import { usePortal } from '@/contexts/PortalContext'
 import { fmt } from '@/lib/utils'
 
@@ -66,7 +68,8 @@ function PortalError({ error, userEmail, reload }: { error: string; userEmail: s
 }
 
 export default function PortalDashboard() {
-  const { invoices, variations, jobs, payments, contracts, settings, userEmail, loading, error, reload } = usePortal()
+  const { invoices, variations, jobs, payments, contracts, ganttStates, clientSettings, settings, userEmail, loading, error, reload } = usePortal()
+  const router = useRouter()
 
   if (loading) {
     return (
@@ -167,6 +170,10 @@ export default function PortalDashboard() {
         </div>
 
       </div>
+
+      {clientSettings.showDashboardProgress !== false && (
+        <PortalDashboardCards jobs={jobs} ganttStates={ganttStates} invoices={invoices} onViewInvoices={() => router.push('/portal/invoices')} />
+      )}
 
       {/* Unpaid invoices */}
       {unpaidInvoices.length > 0 && (

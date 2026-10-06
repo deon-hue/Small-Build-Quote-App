@@ -7,6 +7,7 @@ import type { GanttState, Job, Quote } from '@/lib/types'
 import PortalBuildPlan from '@/components/PortalBuildPlan'
 import PortalQuoteDetailsModal from '@/components/PortalQuoteDetailsModal'
 import PortalContractsView, { PortalFileList, type PortalJobFile } from '@/components/PortalContractsView'
+import PortalDashboardCards from '@/components/PortalDashboardCards'
 import type { PortalContract } from '@/contexts/PortalContext'
 import { useApp } from '@/contexts/AppContext'
 import { signedAttachmentUrl } from '@/lib/job-attachments'
@@ -31,6 +32,7 @@ interface PreviewQuote {
 interface PreviewInvoice {
   id: string; ref: string; clientName: string; total: number
   status: string; issueDate: string; dueDate: string
+  paymentPlan: { id?: number; description: string; amount: number; dueDate: string; paid: boolean }[] | null
 }
 interface PreviewVariation {
   id: string; ref: string; title: string; status: string; total: number; description: string
@@ -94,7 +96,7 @@ function PortalPreviewInner() {
   const [variations, setVariations] = useState<PreviewVariation[]>([])
   const [payments, setPayments] = useState<PreviewPayment[]>([])
   const [settings, setSettings] = useState<PreviewSettings | null>(null)
-  const [clientSettings, setClientSettings] = useState<{ quoteView?: 'full' | 'phases' | 'total_only'; showScope?: boolean }>({})
+  const [clientSettings, setClientSettings] = useState<{ quoteView?: 'full' | 'phases' | 'total_only'; showScope?: boolean; showDashboardProgress?: boolean }>({})
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null)
 
@@ -168,6 +170,7 @@ function PortalPreviewInner() {
         setClientSettings({
           quoteView: d.client_settings.quoteView || 'full',
           showScope: d.client_settings.showScope !== false,
+          showDashboardProgress: d.client_settings.showDashboardProgress !== false,
         })
       }
 
@@ -194,6 +197,7 @@ function PortalPreviewInner() {
           id: r.id, ref: r.ref, clientName: r.client_name,
           total: Number(r.total), status: r.status,
           issueDate: r.issue_date || '', dueDate: r.due_date || '',
+          paymentPlan: Array.isArray(r.payment_plan) ? r.payment_plan : null,
         })))
       }
       if (Array.isArray(d?.variations)) {
@@ -363,6 +367,14 @@ function PortalPreviewInner() {
               </div>
             </div>
 
+            {clientSettings.showDashboardProgress !== false && (
+              <PortalDashboardCards
+                jobs={jobs as unknown as Job[]}
+                ganttStates={Object.fromEntries(jobs.map(j => [j.id, j.ganttState]))}
+                invoices={invoices}
+                onViewInvoices={() => setActiveTab('invoices')}
+              />
+            )}
 
           </>
         )})()}

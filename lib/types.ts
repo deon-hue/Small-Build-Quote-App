@@ -391,6 +391,8 @@ export interface ClientPortalSettings {
   showProgramme: boolean
   /** Allow client to digitally approve quotes via the portal */
   allowOnlineApproval: boolean
+  /** Show the Next payment / Project progress / Upcoming works cards on the portal dashboard */
+  showDashboardProgress: boolean
 }
 
 export const DEFAULT_CLIENT_PORTAL_SETTINGS: ClientPortalSettings = {
@@ -403,6 +405,7 @@ export const DEFAULT_CLIENT_PORTAL_SETTINGS: ClientPortalSettings = {
   showVariationsTab:  true,
   showProgramme:      true,
   allowOnlineApproval: true,
+  showDashboardProgress: true,
 }
 
 export const PAYMENT_TERMS_OPTIONS = [

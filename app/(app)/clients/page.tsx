@@ -989,6 +989,7 @@ function ClientsPageInner() {
                       { key: 'showJobsTab',      label: 'Jobs tab' },
                       { key: 'showInvoicesTab',  label: 'Invoices tab' },
                       { key: 'showProgramme',    label: 'Programme / Gantt' },
+                      { key: 'showDashboardProgress', label: 'Dashboard: next payment, progress & upcoming works' },
                     ] as { key: keyof ClientPortalSettings; label: string }[]
                   ).map(({ key, label }) => (
                     <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12 }}>
