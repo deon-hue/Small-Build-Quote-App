@@ -1,11 +1,12 @@
 'use client'
 
-// Pick one or more subcontractors / workers for a task, and say which days of the task each one is on site. A tap toggles a person on or
-// off; for everyone booked, "Days" lets you choose just the days they work (e.g. Wed, Thu and Fri of a five-day task), which is what the
-// subcontractor sees in their own portal. A person whose Contact has since been deleted is kept by name and can be removed with ✕.
+// Book subcontractors / workers on a task, and say which days of the task each one is on site. Kept compact: only the people already
+// booked are listed (one tidy row each, with their days and a remove button); everyone else is behind one "+ Add person" search box, so a
+// long list of subcontractors never fills the panel. Each person's days (e.g. Wed, Thu and Fri of a five-day task) is what they see in their
+// own portal. A person whose Contact has since been deleted is kept by name and can be removed with ✕.
 // Used in the job schedule's edit panel and the Calendar's task panel.
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { bookedDays, describeDays, dayLabel, normaliseOffsets, type TaskDay } from '@/lib/task-days'
 import type { AssigneePick } from '@/lib/task-assignments'
 
@@ -27,6 +28,8 @@ export function picksFromKeys(
   return out
 }
 
+const initialOf = (n: string) => (n.trim().charAt(0) || '?').toUpperCase()
+
 export default function AssigneePicker({ contacts, extras, selected, onChange, label = 'Booked on this task', taskDays, daysByKey, onDaysChange }: {
   contacts: PickerContact[]
   /** people already booked whose Contact no longer exists */
@@ -35,76 +38,120 @@ export default function AssigneePicker({ contacts, extras, selected, onChange, l
   selected: string[]
   onChange: (keys: string[]) => void
   label?: string
-  /** the working days of this task; with more than one, each booked person gets a "which days" chooser */
+  /** the working days of this task; with more than one, each booked person gets a "Days" button */
   taskDays?: TaskDay[]
   /** each person's chosen days (offsets), null = every day */
   daysByKey?: Record<string, number[] | null>
   onDaysChange?: (key: string, offsets: number[] | null) => void
 }) {
+  const [adding, setAdding] = useState(false)
+  const [query, setQuery] = useState('')
   const [openKey, setOpenKey] = useState<string | null>(null)
-  const has = (k: string) => selected.includes(k)
-  const toggle = (k: string) => onChange(has(k) ? selected.filter(x => x !== k) : [...selected, k])
+  const addRef = useRef<HTMLDivElement>(null)
   const nameOf = (k: string) => contacts.find(c => c.id === k)?.name ?? extras.find(e => e.key === k)?.name ?? ''
-  const pill = (on: boolean): React.CSSProperties => ({
-    fontSize: 12, padding: '4px 10px', borderRadius: 14, cursor: 'pointer', fontFamily: 'inherit', fontWeight: on ? 700 : 500, whiteSpace: 'nowrap',
+  const showDays = !!taskDays && taskDays.length > 1 && !!onDaysChange
+
+  // people who can still be added, filtered by what is typed
+  const q = query.trim().toLowerCase()
+  const available = contacts.filter(c => !selected.includes(c.id) && (!q || c.name.toLowerCase().includes(q)))
+
+  // close the add box when clicking elsewhere
+  useEffect(() => {
+    if (!adding) return
+    const onDown = (e: MouseEvent) => { if (addRef.current && !addRef.current.contains(e.target as Node)) { setAdding(false); setQuery('') } }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [adding])
+
+  const add = (id: string) => { onChange([...selected, id]); setAdding(false); setQuery('') }
+  const remove = (k: string) => { onChange(selected.filter(x => x !== k)); if (openKey === k) setOpenKey(null) }
+  const chip = (on: boolean): React.CSSProperties => ({
+    fontSize: 11, padding: '3px 9px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', fontWeight: on ? 700 : 500, whiteSpace: 'nowrap',
     border: `1.5px solid ${on ? '#7ab533' : '#c8d0d8'}`, background: on ? '#7ab533' : '#fff', color: on ? '#fff' : '#334155',
   })
-  const showDays = !!taskDays && taskDays.length > 1 && !!onDaysChange
 
   return (
     <div>
-      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', marginBottom: 4 }}>{label}</div>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', maxHeight: 120, overflowY: 'auto' }}>
-        {contacts.map(c => (
-          <button key={c.id} type="button" onClick={() => toggle(c.id)} style={pill(has(c.id))} aria-pressed={has(c.id)}>
-            {has(c.id) ? '✓ ' : ''}{c.name}
-          </button>
-        ))}
-        {extras.filter(e => has(e.key)).map(e => (
-          <button key={e.key} type="button" onClick={() => toggle(e.key)} style={{ ...pill(true), background: '#94a3b8', borderColor: '#94a3b8' }} title="This contact has been deleted. Click to remove them from the task.">
-            {e.name} (contact removed) ✕
-          </button>
-        ))}
-      </div>
-      {contacts.length === 0 && extras.length === 0 && (
-        <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 3 }}>Save subcontractors in Contacts to book them here.</div>
-      )}
-      {selected.length === 0 && contacts.length > 0 && <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>Tap a name to book them. You can book several.</div>}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+        <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)' }}>{label}{selected.length > 0 ? ` (${selected.length})` : ''}</div>
 
-      {/* Which days each booked person works */}
-      {showDays && selected.length > 0 && (
-        <div style={{ marginTop: 10, borderTop: '1px solid #e2e8f0', paddingTop: 8 }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>Days each person works (they see these in their portal)</div>
+        <div ref={addRef} style={{ position: 'relative' }}>
+          <button type="button" onClick={() => { setAdding(a => !a); setQuery('') }}
+            style={{ fontSize: 11.5, padding: '3px 10px', border: '1px solid #7ab533', borderRadius: 12, background: '#f4f9ea', color: '#3e6b12', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700 }}>
+            + Add person
+          </button>
+          {adding && (
+            <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 4px)', zIndex: 30, width: 230, background: '#fff', border: '1px solid #c8d0d8', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.18)', padding: 6 }}>
+              <input
+                autoFocus value={query} onChange={e => setQuery(e.target.value)} placeholder="Search subcontractors…"
+                onKeyDown={e => { if (e.key === 'Enter' && available[0]) add(available[0].id); if (e.key === 'Escape') { setAdding(false); setQuery('') } }}
+                style={{ width: '100%', boxSizing: 'border-box', fontSize: 12.5, padding: '6px 8px', border: '1px solid #c8d0d8', borderRadius: 6, fontFamily: 'inherit' }}
+              />
+              <div style={{ maxHeight: 180, overflowY: 'auto', marginTop: 4 }}>
+                {available.length === 0 && (
+                  <div style={{ fontSize: 11.5, color: 'var(--muted)', padding: '8px 6px' }}>
+                    {contacts.length === 0 ? 'Save subcontractors in Contacts to book them here.' : q ? 'No one matches that.' : 'Everyone is already on this task.'}
+                  </div>
+                )}
+                {available.map(c => (
+                  <button key={c.id} type="button" onClick={() => add(c.id)}
+                    style={{ display: 'block', width: '100%', textAlign: 'left', fontSize: 12.5, padding: '6px 8px', border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', borderRadius: 5 }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f1f5f9' }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'none' }}>
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {selected.length === 0 ? (
+        <div style={{ fontSize: 11.5, color: 'var(--muted)' }}>Nobody booked yet.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {selected.map(k => {
+            const isExtra = !contacts.some(c => c.id === k)
             const offsets = daysByKey && k in daysByKey ? daysByKey[k] : null
-            const mine = bookedDays(taskDays!, offsets)
             const isOpen = openKey === k
             return (
-              <div key={k} style={{ marginBottom: 6 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12 }}>
-                  <strong style={{ minWidth: 90 }}>{nameOf(k)}</strong>
-                  <span style={{ color: offsets ? '#3e6b12' : 'var(--muted)', fontWeight: offsets ? 700 : 400 }}>{describeDays(taskDays!, mine)}</span>
-                  <button type="button" onClick={() => setOpenKey(isOpen ? null : k)}
-                    style={{ fontSize: 11, padding: '2px 8px', border: '1px solid #c8d0d8', borderRadius: 10, background: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>
-                    {isOpen ? 'Done' : 'Change days'}
-                  </button>
+              <div key={k} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '5px 8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ width: 22, height: 22, borderRadius: '50%', background: isExtra ? '#94a3b8' : '#7ab533', color: '#fff', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initialOf(nameOf(k))}</span>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {nameOf(k)}{isExtra ? ' (contact removed)' : ''}
+                    </div>
+                    {showDays && (
+                      <div style={{ fontSize: 11, color: offsets ? '#3e6b12' : 'var(--muted)', fontWeight: offsets ? 700 : 400 }}>
+                        {describeDays(taskDays!, bookedDays(taskDays!, offsets))}
+                      </div>
+                    )}
+                  </div>
+                  {showDays && (
+                    <button type="button" onClick={() => setOpenKey(isOpen ? null : k)}
+                      style={{ fontSize: 11, padding: '2px 9px', border: '1px solid #c8d0d8', borderRadius: 10, background: isOpen ? '#e8f3d6' : '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>
+                      {isOpen ? 'Done' : 'Days'}
+                    </button>
+                  )}
+                  <button type="button" onClick={() => remove(k)} title="Take off this task" aria-label={`Remove ${nameOf(k)}`}
+                    style={{ fontSize: 13, lineHeight: 1, padding: '2px 6px', border: 'none', background: 'none', color: '#94a3b8', cursor: 'pointer' }}>✕</button>
                 </div>
-                {isOpen && (
-                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
-                    <button type="button" onClick={() => onDaysChange!(k, null)}
-                      style={{ ...pill(offsets === null), fontSize: 11, padding: '3px 9px' }}>Every day</button>
+                {showDays && isOpen && (
+                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 6, paddingLeft: 30 }}>
+                    <button type="button" onClick={() => onDaysChange!(k, null)} style={chip(offsets === null)}>Every day</button>
                     {taskDays!.map(d => {
-                      const on = mine.some(m => m.offset === d.offset)
+                      const on = bookedDays(taskDays!, offsets).some(m => m.offset === d.offset)
                       return (
                         <button key={d.offset} type="button" aria-pressed={on}
                           onClick={() => {
-                            const cur = (offsets ?? taskDays!.map(x => x.offset))
+                            const cur = offsets ?? taskDays!.map(x => x.offset)
                             const next = on ? cur.filter(o => o !== d.offset) : [...cur, d.offset]
-                            // never leave a person with no days at all: that would just mean "every day" again
-                            if (next.length === 0) return
+                            if (next.length === 0) return   // never leave someone with no days: that would just mean "every day" again
                             onDaysChange!(k, normaliseOffsets(taskDays!, next))
                           }}
-                          style={{ ...pill(offsets !== null && on), fontSize: 11, padding: '3px 9px', background: on ? (offsets === null ? '#e8f3d6' : '#7ab533') : '#fff', color: on ? (offsets === null ? '#3e6b12' : '#fff') : '#334155', borderColor: on ? '#7ab533' : '#c8d0d8' }}>
+                          style={{ ...chip(offsets !== null && on), background: on ? (offsets === null ? '#e8f3d6' : '#7ab533') : '#fff', color: on ? (offsets === null ? '#3e6b12' : '#fff') : '#334155', borderColor: on ? '#7ab533' : '#c8d0d8' }}>
                           {dayLabel(d.date)}
                         </button>
                       )

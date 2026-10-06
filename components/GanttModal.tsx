@@ -1183,7 +1183,6 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
                 {taskAssignmentsReady && (
                   <div style={{ flexBasis: '100%', minWidth: 200 }}>
                     <AssigneePicker
-                      label="Booked on this (tap to add or remove — several allowed)"
                       contacts={assignableContacts(clients)}
                       extras={assignmentsFor(assignRef.current, job.id, editingRow.id).filter(a => !a.assigneeId).map(a => ({ key: assignmentKey(a), name: a.assigneeName }))}
                       selected={editingRow.assignees ?? []}

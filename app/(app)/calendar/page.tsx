@@ -845,7 +845,7 @@ export default function CalendarPage() {
             <DetailRow label="Job"        value={jobDisplayTitle(evt.job)} />
             <DetailRow label="Address"    value={evt.job.address} />
             {taskAssignmentsReady && evt.phaseId && (
-              <DetailRow label="Booked on it" value={(() => {
+              <DetailRow label="Booked" value={(() => {
                 const phaseId = evt.phaseId as string
                 const here = assignmentsFor(taskAssignments, evt.job.id, phaseId)
                 const contacts = assignableContacts(clients)
@@ -857,7 +857,6 @@ export default function CalendarPage() {
                 }
                 return (
                   <AssigneePicker
-                    label="Tap to add or remove — several allowed"
                     contacts={contacts}
                     extras={extras}
                     selected={keys}
