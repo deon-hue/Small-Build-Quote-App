@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import type { ScheduleRow } from '@/lib/task-days'
 
 export interface SubPortalSettings {
   name: string
@@ -86,6 +87,8 @@ interface SubPortalContextType {
   jobs: SubPortalJob[]
   subRates: SubRates
   subName: string
+  /** The days this person is booked on site (their own bookings only) */
+  schedule: ScheduleRow[]
   loading: boolean
   error: string | null
   reload: () => void
@@ -111,6 +114,7 @@ export function SubPortalProvider({ children }: { children: ReactNode }) {
   const [jobs, setJobs] = useState<SubPortalJob[]>([])
   const [subRates, setSubRates] = useState<SubRates>(DEFAULT_RATES)
   const [subName, setSubName] = useState('')
+  const [schedule, setSchedule] = useState<ScheduleRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
@@ -169,6 +173,13 @@ export function SubPortalProvider({ children }: { children: ReactNode }) {
         setSubRates(d.subRates ?? DEFAULT_RATES)
         setSubName(d.subName ?? '')
         setError(null)
+
+        // Their booked days. Kept apart from the main load so a problem here (or the database update not being run yet) never breaks the rest of the portal.
+        try {
+          const { data: sch } = await supabase.rpc('get_my_task_schedule')
+          const rows = (sch as { rows?: ScheduleRow[] } | null)?.rows
+          setSchedule(Array.isArray(rows) ? rows : [])
+        } catch { setSchedule([]) }
       } catch {
         setError('rpc_error')
       } finally {
@@ -179,7 +190,7 @@ export function SubPortalProvider({ children }: { children: ReactNode }) {
   }, [tick]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <SubPortalContext.Provider value={{ contracts, timeEntries, paymentStages, settings, jobs, subRates, subName, loading, error, reload }}>
+    <SubPortalContext.Provider value={{ contracts, timeEntries, paymentStages, settings, jobs, subRates, subName, schedule, loading, error, reload }}>
       {children}
     </SubPortalContext.Provider>
   )

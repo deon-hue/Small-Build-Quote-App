@@ -21,10 +21,18 @@ export function assignmentKey(a: { assigneeId: string | null; assigneeName: stri
   return a.assigneeId || `name:${a.assigneeName.toLowerCase()}`
 }
 
-export interface AssigneePick { id: string | null; name: string }
+/** A person to book on a task. dayOffsets: null = every working day, a list = just those days, undefined = leave their days as they are. */
+export interface AssigneePick { id: string | null; name: string; dayOffsets?: number[] | null }
+
+function sameOffsets(a: number[] | null | undefined, b: number[] | null | undefined): boolean {
+  const x = a && a.length ? [...a].sort((p, q) => p - q) : null
+  const y = b && b.length ? [...b].sort((p, q) => p - q) : null
+  if (x === null || y === null) return x === y
+  return x.length === y.length && x.every((v, i) => v === y[i])
+}
 
 /** What has to change to turn the people currently booked on a row into the wanted list: who to remove, who to add. */
-export function diffAssignments(current: TaskAssignment[], wanted: AssigneePick[]): { remove: TaskAssignment[]; add: AssigneePick[] } {
+export function diffAssignments(current: TaskAssignment[], wanted: AssigneePick[]): { remove: TaskAssignment[]; add: AssigneePick[]; update: { assignment: TaskAssignment; dayOffsets: number[] | null }[] } {
   const wantKeys = new Set(wanted.map(w => assignmentKey({ assigneeId: w.id, assigneeName: w.name })))
   const haveKeys = new Set(current.map(assignmentKey))
   const seen = new Set<string>()
@@ -33,9 +41,16 @@ export function diffAssignments(current: TaskAssignment[], wanted: AssigneePick[
     const k = assignmentKey({ assigneeId: w.id, assigneeName: w.name })
     if (haveKeys.has(k) || seen.has(k) || !w.name.trim()) continue
     seen.add(k)
-    add.push({ id: w.id, name: w.name.trim() })
+    add.push({ id: w.id, name: w.name.trim(), dayOffsets: w.dayOffsets ?? null })
   }
-  return { remove: current.filter(a => !wantKeys.has(assignmentKey(a))), add }
+  // people already booked whose days were changed
+  const update: { assignment: TaskAssignment; dayOffsets: number[] | null }[] = []
+  for (const w of wanted) {
+    if (w.dayOffsets === undefined) continue
+    const cur = current.find(a => assignmentKey(a) === assignmentKey({ assigneeId: w.id, assigneeName: w.name }))
+    if (cur && !sameOffsets(cur.dayOffsets, w.dayOffsets)) update.push({ assignment: cur, dayOffsets: w.dayOffsets && w.dayOffsets.length ? w.dayOffsets : null })
+  }
+  return { remove: current.filter(a => !wantKeys.has(assignmentKey(a))), add, update }
 }
 
 export interface AssigneeTag { key: string; name: string }

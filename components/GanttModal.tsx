@@ -13,6 +13,7 @@ import { useDraggableModal } from './useDraggableModal'
 import ModalResizeHandle from './ModalResizeHandle'
 import { assignableContacts, assignmentsFor, assignmentKey, shortName } from '@/lib/task-assignments'
 import AssigneePicker, { picksFromKeys } from './AssigneePicker'
+import { taskDays as buildTaskDays } from '@/lib/task-days'
 
 interface Props {
   job: Job
@@ -63,7 +64,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
 
   // ── Row editing / BO picker state ────────────────────────────
   // assignees: the people booked on this row, as keys (a Contact's id, or "name:..." for someone whose contact has been deleted); undefined = not touched
-  interface EditingRow { id: string; label: string; startDay: number; durDays: number; allowSaturday: boolean; assignees?: string[] }
+  interface EditingRow { id: string; label: string; startDay: number; durDays: number; allowSaturday: boolean; assignees?: string[]; assigneeDays?: Record<string, number[] | null> }
   const [editingRow, setEditingRow] = useState<EditingRow | null>(null)
   const [showBoPanel, setShowBoPanel] = useState(false)
   const [boPhaseList, setBoPhaseList] = useState<Array<{ phaseName: string; subPhaseName: string }>>([])
@@ -779,6 +780,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
         durDays: Math.max(1, countWorkingDays(phaseStart, phaseEnd, !!ph.allowSaturday)),
         allowSaturday: !!ph.allowSaturday,
         assignees: assignmentsFor(assignRef.current, job.id, id).map(assignmentKey),
+        assigneeDays: Object.fromEntries(assignmentsFor(assignRef.current, job.id, id).map(a => [assignmentKey(a), a.dayOffsets])),
       })
     }
 
@@ -953,7 +955,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
     if (taskAssignmentsReady && editingRow.assignees !== undefined) {
       const here = assignmentsFor(assignRef.current, job.id, editingRow.id)
       const extras = here.filter(a => !a.assigneeId).map(a => ({ key: assignmentKey(a), name: a.assigneeName }))
-      void setTaskAssignees(job.id, editingRow.id, picksFromKeys(editingRow.assignees, assignableContacts(clients), extras)).then(saved => { if (!saved) window.alert('Could not save who is booked on this task. If you have just updated the app, the one-off database update (supabase/task-assignments-multi.sql) may not have been run yet.') })
+      void setTaskAssignees(job.id, editingRow.id, picksFromKeys(editingRow.assignees, assignableContacts(clients), extras, editingRow.assigneeDays)).then(saved => { if (!saved) window.alert('Could not save who is booked on this task. If you have just updated the app, the one-off database updates (supabase/task-assignments-multi.sql and task-assignment-days.sql) may not have been run yet.') })
     }
     setEditingRow(null)
   }
@@ -1186,6 +1188,15 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
                       extras={assignmentsFor(assignRef.current, job.id, editingRow.id).filter(a => !a.assigneeId).map(a => ({ key: assignmentKey(a), name: a.assigneeName }))}
                       selected={editingRow.assignees ?? []}
                       onChange={keys => setEditingRow(r => r ? { ...r, assignees: keys } : r)}
+                      taskDays={(() => {
+                        // the working days this task covers right now (follows the start date and length being edited above)
+                        const js = job.start ? new Date(job.start) : new Date(); js.setHours(0, 0, 0, 0)
+                        const start = addDays(js, editingRow.startDay)
+                        const span = workingDaySpanInCalendarDays(start, Math.max(1, editingRow.durDays), editingRow.allowSaturday)
+                        return buildTaskDays(start, span, editingRow.allowSaturday)
+                      })()}
+                      daysByKey={editingRow.assigneeDays ?? {}}
+                      onDaysChange={(k, offs) => setEditingRow(r => r ? { ...r, assigneeDays: { ...(r.assigneeDays ?? {}), [k]: offs } } : r)}
                     />
                   </div>
                 )}

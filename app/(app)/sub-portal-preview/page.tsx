@@ -3,6 +3,8 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import SubScheduleView, { SubNextDaysCard } from '@/components/SubScheduleView'
+import { expandSchedule, type ScheduleRow } from '@/lib/task-days'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRecord = Record<string, any>
@@ -73,7 +75,8 @@ function SubPortalPreviewInner() {
   const [contracts, setContracts] = useState<Contract[]>([])
   const [paymentStages, setPaymentStages] = useState<PaymentStage[]>([])
   const [jobs, setJobs] = useState<Job[]>([])
-  const [tab, setTab] = useState<'timesheets' | 'payments'>('timesheets')
+  const [tab, setTab] = useState<'schedule' | 'timesheets' | 'payments'>('schedule')
+  const [schedule, setSchedule] = useState<ScheduleRow[]>([])
 
   useEffect(() => {
     if (!contactId) { setError('No contact specified.'); setLoading(false); return }
@@ -93,6 +96,12 @@ function SubPortalPreviewInner() {
       setTimeEntries((d.timeEntries ?? []) as TimeEntry[])
       setPaymentStages((d.paymentStages ?? []) as PaymentStage[])
       setJobs((d.jobs ?? []) as Job[])
+      // the days this subcontractor is booked on site (same function the real portal's data comes from, for the builder to see)
+      try {
+        const { data: sch } = await supabase.rpc('get_sub_task_schedule_for_admin', { p_contact_id: contactId })
+        const rows = (sch as { rows?: ScheduleRow[] } | null)?.rows
+        setSchedule(Array.isArray(rows) ? rows : [])
+      } catch { setSchedule([]) }
       setLoading(false)
     }
     load()
@@ -151,6 +160,8 @@ function SubPortalPreviewInner() {
         <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{contracts.length} active job{contracts.length !== 1 ? 's' : ''} · Here's your overview</p>
       </div>
 
+      <SubNextDaysCard days={expandSchedule(schedule, new Date())} onSeeAll={() => setTab('schedule')} />
+
       {/* Summary cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 28 }}>
         {[
@@ -197,16 +208,19 @@ function SubPortalPreviewInner() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '2px solid #e5e7eb' }}>
-        {(['timesheets', 'payments'] as const).map(t => (
+        {(['schedule', 'timesheets', 'payments'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{
             padding: '8px 16px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer',
             background: 'none', borderBottom: `2px solid ${tab === t ? '#6366f1' : 'transparent'}`,
             color: tab === t ? '#6366f1' : '#64748b', marginBottom: -2, textTransform: 'capitalize',
           }}>
-            {t === 'timesheets' ? `Timesheets (${timeEntries.length})` : `Payments (${paymentStages.length})`}
+            {t === 'schedule' ? `Schedule (${expandSchedule(schedule, new Date()).length})` : t === 'timesheets' ? `Timesheets (${timeEntries.length})` : `Payments (${paymentStages.length})`}
           </button>
         ))}
       </div>
+
+      {/* Schedule tab: the days they are booked on site */}
+      {tab === 'schedule' && <SubScheduleView days={expandSchedule(schedule, new Date())} preview />}
 
       {/* Timesheets tab */}
       {tab === 'timesheets' && (

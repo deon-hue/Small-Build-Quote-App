@@ -555,6 +555,8 @@ export interface TaskAssignment {
   /** the Contact; null when that contact has since been deleted (the name is kept) */
   assigneeId: string | null
   assigneeName: string
+  /** The days they are on site, as calendar-day offsets from the task's first day (0 = first day). null = every working day of the task. */
+  dayOffsets: number[] | null
 }
 
 export interface GanttPhase {

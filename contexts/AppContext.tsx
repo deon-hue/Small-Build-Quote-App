@@ -231,7 +231,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // task_assignments only exists once supabase/task-assignments.sql has been run; until then the feature stays switched off
       if (assignRes && !('error' in assignRes && assignRes.error) && Array.isArray(assignRes.data)) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        setTaskAssignments((assignRes.data as any[]).map(r => ({ id: r.id, jobId: r.job_id, phaseId: r.phase_id, assigneeId: r.assignee_id || null, assigneeName: r.assignee_name })))
+        setTaskAssignments((assignRes.data as any[]).map(r => ({ id: r.id, jobId: r.job_id, phaseId: r.phase_id, assigneeId: r.assignee_id || null, assigneeName: r.assignee_name, dayOffsets: Array.isArray(r.day_offsets) ? r.day_offsets : null })))
         setTaskAssignmentsReady(true)
       } else {
         setTaskAssignmentsReady(false)
@@ -858,8 +858,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const setTaskAssignees = useCallback(async (jobId: string, phaseId: string, picks: AssigneePick[]): Promise<boolean> => {
     if (!phaseId) return false
     const current = assignmentsFor(taskAssignmentsRef.current, jobId, phaseId)
-    const { remove, add } = diffAssignments(current, picks)
-    if (remove.length === 0 && add.length === 0) return true
+    const { remove, add, update } = diffAssignments(current, picks)
+    if (remove.length === 0 && add.length === 0 && update.length === 0) return true
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return false
     const ownerId = dataOwnerIdRef.current || user.id
@@ -871,11 +871,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     if (add.length) {
       const { data, error } = await supabase.from('task_assignments')
-        .insert(add.map(a => ({ user_id: ownerId, job_id: jobId, phase_id: phaseId, assignee_id: a.id, assignee_name: a.name })))
+        .insert(add.map(a => ({ user_id: ownerId, job_id: jobId, phase_id: phaseId, assignee_id: a.id, assignee_name: a.name, ...(a.dayOffsets ? { day_offsets: a.dayOffsets } : {}) })))
         .select()
       if (error || !data) ok = false
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      else setTaskAssignments(prev => [...prev, ...(data as any[]).map(r => ({ id: r.id, jobId: r.job_id, phaseId: r.phase_id, assigneeId: r.assignee_id || null, assigneeName: r.assignee_name }))])
+      else setTaskAssignments(prev => [...prev, ...(data as any[]).map(r => ({ id: r.id, jobId: r.job_id, phaseId: r.phase_id, assigneeId: r.assignee_id || null, assigneeName: r.assignee_name, dayOffsets: Array.isArray(r.day_offsets) ? r.day_offsets : null }))])
+    }
+    // days changed for people who were already booked
+    for (const u of update) {
+      const { error } = await supabase.from('task_assignments').update({ day_offsets: u.dayOffsets, updated_at: new Date().toISOString() }).eq('id', u.assignment.id)
+      if (error) ok = false
+      else setTaskAssignments(prev => prev.map(a => (a.id === u.assignment.id ? { ...a, dayOffsets: u.dayOffsets } : a)))
     }
     return ok
   }, [supabase])

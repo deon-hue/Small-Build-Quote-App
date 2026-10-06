@@ -9,6 +9,7 @@ import { resolveGanttState, workingDaySpanInCalendarDays, countWorkingDays } fro
 import type { Job, GanttPhase, GanttState } from '@/lib/types'
 import { assignableContacts, assignmentsFor, assignmentKey, assigneesForRow, allAssignees, type AssigneeTag } from '@/lib/task-assignments'
 import AssigneePicker, { picksFromKeys } from '@/components/AssigneePicker'
+import { taskDays as buildTaskDays, bookedDays } from '@/lib/task-days'
 
 // ── Date helpers ───────────────────────────────────────────────
 function addDays(d: Date, n: number): Date { const r = new Date(d); r.setDate(r.getDate() + n); return r }
@@ -781,9 +782,20 @@ export default function CalendarPage() {
                 <div className="cal-day-sub" style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', marginTop: 2 }}>
                   {evt.job.address}
                 </div>
-                {evt.assignees.length > 0 && (
-                  <div className="cal-day-sub" style={{ fontSize: 11.5, color: '#fff', marginTop: 3, fontWeight: 700 }}>👷 {evt.assignees.map(a => a.name).join(', ')}</div>
-                )}
+                {(() => {
+                  // only the people who work on THIS day: someone booked for just Wed-Fri is not listed on Monday
+                  const dayStart = evt.startDate
+                  const all = buildTaskDays(dayStart, Math.max(1, daysBetween(evt.startDate, evt.endDate)), evt.allowSaturday)
+                  const ownKeys = new Set(assignmentsFor(taskAssignments, evt.job.id, evt.phaseId).map(assignmentKey))
+                  const working = evt.assignees.filter(a => {
+                    if (!ownKeys.has(a.key)) return true   // booked on a sub-task of this phase: shown as before
+                    const mine = assignmentsFor(taskAssignments, evt.job.id, evt.phaseId).find(x => assignmentKey(x) === a.key)
+                    return bookedDays(all, mine?.dayOffsets).some(d => d.date.toDateString() === anchor.toDateString())
+                  })
+                  return working.length > 0 ? (
+                    <div className="cal-day-sub" style={{ fontSize: 11.5, color: '#fff', marginTop: 3, fontWeight: 700 }}>👷 {working.map(a => a.name).join(', ')}</div>
+                  ) : null
+                })()}
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div className="cal-day-title" style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{fmtShort(evt.startDate)} → {fmtShort(addDays(evt.endDate, -1))}</div>
@@ -838,13 +850,21 @@ export default function CalendarPage() {
                 const here = assignmentsFor(taskAssignments, evt.job.id, phaseId)
                 const contacts = assignableContacts(clients)
                 const extras = here.filter(a => !a.assigneeId).map(a => ({ key: assignmentKey(a), name: a.assigneeName }))
+                const daysByKey: Record<string, number[] | null> = Object.fromEntries(here.map(a => [assignmentKey(a), a.dayOffsets]))
+                const keys = here.map(assignmentKey)
+                const save = (nextKeys: string[], nextDays: Record<string, number[] | null>) => {
+                  void setTaskAssignees(evt.job.id, phaseId, picksFromKeys(nextKeys, contacts, extras, nextDays)).then(saved => { if (!saved) window.alert('Could not save who is booked on this task. If you have just updated the app, the one-off database updates (supabase/task-assignments-multi.sql and task-assignment-days.sql) may not have been run yet.') })
+                }
                 return (
                   <AssigneePicker
                     label="Tap to add or remove — several allowed"
                     contacts={contacts}
                     extras={extras}
-                    selected={here.map(assignmentKey)}
-                    onChange={keys => { void setTaskAssignees(evt.job.id, phaseId, picksFromKeys(keys, contacts, extras)).then(saved => { if (!saved) window.alert('Could not save who is booked on this task. If you have just updated the app, the one-off database update (supabase/task-assignments-multi.sql) may not have been run yet.') }) }}
+                    selected={keys}
+                    onChange={nextKeys => save(nextKeys, daysByKey)}
+                    taskDays={buildTaskDays(evt.startDate, Math.max(1, daysBetween(evt.startDate, evt.endDate)), evt.allowSaturday)}
+                    daysByKey={daysByKey}
+                    onDaysChange={(k, offs) => save(keys, { ...daysByKey, [k]: offs })}
                   />
                 )
               })()} />

@@ -2,6 +2,8 @@
 
 import { useRouter } from 'next/navigation'
 import { useSubPortal } from '@/contexts/SubPortalContext'
+import { SubNextDaysCard } from '@/components/SubScheduleView'
+import { expandSchedule } from '@/lib/task-days'
 
 const fmt = (n: number) => `£${(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const fmtDate = (d: string | null) => d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
@@ -48,7 +50,7 @@ function ErrorScreen({ error, subName, reload }: { error: string; subName: strin
 
 export default function SubPortalDashboard() {
   const router = useRouter()
-  const { contracts, timeEntries, paymentStages, subName, loading, error, reload } = useSubPortal()
+  const { contracts, timeEntries, paymentStages, subName, schedule, loading, error, reload } = useSubPortal()
 
   if (loading) return (
     <div className="portal-loading">
@@ -102,6 +104,9 @@ export default function SubPortalDashboard() {
           {contracts.length} active job{contracts.length !== 1 ? 's' : ''} · Here&apos;s your overview
         </p>
       </div>
+
+      {/* The days they are booked on site */}
+      <SubNextDaysCard days={expandSchedule(schedule, new Date())} onSeeAll={() => router.push('/sub-portal/schedule')} />
 
       {/* Summary cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 28 }}>

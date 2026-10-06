@@ -39,6 +39,7 @@ function SubPortalNav() {
         </div>
         <nav className={`portal-nav${menuOpen ? ' open' : ''}`}>
           {navLink('/sub-portal', 'Dashboard')}
+          {navLink('/sub-portal/schedule', 'Schedule')}
           {navLink('/sub-portal/timesheets', 'Timesheets')}
           {navLink('/sub-portal/payments', 'Payments')}
           <button className="portal-signout-btn" onClick={signOut}>Sign Out</button>
