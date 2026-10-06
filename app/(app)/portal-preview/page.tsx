@@ -334,7 +334,7 @@ function PortalPreviewInner() {
             {/* Financial snapshot */}
             <div className="fin-snapshot">
               <div className="fin-card" style={{ borderTop: '3px solid #4a90a4' }}>
-                <div className="fin-card-label" style={{ color: '#4a90a4' }}>Original Quote</div>
+                <div className="fin-card-label" style={{ color: '#4a90a4' }}>{jobs.length > 0 ? 'Contract Price' : 'Original Quote'}</div>
                 <div className="fin-card-value">{fmt(totalQuoteValue)}</div>
                 <div className="fin-card-sub">
                   {jobs.length === 1 ? jobs[0].type : `${jobs.length} project${jobs.length !== 1 ? 's' : ''}`}
@@ -358,7 +358,7 @@ function PortalPreviewInner() {
                 <div className="fin-card-label" style={{ color: 'rgba(255,255,255,0.75)' }}>Balance Due</div>
                 <div className="fin-card-value" style={{ color: 'white' }}>{fmt(Math.max(0, balanceDue))}</div>
                 <div className="fin-card-sub" style={{ color: 'rgba(255,255,255,0.72)' }}>
-                  {allSettled ? 'All payments settled ✓' : 'Quote + variations − paid'}
+                  {allSettled ? 'All payments settled ✓' : (jobs.length > 0 ? 'Contract + variations − paid' : 'Quote + variations − paid')}
                 </div>
               </div>
             </div>
