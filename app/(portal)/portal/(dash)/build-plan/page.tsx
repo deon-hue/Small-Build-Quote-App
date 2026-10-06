@@ -10,7 +10,7 @@ export default function BuildPlanPage() {
   if (loading) {
     return (
       <div className="portal-section">
-        <p className="portal-empty">Loading build plan…</p>
+        <p className="portal-empty">Loading work schedule…</p>
       </div>
     )
   }
@@ -18,7 +18,7 @@ export default function BuildPlanPage() {
   if (error) {
     return (
       <div className="portal-section">
-        <p className="portal-empty">Unable to load build plan.</p>
+        <p className="portal-empty">Unable to load work schedule.</p>
       </div>
     )
   }
@@ -30,7 +30,7 @@ export default function BuildPlanPage() {
     return (
       <div className="portal-section">
         <div className="portal-section-hd">
-          <h2 className="portal-section-title">Build Plan</h2>
+          <h2 className="portal-section-title">Work Schedule</h2>
         </div>
         <p className="portal-empty">No programme on file yet.</p>
       </div>
@@ -57,7 +57,7 @@ export default function BuildPlanPage() {
   return (
     <div className="portal-section">
       <div className="portal-section-hd">
-        <h2 className="portal-section-title">Build Plan</h2>
+        <h2 className="portal-section-title">Work Schedule</h2>
       </div>
 
       {activeJobs.length > 0 && activeJobs.map(renderJob)}

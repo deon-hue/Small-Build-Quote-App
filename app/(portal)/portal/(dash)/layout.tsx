@@ -57,7 +57,7 @@ function PortalNav() {
           {clientSettings.showVariationsTab && navLink('/portal/variations',  'Variations')}
           {clientSettings.showInvoicesTab   && navLink('/portal/invoices',    'Invoices')}
           {visibleContracts.length > 0 && navLink('/portal/contracts', 'Contracts', awaitingContracts)}
-          {navLink('/portal/build-plan', 'Build Plan')}
+          {navLink('/portal/build-plan', 'Work Schedule')}
           <button className="portal-signout-btn" onClick={signOut}>Sign Out</button>
         </nav>
         <button

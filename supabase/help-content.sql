@@ -116,7 +116,7 @@ FROM (VALUES
   ('Quotes', 'What happens when a client accepts my quote?',
    E'An accepted quote is locked, so the price and scope the client agreed cannot be changed by accident.\n\nIf the work changes afterwards, add a note in the "Changes to the scope" box on the quote. If the price changes, use a Variation. The original quote is never altered.', 20),
   ('Client portal', 'What does my client see in their portal?',
-   E'Your clients sign in with the email address saved on their contact. They can see their quotes, variations, invoices, contracts and the build plan, and they can approve quotes and variations and sign contracts online.\n\nTo see exactly what a client sees, open Contacts, choose the client and open their portal preview.', 10),
+   E'Your clients sign in with the email address saved on their contact. They can see their quotes, variations, invoices, contracts and the work schedule, and they can approve quotes and variations and sign contracts online.\n\nTo see exactly what a client sees, open Contacts, choose the client and open their portal preview.', 10),
   ('Client portal', 'My client says their portal is empty',
    E'The portal matches the email address the client signs in with to the email saved on their contact, and the contact''s name to the name on the job. Check both match exactly.\n\nAlso avoid using your own sign-in email for a test client, because the system treats that account as yours, not as a client.', 20),
   ('Contracts', 'How do I send a contract to a client?',

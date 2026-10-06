@@ -253,7 +253,7 @@ function PortalPreviewInner() {
   )
 
   const TAB_LABELS: Record<Tab, string> = {
-    dashboard: 'Dashboard', quotes: 'Quotes', variations: 'Variations', invoices: 'Invoices', contracts: 'Contracts', 'build-plan': 'Build Plan',
+    dashboard: 'Dashboard', quotes: 'Quotes', variations: 'Variations', invoices: 'Invoices', contracts: 'Contracts', 'build-plan': 'Work Schedule',
   }
 
   return (
@@ -617,7 +617,7 @@ function PortalPreviewInner() {
         {activeTab === 'build-plan' && (
           <>
             <div className="portal-page-hd">
-              <h1>Build Plan</h1>
+              <h1>Work Schedule</h1>
               <p>{jobs.length} project{jobs.length !== 1 ? 's' : ''}</p>
             </div>
             <div style={{ background: '#1e2022', color: '#f0c040', borderRadius: 8, padding: '10px 16px', fontSize: 12, fontWeight: 600, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>

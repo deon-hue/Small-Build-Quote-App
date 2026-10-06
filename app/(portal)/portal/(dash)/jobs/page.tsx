@@ -377,7 +377,7 @@ export default function PortalJobsPage() {
                     style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 12px', fontSize: 12, fontWeight: 600, color: 'var(--ink)', cursor: 'pointer', fontFamily: 'inherit' }}
                   >
                     <span>📋</span>
-                    {ganttOpen ? 'Hide Build Plan ▲' : 'View Build Plan ▼'}
+                    {ganttOpen ? 'Hide Work Schedule ▲' : 'View Work Schedule ▼'}
                   </button>
                   {ganttOpen && (
                     <div style={{ marginTop: 14 }}><PortalBuildPlan job={j} ganttState={ganttState} /></div>

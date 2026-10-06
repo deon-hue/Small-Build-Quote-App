@@ -6,7 +6,7 @@
 
 const USES: [string, string][] = [
   ['Your quote', 'read it, ask us questions and approve it online'],
-  ['Build plan', 'see what is happening on site, and when'],
+  ['Work schedule', 'see what is happening on site, and when'],
   ['Changes', 'review and approve any extra or changed work'],
   ['Invoices', 'see what is due and what you have paid'],
   ['Plans and documents', 'download the drawings and paperwork we share with you'],
@@ -36,7 +36,7 @@ export function portalExplainerHtml(): string {
 /** Plain-text lines for WhatsApp. Pass the (reusable) portal address; empty means leave it out. */
 export function portalWhatsAppLines(portalUrl: string): string[] {
   const lines = [
-    `Your client portal lets you view and approve your quote, follow the build plan, approve any changes and see your invoices.`,
+    `Your client portal lets you view and approve your quote, follow the work schedule, approve any changes and see your invoices.`,
   ]
   if (portalUrl) lines.push(portalUrl)
   lines.push(
