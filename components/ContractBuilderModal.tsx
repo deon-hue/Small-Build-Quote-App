@@ -110,12 +110,19 @@ interface Props { job: Job; quote: Quote | undefined; onClose: () => void }
 
 export default function ContractBuilderModal({ job, quote, onClose }: Props) {
   const sb = createClient()
-  const { contracts, settings, clients, addContract, updateContract, refreshContracts } = useApp()
+  const { contracts, settings, clients, addContract, updateContract, deleteContract, refreshContracts } = useApp()
   const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown, onOverlayClick, isMaximized, toggleMaximize } = useDraggableModal()
 
-  const existing = contracts
+  const forJob = contracts
     .filter(c => c.jobId === job.id)
-    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))[0]
+    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+  // A draft with nothing in it was only ever created by opening this window: it never counts as "the contract". Without this, opening the
+  // window of a SIGNED contract started a blank new draft that then hid the signed one behind the editor.
+  const isEmptyDraft = (c: Contract) => c.status === 'draft' && Object.keys(c.fields || {}).length === 0
+  const existing = forJob.find(c => !isEmptyDraft(c)) ?? forJob[0]
+  // the builder chose to raise a fresh contract after a signed one (e.g. after a variation)
+  const [startNew, setStartNew] = useState(false)
+  const [bootKey, setBootKey] = useState(0)
 
   const [contract, setContract] = useState<Contract | null>(existing && existing.status !== 'signed' ? existing : null)
   const [fields, setFields] = useState<ContractFields>({})
@@ -137,9 +144,10 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
   // The client may have signed since the app loaded: fetch the latest state of the contracts as the window opens
   useEffect(() => { void refreshContracts() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Bootstrap: create the draft row if none exists, then seed local form state.
+  // Bootstrap: create the draft row if none exists, then seed local form state. (Not when the contract is already signed: that just shows the signed view.)
   useEffect(() => {
     if (initedRef.current) return
+    if (!contract && existing?.status === 'signed' && !startNew) return
     initedRef.current = true
     ;(async () => {
       let c = contract
@@ -173,7 +181,13 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
       setSecondClientName(c.secondClientName || '')
       setSignName(c.builderSignedBy || settings.contact || '')
     })()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [bootKey, existing?.status]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Blank drafts left behind by the old behaviour are tidied away once the real contract is sent or signed
+  useEffect(() => {
+    if (startNew || !existing || existing.status === 'draft') return
+    forJob.filter(isEmptyDraft).forEach(c => { deleteContract(c.id).catch(() => {}) })
+  }, [existing?.id, forJob.length, startNew]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Any change to the contract clears the signature tick: the builder must confirm they are signing the changed version
   const signTickReady = useRef(false)
@@ -332,7 +346,15 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
     setSchedule(prev => prev.filter((_, idx) => idx !== i))
   }
 
-  const readOnlySigned = existing?.status === 'signed'
+  const readOnlySigned = existing?.status === 'signed' && !startNew
+
+  // Raise a fresh contract after a signed one (e.g. after a variation): only when the builder asks, never just by opening the window
+  function startNewContract() {
+    setStartNew(true)
+    setContract(null)
+    initedRef.current = false
+    setBootKey(k => k + 1)
+  }
 
   return (
     <div className="modal-overlay" onClick={e => onOverlayClick(e, onClose)}>
@@ -361,8 +383,10 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
                 {existing?.clientSignedAt && <> on {new Date(existing.clientSignedAt).toLocaleDateString('en-GB')}</>}
               </div>
               {signedUrl && <a className="btn-sm btn-outline" href={signedUrl} target="_blank" rel="noreferrer">View signed contract →</a>}
-              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 10 }}>
-                To raise a new contract for this job (e.g. after a variation), close this and reopen — a fresh draft will be started.
+              {existing?.builderSignedBy && <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>Signed for the builder by {existing.builderSignedBy}{existing.builderSignedAt ? ` on ${new Date(existing.builderSignedAt).toLocaleDateString('en-GB')}` : ''}</div>}
+              <div style={{ borderTop: '1px solid #bbf7d0', marginTop: 10, paddingTop: 10 }}>
+                <button type="button" className="btn-sm btn-outline" onClick={startNewContract}>Start a new contract for this job</button>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>Only needed if you must raise another contract, for example after a variation. This signed contract stays as it is.</div>
               </div>
             </div>
           )}

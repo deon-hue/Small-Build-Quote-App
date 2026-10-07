@@ -243,7 +243,7 @@ function JobsPageInner() {
             )}
             <button className="btn-sm btn-outline jb-contract" onClick={() => setContractJob(j)} title="Fill, send and track the signed FMB contract for this job">{(() => {
               // where this job's latest contract is up to
-              const latest = contracts.filter(c => c.jobId === j.id).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))[0]
+              const latest = contracts.filter(c => c.jobId === j.id && !(c.status === 'draft' && Object.keys(c.fields || {}).length === 0)).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))[0]
               return latest?.status === 'signed' ? '✅ Contract signed' : latest?.status === 'sent' ? '📤 Contract sent' : '📝 Contract'
             })()}</button>
             <button className="btn-sm btn-outline jb-costs" onClick={() => setDocsJob(j)} title="Scan/upload supplier docs and track costs">💷 Costs</button>
