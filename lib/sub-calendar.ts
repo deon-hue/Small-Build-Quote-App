@@ -103,3 +103,29 @@ export function calendarMonth(year: number, month: number, schedule: ScheduleRow
   }
   return weeks
 }
+
+/** The Monday of the week a date falls in (time of day dropped). */
+export function weekStartOf(d: Date): Date {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7))
+  return x
+}
+
+/** One week, Monday to Sunday, in the same shape as a month's days: this person's own bookings and (when `rows` is given) the company's other work. */
+export function calendarWeek(weekStart: Date, schedule: ScheduleRow[], rows: CompanyCalendarRow[] | null, today: Date = new Date()): CalendarDay[] {
+  const start = weekStartOf(weekStart)
+  const end = addDays(start, 6)
+  const mineByDay = new Map<string, ScheduleEntry[]>()
+  for (const d of expandSchedule(schedule, start, end)) mineByDay.set(d.key, d.entries)
+  const co = rows ? companyDays(rows) : new Map<string, CompanyDayEntry[]>()
+  const t = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const days: CalendarDay[] = []
+  for (let i = 0; i < 7; i++) {
+    const date = addDays(start, i)
+    const key = isoDay(date)
+    const mine = mineByDay.get(key) ?? []
+    const mineJobs = new Set(mine.map(m => m.jobId))
+    days.push({ date, key, inMonth: true, isToday: date.getTime() === t.getTime(), mine, company: (co.get(key) ?? []).filter(c => !mineJobs.has(c.jobId)) })
+  }
+  return days
+}
