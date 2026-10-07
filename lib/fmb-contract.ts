@@ -78,10 +78,12 @@ export const FIELD = {
 
   builderSignName: 'Builder name 7',
   builderSignature: 'Builder signature 6',
-  clientSignName1: 'Client name 8',
-  clientSignature1: 'Client signature 7',
-  clientSignName2: 'Client name 9',
-  clientSignature2: 'Client signature 8',
+  // The template numbers these the other way round to how they sit on the page: "Client name 9 / Client signature 8" is the FIRST client row
+  // (just under the builder's), "Client name 8 / Client signature 7" is the SECOND, lower one. (Checked against the field positions in the PDF.)
+  clientSignName1: 'Client name 9',
+  clientSignature1: 'Client signature 8',
+  clientSignName2: 'Client name 8',
+  clientSignature2: 'Client signature 7',
 
   additionalNotes: 'Additional notes 2',
 

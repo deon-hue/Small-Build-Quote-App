@@ -354,6 +354,22 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
 
   const readOnlySigned = existing?.status === 'signed' && !startNew
 
+  // Rebuild the signed copy (e.g. one made while the client's signature went into the wrong box)
+  const [rebuilding, setRebuilding] = useState(false)
+  const [rebuildMsg, setRebuildMsg] = useState('')
+  async function rebuildSigned() {
+    if (!existing || rebuilding) return
+    if (!window.confirm('Rebuild the signed copy of this contract? The signatures, names and dates stay exactly as they are; only the PDF is made again and replaces the old one.')) return
+    setRebuilding(true); setRebuildMsg('')
+    try {
+      const res = await fetch('/api/contracts/rebuild-signed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contractId: existing.id }) })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { setRebuildMsg(data?.error || 'Could not rebuild it.'); return }
+      await refreshContracts()
+      setRebuildMsg('Done: the signed copy has been rebuilt.')
+    } catch { setRebuildMsg('Could not rebuild it. Please try again.') } finally { setRebuilding(false) }
+  }
+
   // Carry on with a draft that was started after the signed contract
   function openDraft(d: Contract) {
     setStartNew(true)
@@ -397,6 +413,10 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
                 {existing?.clientSignedAt && <> on {new Date(existing.clientSignedAt).toLocaleDateString('en-GB')}</>}
               </div>
               {signedUrl && <a className="btn-sm btn-outline" href={signedUrl} target="_blank" rel="noreferrer">View signed contract →</a>}
+              <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--muted)' }}>
+                Signatures in the wrong place on the PDF? <button type="button" onClick={rebuildSigned} disabled={rebuilding} style={{ border: 'none', background: 'none', padding: 0, color: '#2563eb', textDecoration: 'underline', cursor: 'pointer', fontSize: 11.5 }}>{rebuilding ? 'Rebuilding…' : 'Rebuild the signed copy'}</button>
+                {rebuildMsg && <span style={{ marginLeft: 8, color: rebuildMsg.startsWith('Done') ? '#166534' : '#b91c1c' }}>{rebuildMsg}</span>}
+              </div>
               {existing?.builderSignedBy && <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>Signed for the builder by {existing.builderSignedBy}{existing.builderSignedAt ? ` on ${new Date(existing.builderSignedAt).toLocaleDateString('en-GB')}` : ''}</div>}
               {draftAfterIssued && (
                 <div style={{ background: '#fff8e1', border: '1px solid #ffe082', borderRadius: 6, padding: '8px 10px', marginTop: 10, fontSize: 12 }}>

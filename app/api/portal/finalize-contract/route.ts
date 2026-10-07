@@ -15,7 +15,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/supabase/service-role'
-import { signContractPdf } from '@/lib/fmb-contract'
+import { signedContractBytes } from '@/lib/contract-signed'
 import { notifyBuilderContractSigned } from '@/lib/contract-notify'
 import { siteOrigin } from '@/lib/site-origin'
 
@@ -62,21 +62,7 @@ export async function POST(req: NextRequest) {
   if (dlErr || !draftFile) return NextResponse.json({ error: 'Could not read draft contract file' }, { status: 500 })
   const draftBytes = new Uint8Array(await draftFile.arrayBuffer())
 
-  const dateStr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
-  const signedBytes = await signContractPdf(draftBytes, {
-    builderName: contract.builder_signed_by || '',
-    builderSignedAt: contract.builder_signed_at
-      ? new Date(contract.builder_signed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
-      : dateStr,
-    clientName: contract.client_signed_by || '',
-    clientSignedAt: contract.client_signed_at
-      ? new Date(contract.client_signed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
-      : dateStr,
-    client2Name: contract.client2_signed_by || undefined,
-    client2SignedAt: contract.client2_signed_at
-      ? new Date(contract.client2_signed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
-      : undefined,
-  })
+  const signedBytes = await signedContractBytes(contract, draftBytes)
 
   const path = `${job.user_id}/${job.id}/attachments/${stamp()}-signed-contract.pdf`
   const { error: upErr } = await sb.storage.from(BUCKET).upload(path, Buffer.from(signedBytes), { contentType: 'application/pdf' })
