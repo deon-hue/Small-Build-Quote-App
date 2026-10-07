@@ -7,7 +7,7 @@
 // Used in the job schedule's edit panel and the Calendar's task panel.
 
 import { useEffect, useRef, useState } from 'react'
-import { bookedDays, describeDays, dayLabel, normaliseOffsets, type TaskDay } from '@/lib/task-days'
+import { bookedDays, describeDays, dayLabel, toggleDay, type TaskDay } from '@/lib/task-days'
 import type { AssigneePick } from '@/lib/task-assignments'
 
 export interface PickerContact { id: string; name: string }
@@ -142,16 +142,12 @@ export default function AssigneePicker({ contacts, extras, selected, onChange, l
                   <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 6, paddingLeft: 30 }}>
                     <button type="button" onClick={() => onDaysChange!(k, null)} style={chip(offsets === null)}>Every day</button>
                     {taskDays!.map(d => {
-                      const on = bookedDays(taskDays!, offsets).some(m => m.offset === d.offset)
+                      // "Every day" is its own button; the single days are only lit when particular days have been picked, so a click clearly selects that day
+                      const on = offsets !== null && offsets.includes(d.offset)
                       return (
                         <button key={d.offset} type="button" aria-pressed={on}
-                          onClick={() => {
-                            const cur = offsets ?? taskDays!.map(x => x.offset)
-                            const next = on ? cur.filter(o => o !== d.offset) : [...cur, d.offset]
-                            if (next.length === 0) return   // never leave someone with no days: that would just mean "every day" again
-                            onDaysChange!(k, normaliseOffsets(taskDays!, next))
-                          }}
-                          style={{ ...chip(offsets !== null && on), background: on ? (offsets === null ? '#e8f3d6' : '#7ab533') : '#fff', color: on ? (offsets === null ? '#3e6b12' : '#fff') : '#334155', borderColor: on ? '#7ab533' : '#c8d0d8' }}>
+                          onClick={() => onDaysChange!(k, toggleDay(taskDays!, offsets, d.offset))}
+                          style={chip(on)}>
                           {dayLabel(d.date)}
                         </button>
                       )

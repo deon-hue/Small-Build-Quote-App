@@ -48,6 +48,14 @@ export function normaliseOffsets(all: TaskDay[], chosen: number[]): number[] | n
   return valid
 }
 
+/** What a person's days become when one day button is clicked. From "every day" (null) the click picks JUST that day; after that each click adds or removes
+ *  a day. Clearing the last day, or choosing all of them, goes back to "every day" (null). */
+export function toggleDay(all: TaskDay[], offsets: number[] | null | undefined, clicked: number): number[] | null {
+  const cur = offsets && offsets.length > 0 ? offsets : []
+  const next = cur.includes(clicked) ? cur.filter(o => o !== clicked) : [...cur, clicked]
+  return normaliseOffsets(all, next)
+}
+
 export function dayLabel(d: Date): string { return `${DAY_NAMES[d.getDay()]} ${d.getDate()}` }
 export function dayLabelLong(d: Date): string { return `${DAY_NAMES[d.getDay()]} ${d.getDate()} ${MONTH_NAMES[d.getMonth()]}` }
 
