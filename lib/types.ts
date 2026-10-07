@@ -393,6 +393,8 @@ export interface ClientPortalSettings {
   allowOnlineApproval: boolean
   /** Show the Next payment / Project progress / Upcoming works cards on the portal dashboard */
   showDashboardProgress: boolean
+  /** Subcontractors only: the Calendar tab also shows the company's other jobs and phases (job name, address and phase — never clients, prices or people) */
+  showCompanyCalendar: boolean
 }
 
 export const DEFAULT_CLIENT_PORTAL_SETTINGS: ClientPortalSettings = {
@@ -406,6 +408,7 @@ export const DEFAULT_CLIENT_PORTAL_SETTINGS: ClientPortalSettings = {
   showProgramme:      true,
   allowOnlineApproval: true,
   showDashboardProgress: true,
+  showCompanyCalendar: true,
 }
 
 export const PAYMENT_TERMS_OPTIONS = [

@@ -4,6 +4,8 @@ import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import SubScheduleView, { SubNextDaysCard } from '@/components/SubScheduleView'
+import SubCalendarView from '@/components/SubCalendarView'
+import type { CompanyCalendarRow } from '@/lib/sub-calendar'
 import { expandSchedule, type ScheduleRow } from '@/lib/task-days'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -75,8 +77,10 @@ function SubPortalPreviewInner() {
   const [contracts, setContracts] = useState<Contract[]>([])
   const [paymentStages, setPaymentStages] = useState<PaymentStage[]>([])
   const [jobs, setJobs] = useState<Job[]>([])
-  const [tab, setTab] = useState<'schedule' | 'timesheets' | 'payments'>('schedule')
+  const [tab, setTab] = useState<'schedule' | 'calendar' | 'timesheets' | 'payments'>('schedule')
   const [schedule, setSchedule] = useState<ScheduleRow[]>([])
+  const [companyCalendar, setCompanyCalendar] = useState<CompanyCalendarRow[] | null>(null)
+  const [companyCalendarProblem, setCompanyCalendarProblem] = useState(false)
 
   useEffect(() => {
     if (!contactId) { setError('No contact specified.'); setLoading(false); return }
@@ -102,6 +106,15 @@ function SubPortalPreviewInner() {
         const rows = (sch as { rows?: ScheduleRow[] } | null)?.rows
         setSchedule(Array.isArray(rows) ? rows : [])
       } catch { setSchedule([]) }
+      // the company's other jobs, exactly as this subcontractor's Calendar tab gets them (null = switched off for them)
+      try {
+        const { data: cal, error: calErr } = await supabase.rpc('get_company_calendar_for_admin', { p_contact_id: contactId })
+        const c = cal as { rows?: CompanyCalendarRow[]; error?: string } | null
+        if (calErr || !c) { setCompanyCalendar(null); setCompanyCalendarProblem(true) }
+        else if (c.error === 'disabled') { setCompanyCalendar(null); setCompanyCalendarProblem(false) }
+        else if (c.error || !Array.isArray(c.rows)) { setCompanyCalendar(null); setCompanyCalendarProblem(true) }
+        else { setCompanyCalendar(c.rows); setCompanyCalendarProblem(false) }
+      } catch { setCompanyCalendar(null); setCompanyCalendarProblem(true) }
       setLoading(false)
     }
     load()
@@ -208,19 +221,22 @@ function SubPortalPreviewInner() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '2px solid #e5e7eb' }}>
-        {(['schedule', 'timesheets', 'payments'] as const).map(t => (
+        {(['schedule', 'calendar', 'timesheets', 'payments'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{
             padding: '8px 16px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer',
             background: 'none', borderBottom: `2px solid ${tab === t ? '#6366f1' : 'transparent'}`,
             color: tab === t ? '#6366f1' : '#64748b', marginBottom: -2, textTransform: 'capitalize',
           }}>
-            {t === 'schedule' ? `Schedule (${expandSchedule(schedule, new Date()).length})` : t === 'timesheets' ? `Timesheets (${timeEntries.length})` : `Payments (${paymentStages.length})`}
+            {t === 'schedule' ? `Schedule (${expandSchedule(schedule, new Date()).length})` : t === 'calendar' ? 'Calendar' : t === 'timesheets' ? `Timesheets (${timeEntries.length})` : `Payments (${paymentStages.length})`}
           </button>
         ))}
       </div>
 
       {/* Schedule tab: the days they are booked on site */}
       {tab === 'schedule' && <SubScheduleView days={expandSchedule(schedule, new Date())} preview />}
+
+      {/* Calendar tab: their days, plus the company's other jobs in grey unless switched off for them */}
+      {tab === 'calendar' && <SubCalendarView schedule={schedule} companyRows={companyCalendar} companyProblem={companyCalendarProblem} preview />}
 
       {/* Timesheets tab */}
       {tab === 'timesheets' && (

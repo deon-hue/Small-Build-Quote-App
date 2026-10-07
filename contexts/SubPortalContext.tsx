@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { ScheduleRow } from '@/lib/task-days'
+import type { CompanyCalendarRow } from '@/lib/sub-calendar'
 
 export interface SubPortalSettings {
   name: string
@@ -89,6 +90,10 @@ interface SubPortalContextType {
   subName: string
   /** The days this person is booked on site (their own bookings only) */
   schedule: ScheduleRow[]
+  /** The company's jobs and phases for the Calendar tab; null when the builder has switched that off for this person (or it could not load) */
+  companyCalendar: CompanyCalendarRow[] | null
+  /** 'ok' | 'off' (builder switched it off) | 'problem' (could not load, e.g. database update not run yet) */
+  companyCalendarStatus: 'ok' | 'off' | 'problem'
   loading: boolean
   error: string | null
   reload: () => void
@@ -115,6 +120,8 @@ export function SubPortalProvider({ children }: { children: ReactNode }) {
   const [subRates, setSubRates] = useState<SubRates>(DEFAULT_RATES)
   const [subName, setSubName] = useState('')
   const [schedule, setSchedule] = useState<ScheduleRow[]>([])
+  const [companyCalendar, setCompanyCalendar] = useState<CompanyCalendarRow[] | null>(null)
+  const [companyCalendarStatus, setCompanyCalendarStatus] = useState<'ok' | 'off' | 'problem'>('ok')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
@@ -180,6 +187,16 @@ export function SubPortalProvider({ children }: { children: ReactNode }) {
           const rows = (sch as { rows?: ScheduleRow[] } | null)?.rows
           setSchedule(Array.isArray(rows) ? rows : [])
         } catch { setSchedule([]) }
+
+        // The company's other jobs (job name, address, phases only). Also kept apart: if it fails, the person still sees their own days.
+        try {
+          const { data: cal, error: calErr } = await supabase.rpc('get_company_calendar_for_sub')
+          const c = cal as { rows?: CompanyCalendarRow[]; error?: string } | null
+          if (calErr || !c) { setCompanyCalendar(null); setCompanyCalendarStatus('problem') }
+          else if (c.error === 'disabled') { setCompanyCalendar(null); setCompanyCalendarStatus('off') }
+          else if (c.error || !Array.isArray(c.rows)) { setCompanyCalendar(null); setCompanyCalendarStatus('problem') }
+          else { setCompanyCalendar(c.rows); setCompanyCalendarStatus('ok') }
+        } catch { setCompanyCalendar(null); setCompanyCalendarStatus('problem') }
       } catch {
         setError('rpc_error')
       } finally {
@@ -190,7 +207,7 @@ export function SubPortalProvider({ children }: { children: ReactNode }) {
   }, [tick]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <SubPortalContext.Provider value={{ contracts, timeEntries, paymentStages, settings, jobs, subRates, subName, schedule, loading, error, reload }}>
+    <SubPortalContext.Provider value={{ contracts, timeEntries, paymentStages, settings, jobs, subRates, subName, schedule, companyCalendar, companyCalendarStatus, loading, error, reload }}>
       {children}
     </SubPortalContext.Provider>
   )

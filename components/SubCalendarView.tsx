@@ -1,0 +1,168 @@
+'use client'
+
+// The subcontractor portal's Calendar: a month where the person's OWN booked days are green and, when their builder allows it, the company's other
+// jobs are grey (job name, address and phase only). A plain display component used by BOTH the real subcontractor portal and the builder's preview
+// of it, so they cannot drift apart. Never shows client names, prices, notes, individual tasks or who else is booked.
+
+import { useMemo, useState } from 'react'
+import { calendarMonth, type CalendarDay, type CompanyCalendarRow } from '@/lib/sub-calendar'
+import { dayLabelLong, type ScheduleRow } from '@/lib/task-days'
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const GREEN = '#7ab533'
+const GREEN_DARK = '#3e6b12'
+const GREEN_SOFT = '#e4f2cf'
+const GREY = '#e2e8f0'
+const GREY_TEXT = '#475569'
+
+interface Props {
+  schedule: ScheduleRow[]
+  /** The company's jobs, or null when the builder has turned the company view off for this person */
+  companyRows: CompanyCalendarRow[] | null
+  /** Set when the company part could not be loaded (rather than switched off) */
+  companyProblem?: boolean
+  preview?: boolean
+}
+
+export default function SubCalendarView({ schedule, companyRows, companyProblem, preview }: Props) {
+  const now = new Date()
+  const [ym, setYm] = useState({ y: now.getFullYear(), m: now.getMonth() })
+  const [selected, setSelected] = useState<string | null>(null)
+
+  const weeks = useMemo(() => calendarMonth(ym.y, ym.m, schedule, companyRows, new Date()), [ym, schedule, companyRows])
+  const allDays = weeks.flat()
+  const isThisMonth = ym.y === now.getFullYear() && ym.m === now.getMonth()
+  const todayKey = allDays.find(d => d.isToday)?.key ?? null
+  const sel: CalendarDay | undefined = allDays.find(d => d.key === (selected ?? (isThisMonth ? todayKey : null)))
+
+  function go(delta: number) {
+    const d = new Date(ym.y, ym.m + delta, 1)
+    setYm({ y: d.getFullYear(), m: d.getMonth() })
+    setSelected(null)
+  }
+  function today() { setYm({ y: now.getFullYear(), m: now.getMonth() }); setSelected(null) }
+
+  return (
+    <div>
+      <style>{`
+        .subcal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+        .subcal-chip-text { display: inline; }
+        @media (max-width: 640px) {
+          .subcal-chip-text { display: none; }
+          .subcal-cell { min-height: 54px !important; padding: 3px !important; }
+          .subcal-chip { height: 8px !important; padding: 0 !important; }
+        }
+      `}</style>
+
+      <div style={{ marginBottom: 14 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', margin: 0 }}>Calendar</h1>
+        <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 0' }}>
+          {companyRows ? 'Your booked days are green. The rest of the company’s work is grey, so you can see where things are happening.' : 'The days you are booked to be on site.'}
+        </p>
+      </div>
+      {preview && <div style={{ background: '#1e2022', color: '#f0c040', borderRadius: 8, padding: '10px 16px', fontSize: 12, fontWeight: 600, marginBottom: 14 }}>👁 Preview mode</div>}
+      {companyProblem && (
+        <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', color: '#92400e', borderRadius: 8, padding: '9px 14px', fontSize: 12.5, marginBottom: 14 }}>
+          The company’s other jobs could not be loaded just now, so only your own days are shown.
+        </div>
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <button onClick={() => go(-1)} aria-label="Previous month" style={navBtn}>‹</button>
+        <div style={{ fontWeight: 700, fontSize: 16, color: '#0f172a', minWidth: 150, textAlign: 'center' }}>{MONTHS[ym.m]} {ym.y}</div>
+        <button onClick={() => go(1)} aria-label="Next month" style={navBtn}>›</button>
+        {!isThisMonth && <button onClick={today} style={{ ...navBtn, width: 'auto', padding: '0 12px', fontSize: 12.5 }}>Today</button>}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 12, fontSize: 12, color: '#475569', flexWrap: 'wrap' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: GREEN }} />You</span>
+          {companyRows && <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: GREY }} />Company</span>}
+        </div>
+      </div>
+
+      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
+        <div className="subcal-grid" style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+          {WEEKDAYS.map(w => <div key={w} style={{ padding: '6px 4px', textAlign: 'center', fontSize: 11.5, fontWeight: 700, color: '#64748b' }}>{w}</div>)}
+        </div>
+        {weeks.map((week, wi) => (
+          <div key={wi} className="subcal-grid" style={{ borderTop: wi ? '1px solid #eef2f6' : 'none' }}>
+            {week.map(d => {
+              const isSel = sel?.key === d.key
+              const shown = [...d.mine.map(m => ({ k: 'm' + m.jobId + m.taskName, mine: true, text: m.taskName })), ...d.company.map(c => ({ k: 'c' + c.jobId + c.phaseName, mine: false, text: c.jobTitle }))]
+              return (
+                <div
+                  key={d.key}
+                  className="subcal-cell"
+                  onClick={() => setSelected(d.key)}
+                  style={{
+                    minHeight: 92, padding: 5, cursor: 'pointer', borderLeft: d.date.getDay() === 1 ? 'none' : '1px solid #eef2f6',
+                    background: isSel ? '#f0f9e0' : d.inMonth ? '#fff' : '#fafbfc', outline: isSel ? `2px solid ${GREEN}` : 'none', outlineOffset: -2,
+                    opacity: d.inMonth ? 1 : 0.55,
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <span style={{
+                      fontSize: 12, fontWeight: d.isToday ? 700 : 500, color: d.isToday ? '#fff' : '#334155',
+                      background: d.isToday ? GREEN : 'transparent', borderRadius: 10, minWidth: 20, textAlign: 'center', padding: '0 5px',
+                    }}>{d.date.getDate()}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 3 }}>
+                    {shown.slice(0, 4).map(s => (
+                      <div key={s.k} className="subcal-chip" title={s.text} style={{
+                        height: 17, lineHeight: '17px', padding: '0 5px', borderRadius: 4, fontSize: 11, fontWeight: s.mine ? 700 : 500,
+                        overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+                        background: s.mine ? GREEN : GREY, color: s.mine ? '#fff' : GREY_TEXT,
+                      }}><span className="subcal-chip-text">{s.text}</span></div>
+                    ))}
+                    {shown.length > 4 && <div style={{ fontSize: 10.5, color: '#64748b', fontWeight: 600 }}>+{shown.length - 4} more</div>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop: 14 }}>
+        {sel ? <DayDetail day={sel} showCompany={!!companyRows} /> : <div style={{ fontSize: 13, color: '#64748b' }}>Tap a day to see what is on.</div>}
+      </div>
+    </div>
+  )
+}
+
+const navBtn: React.CSSProperties = { width: 34, height: 34, border: '1px solid #e2e8f0', background: '#fff', borderRadius: 8, cursor: 'pointer', fontSize: 18, color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center' }
+
+function DayDetail({ day, showCompany }: { day: CalendarDay; showCompany: boolean }) {
+  const nothing = day.mine.length === 0 && day.company.length === 0
+  return (
+    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 16px' }}>
+      <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a', marginBottom: 6 }}>{dayLabelLong(day.date)}</div>
+      {nothing && <div style={{ fontSize: 13, color: '#64748b' }}>{showCompany ? 'Nothing is scheduled this day.' : 'You are not booked this day.'}</div>}
+      {day.mine.map((e, i) => (
+        <div key={'m' + i} style={{ display: 'flex', gap: 10, padding: '8px 0', borderTop: i ? '1px solid #f1f5f9' : 'none' }}>
+          <span style={{ marginTop: 5, width: 9, height: 9, borderRadius: '50%', background: GREEN, flexShrink: 0 }} />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>{e.taskName} <span style={{ fontSize: 10.5, fontWeight: 700, color: GREEN_DARK, background: GREEN_SOFT, borderRadius: 10, padding: '1px 8px', marginLeft: 4, whiteSpace: 'nowrap', display: 'inline-block' }}>BOOKED</span></div>
+            <div style={{ fontSize: 12.5, color: '#475569', marginTop: 1 }}>{e.stageName ? `${e.stageName} · ` : ''}{e.jobTitle}</div>
+            {e.address && <div style={{ fontSize: 12, color: '#64748b', marginTop: 1 }}>📍 {e.address}</div>}
+          </div>
+          {e.ofDays > 1 && <span style={{ fontSize: 11, color: '#64748b', whiteSpace: 'nowrap', marginTop: 2 }}>Day {e.dayNo} of {e.ofDays}</span>}
+        </div>
+      ))}
+      {day.company.length > 0 && (
+        <>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748b', margin: '10px 0 2px', letterSpacing: 0.3 }}>ALSO ON THIS DAY (COMPANY)</div>
+          {day.company.map((c, i) => (
+            <div key={'c' + i} style={{ display: 'flex', gap: 10, padding: '7px 0', borderTop: i ? '1px solid #f1f5f9' : 'none' }}>
+              <span style={{ marginTop: 5, width: 9, height: 9, borderRadius: '50%', background: '#94a3b8', flexShrink: 0 }} />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: 13.5, color: '#334155' }}>{c.jobTitle}</div>
+                {c.phaseName && <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 1 }}>{c.phaseName}</div>}
+                {c.address && <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 1 }}>📍 {c.address}</div>}
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  )
+}

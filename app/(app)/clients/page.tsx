@@ -1020,6 +1020,20 @@ function ClientsPageInner() {
                 <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)', marginBottom: 14 }}>
                   Sub Rate Profile
                 </div>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer', fontSize: 12.5, marginBottom: 14 }}>
+                  <input
+                    type="checkbox"
+                    checked={formPortalSettings.showCompanyCalendar !== false}
+                    onChange={e => setFormPortalSettings(s => ({ ...s, showCompanyCalendar: e.target.checked }))}
+                    style={{ width: 14, height: 14, flexShrink: 0, cursor: 'pointer', marginTop: 2 }}
+                  />
+                  <span>
+                    <strong>Can see the company calendar</strong>
+                    <span style={{ display: 'block', color: 'var(--muted)', fontSize: 11.5 }}>
+                      Their Calendar tab also shows the company’s other jobs in grey (job name, address and phase only — never clients, prices or other people). Untick to show only their own days.
+                    </span>
+                  </span>
+                </label>
                 <div className="row2" style={{ marginBottom: 10 }}>
                   <div className="fg">
                     <label>Day Rate (£)</label>
