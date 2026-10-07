@@ -66,7 +66,7 @@ export default function SubCalendarView({ schedule, companyRows, companyProblem,
       `}</style>
 
       <div style={{ marginBottom: 14 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', margin: 0 }}>Calendar</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', margin: 0 }}>{companyRows ? 'Company calendar' : 'Calendar'}</h1>
         <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 0' }}>
           {companyRows ? 'Your booked days are green. The rest of the company’s work is grey, so you can see where things are happening.' : 'The days you are booked to be on site.'}
         </p>

@@ -232,7 +232,7 @@ function SubPortalPreviewInner() {
             background: 'none', borderBottom: `2px solid ${tab === t ? '#6366f1' : 'transparent'}`,
             color: tab === t ? '#6366f1' : '#64748b', marginBottom: -2, textTransform: 'capitalize',
           }}>
-            {t === 'schedule' ? `Schedule (${expandSchedule(schedule, new Date()).length})` : t === 'calendar' ? 'Calendar' : t === 'timesheets' ? `Timesheets (${timeEntries.length})` : `Payments (${paymentStages.length})`}
+            {t === 'schedule' ? `Schedule (${expandSchedule(schedule, new Date()).length})` : t === 'calendar' ? (companyCalendar ? 'Company Calendar' : 'Calendar') : t === 'timesheets' ? `Timesheets (${timeEntries.length})` : `Payments (${paymentStages.length})`}
           </button>
         ))}
       </div>
