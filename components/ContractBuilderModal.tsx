@@ -119,7 +119,13 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
   // A draft with nothing in it was only ever created by opening this window: it never counts as "the contract". Without this, opening the
   // window of a SIGNED contract started a blank new draft that then hid the signed one behind the editor.
   const isEmptyDraft = (c: Contract) => c.status === 'draft' && Object.keys(c.fields || {}).length === 0
-  const existing = forJob.find(c => !isEmptyDraft(c)) ?? forJob[0]
+  // A contract that has been SENT or SIGNED is "the contract". A draft only counts when nothing has been sent or signed, so a stray draft
+  // (even one that has had something saved into it) can never hide a signed contract behind the editor.
+  const issued = forJob.filter(c => c.status !== 'draft')
+  const draftsInProgress = forJob.filter(c => c.status === 'draft' && !isEmptyDraft(c))
+  const existing = issued[0] ?? draftsInProgress[0] ?? forJob[0]
+  // a draft started after the signed/sent one (the builder can carry on with it or throw it away)
+  const draftAfterIssued = existing && existing.status !== 'draft' ? draftsInProgress.find(d => (d.createdAt || '') > (existing.createdAt || '')) : undefined
   // the builder chose to raise a fresh contract after a signed one (e.g. after a variation)
   const [startNew, setStartNew] = useState(false)
   const [bootKey, setBootKey] = useState(0)
@@ -348,6 +354,14 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
 
   const readOnlySigned = existing?.status === 'signed' && !startNew
 
+  // Carry on with a draft that was started after the signed contract
+  function openDraft(d: Contract) {
+    setStartNew(true)
+    setContract(d)
+    initedRef.current = false
+    setBootKey(k => k + 1)
+  }
+
   // Raise a fresh contract after a signed one (e.g. after a variation): only when the builder asks, never just by opening the window
   function startNewContract() {
     setStartNew(true)
@@ -384,6 +398,15 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
               </div>
               {signedUrl && <a className="btn-sm btn-outline" href={signedUrl} target="_blank" rel="noreferrer">View signed contract →</a>}
               {existing?.builderSignedBy && <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>Signed for the builder by {existing.builderSignedBy}{existing.builderSignedAt ? ` on ${new Date(existing.builderSignedAt).toLocaleDateString('en-GB')}` : ''}</div>}
+              {draftAfterIssued && (
+                <div style={{ background: '#fff8e1', border: '1px solid #ffe082', borderRadius: 6, padding: '8px 10px', marginTop: 10, fontSize: 12 }}>
+                  There is also a <strong>draft contract</strong> started after this one.
+                  <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                    <button type="button" className="btn-sm btn-outline" onClick={() => openDraft(draftAfterIssued)}>Carry on with the draft</button>
+                    <button type="button" className="btn-sm btn-outline" onClick={() => { if (window.confirm('Delete that draft contract? The signed contract is not affected.')) deleteContract(draftAfterIssued.id).catch(() => {}) }}>Discard the draft</button>
+                  </div>
+                </div>
+              )}
               <div style={{ borderTop: '1px solid #bbf7d0', marginTop: 10, paddingTop: 10 }}>
                 <button type="button" className="btn-sm btn-outline" onClick={startNewContract}>Start a new contract for this job</button>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>Only needed if you must raise another contract, for example after a variation. This signed contract stays as it is.</div>
