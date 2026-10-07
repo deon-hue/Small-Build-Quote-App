@@ -77,6 +77,8 @@ interface AppContextType {
   setTaskAssignees: (jobId: string, phaseId: string, picks: AssigneePick[]) => Promise<boolean>
 
   contracts: Contract[]
+  /** Re-read the contracts from the database: a client can sign in their portal while the builder's app is open, and nothing else tells the app. */
+  refreshContracts: () => Promise<void>
   addContract: (jobId: string, quoteId: string | null) => Promise<Contract>
   updateContract: (c: Contract) => Promise<void>
   deleteContract: (id: string) => Promise<void>
@@ -887,6 +889,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [supabase])
 
   // ── Contracts ────────────────────────────────────────────────
+  // The app loads everything once when it opens. A client signing a contract in their portal changes the contract in the database, but
+  // the builder's open app would keep showing "sent" with no signed PDF until the page was reloaded. So contracts are re-read when the
+  // builder comes back to the tab, every minute while it is open, and whenever the contract window opens.
+  const refreshContracts = useCallback(async () => {
+    const { data, error } = await supabase.from('contracts').select('*').order('created_at', { ascending: true })
+    if (error || !data) return
+    setContracts(data.map(r => ({
+      id: r.id, jobId: r.job_id, quoteId: r.quote_id || null,
+      status: r.status, fields: r.fields || {},
+      paymentMode: r.payment_mode || 'simple', paymentSchedule: r.payment_schedule || [],
+      secondClientName: r.second_client_name || null,
+      draftAttachmentId: r.draft_attachment_id || null,
+      signedAttachmentId: r.signed_attachment_id || null,
+      builderSignedAt: r.builder_signed_at || null, builderSignedBy: r.builder_signed_by || null,
+      clientSignedAt: r.client_signed_at || null, clientSignedBy: r.client_signed_by || null,
+      client2SignedAt: r.client2_signed_at || null, client2SignedBy: r.client2_signed_by || null,
+      createdAt: r.created_at, updatedAt: r.updated_at,
+    })))
+  }, [supabase])
+
+  useEffect(() => {
+    if (loading) return
+    const onVisible = () => { if (document.visibilityState === 'visible') void refreshContracts() }
+    document.addEventListener('visibilitychange', onVisible)
+    const timer = setInterval(() => { if (document.visibilityState === 'visible') void refreshContracts() }, 60_000)
+    return () => { document.removeEventListener('visibilitychange', onVisible); clearInterval(timer) }
+  }, [loading, refreshContracts])
   const addContract = useCallback(async (jobId: string, quoteId: string | null): Promise<Contract> => {
     const { data: { user } } = await supabase.auth.getUser()
     const ownerId = dataOwnerIdRef.current || user!.id
@@ -1198,7 +1227,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addJobNote, updateJobNote, deleteJobNote,
       addJobPayment, deleteJobPayment,
       addVariation, updateVariation, deleteVariation,
-      addContract, updateContract, deleteContract,
+      addContract, updateContract, deleteContract, refreshContracts,
       taskAssignments, taskAssignmentsReady, setTaskAssignees,
       bills, addBill, updateBill, deleteBill,
       saveJobTypeTemplate, resetJobTypeTemplate, getTemplate,

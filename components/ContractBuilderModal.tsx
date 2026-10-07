@@ -110,7 +110,7 @@ interface Props { job: Job; quote: Quote | undefined; onClose: () => void }
 
 export default function ContractBuilderModal({ job, quote, onClose }: Props) {
   const sb = createClient()
-  const { contracts, settings, clients, addContract, updateContract } = useApp()
+  const { contracts, settings, clients, addContract, updateContract, refreshContracts } = useApp()
   const { boxRef, draggableStyle, onHeaderMouseDown, onResizeMouseDown, onOverlayClick, isMaximized, toggleMaximize } = useDraggableModal()
 
   const existing = contracts
@@ -133,6 +133,9 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
   const [changesNote, setChangesNote] = useState<'' | 'updated' | 'changed'>('')   // same, for the changes-to-the-scope notes
   const [signedUrl, setSignedUrl] = useState<string | null>(null)
   const initedRef = useRef(false)
+
+  // The client may have signed since the app loaded: fetch the latest state of the contracts as the window opens
+  useEffect(() => { void refreshContracts() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Bootstrap: create the draft row if none exists, then seed local form state.
   useEffect(() => {

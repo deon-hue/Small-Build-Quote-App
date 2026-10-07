@@ -26,7 +26,7 @@ const BLANK_JOB: Omit<Job, 'id'> = {
 }
 
 function JobsPageInner() {
-  const { jobs, quotes, clients, jobNotes, jobPayments, variations, invoices, addJob, updateJob, deleteJob, updateQuote, loading } = useApp()
+  const { jobs, quotes, clients, jobNotes, jobPayments, variations, invoices, contracts, addJob, updateJob, deleteJob, updateQuote, loading } = useApp()
   const searchParams = useSearchParams()
   const router = useRouter()
   const [filter, setFilter] = useState('all')
@@ -241,7 +241,11 @@ function JobsPageInner() {
             {linkedQuote && (
               <button className="btn-sm btn-outline jb-qa" onClick={() => setCommentsQuote(linkedQuote)} title="Questions and replies for this job's quote">💬 Quote Q&amp;A</button>
             )}
-            <button className="btn-sm btn-outline jb-contract" onClick={() => setContractJob(j)} title="Fill, send and track the signed FMB contract for this job">📝 Contract</button>
+            <button className="btn-sm btn-outline jb-contract" onClick={() => setContractJob(j)} title="Fill, send and track the signed FMB contract for this job">{(() => {
+              // where this job's latest contract is up to
+              const latest = contracts.filter(c => c.jobId === j.id).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))[0]
+              return latest?.status === 'signed' ? '✅ Contract signed' : latest?.status === 'sent' ? '📤 Contract sent' : '📝 Contract'
+            })()}</button>
             <button className="btn-sm btn-outline jb-costs" onClick={() => setDocsJob(j)} title="Scan/upload supplier docs and track costs">💷 Costs</button>
             <button className="btn-sm btn-outline jb-pay" onClick={() => setRequestsJob(j)} title="Payment requests and received payments">
               💳 Payments{jobPayments.filter(p => p.jobId === j.id).length > 0 ? ` (${jobPayments.filter(p => p.jobId === j.id).length})` : ''}
