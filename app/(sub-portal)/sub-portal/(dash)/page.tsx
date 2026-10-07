@@ -1,12 +1,35 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import { useSubPortal } from '@/contexts/SubPortalContext'
 import { SubNextDaysCard } from '@/components/SubScheduleView'
 import { expandSchedule } from '@/lib/task-days'
 
 const fmt = (n: number) => `£${(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const fmtDate = (d: string | null) => d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
+
+// Shown under a sign-in problem: which email this phone is signed in as, and a way to sign out and use the right one. The usual cause of "not linked"
+// is signing in with a different email address from the one the office saved for the person.
+function SignedInAs() {
+  const router = useRouter()
+  const [email, setEmail] = useState('')
+  useEffect(() => {
+    createClient().auth.getUser().then(({ data }) => setEmail(data.user?.email ?? '')).catch(() => {})
+  }, [])
+  async function signOut() {
+    await createClient().auth.signOut()
+    router.push('/sub-portal/login')
+    router.refresh()
+  }
+  return (
+    <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid #e2e8f0', fontSize: 12.5, color: 'var(--muted)' }}>
+      {email && <div style={{ marginBottom: 8 }}>You are signed in as <strong style={{ color: '#0f172a' }}>{email}</strong>. If that is not the email address the office has saved for you, sign out and sign in with the right one.</div>}
+      <button className="btn btn-outline" onClick={signOut}>Sign out</button>
+    </div>
+  )
+}
 
 function ErrorScreen({ error, subName, reload }: { error: string; subName: string; reload: () => void }) {
   if (error === 'unauthenticated') return (
@@ -23,12 +46,13 @@ function ErrorScreen({ error, subName, reload }: { error: string; subName: strin
       <p>This portal is for subcontractors. <a href="/dashboard" style={{ color: 'var(--moss)' }}>Go to admin dashboard →</a></p>
     </div>
   )
-  if (error === 'no_sub_linked' || error === 'not_subcontractor') return (
+  if (error === 'no_sub_linked' || error === 'not_subcontractor' || error === 'no_profile') return (
     <div className="portal-notice">
       <div style={{ fontSize: 40, marginBottom: 16 }}>📋</div>
       <h2>Account not linked</h2>
       <p>Your email hasn&apos;t been matched to a subcontractor record yet. Please contact the office and ask them to save your email address in the system.</p>
       <button className="btn btn-outline" style={{ marginTop: 16 }} onClick={reload}>Check again</button>
+      <SignedInAs />
     </div>
   )
   if (error === 'no_admin_linked') return (
@@ -44,6 +68,7 @@ function ErrorScreen({ error, subName, reload }: { error: string; subName: strin
       <h2>Something went wrong</h2>
       <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 16 }}>We couldn&apos;t load your portal. Please try again.</p>
       <button className="btn btn-primary" onClick={reload}>Try again</button>
+      <SignedInAs />
     </div>
   )
 }
