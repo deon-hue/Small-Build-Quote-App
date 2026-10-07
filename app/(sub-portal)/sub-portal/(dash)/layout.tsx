@@ -42,6 +42,7 @@ function SubPortalNav() {
           {navLink('/sub-portal/schedule', 'Schedule')}
           {navLink('/sub-portal/calendar', companyCalendarStatus === 'off' ? 'Calendar' : 'Company Calendar')}
           {navLink('/sub-portal/timesheets', 'Timesheets')}
+          {navLink('/sub-portal/notes', 'Notes')}
           {navLink('/sub-portal/payments', 'Payments')}
           <button className="portal-signout-btn" onClick={signOut}>Sign Out</button>
         </nav>

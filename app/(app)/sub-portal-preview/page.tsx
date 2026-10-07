@@ -5,6 +5,8 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import SubScheduleView, { SubNextDaysCard } from '@/components/SubScheduleView'
 import SubCalendarView from '@/components/SubCalendarView'
+import SubNotesView, { type SubNote } from '@/components/SubNotesView'
+import { signedNotePhotoUrl } from '@/lib/job-note-photos'
 import type { CompanyCalendarRow } from '@/lib/sub-calendar'
 import { expandSchedule, type ScheduleRow } from '@/lib/task-days'
 
@@ -77,7 +79,8 @@ function SubPortalPreviewInner() {
   const [contracts, setContracts] = useState<Contract[]>([])
   const [paymentStages, setPaymentStages] = useState<PaymentStage[]>([])
   const [jobs, setJobs] = useState<Job[]>([])
-  const [tab, setTab] = useState<'schedule' | 'calendar' | 'timesheets' | 'payments'>('schedule')
+  const [tab, setTab] = useState<'schedule' | 'calendar' | 'timesheets' | 'notes' | 'payments'>('schedule')
+  const [subNotes, setSubNotes] = useState<SubNote[]>([])
   const [schedule, setSchedule] = useState<ScheduleRow[]>([])
   const [companyCalendar, setCompanyCalendar] = useState<CompanyCalendarRow[] | null>(null)
   const [companyCalendarProblem, setCompanyCalendarProblem] = useState(false)
@@ -115,6 +118,17 @@ function SubPortalPreviewInner() {
         else if (c.error || !Array.isArray(c.rows)) { setCompanyCalendar(null); setCompanyCalendarProblem(true) }
         else { setCompanyCalendar(c.rows); setCompanyCalendarProblem(false) }
       } catch { setCompanyCalendar(null); setCompanyCalendarProblem(true) }
+      // the notes this subcontractor has sent (the builder reads the same job notes the Activity Log shows, by who wrote them)
+      try {
+        const { data: nrows } = await supabase.from('job_notes').select('id, job_id, note, created_at').eq('author_contact_id', contactId).order('created_at', { ascending: false }).limit(200)
+        const ids = (nrows ?? []).map(n => n.id as string)
+        const { data: prows } = ids.length ? await supabase.from('job_note_photos').select('id, note_id, storage_path').in('note_id', ids) : { data: [] as { id: string; note_id: string; storage_path: string }[] }
+        const urls = await Promise.all((prows ?? []).map(async p => ({ id: p.id as string, noteId: p.note_id as string, url: await signedNotePhotoUrl(supabase, p.storage_path as string) })))
+        setSubNotes((nrows ?? []).map(n => ({
+          id: n.id as string, jobId: n.job_id as string, note: n.note as string, createdAt: n.created_at as string,
+          photos: urls.filter(u => u.noteId === n.id && u.url).map(u => ({ id: u.id, url: u.url as string })),
+        })))
+      } catch { setSubNotes([]) }
       setLoading(false)
     }
     load()
@@ -226,19 +240,22 @@ function SubPortalPreviewInner() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '2px solid #e5e7eb' }}>
-        {(['schedule', 'calendar', 'timesheets', 'payments'] as const).map(t => (
+        {(['schedule', 'calendar', 'timesheets', 'notes', 'payments'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{
             padding: '8px 16px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer',
             background: 'none', borderBottom: `2px solid ${tab === t ? '#6366f1' : 'transparent'}`,
             color: tab === t ? '#6366f1' : '#64748b', marginBottom: -2, textTransform: 'capitalize',
           }}>
-            {t === 'schedule' ? `Schedule (${expandSchedule(schedule, new Date()).length})` : t === 'calendar' ? (companyCalendar ? 'Company Calendar' : 'Calendar') : t === 'timesheets' ? `Timesheets (${timeEntries.length})` : `Payments (${paymentStages.length})`}
+            {t === 'schedule' ? `Schedule (${expandSchedule(schedule, new Date()).length})` : t === 'calendar' ? (companyCalendar ? 'Company Calendar' : 'Calendar') : t === 'timesheets' ? `Timesheets (${timeEntries.length})` : t === 'notes' ? `Notes (${subNotes.length})` : `Payments (${paymentStages.length})`}
           </button>
         ))}
       </div>
 
       {/* Schedule tab: the days they are booked on site */}
       {tab === 'schedule' && <SubScheduleView days={expandSchedule(schedule, new Date())} preview />}
+
+      {/* Notes tab: what they have written and photographed on jobs (also in each job's Activity Log) */}
+      {tab === 'notes' && <SubNotesView notes={subNotes} jobs={jobs.map(j => ({ id: j.id, label: [(j.address || '').split(String.fromCharCode(10))[0], j.client].filter(Boolean).join(' · ') || 'Job' }))} preview />}
 
       {/* Calendar tab: their days, plus the company's other jobs in grey unless switched off for them */}
       {tab === 'calendar' && <SubCalendarView schedule={schedule} companyRows={companyCalendar} companyProblem={companyCalendarProblem} preview />}

@@ -652,7 +652,9 @@ export interface JobNote {
   rawNote?: string
   tag?: NoteTag
   actionItems?: NoteActionItem[]
-  source?: 'typed' | 'voice'
+  source?: 'typed' | 'voice' | 'subcontractor'
+  /** Set when a subcontractor wrote the note from their portal: who */
+  authorName?: string
   createdAt: string
 }
 

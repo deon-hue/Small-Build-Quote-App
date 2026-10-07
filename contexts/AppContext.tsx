@@ -79,6 +79,8 @@ interface AppContextType {
   contracts: Contract[]
   /** Re-read the contracts from the database: a client can sign in their portal while the builder's app is open, and nothing else tells the app. */
   refreshContracts: () => Promise<void>
+  /** Re-read the job notes: a subcontractor can add one from their portal while the builder's app is open. */
+  refreshJobNotes: () => Promise<void>
   addContract: (jobId: string, quoteId: string | null) => Promise<Contract>
   updateContract: (c: Contract) => Promise<void>
   deleteContract: (id: string) => Promise<void>
@@ -366,6 +368,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setJobNotes(notesRes.data.map(r => ({
           id: r.id, jobId: r.job_id, note: r.note, rawNote: r.raw_note ?? undefined,
           tag: r.tag ?? undefined, actionItems: r.action_items ?? [], source: r.source ?? 'typed',
+          authorName: r.author_name ?? undefined,
           createdAt: r.created_at,
         })))
       }
@@ -892,6 +895,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // The app loads everything once when it opens. A client signing a contract in their portal changes the contract in the database, but
   // the builder's open app would keep showing "sent" with no signed PDF until the page was reloaded. So contracts are re-read when the
   // builder comes back to the tab, every minute while it is open, and whenever the contract window opens.
+  const refreshJobNotes = useCallback(async () => {
+    const { data, error } = await supabase.from('job_notes').select('*').order('created_at', { ascending: true })
+    if (error || !data) return
+    setJobNotes(data.map(r => ({
+      id: r.id, jobId: r.job_id, note: r.note, rawNote: r.raw_note ?? undefined,
+      tag: r.tag ?? undefined, actionItems: r.action_items ?? [], source: r.source ?? 'typed',
+      authorName: r.author_name ?? undefined,
+      createdAt: r.created_at,
+    })))
+  }, [supabase])
+
   const refreshContracts = useCallback(async () => {
     const { data, error } = await supabase.from('contracts').select('*').order('created_at', { ascending: true })
     if (error || !data) return
@@ -1227,7 +1241,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addJobNote, updateJobNote, deleteJobNote,
       addJobPayment, deleteJobPayment,
       addVariation, updateVariation, deleteVariation,
-      addContract, updateContract, deleteContract, refreshContracts,
+      addContract, updateContract, deleteContract, refreshContracts, refreshJobNotes,
       taskAssignments, taskAssignmentsReady, setTaskAssignees,
       bills, addBill, updateBill, deleteBill,
       saveJobTypeTemplate, resetJobTypeTemplate, getTemplate,

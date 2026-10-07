@@ -37,7 +37,7 @@ const newActionItemId = () => `ai-${Date.now().toString(36)}-${++_actionItemSeq}
 
 export default function JobNotesModal({ job, onClose }: Props) {
   const sb = createClient()
-  const { jobNotes, addJobNote, updateJobNote, deleteJobNote } = useApp()
+  const { jobNotes, addJobNote, updateJobNote, deleteJobNote, refreshJobNotes } = useApp()
   const notesModal = useDraggableModal()
 
   const [newNote, setNewNote] = useState('')
@@ -66,6 +66,8 @@ export default function JobNotesModal({ job, onClose }: Props) {
   }, [job.id])
 
   useEffect(() => { loadPhotos() }, [loadPhotos])
+  // a subcontractor may have added a note from their portal since the app was loaded
+  useEffect(() => { void refreshJobNotes(); void loadPhotos() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handlePhotoPick(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? [])
@@ -205,6 +207,11 @@ export default function JobNotesModal({ job, onClose }: Props) {
                   return (
                     <div key={n.id} style={{ borderBottom: '1px solid var(--border)', padding: '12px 0', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
+                        {n.source === 'subcontractor' && (
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#ecfccb', color: '#3f6212', marginBottom: 5, marginRight: 6, display: 'inline-block' }}>
+                            👷 {n.authorName || 'Subcontractor'} · Subcontractor
+                          </span>
+                        )}
                         {n.tag && (
                           <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: tagStyle!.bg, color: tagStyle!.text, marginBottom: 5, display: 'inline-block' }}>
                             {TAG_LABEL[n.tag]}

@@ -134,6 +134,9 @@ export default function SubPortalDashboard() {
       <button onClick={() => router.push('/sub-portal/timesheets')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '15px 18px', marginBottom: 18, background: '#7ab533', color: '#fff', border: 'none', borderRadius: 12, fontSize: 17, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 6px rgba(94,143,32,0.35)' }}>
         <span style={{ fontSize: 22, lineHeight: 1 }}>＋</span> Add my time
       </button>
+      <button onClick={() => router.push('/sub-portal/notes')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '12px 18px', marginTop: -6, marginBottom: 18, background: '#fff', color: '#3e6b12', border: '1.5px solid #7ab533', borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+        📷 Add a job note or photos
+      </button>
 
       {/* The days they are booked on site */}
       <SubNextDaysCard days={expandSchedule(schedule, new Date())} onSeeAll={() => router.push('/sub-portal/schedule')} />
