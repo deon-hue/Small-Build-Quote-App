@@ -57,10 +57,10 @@ interface WeekSlot {
 
 // ── Constants ──────────────────────────────────────────────────
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-const MAX_ROWS = 3  // max event rows visible per week strip in month view
+const MIN_ROWS = 3  // a week strip in month view is at least this many task rows tall; it grows to show every task
 const DATE_H   = 26 // px – date-number strip height
 const EVT_H    = 22 // px – one event bar height
-const OVF_H    = 18 // px – "+N more" row height
+const STRIP_PAD = 6  // px – breathing space under the last task row of a week
 
 // ── Slot-assignment algorithm ─────────────────────────────────
 // Assigns each CalEvent overlapping [weekStart, weekStart+7) to a row
@@ -495,7 +495,6 @@ export default function CalendarPage() {
     const offset   = (firstDay.getDay() + 6) % 7
     const calStart = addDays(firstDay, -offset)
     const numWeeks = Math.ceil((offset + lastDay.getDate()) / 7)
-    const stripH   = DATE_H + MAX_ROWS * EVT_H + OVF_H
 
     return (
       <div className="card" style={{ overflow: 'hidden' }}>
@@ -510,9 +509,9 @@ export default function CalendarPage() {
         {Array.from({ length: numWeeks }, (_, wi) => {
           const weekStart = addDays(calStart, wi * 7)
           const slots     = layoutWeek(eventsForRender, weekStart)
-          const overflowByCol = Array.from({ length: 7 }, (_, col) =>
-            slots.filter(s => s.row >= MAX_ROWS && s.startCol <= col && s.endCol > col).length
-          )
+          // Every task is shown: the week grows taller to fit however many rows it needs (never hidden behind "+N more")
+          const rowsNeeded = Math.max(MIN_ROWS, ...slots.map(s => s.row + 1))
+          const stripH = DATE_H + rowsNeeded * EVT_H + STRIP_PAD
 
           return (
             <div
@@ -560,7 +559,7 @@ export default function CalendarPage() {
               </div>
 
               {/* Event bars */}
-              {slots.filter(s => s.row < MAX_ROWS).map(slot => (
+              {slots.map(slot => (
                 <div
                   key={slot.event.id}
                   onClick={() => { if (suppressClickRef.current) return; setSelected(slot.event) }}
@@ -610,19 +609,6 @@ export default function CalendarPage() {
                 </div>
               ))}
 
-              {/* +N more per column */}
-              {overflowByCol.map((cnt, col) => cnt > 0 ? (
-                <div
-                  key={col}
-                  onClick={() => { setView('day'); setAnchor(addDays(weekStart, col)) }}
-                  style={{
-                    position: 'absolute', bottom: 2,
-                    left:  `calc(${(col / 7) * 100}% + 4px)`,
-                    width: `calc(${(1 / 7) * 100}% - 8px)`,
-                    fontSize: 10, color: 'var(--muted)', cursor: 'pointer', fontWeight: 600,
-                  }}
-                >+{cnt} more</div>
-              ) : null)}
             </div>
           )
         })}
