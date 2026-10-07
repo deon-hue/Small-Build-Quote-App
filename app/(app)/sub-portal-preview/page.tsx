@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import SubScheduleView, { SubNextDaysCard } from '@/components/SubScheduleView'
 import SubCalendarView from '@/components/SubCalendarView'
+import SubHomeTiles from '@/components/SubHomeTiles'
 import SubNotesView, { type SubNote } from '@/components/SubNotesView'
 import { signedNotePhotoUrl } from '@/lib/job-note-photos'
 import type { CompanyCalendarRow } from '@/lib/sub-calendar'
@@ -187,10 +188,11 @@ function SubPortalPreviewInner() {
         <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{contracts.length} active job{contracts.length !== 1 ? 's' : ''} · Here's your overview</p>
       </div>
 
-      {/* Same big button the subcontractor has (here it just opens the Timesheets tab) */}
-      <button onClick={() => setTab('timesheets')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '15px 18px', marginBottom: 18, background: '#7ab533', color: '#fff', border: 'none', borderRadius: 12, fontSize: 17, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 6px rgba(94,143,32,0.35)' }}>
-        <span style={{ fontSize: 22, lineHeight: 1 }}>＋</span> Add my time
-      </button>
+      {/* The same big tiles the subcontractor has on their home screen (here each one opens its tab below). They choose their own style; this shows the default. */}
+      <div style={{ marginBottom: 20 }}>
+        <SubHomeTiles style="soft" calendarLabel={companyCalendar ? 'Company calendar' : 'Calendar'}
+          onSelect={k => setTab(k === 'time' || k === 'timesheets' ? 'timesheets' : k === 'schedule' ? 'schedule' : k === 'calendar' ? 'calendar' : k === 'notes' ? 'notes' : 'payments')} />
+      </div>
 
       <SubNextDaysCard days={expandSchedule(schedule, new Date())} onSeeAll={() => setTab('schedule')} />
 

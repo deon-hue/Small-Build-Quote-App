@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useSubPortal } from '@/contexts/SubPortalContext'
 import { SubNextDaysCard } from '@/components/SubScheduleView'
+import SubHomeTiles, { type SubTileKey } from '@/components/SubHomeTiles'
+import { useSubLook } from '@/contexts/SubLookContext'
 import { expandSchedule } from '@/lib/task-days'
 
 const fmt = (n: number) => `£${(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -29,6 +31,11 @@ function SignedInAs() {
       <button className="btn btn-outline" onClick={signOut}>Sign out</button>
     </div>
   )
+}
+
+const TILE_ROUTES: Record<SubTileKey, string> = {
+  time: '/sub-portal/timesheets', notes: '/sub-portal/notes', schedule: '/sub-portal/schedule',
+  calendar: '/sub-portal/calendar', timesheets: '/sub-portal/timesheets', payments: '/sub-portal/payments',
 }
 
 function ErrorScreen({ error, subName, reload }: { error: string; subName: string; reload: () => void }) {
@@ -75,7 +82,8 @@ function ErrorScreen({ error, subName, reload }: { error: string; subName: strin
 
 export default function SubPortalDashboard() {
   const router = useRouter()
-  const { contracts, timeEntries, paymentStages, subName, schedule, loading, error, reload } = useSubPortal()
+  const { contracts, timeEntries, paymentStages, subName, schedule, companyCalendarStatus, loading, error, reload } = useSubPortal()
+  const { look } = useSubLook()
 
   if (loading) return (
     <div className="portal-loading">
@@ -122,38 +130,35 @@ export default function SubPortalDashboard() {
 
       {/* Welcome */}
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a' }}>
+        <h1 style={{ fontSize: 26, fontWeight: 700, color: '#0f172a' }}>
           {greet}{subName ? `, ${subName.split(' ')[0]}` : ''} 👋
         </h1>
-        <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
+        <p style={{ fontSize: 16, color: '#64748b', marginTop: 4 }}>
           {contracts.length} active job{contracts.length !== 1 ? 's' : ''} · Here&apos;s your overview
         </p>
       </div>
 
-      {/* The thing they do most: add today's time (opens the Timesheets form) */}
-      <button onClick={() => router.push('/sub-portal/timesheets')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '15px 18px', marginBottom: 18, background: '#7ab533', color: '#fff', border: 'none', borderRadius: 12, fontSize: 17, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 6px rgba(94,143,32,0.35)' }}>
-        <span style={{ fontSize: 22, lineHeight: 1 }}>＋</span> Add my time
-      </button>
-      <button onClick={() => router.push('/sub-portal/notes')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '12px 18px', marginTop: -6, marginBottom: 18, background: '#fff', color: '#3e6b12', border: '1.5px solid #7ab533', borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
-        📷 Add a job note or photos
-      </button>
-
-      {/* The days they are booked on site */}
-      <SubNextDaysCard days={expandSchedule(schedule, new Date())} onSeeAll={() => router.push('/sub-portal/schedule')} />
-
       {/* Summary cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 28 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, marginBottom: 18 }}>
         {[
           { label: 'Active Jobs',       value: contracts.length,              mono: false, color: '#6366f1' },
           { label: 'Hours This Month',  value: `${hoursThisMonth.toFixed(1)}h`, mono: true,  color: '#0ea5e9' },
           { label: 'Total Paid',        value: fmt(totalPaid),                mono: true,  color: '#10b981' },
           { label: 'Outstanding',       value: fmt(totalOutstanding),         mono: true,  color: totalOutstanding > 0 ? '#f59e0b' : '#94a3b8' },
         ].map(card => (
-          <div key={card.label} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '16px 18px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>{card.label}</div>
-            <div style={{ fontSize: 24, fontWeight: 700, color: card.color, fontFamily: card.mono ? 'monospace' : undefined }}>{card.value}</div>
+          <div key={card.label} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#64748b', marginBottom: 4 }}>{card.label}</div>
+            <div style={{ fontSize: 28, fontWeight: 700, color: card.color, fontFamily: card.mono ? 'monospace' : undefined }}>{card.value}</div>
           </div>
         ))}
+      </div>
+
+      {/* The big tiles: each opens its own page (Add my time is the one they use most) */}
+      <SubHomeTiles style={look.style} calendarLabel={companyCalendarStatus === 'off' ? 'Calendar' : 'Company calendar'} onSelect={k => router.push(TILE_ROUTES[k])} />
+
+      {/* The days they are booked on site */}
+      <div style={{ marginTop: 20 }}>
+        <SubNextDaysCard days={expandSchedule(schedule, new Date())} onSeeAll={() => router.push('/sub-portal/schedule')} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: contracts.length > 0 ? '1fr 1fr' : '1fr', gap: 20 }}>

@@ -1,17 +1,35 @@
 'use client'
 
+// The subcontractor portal's frame. The home screen is a dashboard of big tiles (see page.tsx); every other page opens from a tile and has a
+// "Home" button back. The small paintbrush in the top corner opens "Your look" (tile style, text size, sign out), saved on their phone.
+
 import { useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { ChevronLeft, Palette } from 'lucide-react'
 import { SubPortalProvider, useSubPortal } from '@/contexts/SubPortalContext'
+import { SubLookProvider, useSubLook } from '@/contexts/SubLookContext'
+import SubLookSheet from '@/components/SubLookSheet'
 import { createClient } from '@/lib/supabase/client'
+
+const TITLES: Record<string, string> = {
+  '/sub-portal/schedule': 'Schedule',
+  '/sub-portal/calendar': 'Company calendar',
+  '/sub-portal/timesheets': 'Timesheets',
+  '/sub-portal/notes': 'Job notes',
+  '/sub-portal/payments': 'Payments',
+}
 
 function SubPortalNav() {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
   const { settings, companyCalendarStatus } = useSubPortal()
-  const [menuOpen, setMenuOpen] = useState(false)
+  const [sheet, setSheet] = useState(false)
+
+  const isHome = pathname === '/sub-portal'
+  let title = TITLES[pathname] ?? ''
+  if (pathname === '/sub-portal/calendar' && companyCalendarStatus === 'off') title = 'Calendar'
 
   async function signOut() {
     await supabase.auth.signOut()
@@ -19,47 +37,40 @@ function SubPortalNav() {
     router.refresh()
   }
 
-  const navLink = (href: string, label: string) => {
-    const active = pathname === href
-    return (
-      <Link href={href} className={`portal-nav-link${active ? ' active' : ''}`} onClick={() => setMenuOpen(false)}>
-        {label}
-      </Link>
-    )
-  }
-
   return (
-    <header className="portal-header">
-      <div className="portal-header-inner">
-        <div className="portal-logo">
-          {settings.logo
-            ? <img src={settings.logo} alt="logo" style={{ height: 32, objectFit: 'contain' }} />
-            : <span>🔧 {settings.name || 'Subcontractor Portal'}</span>
-          }
+    <>
+      <header className="portal-header">
+        <div className="portal-header-inner" style={{ height: 60 }}>
+          {isHome ? (
+            <div className="portal-logo">
+              {settings.logo
+                ? <img src={settings.logo} alt="logo" style={{ height: 34, objectFit: 'contain' }} />
+                : <span>{settings.name || 'Subcontractor Portal'}</span>}
+            </div>
+          ) : (
+            <Link href="/sub-portal" style={{ display: 'flex', alignItems: 'center', gap: 2, color: '#9bd24a', fontSize: 17, fontWeight: 600, textDecoration: 'none', padding: '8px 4px' }}>
+              <ChevronLeft size={24} />Home
+            </Link>
+          )}
+          {!isHome && <span style={{ color: '#fff', fontSize: 17, fontWeight: 600, flex: 1, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</span>}
+          <button type="button" onClick={() => setSheet(true)} aria-label="Your look and sign out"
+            style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', cursor: 'pointer', flexShrink: 0 }}>
+            <Palette size={22} />
+          </button>
         </div>
-        <nav className={`portal-nav${menuOpen ? ' open' : ''}`}>
-          {navLink('/sub-portal', 'Dashboard')}
-          {navLink('/sub-portal/schedule', 'Schedule')}
-          {navLink('/sub-portal/calendar', companyCalendarStatus === 'off' ? 'Calendar' : 'Company Calendar')}
-          {navLink('/sub-portal/timesheets', 'Timesheets')}
-          {navLink('/sub-portal/notes', 'Notes')}
-          {navLink('/sub-portal/payments', 'Payments')}
-          <button className="portal-signout-btn" onClick={signOut}>Sign Out</button>
-        </nav>
-        <button className="portal-hamburger" onClick={() => setMenuOpen(v => !v)} aria-label="Menu">
-          <span /><span /><span />
-        </button>
-      </div>
-      {menuOpen && <div className="portal-nav-overlay" onClick={() => setMenuOpen(false)} />}
-    </header>
+      </header>
+      {sheet && <SubLookSheet onClose={() => setSheet(false)} onSignOut={signOut} />}
+    </>
   )
 }
 
 function SubPortalLayoutInner({ children }: { children: React.ReactNode }) {
+  const { look } = useSubLook()
   return (
     <div className="portal-wrap">
       <SubPortalNav />
-      <main className="portal-main">{children}</main>
+      {/* "Large" text: the whole page is scaled up a little, so every screen gets bigger writing without changing each one */}
+      <main className="portal-main" style={look.size === 'large' ? { zoom: 1.15 } : undefined}>{children}</main>
     </div>
   )
 }
@@ -67,7 +78,9 @@ function SubPortalLayoutInner({ children }: { children: React.ReactNode }) {
 export default function SubPortalDashLayout({ children }: { children: React.ReactNode }) {
   return (
     <SubPortalProvider>
-      <SubPortalLayoutInner>{children}</SubPortalLayoutInner>
+      <SubLookProvider>
+        <SubPortalLayoutInner>{children}</SubPortalLayoutInner>
+      </SubLookProvider>
     </SubPortalProvider>
   )
 }
