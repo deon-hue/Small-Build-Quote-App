@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { senderFrom, withPoweredBy, escapeHtml } from '@/lib/email-brand'
 import { BRAND, emailShell, emailPara, emailButton, emailCallout, emailContact } from '@/lib/email-layout'
 import { callerIsPortalOnly } from '@/lib/caller-role'
+import { escapeLike } from '@/lib/email-match'
 import { usageGuard } from '@/lib/usage'
 
 function toE164(raw: string): string | null {
@@ -48,6 +49,14 @@ export async function POST(req: NextRequest) {
 
   const { clientName, clientEmail, clientPhone, companyName } = body
   if (!clientEmail && !clientPhone) return NextResponse.json({ error: 'No email or phone' }, { status: 400 })
+  if (clientEmail) {
+    // the client-portal app link must not go to someone who is only a subcontractor contact
+    const { data: same } = await sb.from('clients').select('client_type').ilike('email', escapeLike(clientEmail.trim()))
+    const types = (same || []).map((c: { client_type: string | null }) => c.client_type || 'client')
+    if (types.length > 0 && types.every((t: string) => t === 'subcontractor')) {
+      return NextResponse.json({ error: 'This contact is a subcontractor, so the client portal app link is not for them.' }, { status: 400 })
+    }
+  }
 
   const resendKey    = process.env.RESEND_API_KEY
   const fromEmail    = process.env.NOTIFY_FROM_EMAIL || 'noreply@resend.dev'

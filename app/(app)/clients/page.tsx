@@ -131,7 +131,9 @@ function ClientsPageInner() {
 
   // URL for sending to the client (magic-link target / copy link)
   function portalUrl(c: Client) {
-    return c.email ? `${portalBase}?email=${encodeURIComponent(c.email)}` : portalBase
+    // a subcontractor signs in to their own portal, never the client one
+    const base = c.clientType === 'subcontractor' ? portalBase.replace('/portal/login', '/sub-portal/login') : portalBase
+    return c.email ? `${base}?email=${encodeURIComponent(c.email)}` : base
   }
 
   function toIntlDigits(phone: string): string {
@@ -146,7 +148,9 @@ function ClientsPageInner() {
     const url = portalUrl(c)
     const firstName = (c.name || '').split(' ')[0] || c.name
     const company = settings.name || 'Your contractor'
-    const body = `Hi ${firstName}, ${company} has set up your project portal where you can view your quotes, approve change orders and check invoices — all in one place.\n\nOpen it here: ${url}\n\nTo install as an app:\niPhone: Tap Share → "Add to Home Screen"\nAndroid: Tap ⋮ → "Add to Home Screen"`
+    const body = c.clientType === 'subcontractor'
+      ? `Hi ${firstName}, ${company} has set up your subcontractor portal where you can see the days you are booked on site, send in timesheets and check your payments.\n\nOpen it here: ${url}\n\nTo install as an app:\niPhone: Tap Share → "Add to Home Screen"\nAndroid: Tap ⋮ → "Add to Home Screen"`
+      : `Hi ${firstName}, ${company} has set up your project portal where you can view your quotes, approve change orders and check invoices — all in one place.\n\nOpen it here: ${url}\n\nTo install as an app:\niPhone: Tap Share → "Add to Home Screen"\nAndroid: Tap ⋮ → "Add to Home Screen"`
     return `sms:+${num}?body=${encodeURIComponent(body)}`
   }
 
@@ -155,7 +159,9 @@ function ClientsPageInner() {
     const url = portalUrl(c)
     const firstName = (c.name || '').split(' ')[0] || c.name
     const company = settings.name || 'Your contractor'
-    const body = `Hi ${firstName} 👋\n\n${company} has set up your project portal — a private space where you can:\n• View your project quotes\n• Approve or reject change orders\n• Check and track your invoices\n• Follow your build progress\n\nOpen your portal here:\n${url}\n\nTo install it as an app on your phone:\n*iPhone*: Tap Share ↑ → "Add to Home Screen"\n*Android*: Tap ⋮ menu → "Add to Home Screen"`
+    const body = c.clientType === 'subcontractor'
+      ? `Hi ${firstName} 👋\n\n${company} has set up your subcontractor portal — a private space where you can:\n• See the days you are booked on site\n• Send in your timesheets\n• Check your payments\n\nOpen your portal here:\n${url}\n\nTo install it as an app on your phone:\n*iPhone*: Tap Share ↑ → "Add to Home Screen"\n*Android*: Tap ⋮ menu → "Add to Home Screen"`
+      : `Hi ${firstName} 👋\n\n${company} has set up your project portal — a private space where you can:\n• View your project quotes\n• Approve or reject change orders\n• Check and track your invoices\n• Follow your build progress\n\nOpen your portal here:\n${url}\n\nTo install it as an app on your phone:\n*iPhone*: Tap Share ↑ → "Add to Home Screen"\n*Android*: Tap ⋮ menu → "Add to Home Screen"`
     return `https://wa.me/${num}?text=${encodeURIComponent(body)}`
   }
 
@@ -515,12 +521,18 @@ function ClientsPageInner() {
             <div className="modal-hd" onMouseDown={detailModal.onHeaderMouseDown}>
               <div style={{ fontWeight: 700, fontSize: 18 }}>{selected.name}</div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                {selected.email && (
+                {selected.email && selected.clientType === 'subcontractor' && (
+                  <button className={`btn-sm ${subInviteSentId === selected.id ? 'btn-gold' : 'btn-primary'}`} disabled={subInviteSendingId === selected.id} onClick={() => sendSubPortalInvite(selected)}
+                    title="Email a sign-in link to the subcontractor portal">
+                    {subInviteSentId === selected.id ? '✓ Invite Sent' : subInviteSendingId === selected.id ? 'Sending…' : '📧 Invite to Sub Portal'}
+                  </button>
+                )}
+                {selected.email && selected.clientType !== 'subcontractor' && (
                   <button className="btn-sm btn-primary" onClick={() => { openInvite(selected); setSelected(null) }}>
                     📧 Invite to Portal
                   </button>
                 )}
-                {selected.email && (
+                {selected.email && selected.clientType !== 'subcontractor' && (
                   <button
                     className={`btn-sm ${appLinkSentId === selected.id ? 'btn-gold' : 'btn-outline'}`}
                     title="Send app install instructions by email"

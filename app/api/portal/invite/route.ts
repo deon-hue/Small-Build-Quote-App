@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { senderFrom, withPoweredBy } from '@/lib/email-brand'
 import { callerIsPortalOnly } from '@/lib/caller-role'
+import { escapeLike } from '@/lib/email-match'
 import { usageGuard } from '@/lib/usage'
 import { createPortalSignInLink } from '@/lib/portal-magic-link'
 import { portalExplainerHtml, portalWhatsAppLines } from '@/lib/portal-welcome'
@@ -74,6 +75,15 @@ export async function POST(req: NextRequest) {
 
     const { clientEmail, clientPhone, companyPhone, companyEmail } = body
     if (!clientEmail) return NextResponse.json({ error: 'This client has no email address saved.' }, { status: 400 })
+
+    // A subcontractor has their own portal and their own invite; sending them the client one drops them into the wrong portal.
+    {
+      const { data: same } = await sb.from('clients').select('client_type').ilike('email', escapeLike(clientEmail.trim()))
+      const types = (same || []).map((c: { client_type: string | null }) => c.client_type || 'client')
+      if (types.length > 0 && types.every((t: string) => t === 'subcontractor')) {
+        return NextResponse.json({ error: 'This contact is a subcontractor. Use "Invite to Sub Portal" so they get the subcontractor portal.' }, { status: 400 })
+      }
+    }
 
     const resendKey = process.env.RESEND_API_KEY
     if (!resendKey) return NextResponse.json({ error: 'RESEND_API_KEY is not set in this environment, so the invite email cannot be sent.' }, { status: 500 })
