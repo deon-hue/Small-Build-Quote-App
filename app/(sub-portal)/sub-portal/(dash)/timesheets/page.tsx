@@ -42,6 +42,16 @@ const STATUS_STYLE: Record<string, { bg: string; text: string }> = {
   pending:   { bg: '#f1f5f9', text: '#64748b' },
 }
 
+/** Hours worked from a start time, a finish time and a break in minutes (to the nearest quarter hour). null when the times don't make sense yet. */
+function hoursBetween(start: string, finish: string, breakMins: number): number | null {
+  const m = (t: string) => { const x = /^(\d{1,2}):(\d{2})/.exec(t); return x ? Number(x[1]) * 60 + Number(x[2]) : NaN }
+  const mins = m(finish) - m(start) - (Number.isFinite(breakMins) ? breakMins : 0)
+  if (!Number.isFinite(mins) || mins <= 0) return null
+  return Math.round((mins / 60) * 4) / 4
+}
+
+const BLANK_ENTRY: ParsedEntry = { date: '', startTime: null, finishTime: null, breakMins: 30, totalHours: 0, description: '', contractId: null, jobId: null }
+
 interface ParsedEntry {
   date: string
   startTime: string | null
@@ -59,14 +69,15 @@ export default function SubPortalTimesheets() {
   const [aiText, setAiText] = useState('')
   const [parsing, setParsing] = useState(false)
   const [parseError, setParseError] = useState('')
-  const [parsed, setParsed] = useState<ParsedEntry | null>(null)
+  // The simple form is what opens; the describe-your-day box is an optional shortcut (parsed = null shows it)
+  const [parsed, setParsed] = useState<ParsedEntry | null>(BLANK_ENTRY)
 
   // Form fields (pre-filled by AI, editable by sub)
   const [formDate, setFormDate] = useState(todayISO())
   const [formHours, setFormHours] = useState('')
   const [formStart, setFormStart] = useState('')
   const [formFinish, setFormFinish] = useState('')
-  const [formBreak, setFormBreak] = useState('0')
+  const [formBreak, setFormBreak] = useState('30')
   const [formDesc, setFormDesc] = useState('')
   // Primary: job-based
   const [formJobId, setFormJobId] = useState('')
@@ -126,10 +137,20 @@ export default function SubPortalTimesheets() {
     }
   }
 
+  // Changing a time or the break works out the hours for you (they can still type over it)
+  function setTimes(next: { start?: string; finish?: string; brk?: string }) {
+    const s = next.start ?? formStart, f = next.finish ?? formFinish, b = next.brk ?? formBreak
+    if (next.start !== undefined) setFormStart(next.start)
+    if (next.finish !== undefined) setFormFinish(next.finish)
+    if (next.brk !== undefined) setFormBreak(next.brk)
+    const h = s && f ? hoursBetween(s, f, Number(b) || 0) : null
+    if (h != null) setFormHours(String(h))
+  }
+
   function clearForm() {
-    setParsed(null); setAiText('')
+    setParsed(BLANK_ENTRY); setAiText('')
     setFormDate(todayISO()); setFormHours(''); setFormStart(''); setFormFinish('')
-    setFormBreak('0'); setFormDesc(''); setFormJobId(''); setFormContractId('')
+    setFormBreak('30'); setFormDesc(''); setFormJobId(''); setFormContractId('')
     setSubmitError(''); setSubmitted(false)
   }
 
@@ -201,13 +222,13 @@ export default function SubPortalTimesheets() {
     <div style={{ maxWidth: 760, margin: '0 auto', padding: '24px 16px' }}>
       <h1 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>Timesheets</h1>
       <p style={{ fontSize: 13, color: '#64748b', marginBottom: 24 }}>
-        Log your time — describe your day and let AI fill in the details, or enter it manually.
+        Add the day you worked: the job, the start and finish times and your lunch. The hours are worked out for you, and your office reviews it once you submit.
       </p>
 
       {/* ── Entry form ── */}
       {!submitted && (
         <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 18, marginBottom: 28 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 10 }}>✨ Describe your day</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 10 }}>{parsed ? '🕒 Add your time' : '✨ Describe your day'}</div>
 
           {!parsed ? (
             <>
@@ -223,10 +244,10 @@ export default function SubPortalTimesheets() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, gap: 8, flexWrap: 'wrap' }}>
                 <button
                   type="button"
-                  onClick={() => setParsed({ date: todayISO(), startTime: null, finishTime: null, breakMins: 0, totalHours: 0, description: '', contractId: null, jobId: null })}
+                  onClick={() => setParsed(BLANK_ENTRY)}
                   style={{ fontSize: 12, color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
                 >
-                  Enter manually instead
+                  Fill in the form instead
                 </button>
                 <button
                   onClick={parseWithAI}
@@ -242,6 +263,12 @@ export default function SubPortalTimesheets() {
               {aiText && (
                 <div style={{ fontSize: 12, color: '#16a34a', fontWeight: 600, marginBottom: 12, padding: '7px 10px', background: '#f0fdf4', borderRadius: 7, border: '1px solid #bbf7d0' }}>
                   ✓ AI filled in the details — check everything looks right and submit.
+                </div>
+              )}
+
+              {!aiText && (
+                <div style={{ marginBottom: 10, textAlign: 'right' }}>
+                  <button type="button" onClick={() => setParsed(null)} style={{ fontSize: 12, color: '#6366f1', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>✨ Describe your day instead</button>
                 </div>
               )}
 
@@ -310,19 +337,19 @@ export default function SubPortalTimesheets() {
                 </FieldGroup>
 
                 <FieldGroup label="Total hours *">
-                  <input type="number" min={0.5} step={0.5} style={inp} value={formHours} onChange={e => setFormHours(e.target.value)} placeholder="e.g. 8" />
+                  <input type="number" inputMode="decimal" min={0.25} step={0.25} style={inp} value={formHours} onChange={e => setFormHours(e.target.value)} placeholder="worked out for you" />
                 </FieldGroup>
 
                 <FieldGroup label="Start time">
-                  <input type="time" style={inp} value={formStart} onChange={e => setFormStart(e.target.value)} />
+                  <input type="time" style={inp} value={formStart} onChange={e => setTimes({ start: e.target.value })} />
                 </FieldGroup>
 
                 <FieldGroup label="Finish time">
-                  <input type="time" style={inp} value={formFinish} onChange={e => setFormFinish(e.target.value)} />
+                  <input type="time" style={inp} value={formFinish} onChange={e => setTimes({ finish: e.target.value })} />
                 </FieldGroup>
 
-                <FieldGroup label="Break (mins)">
-                  <input type="number" min={0} step={5} style={inp} value={formBreak} onChange={e => setFormBreak(e.target.value)} />
+                <FieldGroup label="Lunch / break (mins)">
+                  <input type="number" inputMode="numeric" min={0} step={5} style={inp} value={formBreak} onChange={e => setTimes({ brk: e.target.value })} />
                 </FieldGroup>
 
                 <div style={{ gridColumn: '1 / -1' }}>
@@ -468,4 +495,5 @@ function FieldGroup({ label, children }: { label: string; children: React.ReactN
   )
 }
 
-const inp: React.CSSProperties = { width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 7, fontSize: 13, boxSizing: 'border-box' }
+// 16px text and a taller box so a phone doesn't zoom in on the field and it is easy to tap
+const inp: React.CSSProperties = { width: '100%', padding: '10px 10px', minHeight: 42, border: '1px solid #e2e8f0', borderRadius: 7, fontSize: 16, boxSizing: 'border-box' }
