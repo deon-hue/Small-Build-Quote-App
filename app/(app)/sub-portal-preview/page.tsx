@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import SubScheduleView, { SubNextDaysCard } from '@/components/SubScheduleView'
 import SubCalendarView from '@/components/SubCalendarView'
 import SubHomeTiles from '@/components/SubHomeTiles'
+import { ChevronLeft } from 'lucide-react'
 import SubNotesView, { type SubNote } from '@/components/SubNotesView'
 import { signedNotePhotoUrl } from '@/lib/job-note-photos'
 import type { CompanyCalendarRow } from '@/lib/sub-calendar'
@@ -80,7 +81,7 @@ function SubPortalPreviewInner() {
   const [contracts, setContracts] = useState<Contract[]>([])
   const [paymentStages, setPaymentStages] = useState<PaymentStage[]>([])
   const [jobs, setJobs] = useState<Job[]>([])
-  const [tab, setTab] = useState<'schedule' | 'calendar' | 'timesheets' | 'notes' | 'payments'>('schedule')
+  const [tab, setTab] = useState<'schedule' | 'calendar' | 'timesheets' | 'notes' | 'payments' | null>(null)
   const [subNotes, setSubNotes] = useState<SubNote[]>([])
   const [schedule, setSchedule] = useState<ScheduleRow[]>([])
   const [companyCalendar, setCompanyCalendar] = useState<CompanyCalendarRow[] | null>(null)
@@ -169,6 +170,8 @@ function SubPortalPreviewInner() {
   const outstandingFromEntries = timeEntries
     .filter(e => e.source === 'admin' && e.amount != null && e.status !== 'paid' && e.payment_method == null && e.status !== 'rejected')
     .reduce((s, e) => s + Number(e.amount), 0)
+  const thisMonth = new Date().toISOString().slice(0, 7)
+  const hoursThisMonth = timeEntries.filter(e => e.entry_date.startsWith(thisMonth) && e.status !== 'rejected').reduce((s, e) => s + (Number(e.units) || 0), 0)
   const totalPaid = paymentStages.length > 0 ? paidFromStages : paidFromEntries
   const totalOutstanding = paymentStages.length > 0 ? outstandingFromStages : outstandingFromEntries
 
@@ -182,6 +185,7 @@ function SubPortalPreviewInner() {
         <button onClick={() => router.back()} style={{ marginLeft: 'auto', fontSize: 12, padding: '4px 12px', background: '#fff', border: '1px solid #d1d5db', borderRadius: 5, cursor: 'pointer', color: '#374151' }}>← Back</button>
       </div>
 
+      {tab === null && (<>
       {/* Welcome header */}
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a' }}>Good morning, {subName.split(' ')[0]} 👋</h1>
@@ -200,7 +204,7 @@ function SubPortalPreviewInner() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 28 }}>
         {[
           { label: 'Active Jobs',      value: String(contracts.length),        color: '#6366f1', mono: false },
-          { label: 'Timesheet Entries', value: String(timeEntries.length),     color: '#0ea5e9', mono: false },
+          { label: 'Hours this month', value: `${hoursThisMonth.toFixed(1)}h`, color: '#0ea5e9', mono: true },
           { label: 'Total Paid',        value: fmt(totalPaid),                 color: '#10b981', mono: true  },
           { label: 'Outstanding',       value: fmt(totalOutstanding),          color: totalOutstanding > 0 ? '#f59e0b' : '#94a3b8', mono: true },
         ].map(c => (
@@ -211,47 +215,19 @@ function SubPortalPreviewInner() {
         ))}
       </div>
 
-      {/* Active contracts */}
-      {contracts.length > 0 && (
-        <div style={{ marginBottom: 28 }}>
-          <h2 style={{ fontSize: 14, fontWeight: 700, color: '#374151', marginBottom: 12 }}>Active Jobs</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {contracts.map(c => (
-              <div key={c.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>{c.job_type || c.description || 'Contract'}</div>
-                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: c.type === 'fixed' ? '#ede9fe' : '#e0f2fe', color: c.type === 'fixed' ? '#6d28d9' : '#0369a1', flexShrink: 0 }}>
-                    {c.type === 'fixed' ? 'Fixed price' : c.rate_type === 'daily' || c.rate_type === 'day' ? 'Day rate' : 'Hourly rate'}
-                  </span>
-                </div>
-                {c.job_address && <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>📍 {c.job_address}</div>}
-                <div style={{ display: 'flex', gap: 16, marginTop: 6, fontSize: 11, color: '#94a3b8' }}>
-                  {c.start_date && <span>Start: {fmtDate(c.start_date)}</span>}
-                  {c.end_date   && <span>Due: {fmtDate(c.end_date)}</span>}
-                </div>
-                {c.type === 'rate' && c.rate_amount && (
-                  <div style={{ marginTop: 4, fontSize: 12, color: '#0369a1', fontWeight: 600 }}>
-                    {fmt(c.rate_amount)} / {c.rate_type === 'daily' || c.rate_type === 'day' ? 'day' : 'hour'}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+      </>)}
+
+      {/* A page opened from a tile: a Home button back to the tiles, like the real portal */}
+      {tab !== null && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+          <button onClick={() => setTab(null)} style={{ display: 'flex', alignItems: 'center', gap: 2, background: '#1e2022', color: '#9bd24a', border: 'none', borderRadius: 10, padding: '8px 14px 8px 8px', fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>
+            <ChevronLeft size={20} />Home
+          </button>
+          <span style={{ fontSize: 18, fontWeight: 700, color: '#0f172a' }}>
+            {tab === 'schedule' ? 'Schedule' : tab === 'calendar' ? (companyCalendar ? 'Company calendar' : 'Calendar') : tab === 'timesheets' ? 'Timesheets' : tab === 'notes' ? 'Job notes' : 'Payments'}
+          </span>
         </div>
       )}
-
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '2px solid #e5e7eb' }}>
-        {(['schedule', 'calendar', 'timesheets', 'notes', 'payments'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{
-            padding: '8px 16px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer',
-            background: 'none', borderBottom: `2px solid ${tab === t ? '#6366f1' : 'transparent'}`,
-            color: tab === t ? '#6366f1' : '#64748b', marginBottom: -2, textTransform: 'capitalize',
-          }}>
-            {t === 'schedule' ? `Schedule (${expandSchedule(schedule, new Date()).length})` : t === 'calendar' ? (companyCalendar ? 'Company Calendar' : 'Calendar') : t === 'timesheets' ? `Timesheets (${timeEntries.length})` : t === 'notes' ? `Notes (${subNotes.length})` : `Payments (${paymentStages.length})`}
-          </button>
-        ))}
-      </div>
 
       {/* Schedule tab: the days they are booked on site */}
       {tab === 'schedule' && <SubScheduleView days={expandSchedule(schedule, new Date())} preview />}
