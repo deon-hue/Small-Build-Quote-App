@@ -34,7 +34,7 @@ function SignedInAs() {
 }
 
 const TILE_ROUTES: Record<SubTileKey, string> = {
-  time: '/sub-portal/timesheets', notes: '/sub-portal/notes', schedule: '/sub-portal/schedule',
+  time: '/sub-portal/add-time', notes: '/sub-portal/notes', schedule: '/sub-portal/schedule',
   calendar: '/sub-portal/calendar', timesheets: '/sub-portal/timesheets', payments: '/sub-portal/payments',
 }
 

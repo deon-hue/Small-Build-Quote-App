@@ -81,7 +81,7 @@ function SubPortalPreviewInner() {
   const [contracts, setContracts] = useState<Contract[]>([])
   const [paymentStages, setPaymentStages] = useState<PaymentStage[]>([])
   const [jobs, setJobs] = useState<Job[]>([])
-  const [tab, setTab] = useState<'schedule' | 'calendar' | 'timesheets' | 'notes' | 'payments' | null>(null)
+  const [tab, setTab] = useState<'schedule' | 'calendar' | 'timesheets' | 'addtime' | 'notes' | 'payments' | null>(null)
   const [subNotes, setSubNotes] = useState<SubNote[]>([])
   const [schedule, setSchedule] = useState<ScheduleRow[]>([])
   const [companyCalendar, setCompanyCalendar] = useState<CompanyCalendarRow[] | null>(null)
@@ -195,7 +195,7 @@ function SubPortalPreviewInner() {
       {/* The same big tiles the subcontractor has on their home screen (here each one opens its tab below). They choose their own style; this shows the default. */}
       <div style={{ marginBottom: 20 }}>
         <SubHomeTiles style="soft" calendarLabel={companyCalendar ? 'Company calendar' : 'Calendar'}
-          onSelect={k => setTab(k === 'time' || k === 'timesheets' ? 'timesheets' : k === 'schedule' ? 'schedule' : k === 'calendar' ? 'calendar' : k === 'notes' ? 'notes' : 'payments')} />
+          onSelect={k => setTab(k === 'time' ? 'addtime' : k === 'timesheets' ? 'timesheets' : k === 'schedule' ? 'schedule' : k === 'calendar' ? 'calendar' : k === 'notes' ? 'notes' : 'payments')} />
       </div>
 
       <SubNextDaysCard days={expandSchedule(schedule, new Date())} onSeeAll={() => setTab('schedule')} />
@@ -224,7 +224,7 @@ function SubPortalPreviewInner() {
             <ChevronLeft size={20} />Home
           </button>
           <span style={{ fontSize: 18, fontWeight: 700, color: '#0f172a' }}>
-            {tab === 'schedule' ? 'Schedule' : tab === 'calendar' ? (companyCalendar ? 'Company calendar' : 'Calendar') : tab === 'timesheets' ? 'Timesheets' : tab === 'notes' ? 'Job notes' : 'Payments'}
+            {tab === 'schedule' ? 'Schedule' : tab === 'calendar' ? (companyCalendar ? 'Company calendar' : 'Calendar') : tab === 'timesheets' ? 'Timesheets' : tab === 'addtime' ? 'Add my time' : tab === 'notes' ? 'Job notes' : 'Payments'}
           </span>
         </div>
       )}
@@ -239,7 +239,7 @@ function SubPortalPreviewInner() {
       {tab === 'calendar' && <SubCalendarView schedule={schedule} companyRows={companyCalendar} companyProblem={companyCalendarProblem} preview />}
 
       {/* What the subcontractor fills in to add their time (shown switched off here — nothing is saved from the preview) */}
-      {tab === 'timesheets' && <AddTimeExample />}
+      {tab === 'addtime' && <AddTimeExample />}
 
       {/* Timesheets tab */}
       {tab === 'timesheets' && (
