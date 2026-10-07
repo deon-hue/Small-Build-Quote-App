@@ -130,6 +130,11 @@ export default function SubPortalDashboard() {
         </p>
       </div>
 
+      {/* The thing they do most: add today's time (opens the Timesheets form) */}
+      <button onClick={() => router.push('/sub-portal/timesheets')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '15px 18px', marginBottom: 18, background: '#7ab533', color: '#fff', border: 'none', borderRadius: 12, fontSize: 17, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 6px rgba(94,143,32,0.35)' }}>
+        <span style={{ fontSize: 22, lineHeight: 1 }}>＋</span> Add my time
+      </button>
+
       {/* The days they are booked on site */}
       <SubNextDaysCard days={expandSchedule(schedule, new Date())} onSeeAll={() => router.push('/sub-portal/schedule')} />
 

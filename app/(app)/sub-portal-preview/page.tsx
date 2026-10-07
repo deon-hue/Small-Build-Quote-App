@@ -173,6 +173,11 @@ function SubPortalPreviewInner() {
         <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{contracts.length} active job{contracts.length !== 1 ? 's' : ''} · Here's your overview</p>
       </div>
 
+      {/* Same big button the subcontractor has (here it just opens the Timesheets tab) */}
+      <button onClick={() => setTab('timesheets')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '15px 18px', marginBottom: 18, background: '#7ab533', color: '#fff', border: 'none', borderRadius: 12, fontSize: 17, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 6px rgba(94,143,32,0.35)' }}>
+        <span style={{ fontSize: 22, lineHeight: 1 }}>＋</span> Add my time
+      </button>
+
       <SubNextDaysCard days={expandSchedule(schedule, new Date())} onSeeAll={() => setTab('schedule')} />
 
       {/* Summary cards */}
@@ -237,6 +242,9 @@ function SubPortalPreviewInner() {
 
       {/* Calendar tab: their days, plus the company's other jobs in grey unless switched off for them */}
       {tab === 'calendar' && <SubCalendarView schedule={schedule} companyRows={companyCalendar} companyProblem={companyCalendarProblem} preview />}
+
+      {/* What the subcontractor fills in to add their time (shown switched off here — nothing is saved from the preview) */}
+      {tab === 'timesheets' && <AddTimeExample />}
 
       {/* Timesheets tab */}
       {tab === 'timesheets' && (
@@ -332,5 +340,26 @@ export default function SubPortalPreviewPage() {
     <Suspense fallback={<div style={{ padding: 40, color: '#6b7280' }}>Loading…</div>}>
       <SubPortalPreviewInner />
     </Suspense>
+  )
+}
+
+/** A read-only picture of the form a subcontractor uses to add their time, so the builder can see what it asks for */
+function AddTimeExample() {
+  const box: React.CSSProperties = { width: '100%', padding: '9px 10px', border: '1px solid #e2e8f0', borderRadius: 7, fontSize: 14, boxSizing: 'border-box', background: '#f8fafc', color: '#94a3b8' }
+  const lab: React.CSSProperties = { display: 'block', fontSize: 10, fontWeight: 600, color: '#64748b', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em' }
+  return (
+    <div style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 12, padding: 16, marginBottom: 20 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 4 }}>🕒 Add your time <span style={{ fontWeight: 500, color: '#94a3b8' }}>(what they fill in — switched off in this preview)</span></div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
+        <div style={{ gridColumn: '1 / -1' }}><label style={lab}>Job / Project</label><div style={box}>— select job —</div></div>
+        <div><label style={lab}>Date</label><div style={box}>Today</div></div>
+        <div><label style={lab}>Total hours</label><div style={box}>worked out for them</div></div>
+        <div><label style={lab}>Start time</label><div style={box}>08:00</div></div>
+        <div><label style={lab}>Finish time</label><div style={box}>17:00</div></div>
+        <div><label style={lab}>Lunch / break (mins)</label><div style={box}>30</div></div>
+        <div><label style={lab}>Description of work</label><div style={box}>What did you work on?</div></div>
+      </div>
+      <div style={{ fontSize: 12, color: '#64748b', marginTop: 10 }}>When they submit, it appears in the yellow <strong>Portal Timesheets Pending Review</strong> box on your Subcontractors page.</div>
+    </div>
   )
 }
