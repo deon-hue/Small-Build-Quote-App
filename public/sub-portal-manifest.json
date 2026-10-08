@@ -1,0 +1,17 @@
+{
+  "name": "Subcontractor Portal",
+  "short_name": "Sub Portal",
+  "description": "Your schedule, timesheets, job notes and payments.",
+  "start_url": "/sub-portal",
+  "scope": "/sub-portal",
+  "display": "standalone",
+  "background_color": "#f1f3f5",
+  "theme_color": "#1e2022",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/portal-icon.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" },
+    { "src": "/portal-icon.png", "sizes": "1024x1024", "type": "image/png", "purpose": "maskable" },
+    { "src": "/portal-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "categories": ["business", "productivity"]
+}

@@ -188,6 +188,12 @@ function AppLayoutWrapper({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const { permissions, isOwner, loading, hasCompany, settings, currentMember, pageTitle, setPageTitle } = useApp()
   const [tab, setTab] = useState<string | null>(null)
+  // Has this phone/computer opened the builder's app as a builder before? Until we know (and until the account is known to be a builder's), show a plain
+  // "Checking your account…" screen rather than the builder's screens, so a subcontractor or client who arrives here is not shown them for a moment
+  // before being sent on to their own portal. Builders see no difference after their first visit on a device.
+  const [seenAsBuilder, setSeenAsBuilder] = useState<boolean | null>(null)
+  useEffect(() => { try { setSeenAsBuilder(localStorage.getItem('sbc-is-builder') === '1') } catch { setSeenAsBuilder(true) } }, [])
+  useEffect(() => { if (!loading && hasCompany === true) { try { localStorage.setItem('sbc-is-builder', '1') } catch { /* storage blocked */ } } }, [loading, hasCompany])
 
   useEffect(() => {
     setTab(new URLSearchParams(window.location.search).get('tab'))
@@ -243,6 +249,9 @@ function AppLayoutWrapper({ children }: { children: React.ReactNode }) {
   }
 
   if (!loading && hasCompany === false) return null
+  if (seenAsBuilder !== true && (loading || hasCompany === null)) {
+    return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: 14 }}>Checking your account…</div>
+  }
 
   // The platform owner has paused this company (nothing is deleted; they can be re-opened)
   if (!loading && hasCompany && settings.paused === true) {
