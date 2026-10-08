@@ -518,8 +518,19 @@ function ClientsPageInner() {
       {selected && (
         <div className="modal-overlay" onClick={e => detailModal.onOverlayClick(e, () => setSelected(null))}>
           <div ref={detailModal.boxRef} className="modal-box" style={{ width: 'min(760px,96vw)', ...detailModal.draggableStyle }}>
-            <div className="modal-hd" onMouseDown={detailModal.onHeaderMouseDown}>
-              <div style={{ fontWeight: 700, fontSize: 18 }}>{selected.name}</div>
+            <div className="modal-hd" onMouseDown={detailModal.onHeaderMouseDown} style={{ flexDirection: 'column', alignItems: 'stretch', gap: 10 }}>
+              {/* Top line: who this is, and the window buttons */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flexWrap: 'wrap' }}>
+                  <div style={{ fontWeight: 700, fontSize: 18 }}>{selected.name}</div>
+                  {selected.clientType === 'subcontractor' && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 99, background: '#ecfccb', color: '#3f6212' }}>Subcontractor</span>}
+                </div>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+                  <ModalMaximizeButton isMaximized={detailModal.isMaximized} onClick={detailModal.toggleMaximize} />
+                  <button className="modal-close" onClick={() => setSelected(null)}>×</button>
+                </div>
+              </div>
+              {/* Actions, in one tidy row: invite and view first, then message them, then edit (a quote only makes sense for a customer, so subcontractors don't get that button) */}
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 {selected.email && selected.clientType === 'subcontractor' && (
                   <button className={`btn-sm ${subInviteSentId === selected.id ? 'btn-gold' : 'btn-primary'}`} disabled={subInviteSendingId === selected.id} onClick={() => sendSubPortalInvite(selected)}
@@ -527,12 +538,12 @@ function ClientsPageInner() {
                     {subInviteSentId === selected.id ? '✓ Invite Sent' : subInviteSendingId === selected.id ? 'Sending…' : '📧 Invite to Sub Portal'}
                   </button>
                 )}
-                {selected.email && selected.clientType !== 'subcontractor' && (
+                {selected.email && !(selected.clientType === 'subcontractor') && (
                   <button className="btn-sm btn-primary" onClick={() => { openInvite(selected); setSelected(null) }}>
                     📧 Invite to Portal
                   </button>
                 )}
-                {selected.email && selected.clientType !== 'subcontractor' && (
+                {selected.email && !(selected.clientType === 'subcontractor') && (
                   <button
                     className={`btn-sm ${appLinkSentId === selected.id ? 'btn-gold' : 'btn-outline'}`}
                     title="Send app install instructions by email"
@@ -542,23 +553,23 @@ function ClientsPageInner() {
                     {appLinkSentId === selected.id ? '✓ App Link Sent' : '📲 App Link'}
                   </button>
                 )}
+                <button className="btn-sm btn-sky" onClick={() => { setSelected(null); router.push(adminPreviewUrl(selected)) }} title={`View everything in ${selected.name}'s portal`}>
+                  👁 View Portal
+                </button>
                 {selected.phone && (
                   <a className="btn-sm btn-outline" href={smsHref(selected)} title="Send portal link via SMS">💬 SMS</a>
                 )}
                 {selected.phone && (
                   <a className="btn-sm btn-outline" href={waHref(selected)} target="_blank" rel="noreferrer" title="Send portal link via WhatsApp">🟢 WhatsApp</a>
                 )}
-                <button className="btn-sm btn-sky" onClick={() => { setSelected(null); router.push(adminPreviewUrl(selected)) }} title={`View everything in ${selected.name}'s portal`}>
-                  👁 View Portal
-                </button>
                 <button className="btn-sm btn-outline" onClick={() => openEdit(selected)}>✎ Edit</button>
-                <button className="btn-sm btn-gold" onClick={() => {
-                  sessionStorage.setItem('sbc_prefill_client', selected.id)
-                  setSelected(null)
-                  router.push('/new-quote')
-                }}>+ Quote</button>
-                <ModalMaximizeButton isMaximized={detailModal.isMaximized} onClick={detailModal.toggleMaximize} />
-                <button className="modal-close" onClick={() => setSelected(null)}>×</button>
+                {!(selected.clientType === 'subcontractor') && (
+                  <button className="btn-sm btn-gold" title="Start a new quote for this contact" onClick={() => {
+                    sessionStorage.setItem('sbc_prefill_client', selected.id)
+                    setSelected(null)
+                    router.push('/new-quote')
+                  }}>+ Quote</button>
+                )}
               </div>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
