@@ -2,13 +2,14 @@
 
 // The subcontractor's Job notes: write a note and add photos against a job. The screen is components/SubNotesView.tsx (shared with the builder's
 // preview). A note is saved by the database function add_sub_job_note (straight into the job's Activity Log for the builder); each photo is
-// shrunk on the phone, then uploaded to /api/sub-portal/note-photo.
+// shrunk on the phone, then uploaded to /api/sub-portal/note-photo. If a photo does not go, the note is already saved and the screen offers to
+// try that photo again on the SAME note (nothing is sent twice).
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useSubPortal } from '@/contexts/SubPortalContext'
-import SubNotesView, { type SubNote } from '@/components/SubNotesView'
-import { shrinkImage } from '@/lib/image-resize'
+import SubNotesView, { type SubNote, type AddResult } from '@/components/SubNotesView'
+import { shrinkImage, photoProblem } from '@/lib/image-resize'
 
 /** Turns a technical error into something a subcontractor can act on (and tell the office), keeping the original wording at the end so it can be diagnosed. */
 function friendlyError(raw: string): string {
@@ -19,6 +20,34 @@ function friendlyError(raw: string): string {
   if (/not available/i.test(m)) return 'That job is no longer available. Choose another job, or tell the office. (' + m + ')'
   if (/does not exist|schema cache|could not find the function/i.test(m)) return 'Notes are not switched on yet. Please tell the office. (' + m + ')'
   return (m ? m + ' — ' : '') + 'Your note was not sent. Please try again, and tell the office if it keeps happening.'
+}
+
+/** Uploads photos to a note. Returns the ones that did not go, with the reason for the first. */
+async function uploadPhotos(noteId: string, files: File[]): Promise<{ failed: File[]; why: string }> {
+  const failed: File[] = []
+  let why = ''
+  for (const f of files) {
+    const fail = (reason: string) => { failed.push(f); if (!why) why = reason }
+    try {
+      const small = await shrinkImage(f)
+      const problem = photoProblem(small)
+      if (problem) { fail(problem); continue }
+      const body = new FormData()
+      body.append('noteId', noteId); body.append('file', small)
+      const res = await fetch('/api/sub-portal/note-photo', { method: 'POST', body })
+      if (res.ok) continue
+      const j = await res.json().catch(() => null) as { error?: string } | null
+      if (j?.error) fail(j.error)
+      else if (res.status === 413) fail('the photo is too big for the server')
+      else if (res.status >= 500) fail('the server had a problem (error ' + res.status + ')')
+      else fail('error ' + res.status)
+    } catch { fail('no signal') }
+  }
+  return { failed, why }
+}
+
+function photoMessage(n: number, why: string): string {
+  return `Your note was sent, but ${n} photo${n === 1 ? '' : 's'} did not go. (${why})`
 }
 
 export default function SubNotesPage() {
@@ -41,25 +70,19 @@ export default function SubNotesPage() {
   }, [])
   useEffect(() => { loadNotes() }, [loadNotes])
 
-  async function addNote(jobId: string, text: string, files: File[]): Promise<{ saved: boolean; message?: string }> {
+  async function addNote(jobId: string, text: string, files: File[]): Promise<AddResult> {
     const sb = createClient()
     const { data: noteId, error: err } = await sb.rpc('add_sub_job_note', { p_job_id: jobId, p_note: text })
-    if (err || !noteId) {
-      return { saved: false, message: friendlyError(err?.message || '') }
-    }
-    let failed = 0
-    let why = ''
-    for (const f of files) {
-      try {
-        const small = await shrinkImage(f)
-        const body = new FormData()
-        body.append('noteId', String(noteId)); body.append('file', small)
-        const res = await fetch('/api/sub-portal/note-photo', { method: 'POST', body })
-        if (!res.ok) { failed++; if (!why) { const j = await res.json().catch(() => null) as { error?: string } | null; why = j?.error || ('error ' + res.status) } }
-      } catch { failed++; if (!why) why = 'no signal' }
-    }
+    if (err || !noteId) return { saved: false, message: friendlyError(err?.message || '') }
+    const { failed, why } = await uploadPhotos(String(noteId), files)
     await loadNotes()
-    return failed ? { saved: true, message: `Your note was sent, but ${failed} photo${failed === 1 ? '' : 's'} could not be added. Try adding ${failed === 1 ? 'it' : 'them'} again in a new note. (${why})` } : { saved: true }
+    return failed.length ? { saved: true, noteId: String(noteId), failed, message: photoMessage(failed.length, why) } : { saved: true }
+  }
+
+  async function retryPhotos(noteId: string, files: File[]): Promise<AddResult> {
+    const { failed, why } = await uploadPhotos(noteId, files)
+    await loadNotes()
+    return failed.length ? { saved: true, noteId, failed, message: photoMessage(failed.length, why) } : { saved: true }
   }
 
   if (loading) return <div className="portal-loading"><div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div>Loading…</div>
@@ -68,7 +91,7 @@ export default function SubNotesPage() {
   return (
     <div style={{ maxWidth: 760, margin: '0 auto', padding: '24px 16px' }}>
       {problem && <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', color: '#92400e', borderRadius: 8, padding: '9px 14px', fontSize: 12.5, marginBottom: 14 }}>Your earlier notes could not be loaded just now. You can still add a new one.</div>}
-      <SubNotesView notes={notes} jobs={jobOptions} onAdd={addNote} />
+      <SubNotesView notes={notes} jobs={jobOptions} onAdd={addNote} onRetry={retryPhotos} />
     </div>
   )
 }
