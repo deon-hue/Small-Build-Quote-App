@@ -4,9 +4,9 @@
 // job's Activity Log for the builder. A plain display component used by BOTH the real subcontractor portal and the builder's preview of it
 // (the preview passes no onAdd, so the form is replaced by a note and only the list shows). Built for a phone: big fields, big buttons.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Mic, Square } from 'lucide-react'
-import { useSpeechToText } from '@/components/useSpeechToText'
+import { useEffect, useRef, useState } from 'react'
+import TalkButton from '@/components/TalkButton'
+import { useDictatedText } from '@/components/useDictatedText'
 
 export interface SubNote { id: string; jobId: string; note: string; createdAt: string; photos: { id: string; url: string }[] }
 export interface SubNoteJob { id: string; label: string }
@@ -37,24 +37,8 @@ export default function SubNotesView({ notes, jobs, onAdd, onRetry, preview }: {
   const [retry, setRetry] = useState<{ noteId: string; files: File[] } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  // Talk instead of typing: the phone's own speech recognition (same as the builder's notes). It hands over everything it has heard in the current
-  // "listening session"; the phone restarts a session after a pause, so a chunk that no longer continues the last one means a new session started,
-  // and what is on screen so far becomes the base the new words are added to. Spoken words are always ADDED to what is already typed.
-  const baseRef = useRef('')
-  const lastChunk = useRef('')
-  const textRef = useRef('')
-  useEffect(() => { textRef.current = text }, [text])
-  const onSpeech = useCallback((chunk: string) => {
-    if (lastChunk.current && !chunk.startsWith(lastChunk.current)) baseRef.current = textRef.current
-    lastChunk.current = chunk
-    const base = baseRef.current
-    setText((base && !/\s$/.test(base) ? base + ' ' : base) + chunk)
-  }, [])
-  const { listening, toggleMic } = useSpeechToText(onSpeech)
-  function talk() {
-    if (!listening) { baseRef.current = text; lastChunk.current = '' }
-    toggleMic()
-  }
+  // Talk instead of typing (spoken words are added to what is typed)
+  const dict = useDictatedText(text, setText)
   const jobLabel = (id: string) => jobs.find(j => j.id === id)?.label ?? 'Job'
 
   // one job: no need to choose it
@@ -81,7 +65,7 @@ export default function SubNotesView({ notes, jobs, onAdd, onRetry, preview }: {
     setBusy(false)
     if (!r.saved) { setError(r.message || 'Could not send the note — please try again.'); return }
     // the note is in: clear the form (so it can't be sent twice). If a photo didn't make it, it stays here with a Try again button.
-    setText(''); setFiles([]); baseRef.current = ''; lastChunk.current = ''
+    setText(''); setFiles([]); dict.reset()
     if (r.failed && r.failed.length && r.noteId) { setRetry({ noteId: r.noteId, files: r.failed }); setWarn(r.message || ''); return }
     setDone(true); setWarn(r.message || '')
     setTimeout(() => { setDone(false); setWarn('') }, 3500)
@@ -121,16 +105,13 @@ export default function SubNotesView({ notes, jobs, onAdd, onRetry, preview }: {
           </select>
 
           <label style={{ display: 'block', fontSize: 10, fontWeight: 600, color: '#64748b', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Note *</label>
-          <textarea value={text} onChange={e => { if (listening) toggleMic(); setText(e.target.value) }} rows={4} maxLength={4000}
+          <textarea value={text} onChange={e => { dict.stop(); setText(e.target.value) }} rows={4} maxLength={4000}
             placeholder="What do you want the office to know? e.g. boards delivered, a problem found, work finished…"
             style={{ ...field, resize: 'vertical', lineHeight: 1.45 }} />
 
           <input ref={fileRef} type="file" accept="image/*" multiple onChange={pick} style={{ display: 'none' }} />
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginTop: 10 }}>
-            <button type="button" onClick={talk} aria-pressed={listening}
-              style={{ padding: '11px 16px', border: listening ? '1px solid #dc2626' : '1px solid #7ab533', borderRadius: 10, background: listening ? '#dc2626' : '#f4f9ea', color: listening ? '#fff' : '#3e6b12', fontSize: 15, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 7, fontFamily: 'inherit' }}>
-              {listening ? <Square size={18} /> : <Mic size={18} />}{listening ? 'Listening… tap to stop' : 'Talk'}
-            </button>
+            <TalkButton listening={dict.listening} onClick={dict.talk} />
             <button type="button" onClick={() => fileRef.current?.click()} disabled={files.length >= MAX_PHOTOS}
               style={{ padding: '11px 16px', border: '1px solid #c8d0d8', borderRadius: 10, background: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
               📷 Add photos{files.length ? ` (${files.length})` : ''}

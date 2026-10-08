@@ -1,6 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import TalkButton from '@/components/TalkButton'
+import { useDictatedText } from '@/components/useDictatedText'
 import Link from 'next/link'
 import { useSubPortal } from '@/contexts/SubPortalContext'
 import type { SubTimeEntry } from '@/contexts/SubPortalContext'
@@ -148,7 +150,14 @@ export default function SubTimesheetsScreen({ mode }: { mode: 'add' | 'history' 
     if (h != null) setFormHours(String(h))
   }
 
+  // Talk instead of typing, for the "Describe your day" box and the "What did you work on?" line
+  const aiDict = useDictatedText(aiText, setAiText)
+  const descDict = useDictatedText(formDesc, setFormDesc)
+  // switching between the two views turns the microphone off
+  useEffect(() => { aiDict.stop(); descDict.stop() }, [parsed === null]) // eslint-disable-line react-hooks/exhaustive-deps
+
   function clearForm() {
+    aiDict.stop(); descDict.stop(); aiDict.reset(); descDict.reset()
     setParsed(BLANK_ENTRY); setAiText('')
     setFormDate(todayISO()); setFormHours(''); setFormStart(''); setFormFinish('')
     setFormBreak('30'); setFormDesc(''); setFormJobId(''); setFormContractId('')
@@ -237,7 +246,7 @@ export default function SubTimesheetsScreen({ mode }: { mode: 'add' | 'history' 
             <>
               <textarea
                 value={aiText}
-                onChange={e => setAiText(e.target.value)}
+                onChange={e => { aiDict.stop(); setAiText(e.target.value) }}
                 placeholder={'e.g. "On site from 8am to 5:30pm at the Acacia Road job, 30 min break, laying floor screed"\nor "Half day at the Camden extension, plastering internal walls"'}
                 rows={3}
                 style={{ width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.5 }}
@@ -252,6 +261,8 @@ export default function SubTimesheetsScreen({ mode }: { mode: 'add' | 'history' 
                 >
                   Fill in the form instead
                 </button>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <TalkButton listening={aiDict.listening} onClick={aiDict.talk} />
                 <button
                   onClick={parseWithAI}
                   disabled={parsing || !aiText.trim()}
@@ -259,6 +270,7 @@ export default function SubTimesheetsScreen({ mode }: { mode: 'add' | 'history' 
                 >
                   {parsing ? 'Parsing…' : '✨ Parse with AI'}
                 </button>
+                </div>
               </div>
             </>
           ) : (
@@ -357,7 +369,10 @@ export default function SubTimesheetsScreen({ mode }: { mode: 'add' | 'history' 
 
                 <div style={{ gridColumn: '1 / -1' }}>
                   <FieldGroup label="Description of work">
-                    <input style={inp} value={formDesc} onChange={e => setFormDesc(e.target.value)} placeholder="What did you work on?" />
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <input style={inp} value={formDesc} onChange={e => { descDict.stop(); setFormDesc(e.target.value) }} placeholder="What did you work on?" />
+                      <TalkButton compact listening={descDict.listening} onClick={descDict.talk} />
+                    </div>
                   </FieldGroup>
                 </div>
               </div>
