@@ -444,7 +444,7 @@ export default function SubTimesheetsScreen({ mode }: { mode: 'add' | 'history' 
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 3 }}>
                               <span style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>{fmtDay(e.entry_date)}</span>
                               <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: ds.bg, color: ds.text }}>{effectiveStatus(e)}</span>
-                              {e.source === 'admin' && (
+                              {e.source === 'admin' && e.submitted_by !== 'subcontractor' && (
                                 <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: '#f0f9ff', color: '#0369a1', border: '1px solid #bae6fd' }}>office logged</span>
                               )}
                               {payLabel && (

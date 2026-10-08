@@ -83,6 +83,8 @@ interface AdminTimeLog {
   paid_method?: PaidMethod | null
   xero_bill_id: string | null
   job_cost_id: string | null
+  /** Set when this line came from a timesheet the subcontractor sent through their portal */
+  portal_entry_id?: string | null
   created_at: string
 }
 
@@ -136,6 +138,8 @@ export default function SubcontractorsPage() {
   const [xeroPushing, setXeroPushing] = useState<string | null>(null)
   const [xeroPushingLog, setXeroPushingLog] = useState<string | null>(null)
   const [error, setError] = useState('')
+  // shown after approving a portal timesheet: says where it went
+  const [approvedNote, setApprovedNote] = useState('')
   const [portalInviting, setPortalInviting] = useState<string | null>(null)
   const [portalInviteSent, setPortalInviteSent] = useState<Set<string>>(new Set())
 
@@ -275,28 +279,38 @@ export default function SubcontractorsPage() {
     }
   }
 
+  // A timesheet a subcontractor sends from their portal, once approved, goes into THEIR WEEKLY TIMESHEET for the week of that day (pending, like a
+  // day you log yourself). It is paid, approved and costed through the weekly timesheet as usual, so no job cost is added here. The subcontractor
+  // sees the day as approved, then paid when you pay the week.
   async function approveDirectEntry(entry: TimeEntry) {
-    setApprovingEntry(entry.id)
+    setApprovingEntry(entry.id); setError(''); setApprovedNote('')
     try {
       const { data: { user } } = await sb.auth.getUser()
       if (!user) return
-      await sb.from('sub_time_entries').update({ status: 'approved', admin_notes: null }).eq('id', entry.id)
-      // Derive amount from rate stored on the entry itself
-      const amount = entry.rate_type === 'daily' || entry.rate_type === 'half_day'
-        ? Number(entry.rate_amount) ?? 0
-        : Number(entry.units) * (Number(entry.rate_amount) ?? 0)
-      if (entry.job_id && amount > 0) {
-        await insertJobCost(sb, user.id, {
-          jobId: entry.job_id,
-          source: 'timesheet',
-          costCategory: isPaye(entry.contact_id) ? 'labour' : 'subcontractors',
-          supplier: contactName(entry.contact_id),
-          description: entry.notes || `Sub time — ${entry.entry_date}`,
-          docDate: entry.entry_date, docNumber: '',
-          netAmount: amount, vatAmount: 0, grossAmount: amount,
-          paymentStatus: 'unpaid', chargeToClient: false,
-        })
+      if (!entry.contact_id) { setError('This timesheet has no subcontractor attached, so it cannot be added to a weekly timesheet.'); return }
+      const rateType: AdminTimeLog['rate_type'] = entry.rate_type === 'hourly' ? 'hourly' : entry.rate_type === 'half_day' ? 'half_day' : 'day'
+      const rate = Number(entry.rate_amount) || 0
+      const amount = rateType === 'hourly' ? Number(entry.units) * rate : rate
+      const ws = getWeekStart(entry.entry_date)
+      const { error: insErr } = await sb.from('sub_admin_time_logs').insert({
+        user_id: user.id, contact_id: entry.contact_id, job_id: entry.job_id || null,
+        entry_date: entry.entry_date, week_start: ws,
+        start_time: entry.start_time || null, finish_time: entry.finish_time || null,
+        total_hours: rateType === 'hourly' ? Number(entry.units) || null : null,
+        rate_type: rateType, rate_amount: rate, amount, amount_overridden: false,
+        notes: entry.notes || '', entry_type: 'payable', status: 'pending', portal_entry_id: entry.id,
+      })
+      if (insErr) {
+        // already added (approved twice), or the database update has not been run
+        if (/duplicate|unique/i.test(insErr.message)) { await sb.from('sub_time_entries').update({ status: 'approved', admin_notes: null }).eq('id', entry.id); await load(); return }
+        setError(/portal_entry_id|column/i.test(insErr.message) ? 'Could not add it to the weekly timesheet: the database update (supabase/sub-portal-data-fix.sql) has not been run yet.' : 'Could not add it to the weekly timesheet: ' + insErr.message)
+        return
       }
+      await sb.from('sub_time_entries').update({ status: 'approved', admin_notes: null }).eq('id', entry.id)
+      setApprovedNote(
+        `Approved. It is now in ${contactName(entry.contact_id)}'s weekly timesheet for the week of ${fmtWeekRange(ws)} (scroll down to Weekly timesheets), waiting to be approved and paid with the rest of that week.` +
+        (rate > 0 ? '' : ' There is no rate saved for them, so it is at £0 — open Log Time for that week to set the amount.')
+      )
       await load()
     } finally {
       setApprovingEntry(null)
@@ -1161,6 +1175,12 @@ export default function SubcontractorsPage() {
       </div>
 
       {error && <div style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 6, padding: '10px 14px', marginBottom: 16, fontSize: 13 }}>{error}</div>}
+      {approvedNote && (
+        <div style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: 6, padding: '10px 14px', marginBottom: 16, fontSize: 13, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+          <span style={{ flex: 1 }}>✓ {approvedNote}</span>
+          <button onClick={() => setApprovedNote('')} style={{ border: 'none', background: 'none', color: '#166534', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
+        </div>
+      )}
 
       {/* ── Direct portal submissions (no contract) ─────────── */}
       {(() => {

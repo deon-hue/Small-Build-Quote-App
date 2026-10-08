@@ -6,6 +6,11 @@
 -- Everything else in the function is exactly as phase46.sql had it. Safe to run more than once. Staging first, then live.
 -- ============================================================
 
+-- A subcontractor's portal timesheet that the builder approves becomes a line in that subcontractor's WEEKLY timesheet (status pending until the week is
+-- approved and paid, like any line the builder logs). This column ties the line back to the portal entry so it is shown to the subcontractor once.
+ALTER TABLE sub_admin_time_logs ADD COLUMN IF NOT EXISTS portal_entry_id UUID;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_sub_admin_time_logs_portal_entry ON sub_admin_time_logs (portal_entry_id) WHERE portal_entry_id IS NOT NULL;
+
 CREATE OR REPLACE FUNCTION get_sub_portal_data()
 RETURNS JSON
 LANGUAGE PLPGSQL
@@ -108,6 +113,7 @@ BEGIN
         OR
         (te.sub_contract_id IS NULL AND te.contact_id = v_contact_id)
       )
+      AND NOT EXISTS (SELECT 1 FROM sub_admin_time_logs lk WHERE lk.portal_entry_id = te.id)
 
     UNION ALL
 
@@ -124,8 +130,8 @@ BEGIN
         END
       )::numeric                           AS units,
       COALESCE(atl.notes, '')::text        AS notes,
-      atl.status::text,
-      'admin'::text                        AS submitted_by,
+      CASE WHEN atl.portal_entry_id IS NOT NULL AND atl.status = 'pending' THEN 'approved' ELSE atl.status END::text AS status,
+      CASE WHEN atl.portal_entry_id IS NOT NULL THEN 'subcontractor' ELSE 'admin' END::text AS submitted_by,
       NULL::text                           AS admin_notes,
       atl.start_time::text,
       atl.finish_time::text,
@@ -296,6 +302,7 @@ BEGIN
         OR
         (te.sub_contract_id IS NULL AND te.contact_id = p_contact_id)
       )
+      AND NOT EXISTS (SELECT 1 FROM sub_admin_time_logs lk WHERE lk.portal_entry_id = te.id)
 
     UNION ALL
 
@@ -308,8 +315,8 @@ BEGIN
         CASE atl.rate_type WHEN 'day' THEN 1.0 WHEN 'half_day' THEN 0.5 ELSE 0.0 END
       )::numeric                           AS units,
       COALESCE(atl.notes, '')::text        AS notes,
-      atl.status::text,
-      'admin'::text                        AS submitted_by,
+      CASE WHEN atl.portal_entry_id IS NOT NULL AND atl.status = 'pending' THEN 'approved' ELSE atl.status END::text AS status,
+      CASE WHEN atl.portal_entry_id IS NOT NULL THEN 'subcontractor' ELSE 'admin' END::text AS submitted_by,
       NULL::text                           AS admin_notes,
       atl.start_time::text,
       atl.finish_time::text,
