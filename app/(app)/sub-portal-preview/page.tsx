@@ -224,7 +224,7 @@ function SubPortalPreviewInner() {
             <ChevronLeft size={20} />Home
           </button>
           <span style={{ fontSize: 18, fontWeight: 700, color: '#0f172a' }}>
-            {tab === 'schedule' ? 'Schedule' : tab === 'calendar' ? (companyCalendar ? 'Company calendar' : 'Calendar') : tab === 'timesheets' ? 'Timesheets' : tab === 'addtime' ? 'Add my time' : tab === 'notes' ? 'Job notes' : 'Payments'}
+            {tab === 'schedule' ? 'Schedule' : tab === 'calendar' ? (companyCalendar ? 'Company calendar' : 'Calendar') : tab === 'timesheets' ? 'Timesheets' : tab === 'addtime' ? 'Add my time' : tab === 'notes' ? 'Job notes' : 'Fixed-price payments'}
           </span>
         </div>
       )}

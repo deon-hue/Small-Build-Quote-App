@@ -18,7 +18,7 @@ const TITLES: Record<string, string> = {
   '/sub-portal/timesheets': 'Timesheets',
   '/sub-portal/add-time': 'Add my time',
   '/sub-portal/notes': 'Job notes',
-  '/sub-portal/payments': 'Payments',
+  '/sub-portal/payments': 'Fixed-price payments',
 }
 
 function SubPortalNav() {

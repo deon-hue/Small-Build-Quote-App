@@ -17,7 +17,7 @@ export const SUB_TILES: TileDef[] = [
   { key: 'schedule',   label: 'Schedule',         Icon: CalendarDays,  colour: '#d9822b' },
   { key: 'calendar',   label: 'Company calendar', Icon: CalendarRange, colour: '#7c5cc4' },
   { key: 'timesheets', label: 'Timesheets',       Icon: ClipboardList, colour: '#2a9d8f' },
-  { key: 'payments',   label: 'Payments',         Icon: PoundSterling, colour: '#c2503f' },
+  { key: 'payments',   label: 'Fixed-price payments',       Icon: PoundSterling, colour: '#c2503f' },
 ]
 
 const LIME = '#7ab533'
