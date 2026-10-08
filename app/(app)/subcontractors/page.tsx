@@ -763,6 +763,7 @@ export default function SubcontractorsPage() {
         const gone = timeLogs.find(l => l.id === row.existingId)
         if (gone?.job_cost_id) await sb.from('job_costs').delete().eq('id', gone.job_cost_id)
         await sb.from('sub_admin_time_logs').delete().eq('id', row.existingId)
+        await removePortalOrigins([gone])
       }
     }
     setWeekModal(false)
@@ -844,6 +845,13 @@ export default function SubcontractorsPage() {
     await load()
   }
 
+  // A weekly timesheet day that came from a timesheet the subcontractor sent through their portal: when the day is deleted here, their original entry
+  // goes too, otherwise it would reappear on their Timesheets page as if nothing had been removed.
+  async function removePortalOrigins(logs: (AdminTimeLog | undefined)[]) {
+    const ids = logs.map(l => l?.portal_entry_id).filter(Boolean) as string[]
+    if (ids.length > 0) await sb.from('sub_time_entries').delete().in('id', ids)
+  }
+
   async function deleteWeek(contactId: string, ws: string) {
     const weekLogs = timeLogs.filter(l => l.contact_id === contactId && (l.week_start ?? getWeekStart(l.entry_date)) === ws)
     const costIds = weekLogs.map(l => l.job_cost_id).filter(Boolean) as string[]
@@ -855,6 +863,7 @@ export default function SubcontractorsPage() {
     const ids = weekLogs.map(l => l.id)
     if (ids.length > 0) await sb.from('sub_admin_time_logs').delete().in('id', ids)
     if (costIds.length > 0) await sb.from('job_costs').delete().in('id', costIds)
+    await removePortalOrigins(weekLogs)
     await load()
   }
 
