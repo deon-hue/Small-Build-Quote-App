@@ -149,17 +149,12 @@ export function SubPortalProvider({ children }: { children: ReactNode }) {
       if (!silent) setLoading(true)
 
       try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) { setError('unauthenticated'); setLoading(false); return }
+        // Who is signed in is read from this phone's own saved sign-in (no waiting on the network): the middleware has already checked it on the server,
+        // and every database call below is checked again by the database itself.
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session?.user) { setError('unauthenticated'); setLoading(false); return }
 
-        // Ensure a sub profile exists (no-op if already set up)
-        const { error: profileErr } = await supabase.rpc('create_sub_profile')
-        if (profileErr) { setError('setup_required'); setLoading(false); return }
-
-        const { data, error: rpcErr } = await supabase.rpc('get_sub_portal_data')
-        if (rpcErr) { setError('rpc_error'); setLoading(false); return }
-
-        const d = data as {
+        type PortalData = {
           error?: string
           contracts: SubContract[]
           timeEntries: SubTimeEntry[]
@@ -168,6 +163,25 @@ export function SubPortalProvider({ children }: { children: ReactNode }) {
           jobs: SubPortalJob[]
           subRates: SubRates
           subName: string
+        }
+        // All three at once (one wait, not three). The schedule and the company calendar are kept apart from the main data, so a problem with either
+        // (or a database update not being run yet) never breaks the rest of the portal.
+        const fetchAll = () => Promise.all([
+          supabase.rpc('get_sub_portal_data'),
+          Promise.resolve(supabase.rpc('get_my_task_schedule')).catch(() => ({ data: null, error: true })),
+          Promise.resolve(supabase.rpc('get_company_calendar_for_sub')).catch(() => ({ data: null, error: true })),
+        ])
+        let [dataRes, schRes, calRes] = await fetchAll()
+        if (dataRes.error) { setError('rpc_error'); setLoading(false); return }
+        let d = dataRes.data as PortalData
+
+        // First time in (no profile yet), or a login that was set up as something else: set the subcontractor profile up, then ask again.
+        if (d?.error === 'no_profile' || d?.error === 'not_subcontractor') {
+          const { error: profileErr } = await supabase.rpc('create_sub_profile')
+          if (profileErr) { setError('setup_required'); setLoading(false); return }
+          ;[dataRes, schRes, calRes] = await fetchAll()
+          if (dataRes.error) { setError('rpc_error'); setLoading(false); return }
+          d = dataRes.data as PortalData
         }
 
         if (d.error) { setError(d.error); setLoading(false); return }
@@ -181,22 +195,16 @@ export function SubPortalProvider({ children }: { children: ReactNode }) {
         setSubName(d.subName ?? '')
         setError(null)
 
-        // Their booked days. Kept apart from the main load so a problem here (or the database update not being run yet) never breaks the rest of the portal.
-        try {
-          const { data: sch } = await supabase.rpc('get_my_task_schedule')
-          const rows = (sch as { rows?: ScheduleRow[] } | null)?.rows
-          setSchedule(Array.isArray(rows) ? rows : [])
-        } catch { setSchedule([]) }
+        // Their booked days
+        const rows = (schRes.data as { rows?: ScheduleRow[] } | null)?.rows
+        setSchedule(Array.isArray(rows) ? rows : [])
 
-        // The company's other jobs (job name, address, phases only). Also kept apart: if it fails, the person still sees their own days.
-        try {
-          const { data: cal, error: calErr } = await supabase.rpc('get_company_calendar_for_sub')
-          const c = cal as { rows?: CompanyCalendarRow[]; error?: string } | null
-          if (calErr || !c) { setCompanyCalendar(null); setCompanyCalendarStatus('problem') }
-          else if (c.error === 'disabled') { setCompanyCalendar(null); setCompanyCalendarStatus('off') }
-          else if (c.error || !Array.isArray(c.rows)) { setCompanyCalendar(null); setCompanyCalendarStatus('problem') }
-          else { setCompanyCalendar(c.rows); setCompanyCalendarStatus('ok') }
-        } catch { setCompanyCalendar(null); setCompanyCalendarStatus('problem') }
+        // The company's other jobs (job name, address, phases only)
+        const c = calRes.data as { rows?: CompanyCalendarRow[]; error?: string } | null
+        if (calRes.error || !c) { setCompanyCalendar(null); setCompanyCalendarStatus('problem') }
+        else if (c.error === 'disabled') { setCompanyCalendar(null); setCompanyCalendarStatus('off') }
+        else if (c.error || !Array.isArray(c.rows)) { setCompanyCalendar(null); setCompanyCalendarStatus('problem') }
+        else { setCompanyCalendar(c.rows); setCompanyCalendarStatus('ok') }
       } catch {
         setError('rpc_error')
       } finally {
