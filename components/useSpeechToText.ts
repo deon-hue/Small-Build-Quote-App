@@ -31,7 +31,7 @@ export function useSpeechToText(onTranscript: (text: string) => void) {
     if (listening) { stopListening(); return }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-    if (!SR) { alert('Voice input is not supported in this browser. Please use Chrome or Edge.'); return }
+    if (!SR) { alert('Voice input is not available in this browser. You can still type, or tap the microphone on your phone keyboard to dictate.'); return }
 
     const start = () => {
       const rec: AnySpeechRecognition = new SR()
