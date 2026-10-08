@@ -12,6 +12,8 @@ import type { Quote } from '@/lib/types'
 import { useDraggableModal } from '@/components/useDraggableModal'
 import ModalResizeHandle from '@/components/ModalResizeHandle'
 import ModalMaximizeButton from '@/components/ModalMaximizeButton'
+import { escapeLike } from '@/lib/email-match'
+import { snippet } from '@/lib/note-attention'
 
 const BLANK_FORM = { name: '', first: '', last: '', email: '', phone: '', address: '', notes: '', paymentTerms: 'Payment on receipt', clientType: 'client' as 'client' | 'supplier' | 'subcontractor' }
 
@@ -100,13 +102,29 @@ function ClientsPageInner() {
   const [subTimeLogs, setSubTimeLogs] = useState<SubTimeLog[]>([])
   const [subContracts, setSubContracts] = useState<SubContract[]>([])
   const [subHistoryLoading, setSubHistoryLoading] = useState(false)
-  const [subHistoryTab, setSubHistoryTab] = useState<'logs' | 'bills' | 'quotes'>('logs')
+  const [subHistoryTab, setSubHistoryTab] = useState<'logs' | 'bills' | 'quotes' | 'notes'>('logs')
+  // a subcontractor's notes sent from their portal, and the timesheets of theirs waiting for review
+  const [subNotes, setSubNotes] = useState<{ id: string; job_id: string; note: string; created_at: string }[]>([])
+  const [subPending, setSubPending] = useState<{ id: string; entry_date: string; units: number; notes: string }[]>([])
+  // a supplier's costs recorded against jobs (matched by name), and which tab is open
+  const [supCosts, setSupCosts] = useState<{ id: string; job_id: string | null; doc_date: string | null; description: string | null; gross_amount: number; payment_status: string | null }[]>([])
+  const [supTab, setSupTab] = useState<'bills' | 'costs'>('bills')
 
   useEffect(() => {
+    if (selected?.clientType === 'supplier') {
+      setSupCosts([]); setSupTab('bills')
+      supabase.from('job_costs').select('id, job_id, doc_date, description, gross_amount, payment_status').ilike('supplier', escapeLike(selected.name))
+        .order('doc_date', { ascending: false }).limit(100)
+        .then(({ data }) => setSupCosts((data ?? []) as typeof supCosts))
+    }
     if (!selected || selected.clientType !== 'subcontractor') {
-      setSubTimeLogs([]); setSubContracts([]); return
+      setSubTimeLogs([]); setSubContracts([]); setSubNotes([]); setSubPending([]); return
     }
     setSubHistoryLoading(true)
+    supabase.from('job_notes').select('id, job_id, note, created_at').eq('author_contact_id', selected.id).order('created_at', { ascending: false }).limit(30)
+      .then(({ data }) => setSubNotes((data ?? []) as typeof subNotes))
+    supabase.from('sub_time_entries').select('id, entry_date, units, notes').eq('contact_id', selected.id).eq('status', 'submitted').order('entry_date', { ascending: true })
+      .then(({ data }) => setSubPending((data ?? []) as typeof subPending))
     Promise.all([
       supabase.from('sub_admin_time_logs')
         .select('id, contact_id, job_id, entry_date, week_start, rate_type, rate_amount, amount, notes, status, entry_type')
@@ -126,6 +144,16 @@ function ClientsPageInner() {
   }, [selected?.id, selected?.clientType])
 
   const subBills = bills.filter(b => b.supplierId === selected?.id)
+  const billAmount = (b: { lineItems: { amount?: number }[]; subtotal?: number }) => b.lineItems.reduce((a, li) => a + (li.amount || 0), 0) || Number(b.subtotal) || 0
+  // a subcontractor: what is owed to them and what has been paid (weekly timesheet days plus fixed-price stages)
+  const subOwed = subTimeLogs.filter(l => l.status !== 'paid').reduce((a, l) => a + Number(l.amount), 0)
+    + subContracts.filter(c => c.status !== 'cancelled').reduce((a, c) => a + c.stages.filter(st => !st.paid_date).reduce((b, st) => b + Number(st.amount), 0), 0)
+  const subPaid = subTimeLogs.filter(l => l.status === 'paid').reduce((a, l) => a + Number(l.amount), 0)
+    + subContracts.reduce((a, c) => a + c.stages.filter(st => st.paid_date).reduce((b, st) => b + Number(st.amount), 0), 0)
+  // a supplier: spend this year, what is still unpaid, how many bills
+  const thisYear = String(new Date().getFullYear())
+  const supSpent = subBills.filter(b => (b.billDate || '').startsWith(thisYear)).reduce((a, b) => a + billAmount(b), 0)
+  const supUnpaid = subBills.filter(b => b.status !== 'paid').reduce((a, b) => a + billAmount(b), 0)
 
   const portalBase = (typeof window !== 'undefined' ? window.location.origin : '') + '/portal/login'
 
@@ -524,6 +552,8 @@ function ClientsPageInner() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flexWrap: 'wrap' }}>
                   <div style={{ fontWeight: 700, fontSize: 18 }}>{selected.name}</div>
                   {selected.clientType === 'subcontractor' && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 99, background: '#ecfccb', color: '#3f6212' }}>Subcontractor</span>}
+                  {selected.clientType === 'supplier' && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 99, background: '#fef3c7', color: '#92400e' }}>Supplier</span>}
+                  {selected.clientType === 'client' && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 99, background: '#e0f2fe', color: '#075985' }}>Client</span>}
                 </div>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
                   <ModalMaximizeButton isMaximized={detailModal.isMaximized} onClick={detailModal.toggleMaximize} />
@@ -538,12 +568,12 @@ function ClientsPageInner() {
                     {subInviteSentId === selected.id ? '✓ Invite Sent' : subInviteSendingId === selected.id ? 'Sending…' : '📧 Invite to Sub Portal'}
                   </button>
                 )}
-                {selected.email && !(selected.clientType === 'subcontractor') && (
+                {selected.email && selected.clientType === 'client' && (
                   <button className="btn-sm btn-primary" onClick={() => { openInvite(selected); setSelected(null) }}>
                     📧 Invite to Portal
                   </button>
                 )}
-                {selected.email && !(selected.clientType === 'subcontractor') && (
+                {selected.email && selected.clientType === 'client' && (
                   <button
                     className={`btn-sm ${appLinkSentId === selected.id ? 'btn-gold' : 'btn-outline'}`}
                     title="Send app install instructions by email"
@@ -553,17 +583,25 @@ function ClientsPageInner() {
                     {appLinkSentId === selected.id ? '✓ App Link Sent' : '📲 App Link'}
                   </button>
                 )}
-                <button className="btn-sm btn-sky" onClick={() => { setSelected(null); router.push(adminPreviewUrl(selected)) }} title={`View everything in ${selected.name}'s portal`}>
-                  👁 View Portal
-                </button>
-                {selected.phone && (
+                {selected.clientType !== 'supplier' && (
+                  <button className="btn-sm btn-sky" onClick={() => { setSelected(null); router.push(adminPreviewUrl(selected)) }} title={`View everything in ${selected.name}'s portal`}>
+                    👁 View Portal
+                  </button>
+                )}
+                {selected.clientType !== 'supplier' && selected.phone && (
                   <a className="btn-sm btn-outline" href={smsHref(selected)} title="Send portal link via SMS">💬 SMS</a>
                 )}
-                {selected.phone && (
+                {selected.clientType !== 'supplier' && selected.phone && (
                   <a className="btn-sm btn-outline" href={waHref(selected)} target="_blank" rel="noreferrer" title="Send portal link via WhatsApp">🟢 WhatsApp</a>
                 )}
+                {selected.clientType === 'supplier' && selected.phone && (
+                  <a className="btn-sm btn-primary" href={'tel:' + selected.phone.replace(/\s+/g, '')} title="Call this supplier">📞 Call</a>
+                )}
+                {selected.clientType === 'supplier' && selected.email && (
+                  <a className="btn-sm btn-outline" href={'mailto:' + selected.email} title="Email this supplier">✉ Email</a>
+                )}
                 <button className="btn-sm btn-outline" onClick={() => openEdit(selected)}>✎ Edit</button>
-                {!(selected.clientType === 'subcontractor') && (
+                {selected.clientType === 'client' && (
                   <button className="btn-sm btn-gold" title="Start a new quote for this contact" onClick={() => {
                     sessionStorage.setItem('sbc_prefill_client', selected.id)
                     setSelected(null)
@@ -573,7 +611,19 @@ function ClientsPageInner() {
               </div>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
-              {/* Portal status */}
+              {/* Subcontractor: timesheets of theirs waiting for the builder's review */}
+              {selected.clientType === 'subcontractor' && subPending.length > 0 && (
+                <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderLeft: '4px solid #d97706', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#92400e' }}>
+                  <strong>{subPending.length} timesheet{subPending.length === 1 ? '' : 's'} waiting for your review</strong>
+                  <div style={{ fontSize: 12, marginTop: 2 }}>
+                    {subPending.slice(0, 4).map(e => fmtDate(e.entry_date) + ' · ' + e.units + 'h' + (e.notes ? ' · ' + e.notes : '')).join('  |  ')}
+                    {subPending.length > 4 ? '  |  and ' + (subPending.length - 4) + ' more' : ''}
+                  </div>
+                  <button className="btn-sm btn-outline" style={{ marginTop: 8 }} onClick={() => { setSelected(null); router.push('/subcontractors') }}>Open Subcontractors to approve →</button>
+                </div>
+              )}
+              {/* Portal status (clients and subcontractors; a supplier has no portal) */}
+              {selected.clientType !== 'supplier' && (<>
               <div className="card" style={{ margin: '0 0 16px', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)', marginBottom: 4 }}>Portal Status</div>
@@ -596,7 +646,9 @@ function ClientsPageInner() {
                 </div>
               </div>
 
-              {/* Contact + Summary */}
+              </>)}
+
+              {/* Contact + Summary (what the second card shows depends on the type) */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
                 <div className="card" style={{ margin: 0 }}>
                   <div className="card-hd" style={{ fontSize: 11 }}>Contact</div>
@@ -604,8 +656,10 @@ function ClientsPageInner() {
                     <div>{selected.email || '—'}</div>
                     <div>{selected.phone || '—'}</div>
                     <div style={{ color: 'var(--muted)', fontSize: 12 }}>{selected.address || '—'}</div>
+                    {selected.clientType === 'supplier' && selected.paymentTerms && <div style={{ color: 'var(--muted)', fontSize: 12 }}>Payment terms: {selected.paymentTerms}</div>}
                   </div>
                 </div>
+                {selected.clientType === 'client' && (
                 <div className="card" style={{ margin: 0 }}>
                   <div className="card-hd" style={{ fontSize: 11 }}>Summary</div>
                   <div style={{ padding: '12px 16px', fontSize: 13, lineHeight: 2 }}>
@@ -614,9 +668,41 @@ function ClientsPageInner() {
                     <div><span style={{ color: 'var(--muted)' }}>Accepted value:</span> <span className="mono">{fmt(acceptedValue)}</span></div>
                   </div>
                 </div>
+                )}
+                {selected.clientType === 'subcontractor' && (
+                <div className="card" style={{ margin: 0 }}>
+                  <div className="card-hd" style={{ fontSize: 11 }}>Rates and pay</div>
+                  <div style={{ padding: '12px 16px', fontSize: 13, lineHeight: 1.9 }}>
+                    <div><span style={{ color: 'var(--muted)' }}>Day rate:</span> <span className="mono">{selected.subDayRate != null ? fmt(selected.subDayRate) : '—'}</span></div>
+                    <div><span style={{ color: 'var(--muted)' }}>Half day:</span> <span className="mono">{selected.subHalfDayRate != null ? fmt(selected.subHalfDayRate) : '—'}</span></div>
+                    <div><span style={{ color: 'var(--muted)' }}>Hourly:</span> <span className="mono">{selected.subHourlyRate != null ? fmt(selected.subHourlyRate) : '—'}</span></div>
+                    <div style={{ color: 'var(--muted)', fontSize: 12 }}>
+                      {selected.isPaye ? 'Direct labour (PAYE)' : 'Subcontractor'}{selected.subPaymentType ? ' · paid ' + selected.subPaymentType : ''}{selected.cisRegistered ? ' · CIS' + (selected.cisPercentage != null ? ' ' + selected.cisPercentage + '%' : '') : ''}
+                    </div>
+                  </div>
+                </div>
+                )}
+                {selected.clientType === 'supplier' && (
+                <div className="card" style={{ margin: 0 }}>
+                  <div className="card-hd" style={{ fontSize: 11 }}>Spend</div>
+                  <div style={{ padding: '12px 16px', fontSize: 13, lineHeight: 2 }}>
+                    <div><span style={{ color: 'var(--muted)' }}>Spent this year:</span> <span className="mono">{fmt(supSpent)}</span></div>
+                    <div><span style={{ color: 'var(--muted)' }}>Unpaid:</span> <span className="mono" style={{ color: supUnpaid > 0 ? '#b45309' : undefined }}>{fmt(supUnpaid)}</span></div>
+                    <div><span style={{ color: 'var(--muted)' }}>Bills on file:</span> {subBills.length}</div>
+                  </div>
+                </div>
+                )}
               </div>
 
-              {/* Quotes */}
+              {selected.clientType === 'subcontractor' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+                  <div className="card" style={{ margin: 0, padding: '12px 16px' }}><div style={{ fontSize: 11, color: 'var(--muted)' }}>Owed to them</div><div className="mono" style={{ fontSize: 20, fontWeight: 700, color: subOwed > 0 ? '#b45309' : undefined }}>{fmt(subOwed)}</div></div>
+                  <div className="card" style={{ margin: 0, padding: '12px 16px' }}><div style={{ fontSize: 11, color: 'var(--muted)' }}>Paid to date</div><div className="mono" style={{ fontSize: 20, fontWeight: 700 }}>{fmt(subPaid)}</div></div>
+                </div>
+              )}
+
+              {/* Quotes and jobs: customers only */}
+              {selected.clientType === 'client' && (<>
               <div style={{ marginBottom: 20 }}>
                 <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 10 }}>Quotes</div>
                 {!selQuotes.length
@@ -675,6 +761,8 @@ function ClientsPageInner() {
                 }
               </div>
 
+              </>)}
+
               {/* ── Subcontractor History ───────────────────────── */}
               {selected.clientType === 'subcontractor' && (
                 <div style={{ marginTop: 20, marginBottom: 20 }}>
@@ -683,9 +771,10 @@ function ClientsPageInner() {
                   {/* Tab bar */}
                   <div style={{ display: 'flex', gap: 0, marginBottom: 12, borderBottom: '2px solid var(--border)' }}>
                     {([
-                      { key: 'logs',   label: `Time Logs (${subTimeLogs.length})` },
+                      { key: 'logs',   label: `Weekly timesheets (${subTimeLogs.length})` },
+                      { key: 'quotes', label: `Fixed-price work (${subContracts.length})` },
+                      { key: 'notes',  label: `Notes sent (${subNotes.length})` },
                       { key: 'bills',  label: `Bills (${subBills.length})` },
-                      { key: 'quotes', label: `Fixed Quotes (${subContracts.length})` },
                     ] as const).map(t => (
                       <button key={t.key} onClick={() => setSubHistoryTab(t.key)} style={{
                         padding: '6px 14px', fontSize: 12, fontWeight: 600, border: 'none', background: 'none', cursor: 'pointer',
@@ -790,6 +879,27 @@ function ClientsPageInner() {
                         </div>
                       </div>
                     )
+                  ) : subHistoryTab === 'notes' ? (
+                    // ── Notes they have sent from their portal ───────
+                    !subNotes.length ? (
+                      <div style={{ fontSize: 12, color: 'var(--muted)', padding: '12px 0' }}>No notes sent from their portal yet.</div>
+                    ) : (
+                      <div>
+                        {subNotes.map(n => {
+                          const j = jobs.find(x => x.id === n.job_id)
+                          return (
+                            <div key={n.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12 }}>
+                                <strong>{j ? jobDisplayTitle(j) + (j.address ? ' — ' + j.address : '') : 'A job'}</strong>
+                                <span style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>{fmtDate(n.created_at)}</span>
+                              </div>
+                              <div style={{ fontSize: 13, marginTop: 2 }}>{snippet(n.note, 140)}</div>
+                            </div>
+                          )
+                        })}
+                        <div style={{ fontSize: 11, color: 'var(--muted)', paddingTop: 8 }}>The full notes and photos are in each job's Activity Log (Jobs → Notes).</div>
+                      </div>
+                    )
                   ) : (
                     // ── Fixed Quotes ────────────────────────────────
                     !subContracts.length ? (
@@ -845,8 +955,69 @@ function ClientsPageInner() {
                 </div>
               )}
 
-              {/* Portal Activity Log */}
-              {selected.email && (
+              {/* ── Supplier history: their bills and the costs recorded against jobs ───────── */}
+              {selected.clientType === 'supplier' && (
+                <div style={{ marginTop: 20, marginBottom: 20 }}>
+                  <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 10 }}>History</div>
+                  <div style={{ display: 'flex', gap: 0, marginBottom: 12, borderBottom: '2px solid var(--border)' }}>
+                    {([{ key: 'bills', label: 'Bills (' + subBills.length + ')' }, { key: 'costs', label: 'Costs by job (' + supCosts.length + ')' }] as const).map(t => (
+                      <button key={t.key} onClick={() => setSupTab(t.key)} style={{
+                        padding: '6px 14px', fontSize: 12, fontWeight: 600, border: 'none', background: 'none', cursor: 'pointer',
+                        color: supTab === t.key ? 'var(--slate)' : 'var(--muted)',
+                        borderBottom: supTab === t.key ? '2px solid var(--slate)' : '2px solid transparent', marginBottom: -2,
+                      }}>{t.label}</button>
+                    ))}
+                  </div>
+                  {supTab === 'bills' ? (
+                    !subBills.length ? <div style={{ fontSize: 12, color: 'var(--muted)', padding: '12px 0' }}>No bills recorded for this supplier yet.</div> : (
+                      <div>
+                        {subBills.map(b => {
+                          const j = jobs.find(x => x.id === b.jobId)
+                          return (
+                            <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 600, fontSize: 13 }}>{b.ref || 'Draft bill'} <span style={{ fontWeight: 400, color: 'var(--muted)' }}>· {fmtDate(b.billDate)}</span></div>
+                                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{j ? jobDisplayTitle(j) + (j.address ? ' — ' + j.address : '') : (b.description || '')}</div>
+                              </div>
+                              <div style={{ textAlign: 'right' }}>
+                                <div className="mono" style={{ fontSize: 15, fontWeight: 700 }}>{fmt(billAmount(b))}</div>
+                                <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 10, fontWeight: 600, background: b.status === 'paid' ? '#dcfce7' : '#fee2e2', color: b.status === 'paid' ? '#166534' : '#991b1b' }}>{b.status === 'paid' ? 'Paid' : 'Unpaid'}</span>
+                              </div>
+                            </div>
+                          )
+                        })}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', fontSize: 13, fontWeight: 700 }}>
+                          <span>Total billed</span><span className="mono">{fmt(subBills.reduce((a, b) => a + billAmount(b), 0))}</span>
+                        </div>
+                      </div>
+                    )
+                  ) : (
+                    !supCosts.length ? <div style={{ fontSize: 12, color: 'var(--muted)', padding: '12px 0' }}>No costs recorded against jobs for this supplier yet.</div> : (
+                      <div>
+                        {supCosts.map(c => {
+                          const j = jobs.find(x => x.id === c.job_id)
+                          return (
+                            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 600, fontSize: 13 }}>{j ? jobDisplayTitle(j) + (j.address ? ' — ' + j.address : '') : 'No job'}</div>
+                                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{c.doc_date ? fmtDate(c.doc_date) + ' · ' : ''}{c.description || ''}</div>
+                              </div>
+                              <div style={{ textAlign: 'right' }}>
+                                <div className="mono" style={{ fontSize: 15, fontWeight: 700 }}>{fmt(Number(c.gross_amount))}</div>
+                                <span style={{ fontSize: 10, color: 'var(--muted)' }}>{c.payment_status === 'paid' ? 'Paid' : 'Unpaid'}</span>
+                              </div>
+                            </div>
+                          )
+                        })}
+                        <div style={{ fontSize: 11, color: 'var(--muted)', paddingTop: 8 }}>Matched by the supplier's name, so a different spelling on a document won't appear here.</div>
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
+
+              {/* Portal Activity Log (clients and subcontractors) */}
+              {selected.email && selected.clientType !== 'supplier' && (
                 <div style={{ marginTop: 20 }}>
                   <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 10 }}>Portal Activity</div>
                   {activityLoading ? (
