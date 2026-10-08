@@ -11,13 +11,14 @@
 import { useRouter } from 'next/navigation'
 import {
   Briefcase, FileText, FilePlus, Camera, StickyNote, Zap, Mail, Receipt, CalendarDays,
-  Contact, Inbox, Wallet, Wrench, Settings, Users, AlertTriangle, Send, PauseCircle, HelpCircle,
+  Contact, Inbox, Wallet, Wrench, Settings, Users, AlertTriangle, Send, PauseCircle, HelpCircle, MessageSquare,
   type LucideIcon,
 } from 'lucide-react'
 import { useApp } from '@/contexts/AppContext'
 import { createClient } from '@/lib/supabase/client'
 import type { UserPermissions } from '@/lib/types'
 import { jobDisplayTitle, quoteDisplayTitle } from '@/lib/utils'
+import { unseenSubNotes } from '@/lib/note-attention'
 import HomeOverview, {
   type HomeLink, type HomeStat, type HomeRecent, type HomeAttention, type HomeQuick, type PillTone,
 } from './HomeOverview'
@@ -73,7 +74,7 @@ function greeting() {
 
 export default function MobileLauncher({ onOpenNotes }: { onOpenNotes: () => void }) {
   const router = useRouter()
-  const { settings, permissions, isOwner, currentMember, jobs, quotes, invoices } = useApp()
+  const { settings, permissions, isOwner, currentMember, jobs, quotes, invoices, jobNotes } = useApp()
   const can = (key: keyof UserPermissions) => isOwner || permissions[key]
 
   async function signOut() {
@@ -126,6 +127,13 @@ export default function MobileLauncher({ onOpenNotes }: { onOpenNotes: () => voi
 
   // Needs attention — only items that actually apply; a couple of steady prompts if nothing does
   const attention: HomeAttention[] = []
+  // new site notes subcontractors have sent from their portal and nobody has opened yet (first, so it is never pushed off the list)
+  const newSubNotes = unseenSubNotes(jobNotes)
+  if (can('jobs') && newSubNotes.length) {
+    const first = newSubNotes[0]
+    const j = jobs.find(x => x.id === first.jobId)
+    attention.push({ id: 'subnotes', title: `${plural(newSubNotes.length, 'new site note')} from subcontractors`, hint: `${first.authorName || 'Subcontractor'}${j ? ' · ' + jobDisplayTitle(j) : ''}`, href: `/jobs?notes=${encodeURIComponent(first.jobId)}`, Icon: MessageSquare })
+  }
   if (can('invoices') && overdue.length) attention.push({ id: 'overdue', title: `${plural(overdue.length, 'overdue invoice')}`, hint: 'Chase payment', href: '/invoices', Icon: AlertTriangle })
   if (can('quotes') && sentQuotes.length) attention.push({ id: 'sent', title: `${plural(sentQuotes.length, 'quote')} awaiting a reply`, hint: 'Follow up with the client', href: '/quotes', Icon: Send })
   if (can('quotes') && draftQuotes.length) attention.push({ id: 'draft', title: `${plural(draftQuotes.length, 'draft quote')} to finish`, hint: 'Pick up where you left off', href: '/quotes', Icon: FileText })

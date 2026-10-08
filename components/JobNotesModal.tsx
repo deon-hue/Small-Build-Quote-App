@@ -13,6 +13,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useApp } from '@/contexts/AppContext'
 import type { Job, JobNote, JobNotePhoto, NoteTag } from '@/lib/types'
 import { jobDisplayTitle } from '@/lib/utils'
+import { unseenSubNotes } from '@/lib/note-attention'
 import { uploadNotePhoto, fetchNotePhotosForJob, deleteNotePhoto, signedNotePhotoUrl } from '@/lib/job-note-photos'
 import { useSpeechToText } from './useSpeechToText'
 import { useDraggableModal } from './useDraggableModal'
@@ -37,7 +38,9 @@ const newActionItemId = () => `ai-${Date.now().toString(36)}-${++_actionItemSeq}
 
 export default function JobNotesModal({ job, onClose }: Props) {
   const sb = createClient()
-  const { jobNotes, addJobNote, updateJobNote, deleteJobNote, refreshJobNotes } = useApp()
+  const { jobNotes, addJobNote, updateJobNote, deleteJobNote, refreshJobNotes, markJobNotesSeen } = useApp()
+  // the subcontractor notes that were new when this window opened: they keep their NEW tag while it is open, and are marked as seen straight away
+  const newOnOpen = useRef<Set<string> | null>(null)
   const notesModal = useDraggableModal()
 
   const [newNote, setNewNote] = useState('')
@@ -67,7 +70,23 @@ export default function JobNotesModal({ job, onClose }: Props) {
 
   useEffect(() => { loadPhotos() }, [loadPhotos])
   // a subcontractor may have added a note from their portal since the app was loaded
-  useEffect(() => { void refreshJobNotes(); void loadPhotos() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    void (async () => {
+      await refreshJobNotes()
+      await loadPhotos()
+    })()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (newOnOpen.current === null) {
+      const unseen = unseenSubNotes(jobNotes.filter(n => n.jobId === job.id))
+      newOnOpen.current = new Set(unseen.map(n => n.id))
+      if (unseen.length > 0) void markJobNotesSeen(job.id)
+    } else {
+      // a note that arrives while the window is open (the notes refresh when it opens) also counts as seen, with its NEW tag
+      const late = unseenSubNotes(jobNotes.filter(n => n.jobId === job.id))
+      if (late.length > 0) { late.forEach(n => newOnOpen.current!.add(n.id)); void markJobNotesSeen(job.id) }
+    }
+  }, [jobNotes]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handlePhotoPick(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? [])
@@ -210,6 +229,11 @@ export default function JobNotesModal({ job, onClose }: Props) {
                         {n.source === 'subcontractor' && (
                           <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#ecfccb', color: '#3f6212', marginBottom: 5, marginRight: 6, display: 'inline-block' }}>
                             👷 {n.authorName || 'Subcontractor'} · Subcontractor
+                          </span>
+                        )}
+                        {n.source === 'subcontractor' && newOnOpen.current?.has(n.id) && (
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#c0392b', color: '#fff', marginBottom: 5, marginRight: 6, display: 'inline-block' }}>
+                            NEW
                           </span>
                         )}
                         {n.tag && (

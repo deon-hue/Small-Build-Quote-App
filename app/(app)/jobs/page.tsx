@@ -6,6 +6,7 @@ import { useApp } from '@/contexts/AppContext'
 import { fmt, resolveJobColor, JOB_COLORS, jobDisplayTitle, findLinkedQuote, jobNumber, STAGE_BADGE, STAGE_LABEL, JOB_TYPES, jobProgress } from '@/lib/utils'
 import type { Job, Quote } from '@/lib/types'
 import { quoteBudget } from '@/lib/job-costs'
+import { unseenByJob } from '@/lib/note-attention'
 import GanttModal from '@/components/GanttModal'
 import { ContactPicker } from '@/components/ContactPicker'
 import VariationModal from '@/components/VariationModal'
@@ -53,6 +54,16 @@ function JobsPageInner() {
   // than just somewhere on the unfiltered list.
   const [highlightId, setHighlightId] = useState<string | null>(null)
   const jobFormModal = useDraggableModal()
+  // subcontractor notes not yet opened, per job (shown as a red "new" badge on the Notes button)
+  const newNotes = unseenByJob(jobNotes)
+  // "?notes=<jobId>" (from the dashboard's Needs your attention card) opens that job's notes straight away
+  useEffect(() => {
+    const nid = searchParams.get('notes')
+    if (!nid || loading) return
+    const nj = jobs.find(j => j.id === nid)
+    if (nj) { setNotesJob(nj); router.replace('/jobs') }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, searchParams])
 
   // Archived jobs are hidden from the main list and every filter, but nothing about them
   // is deleted — see handleArchive. They only ever reach here with stage 'complete'.
@@ -228,6 +239,7 @@ function JobsPageInner() {
             <button className="btn-sm btn-gold jb-gantt" onClick={() => setGanttJob(j)}>📋 Gantt</button>
             <button className="btn-sm btn-sky jb-notes" onClick={() => setNotesJob(j)}>
               📝 Notes {jobNotes.filter(n => n.jobId === j.id).length > 0 ? `(${jobNotes.filter(n => n.jobId === j.id).length})` : ''}
+              {newNotes[j.id] > 0 && <span style={{ marginLeft: 6, background: '#c0392b', color: '#fff', borderRadius: 99, padding: '1px 8px', fontSize: 11, fontWeight: 700 }}>{newNotes[j.id]} new</span>}
             </button>
             <button
               className={`${sentVarCount > 0 ? 'btn-sm btn-primary' : 'btn-sm btn-outline'} jb-var`}

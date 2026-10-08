@@ -655,6 +655,8 @@ export interface JobNote {
   source?: 'typed' | 'voice' | 'subcontractor'
   /** Set when a subcontractor wrote the note from their portal: who */
   authorName?: string
+  /** When the builder opened a subcontractor's note (null = not yet: it shows as NEW) */
+  seenAt?: string | null
   createdAt: string
 }
 

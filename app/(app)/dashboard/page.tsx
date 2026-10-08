@@ -5,6 +5,7 @@ import { useApp } from '@/contexts/AppContext'
 import { fmt, fmtK, quoteTotal, STAGE_COLOR, Q_BADGE, Q_LABEL, jobDisplayTitle, quoteDisplayTitle, jobProgress } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { quoteBudget } from '@/lib/job-costs'
+import NeedsAttentionCard from '@/components/NeedsAttentionCard'
 
 function marginColor(pct: number): string {
   if (pct >= 20) return '#7ab533'
@@ -132,6 +133,9 @@ export default function DashboardPage() {
 
   return (
     <>
+      {/* New subcontractor notes and timesheets waiting for review (nothing is shown when there is nothing to do) */}
+      <NeedsAttentionCard />
+
       {/* Stats */}
       <div className="stats-grid">
         <div className="stat green">

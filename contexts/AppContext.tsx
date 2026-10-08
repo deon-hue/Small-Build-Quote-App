@@ -81,6 +81,8 @@ interface AppContextType {
   refreshContracts: () => Promise<void>
   /** Re-read the job notes: a subcontractor can add one from their portal while the builder's app is open. */
   refreshJobNotes: () => Promise<void>
+  /** Mark a job's subcontractor notes as looked at (they stop showing as NEW). */
+  markJobNotesSeen: (jobId: string) => Promise<void>
   addContract: (jobId: string, quoteId: string | null) => Promise<Contract>
   updateContract: (c: Contract) => Promise<void>
   deleteContract: (id: string) => Promise<void>
@@ -369,6 +371,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           id: r.id, jobId: r.job_id, note: r.note, rawNote: r.raw_note ?? undefined,
           tag: r.tag ?? undefined, actionItems: r.action_items ?? [], source: r.source ?? 'typed',
           authorName: r.author_name ?? undefined,
+          seenAt: 'seen_at' in r ? (r.seen_at ?? null) : r.created_at,
           createdAt: r.created_at,
         })))
       }
@@ -902,8 +905,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       id: r.id, jobId: r.job_id, note: r.note, rawNote: r.raw_note ?? undefined,
       tag: r.tag ?? undefined, actionItems: r.action_items ?? [], source: r.source ?? 'typed',
       authorName: r.author_name ?? undefined,
+          seenAt: 'seen_at' in r ? (r.seen_at ?? null) : r.created_at,
       createdAt: r.created_at,
     })))
+  }, [supabase])
+
+  const markJobNotesSeen = useCallback(async (jobId: string) => {
+    const stamp = new Date().toISOString()
+    setJobNotes(prev => prev.map(n => n.jobId === jobId && n.source === 'subcontractor' && !n.seenAt ? { ...n, seenAt: stamp } : n))
+    await supabase.from('job_notes').update({ seen_at: stamp }).eq('job_id', jobId).eq('source', 'subcontractor').is('seen_at', null)
   }, [supabase])
 
   const refreshContracts = useCallback(async () => {
@@ -925,11 +935,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (loading) return
-    const onVisible = () => { if (document.visibilityState === 'visible') void refreshContracts() }
+    const refreshAll = () => { void refreshContracts(); void refreshJobNotes() }
+    const onVisible = () => { if (document.visibilityState === 'visible') refreshAll() }
     document.addEventListener('visibilitychange', onVisible)
-    const timer = setInterval(() => { if (document.visibilityState === 'visible') void refreshContracts() }, 60_000)
+    const timer = setInterval(() => { if (document.visibilityState === 'visible') refreshAll() }, 60_000)
     return () => { document.removeEventListener('visibilitychange', onVisible); clearInterval(timer) }
-  }, [loading, refreshContracts])
+  }, [loading, refreshContracts, refreshJobNotes])
   const addContract = useCallback(async (jobId: string, quoteId: string | null): Promise<Contract> => {
     const { data: { user } } = await supabase.auth.getUser()
     const ownerId = dataOwnerIdRef.current || user!.id
@@ -1241,7 +1252,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addJobNote, updateJobNote, deleteJobNote,
       addJobPayment, deleteJobPayment,
       addVariation, updateVariation, deleteVariation,
-      addContract, updateContract, deleteContract, refreshContracts, refreshJobNotes,
+      addContract, updateContract, deleteContract, refreshContracts, refreshJobNotes, markJobNotesSeen,
       taskAssignments, taskAssignmentsReady, setTaskAssignees,
       bills, addBill, updateBill, deleteBill,
       saveJobTypeTemplate, resetJobTypeTemplate, getTemplate,
