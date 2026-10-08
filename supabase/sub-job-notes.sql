@@ -41,8 +41,8 @@ BEGIN
   IF v_ctx.admin_id IS NULL THEN RAISE EXCEPTION 'Not a subcontractor account'; END IF;
   IF v_text = '' THEN RAISE EXCEPTION 'Please write a note'; END IF;
   IF length(v_text) > 4000 THEN RAISE EXCEPTION 'That note is too long'; END IF;
-  -- the job must be one of their builder's current jobs
-  IF NOT EXISTS (SELECT 1 FROM jobs j WHERE j.id::text = p_job_id AND j.user_id = v_ctx.admin_id AND j.stage <> 'complete' AND NOT COALESCE(j.archived, false)) THEN
+  -- the job must be one of their builder's jobs that the portal offers them: exactly the list get_sub_portal_data gives (jobs not marked done)
+  IF NOT EXISTS (SELECT 1 FROM jobs j WHERE j.id::text = p_job_id AND j.user_id = v_ctx.admin_id AND (j.done = 0 OR j.done IS NULL)) THEN
     RAISE EXCEPTION 'That job is not available';
   END IF;
   -- a sensible daily limit

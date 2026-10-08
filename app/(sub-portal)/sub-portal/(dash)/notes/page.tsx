@@ -10,6 +10,17 @@ import { useSubPortal } from '@/contexts/SubPortalContext'
 import SubNotesView, { type SubNote } from '@/components/SubNotesView'
 import { shrinkImage } from '@/lib/image-resize'
 
+/** Turns a technical error into something a subcontractor can act on (and tell the office), keeping the original wording at the end so it can be diagnosed. */
+function friendlyError(raw: string): string {
+  const m = (raw || '').trim()
+  if (/failed to fetch|networkerror|load failed|network request failed/i.test(m)) return 'No signal just now, so your note was not sent. Check your connection and try again.'
+  if (/jwt|not authenticated|invalid token|expired/i.test(m)) return 'You have been signed out. Please sign in again, then send your note.'
+  if (/not a subcontractor/i.test(m)) return 'This sign-in is not linked to a subcontractor record. Please tell the office.'
+  if (/not available/i.test(m)) return 'That job is no longer available. Choose another job, or tell the office. (' + m + ')'
+  if (/does not exist|schema cache|could not find the function/i.test(m)) return 'Notes are not switched on yet. Please tell the office. (' + m + ')'
+  return (m ? m + ' — ' : '') + 'Your note was not sent. Please try again, and tell the office if it keeps happening.'
+}
+
 export default function SubNotesPage() {
   const { jobs, loading, error } = useSubPortal()
   const [notes, setNotes] = useState<SubNote[]>([])
@@ -34,21 +45,21 @@ export default function SubNotesPage() {
     const sb = createClient()
     const { data: noteId, error: err } = await sb.rpc('add_sub_job_note', { p_job_id: jobId, p_note: text })
     if (err || !noteId) {
-      const m = err?.message || ''
-      return { saved: false, message: /does not exist|schema cache/i.test(m) ? 'Notes are not switched on yet — please tell the office.' : (m || 'Could not send the note — please try again.') }
+      return { saved: false, message: friendlyError(err?.message || '') }
     }
     let failed = 0
+    let why = ''
     for (const f of files) {
       try {
         const small = await shrinkImage(f)
         const body = new FormData()
         body.append('noteId', String(noteId)); body.append('file', small)
         const res = await fetch('/api/sub-portal/note-photo', { method: 'POST', body })
-        if (!res.ok) failed++
-      } catch { failed++ }
+        if (!res.ok) { failed++; if (!why) { const j = await res.json().catch(() => null) as { error?: string } | null; why = j?.error || ('error ' + res.status) } }
+      } catch { failed++; if (!why) why = 'no signal' }
     }
     await loadNotes()
-    return failed ? { saved: true, message: `Your note was sent, but ${failed} photo${failed === 1 ? '' : 's'} could not be added. Try adding ${failed === 1 ? 'it' : 'them'} again in a new note.` } : { saved: true }
+    return failed ? { saved: true, message: `Your note was sent, but ${failed} photo${failed === 1 ? '' : 's'} could not be added. Try adding ${failed === 1 ? 'it' : 'them'} again in a new note. (${why})` } : { saved: true }
   }
 
   if (loading) return <div className="portal-loading"><div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div>Loading…</div>
