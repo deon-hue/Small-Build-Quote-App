@@ -22,7 +22,7 @@ function ago(iso: string): string {
 }
 
 export default function NeedsAttentionCard() {
-  const { jobNotes, jobs, clients } = useApp()
+  const { jobNotes, jobs, clients, invoices } = useApp()
   const [pending, setPending] = useState<PendingRow[]>([])
 
   useEffect(() => {
@@ -54,15 +54,25 @@ export default function NeedsAttentionCard() {
 
   const newNotes = unseenSubNotes(jobNotes)
   const pendingTotal = pending.reduce((s, p) => s + p.count, 0)
-  if (newNotes.length === 0 && pendingTotal === 0) return null
+  const overdueInv = invoices.filter(i => i.status === 'overdue')
+  const overdueTotal = overdueInv.reduce((a, i) => a + (Number(i.total) || 0), 0)
+  // nothing to do: a calm card rather than no card, so it keeps its place on the dashboard
+  if (newNotes.length === 0 && pendingTotal === 0 && overdueInv.length === 0) {
+    return (
+      <div className="card" style={{ borderLeft: '4px solid #7ab533' }}>
+        <div className="card-hd">Needs your attention</div>
+        <div style={{ padding: '10px 16px 14px', fontSize: 13, color: 'var(--muted)' }}>✓ Nothing needs your attention right now.</div>
+      </div>
+    )
+  }
 
   const jobLabel = (id: string) => { const j = jobs.find(x => x.id === id); return j ? jobDisplayTitle(j) : 'A job' }
 
   return (
-    <div className="card" style={{ marginBottom: 18, borderLeft: '4px solid #c0392b' }}>
+    <div className="card" style={{ borderLeft: '4px solid #c0392b' }}>
       <div className="card-hd" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         Needs your attention
-        <span style={{ background: '#c0392b', color: '#fff', borderRadius: 99, padding: '1px 9px', fontSize: 12, fontWeight: 700 }}>{newNotes.length + (pendingTotal > 0 ? 1 : 0)}</span>
+        <span style={{ background: '#c0392b', color: '#fff', borderRadius: 99, padding: '1px 9px', fontSize: 12, fontWeight: 700 }}>{newNotes.length + (pendingTotal > 0 ? 1 : 0) + (overdueInv.length > 0 ? 1 : 0)}</span>
       </div>
       <div style={{ padding: '4px 16px 12px' }}>
         {newNotes.length > 0 && (
@@ -90,6 +100,18 @@ export default function NeedsAttentionCard() {
                 <span style={{ color: 'var(--muted)' }}> from {pending.map(p => `${p.name} (${p.count})`).join(', ')}</span>
               </div>
               <div style={{ fontSize: 12, color: 'var(--sky, #2a7ab0)', marginTop: 2 }}>Open Subcontractors to approve →</div>
+            </Link>
+          </>
+        )}
+        {overdueInv.length > 0 && (
+          <>
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--muted)', margin: '10px 0 4px' }}>Overdue invoices</div>
+            <Link href="/invoices" style={{ display: 'block', padding: '8px 0', textDecoration: 'none', color: 'inherit' }}>
+              <div style={{ fontSize: 13 }}>
+                <strong>{overdueInv.length} overdue invoice{overdueInv.length === 1 ? '' : 's'}</strong>
+                <span style={{ color: 'var(--muted)' }}> · £{overdueTotal.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--sky, #2a7ab0)', marginTop: 2 }}>Open Invoices to chase →</div>
             </Link>
           </>
         )}

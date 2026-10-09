@@ -6,6 +6,9 @@ import { fmt, fmtK, quoteTotal, STAGE_COLOR, Q_BADGE, Q_LABEL, jobDisplayTitle, 
 import { createClient } from '@/lib/supabase/client'
 import { quoteBudget } from '@/lib/job-costs'
 import NeedsAttentionCard from '@/components/NeedsAttentionCard'
+import DashboardCards, { type DashCard } from '@/components/DashboardCards'
+import { weekOnSite, mondayOf } from '@/lib/week-on-site'
+import Link from 'next/link'
 
 function marginColor(pct: number): string {
   if (pct >= 20) return '#7ab533'
@@ -13,8 +16,25 @@ function marginColor(pct: number): string {
   return '#c0392b'
 }
 
+// New enquiries from the website quote form that nobody has looked at yet
+function EnquiriesStat() {
+  const [n, setN] = useState<number | null>(null)
+  useEffect(() => {
+    createClient().from('quote_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending')
+      .then(({ count, error }) => setN(error ? null : (count ?? 0)))
+  }, [])
+  return (
+    <Link href="/quote-requests" className="stat sky" style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}>
+      <div className="stat-label">New enquiries</div>
+      <div className="stat-val">{n ?? '–'}</div>
+      <div className="stat-sub">{n === null ? 'Checking…' : n > 0 ? 'waiting on a reply' : 'nothing new'}</div>
+    </Link>
+  )
+}
+
+
 export default function DashboardPage() {
-  const { jobs, quotes, invoices, variations, loading } = useApp()
+  const { jobs, quotes, invoices, variations, settings, ganttStates, taskAssignments, loading } = useApp()
 
   // ── Job costing: fetch all costs in one query ─────────────────────────────
   const [allJobCosts, setAllJobCosts] = useState<{ job_id: string; net_amount: number }[]>([])
@@ -131,356 +151,431 @@ export default function DashboardPage() {
     ? Math.round(rowsWithMargin.reduce((s, r) => s + (r.marginPct ?? 0), 0) / rowsWithMargin.length)
     : null
 
-  return (
-    <>
-      {/* New subcontractor notes and timesheets waiting for review (nothing is shown when there is nothing to do) */}
-      <NeedsAttentionCard />
 
-      {/* Stats */}
-      <div className="stats-grid">
-        <div className="stat green">
-          <div className="stat-label">Active Jobs</div>
-          <div className="stat-val">{active.length}</div>
-          <div className="stat-sub">{active.length ? active.length + ' job' + (active.length !== 1 ? 's' : '') + ' on site' : 'No active jobs'}</div>
-        </div>
-        <div className="stat gold">
-          <div className="stat-label">Open Quotes</div>
-          <div className="stat-val">{open.length}</div>
-          <div className="stat-sub">{open.length ? fmtK(pipeline) + ' pipeline' : 'No open quotes'}</div>
-        </div>
-        <div className="stat terra">
-          <div className="stat-label">Contract Value</div>
-          <div className="stat-val">{fmtK(totalVal)}</div>
-          <div className="stat-sub">Active jobs total</div>
-        </div>
-        <div className="stat sky">
-          <div className="stat-label">Jobs Complete</div>
-          <div className="stat-val">{complete.length}</div>
-          <div className="stat-sub">{complete.length ? complete.length + ' job' + (complete.length !== 1 ? 's' : '') + ' done' : 'None yet'}</div>
+  // ── Figures for the new headline cards ────────────────────────────────────
+  const unpaid        = invoices.filter(i => i.status === 'sent' || i.status === 'overdue')
+  const unpaidTotal   = unpaid.reduce((a, i) => a + (Number(i.total) || 0), 0)
+  const overdueInv    = invoices.filter(i => i.status === 'overdue')
+  const overdueInvTot = overdueInv.reduce((a, i) => a + (Number(i.total) || 0), 0)
+  const hr            = new Date().getHours()
+  const greeting      = hr < 12 ? 'Good morning' : hr < 18 ? 'Good afternoon' : 'Good evening'
+  const firstName     = (settings?.contact || '').trim().split(/\s+/)[0] || ''
+
+  // who is on site this week (from the jobs' schedules and the people booked on their tasks)
+  const weekLines = weekOnSite(
+    jobs.filter(j => !j.archived && j.stage !== 'complete').map(j => ({ id: j.id, start: j.start || '', label: jobDisplayTitle(j) + (j.address ? ' — ' + j.address.split('\n')[0] : '') })),
+    Object.fromEntries(Object.entries(ganttStates ?? {}).map(([id, g]) => [id, g.phases])),
+    (taskAssignments ?? []).map(a => ({ jobId: a.jobId, phaseId: a.phaseId, assigneeName: a.assigneeName, dayOffsets: a.dayOffsets })),
+    mondayOf(new Date()),
+  )
+
+  // ── The cards. The first six are the ones most builders want; the rest start hidden and come back from "Customise". ──
+  const cards: DashCard[] = [
+    { id: 'greet', title: 'Welcome', size: 'large', on: true, node: (
+      <div className="card" style={{ padding: '16px 20px' }}>
+        <div style={{ fontSize: 20, fontWeight: 600 }}>{greeting}{firstName ? ', ' + firstName : ''}</div>
+        <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 3 }}>
+          {active.length} job{active.length === 1 ? '' : 's'} on site · {open.length} quote{open.length === 1 ? '' : 's'} waiting{overdueInv.length ? ' · ' + overdueInv.length + ' overdue invoice' + (overdueInv.length === 1 ? '' : 's') : ''}
         </div>
       </div>
-
-      {/* Chart + Overdue quotes */}
-      <div className="dash-2col" style={{ marginBottom: 18 }}>
-        {/* Revenue chart */}
-        <div className="card">
-          <div className="card-hd">Contract Value by Month</div>
-          <div style={{ padding: '20px 24px' }}>
-            {!hasChartData
-              ? <div style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 13, padding: '20px 0' }}>
-                  Add jobs with start dates to see monthly revenue
+    ) },
+    { id: 'attention', title: 'Needs your attention', size: 'large', on: true, node: <NeedsAttentionCard /> },
+    { id: 'jobsOnSite', title: 'Jobs on site', size: 'small', on: true, node: (
+      <Link href="/jobs" className="stat green" style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}>
+        <div className="stat-label">Jobs on site</div>
+        <div className="stat-val">{active.length}</div>
+        <div className="stat-sub">{upcomingJobs.length ? upcomingJobs.length + ' starting within 7 days' : active.length ? 'on site now' : 'No active jobs'}</div>
+      </Link>
+    ) },
+    { id: 'owed', title: 'Owed to you', size: 'small', on: true, node: (
+      <Link href="/invoices" className="stat terra" style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}>
+        <div className="stat-label">Owed to you</div>
+        <div className="stat-val">{fmtK(unpaidTotal)}</div>
+        <div className="stat-sub">{overdueInv.length ? fmtK(overdueInvTot) + ' overdue' : unpaid.length ? 'none overdue' : 'No unpaid invoices'}</div>
+      </Link>
+    ) },
+    { id: 'quotesWaiting', title: 'Quotes waiting', size: 'small', on: true, node: (
+      <Link href="/quotes" className="stat gold" style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}>
+        <div className="stat-label">Quotes waiting</div>
+        <div className="stat-val">{open.length}</div>
+        <div className="stat-sub">{overdueQuotes.length ? overdueQuotes.length + ' over 30 days old' : open.length ? fmtK(pipeline) + ' pipeline' : 'No open quotes'}</div>
+      </Link>
+    ) },
+    { id: 'enquiries', title: 'New enquiries', size: 'small', on: true, node: <EnquiriesStat /> },
+    { id: 'week', title: 'This week on site', size: 'medium', on: true, node: (
+      <div className="card">
+        <div className="card-hd"><span>This week on site</span><Link href="/calendar" style={{ fontSize: 12, color: 'var(--muted)', textDecoration: 'none' }}>Calendar →</Link></div>
+        <div style={{ padding: '4px 16px 12px' }}>
+          {weekLines.length === 0
+            ? <div style={{ fontSize: 13, color: 'var(--muted)', padding: '12px 0' }}>Nobody is booked on site this week. Book people on tasks in a job's schedule and they will show here.</div>
+            : weekLines.map(w => (
+                <div key={w.jobId} style={{ padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{w.label}</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{w.people.map(pp => pp.name + ' (' + pp.days + ')').join(' · ')}</div>
                 </div>
-              : <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, height: 130 }}>
-                  {months.map((m, i) => (
-                    <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                      <div style={{ fontSize: 10, color: 'var(--muted)', fontFamily: 'DM Mono, monospace', textAlign: 'center', minHeight: 14 }}>
-                        {m.value > 0 ? fmtK(m.value) : ''}
+              ))}
+        </div>
+      </div>
+    ) },
+    { id: 'activeJobs', title: 'Active jobs', size: 'medium', on: true, node: (
+          <div className="card">
+            <div className="card-hd">
+              <span>Active Jobs</span>
+              <a href="/jobs" style={{ fontSize: 12, color: 'var(--muted)', textDecoration: 'none' }}>View all →</a>
+            </div>
+            <div>
+              {!active.length
+                ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No active jobs — add one in Jobs</div>
+                : active.slice(0, 4).map(j => {
+                    const pct = jobProgress(j).pct
+                    const col = STAGE_COLOR[j.stage] || 'var(--muted)'
+                    return (
+                      <div key={j.id} className="job-row">
+                        <div className="job-dot" style={{ background: col }} />
+                        <div className="job-info">
+                          <div className="job-name">{jobDisplayTitle(j)} — {j.client}</div>
+                          <div className="job-meta">{j.address}</div>
+                          <div className="progress">
+                            <div className="progress-bar" style={{ width: pct + '%', background: col }} />
+                          </div>
+                        </div>
+                        <div className="job-right">
+                          <div className="mono" style={{ fontSize: 14, fontWeight: 600 }}>{fmt(j.value)}</div>
+                          <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{pct}% done</div>
+                        </div>
                       </div>
-                      <div style={{
-                        width: '100%',
-                        background: m.value > 0 ? '#7ab533' : 'var(--border)',
-                        borderRadius: '4px 4px 0 0',
-                        height: m.value > 0 ? Math.max(6, Math.round((m.value / maxVal) * 90)) + 'px' : '4px',
-                        transition: 'height 0.3s',
-                      }} />
-                      <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>{m.label}</div>
+                    )
+                  })
+              }
+              {upcomingJobs.length > 0 && (
+                <div style={{ padding: '10px 20px', background: 'rgba(74,144,164,0.05)', borderTop: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--sky)', letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: 8 }}>
+                    Starting This Week
+                  </div>
+                  {upcomingJobs.map(j => (
+                    <div key={j.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
+                      <span>{jobDisplayTitle(j)} — {j.client}</span>
+                      <span style={{ color: 'var(--sky)', fontWeight: 600 }}>
+                        {new Date(j.start).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                      </span>
                     </div>
                   ))}
                 </div>
-            }
+              )}
+            </div>
           </div>
-        </div>
-
-        {/* Overdue quotes */}
-        <div className="card">
-          <div className="card-hd">
-            <span>Overdue Quotes</span>
-            {overdueQuotes.length > 0 && <span className="badge b-onhold">{overdueQuotes.length} overdue</span>}
-          </div>
-          <div>
-            {!overdueQuotes.length
-              ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No overdue quotes — great!</div>
-              : overdueQuotes.slice(0, 5).map(q => (
-                  <div key={q.id} style={{ padding: '12px 18px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600 }}>{q.customer.name || '—'}</div>
-                      <div style={{ fontSize: 11, color: 'var(--terra)' }}>Sent {q.savedDate}</div>
-                    </div>
-                    <div className="mono" style={{ fontSize: 13 }}>{fmt(quoteTotal(q))}</div>
-                  </div>
-                ))
-            }
-            {overdueQuotes.length > 0 && (
-              <div style={{ padding: '10px 18px' }}>
-                <a href="/quotes" style={{ fontSize: 12, color: 'var(--muted)', textDecoration: 'none' }}>View all quotes →</a>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Active jobs + recent quotes */}
-      <div className="dash-2col">
-        {/* Active jobs */}
-        <div className="card">
-          <div className="card-hd">
-            <span>Active Jobs</span>
-            <a href="/jobs" style={{ fontSize: 12, color: 'var(--muted)', textDecoration: 'none' }}>View all →</a>
-          </div>
-          <div>
-            {!active.length
-              ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No active jobs — add one in Jobs</div>
-              : active.slice(0, 4).map(j => {
-                  const pct = jobProgress(j).pct
-                  const col = STAGE_COLOR[j.stage] || 'var(--muted)'
-                  return (
-                    <div key={j.id} className="job-row">
-                      <div className="job-dot" style={{ background: col }} />
-                      <div className="job-info">
-                        <div className="job-name">{jobDisplayTitle(j)} — {j.client}</div>
-                        <div className="job-meta">{j.address}</div>
-                        <div className="progress">
-                          <div className="progress-bar" style={{ width: pct + '%', background: col }} />
-                        </div>
-                      </div>
-                      <div className="job-right">
-                        <div className="mono" style={{ fontSize: 14, fontWeight: 600 }}>{fmt(j.value)}</div>
-                        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{pct}% done</div>
-                      </div>
-                    </div>
-                  )
-                })
-            }
-            {upcomingJobs.length > 0 && (
-              <div style={{ padding: '10px 20px', background: 'rgba(74,144,164,0.05)', borderTop: '1px solid var(--border)' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--sky)', letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: 8 }}>
-                  Starting This Week
+  
+  
+    ) },
+    { id: 'margins', title: 'Job margins', size: 'medium', on: true, node: (
+      <div className="card">
+        <div className="card-hd"><span>Job margins</span><Link href="/jobs" style={{ fontSize: 12, color: 'var(--muted)', textDecoration: 'none' }}>Jobs →</Link></div>
+        <div style={{ padding: '4px 16px 12px' }}>
+          {activeRows.length === 0
+            ? <div style={{ fontSize: 13, color: 'var(--muted)', padding: '12px 0' }}>No jobs on site yet.</div>
+            : activeRows.slice(0, 6).map(r => (
+                <div key={r.job.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
+                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{jobDisplayTitle(r.job)}</span>
+                  <span style={{ whiteSpace: 'nowrap' }}>
+                    {r.marginPct === null
+                      ? <span style={{ color: 'var(--muted)' }}>no costs yet</span>
+                      : <><strong style={{ color: marginColor(r.marginPct) }}>{r.marginPct}%</strong>{r.marginEstimated ? <span style={{ color: 'var(--muted)' }}> est.</span> : null}</>}
+                  </span>
                 </div>
-                {upcomingJobs.map(j => (
-                  <div key={j.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
-                    <span>{jobDisplayTitle(j)} — {j.client}</span>
-                    <span style={{ color: 'var(--sky)', fontWeight: 600 }}>
-                      {new Date(j.start).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Recent quotes */}
-        <div className="card">
-          <div className="card-hd">
-            <span>Recent Quotes</span>
-            <a href="/quotes" style={{ fontSize: 12, color: 'var(--muted)', textDecoration: 'none' }}>View all →</a>
-          </div>
-          <div>
-            {!quotes.length
-              ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No quotes yet</div>
-              : [...quotes].reverse().slice(0, 5).map(q => (
-                  <div key={q.id} style={{ padding: '12px 18px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600 }}>{q.customer.name || '—'}</div>
-                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>{quoteDisplayTitle(q)}</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div className="mono" style={{ fontSize: 13 }}>{fmt(quoteTotal(q))}</div>
-                      <span className={`badge ${Q_BADGE[q.status] || 'b-pending'}`}>{Q_LABEL[q.status] || q.status}</span>
-                    </div>
-                  </div>
-                ))
-            }
-          </div>
+              ))}
         </div>
       </div>
-
-      {/* Pipeline board */}
-      <div className="card" style={{ marginTop: 18 }}>
-        <div className="card-hd">Job Pipeline</div>
-        <div className="pipeline">
-          {Object.entries(stageGroups).map(([label, stageJobs]) => (
-            <div key={label} className="pip-col">
-              <div className="pip-label">{label} ({stageJobs.length})</div>
-              {stageJobs.length === 0
-                ? <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>—</div>
-                : stageJobs.map(j => (
-                    <div key={j.id} className="pip-card">
-                      <div className="pip-card-name">{j.client}</div>
-                      <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 3 }}>{jobDisplayTitle(j)}</div>
-                      <div className="pip-card-val">{fmt(j.value)}</div>
+    ) },
+    { id: 'overdue', title: 'Overdue quotes', size: 'medium', on: false, node: (
+          <div className="card">
+            <div className="card-hd">
+              <span>Overdue Quotes</span>
+              {overdueQuotes.length > 0 && <span className="badge b-onhold">{overdueQuotes.length} overdue</span>}
+            </div>
+            <div>
+              {!overdueQuotes.length
+                ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No overdue quotes — great!</div>
+                : overdueQuotes.slice(0, 5).map(q => (
+                    <div key={q.id} style={{ padding: '12px 18px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>{q.customer.name || '—'}</div>
+                        <div style={{ fontSize: 11, color: 'var(--terra)' }}>Sent {q.savedDate}</div>
+                      </div>
+                      <div className="mono" style={{ fontSize: 13 }}>{fmt(quoteTotal(q))}</div>
+                    </div>
+                  ))
+              }
+              {overdueQuotes.length > 0 && (
+                <div style={{ padding: '10px 18px' }}>
+                  <a href="/quotes" style={{ fontSize: 12, color: 'var(--muted)', textDecoration: 'none' }}>View all quotes →</a>
+                </div>
+              )}
+            </div>
+          </div>
+  
+    ) },
+    { id: 'recent', title: 'Recent quotes', size: 'medium', on: false, node: (
+          <div className="card">
+            <div className="card-hd">
+              <span>Recent Quotes</span>
+              <a href="/quotes" style={{ fontSize: 12, color: 'var(--muted)', textDecoration: 'none' }}>View all →</a>
+            </div>
+            <div>
+              {!quotes.length
+                ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No quotes yet</div>
+                : [...quotes].reverse().slice(0, 5).map(q => (
+                    <div key={q.id} style={{ padding: '12px 18px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>{q.customer.name || '—'}</div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>{quoteDisplayTitle(q)}</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div className="mono" style={{ fontSize: 13 }}>{fmt(quoteTotal(q))}</div>
+                        <span className={`badge ${Q_BADGE[q.status] || 'b-pending'}`}>{Q_LABEL[q.status] || q.status}</span>
+                      </div>
                     </div>
                   ))
               }
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Job Costing ────────────────────────────────────────────────────────── */}
-      <div className="card" style={{ marginTop: 18 }}>
-        <div className="card-hd">
-          <span>Job Costing</span>
-          <a href="/jobs" style={{ fontSize: 12, color: 'var(--muted)', textDecoration: 'none' }}>Enter costs in Jobs →</a>
-        </div>
-
-        {/* Summary bar */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', borderBottom: '1.5px solid var(--border)' }}>
-          <div style={{ padding: '14px 20px', borderRight: '1px solid var(--border)' }}>
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)', marginBottom: 4 }}>Active Contract Value</div>
-            <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'DM Mono, monospace', color: '#7ab533' }}>{fmtK(summaryContract)}</div>
-            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{activeRows.length} active job{activeRows.length !== 1 ? 's' : ''}</div>
           </div>
-          <div style={{ padding: '14px 20px', borderRight: '1px solid var(--border)' }}>
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)', marginBottom: 4 }}>Actual Costs Entered</div>
-            <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'DM Mono, monospace', color: 'var(--text)' }}>{fmtK(summaryActual)}</div>
-            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
-              {activeRows.filter(r => r.hasActual).length} of {activeRows.length} jobs with costs
+  
+    ) },
+    { id: 'chart', title: 'Contract value by month', size: 'medium', on: false, node: (
+          <div className="card">
+            <div className="card-hd">Contract Value by Month</div>
+            <div style={{ padding: '20px 24px' }}>
+              {!hasChartData
+                ? <div style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 13, padding: '20px 0' }}>
+                    Add jobs with start dates to see monthly revenue
+                  </div>
+                : <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, height: 130 }}>
+                    {months.map((m, i) => (
+                      <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                        <div style={{ fontSize: 10, color: 'var(--muted)', fontFamily: 'DM Mono, monospace', textAlign: 'center', minHeight: 14 }}>
+                          {m.value > 0 ? fmtK(m.value) : ''}
+                        </div>
+                        <div style={{
+                          width: '100%',
+                          background: m.value > 0 ? '#7ab533' : 'var(--border)',
+                          borderRadius: '4px 4px 0 0',
+                          height: m.value > 0 ? Math.max(6, Math.round((m.value / maxVal) * 90)) + 'px' : '4px',
+                          transition: 'height 0.3s',
+                        }} />
+                        <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>{m.label}</div>
+                      </div>
+                    ))}
+                  </div>
+              }
             </div>
           </div>
-          <div style={{ padding: '14px 20px' }}>
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)', marginBottom: 4 }}>Avg Gross Margin</div>
-            <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'DM Mono, monospace', color: avgMargin !== null ? marginColor(avgMargin) : 'var(--muted)' }}>
-              {avgMargin !== null ? avgMargin + '%' : '—'}
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>across {rowsWithMargin.length} job{rowsWithMargin.length !== 1 ? 's' : ''}</div>
+  
+  
+    ) },
+    { id: 'pipeline', title: 'Job pipeline', size: 'large', on: false, node: (
+        <div className="card">
+          <div className="card-hd">Job Pipeline</div>
+          <div className="pipeline">
+            {Object.entries(stageGroups).map(([label, stageJobs]) => (
+              <div key={label} className="pip-col">
+                <div className="pip-label">{label} ({stageJobs.length})</div>
+                {stageJobs.length === 0
+                  ? <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>—</div>
+                  : stageJobs.map(j => (
+                      <div key={j.id} className="pip-card">
+                        <div className="pip-card-name">{j.client}</div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 3 }}>{jobDisplayTitle(j)}</div>
+                        <div className="pip-card-val">{fmt(j.value)}</div>
+                      </div>
+                    ))
+                }
+              </div>
+            ))}
           </div>
         </div>
-
-        {/* Table header */}
-        {costingRows.length > 0 && (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 100px 120px 100px 150px 80px',
-            padding: '6px 18px',
-            background: '#f0f2f4',
-            fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)',
-          }}>
-            <span>Job</span>
-            <span style={{ textAlign: 'right' }}>Contract</span>
-            <span style={{ textAlign: 'right' }}>Invoiced</span>
-            <span style={{ textAlign: 'right' }}>Budget</span>
-            <span style={{ paddingLeft: 8 }}>Actual Cost</span>
-            <span style={{ textAlign: 'right' }}>Margin</span>
+  
+  
+    ) },
+    { id: 'costing', title: 'Job costing (full table)', size: 'large', on: false, node: (
+        <div className="card">
+          <div className="card-hd">
+            <span>Job Costing</span>
+            <a href="/jobs" style={{ fontSize: 12, color: 'var(--muted)', textDecoration: 'none' }}>Enter costs in Jobs →</a>
           </div>
-        )}
-
-        {/* Rows */}
-        {costingRows.length === 0
-          ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
-              No jobs yet — create jobs to track costs and margin
+  
+          {/* Summary bar */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', borderBottom: '1.5px solid var(--border)' }}>
+            <div style={{ padding: '14px 20px', borderRight: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)', marginBottom: 4 }}>Active Contract Value</div>
+              <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'DM Mono, monospace', color: '#7ab533' }}>{fmtK(summaryContract)}</div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{activeRows.length} active job{activeRows.length !== 1 ? 's' : ''}</div>
             </div>
-          : costingRows.map(r => {
-              const stageCol = STAGE_COLOR[r.job.stage] || 'var(--muted)'
-              const barPct   = Math.min(100, r.budgetUsedPct ?? 0)
-              const barColor = r.overBudget ? '#c0392b' : (r.budgetUsedPct ?? 0) > 85 ? '#e67e22' : '#7ab533'
-
-              return (
-                <div key={r.job.id} style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 100px 120px 100px 150px 80px',
-                  padding: '11px 18px',
-                  borderBottom: '1px solid var(--border)',
-                  alignItems: 'center',
-                }}>
-
-                  {/* Job info */}
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: stageCol, marginTop: 5, flexShrink: 0 }} />
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 600 }}>{jobDisplayTitle(r.job)} — {r.job.client}</div>
-                      <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>{r.job.address}</div>
+            <div style={{ padding: '14px 20px', borderRight: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)', marginBottom: 4 }}>Actual Costs Entered</div>
+              <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'DM Mono, monospace', color: 'var(--text)' }}>{fmtK(summaryActual)}</div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                {activeRows.filter(r => r.hasActual).length} of {activeRows.length} jobs with costs
+              </div>
+            </div>
+            <div style={{ padding: '14px 20px' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)', marginBottom: 4 }}>Avg Gross Margin</div>
+              <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'DM Mono, monospace', color: avgMargin !== null ? marginColor(avgMargin) : 'var(--muted)' }}>
+                {avgMargin !== null ? avgMargin + '%' : '—'}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>across {rowsWithMargin.length} job{rowsWithMargin.length !== 1 ? 's' : ''}</div>
+            </div>
+          </div>
+  
+          {/* Table header */}
+          {costingRows.length > 0 && (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 100px 120px 100px 150px 80px',
+              padding: '6px 18px',
+              background: '#f0f2f4',
+              fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)',
+            }}>
+              <span>Job</span>
+              <span style={{ textAlign: 'right' }}>Contract</span>
+              <span style={{ textAlign: 'right' }}>Invoiced</span>
+              <span style={{ textAlign: 'right' }}>Budget</span>
+              <span style={{ paddingLeft: 8 }}>Actual Cost</span>
+              <span style={{ textAlign: 'right' }}>Margin</span>
+            </div>
+          )}
+  
+          {/* Rows */}
+          {costingRows.length === 0
+            ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
+                No jobs yet — create jobs to track costs and margin
+              </div>
+            : costingRows.map(r => {
+                const stageCol = STAGE_COLOR[r.job.stage] || 'var(--muted)'
+                const barPct   = Math.min(100, r.budgetUsedPct ?? 0)
+                const barColor = r.overBudget ? '#c0392b' : (r.budgetUsedPct ?? 0) > 85 ? '#e67e22' : '#7ab533'
+  
+                return (
+                  <div key={r.job.id} style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 100px 120px 100px 150px 80px',
+                    padding: '11px 18px',
+                    borderBottom: '1px solid var(--border)',
+                    alignItems: 'center',
+                  }}>
+  
+                    {/* Job info */}
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                      <div style={{ width: 7, height: 7, borderRadius: '50%', background: stageCol, marginTop: 5, flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>{jobDisplayTitle(r.job)} — {r.job.client}</div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>{r.job.address}</div>
+                      </div>
                     </div>
-                  </div>
-
-                  {/* Contract value */}
-                  <div style={{ textAlign: 'right', fontFamily: 'DM Mono, monospace', fontSize: 13, fontWeight: 600 }}>
-                    {fmt(r.contractValue)}
-                  </div>
-
-                  {/* Invoiced / Received */}
-                  <div style={{ textAlign: 'right' }}>
-                    {r.invoicedTotal > 0 ? (
-                      <>
-                        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{fmt(r.invoicedTotal)}</div>
-                        {r.paidTotal > 0 && (
-                          <div style={{ fontSize: 10, color: '#2e7d32', fontWeight: 700, marginTop: 1 }}>
-                            ✓ {fmt(r.paidTotal)} received
-                          </div>
-                        )}
-                        {r.paidTotal === 0 && (
-                          <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 1 }}>unpaid</div>
-                        )}
-                      </>
-                    ) : (
-                      <span style={{ fontSize: 11, color: 'var(--muted)' }}>—</span>
-                    )}
-                  </div>
-
-                  {/* Quoted budget (cost) */}
-                  <div style={{ textAlign: 'right', fontFamily: 'DM Mono, monospace', fontSize: 13, color: r.budgetTotal !== null ? 'var(--text)' : 'var(--muted)' }}>
-                    {r.budgetTotal !== null ? fmt(r.budgetTotal) : '—'}
-                  </div>
-
-                  {/* Actual cost + budget bar */}
-                  <div style={{ paddingLeft: 8 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: r.hasActual && r.budgetTotal !== null ? 4 : 0 }}>
-                      <span style={{
-                        fontFamily: 'DM Mono, monospace', fontSize: 13,
-                        color: r.overBudget ? '#c0392b' : r.hasActual ? 'var(--text)' : 'var(--muted)',
-                        fontWeight: r.overBudget ? 700 : 400,
-                      }}>
-                        {r.overBudget && '⚠ '}
-                        {r.hasActual ? fmt(r.actualCost) : <span style={{ fontSize: 11 }}>No costs entered</span>}
-                      </span>
-                      {r.budgetUsedPct !== null && r.hasActual && (
-                        <span style={{ fontSize: 10, color: r.overBudget ? '#c0392b' : 'var(--muted)', fontWeight: r.overBudget ? 700 : 400 }}>
-                          {r.budgetUsedPct}%
-                        </span>
+  
+                    {/* Contract value */}
+                    <div style={{ textAlign: 'right', fontFamily: 'DM Mono, monospace', fontSize: 13, fontWeight: 600 }}>
+                      {fmt(r.contractValue)}
+                    </div>
+  
+                    {/* Invoiced / Received */}
+                    <div style={{ textAlign: 'right' }}>
+                      {r.invoicedTotal > 0 ? (
+                        <>
+                          <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{fmt(r.invoicedTotal)}</div>
+                          {r.paidTotal > 0 && (
+                            <div style={{ fontSize: 10, color: '#2e7d32', fontWeight: 700, marginTop: 1 }}>
+                              ✓ {fmt(r.paidTotal)} received
+                            </div>
+                          )}
+                          {r.paidTotal === 0 && (
+                            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 1 }}>unpaid</div>
+                          )}
+                        </>
+                      ) : (
+                        <span style={{ fontSize: 11, color: 'var(--muted)' }}>—</span>
                       )}
                     </div>
-                    {r.hasActual && r.budgetTotal !== null && (
-                      <div style={{ height: 4, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: barPct + '%', background: barColor, borderRadius: 2, transition: 'width 0.4s' }} />
+  
+                    {/* Quoted budget (cost) */}
+                    <div style={{ textAlign: 'right', fontFamily: 'DM Mono, monospace', fontSize: 13, color: r.budgetTotal !== null ? 'var(--text)' : 'var(--muted)' }}>
+                      {r.budgetTotal !== null ? fmt(r.budgetTotal) : '—'}
+                    </div>
+  
+                    {/* Actual cost + budget bar */}
+                    <div style={{ paddingLeft: 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: r.hasActual && r.budgetTotal !== null ? 4 : 0 }}>
+                        <span style={{
+                          fontFamily: 'DM Mono, monospace', fontSize: 13,
+                          color: r.overBudget ? '#c0392b' : r.hasActual ? 'var(--text)' : 'var(--muted)',
+                          fontWeight: r.overBudget ? 700 : 400,
+                        }}>
+                          {r.overBudget && '⚠ '}
+                          {r.hasActual ? fmt(r.actualCost) : <span style={{ fontSize: 11 }}>No costs entered</span>}
+                        </span>
+                        {r.budgetUsedPct !== null && r.hasActual && (
+                          <span style={{ fontSize: 10, color: r.overBudget ? '#c0392b' : 'var(--muted)', fontWeight: r.overBudget ? 700 : 400 }}>
+                            {r.budgetUsedPct}%
+                          </span>
+                        )}
                       </div>
-                    )}
+                      {r.hasActual && r.budgetTotal !== null && (
+                        <div style={{ height: 4, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: barPct + '%', background: barColor, borderRadius: 2, transition: 'width 0.4s' }} />
+                        </div>
+                      )}
+                    </div>
+  
+                    {/* Margin */}
+                    <div style={{ textAlign: 'right' }}>
+                      {r.marginPct !== null ? (
+                        <span style={{
+                          fontWeight: 700, fontSize: 13, fontFamily: 'DM Mono, monospace',
+                          color: marginColor(r.marginPct),
+                        }}>
+                          {r.marginPct}%
+                          {r.marginEstimated && <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--muted)' }}> est</span>}
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: 11, color: 'var(--muted)' }}>—</span>
+                      )}
+                    </div>
                   </div>
-
-                  {/* Margin */}
-                  <div style={{ textAlign: 'right' }}>
-                    {r.marginPct !== null ? (
-                      <span style={{
-                        fontWeight: 700, fontSize: 13, fontFamily: 'DM Mono, monospace',
-                        color: marginColor(r.marginPct),
-                      }}>
-                        {r.marginPct}%
-                        {r.marginEstimated && <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--muted)' }}> est</span>}
-                      </span>
-                    ) : (
-                      <span style={{ fontSize: 11, color: 'var(--muted)' }}>—</span>
-                    )}
-                  </div>
-                </div>
-              )
-            })
-        }
-
-        {/* Legend */}
-        <div style={{ padding: '8px 18px', display: 'flex', gap: 16, fontSize: 11, color: 'var(--muted)', flexWrap: 'wrap' }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#7ab533', display: 'inline-block' }} /> ≥20% margin
-          </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#e67e22', display: 'inline-block' }} /> 10–19%
-          </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#c0392b', display: 'inline-block' }} /> &lt;10% or over budget
-          </span>
-          <span style={{ marginLeft: 'auto' }}>
-            Budget = quoted cost (ex-markup) · est = estimated from quote, no actual costs yet
-          </span>
+                )
+              })
+          }
+  
+          {/* Legend */}
+          <div style={{ padding: '8px 18px', display: 'flex', gap: 16, fontSize: 11, color: 'var(--muted)', flexWrap: 'wrap' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#7ab533', display: 'inline-block' }} /> ≥20% margin
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#e67e22', display: 'inline-block' }} /> 10–19%
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#c0392b', display: 'inline-block' }} /> &lt;10% or over budget
+            </span>
+            <span style={{ marginLeft: 'auto' }}>
+              Budget = quoted cost (ex-markup) · est = estimated from quote, no actual costs yet
+            </span>
+          </div>
         </div>
+  
+    ) },
+    { id: 'complete', title: 'Jobs complete', size: 'small', on: false, node: (
+      <div className="stat sky">
+        <div className="stat-label">Jobs Complete</div>
+        <div className="stat-val">{complete.length}</div>
+        <div className="stat-sub">{complete.length ? complete.length + ' job' + (complete.length !== 1 ? 's' : '') + ' done' : 'None yet'}</div>
       </div>
-    </>
-  )
+    ) },
+    { id: 'contractValue', title: 'Contract value', size: 'small', on: false, node: (
+      <div className="stat terra">
+        <div className="stat-label">Contract Value</div>
+        <div className="stat-val">{fmtK(totalVal)}</div>
+        <div className="stat-sub">Active jobs total</div>
+      </div>
+    ) },
+  ]
+
+  return <DashboardCards cards={cards} />
 }
