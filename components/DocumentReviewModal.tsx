@@ -7,6 +7,7 @@ import { signedDocUrl, allocateDocument } from '@/lib/job-costs'
 import { useApp } from '@/contexts/AppContext'
 import type { InboxDocument, JobCostCategory, PaymentStatus, BillLineItem, VariationLineItem } from '@/lib/types'
 import type { ExtractedCostLine } from '@/lib/doc-extract/types'
+import { useRouter } from 'next/navigation'
 import DocumentPreviewPane from './DocumentPreviewPane'
 
 interface JobOption { id: string; label: string }
@@ -40,7 +41,7 @@ function initialLines(ex: Record<string, unknown> | null | undefined): Extracted
   return [{ description: String(raw?.description ?? ''), costCategory: (raw?.costCategory as JobCostCategory) || 'materials', netAmount: net, vatAmount: vat, grossAmount: gross }]
 }
 
-export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSaved }: Props) {
+export default function DocumentReviewModal({ doc, jobs, userId, onClose: onCloseProp, onSaved }: Props) {
   const sb = createClient()
   const { addBill, updateBill, bills, clients, addVariation } = useApp()
   const ex = doc.extraction ?? {}
@@ -72,6 +73,19 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
   const [linkSubId, setLinkSubId] = useState('')
   const [linkedSub, setLinkedSub] = useState<{ id: string; contactName: string } | null>(null)
   const [linkBusy, setLinkBusy] = useState(false)
+
+  // "Save as subcontractor fixed quote": makes the fixed quote (under that subcontractor, with this document attached) and files the document,
+  // with no bill or job cost, because a quote is not money owed. The payment stages are then added on the Subcontractors page.
+  const router = useRouter()
+  const [fqOpen, setFqOpen] = useState(false)
+  const [fqContactId, setFqContactId] = useState('')
+  const [fqDesc, setFqDesc] = useState('')
+  const [fqAmount, setFqAmount] = useState('')
+  const [fqBusy, setFqBusy] = useState(false)
+  const [fqError, setFqError] = useState('')
+  const [fqDone, setFqDone] = useState<{ contactName: string; amount: number } | null>(null)
+  // once a fixed quote has been made the document is filed, so closing the window must refresh the inbox like Save does
+  const onClose = () => (fqDone ? onSaved() : onCloseProp())
 
   // Link to existing bill
   const [linkBillId, setLinkBillId] = useState('')
@@ -152,6 +166,36 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
     await sb.from('sub_contracts').update({ quote_document_id: null }).eq('id', linkedSub.id)
     setLinkedSub(null)
     setLinkBusy(false)
+  }
+
+  function openFixedQuote() {
+    const net = lines.reduce((a, l) => a + (Number(l.netAmount) || 0), 0)
+    const gross = lines.reduce((a, l) => a + (Number(l.grossAmount) || 0), 0)
+    const byName = clients.find(c => (c.clientType === 'subcontractor' || c.clientType === 'supplier') && c.name.trim().toLowerCase() === supplier.trim().toLowerCase())
+    setFqContactId(supplierId && clients.some(c => c.id === supplierId) ? supplierId : (byName?.id ?? ''))
+    setFqDesc((lines[0]?.description || '').trim() || String((ex as Record<string, unknown>).description ?? '').trim() || '')
+    setFqAmount(String(+(net || gross).toFixed(2) || ''))
+    setFqError(''); setFqOpen(true)
+  }
+
+  async function createFixedQuote() {
+    if (!fqContactId) { setFqError('Choose the subcontractor.'); return }
+    if (!fqDesc.trim()) { setFqError('Add a short description of the work.'); return }
+    const amount = Number(fqAmount)
+    if (!(amount > 0)) { setFqError('Enter the quoted amount.'); return }
+    setFqBusy(true); setFqError('')
+    const { data, error } = await sb.from('sub_contracts').insert({
+      user_id: userId, contact_id: fqContactId, job_id: jobId || null, type: 'fixed',
+      description: fqDesc.trim(), rate_type: null, rate_amount: null, quoted_amount: amount,
+      notes: 'From an emailed quote' + (docNumber ? ' (ref ' + docNumber + ')' : ''), status: 'active', quote_document_id: doc.id,
+    }).select('id').single()
+    if (error || !data) { setFqBusy(false); setFqError('Could not save the fixed quote: ' + (error?.message ?? 'unknown error')); return }
+    // file the document under the job (when chosen) and take it out of the inbox: no bill, no job cost
+    await sb.from('job_documents').update({ job_id: jobId || null, status: 'archived', updated_at: new Date().toISOString() }).eq('id', doc.id)
+    const name = clients.find(c => c.id === fqContactId)?.name ?? 'the subcontractor'
+    setLinkedSub({ id: data.id as string, contactName: name })
+    setFqDone({ contactName: name, amount })
+    setFqOpen(false); setFqBusy(false)
   }
 
   async function linkToBill() {
@@ -490,6 +534,49 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose, onSave
               {/* Link to Sub Contract */}
               <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: '#7c3aed', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>🔧 Sub Contract Quote</div>
+                {fqDone ? (
+                  <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 12px', fontSize: 12, color: '#166534', marginBottom: 8 }}>
+                    <div style={{ fontWeight: 700 }}>✓ Fixed quote created for {fqDone.contactName} — {fmt(fqDone.amount)}</div>
+                    <div style={{ marginTop: 2 }}>This document is attached to it and filed (no bill or job cost was made). Next, add the payment stages.</div>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                      <button onClick={() => { onSaved(); router.push('/subcontractors') }} style={{ padding: '6px 12px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Add payment stages →</button>
+                      <button onClick={onSaved} style={{ padding: '6px 12px', background: '#fff', color: '#334155', border: '1px solid #cbd5e1', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}>Done</button>
+                    </div>
+                  </div>
+                ) : !linkedSub && !isAllocated && (
+                  fqOpen ? (
+                    <div style={{ background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 8, padding: '10px 12px', marginBottom: 8, fontSize: 12 }}>
+                      <div style={{ fontWeight: 700, color: '#6b21a8', marginBottom: 8 }}>Save as subcontractor fixed quote</div>
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        <select value={fqContactId} onChange={e => setFqContactId(e.target.value)} style={{ padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 12 }}>
+                          <option value="">Which subcontractor?…</option>
+                          {[...clients.filter(c => c.clientType === 'subcontractor'), ...clients.filter(c => c.clientType === 'supplier')].map(c => (
+                            <option key={c.id} value={c.id}>{c.name}{c.clientType === 'supplier' ? ' (supplier)' : ''}</option>
+                          ))}
+                        </select>
+                        <select value={jobId} onChange={e => setJobId(e.target.value)} style={{ padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 12 }}>
+                          <option value="">Which job? (optional)…</option>
+                          {jobs.map(j => <option key={j.id} value={j.id}>{j.label}</option>)}
+                        </select>
+                        <input value={fqDesc} onChange={e => setFqDesc(e.target.value)} placeholder="Description of the work, e.g. Roofing - rear extension" style={{ padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 12 }} />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ color: '#64748b' }}>Quoted amount (£)</span>
+                          <input type="number" min={0} step="0.01" value={fqAmount} onChange={e => setFqAmount(e.target.value)} style={{ width: 120, padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 12, fontFamily: 'monospace' }} />
+                          <span style={{ color: '#94a3b8', fontSize: 11 }}>from the document: {fmt(lines.reduce((a, l) => a + (Number(l.netAmount) || 0), 0))} ex VAT, {fmt(lines.reduce((a, l) => a + (Number(l.grossAmount) || 0), 0))} inc VAT</span>
+                        </div>
+                      </div>
+                      {fqError && <div style={{ color: '#dc2626', marginTop: 6 }}>⚠ {fqError}</div>}
+                      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                        <button onClick={createFixedQuote} disabled={fqBusy} style={{ padding: '6px 14px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: fqBusy ? 0.6 : 1 }}>{fqBusy ? 'Saving…' : 'Create fixed quote and file this document'}</button>
+                        <button onClick={() => setFqOpen(false)} disabled={fqBusy} style={{ padding: '6px 12px', background: '#fff', color: '#334155', border: '1px solid #cbd5e1', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={openFixedQuote} style={{ width: '100%', marginBottom: 8, padding: '8px 12px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                      ➕ Save as subcontractor fixed quote
+                    </button>
+                  )
+                )}
                 {linkedSub ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
                     <span style={{ color: '#16a34a', fontWeight: 600 }}>✓ Linked to {linkedSub.contactName}</span>
