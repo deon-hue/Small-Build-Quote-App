@@ -171,7 +171,7 @@ export default function DashboardPage() {
 
   // ── The cards. The first six are the ones most builders want; the rest start hidden and come back from "Customise". ──
   const cards: DashCard[] = [
-    { id: 'greet', title: 'Welcome', size: 'large', on: true, node: (
+    { id: 'greet', title: 'Welcome', span: 4, on: true, node: (
       <div className="card" style={{ padding: '16px 20px' }}>
         <div style={{ fontSize: 20, fontWeight: 600 }}>{greeting}{firstName ? ', ' + firstName : ''}</div>
         <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 3 }}>
@@ -179,30 +179,30 @@ export default function DashboardPage() {
         </div>
       </div>
     ) },
-    { id: 'attention', title: 'Needs your attention', size: 'large', on: true, node: <NeedsAttentionCard /> },
-    { id: 'jobsOnSite', title: 'Jobs on site', size: 'small', on: true, node: (
+    { id: 'attention', title: 'Needs your attention', span: 4, on: true, node: <NeedsAttentionCard /> },
+    { id: 'jobsOnSite', title: 'Jobs on site', span: 1, on: true, node: (
       <Link href="/jobs" className="stat green" style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}>
         <div className="stat-label">Jobs on site</div>
         <div className="stat-val">{active.length}</div>
         <div className="stat-sub">{upcomingJobs.length ? upcomingJobs.length + ' starting within 7 days' : active.length ? 'on site now' : 'No active jobs'}</div>
       </Link>
     ) },
-    { id: 'owed', title: 'Owed to you', size: 'small', on: true, node: (
+    { id: 'owed', title: 'Owed to you', span: 1, on: true, node: (
       <Link href="/invoices" className="stat terra" style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}>
         <div className="stat-label">Owed to you</div>
         <div className="stat-val">{fmtK(unpaidTotal)}</div>
         <div className="stat-sub">{overdueInv.length ? fmtK(overdueInvTot) + ' overdue' : unpaid.length ? 'none overdue' : 'No unpaid invoices'}</div>
       </Link>
     ) },
-    { id: 'quotesWaiting', title: 'Quotes waiting', size: 'small', on: true, node: (
+    { id: 'quotesWaiting', title: 'Quotes waiting', span: 1, on: true, node: (
       <Link href="/quotes" className="stat gold" style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}>
         <div className="stat-label">Quotes waiting</div>
         <div className="stat-val">{open.length}</div>
         <div className="stat-sub">{overdueQuotes.length ? overdueQuotes.length + ' over 30 days old' : open.length ? fmtK(pipeline) + ' pipeline' : 'No open quotes'}</div>
       </Link>
     ) },
-    { id: 'enquiries', title: 'New enquiries', size: 'small', on: true, node: <EnquiriesStat /> },
-    { id: 'week', title: 'This week on site', size: 'medium', on: true, node: (
+    { id: 'enquiries', title: 'New enquiries', span: 1, on: true, node: <EnquiriesStat /> },
+    { id: 'week', title: 'This week on site', span: 2, on: true, node: (
       <div className="card">
         <div className="card-hd"><span>This week on site</span><Link href="/calendar" style={{ fontSize: 12, color: 'var(--muted)', textDecoration: 'none' }}>Calendar →</Link></div>
         <div style={{ padding: '4px 16px 12px' }}>
@@ -217,7 +217,7 @@ export default function DashboardPage() {
         </div>
       </div>
     ) },
-    { id: 'activeJobs', title: 'Active jobs', size: 'medium', on: true, node: (
+    { id: 'activeJobs', title: 'Active jobs', span: 2, on: true, node: (
           <div className="card">
             <div className="card-hd">
               <span>Active Jobs</span>
@@ -267,7 +267,7 @@ export default function DashboardPage() {
   
   
     ) },
-    { id: 'margins', title: 'Job margins', size: 'medium', on: true, node: (
+    { id: 'margins', title: 'Job margins', span: 2, on: true, node: (
       <div className="card">
         <div className="card-hd"><span>Job margins</span><Link href="/jobs" style={{ fontSize: 12, color: 'var(--muted)', textDecoration: 'none' }}>Jobs →</Link></div>
         <div style={{ padding: '4px 16px 12px' }}>
@@ -286,7 +286,7 @@ export default function DashboardPage() {
         </div>
       </div>
     ) },
-    { id: 'overdue', title: 'Overdue quotes', size: 'medium', on: false, node: (
+    { id: 'overdue', title: 'Overdue quotes', span: 2, on: false, node: (
           <div className="card">
             <div className="card-hd">
               <span>Overdue Quotes</span>
@@ -314,7 +314,7 @@ export default function DashboardPage() {
           </div>
   
     ) },
-    { id: 'recent', title: 'Recent quotes', size: 'medium', on: false, node: (
+    { id: 'recent', title: 'Recent quotes', span: 2, on: false, node: (
           <div className="card">
             <div className="card-hd">
               <span>Recent Quotes</span>
@@ -340,7 +340,7 @@ export default function DashboardPage() {
           </div>
   
     ) },
-    { id: 'chart', title: 'Contract value by month', size: 'medium', on: false, node: (
+    { id: 'chart', title: 'Contract value by month', span: 2, on: false, node: (
           <div className="card">
             <div className="card-hd">Contract Value by Month</div>
             <div style={{ padding: '20px 24px' }}>
@@ -371,7 +371,7 @@ export default function DashboardPage() {
   
   
     ) },
-    { id: 'pipeline', title: 'Job pipeline', size: 'large', on: false, node: (
+    { id: 'pipeline', title: 'Job pipeline', span: 4, on: false, node: (
         <div className="card">
           <div className="card-hd">Job Pipeline</div>
           <div className="pipeline">
@@ -395,7 +395,7 @@ export default function DashboardPage() {
   
   
     ) },
-    { id: 'costing', title: 'Job costing (full table)', size: 'large', on: false, node: (
+    { id: 'costing', title: 'Job costing (full table)', span: 4, on: false, node: (
         <div className="card">
           <div className="card-hd">
             <span>Job Costing</span>
@@ -561,14 +561,14 @@ export default function DashboardPage() {
         </div>
   
     ) },
-    { id: 'complete', title: 'Jobs complete', size: 'small', on: false, node: (
+    { id: 'complete', title: 'Jobs complete', span: 1, on: false, node: (
       <div className="stat sky">
         <div className="stat-label">Jobs Complete</div>
         <div className="stat-val">{complete.length}</div>
         <div className="stat-sub">{complete.length ? complete.length + ' job' + (complete.length !== 1 ? 's' : '') + ' done' : 'None yet'}</div>
       </div>
     ) },
-    { id: 'contractValue', title: 'Contract value', size: 'small', on: false, node: (
+    { id: 'contractValue', title: 'Contract value', span: 1, on: false, node: (
       <div className="stat terra">
         <div className="stat-label">Contract Value</div>
         <div className="stat-val">{fmtK(totalVal)}</div>
