@@ -139,6 +139,8 @@ export async function fetchQuoteDefaults(
   phaseId:     string
   subPhaseName:string
   subPhaseId:  string
+  /** the sub-phase's built-in id; a built-in calculator sub-phase is priced by its calculator, not by tasks */
+  canonicalId: string | null
   markupPct:   number
   tasks: BOTask[]
 }>> {
@@ -157,7 +159,7 @@ export async function fetchQuoteDefaults(
 
   const result: Array<{
     phaseName: string; phaseId: string
-    subPhaseName: string; subPhaseId: string
+    subPhaseName: string; subPhaseId: string; canonicalId: string | null
     markupPct: number; tasks: BOTask[]
   }> = []
 
@@ -171,6 +173,7 @@ export async function fetchQuoteDefaults(
         phaseId:      phase.id,
         subPhaseName: sp.name,
         subPhaseId:   sp.id,
+        canonicalId:  sp.canonical_id ?? null,
         markupPct:    sp.markup_pct ?? 0,
         tasks:        spTasks as BOTask[],
       })
@@ -189,6 +192,7 @@ export async function fetchAllQuoteDefaults(
   phaseId:     string
   subPhaseName:string
   subPhaseId:  string
+  canonicalId: string | null
   markupPct:   number
   tasks: BOTask[]
 }>> {
@@ -198,12 +202,12 @@ export async function fetchAllQuoteDefaults(
     sb.from('bo_tasks').select('*').eq('user_id', userId).eq('active', true).order('display_order'),
   ])
   if (!phases?.length) return []
-  const result: Array<{ phaseName: string; phaseId: string; subPhaseName: string; subPhaseId: string; markupPct: number; tasks: BOTask[] }> = []
+  const result: Array<{ phaseName: string; phaseId: string; subPhaseName: string; subPhaseId: string; canonicalId: string | null; markupPct: number; tasks: BOTask[] }> = []
   for (const phase of phases ?? []) {
     const phaseSubs = (subPhases ?? []).filter(sp => sp.phase_id === phase.id)
     for (const sp of phaseSubs) {
       const spTasks = (tasks ?? []).filter(t => t.sub_phase_id === sp.id)
-      result.push({ phaseName: phase.name, phaseId: phase.id, subPhaseName: sp.name, subPhaseId: sp.id, markupPct: sp.markup_pct ?? 0, tasks: spTasks as BOTask[] })
+      result.push({ phaseName: phase.name, phaseId: phase.id, subPhaseName: sp.name, subPhaseId: sp.id, canonicalId: sp.canonical_id ?? null, markupPct: sp.markup_pct ?? 0, tasks: spTasks as BOTask[] })
     }
   }
   return result

@@ -155,13 +155,98 @@ interface Props {
   onSave?: (result: { name: string; qty: number; location: string; description: string; lines: CostedLine[] }) => void
   labourTrades?: BOLabourTrade[]
   externalLengthMm?: number
+  /** Starting height (mm) when it is known, e.g. the size the AI quote heard. */
+  initialHeightMm?: number
+  /** Start with no sample window (the AI quote's wall has none). */
+  noSampleOpenings?: boolean
 }
 
 function sampleOpenings(): CavityOpening[] {
   return [{ id: newOpeningId(), kind: 'window', widthMm: 1200, heightMm: 1200, offsetMm: 2000, sillHeightMm: 900, lintelType: 'steel-cavity' }]
 }
 
-export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onClose, onSave, labourTrades = [], externalLengthMm }: Props) {
+interface DescribeOpts {
+  lengthMm: number; heightMm: number; outerLeaf: CavityLeafType; externalFinish: ExternalFinishType
+  insulation: CavityInsulationType; boardThicknessMm: number; cavityWidthMm: number
+  innerThicknessMm: number; innerType: InnerBlockType; finishType: FinishType; openings: CavityOpening[]
+}
+
+/** The one-line quote description. Shared by the screen and by priceCavityWallFromBasics so the two never word it differently. */
+export function cavityAutoDescription(o: DescribeOpts): string {
+  const outer = o.outerLeaf === 'brick'
+    ? 'facing brick outer leaf'
+    : `block outer leaf, ${EXTERNAL_FINISH_CONFIG[o.externalFinish].label.toLowerCase()} outside`
+  const fill = o.insulation === 'none' ? 'empty cavity'
+    : o.insulation === 'pir' ? `${o.boardThicknessMm}mm rigid board (partial fill)`
+    : 'mineral wool full fill'
+  const parts = [
+    `${(o.lengthMm / 1000).toFixed(2)}m long × ${(o.heightMm / 1000).toFixed(2)}m high external cavity wall, DPC to wall plate`,
+    outer,
+    `${o.cavityWidthMm}mm cavity, ${fill}`,
+    `${o.innerThicknessMm}mm ${INNER_BLOCK[o.innerType].label.toLowerCase()} inner leaf`,
+    `${FINISH_TYPE_CONFIG[o.finishType].label.toLowerCase()} inside`,
+  ]
+  let text = parts.join(', ') + '.'
+  if (o.openings.length) {
+    const list = o.openings.map(op => `${op.kind} (${op.widthMm}×${op.heightMm}mm, ${LINTEL_LABEL[op.lintelType].split(' (')[0].toLowerCase()})`).join(', ')
+    text += ` Includes ${o.openings.length} opening${o.openings.length !== 1 ? 's' : ''}: ${list}.`
+  }
+  return text
+}
+
+/**
+ * Prices a cavity wall from just its length and height, with the calculator's own standard settings (facing brick outer leaf, 100mm thermal inner
+ * leaf, dot-and-dab inside, 10% waste, 20% profit, no openings). Used when the AI quote hears a size, so the wall arrives priced the way "Save &
+ * Price" would price it; the calculator can still be opened and changed. Labour: the screen's own sample is 12 hours for a 5m x 2.4m wall, so
+ * this uses 1 hour per m² of wall, with the bricklayer trade if one is set up (otherwise the first trade); with no trades there is no labour line,
+ * the same as the screen. Returns null when the size doesn't make a valid wall.
+ */
+export function priceCavityWallFromBasics(o: { lengthMm: number; heightMm: number; insulation: 'pir' | 'wool'; labourTrades: BOLabourTrade[]; openings?: CavityOpening[] }):
+  { name: string; qty: number; location: string; description: string; lines: CostedLine[] } | null {
+  const isFull = o.insulation === 'wool'
+  const cavityWidthMm = isFull ? 100 : 125
+  const boardThicknessMm = 75
+  const wastePct = 10
+  const outerLeaf: CavityLeafType = 'brick', innerType: InnerBlockType = 'thermal', innerThicknessMm = 100
+  const externalFinish: ExternalFinishType = 'render', finishType: FinishType = 'dot-dab'
+  const openings = o.openings ?? []
+  const input: CavityWallInput = {
+    lengthMm: o.lengthMm, heightMm: o.heightMm, outerLeaf, innerLeafThicknessMm: innerThicknessMm, cavityWidthMm,
+    insulation: o.insulation, insulationThicknessMm: boardThicknessMm, openings,
+  }
+  let g
+  try { g = calculateCavityGeometry(input) } catch { return null }
+  const layers = buildCavityLayers({
+    wastePct, outerLeaf, innerType, innerThicknessMm, insulation: o.insulation,
+    insulationThicknessMm: g.insulationThicknessMm, tieLengthMm: g.tieLengthMm, externalFinish, finishType,
+    counts: { steelCavity: g.steelCavityLintels, concrete: g.concreteLintels, angles: g.steelAngles, trays: g.trayCount, weeps: g.weepCount, closerLm: g.closerLm },
+  })
+  let cost
+  try { cost = calculateCavityWallCost(input, layers) } catch { return null }
+
+  const lines: CostedLine[] = [...cost.lines]
+  const trade = o.labourTrades.find(t => t.active !== false && /brick/i.test(t.name)) ?? o.labourTrades.find(t => t.active !== false)
+  const hours = Math.max(1, Math.round(g.netAreaM2))
+  if (trade) {
+    const rate = hourlyRate(trade)
+    lines.push({
+      layerId: 'labour_basic', name: `${trade.name} — Build cavity wall (brick & block)`, category: 'labour', source: 'fixed', wastePct: 0,
+      rawQty: hours, purchaseQty: hours, unit: 'hr', unitCost: rate, cost: +(hours * rate).toFixed(2),
+    })
+  }
+  const profitPct = 20
+  const subtotal = lines.reduce((s, l) => s + l.cost, 0)
+  const profitAmount = +(subtotal * profitPct / 100).toFixed(2)
+  lines.push({ layerId: 'profit', name: `Profit (${profitPct}%)`, category: 'other', source: 'fixed', wastePct: 0, rawQty: 1, purchaseQty: 1, unit: 'item', unitCost: profitAmount, cost: profitAmount })
+
+  return {
+    name: isFull ? 'Cavity Wall — Full Fill' : 'Cavity Wall — Partial Fill', qty: 1, location: '',
+    description: cavityAutoDescription({ lengthMm: o.lengthMm, heightMm: o.heightMm, outerLeaf, externalFinish, insulation: o.insulation, boardThicknessMm, cavityWidthMm, innerThicknessMm, innerType, finishType, openings }),
+    lines,
+  }
+}
+
+export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onClose, onSave, labourTrades = [], externalLengthMm, initialHeightMm, noSampleOpenings }: Props) {
   const isFullFill = insulationDefault === 'wool'
   const [name, setName]         = useState(isFullFill ? 'Cavity Wall — Full Fill' : 'Cavity Wall — Partial Fill')
   const [qty, setQty]           = useState(1)
@@ -169,7 +254,7 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
   useEffect(() => {
     if (externalLengthMm != null) setLengthMm(externalLengthMm)
   }, [externalLengthMm])
-  const [heightMm, setHeightMm] = useState(2400)
+  const [heightMm, setHeightMm] = useState(initialHeightMm ?? 2400)
   const [outerLeaf, setOuterLeaf] = useState<CavityLeafType>('brick')
   const [externalFinish, setExternalFinish] = useState<ExternalFinishType>('render')
   const [innerType, setInnerType] = useState<InnerBlockType>('thermal')
@@ -179,7 +264,7 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
   const [boardThicknessMm, setBoardThicknessMm] = useState(75)
   const [finishType, setFinishType] = useState<FinishType>('dot-dab')
   const [wastePct, setWastePct] = useState(10)
-  const [openings, setOpenings] = useState<CavityOpening[]>(sampleOpenings)
+  const [openings, setOpenings] = useState<CavityOpening[]>(noSampleOpenings ? [] : sampleOpenings)
   const [location, setLocation] = useState('')
 
   const [labourLines, setLabourLines] = useState<LabourLine[]>([
@@ -220,25 +305,7 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
   const noSidesLayers = useMemo(() => new Set<string>(), [])
 
   function buildAutoDescription(): string {
-    const outer = outerLeaf === 'brick'
-      ? 'facing brick outer leaf'
-      : `block outer leaf, ${EXTERNAL_FINISH_CONFIG[externalFinish].label.toLowerCase()} outside`
-    const fill = insulation === 'none' ? 'empty cavity'
-      : insulation === 'pir' ? `${boardThicknessMm}mm rigid board (partial fill)`
-      : 'mineral wool full fill'
-    const parts = [
-      `${(lengthMm / 1000).toFixed(2)}m long × ${(heightMm / 1000).toFixed(2)}m high external cavity wall, DPC to wall plate`,
-      outer,
-      `${cavityWidthMm}mm cavity, ${fill}`,
-      `${innerThicknessMm}mm ${INNER_BLOCK[innerType].label.toLowerCase()} inner leaf`,
-      `${FINISH_TYPE_CONFIG[finishType].label.toLowerCase()} inside`,
-    ]
-    let text = parts.join(', ') + '.'
-    if (openings.length) {
-      const list = openings.map(o => `${o.kind} (${o.widthMm}×${o.heightMm}mm, ${LINTEL_LABEL[o.lintelType].split(' (')[0].toLowerCase()})`).join(', ')
-      text += ` Includes ${openings.length} opening${openings.length !== 1 ? 's' : ''}: ${list}.`
-    }
-    return text
+    return cavityAutoDescription({ lengthMm, heightMm, outerLeaf, externalFinish, insulation, boardThicknessMm, cavityWidthMm, innerThicknessMm, innerType, finishType, openings })
   }
   const [description, setDescription] = useState(buildAutoDescription)
 

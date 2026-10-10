@@ -124,6 +124,8 @@ export interface QuotePhase {
    * materials list" report reads from. Set whenever a calculator's Save & Price is used,
    * from a real quote sub-phase or via Take-off. */
   assemblyLines?: CostedLine[]
+  /** The size the AI heard for a calculator wall (mm). The calculator opens on it, with no sample openings, so reopening it agrees with the price the AI put in. */
+  assemblySize?: { lengthMm: number; heightMm: number }
   /** AI-generated item that couldn't be matched to Back Office master data */
   needsReview?: boolean
   reviewNote?: string

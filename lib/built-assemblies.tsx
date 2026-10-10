@@ -41,6 +41,10 @@ export interface AssemblyRenderOpts {
   /** Take-off's traced line length (mm) — live-syncs into the calculator's own length field.
    * Absent everywhere else (Back Office preview, QuoteWorkspace), which have no drawn line. */
   externalLengthMm?: number
+  /** A wall's starting height (mm), when something other than the calculator's own default is known, e.g. the size the AI heard. Today only the cavity wall uses it. */
+  initialHeightMm?: number
+  /** Start with no sample openings (the AI quote does not know about any). Today only the cavity wall uses it. */
+  noSampleOpenings?: boolean
   /** A roof's drawn width (the shorter side) — the joists span it. Only roofs use it; walls have no width. */
   externalWidthMm?: number
   /** Which variant the calculator opens on, where it has more than one — the flat roof's warm/cold,
@@ -67,8 +71,8 @@ export const BUILT_ASSEMBLY_CANON_IDS: Record<string, {
   'roof-rooflights': { icon: 'rooflights', render: opts => <AssemblyRooflightsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'roof-fascia-soffit': { icon: 'fascia-soffit', render: opts => <AssemblyFasciaSoffitDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} externalWidthMm={opts?.externalWidthMm} /> },
   'roof-flat': { icon: 'flat-roof', render: opts => <AssemblyFlatRoofDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} externalWidthMm={opts?.externalWidthMm} buildUpDefault={opts?.variant === 'cold' ? 'cold' : 'warm'} /> },
-  'ew-cav-partial': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="pir" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
-  'ew-cav-full': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="wool" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
+  'ew-cav-partial': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="pir" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initialHeightMm={opts?.initialHeightMm} noSampleOpenings={opts?.noSampleOpenings} /> },
+  'ew-cav-full': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="wool" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initialHeightMm={opts?.initialHeightMm} noSampleOpenings={opts?.noSampleOpenings} /> },
 }
 
 export function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; size?: number }) {

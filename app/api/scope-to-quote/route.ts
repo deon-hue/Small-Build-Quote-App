@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { usageGuard } from '@/lib/usage'
 import { JOB_TEMPLATES } from '@/lib/utils'
+import { BUILT_ASSEMBLY_CANONICAL_IDS } from '@/lib/built-assembly-ids'
 
 export const maxDuration = 300
 import { ESTIMATOR_PHASE_DEFAULTS } from '@/lib/estimatorDefaults'
@@ -34,6 +35,8 @@ async function buildLibraryFromDB(userId: string): Promise<{
   phaseTaskMap: Record<string, string[]>
   parentPhaseMap: Record<string, string>
   rateMap: Record<string, TaskLibEntry>
+  /** Sub-phases priced by an assembly calculator, listed even when they have no tasks. `takesWallSize` ones are the cavity walls, which the AI quote can price from a length and height. */
+  calcPhases: { name: string; parent: string; takesWallSize: boolean }[]
 } | null> {
   const sb = await createClient()
 
@@ -50,7 +53,7 @@ async function buildLibraryFromDB(userId: string): Promise<{
   // Fetch sub-phases
   const { data: subPhases } = await sb
     .from('bo_sub_phases')
-    .select('id, name, phase_id, display_order')
+    .select('id, name, phase_id, display_order, canonical_id')
     .eq('user_id', userId)
     .eq('active', true)
     .order('display_order')
@@ -66,6 +69,9 @@ async function buildLibraryFromDB(userId: string): Promise<{
   if (!tasks || tasks.length === 0) return null
 
   const phaseById = Object.fromEntries((phases ?? []).map(p => [p.id, p.name]))
+  const calcPhases = (subPhases ?? [])
+    .filter(sp => sp.canonical_id && BUILT_ASSEMBLY_CANONICAL_IDS.has(sp.canonical_id) && phaseById[sp.phase_id])
+    .map(sp => ({ name: sp.name as string, parent: phaseById[sp.phase_id] as string, takesWallSize: sp.canonical_id === 'ew-cav-partial' || sp.canonical_id === 'ew-cav-full' }))
   const subPhaseById = Object.fromEntries((subPhases ?? []).map(sp => [sp.id, { name: sp.name, phaseId: sp.phase_id }]))
 
   const phaseTaskMap: Record<string, string[]> = {}
@@ -115,7 +121,7 @@ async function buildLibraryFromDB(userId: string): Promise<{
     phaseTaskMap[phaseName].push(t.name)
   }
 
-  return entries.length > 0 ? { entries, phaseTaskMap, parentPhaseMap, rateMap } : null
+  return entries.length > 0 ? { entries, phaseTaskMap, parentPhaseMap, rateMap, calcPhases } : null
 }
 
 // ── Static fallback library builder ───────────────────────────────────────────
@@ -193,6 +199,7 @@ export async function POST(req: NextRequest) {
   let parentPhaseMap: Record<string, string>
   let rateMap: Record<string, Partial<TaskLibEntry>>
   let usingDB = false
+  let calcPhases: { name: string; parent: string; takesWallSize: boolean }[] = []
 
   if (user) {
     const dbLib = await buildLibraryFromDB(user.id)
@@ -200,6 +207,7 @@ export async function POST(req: NextRequest) {
       phaseTaskMap = dbLib.phaseTaskMap
       parentPhaseMap = dbLib.parentPhaseMap
       rateMap = dbLib.rateMap
+      calcPhases = dbLib.calcPhases
       usingDB = true
     } else {
       // User exists but Back Office not set up yet — use static defaults
@@ -216,9 +224,15 @@ export async function POST(req: NextRequest) {
   }
 
   // Compact library text — "Phase name": task1 | task2 | task3
-  const libraryLines = Object.entries(phaseTaskMap).map(([phase, tasks]) =>
+  const calcByName = new Map(calcPhases.map(c => [c.name, c]))
+  const libraryLines = Object.entries(phaseTaskMap).filter(([phase]) => !calcByName.has(phase)).map(([phase, tasks]) =>
     `"${phase}": ${tasks.join(' | ')}`
   )
+  // Calculator sub-phases are priced by their calculator, not from tasks, so they are listed on their own (even with no tasks)
+  for (const c of calcPhases) {
+    libraryLines.push(`"${c.name}": [PRICED BY CALCULATOR \u2014 select no tasks${c.takesWallSize ? '; give the wall length and height in "measurements" if the scope states them' : ''}]`)
+    parentPhaseMap[c.name] = c.parent
+  }
   const libraryText = libraryLines.join('\n')
 
   const parentMapText = Object.entries(parentPhaseMap)
@@ -264,6 +278,7 @@ Rules:
 - Only include phases genuinely required by the scope — do not include phases with nothing to do
 - Always include Preliminaries for any construction project
 - Include Completion & Handover for all projects
+- A library line marked [PRICED BY CALCULATOR] is priced by a calculator, so give it an empty "selectedTasks". For those marked as taking a wall length and height, add "measurements": {"lengthM": <metres>, "heightM": <metres>} using ONLY the length and height the scope states for that wall (convert to metres; if only some walls are stated, use the stated wall). If the scope does not state both, leave "measurements" out. Never guess or invent a size.
 - "extraTasks" should ONLY be used for work genuinely outside the standard library; include all fields:
   { "name": "...", "description": "...", "measurementType": "quantity|area|linear|volume", "unit": "...", "labourRate": 0, "materialsRate": 0, "plantRate": 0, "subRate": 0, "otherRate": 0, "wastePercent": 0 }
 - Select enough tasks to fully represent each phase — don't under-select

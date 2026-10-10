@@ -22,6 +22,7 @@ import PlantPicker        from '@/components/PlantPicker'
 import PhaseReviewModal   from '@/components/PhaseReviewModal'
 import { BUILT_ASSEMBLY_CANON_IDS, AssemblyIconGlyph, type AssemblySaveResult } from '@/lib/built-assemblies'
 import { MaterialsListButtons } from '@/components/assembly-ui'
+import { assemblyLinesToItems } from '@/lib/assembly-quote-items'
 
 // ── IDs ────────────────────────────────────────────────────────────────────────
 let _id = Date.now()
@@ -864,18 +865,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
   // lines — one QuoteItem per line, its cost in the single field matching its category (the
   // same "one category per row" shape used elsewhere, e.g. refreshFromBackOffice's siblings).
   function applyAssemblyCalculation(result: AssemblySaveResult) {
-    const newItems: QuoteItem[] = result.lines
-      .filter(l => l.cost !== 0)
-      .map(l => {
-        const base: QuoteItem = {
-          id: uid(), desc: l.name, qty: 1, unit: l.unit,
-          labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0,
-          notes: `${l.purchaseQty} ${l.unit} @ £${l.unitCost.toFixed(2)}/${l.unit}${l.wastePct ? ` (${l.wastePct}% waste)` : ''}`,
-          itemType: l.category,
-        }
-        const key = l.category === 'plant' ? 'plantHire' : l.category
-        return { ...base, [key]: l.cost }
-      })
+    const newItems: QuoteItem[] = assemblyLinesToItems(result.lines).map(i => ({ ...i, id: uid() }))
     onUpdate(markEdited({
       ...p, items: newItems, taskName: result.description, assemblyLines: result.lines,
       // Always set (even to undefined): re-saving a calculator that no longer writes a detail must not leave a stale one.
@@ -927,6 +917,9 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
     other:          itemsOfType('other').length + (p.miscItems ?? []).length,
   }
   const totalCost = ITEM_TYPES.reduce((s, t) => s + cardCost[t], 0)
+  // A calculator sub-phase counts as calculated once the calculator has priced it (it saved its lines) or it carries a cost; one with nothing
+  // priced yet says "Not yet calculated" (the AI quote and templates now start calculator sub-phases at nothing, see phasesFromBORows).
+  const isCalculated = (p.assemblyLines?.length ?? 0) > 0 || totalCost > 0
   const totalSell = sell
   const margin    = +(totalSell - totalCost).toFixed(2)
 
@@ -1648,10 +1641,10 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
               <AssemblyIconGlyph icon={builtAssembly.icon} size={26} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 13, color: '#1e293b' }}>
-                  {p.items.length > 0 ? `Priced via Assembly Calculator — ${p.items.length} line${p.items.length !== 1 ? 's' : ''}` : 'Not yet calculated'}
+                  {isCalculated ? `Priced via Assembly Calculator — ${p.items.length} line${p.items.length !== 1 ? 's' : ''}` : 'Not yet calculated'}
                 </div>
                 <div style={{ fontSize: 11, color: '#94a3b8' }}>
-                  {p.items.length > 0 ? 'Cost £' + totalCost.toFixed(2) + ' — open the calculator to recalculate' : 'Open the calculator to size this and price it'}
+                  {isCalculated ? 'Cost £' + totalCost.toFixed(2) + ' — open the calculator to recalculate' : 'Open the calculator to size this and price it'}
                 </div>
               </div>
               {p.assemblyLines && p.assemblyLines.length > 0 && (
@@ -1660,7 +1653,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
               <button
                 onClick={() => setShowAssemblyCalc(true)}
                 style={{ padding: '6px 14px', background: '#7c3aed', border: 'none', borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
-                {p.items.length > 0 ? 'Recalculate' : 'Open Calculator'}
+                {isCalculated ? 'Recalculate' : 'Open Calculator'}
               </button>
             </div>
           )}
@@ -1841,7 +1834,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
               <div style={{ fontSize: 12, color: '#7c3aed', background: '#fdfaff', border: '1px dashed #e9d5ff', borderRadius: 6, padding: '8px 12px', marginBottom: 14 }}>
                 🧪 Sample rates for now — playing with this doesn't change this quote's actual costs yet.
               </div>
-              {builtAssembly.render({ onSave: applyAssemblyCalculation, labourTrades })}
+              {builtAssembly.render({ onSave: applyAssemblyCalculation, labourTrades, ...(p.assemblySize && { externalLengthMm: p.assemblySize.lengthMm, initialHeightMm: p.assemblySize.heightMm, noSampleOpenings: true }) })}
             </div>
           </div>
         </div>
