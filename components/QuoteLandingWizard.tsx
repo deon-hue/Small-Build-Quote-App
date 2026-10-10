@@ -6,13 +6,16 @@
  * The user picks one route and is taken into the QuoteWorkspace.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { JOB_TYPES } from '@/lib/utils'
+import { createClient } from '@/lib/supabase/client'
+import { fetchQuoteTemplates, type QuoteTemplate } from '@/lib/quote-templates'
 
 export type QuoteCreationMode = 'takeoff' | 'ai' | 'manual' | 'quick'
 
 interface Props {
-  onSelect: (mode: QuoteCreationMode, jobType?: string) => void
+  /** for a manual quote: the job type, and the template's id when one of "My templates" was picked */
+  onSelect: (mode: QuoteCreationMode, jobType?: string, templateId?: string) => void
 }
 
 const card: React.CSSProperties = {
@@ -54,6 +57,15 @@ const ctaBtn = (bg: string, text: string): React.CSSProperties => ({
 export default function QuoteLandingWizard({ onSelect }: Props) {
   const [jobType, setJobType] = useState('Rear Extension')
   const [hovered, setHovered] = useState<QuoteCreationMode | null>(null)
+  // "My templates" from Back Office > Job Templates; none (or the table not there yet) just means the list is the job types as before
+  const [templates, setTemplates] = useState<QuoteTemplate[]>([])
+  useEffect(() => { fetchQuoteTemplates(createClient()).then(r => setTemplates(r.templates)).catch(() => {}) }, [])
+  function choose(mode: QuoteCreationMode) {
+    if (mode !== 'manual') return onSelect(mode)
+    const t = jobType.startsWith('tpl:') ? templates.find(x => x.id === jobType.slice(4)) : undefined
+    if (t) onSelect('manual', t.baseJobType, t.id)
+    else onSelect('manual', jobType)
+  }
 
   const CARDS: Array<{
     mode:   QuoteCreationMode
@@ -214,10 +226,17 @@ export default function QuoteLandingWizard({ onSelect }: Props) {
                   onClick={e => e.stopPropagation()}
                   style={{ width: '100%', padding: '8px 10px', border: '1.5px solid #e2e8f0', borderRadius: 7, fontSize: 13, outline: 'none' }}
                 >
-                  {JOB_TYPES.map(t => <option key={t}>{t}</option>)}
+                  {templates.length > 0 && (
+                    <optgroup label="My templates">
+                      {templates.map(t => <option key={t.id} value={'tpl:' + t.id}>{t.name}</option>)}
+                    </optgroup>
+                  )}
+                  <optgroup label="Job types">
+                    {JOB_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </optgroup>
                 </select>
                 <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>
-                  Phases and tasks will be loaded for this job type.
+                  {jobType.startsWith('tpl:') ? 'Phases and tasks for this template will be loaded from Phases & Tasks.' : 'Phases and tasks will be loaded for this job type.'}
                 </div>
               </div>
             )}
@@ -225,7 +244,7 @@ export default function QuoteLandingWizard({ onSelect }: Props) {
             {/* CTA */}
             <div style={ctaBtn(c.ctaColor, c.ctaTextColor)}>
               <button
-                onClick={() => onSelect(c.mode, c.mode === 'manual' ? jobType : undefined)}
+                onClick={() => choose(c.mode)}
                 style={{
                   width: '100%', padding: '12px', borderRadius: 8, border: 'none',
                   background: c.ctaColor, color: c.ctaTextColor,

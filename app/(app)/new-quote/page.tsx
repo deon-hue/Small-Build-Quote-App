@@ -29,6 +29,7 @@ import { DEFAULT_DEMO_SUBPHASES, calcDemoSellingPrice, DEMO_UNIT_LABELS, type De
 import { ALL_PHASE_SUBPHASES, calcPhaseTaskSellingPrice } from '@/lib/phase-tasks'
 import { sumByCategory } from '@/lib/material-recipes'
 import { createClient } from '@/lib/supabase/client'
+import { fetchQuoteTemplates, pickTemplateRows } from '@/lib/quote-templates'
 import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchQuoteDefaults, fetchAllQuoteDefaults, upsertTask, fetchLabourTrades, fetchProducts, fetchPlantItems, fetchPhases, fetchSubPhases, fetchTasks } from '@/lib/back-office-queries'
 import type { BOLabourTrade, BOProduct, BOPlantItem, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
 import type { FloorMakeup } from '@/lib/takeoff-types'
@@ -481,6 +482,32 @@ export default function NewQuotePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phases, custName, custAddr, custEmail, custPhone, jobType, jobTitle, markup, vatOn, scope, photo, editingId])
 
+  /** Phases & Tasks rows -> quote phases (one per sub-phase, five typed rows per task, stamped so the quote can save back to Back Office). A sub-phase with no tasks still gets its five empty rows. */
+  function phasesFromBORows(defaults: Awaited<ReturnType<typeof fetchAllQuoteDefaults>>): QuotePhase[] {
+    const built: QuotePhase[] = []
+    for (const row of defaults) {
+      const items: Omit<QuoteItem, 'id'>[] = []
+      for (const task of row.tasks) {
+        const tg = task.name
+        items.push(
+          { desc: task.description || task.name, qty: task.default_qty, unit: task.unit, labour: task.labour_cost, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: task.client_description || '', itemType: 'labour'         as const, taskGroup: tg, boTaskId: task.id },
+          { desc: '',                              qty: task.default_qty, unit: task.unit, labour: 0, materials: task.materials_cost,   plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials'      as const, taskGroup: tg, boTaskId: task.id },
+          { desc: '',                              qty: task.default_qty, unit: task.unit, labour: 0, materials: 0, plantHire: task.plant_cost,  subcontractors: 0, other: 0, notes: '', itemType: 'plant'          as const, taskGroup: tg, boTaskId: task.id },
+          { desc: '',                              qty: task.default_qty, unit: task.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: task.subcontract_cost, other: 0, notes: '', itemType: 'subcontractors' as const, taskGroup: tg, boTaskId: task.id },
+          { desc: '',                              qty: task.default_qty, unit: task.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: task.other_cost, notes: '', itemType: 'other'          as const, taskGroup: tg, boTaskId: task.id },
+        )
+      }
+      if (!items.length) items.push(...defaultTypedItems())   // a sub-phase with no tasks yet still gets its five typed rows
+      const ph = makePhase(row.subPhaseName, items, row.phaseName)
+      // Use task description (preferred — more human-readable) then name as fallback
+      const taskNames = Array.from(new Set(
+        row.tasks.map(t => (t.description?.trim() || t.client_description?.trim() || t.name)?.trim()).filter(Boolean)
+      ))
+      built.push({ ...ph, source: 'manual', itemStatus: 'bo-default', boSubPhaseId: row.subPhaseId, taskName: taskNames.join(' · ') || undefined })
+    }
+    return built
+  }
+
   // ── Load from Back Office (primary path for manual quotes) ───────────────────
   // Fetches live bo_phases → bo_sub_phases → bo_tasks for the selected job type
   // and builds QuotePhase[] with itemStatus:'bo-default' and boTaskId stamped.
@@ -499,26 +526,7 @@ export default function NewQuotePage() {
         return
       }
 
-      const built: QuotePhase[] = []
-      for (const row of defaults) {
-        const items: Omit<QuoteItem, 'id'>[] = []
-        for (const task of row.tasks) {
-          const tg = task.name
-          items.push(
-            { desc: task.description || task.name, qty: task.default_qty, unit: task.unit, labour: task.labour_cost, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: task.client_description || '', itemType: 'labour'         as const, taskGroup: tg, boTaskId: task.id },
-            { desc: '',                              qty: task.default_qty, unit: task.unit, labour: 0, materials: task.materials_cost,   plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'materials'      as const, taskGroup: tg, boTaskId: task.id },
-            { desc: '',                              qty: task.default_qty, unit: task.unit, labour: 0, materials: 0, plantHire: task.plant_cost,  subcontractors: 0, other: 0, notes: '', itemType: 'plant'          as const, taskGroup: tg, boTaskId: task.id },
-            { desc: '',                              qty: task.default_qty, unit: task.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: task.subcontract_cost, other: 0, notes: '', itemType: 'subcontractors' as const, taskGroup: tg, boTaskId: task.id },
-            { desc: '',                              qty: task.default_qty, unit: task.unit, labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: task.other_cost, notes: '', itemType: 'other'          as const, taskGroup: tg, boTaskId: task.id },
-          )
-        }
-        const ph = makePhase(row.subPhaseName, items, row.phaseName)
-        // Use task description (preferred — more human-readable) then name as fallback
-        const taskNames = Array.from(new Set(
-          row.tasks.map(t => (t.description?.trim() || t.client_description?.trim() || t.name)?.trim()).filter(Boolean)
-        ))
-        built.push({ ...ph, source: 'manual', itemStatus: 'bo-default', boSubPhaseId: row.subPhaseId, taskName: taskNames.join(' · ') || undefined })
-      }
+      const built = phasesFromBORows(defaults)
       console.log('[loadFromBackOffice] Loaded', built.length, 'sub-phases from Back Office for', type)
       setPhases(built)
     } catch (err) {
@@ -583,6 +591,28 @@ export default function NewQuotePage() {
     })
     setPhases(prev => [...prev, ...newPhases])
     setShowLibrary(false)
+  }
+
+  /** A template from Back Office > Job Templates ("My templates"): its sub-phases, in Phases & Tasks order, with the prices from Phases & Tasks. */
+  async function loadFromTemplate(templateId: string, baseType: string) {
+    setLoadingBO(true)
+    try {
+      const sb = createClient()
+      const { data: { user } } = await sb.auth.getUser()
+      if (!user) { loadTemplateStamped(baseType); return }
+      const [{ templates }, all] = await Promise.all([fetchQuoteTemplates(sb), fetchAllQuoteDefaults(sb, user.id)])
+      const tpl = templates.find(t => t.id === templateId)
+      if (!tpl) { alert('That template could not be found, so the standard ' + baseType + ' phases were loaded instead.'); await loadFromBackOffice(baseType); return }
+      const { rows, missingIds } = pickTemplateRows(all, tpl.subPhaseIds)
+      if (!rows.length) { alert('The template "' + tpl.name + '" has no sub-phases in it yet. Add some in Back Office > Job Templates.'); setPhases([]); return }
+      setPhases(phasesFromBORows(rows))
+      if (missingIds.length) console.warn('[loadFromTemplate]', missingIds.length, 'sub-phase(s) in the template no longer exist in Phases & Tasks')
+    } catch (err) {
+      console.error('[loadFromTemplate] Error:', err)
+      loadTemplateStamped(baseType)
+    } finally {
+      setLoadingBO(false)
+    }
   }
 
   /** Fallback: load hardcoded template but stamp itemStatus:'manual' so badges always show */
@@ -750,7 +780,7 @@ export default function NewQuotePage() {
   }
 
   // ── Landing wizard selection ───────────────────────────────────────────────
-  function handleLandingSelect(mode: QuoteCreationMode, selectedJobType?: string) {
+  function handleLandingSelect(mode: QuoteCreationMode, selectedJobType?: string, templateId?: string) {
     setQuoteSource(mode)
     if (mode === 'ai') {
       // Go to the dedicated AI Scope screen first
@@ -762,7 +792,8 @@ export default function NewQuotePage() {
         // "Other" starts blank — user builds from scratch
         setPhases([])
       } else {
-        loadFromBackOffice(selectedJobType)  // async — BO defaults first, template fallback
+        if (templateId) loadFromTemplate(templateId, selectedJobType)   // one of "My templates"
+        else loadFromBackOffice(selectedJobType)  // async — BO defaults first, template fallback
       }
     } else if (mode === 'takeoff') {
       // Navigate to the Takeoff tool — user draws plans there, then

@@ -23,6 +23,7 @@ import SectionTakeoffMapping from './components/SectionTakeoffMapping'
 import SectionFormulaRules from './components/SectionFormulaRules'
 import SectionAIMapping from './components/SectionAIMapping'
 import SectionAssemblies from './components/SectionAssemblies'
+import SectionTemplates from './components/SectionTemplates'
 
 function deepClone<T>(v: T): T { return JSON.parse(JSON.stringify(v)) }
 
@@ -191,6 +192,7 @@ export default function BackOfficePage() {
   }, [])
 
   // ── Job Templates state (unchanged) ─────────────────────────────────────────
+  const [tplMode, setTplMode] = useState<'linked' | 'classic'>('linked')
   const [selectedJobType, setSelectedJobType] = useState<string>(JOB_TYPES[0])
   const [localTemplate, setLocalTemplate] = useState<TemplatePhaseData[]>([])
   const [dirty, setDirty] = useState(false)
@@ -323,8 +325,19 @@ export default function BackOfficePage() {
         {/* ── Job Templates (existing, unchanged) ── */}
         {activeSection === 'job-templates' && (
           <>
-            <h2 style={{ margin: '0 0 16px', fontSize: 20, fontWeight: 700 }}>Job Templates</h2>
-            <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+            <h2 style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 700 }}>Job Templates</h2>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+              {([['linked', 'My templates'], ['classic', 'Built-in job types (old style)']] as const).map(([k, label]) => (
+                <button key={k} onClick={() => { if (tplMode === 'classic' && k === 'linked' && dirty && !confirm('You have unsaved changes. Discard them?')) return; setTplMode(k) }}
+                  style={{ padding: '6px 14px', borderRadius: 99, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: '1px solid #d1d5db', background: tplMode === k ? '#4a90a4' : '#fff', color: tplMode === k ? '#fff' : '#475569' }}>{label}</button>
+              ))}
+              <span style={{ fontSize: 12, color: '#64748b' }}>
+                {tplMode === 'linked' ? 'Built from the sub-phases in Phases & Tasks, so prices and calculators stay in one place.' : 'The older templates, with their own list of phases. They are being replaced by My templates.'}
+              </span>
+            </div>
+            {tplMode === 'linked' && userId && <SectionTemplates userId={userId} />}
+            {tplMode === 'linked' && !userId && <div style={{ textAlign: 'center', padding: 48, color: '#64748b' }}>Loading…</div>}
+            {tplMode === 'classic' && <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
               <div style={{ width: 196, flexShrink: 0 }}>
                 <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
                   <div style={{ padding: '10px 14px', borderBottom: '1px solid #e2e8f0', fontWeight: 600, fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Job Types</div>
@@ -458,7 +471,7 @@ export default function BackOfficePage() {
                     </>
                   )}
               </div>
-            </div>
+            </div>}
           </>
         )}
 
