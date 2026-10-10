@@ -1251,7 +1251,7 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
   //   FloorMakeup  → bo_sub_phase  (canonical_id = 'makeup_' + makeup.id)
   //   FloorLayer   → bo_task       (canonical_id = 'layer_'  + makeup.id + '_' + layer.id)
   //
-  // Rules: insert new; update name/description if changed; PRESERVE all cost fields.
+  // Rules: insert new; never overwrite what is already there (name, description or costs); skip anything the company deleted.
   // This ensures Back Office sub-phase shows Construction Layers, not generic tasks.
 
   // Fresh sub-phase list for name-based matching (includes anything just inserted in step 2)
@@ -1269,6 +1269,8 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
     for (let mi = 0; mi < makeups.length; mi++) {
       const makeup = makeups[mi]
       const subCanonId = `makeup_${makeup.id}`
+      // a build-up the company deleted stays deleted (the External Walls / Floors / Foundations / Plastering build-ups come from here)
+      if (deletedStd.has('sub_phase', subCanonId)) continue
 
       // Find matching sub-phase: first by canonical_id, then by name+phase
       let subPhaseDbId: string | undefined =
@@ -1297,15 +1299,10 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
       for (let li = 0; li < makeup.layers.length; li++) {
         const layer = makeup.layers[li]
         const layerCanonId = `layer_${makeup.id}_${layer.id}`
+        if (deletedStd.has('task', layerCanonId)) continue   // a layer the company deleted stays deleted
 
         if (taskByCanon.has(layerCanonId)) {
-          // Update name/description only — PRESERVE all cost fields
-          const ex = taskByCanon.get(layerCanonId)!
-          if (ex.name !== layer.name) {
-            await sb.from('bo_tasks')
-              .update({ name: layer.name, description: layer.description, updated_at: new Date().toISOString() })
-              .eq('id', ex.id)
-          }
+          // Already there: leave it exactly as the company has it (name, description and every cost).
         } else {
           // Check if a row exists by name + sub_phase_id (for healing rows without canonical_id)
           const existByName = (dbTasks ?? []).find(
