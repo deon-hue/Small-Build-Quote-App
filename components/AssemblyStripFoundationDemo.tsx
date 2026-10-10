@@ -26,6 +26,8 @@ import {
   MaterialsListButtons,
 } from '@/components/assembly-ui'
 import { LabourSuggestionPanel } from '@/components/AssemblyFlatRoofDemo'
+import { costFromBasics, type PricedFromBasics } from '@/components/assembly-basics-pricing'
+import type { AssemblyBasics } from '@/lib/assembly-basics'
 import { CEMENT_M2_PER_BAG, SAND_M2_PER_TONNE } from '@/components/AssemblyMasonryWallDemo'
 
 // Mortar as a volume — the same calibration as the dwarf, sleeper, parapet and flat roof calculators.
@@ -51,6 +53,8 @@ interface Props {
   externalLengthMm?: number
   /** 'strip' (default): a set thickness of concrete in the bottom. 'trench-fill': the trench filled with concrete up to a set distance below ground. */
   variant?: 'strip' | 'trench-fill'
+  /** Sizes the AI quote heard (length, and the trench width and depth if stated): the calculator opens with them, so it matches what the AI priced. */
+  initial?: AssemblyBasics
 }
 
 function buildStripFoundationLayers(g: StripFoundationGeometry, o: { wall: StripWallBuild; mix: Mix; wastePct: number }): AssemblyLayerDef[] {
@@ -79,15 +83,35 @@ function buildStripFoundationLayers(g: StripFoundationGeometry, o: { wall: Strip
   return L
 }
 
-export default function AssemblyStripFoundationDemo({ onClose, onSave, labourTrades = [], externalLengthMm, variant = 'strip' }: Props) {
+/**
+ * Prices a strip foundation or trench fill from just its length (and the trench width and depth if they are known), with the calculator's own
+ * standard settings (the ones its screen opens with: 600mm wide, 1.0m deep, 225mm of C25, solid 215mm blocks to 150mm above ground, 10% waste,
+ * 20% profit). Used when the AI quote hears a length, so the foundation arrives priced the way "Save & Price" would price it. Returns null when
+ * the sizes don't make a valid foundation.
+ */
+export function priceStripFoundationFromBasics(o: { variant: 'strip' | 'trench-fill'; basics: AssemblyBasics; labourTrades: BOLabourTrade[] }): PricedFromBasics | null {
+  const isFill = o.variant === 'trench-fill'
+  const widthMm = o.basics.widthMm ?? 600, depthMm = o.basics.depthMm ?? 1000, fillBelowMm = 150, dpcAbove = 150
+  const concreteMm = isFill ? Math.max(1, depthMm - fillBelowMm) : 225
+  const wall: StripWallBuild = 'solid-flat', mix: Mix = 'C25', wastePct = 10
+  if (!o.basics.lengthMm) return null
+  let g: StripFoundationGeometry
+  try { g = calculateStripFoundationGeometry({ lengthMm: o.basics.lengthMm, widthMm, depthMm, concreteThicknessMm: concreteMm, dpcAboveGroundMm: dpcAbove, wall, takeAllSpoilAway: false }) } catch { return null }
+  const suggestions = suggestStripFoundationLabour({ lm: g.lengthM, concreteM3: g.concreteVolumeM3, backfillM3: g.backfillM3, masonryAreaM2: g.masonryAreaM2, wall, cavityFillM3: g.cavityFillM3 })
+  const lines = costFromBasics({ layers: buildStripFoundationLayers(g, { wall, mix, wastePct }), suggestions, labourTrades: o.labourTrades })
+  const d = { lengthM: g.lengthM, widthMm, depthMm, concreteThicknessMm: concreteMm, dpcAboveGroundMm: dpcAbove, wall, concreteMix: mix, takeAllSpoilAway: false, variant: o.variant }
+  return { name: isFill ? 'Trench fill foundation' : 'Strip foundation (traditional)', qty: 1, location: '', description: describeStripFoundationShort(d), detail: describeStripFoundation(d), lines }
+}
+
+export default function AssemblyStripFoundationDemo({ onClose, onSave, labourTrades = [], externalLengthMm, variant = 'strip', initial }: Props) {
   const isFill = variant === 'trench-fill'
   const [name, setName]         = useState(isFill ? 'Trench fill foundation' : 'Strip foundation (traditional)')
   const [location, setLocation] = useState('')
   const [qty, setQty]           = useState(1)
-  const [lengthMm, setLengthMm] = useState(externalLengthMm ?? 10000)
+  const [lengthMm, setLengthMm] = useState(externalLengthMm ?? initial?.lengthMm ?? 10000)
   useEffect(() => { if (externalLengthMm != null) setLengthMm(externalLengthMm) }, [externalLengthMm])
-  const [widthMm, setWidthMm]   = useState(600)
-  const [depthMm, setDepthMm]   = useState(1000)
+  const [widthMm, setWidthMm]   = useState(initial?.widthMm ?? 600)
+  const [depthMm, setDepthMm]   = useState(initial?.depthMm ?? 1000)
   const [stripConcreteMm, setConcreteMm] = useState(225)
   const [fillBelowMm, setFillBelowMm] = useState(150)   // trench fill: the concrete stops this far below ground
   // The concrete's thickness: given for a strip, and for a trench fill the depth less what is left above the concrete

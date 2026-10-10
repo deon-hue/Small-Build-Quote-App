@@ -23,6 +23,8 @@ import {
   MaterialsListButtons,
 } from '@/components/assembly-ui'
 import { LabourSuggestionPanel } from '@/components/AssemblyFlatRoofDemo'
+import { costFromBasics, type PricedFromBasics } from '@/components/assembly-basics-pricing'
+import type { AssemblyBasics } from '@/lib/assembly-basics'
 
 // Sample rates, like every calculator here — editable per line in the breakdown until Back Office products and plant replace them.
 const MIXES = { C25: { label: 'C25', cost: 105 }, C30: { label: 'C30 (usual for a ground beam)', cost: 112 }, C35: { label: 'C35', cost: 120 } } as const
@@ -41,6 +43,8 @@ interface Props {
   onClose?: () => void
   onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }) => void
   labourTrades?: BOLabourTrade[]
+  /** Sizes the AI quote heard: the calculator opens with them, so it matches what the AI priced. */
+  initial?: AssemblyBasics
   /** The length of the foundation line drawn in Take-off, in mm. Whenever it changes it overwrites the calculator's own. */
   externalLengthMm?: number
 }
@@ -63,16 +67,33 @@ function buildPiledLayers(g: PiledFoundationGeometry, o: { mix: Mix; wastePct: n
   return L
 }
 
-export default function AssemblyPiledFoundationDemo({ onClose, onSave, labourTrades = [], externalLengthMm }: Props) {
+/**
+ * Prices piles with a ground beam on top from just the length of beam (and the number of piles and pile depth if known), with the calculator's own
+ * standard settings (the ones its screen opens with: a pile every 3.0m, 300mm piles 8m deep, a 450 x 450mm beam on 50mm blinding, C30, no void
+ * former, 10% waste, 20% profit). Used when the AI quote hears the length. Returns null when the sizes don't make a valid foundation.
+ */
+export function pricePiledFoundationFromBasics(o: { basics: AssemblyBasics; labourTrades: BOLabourTrade[] }): PricedFromBasics | null {
+  const spacingMm = 3000, pileDiaMm = 300, pileDepthMm = o.basics.depthMm ?? 8000, beamW = 450, beamD = 450, blindingMm = 50, voidFormer = false
+  const mix: Mix = 'C30', wastePct = 10
+  if (!o.basics.lengthMm) return null
+  let g: PiledFoundationGeometry
+  try { g = calculatePiledFoundationGeometry({ lengthMm: o.basics.lengthMm, pileSpacingMm: spacingMm, pileCountOverride: o.basics.count ?? null, pileDiameterMm: pileDiaMm, pileDepthMm, beamWidthMm: beamW, beamDepthMm: beamD, blindingMm, workingSpaceMm: 150, voidFormer }) } catch { return null }
+  const suggestions = suggestPiledFoundationLabour({ lm: g.lengthM, pileCount: g.pileCount, beamConcreteM3: g.beamConcreteM3, formworkM2: g.formworkM2, backfillM3: g.backfillM3 })
+  const lines = costFromBasics({ layers: buildPiledLayers(g, { mix, wastePct, pileDiameterMm: pileDiaMm, beamDepthMm: beamD }), suggestions, labourTrades: o.labourTrades })
+  const d = { lengthM: g.lengthM, pileCount: g.pileCount, pileDiameterMm: pileDiaMm, pileDepthMm, beamWidthMm: beamW, beamDepthMm: beamD, concreteMix: mix, voidFormer, blindingMm }
+  return { name: 'Piled foundation', qty: 1, location: '', description: describePiledFoundationShort(d), detail: describePiledFoundation(d), lines }
+}
+
+export default function AssemblyPiledFoundationDemo({ onClose, onSave, labourTrades = [], externalLengthMm, initial }: Props) {
   const [name, setName]         = useState('Piled foundation')
   const [location, setLocation] = useState('')
   const [qty, setQty]           = useState(1)
-  const [lengthMm, setLengthMm] = useState(externalLengthMm ?? 10000)
+  const [lengthMm, setLengthMm] = useState(externalLengthMm ?? initial?.lengthMm ?? 10000)
   useEffect(() => { if (externalLengthMm != null) setLengthMm(externalLengthMm) }, [externalLengthMm])
   const [spacingMm, setSpacingMm] = useState(3000)
-  const [countOverride, setCountOverride] = useState<number | null>(null)   // typed pile count, replacing the one from the spacing
+  const [countOverride, setCountOverride] = useState<number | null>(initial?.count ?? null)   // typed pile count, replacing the one from the spacing
   const [pileDiaMm, setPileDiaMm] = useState(300)
-  const [pileDepthMm, setPileDepthMm] = useState(8000)
+  const [pileDepthMm, setPileDepthMm] = useState(initial?.depthMm ?? 8000)
   const [beamW, setBeamW]       = useState(450)
   const [beamD, setBeamD]       = useState(450)
   const [blindingMm, setBlindingMm] = useState(50)

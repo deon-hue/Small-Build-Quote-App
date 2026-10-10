@@ -23,6 +23,8 @@ import {
   MaterialsListButtons,
 } from '@/components/assembly-ui'
 import { LabourSuggestionPanel } from '@/components/AssemblyFlatRoofDemo'
+import { costFromBasics, type PricedFromBasics } from '@/components/assembly-basics-pricing'
+import type { AssemblyBasics } from '@/lib/assembly-basics'
 
 // Sample rates, like every calculator here — editable per line in the breakdown until Back Office products and plant replace them.
 // Small loads of ready-mix cost more per m³ than a big pour, so these are dearer than the other foundation calculators'.
@@ -38,6 +40,8 @@ interface Props {
   onClose?: () => void
   onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }) => void
   labourTrades?: BOLabourTrade[]
+  /** Sizes the AI quote heard: the calculator opens with them, so it matches what the AI priced. */
+  initial?: AssemblyBasics
   /** The length of the wall line drawn in Take-off, in mm. Whenever it changes it overwrites the calculator's own. */
   externalLengthMm?: number
 }
@@ -56,15 +60,31 @@ function buildUnderpinLayers(g: UnderpinningGeometry, o: { mix: Mix; wastePct: n
   return L
 }
 
-export default function AssemblyUnderpinningDemo({ onClose, onSave, labourTrades = [], externalLengthMm }: Props) {
+/**
+ * Prices underpinning from just the length of wall (and how much deeper, if known), with the calculator's own standard settings (the ones its
+ * screen opens with: 1.0m pins 600mm wide, 1.2m deeper, 75mm dry pack, C25, no reinforcement or props, 10% waste, 20% profit). Used when the AI
+ * quote hears the length. Returns null when the sizes don't make a valid job.
+ */
+export function priceUnderpinningFromBasics(o: { basics: AssemblyBasics; labourTrades: BOLabourTrade[] }): PricedFromBasics | null {
+  const pinLengthMm = 1000, pinWidthMm = 600, depthMm = o.basics.depthMm ?? 1200, dryPackMm = 75, mix: Mix = 'C25', wastePct = 10
+  if (!o.basics.lengthMm) return null
+  let g: UnderpinningGeometry
+  try { g = calculateUnderpinningGeometry({ lengthMm: o.basics.lengthMm, pinLengthMm, pinWidthMm, depthMm, dryPackMm, rebarKgPerM3: 0, support: null }) } catch { return null }
+  const suggestions = suggestUnderpinningLabour({ digM3: g.digM3, pinCount: g.pinCount, formworkM2: g.formworkM2, concreteM3: g.concreteM3, rebarKg: g.rebarKg })
+  const lines = costFromBasics({ layers: buildUnderpinLayers(g, { mix, wastePct }), suggestions, labourTrades: o.labourTrades })
+  const d = { lengthM: g.lengthM, pinCount: g.pinCount, pinLengthMm, pinWidthMm, depthMm, dryPackMm, concreteMix: mix, rebar: false, support: false }
+  return { name: 'Underpinning', qty: 1, location: '', description: describeUnderpinningShort(d), detail: describeUnderpinning(d), lines }
+}
+
+export default function AssemblyUnderpinningDemo({ onClose, onSave, labourTrades = [], externalLengthMm, initial }: Props) {
   const [name, setName]         = useState('Underpinning')
   const [location, setLocation] = useState('')
   const [qty, setQty]           = useState(1)
-  const [lengthMm, setLengthMm] = useState(externalLengthMm ?? 8000)
+  const [lengthMm, setLengthMm] = useState(externalLengthMm ?? initial?.lengthMm ?? 8000)
   useEffect(() => { if (externalLengthMm != null) setLengthMm(externalLengthMm) }, [externalLengthMm])
   const [pinLengthMm, setPinLengthMm] = useState(1000)
   const [pinWidthMm, setPinWidthMm]   = useState(600)
-  const [depthMm, setDepthMm]   = useState(1200)
+  const [depthMm, setDepthMm]   = useState(initial?.depthMm ?? 1200)
   const [dryPackMm, setDryPackMm] = useState(75)
   const [mix, setMix]           = useState<Mix>('C25')
   const [rebarOn, setRebarOn]   = useState(false)

@@ -1,6 +1,7 @@
 import type { EstimatorItem, EstimatorItemTemplate } from './estimator'
 import type { LabourTrade, TaskLabourLine } from './tradeRates'
 import type { CostedLine } from './assembly-calc'
+import type { AssemblyBasics } from './assembly-basics'
 export type { EstimatorItem, EstimatorItemTemplate, LabourTrade, TaskLabourLine }
 
 export interface QuoteItem {
@@ -125,7 +126,7 @@ export interface QuotePhase {
    * from a real quote sub-phase or via Take-off. */
   assemblyLines?: CostedLine[]
   /** The size the AI heard for a calculator wall (mm). The calculator opens on it, with no sample openings, so reopening it agrees with the price the AI put in. */
-  assemblySize?: { lengthMm: number; heightMm: number }
+  assemblySize?: AssemblyBasics
   /** AI-generated item that couldn't be matched to Back Office master data */
   needsReview?: boolean
   reviewNote?: string

@@ -23,6 +23,8 @@ import {
   MaterialsListButtons,
 } from '@/components/assembly-ui'
 import { LabourSuggestionPanel } from '@/components/AssemblyFlatRoofDemo'
+import { costFromBasics, type PricedFromBasics } from '@/components/assembly-basics-pricing'
+import type { AssemblyBasics } from '@/lib/assembly-basics'
 
 // Sample rates, like every calculator here — editable per line in the breakdown until Back Office products and plant replace them.
 const MIXES = { C25: { label: 'C25', cost: 105 }, C30: { label: 'C30 (usual for pads)', cost: 112 }, C35: { label: 'C35', cost: 120 } } as const
@@ -39,6 +41,8 @@ interface Props {
   onClose?: () => void
   onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }) => void
   labourTrades?: BOLabourTrade[]
+  /** Sizes the AI quote heard: the calculator opens with them, so it matches what the AI priced. */
+  initial?: AssemblyBasics
 }
 
 let groupSeq = 0
@@ -60,12 +64,29 @@ function buildPadLayers(g: PadFoundationGeometry, o: { mix: Mix; wastePct: numbe
   return L
 }
 
-export default function AssemblyPadFoundationDemo({ onClose, onSave, labourTrades = [] }: Props) {
+/**
+ * Prices pad foundations from just how many there are (and the pad size and thickness if known), with the calculator's own standard settings
+ * (the ones its screen opens with: 900 x 900 x 600mm pads, 75mm blinding, C30, no formwork, reinforcement or starters, 10% waste, 20% profit).
+ * Used when the AI quote hears the number of pads. Returns null when the sizes don't make a valid set of pads.
+ */
+export function pricePadFoundationFromBasics(o: { basics: AssemblyBasics; labourTrades: BOLabourTrade[] }): PricedFromBasics | null {
+  const blindingMm = 75, formwork = false, starters = false, mix: Mix = 'C30', wastePct = 10
+  if (!o.basics.count) return null
+  const groups: PadGroup[] = [newGroup(o.basics.count, o.basics.lengthMm ?? 900, o.basics.widthMm ?? 900, o.basics.depthMm ?? 600)]
+  let g: PadFoundationGeometry
+  try { g = calculatePadFoundationGeometry({ pads: groups, blindingMm, formwork, workingSpaceMm: 200, rebarKgPerM3: 0, starters }) } catch { return null }
+  const suggestions = suggestPadFoundationLabour({ padCount: g.padCount, concreteM3: g.concreteM3, formworkM2: g.formworkM2, rebarKg: g.rebarKg, backfillM3: g.backfillM3 })
+  const lines = costFromBasics({ layers: buildPadLayers(g, { mix, wastePct, formwork }), suggestions, labourTrades: o.labourTrades })
+  const d = { groups: groups.map(x => ({ count: x.count, lengthMm: x.lengthMm, widthMm: x.widthMm, depthMm: x.depthMm })), blindingMm, concreteMix: mix, formwork, rebar: false, starters }
+  return { name: 'Pad foundations', qty: 1, location: '', description: describePadFoundationShort(d), detail: describePadFoundation(d), lines }
+}
+
+export default function AssemblyPadFoundationDemo({ onClose, onSave, labourTrades = [], initial }: Props) {
   const [name, setName]         = useState('Pad foundations')
   const [location, setLocation] = useState('')
   const [qty, setQty]           = useState(1)
   // One group to start with (all the pads the same); more groups are for pads of a different size
-  const [groups, setGroups]     = useState<PadGroup[]>(() => [newGroup(4, 900, 900, 600)])
+  const [groups, setGroups]     = useState<PadGroup[]>(() => [newGroup(initial?.count ?? 4, initial?.lengthMm ?? 900, initial?.widthMm ?? 900, initial?.depthMm ?? 600)])
   const [blindingMm, setBlindingMm] = useState(75)
   const [formwork, setFormwork] = useState(false)
   const [rebarOn, setRebarOn]   = useState(false)   // reinforcement is an option, not in the starting price

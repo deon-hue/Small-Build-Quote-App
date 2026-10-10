@@ -18,13 +18,3 @@ export function assemblyLinesToItems(lines: CostedLine[]): Omit<QuoteItem, 'id'>
       return { ...base, [key]: l.cost }
     })
 }
-
-/** The size the AI heard for a wall, validated: metres, both positive and sensible. null when it was not given or does not make sense. */
-export function wallMeasurementsMm(m: unknown): { lengthMm: number; heightMm: number } | null {
-  if (!m || typeof m !== 'object') return null
-  const o = m as Record<string, unknown>
-  const len = Number(o.lengthM), h = Number(o.heightM)
-  if (!Number.isFinite(len) || !Number.isFinite(h)) return null
-  if (len < 0.3 || len > 100 || h < 0.3 || h > 12) return null
-  return { lengthMm: Math.round(len * 1000), heightMm: Math.round(h * 1000) }
-}

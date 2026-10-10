@@ -83,7 +83,7 @@ EXTENSIONS (rear / side / kitchen / garden room):
 - Wall height: standard ~2.4m ceiling, or taller (2.7m, 3m)? This affects block quantities and scaffolding.
 - Wall construction: cavity blockwork (standard UK), timber frame, ICF, or solid brick to match existing?
 - External finish: brick to match, render, timber cladding, or mixed?
-- Foundations: does the client have ground conditions info, or assume standard strip footings?
+- Foundations: does the client have ground conditions info, or assume standard strip footings? Which type (strip, trench fill, raft, pads, piles with a ground beam, underpinning) and how much: the total length of foundation, and the trench depth if known; the raft length and width; how many pads or piles; or the length of wall to underpin and how much deeper.
 - Party wall: is the property detached, semi-detached, or terraced? Party wall notice required?
 - Planning: permitted development or full planning permission already granted?
 - Roof type: flat GRP/EPDM, pitched tiles/slates, parapet roof, lantern or rooflight?
@@ -163,6 +163,7 @@ SCOPE REQUIREMENTS:
 - For each included phase, write 1–2 sentences describing the works in that phase
 - Use clear phase headings (e.g. "**External Walls**") to break up sections when there is more than one
 - Note every assumption: "(Assumed: ...)" or "(Provisional sum for ...)"
+- State every size you were given as a number with its unit, so it can be priced (for example "20m of strip foundation, 1.0m deep", "6 pad foundations, 900 x 900mm", "raft 9m x 7m", "8m long x 2.4m high cavity wall"). Never make a size vaguer than it was told to you, and never invent one: if a size was not given, say so rather than guessing a number.
 - Specific enough for a QS to identify every trade and allocate quantities
 - Do NOT include prices, rates, or programme durations
 - Format as markdown with bold headings for each phase (e.g. **Phase Name**) to make it easy to scan

@@ -9,6 +9,7 @@ import { usageGuard } from '@/lib/usage'
 import { JOB_TEMPLATES } from '@/lib/utils'
 import { BUILT_ASSEMBLY_CANONICAL_IDS } from '@/lib/built-assembly-ids'
 import { hintForAi } from '@/lib/sub-phase-hints'
+import { BASICS_NEEDS } from '@/lib/assembly-basics'
 
 export const maxDuration = 300
 import { ESTIMATOR_PHASE_DEFAULTS } from '@/lib/estimatorDefaults'
@@ -36,8 +37,8 @@ async function buildLibraryFromDB(userId: string): Promise<{
   phaseTaskMap: Record<string, string[]>
   parentPhaseMap: Record<string, string>
   rateMap: Record<string, TaskLibEntry>
-  /** Sub-phases priced by an assembly calculator, listed even when they have no tasks. `takesWallSize` ones are the cavity walls, which the AI quote can price from a length and height. */
-  calcPhases: { name: string; parent: string; takesWallSize: boolean; hint: string }[]
+  /** Sub-phases priced by an assembly calculator, listed even when they have no tasks. `ask` is set for the ones the AI quote can price itself from sizes in the scope (see BASICS_NEEDS), and says which sizes to look for. */
+  calcPhases: { name: string; parent: string; ask: string; hint: string }[]
   /** "What this covers" for each sub-phase, by name: the company's own wording, otherwise the built-in suggestion */
   hintByName: Record<string, string>
 } | null> {
@@ -84,7 +85,7 @@ async function buildLibraryFromDB(userId: string): Promise<{
   }
   const calcPhases = (subPhases ?? [])
     .filter(sp => sp.canonical_id && BUILT_ASSEMBLY_CANONICAL_IDS.has(sp.canonical_id) && phaseById[sp.phase_id])
-    .map(sp => ({ name: sp.name as string, parent: phaseById[sp.phase_id] as string, takesWallSize: sp.canonical_id === 'ew-cav-partial' || sp.canonical_id === 'ew-cav-full', hint: hintByName[sp.name as string] ?? '' }))
+    .map(sp => ({ name: sp.name as string, parent: phaseById[sp.phase_id] as string, ask: BASICS_NEEDS[sp.canonical_id as string]?.ask ?? '', hint: hintByName[sp.name as string] ?? '' }))
   const subPhaseById = Object.fromEntries((subPhases ?? []).map(sp => [sp.id, { name: sp.name, phaseId: sp.phase_id }]))
 
   const phaseTaskMap: Record<string, string[]> = {}
@@ -212,7 +213,7 @@ export async function POST(req: NextRequest) {
   let parentPhaseMap: Record<string, string>
   let rateMap: Record<string, Partial<TaskLibEntry>>
   let usingDB = false
-  let calcPhases: { name: string; parent: string; takesWallSize: boolean; hint: string }[] = []
+  let calcPhases: { name: string; parent: string; ask: string; hint: string }[] = []
   let hintByName: Record<string, string> = {}
 
   if (user) {
@@ -245,7 +246,7 @@ export async function POST(req: NextRequest) {
   )
   // Calculator sub-phases are priced by their calculator, not from tasks, so they are listed on their own (even with no tasks)
   for (const c of calcPhases) {
-    libraryLines.push(`"${c.name}": [PRICED BY CALCULATOR \u2014 ${c.hint ? 'covers: ' + c.hint + '; ' : ''}select no tasks${c.takesWallSize ? '; give the wall length and height in "measurements" if the scope states them' : ''}]`)
+    libraryLines.push(`"${c.name}": [PRICED BY CALCULATOR \u2014 ${c.hint ? 'covers: ' + c.hint + '; ' : ''}select no tasks${c.ask ? '; if the scope states them, give ' + c.ask : ''}]`)
     parentPhaseMap[c.name] = c.parent
   }
   const libraryText = libraryLines.join('\n')
@@ -294,7 +295,7 @@ Rules:
 - Always include Preliminaries for any construction project
 - Include Completion & Handover for all projects
 - PREFER the calculator lines. Where a library line marked [PRICED BY CALCULATOR] covers the work (read what it "covers"), choose it instead of a general task-based phase for the same work. For example, for a new external cavity wall choose the cavity wall calculator line, not a general "Masonry & Blockwork" phase.
-- A library line marked [PRICED BY CALCULATOR] is priced by a calculator, so give it an empty "selectedTasks". For those marked as taking a wall length and height, add "measurements": {"lengthM": <metres>, "heightM": <metres>} using ONLY the length and height the scope states for that wall (convert to metres; if only some walls are stated, use the stated wall). If the scope does not state both, leave "measurements" out. Never guess or invent a size.
+- A library line marked [PRICED BY CALCULATOR] is priced by a calculator, so give it an empty "selectedTasks". For those that say what to give, add a "measurements" object using ONLY the sizes the scope actually states for that element, in metres ("count" is a whole number): lengthM, widthM, heightM, depthM, count as that line asks. Include a size only if the scope states it; if the scope does not state the sizes a line needs, leave "measurements" out for it. Never guess or invent a size. If the scope gives several separate runs, walls or foundations of the same kind, add them up for a foundation length, but for a wall use the one stated wall.
 - "extraTasks" should ONLY be used for work genuinely outside the standard library; include all fields:
   { "name": "...", "description": "...", "measurementType": "quantity|area|linear|volume", "unit": "...", "labourRate": 0, "materialsRate": 0, "plantRate": 0, "subRate": 0, "otherRate": 0, "wastePercent": 0 }
 - Select enough tasks to fully represent each phase — don't under-select

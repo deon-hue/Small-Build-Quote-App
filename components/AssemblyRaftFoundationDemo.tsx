@@ -23,6 +23,8 @@ import {
   MaterialsListButtons,
 } from '@/components/assembly-ui'
 import { LabourSuggestionPanel } from '@/components/AssemblyFlatRoofDemo'
+import { costFromBasics, type PricedFromBasics } from '@/components/assembly-basics-pricing'
+import type { AssemblyBasics } from '@/lib/assembly-basics'
 
 // Sample rates, like every calculator here — editable per line in the breakdown until Back Office products and plant replace them.
 const MIXES = { C25: { label: 'C25', cost: 105 }, C30: { label: 'C30 (usual for a raft)', cost: 112 }, C35: { label: 'C35', cost: 120 } } as const
@@ -39,6 +41,8 @@ interface Props {
   /** The longer and the shorter side of the box the drawn shape sits in, in mm. Whenever they change they overwrite the calculator's own. */
   externalLengthMm?: number
   externalWidthMm?: number
+  /** Sizes the AI quote heard (length and width): the calculator opens with them, so it matches what the AI priced. */
+  initial?: AssemblyBasics
 }
 
 function buildRaftLayers(g: RaftFoundationGeometry, o: {
@@ -66,12 +70,30 @@ function buildRaftLayers(g: RaftFoundationGeometry, o: {
   return L
 }
 
-export default function AssemblyRaftFoundationDemo({ onClose, onSave, labourTrades = [], externalLengthMm, externalWidthMm }: Props) {
+/**
+ * Prices a raft from just its length and width, with the calculator's own standard settings (the ones its screen opens with: 200mm C30 slab on
+ * 150mm hardcore and 50mm blinding, two layers of mesh, 300mm overdig, edge insulation, no edge beam, not pumped, 10% waste, 20% profit). Used when
+ * the AI quote hears the size. Returns null when the sizes don't make a valid raft.
+ */
+export function priceRaftFoundationFromBasics(o: { basics: AssemblyBasics; labourTrades: BOLabourTrade[] }): PricedFromBasics | null {
+  const slabMm = 200, hardcoreMm = 150, blindingMm = 50, overdigMm = 300, meshLayers = 2, underSlabMm = 0
+  const edgeInsulation = true, pumped = false, mix: Mix = 'C30', wastePct = 10
+  const digDepthMm = slabMm + hardcoreMm + blindingMm
+  if (!o.basics.lengthMm || !o.basics.widthMm) return null
+  let g: RaftFoundationGeometry
+  try { g = calculateRaftFoundationGeometry({ lengthMm: o.basics.lengthMm, widthMm: o.basics.widthMm, slabThicknessMm: slabMm, hardcoreMm, blindingMm, digDepthMm, overdigMm, edgeBeam: null, underSlabInsulationMm: underSlabMm, meshLayers }) } catch { return null }
+  const suggestions = suggestRaftFoundationLabour({ areaM2: g.areaM2, perimeterLm: g.perimeterLm, concreteM3: g.concreteVolumeM3, meshLayers: g.meshLayers, underSlabInsulation: false })
+  const lines = costFromBasics({ layers: buildRaftLayers(g, { mix, wastePct, slabMm, underSlabMm, edgeInsulation, pumped, hasEdgeBeam: false }), suggestions, labourTrades: o.labourTrades })
+  const d = { lengthM: g.lengthM, widthM: g.widthM, slabThicknessMm: slabMm, hardcoreMm, blindingMm, concreteMix: mix, meshLayers: g.meshLayers, edgeBeam: null, underSlabInsulationMm: underSlabMm, edgeInsulation, pumped }
+  return { name: 'Raft foundation', qty: 1, location: '', description: describeRaftFoundationShort(d), detail: describeRaftFoundation(d), lines }
+}
+
+export default function AssemblyRaftFoundationDemo({ onClose, onSave, labourTrades = [], externalLengthMm, externalWidthMm, initial }: Props) {
   const [name, setName]         = useState('Raft foundation')
   const [location, setLocation] = useState('')
   const [qty, setQty]           = useState(1)
-  const [lengthMm, setLengthMm] = useState(externalLengthMm ?? 10000)
-  const [widthMm, setWidthMm]   = useState(externalWidthMm ?? 8000)
+  const [lengthMm, setLengthMm] = useState(externalLengthMm ?? initial?.lengthMm ?? 10000)
+  const [widthMm, setWidthMm]   = useState(externalWidthMm ?? initial?.widthMm ?? 8000)
   useEffect(() => { if (externalLengthMm != null) setLengthMm(externalLengthMm) }, [externalLengthMm])
   useEffect(() => { if (externalWidthMm != null) setWidthMm(externalWidthMm) }, [externalWidthMm])
   const [slabMm, setSlabMm]     = useState(200)

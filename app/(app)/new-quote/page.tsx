@@ -31,8 +31,9 @@ import { sumByCategory } from '@/lib/material-recipes'
 import { createClient } from '@/lib/supabase/client'
 import { fetchQuoteTemplates, pickTemplateRows } from '@/lib/quote-templates'
 import { BUILT_ASSEMBLY_CANONICAL_IDS } from '@/lib/built-assembly-ids'
-import { assemblyLinesToItems, wallMeasurementsMm } from '@/lib/assembly-quote-items'
-import { priceCavityWallFromBasics } from '@/components/AssemblyCavityWallDemo'
+import { assemblyLinesToItems } from '@/lib/assembly-quote-items'
+import { basicsFor, describeBasics, BASICS_NEEDS } from '@/lib/assembly-basics'
+import { priceFromBasics } from '@/components/ai-priced-calculators'
 import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchQuoteDefaults, fetchAllQuoteDefaults, upsertTask, fetchLabourTrades, fetchProducts, fetchPlantItems, fetchPhases, fetchSubPhases, fetchTasks } from '@/lib/back-office-queries'
 import type { BOLabourTrade, BOProduct, BOPlantItem, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
 import type { FloorMakeup } from '@/lib/takeoff-types'
@@ -81,8 +82,8 @@ interface ScopeToQuotePhase {
   parentPhase: string
   phase: string
   selectedTasks: string[]
-  /** the wall size the AI heard, in metres, for a calculator wall (cavity wall) */
-  measurements?: { lengthM?: number; heightM?: number }
+  /** the sizes the AI heard, in metres (and a count), for a calculator it can price: wall length/height, foundation length/width/depth, number of pads or piles */
+  measurements?: { lengthM?: number; widthM?: number; heightM?: number; depthM?: number; count?: number }
   extraTasks?: {
     name: string
     description?: string
@@ -125,14 +126,13 @@ function buildPhasesFromScopeToQuote(
 
   return scopePhases.map(sp => {
     // A sub-phase with a built-in assembly calculator is priced by that calculator, never from flat task lines (a few pence of leftover task
-    // lines read as a real price). If the AI heard a size for a cavity wall it prices the wall now with the calculator's standard settings;
-    // otherwise the sub-phase starts at nothing and says "Not yet calculated".
+    // lines read as a real price). If the AI heard the sizes a calculator needs (a wall's length and height, a foundation's length, a count of pads...)
+    // it prices the sub-phase now with the calculator's standard settings; otherwise the sub-phase starts at nothing and says "Not yet calculated".
     const sameName = boSubPhases.filter(s => s.name === sp.phase)
     const calcSub = sameName.find(s => s.canonical_id && BUILT_ASSEMBLY_CANONICAL_IDS.has(s.canonical_id))
     if (calcSub) {
-      const cavity = calcSub.canonical_id === 'ew-cav-partial' || calcSub.canonical_id === 'ew-cav-full'
-      const size = cavity ? wallMeasurementsMm(sp.measurements) : null
-      const priced = size ? priceCavityWallFromBasics({ lengthMm: size.lengthMm, heightMm: size.heightMm, insulation: calcSub.canonical_id === 'ew-cav-full' ? 'wool' : 'pir', labourTrades }) : null
+      const size = basicsFor(calcSub.canonical_id, sp.measurements)
+      const priced = size && calcSub.canonical_id ? priceFromBasics(calcSub.canonical_id, size, labourTrades) : null
       const calcPhase = makePhase(sp.phase, priced ? assemblyLinesToItems(priced.lines) : defaultTypedItems(), sp.parentPhase || undefined)
       return {
         ...calcPhase,
@@ -142,10 +142,10 @@ function buildPhasesFromScopeToQuote(
         needsReview: true,
         ...(priced && size
           ? {
-              taskName: priced.description, assemblyLines: priced.lines, assemblySize: size,
-              reviewNote: `Priced by its calculator from the size in your scope (${(size.lengthMm / 1000).toFixed(2)} m long × ${(size.heightMm / 1000).toFixed(2)} m high, no openings) with the calculator's standard settings and sample rates. Open the calculator to check it and change anything.`,
+              taskName: priced.description, ...(priced.detail && { scopeDetail: priced.detail }), assemblyLines: priced.lines, assemblySize: size,
+              reviewNote: `Priced by its calculator from the size in your scope (${describeBasics(size)}) with the calculator's standard settings and sample rates. Open the calculator to check it and change anything.`,
             }
-          : { reviewNote: cavity ? 'Priced by its calculator, but no wall length and height were found in the scope. Open the calculator and enter the size.' : 'Priced by its calculator. Open the calculator to size and price it.' }),
+          : { reviewNote: BASICS_NEEDS[calcSub.canonical_id ?? ''] ? 'Priced by its calculator, but the size it needs was not found in the scope. Open the calculator and enter the size.' : 'Priced by its calculator. Open the calculator to size and price it.' }),
       }
     }
 

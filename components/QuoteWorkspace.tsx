@@ -1834,7 +1834,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
               <div style={{ fontSize: 12, color: '#7c3aed', background: '#fdfaff', border: '1px dashed #e9d5ff', borderRadius: 6, padding: '8px 12px', marginBottom: 14 }}>
                 🧪 Sample rates for now — playing with this doesn't change this quote's actual costs yet.
               </div>
-              {builtAssembly.render({ onSave: applyAssemblyCalculation, labourTrades, ...(p.assemblySize && { externalLengthMm: p.assemblySize.lengthMm, initialHeightMm: p.assemblySize.heightMm, noSampleOpenings: true }) })}
+              {builtAssembly.render({ onSave: applyAssemblyCalculation, labourTrades, ...(p.assemblySize && { externalLengthMm: p.assemblySize.lengthMm, externalWidthMm: p.assemblySize.widthMm, initialHeightMm: p.assemblySize.heightMm, basics: p.assemblySize, noSampleOpenings: true }) })}
             </div>
           </div>
         </div>
