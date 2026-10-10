@@ -21,6 +21,7 @@ import AssemblySleeperWallDemo from '@/components/AssemblySleeperWallDemo'
 import AssemblyFlatRoofDemo from '@/components/AssemblyFlatRoofDemo'
 import AssemblyParapetWallDemo from '@/components/AssemblyParapetWallDemo'
 import AssemblyStripFoundationDemo from '@/components/AssemblyStripFoundationDemo'
+import AssemblyRaftFoundationDemo from '@/components/AssemblyRaftFoundationDemo'
 import AssemblyRoofStructureDemo from '@/components/AssemblyRoofStructureDemo'
 import AssemblyRoofCoveringDemo from '@/components/AssemblyRoofCoveringDemo'
 import AssemblyRooflightsDemo from '@/components/AssemblyRooflightsDemo'
@@ -28,7 +29,7 @@ import AssemblyFasciaSoffitDemo from '@/components/AssemblyFasciaSoffitDemo'
 import type { CostedLine } from '@/lib/assembly-calc'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 
-export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation'
+export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation'
 
 /** Fired when a calculator's "Save & Price" is used from inside a real quote — absent in
  * the Back Office preview context, which has no quote to save into. */
@@ -75,6 +76,7 @@ export const BUILT_ASSEMBLY_CANON_IDS: Record<string, {
   'ew-cav-partial': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="pir" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initialHeightMm={opts?.initialHeightMm} noSampleOpenings={opts?.noSampleOpenings} /> },
   'fnd-strip': { icon: 'strip-foundation', render: opts => <AssemblyStripFoundationDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'fnd-trench-fill': { icon: 'strip-foundation', render: opts => <AssemblyStripFoundationDemo variant="trench-fill" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
+  'fnd-raft': { icon: 'raft-foundation', render: opts => <AssemblyRaftFoundationDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} externalWidthMm={opts?.externalWidthMm} /> },
   'ew-cav-full': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="wool" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initialHeightMm={opts?.initialHeightMm} noSampleOpenings={opts?.noSampleOpenings} /> },
 }
 
@@ -113,6 +115,17 @@ export function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; siz
           <rect x="9.5" y="4" width="5" height="12" stroke="#57534e" strokeWidth="1.5" />
           <line x1="8" y1="4" x2="16" y2="4" stroke="#0f766e" strokeWidth="2" />
           <path d="M3 13 L3 21 M21 13 L21 21" stroke="#a8a29e" strokeWidth="1.2" />
+        </svg>
+      )
+    case 'raft-foundation':
+      // A raft in section: the ground line, hardcore beneath, and a slab with two layers of mesh and a thickened edge.
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <line x1="1.5" y1="8" x2="22.5" y2="8" stroke="#78716c" strokeWidth="1.4" />
+          <path d="M3 8 L3 17 L21 17 L21 8" stroke="#57534e" strokeWidth="1.5" fill="none" />
+          <rect x="3" y="8" width="18" height="5" stroke="#57534e" strokeWidth="1.5" />
+          <line x1="5" y1="10" x2="19" y2="10" stroke="#b91c1c" strokeWidth="1" strokeDasharray="2 1.5" />
+          <path d="M5 20 L19 20" stroke="#a8a29e" strokeWidth="2" />
         </svg>
       )
     case 'block-wall':

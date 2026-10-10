@@ -17,6 +17,7 @@ const HINTS: Record<string, string> = {
   // Foundations
   'fnd-strip': 'strip foundation: a trench dug and part-filled with concrete, with solid blockwork built up from it to the DPC. Not a raft, pad or piled foundation',
   'fnd-trench-fill': 'trench fill foundation: a trench dug and filled with concrete up to about 150mm below ground, with a short wall up to the DPC. Not a traditional strip, raft, pad or piled foundation',
+  'fnd-raft': 'raft foundation: one reinforced concrete slab under the whole building on hardcore, with a membrane and edge insulation. Not a strip, trench fill, pad or piled foundation',
   // Internal walls
   'iw-stud-partition': 'internal timber stud partition wall',
   'iw-metal-stud': 'internal metal stud partition wall',

@@ -32,7 +32,7 @@ export const LABOUR_RATES = {
     membraneM2: 0.15, battenLm: 0.08, ridgeLm: 0.35, hipLm: 0.4, vergeLm: 0.3, abutmentLm: 0.4, eavesLm: 0.15,
   },
   bricklayer: { cavityM2: 1.4, solidM2: 1.0, solidBrickM2: 1.8, copingLm: 0.35, trayLm: 0.15, outletOpeningNr: 0.5, dpcLm: 0.05 },
-  groundworker: { trimLm: 0.25, concreteM3: 1.5, backfillM3: 0.5, cavityFillM3: 1.0 },
+  groundworker: { trimLm: 0.25, concreteM3: 1.5, backfillM3: 0.5, cavityFillM3: 1.0, raftTrimM2: 0.06, raftHardcoreM2: 0.12, raftBlindM2: 0.10, raftInsulationM2: 0.08, raftMeshM2PerLayer: 0.12, raftFormworkLm: 0.3, raftFinishM2: 0.12 },
   renderer: { renderM2: 0.6 },
   plumber: { gutterLm: 0.3, fittingNr: 0.15, downpipeLm: 0.35, shoeNr: 0.15, hopperNr: 0.5, offsetNr: 0.3 },
   labourer: { carryM2: 0.15, bricklayerShare: 0.5 },
@@ -258,6 +258,30 @@ export function suggestStripFoundationLabour(g: {
   const out: (LabourSuggestion | null)[] = [ground, brick]
   out.push(line('lab-found', 'labourer', 'Mix and carry for the bricklayer', [{ qty: brick?.hours ?? 0, unit: 'h', what: 'bricklayer', rate: LABOUR_RATES.labourer.bricklayerShare }]))
   return out.filter((x): x is LabourSuggestion => x !== null)
+}
+
+/** The labour for a raft foundation (Foundations → Raft Foundation): a labour gang to trim the formation, spread and compact the hardcore, blind it and lay the
+ * membrane (and any insulation), fix the mesh, form the edges, pour and level the concrete and power-float it. The digging is the machine and its operator,
+ * priced as plant in the calculator, so it is not in these hours. */
+export function suggestRaftFoundationLabour(g: {
+  areaM2: number; perimeterLm: number; concreteM3: number; meshLayers: number; underSlabInsulation: boolean
+}): LabourSuggestion[] {
+  const w = LABOUR_RATES.groundworker
+  const prep = line('raft-prep', 'labourer', 'Trim the formation, spread and compact the hardcore, blind it and lay the membrane', [
+    { qty: g.areaM2, unit: 'm²', what: 'formation trimmed', rate: w.raftTrimM2 },
+    { qty: g.areaM2, unit: 'm²', what: 'hardcore spread and compacted', rate: w.raftHardcoreM2 },
+    { qty: g.areaM2, unit: 'm²', what: 'blinding and membrane', rate: w.raftBlindM2 },
+    { qty: g.underSlabInsulation ? g.areaM2 : 0, unit: 'm²', what: 'insulation laid', rate: w.raftInsulationM2 },
+  ])
+  const steel = line('raft-steel', 'labourer', 'Form the edges and fix the mesh on chairs', [
+    { qty: g.perimeterLm, unit: 'lm', what: 'edge formwork', rate: w.raftFormworkLm },
+    { qty: g.areaM2 * g.meshLayers, unit: 'm² of mesh', what: 'fixed', rate: w.raftMeshM2PerLayer },
+  ])
+  const pour = line('raft-pour', 'labourer', 'Place and level the concrete and power-float the slab', [
+    { qty: g.concreteM3, unit: 'm³', what: 'concrete placed and levelled', rate: w.concreteM3 },
+    { qty: g.areaM2, unit: 'm²', what: 'power-floated', rate: w.raftFinishM2 },
+  ])
+  return [prep, steel, pour].filter((x): x is LabourSuggestion => x !== null)
 }
 
 /** The labour for the rooflight units themselves (Roof → Rooflights & Dormers): the fitter's time, from a

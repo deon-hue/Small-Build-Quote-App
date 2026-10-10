@@ -1442,6 +1442,14 @@ const foundationsSubphases: PhaseSubphase[] = [
     ukWarning: 'The trench size, concrete strength and depth are the structural engineer\'s or building control\'s to set — the ground and frost depth decide how deep. A trench over about 1.2m deep needs its sides supported.',
     tasks: [],
   },
+  {
+    id: 'fnd-raft',
+    phase: 'Foundations',
+    name: 'Raft Foundation',
+    markupPct: 20,
+    ukWarning: 'A raft is designed by a structural engineer: the slab thickness, mesh and any thickened edge beams are theirs to specify, and the ground must be assessed for it.',
+    tasks: [],
+  },
 ]
 
 export const ALL_PHASE_SUBPHASES: PhaseSubphase[] = [

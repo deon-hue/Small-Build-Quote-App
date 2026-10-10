@@ -23,6 +23,7 @@ export const BUILT_ASSEMBLY_CANONICAL_IDS = new Set<string>([
   'ew-cav-full',
   'fnd-strip',
   'fnd-trench-fill',
+  'fnd-raft',
 ])
 
 // Bridges Take-off's External Walls "Build-up Type" system (keyed by WALL_MAKEUPS/
@@ -45,4 +46,5 @@ export const WALL_MAKEUP_TO_SUBPHASE_CANONICAL: Record<string, string> = {
   // Foundation build-ups: Take-off's Foundation Type on a drawn foundation line pairs with its calculator the same way.
   strip_found: 'fnd-strip',
   trench_fill: 'fnd-trench-fill',
+  raft_found: 'fnd-raft',
 }
