@@ -10,8 +10,9 @@
  *   Right  — embedded AI interview panel
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import ScopeChat from '@/components/ScopeChat'
+import { DragHandle } from '@/components/DragHandle'
 
 // ── Job type configuration ────────────────────────────────────────────────────
 
@@ -197,6 +198,10 @@ export default function AIScopeWorkspace({
 
   // Scope draft
   const [scopeTitle, setScopeTitle] = useState(config.scopeTitle)
+  // The AI writer's column width: drag its left edge to change it; remembered on this device
+  const [chatW, setChatW] = useState(300)
+  const chatWAtStart = useRef(300)
+  useEffect(() => { try { const w = Number(localStorage.getItem('buildos-ai-chat-width')); if (w >= 280 && w <= 900) setChatW(w) } catch { /* private mode */ } }, [])
   const [scopeText,  setScopeText]  = useState(config.defaultDescription)
 
   const [generatingScope,  setGeneratingScope]   = useState(false)
@@ -301,7 +306,7 @@ export default function AIScopeWorkspace({
       </div>
 
       {/* 3-column layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr 300px', gap: 16, flex: 1, minHeight: 0 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: `220px minmax(240px, 1fr) ${chatW}px`, gap: 16, flex: 1, minHeight: 0 }}>
 
         {/* ── LEFT: project setup ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -370,7 +375,11 @@ export default function AIScopeWorkspace({
         </div>
 
         {/* ── RIGHT: embedded AI chat with mic + file attach ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, position: 'relative' }}>
+          <DragHandle cursor="ew-resize" title="Drag to make the AI writer wider or narrower" onStart={() => { chatWAtStart.current = chatW }}
+            onMove={pulled => setChatW(Math.max(280, Math.min(900, chatWAtStart.current + pulled)))}
+            onEnd={() => { try { localStorage.setItem('buildos-ai-chat-width', String(chatW)) } catch { /* private mode */ } }}
+            style={{ left: -12, top: 0, bottom: 0, width: 10 }} />
           <ScopeChat
             embedded
             quoteId={null}

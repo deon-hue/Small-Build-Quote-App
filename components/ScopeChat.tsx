@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useSpeechToText } from './useSpeechToText'
-import { useSpeechOut } from './useSpeechOut'
+import { useSpeechOut, SPEECH_RATES } from './useSpeechOut'
+import { DragHandle } from './DragHandle'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -208,6 +209,26 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
   const { listening, toggleMic } = useSpeechToText(setInput)
   // Reading the AI's replies and the scope aloud, with the device's own voice
   const speechOut = useSpeechOut()
+  // The window's size (not used when embedded): the default, or one set by dragging its left/top edges or with the expand button; remembered on this device
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null)
+  const sizeAtStart = useRef<{ w: number; h: number }>({ w: 500, h: 700 })
+  const panelRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('buildos-scope-chat-size')
+      if (raw) { const v = JSON.parse(raw); if (v && v.w >= 340 && v.h >= 420) setSize({ w: v.w, h: v.h }) }
+    } catch { /* private mode */ }
+  }, [])
+  function saveSize(v: { w: number; h: number } | null) {
+    setSize(v)
+    try { if (v) localStorage.setItem('buildos-scope-chat-size', JSON.stringify(v)); else localStorage.removeItem('buildos-scope-chat-size') } catch { /* private mode */ }
+  }
+  const clampSize = (w: number, h: number) => ({ w: Math.max(340, Math.min(w, window.innerWidth - 32)), h: Math.max(420, Math.min(h, window.innerHeight - 32)) })
+  const startResize = () => { const r = panelRef.current?.getBoundingClientRect(); sizeAtStart.current = { w: r?.width ?? 500, h: r?.height ?? 700 } }
+  const resizeBy = (pulledLeft: number, pulledUp: number, axes: 'w' | 'h' | 'both') =>
+    setSize(clampSize(axes === 'h' ? sizeAtStart.current.w : sizeAtStart.current.w + pulledLeft, axes === 'w' ? sizeAtStart.current.h : sizeAtStart.current.h + pulledUp))
+  const endResize = () => { setSize(s => { if (s) try { localStorage.setItem('buildos-scope-chat-size', JSON.stringify(s)) } catch { /* private mode */ } return s }) }
+  const isBig = !!size && size.w >= 800
   // The speaker would be heard by the microphone, so dictating stops any read-out
   useEffect(() => { if (listening) speechOut.stop() }, [listening]) // eslint-disable-line react-hooks/exhaustive-deps
   // Refocus the input once dictation stops — same behaviour the old inline version had.
@@ -476,12 +497,14 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
 
   // Inner chat panel (shared between modal and embedded modes)
   const chatPanel = (
-    <div style={{
+    <div ref={panelRef} style={{
+      position: 'relative',
       background: '#fff',
       borderRadius: embedded ? 12 : 14,
-      width: embedded ? '100%' : '100%',
-      maxWidth: embedded ? undefined : 500,
-      height: embedded ? '100%' : 'min(90vh, 740px)',
+      width: embedded ? '100%' : (size ? size.w : '100%'),
+      maxWidth: embedded ? undefined : (size ? 'calc(100vw - 32px)' : 500),
+      height: embedded ? '100%' : (size ? size.h : 'min(90vh, 740px)'),
+      maxHeight: embedded ? undefined : 'calc(100vh - 32px)',
       display: 'flex', flexDirection: 'column',
       boxShadow: embedded ? 'none' : '0 24px 64px rgba(0,0,0,0.35)',
       animation: embedded ? undefined : 'slideUp 0.2s ease',
@@ -489,6 +512,16 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
       overflow: 'hidden',
     }}>
 
+        {!embedded && (
+          <>
+            <DragHandle cursor="ew-resize" title="Drag to make wider or narrower" onStart={startResize} onMove={(l, u) => resizeBy(l, u, 'w')} onEnd={endResize}
+              style={{ left: 0, top: 24, bottom: 0, width: 8 }} />
+            <DragHandle cursor="ns-resize" title="Drag to make taller or shorter" onStart={startResize} onMove={(l, u) => resizeBy(l, u, 'h')} onEnd={endResize}
+              style={{ left: 24, right: 0, top: 0, height: 8 }} />
+            <DragHandle cursor="nwse-resize" title="Drag to resize" onStart={startResize} onMove={(l, u) => resizeBy(l, u, 'both')} onEnd={endResize}
+              style={{ left: 0, top: 0, width: 24, height: 24 }} />
+          </>
+        )}
         {/* ── Header ── */}
         <div style={{ background: 'var(--moss)', color: '#fff', padding: embedded ? '10px 14px' : '14px 18px', borderRadius: embedded ? '10px 10px 0 0' : '14px 14px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
           <div>
@@ -498,11 +531,25 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
               <span style={{ opacity: 0.65 }}> · 🎤 voice · 📎 attach plans</span>
             </div>
           </div>
+          {speechOut.supported && (
+            <select value={speechOut.rate} onChange={e => speechOut.setRate(Number(e.target.value))} title="How fast the voice reads (takes effect the next time you tap 🔊)"
+              style={{ marginLeft: 'auto', marginRight: 6, fontSize: 10, padding: '2px 4px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.15)', color: '#fff' }}>
+              {SPEECH_RATES.map(r => <option key={r} value={r} style={{ color: '#000' }}>{r === 1 ? 'Normal speed' : `${r}× speed`}</option>)}
+            </select>
+          )}
           {speechOut.supported && speechOut.voices.length > 1 && (
             <select value={speechOut.voiceURI} onChange={e => speechOut.setVoice(e.target.value)} title="The voice used when the AI's replies are read aloud (🔊)"
-              style={{ marginLeft: 'auto', marginRight: embedded ? 0 : 8, maxWidth: 130, fontSize: 10, padding: '2px 4px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.15)', color: '#fff' }}>
+              style={{ marginRight: embedded ? 0 : 8, maxWidth: 130, fontSize: 10, padding: '2px 4px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.15)', color: '#fff' }}>
               {speechOut.voices.map(v => <option key={v.voiceURI} value={v.voiceURI} style={{ color: '#000' }}>{v.name.replace(/^(Microsoft|Google)\s+/, '').slice(0, 28)} ({v.lang})</option>)}
             </select>
+          )}
+          {!embedded && (
+            <button
+              onClick={() => saveSize(isBig ? null : clampSize(900, 2000))}
+              title={isBig ? 'Back to the normal size' : 'Make this window bigger (you can also drag its left or top edge)'}
+              aria-label={isBig ? 'Normal size' : 'Make bigger'}
+              style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', width: 28, height: 28, borderRadius: '50%', fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, marginRight: 6 }}
+            >{isBig ? '⤡' : '⤢'}</button>
           )}
           {!embedded && (
             <button

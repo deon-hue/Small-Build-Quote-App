@@ -4,6 +4,9 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { speakableText, speechChunks } from '@/lib/speech-text'
 
 const VOICE_KEY = 'buildos-voice-uri'
+const RATE_KEY = 'buildos-voice-rate'
+export const SPEECH_RATES = [0.9, 1, 1.15, 1.3, 1.5, 1.75, 2] as const
+const DEFAULT_RATE = 1.15
 
 /**
  * Reading text aloud with the device's own voice (the browser's speech synthesis): free, nothing is sent anywhere. One thing is read at a time;
@@ -16,6 +19,10 @@ export function useSpeechOut() {
   const [speakingKey, setSpeakingKey] = useState<string | null>(null)
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([])
   const [voiceURI, setVoiceURIState] = useState<string>('')
+  const [rate, setRateState] = useState<number>(DEFAULT_RATE)
+  useEffect(() => {
+    try { const r = Number(localStorage.getItem(RATE_KEY)); if (r >= 0.5 && r <= 3) setRateState(r) } catch { /* private mode */ }
+  }, [])
   const runRef = useRef(0)   // bumped on every start/stop so an old read-out's callbacks can't touch the new one
 
   useEffect(() => {
@@ -54,18 +61,23 @@ export function useSpeechOut() {
       const u = new SpeechSynthesisUtterance(c)
       u.lang = voice?.lang ?? 'en-GB'
       if (voice) u.voice = voice
-      u.rate = 1
+      u.rate = rate
       const done = () => { if (runRef.current === run && i === chunks.length - 1) setSpeakingKey(null) }
       u.onend = done
       u.onerror = done
       window.speechSynthesis.speak(u)
     })
-  }, [supported, speakingKey, voices, voiceURI, stop])
+  }, [supported, speakingKey, voices, voiceURI, rate, stop])
 
   const setVoice = useCallback((uri: string) => {
     setVoiceURIState(uri)
     try { localStorage.setItem(VOICE_KEY, uri) } catch { /* private mode */ }
   }, [])
 
-  return { supported, speakingKey, speak, stop, voices, voiceURI, setVoice }
+  const setRate = useCallback((r: number) => {
+    setRateState(r)
+    try { localStorage.setItem(RATE_KEY, String(r)) } catch { /* private mode */ }
+  }, [])
+
+  return { supported, speakingKey, speak, stop, voices, voiceURI, setVoice, rate, setRate }
 }
