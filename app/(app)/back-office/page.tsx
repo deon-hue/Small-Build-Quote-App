@@ -24,6 +24,7 @@ import SectionFormulaRules from './components/SectionFormulaRules'
 import SectionAIMapping from './components/SectionAIMapping'
 import SectionAssemblies from './components/SectionAssemblies'
 import SectionTemplates from './components/SectionTemplates'
+import DeletedStandardItems from './components/DeletedStandardItems'
 
 function deepClone<T>(v: T): T { return JSON.parse(JSON.stringify(v)) }
 
@@ -310,6 +311,7 @@ export default function BackOfficePage() {
         {/* ── DB-backed sections ── */}
         {activeSection === 'labour' && userId && <SectionLabour userId={userId} />}
         {activeSection === 'phases-tasks' && userId && <SectionPhasesTasks userId={userId} key={syncKey} onEditViaAssemblies={editViaAssemblies} />}
+        {activeSection === 'phases-tasks' && userId && <DeletedStandardItems userId={userId} onChanged={() => setSyncKey(k => k + 1)} />}
         {activeSection === 'products' && userId && <SectionProducts userId={userId} />}
         {activeSection === 'plant' && userId && <SectionPlant userId={userId} />}
         {activeSection === 'takeoff-mapping' && userId && <SectionTakeoffMapping userId={userId} />}

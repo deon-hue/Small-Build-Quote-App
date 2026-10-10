@@ -14,6 +14,43 @@ import { ALL_PHASE_SUBPHASES } from './phase-tasks'
 import { DEFAULT_DEMO_SUBPHASES } from './demolition-data'
 import { BUILT_ASSEMBLY_CANONICAL_IDS } from './built-assembly-ids'
 import { PLANT_LIBRARY } from './plant-library'
+import { buildDeletedIndex, BO_TABLE_KIND, type BoDeletedIndex } from './bo-deleted'
+
+// ── Deleted standard items ────────────────────────────────────────────────────
+// A standard (built-in) phase, sub-phase or task that the company deletes is remembered here so the sync below does not put it back the next time
+// Back Office opens. Items the company made itself have no canonical_id and are not recorded. Without the table (supabase/bo-deleted-items.sql) this
+// does nothing and the old behaviour stays.
+
+async function rememberDeletedStandard(sb: SupabaseClient, table: 'bo_phases' | 'bo_sub_phases' | 'bo_tasks', id: string): Promise<void> {
+  try {
+    const { data } = await sb.from(table).select('user_id, canonical_id, name').eq('id', id).maybeSingle()
+    if (!data?.canonical_id) return
+    await sb.from('bo_deleted_items').upsert(
+      { user_id: data.user_id, kind: BO_TABLE_KIND[table], canonical_id: data.canonical_id, name: data.name ?? null },
+      { onConflict: 'user_id,kind,canonical_id' },
+    )
+  } catch { /* the table is not there yet: nothing to remember */ }
+}
+
+async function loadDeletedIndex(sb: SupabaseClient, userId: string): Promise<BoDeletedIndex> {
+  try {
+    const { data, error } = await sb.from('bo_deleted_items').select('kind, canonical_id').eq('user_id', userId)
+    return buildDeletedIndex(error ? [] : (data as { kind: string; canonical_id: string }[] | null))
+  } catch { return buildDeletedIndex([]) }
+}
+
+/** The standard items this company has deleted, for the Restore list. */
+export async function fetchDeletedStandardItems(sb: SupabaseClient, userId: string): Promise<{ id: string; kind: string; canonical_id: string; name: string | null; deleted_at: string }[]> {
+  try {
+    const { data, error } = await sb.from('bo_deleted_items').select('id, kind, canonical_id, name, deleted_at').eq('user_id', userId).order('deleted_at', { ascending: false })
+    return error ? [] : (data ?? [])
+  } catch { return [] }
+}
+
+/** Let a deleted standard item come back: forget it, and the next sync puts it (and, for a phase or sub-phase, what was under it) back. */
+export async function restoreDeletedStandardItem(sb: SupabaseClient, tombstoneId: string): Promise<void> {
+  await sb.from('bo_deleted_items').delete().eq('id', tombstoneId)
+}
 
 // ── Labour Trades ─────────────────────────────────────────────────────────────
 
@@ -48,6 +85,7 @@ export async function upsertPhase(sb: SupabaseClient, phase: Partial<BOPhase> & 
 }
 
 export async function deletePhase(sb: SupabaseClient, id: string): Promise<void> {
+  await rememberDeletedStandard(sb, 'bo_phases', id)
   await sb.from('bo_phases').delete().eq('id', id)
 }
 
@@ -70,6 +108,7 @@ export async function upsertSubPhase(sb: SupabaseClient, sp: Partial<BOSubPhase>
 export async function deleteSubPhase(sb: SupabaseClient, id: string): Promise<void> {
   // Tasks aren't cascade-deleted by the DB (their FK just nulls sub_phase_id),
   // which silently turns them into orphaned "Direct Tasks" — delete them explicitly first.
+  await rememberDeletedStandard(sb, 'bo_sub_phases', id)
   await sb.from('bo_tasks').delete().eq('sub_phase_id', id)
   await sb.from('bo_sub_phases').delete().eq('id', id)
 }
@@ -191,6 +230,7 @@ export async function upsertTaskWithError(sb: SupabaseClient, task: Partial<BOTa
 }
 
 export async function deleteTask(sb: SupabaseClient, id: string): Promise<void> {
+  await rememberDeletedStandard(sb, 'bo_tasks', id)
   await sb.from('bo_tasks').delete().eq('id', id)
 }
 
@@ -750,6 +790,9 @@ export async function seedBackOfficeDefaults(sb: SupabaseClient, userId: string)
 // Requires supabase/phase12.sql to have been run (adds canonical_id columns).
 
 export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: string): Promise<void> {
+  // Standard items the company deleted on purpose are never put back, and names and order the company has set are never overwritten (the sync only
+  // creates what is missing and fills blanks): Small Build is also the testing company, so what is changed there has to stay changed.
+  const deletedStd = await loadDeletedIndex(sb, userId)
 
   // ── 1. Phases ────────────────────────────────────────────────────────────────
   const { data: dbPhases } = await sb
@@ -768,7 +811,7 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
     canonical_id: CANONICAL_PHASE_IDS[name] ?? null,
     name,
     display_order: i,
-  })).filter(p => p.canonical_id !== null) as Array<{ canonical_id: string; name: string; display_order: number }>
+  })).filter(p => p.canonical_id !== null && !deletedStd.has('phase', p.canonical_id)) as Array<{ canonical_id: string; name: string; display_order: number }>
 
   // ── Heal phases with null canonical_id by matching name ──────────────────────
   const unmappedPhases = (dbPhases ?? []).filter(p => !p.canonical_id)
@@ -819,13 +862,7 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
     ;(inserted ?? []).forEach(r => { if (r.canonical_id) phaseCanonToId.set(r.canonical_id as string, r.id as string) })
   }
 
-  // Update phases whose name or order changed
-  for (const p of desiredPhases.filter(p => phaseByCanon.has(p.canonical_id))) {
-    const ex = phaseByCanon.get(p.canonical_id)!
-    if (ex.name !== p.name || ex.display_order !== p.display_order) {
-      await sb.from('bo_phases').update({ name: p.name, display_order: p.display_order }).eq('id', phaseCanonToId.get(p.canonical_id)!)
-    }
-  }
+  // (A phase that already exists keeps the name and order the company has given it.)
 
   // ── 2. Sub-Phases ────────────────────────────────────────────────────────────
   // Sources:
@@ -850,12 +887,12 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
 
   ALL_PHASE_SUBPHASES.forEach((sub, i) => {
     const pc = CANONICAL_PHASE_IDS[sub.phase]
-    if (pc) desiredSubs.push({ canonical_id: sub.id, phase_canonical: pc, name: sub.name, display_order: i, markup_pct: sub.markupPct })
+    if (pc && !deletedStd.has('sub_phase', sub.id)) desiredSubs.push({ canonical_id: sub.id, phase_canonical: pc, name: sub.name, display_order: i, markup_pct: sub.markupPct })
   })
   DEFAULT_DEMO_SUBPHASES.forEach((sub, i) => {
     // Use 'Demolition' canonical ID (new split phase). Falls back to legacy 'Site Setup & Demolition' ID.
     const pc = CANONICAL_PHASE_IDS['Demolition'] ?? CANONICAL_PHASE_IDS['Site Setup & Demolition']
-    if (pc) desiredSubs.push({ canonical_id: `demo-${sub.id}`, phase_canonical: pc, name: sub.name, display_order: i, markup_pct: sub.markupPct })
+    if (pc && !deletedStd.has('sub_phase', `demo-${sub.id}`)) desiredSubs.push({ canonical_id: `demo-${sub.id}`, phase_canonical: pc, name: sub.name, display_order: i, markup_pct: sub.markupPct })
   })
 
   // ── Cleanup: remove old subphases replaced by room-based systems ─────────────
@@ -913,13 +950,7 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
     ;(inserted ?? []).forEach(r => { if (r.canonical_id) subCanonToId.set(r.canonical_id as string, r.id as string) })
   }
 
-  // Update sub-phases whose name or order changed (preserve markup_pct)
-  for (const s of desiredSubs.filter(s => subByCanon.has(s.canonical_id))) {
-    const ex = subByCanon.get(s.canonical_id)!
-    if (ex.name !== s.name || ex.display_order !== s.display_order) {
-      await sb.from('bo_sub_phases').update({ name: s.name, display_order: s.display_order }).eq('id', subCanonToId.get(s.canonical_id)!)
-    }
-  }
+  // (A sub-phase that already exists keeps the name, order and markup the company has given it.)
 
   // ── 3. Tasks ─────────────────────────────────────────────────────────────────
   // Sources:
@@ -1008,6 +1039,9 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
     })
   })
 
+  // Standard tasks the company deleted stay deleted
+  for (let i = desiredTasks.length - 1; i >= 0; i--) if (deletedStd.has('task', desiredTasks[i].canonical_id)) desiredTasks.splice(i, 1)
+
   // Insert new tasks (batch)
   const newTasks = desiredTasks.filter(t =>
     !taskByCanon.has(t.canonical_id) &&
@@ -1055,21 +1089,15 @@ export async function syncBackOfficeFromProduct(sb: SupabaseClient, userId: stri
     }
   }
 
-  // Update tasks whose name or unit changed (preserve all cost fields and user-set descriptions)
+  // Existing tasks keep their name, unit, costs and descriptions. Only a blank description is filled (with the task name).
   for (const t of desiredTasks.filter(t => taskByCanon.has(t.canonical_id))) {
     const ex = taskByCanon.get(t.canonical_id)!
-    const nameChanged = ex.name !== t.name || ex.unit !== t.unit
-    // Backfill blank descriptions with the task name (only if user hasn't set one)
     const needsDescFill = !ex.description || !ex.client_description
-    if (nameChanged || needsDescFill) {
+    if (needsDescFill) {
       await sb.from('bo_tasks')
         .update({
-          name: t.name,
-          unit: t.unit,
-          ...(needsDescFill ? {
-            description:        ex.description        || t.name,
-            client_description: ex.client_description || t.name,
-          } : {}),
+          description:        ex.description        || ex.name || t.name,
+          client_description: ex.client_description || ex.name || t.name,
           updated_at: new Date().toISOString(),
         })
         .eq('id', ex.id)
