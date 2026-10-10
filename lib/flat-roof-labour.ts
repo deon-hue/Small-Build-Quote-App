@@ -32,7 +32,7 @@ export const LABOUR_RATES = {
     membraneM2: 0.15, battenLm: 0.08, ridgeLm: 0.35, hipLm: 0.4, vergeLm: 0.3, abutmentLm: 0.4, eavesLm: 0.15,
   },
   bricklayer: { cavityM2: 1.4, solidM2: 1.0, solidBrickM2: 1.8, copingLm: 0.35, trayLm: 0.15, outletOpeningNr: 0.5, dpcLm: 0.05 },
-  groundworker: { trimLm: 0.25, concreteM3: 1.5, backfillM3: 0.5, cavityFillM3: 1.0, raftTrimM2: 0.06, raftHardcoreM2: 0.12, raftBlindM2: 0.10, raftInsulationM2: 0.08, raftMeshM2PerLayer: 0.12, raftFormworkLm: 0.3, raftFinishM2: 0.12, padPitNr: 0.4, padBlindNr: 0.3, padFormworkM2: 0.8, padRebarKg: 0.025, beamBlindLm: 0.15, beamFormworkM2: 0.35, beamCageLm: 0.2, pileCutNr: 0.5 },
+  groundworker: { trimLm: 0.25, concreteM3: 1.5, backfillM3: 0.5, cavityFillM3: 1.0, raftTrimM2: 0.06, raftHardcoreM2: 0.12, raftBlindM2: 0.10, raftInsulationM2: 0.08, raftMeshM2PerLayer: 0.12, raftFormworkLm: 0.3, raftFinishM2: 0.12, padPitNr: 0.4, padBlindNr: 0.3, padFormworkM2: 0.8, padRebarKg: 0.025, beamBlindLm: 0.15, beamFormworkM2: 0.35, beamCageLm: 0.2, pileCutNr: 0.5, underpinDigM3: 10, underpinShutterM2: 1.0, underpinPinNr: 2.0, underpinPourM3: 2.5, underpinPackNr: 1.0, underpinSteelKg: 0.025 },
   renderer: { renderM2: 0.6 },
   plumber: { gutterLm: 0.3, fittingNr: 0.15, downpipeLm: 0.35, shoeNr: 0.15, hopperNr: 0.5, offsetNr: 0.3 },
   labourer: { carryM2: 0.15, bricklayerShare: 0.5 },
@@ -326,6 +326,27 @@ export function suggestPiledFoundationLabour(g: {
     { qty: g.backfillM3, unit: 'm³', what: 'backfilled', rate: w.backfillM3 },
   ])
   return [prep, steel, pour].filter((x): x is LabourSuggestion => x !== null)
+}
+
+/** The labour for underpinning (Foundations → Underpinning): all by hand — digging under the old footing and barrowing the soil out, setting up each pin,
+ * shuttering it, fixing any steel, pouring and levelling the concrete and packing the gap. There is no machine to price. */
+export function suggestUnderpinningLabour(g: {
+  digM3: number; pinCount: number; formworkM2: number; concreteM3: number; rebarKg: number
+}): LabourSuggestion[] {
+  const w = LABOUR_RATES.groundworker
+  const dig = line('under-dig', 'labourer', 'Hand-dig the pins under the old footing and barrow the soil to the skips', [
+    { qty: g.digM3, unit: 'm³', what: 'dug by hand and barrowed', rate: w.underpinDigM3 },
+  ])
+  const form = line('under-form', 'labourer', 'Set up each pin, shutter it and fix any steel', [
+    { qty: g.pinCount, unit: 'pins', what: 'set up and struck', rate: w.underpinPinNr },
+    { qty: g.formworkM2, unit: 'm²', what: 'shuttering', rate: w.underpinShutterM2 },
+    { qty: g.rebarKg, unit: 'kg', what: 'steel fixed', rate: w.underpinSteelKg },
+  ])
+  const pour = line('under-pour', 'labourer', 'Pour and level the concrete and dry-pack the gap', [
+    { qty: g.concreteM3, unit: 'm³', what: 'concrete placed and levelled', rate: w.underpinPourM3 },
+    { qty: g.pinCount, unit: 'pins', what: 'dry-packed', rate: w.underpinPackNr },
+  ])
+  return [dig, form, pour].filter((x): x is LabourSuggestion => x !== null)
 }
 
 /** The labour for the rooflight units themselves (Roof → Rooflights & Dormers): the fitter's time, from a

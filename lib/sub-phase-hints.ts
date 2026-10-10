@@ -20,6 +20,7 @@ const HINTS: Record<string, string> = {
   'fnd-raft': 'raft foundation: one reinforced concrete slab under the whole building on hardcore, with a membrane and edge insulation. Not a strip, trench fill, pad or piled foundation',
   'fnd-pad': 'pad foundations: separate blocks of concrete in their own pits, usually under columns or steel posts, counted by number. Not a continuous strip, trench fill, raft or piled foundation',
   'fnd-piled': 'piled foundation: piles driven or bored into the ground along the wall with a reinforced concrete ground beam on top. Not a strip, trench fill, raft or pad foundation',
+  'fnd-underpin': 'underpinning: deepening the foundation under an existing wall, a short section (pin) at a time, dug by hand and filled with mass concrete. Not a new foundation for new work',
   // Internal walls
   'iw-stud-partition': 'internal timber stud partition wall',
   'iw-metal-stud': 'internal metal stud partition wall',

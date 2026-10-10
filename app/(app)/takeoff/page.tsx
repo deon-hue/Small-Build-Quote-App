@@ -11,9 +11,9 @@ import { WALL_MAKEUP_TO_SUBPHASE_CANONICAL } from '@/lib/built-assembly-ids'
 import AssemblyItemPanel from './components/AssemblyWindow'
 
 // A drawn foundation line's Foundation Type -> its build-up id (see FOUNDATION_MAKEUPS). A type whose build-up has a calculator (WALL_MAKEUP_TO_SUBPHASE_CANONICAL) is priced by it.
-const FOUNDATION_MAKEUP_BY_TYPE: Record<string, string | null> = { trench_fill: 'trench_fill', strip: 'strip_found', pad_edge: 'pad_found', raft_edge: 'raft_found', piled: 'piled_found', other: null }
+const FOUNDATION_MAKEUP_BY_TYPE: Record<string, string | null> = { trench_fill: 'trench_fill', strip: 'strip_found', pad_edge: 'pad_found', raft_edge: 'raft_found', piled: 'piled_found', underpin: 'underpin', other: null }
 // A drawn foundation LINE is priced by the strip or trench fill calculator; a raft is a SHAPE (its footprint), so a line - even one set to Raft Edge Beam - never gets the raft calculator.
-const FOUNDATION_LINE_CALCS = new Set(['fnd-strip', 'fnd-trench-fill', 'fnd-piled'])
+const FOUNDATION_LINE_CALCS = new Set(['fnd-strip', 'fnd-trench-fill', 'fnd-piled', 'fnd-underpin'])
 // A raft (sized from its box) and pad foundations (counted in the calculator: the shape is only a placemarker) are shapes.
 const FOUNDATION_SHAPE_CALCS = new Set(['fnd-raft', 'fnd-pad'])
 import LabourCostBuilder from './components/LabourCostBuilder'
@@ -2463,6 +2463,7 @@ export default function TakeoffPage() {
       { value: 'pad_edge',    label: 'Pad / Edge Beam',  makeupId: 'pad_found'   },
       { value: 'raft_edge',   label: 'Raft Edge Beam',   makeupId: 'raft_found'  },
       { value: 'piled',       label: 'Piled Foundation (piles and beam)', makeupId: 'piled_found' },
+      { value: 'underpin',    label: 'Underpinning (existing wall)',       makeupId: null },
       { value: 'other',       label: 'Other',            makeupId: null          },
     ]
     // Resolve the FOUNDATION_MAKEUPS entry for the current foundationType

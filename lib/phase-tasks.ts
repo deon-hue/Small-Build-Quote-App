@@ -1466,6 +1466,14 @@ const foundationsSubphases: PhaseSubphase[] = [
     ukWarning: 'Piles and the ground beam are designed by a structural engineer: their size, depth, spacing and the beam\'s reinforcement are theirs to specify, and the piling is done by a specialist contractor.',
     tasks: [],
   },
+  {
+    id: 'fnd-underpin',
+    phase: 'Foundations',
+    name: 'Underpinning',
+    markupPct: 20,
+    ukWarning: 'Underpinning is designed by a structural engineer: the depth, the pin size and sequence, and any temporary support are theirs to specify, and building control and the party wall procedure may apply.',
+    tasks: [],
+  },
 ]
 
 export const ALL_PHASE_SUBPHASES: PhaseSubphase[] = [

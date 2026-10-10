@@ -26,6 +26,7 @@ export const BUILT_ASSEMBLY_CANONICAL_IDS = new Set<string>([
   'fnd-raft',
   'fnd-pad',
   'fnd-piled',
+  'fnd-underpin',
 ])
 
 // Bridges Take-off's External Walls "Build-up Type" system (keyed by WALL_MAKEUPS/
@@ -51,4 +52,6 @@ export const WALL_MAKEUP_TO_SUBPHASE_CANONICAL: Record<string, string> = {
   raft_found: 'fnd-raft',
   pad_found: 'fnd-pad',
   piled_found: 'fnd-piled',
+  // Underpinning has no build-up in FOUNDATION_MAKEUPS; Take-off's Foundation Type 'Underpinning' pairs with its calculator through this key.
+  underpin: 'fnd-underpin',
 }
