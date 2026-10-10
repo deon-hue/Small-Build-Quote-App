@@ -194,6 +194,12 @@ export function cavityAutoDescription(o: DescribeOpts): string {
   return text
 }
 
+/** The labour a cavity wall starts with, on the screen and in the AI quote: one line, 1 hour per m² of wall (net of openings, at least 1), the bricklayer trade if one is set up (otherwise the first active trade; none if there are no trades). */
+export function cavityStartingLabour(netAreaM2: number, trades: BOLabourTrade[]): { tradeId: string; task: string; hours: number } {
+  const trade = trades.find(t => t.active !== false && /brick/i.test(t.name)) ?? trades.find(t => t.active !== false)
+  return { tradeId: trade?.id ?? '', task: 'Build cavity wall (brick & block)', hours: Math.max(1, Math.round(netAreaM2)) }
+}
+
 /**
  * Prices a cavity wall from just its length and height, with the calculator's own standard settings (facing brick outer leaf, 100mm thermal inner
  * leaf, dot-and-dab inside, 10% waste, 20% profit, no openings). Used when the AI quote hears a size, so the wall arrives priced the way "Save &
@@ -225,13 +231,13 @@ export function priceCavityWallFromBasics(o: { lengthMm: number; heightMm: numbe
   try { cost = calculateCavityWallCost(input, layers) } catch { return null }
 
   const lines: CostedLine[] = [...cost.lines]
-  const trade = o.labourTrades.find(t => t.active !== false && /brick/i.test(t.name)) ?? o.labourTrades.find(t => t.active !== false)
-  const hours = Math.max(1, Math.round(g.netAreaM2))
+  const start = cavityStartingLabour(g.netAreaM2, o.labourTrades)
+  const trade = o.labourTrades.find(t => t.id === start.tradeId)
   if (trade) {
     const rate = hourlyRate(trade)
     lines.push({
-      layerId: 'labour_basic', name: `${trade.name} — Build cavity wall (brick & block)`, category: 'labour', source: 'fixed', wastePct: 0,
-      rawQty: hours, purchaseQty: hours, unit: 'hr', unitCost: rate, cost: +(hours * rate).toFixed(2),
+      layerId: 'labour_basic', name: `${trade.name} — ${start.task}`, category: 'labour', source: 'fixed', wastePct: 0,
+      rawQty: start.hours, purchaseQty: start.hours, unit: 'hr', unitCost: rate, cost: +(start.hours * rate).toFixed(2),
     })
   }
   const profitPct = 20
@@ -266,19 +272,6 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
   const [wastePct, setWastePct] = useState(10)
   const [openings, setOpenings] = useState<CavityOpening[]>(noSampleOpenings ? [] : sampleOpenings)
   const [location, setLocation] = useState('')
-
-  const [labourLines, setLabourLines] = useState<LabourLine[]>([
-    { id: newLabourLineId(), tradeId: '', task: 'Build cavity wall (brick & block)', hours: 12 },
-  ])
-  function addLabourLine() {
-    setLabourLines(prev => [...prev, { id: newLabourLineId(), tradeId: prev[0]?.tradeId ?? '', task: '', hours: 0 }])
-  }
-  function updateLabourLine(id: string, patch: Partial<LabourLine>) {
-    setLabourLines(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l))
-  }
-  function removeLabourLine(id: string) {
-    setLabourLines(prev => prev.filter(l => l.id !== id))
-  }
 
   const [miscMaterialLines, setMiscMaterialLines] = useState<MiscMaterialLine[]>([])
   function addMiscMaterialLine() {
@@ -320,6 +313,23 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
     catch (e: any) { return { ok: false as const, error: e.message as string } }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lengthMm, heightMm, outerLeaf, innerThicknessMm, cavityWidthMm, insulation, boardThicknessMm, openingsKey])
+
+  // Labour starts as one line sized from the wall (1 hour per m², the bricklayer trade if there is one) and follows the wall until it is edited by hand
+  const startingLabour = cavityStartingLabour(geometryResult.ok ? geometryResult.geometry.netAreaM2 : 0, labourTrades)
+  const suggestedLabour: LabourLine[] = [{ id: 'suggested-cavity', ...startingLabour }]
+  const [labourOverride, setLabourOverride] = useState<LabourLine[] | null>(null)
+  const suggestedRef = React.useRef<LabourLine[]>([])
+  suggestedRef.current = suggestedLabour
+  const labourLines: LabourLine[] = labourOverride ?? suggestedLabour
+  function addLabourLine() {
+    setLabourOverride(prev => { const b = prev ?? suggestedRef.current; return [...b, { id: newLabourLineId(), tradeId: b[0]?.tradeId ?? '', task: '', hours: 0 }] })
+  }
+  function updateLabourLine(id: string, patch: Partial<LabourLine>) {
+    setLabourOverride(prev => (prev ?? suggestedRef.current).map(l => l.id === id ? { ...l, ...patch } : l))
+  }
+  function removeLabourLine(id: string) {
+    setLabourOverride(prev => (prev ?? suggestedRef.current).filter(l => l.id !== id))
+  }
 
   const layers = useMemo(() => {
     if (!geometryResult.ok) return []
