@@ -1450,6 +1450,14 @@ const foundationsSubphases: PhaseSubphase[] = [
     ukWarning: 'A raft is designed by a structural engineer: the slab thickness, mesh and any thickened edge beams are theirs to specify, and the ground must be assessed for it.',
     tasks: [],
   },
+  {
+    id: 'fnd-pad',
+    phase: 'Foundations',
+    name: 'Pad Foundations',
+    markupPct: 20,
+    ukWarning: 'The size, depth and reinforcement of each pad are the structural engineer\'s to specify from the column load and the ground bearing capacity. A pit deeper than about 1.2m needs its sides supported.',
+    tasks: [],
+  },
 ]
 
 export const ALL_PHASE_SUBPHASES: PhaseSubphase[] = [

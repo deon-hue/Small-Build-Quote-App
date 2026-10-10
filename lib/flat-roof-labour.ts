@@ -32,7 +32,7 @@ export const LABOUR_RATES = {
     membraneM2: 0.15, battenLm: 0.08, ridgeLm: 0.35, hipLm: 0.4, vergeLm: 0.3, abutmentLm: 0.4, eavesLm: 0.15,
   },
   bricklayer: { cavityM2: 1.4, solidM2: 1.0, solidBrickM2: 1.8, copingLm: 0.35, trayLm: 0.15, outletOpeningNr: 0.5, dpcLm: 0.05 },
-  groundworker: { trimLm: 0.25, concreteM3: 1.5, backfillM3: 0.5, cavityFillM3: 1.0, raftTrimM2: 0.06, raftHardcoreM2: 0.12, raftBlindM2: 0.10, raftInsulationM2: 0.08, raftMeshM2PerLayer: 0.12, raftFormworkLm: 0.3, raftFinishM2: 0.12 },
+  groundworker: { trimLm: 0.25, concreteM3: 1.5, backfillM3: 0.5, cavityFillM3: 1.0, raftTrimM2: 0.06, raftHardcoreM2: 0.12, raftBlindM2: 0.10, raftInsulationM2: 0.08, raftMeshM2PerLayer: 0.12, raftFormworkLm: 0.3, raftFinishM2: 0.12, padPitNr: 0.4, padBlindNr: 0.3, padFormworkM2: 0.8, padRebarKg: 0.025 },
   renderer: { renderM2: 0.6 },
   plumber: { gutterLm: 0.3, fittingNr: 0.15, downpipeLm: 0.35, shoeNr: 0.15, hopperNr: 0.5, offsetNr: 0.3 },
   labourer: { carryM2: 0.15, bricklayerShare: 0.5 },
@@ -282,6 +282,27 @@ export function suggestRaftFoundationLabour(g: {
     { qty: g.areaM2, unit: 'm²', what: 'power-floated', rate: w.raftFinishM2 },
   ])
   return [prep, steel, pour].filter((x): x is LabourSuggestion => x !== null)
+}
+
+/** The labour for pad foundations (Foundations → Pad Foundations): a labourer to trim each pit and lay its blinding, make and strike the formwork, fix the
+ * steel, place and level the concrete and backfill. The digging is the machine and its operator, priced as plant in the calculator. */
+export function suggestPadFoundationLabour(g: {
+  padCount: number; concreteM3: number; formworkM2: number; rebarKg: number; backfillM3: number
+}): LabourSuggestion[] {
+  const w = LABOUR_RATES.groundworker
+  const pits = line('pad-pits', 'labourer', 'Trim each pit and lay the blinding', [
+    { qty: g.padCount, unit: 'pads', what: 'pit trimmed', rate: w.padPitNr },
+    { qty: g.padCount, unit: 'pads', what: 'blinded', rate: w.padBlindNr },
+  ])
+  const form = line('pad-form', 'labourer', 'Make and strike the formwork, and fix the steel', [
+    { qty: g.formworkM2, unit: 'm²', what: 'formwork made and struck', rate: w.padFormworkM2 },
+    { qty: g.rebarKg, unit: 'kg', what: 'steel fixed', rate: w.padRebarKg },
+  ])
+  const pour = line('pad-pour', 'labourer', 'Place and level the concrete, and backfill', [
+    { qty: g.concreteM3, unit: 'm³', what: 'concrete placed and levelled', rate: w.concreteM3 },
+    { qty: g.backfillM3, unit: 'm³', what: 'backfilled', rate: w.backfillM3 },
+  ])
+  return [pits, form, pour].filter((x): x is LabourSuggestion => x !== null)
 }
 
 /** The labour for the rooflight units themselves (Roof → Rooflights & Dormers): the fitter's time, from a
