@@ -41,4 +41,6 @@ export const WALL_MAKEUP_TO_SUBPHASE_CANONICAL: Record<string, string> = {
   solid_brick_225: 'ew-solid-brick',
   timber_frame_wall: 'ew-timber-frame',
   blockwork_100: 'ew-blockwork-100',
+  // Foundation build-ups: Take-off's Foundation Type on a drawn foundation line pairs with its calculator the same way.
+  strip_found: 'fnd-strip',
 }

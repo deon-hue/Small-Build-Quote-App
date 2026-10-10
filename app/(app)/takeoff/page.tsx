@@ -9,6 +9,9 @@ import type { BOLabourTrade, BOPhase, BOSubPhase, BOTask } from '@/lib/back-offi
 import { BUILT_ASSEMBLY_CANON_IDS } from '@/lib/built-assemblies'
 import { WALL_MAKEUP_TO_SUBPHASE_CANONICAL } from '@/lib/built-assembly-ids'
 import AssemblyItemPanel from './components/AssemblyWindow'
+
+// A drawn foundation line's Foundation Type -> its build-up id (see FOUNDATION_MAKEUPS). A type whose build-up has a calculator (WALL_MAKEUP_TO_SUBPHASE_CANONICAL) is priced by it.
+const FOUNDATION_MAKEUP_BY_TYPE: Record<string, string | null> = { trench_fill: 'trench_fill', strip: 'strip_found', pad_edge: 'pad_found', raft_edge: 'raft_found', other: null }
 import LabourCostBuilder from './components/LabourCostBuilder'
 import ClientProjectModal from './components/ClientProjectModal'
 import ConstructionLayerModal, { saveLayerCostToBackOffice } from './components/ConstructionLayerModal'
@@ -869,14 +872,18 @@ export default function TakeoffPage() {
     // Walls are lines; a roof is a shape, so any roof element qualifies — but a roof only carries a
     // sub-phase that has a calculator (the others aren't used by the roof screen).
     if (!taskSubphaseId && selectedTaskSubphaseId &&
-        ((el.type === 'line' && (item.phase === 'External Walls' || item.phase === 'Internal Walls & Partitions')) ||
+        ((el.type === 'line' && (item.phase === 'External Walls' || item.phase === 'Internal Walls & Partitions' || item.phase === 'Foundations')) ||
           item.phase === 'Roof')) {
       const bo = boSubPhases.find(sp => sp.id === selectedTaskSubphaseId)
       const boPhaseName = bo ? boPhases.find(p => p.id === bo.phase_id)?.name : undefined
       const hasCalculator = !!(bo?.canonical_id && BUILT_ASSEMBLY_CANON_IDS[bo.canonical_id])
-      if (bo && boPhaseName === item.phase && (item.phase !== 'Roof' || hasCalculator)) {
+      if (bo && boPhaseName === item.phase && ((item.phase !== 'Roof' && item.phase !== 'Foundations') || hasCalculator)) {
         item.taskSubphaseId = bo.id
         item.subPhase = bo.name
+        if (item.phase === 'Foundations') {
+          const pairedType = Object.entries(FOUNDATION_MAKEUP_BY_TYPE).find(([, mk]) => mk && WALL_MAKEUP_TO_SUBPHASE_CANONICAL[mk] === bo.canonical_id)?.[0]
+          if (pairedType) item.foundationType = pairedType
+        }
         if (item.phase === 'External Walls' || item.phase === 'Roof') {
           // Some sub-phases pair with one of the Build-up Types (e.g. Cavity Wall – Full Fill, Flat
           // Roof) — set that too, so the item arrives as that type rather than the default one.
@@ -1190,6 +1197,11 @@ export default function TakeoffPage() {
       return canonical ? BUILT_ASSEMBLY_CANON_IDS[canonical] : undefined
     }
     const isLine = (it.elementId ? project.elements.find(e => e.id === it.elementId) : null)?.type === 'line'
+    if (it.phase === 'Foundations' && isLine) {
+      const mk = FOUNDATION_MAKEUP_BY_TYPE[it.foundationType ?? 'trench_fill']
+      const canonical = mk ? WALL_MAKEUP_TO_SUBPHASE_CANONICAL[mk] : undefined
+      return canonical ? BUILT_ASSEMBLY_CANON_IDS[canonical] : undefined
+    }
     if (it.phase === 'Internal Walls & Partitions' && isLine) {
       const subs = getAllSubphasesForPhase('Internal Walls & Partitions')
       const sel = subs.find(s => s.id === it.taskSubphaseId) ?? subs[0]
@@ -1586,9 +1598,9 @@ export default function TakeoffPage() {
     // (e.g. the default cavity wall layers) rather than what it's labelled as — say so first.
     const unpriced = project.items.filter(it => resolveBuiltAssembly(it) && !it.assemblyResult)
     if (unpriced.length > 0 && !window.confirm(
-      `${unpriced.length} wall${unpriced.length !== 1 ? 's have' : ' has'} a calculator that hasn't been priced yet:\n\n` +
+      `${unpriced.length} item${unpriced.length !== 1 ? 's have' : ' has'} a calculator that hasn't been priced yet:\n\n` +
       unpriced.map(it => `• ${it.name}${it.subPhase ? ` (${it.subPhase})` : ''}`).join('\n') +
-      `\n\nUnpriced walls are sent to the quote as a plain build-up, not from their calculator. Send anyway?`
+      `\n\nUnpriced items are sent to the quote as a plain build-up, not from their calculator. Send anyway?`
     )) return
     const { planImageUrl: _, ...rest } = project
     const data = { version: 1, ...rest }
@@ -2291,7 +2303,7 @@ export default function TakeoffPage() {
       const _dM  = 1.0    // 1000mm default
       item = {
         ...item,
-        foundationWidth: 600, foundationDepth: 1000, foundationType: 'trench_fill',
+        foundationWidth: 600, foundationDepth: 1000, foundationType: item.foundationType ?? 'trench_fill',
         unit:   'lm',
         qty:    +_len.toFixed(3),
         area:   +(_len * _wM).toFixed(3),
@@ -2354,8 +2366,8 @@ export default function TakeoffPage() {
     // calculator? See resolveBuiltAssembly. When it does, it has final say on measurements/
     // materials/pricing, so all the old recipe-engine/build-up UI below is suppressed.
     const isRoof = item.phase === 'Roof'
-    const builtAssembly = (isIntWall || isExtWall || isRoof) ? resolveBuiltAssembly(item) : undefined
-    const hideForBuiltAssembly = (isIntWall || isExtWall || isRoof) && !!builtAssembly
+    const builtAssembly = (isIntWall || isExtWall || isRoof || isFoundationLine) ? resolveBuiltAssembly(item) : undefined
+    const hideForBuiltAssembly = (isIntWall || isExtWall || isRoof || isFoundationLine) && !!builtAssembly
 
     // The calculator is too big for this ~300px panel, so the panel shows a summary card and the
     // calculator itself opens full size in a window (see AssemblyWindow.tsx). A wall is sized by its
@@ -3022,11 +3034,16 @@ export default function TakeoffPage() {
               <label style={labelStyle}>Foundation Type</label>
               <select style={{ ...inputStyle, color: accent }}
                 value={item.foundationType ?? 'trench_fill'}
-                onChange={e => recalcFoundationAndSave({ foundationType: e.target.value })}>
+                onChange={e => recalcFoundationAndSave({ foundationType: e.target.value, assemblyResult: undefined })}>
                 {FOUNDATION_TYPE_OPTIONS.map(o => (
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </select>
+              {builtAssembly && (() => {
+                // the calculator's own sub-phase, so the quote links to it
+                const calcSub = boSubPhases.find(sp => sp.canonical_id === WALL_MAKEUP_TO_SUBPHASE_CANONICAL[FOUNDATION_MAKEUP_BY_TYPE[item.foundationType ?? 'trench_fill'] ?? ''])
+                return <div style={{ marginTop: 10 }}>{renderAssemblyPanel({ taskSubphaseId: calcSub?.id, subPhase: calcSub?.name })}</div>
+              })()}
             </div>
           )}
 
