@@ -396,11 +396,6 @@ function ClientsPageInner() {
     try { await loadUsage(); setTidyOpen(true) } finally { setTidyBusy(false) }
   }
 
-  async function handleDelete(c: Client) {
-    const ix = await loadUsage()
-    setDeleteTargets([{ c, usage: usageOf(ix, c) }])
-  }
-
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
 
   const selQuotes = selected ? getClientQuotes(selected) : []
@@ -572,7 +567,6 @@ function ClientsPageInner() {
                           </button>
                           </div>)}
                           <button className="btn-sm btn-outline" onClick={() => openEdit(c)}>Edit</button>
-                          <button className="btn-sm btn-danger" onClick={() => handleDelete(c)}>Delete</button>
                         </div>
                       </td>
                     </tr>
