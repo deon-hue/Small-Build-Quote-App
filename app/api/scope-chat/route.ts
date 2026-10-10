@@ -157,9 +157,11 @@ WITHOUT these tags, the scope cannot be used. There are no exceptions to this fo
 SCOPE REQUIREMENTS:
 - Professional UK contractor English
 - START with a single-line overview (e.g. "Single-storey rear extension to existing dwelling at [address]")
-- Then organize by PHASES (if phases have been set: ${phaseList})
-- For each phase, write 1–2 sentences describing the works in that phase
-- Use clear phase headings (e.g. "**Demolition**", "**Foundations**") to break up sections
+- Write about ONLY the work the client has described or agreed in this conversation. Do not add work they did not mention.
+- Organise by phase headings, but only for phases that are genuinely part of the described work. The phase list (${phaseList}) is background, NOT a checklist: leave out every phase the described work does not involve.
+- A small job gets a short scope. If the client wants a single element (for example one wall), write only that element: do NOT add demolition, foundations, structural frame, roof, services, finishes or any other heading that was not discussed. If it helps, finish with one line starting "Not included:" naming what is excluded.
+- For each included phase, write 1–2 sentences describing the works in that phase
+- Use clear phase headings (e.g. "**External Walls**") to break up sections when there is more than one
 - Note every assumption: "(Assumed: ...)" or "(Provisional sum for ...)"
 - Specific enough for a QS to identify every trade and allocate quantities
 - Do NOT include prices, rates, or programme durations

@@ -376,7 +376,7 @@ export default function AIScopeWorkspace({
             quoteId={null}
             jobType={config.label}
             address=""
-            phases={config.defaultPhases}
+            phases={[]}
             onInsert={text => { setScopeText(text); onScopeChange(text) }}
             onClose={() => {/* no-op in embedded mode */}}
             onBuildEstimate={text => { setScopeText(text); onScopeChange(text); onBuildEstimate(text) }}
