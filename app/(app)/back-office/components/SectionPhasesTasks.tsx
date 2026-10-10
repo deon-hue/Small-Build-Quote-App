@@ -18,6 +18,7 @@ import { JOB_TYPES } from '@/lib/utils'
 import { buildTaskRecipe, uid, plantListTotal } from '@/lib/layer-recipe'
 import type { LayerCostRecord, LayerPlantItem } from '@/lib/takeoff-types'
 import { Plus, Trash2, ChevronRight, ChevronDown } from 'lucide-react'
+import SubPhaseHintBox from './SubPhaseHintBox'
 
 interface Props {
   userId: string
@@ -630,6 +631,7 @@ export default function SectionPhasesTasks({ userId, onEditViaAssemblies }: Prop
                   </div>
                   {isOpen && (
                     <div style={{ padding: '8px 14px 12px' }}>
+                      <SubPhaseHintBox sp={sp} onSaved={hint => setSubPhases(prev => prev.map(x => x.id === sp.id ? { ...x, ai_hint: hint || null } : x))} />
                       {isBuiltAssembly ? (
                         <div style={{ color: '#7c3aed', fontSize: 12, padding: '10px 12px', textAlign: 'center', background: '#fdfaff', border: '1px dashed #e9d5ff', borderRadius: 6 }}>
                           🔒 This sub-phase has a built assembly — edit its pricing from{' '}

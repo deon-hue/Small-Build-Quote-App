@@ -37,6 +37,8 @@ export interface BOSubPhase {
    *  other_cost), no Labour/Materials/Plant/Subcontractors breakdown. Used for
    *  General Preliminaries roles (Project Manager, QS, Foreman, etc.). */
   is_allowance?: boolean
+  /** "What this covers (for the AI)": plain words the AI quote reads to decide which sub-phase work belongs to. Optional; see lib/sub-phase-hints.ts. */
+  ai_hint?: string | null
   created_at?: string
 }
 

@@ -8,30 +8,10 @@ import { createClient } from '@/lib/supabase/server'
 import { usageGuard } from '@/lib/usage'
 import { JOB_TEMPLATES } from '@/lib/utils'
 import { BUILT_ASSEMBLY_CANONICAL_IDS } from '@/lib/built-assembly-ids'
+import { hintForAi } from '@/lib/sub-phase-hints'
 
 export const maxDuration = 300
 import { ESTIMATOR_PHASE_DEFAULTS } from '@/lib/estimatorDefaults'
-
-// What each calculator sub-phase covers, in the words a builder uses, so the AI can match a scope to the right one instead of a general task-based phase.
-const CALC_HINTS: Record<string, string> = {
-  'ew-cav-partial': 'new external cavity wall: facing brick or block outer leaf, cavity with partial-fill rigid insulation, block inner leaf, DPC to wall plate',
-  'ew-cav-full': 'new external cavity wall with full-fill mineral wool in the cavity, brick or block outer leaf, block inner leaf',
-  'ew-blockwork-100': 'single-leaf 100mm concrete blockwork wall (not a cavity wall)',
-  'ew-blockwork-215': 'single-leaf 215mm concrete block wall laid flat (not a cavity wall)',
-  'ew-garden-room-timber': 'timber-frame garden room wall',
-  'ew-dwarf-wall': 'dwarf / load-bearing wall below floor level',
-  'ew-sleeper-wall': 'sleeper wall under a block-and-beam floor',
-  'ew-parapet-wall': 'parapet wall at roof edge',
-  'iw-stud-partition': 'internal timber stud partition wall',
-  'iw-metal-stud': 'internal metal stud partition wall',
-  'iw-block-masonry': 'internal blockwork partition wall',
-  'roof-flat': 'complete flat roof (structure, covering and gutters together)',
-  'roof-structure': 'roof structure: flat, mono-pitch, gable or hip roof timbers',
-  'roof-covering': 'roof covering: GRP, EPDM, TPO, tiles or slate',
-  'roof-rainwater': 'gutters and downpipes',
-  'roof-rooflights': 'rooflights, lanterns, roof windows, domes and hatches',
-  'roof-fascia-soffit': 'fascias, soffits and barge boards',
-}
 
 // ── Back Office library builder────────────────────────────────────────────────
 
@@ -58,6 +38,8 @@ async function buildLibraryFromDB(userId: string): Promise<{
   rateMap: Record<string, TaskLibEntry>
   /** Sub-phases priced by an assembly calculator, listed even when they have no tasks. `takesWallSize` ones are the cavity walls, which the AI quote can price from a length and height. */
   calcPhases: { name: string; parent: string; takesWallSize: boolean; hint: string }[]
+  /** "What this covers" for each sub-phase, by name: the company's own wording, otherwise the built-in suggestion */
+  hintByName: Record<string, string>
 } | null> {
   const sb = await createClient()
 
@@ -90,9 +72,19 @@ async function buildLibraryFromDB(userId: string): Promise<{
   if (!tasks || tasks.length === 0) return null
 
   const phaseById = Object.fromEntries((phases ?? []).map(p => [p.id, p.name]))
+  const ownHint: Record<string, string> = {}
+  try {
+    const { data: hintRows, error: hintErr } = await sb.from('bo_sub_phases').select('id, ai_hint').eq('user_id', userId)
+    if (!hintErr) for (const r of hintRows ?? []) if (r.ai_hint) ownHint[r.id as string] = r.ai_hint as string
+  } catch { /* the ai_hint column is not there yet: the built-in suggestions are used */ }
+  const hintByName: Record<string, string> = {}
+  for (const sp of subPhases ?? []) {
+    const h = hintForAi(ownHint[sp.id as string], sp.canonical_id as string | null, sp.name as string)
+    if (h && !hintByName[sp.name as string]) hintByName[sp.name as string] = h
+  }
   const calcPhases = (subPhases ?? [])
     .filter(sp => sp.canonical_id && BUILT_ASSEMBLY_CANONICAL_IDS.has(sp.canonical_id) && phaseById[sp.phase_id])
-    .map(sp => ({ name: sp.name as string, parent: phaseById[sp.phase_id] as string, takesWallSize: sp.canonical_id === 'ew-cav-partial' || sp.canonical_id === 'ew-cav-full', hint: CALC_HINTS[sp.canonical_id as string] ?? '' }))
+    .map(sp => ({ name: sp.name as string, parent: phaseById[sp.phase_id] as string, takesWallSize: sp.canonical_id === 'ew-cav-partial' || sp.canonical_id === 'ew-cav-full', hint: hintByName[sp.name as string] ?? '' }))
   const subPhaseById = Object.fromEntries((subPhases ?? []).map(sp => [sp.id, { name: sp.name, phaseId: sp.phase_id }]))
 
   const phaseTaskMap: Record<string, string[]> = {}
@@ -142,7 +134,7 @@ async function buildLibraryFromDB(userId: string): Promise<{
     phaseTaskMap[phaseName].push(t.name)
   }
 
-  return entries.length > 0 ? { entries, phaseTaskMap, parentPhaseMap, rateMap, calcPhases } : null
+  return entries.length > 0 ? { entries, phaseTaskMap, parentPhaseMap, rateMap, calcPhases, hintByName } : null
 }
 
 // ── Static fallback library builder ───────────────────────────────────────────
@@ -221,6 +213,7 @@ export async function POST(req: NextRequest) {
   let rateMap: Record<string, Partial<TaskLibEntry>>
   let usingDB = false
   let calcPhases: { name: string; parent: string; takesWallSize: boolean; hint: string }[] = []
+  let hintByName: Record<string, string> = {}
 
   if (user) {
     const dbLib = await buildLibraryFromDB(user.id)
@@ -229,6 +222,7 @@ export async function POST(req: NextRequest) {
       parentPhaseMap = dbLib.parentPhaseMap
       rateMap = dbLib.rateMap
       calcPhases = dbLib.calcPhases
+      hintByName = dbLib.hintByName
       usingDB = true
     } else {
       // User exists but Back Office not set up yet — use static defaults
@@ -247,7 +241,7 @@ export async function POST(req: NextRequest) {
   // Compact library text — "Phase name": task1 | task2 | task3
   const calcByName = new Map(calcPhases.map(c => [c.name, c]))
   const libraryLines = Object.entries(phaseTaskMap).filter(([phase]) => !calcByName.has(phase)).map(([phase, tasks]) =>
-    `"${phase}": ${tasks.join(' | ')}`
+    `"${phase}"${hintByName[phase] ? ` (covers: ${hintByName[phase]})` : ''}: ${tasks.join(' | ')}`
   )
   // Calculator sub-phases are priced by their calculator, not from tasks, so they are listed on their own (even with no tasks)
   for (const c of calcPhases) {
@@ -312,7 +306,7 @@ Rules:
 Scope of works:
 ${scope}
 
-Task library (phase: task1 | task2 | …):
+Task library ("phase" (what it covers): task1 | task2 | …) — use the "covers" note to decide which phase a piece of work belongs to, and which it does not:
 ${libraryText}
 
 Parent phase groupings for reference:
