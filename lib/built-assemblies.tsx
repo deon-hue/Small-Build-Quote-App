@@ -29,6 +29,7 @@ import AssemblyRoofStructureDemo from '@/components/AssemblyRoofStructureDemo'
 import AssemblyRoofCoveringDemo from '@/components/AssemblyRoofCoveringDemo'
 import AssemblyRooflightsDemo from '@/components/AssemblyRooflightsDemo'
 import AssemblyFasciaSoffitDemo from '@/components/AssemblyFasciaSoffitDemo'
+import { RateLinksProvider } from '@/components/RateLinks'
 import type { CostedLine } from '@/lib/assembly-calc'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 
@@ -57,10 +58,12 @@ export interface AssemblyRenderOpts {
   variant?: string
 }
 
-export const BUILT_ASSEMBLY_CANON_IDS: Record<string, {
+type BuiltAssemblyEntry = {
   icon: AssemblyIcon
   render: (opts?: AssemblyRenderOpts) => React.ReactNode
-}> = {
+}
+
+const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'iw-stud-partition': { icon: 'stud-wall', render: opts => <AssemblyWallDemo system="timber" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'iw-metal-stud': { icon: 'metal-stud-wall', render: opts => <AssemblyWallDemo system="metal" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'iw-block-masonry': { icon: 'block-wall', render: opts => <AssemblyMasonryWallDemo context="partition" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
@@ -85,6 +88,11 @@ export const BUILT_ASSEMBLY_CANON_IDS: Record<string, {
   'fnd-underpin': { icon: 'underpinning', render: opts => <AssemblyUnderpinningDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'ew-cav-full': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="wool" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initialHeightMm={opts?.initialHeightMm} noSampleOpenings={opts?.noSampleOpenings} /> },
 }
+
+/** Every calculator is drawn inside the rate-link provider, so its cost table can link a line to a Back Office product or plant item without each screen knowing about it. */
+export const BUILT_ASSEMBLY_CANON_IDS: Record<string, BuiltAssemblyEntry> = Object.fromEntries(
+  Object.entries(RAW_BUILT_ASSEMBLIES).map(([id, e]) => [id, { ...e, render: (opts?: AssemblyRenderOpts) => <RateLinksProvider assemblyId={id}>{e.render(opts)}</RateLinksProvider> }]),
+)
 
 export function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; size?: number }) {
   switch (icon) {

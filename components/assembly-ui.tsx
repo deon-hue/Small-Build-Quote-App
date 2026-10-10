@@ -7,10 +7,12 @@
 // callbacks. Each calculator component supplies its own geometry, layer list, and elevation
 // drawing; everything here is what stays identical across all of them.
 
-import React from 'react'
+import React, { useEffect, useRef } from 'react'
 import type { AssemblyOpening, CostedLine } from '@/lib/assembly-calc'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import { openMaterialsPrintView, downloadMaterialsCsv } from '@/lib/materials-report'
+import { useRateLinks } from '@/components/RateLinks'
+import { candidatesFor, costOf, isLinkable } from '@/lib/rate-links'
 
 export const CATEGORY_LABEL: Record<string, string> = { materials: 'Materials', labour: 'Labour', plant: 'Plant', subcontractors: 'Subcontractors', other: 'Other' }
 
@@ -293,10 +295,25 @@ export function BreakdownTable({ lines, onRateChange, disabledLayerIds, onToggle
   sidesEligibleLayerIds: Set<string>
 }) {
   const groups = ['materials', 'labour', 'plant', 'subcontractors', 'other'] as const
+  const rl = useRateLinks()
+  // The sample rate each line had before it was linked, so unlinking puts it back.
+  const sampleRates = useRef<Record<string, number>>({})
+  for (const l of lines) if (sampleRates.current[l.layerId] === undefined && !rl?.links[l.layerId]) sampleRates.current[l.layerId] = l.unitCost
+  // A linked line always takes its Back Office item's current price.
+  useEffect(() => {
+    if (!rl) return
+    for (const l of lines) {
+      const link = rl.links[l.layerId]
+      if (!link) continue
+      const c = costOf(link, rl.items)
+      if (c != null && Math.abs(c - l.unitCost) > 0.0005) onRateChange(l.layerId, c)
+    }
+  }, [lines, rl, onRateChange])
+  const anyLinkable = !!rl && rl.items.length > 0
   return (
     <div>
       <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 }}>
-        Cost breakdown — sample rates, editable for now until Products/Labour/Plant linking replaces them. Untick a line to leave it out (e.g. no insulation).
+        Cost breakdown — sample rates you can edit{anyLinkable ? ', or link a materials or plant line to your Back Office price (then it follows that price)' : ''}. Untick a line to leave it out (e.g. no insulation).
       </div>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
         <thead>
@@ -327,6 +344,10 @@ export function BreakdownTable({ lines, onRateChange, disabledLayerIds, onToggle
                   const off = disabledLayerIds.has(l.layerId)
                   const sidesEligible = sidesEligibleLayerIds.has(l.layerId)
                   const sides = layerSides[l.layerId] ?? 1
+                  const link = rl?.links[l.layerId]
+                  const linkedItem = link ? rl!.items.find(i => i.kind === link.kind && i.id === link.refId) : undefined
+                  const canLink = !!rl && rl.ready && isLinkable(l.layerId, l.category)
+                  const options = canLink && !link ? candidatesFor(l, rl!.items) : []
                   return (
                     <tr key={l.layerId} style={{ borderBottom: '1px solid #f1f5f9', opacity: off ? 0.45 : 1 }}>
                       <td style={{ padding: '3px 6px' }}>
@@ -361,12 +382,34 @@ export function BreakdownTable({ lines, onRateChange, disabledLayerIds, onToggle
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
                           <span style={{ fontFamily: 'monospace', color: '#94a3b8' }}>£</span>
                           <input
-                            type="number" min={0} step={0.01} value={l.unitCost} disabled={off}
+                            type="number" min={0} step={0.01} value={l.unitCost} disabled={off || !!link}
                             onChange={e => onRateChange(l.layerId, +e.target.value)}
-                            title="Edit this sample rate"
-                            style={{ width: 62, fontFamily: 'monospace', fontSize: 12, textAlign: 'right', padding: '2px 4px', border: '1px solid #e2e8f0', borderRadius: 4 }}
+                            title={link ? 'This price comes from Back Office — unlink to type your own' : 'Edit this sample rate'}
+                            style={{ width: 62, fontFamily: 'monospace', fontSize: 12, textAlign: 'right', padding: '2px 4px', border: '1px solid #e2e8f0', borderRadius: 4, background: link ? '#f0fdf4' : undefined }}
                           />
                         </div>
+                        {link && (
+                          <div style={{ fontSize: 10, color: linkedItem ? '#15803d' : '#b45309', marginTop: 2, maxWidth: 190, marginLeft: 'auto' }}>
+                            {linkedItem ? <>🔗 {linkedItem.name}{linkedItem.supplier ? ` · ${linkedItem.supplier}` : ''}</> : <>⚠ the linked item has been deleted</>}
+                            {' '}
+                            <button type="button" onClick={() => { rl!.setLink(l.layerId, null); const back = sampleRates.current[l.layerId]; if (back !== undefined) onRateChange(l.layerId, back) }}
+                              style={{ border: 'none', background: 'none', color: '#64748b', cursor: 'pointer', fontSize: 10, textDecoration: 'underline', padding: 0 }}>unlink</button>
+                          </div>
+                        )}
+                        {!link && options.length > 0 && (
+                          <select value="" disabled={off}
+                            onChange={e => {
+                              const it = options.find(o => o.id === e.target.value)
+                              if (!it) return
+                              sampleRates.current[l.layerId] = l.unitCost
+                              rl!.setLink(l.layerId, { kind: it.kind, refId: it.id })
+                            }}
+                            title="Take this price from your Back Office list (same unit only)"
+                            style={{ display: 'block', marginLeft: 'auto', marginTop: 2, maxWidth: 150, fontSize: 10, padding: '1px 2px', border: '1px solid #e2e8f0', borderRadius: 4, color: '#64748b' }}>
+                            <option value="">🔗 Link to {l.category === 'plant' ? 'plant' : 'a product'}…</option>
+                            {options.map(o => <option key={o.id} value={o.id}>{o.name} — £{o.cost.toFixed(2)}/{o.unit}{o.supplier ? ` (${o.supplier})` : ''}</option>)}
+                          </select>
+                        )}
                       </td>
                       <td style={{ padding: '3px 6px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 600, textDecoration: off ? 'line-through' : 'none' }}>£{l.cost.toFixed(2)}</td>
                     </tr>
