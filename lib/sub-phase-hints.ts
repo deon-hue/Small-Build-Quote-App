@@ -14,6 +14,8 @@ const HINTS: Record<string, string> = {
   'ew-parapet-wall': 'parapet wall at roof edge',
   'ew-solid-brick': 'solid brick external wall, 225mm thick',
   'ew-timber-frame': 'timber-frame external wall',
+  // Foundations
+  'fnd-strip': 'strip foundation: a trench dug and part-filled with concrete, with solid blockwork built up from it to the DPC. Not a raft, pad or piled foundation',
   // Internal walls
   'iw-stud-partition': 'internal timber stud partition wall',
   'iw-metal-stud': 'internal metal stud partition wall',

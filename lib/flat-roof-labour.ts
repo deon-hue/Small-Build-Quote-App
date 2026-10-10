@@ -31,7 +31,8 @@ export const LABOUR_RATES = {
     trimLm: 0.3, cornerNr: 0.2, leadLm: 0.5, outletNr: 0.75, overflowNr: 0.5,
     membraneM2: 0.15, battenLm: 0.08, ridgeLm: 0.35, hipLm: 0.4, vergeLm: 0.3, abutmentLm: 0.4, eavesLm: 0.15,
   },
-  bricklayer: { cavityM2: 1.4, solidM2: 1.0, solidBrickM2: 1.8, copingLm: 0.35, trayLm: 0.15, outletOpeningNr: 0.5 },
+  bricklayer: { cavityM2: 1.4, solidM2: 1.0, solidBrickM2: 1.8, copingLm: 0.35, trayLm: 0.15, outletOpeningNr: 0.5, dpcLm: 0.05 },
+  groundworker: { trimLm: 0.25, concreteM3: 1.5, backfillM3: 0.5, cavityFillM3: 1.0 },
   renderer: { renderM2: 0.6 },
   plumber: { gutterLm: 0.3, fittingNr: 0.15, downpipeLm: 0.35, shoeNr: 0.15, hopperNr: 0.5, offsetNr: 0.3 },
   labourer: { carryM2: 0.15, bricklayerShare: 0.5 },
@@ -233,6 +234,29 @@ export function suggestParapetLabour(p: {
   const out: (LabourSuggestion | null)[] = [brick]
   out.push(line('lab-parapet', 'labourer', 'Mix and carry for the bricklayer', [{ qty: brick?.hours ?? 0, unit: 'h', what: 'bricklayer', rate: LABOUR_RATES.labourer.bricklayerShare }]))
   if (p.build === 'solid-block') out.push(line('render-parapet', 'renderer', 'Render the parapet', [{ qty: p.renderAreaM2, unit: 'm²', what: 'render', rate: LABOUR_RATES.renderer.renderM2 }]))
+  return out.filter((x): x is LabourSuggestion => x !== null)
+}
+
+/** The labour for a strip foundation (Foundations → Strip Foundation): a labourer to trim the trench, place and level the concrete and backfill
+ * it, the bricklayer for the blockwork up to DPC (with the DPC), and a labourer serving the bricklayer. The digging itself is the machine and its
+ * operator, priced as plant in the calculator, so it is not in these hours. */
+export function suggestStripFoundationLabour(g: {
+  lm: number; concreteM3: number; backfillM3: number; masonryAreaM2: number; wall: 'solid-flat' | 'cavity-filled'; cavityFillM3: number
+}): LabourSuggestion[] {
+  const w = LABOUR_RATES.groundworker
+  const b = LABOUR_RATES.bricklayer
+  const ground = line('found-ground', 'labourer', 'Trim the trench, set the depth pegs, place and level the concrete, backfill and compact', [
+    { qty: g.lm, unit: 'lm', what: 'trench trimmed and pegged', rate: w.trimLm },
+    { qty: g.concreteM3, unit: 'm³', what: 'concrete placed and levelled', rate: w.concreteM3 },
+    { qty: g.cavityFillM3, unit: 'm³', what: 'cavity fill', rate: w.cavityFillM3 },
+    { qty: g.backfillM3, unit: 'm³', what: 'backfill compacted', rate: w.backfillM3 },
+  ])
+  const brick = line('found-brick', 'bricklayer', 'Build the foundation blockwork up to DPC and lay the DPC', [
+    { qty: g.masonryAreaM2, unit: 'm²', what: g.wall === 'solid-flat' ? 'solid blockwork' : 'cavity blockwork', rate: g.wall === 'solid-flat' ? b.solidM2 : b.cavityM2 },
+    { qty: g.lm, unit: 'lm', what: 'DPC', rate: b.dpcLm },
+  ])
+  const out: (LabourSuggestion | null)[] = [ground, brick]
+  out.push(line('lab-found', 'labourer', 'Mix and carry for the bricklayer', [{ qty: brick?.hours ?? 0, unit: 'h', what: 'bricklayer', rate: LABOUR_RATES.labourer.bricklayerShare }]))
   return out.filter((x): x is LabourSuggestion => x !== null)
 }
 
