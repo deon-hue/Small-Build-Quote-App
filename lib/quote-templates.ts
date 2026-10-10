@@ -22,6 +22,12 @@ export function pickTemplateRows<T extends { subPhaseId: string }>(allRows: T[],
   return { rows, missingIds: Array.from(want).filter(id => !have.has(id)) }
 }
 
+/** The standard job types (all but "Other", which always starts blank) that do not have a template yet. */
+export function missingStandardNames(templates: { name: string }[], jobTypes: readonly string[]): string[] {
+  const have = new Set(templates.map(t => t.name.trim().toLowerCase()))
+  return jobTypes.filter(j => j !== 'Other' && !have.has(j.toLowerCase()))
+}
+
 /** Ids with duplicates and blanks removed, original order kept. */
 export function cleanIds(ids: unknown): string[] {
   if (!Array.isArray(ids)) return []

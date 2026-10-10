@@ -604,7 +604,12 @@ export default function NewQuotePage() {
       const tpl = templates.find(t => t.id === templateId)
       if (!tpl) { alert('That template could not be found, so the standard ' + baseType + ' phases were loaded instead.'); await loadFromBackOffice(baseType); return }
       const { rows, missingIds } = pickTemplateRows(all, tpl.subPhaseIds)
-      if (!rows.length) { alert('The template "' + tpl.name + '" has no sub-phases in it yet. Add some in Back Office > Job Templates.'); setPhases([]); return }
+      if (!tpl.subPhaseIds.length) {
+        // a template nobody has filled in yet (a standard job type to start with): quote it the way that job type has always been quoted
+        if (baseType === 'Other') setPhases([]); else await loadFromBackOffice(baseType)
+        return
+      }
+      if (!rows.length) { alert('None of the sub-phases in the template "' + tpl.name + '" exist in Phases & Tasks any more. Update it in Back Office > Job Templates.'); setPhases([]); return }
       setPhases(phasesFromBORows(rows))
       if (missingIds.length) console.warn('[loadFromTemplate]', missingIds.length, 'sub-phase(s) in the template no longer exist in Phases & Tasks')
     } catch (err) {
@@ -788,12 +793,13 @@ export default function NewQuotePage() {
     } else if (mode === 'manual' && selectedJobType) {
       setJobType(selectedJobType)
       setStep('workspace')
-      if (selectedJobType === 'Other') {
+      if (templateId) {
+        loadFromTemplate(templateId, selectedJobType)   // one of "My templates"
+      } else if (selectedJobType === 'Other') {
         // "Other" starts blank — user builds from scratch
         setPhases([])
       } else {
-        if (templateId) loadFromTemplate(templateId, selectedJobType)   // one of "My templates"
-        else loadFromBackOffice(selectedJobType)  // async — BO defaults first, template fallback
+        loadFromBackOffice(selectedJobType)  // async — BO defaults first, template fallback
       }
     } else if (mode === 'takeoff') {
       // Navigate to the Takeoff tool — user draws plans there, then

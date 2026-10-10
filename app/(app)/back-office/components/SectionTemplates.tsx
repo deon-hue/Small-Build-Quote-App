@@ -3,10 +3,10 @@
 // Back Office > Job Templates (the new, linked kind): loads Phases & Tasks and the saved templates, and saves changes. The screen itself is
 // components/LinkedTemplatesView.tsx; what a template stores is described in lib/quote-templates.ts.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { fetchPhases, fetchSubPhases, fetchTasks } from '@/lib/back-office-queries'
-import { createQuoteTemplate, deleteQuoteTemplate, fetchQuoteTemplates, saveQuoteTemplate, type QuoteTemplate } from '@/lib/quote-templates'
+import { createQuoteTemplate, deleteQuoteTemplate, fetchQuoteTemplates, missingStandardNames, saveQuoteTemplate, type QuoteTemplate } from '@/lib/quote-templates'
 import { JOB_TYPES } from '@/lib/utils'
 import LinkedTemplatesView, { type TplPhase, type TplSubPhase } from '@/components/LinkedTemplatesView'
 
@@ -17,6 +17,7 @@ export default function SectionTemplates({ userId }: { userId: string }) {
   const [taskCounts, setTaskCounts] = useState<Record<string, number>>({})
   const [templates, setTemplates] = useState<QuoteTemplate[]>([])
   const [missingTable, setMissingTable] = useState(false)
+  const seeding = useRef(false)
 
   const load = useCallback(async () => {
     const sb = createClient()
@@ -28,7 +29,16 @@ export default function SectionTemplates({ userId }: { userId: string }) {
     const counts: Record<string, number> = {}
     for (const t of tk) if (t.active && t.sub_phase_id) counts[t.sub_phase_id] = (counts[t.sub_phase_id] ?? 0) + 1
     setTaskCounts(counts)
-    setTemplates(tp.templates); setMissingTable(tp.missingTable)
+    let list = tp.templates
+    // the standard job types (Rear Extension, Loft Conversion ...) are templates too: create any that are missing, empty to start with
+    if (!tp.missingTable && !seeding.current) {
+      seeding.current = true
+      for (const name of missingStandardNames(list, JOB_TYPES)) {
+        const { template } = await createQuoteTemplate(sb, userId, { name, baseJobType: name, subPhaseIds: [] })
+        if (template) list = [...list, template]
+      }
+    }
+    setTemplates([...list].sort((a, b) => a.name.localeCompare(b.name))); setMissingTable(tp.missingTable)
     setLoading(false)
   }, [userId])
   useEffect(() => { load() }, [load])
@@ -37,7 +47,7 @@ export default function SectionTemplates({ userId }: { userId: string }) {
 
   return (
     <LinkedTemplatesView
-      phases={phases} subPhases={subPhases} taskCounts={taskCounts} templates={templates} jobTypes={JOB_TYPES} missingTable={missingTable}
+      phases={phases} subPhases={subPhases} taskCounts={taskCounts} templates={templates} jobTypes={JOB_TYPES} standardNames={JOB_TYPES.filter(j => j !== 'Other')} missingTable={missingTable}
       onCreate={async t => {
         const { template } = await createQuoteTemplate(createClient(), userId, t)
         if (template) setTemplates(prev => [...prev, template].sort((a, b) => a.name.localeCompare(b.name)))

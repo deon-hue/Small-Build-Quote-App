@@ -18,6 +18,8 @@ interface Props {
   taskCounts: Record<string, number>
   templates: QuoteTemplate[]
   jobTypes: string[]
+  /** names of the standard job types: these templates are always there, so they cannot be deleted (empty them instead) */
+  standardNames?: string[]
   /** the SQL file has not been run yet */
   missingTable?: boolean
   onCreate: (t: { name: string; baseJobType: string; subPhaseIds: string[] }) => Promise<QuoteTemplate | null>
@@ -28,7 +30,7 @@ interface Props {
 const btn: React.CSSProperties = { padding: '6px 14px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, background: '#fff', color: '#374151', cursor: 'pointer' }
 const field: React.CSSProperties = { padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, background: '#fff' }
 
-export default function LinkedTemplatesView({ phases, subPhases, taskCounts, templates, jobTypes, missingTable, onCreate, onSave, onDelete }: Props) {
+export default function LinkedTemplatesView({ phases, subPhases, taskCounts, templates, jobTypes, standardNames = [], missingTable, onCreate, onSave, onDelete }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [draft, setDraft] = useState<QuoteTemplate | null>(null)
   const [dirty, setDirty] = useState(false)
@@ -185,10 +187,11 @@ export default function LinkedTemplatesView({ phases, subPhases, taskCounts, tem
                   {Array.from(new Set([...jobTypes, draft.baseJobType])).map(j => <option key={j}>{j}</option>)}
                 </select>
                 <button style={{ ...btn, background: dirty ? '#4a90a4' : '#cbd5e1', color: '#fff', border: 'none', fontWeight: 600, cursor: dirty && !busy ? 'pointer' : 'not-allowed' }} disabled={!dirty || busy} onClick={save}>{busy ? 'Saving…' : 'Save template'}</button>
-                <button style={{ ...btn, color: '#dc2626', borderColor: '#fca5a5' }} disabled={busy} onClick={remove}>Delete</button>
+                {!standardNames.includes(draft.name) && <button style={{ ...btn, color: '#dc2626', borderColor: '#fca5a5' }} disabled={busy} onClick={remove}>Delete</button>}
               </div>
               <div style={{ fontSize: 12, color: '#64748b', marginTop: 8 }}>
                 {pickedCount} sub-phase{pickedCount === 1 ? '' : 's'} in {mainPhasesUsed} main phase{mainPhasesUsed === 1 ? '' : 's'}. Prices, tasks and calculators come from Phases & Tasks, so changing them there updates this template.
+                {draft.subPhaseIds.length === 0 && ' This one is empty, so quotes for it use the usual phases for this job type until you fill it in.'}
               </div>
               {dirty && <div style={{ marginTop: 6, fontSize: 12, color: '#b85c00', fontWeight: 500 }}>● Unsaved changes — click Save template to keep them</div>}
             </div>

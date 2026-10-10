@@ -231,8 +231,8 @@ export default function QuoteLandingWizard({ onSelect }: Props) {
                       {templates.map(t => <option key={t.id} value={'tpl:' + t.id}>{t.name}</option>)}
                     </optgroup>
                   )}
-                  <optgroup label="Job types">
-                    {JOB_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  <optgroup label={templates.length ? 'Other job types' : 'Job types'}>
+                    {JOB_TYPES.filter(t => !templates.some(x => x.name === t)).map(t => <option key={t} value={t}>{t}</option>)}
                   </optgroup>
                 </select>
                 <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>
