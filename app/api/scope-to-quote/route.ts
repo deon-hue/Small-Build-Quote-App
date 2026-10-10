@@ -12,7 +12,28 @@ import { BUILT_ASSEMBLY_CANONICAL_IDS } from '@/lib/built-assembly-ids'
 export const maxDuration = 300
 import { ESTIMATOR_PHASE_DEFAULTS } from '@/lib/estimatorDefaults'
 
-// ── Back Office library builder ────────────────────────────────────────────────
+// What each calculator sub-phase covers, in the words a builder uses, so the AI can match a scope to the right one instead of a general task-based phase.
+const CALC_HINTS: Record<string, string> = {
+  'ew-cav-partial': 'new external cavity wall: facing brick or block outer leaf, cavity with partial-fill rigid insulation, block inner leaf, DPC to wall plate',
+  'ew-cav-full': 'new external cavity wall with full-fill mineral wool in the cavity, brick or block outer leaf, block inner leaf',
+  'ew-blockwork-100': 'single-leaf 100mm concrete blockwork wall (not a cavity wall)',
+  'ew-blockwork-215': 'single-leaf 215mm concrete block wall laid flat (not a cavity wall)',
+  'ew-garden-room-timber': 'timber-frame garden room wall',
+  'ew-dwarf-wall': 'dwarf / load-bearing wall below floor level',
+  'ew-sleeper-wall': 'sleeper wall under a block-and-beam floor',
+  'ew-parapet-wall': 'parapet wall at roof edge',
+  'iw-stud-partition': 'internal timber stud partition wall',
+  'iw-metal-stud': 'internal metal stud partition wall',
+  'iw-block-masonry': 'internal blockwork partition wall',
+  'roof-flat': 'complete flat roof (structure, covering and gutters together)',
+  'roof-structure': 'roof structure: flat, mono-pitch, gable or hip roof timbers',
+  'roof-covering': 'roof covering: GRP, EPDM, TPO, tiles or slate',
+  'roof-rainwater': 'gutters and downpipes',
+  'roof-rooflights': 'rooflights, lanterns, roof windows, domes and hatches',
+  'roof-fascia-soffit': 'fascias, soffits and barge boards',
+}
+
+// ── Back Office library builder────────────────────────────────────────────────
 
 interface TaskLibEntry {
   id: string
@@ -36,7 +57,7 @@ async function buildLibraryFromDB(userId: string): Promise<{
   parentPhaseMap: Record<string, string>
   rateMap: Record<string, TaskLibEntry>
   /** Sub-phases priced by an assembly calculator, listed even when they have no tasks. `takesWallSize` ones are the cavity walls, which the AI quote can price from a length and height. */
-  calcPhases: { name: string; parent: string; takesWallSize: boolean }[]
+  calcPhases: { name: string; parent: string; takesWallSize: boolean; hint: string }[]
 } | null> {
   const sb = await createClient()
 
@@ -71,7 +92,7 @@ async function buildLibraryFromDB(userId: string): Promise<{
   const phaseById = Object.fromEntries((phases ?? []).map(p => [p.id, p.name]))
   const calcPhases = (subPhases ?? [])
     .filter(sp => sp.canonical_id && BUILT_ASSEMBLY_CANONICAL_IDS.has(sp.canonical_id) && phaseById[sp.phase_id])
-    .map(sp => ({ name: sp.name as string, parent: phaseById[sp.phase_id] as string, takesWallSize: sp.canonical_id === 'ew-cav-partial' || sp.canonical_id === 'ew-cav-full' }))
+    .map(sp => ({ name: sp.name as string, parent: phaseById[sp.phase_id] as string, takesWallSize: sp.canonical_id === 'ew-cav-partial' || sp.canonical_id === 'ew-cav-full', hint: CALC_HINTS[sp.canonical_id as string] ?? '' }))
   const subPhaseById = Object.fromEntries((subPhases ?? []).map(sp => [sp.id, { name: sp.name, phaseId: sp.phase_id }]))
 
   const phaseTaskMap: Record<string, string[]> = {}
@@ -199,7 +220,7 @@ export async function POST(req: NextRequest) {
   let parentPhaseMap: Record<string, string>
   let rateMap: Record<string, Partial<TaskLibEntry>>
   let usingDB = false
-  let calcPhases: { name: string; parent: string; takesWallSize: boolean }[] = []
+  let calcPhases: { name: string; parent: string; takesWallSize: boolean; hint: string }[] = []
 
   if (user) {
     const dbLib = await buildLibraryFromDB(user.id)
@@ -230,7 +251,7 @@ export async function POST(req: NextRequest) {
   )
   // Calculator sub-phases are priced by their calculator, not from tasks, so they are listed on their own (even with no tasks)
   for (const c of calcPhases) {
-    libraryLines.push(`"${c.name}": [PRICED BY CALCULATOR \u2014 select no tasks${c.takesWallSize ? '; give the wall length and height in "measurements" if the scope states them' : ''}]`)
+    libraryLines.push(`"${c.name}": [PRICED BY CALCULATOR \u2014 ${c.hint ? 'covers: ' + c.hint + '; ' : ''}select no tasks${c.takesWallSize ? '; give the wall length and height in "measurements" if the scope states them' : ''}]`)
     parentPhaseMap[c.name] = c.parent
   }
   const libraryText = libraryLines.join('\n')
@@ -278,6 +299,7 @@ Rules:
 - Only include phases genuinely required by the scope — do not include phases with nothing to do
 - Always include Preliminaries for any construction project
 - Include Completion & Handover for all projects
+- PREFER the calculator lines. Where a library line marked [PRICED BY CALCULATOR] covers the work (read what it "covers"), choose it instead of a general task-based phase for the same work. For example, for a new external cavity wall choose the cavity wall calculator line, not a general "Masonry & Blockwork" phase.
 - A library line marked [PRICED BY CALCULATOR] is priced by a calculator, so give it an empty "selectedTasks". For those marked as taking a wall length and height, add "measurements": {"lengthM": <metres>, "heightM": <metres>} using ONLY the length and height the scope states for that wall (convert to metres; if only some walls are stated, use the stated wall). If the scope does not state both, leave "measurements" out. Never guess or invent a size.
 - "extraTasks" should ONLY be used for work genuinely outside the standard library; include all fields:
   { "name": "...", "description": "...", "measurementType": "quantity|area|linear|volume", "unit": "...", "labourRate": 0, "materialsRate": 0, "plantRate": 0, "subRate": 0, "otherRate": 0, "wastePercent": 0 }
