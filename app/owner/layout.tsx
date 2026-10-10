@@ -19,6 +19,7 @@ const NAV = [
   { href: '/owner/invites', label: 'Invite codes' },
   { href: '/owner/feedback', label: 'Feedback' },
   { href: '/owner/help', label: 'Help content' },
+  { href: '/owner/changes', label: 'Phase changes' },
   { href: '/owner/audit', label: 'Audit log' },
 ]
 
