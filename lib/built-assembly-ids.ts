@@ -27,6 +27,7 @@ export const BUILT_ASSEMBLY_CANONICAL_IDS = new Set<string>([
   'fnd-pad',
   'fnd-piled',
   'fnd-underpin',
+  'elec-install',
 ])
 
 // Bridges Take-off's External Walls "Build-up Type" system (keyed by WALL_MAKEUPS/

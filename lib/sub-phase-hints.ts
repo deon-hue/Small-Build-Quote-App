@@ -21,6 +21,8 @@ const HINTS: Record<string, string> = {
   'fnd-pad': 'pad foundations: separate blocks of concrete in their own pits, usually under columns or steel posts, counted by number. Not a continuous strip, trench fill, raft or piled foundation',
   'fnd-piled': 'piled foundation: piles driven or bored into the ground along the wall with a reinforced concrete ground beam on top. Not a strip, trench fill, raft or pad foundation',
   'fnd-underpin': 'underpinning: deepening the foundation under an existing wall, a short section (pin) at a time, dug by hand and filled with mass concrete. Not a new foundation for new work',
+  // Electrics
+  'elec-install': 'the whole electrical installation priced room by room: sockets, switches, lights, kitchen and bathroom electrics, special light fittings such as chandeliers, consumer unit, circuits and the electrical certificate. Priced per point by an electrician',
   // Internal walls
   'iw-stud-partition': 'internal timber stud partition wall',
   'iw-metal-stud': 'internal metal stud partition wall',

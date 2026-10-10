@@ -553,6 +553,16 @@ const electricsSubphases: PhaseSubphase[] = [
     ],
   },
 
+  // ── Electrical installation, priced by the room (assembly calculator) ───────────
+  {
+    id: 'elec-install',
+    phase: 'Electrics',
+    name: 'Electrical Installation (by room)',
+    markupPct: 20,
+    ukWarning: 'All electrical work must comply with BS 7671:2018 (18th Edition). Notifiable work requires a Part P registered electrician (NICEIC/NAPIT) or Building Control notification. The circuit design, cable sizes and certificate are the electrician\'s.',
+    tasks: [],
+  },
+
   // ── Bedrooms ───────────────────────────────────────────────────────────────
   { id: 'elec-bed-1', phase: 'Electrics', name: 'Bedroom 1', markupPct: 20, tasks: bedroomItems('elec-bed1') },
   { id: 'elec-bed-2', phase: 'Electrics', name: 'Bedroom 2', markupPct: 20, tasks: bedroomItems('elec-bed2') },

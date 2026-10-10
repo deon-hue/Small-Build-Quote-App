@@ -25,6 +25,7 @@ import AssemblyRaftFoundationDemo from '@/components/AssemblyRaftFoundationDemo'
 import AssemblyPadFoundationDemo from '@/components/AssemblyPadFoundationDemo'
 import AssemblyPiledFoundationDemo from '@/components/AssemblyPiledFoundationDemo'
 import AssemblyUnderpinningDemo from '@/components/AssemblyUnderpinningDemo'
+import AssemblyElectricsDemo from '@/components/AssemblyElectricsDemo'
 import AssemblyRoofStructureDemo from '@/components/AssemblyRoofStructureDemo'
 import AssemblyRoofCoveringDemo from '@/components/AssemblyRoofCoveringDemo'
 import AssemblyRooflightsDemo from '@/components/AssemblyRooflightsDemo'
@@ -34,7 +35,7 @@ import type { CostedLine } from '@/lib/assembly-calc'
 import type { AssemblyBasics } from '@/lib/assembly-basics'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 
-export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation' | 'pad-foundation' | 'piled-foundation' | 'underpinning'
+export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation' | 'pad-foundation' | 'piled-foundation' | 'underpinning' | 'electrics'
 
 /** Fired when a calculator's "Save & Price" is used from inside a real quote — absent in
  * the Back Office preview context, which has no quote to save into. */
@@ -89,6 +90,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'fnd-pad': { icon: 'pad-foundation', render: opts => <AssemblyPadFoundationDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} initial={opts?.basics} /> },
   'fnd-piled': { icon: 'piled-foundation', render: opts => <AssemblyPiledFoundationDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initial={opts?.basics} /> },
   'fnd-underpin': { icon: 'underpinning', render: opts => <AssemblyUnderpinningDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initial={opts?.basics} /> },
+  'elec-install': { icon: 'electrics', render: opts => <AssemblyElectricsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'ew-cav-full': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="wool" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initialHeightMm={opts?.initialHeightMm} noSampleOpenings={opts?.noSampleOpenings} /> },
 }
 
@@ -165,6 +167,18 @@ export function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; siz
           <line x1="4" y1="7.5" x2="20" y2="7.5" stroke="#b91c1c" strokeWidth="1" strokeDasharray="2 1.5" />
           <rect x="5" y="10" width="3" height="11" stroke="#57534e" strokeWidth="1.5" />
           <rect x="16" y="10" width="3" height="11" stroke="#57534e" strokeWidth="1.5" />
+        </svg>
+      )
+    case 'electrics':
+      // A double socket face plate with a switched light above it: a plate, two socket pin-holes and a rocker switch.
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="3" width="18" height="18" rx="2" stroke="#ca8a04" strokeWidth="1.6" />
+          <rect x="8" y="5.5" width="8" height="5" rx="1" stroke="#ca8a04" strokeWidth="1.3" />
+          <circle cx="8.5" cy="16" r="2.6" stroke="#ca8a04" strokeWidth="1.3" />
+          <circle cx="15.5" cy="16" r="2.6" stroke="#ca8a04" strokeWidth="1.3" />
+          <line x1="8.5" y1="15" x2="8.5" y2="17" stroke="#ca8a04" strokeWidth="1.2" />
+          <line x1="15.5" y1="15" x2="15.5" y2="17" stroke="#ca8a04" strokeWidth="1.2" />
         </svg>
       )
     case 'underpinning':

@@ -60,6 +60,13 @@ timber garden room wall, dwarf wall, sleeper wall (block & beam floor), parapet 
 structure, covering and gutters. Every new one follows the same
 pattern, and **is used from Take-off in the same way** — do not invent a different one.
 
+**Electrics (`elec-install`) is the one calculator that is not drawn geometry.** It prices the whole electrical installation room by room,
+per point at an electrician's all-in rate (`lib/electrics-units.ts` engine, `lib/electrics-description.ts`, `components/AssemblyElectricsDemo.tsx`).
+Rooms start empty (added from a kind of room, which brings its usual points); a situation uplift % applies to points for the job or one room; a
+special fitting (chandelier etc.) is an extra install line on top of its point, client-supplied or ours; a room can be priced by the day instead;
+whole-house items (consumer unit, testing/certificate, circuits) are separate, only the certificate in the starting price. Step 2 (not built):
+Take-off "electrical point" clicks per room feed the counts, following the plan until typed over. Do not add per-room sub-phases for it.
+
 **Build it**
 1. Engine: its own pure module — in `lib/assembly-calc.ts` for a wall/roof costed from drawn geometry
    (geometry + `calculate…Cost`, reusing `costLayer`; add its quantity-source type to the

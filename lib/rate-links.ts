@@ -55,7 +55,7 @@ export function toRateItems(
 export const linkKindFor = (category: string): RateRefKind | null => category === 'materials' ? 'product' : category === 'plant' ? 'plant' : null
 
 /** Lines the estimator typed in (miscellaneous materials) have an id that changes every session, so a link to one could not be kept. */
-export const isStableLayerId = (layerId: string) => !/^(misc|suggested|profit|trim_extra_|drain_extra_)/.test(layerId) && layerId.length > 0
+export const isStableLayerId = (layerId: string) => !/^(misc|suggested|profit|trim_extra_|drain_extra_|fitmat\|)/.test(layerId) && layerId.length > 0
 
 export function isLinkable(layerId: string, category: string): boolean {
   return isStableLayerId(layerId) && linkKindFor(category) !== null
