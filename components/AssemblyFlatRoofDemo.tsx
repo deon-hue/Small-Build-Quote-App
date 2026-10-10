@@ -1253,7 +1253,7 @@ function CoveringTrimsPanel({ covering, roof, trims, areaM2, wastePct, onPick, e
 // ── Suggested labour ───────────────────────────────────────────────────────────────
 // Which trades the roof as chosen needs, and roughly how long each takes, with the working for each. The hours go
 // straight into the labour section below (where they can be changed) and follow the roof until they are.
-export function LabourSuggestionPanel({ suggestions, includeFitting, onIncludeFitting, unmatched, edited, onSuggestAgain, tradesFound }: {
+export function LabourSuggestionPanel({ suggestions, includeFitting, onIncludeFitting, unmatched, edited, onSuggestAgain, tradesFound, subject = 'roof' }: {
   suggestions: LabourSuggestion[]
   includeFitting: boolean
   onIncludeFitting: (on: boolean) => void
@@ -1261,6 +1261,8 @@ export function LabourSuggestionPanel({ suggestions, includeFitting, onIncludeFi
   edited: boolean
   onSuggestAgain: () => void
   tradesFound: boolean
+  /** What the labour is for, in the panel's wording ("this roof"). Default 'roof'. */
+  subject?: string
 }) {
   const shown = suggestions.filter(x => !x.optional || includeFitting)
   const fitting = suggestions.find(x => x.optional)
@@ -1271,11 +1273,11 @@ export function LabourSuggestionPanel({ suggestions, includeFitting, onIncludeFi
   return (
     <div style={{ gridColumn: '1 / -1', marginTop: 4, padding: 8, background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 6 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#0c4a6e', textTransform: 'uppercase', letterSpacing: 0.4 }}>Suggested labour for this roof</div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#0c4a6e', textTransform: 'uppercase', letterSpacing: 0.4 }}>Suggested labour for this {subject}</div>
         {edited
-          ? <button onClick={onSuggestAgain} title="Go back to the labour suggested from the roof — replaces the labour lines below"
-              style={{ fontSize: 10, color: '#0369a1', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>↻ Edited by you — suggest again from the roof</button>
-          : <span style={{ fontSize: 10, color: '#16a34a' }}>updates as you change the roof</span>}
+          ? <button onClick={onSuggestAgain} title={`Go back to the labour suggested from the ${subject} — replaces the labour lines below`}
+              style={{ fontSize: 10, color: '#0369a1', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>↻ Edited by you — suggest again from the {subject}</button>
+          : <span style={{ fontSize: 10, color: '#16a34a' }}>updates as you change the {subject}</span>}
       </div>
       <div style={{ fontSize: 12, color: '#334155', marginTop: 4, lineHeight: 1.5 }}>
         <strong>{total} hours</strong> in all:{' '}

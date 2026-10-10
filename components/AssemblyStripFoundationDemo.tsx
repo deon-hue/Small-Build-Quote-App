@@ -1,7 +1,9 @@
 'use client'
 
 /**
- * Assembly Calculator — Strip foundation (traditional), drawn as a line (Foundations → Strip Foundation).
+ * Assembly Calculator — Strip foundation (traditional) or trench fill, drawn as a line (Foundations → Strip Foundation / Trench Fill Foundation).
+ * One screen serves both sub-phases: `variant` only changes the starting name, which concrete figure you give (the thickness in the bottom of a
+ * strip, or how far below ground a trench fill stops) and the wording. They share lib/strip-foundation.ts.
  *
  * The trench along the wall (length from the line, width and depth chosen here), the concrete in the bottom of it (thickness and mix), the blockwork
  * built up from the concrete to the DPC just above ground (solid 215mm blocks laid flat, or two 100mm leaves with the cavity filled with concrete),
@@ -47,6 +49,8 @@ interface Props {
   labourTrades?: BOLabourTrade[]
   /** The length of the foundation line drawn in Take-off, in mm. Whenever it changes it overwrites the calculator's own. */
   externalLengthMm?: number
+  /** 'strip' (default): a set thickness of concrete in the bottom. 'trench-fill': the trench filled with concrete up to a set distance below ground. */
+  variant?: 'strip' | 'trench-fill'
 }
 
 function buildStripFoundationLayers(g: StripFoundationGeometry, o: { wall: StripWallBuild; mix: Mix; wastePct: number }): AssemblyLayerDef[] {
@@ -75,15 +79,19 @@ function buildStripFoundationLayers(g: StripFoundationGeometry, o: { wall: Strip
   return L
 }
 
-export default function AssemblyStripFoundationDemo({ onClose, onSave, labourTrades = [], externalLengthMm }: Props) {
-  const [name, setName]         = useState('Strip foundation (traditional)')
+export default function AssemblyStripFoundationDemo({ onClose, onSave, labourTrades = [], externalLengthMm, variant = 'strip' }: Props) {
+  const isFill = variant === 'trench-fill'
+  const [name, setName]         = useState(isFill ? 'Trench fill foundation' : 'Strip foundation (traditional)')
   const [location, setLocation] = useState('')
   const [qty, setQty]           = useState(1)
   const [lengthMm, setLengthMm] = useState(externalLengthMm ?? 10000)
   useEffect(() => { if (externalLengthMm != null) setLengthMm(externalLengthMm) }, [externalLengthMm])
   const [widthMm, setWidthMm]   = useState(600)
   const [depthMm, setDepthMm]   = useState(1000)
-  const [concreteMm, setConcreteMm] = useState(225)
+  const [stripConcreteMm, setConcreteMm] = useState(225)
+  const [fillBelowMm, setFillBelowMm] = useState(150)   // trench fill: the concrete stops this far below ground
+  // The concrete's thickness: given for a strip, and for a trench fill the depth less what is left above the concrete
+  const concreteMm = isFill ? Math.max(1, depthMm - fillBelowMm) : stripConcreteMm
   const [dpcAbove, setDpcAbove] = useState(150)
   const [wall, setWall]         = useState<StripWallBuild>('solid-flat')
   const [mix, setMix]           = useState<Mix>('C25')
@@ -151,7 +159,7 @@ export default function AssemblyStripFoundationDemo({ onClose, onSave, labourTra
   const totalCost = costSubtotal + profitAmount
 
   // The customer's description follows the foundation until it's edited by hand
-  const descInput = g ? { lengthM: g.lengthM, widthMm, depthMm, concreteThicknessMm: concreteMm, dpcAboveGroundMm: dpcAbove, wall, concreteMix: mix, takeAllSpoilAway: allSpoil } : null
+  const descInput = g ? { lengthM: g.lengthM, widthMm, depthMm, concreteThicknessMm: concreteMm, dpcAboveGroundMm: dpcAbove, wall, concreteMix: mix, takeAllSpoilAway: allSpoil, variant } : null
   const [descriptionOverride, setDescriptionOverride] = useState<string | null>(null)
   const [detailOverride, setDetailOverride] = useState<string | null>(null)
   const description = descriptionOverride ?? (descInput ? describeStripFoundationShort(descInput) : '')
@@ -230,7 +238,10 @@ export default function AssemblyStripFoundationDemo({ onClose, onSave, labourTra
               <div style={{ flex: 1 }}><PropRow label="Depth (mm)">{numInput(depthMm, setDepthMm, 1)}</PropRow></div>
             </div>
             <div style={{ fontSize: 10, color: '#94a3b8', margin: '2px 0 6px' }}>Depth is from ground level to the underside of the concrete.</div>
-            <PropRow label="Concrete thickness (mm)">{numInput(concreteMm, setConcreteMm, 1)}</PropRow>
+            {isFill
+              ? <PropRow label="Concrete stops this far below ground (mm)">{numInput(fillBelowMm, setFillBelowMm, 0)}</PropRow>
+              : <PropRow label="Concrete thickness (mm)">{numInput(stripConcreteMm, setConcreteMm, 1)}</PropRow>}
+            {isFill && <div style={{ fontSize: 10, color: '#94a3b8', margin: '2px 0 6px' }}>So the concrete is {concreteMm}mm deep. The wall is built up from it to the DPC.</div>}
             <PropRow label="Concrete mix">
               <select value={mix} onChange={e => setMix(e.target.value as Mix)} style={propInput}>
                 {(Object.keys(CONCRETE_MIXES) as Mix[]).map(k => <option key={k} value={k}>{CONCRETE_MIXES[k].label}</option>)}
@@ -262,7 +273,7 @@ export default function AssemblyStripFoundationDemo({ onClose, onSave, labourTra
         <LabourSuggestionPanel
           suggestions={labourSuggestions} includeFitting={false} onIncludeFitting={() => {}}
           unmatched={suggestedLabour.unmatched} edited={labourOverride !== null} onSuggestAgain={() => setLabourOverride(null)}
-          tradesFound={labourTrades.length > 0}
+          tradesFound={labourTrades.length > 0} subject="foundation"
         />
         <LabourSection labourLines={labourLines} labourTrades={labourTrades} onAdd={addLabour} onUpdate={updateLabour} onRemove={removeLabour} />
         <MiscMaterialsSection miscMaterialLines={miscMaterialLines} onAdd={addMisc} onUpdate={updateMisc} onRemove={removeMisc} />

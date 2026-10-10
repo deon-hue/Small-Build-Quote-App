@@ -1434,6 +1434,14 @@ const foundationsSubphases: PhaseSubphase[] = [
     ukWarning: 'The trench size, concrete strength and depth are the structural engineer\'s or building control\'s to set — the ground and frost depth decide how deep. A trench over about 1.2m deep needs its sides supported.',
     tasks: [],
   },
+  {
+    id: 'fnd-trench-fill',
+    phase: 'Foundations',
+    name: 'Trench Fill Foundation',
+    markupPct: 20,
+    ukWarning: 'The trench size, concrete strength and depth are the structural engineer\'s or building control\'s to set — the ground and frost depth decide how deep. A trench over about 1.2m deep needs its sides supported.',
+    tasks: [],
+  },
 ]
 
 export const ALL_PHASE_SUBPHASES: PhaseSubphase[] = [

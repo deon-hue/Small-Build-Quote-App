@@ -74,6 +74,7 @@ export const BUILT_ASSEMBLY_CANON_IDS: Record<string, {
   'roof-flat': { icon: 'flat-roof', render: opts => <AssemblyFlatRoofDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} externalWidthMm={opts?.externalWidthMm} buildUpDefault={opts?.variant === 'cold' ? 'cold' : 'warm'} /> },
   'ew-cav-partial': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="pir" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initialHeightMm={opts?.initialHeightMm} noSampleOpenings={opts?.noSampleOpenings} /> },
   'fnd-strip': { icon: 'strip-foundation', render: opts => <AssemblyStripFoundationDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
+  'fnd-trench-fill': { icon: 'strip-foundation', render: opts => <AssemblyStripFoundationDemo variant="trench-fill" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'ew-cav-full': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="wool" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initialHeightMm={opts?.initialHeightMm} noSampleOpenings={opts?.noSampleOpenings} /> },
 }
 

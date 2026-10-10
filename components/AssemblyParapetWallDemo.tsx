@@ -290,7 +290,7 @@ export default function AssemblyParapetWallDemo({ onClose, onSave, labourTrades 
         <LabourSuggestionPanel
           suggestions={labourSuggestions} includeFitting={false} onIncludeFitting={() => {}}
           unmatched={suggestedLabour.unmatched} edited={labourOverride !== null} onSuggestAgain={() => setLabourOverride(null)}
-          tradesFound={labourTrades.length > 0}
+          tradesFound={labourTrades.length > 0} subject="parapet wall"
         />
         <LabourSection labourLines={labourLines} labourTrades={labourTrades} onAdd={addLabour} onUpdate={updateLabour} onRemove={removeLabour} />
         <MiscMaterialsSection miscMaterialLines={miscMaterialLines} onAdd={addMisc} onUpdate={updateMisc} onRemove={removeMisc} />

@@ -1,4 +1,4 @@
-// Strip foundation (traditional) — a trench dug the length of the wall, filled part-way with concrete, with blockwork built up from the
+// Strip foundation (traditional) — and, with the concrete filling the trench to near ground level, a trench fill foundation — a trench dug the length of the wall, filled part-way with concrete, with blockwork built up from the
 // concrete to the damp-proof course just above ground level. Sized from the drawn line (its length) and four dimensions: the trench's
 // width and depth, the thickness of the concrete, and how far the DPC sits above ground. Counts and volumes only: the trench size, concrete
 // strength and whether it needs reinforcement are the designer's / building control's to confirm — this only warns about the usual rules of thumb.
@@ -98,7 +98,7 @@ export function calculateStripFoundationGeometry(input: StripFoundationInput): S
   const projectionMm = (widthMm - wallThicknessMm) / 2
   if (widthMm < wallThicknessMm + 200) warnings.push(`A ${widthMm}mm trench leaves under 100mm of concrete each side of a ${wallThicknessMm}mm wall — the trench is normally wider than that.`)
   else if (concreteThicknessMm < projectionMm) warnings.push(`The concrete (${concreteThicknessMm}mm) is thinner than it projects each side of the wall (${Math.round(projectionMm)}mm). A strip foundation is normally at least as thick as its projection — check with the designer.`)
-  if (depthMm < 750) warnings.push('A strip foundation less than about 750mm deep is only suitable where the ground and frost depth allow — confirm the depth with building control or the engineer.')
+  if (depthMm < 750) warnings.push('A foundation less than about 750mm deep is only suitable where the ground and frost depth allow — confirm the depth with building control or the engineer.')
   if (depthMm > 1200) warnings.push('A trench deeper than 1.2m normally needs its sides supported while people work in it. Support is not priced here.')
 
   return {
