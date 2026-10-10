@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useSpeechToText } from './useSpeechToText'
+import { useSpeechOut } from './useSpeechOut'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -205,6 +206,10 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
 
   // ── Speech recognition ──────────────────────────────────────
   const { listening, toggleMic } = useSpeechToText(setInput)
+  // Reading the AI's replies and the scope aloud, with the device's own voice
+  const speechOut = useSpeechOut()
+  // The speaker would be heard by the microphone, so dictating stops any read-out
+  useEffect(() => { if (listening) speechOut.stop() }, [listening]) // eslint-disable-line react-hooks/exhaustive-deps
   // Refocus the input once dictation stops — same behaviour the old inline version had.
   const wasListening = useRef(false)
   useEffect(() => {
@@ -324,6 +329,7 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
   // ── Send ───────────────────────────────────────────────────
   // overrideText: when a chip sends directly (bypasses input field; no attachments sent)
   async function send(overrideText?: string) {
+    speechOut.stop()
     const textInput = overrideText !== undefined ? overrideText : input.trim()
     if (!textInput && attachments.length === 0) return
     if (loading) return
@@ -492,6 +498,12 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
               <span style={{ opacity: 0.65 }}> · 🎤 voice · 📎 attach plans</span>
             </div>
           </div>
+          {speechOut.supported && speechOut.voices.length > 1 && (
+            <select value={speechOut.voiceURI} onChange={e => speechOut.setVoice(e.target.value)} title="The voice used when the AI's replies are read aloud (🔊)"
+              style={{ marginLeft: 'auto', marginRight: embedded ? 0 : 8, maxWidth: 130, fontSize: 10, padding: '2px 4px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.15)', color: '#fff' }}>
+              {speechOut.voices.map(v => <option key={v.voiceURI} value={v.voiceURI} style={{ color: '#000' }}>{v.name.replace(/^(Microsoft|Google)\s+/, '').slice(0, 28)} ({v.lang})</option>)}
+            </select>
+          )}
           {!embedded && (
             <button
               onClick={onClose}
@@ -514,6 +526,14 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
                   color: isUser ? '#fff' : 'var(--ink)',
                   fontSize: 13, lineHeight: 1.65,
                 }}>
+                  {!isUser && speechOut.supported && (commentary || scope) && (
+                    <div style={{ textAlign: 'right', marginBottom: 4 }}><button type="button" onClick={() => speechOut.speak('m' + i, [commentary, scope].filter(Boolean).join('\n'))}
+                      title={speechOut.speakingKey === 'm' + i ? 'Stop reading' : 'Read this aloud'}
+                      aria-label={speechOut.speakingKey === 'm' + i ? 'Stop reading' : 'Read this aloud'}
+                      style={{ background: speechOut.speakingKey === 'm' + i ? '#7ab533' : 'rgba(0,0,0,0.06)', color: speechOut.speakingKey === 'm' + i ? '#fff' : 'var(--ink)', border: 'none', borderRadius: 14, padding: '2px 9px', fontSize: 12, cursor: 'pointer', lineHeight: 1.4 }}>
+                      {speechOut.speakingKey === 'm' + i ? '⏹ Stop' : '🔊'}
+                    </button></div>
+                  )}
                   {commentary && (
                     <div style={{ whiteSpace: 'pre-wrap' }}>
                       {commentary.split(/(\*\*[^*]+\*\*)/).map((part, j) =>
