@@ -12,6 +12,9 @@ import type { Quote } from '@/lib/types'
 import { useDraggableModal } from '@/components/useDraggableModal'
 import ModalResizeHandle from '@/components/ModalResizeHandle'
 import ModalMaximizeButton from '@/components/ModalMaximizeButton'
+import DeleteContactsDialog, { type DeleteTarget } from '@/components/DeleteContactsDialog'
+import TidyUpContactsDialog from '@/components/TidyUpContactsDialog'
+import { buildUsageIndex, usageOf, type UsageIndex } from '@/lib/contact-usage'
 import { escapeLike } from '@/lib/email-match'
 import { snippet } from '@/lib/note-attention'
 
@@ -42,7 +45,7 @@ function fmtDateTime(iso: string | null | undefined) {
 }
 
 function ClientsPageInner() {
-  const { clients, quotes, jobs, settings, bills, addClient, updateClient, deleteClient, markPortalInvite, loading } = useApp()
+  const { clients, quotes, jobs, settings, bills, invoices, addClient, updateClient, deleteClient, markPortalInvite, loading } = useApp()
   const supabase = createClient()
   const [selected, setSelected] = useState<Client | null>(null)
   const [previewQuote, setPreviewQuote] = useState<Quote | null>(null)
@@ -350,17 +353,52 @@ function ClientsPageInner() {
     })
   }
 
-  async function handleDelete(c: Client) {
-    const cQuotes = getClientQuotes(c)
-    const cJobs = getClientJobs(c)
-    let msg = `Delete client: ${c.name}?`
-    if (cQuotes.length || cJobs.length) {
-      msg += `\n\nThis client has:${cQuotes.length ? '\n  ' + cQuotes.length + ' quote' + (cQuotes.length !== 1 ? 's' : '') : ''}${cJobs.length ? '\n  ' + cJobs.length + ' job' + (cJobs.length !== 1 ? 's' : '') : ''}\n\nDeleting the client will NOT delete their quotes or jobs.`
+  // ── Deleting contacts, and tidying up ────────────────────────────────────
+  // What each contact is used for is worked out when you start a delete or open Tidy up (a few quick looks at the database, read in full pages).
+  const [deleteTargets, setDeleteTargets] = useState<DeleteTarget[] | null>(null)
+  const [tidyOpen, setTidyOpen] = useState(false)
+  const [tidyBusy, setTidyBusy] = useState(false)
+  const [usageIx, setUsageIx] = useState<UsageIndex | null>(null)
+  const [usageNotice, setUsageNotice] = useState('')
+  const [xeroConnected, setXeroConnected] = useState(false)
+
+  async function loadUsage(): Promise<UsageIndex> {
+    let uncertain = ''
+    const all = async (table: string, col: string): Promise<(string | null)[]> => {
+      const out: (string | null)[] = []
+      for (let from = 0; from < 50000; from += 1000) {
+        const { data, error } = await supabase.from(table).select(col).range(from, from + 999)
+        if (error || !data) { uncertain = uncertain || 'Part of the check (' + table.replace(/_/g, ' ') + ') could not be read, so a contact may be used somewhere that is not shown here. Check before deleting.'; break }
+        const rows = data as unknown as Record<string, string | null>[]
+        out.push(...rows.map(r => r[col]))
+        if (rows.length < 1000) break
+      }
+      return out
     }
-    msg += '\n\nThis cannot be undone.'
-    if (!confirm(msg)) return
-    await deleteClient(c.id)
-    if (selected?.id === c.id) setSelected(null)
+    const [contracts, logs, entries, assigns, costs] = await Promise.all([
+      all('sub_contracts', 'contact_id'), all('sub_admin_time_logs', 'contact_id'), all('sub_time_entries', 'contact_id'),
+      all('task_assignments', 'assignee_id'), all('job_costs', 'supplier'),
+    ])
+    const ix = buildUsageIndex({
+      quotes: quotes.map(q => ({ customerName: q.customer?.name, customerEmail: q.customer?.email })),
+      jobs: jobs.map(j => ({ client: j.client })),
+      invoices: (invoices ?? []).map(i => ({ clientName: i.clientName })),
+      bills: bills.map(b => ({ supplierId: b.supplierId })),
+      subContractContactIds: contracts, subTimeLogContactIds: logs, subEntryContactIds: entries, assignmentContactIds: assigns, costSuppliers: costs,
+    })
+    setUsageIx(ix); setUsageNotice(uncertain)
+    try { const s = await (await fetch('/api/xero/status')).json() as { connected?: boolean }; setXeroConnected(!!s.connected) } catch { setXeroConnected(false) }
+    return ix
+  }
+
+  async function openTidy() {
+    setTidyBusy(true)
+    try { await loadUsage(); setTidyOpen(true) } finally { setTidyBusy(false) }
+  }
+
+  async function handleDelete(c: Client) {
+    const ix = await loadUsage()
+    setDeleteTargets([{ c, usage: usageOf(ix, c) }])
   }
 
   if (loading) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>
@@ -409,7 +447,10 @@ function ClientsPageInner() {
             </button>
           ))}
         </div>
-        <button className="btn btn-primary" onClick={openNew}>+ New Contact</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-outline" onClick={openTidy} disabled={tidyBusy} title="Find contacts that are not used anywhere and remove them in one go">{tidyBusy ? 'Checking…' : '🧹 Tidy up contacts'}</button>
+          <button className="btn btn-primary" onClick={openNew}>+ New Contact</button>
+        </div>
       </div>
 
       {appLinkError && (
@@ -541,6 +582,23 @@ function ClientsPageInner() {
           </tbody>
         </table>
       </div>
+
+      {tidyOpen && usageIx && (
+        <TidyUpContactsDialog
+          rows={clients.map(c => ({ c, usage: usageOf(usageIx, c) }))}
+          notice={usageNotice}
+          onClose={() => setTidyOpen(false)}
+          onDelete={targets => setDeleteTargets(targets)}
+        />
+      )}
+      {deleteTargets && (
+        <DeleteContactsDialog
+          targets={deleteTargets}
+          xeroConnected={xeroConnected}
+          onClose={() => setDeleteTargets(null)}
+          onDone={ids => { if (selected && ids.includes(selected.id)) setSelected(null); setDeleteTargets(null) }}
+        />
+      )}
 
       {/* ── Client detail modal ────────────────────────────── */}
       {selected && (

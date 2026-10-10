@@ -35,7 +35,7 @@ export default function XeroConnectionCard() {
       if (!res.ok) { if (!silent) setSyncMsg(`Sync failed: ${data.error || 'error'}`); return }
       const s = data.summary
       if (!silent)
-        setSyncMsg(`Synced ✓ — ${s.created} new, ${s.updated} updated, ${s.pushed} sent to Xero.${s.errors?.length ? ` (${s.errors.length} error(s))` : ''}`)
+        setSyncMsg(`Synced ✓ — ${s.created} new, ${s.updated} updated, ${s.pushed} sent to Xero.${s.skipped ? ` ${s.skipped} left out because you deleted them.` : ''}${s.errors?.length ? ` (${s.errors.length} error(s))` : ''}`)
     } catch {
       if (!silent) setSyncMsg('Sync failed — please try again.')
     } finally { setSyncing(false) }

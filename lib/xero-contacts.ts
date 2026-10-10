@@ -6,6 +6,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getValidConnection, xeroFetch, type XeroConn } from './xero'
+import { buildTombstones, isTombstoned } from './contact-tombstones'
 
 interface XeroPhone { PhoneType?: string; PhoneNumber?: string }
 interface XeroAddress { AddressType?: string; AddressLine1?: string }
@@ -27,6 +28,8 @@ export interface SyncSummary {
   created: number
   updated: number
   pushed: number
+  /** Xero contacts not brought in because the builder deleted them on purpose */
+  skipped: number
   errors: string[]
 }
 
@@ -71,12 +74,16 @@ export async function syncContacts(sb: SupabaseClient, userId: string): Promise<
   const conn = await getValidConnection(sb, userId)
   if (!conn) throw new Error('Not connected to Xero')
 
-  const summary: SyncSummary = { created: 0, updated: 0, pushed: 0, errors: [] }
+  const summary: SyncSummary = { created: 0, updated: 0, pushed: 0, skipped: 0, errors: [] }
 
   const xeroContacts = await fetchAllContacts(conn)
 
   const { data: allRows } = await sb.from('clients').select('*').eq('user_id', userId)
   const rows: Row[] = allRows ?? []
+
+  // Contacts the builder deleted on purpose: never re-created from Xero (if the table has not been created yet, nothing is blocked)
+  const { data: tombRows } = await sb.from('deleted_contacts').select('name, email, xero_contact_id').eq('user_id', userId)
+  const tombs = buildTombstones(tombRows as { name?: string; email?: string; xero_contact_id?: string }[] | null)
 
   // Index by Xero ContactID, normalised email/name, normalised company name
   const byId   = new Map<string, Row>()
@@ -121,6 +128,7 @@ export async function syncContacts(sb: SupabaseClient, userId: string): Promise<
         else summary.updated++
       }
     } else {
+      if (isTombstoned(tombs, { xeroId: xc.ContactID, email: xc.EmailAddress, name: xc.Name })) { summary.skipped++; continue }
       // Determine client_type from Xero flags
       const clientType = isCustomer && !isSupplier ? 'client' : 'supplier'
       const { error } = await sb.from('clients').insert({

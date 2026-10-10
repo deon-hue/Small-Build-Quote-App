@@ -7,6 +7,7 @@ import type { Job, Quote, Client, Supplier, Settings, GanttState, Invoice, JobNo
 import { FULL_PERMISSIONS, DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
 import { assignmentsFor, diffAssignments, type AssigneePick } from '@/lib/task-assignments'
 import { uid, JOB_TEMPLATES } from '@/lib/utils'
+import { escapeLike } from '@/lib/email-match'
 
 interface AppContextType {
   jobs: Job[]
@@ -297,6 +298,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           cisPercentage: r.cis_percentage ?? null,
           subPaymentType: r.sub_payment_type || 'invoice',
           isPaye: r.is_paye ?? false,
+          xeroContactId: r.xero_contact_id || null,
         })))
       }
 
@@ -569,6 +571,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     if (res.error) throw res.error
     const data = res.data
+    // a contact added by hand on purpose is wanted again: forget any "deleted" record for the same name or email
+    try {
+      const nm = (c.name || '').trim(), em = (c.email || '').trim()
+      if (nm) await supabase.from('deleted_contacts').delete().eq('user_id', ownerId).ilike('name', escapeLike(nm))
+      if (em) await supabase.from('deleted_contacts').delete().eq('user_id', ownerId).ilike('email', escapeLike(em))
+    } catch { /* nothing to forget */ }
     setClients(prev => [...prev, {
       id: data.id, name: data.name, first: data.first_name || '', last: data.last_name || '',
       phone: data.phone || '', email: data.email || '', address: data.address || '',
@@ -584,6 +592,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       cisPercentage: data.cis_percentage ?? null,
       subPaymentType: data.sub_payment_type || 'invoice',
       isPaye: data.is_paye ?? false,
+      xeroContactId: data.xero_contact_id || null,
     }])
   }, [supabase])
 
@@ -614,6 +623,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [supabase])
 
   const deleteClient = useCallback(async (id: string) => {
+    // Remember it first, so the Xero contact sync does not bring it back. (If the table has not been created yet this quietly does nothing.)
+    try {
+      const { data: row } = await supabase.from('clients').select('user_id, name, email, client_type, xero_contact_id').eq('id', id).maybeSingle()
+      if (row) await supabase.from('deleted_contacts').insert({ user_id: row.user_id, name: row.name, email: row.email, client_type: row.client_type, xero_contact_id: row.xero_contact_id })
+    } catch { /* not remembered this time */ }
     await supabase.from('clients').delete().eq('id', id)
     setClients(prev => prev.filter(c => c.id !== id))
   }, [supabase])

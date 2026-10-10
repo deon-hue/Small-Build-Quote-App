@@ -443,6 +443,8 @@ export interface Client {
   cisPercentage?: number | null
   subPaymentType?: string
   isPaye?: boolean
+  /** The contact's ID in Xero, once the Xero contact sync has linked it (null = not linked) */
+  xeroContactId?: string | null
 }
 
 export interface SubContract {
