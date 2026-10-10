@@ -1458,6 +1458,14 @@ const foundationsSubphases: PhaseSubphase[] = [
     ukWarning: 'The size, depth and reinforcement of each pad are the structural engineer\'s to specify from the column load and the ground bearing capacity. A pit deeper than about 1.2m needs its sides supported.',
     tasks: [],
   },
+  {
+    id: 'fnd-piled',
+    phase: 'Foundations',
+    name: 'Piled Foundation',
+    markupPct: 20,
+    ukWarning: 'Piles and the ground beam are designed by a structural engineer: their size, depth, spacing and the beam\'s reinforcement are theirs to specify, and the piling is done by a specialist contractor.',
+    tasks: [],
+  },
 ]
 
 export const ALL_PHASE_SUBPHASES: PhaseSubphase[] = [

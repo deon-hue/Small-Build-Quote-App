@@ -32,7 +32,7 @@ export const LABOUR_RATES = {
     membraneM2: 0.15, battenLm: 0.08, ridgeLm: 0.35, hipLm: 0.4, vergeLm: 0.3, abutmentLm: 0.4, eavesLm: 0.15,
   },
   bricklayer: { cavityM2: 1.4, solidM2: 1.0, solidBrickM2: 1.8, copingLm: 0.35, trayLm: 0.15, outletOpeningNr: 0.5, dpcLm: 0.05 },
-  groundworker: { trimLm: 0.25, concreteM3: 1.5, backfillM3: 0.5, cavityFillM3: 1.0, raftTrimM2: 0.06, raftHardcoreM2: 0.12, raftBlindM2: 0.10, raftInsulationM2: 0.08, raftMeshM2PerLayer: 0.12, raftFormworkLm: 0.3, raftFinishM2: 0.12, padPitNr: 0.4, padBlindNr: 0.3, padFormworkM2: 0.8, padRebarKg: 0.025 },
+  groundworker: { trimLm: 0.25, concreteM3: 1.5, backfillM3: 0.5, cavityFillM3: 1.0, raftTrimM2: 0.06, raftHardcoreM2: 0.12, raftBlindM2: 0.10, raftInsulationM2: 0.08, raftMeshM2PerLayer: 0.12, raftFormworkLm: 0.3, raftFinishM2: 0.12, padPitNr: 0.4, padBlindNr: 0.3, padFormworkM2: 0.8, padRebarKg: 0.025, beamBlindLm: 0.15, beamFormworkM2: 0.35, beamCageLm: 0.2, pileCutNr: 0.5 },
   renderer: { renderM2: 0.6 },
   plumber: { gutterLm: 0.3, fittingNr: 0.15, downpipeLm: 0.35, shoeNr: 0.15, hopperNr: 0.5, offsetNr: 0.3 },
   labourer: { carryM2: 0.15, bricklayerShare: 0.5 },
@@ -303,6 +303,29 @@ export function suggestPadFoundationLabour(g: {
     { qty: g.backfillM3, unit: 'm³', what: 'backfilled', rate: w.backfillM3 },
   ])
   return [pits, form, pour].filter((x): x is LabourSuggestion => x !== null)
+}
+
+/** The labour for a piled foundation's ground beam (Foundations → Piled Foundation): a labourer to trim the trench, lay the blinding, cut down the pile heads,
+ * shutter the beam, fix the cage, place the concrete and backfill. The piling itself is a subcontract (priced per pile) and the digging a machine, priced
+ * in the calculator, so neither is in these hours. */
+export function suggestPiledFoundationLabour(g: {
+  lm: number; pileCount: number; beamConcreteM3: number; formworkM2: number; backfillM3: number
+}): LabourSuggestion[] {
+  const w = LABOUR_RATES.groundworker
+  const prep = line('pile-prep', 'labourer', 'Trim the trench, cut down the pile heads and lay the blinding', [
+    { qty: g.lm, unit: 'lm', what: 'trench trimmed', rate: w.trimLm },
+    { qty: g.pileCount, unit: 'piles', what: 'cut down', rate: w.pileCutNr },
+    { qty: g.lm, unit: 'lm', what: 'blinding', rate: w.beamBlindLm },
+  ])
+  const steel = line('pile-steel', 'labourer', 'Shutter the beam and fix the cage', [
+    { qty: g.formworkM2, unit: 'm²', what: 'shuttering made and struck', rate: w.beamFormworkM2 },
+    { qty: g.lm, unit: 'lm', what: 'cage fixed', rate: w.beamCageLm },
+  ])
+  const pour = line('pile-pour', 'labourer', 'Place and level the concrete and backfill', [
+    { qty: g.beamConcreteM3, unit: 'm³', what: 'concrete placed and levelled', rate: w.concreteM3 },
+    { qty: g.backfillM3, unit: 'm³', what: 'backfilled', rate: w.backfillM3 },
+  ])
+  return [prep, steel, pour].filter((x): x is LabourSuggestion => x !== null)
 }
 
 /** The labour for the rooflight units themselves (Roof → Rooflights & Dormers): the fitter's time, from a

@@ -25,6 +25,7 @@ export const BUILT_ASSEMBLY_CANONICAL_IDS = new Set<string>([
   'fnd-trench-fill',
   'fnd-raft',
   'fnd-pad',
+  'fnd-piled',
 ])
 
 // Bridges Take-off's External Walls "Build-up Type" system (keyed by WALL_MAKEUPS/
@@ -49,4 +50,5 @@ export const WALL_MAKEUP_TO_SUBPHASE_CANONICAL: Record<string, string> = {
   trench_fill: 'fnd-trench-fill',
   raft_found: 'fnd-raft',
   pad_found: 'fnd-pad',
+  piled_found: 'fnd-piled',
 }
