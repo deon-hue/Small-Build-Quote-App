@@ -409,6 +409,12 @@ Analyse the scope and select appropriate phases and tasks from the library.`
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (p: any) => typeof p.phase === 'string' && p.phase.trim()
     )
+    // A phase that is in the library belongs to the main phase Phases & Tasks puts it under, whatever main phase the AI wrote for it
+    // (it had put "Masonry & Blockwork", which lives under Structural Frame, under External Walls).
+    for (const p of phases) {
+      const real = parentPhaseMap[p.phase]
+      if (real) p.parentPhase = real
+    }
 
     // Build a taskRates map so the client can hydrate estimator items with Back Office rates
     // without needing to call getPhaseEstimatorDefaults (which only knows the static library)
