@@ -9,6 +9,7 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  { at: '2026-10-10T18:07:00+01:00', title: 'New calculator: Trench Fill Foundation', detail: 'Prices a trench filled with concrete to a set distance below ground, with the wall up to DPC, from the drawn line. A new sub-phase under Foundations, and the default Foundation Type in Take-off now opens this calculator. The labour panel wording now says foundation / parapet wall instead of roof.' },
   { at: '2026-10-10T17:58:00+01:00', title: 'Take-off: strip foundations priced by their calculator', detail: 'A drawn foundation line set to Strip Footing is priced by the Strip Foundation calculator (summary card and full-size window), and a sub-phase picked before drawing carries onto the line. Open Back Office once so the new sub-phase appears in your list.' },
   { at: '2026-10-10T17:46:00+01:00', title: 'New calculator: Strip Foundation (Traditional)', detail: 'Prices a strip foundation from its length: the trench and machine, soil taken away, concrete, blockwork up to DPC (solid or cavity filled), DPC, backfill and labour, with a quote description and section drawing. A new sub-phase under Foundations. Not yet opened from Take-off.' },
   { at: '2026-10-10T17:31:00+01:00', title: 'Owner area: one Change log', detail: 'Software updates and every change to Phases & Tasks now appear together in one list, with filters and search.' },
