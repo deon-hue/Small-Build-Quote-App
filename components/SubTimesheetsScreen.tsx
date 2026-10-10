@@ -6,6 +6,7 @@ import { useDictatedText } from '@/components/useDictatedText'
 import Link from 'next/link'
 import { useSubPortal } from '@/contexts/SubPortalContext'
 import type { SubTimeEntry } from '@/contexts/SubPortalContext'
+import { buildDayBodies, canPickDayType, halfDayRateOf, type DayType } from '@/lib/sub-day-type'
 
 const fmtDate = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 const fmtDay  = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
@@ -87,6 +88,10 @@ export default function SubTimesheetsScreen({ mode }: { mode: 'add' | 'history' 
   // Secondary: specific contract (optional)
   const [formContractId, setFormContractId] = useState('')
 
+  // full day / half day / split day (morning at one job, afternoon at another); see lib/sub-day-type.ts
+  const [dayType, setDayType] = useState<DayType>('full')
+  const [formJobId2, setFormJobId2] = useState('')
+  const [formDesc2, setFormDesc2] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [submitted, setSubmitted] = useState(false)
@@ -133,6 +138,7 @@ export default function SubTimesheetsScreen({ mode }: { mode: 'add' | 'history' 
       setFormDesc(p.description ?? '')
       if (p.jobId) setFormJobId(p.jobId)
       if (p.contractId) setFormContractId(p.contractId)
+      if (/half[\s-]?day/i.test(aiText) && canPickDayType(subRates)) setDayType('half')
     } catch {
       setParseError('Network error — please try again.')
     } finally {
@@ -161,46 +167,57 @@ export default function SubTimesheetsScreen({ mode }: { mode: 'add' | 'history' 
     setParsed(BLANK_ENTRY); setAiText('')
     setFormDate(todayISO()); setFormHours(''); setFormStart(''); setFormFinish('')
     setFormBreak('30'); setFormDesc(''); setFormJobId(''); setFormContractId('')
+    setDayType('full'); setFormJobId2(''); setFormDesc2('')
     setSubmitError(''); setSubmitted(false)
   }
 
   async function submitTimesheet() {
-    if (!formDate || !formHours) { setSubmitError('Please fill in date and hours.'); return }
+    if (!formDate || (!formHours && (formContractId || dayType === 'full' || !canPickDayType(subRates)))) { setSubmitError('Please fill in date and hours.'); return }
     if (!formJobId && !formContractId) { setSubmitError('Please select a project or job.'); return }
 
+    // a contract has its own rate, so the day choices only apply to a plain job
+    const bodies: object[] = []
+    if (formContractId) {
+      bodies.push({ date: formDate, units: Number(formHours), description: formDesc, startTime: formStart || null, finishTime: formFinish || null, breakMins: Number(formBreak) || 0, contractId: formContractId })
+    } else {
+      try {
+        bodies.push(...buildDayBodies({
+          dayType, date: formDate, rates: subRates, jobId: formJobId, description: formDesc, hours: Number(formHours) || 0,
+          startTime: formStart, finishTime: formFinish, breakMins: Number(formBreak) || 0, secondJobId: formJobId2, secondDescription: formDesc2,
+        }))
+      } catch (e) { setSubmitError(e instanceof Error ? e.message : 'Please check the form.'); return }
+    }
+
     setSubmitting(true); setSubmitError('')
+    let sent = 0
     try {
-      const body: Record<string, unknown> = {
-        date:        formDate,
-        units:       Number(formHours),
-        description: formDesc,
-        startTime:   formStart || null,
-        finishTime:  formFinish || null,
-        breakMins:   Number(formBreak) || 0,
+      for (let n = 0; n < bodies.length; n++) {
+        const res = await fetch('/api/sub-portal/submit-timesheet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bodies[n]),
+        })
+        const data = await res.json()
+        if (!res.ok || data.error) {
+          if (n === 1) {
+            // the morning job was sent, the afternoon one was not: leave the form ready to send just the second half
+            reload()
+            setFormJobId(formJobId2); setFormDesc(formDesc2); setDayType('half'); setFormJobId2(''); setFormDesc2('')
+            setSubmitError('Your first job was sent, but the second one failed: ' + (data.error || 'Submit failed') + ' The form now has just the second job as a half day, so press Submit again.')
+          } else setSubmitError(data.error || 'Submit failed')
+          return
+        }
+        sent++
       }
-
-      if (formContractId) {
-        // Specific contract path
-        body.contractId = formContractId
-      } else {
-        // Direct job path — send rate info so admin knows what to pay
-        body.jobId = formJobId
-        body.rateType = defaultRateType
-        body.rateAmount = defaultRateAmount
-      }
-
-      const res = await fetch('/api/sub-portal/submit-timesheet', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      const data = await res.json()
-      if (!res.ok || data.error) { setSubmitError(data.error || 'Submit failed'); return }
       setSubmitted(true)
       reload()
       setTimeout(clearForm, 2500)
     } catch {
-      setSubmitError('Network error — please try again.')
+      if (sent > 0) {
+        reload()
+        setFormJobId(formJobId2); setFormDesc(formDesc2); setDayType('half'); setFormJobId2(''); setFormDesc2('')
+        setSubmitError('Your first job was sent, but the connection dropped before the second one. The form now has just the second job as a half day, so press Submit again.')
+      } else setSubmitError('Network error — please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -227,6 +244,11 @@ export default function SubTimesheetsScreen({ mode }: { mode: 'add' | 'history' 
   if (loading) return <div className="portal-loading">Loading timesheets…</div>
 
   const hasJobs = jobs.length > 0
+  // the full / half / split choice is for people paid by the day or half day, on a plain job (a contract has its own rate)
+  const canPick = hasJobs && !formContractId && canPickDayType(subRates)
+  const dt: DayType = canPick ? dayType : 'full'
+  const halfPay = halfDayRateOf(subRates)
+  const dayBtn = (on: boolean): React.CSSProperties => ({ flex: 1, padding: '10px 6px', minHeight: 42, borderRadius: 8, border: '1px solid ' + (on ? '#7ab533' : '#e2e8f0'), background: on ? '#f1f8e6' : '#fff', color: on ? '#3f6212' : '#475569', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' })
 
   return (
     <div style={{ maxWidth: 760, margin: '0 auto', padding: '24px 16px' }}>
@@ -338,11 +360,27 @@ export default function SubTimesheetsScreen({ mode }: { mode: 'add' | 'history' 
                   </div>
                 )}
 
+                {/* How long did you work: a whole day, half a day, or two jobs in one day */}
+                {canPick && (
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <FieldGroup label="Your day">
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button type="button" style={dayBtn(dt === 'full')} onClick={() => setDayType('full')}>Full day</button>
+                        <button type="button" style={dayBtn(dt === 'half')} onClick={() => setDayType('half')}>Half day</button>
+                        <button type="button" style={dayBtn(dt === 'split')} onClick={() => setDayType('split')}>Split day</button>
+                      </div>
+                      {dt === 'split' && <div style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>Two jobs on the same day, for example the morning at one and the afternoon at another. Each is paid as a half day.</div>}
+                    </FieldGroup>
+                  </div>
+                )}
+
                 {/* Rate display (read-only, from contact record) */}
                 {!formContractId && defaultRateAmount > 0 && (
                   <div style={{ gridColumn: '1 / -1' }}>
                     <div style={{ fontSize: 12, color: '#64748b', background: '#f1f5f9', borderRadius: 7, padding: '7px 10px', border: '1px solid #e2e8f0' }}>
-                      💷 Rate: <strong>£{defaultRateAmount} {defaultRateType === 'hourly' ? 'per hour' : defaultRateType === 'half_day' ? 'half day' : 'per day'}</strong>
+                      {dt === 'half' && <>💷 Rate: <strong>£{halfPay} for the half day</strong></>}
+                      {dt === 'split' && <>💷 Rate: <strong>£{halfPay} for each half day</strong></>}
+                      {dt === 'full' && <>💷 Rate: <strong>£{defaultRateAmount} {defaultRateType === 'hourly' ? 'per hour' : defaultRateType === 'half_day' ? 'half day' : 'per day'}</strong></>}
                     </div>
                   </div>
                 )}
@@ -351,30 +389,55 @@ export default function SubTimesheetsScreen({ mode }: { mode: 'add' | 'history' 
                   <input type="date" style={inp} value={formDate} onChange={e => setFormDate(e.target.value)} />
                 </FieldGroup>
 
-                <FieldGroup label="Total hours *">
-                  <input type="number" inputMode="decimal" min={0.25} step={0.25} style={inp} value={formHours} onChange={e => setFormHours(e.target.value)} placeholder="worked out for you" />
-                </FieldGroup>
+                {dt === 'full' && (
+                  <FieldGroup label="Total hours *">
+                    <input type="number" inputMode="decimal" min={0.25} step={0.25} style={inp} value={formHours} onChange={e => setFormHours(e.target.value)} placeholder="worked out for you" />
+                  </FieldGroup>
+                )}
 
-                <FieldGroup label="Start time">
-                  <input type="time" style={inp} value={formStart} onChange={e => setTimes({ start: e.target.value })} />
-                </FieldGroup>
+                {dt !== 'split' && (<>
+                  <FieldGroup label="Start time">
+                    <input type="time" style={inp} value={formStart} onChange={e => setTimes({ start: e.target.value })} />
+                  </FieldGroup>
 
-                <FieldGroup label="Finish time">
-                  <input type="time" style={inp} value={formFinish} onChange={e => setTimes({ finish: e.target.value })} />
-                </FieldGroup>
+                  <FieldGroup label="Finish time">
+                    <input type="time" style={inp} value={formFinish} onChange={e => setTimes({ finish: e.target.value })} />
+                  </FieldGroup>
 
-                <FieldGroup label="Lunch / break (mins)">
-                  <input type="number" inputMode="numeric" min={0} step={5} style={inp} value={formBreak} onChange={e => setTimes({ brk: e.target.value })} />
-                </FieldGroup>
+                  <FieldGroup label="Lunch / break (mins)">
+                    <input type="number" inputMode="numeric" min={0} step={5} style={inp} value={formBreak} onChange={e => setTimes({ brk: e.target.value })} />
+                  </FieldGroup>
+                </>)}
 
                 <div style={{ gridColumn: '1 / -1' }}>
-                  <FieldGroup label="Description of work">
+                  <FieldGroup label={dt === 'split' ? 'What did you do on the first job?' : 'Description of work'}>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                       <input style={inp} value={formDesc} onChange={e => { descDict.stop(); setFormDesc(e.target.value) }} placeholder="What did you work on?" />
                       <TalkButton compact listening={descDict.listening} onClick={descDict.talk} />
                     </div>
                   </FieldGroup>
                 </div>
+
+                {/* Split day: the second job, the other half of the day */}
+                {dt === 'split' && (<>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <FieldGroup label="Second job *">
+                      <select value={formJobId2} onChange={e => setFormJobId2(e.target.value)} style={inp}>
+                        <option value="">— select the second job —</option>
+                        {jobs.filter(j => j.id !== formJobId).map(j => (
+                          <option key={j.id} value={j.id}>
+                            {j.client}{j.address ? ` · ${j.address}` : ''}{j.type ? ` (${j.type})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </FieldGroup>
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <FieldGroup label="What did you do on the second job?">
+                      <input style={inp} value={formDesc2} onChange={e => setFormDesc2(e.target.value)} placeholder="What did you work on?" />
+                    </FieldGroup>
+                  </div>
+                </>)}
               </div>
 
               {submitError && <div style={{ fontSize: 12, color: '#dc2626', marginTop: 8 }}>⚠ {submitError}</div>}
@@ -420,9 +483,10 @@ export default function SubTimesheetsScreen({ mode }: { mode: 'add' | 'history' 
             const topStatus = sorted.reduce((best, e) => weekStatusPriority(effectiveStatus(e)) > weekStatusPriority(best) ? effectiveStatus(e) : best, effectiveStatus(sorted[0]))
             const sc = STATUS_STYLE[topStatus] ?? { bg: '#f1f5f9', text: '#64748b' }
             const totalAmount = entries.filter(e => e.source === 'admin' && e.amount != null).reduce((s, e) => s + Number(e.amount), 0)
-            const totalHours  = entries.filter(e => e.source !== 'admin').reduce((s, e) => s + Number(e.units), 0)
+            // a half day has no hours (its units is "1 half day"), so it is left out of the hours total
+            const totalHours  = entries.filter(e => e.source !== 'admin' && e.rate_type !== 'half_day').reduce((s, e) => s + Number(e.units), 0)
             const hasAmount   = entries.some(e => e.source === 'admin' && e.amount != null)
-            const hasHours    = entries.some(e => e.source !== 'admin')
+            const hasHours    = entries.some(e => e.source !== 'admin' && e.rate_type !== 'half_day')
 
             return (
               <div key={ws} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
@@ -490,7 +554,7 @@ export default function SubTimesheetsScreen({ mode }: { mode: 'add' | 'history' 
                             )}
                           </div>
                           <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'monospace', color: '#0f172a', flexShrink: 0, textAlign: 'right' }}>
-                            {e.source === 'admin' && e.amount != null ? `£${Number(e.amount).toFixed(2)}` : `${e.units}h`}
+                            {e.source === 'admin' && e.amount != null ? `£${Number(e.amount).toFixed(2)}` : e.rate_type === 'half_day' ? '½ day' : `${e.units}h`}
                           </div>
                         </div>
                       )
