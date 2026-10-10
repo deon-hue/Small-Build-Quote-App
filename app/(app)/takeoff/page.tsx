@@ -12,6 +12,9 @@ import AssemblyItemPanel from './components/AssemblyWindow'
 
 // A drawn foundation line's Foundation Type -> its build-up id (see FOUNDATION_MAKEUPS). A type whose build-up has a calculator (WALL_MAKEUP_TO_SUBPHASE_CANONICAL) is priced by it.
 const FOUNDATION_MAKEUP_BY_TYPE: Record<string, string | null> = { trench_fill: 'trench_fill', strip: 'strip_found', pad_edge: 'pad_found', raft_edge: 'raft_found', other: null }
+// A drawn foundation LINE is priced by the strip or trench fill calculator; a raft is a SHAPE (its footprint), so a line - even one set to Raft Edge Beam - never gets the raft calculator.
+const FOUNDATION_LINE_CALCS = new Set(['fnd-strip', 'fnd-trench-fill'])
+const FOUNDATION_SHAPE_CALC = 'fnd-raft'
 import LabourCostBuilder from './components/LabourCostBuilder'
 import ClientProjectModal from './components/ClientProjectModal'
 import ConstructionLayerModal, { saveLayerCostToBackOffice } from './components/ConstructionLayerModal'
@@ -873,16 +876,22 @@ export default function TakeoffPage() {
     // sub-phase that has a calculator (the others aren't used by the roof screen).
     if (!taskSubphaseId && selectedTaskSubphaseId &&
         ((el.type === 'line' && (item.phase === 'External Walls' || item.phase === 'Internal Walls & Partitions' || item.phase === 'Foundations')) ||
-          item.phase === 'Roof')) {
+          item.phase === 'Roof' || (item.phase === 'Foundations' && el.type !== 'line'))) {
       const bo = boSubPhases.find(sp => sp.id === selectedTaskSubphaseId)
       const boPhaseName = bo ? boPhases.find(p => p.id === bo.phase_id)?.name : undefined
       const hasCalculator = !!(bo?.canonical_id && BUILT_ASSEMBLY_CANON_IDS[bo.canonical_id])
-      if (bo && boPhaseName === item.phase && ((item.phase !== 'Roof' && item.phase !== 'Foundations') || hasCalculator)) {
+      const foundationFits = item.phase !== 'Foundations' || (el.type === 'line' ? FOUNDATION_LINE_CALCS.has(bo?.canonical_id ?? '') : bo?.canonical_id === FOUNDATION_SHAPE_CALC)
+      if (bo && boPhaseName === item.phase && foundationFits && ((item.phase !== 'Roof' && item.phase !== 'Foundations') || hasCalculator)) {
         item.taskSubphaseId = bo.id
         item.subPhase = bo.name
         if (item.phase === 'Foundations') {
-          const pairedType = Object.entries(FOUNDATION_MAKEUP_BY_TYPE).find(([, mk]) => mk && WALL_MAKEUP_TO_SUBPHASE_CANONICAL[mk] === bo.canonical_id)?.[0]
-          if (pairedType) item.foundationType = pairedType
+          if (el.type === 'line') {
+            const pairedType = Object.entries(FOUNDATION_MAKEUP_BY_TYPE).find(([, mk]) => mk && WALL_MAKEUP_TO_SUBPHASE_CANONICAL[mk] === bo.canonical_id)?.[0]
+            if (pairedType) item.foundationType = pairedType
+          } else {
+            const raftMakeup = (PHASE_MAKEUPS['Foundations'] ?? []).find(m => m.id === 'raft_found')
+            if (raftMakeup) { item.floorMakeupId = raftMakeup.id; item.spec = raftMakeup.clientDescription }
+          }
         }
         if (item.phase === 'External Walls' || item.phase === 'Roof') {
           // Some sub-phases pair with one of the Build-up Types (e.g. Cavity Wall – Full Fill, Flat
@@ -1200,7 +1209,14 @@ export default function TakeoffPage() {
     if (it.phase === 'Foundations' && isLine) {
       const mk = FOUNDATION_MAKEUP_BY_TYPE[it.foundationType ?? 'trench_fill']
       const canonical = mk ? WALL_MAKEUP_TO_SUBPHASE_CANONICAL[mk] : undefined
-      return canonical ? BUILT_ASSEMBLY_CANON_IDS[canonical] : undefined
+      return canonical && FOUNDATION_LINE_CALCS.has(canonical) ? BUILT_ASSEMBLY_CANON_IDS[canonical] : undefined
+    }
+    if (it.phase === 'Foundations') {
+      // A shape in Foundations: a raft, by the sub-phase picked or the Build-Up Type
+      const boSub = it.taskSubphaseId ? boSubPhases.find(sp => sp.id === it.taskSubphaseId) : undefined
+      if (boSub?.canonical_id === FOUNDATION_SHAPE_CALC) return BUILT_ASSEMBLY_CANON_IDS[FOUNDATION_SHAPE_CALC]
+      const canonical = it.floorMakeupId ? WALL_MAKEUP_TO_SUBPHASE_CANONICAL[it.floorMakeupId] : undefined
+      return canonical === FOUNDATION_SHAPE_CALC ? BUILT_ASSEMBLY_CANON_IDS[canonical] : undefined
     }
     if (it.phase === 'Internal Walls & Partitions' && isLine) {
       const subs = getAllSubphasesForPhase('Internal Walls & Partitions')
@@ -2366,27 +2382,30 @@ export default function TakeoffPage() {
     // calculator? See resolveBuiltAssembly. When it does, it has final say on measurements/
     // materials/pricing, so all the old recipe-engine/build-up UI below is suppressed.
     const isRoof = item.phase === 'Roof'
-    const builtAssembly = (isIntWall || isExtWall || isRoof || isFoundationLine) ? resolveBuiltAssembly(item) : undefined
-    const hideForBuiltAssembly = (isIntWall || isExtWall || isRoof || isFoundationLine) && !!builtAssembly
+    // A raft is a shape in Foundations, sized from the box it sits in (like a roof)
+    const isFoundationShape = item.phase === 'Foundations' && !isLineBased && !!linkedEl
+    const builtAssembly = (isIntWall || isExtWall || isRoof || isFoundationLine || isFoundationShape) ? resolveBuiltAssembly(item) : undefined
+    const hideForBuiltAssembly = (isIntWall || isExtWall || isRoof || isFoundationLine || isFoundationShape) && !!builtAssembly
 
     // The calculator is too big for this ~300px panel, so the panel shows a summary card and the
     // calculator itself opens full size in a window (see AssemblyWindow.tsx). A wall is sized by its
     // length; a roof by the box its drawn shape sits in.
-    const roofBox = isRoof ? drawnBoxMm(item) : undefined
+    const isBoxShape = isRoof || isFoundationShape
+    const roofBox = isBoxShape ? drawnBoxMm(item) : undefined
     const renderAssemblyPanel = (savePatch: Partial<TakeoffItem>) => builtAssembly && (
       <AssemblyItemPanel
         name={item.name}
         lengthM={item.length ?? 0}
-        measureLabel={isRoof ? 'Size' : undefined}
-        measureText={isRoof ? (roofBox ? `${(roofBox.lengthMm / 1000).toFixed(2)} × ${(roofBox.widthMm / 1000).toFixed(2)} m` : 'Not drawn') : undefined}
+        measureLabel={isBoxShape ? 'Size' : undefined}
+        measureText={isBoxShape ? (roofBox ? `${(roofBox.lengthMm / 1000).toFixed(2)} × ${(roofBox.widthMm / 1000).toFixed(2)} m` : 'Not drawn') : undefined}
         saved={item.assemblyResult}
         open={assemblyWindowItemId === item.id}
         onOpen={() => setAssemblyWindowItemId(item.id)}
         onClose={() => setAssemblyWindowItemId(null)}
       >
         {builtAssembly.render({
-          externalLengthMm: isRoof ? roofBox?.lengthMm : ((item.length ?? 0) > 0 ? Math.round((item.length ?? 0) * 1000) : undefined),
-          externalWidthMm: isRoof ? roofBox?.widthMm : undefined,
+          externalLengthMm: isBoxShape ? roofBox?.lengthMm : ((item.length ?? 0) > 0 ? Math.round((item.length ?? 0) * 1000) : undefined),
+          externalWidthMm: isBoxShape ? roofBox?.widthMm : undefined,
           variant: item.floorMakeupId === 'cold_flat_roof' ? 'cold' : undefined,
           labourTrades,
           onSave: result => {
@@ -3082,7 +3101,7 @@ export default function TakeoffPage() {
                       ...item, floorMakeupId: v, spec: nm?.clientDescription ?? item.spec, floorLayerToggles: {}, floorLayerThicknesses: {},
                       // Back to a Build-Up Type: drop any calculator picked by sub-phase, and a saved
                       // result from the calculator that was there (roofs only — as for external walls).
-                      ...(isRoof && { taskSubphaseId: undefined, subPhase: undefined, assemblyResult: undefined }),
+                      ...((isRoof || isFoundationShape) && { taskSubphaseId: undefined, subPhase: undefined, assemblyResult: undefined }),
                     })
                   }}>
                   {_bm.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
@@ -3092,9 +3111,9 @@ export default function TakeoffPage() {
                     </optgroup>
                   )}
                 </select>
-                {isRoof && builtAssembly && (
+                {(isRoof || isFoundationShape) && builtAssembly && (
                   <div style={{ marginTop: 10 }}>
-                    {renderAssemblyPanel({})}
+                    {renderAssemblyPanel(isFoundationShape ? (() => { const sub = boSubPhases.find(sp => sp.canonical_id === FOUNDATION_SHAPE_CALC); return { taskSubphaseId: sub?.id, subPhase: sub?.name } })() : {})}
                   </div>
                 )}
                 {!builtAssembly && _bMakeup && (
@@ -3794,7 +3813,7 @@ export default function TakeoffPage() {
                     else setSelectedTaskId(null)
                     // A calculator sub-phase is drawn as a line, whatever the last task's tool was.
                     const canon = boSubPhases.find(b => b.id === e.target.value)?.canonical_id
-                    if (canon && BUILT_ASSEMBLY_CANON_IDS[canon]) setTool(PHASE_DEFAULT_TOOL[activePhase] ?? 'line')
+                    if (canon && BUILT_ASSEMBLY_CANON_IDS[canon]) setTool(canon === FOUNDATION_SHAPE_CALC ? 'rect' : (PHASE_DEFAULT_TOOL[activePhase] ?? 'line'))
                   }}>
                   {taskSubs.map(sp => <option key={sp.id} value={sp.id}>{sp.name}</option>)}
                 </select>
