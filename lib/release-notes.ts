@@ -9,6 +9,7 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  { at: '2026-10-10T17:58:00+01:00', title: 'Take-off: strip foundations priced by their calculator', detail: 'A drawn foundation line set to Strip Footing is priced by the Strip Foundation calculator (summary card and full-size window), and a sub-phase picked before drawing carries onto the line. Open Back Office once so the new sub-phase appears in your list.' },
   { at: '2026-10-10T17:46:00+01:00', title: 'New calculator: Strip Foundation (Traditional)', detail: 'Prices a strip foundation from its length: the trench and machine, soil taken away, concrete, blockwork up to DPC (solid or cavity filled), DPC, backfill and labour, with a quote description and section drawing. A new sub-phase under Foundations. Not yet opened from Take-off.' },
   { at: '2026-10-10T17:31:00+01:00', title: 'Owner area: one Change log', detail: 'Software updates and every change to Phases & Tasks now appear together in one list, with filters and search.' },
   { at: '2026-10-10T17:22:00+01:00', title: 'Phase change history', detail: 'The database now records every change to Phases & Tasks: what changed, before and after, who and when. Read it in the Owner area. Needs supabase/bo-change-log.sql.' },
