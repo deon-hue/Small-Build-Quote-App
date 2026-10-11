@@ -1400,7 +1400,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
       {/* Sub-phase header */}
       <div
         style={{
-          display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
+          display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', flexWrap: 'wrap',
           background: p.needsReview ? '#fffbeb' : '#f8fafc',
           cursor: 'pointer', userSelect: 'none',
           borderLeft: p.needsReview ? '3px solid #f59e0b' : 'none',
@@ -1416,7 +1416,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
           onFocus={() => setNameFocused(true)}
           onBlur={() => setNameFocused(false)}
           style={{
-            ...fldStyle, fontWeight: 700, fontSize: 13, color: '#1e293b', flex: 1,
+            ...fldStyle, fontWeight: 700, fontSize: 13, color: '#1e293b', flex: 1, minWidth: 140,
             cursor: isLocked ? 'default' : 'text',
             borderBottom: !isLocked && nameFocused ? '2px solid #7ab533' : '2px solid transparent',
             paddingBottom: 1,
@@ -1442,9 +1442,16 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
         {p.aiReviewed && !p.phaseImage && (
           <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 99, background: '#f0fdf4', color: '#16a34a', fontWeight: 700, flexShrink: 0 }}>✓ Reviewed</span>
         )}
-        <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: '#7ab533', flexShrink: 0 }}>
+        {open && (
+          <>
+            <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }} title="What the work costs you, without VAT">Cost <strong style={{ fontFamily: 'monospace', color: '#1e293b' }}>£{totalCost.toFixed(2)}</strong></span>
+            <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }} title="The margin added on top of cost. It has to cover company costs and expenses, so the real profit on the job is lower.">Margin {phaseMarkup(p, markup)}% <strong style={{ fontFamily: 'monospace', color: margin >= 0 ? '#16a34a' : '#dc2626' }}>£{margin.toFixed(2)}</strong></span>
+          </>
+        )}
+        <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: '#7ab533', flexShrink: 0 }} title="Selling price, without VAT">
           {sell > 0 ? fmt(sell) : '—'}
         </span>
+        <span style={{ fontSize: 10, color: '#94a3b8', flexShrink: 0 }}>ex VAT</span>
         {!isLocked && (
           <div className="icon-btn-row" style={{ display: 'flex', gap: 2, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
             <button className="icon-btn-touch" style={iconBtn()} title="Duplicate" onClick={onDuplicate}>⧉</button>
@@ -1465,15 +1472,6 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
       {/* Sub-phase body — card-style cost breakdown */}
       {open && (
         <div style={{ padding: '8px 10px 10px' }}>
-
-          {/* Totals — shown at the top right, above the task name */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontFamily: 'monospace', fontSize: 12, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 7, padding: '5px 12px' }}>
-              <span style={{ color: '#64748b' }} title="What the work costs you, without VAT">Cost <span style={{ fontSize: 10, color: '#94a3b8' }}>(ex VAT)</span> <strong style={{ color: '#1e293b' }}>£{totalCost.toFixed(2)}</strong></span>
-              <span style={{ color: '#64748b' }} title="The margin added on top of cost. It has to cover company costs and expenses, so the real profit on the job is lower.">Margin <span style={{ fontSize: 10, color: '#94a3b8' }}>{phaseMarkup(p, markup)}% on cost</span> <strong style={{ color: margin >= 0 ? '#16a34a' : '#dc2626' }}>£{margin.toFixed(2)}</strong></span>
-              <span style={{ color: '#64748b' }} title="Cost plus margin, without VAT">Sell <span style={{ fontSize: 10, color: '#94a3b8' }}>(ex VAT)</span> <strong style={{ color: '#7ab533', fontSize: 14 }}>£{totalSell.toFixed(2)}</strong></span>
-            </div>
-          </div>
 
           {/* Task description — tells the estimator what work this sub-phase covers */}
           <div style={{ marginBottom: 8 }}>
@@ -1881,9 +1879,11 @@ function RoomBlock({ mainPhase, room, phases, markup, jobType, isLocked, collaps
             style={{ ...fldStyle, fontWeight: 600, fontSize: 13, color: '#166534', flex: 1 }}
             placeholder="Area / Room label"
           />
-          <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#16a34a', fontWeight: 700, flexShrink: 0 }}>
-            {total > 0 ? fmt(total) : '—'}
-          </span>
+          {subPhs.length > 1 && (
+            <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#16a34a', fontWeight: 700, flexShrink: 0 }} title="This room's total, without VAT">
+              {total > 0 ? fmt(total) : '—'}
+            </span>
+          )}
         </div>
       )}
 
@@ -1976,9 +1976,10 @@ function PhaseBlock({ mainPhase, phases, markup, jobType, isLocked, collapsed, t
           title={isLocked ? undefined : 'Click to rename'}
         />
         {!isLocked && !nameFocused && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', flexShrink: 0, pointerEvents: 'none' }}>✎</span>}
-        <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 700, color: '#7ab533', flexShrink: 0 }}>
+        <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 700, color: '#7ab533', flexShrink: 0 }} title="This phase's total, without VAT">
           {total > 0 ? fmt(total) : '—'}
         </span>
+        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', flexShrink: 0 }}>ex VAT</span>
         {!isLocked && (
           <div style={{ display: 'flex', gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
             <button style={{ ...addBtn, border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.8)', fontSize: 11 }}
