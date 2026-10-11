@@ -160,10 +160,12 @@ export interface DecoInput {
   rates: Partial<Record<keyof typeof MATERIAL_RATES, number>>
   /** weeks of access tower hire for the job (optional, off by default) */
   towerWeeks: number
+  /** % added to the painter's hours for drying time and return visits (default 0 when not given; the calculator screen starts at 10) */
+  dryingPct?: number
 }
 
 export interface DecoLine { id: string; name: string; category: 'materials' | 'plant'; unit: string; unitCost: number; qty: number; roomId?: string; wasteApplies: boolean }
-export interface DecoLabourTask { key: string; roomId: string; group: 'prep' | 'paint' | 'wood'; task: string; hours: number; basis: string }
+export interface DecoLabourTask { key: string; roomId: string; group: 'prep' | 'paint' | 'wood' | 'drying'; task: string; hours: number; basis: string }
 export interface DecoRoomSummary {
   roomId: string; name: string; floorM2: number; wallM2: number; ceilingM2: number
   skirtingLm: number; architraveLm: number; doorCount: number; frameCount: number
@@ -171,7 +173,20 @@ export interface DecoRoomSummary {
   /** plain phrases for the description: "strip the wallpaper", "mist coat", "2 coats of matt emulsion to the walls" */
   parts: string[]
 }
-export interface DecoResult { lines: DecoLine[]; labour: DecoLabourTask[]; rooms: DecoRoomSummary[]; totalStripM2: number; warnings: string[] }
+/** How long the job runs, once drying is allowed for: each room's chain of steps that must dry before the next, against the painter's hours. */
+export interface DecoRoomDays { roomId: string; name: string; hours: number; chainDays: number; days: number; /** plain words for why: "fill and let it dry, then 2 coats of paint, one a day" */ why: string }
+export interface DecoDays {
+  /** the painter's hours before and after the drying allowance */
+  workHours: number; allowanceHours: number; totalHours: number
+  /** the painter's time in 8-hour days (to the half day) */
+  workDays: number
+  /** the longest drying chain of any one room, in days, and which room */
+  longestChainDays: number; longestRoom: string
+  /** what the job takes on site: the longer of the painter's days and the longest drying chain */
+  daysOnSite: number
+  rooms: DecoRoomDays[]
+}
+export interface DecoResult { lines: DecoLine[]; labour: DecoLabourTask[]; rooms: DecoRoomSummary[]; days: DecoDays; totalStripM2: number; warnings: string[] }
 
 const money = (n: number) => +n.toFixed(2)
 const hoursOf = (h: number) => (h <= 0 ? 0 : Math.max(0.5, Math.round(h * 2) / 2))
@@ -192,6 +207,8 @@ export function calculateDecoration(input: DecoInput): DecoResult {
   if (!job) throw new Error('Choose the job situation.')
   for (const s of input.situations) if (!(s.upliftPct >= -50 && s.upliftPct <= 200)) throw new Error(`The extra for "${s.label}" must be between -50% and 200%.`)
   nonNeg(input.towerWeeks, 'The weeks of access tower')
+  const dryingPct = input.dryingPct ?? 0
+  if (!(dryingPct >= 0 && dryingPct <= 100)) throw new Error('The drying allowance must be between 0% and 100%.')
   const rate = <K extends keyof typeof MATERIAL_RATES>(k: K): number => {
     const v = input.rates[k] ?? MATERIAL_RATES[k]
     if (!(v >= 0)) throw new Error('A rate cannot be negative.')
@@ -203,6 +220,7 @@ export function calculateDecoration(input: DecoInput): DecoResult {
   const summaries: DecoRoomSummary[] = []
   const warnings: string[] = []
   let totalStripM2 = 0
+  const roomDays: DecoRoomDays[] = []
 
   for (const room of input.rooms) {
     const rn = room.name.trim() || 'Room'
@@ -323,6 +341,31 @@ export function calculateDecoration(input: DecoInput): DecoResult {
     add('wood-gloss', 'gloss topcoat to woodwork', 'materials', 'L', rate('gloss'), glossM2 / COVERAGE.wood)
     task('wood', 'wood', 'paint the woodwork, doors and window frames', woodParts)
 
+    // ── Days the room needs because of drying (a wait, not the painter's hours) ──
+    const wallsOn = room.walls.paint && wallM2 > 0, ceilOn = room.ceiling.paint && ceilingM2 > 0
+    const filling = (wallsOn && room.walls.prep !== 'light') || (ceilOn && room.ceiling.prep !== 'light')
+    const coatsWanted = Math.max(wallsOn ? room.walls.coats : 0, ceilOn ? room.ceiling.coats : 0)
+    const coatHours = ((wallsOn ? wallM2 * HOURS.wallCoatM2 : 0) + (ceilOn ? ceilingM2 * HOURS.ceilingCoatM2 : 0)) * uplift
+    // two coats in one day only if a coat is quick enough to fit both, with about four hours' drying between, inside the day
+    const coatsPerDay = coatHours <= 2 ? 2 : 1
+    const coatDays = coatsWanted > 0 ? Math.ceil(coatsWanted / coatsPerDay) : 0
+    const wallSteps: string[] = []
+    if (stripM2 > 0) wallSteps.push('strip the wallpaper and let the walls dry (1 day)')
+    if (filling) wallSteps.push('fill and let it dry (1 day)')
+    if (mistM2 > 0) wallSteps.push('mist coat (1 day)'); else if (sealerM2 > 0) wallSteps.push('sealer coat (1 day)')
+    if (coatDays > 0) wallSteps.push(`${coatsWanted} coat${coatsWanted === 1 ? '' : 's'} of paint (${coatsPerDay === 2 ? 'two in a day' : 'one a day to dry'}, ${coatDays} day${coatDays === 1 ? '' : 's'})`)
+    const wallDays = (stripM2 > 0 ? 1 : 0) + (filling ? 1 : 0) + (mistM2 > 0 || sealerM2 > 0 ? 1 : 0) + coatDays
+    const woodTop = Math.max(wood.paint ? wood.topcoats : 0, room.doorWork.paint && doorCount > 0 ? room.doorWork.topcoats : 0, room.frames.paint && frameCount > 0 ? room.frames.topcoats : 0)
+    const woodDays = need.top > 0 ? (need.primer > 0 ? 2 : 0) + woodTop : 0
+    const woodSteps: string[] = []
+    if (woodDays > 0) woodSteps.push(`woodwork: ${need.primer > 0 ? 'primer and undercoat (a day each), then ' : ''}${woodTop} topcoat${woodTop === 1 ? '' : 's'} (a day each)`)
+    const chainDays = Math.max(wallDays, woodDays)
+    const roomHours = labour.filter(t => t.roomId === room.id).reduce((t, x) => t + x.hours, 0)
+    roomDays.push({
+      roomId: room.id, name: rn, hours: money(roomHours), chainDays, days: Math.max(chainDays, Math.ceil(roomHours / 4) / 2),
+      why: [...wallSteps, ...woodSteps].join('; ') || 'nothing to paint',
+    })
+
     summaries.push({
       roomId: room.id, name: rn, floorM2: money(floorM2), wallM2: money(room.walls.paint ? wallM2 : 0), ceilingM2: money(room.ceiling.paint ? ceilingM2 : 0),
       skirtingLm: money(wood.paint ? skirtingLm : 0), architraveLm: money(wood.paint ? architraveLm : 0),
@@ -335,5 +378,19 @@ export function calculateDecoration(input: DecoInput): DecoResult {
   // Job-level hire
   if (totalStripM2 > 0) lines.push({ id: 'steamer', name: 'Wallpaper steamer hire', category: 'plant', unit: 'day', unitCost: money(rate('steamerDay')), qty: Math.max(1, Math.ceil(totalStripM2 / 60)), wasteApplies: false })
   if (input.towerWeeks > 0) lines.push({ id: 'tower', name: 'Access tower hire', category: 'plant', unit: 'week', unitCost: money(rate('towerWeek')), qty: input.towerWeeks, wasteApplies: false })
-  return { lines, labour, rooms: summaries, totalStripM2: money(totalStripM2), warnings }
+  // The drying and return-visits allowance: a % of the painter's hours, as a line of its own so it can be seen and changed
+  const baseHours = labour.reduce((t, x) => t + x.hours, 0)
+  const allowanceHours = dryingPct > 0 && baseHours > 0 ? hoursOf(baseHours * dryingPct / 100) : 0
+  if (allowanceHours > 0) {
+    labour.push({ key: 'drying|job', roomId: '', group: 'drying', task: `Drying time and return visits (${n1(dryingPct)}% allowance)`, hours: allowanceHours,
+      basis: `${n1(dryingPct)}% of ${n1(baseHours)} h of preparation and painting` })
+  }
+  const totalHours = baseHours + allowanceHours
+  const workDays = Math.ceil(totalHours / 4) / 2
+  const longest = roomDays.reduce<DecoRoomDays | null>((best, r) => (!best || r.chainDays > best.chainDays ? r : best), null)
+  const days: DecoDays = {
+    workHours: money(baseHours), allowanceHours: money(allowanceHours), totalHours: money(totalHours), workDays,
+    longestChainDays: longest?.chainDays ?? 0, longestRoom: longest?.name ?? '', daysOnSite: Math.max(workDays, longest?.chainDays ?? 0), rooms: roomDays,
+  }
+  return { lines, labour, rooms: summaries, days, totalStripM2: money(totalStripM2), warnings }
 }

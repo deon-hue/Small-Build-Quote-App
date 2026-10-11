@@ -56,6 +56,8 @@ export default function AssemblyDecorationDemo({ onClose, onSave, labourTrades =
   const [jobSituationId, setJobSituationId] = useCalcState(NS, 'jobSituationId', 'empty')
   const [situations, setSituations] = useCalcState<DecoSituation[]>(NS, 'situations', DEFAULT_DECO_SITUATIONS)
   const [towerWeeks, setTowerWeeks] = useCalcState(NS, 'towerWeeks', 0)
+  // Drying time and return visits: % added to the painter's hours (a labour line of its own)
+  const [dryingPct, setDryingPct] = useCalcState(NS, 'dryingPct', 10)
   const [rates, setRates] = useCalcState<Partial<Record<keyof typeof MATERIAL_RATES, number>>>(NS, 'rates', {})
   const [wastePct, setWastePct] = useCalcState(NS, 'wastePct', 10)
   const [profitPct, setProfitPct] = useCalcState(NS, 'profitPct', 20)   // default profit margin
@@ -90,9 +92,9 @@ export default function AssemblyDecorationDemo({ onClose, onSave, labourTrades =
   const [allCondition, setAllCondition] = useState<SurfaceCondition>('painted-good')
 
   const result = useMemo((): { ok: true; r: DecoResult } | { ok: false; error: string } => {
-    try { return { ok: true, r: calculateDecoration({ rooms, jobSituationId, situations, rates, towerWeeks }) } }
+    try { return { ok: true, r: calculateDecoration({ rooms, jobSituationId, situations, rates, towerWeeks, dryingPct }) } }
     catch (e: any) { return { ok: false, error: e.message as string } }
-  }, [rooms, jobSituationId, situations, rates, towerWeeks])
+  }, [rooms, jobSituationId, situations, rates, towerWeeks, dryingPct])
   const r = result.ok ? result.r : null
 
   const roomOfLayer = useMemo(() => new Map((r?.lines ?? []).map(l => [l.id, l.roomId])), [r])
@@ -242,6 +244,19 @@ export default function AssemblyDecorationDemo({ onClose, onSave, labourTrades =
             <span style={{ fontSize: 10.5, color: '#94a3b8' }}>A new room starts with its walls and ceiling switched on. Change its size, then what condition each surface is in.</span>
           </div>
 
+          {r && r.days.rooms.length > 0 && (
+            <div style={{ background: '#fff', border: '1px solid #bae6fd', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: '#334155', lineHeight: 1.5 }}>
+              <div>
+                <strong style={{ fontSize: 14, color: '#0369a1' }}>About {r.days.daysOnSite} day{r.days.daysOnSite === 1 ? '' : 's'} on site</strong>
+                <span style={{ color: '#64748b' }}> — the painter&apos;s time is {r.days.totalHours} h{r.days.allowanceHours > 0 ? ` (including ${r.days.allowanceHours} h for drying and return visits)` : ''}, which is {r.days.workDays} day{r.days.workDays === 1 ? '' : 's'} of 8 hours.</span>
+              </div>
+              {r.days.longestChainDays > r.days.workDays
+                ? <div style={{ color: '#92400e' }}>Drying sets the length: {r.days.longestRoom} needs at least {r.days.longestChainDays} days because each step has to dry before the next.</div>
+                : <div style={{ color: '#64748b' }}>The painter can move to another room while one dries, so the painter&apos;s time sets the length.</div>}
+              <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 2 }}>An estimate for planning (working days, one painter): two coats in a day only where the room is small enough to fit both with the drying between.</div>
+            </div>
+          )}
+
           {rooms.length === 0 && (
             <div style={{ fontSize: 12, color: '#64748b', background: '#fff', border: '1px dashed #bae6fd', borderRadius: 6, padding: '14px 12px', marginBottom: 10 }}>
               No rooms yet. Pick a kind of room above and press <strong>+ Add room</strong>. Add every room that is being decorated.
@@ -265,6 +280,7 @@ export default function AssemblyDecorationDemo({ onClose, onSave, labourTrades =
                   <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>
                     Walls {sum.wallM2} m² · ceiling {sum.ceilingM2} m²{sum.skirtingLm > 0 ? ` · skirting ${sum.skirtingLm} lm` : ''}{sum.architraveLm > 0 ? ` · architrave ${sum.architraveLm} lm` : ''}{sum.doorCount > 0 ? ` · ${sum.doorCount} door${sum.doorCount === 1 ? '' : 's'}` : ''}{sum.frameCount > 0 ? ` · ${sum.frameCount} window frame${sum.frameCount === 1 ? '' : 's'}` : ''}
                     {sum.uplift !== 0 ? ` · +${sum.uplift}% time` : ''}
+                    {(() => { const d = r?.days.rooms.find(x => x.roomId === rm.id); return d && d.chainDays > 0 ? <span title={d.why} style={{ color: '#0369a1' }}> · at least {d.chainDays} day{d.chainDays === 1 ? '' : 's'} to dry between steps</span> : null })()}
                   </div>
                 )}
 
@@ -398,6 +414,10 @@ export default function AssemblyDecorationDemo({ onClose, onSave, labourTrades =
             <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 4 }}>Sample rates — use your own trade prices. You can also change any single line in the cost breakdown below.</div>
           </CollapsibleSection>
 
+          <PropRow label={`Drying time and return visits (${dryingPct}%)`}>
+            <input type="range" min={0} max={30} value={dryingPct} onChange={e => setDryingPct(+e.target.value)} style={{ width: '100%' }} />
+            <div style={{ fontSize: 10.5, color: '#94a3b8' }}>Added to the painter&apos;s hours as its own labour line, for waiting on filler, caulk and paint and coming back the next day. A single room or lots of filling needs more; several rooms less.</div>
+          </PropRow>
           <PropRow label={`Waste % on paint and filler (${wastePct}%)`}>
             <input type="range" min={0} max={25} value={wastePct} onChange={e => setWastePct(+e.target.value)} style={{ width: '100%' }} />
           </PropRow>
