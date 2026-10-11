@@ -1454,16 +1454,8 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
               style={{ ...iconBtn('#7c3aed'), fontSize: 11, border: '1px solid #ddd6fe', borderRadius: 4, padding: '2px 6px', background: p.aiReviewed ? '#f0fdf4' : undefined }}>
               🤖
             </button>
-            {onSaveToBO && (p.itemStatus === 'edited' || p.itemStatus === 'bo-default') && p.boSubPhaseId && (
-              <button
-                onClick={e => { e.stopPropagation(); onSaveToBO(p) }}
-                title="Save current rates back to Back Office defaults"
-                className="icon-btn-touch"
-                style={{ ...iconBtn('#16a34a'), fontSize: 10, border: '1px solid #86efac', borderRadius: 4, padding: '2px 6px' }}
-              >
-                ↑ BO
-              </button>
-            )}
+            {/* The "↑ BO" button (save this sub-phase's rates back to Back Office defaults) was taken out of the quote on purpose: Back Office is where defaults are edited.
+                The onSaveToBO prop and handleSaveToBO in new-quote/page.tsx are left in place in case it is wanted again. */}
             <button className="icon-btn-touch" style={iconBtn('#e74c3c')} title="Delete" onClick={onDelete}>×</button>
           </div>
         )}
