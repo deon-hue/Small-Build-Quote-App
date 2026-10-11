@@ -95,7 +95,8 @@ export async function POST(req: NextRequest) {
     : 'not specified'
 
   // What the work is, what is priced for it, and the cost, margin and sell: for the price check
-  const sum = summarisePhaseForReview(phase, markup)
+  let sum: ReturnType<typeof summarisePhaseForReview>
+  try { sum = summarisePhaseForReview(phase, markup) } catch { sum = { description: phase.taskName || '(not available)', rows: '(not available)', pricing: '(not available)', costTotal: 0, sellTotal: 0, marginPct: markup } }
 
   // ── Prompt ──────────────────────────────────────────────────────────────────
   const system = `You are an expert UK construction estimator with 20+ years experience across residential extensions, loft conversions, refurbishments and new builds. You understand UK building regulations, typical labour rates, material specifications and contractor workflows.
@@ -144,7 +145,10 @@ For priceCheck: judge whether the SELL price looks right for the work described,
 Limit to the most important 3-5 gaps and 2-3 suggestions. Be specific to the trade.`
 
   try {
+    const abort = new AbortController()
+    const timer = setTimeout(() => abort.abort(), 22000)
     const res = await fetch('https://api.anthropic.com/v1/messages', {
+      signal: abort.signal,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -152,8 +156,8 @@ Limit to the most important 3-5 gaps and 2-3 suggestions. Be specific to the tra
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 2600,
+        model: 'claude-haiku-4-5-20251001',   // fast: the review must finish well inside the host's time limit
+        max_tokens: 2000,
         system,
         messages: [
           { role: 'user',      content: user_msg },
@@ -161,6 +165,7 @@ Limit to the most important 3-5 gaps and 2-3 suggestions. Be specific to the tra
       }),
     })
 
+    clearTimeout(timer)
     const data = await res.json()
     if (data.error) return NextResponse.json({ error: data.error?.message }, { status: 500 })
 
@@ -176,6 +181,7 @@ Limit to the most important 3-5 gaps and 2-3 suggestions. Be specific to the tra
     if (result.priceCheck && !Array.isArray(result.priceCheck.reasons)) result.priceCheck.reasons = []
     return NextResponse.json({ result, hasHistory: similar.length > 0 })
   } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') return NextResponse.json({ error: 'The review took too long. Please try again.' }, { status: 504 })
     console.error('[phase-review] error:', e)
     return NextResponse.json({ error: 'AI review failed' }, { status: 500 })
   }

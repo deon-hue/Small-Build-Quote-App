@@ -43,7 +43,10 @@ export default function PhaseReviewModal({ phase, jobType, markup, onAddItem, on
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ phase, jobType, markup }),
         })
-        const data = await res.json()
+        // The host can answer a slow request with its own HTML error page, so read the reply as text first
+        const text = await res.text()
+        let data: { result?: PhaseReviewResult; hasHistory?: boolean; error?: string } = {}
+        try { data = JSON.parse(text) } catch { data = { error: 'The review took too long or could not be reached. Please try again.' } }
         if (cancelled) return
         if (!res.ok || data.error) { setError(data.error ?? 'Review failed'); return }
         setResult(data.result as PhaseReviewResult)
