@@ -73,7 +73,7 @@ const HINTS: Record<string, string> = {
   'tile-wall': 'wall tiling in bathrooms, kitchens and splashbacks',
   'tile-floor': 'floor tiling',
   'tile-surface-prep': 'preparing surfaces for tiling: boarding, waterproofing and levelling',
-  'deco-internal-walls': 'painting and decorating internal walls and ceilings',
+  'deco-internal-walls': 'all internal decoration, room by room: preparation (stripping wallpaper, filling, sanding), painting the walls and ceilings, painting skirting boards, architraves, picture rails, doors and window frames. Not wallpapering or specialist finishes, external painting or floor finishes',
   'deco-specialist': 'specialist finishes: wallpaper, feature walls, decorative plaster',
   'deco-external': 'painting and finishing the outside: masonry paint and woodwork',
   'deco-floor-finishes': 'floor coverings: carpet, vinyl, LVT, laminate and timber flooring',

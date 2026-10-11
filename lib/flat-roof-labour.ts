@@ -11,7 +11,7 @@
 
 import type { RoofOpeningKind } from './assembly-calc'
 
-export type LabourTradeKind = 'carpenter' | 'roofer' | 'bricklayer' | 'renderer' | 'plumber' | 'labourer' | 'fitter'
+export type LabourTradeKind = 'carpenter' | 'roofer' | 'bricklayer' | 'renderer' | 'plumber' | 'labourer' | 'fitter' | 'painter'
 
 export const LABOUR_TRADE_LABEL: Record<LabourTradeKind, string> = {
   carpenter:  'Carpenter',
@@ -21,6 +21,7 @@ export const LABOUR_TRADE_LABEL: Record<LabourTradeKind, string> = {
   plumber:    'Plumber / gutter fitter',
   labourer:   'Labourer',
   fitter:     'Window / rooflight fitter',
+  painter:    'Painter and decorator',
 }
 
 /** Hours per unit — rough estimates, one operative. */
@@ -192,6 +193,7 @@ const TRADE_PATTERN: Record<LabourTradeKind, RegExp> = {
   plumber:    /plumb|gutter|drain/i,
   labourer:   /labourer|general operative|site labour|^labour/i,
   fitter:     /glaz|window|fitter|rooflight/i,
+  painter:    /paint|decorat/i,
 }
 
 /** The Back Office trade that suits a kind of work, judged by its name; undefined when none does. */

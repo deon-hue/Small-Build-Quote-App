@@ -884,12 +884,7 @@ const decorationSubphases: PhaseSubphase[] = [
     phase: 'Decoration',
     name: 'Internal Wall & Ceiling Painting',
     markupPct: 22,
-    tasks: [
-      t('deco-paint-mist',          'Mist coat (new plaster)',               'm²',  80,  1.80,  0.60,  0,    0,    0,  'Watered down emulsion first coat'),
-      t('deco-paint-emulsion',      'Emulsion 2 coats (walls & ceilings)',   'm²',  80,  3.50,  1.20,  0,    0,    0,  'Mid-sheen or matt — PC sum for paint'),
-      t('deco-paint-primer',        'Primer / sealer coat',                  'm²',  20,  2.00,  1.50,  0,    0,    0,  'To new MDF or bare timber'),
-      t('deco-paint-gloss-ww',      'Gloss / satinwood to woodwork',         'lm',  50,  3.00,  1.00,  0,    0,    0,  '2 coats on skirting, architrave, doors'),
-    ],
+    tasks: [],  // priced by the Internal decoration calculator (rooms: prep, walls and ceilings, woodwork, doors, window frames)
   },
   {
     id: 'deco-specialist',

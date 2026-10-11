@@ -70,6 +70,14 @@ kept on ONE Take-off item (`electricsSummary`, id `electrics-summary`, holding `
 `assemblyResult`) so they save with the project, and `planRoomsFromPoints` turns them into room counts that feed the calculator
 (`mergePlanRooms` in `lib/electrics-units.ts`: a count follows the plan until typed over). Do not add per-room sub-phases for it.
 
+**Internal decoration (`deco-internal-walls`) is the second room-by-room calculator** (`lib/decoration-units.ts` engine, `lib/decoration-description.ts`,
+`components/AssemblyDecorationDemo.tsx`). ONE calculator covers prep, walls and ceilings, woodwork (skirting, architrave, rails), doors and window frames; each
+room is sized and each surface says its condition (new plaster / painted good / painted poor / wallpaper) and filling-and-sanding level, because that
+changes the price (mist coat, sealer, stripping + steamer hire, filler). Lines and labour tasks are per room and per kind of work; the painter trade is
+`'painter'` in `lib/flat-roof-labour.ts`. All rates and hours are samples to check against real jobs. Rooms start empty. Not drawn from Take-off. Still to do:
+Specialist Finishes and External Painting calculators (Deon unsure on specialist), the AI interview asking about wall condition and prep, and moving Floor
+Finishes out of Decoration into an Internal Finishes phase (needs his real Back Office data first).
+
 **A calculator's profit % is the sub-phase's margin, not a cost row.** When a calculator is saved into a quote (Save & Price, the AI quote, or Take-off
 import) its "Profit (n%)" line is dropped from the quote items and its % is stored on the sub-phase as `QuotePhase.markupPct`; `calcPhaseSell` (and every
 item-level sell) uses `phaseMarkup(p, quoteMarkup)`, so a calculator sub-phase takes ITS margin instead of the quote's overall markup (no double profit).

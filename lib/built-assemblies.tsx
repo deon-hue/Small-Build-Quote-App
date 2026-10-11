@@ -26,6 +26,7 @@ import AssemblyPadFoundationDemo from '@/components/AssemblyPadFoundationDemo'
 import AssemblyPiledFoundationDemo from '@/components/AssemblyPiledFoundationDemo'
 import AssemblyUnderpinningDemo from '@/components/AssemblyUnderpinningDemo'
 import AssemblyElectricsDemo from '@/components/AssemblyElectricsDemo'
+import AssemblyDecorationDemo from '@/components/AssemblyDecorationDemo'
 import AssemblyRoofStructureDemo from '@/components/AssemblyRoofStructureDemo'
 import AssemblyRoofCoveringDemo from '@/components/AssemblyRoofCoveringDemo'
 import AssemblyRooflightsDemo from '@/components/AssemblyRooflightsDemo'
@@ -38,7 +39,7 @@ import type { AssemblyBasics } from '@/lib/assembly-basics'
 import type { PlanRoom, ElectricsSavedState } from '@/lib/electrics-units'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 
-export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation' | 'pad-foundation' | 'piled-foundation' | 'underpinning' | 'electrics'
+export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation' | 'pad-foundation' | 'piled-foundation' | 'underpinning' | 'electrics' | 'decoration'
 
 /** Fired when a calculator's "Save & Price" is used from inside a real quote — absent in
  * the Back Office preview context, which has no quote to save into. */
@@ -103,6 +104,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'fnd-pad': { icon: 'pad-foundation', render: opts => <AssemblyPadFoundationDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} initial={opts?.basics} /> },
   'fnd-piled': { icon: 'piled-foundation', render: opts => <AssemblyPiledFoundationDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initial={opts?.basics} /> },
   'fnd-underpin': { icon: 'underpinning', render: opts => <AssemblyUnderpinningDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initial={opts?.basics} /> },
+  'deco-internal-walls': { icon: 'decoration', render: opts => <AssemblyDecorationDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'elec-install': { icon: 'electrics', render: opts => <AssemblyElectricsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} planRooms={opts?.electrics?.planRooms} initialState={opts?.electrics?.initialState} /> },
   'ew-cav-full': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="wool" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initialHeightMm={opts?.initialHeightMm} noSampleOpenings={opts?.noSampleOpenings} /> },
 }
@@ -196,6 +198,15 @@ export function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; siz
           <circle cx="15.5" cy="16" r="2.6" stroke="#ca8a04" strokeWidth="1.3" />
           <line x1="8.5" y1="15" x2="8.5" y2="17" stroke="#ca8a04" strokeWidth="1.2" />
           <line x1="15.5" y1="15" x2="15.5" y2="17" stroke="#ca8a04" strokeWidth="1.2" />
+        </svg>
+      )
+    case 'decoration':
+      // A paint roller: the roller head, its frame and the handle.
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="3" width="15" height="6" rx="1.5" stroke="#0891b2" strokeWidth="1.6" />
+          <path d="M18 6h2.5v5.5H11v3" stroke="#0891b2" strokeWidth="1.5" strokeLinejoin="round" />
+          <rect x="9.5" y="14.5" width="3" height="7" rx="1" stroke="#0891b2" strokeWidth="1.5" />
         </svg>
       )
     case 'underpinning':
