@@ -2522,9 +2522,11 @@ export default function TakeoffPage() {
           externalWidthMm: isBoxShape ? roofBox?.widthMm : undefined,
           variant: item.floorMakeupId === 'cold_flat_roof' ? 'cold' : undefined,
           labourTrades,
+          calcState: item.assemblyCalcState,
           onSave: result => {
+            const { calcState, state: _state, ...res } = result
             saveItemEdit({
-              ...item, ...savePatch, assemblyResult: result, name: result.name, roomName: result.location || item.roomName,
+              ...item, ...savePatch, assemblyResult: res, assemblyCalcState: calcState, name: result.name, roomName: result.location || item.roomName,
             })
             setAssemblyWindowItemId(null)
           },

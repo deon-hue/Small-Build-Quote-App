@@ -11,6 +11,7 @@
  */
 
 import React, { useMemo, useState } from 'react'
+import { useCalcState } from '@/components/calc-state'
 import {
   costLayer, type AssemblyLayerDef, type CostedLine,
 } from '@/lib/assembly-calc'
@@ -47,14 +48,14 @@ function materialLineToLayer(l: { id: string; name: string; qty: number; unit: s
 }
 
 export default function AssemblyRooflightsDemo({ onClose, onSave, labourTrades = [] }: Props) {
-  const [name, setName]         = useState('Rooflights & Dormers')
-  const [location, setLocation] = useState('')
-  const [qty, setQty]           = useState(1)
-  const [items, setItems]       = useState<RooflightItem[]>([])
-  const [wastePct, setWastePct] = useState(5)
-  const [profitPct, setProfitPct] = useState(20)   // default profit margin
-  const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
-  const [disabledLayerIds, setDisabledLayerIds] = useState<Set<string>>(new Set())
+  const [name, setName] = useCalcState('AssemblyRooflightsDemo', 'name', 'Rooflights & Dormers')
+  const [location, setLocation] = useCalcState('AssemblyRooflightsDemo', 'location', '')
+  const [qty, setQty] = useCalcState('AssemblyRooflightsDemo', 'qty', 1)
+  const [items, setItems] = useCalcState<RooflightItem[]>('AssemblyRooflightsDemo', 'items', [])
+  const [wastePct, setWastePct] = useCalcState('AssemblyRooflightsDemo', 'wastePct', 5)
+  const [profitPct, setProfitPct] = useCalcState('AssemblyRooflightsDemo', 'profitPct', 20)   // default profit margin
+  const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>('AssemblyRooflightsDemo', 'rateOverrides', {})
+  const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>('AssemblyRooflightsDemo', 'disabledLayerIds', new Set())
   function toggleLayer(id: string) { setDisabledLayerIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
   const noSidesLayers = useMemo(() => new Set<string>(), [])
 
@@ -77,7 +78,7 @@ export default function AssemblyRooflightsDemo({ onClose, onSave, labourTrades =
   const enabledMaterialLines = costedLines.filter(l => !disabledLayerIds.has(l.layerId))
 
   // Miscellaneous materials
-  const [miscMaterialLines, setMiscMaterialLines] = useState<MiscMaterialLine[]>([])
+  const [miscMaterialLines, setMiscMaterialLines] = useCalcState<MiscMaterialLine[]>('AssemblyRooflightsDemo', 'miscMaterialLines', [])
   function addMisc() { setMiscMaterialLines(p => [...p, { id: newMiscMaterialLineId(), name: '', qty: 1, unit: 'item', unitCost: 0 }]) }
   function updateMisc(id: string, patch: Partial<MiscMaterialLine>) { setMiscMaterialLines(p => p.map(m => m.id === id ? { ...m, ...patch } : m)) }
   function removeMisc(id: string) { setMiscMaterialLines(p => p.filter(m => m.id !== id)) }
@@ -104,7 +105,7 @@ export default function AssemblyRooflightsDemo({ onClose, onSave, labourTrades =
   }, [items])
   const labourSuggestions: LabourSuggestion[] = suggestRooflightLabour(kindGroups)
   const suggestedLabour = toLabourLines(labourSuggestions, labourTrades, false)
-  const [labourOverride, setLabourOverride] = useState<LabourLine[] | null>(null)
+  const [labourOverride, setLabourOverride] = useCalcState<LabourLine[] | null>('AssemblyRooflightsDemo', 'labourOverride', null)
   const suggestedRef = React.useRef<LabourLine[]>([])
   suggestedRef.current = suggestedLabour.lines
   const labourLines: LabourLine[] = labourOverride ?? suggestedLabour.lines
@@ -127,8 +128,8 @@ export default function AssemblyRooflightsDemo({ onClose, onSave, labourTrades =
   const totalCost = costSubtotal + profitAmount
 
   // The customer's description follows the items until it's edited by hand
-  const [descriptionOverride, setDescriptionOverride] = useState<string | null>(null)
-  const [detailOverride, setDetailOverride] = useState<string | null>(null)
+  const [descriptionOverride, setDescriptionOverride] = useCalcState<string | null>('AssemblyRooflightsDemo', 'descriptionOverride', null)
+  const [detailOverride, setDetailOverride] = useCalcState<string | null>('AssemblyRooflightsDemo', 'detailOverride', null)
   const description = descriptionOverride ?? describeRooflightsShort(items)
   const detail = detailOverride ?? describeRooflights(items)
 

@@ -15,6 +15,7 @@
  */
 
 import React, { useMemo, useState, useEffect } from 'react'
+import { useCalcState } from '@/components/calc-state'
 import {
   calculateSleeperWallGeometry, calculateSleeperWallCost,
   type SleeperWallInput, type SleeperWallGeometry, type SleeperVentType, type DwarfFoundationType,
@@ -85,27 +86,27 @@ interface Props {
 }
 
 export default function AssemblySleeperWallDemo({ onClose, onSave, labourTrades = [], externalLengthMm }: Props) {
-  const [name, setName]         = useState('Sleeper Wall — Block & Beam Floor')
-  const [qty, setQty]           = useState(1)
-  const [lengthMm, setLengthMm] = useState(externalLengthMm ?? 5000)
+  const [name, setName] = useCalcState('AssemblySleeperWallDemo', 'name', 'Sleeper Wall — Block & Beam Floor')
+  const [qty, setQty] = useCalcState('AssemblySleeperWallDemo', 'qty', 1)
+  const [lengthMm, setLengthMm] = useCalcState('AssemblySleeperWallDemo', 'lengthMm', externalLengthMm ?? 5000)
   useEffect(() => {
     if (externalLengthMm != null) setLengthMm(externalLengthMm)
   }, [externalLengthMm])
-  const [topAboveGroundMm, setTopAboveGroundMm] = useState(300)
-  const [laid, setLaid] = useState<BlockLaid>('side')
-  const [blockWidthMm, setBlockWidthMm] = useState(100)
-  const [foundationType, setFoundationType] = useState<DwarfFoundationType>('strip')
-  const [trenchWidthMm, setTrenchWidthMm] = useState(450)
-  const [foundationDepthMm, setFoundationDepthMm] = useState(450)
-  const [concreteThicknessMm, setConcreteThicknessMm] = useState(200)
-  const [concreteTopBelowGroundMm, setConcreteTopBelowGroundMm] = useState(150)
-  const [hardcoreThicknessMm, setHardcoreThicknessMm] = useState(0)
-  const [ventSpacingMm, setVentSpacingMm] = useState(1500)
-  const [ventType, setVentType] = useState<SleeperVentType>('pipe')
-  const [wastePct, setWastePct] = useState(10)
-  const [location, setLocation] = useState('')
+  const [topAboveGroundMm, setTopAboveGroundMm] = useCalcState('AssemblySleeperWallDemo', 'topAboveGroundMm', 300)
+  const [laid, setLaid] = useCalcState<BlockLaid>('AssemblySleeperWallDemo', 'laid', 'side')
+  const [blockWidthMm, setBlockWidthMm] = useCalcState('AssemblySleeperWallDemo', 'blockWidthMm', 100)
+  const [foundationType, setFoundationType] = useCalcState<DwarfFoundationType>('AssemblySleeperWallDemo', 'foundationType', 'strip')
+  const [trenchWidthMm, setTrenchWidthMm] = useCalcState('AssemblySleeperWallDemo', 'trenchWidthMm', 450)
+  const [foundationDepthMm, setFoundationDepthMm] = useCalcState('AssemblySleeperWallDemo', 'foundationDepthMm', 450)
+  const [concreteThicknessMm, setConcreteThicknessMm] = useCalcState('AssemblySleeperWallDemo', 'concreteThicknessMm', 200)
+  const [concreteTopBelowGroundMm, setConcreteTopBelowGroundMm] = useCalcState('AssemblySleeperWallDemo', 'concreteTopBelowGroundMm', 150)
+  const [hardcoreThicknessMm, setHardcoreThicknessMm] = useCalcState('AssemblySleeperWallDemo', 'hardcoreThicknessMm', 0)
+  const [ventSpacingMm, setVentSpacingMm] = useCalcState('AssemblySleeperWallDemo', 'ventSpacingMm', 1500)
+  const [ventType, setVentType] = useCalcState<SleeperVentType>('AssemblySleeperWallDemo', 'ventType', 'pipe')
+  const [wastePct, setWastePct] = useCalcState('AssemblySleeperWallDemo', 'wastePct', 10)
+  const [location, setLocation] = useCalcState('AssemblySleeperWallDemo', 'location', '')
 
-  const [labourLines, setLabourLines] = useState<LabourLine[]>([
+  const [labourLines, setLabourLines] = useCalcState<LabourLine[]>('AssemblySleeperWallDemo', 'labourLines', [
     { id: newLabourLineId(), tradeId: '', task: 'Set out, dig, pour foundation and build sleeper wall', hours: 16 },
   ])
   function addLabourLine() {
@@ -118,7 +119,7 @@ export default function AssemblySleeperWallDemo({ onClose, onSave, labourTrades 
     setLabourLines(prev => prev.filter(l => l.id !== id))
   }
 
-  const [miscMaterialLines, setMiscMaterialLines] = useState<MiscMaterialLine[]>([])
+  const [miscMaterialLines, setMiscMaterialLines] = useCalcState<MiscMaterialLine[]>('AssemblySleeperWallDemo', 'miscMaterialLines', [])
   function addMiscMaterialLine() {
     setMiscMaterialLines(prev => [...prev, { id: newMiscMaterialLineId(), name: '', qty: 1, unit: 'item', unitCost: 0 }])
   }
@@ -129,9 +130,9 @@ export default function AssemblySleeperWallDemo({ onClose, onSave, labourTrades 
     setMiscMaterialLines(prev => prev.filter(m => m.id !== id))
   }
 
-  const [profitPct, setProfitPct] = useState(20)   // default profit margin
-  const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
-  const [disabledLayerIds, setDisabledLayerIds] = useState<Set<string>>(new Set())
+  const [profitPct, setProfitPct] = useCalcState('AssemblySleeperWallDemo', 'profitPct', 20)   // default profit margin
+  const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>('AssemblySleeperWallDemo', 'rateOverrides', {})
+  const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>('AssemblySleeperWallDemo', 'disabledLayerIds', new Set())
   function toggleLayer(layerId: string) {
     setDisabledLayerIds(prev => {
       const next = new Set(prev)
@@ -164,7 +165,7 @@ export default function AssemblySleeperWallDemo({ onClose, onSave, labourTrades 
     }
     return text
   }
-  const [description, setDescription] = useState(buildAutoDescription)
+  const [description, setDescription] = useCalcState('AssemblySleeperWallDemo', 'description', buildAutoDescription)
 
   const layers = useMemo(() => {
     if (!geometryResult.ok) return []

@@ -14,6 +14,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useCalcState } from '@/components/calc-state'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
 import { fmt } from '@/lib/utils'
 import { calculateHipRoofGeometry, type HipRoofGeometry, type HipEndTreatment } from '@/lib/hip-roof'
@@ -57,31 +58,31 @@ const END_TREATMENT_LABEL: Record<HipEndTreatment, string> = {
 }
 
 export default function AssemblyHipRoofDemo({ onClose, onSave, labourTrades = [], externalLengthMm, externalWidthMm }: Props) {
-  const [name, setName]         = useState('Hip Roof Structure')
-  const [location, setLocation] = useState('')
-  const [qty, setQty]           = useState(1)
-  const [lengthMm, setLengthMm] = useState(externalLengthMm ?? 10000)
-  const [spanMm, setSpanMm]     = useState(externalWidthMm ?? 6000)
+  const [name, setName] = useCalcState('AssemblyHipRoofDemo', 'name', 'Hip Roof Structure')
+  const [location, setLocation] = useCalcState('AssemblyHipRoofDemo', 'location', '')
+  const [qty, setQty] = useCalcState('AssemblyHipRoofDemo', 'qty', 1)
+  const [lengthMm, setLengthMm] = useCalcState('AssemblyHipRoofDemo', 'lengthMm', externalLengthMm ?? 10000)
+  const [spanMm, setSpanMm] = useCalcState('AssemblyHipRoofDemo', 'spanMm', externalWidthMm ?? 6000)
   useEffect(() => { if (externalLengthMm != null) setLengthMm(externalLengthMm) }, [externalLengthMm])
   useEffect(() => { if (externalWidthMm != null) setSpanMm(externalWidthMm) }, [externalWidthMm])
   function swapLengthSpan() { setLengthMm(spanMm); setSpanMm(lengthMm) }
 
-  const [pitchDeg, setPitchDeg] = useState(30)
-  const [rafterCentresMm, setRafterCentresMm] = useState(400)
-  const [eavesOverhangMm, setEavesOverhangMm] = useState(300)
+  const [pitchDeg, setPitchDeg] = useCalcState('AssemblyHipRoofDemo', 'pitchDeg', 30)
+  const [rafterCentresMm, setRafterCentresMm] = useCalcState('AssemblyHipRoofDemo', 'rafterCentresMm', 400)
+  const [eavesOverhangMm, setEavesOverhangMm] = useCalcState('AssemblyHipRoofDemo', 'eavesOverhangMm', 300)
 
   // Each end — at the start and the far end of the ridge-direction length — is independently hipped, a
   // gable, or built against an existing wall (a common real case: hipped at the garden end, tied into the
   // house at the other). Default to a full hip, the ordinary case.
-  const [endA, setEndA] = useState<HipEndTreatment>('hip')
-  const [endB, setEndB] = useState<HipEndTreatment>('hip')
+  const [endA, setEndA] = useCalcState<HipEndTreatment>('AssemblyHipRoofDemo', 'endA', 'hip')
+  const [endB, setEndB] = useCalcState<HipEndTreatment>('AssemblyHipRoofDemo', 'endB', 'hip')
 
-  const [rafterGrade, setRafterGrade] = useState<SolidJoistGrade>('c24')
-  const [rafterDepthMm, setRafterDepthMm] = useState(150)
-  const [spanLoads, setSpanLoads] = useState<JoistSpanLoads>(DEFAULT_JOIST_SPAN_LOADS)
-  const [depthPicked, setDepthPicked] = useState(false)
+  const [rafterGrade, setRafterGrade] = useCalcState<SolidJoistGrade>('AssemblyHipRoofDemo', 'rafterGrade', 'c24')
+  const [rafterDepthMm, setRafterDepthMm] = useCalcState('AssemblyHipRoofDemo', 'rafterDepthMm', 150)
+  const [spanLoads, setSpanLoads] = useCalcState<JoistSpanLoads>('AssemblyHipRoofDemo', 'spanLoads', DEFAULT_JOIST_SPAN_LOADS)
+  const [depthPicked, setDepthPicked] = useCalcState('AssemblyHipRoofDemo', 'depthPicked', false)
 
-  const [ceilingJoistDepthMm, setCeilingJoistDepthMm] = useState(100)
+  const [ceilingJoistDepthMm, setCeilingJoistDepthMm] = useCalcState('AssemblyHipRoofDemo', 'ceilingJoistDepthMm', 100)
 
   const geometryResult = useMemo(() => {
     try { return { ok: true as const, geometry: calculateHipRoofGeometry({ lengthMm, spanMm, pitchDeg, rafterCentresMm, eavesOverhangMm, endA, endB }) } }
@@ -106,10 +107,10 @@ export default function AssemblyHipRoofDemo({ onClose, onSave, labourTrades = []
   const ridgeRate = timberRate('c24', hipDepthMm)
   const ceilingJoistRate = timberRate('c16', ceilingJoistDepthMm)
 
-  const [wastePct, setWastePct] = useState(5)
-  const [profitPct, setProfitPct] = useState(20)
-  const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
-  const [disabledLayerIds, setDisabledLayerIds] = useState<Set<string>>(new Set())
+  const [wastePct, setWastePct] = useCalcState('AssemblyHipRoofDemo', 'wastePct', 5)
+  const [profitPct, setProfitPct] = useCalcState('AssemblyHipRoofDemo', 'profitPct', 20)
+  const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>('AssemblyHipRoofDemo', 'rateOverrides', {})
+  const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>('AssemblyHipRoofDemo', 'disabledLayerIds', new Set())
   function toggleLayer(id: string) { setDisabledLayerIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
   const noSidesLayers = useMemo(() => new Set<string>(), [])
 
@@ -134,7 +135,7 @@ export default function AssemblyHipRoofDemo({ onClose, onSave, labourTrades = []
   const enabledMaterialLines = costedLines.filter(l => !disabledLayerIds.has(l.layerId))
 
   // Miscellaneous materials
-  const [miscMaterialLines, setMiscMaterialLines] = useState<MiscMaterialLine[]>([])
+  const [miscMaterialLines, setMiscMaterialLines] = useCalcState<MiscMaterialLine[]>('AssemblyHipRoofDemo', 'miscMaterialLines', [])
   function addMisc() { setMiscMaterialLines(p => [...p, { id: newMiscMaterialLineId(), name: '', qty: 1, unit: 'item', unitCost: 0 }]) }
   function updateMisc(id: string, patch: Partial<MiscMaterialLine>) { setMiscMaterialLines(p => p.map(m => m.id === id ? { ...m, ...patch } : m)) }
   function removeMisc(id: string) { setMiscMaterialLines(p => p.filter(m => m.id !== id)) }
@@ -152,7 +153,7 @@ export default function AssemblyHipRoofDemo({ onClose, onSave, labourTrades = []
   // fitting the ceiling joists, following the roof until edited by hand
   const labourSuggestions: LabourSuggestion[] = g ? suggestHipRoofLabour(g) : []
   const suggestedLabour = toLabourLines(labourSuggestions, labourTrades, false)
-  const [labourOverride, setLabourOverride] = useState<LabourLine[] | null>(null)
+  const [labourOverride, setLabourOverride] = useCalcState<LabourLine[] | null>('AssemblyHipRoofDemo', 'labourOverride', null)
   const suggestedRef = useRef<LabourLine[]>([])
   suggestedRef.current = suggestedLabour.lines
   const labourLines: LabourLine[] = labourOverride ?? suggestedLabour.lines
@@ -180,8 +181,8 @@ export default function AssemblyHipRoofDemo({ onClose, onSave, labourTrades = []
     commonRafterCount: g.commonRafterCount, hipRafterCount: g.hipRafterCount, jackRafterCount: g.jackRafterCount,
     ceilingJoistCount: g.ceilingJoistCount, slopeAreaM2: g.slopeAreaM2,
   } : null
-  const [descriptionOverride, setDescriptionOverride] = useState<string | null>(null)
-  const [detailOverride, setDetailOverride] = useState<string | null>(null)
+  const [descriptionOverride, setDescriptionOverride] = useCalcState<string | null>('AssemblyHipRoofDemo', 'descriptionOverride', null)
+  const [detailOverride, setDetailOverride] = useCalcState<string | null>('AssemblyHipRoofDemo', 'detailOverride', null)
   const description = descriptionOverride ?? (descInput ? describeHipRoofShort(descInput) : '')
   const detail = detailOverride ?? (descInput ? describeHipRoof(descInput) : '')
 

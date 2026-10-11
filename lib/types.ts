@@ -3,6 +3,7 @@ import type { LabourTrade, TaskLabourLine } from './tradeRates'
 import type { CostedLine } from './assembly-calc'
 import type { AssemblyBasics } from './assembly-basics'
 import type { ElectricsSavedState } from './electrics-units'
+import type { CalcStateSnapshot } from './calc-snapshot'
 export type { EstimatorItem, EstimatorItemTemplate, LabourTrade, TaskLabourLine }
 
 export interface QuoteItem {
@@ -130,6 +131,8 @@ export interface QuotePhase {
   assemblySize?: AssemblyBasics
   /** The electrics calculator's rooms and settings (from the AI quote, or the last Save & Price), so reopening it shows what was priced. */
   electricsState?: ElectricsSavedState
+  /** What was typed into the assembly calculator at the last Save & Price, so it opens again as it was left. */
+  calcState?: CalcStateSnapshot
   /** AI-generated item that couldn't be matched to Back Office master data */
   needsReview?: boolean
   reviewNote?: string

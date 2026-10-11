@@ -25,6 +25,7 @@
  */
 
 import React, { useMemo, useState, useEffect, useRef } from 'react'
+import { useCalcState } from '@/components/calc-state'
 import {
   calculateFlatRoofGeometry, calculateFlatRoofCost, studPositionsMm, flatRoofJoistLayout, openingTrimZoneMm, JOIST_THICKNESS_MM,
   type FlatRoofInput, type FlatRoofGeometry, type FlatRoofOpening, type FlatRoofBuildUp, type RoofOpeningKind,
@@ -354,47 +355,47 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   const showCovering = part === 'complete' || part === 'covering'
   const showGutters = part === 'complete' || part === 'gutters'
   const showParapetBuild = part === 'complete'   // the parapet's masonry belongs to External Walls → Parapet wall
-  const [name, setName]         = useState(PART_NAME[part])
-  const [qty, setQty]           = useState(1)
-  const [lengthMm, setLengthMm] = useState(externalLengthMm ?? 5000)
-  const [widthMm, setWidthMm]   = useState(externalWidthMm ?? 3200)
+  const [name, setName] = useCalcState('AssemblyFlatRoofDemo', 'name', PART_NAME[part])
+  const [qty, setQty] = useCalcState('AssemblyFlatRoofDemo', 'qty', 1)
+  const [lengthMm, setLengthMm] = useCalcState('AssemblyFlatRoofDemo', 'lengthMm', externalLengthMm ?? 5000)
+  const [widthMm, setWidthMm] = useCalcState('AssemblyFlatRoofDemo', 'widthMm', externalWidthMm ?? 3200)
   useEffect(() => { if (externalLengthMm != null) setLengthMm(externalLengthMm) }, [externalLengthMm])
   useEffect(() => { if (externalWidthMm != null) setWidthMm(externalWidthMm) }, [externalWidthMm])
 
-  const [buildUp, setBuildUp] = useState<FlatRoofBuildUp>(buildUpDefault)
-  const [joistSystem, setJoistSystem] = useState<JoistSystem>('c24')
-  const [joistDepth, setJoistDepth] = useState(175)
+  const [buildUp, setBuildUp] = useCalcState<FlatRoofBuildUp>('AssemblyFlatRoofDemo', 'buildUp', buildUpDefault)
+  const [joistSystem, setJoistSystem] = useCalcState<JoistSystem>('AssemblyFlatRoofDemo', 'joistSystem', 'c24')
+  const [joistDepth, setJoistDepth] = useCalcState('AssemblyFlatRoofDemo', 'joistDepth', 175)
   // Until the section is picked by hand it follows the span chart: the smallest section that works for the span.
-  const [depthPicked, setDepthPicked] = useState(false)
-  const [centresMm, setCentresMm] = useState(400)
-  const [spanLoads, setSpanLoads] = useState<JoistSpanLoads>(DEFAULT_JOIST_SPAN_LOADS)
-  const [fallRatio, setFallRatio] = useState(80)
+  const [depthPicked, setDepthPicked] = useCalcState('AssemblyFlatRoofDemo', 'depthPicked', false)
+  const [centresMm, setCentresMm] = useCalcState('AssemblyFlatRoofDemo', 'centresMm', 400)
+  const [spanLoads, setSpanLoads] = useCalcState<JoistSpanLoads>('AssemblyFlatRoofDemo', 'spanLoads', DEFAULT_JOIST_SPAN_LOADS)
+  const [fallRatio, setFallRatio] = useCalcState('AssemblyFlatRoofDemo', 'fallRatio', 80)
   // Warm roof: a PIR board on the deck. Cold roof: insulation between the joists, leaving a 50mm gap.
-  const [insulationMm, setInsulationMm] = useState(buildUpDefault === 'cold' ? 125 : 120)
-  const [deck, setDeck] = useState<DeckType>('ply')
-  const [covering, setCovering] = useState<CoveringType>('grp')   // most of the roofs are Cure It GRP
-  const [fascia, setFascia] = useState(false)
+  const [insulationMm, setInsulationMm] = useCalcState('AssemblyFlatRoofDemo', 'insulationMm', buildUpDefault === 'cold' ? 125 : 120)
+  const [deck, setDeck] = useCalcState<DeckType>('AssemblyFlatRoofDemo', 'deck', 'ply')
+  const [covering, setCovering] = useCalcState<CoveringType>('AssemblyFlatRoofDemo', 'covering', 'grp')   // most of the roofs are Cure It GRP
+  const [fascia, setFascia] = useCalcState('AssemblyFlatRoofDemo', 'fascia', false)
   // The trims chosen for each place, and any added by hand. Picks are per covering: changing the covering starts them afresh.
-  const [trimPicks, setTrimPicks] = useState<Partial<Record<SlotId, string>>>({})
-  const [extraTrims, setExtraTrims] = useState<ExtraTrim[]>([])
-  const [downpipes, setDownpipes] = useState(1)
+  const [trimPicks, setTrimPicks] = useCalcState<Partial<Record<SlotId, string>>>('AssemblyFlatRoofDemo', 'trimPicks', {})
+  const [extraTrims, setExtraTrims] = useCalcState<ExtraTrim[]>('AssemblyFlatRoofDemo', 'extraTrims', [])
+  const [downpipes, setDownpipes] = useCalcState('AssemblyFlatRoofDemo', 'downpipes', 1)
   // Drainage is separate from the covering: a system for the gutters and downpipes, with a part-by-part choice like the trims.
-  const [dropM, setDropM] = useState(2.6)
-  const [drainSystem, setDrainSystem] = useState<DrainSystem>('upvc-hr')
-  const [drainPicks, setDrainPicks] = useState<Partial<Record<DrainSlotId, string>>>({})
-  const [extraDrain, setExtraDrain] = useState<DrainExtra[]>([])
-  const [wastePct, setWastePct] = useState(10)
-  const [location, setLocation] = useState('')
+  const [dropM, setDropM] = useCalcState('AssemblyFlatRoofDemo', 'dropM', 2.6)
+  const [drainSystem, setDrainSystem] = useCalcState<DrainSystem>('AssemblyFlatRoofDemo', 'drainSystem', 'upvc-hr')
+  const [drainPicks, setDrainPicks] = useCalcState<Partial<Record<DrainSlotId, string>>>('AssemblyFlatRoofDemo', 'drainPicks', {})
+  const [extraDrain, setExtraDrain] = useCalcState<DrainExtra[]>('AssemblyFlatRoofDemo', 'extraDrain', [])
+  const [wastePct, setWastePct] = useCalcState('AssemblyFlatRoofDemo', 'wastePct', 10)
+  const [location, setLocation] = useCalcState('AssemblyFlatRoofDemo', 'location', '')
 
   // The four edges, how the joists meet an existing wall, and the parapet.
-  const [edges, setEdges] = useState<FlatRoofEdges>({ high: 'abutment', low: 'gutter', left: 'free', right: 'free' })
-  const [wallConnection, setWallConnection] = useState<FlatRoofWallConnection>('ledger')
-  const [parapetHeightMm, setParapetHeightMm] = useState(450)
-  const [parapetType, setParapetType] = useState<ParapetType>('cavity-brick-block')
+  const [edges, setEdges] = useCalcState<FlatRoofEdges>('AssemblyFlatRoofDemo', 'edges', { high: 'abutment', low: 'gutter', left: 'free', right: 'free' })
+  const [wallConnection, setWallConnection] = useCalcState<FlatRoofWallConnection>('AssemblyFlatRoofDemo', 'wallConnection', 'ledger')
+  const [parapetHeightMm, setParapetHeightMm] = useCalcState('AssemblyFlatRoofDemo', 'parapetHeightMm', 450)
+  const [parapetType, setParapetType] = useCalcState<ParapetType>('AssemblyFlatRoofDemo', 'parapetType', 'cavity-brick-block')
   // Rainwater outlets through the parapet — each one placed individually, so they can be added, deleted and
   // moved wherever, and there can be as many as are needed. A parapet starts with enough for its length;
   // once any is added, deleted or moved by hand they're left alone (until "Auto-place").
-  const [outlets, setOutlets] = useState<FlatRoofOutlet[]>([])
+  const [outlets, setOutlets] = useCalcState<FlatRoofOutlet[]>('AssemblyFlatRoofDemo', 'outlets', [])
   const outletsTouched = useRef(false)
 
   const edgeLenMm: Record<keyof FlatRoofEdges, number> = { high: lengthMm, low: lengthMm, left: widthMm, right: widthMm }
@@ -442,7 +443,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   }
 
   // No rooflights by default — added by hand once the job actually has a lantern or roof window.
-  const [openings, setOpenings] = useState<FlatRoofOpening[]>([])
+  const [openings, setOpenings] = useCalcState<FlatRoofOpening[]>('AssemblyFlatRoofDemo', 'openings', [])
   function addOpening(kind: RoofOpeningKind) {
     setOpenings(prev => [...prev, newOpening(kind, prev, lengthMm, widthMm)])
   }
@@ -468,8 +469,8 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
 
   // Labour is suggested from the roof (lib/flat-roof-labour.ts) and follows it — the trades, the tasks and the hours —
   // until it is edited; then the estimator's own lines are kept, and "Suggest again" goes back to following the roof.
-  const [labourOverride, setLabourOverride] = useState<LabourLine[] | null>(null)
-  const [includeFitting, setIncludeFitting] = useState(false)
+  const [labourOverride, setLabourOverride] = useCalcState<LabourLine[] | null>('AssemblyFlatRoofDemo', 'labourOverride', null)
+  const [includeFitting, setIncludeFitting] = useCalcState('AssemblyFlatRoofDemo', 'includeFitting', false)
   const suggestedLinesRef = useRef<LabourLine[]>([])
   function addLabourLine() {
     setLabourOverride(prev => {
@@ -484,7 +485,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
     setLabourOverride(prev => (prev ?? suggestedLinesRef.current).filter(l => l.id !== id))
   }
 
-  const [miscMaterialLines, setMiscMaterialLines] = useState<MiscMaterialLine[]>([])
+  const [miscMaterialLines, setMiscMaterialLines] = useCalcState<MiscMaterialLine[]>('AssemblyFlatRoofDemo', 'miscMaterialLines', [])
   function addMiscMaterialLine() {
     setMiscMaterialLines(prev => [...prev, { id: newMiscMaterialLineId(), name: '', qty: 1, unit: 'item', unitCost: 0 }])
   }
@@ -495,9 +496,9 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
     setMiscMaterialLines(prev => prev.filter(m => m.id !== id))
   }
 
-  const [profitPct, setProfitPct] = useState(20)   // default profit margin
-  const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
-  const [disabledLayerIds, setDisabledLayerIds] = useState<Set<string>>(new Set())
+  const [profitPct, setProfitPct] = useCalcState('AssemblyFlatRoofDemo', 'profitPct', 20)   // default profit margin
+  const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>('AssemblyFlatRoofDemo', 'rateOverrides', {})
+  const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>('AssemblyFlatRoofDemo', 'disabledLayerIds', new Set())
   function toggleLayer(layerId: string) {
     setDisabledLayerIds(prev => {
       const next = new Set(prev)
@@ -620,8 +621,8 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   // full part-by-part text (`detail`, shown on the online quote behind a "What's included" toggle).
   const autoDescription = descriptionInput ? describeFlatRoofShort(descriptionInput, part) : ''
   const autoDetail = descriptionInput ? describeFlatRoof(descriptionInput, part) : ''
-  const [descriptionOverride, setDescriptionOverride] = useState<string | null>(null)
-  const [detailOverride, setDetailOverride] = useState<string | null>(null)
+  const [descriptionOverride, setDescriptionOverride] = useCalcState<string | null>('AssemblyFlatRoofDemo', 'descriptionOverride', null)
+  const [detailOverride, setDetailOverride] = useCalcState<string | null>('AssemblyFlatRoofDemo', 'detailOverride', null)
   const description = descriptionOverride ?? autoDescription
   const detail = detailOverride ?? autoDetail
 

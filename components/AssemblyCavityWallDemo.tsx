@@ -20,6 +20,7 @@
  */
 
 import React, { useMemo, useState, useEffect } from 'react'
+import { useCalcState } from '@/components/calc-state'
 import {
   calculateCavityGeometry, calculateCavityWallCost,
   BRICK_OUTER_LEAF_MM, BLOCK_OUTER_LEAF_MM,
@@ -254,26 +255,26 @@ export function priceCavityWallFromBasics(o: { lengthMm: number; heightMm: numbe
 
 export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onClose, onSave, labourTrades = [], externalLengthMm, initialHeightMm, noSampleOpenings }: Props) {
   const isFullFill = insulationDefault === 'wool'
-  const [name, setName]         = useState(isFullFill ? 'Cavity Wall — Full Fill' : 'Cavity Wall — Partial Fill')
-  const [qty, setQty]           = useState(1)
-  const [lengthMm, setLengthMm] = useState(externalLengthMm ?? 5000)
+  const [name, setName] = useCalcState('AssemblyCavityWallDemo', 'name', isFullFill ? 'Cavity Wall — Full Fill' : 'Cavity Wall — Partial Fill')
+  const [qty, setQty] = useCalcState('AssemblyCavityWallDemo', 'qty', 1)
+  const [lengthMm, setLengthMm] = useCalcState('AssemblyCavityWallDemo', 'lengthMm', externalLengthMm ?? 5000)
   useEffect(() => {
     if (externalLengthMm != null) setLengthMm(externalLengthMm)
   }, [externalLengthMm])
-  const [heightMm, setHeightMm] = useState(initialHeightMm ?? 2400)
-  const [outerLeaf, setOuterLeaf] = useState<CavityLeafType>('brick')
-  const [externalFinish, setExternalFinish] = useState<ExternalFinishType>('render')
-  const [innerType, setInnerType] = useState<InnerBlockType>('thermal')
-  const [innerThicknessMm, setInnerThicknessMm] = useState(100)
-  const [cavityWidthMm, setCavityWidthMm] = useState(isFullFill ? 100 : 125)
-  const [insulation, setInsulation] = useState<CavityInsulationType>(insulationDefault)
-  const [boardThicknessMm, setBoardThicknessMm] = useState(75)
-  const [finishType, setFinishType] = useState<FinishType>('dot-dab')
-  const [wastePct, setWastePct] = useState(10)
-  const [openings, setOpenings] = useState<CavityOpening[]>(noSampleOpenings ? [] : sampleOpenings)
-  const [location, setLocation] = useState('')
+  const [heightMm, setHeightMm] = useCalcState('AssemblyCavityWallDemo', 'heightMm', initialHeightMm ?? 2400)
+  const [outerLeaf, setOuterLeaf] = useCalcState<CavityLeafType>('AssemblyCavityWallDemo', 'outerLeaf', 'brick')
+  const [externalFinish, setExternalFinish] = useCalcState<ExternalFinishType>('AssemblyCavityWallDemo', 'externalFinish', 'render')
+  const [innerType, setInnerType] = useCalcState<InnerBlockType>('AssemblyCavityWallDemo', 'innerType', 'thermal')
+  const [innerThicknessMm, setInnerThicknessMm] = useCalcState('AssemblyCavityWallDemo', 'innerThicknessMm', 100)
+  const [cavityWidthMm, setCavityWidthMm] = useCalcState('AssemblyCavityWallDemo', 'cavityWidthMm', isFullFill ? 100 : 125)
+  const [insulation, setInsulation] = useCalcState<CavityInsulationType>('AssemblyCavityWallDemo', 'insulation', insulationDefault)
+  const [boardThicknessMm, setBoardThicknessMm] = useCalcState('AssemblyCavityWallDemo', 'boardThicknessMm', 75)
+  const [finishType, setFinishType] = useCalcState<FinishType>('AssemblyCavityWallDemo', 'finishType', 'dot-dab')
+  const [wastePct, setWastePct] = useCalcState('AssemblyCavityWallDemo', 'wastePct', 10)
+  const [openings, setOpenings] = useCalcState<CavityOpening[]>('AssemblyCavityWallDemo', 'openings', noSampleOpenings ? [] : sampleOpenings)
+  const [location, setLocation] = useCalcState('AssemblyCavityWallDemo', 'location', '')
 
-  const [miscMaterialLines, setMiscMaterialLines] = useState<MiscMaterialLine[]>([])
+  const [miscMaterialLines, setMiscMaterialLines] = useCalcState<MiscMaterialLine[]>('AssemblyCavityWallDemo', 'miscMaterialLines', [])
   function addMiscMaterialLine() {
     setMiscMaterialLines(prev => [...prev, { id: newMiscMaterialLineId(), name: '', qty: 1, unit: 'item', unitCost: 0 }])
   }
@@ -284,9 +285,9 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
     setMiscMaterialLines(prev => prev.filter(m => m.id !== id))
   }
 
-  const [profitPct, setProfitPct] = useState(20)   // default profit margin
-  const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
-  const [disabledLayerIds, setDisabledLayerIds] = useState<Set<string>>(new Set())
+  const [profitPct, setProfitPct] = useCalcState('AssemblyCavityWallDemo', 'profitPct', 20)   // default profit margin
+  const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>('AssemblyCavityWallDemo', 'rateOverrides', {})
+  const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>('AssemblyCavityWallDemo', 'disabledLayerIds', new Set())
   function toggleLayer(layerId: string) {
     setDisabledLayerIds(prev => {
       const next = new Set(prev)
@@ -300,7 +301,7 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
   function buildAutoDescription(): string {
     return cavityAutoDescription({ lengthMm, heightMm, outerLeaf, externalFinish, insulation, boardThicknessMm, cavityWidthMm, innerThicknessMm, innerType, finishType, openings })
   }
-  const [description, setDescription] = useState(buildAutoDescription)
+  const [description, setDescription] = useCalcState('AssemblyCavityWallDemo', 'description', buildAutoDescription)
 
   const input: CavityWallInput = {
     lengthMm, heightMm, outerLeaf, innerLeafThicknessMm: innerThicknessMm, cavityWidthMm,
@@ -317,7 +318,7 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
   // Labour starts as one line sized from the wall (1 hour per m², the bricklayer trade if there is one) and follows the wall until it is edited by hand
   const startingLabour = cavityStartingLabour(geometryResult.ok ? geometryResult.geometry.netAreaM2 : 0, labourTrades)
   const suggestedLabour: LabourLine[] = [{ id: 'suggested-cavity', ...startingLabour }]
-  const [labourOverride, setLabourOverride] = useState<LabourLine[] | null>(null)
+  const [labourOverride, setLabourOverride] = useCalcState<LabourLine[] | null>('AssemblyCavityWallDemo', 'labourOverride', null)
   const suggestedRef = React.useRef<LabourLine[]>([])
   suggestedRef.current = suggestedLabour
   const labourLines: LabourLine[] = labourOverride ?? suggestedLabour

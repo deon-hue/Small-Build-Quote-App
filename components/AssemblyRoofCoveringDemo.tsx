@@ -11,6 +11,7 @@
  */
 
 import React, { useState } from 'react'
+import { useCalcState } from '@/components/calc-state'
 import AssemblyFlatRoofDemo from '@/components/AssemblyFlatRoofDemo'
 import AssemblyPitchedRoofCoveringDemo from '@/components/AssemblyPitchedRoofCoveringDemo'
 import type { CostedLine } from '@/lib/assembly-calc'
@@ -34,7 +35,7 @@ interface Props {
 }
 
 export default function AssemblyRoofCoveringDemo(props: Props) {
-  const [family, setFamily] = useState<RoofCoveringFamily>('flat')
+  const [family, setFamily] = useCalcState<RoofCoveringFamily>('AssemblyRoofCoveringDemo', 'family', 'flat')
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>

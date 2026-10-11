@@ -13,6 +13,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useCalcState } from '@/components/calc-state'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
 import { fmt } from '@/lib/utils'
 import { calculateGableRoofGeometry, type GableRoofGeometry, type GableEndTreatment } from '@/lib/gable-roof'
@@ -55,31 +56,31 @@ const END_TREATMENT_LABEL: Record<GableEndTreatment, string> = {
 }
 
 export default function AssemblyGableRoofDemo({ onClose, onSave, labourTrades = [], externalLengthMm, externalWidthMm }: Props) {
-  const [name, setName]         = useState('Gable Roof Structure')
-  const [location, setLocation] = useState('')
-  const [qty, setQty]           = useState(1)
-  const [lengthMm, setLengthMm] = useState(externalLengthMm ?? 8000)
-  const [spanMm, setSpanMm]     = useState(externalWidthMm ?? 6000)
+  const [name, setName] = useCalcState('AssemblyGableRoofDemo', 'name', 'Gable Roof Structure')
+  const [location, setLocation] = useCalcState('AssemblyGableRoofDemo', 'location', '')
+  const [qty, setQty] = useCalcState('AssemblyGableRoofDemo', 'qty', 1)
+  const [lengthMm, setLengthMm] = useCalcState('AssemblyGableRoofDemo', 'lengthMm', externalLengthMm ?? 8000)
+  const [spanMm, setSpanMm] = useCalcState('AssemblyGableRoofDemo', 'spanMm', externalWidthMm ?? 6000)
   useEffect(() => { if (externalLengthMm != null) setLengthMm(externalLengthMm) }, [externalLengthMm])
   useEffect(() => { if (externalWidthMm != null) setSpanMm(externalWidthMm) }, [externalWidthMm])
   function swapLengthSpan() { setLengthMm(spanMm); setSpanMm(lengthMm) }
 
-  const [pitchDeg, setPitchDeg] = useState(35)
-  const [rafterCentresMm, setRafterCentresMm] = useState(400)
-  const [eavesOverhangMm, setEavesOverhangMm] = useState(300)
+  const [pitchDeg, setPitchDeg] = useCalcState('AssemblyGableRoofDemo', 'pitchDeg', 35)
+  const [rafterCentresMm, setRafterCentresMm] = useCalcState('AssemblyGableRoofDemo', 'rafterCentresMm', 400)
+  const [eavesOverhangMm, setEavesOverhangMm] = useCalcState('AssemblyGableRoofDemo', 'eavesOverhangMm', 300)
 
   // Each gable end — at the start and the far end of the ridge — is independently a new gable wall or built
   // against an existing wall (a rear extension tied into the house at one end, say — the same real case the
   // hip roof's per-end treatment handles). Default to a new gable wall at both, the ordinary case.
-  const [endA, setEndA] = useState<GableEndTreatment>('gable')
-  const [endB, setEndB] = useState<GableEndTreatment>('gable')
+  const [endA, setEndA] = useCalcState<GableEndTreatment>('AssemblyGableRoofDemo', 'endA', 'gable')
+  const [endB, setEndB] = useCalcState<GableEndTreatment>('AssemblyGableRoofDemo', 'endB', 'gable')
 
-  const [rafterGrade, setRafterGrade] = useState<SolidJoistGrade>('c24')
-  const [rafterDepthMm, setRafterDepthMm] = useState(150)
-  const [spanLoads, setSpanLoads] = useState<JoistSpanLoads>(DEFAULT_JOIST_SPAN_LOADS)
-  const [depthPicked, setDepthPicked] = useState(false)
+  const [rafterGrade, setRafterGrade] = useCalcState<SolidJoistGrade>('AssemblyGableRoofDemo', 'rafterGrade', 'c24')
+  const [rafterDepthMm, setRafterDepthMm] = useCalcState('AssemblyGableRoofDemo', 'rafterDepthMm', 150)
+  const [spanLoads, setSpanLoads] = useCalcState<JoistSpanLoads>('AssemblyGableRoofDemo', 'spanLoads', DEFAULT_JOIST_SPAN_LOADS)
+  const [depthPicked, setDepthPicked] = useCalcState('AssemblyGableRoofDemo', 'depthPicked', false)
 
-  const [ceilingJoistDepthMm, setCeilingJoistDepthMm] = useState(100)
+  const [ceilingJoistDepthMm, setCeilingJoistDepthMm] = useCalcState('AssemblyGableRoofDemo', 'ceilingJoistDepthMm', 100)
 
   const geometryResult = useMemo(() => {
     try { return { ok: true as const, geometry: calculateGableRoofGeometry({ lengthMm, spanMm, pitchDeg, rafterCentresMm, eavesOverhangMm, endA, endB }) } }
@@ -103,10 +104,10 @@ export default function AssemblyGableRoofDemo({ onClose, onSave, labourTrades = 
   const ridgeRate = timberRate('c24', ridgeDepthMm)
   const ceilingJoistRate = timberRate('c16', ceilingJoistDepthMm)
 
-  const [wastePct, setWastePct] = useState(5)
-  const [profitPct, setProfitPct] = useState(20)
-  const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
-  const [disabledLayerIds, setDisabledLayerIds] = useState<Set<string>>(new Set())
+  const [wastePct, setWastePct] = useCalcState('AssemblyGableRoofDemo', 'wastePct', 5)
+  const [profitPct, setProfitPct] = useCalcState('AssemblyGableRoofDemo', 'profitPct', 20)
+  const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>('AssemblyGableRoofDemo', 'rateOverrides', {})
+  const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>('AssemblyGableRoofDemo', 'disabledLayerIds', new Set())
   function toggleLayer(id: string) { setDisabledLayerIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
   const noSidesLayers = useMemo(() => new Set<string>(), [])
 
@@ -129,7 +130,7 @@ export default function AssemblyGableRoofDemo({ onClose, onSave, labourTrades = 
   const enabledMaterialLines = costedLines.filter(l => !disabledLayerIds.has(l.layerId))
 
   // Miscellaneous materials
-  const [miscMaterialLines, setMiscMaterialLines] = useState<MiscMaterialLine[]>([])
+  const [miscMaterialLines, setMiscMaterialLines] = useCalcState<MiscMaterialLine[]>('AssemblyGableRoofDemo', 'miscMaterialLines', [])
   function addMisc() { setMiscMaterialLines(p => [...p, { id: newMiscMaterialLineId(), name: '', qty: 1, unit: 'item', unitCost: 0 }]) }
   function updateMisc(id: string, patch: Partial<MiscMaterialLine>) { setMiscMaterialLines(p => p.map(m => m.id === id ? { ...m, ...patch } : m)) }
   function removeMisc(id: string) { setMiscMaterialLines(p => p.filter(m => m.id !== id)) }
@@ -147,7 +148,7 @@ export default function AssemblyGableRoofDemo({ onClose, onSave, labourTrades = 
   // until edited by hand
   const labourSuggestions: LabourSuggestion[] = g ? suggestGableRoofLabour(g) : []
   const suggestedLabour = toLabourLines(labourSuggestions, labourTrades, false)
-  const [labourOverride, setLabourOverride] = useState<LabourLine[] | null>(null)
+  const [labourOverride, setLabourOverride] = useCalcState<LabourLine[] | null>('AssemblyGableRoofDemo', 'labourOverride', null)
   const suggestedRef = useRef<LabourLine[]>([])
   suggestedRef.current = suggestedLabour.lines
   const labourLines: LabourLine[] = labourOverride ?? suggestedLabour.lines
@@ -171,8 +172,8 @@ export default function AssemblyGableRoofDemo({ onClose, onSave, labourTrades = 
 
   // The customer's description follows the roof until it's edited by hand
   const descInput = g ? { lengthM: g.lengthM, spanM: g.spanM, pitchDeg: g.pitchDeg, endA: g.endA, endB: g.endB, rafterCount: g.rafterCount, rafterSectionLabel, ridgeLm: g.ridgeLm, ceilingJoistCount: g.ceilingJoistCount, slopeAreaM2: g.slopeAreaM2 } : null
-  const [descriptionOverride, setDescriptionOverride] = useState<string | null>(null)
-  const [detailOverride, setDetailOverride] = useState<string | null>(null)
+  const [descriptionOverride, setDescriptionOverride] = useCalcState<string | null>('AssemblyGableRoofDemo', 'descriptionOverride', null)
+  const [detailOverride, setDetailOverride] = useCalcState<string | null>('AssemblyGableRoofDemo', 'detailOverride', null)
   const description = descriptionOverride ?? (descInput ? describeGableRoofShort(descInput) : '')
   const detail = detailOverride ?? (descInput ? describeGableRoof(descInput) : '')
 

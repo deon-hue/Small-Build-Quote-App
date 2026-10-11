@@ -31,6 +31,8 @@ import AssemblyRoofCoveringDemo from '@/components/AssemblyRoofCoveringDemo'
 import AssemblyRooflightsDemo from '@/components/AssemblyRooflightsDemo'
 import AssemblyFasciaSoffitDemo from '@/components/AssemblyFasciaSoffitDemo'
 import { RateLinksProvider } from '@/components/RateLinks'
+import { CalcScope } from '@/components/calc-state'
+import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
 import type { CostedLine } from '@/lib/assembly-calc'
 import type { AssemblyBasics } from '@/lib/assembly-basics'
 import type { PlanRoom, ElectricsSavedState } from '@/lib/electrics-units'
@@ -44,7 +46,9 @@ export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cav
 // part-by-part "What's included" text kept as the phase's `scopeDetail`.
 export interface AssemblySaveResult { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[]
   /** A calculator that can't work out its inputs again from a drawn shape (electrics) hands back what it was set to, to be kept with the Take-off item. */
-  state?: unknown }
+  state?: unknown
+  /** What was typed into the calculator, to keep with the quote or Take-off item so it can be opened again and edited. */
+  calcState?: CalcStateSnapshot }
 
 export interface AssemblyRenderOpts {
   onSave?: (result: AssemblySaveResult) => void
@@ -63,6 +67,8 @@ export interface AssemblyRenderOpts {
   variant?: string
   /** The sizes an AI quote priced it from, so the calculator opens showing what the AI used. */
   basics?: AssemblyBasics
+  /** What was kept from the last Save & Price: the calculator opens with these values instead of its defaults. */
+  calcState?: CalcStateSnapshot
   /** Electrics only: the points placed on the Take-off plan (as room counts), and what the calculator was last saved as. */
   electrics?: { planRooms?: PlanRoom[]; initialState?: ElectricsSavedState }
 }
@@ -101,7 +107,11 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
 
 /** Every calculator is drawn inside the rate-link provider, so its cost table can link a line to a Back Office product or plant item without each screen knowing about it. */
 export const BUILT_ASSEMBLY_CANON_IDS: Record<string, BuiltAssemblyEntry> = Object.fromEntries(
-  Object.entries(RAW_BUILT_ASSEMBLIES).map(([id, e]) => [id, { ...e, render: (opts?: AssemblyRenderOpts) => <RateLinksProvider assemblyId={id}>{e.render(opts)}</RateLinksProvider> }]),
+  Object.entries(RAW_BUILT_ASSEMBLIES).map(([id, e]) => [id, { ...e, render: (opts?: AssemblyRenderOpts) => (
+    <RateLinksProvider assemblyId={id}>
+      <CalcScope assemblyId={id} initial={opts?.calcState} onSave={opts?.onSave}>{os => e.render({ ...opts, onSave: os as AssemblyRenderOpts['onSave'] })}</CalcScope>
+    </RateLinksProvider>
+  ) }]),
 )
 
 export function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; size?: number }) {

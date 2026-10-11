@@ -15,6 +15,7 @@
  */
 
 import React, { useMemo, useState, useRef, useEffect } from 'react'
+import { useCalcState } from '@/components/calc-state'
 import {
   calculateWallCost, studPositionsMm,
   type WallInput, type AssemblyOpening, type AssemblyLayerDef, type CostedLine,
@@ -121,19 +122,19 @@ interface Props {
 
 export default function AssemblyWallDemo({ system = 'timber', onClose, onSave, labourTrades = [], externalLengthMm }: Props) {
   const cfg = WALL_SYSTEM_CONFIG[system]
-  const [name, setName]         = useState(cfg.label)
-  const [qty, setQty]           = useState(1)
-  const [lengthMm, setLengthMm] = useState(externalLengthMm ?? 5000)
+  const [name, setName] = useCalcState('AssemblyWallDemo', 'name', cfg.label)
+  const [qty, setQty] = useCalcState('AssemblyWallDemo', 'qty', 1)
+  const [lengthMm, setLengthMm] = useCalcState('AssemblyWallDemo', 'lengthMm', externalLengthMm ?? 5000)
   useEffect(() => {
     if (externalLengthMm != null) setLengthMm(externalLengthMm)
   }, [externalLengthMm])
-  const [heightMm, setHeightMm] = useState(2400)
-  const [centresMm, setCentresMm] = useState(400)
-  const [doubleTopPlate, setDoubleTopPlate] = useState(false)
-  const [wastePct, setWastePct] = useState(10)
-  const [openings, setOpenings] = useState<AssemblyOpening[]>(sampleOpenings)
-  const [location, setLocation] = useState('')
-  const [labourLines, setLabourLines] = useState<LabourLine[]>([
+  const [heightMm, setHeightMm] = useCalcState('AssemblyWallDemo', 'heightMm', 2400)
+  const [centresMm, setCentresMm] = useCalcState('AssemblyWallDemo', 'centresMm', 400)
+  const [doubleTopPlate, setDoubleTopPlate] = useCalcState('AssemblyWallDemo', 'doubleTopPlate', false)
+  const [wastePct, setWastePct] = useCalcState('AssemblyWallDemo', 'wastePct', 10)
+  const [openings, setOpenings] = useCalcState<AssemblyOpening[]>('AssemblyWallDemo', 'openings', sampleOpenings)
+  const [location, setLocation] = useCalcState('AssemblyWallDemo', 'location', '')
+  const [labourLines, setLabourLines] = useCalcState<LabourLine[]>('AssemblyWallDemo', 'labourLines', [
     { id: newLabourLineId(), tradeId: '', task: 'Build stud wall', hours: 4 },
   ])
   function addLabourLine() {
@@ -148,7 +149,7 @@ export default function AssemblyWallDemo({ system = 'timber', onClose, onSave, l
 
   // Miscellaneous materials — freeform name/qty/unit/rate lines for anything not covered by
   // the standard layers (fixings, adhesive, sundries, ...).
-  const [miscMaterialLines, setMiscMaterialLines] = useState<MiscMaterialLine[]>([])
+  const [miscMaterialLines, setMiscMaterialLines] = useCalcState<MiscMaterialLine[]>('AssemblyWallDemo', 'miscMaterialLines', [])
   function addMiscMaterialLine() {
     setMiscMaterialLines(prev => [...prev, { id: newMiscMaterialLineId(), name: '', qty: 1, unit: 'item', unitCost: 0 }])
   }
@@ -161,16 +162,16 @@ export default function AssemblyWallDemo({ system = 'timber', onClose, onSave, l
 
   // Profit % — applied to the whole calculation (materials + labour + misc), shown as its
   // own line in the breakdown and folded into the total price and Save & Price.
-  const [profitPct, setProfitPct] = useState(20)   // default profit margin
+  const [profitPct, setProfitPct] = useCalcState('AssemblyWallDemo', 'profitPct', 20)   // default profit margin
 
   // Sample rates the user has overridden in this session — keyed by layer id. Still not
   // linked to real Products/Labour/Plant records, but editable here in the meantime.
-  const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
+  const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>('AssemblyWallDemo', 'rateOverrides', {})
 
   // How many faces each sides-eligible layer (sheathing, lining) is applied to. Defaults to
   // 1 (one side) — a stud wall boarded/lined on both faces sets it to 2, doubling that
   // layer's raw quantity and cost.
-  const [layerSides, setLayerSides] = useState<Record<string, 1 | 2>>({})
+  const [layerSides, setLayerSides] = useCalcState<Record<string, 1 | 2>>('AssemblyWallDemo', 'layerSides', {})
   function setSides(layerId: string, sides: 1 | 2) {
     setLayerSides(prev => ({ ...prev, [layerId]: sides }))
   }
@@ -193,12 +194,12 @@ export default function AssemblyWallDemo({ system = 'timber', onClose, onSave, l
     }
     return text
   }
-  const [description, setDescription] = useState(buildAutoDescription)
+  const [description, setDescription] = useCalcState('AssemblyWallDemo', 'description', buildAutoDescription)
 
   // Layers toggled off — e.g. a stud wall without insulation. Kept out of the total and
   // excluded from what Save & Price writes to the quote, but still shown (greyed out, with
   // its rate) so it's easy to switch back on rather than having to re-add it from scratch.
-  const [disabledLayerIds, setDisabledLayerIds] = useState<Set<string>>(new Set())
+  const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>('AssemblyWallDemo', 'disabledLayerIds', new Set())
   function toggleLayer(layerId: string) {
     setDisabledLayerIds(prev => {
       const next = new Set(prev)

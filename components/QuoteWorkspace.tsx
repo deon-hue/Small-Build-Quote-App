@@ -762,6 +762,8 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
   const sell   = subPhaseTotalSell(p, markup)
   const m      = p.meta?.measurements
   const [nameFocused, setNameFocused] = React.useState(false)
+  // While the task name is being edited it shows exactly what is typed (even nothing); the fallback wording only shows when it isn't being edited
+  const [nameDraft, setNameDraft] = React.useState<string | null>(null)
 
   // Task name shown to the user — priority order:
   //   1. Explicit p.taskName (user-edited or BO description)
@@ -872,6 +874,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
       // Always set (even to undefined): re-saving a calculator that no longer writes a detail must not leave a stale one.
       scopeDetail: result.detail,
       electricsState: result.state as ElectricsSavedState | undefined,
+      calcState: result.calcState,
       ...(result.location.trim() && { roomLabel: result.location.trim() }),
     }))
     setShowAssemblyCalc(false)
@@ -1493,17 +1496,20 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
             <label style={{ display: 'block', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#94a3b8', marginBottom: 3 }}>
               Task Name
             </label>
-            <input
-              value={derivedTaskName}
+            <textarea
+              rows={2}
+              value={nameDraft ?? derivedTaskName}
               readOnly={isLocked}
-              onChange={e => onUpdate({ ...p, taskName: e.target.value || undefined })}
+              onFocus={() => { if (!isLocked) setNameDraft(derivedTaskName) }}
+              onBlur={() => setNameDraft(null)}
+              onChange={e => { setNameDraft(e.target.value); onUpdate({ ...p, taskName: e.target.value.trim() ? e.target.value : undefined }) }}
               placeholder="Describe the work covered by this sub-phase…"
               style={{
-                width: '100%', fontSize: 13, fontWeight: derivedTaskName ? 500 : 400,
+                width: '100%', fontSize: 13, fontWeight: derivedTaskName ? 500 : 400, lineHeight: 1.45,
                 color: derivedTaskName ? '#1e293b' : '#94a3b8',
                 background: isLocked ? '#f8fafc' : '#fff',
                 border: `1px solid ${derivedTaskName ? '#cbd5e1' : '#e2e8f0'}`,
-                borderRadius: 5, padding: '7px 9px', boxSizing: 'border-box', outline: 'none',
+                borderRadius: 5, padding: '7px 9px', boxSizing: 'border-box', outline: 'none', resize: 'vertical', fontFamily: 'inherit',
               }}
             />
           </div>
@@ -1836,7 +1842,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
               <div style={{ fontSize: 12, color: '#7c3aed', background: '#fdfaff', border: '1px dashed #e9d5ff', borderRadius: 6, padding: '8px 12px', marginBottom: 14 }}>
                 🧪 Sample rates for now — playing with this doesn't change this quote's actual costs yet.
               </div>
-              {builtAssembly.render({ onSave: applyAssemblyCalculation, labourTrades, ...(p.electricsState && { electrics: { initialState: p.electricsState } }), ...(p.assemblySize && { externalLengthMm: p.assemblySize.lengthMm, externalWidthMm: p.assemblySize.widthMm, initialHeightMm: p.assemblySize.heightMm, basics: p.assemblySize, noSampleOpenings: true }) })}
+              {builtAssembly.render({ onSave: applyAssemblyCalculation, labourTrades, ...(p.electricsState && { electrics: { initialState: p.electricsState } }), ...(p.calcState && { calcState: p.calcState }), ...(p.assemblySize && !p.calcState && { externalLengthMm: p.assemblySize.lengthMm, externalWidthMm: p.assemblySize.widthMm, initialHeightMm: p.assemblySize.heightMm, basics: p.assemblySize, noSampleOpenings: true }) })}
             </div>
           </div>
         </div>

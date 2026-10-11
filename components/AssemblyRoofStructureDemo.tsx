@@ -10,6 +10,7 @@
  */
 
 import React, { useState } from 'react'
+import { useCalcState } from '@/components/calc-state'
 import AssemblyFlatRoofDemo from '@/components/AssemblyFlatRoofDemo'
 import AssemblyMonoPitchRoofDemo from '@/components/AssemblyMonoPitchRoofDemo'
 import AssemblyGableRoofDemo from '@/components/AssemblyGableRoofDemo'
@@ -37,7 +38,7 @@ interface Props {
 }
 
 export default function AssemblyRoofStructureDemo(props: Props) {
-  const [type, setType] = useState<RoofStructureType>('flat')
+  const [type, setType] = useCalcState<RoofStructureType>('AssemblyRoofStructureDemo', 'type', 'flat')
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>

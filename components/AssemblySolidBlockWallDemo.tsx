@@ -14,6 +14,7 @@
  */
 
 import React, { useMemo, useState, useEffect } from 'react'
+import { useCalcState } from '@/components/calc-state'
 import {
   calculateSolidBlockGeometry, calculateSolidBlockWallCost,
   type SolidBlockWallInput, type BlockLaid, type AssemblyOpening, type AssemblyLayerDef, type CostedLine,
@@ -104,31 +105,31 @@ interface Props {
 }
 
 export default function AssemblySolidBlockWallDemo({ laidDefault = 'flat', onClose, onSave, labourTrades = [], externalLengthMm }: Props) {
-  const [name, setName]         = useState(laidDefault === 'flat' ? 'Concrete Blockwork 215mm (laid flat)' : 'Solid Blockwork Wall')
-  const [qty, setQty]           = useState(1)
-  const [lengthMm, setLengthMm] = useState(externalLengthMm ?? 5000)
+  const [name, setName] = useCalcState('AssemblySolidBlockWallDemo', 'name', laidDefault === 'flat' ? 'Concrete Blockwork 215mm (laid flat)' : 'Solid Blockwork Wall')
+  const [qty, setQty] = useCalcState('AssemblySolidBlockWallDemo', 'qty', 1)
+  const [lengthMm, setLengthMm] = useCalcState('AssemblySolidBlockWallDemo', 'lengthMm', externalLengthMm ?? 5000)
   useEffect(() => {
     if (externalLengthMm != null) setLengthMm(externalLengthMm)
   }, [externalLengthMm])
-  const [heightMm, setHeightMm] = useState(2400)
-  const [blockType, setBlockType] = useState<BlockType>('dense')
-  const [blockWidthMm, setBlockWidthMm] = useState(100)
-  const [laid, setLaid] = useState<BlockLaid>(laidDefault)
-  const [externalFinish, setExternalFinish] = useState<ExtFinish>('render')
-  const [internalFinish, setInternalFinish] = useState<IntFinish>('none')
-  const [coping, setCoping] = useState(false)
-  const [pierSpacingMm, setPierSpacingMm] = useState(3000)
-  const [pierWidthMm, setPierWidthMm] = useState(440)
-  const [pierProjectionMm, setPierProjectionMm] = useState(215)
-  const [pierFaces, setPierFaces] = useState<1 | 2>(1)
-  const [pierAtEnds, setPierAtEnds] = useState(true)
-  const [movementJointSpacingMm, setMovementJointSpacingMm] = useState(0)
-  const [reinforceEveryNCourses, setReinforceEveryNCourses] = useState(0)
-  const [wastePct, setWastePct] = useState(10)
-  const [openings, setOpenings] = useState<AssemblyOpening[]>([])
-  const [location, setLocation] = useState('')
+  const [heightMm, setHeightMm] = useCalcState('AssemblySolidBlockWallDemo', 'heightMm', 2400)
+  const [blockType, setBlockType] = useCalcState<BlockType>('AssemblySolidBlockWallDemo', 'blockType', 'dense')
+  const [blockWidthMm, setBlockWidthMm] = useCalcState('AssemblySolidBlockWallDemo', 'blockWidthMm', 100)
+  const [laid, setLaid] = useCalcState<BlockLaid>('AssemblySolidBlockWallDemo', 'laid', laidDefault)
+  const [externalFinish, setExternalFinish] = useCalcState<ExtFinish>('AssemblySolidBlockWallDemo', 'externalFinish', 'render')
+  const [internalFinish, setInternalFinish] = useCalcState<IntFinish>('AssemblySolidBlockWallDemo', 'internalFinish', 'none')
+  const [coping, setCoping] = useCalcState('AssemblySolidBlockWallDemo', 'coping', false)
+  const [pierSpacingMm, setPierSpacingMm] = useCalcState('AssemblySolidBlockWallDemo', 'pierSpacingMm', 3000)
+  const [pierWidthMm, setPierWidthMm] = useCalcState('AssemblySolidBlockWallDemo', 'pierWidthMm', 440)
+  const [pierProjectionMm, setPierProjectionMm] = useCalcState('AssemblySolidBlockWallDemo', 'pierProjectionMm', 215)
+  const [pierFaces, setPierFaces] = useCalcState<1 | 2>('AssemblySolidBlockWallDemo', 'pierFaces', 1)
+  const [pierAtEnds, setPierAtEnds] = useCalcState('AssemblySolidBlockWallDemo', 'pierAtEnds', true)
+  const [movementJointSpacingMm, setMovementJointSpacingMm] = useCalcState('AssemblySolidBlockWallDemo', 'movementJointSpacingMm', 0)
+  const [reinforceEveryNCourses, setReinforceEveryNCourses] = useCalcState('AssemblySolidBlockWallDemo', 'reinforceEveryNCourses', 0)
+  const [wastePct, setWastePct] = useCalcState('AssemblySolidBlockWallDemo', 'wastePct', 10)
+  const [openings, setOpenings] = useCalcState<AssemblyOpening[]>('AssemblySolidBlockWallDemo', 'openings', [])
+  const [location, setLocation] = useCalcState('AssemblySolidBlockWallDemo', 'location', '')
 
-  const [labourLines, setLabourLines] = useState<LabourLine[]>([
+  const [labourLines, setLabourLines] = useCalcState<LabourLine[]>('AssemblySolidBlockWallDemo', 'labourLines', [
     { id: newLabourLineId(), tradeId: '', task: 'Build blockwork wall', hours: 12 },
   ])
   function addLabourLine() {
@@ -141,7 +142,7 @@ export default function AssemblySolidBlockWallDemo({ laidDefault = 'flat', onClo
     setLabourLines(prev => prev.filter(l => l.id !== id))
   }
 
-  const [miscMaterialLines, setMiscMaterialLines] = useState<MiscMaterialLine[]>([])
+  const [miscMaterialLines, setMiscMaterialLines] = useCalcState<MiscMaterialLine[]>('AssemblySolidBlockWallDemo', 'miscMaterialLines', [])
   function addMiscMaterialLine() {
     setMiscMaterialLines(prev => [...prev, { id: newMiscMaterialLineId(), name: '', qty: 1, unit: 'item', unitCost: 0 }])
   }
@@ -152,9 +153,9 @@ export default function AssemblySolidBlockWallDemo({ laidDefault = 'flat', onClo
     setMiscMaterialLines(prev => prev.filter(m => m.id !== id))
   }
 
-  const [profitPct, setProfitPct] = useState(20)   // default profit margin
-  const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
-  const [disabledLayerIds, setDisabledLayerIds] = useState<Set<string>>(new Set())
+  const [profitPct, setProfitPct] = useCalcState('AssemblySolidBlockWallDemo', 'profitPct', 20)   // default profit margin
+  const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>('AssemblySolidBlockWallDemo', 'rateOverrides', {})
+  const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>('AssemblySolidBlockWallDemo', 'disabledLayerIds', new Set())
   function toggleLayer(layerId: string) {
     setDisabledLayerIds(prev => {
       const next = new Set(prev)
@@ -181,7 +182,7 @@ export default function AssemblySolidBlockWallDemo({ laidDefault = 'flat', onClo
     }
     return text
   }
-  const [description, setDescription] = useState(buildAutoDescription)
+  const [description, setDescription] = useCalcState('AssemblySolidBlockWallDemo', 'description', buildAutoDescription)
 
   const input: SolidBlockWallInput = {
     lengthMm, heightMm, blockWidthMm, laid, openings,

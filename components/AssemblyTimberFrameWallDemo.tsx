@@ -15,6 +15,7 @@
  */
 
 import React, { useMemo, useState, useEffect } from 'react'
+import { useCalcState } from '@/components/calc-state'
 import {
   calculateTimberFrameGeometry, calculateTimberFrameWallCost,
   type TimberFrameWallInput, type CladdingOrientation, type AssemblyOpening, type AssemblyLayerDef, type CostedLine,
@@ -163,29 +164,29 @@ interface Props {
 }
 
 export default function AssemblyTimberFrameWallDemo({ onClose, onSave, labourTrades = [], externalLengthMm }: Props) {
-  const [name, setName]         = useState('Timber Garden Room Wall')
-  const [qty, setQty]           = useState(1)
-  const [lengthMm, setLengthMm] = useState(externalLengthMm ?? 4000)
+  const [name, setName] = useCalcState('AssemblyTimberFrameWallDemo', 'name', 'Timber Garden Room Wall')
+  const [qty, setQty] = useCalcState('AssemblyTimberFrameWallDemo', 'qty', 1)
+  const [lengthMm, setLengthMm] = useCalcState('AssemblyTimberFrameWallDemo', 'lengthMm', externalLengthMm ?? 4000)
   useEffect(() => {
     if (externalLengthMm != null) setLengthMm(externalLengthMm)
   }, [externalLengthMm])
-  const [heightMm, setHeightMm] = useState(2400)
-  const [sectionKey, setSectionKey] = useState('50x100')
-  const [centresMm, setCentresMm] = useState(400)
-  const [doubleTopPlate, setDoubleTopPlate] = useState(false)
-  const [cornerEnds, setCornerEnds] = useState<0 | 1 | 2>(0)
-  const [sheathing, setSheathing] = useState<SheathingType>('osb')
-  const [cladding, setCladding] = useState<CladdingType>('larch')
-  const [orientation, setOrientation] = useState<CladdingOrientation>('horizontal')
-  const [battenCentresMm, setBattenCentresMm] = useState(600)
-  const [insulation, setInsulation] = useState<InsulationType>('pir')
-  const [insulationMm, setInsulationMm] = useState(STUD_SECTIONS['50x100'].depthMm)
-  const [extraInsulationMm, setExtraInsulationMm] = useState(0)
-  const [vcl, setVcl] = useState(true)
-  const [lining, setLining] = useState<LiningType>('plasterboard')
-  const [wastePct, setWastePct] = useState(10)
-  const [openings, setOpenings] = useState<AssemblyOpening[]>(sampleOpenings)
-  const [location, setLocation] = useState('')
+  const [heightMm, setHeightMm] = useCalcState('AssemblyTimberFrameWallDemo', 'heightMm', 2400)
+  const [sectionKey, setSectionKey] = useCalcState('AssemblyTimberFrameWallDemo', 'sectionKey', '50x100')
+  const [centresMm, setCentresMm] = useCalcState('AssemblyTimberFrameWallDemo', 'centresMm', 400)
+  const [doubleTopPlate, setDoubleTopPlate] = useCalcState('AssemblyTimberFrameWallDemo', 'doubleTopPlate', false)
+  const [cornerEnds, setCornerEnds] = useCalcState<0 | 1 | 2>('AssemblyTimberFrameWallDemo', 'cornerEnds', 0)
+  const [sheathing, setSheathing] = useCalcState<SheathingType>('AssemblyTimberFrameWallDemo', 'sheathing', 'osb')
+  const [cladding, setCladding] = useCalcState<CladdingType>('AssemblyTimberFrameWallDemo', 'cladding', 'larch')
+  const [orientation, setOrientation] = useCalcState<CladdingOrientation>('AssemblyTimberFrameWallDemo', 'orientation', 'horizontal')
+  const [battenCentresMm, setBattenCentresMm] = useCalcState('AssemblyTimberFrameWallDemo', 'battenCentresMm', 600)
+  const [insulation, setInsulation] = useCalcState<InsulationType>('AssemblyTimberFrameWallDemo', 'insulation', 'pir')
+  const [insulationMm, setInsulationMm] = useCalcState('AssemblyTimberFrameWallDemo', 'insulationMm', STUD_SECTIONS['50x100'].depthMm)
+  const [extraInsulationMm, setExtraInsulationMm] = useCalcState('AssemblyTimberFrameWallDemo', 'extraInsulationMm', 0)
+  const [vcl, setVcl] = useCalcState('AssemblyTimberFrameWallDemo', 'vcl', true)
+  const [lining, setLining] = useCalcState<LiningType>('AssemblyTimberFrameWallDemo', 'lining', 'plasterboard')
+  const [wastePct, setWastePct] = useCalcState('AssemblyTimberFrameWallDemo', 'wastePct', 10)
+  const [openings, setOpenings] = useCalcState<AssemblyOpening[]>('AssemblyTimberFrameWallDemo', 'openings', sampleOpenings)
+  const [location, setLocation] = useCalcState('AssemblyTimberFrameWallDemo', 'location', '')
 
   const section = STUD_SECTIONS[sectionKey]
   // Insulation between the studs fills the stud depth, so it follows the stud you pick — still
@@ -195,7 +196,7 @@ export default function AssemblyTimberFrameWallDemo({ onClose, onSave, labourTra
     setInsulationMm(STUD_SECTIONS[key].depthMm)
   }
 
-  const [labourLines, setLabourLines] = useState<LabourLine[]>([
+  const [labourLines, setLabourLines] = useCalcState<LabourLine[]>('AssemblyTimberFrameWallDemo', 'labourLines', [
     { id: newLabourLineId(), tradeId: '', task: 'Erect frame, board, insulate and clad wall', hours: 24 },
   ])
   function addLabourLine() {
@@ -208,7 +209,7 @@ export default function AssemblyTimberFrameWallDemo({ onClose, onSave, labourTra
     setLabourLines(prev => prev.filter(l => l.id !== id))
   }
 
-  const [miscMaterialLines, setMiscMaterialLines] = useState<MiscMaterialLine[]>([])
+  const [miscMaterialLines, setMiscMaterialLines] = useCalcState<MiscMaterialLine[]>('AssemblyTimberFrameWallDemo', 'miscMaterialLines', [])
   function addMiscMaterialLine() {
     setMiscMaterialLines(prev => [...prev, { id: newMiscMaterialLineId(), name: '', qty: 1, unit: 'item', unitCost: 0 }])
   }
@@ -219,9 +220,9 @@ export default function AssemblyTimberFrameWallDemo({ onClose, onSave, labourTra
     setMiscMaterialLines(prev => prev.filter(m => m.id !== id))
   }
 
-  const [profitPct, setProfitPct] = useState(20)   // default profit margin
-  const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
-  const [disabledLayerIds, setDisabledLayerIds] = useState<Set<string>>(new Set())
+  const [profitPct, setProfitPct] = useCalcState('AssemblyTimberFrameWallDemo', 'profitPct', 20)   // default profit margin
+  const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>('AssemblyTimberFrameWallDemo', 'rateOverrides', {})
+  const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>('AssemblyTimberFrameWallDemo', 'disabledLayerIds', new Set())
   function toggleLayer(layerId: string) {
     setDisabledLayerIds(prev => {
       const next = new Set(prev)
@@ -251,7 +252,7 @@ export default function AssemblyTimberFrameWallDemo({ onClose, onSave, labourTra
     }
     return text
   }
-  const [description, setDescription] = useState(buildAutoDescription)
+  const [description, setDescription] = useCalcState('AssemblyTimberFrameWallDemo', 'description', buildAutoDescription)
 
   const input: TimberFrameWallInput = {
     lengthMm, heightMm, studCentresMm: centresMm, studThicknessMm: section.thicknessMm,

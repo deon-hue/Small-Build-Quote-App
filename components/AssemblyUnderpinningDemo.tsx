@@ -10,6 +10,7 @@
  */
 
 import React, { useMemo, useState, useEffect } from 'react'
+import { useCalcState } from '@/components/calc-state'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
 import { calculateUnderpinningGeometry, type UnderpinningInput, type UnderpinningGeometry } from '@/lib/underpinning'
 import { describeUnderpinning, describeUnderpinningShort } from '@/lib/underpinning-description'
@@ -77,25 +78,25 @@ export function priceUnderpinningFromBasics(o: { basics: AssemblyBasics; labourT
 }
 
 export default function AssemblyUnderpinningDemo({ onClose, onSave, labourTrades = [], externalLengthMm, initial }: Props) {
-  const [name, setName]         = useState('Underpinning')
-  const [location, setLocation] = useState('')
-  const [qty, setQty]           = useState(1)
-  const [lengthMm, setLengthMm] = useState(externalLengthMm ?? initial?.lengthMm ?? 8000)
+  const [name, setName] = useCalcState('AssemblyUnderpinningDemo', 'name', 'Underpinning')
+  const [location, setLocation] = useCalcState('AssemblyUnderpinningDemo', 'location', '')
+  const [qty, setQty] = useCalcState('AssemblyUnderpinningDemo', 'qty', 1)
+  const [lengthMm, setLengthMm] = useCalcState('AssemblyUnderpinningDemo', 'lengthMm', externalLengthMm ?? initial?.lengthMm ?? 8000)
   useEffect(() => { if (externalLengthMm != null) setLengthMm(externalLengthMm) }, [externalLengthMm])
-  const [pinLengthMm, setPinLengthMm] = useState(1000)
-  const [pinWidthMm, setPinWidthMm]   = useState(600)
-  const [depthMm, setDepthMm]   = useState(initial?.depthMm ?? 1200)
-  const [dryPackMm, setDryPackMm] = useState(75)
-  const [mix, setMix]           = useState<Mix>('C25')
-  const [rebarOn, setRebarOn]   = useState(false)
-  const [rebarKg, setRebarKg]   = useState(60)
-  const [supportOn, setSupportOn] = useState(false)   // props and needles are an option, not in the starting price
-  const [props, setProps]       = useState(4)
-  const [weeks, setWeeks]       = useState(2)
-  const [wastePct, setWastePct] = useState(10)
-  const [profitPct, setProfitPct] = useState(20)   // default profit margin
-  const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
-  const [disabledLayerIds, setDisabledLayerIds] = useState<Set<string>>(new Set())
+  const [pinLengthMm, setPinLengthMm] = useCalcState('AssemblyUnderpinningDemo', 'pinLengthMm', 1000)
+  const [pinWidthMm, setPinWidthMm] = useCalcState('AssemblyUnderpinningDemo', 'pinWidthMm', 600)
+  const [depthMm, setDepthMm] = useCalcState('AssemblyUnderpinningDemo', 'depthMm', initial?.depthMm ?? 1200)
+  const [dryPackMm, setDryPackMm] = useCalcState('AssemblyUnderpinningDemo', 'dryPackMm', 75)
+  const [mix, setMix] = useCalcState<Mix>('AssemblyUnderpinningDemo', 'mix', 'C25')
+  const [rebarOn, setRebarOn] = useCalcState('AssemblyUnderpinningDemo', 'rebarOn', false)
+  const [rebarKg, setRebarKg] = useCalcState('AssemblyUnderpinningDemo', 'rebarKg', 60)
+  const [supportOn, setSupportOn] = useCalcState('AssemblyUnderpinningDemo', 'supportOn', false)   // props and needles are an option, not in the starting price
+  const [props, setProps] = useCalcState('AssemblyUnderpinningDemo', 'props', 4)
+  const [weeks, setWeeks] = useCalcState('AssemblyUnderpinningDemo', 'weeks', 2)
+  const [wastePct, setWastePct] = useCalcState('AssemblyUnderpinningDemo', 'wastePct', 10)
+  const [profitPct, setProfitPct] = useCalcState('AssemblyUnderpinningDemo', 'profitPct', 20)   // default profit margin
+  const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>('AssemblyUnderpinningDemo', 'rateOverrides', {})
+  const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>('AssemblyUnderpinningDemo', 'disabledLayerIds', new Set())
   function toggleLayer(id: string) { setDisabledLayerIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
   const noSidesLayers = useMemo(() => new Set<string>(), [])
 
@@ -114,7 +115,7 @@ export default function AssemblyUnderpinningDemo({ onClose, onSave, labourTrades
   const costedLines: CostedLine[] = layers.map(l => costLayer(l, l.fixedQty ?? 0))
 
   // Miscellaneous materials
-  const [miscMaterialLines, setMiscMaterialLines] = useState<MiscMaterialLine[]>([])
+  const [miscMaterialLines, setMiscMaterialLines] = useCalcState<MiscMaterialLine[]>('AssemblyUnderpinningDemo', 'miscMaterialLines', [])
   function addMisc() { setMiscMaterialLines(p => [...p, { id: newMiscMaterialLineId(), name: '', qty: 1, unit: 'item', unitCost: 0 }]) }
   function updateMisc(id: string, patch: Partial<MiscMaterialLine>) { setMiscMaterialLines(p => p.map(m => m.id === id ? { ...m, ...patch } : m)) }
   function removeMisc(id: string) { setMiscMaterialLines(p => p.filter(m => m.id !== id)) }
@@ -128,7 +129,7 @@ export default function AssemblyUnderpinningDemo({ onClose, onSave, labourTrades
     digM3: g.digM3, pinCount: g.pinCount, formworkM2: g.formworkM2, concreteM3: g.concreteM3, rebarKg: g.rebarKg,
   }) : []
   const suggestedLabour = toLabourLines(labourSuggestions, labourTrades, false)
-  const [labourOverride, setLabourOverride] = useState<LabourLine[] | null>(null)
+  const [labourOverride, setLabourOverride] = useCalcState<LabourLine[] | null>('AssemblyUnderpinningDemo', 'labourOverride', null)
   const suggestedRef = React.useRef<LabourLine[]>([])
   suggestedRef.current = suggestedLabour.lines
   const labourLines: LabourLine[] = labourOverride ?? suggestedLabour.lines
@@ -156,8 +157,8 @@ export default function AssemblyUnderpinningDemo({ onClose, onSave, labourTrades
 
   // The customer's description follows the pins until it's edited by hand
   const descInput = g ? { lengthM: g.lengthM, pinCount: g.pinCount, pinLengthMm, pinWidthMm, depthMm, dryPackMm, concreteMix: mix, rebar: rebarOn && rebarKg > 0, support: supportOn } : null
-  const [descriptionOverride, setDescriptionOverride] = useState<string | null>(null)
-  const [detailOverride, setDetailOverride] = useState<string | null>(null)
+  const [descriptionOverride, setDescriptionOverride] = useCalcState<string | null>('AssemblyUnderpinningDemo', 'descriptionOverride', null)
+  const [detailOverride, setDetailOverride] = useCalcState<string | null>('AssemblyUnderpinningDemo', 'detailOverride', null)
   const description = descriptionOverride ?? (descInput ? describeUnderpinningShort(descInput) : '')
   const detail = detailOverride ?? (descInput ? describeUnderpinning(descInput) : '')
 

@@ -11,6 +11,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useCalcState } from '@/components/calc-state'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
 import { fmt } from '@/lib/utils'
 import {
@@ -106,27 +107,27 @@ function newMonoPitchOpening(kind: MonoPitchOpeningKind, existing: MonoPitchOpen
 }
 
 export default function AssemblyMonoPitchRoofDemo({ onClose, onSave, labourTrades = [], externalLengthMm, externalWidthMm }: Props) {
-  const [name, setName]         = useState('Mono-Pitch Roof Structure')
-  const [location, setLocation] = useState('')
-  const [qty, setQty]           = useState(1)
-  const [lengthMm, setLengthMm] = useState(externalLengthMm ?? 5000)
-  const [spanMm, setSpanMm]     = useState(externalWidthMm ?? 3000)
+  const [name, setName] = useCalcState('AssemblyMonoPitchRoofDemo', 'name', 'Mono-Pitch Roof Structure')
+  const [location, setLocation] = useCalcState('AssemblyMonoPitchRoofDemo', 'location', '')
+  const [qty, setQty] = useCalcState('AssemblyMonoPitchRoofDemo', 'qty', 1)
+  const [lengthMm, setLengthMm] = useCalcState('AssemblyMonoPitchRoofDemo', 'lengthMm', externalLengthMm ?? 5000)
+  const [spanMm, setSpanMm] = useCalcState('AssemblyMonoPitchRoofDemo', 'spanMm', externalWidthMm ?? 3000)
   useEffect(() => { if (externalLengthMm != null) setLengthMm(externalLengthMm) }, [externalLengthMm])
   useEffect(() => { if (externalWidthMm != null) setSpanMm(externalWidthMm) }, [externalWidthMm])
   function swapLengthSpan() { setLengthMm(spanMm); setSpanMm(lengthMm) }
 
-  const [pitchDeg, setPitchDeg] = useState(15)
-  const [rafterCentresMm, setRafterCentresMm] = useState(400)
-  const [eavesOverhangMm, setEavesOverhangMm] = useState(300)
-  const [highWallConnection, setHighWallConnection] = useState<MonoPitchWallConnection>('ledger')
+  const [pitchDeg, setPitchDeg] = useCalcState('AssemblyMonoPitchRoofDemo', 'pitchDeg', 15)
+  const [rafterCentresMm, setRafterCentresMm] = useCalcState('AssemblyMonoPitchRoofDemo', 'rafterCentresMm', 400)
+  const [eavesOverhangMm, setEavesOverhangMm] = useCalcState('AssemblyMonoPitchRoofDemo', 'eavesOverhangMm', 300)
+  const [highWallConnection, setHighWallConnection] = useCalcState<MonoPitchWallConnection>('AssemblyMonoPitchRoofDemo', 'highWallConnection', 'ledger')
 
-  const [rafterGrade, setRafterGrade] = useState<SolidJoistGrade>('c24')
-  const [rafterDepthMm, setRafterDepthMm] = useState(150)
-  const [spanLoads, setSpanLoads] = useState<JoistSpanLoads>(DEFAULT_JOIST_SPAN_LOADS)
-  const [depthPicked, setDepthPicked] = useState(false)
+  const [rafterGrade, setRafterGrade] = useCalcState<SolidJoistGrade>('AssemblyMonoPitchRoofDemo', 'rafterGrade', 'c24')
+  const [rafterDepthMm, setRafterDepthMm] = useCalcState('AssemblyMonoPitchRoofDemo', 'rafterDepthMm', 150)
+  const [spanLoads, setSpanLoads] = useCalcState<JoistSpanLoads>('AssemblyMonoPitchRoofDemo', 'spanLoads', DEFAULT_JOIST_SPAN_LOADS)
+  const [depthPicked, setDepthPicked] = useCalcState('AssemblyMonoPitchRoofDemo', 'depthPicked', false)
 
   // Roof windows — start empty, never pre-seeded (the calculator defaults rule).
-  const [openings, setOpenings] = useState<MonoPitchOpening[]>([])
+  const [openings, setOpenings] = useCalcState<MonoPitchOpening[]>('AssemblyMonoPitchRoofDemo', 'openings', [])
   function addOpening(kind: MonoPitchOpeningKind) { setOpenings(prev => [...prev, newMonoPitchOpening(kind, prev, lengthMm, spanMm)]) }
   function updateOpening(id: string, patch: Partial<MonoPitchOpening>) { setOpenings(prev => prev.map(o => o.id === id ? { ...o, ...patch } : o)) }
   function removeOpening(id: string) { setOpenings(prev => prev.filter(o => o.id !== id)) }
@@ -150,10 +151,10 @@ export default function AssemblyMonoPitchRoofDemo({ onClose, onSave, labourTrade
   const rafterSectionLabel = `47×${rafterDepthMm} ${rafterGrade.toUpperCase()}`
   const rafterRate = timberRate(rafterGrade, rafterDepthMm)
 
-  const [wastePct, setWastePct] = useState(5)
-  const [profitPct, setProfitPct] = useState(20)
-  const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
-  const [disabledLayerIds, setDisabledLayerIds] = useState<Set<string>>(new Set())
+  const [wastePct, setWastePct] = useCalcState('AssemblyMonoPitchRoofDemo', 'wastePct', 5)
+  const [profitPct, setProfitPct] = useCalcState('AssemblyMonoPitchRoofDemo', 'profitPct', 20)
+  const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>('AssemblyMonoPitchRoofDemo', 'rateOverrides', {})
+  const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>('AssemblyMonoPitchRoofDemo', 'disabledLayerIds', new Set())
   function toggleLayer(id: string) { setDisabledLayerIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
   const noSidesLayers = useMemo(() => new Set<string>(), [])
 
@@ -185,7 +186,7 @@ export default function AssemblyMonoPitchRoofDemo({ onClose, onSave, labourTrade
   const enabledMaterialLines = costedLines.filter(l => !disabledLayerIds.has(l.layerId))
 
   // Miscellaneous materials
-  const [miscMaterialLines, setMiscMaterialLines] = useState<MiscMaterialLine[]>([])
+  const [miscMaterialLines, setMiscMaterialLines] = useCalcState<MiscMaterialLine[]>('AssemblyMonoPitchRoofDemo', 'miscMaterialLines', [])
   function addMisc() { setMiscMaterialLines(p => [...p, { id: newMiscMaterialLineId(), name: '', qty: 1, unit: 'item', unitCost: 0 }]) }
   function updateMisc(id: string, patch: Partial<MiscMaterialLine>) { setMiscMaterialLines(p => p.map(m => m.id === id ? { ...m, ...patch } : m)) }
   function removeMisc(id: string) { setMiscMaterialLines(p => p.filter(m => m.id !== id)) }
@@ -202,10 +203,10 @@ export default function AssemblyMonoPitchRoofDemo({ onClose, onSave, labourTrade
   // Labour — the carpenter fixing the wall plate/ledger, rafters, trimmers and kerbs, following the roof
   // until edited by hand. Fitting the rooflights themselves is optional — off by default, since it's
   // normally priced under Roof → Rooflights & Dormers instead.
-  const [includeFitting, setIncludeFitting] = useState(false)
+  const [includeFitting, setIncludeFitting] = useCalcState('AssemblyMonoPitchRoofDemo', 'includeFitting', false)
   const labourSuggestions: LabourSuggestion[] = g ? suggestMonoPitchRoofLabour({ ...g, openings }) : []
   const suggestedLabour = toLabourLines(labourSuggestions, labourTrades, includeFitting)
-  const [labourOverride, setLabourOverride] = useState<LabourLine[] | null>(null)
+  const [labourOverride, setLabourOverride] = useCalcState<LabourLine[] | null>('AssemblyMonoPitchRoofDemo', 'labourOverride', null)
   const suggestedRef = useRef<LabourLine[]>([])
   suggestedRef.current = suggestedLabour.lines
   const labourLines: LabourLine[] = labourOverride ?? suggestedLabour.lines
@@ -232,8 +233,8 @@ export default function AssemblyMonoPitchRoofDemo({ onClose, onSave, labourTrade
     lengthM: g.lengthM, spanM: g.spanM, pitchDeg: g.pitchDeg, rafterCount: g.rafterCount, rafterSectionLabel, highWallConnection, slopeAreaM2: g.slopeAreaM2,
     openings: openings.map(o => ({ kind: o.kind, widthMm: o.widthMm, depthMm: o.depthMm, trimmers: o.trimmers ?? 2 })),
   } : null
-  const [descriptionOverride, setDescriptionOverride] = useState<string | null>(null)
-  const [detailOverride, setDetailOverride] = useState<string | null>(null)
+  const [descriptionOverride, setDescriptionOverride] = useCalcState<string | null>('AssemblyMonoPitchRoofDemo', 'descriptionOverride', null)
+  const [detailOverride, setDetailOverride] = useCalcState<string | null>('AssemblyMonoPitchRoofDemo', 'detailOverride', null)
   const description = descriptionOverride ?? (descInput ? describeMonoPitchRoofShort(descInput) : '')
   const detail = detailOverride ?? (descInput ? describeMonoPitchRoof(descInput) : '')
 

@@ -10,6 +10,7 @@
  */
 
 import React, { useMemo, useState, useEffect } from 'react'
+import { useCalcState } from '@/components/calc-state'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
 import { calculateRaftFoundationGeometry, type RaftFoundationInput, type RaftFoundationGeometry } from '@/lib/raft-foundation'
 import { describeRaftFoundation, describeRaftFoundationShort } from '@/lib/raft-foundation-description'
@@ -89,31 +90,31 @@ export function priceRaftFoundationFromBasics(o: { basics: AssemblyBasics; labou
 }
 
 export default function AssemblyRaftFoundationDemo({ onClose, onSave, labourTrades = [], externalLengthMm, externalWidthMm, initial }: Props) {
-  const [name, setName]         = useState('Raft foundation')
-  const [location, setLocation] = useState('')
-  const [qty, setQty]           = useState(1)
-  const [lengthMm, setLengthMm] = useState(externalLengthMm ?? initial?.lengthMm ?? 10000)
-  const [widthMm, setWidthMm]   = useState(externalWidthMm ?? initial?.widthMm ?? 8000)
+  const [name, setName] = useCalcState('AssemblyRaftFoundationDemo', 'name', 'Raft foundation')
+  const [location, setLocation] = useCalcState('AssemblyRaftFoundationDemo', 'location', '')
+  const [qty, setQty] = useCalcState('AssemblyRaftFoundationDemo', 'qty', 1)
+  const [lengthMm, setLengthMm] = useCalcState('AssemblyRaftFoundationDemo', 'lengthMm', externalLengthMm ?? initial?.lengthMm ?? 10000)
+  const [widthMm, setWidthMm] = useCalcState('AssemblyRaftFoundationDemo', 'widthMm', externalWidthMm ?? initial?.widthMm ?? 8000)
   useEffect(() => { if (externalLengthMm != null) setLengthMm(externalLengthMm) }, [externalLengthMm])
   useEffect(() => { if (externalWidthMm != null) setWidthMm(externalWidthMm) }, [externalWidthMm])
-  const [slabMm, setSlabMm]     = useState(200)
-  const [hardcoreMm, setHardcoreMm] = useState(150)
-  const [blindingMm, setBlindingMm] = useState(50)
-  const [digOverride, setDigOverride] = useState<number | null>(null)
+  const [slabMm, setSlabMm] = useCalcState('AssemblyRaftFoundationDemo', 'slabMm', 200)
+  const [hardcoreMm, setHardcoreMm] = useCalcState('AssemblyRaftFoundationDemo', 'hardcoreMm', 150)
+  const [blindingMm, setBlindingMm] = useCalcState('AssemblyRaftFoundationDemo', 'blindingMm', 50)
+  const [digOverride, setDigOverride] = useCalcState<number | null>('AssemblyRaftFoundationDemo', 'digOverride', null)
   const digDepthMm = digOverride ?? (slabMm + hardcoreMm + blindingMm)   // follows the layers until it is typed over
-  const [overdigMm, setOverdigMm] = useState(300)
-  const [mix, setMix]           = useState<Mix>('C30')
-  const [meshLayers, setMeshLayers] = useState(2)
-  const [edgeBeamOn, setEdgeBeamOn] = useState(false)
-  const [edgeW, setEdgeW]       = useState(500)
-  const [edgeD, setEdgeD]       = useState(400)
-  const [underSlabMm, setUnderSlabMm] = useState(0)
-  const [edgeInsulation, setEdgeInsulation] = useState(true)
-  const [pumped, setPumped]     = useState(false)
-  const [wastePct, setWastePct] = useState(10)
-  const [profitPct, setProfitPct] = useState(20)   // default profit margin
-  const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
-  const [disabledLayerIds, setDisabledLayerIds] = useState<Set<string>>(new Set())
+  const [overdigMm, setOverdigMm] = useCalcState('AssemblyRaftFoundationDemo', 'overdigMm', 300)
+  const [mix, setMix] = useCalcState<Mix>('AssemblyRaftFoundationDemo', 'mix', 'C30')
+  const [meshLayers, setMeshLayers] = useCalcState('AssemblyRaftFoundationDemo', 'meshLayers', 2)
+  const [edgeBeamOn, setEdgeBeamOn] = useCalcState('AssemblyRaftFoundationDemo', 'edgeBeamOn', false)
+  const [edgeW, setEdgeW] = useCalcState('AssemblyRaftFoundationDemo', 'edgeW', 500)
+  const [edgeD, setEdgeD] = useCalcState('AssemblyRaftFoundationDemo', 'edgeD', 400)
+  const [underSlabMm, setUnderSlabMm] = useCalcState('AssemblyRaftFoundationDemo', 'underSlabMm', 0)
+  const [edgeInsulation, setEdgeInsulation] = useCalcState('AssemblyRaftFoundationDemo', 'edgeInsulation', true)
+  const [pumped, setPumped] = useCalcState('AssemblyRaftFoundationDemo', 'pumped', false)
+  const [wastePct, setWastePct] = useCalcState('AssemblyRaftFoundationDemo', 'wastePct', 10)
+  const [profitPct, setProfitPct] = useCalcState('AssemblyRaftFoundationDemo', 'profitPct', 20)   // default profit margin
+  const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>('AssemblyRaftFoundationDemo', 'rateOverrides', {})
+  const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>('AssemblyRaftFoundationDemo', 'disabledLayerIds', new Set())
   function toggleLayer(id: string) { setDisabledLayerIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
   const noSidesLayers = useMemo(() => new Set<string>(), [])
 
@@ -134,7 +135,7 @@ export default function AssemblyRaftFoundationDemo({ onClose, onSave, labourTrad
   const costedLines: CostedLine[] = layers.map(l => costLayer(l, l.fixedQty ?? 0))
 
   // Miscellaneous materials
-  const [miscMaterialLines, setMiscMaterialLines] = useState<MiscMaterialLine[]>([])
+  const [miscMaterialLines, setMiscMaterialLines] = useCalcState<MiscMaterialLine[]>('AssemblyRaftFoundationDemo', 'miscMaterialLines', [])
   function addMisc() { setMiscMaterialLines(p => [...p, { id: newMiscMaterialLineId(), name: '', qty: 1, unit: 'item', unitCost: 0 }]) }
   function updateMisc(id: string, patch: Partial<MiscMaterialLine>) { setMiscMaterialLines(p => p.map(m => m.id === id ? { ...m, ...patch } : m)) }
   function removeMisc(id: string) { setMiscMaterialLines(p => p.filter(m => m.id !== id)) }
@@ -148,7 +149,7 @@ export default function AssemblyRaftFoundationDemo({ onClose, onSave, labourTrad
     areaM2: g.areaM2, perimeterLm: g.perimeterLm, concreteM3: g.concreteVolumeM3, meshLayers: g.meshLayers, underSlabInsulation: underSlabMm > 0,
   }) : []
   const suggestedLabour = toLabourLines(labourSuggestions, labourTrades, false)
-  const [labourOverride, setLabourOverride] = useState<LabourLine[] | null>(null)
+  const [labourOverride, setLabourOverride] = useCalcState<LabourLine[] | null>('AssemblyRaftFoundationDemo', 'labourOverride', null)
   const suggestedRef = React.useRef<LabourLine[]>([])
   suggestedRef.current = suggestedLabour.lines
   const labourLines: LabourLine[] = labourOverride ?? suggestedLabour.lines
@@ -179,8 +180,8 @@ export default function AssemblyRaftFoundationDemo({ onClose, onSave, labourTrad
     lengthM: g.lengthM, widthM: g.widthM, slabThicknessMm: slabMm, hardcoreMm, blindingMm, concreteMix: mix, meshLayers: g.meshLayers,
     edgeBeam: edgeBeam && g.edgeExtraVolumeM3 > 0 ? edgeBeam : null, underSlabInsulationMm: underSlabMm, edgeInsulation, pumped,
   } : null
-  const [descriptionOverride, setDescriptionOverride] = useState<string | null>(null)
-  const [detailOverride, setDetailOverride] = useState<string | null>(null)
+  const [descriptionOverride, setDescriptionOverride] = useCalcState<string | null>('AssemblyRaftFoundationDemo', 'descriptionOverride', null)
+  const [detailOverride, setDetailOverride] = useCalcState<string | null>('AssemblyRaftFoundationDemo', 'detailOverride', null)
   const description = descriptionOverride ?? (descInput ? describeRaftFoundationShort(descInput) : '')
   const detail = detailOverride ?? (descInput ? describeRaftFoundation(descInput) : '')
 

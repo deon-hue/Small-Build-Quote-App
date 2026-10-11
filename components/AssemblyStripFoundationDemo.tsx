@@ -13,6 +13,7 @@
  */
 
 import React, { useMemo, useState, useEffect } from 'react'
+import { useCalcState } from '@/components/calc-state'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
 import { calculateStripFoundationGeometry, type StripWallBuild, type StripFoundationInput, type StripFoundationGeometry } from '@/lib/strip-foundation'
 import { describeStripFoundation, describeStripFoundationShort } from '@/lib/strip-foundation-description'
@@ -105,25 +106,25 @@ export function priceStripFoundationFromBasics(o: { variant: 'strip' | 'trench-f
 
 export default function AssemblyStripFoundationDemo({ onClose, onSave, labourTrades = [], externalLengthMm, variant = 'strip', initial }: Props) {
   const isFill = variant === 'trench-fill'
-  const [name, setName]         = useState(isFill ? 'Trench fill foundation' : 'Strip foundation (traditional)')
-  const [location, setLocation] = useState('')
-  const [qty, setQty]           = useState(1)
-  const [lengthMm, setLengthMm] = useState(externalLengthMm ?? initial?.lengthMm ?? 10000)
+  const [name, setName] = useCalcState('AssemblyStripFoundationDemo', 'name', isFill ? 'Trench fill foundation' : 'Strip foundation (traditional)')
+  const [location, setLocation] = useCalcState('AssemblyStripFoundationDemo', 'location', '')
+  const [qty, setQty] = useCalcState('AssemblyStripFoundationDemo', 'qty', 1)
+  const [lengthMm, setLengthMm] = useCalcState('AssemblyStripFoundationDemo', 'lengthMm', externalLengthMm ?? initial?.lengthMm ?? 10000)
   useEffect(() => { if (externalLengthMm != null) setLengthMm(externalLengthMm) }, [externalLengthMm])
-  const [widthMm, setWidthMm]   = useState(initial?.widthMm ?? 600)
-  const [depthMm, setDepthMm]   = useState(initial?.depthMm ?? 1000)
-  const [stripConcreteMm, setConcreteMm] = useState(225)
-  const [fillBelowMm, setFillBelowMm] = useState(150)   // trench fill: the concrete stops this far below ground
+  const [widthMm, setWidthMm] = useCalcState('AssemblyStripFoundationDemo', 'widthMm', initial?.widthMm ?? 600)
+  const [depthMm, setDepthMm] = useCalcState('AssemblyStripFoundationDemo', 'depthMm', initial?.depthMm ?? 1000)
+  const [stripConcreteMm, setConcreteMm] = useCalcState('AssemblyStripFoundationDemo', 'stripConcreteMm', 225)
+  const [fillBelowMm, setFillBelowMm] = useCalcState('AssemblyStripFoundationDemo', 'fillBelowMm', 150)   // trench fill: the concrete stops this far below ground
   // The concrete's thickness: given for a strip, and for a trench fill the depth less what is left above the concrete
   const concreteMm = isFill ? Math.max(1, depthMm - fillBelowMm) : stripConcreteMm
-  const [dpcAbove, setDpcAbove] = useState(150)
-  const [wall, setWall]         = useState<StripWallBuild>('solid-flat')
-  const [mix, setMix]           = useState<Mix>('C25')
-  const [allSpoil, setAllSpoil] = useState(false)
-  const [wastePct, setWastePct] = useState(10)
-  const [profitPct, setProfitPct] = useState(20)   // default profit margin
-  const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
-  const [disabledLayerIds, setDisabledLayerIds] = useState<Set<string>>(new Set())
+  const [dpcAbove, setDpcAbove] = useCalcState('AssemblyStripFoundationDemo', 'dpcAbove', 150)
+  const [wall, setWall] = useCalcState<StripWallBuild>('AssemblyStripFoundationDemo', 'wall', 'solid-flat')
+  const [mix, setMix] = useCalcState<Mix>('AssemblyStripFoundationDemo', 'mix', 'C25')
+  const [allSpoil, setAllSpoil] = useCalcState('AssemblyStripFoundationDemo', 'allSpoil', false)
+  const [wastePct, setWastePct] = useCalcState('AssemblyStripFoundationDemo', 'wastePct', 10)
+  const [profitPct, setProfitPct] = useCalcState('AssemblyStripFoundationDemo', 'profitPct', 20)   // default profit margin
+  const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>('AssemblyStripFoundationDemo', 'rateOverrides', {})
+  const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>('AssemblyStripFoundationDemo', 'disabledLayerIds', new Set())
   function toggleLayer(id: string) { setDisabledLayerIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
   const noSidesLayers = useMemo(() => new Set<string>(), [])
 
@@ -142,7 +143,7 @@ export default function AssemblyStripFoundationDemo({ onClose, onSave, labourTra
   const costedLines: CostedLine[] = layers.map(l => costLayer(l, l.fixedQty ?? 0))
 
   // Miscellaneous materials
-  const [miscMaterialLines, setMiscMaterialLines] = useState<MiscMaterialLine[]>([])
+  const [miscMaterialLines, setMiscMaterialLines] = useCalcState<MiscMaterialLine[]>('AssemblyStripFoundationDemo', 'miscMaterialLines', [])
   function addMisc() { setMiscMaterialLines(p => [...p, { id: newMiscMaterialLineId(), name: '', qty: 1, unit: 'item', unitCost: 0 }]) }
   function updateMisc(id: string, patch: Partial<MiscMaterialLine>) { setMiscMaterialLines(p => p.map(m => m.id === id ? { ...m, ...patch } : m)) }
   function removeMisc(id: string) { setMiscMaterialLines(p => p.filter(m => m.id !== id)) }
@@ -156,7 +157,7 @@ export default function AssemblyStripFoundationDemo({ onClose, onSave, labourTra
     lm: g.lengthM, concreteM3: g.concreteVolumeM3, backfillM3: g.backfillM3, masonryAreaM2: g.masonryAreaM2, wall, cavityFillM3: g.cavityFillM3,
   }) : []
   const suggestedLabour = toLabourLines(labourSuggestions, labourTrades, false)
-  const [labourOverride, setLabourOverride] = useState<LabourLine[] | null>(null)
+  const [labourOverride, setLabourOverride] = useCalcState<LabourLine[] | null>('AssemblyStripFoundationDemo', 'labourOverride', null)
   const suggestedRef = React.useRef<LabourLine[]>([])
   suggestedRef.current = suggestedLabour.lines
   const labourLines: LabourLine[] = labourOverride ?? suggestedLabour.lines
@@ -184,8 +185,8 @@ export default function AssemblyStripFoundationDemo({ onClose, onSave, labourTra
 
   // The customer's description follows the foundation until it's edited by hand
   const descInput = g ? { lengthM: g.lengthM, widthMm, depthMm, concreteThicknessMm: concreteMm, dpcAboveGroundMm: dpcAbove, wall, concreteMix: mix, takeAllSpoilAway: allSpoil, variant } : null
-  const [descriptionOverride, setDescriptionOverride] = useState<string | null>(null)
-  const [detailOverride, setDetailOverride] = useState<string | null>(null)
+  const [descriptionOverride, setDescriptionOverride] = useCalcState<string | null>('AssemblyStripFoundationDemo', 'descriptionOverride', null)
+  const [detailOverride, setDetailOverride] = useCalcState<string | null>('AssemblyStripFoundationDemo', 'detailOverride', null)
   const description = descriptionOverride ?? (descInput ? describeStripFoundationShort(descInput) : '')
   const detail = detailOverride ?? (descInput ? describeStripFoundation(descInput) : '')
 

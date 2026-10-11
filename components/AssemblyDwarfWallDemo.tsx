@@ -15,6 +15,7 @@
  */
 
 import React, { useMemo, useState, useEffect } from 'react'
+import { useCalcState } from '@/components/calc-state'
 import {
   calculateDwarfWallGeometry, calculateDwarfWallCost,
   type DwarfWallInput, type DwarfWallType, type DwarfFoundationType, type DwarfWallGeometry,
@@ -142,35 +143,35 @@ interface Props {
 }
 
 export default function AssemblyDwarfWallDemo({ onClose, onSave, labourTrades = [], externalLengthMm }: Props) {
-  const [name, setName]         = useState('Dwarf Wall')
-  const [qty, setQty]           = useState(1)
-  const [lengthMm, setLengthMm] = useState(externalLengthMm ?? 5000)
+  const [name, setName] = useCalcState('AssemblyDwarfWallDemo', 'name', 'Dwarf Wall')
+  const [qty, setQty] = useCalcState('AssemblyDwarfWallDemo', 'qty', 1)
+  const [lengthMm, setLengthMm] = useCalcState('AssemblyDwarfWallDemo', 'lengthMm', externalLengthMm ?? 5000)
   useEffect(() => {
     if (externalLengthMm != null) setLengthMm(externalLengthMm)
   }, [externalLengthMm])
-  const [heightMm, setHeightMm] = useState(600)
-  const [type, setType] = useState<DwarfWallType>('cavity-brick-block')
-  const [laid, setLaid] = useState<BlockLaid>('flat')
-  const [blockWidthMm, setBlockWidthMm] = useState(100)
-  const [cavityWidthMm, setCavityWidthMm] = useState(100)
-  const [insulation, setInsulation] = useState<CavityInsulationType>('none')
-  const [insulationThicknessMm, setInsulationThicknessMm] = useState(50)
-  const [externalFinish, setExternalFinish] = useState<ExtFinish>('render')
-  const [foundationType, setFoundationType] = useState<DwarfFoundationType>('strip')
-  const [trenchWidthMm, setTrenchWidthMm] = useState(450)
-  const [foundationDepthMm, setFoundationDepthMm] = useState(750)
-  const [concreteThicknessMm, setConcreteThicknessMm] = useState(200)
-  const [concreteTopBelowGroundMm, setConcreteTopBelowGroundMm] = useState(150)
-  const [hardcoreThicknessMm, setHardcoreThicknessMm] = useState(0)
-  const [dpcAboveGroundMm, setDpcAboveGroundMm] = useState(150)
-  const [wallPlate, setWallPlate] = useState(false)
-  const [coping, setCoping] = useState(false)
-  const [wastePct, setWastePct] = useState(10)
-  const [location, setLocation] = useState('')
+  const [heightMm, setHeightMm] = useCalcState('AssemblyDwarfWallDemo', 'heightMm', 600)
+  const [type, setType] = useCalcState<DwarfWallType>('AssemblyDwarfWallDemo', 'type', 'cavity-brick-block')
+  const [laid, setLaid] = useCalcState<BlockLaid>('AssemblyDwarfWallDemo', 'laid', 'flat')
+  const [blockWidthMm, setBlockWidthMm] = useCalcState('AssemblyDwarfWallDemo', 'blockWidthMm', 100)
+  const [cavityWidthMm, setCavityWidthMm] = useCalcState('AssemblyDwarfWallDemo', 'cavityWidthMm', 100)
+  const [insulation, setInsulation] = useCalcState<CavityInsulationType>('AssemblyDwarfWallDemo', 'insulation', 'none')
+  const [insulationThicknessMm, setInsulationThicknessMm] = useCalcState('AssemblyDwarfWallDemo', 'insulationThicknessMm', 50)
+  const [externalFinish, setExternalFinish] = useCalcState<ExtFinish>('AssemblyDwarfWallDemo', 'externalFinish', 'render')
+  const [foundationType, setFoundationType] = useCalcState<DwarfFoundationType>('AssemblyDwarfWallDemo', 'foundationType', 'strip')
+  const [trenchWidthMm, setTrenchWidthMm] = useCalcState('AssemblyDwarfWallDemo', 'trenchWidthMm', 450)
+  const [foundationDepthMm, setFoundationDepthMm] = useCalcState('AssemblyDwarfWallDemo', 'foundationDepthMm', 750)
+  const [concreteThicknessMm, setConcreteThicknessMm] = useCalcState('AssemblyDwarfWallDemo', 'concreteThicknessMm', 200)
+  const [concreteTopBelowGroundMm, setConcreteTopBelowGroundMm] = useCalcState('AssemblyDwarfWallDemo', 'concreteTopBelowGroundMm', 150)
+  const [hardcoreThicknessMm, setHardcoreThicknessMm] = useCalcState('AssemblyDwarfWallDemo', 'hardcoreThicknessMm', 0)
+  const [dpcAboveGroundMm, setDpcAboveGroundMm] = useCalcState('AssemblyDwarfWallDemo', 'dpcAboveGroundMm', 150)
+  const [wallPlate, setWallPlate] = useCalcState('AssemblyDwarfWallDemo', 'wallPlate', false)
+  const [coping, setCoping] = useCalcState('AssemblyDwarfWallDemo', 'coping', false)
+  const [wastePct, setWastePct] = useCalcState('AssemblyDwarfWallDemo', 'wastePct', 10)
+  const [location, setLocation] = useCalcState('AssemblyDwarfWallDemo', 'location', '')
 
   const isCavity = type === 'cavity-brick-block' || type === 'cavity-block-block'
 
-  const [labourLines, setLabourLines] = useState<LabourLine[]>([
+  const [labourLines, setLabourLines] = useCalcState<LabourLine[]>('AssemblyDwarfWallDemo', 'labourLines', [
     { id: newLabourLineId(), tradeId: '', task: 'Set out, dig, pour foundation and build dwarf wall', hours: 40 },
   ])
   function addLabourLine() {
@@ -183,7 +184,7 @@ export default function AssemblyDwarfWallDemo({ onClose, onSave, labourTrades = 
     setLabourLines(prev => prev.filter(l => l.id !== id))
   }
 
-  const [miscMaterialLines, setMiscMaterialLines] = useState<MiscMaterialLine[]>([])
+  const [miscMaterialLines, setMiscMaterialLines] = useCalcState<MiscMaterialLine[]>('AssemblyDwarfWallDemo', 'miscMaterialLines', [])
   function addMiscMaterialLine() {
     setMiscMaterialLines(prev => [...prev, { id: newMiscMaterialLineId(), name: '', qty: 1, unit: 'item', unitCost: 0 }])
   }
@@ -194,9 +195,9 @@ export default function AssemblyDwarfWallDemo({ onClose, onSave, labourTrades = 
     setMiscMaterialLines(prev => prev.filter(m => m.id !== id))
   }
 
-  const [profitPct, setProfitPct] = useState(20)   // default profit margin
-  const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
-  const [disabledLayerIds, setDisabledLayerIds] = useState<Set<string>>(new Set())
+  const [profitPct, setProfitPct] = useCalcState('AssemblyDwarfWallDemo', 'profitPct', 20)   // default profit margin
+  const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>('AssemblyDwarfWallDemo', 'rateOverrides', {})
+  const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>('AssemblyDwarfWallDemo', 'disabledLayerIds', new Set())
   function toggleLayer(layerId: string) {
     setDisabledLayerIds(prev => {
       const next = new Set(prev)
@@ -233,7 +234,7 @@ export default function AssemblyDwarfWallDemo({ onClose, onSave, labourTrades = 
     if (coping) parts.push('coping')
     return parts.join(', ') + '.'
   }
-  const [description, setDescription] = useState(buildAutoDescription)
+  const [description, setDescription] = useCalcState('AssemblyDwarfWallDemo', 'description', buildAutoDescription)
 
   const layers = useMemo(() => {
     if (!geometryResult.ok) return []

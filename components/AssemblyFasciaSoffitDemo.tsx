@@ -10,6 +10,7 @@
  */
 
 import React, { useMemo, useState, useEffect } from 'react'
+import { useCalcState } from '@/components/calc-state'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
 import { fmt } from '@/lib/utils'
 import {
@@ -43,28 +44,28 @@ function materialLineToLayer(l: { id: string; name: string; qty: number; unit: s
 }
 
 export default function AssemblyFasciaSoffitDemo({ onClose, onSave, labourTrades = [], externalLengthMm, externalWidthMm }: Props) {
-  const [name, setName]         = useState('Fascias, Soffits & Barge Boards')
-  const [location, setLocation] = useState('')
-  const [qty, setQty]           = useState(1)
-  const [lengthMm, setLengthMm] = useState(externalLengthMm ?? 5000)
-  const [widthMm, setWidthMm]   = useState(externalWidthMm ?? 3200)
+  const [name, setName] = useCalcState('AssemblyFasciaSoffitDemo', 'name', 'Fascias, Soffits & Barge Boards')
+  const [location, setLocation] = useCalcState('AssemblyFasciaSoffitDemo', 'location', '')
+  const [qty, setQty] = useCalcState('AssemblyFasciaSoffitDemo', 'qty', 1)
+  const [lengthMm, setLengthMm] = useCalcState('AssemblyFasciaSoffitDemo', 'lengthMm', externalLengthMm ?? 5000)
+  const [widthMm, setWidthMm] = useCalcState('AssemblyFasciaSoffitDemo', 'widthMm', externalWidthMm ?? 3200)
   useEffect(() => { if (externalLengthMm != null) setLengthMm(externalLengthMm) }, [externalLengthMm])
   useEffect(() => { if (externalWidthMm != null) setWidthMm(externalWidthMm) }, [externalWidthMm])
 
-  const [edges, setEdges] = useState<FasciaEdges>({ high: 'none', low: 'eaves', left: 'verge', right: 'verge' })
+  const [edges, setEdges] = useCalcState<FasciaEdges>('AssemblyFasciaSoffitDemo', 'edges', { high: 'none', low: 'eaves', left: 'verge', right: 'verge' })
   function setEdge(which: EdgeKey, value: FasciaEdgeRole) { setEdges(prev => ({ ...prev, [which]: value })) }
 
-  const [fasciaMaterial, setFasciaMaterial] = useState<BoardMaterial>('upvc')
-  const [fasciaDepthMm, setFasciaDepthMm]   = useState<FasciaDepth>(175)
-  const [soffitMaterial, setSoffitMaterial] = useState<BoardMaterial>('upvc')
-  const [soffitVented, setSoffitVented]     = useState(true)
-  const [soffitWidthMm, setSoffitWidthMm]   = useState<SoffitWidth>(300)
-  const [bargeMaterial, setBargeMaterial]   = useState<BoardMaterial>('upvc')
+  const [fasciaMaterial, setFasciaMaterial] = useCalcState<BoardMaterial>('AssemblyFasciaSoffitDemo', 'fasciaMaterial', 'upvc')
+  const [fasciaDepthMm, setFasciaDepthMm] = useCalcState<FasciaDepth>('AssemblyFasciaSoffitDemo', 'fasciaDepthMm', 175)
+  const [soffitMaterial, setSoffitMaterial] = useCalcState<BoardMaterial>('AssemblyFasciaSoffitDemo', 'soffitMaterial', 'upvc')
+  const [soffitVented, setSoffitVented] = useCalcState('AssemblyFasciaSoffitDemo', 'soffitVented', true)
+  const [soffitWidthMm, setSoffitWidthMm] = useCalcState<SoffitWidth>('AssemblyFasciaSoffitDemo', 'soffitWidthMm', 300)
+  const [bargeMaterial, setBargeMaterial] = useCalcState<BoardMaterial>('AssemblyFasciaSoffitDemo', 'bargeMaterial', 'upvc')
 
-  const [wastePct, setWastePct] = useState(5)
-  const [profitPct, setProfitPct] = useState(20)   // default profit margin
-  const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
-  const [disabledLayerIds, setDisabledLayerIds] = useState<Set<string>>(new Set())
+  const [wastePct, setWastePct] = useCalcState('AssemblyFasciaSoffitDemo', 'wastePct', 5)
+  const [profitPct, setProfitPct] = useCalcState('AssemblyFasciaSoffitDemo', 'profitPct', 20)   // default profit margin
+  const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>('AssemblyFasciaSoffitDemo', 'rateOverrides', {})
+  const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>('AssemblyFasciaSoffitDemo', 'disabledLayerIds', new Set())
   function toggleLayer(id: string) { setDisabledLayerIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
   const noSidesLayers = useMemo(() => new Set<string>(), [])
 
@@ -84,7 +85,7 @@ export default function AssemblyFasciaSoffitDemo({ onClose, onSave, labourTrades
   const enabledMaterialLines = costedLines.filter(l => !disabledLayerIds.has(l.layerId))
 
   // Miscellaneous materials
-  const [miscMaterialLines, setMiscMaterialLines] = useState<MiscMaterialLine[]>([])
+  const [miscMaterialLines, setMiscMaterialLines] = useCalcState<MiscMaterialLine[]>('AssemblyFasciaSoffitDemo', 'miscMaterialLines', [])
   function addMisc() { setMiscMaterialLines(p => [...p, { id: newMiscMaterialLineId(), name: '', qty: 1, unit: 'item', unitCost: 0 }]) }
   function updateMisc(id: string, patch: Partial<MiscMaterialLine>) { setMiscMaterialLines(p => p.map(m => m.id === id ? { ...m, ...patch } : m)) }
   function removeMisc(id: string) { setMiscMaterialLines(p => p.filter(m => m.id !== id)) }
@@ -101,7 +102,7 @@ export default function AssemblyFasciaSoffitDemo({ onClose, onSave, labourTrades
   // Labour — the carpenter fixing the boards, following the edges until the labour is edited by hand
   const labourSuggestions: LabourSuggestion[] = g ? suggestFasciaSoffitLabour(g) : []
   const suggestedLabour = toLabourLines(labourSuggestions, labourTrades, false)
-  const [labourOverride, setLabourOverride] = useState<LabourLine[] | null>(null)
+  const [labourOverride, setLabourOverride] = useCalcState<LabourLine[] | null>('AssemblyFasciaSoffitDemo', 'labourOverride', null)
   const suggestedRef = React.useRef<LabourLine[]>([])
   suggestedRef.current = suggestedLabour.lines
   const labourLines: LabourLine[] = labourOverride ?? suggestedLabour.lines
@@ -125,8 +126,8 @@ export default function AssemblyFasciaSoffitDemo({ onClose, onSave, labourTrades
 
   // The customer's description follows the roof until it's edited by hand
   const descInput = g ? { eavesLm: g.eavesLm, vergeLm: g.vergeLm, fasciaMaterial, fasciaDepthMm, soffitMaterial, soffitVented, soffitWidthMm, bargeMaterial } : null
-  const [descriptionOverride, setDescriptionOverride] = useState<string | null>(null)
-  const [detailOverride, setDetailOverride] = useState<string | null>(null)
+  const [descriptionOverride, setDescriptionOverride] = useCalcState<string | null>('AssemblyFasciaSoffitDemo', 'descriptionOverride', null)
+  const [detailOverride, setDetailOverride] = useCalcState<string | null>('AssemblyFasciaSoffitDemo', 'detailOverride', null)
   const description = descriptionOverride ?? (descInput ? describeFasciaSoffitShort(descInput) : '')
   const detail = detailOverride ?? (descInput ? describeFasciaSoffit(descInput) : '')
 

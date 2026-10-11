@@ -10,6 +10,7 @@
  */
 
 import React, { useMemo, useState } from 'react'
+import { useCalcState } from '@/components/calc-state'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
 import { calculatePadFoundationGeometry, type PadFoundationInput, type PadFoundationGeometry, type PadGroup } from '@/lib/pad-foundation'
 import { describePadFoundation, describePadFoundationShort } from '@/lib/pad-foundation-description'
@@ -82,21 +83,21 @@ export function pricePadFoundationFromBasics(o: { basics: AssemblyBasics; labour
 }
 
 export default function AssemblyPadFoundationDemo({ onClose, onSave, labourTrades = [], initial }: Props) {
-  const [name, setName]         = useState('Pad foundations')
-  const [location, setLocation] = useState('')
-  const [qty, setQty]           = useState(1)
+  const [name, setName] = useCalcState('AssemblyPadFoundationDemo', 'name', 'Pad foundations')
+  const [location, setLocation] = useCalcState('AssemblyPadFoundationDemo', 'location', '')
+  const [qty, setQty] = useCalcState('AssemblyPadFoundationDemo', 'qty', 1)
   // One group to start with (all the pads the same); more groups are for pads of a different size
-  const [groups, setGroups]     = useState<PadGroup[]>(() => [newGroup(initial?.count ?? 4, initial?.lengthMm ?? 900, initial?.widthMm ?? 900, initial?.depthMm ?? 600)])
-  const [blindingMm, setBlindingMm] = useState(75)
-  const [formwork, setFormwork] = useState(false)
-  const [rebarOn, setRebarOn]   = useState(false)   // reinforcement is an option, not in the starting price
-  const [rebarKg, setRebarKg]   = useState(80)
-  const [starters, setStarters] = useState(false)
-  const [mix, setMix]           = useState<Mix>('C30')
-  const [wastePct, setWastePct] = useState(10)
-  const [profitPct, setProfitPct] = useState(20)   // default profit margin
-  const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
-  const [disabledLayerIds, setDisabledLayerIds] = useState<Set<string>>(new Set())
+  const [groups, setGroups] = useCalcState<PadGroup[]>('AssemblyPadFoundationDemo', 'groups', () => [newGroup(initial?.count ?? 4, initial?.lengthMm ?? 900, initial?.widthMm ?? 900, initial?.depthMm ?? 600)])
+  const [blindingMm, setBlindingMm] = useCalcState('AssemblyPadFoundationDemo', 'blindingMm', 75)
+  const [formwork, setFormwork] = useCalcState('AssemblyPadFoundationDemo', 'formwork', false)
+  const [rebarOn, setRebarOn] = useCalcState('AssemblyPadFoundationDemo', 'rebarOn', false)   // reinforcement is an option, not in the starting price
+  const [rebarKg, setRebarKg] = useCalcState('AssemblyPadFoundationDemo', 'rebarKg', 80)
+  const [starters, setStarters] = useCalcState('AssemblyPadFoundationDemo', 'starters', false)
+  const [mix, setMix] = useCalcState<Mix>('AssemblyPadFoundationDemo', 'mix', 'C30')
+  const [wastePct, setWastePct] = useCalcState('AssemblyPadFoundationDemo', 'wastePct', 10)
+  const [profitPct, setProfitPct] = useCalcState('AssemblyPadFoundationDemo', 'profitPct', 20)   // default profit margin
+  const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>('AssemblyPadFoundationDemo', 'rateOverrides', {})
+  const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>('AssemblyPadFoundationDemo', 'disabledLayerIds', new Set())
   function toggleLayer(id: string) { setDisabledLayerIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
   const noSidesLayers = useMemo(() => new Set<string>(), [])
   function updateGroup(id: string, patch: Partial<PadGroup>) { setGroups(p => p.map(g => g.id === id ? { ...g, ...patch } : g)) }
@@ -116,7 +117,7 @@ export default function AssemblyPadFoundationDemo({ onClose, onSave, labourTrade
   const costedLines: CostedLine[] = layers.map(l => costLayer(l, l.fixedQty ?? 0))
 
   // Miscellaneous materials
-  const [miscMaterialLines, setMiscMaterialLines] = useState<MiscMaterialLine[]>([])
+  const [miscMaterialLines, setMiscMaterialLines] = useCalcState<MiscMaterialLine[]>('AssemblyPadFoundationDemo', 'miscMaterialLines', [])
   function addMisc() { setMiscMaterialLines(p => [...p, { id: newMiscMaterialLineId(), name: '', qty: 1, unit: 'item', unitCost: 0 }]) }
   function updateMisc(id: string, patch: Partial<MiscMaterialLine>) { setMiscMaterialLines(p => p.map(m => m.id === id ? { ...m, ...patch } : m)) }
   function removeMisc(id: string) { setMiscMaterialLines(p => p.filter(m => m.id !== id)) }
@@ -130,7 +131,7 @@ export default function AssemblyPadFoundationDemo({ onClose, onSave, labourTrade
     padCount: g.padCount, concreteM3: g.concreteM3, formworkM2: g.formworkM2, rebarKg: g.rebarKg, backfillM3: g.backfillM3,
   }) : []
   const suggestedLabour = toLabourLines(labourSuggestions, labourTrades, false)
-  const [labourOverride, setLabourOverride] = useState<LabourLine[] | null>(null)
+  const [labourOverride, setLabourOverride] = useCalcState<LabourLine[] | null>('AssemblyPadFoundationDemo', 'labourOverride', null)
   const suggestedRef = React.useRef<LabourLine[]>([])
   suggestedRef.current = suggestedLabour.lines
   const labourLines: LabourLine[] = labourOverride ?? suggestedLabour.lines
@@ -158,8 +159,8 @@ export default function AssemblyPadFoundationDemo({ onClose, onSave, labourTrade
 
   // The customer's description follows the pads until it's edited by hand
   const descInput = g ? { groups: groups.map(x => ({ count: x.count, lengthMm: x.lengthMm, widthMm: x.widthMm, depthMm: x.depthMm })), blindingMm, concreteMix: mix, formwork, rebar: rebarOn && rebarKg > 0, starters } : null
-  const [descriptionOverride, setDescriptionOverride] = useState<string | null>(null)
-  const [detailOverride, setDetailOverride] = useState<string | null>(null)
+  const [descriptionOverride, setDescriptionOverride] = useCalcState<string | null>('AssemblyPadFoundationDemo', 'descriptionOverride', null)
+  const [detailOverride, setDetailOverride] = useCalcState<string | null>('AssemblyPadFoundationDemo', 'detailOverride', null)
   const description = descriptionOverride ?? (descInput ? describePadFoundationShort(descInput) : '')
   const detail = detailOverride ?? (descInput ? describePadFoundation(descInput) : '')
 

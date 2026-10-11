@@ -15,6 +15,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useCalcState } from '@/components/calc-state'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
 import { fmt } from '@/lib/utils'
 import { calculateMonoPitchRoofGeometry, type MonoPitchWallConnection } from '@/lib/mono-pitch-roof'
@@ -92,27 +93,27 @@ function deriveCoveringEdges(shape: {
 }
 
 export default function AssemblyPitchedRoofCoveringDemo({ onClose, onSave, labourTrades = [], externalLengthMm, externalWidthMm }: Props) {
-  const [name, setName]         = useState('Pitched Roof Covering')
-  const [location, setLocation] = useState('')
-  const [qty, setQty]           = useState(1)
-  const [lengthMm, setLengthMm] = useState(externalLengthMm ?? 8000)
-  const [spanMm, setSpanMm]     = useState(externalWidthMm ?? 6000)
+  const [name, setName] = useCalcState('AssemblyPitchedRoofCoveringDemo', 'name', 'Pitched Roof Covering')
+  const [location, setLocation] = useCalcState('AssemblyPitchedRoofCoveringDemo', 'location', '')
+  const [qty, setQty] = useCalcState('AssemblyPitchedRoofCoveringDemo', 'qty', 1)
+  const [lengthMm, setLengthMm] = useCalcState('AssemblyPitchedRoofCoveringDemo', 'lengthMm', externalLengthMm ?? 8000)
+  const [spanMm, setSpanMm] = useCalcState('AssemblyPitchedRoofCoveringDemo', 'spanMm', externalWidthMm ?? 6000)
   useEffect(() => { if (externalLengthMm != null) setLengthMm(externalLengthMm) }, [externalLengthMm])
   useEffect(() => { if (externalWidthMm != null) setSpanMm(externalWidthMm) }, [externalWidthMm])
   function swapLengthSpan() { setLengthMm(spanMm); setSpanMm(lengthMm) }
 
-  const [roofType, setRoofType] = useState<PitchedRoofShapeType>('gable')
-  const [pitchDeg, setPitchDeg] = useState(30)
-  const [eavesOverhangMm, setEavesOverhangMm] = useState(300)
-  const [monoHighWallConnection, setMonoHighWallConnection] = useState<MonoPitchWallConnection>('ledger')
-  const [gableEndA, setGableEndA] = useState<GableEndTreatment>('gable')
-  const [gableEndB, setGableEndB] = useState<GableEndTreatment>('gable')
-  const [hipEndA, setHipEndA] = useState<HipEndTreatment>('hip')
-  const [hipEndB, setHipEndB] = useState<HipEndTreatment>('hip')
+  const [roofType, setRoofType] = useCalcState<PitchedRoofShapeType>('AssemblyPitchedRoofCoveringDemo', 'roofType', 'gable')
+  const [pitchDeg, setPitchDeg] = useCalcState('AssemblyPitchedRoofCoveringDemo', 'pitchDeg', 30)
+  const [eavesOverhangMm, setEavesOverhangMm] = useCalcState('AssemblyPitchedRoofCoveringDemo', 'eavesOverhangMm', 300)
+  const [monoHighWallConnection, setMonoHighWallConnection] = useCalcState<MonoPitchWallConnection>('AssemblyPitchedRoofCoveringDemo', 'monoHighWallConnection', 'ledger')
+  const [gableEndA, setGableEndA] = useCalcState<GableEndTreatment>('AssemblyPitchedRoofCoveringDemo', 'gableEndA', 'gable')
+  const [gableEndB, setGableEndB] = useCalcState<GableEndTreatment>('AssemblyPitchedRoofCoveringDemo', 'gableEndB', 'gable')
+  const [hipEndA, setHipEndA] = useCalcState<HipEndTreatment>('AssemblyPitchedRoofCoveringDemo', 'hipEndA', 'hip')
+  const [hipEndB, setHipEndB] = useCalcState<HipEndTreatment>('AssemblyPitchedRoofCoveringDemo', 'hipEndB', 'hip')
 
-  const [material, setMaterial] = useState<PitchedCoveringMaterial>('concrete-tile')
-  const [battenGaugeMm, setBattenGaugeMm] = useState(345)
-  const [membraneType, setMembraneType] = useState<'breather' | 'felt'>('breather')
+  const [material, setMaterial] = useCalcState<PitchedCoveringMaterial>('AssemblyPitchedRoofCoveringDemo', 'material', 'concrete-tile')
+  const [battenGaugeMm, setBattenGaugeMm] = useCalcState('AssemblyPitchedRoofCoveringDemo', 'battenGaugeMm', 345)
+  const [membraneType, setMembraneType] = useCalcState<'breather' | 'felt'>('AssemblyPitchedRoofCoveringDemo', 'membraneType', 'breather')
 
   const edges = useMemo(
     () => deriveCoveringEdges({ roofType, lengthMm, spanMm, pitchDeg, eavesOverhangMm, monoHighWallConnection, gableEndA, gableEndB, hipEndA, hipEndB }),
@@ -133,10 +134,10 @@ export default function AssemblyPitchedRoofCoveringDemo({ onClose, onSave, labou
   const g: PitchedRoofCoveringGeometry | null = geometryResult.ok ? geometryResult.geometry : null
   const shapeWarnings = edges.ok ? edges.warnings : []
 
-  const [wastePct, setWastePct] = useState(5)
-  const [profitPct, setProfitPct] = useState(20)
-  const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
-  const [disabledLayerIds, setDisabledLayerIds] = useState<Set<string>>(new Set())
+  const [wastePct, setWastePct] = useCalcState('AssemblyPitchedRoofCoveringDemo', 'wastePct', 5)
+  const [profitPct, setProfitPct] = useCalcState('AssemblyPitchedRoofCoveringDemo', 'profitPct', 20)
+  const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>('AssemblyPitchedRoofCoveringDemo', 'rateOverrides', {})
+  const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>('AssemblyPitchedRoofCoveringDemo', 'disabledLayerIds', new Set())
   function toggleLayer(id: string) { setDisabledLayerIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
   const noSidesLayers = useMemo(() => new Set<string>(), [])
 
@@ -162,7 +163,7 @@ export default function AssemblyPitchedRoofCoveringDemo({ onClose, onSave, labou
   const enabledMaterialLines = costedLines.filter(l => !disabledLayerIds.has(l.layerId))
 
   // Miscellaneous materials
-  const [miscMaterialLines, setMiscMaterialLines] = useState<MiscMaterialLine[]>([])
+  const [miscMaterialLines, setMiscMaterialLines] = useCalcState<MiscMaterialLine[]>('AssemblyPitchedRoofCoveringDemo', 'miscMaterialLines', [])
   function addMisc() { setMiscMaterialLines(p => [...p, { id: newMiscMaterialLineId(), name: '', qty: 1, unit: 'item', unitCost: 0 }]) }
   function updateMisc(id: string, patch: Partial<MiscMaterialLine>) { setMiscMaterialLines(p => p.map(m => m.id === id ? { ...m, ...patch } : m)) }
   function removeMisc(id: string) { setMiscMaterialLines(p => p.filter(m => m.id !== id)) }
@@ -180,7 +181,7 @@ export default function AssemblyPitchedRoofCoveringDemo({ onClose, onSave, labou
   // until edited by hand
   const labourSuggestions: LabourSuggestion[] = g ? suggestPitchedRoofCoveringLabour({ material, ...g }) : []
   const suggestedLabour = toLabourLines(labourSuggestions, labourTrades, false)
-  const [labourOverride, setLabourOverride] = useState<LabourLine[] | null>(null)
+  const [labourOverride, setLabourOverride] = useCalcState<LabourLine[] | null>('AssemblyPitchedRoofCoveringDemo', 'labourOverride', null)
   const suggestedRef = useRef<LabourLine[]>([])
   suggestedRef.current = suggestedLabour.lines
   const labourLines: LabourLine[] = labourOverride ?? suggestedLabour.lines
@@ -204,8 +205,8 @@ export default function AssemblyPitchedRoofCoveringDemo({ onClose, onSave, labou
 
   // The customer's description follows the roof until it's edited by hand
   const descInput = g ? { material, slopeAreaM2: g.slopeAreaM2, battenGaugeMm, ridgeLm: g.ridgeLm, hipLm: g.hipLm, vergeLm: g.vergeLm, abutmentLm: g.abutmentLm } : null
-  const [descriptionOverride, setDescriptionOverride] = useState<string | null>(null)
-  const [detailOverride, setDetailOverride] = useState<string | null>(null)
+  const [descriptionOverride, setDescriptionOverride] = useCalcState<string | null>('AssemblyPitchedRoofCoveringDemo', 'descriptionOverride', null)
+  const [detailOverride, setDetailOverride] = useCalcState<string | null>('AssemblyPitchedRoofCoveringDemo', 'detailOverride', null)
   const description = descriptionOverride ?? (descInput ? describePitchedRoofCoveringShort(descInput) : '')
   const detail = detailOverride ?? (descInput ? describePitchedRoofCovering(descInput) : '')
 

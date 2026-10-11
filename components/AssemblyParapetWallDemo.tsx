@@ -11,6 +11,7 @@
  */
 
 import React, { useMemo, useState, useEffect } from 'react'
+import { useCalcState } from '@/components/calc-state'
 import {
   calculateParapetWallCost, calculateParapetWallGeometry,
   type ParapetWallInput, type ParapetBuildType, type AssemblyLayerDef, type CostedLine,
@@ -102,20 +103,20 @@ function buildParapetLayers(build: ParapetBuildType, coping: CopingType, copingW
 }
 
 export default function AssemblyParapetWallDemo({ onClose, onSave, labourTrades = [], externalLengthMm }: Props) {
-  const [name, setName]         = useState('Parapet wall')
-  const [location, setLocation] = useState('')
-  const [qty, setQty]           = useState(1)
-  const [lengthMm, setLengthMm] = useState(externalLengthMm ?? 8200)
+  const [name, setName] = useCalcState('AssemblyParapetWallDemo', 'name', 'Parapet wall')
+  const [location, setLocation] = useCalcState('AssemblyParapetWallDemo', 'location', '')
+  const [qty, setQty] = useCalcState('AssemblyParapetWallDemo', 'qty', 1)
+  const [lengthMm, setLengthMm] = useCalcState('AssemblyParapetWallDemo', 'lengthMm', externalLengthMm ?? 8200)
   useEffect(() => { if (externalLengthMm != null) setLengthMm(externalLengthMm) }, [externalLengthMm])
-  const [heightMm, setHeightMm] = useState(450)
-  const [belowMm, setBelowMm]   = useState(350)
-  const [build, setBuild]       = useState<ParapetBuildType>('cavity-brick-block')
-  const [coping, setCoping]     = useState<CopingType>('concrete')
-  const [outlets, setOutlets]   = useState(0)
-  const [wastePct, setWastePct] = useState(10)
-  const [profitPct, setProfitPct] = useState(20)   // default profit margin
-  const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
-  const [disabledLayerIds, setDisabledLayerIds] = useState<Set<string>>(new Set())
+  const [heightMm, setHeightMm] = useCalcState('AssemblyParapetWallDemo', 'heightMm', 450)
+  const [belowMm, setBelowMm] = useCalcState('AssemblyParapetWallDemo', 'belowMm', 350)
+  const [build, setBuild] = useCalcState<ParapetBuildType>('AssemblyParapetWallDemo', 'build', 'cavity-brick-block')
+  const [coping, setCoping] = useCalcState<CopingType>('AssemblyParapetWallDemo', 'coping', 'concrete')
+  const [outlets, setOutlets] = useCalcState('AssemblyParapetWallDemo', 'outlets', 0)
+  const [wastePct, setWastePct] = useCalcState('AssemblyParapetWallDemo', 'wastePct', 10)
+  const [profitPct, setProfitPct] = useCalcState('AssemblyParapetWallDemo', 'profitPct', 20)   // default profit margin
+  const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>('AssemblyParapetWallDemo', 'rateOverrides', {})
+  const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>('AssemblyParapetWallDemo', 'disabledLayerIds', new Set())
   function toggleLayer(id: string) { setDisabledLayerIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
   const noSidesLayers = useMemo(() => new Set<string>(), [])
 
@@ -140,7 +141,7 @@ export default function AssemblyParapetWallDemo({ onClose, onSave, labourTrades 
   }, [geometryResult, layers])
 
   // Miscellaneous materials
-  const [miscMaterialLines, setMiscMaterialLines] = useState<MiscMaterialLine[]>([])
+  const [miscMaterialLines, setMiscMaterialLines] = useCalcState<MiscMaterialLine[]>('AssemblyParapetWallDemo', 'miscMaterialLines', [])
   function addMisc() { setMiscMaterialLines(p => [...p, { id: newMiscMaterialLineId(), name: '', qty: 1, unit: 'item', unitCost: 0 }]) }
   function updateMisc(id: string, patch: Partial<MiscMaterialLine>) { setMiscMaterialLines(p => p.map(m => m.id === id ? { ...m, ...patch } : m)) }
   function removeMisc(id: string) { setMiscMaterialLines(p => p.filter(m => m.id !== id)) }
@@ -154,7 +155,7 @@ export default function AssemblyParapetWallDemo({ onClose, onSave, labourTrades 
     lm: g.lengthM, masonryAreaM2: g.masonryAreaM2, build, renderAreaM2: g.renderAreaM2, outletOpenings: g.outletOpenings,
   }) : []
   const suggestedLabour = toLabourLines(labourSuggestions, labourTrades, false)
-  const [labourOverride, setLabourOverride] = useState<LabourLine[] | null>(null)
+  const [labourOverride, setLabourOverride] = useCalcState<LabourLine[] | null>('AssemblyParapetWallDemo', 'labourOverride', null)
   const suggestedRef = React.useRef<LabourLine[]>([])
   suggestedRef.current = suggestedLabour.lines
   const labourLines: LabourLine[] = labourOverride ?? suggestedLabour.lines
@@ -182,8 +183,8 @@ export default function AssemblyParapetWallDemo({ onClose, onSave, labourTrades 
 
   // The customer's description follows the wall until it's edited by hand
   const descInput = g ? { lengthM: g.lengthM, heightAboveRoofMm: heightMm, build, coping, outletOpenings: g.outletOpenings } : null
-  const [descriptionOverride, setDescriptionOverride] = useState<string | null>(null)
-  const [detailOverride, setDetailOverride] = useState<string | null>(null)
+  const [descriptionOverride, setDescriptionOverride] = useCalcState<string | null>('AssemblyParapetWallDemo', 'descriptionOverride', null)
+  const [detailOverride, setDetailOverride] = useCalcState<string | null>('AssemblyParapetWallDemo', 'detailOverride', null)
   const description = descriptionOverride ?? (descInput ? describeParapetWallShort(descInput) : '')
   const detail = detailOverride ?? (descInput ? describeParapetWall(descInput) : '')
 

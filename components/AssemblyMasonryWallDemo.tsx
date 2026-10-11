@@ -20,6 +20,7 @@
  */
 
 import React, { useMemo, useState, useRef, useEffect } from 'react'
+import { useCalcState } from '@/components/calc-state'
 import {
   calculateMasonryWallCost,
   type MasonryWallInput, type AssemblyOpening, type AssemblyLayerDef, type CostedLine,
@@ -140,22 +141,22 @@ interface Props {
 
 export default function AssemblyMasonryWallDemo({ context = 'partition', onClose, onSave, labourTrades = [], externalLengthMm }: Props) {
   const isExternal = context === 'external-wall'
-  const [name, setName]         = useState(isExternal ? '100mm Blockwork External Wall' : 'Masonry Block Partition')
-  const [qty, setQty]           = useState(1)
-  const [lengthMm, setLengthMm] = useState(externalLengthMm ?? 5000)
+  const [name, setName] = useCalcState('AssemblyMasonryWallDemo', 'name', isExternal ? '100mm Blockwork External Wall' : 'Masonry Block Partition')
+  const [qty, setQty] = useCalcState('AssemblyMasonryWallDemo', 'qty', 1)
+  const [lengthMm, setLengthMm] = useCalcState('AssemblyMasonryWallDemo', 'lengthMm', externalLengthMm ?? 5000)
   useEffect(() => {
     if (externalLengthMm != null) setLengthMm(externalLengthMm)
   }, [externalLengthMm])
-  const [heightMm, setHeightMm] = useState(2400)
-  const [blockType, setBlockType] = useState<BlockType>('concrete')
+  const [heightMm, setHeightMm] = useCalcState('AssemblyMasonryWallDemo', 'heightMm', 2400)
+  const [blockType, setBlockType] = useCalcState<BlockType>('AssemblyMasonryWallDemo', 'blockType', 'concrete')
   // For a partition, this is the wall's only finish. For an external wall, it's the inside
   // face specifically — the outside face is externalFinish below.
-  const [finishType, setFinishType] = useState<FinishType>('dot-dab')
-  const [externalFinish, setExternalFinish] = useState<ExternalFinishType>('render')
-  const [wastePct, setWastePct] = useState(10)
-  const [openings, setOpenings] = useState<AssemblyOpening[]>(() => sampleOpenings(context))
-  const [location, setLocation] = useState('')
-  const [labourLines, setLabourLines] = useState<LabourLine[]>([
+  const [finishType, setFinishType] = useCalcState<FinishType>('AssemblyMasonryWallDemo', 'finishType', 'dot-dab')
+  const [externalFinish, setExternalFinish] = useCalcState<ExternalFinishType>('AssemblyMasonryWallDemo', 'externalFinish', 'render')
+  const [wastePct, setWastePct] = useCalcState('AssemblyMasonryWallDemo', 'wastePct', 10)
+  const [openings, setOpenings] = useCalcState<AssemblyOpening[]>('AssemblyMasonryWallDemo', 'openings', () => sampleOpenings(context))
+  const [location, setLocation] = useCalcState('AssemblyMasonryWallDemo', 'location', '')
+  const [labourLines, setLabourLines] = useCalcState<LabourLine[]>('AssemblyMasonryWallDemo', 'labourLines', [
     { id: newLabourLineId(), tradeId: '', task: 'Build blockwork partition', hours: 6 },
   ])
   function addLabourLine() {
@@ -168,7 +169,7 @@ export default function AssemblyMasonryWallDemo({ context = 'partition', onClose
     setLabourLines(prev => prev.filter(l => l.id !== id))
   }
 
-  const [miscMaterialLines, setMiscMaterialLines] = useState<MiscMaterialLine[]>([])
+  const [miscMaterialLines, setMiscMaterialLines] = useCalcState<MiscMaterialLine[]>('AssemblyMasonryWallDemo', 'miscMaterialLines', [])
   function addMiscMaterialLine() {
     setMiscMaterialLines(prev => [...prev, { id: newMiscMaterialLineId(), name: '', qty: 1, unit: 'item', unitCost: 0 }])
   }
@@ -179,12 +180,12 @@ export default function AssemblyMasonryWallDemo({ context = 'partition', onClose
     setMiscMaterialLines(prev => prev.filter(m => m.id !== id))
   }
 
-  const [profitPct, setProfitPct] = useState(20)   // default profit margin
-  const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
+  const [profitPct, setProfitPct] = useCalcState('AssemblyMasonryWallDemo', 'profitPct', 20)   // default profit margin
+  const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>('AssemblyMasonryWallDemo', 'rateOverrides', {})
 
   // A partition's single finish can go on one or both faces — that toggle makes no sense
   // for an external wall, where the two faces are always different materials by definition.
-  const [layerSides, setLayerSides] = useState<Record<string, 1 | 2>>({})
+  const [layerSides, setLayerSides] = useCalcState<Record<string, 1 | 2>>('AssemblyMasonryWallDemo', 'layerSides', {})
   function setSides(layerId: string, sides: 1 | 2) {
     setLayerSides(prev => ({ ...prev, [layerId]: sides }))
   }
@@ -214,9 +215,9 @@ export default function AssemblyMasonryWallDemo({ context = 'partition', onClose
     }
     return text
   }
-  const [description, setDescription] = useState(buildAutoDescription)
+  const [description, setDescription] = useCalcState('AssemblyMasonryWallDemo', 'description', buildAutoDescription)
 
-  const [disabledLayerIds, setDisabledLayerIds] = useState<Set<string>>(new Set())
+  const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>('AssemblyMasonryWallDemo', 'disabledLayerIds', new Set())
   function toggleLayer(layerId: string) {
     setDisabledLayerIds(prev => {
       const next = new Set(prev)

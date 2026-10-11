@@ -5,6 +5,7 @@
 import type { WallConstructionType, WallFinishType, CalculatedMaterial } from './material-recipes'
 import type { CostedLine } from './assembly-calc'
 import type { ElectricPoint } from './electric-points'
+import type { CalcStateSnapshot } from './calc-snapshot'
 
 // ── Drawing tools ─────────────────────────────────────────────────────────────
 
@@ -243,6 +244,8 @@ export interface TakeoffItem {
 
   // Electrics: the one "Electrical installation" item holds every point placed on the plan (so they save with the project like everything else),
   // and what the electrics calculator was last saved as. Its price comes from the calculator (assemblyResult), not from the points.
+  /** What was typed into the assembly calculator at the last Save & Price, so it opens again as it was left. */
+  assemblyCalcState?: CalcStateSnapshot
   electricsSummary?: boolean
   electricPoints?: ElectricPoint[]
   electricsState?: unknown
