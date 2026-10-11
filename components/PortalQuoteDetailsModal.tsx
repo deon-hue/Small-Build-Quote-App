@@ -3,6 +3,7 @@
 import { showHtmlDocument } from '@/lib/open-document'
 import { useState } from 'react'
 import { calcItemSell, calcPhaseSell, fmt } from '@/lib/utils'
+import { clientRows } from '@/lib/client-items'
 import type { Quote } from '@/lib/types'
 import QuoteCommentsSection from './QuoteCommentsSection'
 import PortalQuoteAttachments from './PortalQuoteAttachments'
@@ -96,10 +97,10 @@ export default function PortalQuoteDetailsModal({
             ${printOptions.includeCosts ? `<td style="padding: 10px; text-align: right; font-weight: 700; border: 1px solid #ddd;">${fmt(calcPhaseSell(phase, quote.markup))}</td>` : ''}
           </tr>
           ${phaseDescriptionRow(phase)}
-          ${printOptions.includePhases ? phase.items.filter(item => calcItemSell(item, quote.markup) > 0).map(item => `
+          ${printOptions.includePhases ? clientRows(phase.items.filter(item => calcItemSell(item, quote.markup) > 0), item => calcItemSell(item, quote.markup)).map(({ item, sell }) => `
             <tr style="background: #fff;">
               <td style="padding: 8px; border: 1px solid #ddd;">${item.desc} (${item.qty} ${item.unit})</td>
-              ${printOptions.includeCosts ? `<td style="padding: 8px; text-align: right; border: 1px solid #ddd;">${fmt(calcItemSell(item, quote.markup))}</td>` : ''}
+              ${printOptions.includeCosts ? `<td style="padding: 8px; text-align: right; border: 1px solid #ddd;">${fmt(sell)}</td>` : ''}
             </tr>
           `).join('') : ''}
         `).join('')}
@@ -395,7 +396,7 @@ export default function PortalQuoteDetailsModal({
                   )}
 
                   {/* Line items — shown for 'full' and 'phases' quoteView; 'phases' hides the price */}
-                  {(quoteView === 'full' || quoteView === 'phases') && phase.items.filter(item => calcItemSell(item, quote.markup) > 0).map((item, ii) => {
+                  {(quoteView === 'full' || quoteView === 'phases') && clientRows(phase.items.filter(item => calcItemSell(item, quote.markup) > 0), item => calcItemSell(item, quote.markup)).map(({ item, sell, notes }, ii) => {
                     // Backfill description if missing
                     const itemTypeLabels: Record<string, string> = {
                       labour: 'Labour', materials: 'Materials', plant: 'Plant Work',
@@ -414,15 +415,15 @@ export default function PortalQuoteDetailsModal({
                         <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
                           {item.qty} {item.unit}
                         </div>
-                        {item.notes && (
+                        {notes && (
                           <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginTop: 2 }}>
-                            {item.notes}
+                            {notes}
                           </div>
                         )}
                       </div>
                       {quoteView === 'full' && (
                         <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 13, fontWeight: 600, color: 'var(--ink)', whiteSpace: 'nowrap' }}>
-                          {fmt(calcItemSell(item, quote.markup))}
+                          {fmt(sell)}
                         </div>
                       )}
                     </div>

@@ -10,6 +10,7 @@
 import { PDFDocument, PDFFont, rgb, StandardFonts, PDFPage } from 'pdf-lib'
 import type { Quote, Settings } from './types'
 import { calcPhaseSell, calcItemSell, VAT } from './utils'
+import { clientRows } from './client-items'
 import { PRODUCT_NAME } from './product-config'
 import { toPdfSafeText } from './pdf-text'
 import { companyLegalParts } from './company-legal'
@@ -363,13 +364,15 @@ export async function buildQuotePdf(
       y -= TABLE_ROW_H
 
       // Item rows — description/qty/unit always shown; price only if showItemPrices
-      const visibleItems = p.items.filter(
-        i => i.enabled !== false && calcItemSell(i, qMkp) > 0
+      // Profit rows are folded into the other rows and calculator cost notes dropped (lib/client-items.ts): a client never sees profit or cost rates
+      const visibleItems = clientRows(
+        p.items.filter(i => i.enabled !== false && calcItemSell(i, qMkp) > 0),
+        i => calcItemSell(i, qMkp),
       )
 
-      for (const item of visibleItems) {
-        const noteLines = item.notes
-          ? Math.ceil(fontRegular.widthOfTextAtSize(safe(item.notes), 7) / (COL.descW - 8)) + 1
+      for (const { item, sell: rowSell, notes: rowNotes } of visibleItems) {
+        const noteLines = rowNotes
+          ? Math.ceil(fontRegular.widthOfTextAtSize(safe(rowNotes), 7) / (COL.descW - 8)) + 1
           : 0
         const rowH = TABLE_ROW_H + noteLines * 9
 
@@ -377,14 +380,13 @@ export async function buildQuotePdf(
         if (rowAlt) drawRect(page, MARGIN, y - rowH, CONTENT_W, rowH, C.cream)
 
         drawText(page, safe(item.desc || '—'), COL.desc + 4, y - 10, 8, fontRegular, C.body, COL.descW - 8)
-        if (item.notes) {
-          drawText(page, safe(item.notes), COL.desc + 4, y - 10 - 9, 7, fontRegular, C.muted, COL.descW - 8)
+        if (rowNotes) {
+          drawText(page, safe(rowNotes), COL.desc + 4, y - 10 - 9, 7, fontRegular, C.muted, COL.descW - 8)
         }
         drawText(page, String(item.qty ?? ''), COL.qty + 4,  y - 10, 8, fontRegular, C.body)
         drawText(page, safe(item.unit || ''),  COL.unit + 2, y - 10, 8, fontRegular, C.body)
         if (showItemPrices) {
-          const itemCost = (Number(item.labour) || 0) + (Number(item.materials) || 0)
-          const itemSell = itemCost * (1 + qMkp / 100)
+          const itemSell = rowSell   // the item's full selling price, the same as the quote shows (it used to count labour and materials only)
           const itemVat  = qVat ? itemSell * VAT : 0
           drawText(page, fmtGBP(itemSell), COL.amt + 2, y - 10, 8, fontRegular, C.body, COL.amtW - 4)
           if (qVat) drawText(page, fmtGBP(itemVat), COL.vat + 2, y - 10, 8, fontRegular, C.body, COL.vatW - 4)
