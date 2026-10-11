@@ -1,5 +1,6 @@
 'use client'
 
+import { showUrlDocument } from '@/lib/open-document'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { fmt, fmtDate, jobDisplayTitle } from '@/lib/utils'
@@ -232,7 +233,7 @@ export default function BillsPage() {
     try {
       const sb = createClient()
       const url = await signedDocUrlById(sb, documentId)
-      if (url) window.open(url, '_blank', 'noopener,noreferrer')
+      if (url && !showUrlDocument(url, { title: 'Invoice' })) window.open(url, '_blank', 'noopener,noreferrer')
     } finally { setViewingDoc(false) }
   }
 
@@ -514,7 +515,7 @@ export default function BillsPage() {
                       <button className="btn btn-sm btn-outline" style={{ marginRight: 4 }}
                         onClick={async () => {
                           const url = await signedDocUrlById(sb, b.documentId!)
-                          if (url) window.open(url, '_blank')
+                          if (url && !showUrlDocument(url, { title: 'Invoice' })) window.open(url, '_blank')
                         }}>
                         📄 Invoice
                       </button>

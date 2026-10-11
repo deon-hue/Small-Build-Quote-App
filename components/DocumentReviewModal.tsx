@@ -1,5 +1,6 @@
 'use client'
 
+import { showUrlDocument } from '@/lib/open-document'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -672,7 +673,7 @@ function ViewDupButton({ sb, storagePath, mimeType }: { sb: SupabaseClient; stor
     setLoading(true)
     try {
       const url = await signedDocUrl(sb, storagePath)
-      if (url) window.open(url, '_blank', 'noopener,noreferrer')
+      if (url && !showUrlDocument(url, { title: 'Document', mime: mimeType })) window.open(url, '_blank', 'noopener,noreferrer')
     } finally { setLoading(false) }
   }
   const isPdf = (mimeType ?? '').includes('pdf')

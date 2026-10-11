@@ -1,5 +1,6 @@
 'use client'
 
+import { showUrlDocument } from '@/lib/open-document'
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
@@ -86,7 +87,7 @@ export default function JobAttachmentsModal({ job, onClose }: Props) {
     if (isImage(att.mimeType)) {
       setPreviewMime(att.mimeType)
       setPreviewUrl(url)
-    } else {
+    } else if (!showUrlDocument(url, { title: att.fileName || 'Attachment', mime: att.mimeType })) {
       window.open(url, '_blank')
     }
   }

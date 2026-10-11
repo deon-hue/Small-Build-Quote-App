@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import PWARegister from '@/components/PWARegister'
 import EnvGuard from '@/components/EnvGuard'
+import DocumentViewerHost from '@/components/DocumentViewerHost'
 import { PRODUCT_NAME } from '@/lib/product-config'
 
 export const metadata: Metadata = {
@@ -39,6 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <EnvGuard />
         <PWARegister />
         {children}
+        <DocumentViewerHost />
       </body>
     </html>
   )

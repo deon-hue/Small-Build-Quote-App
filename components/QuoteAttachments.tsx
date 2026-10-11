@@ -1,5 +1,6 @@
 'use client'
 
+import { showUrlDocument } from '@/lib/open-document'
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { uploadQuoteDocument, deleteQuoteDocument, fetchQuoteDocuments, signedQuoteDocumentUrl } from '@/lib/quote-documents'
@@ -82,7 +83,7 @@ export default function QuoteAttachments({ quoteId, attachments, onAttachmentsCh
       url = signed
       setUrls(prev => ({ ...prev, [doc.id]: signed }))
     }
-    window.open(url, '_blank')
+    if (!showUrlDocument(url, { title: doc.label || doc.fileName || 'Attachment', mime: doc.mimeType })) window.open(url, '_blank')
   }
 
   return (

@@ -1,5 +1,6 @@
 'use client'
 
+import { showUrlDocument } from '@/lib/open-document'
 import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { createClient } from '@/lib/supabase/client'
@@ -266,7 +267,8 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
       const base64 = await generatePdf(fields)
       const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
       const blob = new Blob([bytes], { type: 'application/pdf' })
-      window.open(URL.createObjectURL(blob), '_blank')
+      const blobUrl = URL.createObjectURL(blob)
+      if (!showUrlDocument(blobUrl, { title: 'Contract preview', mime: 'application/pdf' })) window.open(blobUrl, '_blank')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong generating the preview')
     } finally { setBusy(null) }

@@ -1,5 +1,6 @@
 'use client'
 
+import { showHtmlDocument } from '@/lib/open-document'
 import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { ContactPicker } from '@/components/ContactPicker'
@@ -377,6 +378,7 @@ export default function InvoicesPage() {
 
   function handlePrint(inv: Invoice) {
     const html = buildInvoiceHtml(withPriorTotals(inv), settings)
+    if (showHtmlDocument(html, { title: `Invoice ${inv.ref}` })) return
     const w = window.open('', '_blank')
     if (!w) { alert('Pop-up blocked — please allow pop-ups.'); return }
     w.document.write(html)

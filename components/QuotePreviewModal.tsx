@@ -1,5 +1,6 @@
 'use client'
 
+import { showHtmlDocument } from '@/lib/open-document'
 import { useState, useRef } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { buildHtml, buildHtmlClientView } from '@/lib/quoteHtml'
@@ -46,9 +47,11 @@ export default function QuotePreviewModal({ quote, onClose, boTasks = [] }: Prop
   const hasFullDescriptions = quote.phases.some(p => p.scopeDetail?.trim())
 
   function handlePrint() {
+    const printHtml = buildFor(printFullDescriptions)
+    if (showHtmlDocument(printHtml, { title: `Quote ${quote.ref || 'Draft'}` })) return
     const w = window.open('', '_blank')
     if (!w) { alert('Pop-up blocked — please allow pop-ups and try again.'); return }
-    w.document.write(buildFor(printFullDescriptions))
+    w.document.write(printHtml)
     w.document.close()
     setTimeout(() => w.print(), 500)
   }

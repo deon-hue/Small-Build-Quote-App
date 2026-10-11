@@ -78,8 +78,11 @@ function buildMaterialsPrintHtml(lines: CostedLine[], opts: { title: string; loc
 
 /** Opens a new tab with a printable materials list and triggers the browser's print dialog
  * — "Save as PDF" from there covers the download case with no extra library. */
+import { showHtmlDocument } from './open-document'
+
 export function openMaterialsPrintView(lines: CostedLine[], opts: { title: string; location?: string; description?: string }) {
   const html = buildMaterialsPrintHtml(lines, opts)
+  if (showHtmlDocument(html, { title: `Materials list — ${opts.title}` })) return
   const win = window.open('', '_blank')
   if (!win) {
     alert('Please allow pop-ups for this site to print the materials list.')

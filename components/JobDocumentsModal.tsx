@@ -1,5 +1,6 @@
 'use client'
 
+import { showHtmlDocument } from '@/lib/open-document'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { fetchJobCosts, insertJobCost, deleteJobCost } from '@/lib/job-costs'
@@ -63,6 +64,7 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
       jobType: jobType || jobLabel, clientName: clientName || jobLabel, jobAddress,
       contractValue: contractValue ?? 0, variations: localVariations, invoices: localInvoices, payments: localPayments,
     }, settings)
+    if (showHtmlDocument(html, { title: 'Job report' })) return
     const w = window.open('', '_blank')
     if (!w) { alert('Pop-up blocked — please allow pop-ups.'); return }
     w.document.write(html)

@@ -1,5 +1,6 @@
 'use client'
 
+import { showHtmlDocument } from '@/lib/open-document'
 import { useState } from 'react'
 import { calcItemSell, calcPhaseSell, fmt } from '@/lib/utils'
 import type { Quote } from '@/lib/types'
@@ -86,9 +87,6 @@ export default function PortalQuoteDetailsModal({
   }
 
   function handlePrint() {
-    const printWindow = window.open('', '_blank')
-    if (!printWindow) return
-
     const phaseContent = quote.phases.length > 0 ? `
       <h3 style="margin-top: 24px; margin-bottom: 16px; font-size: 16px; font-weight: 700;">Breakdown</h3>
       <table style="width: 100%; border-collapse: collapse;">
@@ -180,6 +178,9 @@ export default function PortalQuoteDetailsModal({
       </html>
     `
 
+    if (showHtmlDocument(html, { title: 'Your quote' })) return
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) return
     printWindow.document.write(html)
     printWindow.document.close()
     setTimeout(() => printWindow.print(), 250)

@@ -1,5 +1,6 @@
 'use client'
 
+import { showUrlDocument } from '@/lib/open-document'
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -637,7 +638,7 @@ export default function SubcontractorsPage() {
     const { data: doc } = await sb.from('job_documents').select('storage_path, mime_type').eq('id', docId).single()
     if (!doc) return
     const url = await signedDocUrl(sb, doc.storage_path as string)
-    if (url) window.open(url, '_blank', 'noopener,noreferrer')
+    if (url && !showUrlDocument(url, { title: 'Quote document', mime: (doc.mime_type as string | undefined) ?? undefined })) window.open(url, '_blank', 'noopener,noreferrer')
   }
 
   async function unlinkQuoteDoc(contractId: string) {
