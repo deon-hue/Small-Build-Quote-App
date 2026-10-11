@@ -91,6 +91,7 @@ EXTENSIONS (rear / side / kitchen / garden room):
 - Glazing: bifold doors, sliding doors, roof lanterns, standard windows?
 - Kitchen: new kitchen going into the extension? Layout change?
 - Floor: tiles, LVT, polished concrete? Underfloor heating?
+- Electrics: room by room, roughly how many double sockets, lights (downlights or pendants) and switches; any feature lighting (a chandelier, breakfast bar pendants) and whether the client supplies those fittings; a new consumer unit or extra circuits (shower, cooker, EV charger)?
 - Drainage: new WC/shower in extension, or rainwater connection only?
 - Finishes: decorating included in contract, or client's own?
 
@@ -164,6 +165,7 @@ SCOPE REQUIREMENTS:
 - Use clear phase headings (e.g. "**External Walls**") to break up sections when there is more than one
 - Note every assumption: "(Assumed: ...)" or "(Provisional sum for ...)"
 - State every size you were given as a number with its unit, so it can be priced (for example "20m of strip foundation, 1.0m deep", "6 pad foundations, 900 x 900mm", "raft 9m x 7m", "8m long x 2.4m high cavity wall"). Never make a size vaguer than it was told to you, and never invent one: if a size was not given, say so rather than guessing a number.
+- Write electrical work room by room with the numbers you were given (for example "Kitchen: 8 double sockets, 10 downlights, breakfast bar pendants (client-supplied fitting)"). Name each room that is to be wired. If the client did not say how many points, just name the room: do not invent counts.
 - Specific enough for a QS to identify every trade and allocate quantities
 - Do NOT include prices, rates, or programme durations
 - Format as markdown with bold headings for each phase (e.g. **Phase Name**) to make it easy to scan

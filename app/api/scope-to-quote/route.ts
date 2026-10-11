@@ -10,6 +10,7 @@ import { JOB_TEMPLATES } from '@/lib/utils'
 import { BUILT_ASSEMBLY_CANONICAL_IDS } from '@/lib/built-assembly-ids'
 import { hintForAi } from '@/lib/sub-phase-hints'
 import { BASICS_NEEDS } from '@/lib/assembly-basics'
+import { electricsPromptGuide } from '@/lib/electrics-ai'
 
 export const maxDuration = 300
 import { ESTIMATOR_PHASE_DEFAULTS } from '@/lib/estimatorDefaults'
@@ -85,7 +86,7 @@ async function buildLibraryFromDB(userId: string): Promise<{
   }
   const calcPhases = (subPhases ?? [])
     .filter(sp => sp.canonical_id && BUILT_ASSEMBLY_CANONICAL_IDS.has(sp.canonical_id) && phaseById[sp.phase_id])
-    .map(sp => ({ name: sp.name as string, parent: phaseById[sp.phase_id] as string, ask: BASICS_NEEDS[sp.canonical_id as string]?.ask ?? '', hint: hintByName[sp.name as string] ?? '' }))
+    .map(sp => ({ name: sp.name as string, parent: phaseById[sp.phase_id] as string, ask: BASICS_NEEDS[sp.canonical_id as string]?.ask ?? (sp.canonical_id === 'elec-install' ? 'an "electrics" object describing the rooms and points, as set out in the rules' : ''), hint: hintByName[sp.name as string] ?? '' }))
   const subPhaseById = Object.fromEntries((subPhases ?? []).map(sp => [sp.id, { name: sp.name, phaseId: sp.phase_id }]))
 
   const phaseTaskMap: Record<string, string[]> = {}
@@ -296,6 +297,7 @@ Rules:
 - Include Completion & Handover for all projects
 - PREFER the calculator lines. Where a library line marked [PRICED BY CALCULATOR] covers the work (read what it "covers"), choose it instead of a general task-based phase for the same work. For example, for a new external cavity wall choose the cavity wall calculator line, not a general "Masonry & Blockwork" phase.
 - A library line marked [PRICED BY CALCULATOR] is priced by a calculator, so give it an empty "selectedTasks". For those that say what to give, add a "measurements" object using ONLY the sizes the scope actually states for that element, in metres ("count" is a whole number): lengthM, widthM, heightM, depthM, count as that line asks. Include a size only if the scope states it; if the scope does not state the sizes a line needs, leave "measurements" out for it. Never guess or invent a size. If the scope gives several separate runs, walls or foundations of the same kind, add them up for a foundation length, but for a wall use the one stated wall.
+  - ${electricsPromptGuide()}
 - "extraTasks" should ONLY be used for work genuinely outside the standard library; include all fields:
   { "name": "...", "description": "...", "measurementType": "quantity|area|linear|volume", "unit": "...", "labourRate": 0, "materialsRate": 0, "plantRate": 0, "subRate": 0, "otherRate": 0, "wastePercent": 0 }
 - Select enough tasks to fully represent each phase — don't under-select
@@ -326,7 +328,7 @@ Analyse the scope and select appropriate phases and tasks from the library.`
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 4096,
+        max_tokens: 8192,
         stream: true,
         system,
         messages: [

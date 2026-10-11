@@ -21,6 +21,7 @@ import ProductPicker      from '@/components/ProductPicker'
 import PlantPicker        from '@/components/PlantPicker'
 import PhaseReviewModal   from '@/components/PhaseReviewModal'
 import { BUILT_ASSEMBLY_CANON_IDS, AssemblyIconGlyph, type AssemblySaveResult } from '@/lib/built-assemblies'
+import type { ElectricsSavedState } from '@/lib/electrics-units'
 import { MaterialsListButtons } from '@/components/assembly-ui'
 import { assemblyLinesToItems } from '@/lib/assembly-quote-items'
 
@@ -870,6 +871,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
       ...p, items: newItems, taskName: result.description, assemblyLines: result.lines,
       // Always set (even to undefined): re-saving a calculator that no longer writes a detail must not leave a stale one.
       scopeDetail: result.detail,
+      electricsState: result.state as ElectricsSavedState | undefined,
       ...(result.location.trim() && { roomLabel: result.location.trim() }),
     }))
     setShowAssemblyCalc(false)
@@ -1834,7 +1836,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
               <div style={{ fontSize: 12, color: '#7c3aed', background: '#fdfaff', border: '1px dashed #e9d5ff', borderRadius: 6, padding: '8px 12px', marginBottom: 14 }}>
                 🧪 Sample rates for now — playing with this doesn't change this quote's actual costs yet.
               </div>
-              {builtAssembly.render({ onSave: applyAssemblyCalculation, labourTrades, ...(p.assemblySize && { externalLengthMm: p.assemblySize.lengthMm, externalWidthMm: p.assemblySize.widthMm, initialHeightMm: p.assemblySize.heightMm, basics: p.assemblySize, noSampleOpenings: true }) })}
+              {builtAssembly.render({ onSave: applyAssemblyCalculation, labourTrades, ...(p.electricsState && { electrics: { initialState: p.electricsState } }), ...(p.assemblySize && { externalLengthMm: p.assemblySize.lengthMm, externalWidthMm: p.assemblySize.widthMm, initialHeightMm: p.assemblySize.heightMm, basics: p.assemblySize, noSampleOpenings: true }) })}
             </div>
           </div>
         </div>

@@ -33,7 +33,7 @@ import { fetchQuoteTemplates, pickTemplateRows } from '@/lib/quote-templates'
 import { BUILT_ASSEMBLY_CANONICAL_IDS } from '@/lib/built-assembly-ids'
 import { assemblyLinesToItems } from '@/lib/assembly-quote-items'
 import { basicsFor, describeBasics, BASICS_NEEDS } from '@/lib/assembly-basics'
-import { priceFromBasics } from '@/components/ai-priced-calculators'
+import { priceFromBasics, priceElectricsFromScope } from '@/components/ai-priced-calculators'
 import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchQuoteDefaults, fetchAllQuoteDefaults, upsertTask, fetchLabourTrades, fetchProducts, fetchPlantItems, fetchPhases, fetchSubPhases, fetchTasks } from '@/lib/back-office-queries'
 import type { BOLabourTrade, BOProduct, BOPlantItem, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
 import type { FloorMakeup } from '@/lib/takeoff-types'
@@ -84,6 +84,8 @@ interface ScopeToQuotePhase {
   selectedTasks: string[]
   /** the sizes the AI heard, in metres (and a count), for a calculator it can price: wall length/height, foundation length/width/depth, number of pads or piles */
   measurements?: { lengthM?: number; widthM?: number; heightM?: number; depthM?: number; count?: number }
+  /** the rooms, points and special fittings the AI heard, for the electrical installation calculator */
+  electrics?: unknown
   extraTasks?: {
     name: string
     description?: string
@@ -130,6 +132,25 @@ function buildPhasesFromScopeToQuote(
     // it prices the sub-phase now with the calculator's standard settings; otherwise the sub-phase starts at nothing and says "Not yet calculated".
     const sameName = boSubPhases.filter(s => s.name === sp.phase)
     const calcSub = sameName.find(s => s.canonical_id && BUILT_ASSEMBLY_CANONICAL_IDS.has(s.canonical_id))
+    if (calcSub && calcSub.canonical_id === 'elec-install') {
+      // The electrical installation is priced room by room from what the scope says (rooms, points, special fittings, whole-house items). A room
+      // named with no points gets the usual set for that kind of room; it is said so in the note, for the estimator to check.
+      const el = priceElectricsFromScope({ spec: sp.electrics, labourTrades })
+      const elPhase = makePhase(sp.phase, el ? assemblyLinesToItems(el.lines) : defaultTypedItems(), sp.parentPhase || undefined)
+      return {
+        ...elPhase,
+        source: 'ai' as const,
+        itemStatus: 'ai' as const,
+        boSubPhaseId: calcSub.id,
+        needsReview: true,
+        ...(el
+          ? {
+              taskName: el.description, ...(el.detail && { scopeDetail: el.detail }), assemblyLines: el.lines, electricsState: el.state,
+              reviewNote: `Priced by the electrical calculator from the rooms in your scope (${el.summary}) with the calculator's standard rates, per point.${el.usualRooms.length > 0 ? ` No points were stated for ${el.usualRooms.join(', ')}, so those use the usual points for that kind of room.` : ''} Open the calculator to check the points and change anything.`,
+            }
+          : { reviewNote: 'Priced by its calculator, but no electrical rooms or points were found in the scope. Open the calculator and add the rooms.' }),
+      }
+    }
     if (calcSub) {
       const size = basicsFor(calcSub.canonical_id, sp.measurements)
       const priced = size && calcSub.canonical_id ? priceFromBasics(calcSub.canonical_id, size, labourTrades) : null

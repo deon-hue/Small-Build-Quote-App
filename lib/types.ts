@@ -2,6 +2,7 @@ import type { EstimatorItem, EstimatorItemTemplate } from './estimator'
 import type { LabourTrade, TaskLabourLine } from './tradeRates'
 import type { CostedLine } from './assembly-calc'
 import type { AssemblyBasics } from './assembly-basics'
+import type { ElectricsSavedState } from './electrics-units'
 export type { EstimatorItem, EstimatorItemTemplate, LabourTrade, TaskLabourLine }
 
 export interface QuoteItem {
@@ -127,6 +128,8 @@ export interface QuotePhase {
   assemblyLines?: CostedLine[]
   /** The size the AI heard for a calculator wall (mm). The calculator opens on it, with no sample openings, so reopening it agrees with the price the AI put in. */
   assemblySize?: AssemblyBasics
+  /** The electrics calculator's rooms and settings (from the AI quote, or the last Save & Price), so reopening it shows what was priced. */
+  electricsState?: ElectricsSavedState
   /** AI-generated item that couldn't be matched to Back Office master data */
   needsReview?: boolean
   reviewNote?: string

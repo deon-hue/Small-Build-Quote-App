@@ -9,6 +9,7 @@ import { pricePadFoundationFromBasics } from '@/components/AssemblyPadFoundation
 import { pricePiledFoundationFromBasics } from '@/components/AssemblyPiledFoundationDemo'
 import { priceUnderpinningFromBasics } from '@/components/AssemblyUnderpinningDemo'
 import type { PricedFromBasics } from '@/components/assembly-basics-pricing'
+export { priceElectricsFromScope } from '@/components/AssemblyElectricsDemo'
 import type { AssemblyBasics } from '@/lib/assembly-basics'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 

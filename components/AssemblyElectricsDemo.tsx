@@ -17,6 +17,9 @@ import {
   WHOLE_HOUSE_ITEMS, mergePlanRooms, type ElectricsRoom, type ElectricsFitting, type Situation, type PointGroup, type ElectricsResult, type PlanRoom, type ElectricsSavedState,
 } from '@/lib/electrics-units'
 import { describeElectrics, describeElectricsShort, type ElectricsDescriptionInput } from '@/lib/electrics-description'
+import { electricsDescriptionInput } from '@/lib/electrics-wording'
+import { electricsFromScope } from '@/lib/electrics-ai'
+import { costFromBasics, type PricedFromBasics } from '@/components/assembly-basics-pricing'
 import { fmt } from '@/lib/utils'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import {
@@ -41,7 +44,6 @@ const GROUPS = Object.keys(GROUP_LABEL) as PointGroup[]
 
 let roomSeq = 0
 let fittingSeq = 0
-const lcFirst = (s: string) => (s.length > 1 && /[A-Z]/.test(s[1]) ? s : s.charAt(0).toLowerCase() + s.slice(1))
 
 function newRoom(typeId: string, existingOfType: number, fixedName?: string): ElectricsRoom {
   const t = ROOM_TYPE_BY_ID[typeId]
@@ -49,6 +51,27 @@ function newRoom(typeId: string, existingOfType: number, fixedName?: string): El
     id: 'room-' + ++roomSeq, name: fixedName ?? (existingOfType === 0 ? t.label : `${t.label} ${existingOfType + 1}`), typeId,
     points: fixedName !== undefined ? {} : { ...t.points }, situationId: null, mode: 'points', days: 1, dayRate: 260, fittings: [],
   }
+}
+
+/**
+ * Prices the electrical installation from what the AI heard in the scope (rooms, points, special fittings, whole-house items), with the calculator's
+ * own standard rates and 20% profit. A room named with no points stated gets its usual set (listed in `usualRooms` so the estimator checks it).
+ * Returns the calculator's state too, so opening it from the quote shows the same rooms. Null when the scope described no electrical work.
+ */
+export function priceElectricsFromScope(o: { spec: unknown; labourTrades: BOLabourTrade[] }): (PricedFromBasics & { state: ElectricsSavedState; usualRooms: string[]; summary: string }) | null {
+  const ai = electricsFromScope(o.spec)
+  if (!ai) return null
+  let r: ElectricsResult
+  try { r = calculateElectrics({ rooms: ai.rooms, wholeHouse: ai.wholeHouse, jobSituationId: ai.jobSituationId, situations: DEFAULT_SITUATIONS, pointRates: {}, fittingRates: {}, wholeHouseRates: {} }) } catch { return null }
+  const layers: AssemblyLayerDef[] = r.lines.map(l => ({ id: l.id, name: l.name, category: l.category, source: 'fixed' as const, unit: l.unit, unitCost: l.unitCost, fixedQty: l.qty, wastePct: 0 }))
+  const lines = costFromBasics({ layers, suggestions: [], labourTrades: o.labourTrades })
+  const d = electricsDescriptionInput(ai.rooms, ai.wholeHouse, r)
+  const state: ElectricsSavedState = {
+    rooms: ai.rooms, wholeHouse: ai.wholeHouse, jobSituationId: ai.jobSituationId, situations: DEFAULT_SITUATIONS, pointRates: {}, fittingRates: {}, wholeHouseRates: {},
+    profitPct: 20, rateOverrides: {}, disabledLayerIds: [], labourLines: [], miscMaterialLines: [], name: 'Electrical installation', location: '', qty: 1,
+  }
+  const summary = `${r.roomCount} room${r.roomCount === 1 ? '' : 's'}, ${r.totalPoints} point${r.totalPoints === 1 ? '' : 's'}${r.fittingCount > 0 ? `, ${r.fittingCount} special fitting${r.fittingCount === 1 ? '' : 's'}` : ''}`
+  return { name: 'Electrical installation', qty: 1, location: '', description: describeElectricsShort(d), detail: describeElectrics(d), lines, state, usualRooms: ai.usualRooms, summary }
 }
 
 export default function AssemblyElectricsDemo({ onClose, onSave, labourTrades = [], planRooms, initialState }: Props) {
@@ -154,25 +177,7 @@ export default function AssemblyElectricsDemo({ onClose, onSave, labourTrades = 
   const scheduleLines: CostedLine[] = enabledMaterialLines.map(l => ({ ...l, category: 'materials' as const }))
 
   // The customer's description follows the rooms until it's edited by hand
-  const descInput: ElectricsDescriptionInput | null = r ? {
-    rooms: rooms.map(rm => ({
-      name: rm.name.trim() || 'Room',
-      days: rm.mode === 'days' ? rm.days : null,
-      items: rm.mode === 'days' ? [] : POINT_TYPES.filter(p => (rm.points[p.id] ?? 0) > 0).map(p => {
-        const n = rm.points[p.id]
-        const word = n === 1 ? lcFirst(p.name) : p.plural
-        return p.unit === 'm²' ? `${n} ${p.plural}` : /^\d/.test(word) ? `${n} × ${word}` : `${n} ${word}`
-      }),
-      fittings: rm.fittings.filter(f => f.count > 0).map(f => {
-        const ft = FITTING_BY_ID[f.typeId]
-        const label = f.name.trim() || (f.count === 1 ? lcFirst(ft.name) : ft.plural)
-        return `${f.count} ${label}${f.supply === 'client' ? ' (client-supplied)' : ''}`
-      }),
-    })),
-    wholeHouse: WHOLE_HOUSE_ITEMS.filter(w => w.id !== 'certificate' && (wholeHouse[w.id] ?? 0) > 0).map(w => (wholeHouse[w.id] === 1 ? lcFirst(w.name) : `${wholeHouse[w.id]} × ${lcFirst(w.name)}`)),
-    certificate: (wholeHouse['certificate'] ?? 0) > 0,
-    totalPoints: r.totalPoints, fittingCount: r.fittingCount,
-  } : null
+  const descInput: ElectricsDescriptionInput | null = r ? electricsDescriptionInput(rooms, wholeHouse, r) : null
   const [descriptionOverride, setDescriptionOverride] = useState<string | null>(null)
   const [detailOverride, setDetailOverride] = useState<string | null>(null)
   const description = descriptionOverride ?? (descInput ? describeElectricsShort(descInput) : '')
