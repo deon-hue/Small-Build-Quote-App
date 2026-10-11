@@ -136,7 +136,7 @@ export interface QuotePhase {
   /** The one-line description the calculator last wrote, so a Task Name you have typed over is not overwritten when the calculator is saved again. */
   calcDescription?: string
   /** Notes from the AI review on a calculator sub-phase (its rows are replaced when the calculator is saved, so a suggestion is kept as a note to add then). */
-  reviewNotes?: { id: string; text: string; done?: boolean }[]
+  reviewNotes?: { id: string; text: string; done?: boolean; card?: string }[]
   /** This sub-phase's own margin, % added on top of its cost. A calculator sets it (its profit slider); without one the quote's overall markup applies. */
   markupPct?: number
   /** AI-generated item that couldn't be matched to Back Office master data */

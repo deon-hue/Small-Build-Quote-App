@@ -1709,7 +1709,8 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
             </div>
           )}
 
-          {builtAssembly && <ReviewNotes notes={p.reviewNotes ?? []} onChange={notes => onUpdate({ ...p, reviewNotes: notes.length ? notes : undefined })} readOnly={isLocked} />}
+          <ReviewNotes notes={p.reviewNotes ?? []} onChange={notes => onUpdate({ ...p, reviewNotes: notes.length ? notes : undefined })} readOnly={isLocked}
+            onOpenCard={builtAssembly ? undefined : c => setOpenCard(c as ItemType)} />
 
           {/* Cost-category cards — accordion, one open at a time (not for Electrics) */}
           {p.phase !== 'Electrics' && !builtAssembly && (
@@ -1868,13 +1869,23 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
               onUpdate({ ...p, reviewNotes: [...(p.reviewNotes ?? []), { id: String(uid()), text }] })
               return
             }
+            // A suggestion is added as a £0 line in its cost card, which is easy to miss (the cards are closed), so a note on the sub-phase
+            // says what was added and opens the card to price it
+            const label: Record<string, string> = { labour: 'Labour', materials: 'Materials', plant: 'Plant', subcontractors: 'Subcontractor', other: 'Other' }
+            const reason = (item.notes ?? '').replace(/^AI suggestion:s*/, '').trim()
+            const text = `${label[item.itemType ?? 'other'] ?? 'Other'}: ${item.desc}${reason ? ` — ${reason}` : ''}`
             const newItem: QuoteItem = { ...item, id: uid() }
-            onUpdate({ ...p, items: [...p.items, newItem] })
+            const already = (p.reviewNotes ?? []).some(n => n.text === text)
+            onUpdate({
+              ...p, items: [...p.items, newItem],
+              reviewNotes: already ? p.reviewNotes : [...(p.reviewNotes ?? []), { id: String(uid()), text, card: item.itemType ?? 'other' }],
+            })
           }}
           onComplete={image => {
             onUpdate({ ...p, aiReviewed: true, phaseImage: image })
             setShowReview(false)
-            toggle(colKey)  // collapse phase after completing
+            // Collapse when done, unless the review left notes to look at
+            if (!(p.reviewNotes ?? []).some(n => !n.done)) toggle(colKey)
           }}
           onClose={() => setShowReview(false)}
         />

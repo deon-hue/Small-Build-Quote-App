@@ -111,7 +111,7 @@ export default function PhaseReviewModal({ phase, jobType, markup, onAddItem, ad
             onClick={() => addSuggestion(s, keyId)}
             disabled={done}
             style={{ padding: '5px 12px', background: done ? '#16a34a' : accent, border: 'none', borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 700, cursor: done ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
-            {done ? (addAsNotes ? '✓ Noted' : '✓ Added') : (addAsNotes ? '+ Add as note' : '+ Add')}
+            {done ? (addAsNotes ? '✓ Noted' : '✓ Added at £0') : (addAsNotes ? '+ Add as note' : '+ Add line')}
           </button>
         </div>
       </div>
@@ -156,6 +156,12 @@ export default function PhaseReviewModal({ phase, jobType, markup, onAddItem, ad
           {result && addAsNotes && (
             <div style={{ marginBottom: 14, padding: '8px 12px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 8, fontSize: 12.5, color: '#6b21a8', lineHeight: 1.5 }}>
               This sub-phase is priced by a calculator, so a suggestion is kept as a note on it. When you press Recalculate the notes are shown at the top, ready for you to add.
+            </div>
+          )}
+
+          {result && !addAsNotes && (
+            <div style={{ marginBottom: 14, padding: '8px 12px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 8, fontSize: 12.5, color: '#6b21a8', lineHeight: 1.5 }}>
+              A suggestion you add goes in as a line at £0 in its cost list (Labour, Materials and so on), and a note appears on the sub-phase with a button to open that list and put a price on it.
             </div>
           )}
 
