@@ -1486,7 +1486,22 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
         {open && (
           <>
             <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }} title="What the work costs you, without VAT">Cost <strong style={{ fontFamily: 'monospace', color: '#1e293b' }}>£{totalCost.toFixed(2)}</strong></span>
-            <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }} title="The margin added on top of cost. It has to cover company costs and expenses, so the real profit on the job is lower.">Margin {phaseMarkup(p, markup)}% <strong style={{ fontFamily: 'monospace', color: margin >= 0 ? '#16a34a' : '#dc2626' }}>£{margin.toFixed(2)}</strong></span>
+            <span style={{ fontSize: 12, color: '#64748b', flexShrink: 0 }} title="The margin added on top of cost. It has to cover company costs and expenses, so the real profit on the job is lower.">Margin{' '}
+              {builtAssembly || isLocked ? <>{phaseMarkup(p, markup)}%</> : (
+                <>
+                  {/* An ordinary sub-phase takes the quote's margin unless you give it its own here (a calculator sub-phase sets its margin in the calculator) */}
+                  <input type="number" min={0} max={200} step={1} value={phaseMarkup(p, markup)}
+                    onClick={e => e.stopPropagation()}
+                    onChange={e => onUpdate({ ...p, markupPct: Math.max(0, Math.min(200, +e.target.value || 0)) })}
+                    title={p.markupPct === undefined ? `Uses the quote's margin (${markup}%). Type a number to give this sub-phase its own.` : `This sub-phase's own margin. The rest of the quote uses ${markup}%.`}
+                    style={{ width: 46, fontSize: 12, padding: '1px 3px', textAlign: 'right', border: p.markupPct === undefined ? '1px solid #e2e8f0' : '1px solid #7ab533', borderRadius: 4, background: p.markupPct === undefined ? '#fff' : '#f7fee7' }} />%
+                  {p.markupPct !== undefined && (
+                    <button type="button" onClick={e => { e.stopPropagation(); onUpdate({ ...p, markupPct: undefined }) }}
+                      title={`Go back to the quote's margin (${markup}%)`}
+                      style={{ marginLeft: 3, border: 'none', background: 'none', color: '#0369a1', cursor: 'pointer', fontSize: 12, padding: 0 }}>↺</button>
+                  )}
+                </>
+              )}{' '}<strong style={{ fontFamily: 'monospace', color: margin >= 0 ? '#16a34a' : '#dc2626' }}>£{margin.toFixed(2)}</strong></span>
           </>
         )}
         <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: '#7ab533', flexShrink: 0 }} title="Selling price, without VAT">
