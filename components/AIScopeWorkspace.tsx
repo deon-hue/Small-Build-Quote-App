@@ -364,6 +364,7 @@ export default function AIScopeWorkspace({
               value={scopeText}
               onChange={setScopeText}
               minHeight={360}
+              autoGrow
               style={{ padding: 14, lineHeight: 1.7, border: `1.5px solid ${scopeFocus ? COLORS.purple : COLORS.border}`, borderRadius: 10, resize: 'none', color: '#1e293b' }}
               onFocus={() => setScopeFocus(true)}
               onBlur={() => setScopeFocus(false)}

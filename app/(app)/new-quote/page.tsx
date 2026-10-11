@@ -1806,7 +1806,7 @@ export default function NewQuotePage() {
             value={scope}
             onChange={setScope}
             readOnly={isLockedQuote}
-            minHeight={140}
+            minHeight={88}
             placeholder={quoteSource === 'ai' ? 'AI-generated scope will appear here — you can edit it freely.' : 'Describe the scope of works… or click "Write with AI" to build it conversationally'}
           />
         </div>

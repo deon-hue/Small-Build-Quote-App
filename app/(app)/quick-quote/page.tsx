@@ -393,7 +393,7 @@ export default function QuickQuotePage() {
         <ScopeEditor
           value={scope}
           onChange={v => { setScope(v); setScopeGenerated(false) }}
-          minHeight={120}
+          minHeight={88}
           placeholder="Describe the scope of works for this project…"
         />
       </div>

@@ -8,13 +8,15 @@ import { scopeToEditorHtml, scopeLineForEditor, domToScope } from '@/lib/scope-f
 import { DragHandle } from '@/components/DragHandle'
 
 export default function ScopeEditor({
-  value, onChange, readOnly = false, placeholder = '', minHeight = 140, style, onFocus, onBlur,
+  value, onChange, readOnly = false, placeholder = '', minHeight = 140, autoGrow = false, style, onFocus, onBlur,
 }: {
   value: string
   onChange: (v: string) => void
   readOnly?: boolean
   placeholder?: string
   minHeight?: number
+  /** true = the box grows to fit all its text (the full-screen AI writer); default false = a fixed small box that scrolls, enlarged by dragging its edges */
+  autoGrow?: boolean
   /** extra styles for the writing area (border, padding, font size, ...) */
   style?: React.CSSProperties
   onFocus?: () => void
@@ -117,7 +119,7 @@ export default function ScopeEditor({
           onFocus={onFocus}
           onBlur={onBlur}
           style={{
-            minHeight, height: size.h ?? undefined, overflowY: 'auto', resize: 'none', whiteSpace: 'pre-wrap', wordBreak: 'break-word', outline: 'none',
+            minHeight: autoGrow ? minHeight : undefined, height: size.h ?? (autoGrow ? undefined : minHeight), overflowY: 'auto', resize: 'none', whiteSpace: 'pre-wrap', wordBreak: 'break-word', outline: 'none',
             width: '100%', boxSizing: 'border-box', fontSize: 13, lineHeight: 1.6, padding: '10px 12px',
             border: '1px solid var(--border)', borderRadius: 6, background: readOnly ? '#f8fafc' : '#fff', color: 'var(--text, #1e293b)', fontFamily: 'inherit',
             ...style,
