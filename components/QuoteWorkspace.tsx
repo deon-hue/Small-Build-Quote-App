@@ -1445,7 +1445,6 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
         </span>
         {!isLocked && (
           <div className="icon-btn-row" style={{ display: 'flex', gap: 2, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-            <button className="icon-btn-touch" style={iconBtn()} title="Add task" onClick={onAddTask}>+ Task</button>
             <button className="icon-btn-touch" style={iconBtn()} title="Duplicate" onClick={onDuplicate}>⧉</button>
             <button
               onClick={e => { e.stopPropagation(); setShowReview(true) }}
@@ -1883,13 +1882,6 @@ function RoomBlock({ mainPhase, room, phases, markup, jobType, isLocked, collaps
           <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#16a34a', fontWeight: 700, flexShrink: 0 }}>
             {total > 0 ? fmt(total) : '—'}
           </span>
-          {!isLocked && (
-            <button
-              onClick={e => { e.stopPropagation(); onAddSubPhase(mainPhase, room) }}
-              style={{ ...addBtn, fontSize: 10 }}>
-              + Sub-phase
-            </button>
-          )}
         </div>
       )}
 
@@ -1917,12 +1909,6 @@ function RoomBlock({ mainPhase, room, phases, markup, jobType, isLocked, collaps
               boTasks={boTasks}
             />
           ))}
-          {!isLocked && !hasRoom && (
-            <button style={{ ...addBtn, fontSize: 11, marginTop: 4 }}
-              onClick={() => onAddSubPhase(mainPhase, room)}>
-              + Sub-phase
-            </button>
-          )}
         </div>
     </div>
   )
@@ -2074,6 +2060,8 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [search,    setSearch]    = useState('')
   const [subPhasePicker, setSubPhasePicker] = useState<{ mainPhase: string; room: string } | null>(null)
+  // Which room the sub-phase being picked goes in ('' = none), chosen in the picker when the phase already has rooms
+  const [pickerRoom, setPickerRoom] = useState('')
   const [pickerSearch, setPickerSearch]     = useState('')
 
   const toggle = useCallback((k: string) => {
@@ -2122,6 +2110,7 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
   function addSubPhase(mainPhase: string, room: string) {
     if (boSubPhases.length > 0) {
       setPickerSearch('')
+      setPickerRoom(room)
       setSubPhasePicker({ mainPhase, room })
     } else {
       createSubPhase(mainPhase, room, 'New Sub-Phase', undefined)
@@ -2628,6 +2617,21 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
             onClick={e => e.stopPropagation()}>
             <div style={{ padding: '16px 18px', borderBottom: '1px solid #e2e8f0' }}>
               <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 10 }}>Add Sub-Phase</div>
+              {(() => {
+                const existing = getRoomLabels(phases, subPhasePicker.mainPhase).filter(Boolean)
+                const isNewRoom = !!subPhasePicker.room && !existing.includes(subPhasePicker.room)
+                if (isNewRoom) return <div style={{ fontSize: 12, color: '#166534', marginBottom: 10 }}>📍 Goes in a new room: {subPhasePicker.room} (rename it afterwards)</div>
+                if (existing.length === 0) return null
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <label style={{ fontSize: 12, color: '#64748b' }}>📍 Put it in</label>
+                    <select value={pickerRoom} onChange={e => setPickerRoom(e.target.value)} style={{ flex: 1, padding: '6px 8px', border: '1px solid #d1d5db', borderRadius: 7, fontSize: 13 }}>
+                      <option value="">No room</option>
+                      {existing.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  </div>
+                )
+              })()}
               <input
                 autoFocus
                 value={pickerSearch}
@@ -2652,7 +2656,7 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
                         <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', padding: '6px 16px 2px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{g.phase.name}</div>
                         {g.subs.map(sp => (
                           <button key={sp.id}
-                            onClick={() => createSubPhase(subPhasePicker.mainPhase, subPhasePicker.room, sp.name, sp.id)}
+                            onClick={() => createSubPhase(subPhasePicker.mainPhase, pickerRoom, sp.name, sp.id)}
                             style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 16px', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', color: '#1e293b' }}
                             onMouseEnter={e => (e.currentTarget.style.background = '#f1f5f9')}
                             onMouseLeave={e => (e.currentTarget.style.background = 'none')}
@@ -2664,7 +2668,7 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
                     ))}
                     {ungrouped.map(sp => (
                       <button key={sp.id}
-                        onClick={() => createSubPhase(subPhasePicker.mainPhase, subPhasePicker.room, sp.name, sp.id)}
+                        onClick={() => createSubPhase(subPhasePicker.mainPhase, pickerRoom, sp.name, sp.id)}
                         style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 16px', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', color: '#1e293b' }}
                         onMouseEnter={e => (e.currentTarget.style.background = '#f1f5f9')}
                         onMouseLeave={e => (e.currentTarget.style.background = 'none')}
@@ -2681,7 +2685,7 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
             </div>
             <div style={{ borderTop: '1px solid #e2e8f0', padding: '10px 16px' }}>
               <button
-                onClick={() => createSubPhase(subPhasePicker.mainPhase, subPhasePicker.room, pickerSearch.trim() || 'New Sub-Phase', undefined)}
+                onClick={() => createSubPhase(subPhasePicker.mainPhase, pickerRoom, pickerSearch.trim() || 'New Sub-Phase', undefined)}
                 style={{ width: '100%', padding: '9px', border: '1px dashed #d1d5db', borderRadius: 7, background: '#f8fafc', fontSize: 13, cursor: 'pointer', color: '#374151', textAlign: 'center' }}
               >
                 + Custom{pickerSearch.trim() ? `: "${pickerSearch.trim()}"` : ' (blank)'}
