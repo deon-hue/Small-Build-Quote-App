@@ -21,7 +21,7 @@ import { fmt } from '@/lib/utils'
 import { calculateMonoPitchRoofGeometry, type MonoPitchWallConnection } from '@/lib/mono-pitch-roof'
 import { calculateGableRoofGeometry, type GableEndTreatment } from '@/lib/gable-roof'
 import { calculateHipRoofGeometry, type HipEndTreatment } from '@/lib/hip-roof'
-import { calculatePitchedRoofCoveringGeometry, type PitchedCoveringMaterial, type PitchedRoofCoveringGeometry } from '@/lib/pitched-roof-covering'
+import { calculatePitchedRoofCoveringGeometry, ABUTMENT_FLASHING, SOAKER_RATE, CHASE_MATERIALS_RATE, soakerCountFor, type AbutmentFlashing, type PitchedCoveringMaterial, type PitchedRoofCoveringGeometry } from '@/lib/pitched-roof-covering'
 import { describePitchedRoofCovering, describePitchedRoofCoveringShort } from '@/lib/pitched-roof-covering-description'
 import { suggestPitchedRoofCoveringLabour, toLabourLines, type LabourSuggestion } from '@/lib/flat-roof-labour'
 import type { BOLabourTrade } from '@/lib/back-office-types'
@@ -114,6 +114,8 @@ export default function AssemblyPitchedRoofCoveringDemo({ onClose, onSave, labou
   const [material, setMaterial] = useCalcState<PitchedCoveringMaterial>('AssemblyPitchedRoofCoveringDemo', 'material', 'concrete-tile')
   const [battenGaugeMm, setBattenGaugeMm] = useCalcState('AssemblyPitchedRoofCoveringDemo', 'battenGaugeMm', 345)
   const [membraneType, setMembraneType] = useCalcState<'breather' | 'felt'>('AssemblyPitchedRoofCoveringDemo', 'membraneType', 'breather')
+  // What the flashing at an existing wall is made of (only matters when the roof meets one)
+  const [flashing, setFlashing] = useCalcState<AbutmentFlashing>('AssemblyPitchedRoofCoveringDemo', 'flashing', 'lead4')
 
   const edges = useMemo(
     () => deriveCoveringEdges({ roofType, lengthMm, spanMm, pitchDeg, eavesOverhangMm, monoHighWallConnection, gableEndA, gableEndB, hipEndA, hipEndB }),
@@ -141,6 +143,9 @@ export default function AssemblyPitchedRoofCoveringDemo({ onClose, onSave, labou
   function toggleLayer(id: string) { setDisabledLayerIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
   const noSidesLayers = useMemo(() => new Set<string>(), [])
 
+  // A gable or hip end built against a wall runs UP the slope (soakers at every course); a lean-to's high wall is level (an apron flashing, no soakers)
+  const soakers = g ? soakerCountFor(g.abutmentLm, battenGaugeMm, roofType !== 'mono', flashing) : 0
+
   const layers: AssemblyLayerDef[] = useMemo(() => {
     if (!g) return []
     const out: AssemblyLayerDef[] = []
@@ -150,11 +155,16 @@ export default function AssemblyPitchedRoofCoveringDemo({ onClose, onSave, labou
     if (g.ridgeLm > 0) out.push({ id: 'ridge', name: 'Ridge capping, dry-fix system', category: 'materials', source: 'fixed', fixedQty: g.ridgeLm, unit: 'lm', unitCost: 18, wastePct })
     if (g.hipLm > 0) out.push({ id: 'hip_cap', name: 'Hip capping, dry-fix system', category: 'materials', source: 'fixed', fixedQty: g.hipLm, unit: 'lm', unitCost: 20, wastePct })
     if (g.vergeLm > 0) out.push({ id: 'verge', name: 'Dry verge system', category: 'materials', source: 'fixed', fixedQty: g.vergeLm, unit: 'lm', unitCost: 12, wastePct })
-    if (g.abutmentLm > 0) out.push({ id: 'abutment', name: 'Lead flashing, code 4, at the abutment', category: 'materials', source: 'fixed', fixedQty: g.abutmentLm, unit: 'lm', unitCost: 15, wastePct })
+    if (g.abutmentLm > 0) {
+      const fl = ABUTMENT_FLASHING[flashing]
+      out.push({ id: 'abutment', name: fl.line, category: 'materials', source: 'fixed', fixedQty: g.abutmentLm, unit: 'lm', unitCost: fl.rate, wastePct })
+      if (soakers > 0) out.push({ id: 'abutment_soakers', name: 'Lead soakers, one per course up the abutment', category: 'materials', source: 'fixed', fixedQty: soakers, unit: 'nr', unitCost: SOAKER_RATE, roundToWhole: true, wastePct: 0 })
+      out.push({ id: 'abutment_chase', name: 'Lead wedges, mortar and sealant for the chase', category: 'materials', source: 'fixed', fixedQty: g.abutmentLm, unit: 'lm', unitCost: CHASE_MATERIALS_RATE, wastePct })
+    }
     if (g.eavesLm > 0) out.push({ id: 'eaves', name: 'Eaves felt support tray / eaves closure', category: 'materials', source: 'fixed', fixedQty: g.eavesLm, unit: 'lm', unitCost: 3.50, wastePct })
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [g, material, membraneType, wastePct])
+  }, [g, material, membraneType, wastePct, flashing, soakers])
 
   const costedLines: CostedLine[] = useMemo(() => layers.map(l => {
     const withRate = rateOverrides[l.id] != null ? { ...l, unitCost: rateOverrides[l.id] } : l
@@ -179,7 +189,7 @@ export default function AssemblyPitchedRoofCoveringDemo({ onClose, onSave, labou
 
   // Labour — the roofer laying the membrane, battens, covering and dressing the trims, following the roof
   // until edited by hand
-  const labourSuggestions: LabourSuggestion[] = g ? suggestPitchedRoofCoveringLabour({ material, ...g }) : []
+  const labourSuggestions: LabourSuggestion[] = g ? suggestPitchedRoofCoveringLabour({ material, ...g, soakerCount: soakers }) : []
   const suggestedLabour = toLabourLines(labourSuggestions, labourTrades, false)
   const [labourOverride, setLabourOverride] = useCalcState<LabourLine[] | null>('AssemblyPitchedRoofCoveringDemo', 'labourOverride', null)
   const suggestedRef = useRef<LabourLine[]>([])
@@ -204,7 +214,7 @@ export default function AssemblyPitchedRoofCoveringDemo({ onClose, onSave, labou
   const totalCost = costSubtotal + profitAmount
 
   // The customer's description follows the roof until it's edited by hand
-  const descInput = g ? { material, slopeAreaM2: g.slopeAreaM2, battenGaugeMm, ridgeLm: g.ridgeLm, hipLm: g.hipLm, vergeLm: g.vergeLm, abutmentLm: g.abutmentLm } : null
+  const descInput = g ? { material, slopeAreaM2: g.slopeAreaM2, battenGaugeMm, ridgeLm: g.ridgeLm, hipLm: g.hipLm, vergeLm: g.vergeLm, abutmentLm: g.abutmentLm, flashingPhrase: ABUTMENT_FLASHING[flashing].phrase, soakerCount: soakers } : null
   const [descriptionOverride, setDescriptionOverride] = useCalcState<string | null>('AssemblyPitchedRoofCoveringDemo', 'descriptionOverride', null)
   const [detailOverride, setDetailOverride] = useCalcState<string | null>('AssemblyPitchedRoofCoveringDemo', 'detailOverride', null)
   const description = descriptionOverride ?? (descInput ? describePitchedRoofCoveringShort(descInput) : '')
@@ -357,6 +367,20 @@ export default function AssemblyPitchedRoofCoveringDemo({ onClose, onSave, labou
             </div>
             <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>Check the batten gauge against the chosen product's own gauge table — this is a starting point, not the product's rating.</div>
           </CollapsibleSection>
+
+          {g && g.abutmentLm > 0 && (
+            <CollapsibleSection title={`Wall flashing — ${ABUTMENT_FLASHING[flashing].label}`} borderColor="#bae6fd">
+              <PropRow label="Flashing where the roof meets the wall">
+                <select value={flashing} onChange={e => setFlashing(e.target.value as AbutmentFlashing)} style={propInput}>
+                  {(Object.entries(ABUTMENT_FLASHING) as [AbutmentFlashing, (typeof ABUTMENT_FLASHING)[AbutmentFlashing]][]).map(([k, v]) => <option key={k} value={k}>{v.label} — £{v.rate.toFixed(2)}/lm</option>)}
+                </select>
+              </PropRow>
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>
+                {g.abutmentLm.toFixed(1)}m of flashing{soakers > 0 ? `, with ${soakers} lead soakers (one per course up the sloping edge)` : roofType === 'mono' ? ' along the high wall (an apron flashing, no soakers)' : ' (no soakers with this flashing)'}.
+                The chase is cut in the brickwork and the flashing pointed in, priced in materials and the roofer&apos;s time.
+              </div>
+            </CollapsibleSection>
+          )}
 
           <PropRow label={`Waste % (${wastePct}%)`}>
             <input type="range" min={0} max={25} value={wastePct} onChange={e => setWastePct(+e.target.value)} style={{ width: '100%' }} />

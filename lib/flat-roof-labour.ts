@@ -30,7 +30,7 @@ export const LABOUR_RATES = {
   roofer: {
     insulationM2: 0.2, coveringM2: { grp: 0.55, epdm: 0.4, tpo: 0.45, 'concrete-tile': 0.5, 'clay-tile': 0.7, 'natural-slate': 0.8, 'fibre-cement-slate': 0.6 } as Record<string, number>,
     trimLm: 0.3, cornerNr: 0.2, leadLm: 0.5, outletNr: 0.75, overflowNr: 0.5,
-    membraneM2: 0.15, battenLm: 0.08, ridgeLm: 0.35, hipLm: 0.4, vergeLm: 0.3, abutmentLm: 0.4, eavesLm: 0.15,
+    membraneM2: 0.15, battenLm: 0.08, ridgeLm: 0.35, hipLm: 0.4, vergeLm: 0.3, abutmentLm: 0.4, eavesLm: 0.15, chaseLm: 0.3, soakerNr: 0.05,
   },
   bricklayer: { cavityM2: 1.4, solidM2: 1.0, solidBrickM2: 1.8, copingLm: 0.35, trayLm: 0.15, outletOpeningNr: 0.5, dpcLm: 0.05 },
   groundworker: { trimLm: 0.25, concreteM3: 1.5, backfillM3: 0.5, cavityFillM3: 1.0, raftTrimM2: 0.06, raftHardcoreM2: 0.12, raftBlindM2: 0.10, raftInsulationM2: 0.08, raftMeshM2PerLayer: 0.12, raftFormworkLm: 0.3, raftFinishM2: 0.12, padPitNr: 0.4, padBlindNr: 0.3, padFormworkM2: 0.8, padRebarKg: 0.025, beamBlindLm: 0.15, beamFormworkM2: 0.35, beamCageLm: 0.2, pileCutNr: 0.5, underpinDigM3: 10, underpinShutterM2: 1.0, underpinPinNr: 2.0, underpinPourM3: 2.5, underpinPackNr: 1.0, underpinSteelKg: 0.025 },
@@ -439,6 +439,8 @@ export function suggestHipRoofLabour(g: {
  * abutment trims, from the lengths and area already worked out by the engine. */
 export function suggestPitchedRoofCoveringLabour(g: {
   material: string; slopeAreaM2: number; battenLm: number; ridgeLm: number; hipLm: number; vergeLm: number; abutmentLm: number; eavesLm: number
+  /** lead soakers to fit up a sloping abutment (0 when there are none) */
+  soakerCount?: number
 }): LabourSuggestion[] {
   const r = LABOUR_RATES.roofer
   const line1 = line('pitch-cov-membrane-batten', 'roofer', 'Lay the breather membrane and fix the battens', [
@@ -455,7 +457,12 @@ export function suggestPitchedRoofCoveringLabour(g: {
     { qty: g.abutmentLm, unit: 'lm', what: 'abutment flashing', rate: r.abutmentLm },
     { qty: g.eavesLm, unit: 'lm', what: 'eaves', rate: r.eavesLm },
   ])
-  return [line1, line2, line3].filter((x): x is LabourSuggestion => x !== null)
+  // At a wall: cut the chase in the brickwork, fit the soakers and point the flashing in (the dressing itself is in the trims line above)
+  const line4 = line('pitch-cov-flashing-chase', 'roofer', 'Cut the chase, fit the soakers and point in the flashing at the wall', [
+    { qty: g.abutmentLm, unit: 'lm', what: 'chase and pointing', rate: r.chaseLm },
+    { qty: g.soakerCount ?? 0, unit: 'soakers', what: '', rate: r.soakerNr },
+  ])
+  return [line1, line2, line3, line4].filter((x): x is LabourSuggestion => x !== null)
 }
 
 /** The labour for fascia, soffit and barge boards priced on their own (Roof → Fascias, Soffits & Barge

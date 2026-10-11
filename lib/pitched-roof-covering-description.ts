@@ -20,6 +20,10 @@ export interface PitchedRoofCoveringDescriptionInput {
   hipLm: number
   vergeLm: number
   abutmentLm: number
+  /** how the flashing reads ("code 4 lead flashing"); absent = "lead flashing" */
+  flashingPhrase?: string
+  /** lead soakers up a sloping abutment */
+  soakerCount?: number
 }
 
 export function describePitchedRoofCoveringShort(i: PitchedRoofCoveringDescriptionInput): string {
@@ -40,7 +44,10 @@ export function describePitchedRoofCovering(i: PitchedRoofCoveringDescriptionInp
   if (i.ridgeLm > 0) trims.push(`${i.ridgeLm.toFixed(1)}m of ridge capping`)
   if (i.hipLm > 0) trims.push(`${i.hipLm.toFixed(1)}m of hip capping`)
   if (i.vergeLm > 0) trims.push(`${i.vergeLm.toFixed(1)}m of verge`)
-  if (i.abutmentLm > 0) trims.push(`${i.abutmentLm.toFixed(1)}m of lead flashing where the roof meets a wall`)
+  if (i.abutmentLm > 0) {
+    const soakers = (i.soakerCount ?? 0) > 0 ? `, with ${i.soakerCount} soakers` : ''
+    trims.push(`${i.abutmentLm.toFixed(1)}m of ${i.flashingPhrase ?? 'lead flashing'} where the roof meets a wall${soakers}, chased into the brickwork and pointed`)
+  }
   if (trims.length) {
     const joined = trims.length > 1 ? `${trims.slice(0, -1).join(', ')} and ${trims[trims.length - 1]}` : trims[0]
     lines.push(`Trims: ${joined}.`)

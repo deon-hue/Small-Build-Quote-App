@@ -60,3 +60,38 @@ export function calculatePitchedRoofCoveringGeometry(input: PitchedRoofCoveringI
     warnings,
   }
 }
+
+// ── Flashing where the roof meets an existing wall ────────────────────────────────────────────────────────────────────────────────────────────
+// Lead (or a lead-effect or GRP substitute) is fixed into a chase cut in the wall and dressed over the roof covering. Where the abutment runs UP the slope (a gable
+// or hip end built against a wall) tiles and slates need a soaker under the flashing at every course; along the high wall of a lean-to (horizontal) it is an apron
+// flashing and needs none. The chase is cut and pointed in whatever the flashing. All rates are sample rates, editable in the calculator.
+
+export type AbutmentFlashing = 'lead4' | 'lead5' | 'lead-effect' | 'grp'
+
+export interface FlashingOption {
+  label: string
+  /** the name of the line in the cost breakdown */
+  line: string
+  /** £ per metre, supplied */
+  rate: number
+  /** lead needs a lead soaker at every course up a sloping abutment */
+  leadSoakers: boolean
+  /** how it reads in the customer's description */
+  phrase: string
+}
+
+export const ABUTMENT_FLASHING: Record<AbutmentFlashing, FlashingOption> = {
+  lead4: { label: 'Code 4 lead', line: 'Code 4 lead flashing, at the abutment', rate: 15, leadSoakers: true, phrase: 'code 4 lead flashing' },
+  lead5: { label: 'Code 5 lead (heavier)', line: 'Code 5 lead flashing, at the abutment', rate: 19.5, leadSoakers: true, phrase: 'code 5 lead flashing' },
+  'lead-effect': { label: 'Lead-effect (lead-free)', line: 'Lead-effect flashing, at the abutment', rate: 9, leadSoakers: false, phrase: 'lead-effect flashing' },
+  grp: { label: 'GRP lead-effect trim', line: 'GRP lead-effect flashing trim, at the abutment', rate: 21, leadSoakers: false, phrase: 'GRP lead-effect flashing' },
+}
+
+export const SOAKER_RATE = 2.4          // £ each, a lead soaker
+export const CHASE_MATERIALS_RATE = 1.8 // £ per metre: lead wedges, mortar and flashing sealant
+
+/** Lead soakers for a sloping abutment: one per batten course up its length. None along a horizontal (lean-to) abutment or for a flashing that has no soakers. */
+export function soakerCountFor(abutmentLm: number, battenGaugeMm: number, sloped: boolean, flashing: AbutmentFlashing): number {
+  if (!sloped || !ABUTMENT_FLASHING[flashing].leadSoakers || !(abutmentLm > 0) || !(battenGaugeMm > 0)) return 0
+  return Math.ceil((abutmentLm * 1000) / battenGaugeMm - 1e-9)
+}
