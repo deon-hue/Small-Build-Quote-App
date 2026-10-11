@@ -888,12 +888,12 @@ export default function TakeoffPage() {
     // sub-phase that has a calculator (the others aren't used by the roof screen).
     if (!taskSubphaseId && selectedTaskSubphaseId &&
         ((el.type === 'line' && (item.phase === 'External Walls' || item.phase === 'Internal Walls & Partitions' || item.phase === 'Foundations')) ||
-          item.phase === 'Roof' || (item.phase === 'Foundations' && el.type !== 'line'))) {
+          item.phase === 'Roof' || item.phase === 'Decoration' || (item.phase === 'Foundations' && el.type !== 'line'))) {
       const bo = boSubPhases.find(sp => sp.id === selectedTaskSubphaseId)
       const boPhaseName = bo ? boPhases.find(p => p.id === bo.phase_id)?.name : undefined
       const hasCalculator = !!(bo?.canonical_id && BUILT_ASSEMBLY_CANON_IDS[bo.canonical_id])
       const foundationFits = item.phase !== 'Foundations' || (el.type === 'line' ? FOUNDATION_LINE_CALCS.has(bo?.canonical_id ?? '') : FOUNDATION_SHAPE_CALCS.has(bo?.canonical_id ?? ''))
-      if (bo && boPhaseName === item.phase && foundationFits && ((item.phase !== 'Roof' && item.phase !== 'Foundations') || hasCalculator)) {
+      if (bo && boPhaseName === item.phase && foundationFits && ((item.phase !== 'Roof' && item.phase !== 'Foundations' && item.phase !== 'Decoration') || hasCalculator)) {
         item.taskSubphaseId = bo.id
         item.subPhase = bo.name
         if (item.phase === 'Foundations') {
@@ -1223,6 +1223,11 @@ export default function TakeoffPage() {
       if (bySubPhase) return bySubPhase
       const canonical = it.floorMakeupId ? WALL_MAKEUP_TO_SUBPHASE_CANONICAL[it.floorMakeupId] : undefined
       return canonical ? BUILT_ASSEMBLY_CANON_IDS[canonical] : undefined
+    }
+    if (it.phase === 'Decoration' && !it.taskId) {
+      // (an item that already carries a flat task from before the calculator existed stays a task item until its sub-phase is changed)
+      const boSub = it.taskSubphaseId ? boSubPhases.find(sp => sp.id === it.taskSubphaseId) : undefined
+      return boSub?.canonical_id ? BUILT_ASSEMBLY_CANON_IDS[boSub.canonical_id] : undefined
     }
     const isLine = (it.elementId ? project.elements.find(e => e.id === it.elementId) : null)?.type === 'line'
     if (it.phase === 'Foundations' && isLine) {
@@ -2459,7 +2464,12 @@ export default function TakeoffPage() {
     const _phaseHasTasks = _subs.length > 0
     if (_phaseHasTasks && !item.taskSubphaseId && !_isBuildupItem) {
       const _ds = _subs[0]; const _dt = _ds?.tasks[0]
-      if (_ds && _dt) {
+      const _dsCanon = _ds ? boSubPhases.find(b => b.id === _ds.id)?.canonical_id : undefined
+      if (_ds && item.phase === 'Decoration' && _dsCanon && BUILT_ASSEMBLY_CANON_IDS[_dsCanon]) {
+        // The first Decoration sub-phase is priced by its calculator: carry it onto the item, with no flat task
+        item = { ...item, taskSubphaseId: _ds.id, subPhase: _ds.name }
+        saveItemEdit(item)
+      } else if (_ds && _dt) {
         const _q = item.qty > 0 ? item.qty : _dt.defaultQty
         item = {
           ...item, name: _dt.name, spec: _dt.notes ?? '',
@@ -2484,7 +2494,9 @@ export default function TakeoffPage() {
     const isBuildup        = _isBuildupItem
     const isFoundationLine = item.phase === 'Foundations' && isLineBased
     const isTurf           = isBuildup && item.phase === 'External Works & Landscaping'
-    const isTaskPhase      = _phaseHasTasks && !isBuildup && !isExtWall && !isPlaster && !isIntWall && !isDemo && !isFoundationLine
+    // Decoration is a task phase, except when the sub-phase picked has a calculator (Internal decoration): then the calculator prices it
+    const isDecoCalc       = item.phase === 'Decoration' && !!resolveBuiltAssembly(item)
+    const isTaskPhase      = _phaseHasTasks && !isBuildup && !isExtWall && !isPlaster && !isIntWall && !isDemo && !isFoundationLine && !isDecoCalc
     const showWallLine     = isLineBased && (isExtWall || isIntWall || isPlaster)
     const hasOpenings      = (isExtWall || isIntWall || isPlaster) && isLineBased
 
@@ -2498,8 +2510,8 @@ export default function TakeoffPage() {
     const isRoof = item.phase === 'Roof'
     // A raft is a shape in Foundations, sized from the box it sits in (like a roof)
     const isFoundationShape = item.phase === 'Foundations' && !isLineBased && !!linkedEl
-    const builtAssembly = (isIntWall || isExtWall || isRoof || isFoundationLine || isFoundationShape) ? resolveBuiltAssembly(item) : undefined
-    const hideForBuiltAssembly = (isIntWall || isExtWall || isRoof || isFoundationLine || isFoundationShape) && !!builtAssembly
+    const builtAssembly = (isIntWall || isExtWall || isRoof || isFoundationLine || isFoundationShape || isDecoCalc) ? resolveBuiltAssembly(item) : undefined
+    const hideForBuiltAssembly = (isIntWall || isExtWall || isRoof || isFoundationLine || isFoundationShape || isDecoCalc) && !!builtAssembly
 
     // The calculator is too big for this ~300px panel, so the panel shows a summary card and the
     // calculator itself opens full size in a window (see AssemblyWindow.tsx). A wall is sized by its
@@ -2510,8 +2522,8 @@ export default function TakeoffPage() {
       <AssemblyItemPanel
         name={item.name}
         lengthM={item.length ?? 0}
-        measureLabel={isBoxShape ? 'Size' : undefined}
-        measureText={isBoxShape ? (roofBox ? `${(roofBox.lengthMm / 1000).toFixed(2)} × ${(roofBox.widthMm / 1000).toFixed(2)} m` : 'Not drawn') : undefined}
+        measureLabel={isBoxShape ? 'Size' : isDecoCalc ? 'Marker' : undefined}
+        measureText={isBoxShape ? (roofBox ? `${(roofBox.lengthMm / 1000).toFixed(2)} × ${(roofBox.widthMm / 1000).toFixed(2)} m` : 'Not drawn') : isDecoCalc ? 'rooms are set in the calculator' : undefined}
         saved={item.assemblyResult}
         open={assemblyWindowItemId === item.id}
         onOpen={() => setAssemblyWindowItemId(item.id)}
@@ -2676,7 +2688,7 @@ export default function TakeoffPage() {
       if (!sp || !tk) return
       const q = item.qty > 0 ? item.qty : tk.defaultQty
       saveItemEdit({
-        ...item, name: tk.name, spec: tk.notes ?? '',
+        ...item, name: tk.name, spec: tk.notes ?? '', assemblyResult: undefined, assemblyCalcState: undefined,
         taskSubphaseId: subId, taskId, taskMarkupPct: sp.markupPct,
         subPhase: sp.name, unit: tk.unit, qty: q,
         taskLabour:        +(tk.labour        * q).toFixed(2),
@@ -3274,6 +3286,33 @@ export default function TakeoffPage() {
             </>
           )}
 
+          {/* Decoration priced by its calculator (Internal decoration): the Sub-Phase picker and the calculator card. The drawn area is only a marker. */}
+          {isDecoCalc && builtAssembly && (() => {
+            const decoSubs = getAllSubphasesForPhase('Decoration')
+            return (
+              <>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={labelStyle}>Sub-Phase</label>
+                  <select style={{ ...inputStyle, color: accent }} value={item.taskSubphaseId ?? ''}
+                    onChange={e => {
+                      const sp = decoSubs.find(x => x.id === e.target.value)
+                      if (!sp) return
+                      const canon = boSubPhases.find(b => b.id === sp.id)?.canonical_id
+                      if (canon && BUILT_ASSEMBLY_CANON_IDS[canon]) {
+                        saveItemEdit({ ...item, taskSubphaseId: sp.id, subPhase: sp.name, taskId: undefined, assemblyResult: undefined, assemblyCalcState: undefined })
+                      } else if (sp.tasks[0]) applyPhaseTask(sp.id, sp.tasks[0].id)
+                    }}>
+                    {decoSubs.map(sp => <option key={sp.id} value={sp.id}>{sp.name}</option>)}
+                  </select>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--to-muted)', marginBottom: 8 }}>
+                  Priced room by room with its own calculator. The area drawn here is only a marker on the plan: add the rooms in the calculator.
+                </div>
+                {renderAssemblyPanel({})}
+              </>
+            )
+          })()}
+
           {/* Task phases: Sub-phase + Task */}
           {isTaskPhase && taskSelSub && (
             <>
@@ -3283,7 +3322,11 @@ export default function TakeoffPage() {
                   value={item.taskSubphaseId ?? (taskSubs[0]?.id ?? '')}
                   onChange={e => {
                     const sp = getAllSubphasesForPhase(item.phase).find(s => s.id === e.target.value)
-                    if (sp?.tasks[0]) applyPhaseTask(sp.id, sp.tasks[0].id)
+                    const canon = sp ? boSubPhases.find(b => b.id === sp.id)?.canonical_id : undefined
+                    if (sp && item.phase === 'Decoration' && canon && BUILT_ASSEMBLY_CANON_IDS[canon]) {
+                      // to a sub-phase with a calculator: drop the flat task, the calculator prices it
+                      saveItemEdit({ ...item, taskSubphaseId: sp.id, subPhase: sp.name, taskId: undefined, taskLabour: undefined, taskMaterials: undefined, taskPlant: undefined, taskSubcontractor: undefined, taskOther: undefined, assemblyResult: undefined, assemblyCalcState: undefined })
+                    } else if (sp?.tasks[0]) applyPhaseTask(sp.id, sp.tasks[0].id)
                   }}>
                   {taskSubs.map(sp => <option key={sp.id} value={sp.id}>{sp.name}</option>)}
                 </select>
@@ -3949,7 +3992,7 @@ export default function TakeoffPage() {
                 }}>
                   <div style={{ fontWeight: 600, marginBottom: 4 }}>🧮 {selectedSub?.name}</div>
                   <div style={{ fontSize: 11, color: 'var(--to-muted)' }}>
-                    Priced with its own calculator — there are no tasks to pick. Draw the wall, then open the calculator to price it.
+                    Priced with its own calculator — there are no tasks to pick. {activePhase === 'Decoration' ? 'Draw an area on the plan (it is only a marker), then open the calculator to price it.' : 'Draw the wall, then open the calculator to price it.'}
                   </div>
                 </div>
               )}

@@ -74,7 +74,8 @@ kept on ONE Take-off item (`electricsSummary`, id `electrics-summary`, holding `
 `components/AssemblyDecorationDemo.tsx`). ONE calculator covers prep, walls and ceilings, woodwork (skirting, architrave, rails), doors and window frames; each
 room is sized and each surface says its condition (new plaster / painted good / painted poor / wallpaper) and filling-and-sanding level, because that
 changes the price (mist coat, sealer, stripping + steamer hire, filler). Lines and labour tasks are per room and per kind of work; the painter trade is
-`'painter'` in `lib/flat-roof-labour.ts`. All rates and hours are samples to check against real jobs. Rooms start empty. Not drawn from Take-off. Still to do:
+`'painter'` in `lib/flat-roof-labour.ts`. All rates and hours are samples to check against real jobs. Rooms start empty. In Take-off, Decoration is a task phase: an area drawn there with the Internal decoration sub-phase picked is only a marker and the
+calculator card opens like the roof's (`isDecoCalc` in `app/(app)/takeoff/page.tsx`; an item that already carries a flat `taskId` stays a task item). Still to do:
 Specialist Finishes and External Painting calculators (Deon unsure on specialist), the AI interview asking about wall condition and prep, and moving Floor
 Finishes out of Decoration into an Internal Finishes phase (needs his real Back Office data first).
 
