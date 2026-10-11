@@ -870,7 +870,8 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
   function applyAssemblyCalculation(result: AssemblySaveResult) {
     const newItems: QuoteItem[] = assemblyLinesToItems(result.lines).map(i => ({ ...i, id: uid() }))
     onUpdate(markEdited({
-      ...p, items: newItems, taskName: result.description, assemblyLines: result.lines,
+      // A Task Name you typed over is kept; one still showing the calculator's own wording follows the calculator
+      ...p, items: newItems, taskName: p.calcDescription !== undefined && p.taskName?.trim() && p.taskName !== p.calcDescription ? p.taskName : result.description, calcDescription: result.description, assemblyLines: result.lines,
       // Always set (even to undefined): re-saving a calculator that no longer writes a detail must not leave a stale one.
       scopeDetail: result.detail,
       electricsState: result.state as ElectricsSavedState | undefined,
@@ -1463,16 +1464,6 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
                 ↑ BO
               </button>
             )}
-            {builtAssembly && (
-              <button
-                onClick={e => { e.stopPropagation(); setShowAssemblyCalc(true) }}
-                title="Open its assembly calculator — sample rates for now, doesn't change this quote's costs yet"
-                className="icon-btn-touch"
-                style={{ ...iconBtn('#7c3aed'), fontSize: 10, border: '1px solid #e9d5ff', borderRadius: 4, padding: '2px 6px', background: '#fdfaff' }}
-              >
-                🧪 Calculator
-              </button>
-            )}
             <button className="icon-btn-touch" style={iconBtn('#e74c3c')} title="Delete" onClick={onDelete}>×</button>
           </div>
         )}
@@ -1652,7 +1643,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
                   {isCalculated ? `Priced via Assembly Calculator — ${p.items.length} line${p.items.length !== 1 ? 's' : ''}` : 'Not yet calculated'}
                 </div>
                 <div style={{ fontSize: 11, color: '#94a3b8' }}>
-                  {isCalculated ? 'Cost £' + totalCost.toFixed(2) + ' — open the calculator to recalculate' : 'Open the calculator to size this and price it'}
+                  {isCalculated ? 'Cost £' + totalCost.toFixed(2) + (p.calcState || p.electricsState ? ' — Recalculate opens the calculator as you left it, to change anything' : ' — open the calculator to recalculate') : 'Open the calculator to size this and price it'}
                 </div>
               </div>
               {p.assemblyLines && p.assemblyLines.length > 0 && (

@@ -133,6 +133,8 @@ export interface QuotePhase {
   electricsState?: ElectricsSavedState
   /** What was typed into the assembly calculator at the last Save & Price, so it opens again as it was left. */
   calcState?: CalcStateSnapshot
+  /** The one-line description the calculator last wrote, so a Task Name you have typed over is not overwritten when the calculator is saved again. */
+  calcDescription?: string
   /** AI-generated item that couldn't be matched to Back Office master data */
   needsReview?: boolean
   reviewNote?: string

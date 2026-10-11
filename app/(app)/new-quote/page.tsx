@@ -145,7 +145,7 @@ function buildPhasesFromScopeToQuote(
         needsReview: true,
         ...(el
           ? {
-              taskName: el.description, ...(el.detail && { scopeDetail: el.detail }), assemblyLines: el.lines, electricsState: el.state,
+              taskName: el.description, calcDescription: el.description, ...(el.detail && { scopeDetail: el.detail }), assemblyLines: el.lines, electricsState: el.state,
               reviewNote: `Priced by the electrical calculator from the rooms in your scope (${el.summary}) with the calculator's standard rates, per point.${el.usualRooms.length > 0 ? ` No points were stated for ${el.usualRooms.join(', ')}, so those use the usual points for that kind of room.` : ''} Open the calculator to check the points and change anything.`,
             }
           : { reviewNote: 'Priced by its calculator, but no electrical rooms or points were found in the scope. Open the calculator and add the rooms.' }),
@@ -163,7 +163,7 @@ function buildPhasesFromScopeToQuote(
         needsReview: true,
         ...(priced && size
           ? {
-              taskName: priced.description, ...(priced.detail && { scopeDetail: priced.detail }), assemblyLines: priced.lines, assemblySize: size,
+              taskName: priced.description, calcDescription: priced.description, ...(priced.detail && { scopeDetail: priced.detail }), assemblyLines: priced.lines, assemblySize: size,
               reviewNote: `Priced by its calculator from the size in your scope (${describeBasics(size)}) with the calculator's standard settings and sample rates. Open the calculator to check it and change anything.`,
             }
           : { reviewNote: BASICS_NEEDS[calcSub.canonical_id ?? ''] ? 'Priced by its calculator, but the size it needs was not found in the scope. Open the calculator and enter the size.' : 'Priced by its calculator. Open the calculator to size and price it.' }),
