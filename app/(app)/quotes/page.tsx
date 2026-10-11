@@ -92,7 +92,7 @@ export default function SavedQuotesPage() {
 
   async function handleStatusChange(quote: Quote, status: Quote['status']) {
     await updateQuote({ ...quote, status })
-    if (status === 'accepted') {
+    if (status === 'accepted' || status === 'rejected' || status === 'declined') {
       try {
         const sb = createClient()
         const { data: { user } } = await sb.auth.getUser()
@@ -100,7 +100,7 @@ export default function SavedQuotesPage() {
           await extractQuoteIntelligence(
             sb, user.id, quote.phases ?? [],
             quote.jobType ?? '', quote.ref ?? quote.id,
-            quote.markup ?? 20, 'won',
+            quote.markup ?? 20, status === 'accepted' ? 'won' : 'lost',
           )
         }
       } catch (e) {

@@ -4,6 +4,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { QuotePhase, QuoteItem } from './types'
+import { phaseFigures } from './quote-breakdown'
 
 export interface QuoteIntelligenceRow {
   user_id:          string
@@ -26,29 +27,6 @@ export interface QuoteIntelligenceRow {
   quote_outcome:    'won' | 'lost' | 'completed'
 }
 
-function phaseTotal(p: QuotePhase): { labour: number; materials: number; plant: number; sub: number; other: number } {
-  let labour = 0, materials = 0, plant = 0, sub = 0, other = 0
-  for (const i of p.items) {
-    if (i.enabled === false) continue
-    labour    += i.labour       ?? 0
-    materials += i.materials    ?? 0
-    plant     += i.plantHire    ?? 0
-    sub       += i.subcontractors ?? 0
-    other     += i.other        ?? 0
-  }
-  // add catalogue products
-  for (const pr of p.products ?? []) {
-    if (pr.enabled === false) continue
-    materials += pr.costPrice ?? 0
-  }
-  // add plant catalogue
-  for (const pl of p.plantItems ?? []) {
-    if (pl.enabled === false) continue
-    plant += pl.costPrice ?? 0
-  }
-  return { labour, materials, plant, sub, other }
-}
-
 function summariseItems(items: QuoteItem[]): { category: string; desc: string }[] {
   return items
     .filter(i => i.enabled !== false && i.desc?.trim())
@@ -68,9 +46,12 @@ export async function extractQuoteIntelligence(
   const rows: Omit<QuoteIntelligenceRow, never>[] = []
 
   for (const p of phases) {
-    const totals = phaseTotal(p)
-    const totalSell = (totals.labour + totals.materials + totals.plant + totals.sub + totals.other) * (1 + markup / 100)
-    if (totalSell <= 0) continue  // skip empty phases
+    // Real cost (quantities counted, catalogue lines and misc items included) and the sub-phase's own margin: a calculator sub-phase
+    // carries its own, so the quote-wide markup would record the wrong margin for it
+    const f = phaseFigures(p, markup)
+    const totals = { labour: f.cost.labour, materials: f.cost.materials, plant: f.cost.plant, sub: f.cost.subcontractors, other: f.cost.other }
+    const totalSell = f.sellTotal
+    if (f.costTotal <= 0) continue  // skip empty phases
 
     // Derive qty from meta if available
     const qty  = p.meta?.measurements?.qty  ?? p.meta?.measurements?.area ?? undefined
@@ -92,13 +73,16 @@ export async function extractQuoteIntelligence(
       subcontract_total: +totals.sub.toFixed(2),
       other_total:       +totals.other.toFixed(2),
       total_sell:        +totalSell.toFixed(2),
-      markup_pct:        markup,
+      markup_pct:        +f.marginPct.toFixed(2),
       items_summary:     summariseItems(p.items),
       quote_outcome:     outcome,
     })
   }
 
   if (!rows.length) return
+
+  // Accepting a quote twice (or accepting after a decline) must not count it twice: replace what this quote recorded before
+  if (quoteRef) await sb.from('quote_intelligence').delete().eq('user_id', userId).eq('quote_ref', quoteRef)
 
   const { error } = await sb.from('quote_intelligence').insert(rows)
   if (error) console.error('[quote-intelligence] insert error:', error.message)
@@ -117,6 +101,7 @@ export async function fetchSimilarPhases(
     .select('*')
     .eq('user_id', userId)
     .ilike('phase_name', `%${phaseName.split(' ').slice(0, 3).join('%')}%`)
+    .in('quote_outcome', ['won', 'completed'])
     .order('created_at', { ascending: false })
     .limit(limit * 2)  // fetch extra, filter by job type below
 

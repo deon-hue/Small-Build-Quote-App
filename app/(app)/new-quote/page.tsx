@@ -2048,6 +2048,7 @@ export default function NewQuotePage() {
                 boSubPhases={boSubPhases}
                 boTasks={boTasks}
                 quoteSource={quoteSource ?? undefined}
+                quoteRefs={[editingId ?? undefined, quotes.find(q => q.id === editingId)?.ref]}
                 onOpenLibrary={openLibrary}
               />
             </>

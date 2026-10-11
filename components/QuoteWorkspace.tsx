@@ -19,6 +19,7 @@ import type { BOLabourTrade, BOProduct, BOPlantItem, BOPhase, BOSubPhase, BOTask
 import { fmt, calcPhase, calcPhaseSell, calcMiscItemSell, phaseMarkup } from '@/lib/utils'
 import { useSpeechToText } from './useSpeechToText'
 import ReviewNotes from './ReviewNotes'
+import QuoteBreakdownCards from './QuoteBreakdownCards'
 import ProductPicker      from '@/components/ProductPicker'
 import PlantPicker        from '@/components/PlantPicker'
 import PhaseReviewModal   from '@/components/PhaseReviewModal'
@@ -2130,9 +2131,11 @@ export interface QuoteWorkspaceProps {
   quoteSource?:      'takeoff' | 'ai' | 'manual' | 'quick'
   /** Opens the BO library picker modal */
   onOpenLibrary?:    () => void
+  /** This quote's reference and id, so the breakdown never compares it with itself */
+  quoteRefs?:        (string | undefined)[]
 }
 
-export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked = false, onChange, onAIGenerate, aiGenerating, onLoadTemplate, jobType, onSaveToBO, labourTrades = [], boProducts = [], boPlantItems = [], boPhases = [], boSubPhases = [], boTasks = [], quoteSource, onOpenLibrary }: QuoteWorkspaceProps) {
+export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked = false, onChange, onAIGenerate, aiGenerating, onLoadTemplate, jobType, onSaveToBO, labourTrades = [], boProducts = [], boPlantItems = [], boPhases = [], boSubPhases = [], boTasks = [], quoteSource, onOpenLibrary, quoteRefs = [] }: QuoteWorkspaceProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [search,    setSearch]    = useState('')
   const [subPhasePicker, setSubPhasePicker] = useState<{ mainPhase: string; room: string } | null>(null)
@@ -2404,148 +2407,12 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
       {/* Grand total footer */}
       {/* ── Phase breakdown chart ─────────────────────────────────────────────── */}
       {phases.length > 0 && (() => {
-        const CHART_TYPES = ['labour','materials','plant','subcontractors','other'] as const
-        const CHART_COLORS: Record<string,string> = {
-          labour:'#f59e0b', materials:'#3b82f6', plant:'#a855f7', subcontractors:'#ef4444', other:'#94a3b8',
-        }
-        const CHART_LABELS: Record<string,string> = {
-          labour:'Labour', materials:'Materials', plant:'Plant', subcontractors:'Subcontract', other:'Other',
-        }
-
         // Use all phases (not search-filtered) and group by parentPhase
         const allMainPhases = getMainPhases(phases)
-        const breakdown = allMainPhases.map(mp => {
-          const mpPhases = phases.filter(p => (p.parentPhase || '(No Phase)') === mp)
-          const t: Record<string,number> = { labour:0, materials:0, plant:0, subcontractors:0, other:0 }
-          for (const p of mpPhases) {
-            const hasLabourTrades = (p.labourTrades?.length ?? 0) > 0
-            const mkp = 1 + markup / 100
-            for (const item of p.items) {
-              if (item.enabled === false) continue
-              const qty = Math.max(item.qty ?? 1, 1)
-              if (item.itemType === 'labour')         t.labour         += (Number(item.labour)         || 0) * qty * (hasLabourTrades ? 1 : mkp)
-              else if (item.itemType === 'materials') t.materials      += (Number(item.materials)      || 0) * qty * mkp
-              else if (item.itemType === 'plant')     t.plant          += (Number(item.plantHire)      || 0) * qty * mkp
-              else if (item.itemType === 'subcontractors') t.subcontractors += (Number(item.subcontractors) || 0) * qty * mkp
-              else if (item.itemType === 'other')     t.other          += (Number(item.other)          || 0) * qty * mkp
-            }
-            for (const pr of p.products  ?? []) { if (pr.enabled !== false) t.materials += pr.sellPrice * pr.qty }
-            for (const pl of p.plantItems ?? []) { if (pl.enabled !== false) t.plant     += pl.sellPrice * pl.qty }
-            for (const mi of p.miscItems  ?? []) { if (mi.enabled !== false) t.other     += calcMiscItemSell(mi) }
-          }
-          const total = CHART_TYPES.reduce((s, k) => s + t[k], 0)
-          return { name: mp, t, total }
-        }).filter(b => b.total > 0)
-
-        if (breakdown.length === 0) return null
-        const maxTotal = Math.max(...breakdown.map(b => b.total))
-
-        // Category totals across all phases — cost and sell
-        const catCost: Record<string,number> = { labour:0, materials:0, plant:0, subcontractors:0, other:0 }
-        const catSell: Record<string,number> = { labour:0, materials:0, plant:0, subcontractors:0, other:0 }
-        for (const p of phases) {
-          const hasLabourTrades = (p.labourTrades?.length ?? 0) > 0
-          const mkp = 1 + markup / 100
-          for (const item of p.items) {
-            if (item.enabled === false) continue
-            const qty = Math.max(item.qty ?? 1, 1)
-            if (item.itemType === 'labour') {
-              const c = (Number(item.labour) || 0) * qty
-              catCost.labour += c
-              catSell.labour += hasLabourTrades ? c : c * mkp
-            } else if (item.itemType === 'materials') {
-              const c = (Number(item.materials) || 0) * qty
-              catCost.materials += c; catSell.materials += c * mkp
-            } else if (item.itemType === 'plant') {
-              const c = (Number(item.plantHire) || 0) * qty
-              catCost.plant += c; catSell.plant += c * mkp
-            } else if (item.itemType === 'subcontractors') {
-              const c = (Number(item.subcontractors) || 0) * qty
-              catCost.subcontractors += c; catSell.subcontractors += c * mkp
-            } else if (item.itemType === 'other') {
-              const c = (Number(item.other) || 0) * qty
-              catCost.other += c; catSell.other += c * mkp
-            }
-          }
-          for (const pr of p.products  ?? []) { if (pr.enabled !== false) { catSell.materials += pr.sellPrice * pr.qty } }
-          for (const pl of p.plantItems ?? []) { if (pl.enabled !== false) { catSell.plant     += pl.sellPrice * pl.qty } }
-          for (const mi of p.miscItems  ?? []) { if (mi.enabled !== false) { catCost.other += mi.cost; catSell.other += calcMiscItemSell(mi) } }
-        }
-        const activeCats = CHART_TYPES.filter(k => catSell[k] > 0)
 
         return (
-          <div style={{ marginTop: 20, padding: '16px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: '#64748b', marginBottom: 14 }}>
-              Phase Cost Breakdown
-            </div>
-            {breakdown.map(b => (
-              <div key={b.name} style={{ marginBottom: 10 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3 }}>
-                  <span style={{ fontWeight: 600, color: '#1e293b', maxWidth: '70%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name}</span>
-                  <span style={{ fontFamily: 'monospace', color: '#374151', fontWeight: 600 }}>{fmt(b.total)}</span>
-                </div>
-                <div style={{ display: 'flex', height: 20, borderRadius: 4, overflow: 'hidden', background: '#e2e8f0', width: '100%' }}>
-                  <div style={{ display: 'flex', width: `${(b.total / maxTotal) * 100}%`, height: '100%' }}>
-                    {CHART_TYPES.map(k => {
-                      const v = b.t[k]
-                      if (!v || v <= 0) return null
-                      const pct = (v / b.total) * 100
-                      return (
-                        <div key={k} title={`${CHART_LABELS[k]}: ${fmt(v)}`}
-                          style={{ width: `${pct}%`, background: CHART_COLORS[k], height: '100%', minWidth: v > 0 ? 2 : 0 }}
-                        />
-                      )
-                    })}
-                  </div>
-                </div>
-              </div>
-            ))}
-
-            {/* Category totals table */}
-            {activeCats.length > 0 && (
-              <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #e2e8f0', overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-                  <thead>
-                    <tr style={{ background: '#f1f5f9' }}>
-                      <th style={{ padding: '5px 8px', textAlign: 'left', color: '#64748b', fontWeight: 700, letterSpacing: '0.5px' }}></th>
-                      {activeCats.map(k => (
-                        <th key={k} style={{ padding: '5px 8px', textAlign: 'right', color: '#64748b', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                            <span style={{ width: 8, height: 8, borderRadius: 2, background: CHART_COLORS[k], display: 'inline-block' }} />
-                            {CHART_LABELS[k]}
-                          </span>
-                        </th>
-                      ))}
-                      <th style={{ padding: '5px 8px', textAlign: 'right', color: '#64748b', fontWeight: 700 }}>Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-                      <td style={{ padding: '6px 8px', color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>Cost</td>
-                      {activeCats.map(k => (
-                        <td key={k} style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#e67e22' }}>
-                          {catCost[k] > 0 ? fmt(catCost[k]) : '—'}
-                        </td>
-                      ))}
-                      <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, color: '#e67e22' }}>
-                        {fmt(activeCats.reduce((s, k) => s + catCost[k], 0))}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style={{ padding: '6px 8px', color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>Sell</td>
-                      {activeCats.map(k => (
-                        <td key={k} style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#1e293b' }}>
-                          {catSell[k] > 0 ? fmt(catSell[k]) : '—'}
-                        </td>
-                      ))}
-                      <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, color: '#7ab533' }}>
-                        {fmt(activeCats.reduce((s, k) => s + catSell[k], 0))}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            )}
+          <div>
+            <QuoteBreakdownCards phases={phases} markup={markup} jobType={jobType} quoteRefs={quoteRefs} />
 
             {/* Labour by trade + days per phase */}
             {(() => {
@@ -2593,9 +2460,9 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
               const fmtDays = (d: number) => d % 1 === 0 ? `${d}d` : `${d.toFixed(1)}d`
 
               return (
-                <>
+                <div style={{ marginTop: 12, padding: '4px 14px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
                   {/* Trade summary */}
-                  <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
+                  <div style={{ marginTop: 10 }}>
                     <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: '#64748b', marginBottom: 8 }}>
                       Labour by Trade
                     </div>
@@ -2669,7 +2536,7 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
                       </table>
                     </div>
                   )}
-                </>
+                </div>
               )
             })()}
           </div>
