@@ -14,6 +14,7 @@ import { useApp } from '@/contexts/AppContext'
 import { signedAttachmentUrl } from '@/lib/job-attachments'
 import { fmt, Q_BADGE, Q_LABEL, calcPhaseSell, calcItemSell } from '@/lib/utils'
 import type { QuotePhase, QuoteItem } from '@/lib/types'
+import { isQuoteVisibleToClient, isInvoiceVisibleToClient } from '@/lib/portal-visibility'
 
 // ── Types mirroring what the RPC returns ────────────────────
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -187,7 +188,7 @@ function PortalPreviewInner() {
         })))
       }
       if (Array.isArray(d?.quotes)) {
-        setQuotes(d.quotes.map((r: AnyRecord) => ({
+        setQuotes(d.quotes.filter((r: AnyRecord) => isQuoteVisibleToClient(r.status)).map((r: AnyRecord) => ({
           id: r.id, ref: r.ref, savedDate: r.saved_date || '',
           status: r.status, jobType: r.job_type,
           customer: r.customer || {}, phases: r.phases || [],
@@ -197,7 +198,7 @@ function PortalPreviewInner() {
         })))
       }
       if (Array.isArray(d?.invoices)) {
-        setInvoices(d.invoices.map((r: AnyRecord) => ({
+        setInvoices(d.invoices.filter((r: AnyRecord) => isInvoiceVisibleToClient(r.status)).map((r: AnyRecord) => ({
           id: r.id, ref: r.ref, clientName: r.client_name,
           total: Number(r.total), status: r.status,
           issueDate: r.issue_date || '', dueDate: r.due_date || '',

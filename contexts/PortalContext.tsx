@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, useRef, ReactNode } fro
 import { createClient } from '@/lib/supabase/client'
 import type { Quote, Job, Invoice, GanttState, Variation, VariationStatus, ClientPortalSettings } from '@/lib/types'
 import { DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
+import { isQuoteVisibleToClient, isInvoiceVisibleToClient } from '@/lib/portal-visibility'
 
 export interface PortalSettings {
   name: string
@@ -175,7 +176,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       // Map quotes
       if (Array.isArray(result?.quotes)) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        setQuotes(result.quotes.map((r: any) => ({
+        setQuotes(result.quotes.filter((r: any) => isQuoteVisibleToClient(r.status)).map((r: any) => ({
           id: r.id, ref: r.ref, savedDate: r.saved_date || '',
           lastEdited: r.last_edited || '', status: r.status,
           jobType: r.job_type, markup: Number(r.markup),
@@ -228,7 +229,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       // Map invoices
       if (Array.isArray(result?.invoices)) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        setInvoices(result.invoices.map((r: any) => ({
+        setInvoices(result.invoices.filter((r: any) => isInvoiceVisibleToClient(r.status)).map((r: any) => ({
           id: r.id, ref: r.ref, jobId: r.job_id || '', quoteId: r.quote_id || '',
           clientName: r.client_name, clientAddress: r.client_address || '',
           clientEmail: r.client_email || '', lineItems: r.line_items || [],

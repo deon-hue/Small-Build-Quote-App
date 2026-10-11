@@ -6,6 +6,7 @@ import { calcPhaseSell, fmt } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import type { Quote } from '@/lib/types'
 import PortalQuoteDetailsModal from '@/components/PortalQuoteDetailsModal'
+import { canClientApproveQuote } from '@/lib/portal-visibility'
 import { useDraggableModal } from '@/components/useDraggableModal'
 import ModalResizeHandle from '@/components/ModalResizeHandle'
 import ModalMaximizeButton from '@/components/ModalMaximizeButton'
@@ -91,7 +92,7 @@ export default function PortalQuotesPage() {
             const groupId = q.parentQuoteId || q.id
             const isCurrentVersion = currentVersionMap.get(groupId) === q.id
             const isSuperseded = q.versionNumber && !isCurrentVersion
-            const canApprove = isCurrentVersion && (q.status === 'pending' || q.status === 'sent') && clientSettings.allowOnlineApproval
+            const canApprove = isCurrentVersion && canClientApproveQuote(q.status) && clientSettings.allowOnlineApproval
 
             return (
               <button
@@ -169,7 +170,7 @@ export default function PortalQuotesPage() {
           }}
           canApprove={
             currentVersionMap.get(selectedQuote.parentQuoteId || selectedQuote.id) === selectedQuote.id
-            && (selectedQuote.status === 'pending' || selectedQuote.status === 'sent')
+            && canClientApproveQuote(selectedQuote.status)
             && clientSettings.allowOnlineApproval
           }
           isPreview={false}
