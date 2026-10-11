@@ -299,9 +299,10 @@ export function BreakdownTable({ lines, onRateChange, disabledLayerIds, onToggle
   // The sample rate each line had before it was linked, so unlinking puts it back.
   const sampleRates = useRef<Record<string, number>>({})
   for (const l of lines) if (sampleRates.current[l.layerId] === undefined && !rl?.links[l.layerId]) sampleRates.current[l.layerId] = l.unitCost
-  // A linked line always takes its Back Office item's current price.
+  // A linked line takes its Back Office item's current price when the calculator is first opened. A calculator opened from a saved copy keeps the saved prices
+  // (a quote is a record: only you change it), and offers to update a line instead.
   useEffect(() => {
-    if (!rl) return
+    if (!rl || rl.frozen) return
     for (const l of lines) {
       const link = rl.links[l.layerId]
       if (!link) continue
@@ -382,17 +383,21 @@ export function BreakdownTable({ lines, onRateChange, disabledLayerIds, onToggle
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
                           <span style={{ fontFamily: 'monospace', color: '#94a3b8' }}>£</span>
                           <input
-                            type="number" min={0} step={0.01} value={l.unitCost} disabled={off || !!link}
+                            type="number" min={0} step={0.01} value={l.unitCost} disabled={off || (!!link && !rl?.frozen)}
                             onChange={e => onRateChange(l.layerId, +e.target.value)}
-                            title={link ? 'This price comes from Back Office — unlink to type your own' : 'Edit this sample rate'}
-                            style={{ width: 62, fontFamily: 'monospace', fontSize: 12, textAlign: 'right', padding: '2px 4px', border: '1px solid #e2e8f0', borderRadius: 4, background: link ? '#f0fdf4' : undefined }}
+                            title={link && !rl?.frozen ? 'This price comes from Back Office — unlink to type your own' : 'Edit this rate'}
+                            style={{ width: 62, fontFamily: 'monospace', fontSize: 12, textAlign: 'right', padding: '2px 4px', border: '1px solid #e2e8f0', borderRadius: 4, background: link && !rl?.frozen ? '#f0fdf4' : undefined }}
                           />
                         </div>
                         {link && (
                           <div style={{ fontSize: 10, color: linkedItem ? '#15803d' : '#b45309', marginTop: 2, maxWidth: 190, marginLeft: 'auto' }}>
                             {linkedItem ? <>🔗 {linkedItem.name}{linkedItem.supplier ? ` · ${linkedItem.supplier}` : ''}</> : <>⚠ the linked item has been deleted</>}
                             {' '}
-                            <button type="button" onClick={() => { rl!.setLink(l.layerId, null); const back = sampleRates.current[l.layerId]; if (back !== undefined) onRateChange(l.layerId, back) }}
+                            {rl!.frozen && linkedItem && Math.abs(linkedItem.cost - l.unitCost) > 0.0005 && (
+                              <><button type="button" title="This quote keeps the price it was saved with. Press to take the current Back Office price" onClick={() => onRateChange(l.layerId, linkedItem.cost)}
+                                style={{ border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#15803d', cursor: 'pointer', fontSize: 10, borderRadius: 4, padding: '0 5px' }}>↻ £{linkedItem.cost.toFixed(2)} now</button>{' '}</>
+                            )}
+                            <button type="button" onClick={() => { rl!.setLink(l.layerId, null); if (rl!.frozen) return; const back = sampleRates.current[l.layerId]; if (back !== undefined) onRateChange(l.layerId, back) }}
                               style={{ border: 'none', background: 'none', color: '#64748b', cursor: 'pointer', fontSize: 10, textDecoration: 'underline', padding: 0 }}>unlink</button>
                           </div>
                         )}

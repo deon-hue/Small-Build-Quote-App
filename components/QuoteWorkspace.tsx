@@ -2221,7 +2221,7 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
             + Add Phase
           </button>
         )}
-        {!isLocked && <button style={{ ...addBtn, fontSize: 11, borderColor: '#7c3aed', color: '#7c3aed' }} onClick={handleRefreshFromBO} title="Pull current names and pricing from Back Office into this quote">↻ Refresh from Back Office</button>}
+        {/* "Refresh from Back Office" was taken out of the toolbar on purpose: a quote is a saved record, new quotes start from current Back Office prices. handleRefreshFromBO is left in place. */}
       </div>
 
       {/* Empty / landing state */}

@@ -14,6 +14,8 @@ interface RateLinksValue {
   /** keyed by layer id */
   links: Record<string, RateLink>
   ready: boolean
+  /** true when the calculator was opened from a saved copy: its prices stay as saved and only change when you change them */
+  frozen: boolean
   setLink: (layerId: string, link: RateLink | null) => Promise<void>
 }
 
@@ -23,7 +25,7 @@ const Ctx = RateLinksContext
 
 export const useRateLinks = () => useContext(Ctx)
 
-export function RateLinksProvider({ assemblyId, children }: { assemblyId: string; children: React.ReactNode }) {
+export function RateLinksProvider({ assemblyId, frozen = false, children }: { assemblyId: string; frozen?: boolean; children: React.ReactNode }) {
   const [owner, setOwner] = useState<string | null>(null)
   const [items, setItems] = useState<RateItem[]>([])
   const [links, setLinks] = useState<Record<string, RateLink>>({})
@@ -66,6 +68,6 @@ export function RateLinksProvider({ assemblyId, children }: { assemblyId: string
     else await sb.from('calculator_rate_links').delete().eq('user_id', owner).eq('assembly_id', assemblyId).eq('layer_id', layerId)
   }, [owner, assemblyId])
 
-  const value = useMemo(() => ({ assemblyId, items, links, ready, setLink }), [assemblyId, items, links, ready, setLink])
+  const value = useMemo(() => ({ assemblyId, items, links, ready, frozen, setLink }), [assemblyId, items, links, ready, frozen, setLink])
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

@@ -108,7 +108,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
 /** Every calculator is drawn inside the rate-link provider, so its cost table can link a line to a Back Office product or plant item without each screen knowing about it. */
 export const BUILT_ASSEMBLY_CANON_IDS: Record<string, BuiltAssemblyEntry> = Object.fromEntries(
   Object.entries(RAW_BUILT_ASSEMBLIES).map(([id, e]) => [id, { ...e, render: (opts?: AssemblyRenderOpts) => (
-    <RateLinksProvider assemblyId={id}>
+    <RateLinksProvider assemblyId={id} frozen={!!(opts?.calcState && opts.calcState.id === id) || !!opts?.electrics?.initialState}>
       <CalcScope assemblyId={id} initial={opts?.calcState} onSave={opts?.onSave}>{os => e.render({ ...opts, onSave: os as AssemblyRenderOpts['onSave'] })}</CalcScope>
     </RateLinksProvider>
   ) }]),
