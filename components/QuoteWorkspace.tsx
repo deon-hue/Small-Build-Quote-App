@@ -16,14 +16,14 @@
 import React, { useState, useCallback } from 'react'
 import type { QuotePhase, QuoteItem, QuoteProduct, QuotePlantItem, QuoteMiscItem } from '@/lib/types'
 import type { BOLabourTrade, BOProduct, BOPlantItem, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
-import { fmt, calcPhase, calcPhaseSell, calcMiscItemSell } from '@/lib/utils'
+import { fmt, calcPhase, calcPhaseSell, calcMiscItemSell, phaseMarkup } from '@/lib/utils'
 import ProductPicker      from '@/components/ProductPicker'
 import PlantPicker        from '@/components/PlantPicker'
 import PhaseReviewModal   from '@/components/PhaseReviewModal'
 import { BUILT_ASSEMBLY_CANON_IDS, AssemblyIconGlyph, type AssemblySaveResult } from '@/lib/built-assemblies'
 import type { ElectricsSavedState } from '@/lib/electrics-units'
 import { MaterialsListButtons } from '@/components/assembly-ui'
-import { assemblyLinesToItems } from '@/lib/assembly-quote-items'
+import { assemblyLinesToItems, profitPctOf } from '@/lib/assembly-quote-items'
 
 // ── IDs ────────────────────────────────────────────────────────────────────────
 let _id = Date.now()
@@ -876,6 +876,8 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
       scopeDetail: result.detail,
       electricsState: result.state as ElectricsSavedState | undefined,
       calcState: result.calcState,
+      // The calculator's profit % is this sub-phase's margin, applied like any other margin (not a cost row of its own)
+      markupPct: result.profitPct ?? profitPctOf(result.lines),
       ...(result.location.trim() && { roomLabel: result.location.trim() }),
     }))
     setShowAssemblyCalc(false)
@@ -1467,9 +1469,9 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
           {/* Totals — shown at the top right, above the task name */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontFamily: 'monospace', fontSize: 12, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 7, padding: '5px 12px' }}>
-              <span style={{ color: '#64748b' }}>Cost <strong style={{ color: '#1e293b' }}>£{totalCost.toFixed(2)}</strong></span>
-              <span style={{ color: '#64748b' }}>Margin <strong style={{ color: margin >= 0 ? '#16a34a' : '#dc2626' }}>£{margin.toFixed(2)}</strong></span>
-              <span style={{ color: '#64748b' }}>Sell <strong style={{ color: '#7ab533', fontSize: 14 }}>£{totalSell.toFixed(2)}</strong></span>
+              <span style={{ color: '#64748b' }} title="What the work costs you, without VAT">Cost <span style={{ fontSize: 10, color: '#94a3b8' }}>(ex VAT)</span> <strong style={{ color: '#1e293b' }}>£{totalCost.toFixed(2)}</strong></span>
+              <span style={{ color: '#64748b' }} title="The margin added on top of cost. It has to cover company costs and expenses, so the real profit on the job is lower.">Margin <span style={{ fontSize: 10, color: '#94a3b8' }}>{phaseMarkup(p, markup)}% on cost</span> <strong style={{ color: margin >= 0 ? '#16a34a' : '#dc2626' }}>£{margin.toFixed(2)}</strong></span>
+              <span style={{ color: '#64748b' }} title="Cost plus margin, without VAT">Sell <span style={{ fontSize: 10, color: '#94a3b8' }}>(ex VAT)</span> <strong style={{ color: '#7ab533', fontSize: 14 }}>£{totalSell.toFixed(2)}</strong></span>
             </div>
           </div>
 

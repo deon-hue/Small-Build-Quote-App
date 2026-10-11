@@ -1,6 +1,6 @@
 import type { Quote } from './types'
 import type { Settings } from './types'
-import { VAT, calcItemSell, calcPhaseSell, calcMiscItemSell } from './utils'
+import { VAT, calcItemSell, calcPhaseSell, calcMiscItemSell, phaseMarkup } from './utils'
 import { clientRows } from './client-items'
 import { getPhaseVisual } from './phase-visuals'
 import { companyLegalParts } from './company-legal'
@@ -91,7 +91,7 @@ export function buildHtml(q: Quote, settings: Settings, opts: HtmlOpts = {}, boT
 
   const phaseRows = q.phases.map(p => {
     const phaseTotal = calcPhaseSell(p, qMkp)
-    const itemRows = clientRows(p.items.filter(i => calcItemSell(i, qMkp) > 0), i => calcItemSell(i, qMkp))
+    const itemRows = clientRows(p.items.filter(i => calcItemSell(i, phaseMarkup(p, qMkp)) > 0), i => calcItemSell(i, phaseMarkup(p, qMkp)))
       .map(c => itemRow(getItemDesc(c.item), c.item.qty, c.item.unit, c.notes, c.sell)).join('')
     const productRows = (p.products ?? []).filter(pr => pr.enabled !== false)
       .map(pr => itemRow(pr.name, pr.qty, pr.unit, pr.notes, pr.sellPrice * pr.qty)).join('')
@@ -288,7 +288,7 @@ export function buildHtmlClientView(q: Quote, settings: Settings, opts: HtmlOpts
     type LineEntry = { desc: string; qty?: number; unit?: string; sell: number }
     const visibleItems: LineEntry[] = (quoteView === 'full' || quoteView === 'phases')
       ? [
-          ...clientRows(p.items.filter(i => calcItemSell(i, qMkp) > 0), i => calcItemSell(i, qMkp))
+          ...clientRows(p.items.filter(i => calcItemSell(i, phaseMarkup(p, qMkp)) > 0), i => calcItemSell(i, phaseMarkup(p, qMkp)))
             .map(c => ({ desc: getItemDesc(c.item), qty: c.item.qty, unit: c.item.unit, sell: c.sell })),
           ...(p.products ?? []).filter(pr => pr.enabled !== false)
             .map(pr => ({ desc: pr.name, qty: pr.qty, unit: pr.unit, sell: pr.sellPrice * pr.qty })),

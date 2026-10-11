@@ -86,7 +86,13 @@ export function calcMiscItemSell(mi: QuoteMiscItem): number {
   return mi.cost * (1 + (mi.markupPct || 0) / 100)
 }
 
-export function calcPhaseSell(p: QuotePhase, mkp: number): number {
+/** The margin (% on cost) that applies to a sub-phase: its own if it has one (a calculator sets it), otherwise the quote's. */
+export function phaseMarkup(p: { markupPct?: number }, quoteMarkup: number): number {
+  return typeof p.markupPct === 'number' && Number.isFinite(p.markupPct) ? p.markupPct : quoteMarkup
+}
+
+export function calcPhaseSell(p: QuotePhase, quoteMkp: number): number {
+  const mkp = phaseMarkup(p, quoteMkp)
   // When a phase uses explicit labour trades, the labour QuoteItem already holds
   // the trade sell price (cost + per-trade markup). Applying global markup on top
   // would double-count. All other item types still get the global markup.

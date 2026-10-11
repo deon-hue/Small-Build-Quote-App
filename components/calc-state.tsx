@@ -42,8 +42,14 @@ export function CalcScope({ assemblyId, initial, onSave, children }: {
     initial: initial && initial.id === assemblyId ? initial.values : undefined,
     record: (ns, key, value) => { (values.current[ns] ??= {})[key] = value },
   })
+  // The profit % the calculator was set to is its state named profitPct (the electrics calculator keeps it in its own saved state)
+  const profitOf = (result: { [k: string]: unknown }): number | undefined => {
+    for (const ns of Object.values(values.current)) if (typeof ns.profitPct === 'number') return ns.profitPct
+    const st = result.state as { profitPct?: unknown } | undefined
+    return typeof st?.profitPct === 'number' ? st.profitPct : undefined
+  }
   const wrapped = onSave
-    ? (result: { [k: string]: unknown }) => (onSave as (r: unknown) => void)({ ...result, calcState: { id: assemblyId, values: toPlain(values.current) } satisfies CalcStateSnapshot })
+    ? (result: { [k: string]: unknown }) => (onSave as (r: unknown) => void)({ ...result, profitPct: profitOf(result), calcState: { id: assemblyId, values: toPlain(values.current) } satisfies CalcStateSnapshot })
     : undefined
   return <CalcCtx.Provider value={ctx.current}>{children(wrapped)}</CalcCtx.Provider>
 }

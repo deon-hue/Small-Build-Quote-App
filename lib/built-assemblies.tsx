@@ -45,6 +45,8 @@ export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cav
 // `description` is the short line for the quote; `detail` (only some calculators write one) is the full
 // part-by-part "What's included" text kept as the phase's `scopeDetail`.
 export interface AssemblySaveResult { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[]
+  /** The profit % the calculator was set to: it becomes the sub-phase's margin in a quote. */
+  profitPct?: number
   /** A calculator that can't work out its inputs again from a drawn shape (electrics) hands back what it was set to, to be kept with the Take-off item. */
   state?: unknown
   /** What was typed into the calculator, to keep with the quote or Take-off item so it can be opened again and edited. */

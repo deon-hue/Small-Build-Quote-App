@@ -70,6 +70,12 @@ kept on ONE Take-off item (`electricsSummary`, id `electrics-summary`, holding `
 `assemblyResult`) so they save with the project, and `planRoomsFromPoints` turns them into room counts that feed the calculator
 (`mergePlanRooms` in `lib/electrics-units.ts`: a count follows the plan until typed over). Do not add per-room sub-phases for it.
 
+**A calculator's profit % is the sub-phase's margin, not a cost row.** When a calculator is saved into a quote (Save & Price, the AI quote, or Take-off
+import) its "Profit (n%)" line is dropped from the quote items and its % is stored on the sub-phase as `QuotePhase.markupPct`; `calcPhaseSell` (and every
+item-level sell) uses `phaseMarkup(p, quoteMarkup)`, so a calculator sub-phase takes ITS margin instead of the quote's overall markup (no double profit).
+Margin means "% added on top of cost", shown as Cost (ex VAT) / Margin n% on cost / Sell (ex VAT). Never show a client the margin: client-facing views
+go through `lib/client-items.ts` (folds any old "Profit" rows into the other rows and drops calculator cost-rate notes).
+
 **Build it**
 1. Engine: its own pure module — in `lib/assembly-calc.ts` for a wall/roof costed from drawn geometry
    (geometry + `calculate…Cost`, reusing `costLayer`; add its quantity-source type to the

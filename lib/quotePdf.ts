@@ -9,7 +9,7 @@
 
 import { PDFDocument, PDFFont, rgb, StandardFonts, PDFPage } from 'pdf-lib'
 import type { Quote, Settings } from './types'
-import { calcPhaseSell, calcItemSell, VAT } from './utils'
+import { calcPhaseSell, calcItemSell, VAT, phaseMarkup } from './utils'
 import { clientRows } from './client-items'
 import { PRODUCT_NAME } from './product-config'
 import { toPdfSafeText } from './pdf-text'
@@ -366,8 +366,8 @@ export async function buildQuotePdf(
       // Item rows — description/qty/unit always shown; price only if showItemPrices
       // Profit rows are folded into the other rows and calculator cost notes dropped (lib/client-items.ts): a client never sees profit or cost rates
       const visibleItems = clientRows(
-        p.items.filter(i => i.enabled !== false && calcItemSell(i, qMkp) > 0),
-        i => calcItemSell(i, qMkp),
+        p.items.filter(i => i.enabled !== false && calcItemSell(i, phaseMarkup(p, qMkp)) > 0),
+        i => calcItemSell(i, phaseMarkup(p, qMkp)),
       )
 
       for (const { item, sell: rowSell, notes: rowNotes } of visibleItems) {

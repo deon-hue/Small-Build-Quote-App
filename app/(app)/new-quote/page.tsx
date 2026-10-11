@@ -31,7 +31,7 @@ import { sumByCategory } from '@/lib/material-recipes'
 import { createClient } from '@/lib/supabase/client'
 import { fetchQuoteTemplates, pickTemplateRows } from '@/lib/quote-templates'
 import { BUILT_ASSEMBLY_CANONICAL_IDS } from '@/lib/built-assembly-ids'
-import { assemblyLinesToItems } from '@/lib/assembly-quote-items'
+import { assemblyLinesToItems, profitPctOf } from '@/lib/assembly-quote-items'
 import { basicsFor, describeBasics, BASICS_NEEDS } from '@/lib/assembly-basics'
 import { priceFromBasics, priceElectricsFromScope } from '@/components/ai-priced-calculators'
 import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchQuoteDefaults, fetchAllQuoteDefaults, upsertTask, fetchLabourTrades, fetchProducts, fetchPlantItems, fetchPhases, fetchSubPhases, fetchTasks } from '@/lib/back-office-queries'
@@ -145,7 +145,7 @@ function buildPhasesFromScopeToQuote(
         needsReview: true,
         ...(el
           ? {
-              taskName: el.description, calcDescription: el.description, ...(el.detail && { scopeDetail: el.detail }), assemblyLines: el.lines, electricsState: el.state,
+              taskName: el.description, calcDescription: el.description, markupPct: profitPctOf(el.lines), ...(el.detail && { scopeDetail: el.detail }), assemblyLines: el.lines, electricsState: el.state,
               reviewNote: `Priced by the electrical calculator from the rooms in your scope (${el.summary}) with the calculator's standard rates, per point.${el.usualRooms.length > 0 ? ` No points were stated for ${el.usualRooms.join(', ')}, so those use the usual points for that kind of room.` : ''} Open the calculator to check the points and change anything.`,
             }
           : { reviewNote: 'Priced by its calculator, but no electrical rooms or points were found in the scope. Open the calculator and add the rooms.' }),
@@ -163,7 +163,7 @@ function buildPhasesFromScopeToQuote(
         needsReview: true,
         ...(priced && size
           ? {
-              taskName: priced.description, calcDescription: priced.description, ...(priced.detail && { scopeDetail: priced.detail }), assemblyLines: priced.lines, assemblySize: size,
+              taskName: priced.description, calcDescription: priced.description, markupPct: profitPctOf(priced.lines), ...(priced.detail && { scopeDetail: priced.detail }), assemblyLines: priced.lines, assemblySize: size,
               reviewNote: `Priced by its calculator from the size in your scope (${describeBasics(size)}) with the calculator's standard settings and sample rates. Open the calculator to check it and change anything.`,
             }
           : { reviewNote: BASICS_NEEDS[calcSub.canonical_id ?? ''] ? 'Priced by its calculator, but the size it needs was not found in the scope. Open the calculator and enter the size.' : 'Priced by its calculator. Open the calculator to size and price it.' }),
@@ -1118,22 +1118,14 @@ export default function NewQuotePage() {
             // name lookup is needed the way scope-to-quote/From Library/the generic take-off
             // branch below need one.
             const asmResult = item.assemblyResult
-            const assemblyItems: Omit<QuoteItem, 'id'>[] = asmResult.lines
-              .filter(l => l.cost !== 0)
-              .map(l => {
-                const base: Omit<QuoteItem, 'id'> = {
-                  desc: l.name, qty: 1, unit: l.unit,
-                  labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0,
-                  notes: `${l.purchaseQty} ${l.unit} @ £${l.unitCost.toFixed(2)}/${l.unit}${l.wastePct ? ` (${l.wastePct}% waste)` : ''}`,
-                  itemType: l.category,
-                }
-                const key = l.category === 'plant' ? 'plantHire' : l.category
-                return { ...base, [key]: l.cost }
-              })
+            // The calculator's profit line is not a cost: it becomes this sub-phase's margin (markupPct)
+            const assemblyItems: Omit<QuoteItem, 'id'>[] = assemblyLinesToItems(asmResult.lines)
+            const asmMargin = profitPctOf(asmResult.lines)
             const ph = makePhase(item.subPhase || asmResult.name || item.phase, assemblyItems, parentPhase)
             newPhases.push({
               ...ph,
               source: 'manual', itemStatus: 'bo-default',
+              ...(asmMargin !== undefined && { markupPct: asmMargin }),
               taskName: asmResult.description,
               ...(asmResult.detail?.trim() && { scopeDetail: asmResult.detail }),
               assemblyLines: asmResult.lines,
