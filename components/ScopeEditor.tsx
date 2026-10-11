@@ -5,6 +5,7 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import { scopeToEditorHtml, scopeLineForEditor, domToScope } from '@/lib/scope-format'
+import { DragHandle } from '@/components/DragHandle'
 
 export default function ScopeEditor({
   value, onChange, readOnly = false, placeholder = '', minHeight = 140, style, onFocus, onBlur,
@@ -23,6 +24,16 @@ export default function ScopeEditor({
   // The last value the editor itself reported: when the parent hands back something different (the AI wrote a new scope), reload the box
   const last = useRef<string | null>(null)
   const [active, setActive] = useState({ bold: false, underline: false, list: false })
+  // Size set by dragging the bottom or right edge (null = the default: full width, minHeight)
+  const [size, setSize] = useState<{ w: number | null; h: number | null }>({ w: null, h: null })
+  const boxRef = useRef<HTMLDivElement>(null)
+  const startSize = useRef({ w: 0, h: 0 })
+  const grabSize = () => { startSize.current = { w: boxRef.current?.offsetWidth ?? 0, h: ref.current?.offsetHeight ?? 0 } }
+  const pullHeight = (up: number) => setSize(p => ({ ...p, h: Math.max(80, Math.min(1400, startSize.current.h - up)) }))
+  const pullWidth = (left: number) => {
+    const max = boxRef.current?.parentElement?.clientWidth ?? 2000
+    setSize(p => ({ ...p, w: Math.max(240, Math.min(max, startSize.current.w - left)) }))
+  }
 
   useEffect(() => {
     const el = ref.current
@@ -89,7 +100,7 @@ export default function ScopeEditor({
           <span style={{ fontSize: 11, color: '#94a3b8' }}>Select some text, then press a button</span>
         </div>
       )}
-      <div style={{ position: 'relative' }}>
+      <div ref={boxRef} style={{ position: 'relative', width: size.w ?? '100%', maxWidth: '100%' }}>
         {empty && placeholder && (
           <div style={{ position: 'absolute', left: 0, top: 0, right: 0, pointerEvents: 'none', color: '#94a3b8', fontSize: 13, padding: style?.padding ?? '10px 12px' }}>{placeholder}</div>
         )}
@@ -106,12 +117,18 @@ export default function ScopeEditor({
           onFocus={onFocus}
           onBlur={onBlur}
           style={{
-            minHeight, overflowY: 'auto', resize: 'vertical', whiteSpace: 'pre-wrap', wordBreak: 'break-word', outline: 'none',
+            minHeight, height: size.h ?? undefined, overflowY: 'auto', resize: 'none', whiteSpace: 'pre-wrap', wordBreak: 'break-word', outline: 'none',
             width: '100%', boxSizing: 'border-box', fontSize: 13, lineHeight: 1.6, padding: '10px 12px',
             border: '1px solid var(--border)', borderRadius: 6, background: readOnly ? '#f8fafc' : '#fff', color: 'var(--text, #1e293b)', fontFamily: 'inherit',
             ...style,
           }}
         />
+        {/* Drag the bottom edge to make it taller, the right edge to make it narrower or wider, the corner for both */}
+        <DragHandle cursor="ns-resize" title="Drag to make the box taller or shorter" onStart={grabSize} onMove={(_l, up) => pullHeight(up)} style={{ left: 12, right: 12, bottom: -10, height: 10 }} />
+        <DragHandle cursor="ew-resize" title="Drag to make the box wider or narrower" onStart={grabSize} onMove={left => pullWidth(left)} style={{ top: 12, bottom: 12, right: -10, width: 10 }} />
+        <DragHandle cursor="nwse-resize" title="Drag to resize" onStart={grabSize} onMove={(left, up) => { pullWidth(left); pullHeight(up) }} style={{ right: -10, bottom: -10, width: 14, height: 14 }} />
+        <div aria-hidden style={{ position: 'absolute', left: '50%', bottom: -7, width: 36, height: 4, marginLeft: -18, borderRadius: 2, background: '#cbd5e1', pointerEvents: 'none' }} />
+        <div aria-hidden style={{ position: 'absolute', top: '50%', right: -7, height: 36, width: 4, marginTop: -18, borderRadius: 2, background: '#cbd5e1', pointerEvents: 'none' }} />
       </div>
       <style>{`.scope-editor ul{margin:4px 0 6px 20px;padding:0}.scope-editor li{margin:0 0 2px}`}</style>
     </div>
