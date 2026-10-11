@@ -13,7 +13,7 @@
  * Works for all data sources: takeoff import, AI-generated, manual.
  */
 
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import type { QuotePhase, QuoteItem, QuoteProduct, QuotePlantItem, QuoteMiscItem } from '@/lib/types'
 import type { BOLabourTrade, BOProduct, BOPlantItem, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
 import { fmt, calcPhase, calcPhaseSell, calcMiscItemSell, phaseMarkup } from '@/lib/utils'
@@ -2146,8 +2146,22 @@ export interface QuoteWorkspaceProps {
   quoteRefs?:        (string | undefined)[]
 }
 
+/** The collapse keys (main phase, room, sub-phase, task) that close the given phases. */
+function collapseKeysFor(list: QuotePhase[], keys: Set<string>): Set<string> {
+  for (const p of list) {
+    const mp = p.parentPhase || '(No Phase)'
+    const rl = p.roomLabel  || ''
+    keys.add(`mp_${mp}`)
+    if (rl) keys.add(`rm_${mp}_${rl}`)
+    keys.add(`sp_${p.id}`)
+    getTaskGroups(p.items).filter(Boolean).forEach(tg => keys.add(`tk_${p.id}_${tg}`))
+  }
+  return keys
+}
+
 export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked = false, onChange, onAIGenerate, aiGenerating, onLoadTemplate, jobType, onSaveToBO, labourTrades = [], boProducts = [], boPlantItems = [], boPhases = [], boSubPhases = [], boTasks = [], quoteSource, onOpenLibrary, quoteRefs = [] }: QuoteWorkspaceProps) {
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  // A quote opens with its phases collapsed (no flash of everything open first)
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => collapseKeysFor(phases, new Set<string>()))
   const [search,    setSearch]    = useState('')
   const [subPhasePicker, setSubPhasePicker] = useState<{ mainPhase: string; room: string } | null>(null)
   // Which room the sub-phase being picked goes in ('' = none), chosen in the picker when the phase already has rooms
@@ -2271,18 +2285,19 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
 
   // ── Collapse all / expand all ─────────────────────────────────────────────
   function expandAll() { setCollapsed(new Set()) }
-  function collapseAll() {
-    const keys = new Set<string>()
-    for (const p of phases) {
-      const mp = p.parentPhase || '(No Phase)'
-      const rl = p.roomLabel  || ''
-      keys.add(`mp_${mp}`)
-      if (rl) keys.add(`rm_${mp}_${rl}`)
-      keys.add(`sp_${p.id}`)
-      getTaskGroups(p.items).filter(Boolean).forEach(tg => keys.add(`tk_${p.id}_${tg}`))
-    }
-    setCollapsed(keys)
-  }
+  function collapseAll() { setCollapsed(collapseKeysFor(phases, new Set<string>())) }
+
+  // A quote opens with its phases collapsed (saved, or built by the AI, a template or a Take-off import). Phases that arrive together are collapsed;
+  // a single sub-phase you add yourself stays open so you can work on it.
+  const seenPhaseIds = useRef<Set<string>>(new Set(phases.map(p => String(p.id))))
+  useEffect(() => {
+    const fresh = phases.filter(p => !seenPhaseIds.current.has(String(p.id)))
+    if (fresh.length === 0) return
+    const first = seenPhaseIds.current.size === 0   // the quote was empty when opened and has just been filled
+    fresh.forEach(p => seenPhaseIds.current.add(String(p.id)))
+    if (first || fresh.length > 1) setCollapsed(prev => collapseKeysFor(fresh, new Set(prev)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phases])
 
   // ── Grand totals ──────────────────────────────────────────────────────────
   const grandCost = phases.reduce((s, p) => s + calcPhase(p), 0)
