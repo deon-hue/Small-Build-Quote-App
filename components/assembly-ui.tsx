@@ -7,12 +7,13 @@
 // callbacks. Each calculator component supplies its own geometry, layer list, and elevation
 // drawing; everything here is what stays identical across all of them.
 
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import type { AssemblyOpening, CostedLine } from '@/lib/assembly-calc'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import { openMaterialsPrintView, downloadMaterialsCsv } from '@/lib/materials-report'
 import { useRateLinks } from '@/components/RateLinks'
-import { candidatesFor, costOf, isLinkable } from '@/lib/rate-links'
+import { linkedRate, isLinkable, packsFor } from '@/lib/rate-links'
+import RateLinkPicker from '@/components/RateLinkPicker'
 
 export const CATEGORY_LABEL: Record<string, string> = { materials: 'Materials', labour: 'Labour', plant: 'Plant', subcontractors: 'Subcontractors', other: 'Other' }
 
@@ -298,6 +299,8 @@ export function BreakdownTable({ lines, onRateChange, disabledLayerIds, onToggle
   const rl = useRateLinks()
   // The sample rate each line had before it was linked, so unlinking puts it back.
   const sampleRates = useRef<Record<string, number>>({})
+  // The line whose product pop-up is open
+  const [pickerFor, setPickerFor] = useState<string | null>(null)
   for (const l of lines) if (sampleRates.current[l.layerId] === undefined && !rl?.links[l.layerId]) sampleRates.current[l.layerId] = l.unitCost
   // A linked line takes its Back Office item's current price when the calculator is first opened. A calculator opened from a saved copy keeps the saved prices
   // (a quote is a record: only you change it), and offers to update a line instead.
@@ -306,7 +309,7 @@ export function BreakdownTable({ lines, onRateChange, disabledLayerIds, onToggle
     for (const l of lines) {
       const link = rl.links[l.layerId]
       if (!link) continue
-      const c = costOf(link, rl.items)
+      const c = linkedRate(link, rl.items, l.purchaseQty)
       if (c != null && Math.abs(c - l.unitCost) > 0.0005) onRateChange(l.layerId, c)
     }
   }, [lines, rl, onRateChange])
@@ -348,7 +351,11 @@ export function BreakdownTable({ lines, onRateChange, disabledLayerIds, onToggle
                   const link = rl?.links[l.layerId]
                   const linkedItem = link ? rl!.items.find(i => i.kind === link.kind && i.id === link.refId) : undefined
                   const canLink = !!rl && rl.ready && isLinkable(l.layerId, l.category)
-                  const options = canLink && !link ? candidatesFor(l, rl!.items) : []
+                  const canPick = canLink && !link && rl!.items.length > 0
+                  // what a linked line pays for: the whole packs when the product is sold in rolls or packs
+                  const packNote = link?.per && link.per > 1 && linkedItem
+                    ? `1 ${linkedItem.unit} = ${link.per} ${l.unit}: ${packsFor(l.purchaseQty, link.per)} × ${linkedItem.unit} bought`
+                    : ''
                   return (
                     <tr key={l.layerId} style={{ borderBottom: '1px solid #f1f5f9', opacity: off ? 0.45 : 1 }}>
                       <td style={{ padding: '3px 6px' }}>
@@ -391,29 +398,22 @@ export function BreakdownTable({ lines, onRateChange, disabledLayerIds, onToggle
                         </div>
                         {link && (
                           <div style={{ fontSize: 10, color: linkedItem ? '#15803d' : '#b45309', marginTop: 2, maxWidth: 190, marginLeft: 'auto' }}>
-                            {linkedItem ? <>🔗 {linkedItem.name}{linkedItem.supplier ? ` · ${linkedItem.supplier}` : ''}</> : <>⚠ the linked item has been deleted</>}
+                            {linkedItem ? <>🔗 {linkedItem.name}{linkedItem.supplier ? ` · ${linkedItem.supplier}` : ''}{packNote ? <><br />{packNote}</> : null}</> : <>⚠ the linked item has been deleted</>}
                             {' '}
-                            {rl!.frozen && linkedItem && Math.abs(linkedItem.cost - l.unitCost) > 0.0005 && (
-                              <><button type="button" title="This quote keeps the price it was saved with. Press to take the current Back Office price" onClick={() => onRateChange(l.layerId, linkedItem.cost)}
-                                style={{ border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#15803d', cursor: 'pointer', fontSize: 10, borderRadius: 4, padding: '0 5px' }}>↻ £{linkedItem.cost.toFixed(2)} now</button>{' '}</>
+                            {rl!.frozen && linkedItem && (() => { const now = linkedRate(link!, rl!.items, l.purchaseQty); return now !== null && Math.abs(now - l.unitCost) > 0.0005 })() && (
+                              <><button type="button" title="This quote keeps the price it was saved with. Press to take the current Back Office price" onClick={() => { const now = linkedRate(link!, rl!.items, l.purchaseQty); if (now !== null) onRateChange(l.layerId, now) }}
+                                style={{ border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#15803d', cursor: 'pointer', fontSize: 10, borderRadius: 4, padding: '0 5px' }}>↻ £{(linkedRate(link!, rl!.items, l.purchaseQty) ?? linkedItem.cost).toFixed(2)} now</button>{' '}</>
                             )}
                             <button type="button" onClick={() => { rl!.setLink(l.layerId, null); if (rl!.frozen) return; const back = sampleRates.current[l.layerId]; if (back !== undefined) onRateChange(l.layerId, back) }}
                               style={{ border: 'none', background: 'none', color: '#64748b', cursor: 'pointer', fontSize: 10, textDecoration: 'underline', padding: 0 }}>unlink</button>
                           </div>
                         )}
-                        {!link && options.length > 0 && (
-                          <select value="" disabled={off}
-                            onChange={e => {
-                              const it = options.find(o => o.id === e.target.value)
-                              if (!it) return
-                              sampleRates.current[l.layerId] = l.unitCost
-                              rl!.setLink(l.layerId, { kind: it.kind, refId: it.id })
-                            }}
-                            title="Take this price from your Back Office list (same unit only)"
-                            style={{ display: 'block', marginLeft: 'auto', marginTop: 2, maxWidth: 150, fontSize: 10, padding: '1px 2px', border: '1px solid #e2e8f0', borderRadius: 4, color: '#64748b' }}>
-                            <option value="">🔗 Link to {l.category === 'plant' ? 'plant' : 'a product'}…</option>
-                            {options.map(o => <option key={o.id} value={o.id}>{o.name} — £{o.cost.toFixed(2)}/{o.unit}{o.supplier ? ` (${o.supplier})` : ''}</option>)}
-                          </select>
+                        {canPick && (
+                          <button type="button" disabled={off} onClick={() => setPickerFor(l.layerId)}
+                            title="Pick a product from your Back Office list (search by name, category or supplier)"
+                            style={{ display: 'block', marginLeft: 'auto', marginTop: 2, fontSize: 10, padding: '1px 6px', border: '1px solid #e2e8f0', borderRadius: 4, background: '#fff', color: '#0369a1', cursor: off ? 'default' : 'pointer' }}>
+                            🔗 Link to {l.category === 'plant' ? 'plant' : 'a product'}…
+                          </button>
                         )}
                       </td>
                       <td style={{ padding: '3px 6px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 600, textDecoration: off ? 'line-through' : 'none' }}>£{l.cost.toFixed(2)}</td>
@@ -429,6 +429,15 @@ export function BreakdownTable({ lines, onRateChange, disabledLayerIds, onToggle
           })}
         </tbody>
       </table>
+      {pickerFor && rl && (() => {
+        const pl = lines.find(x => x.layerId === pickerFor)
+        if (!pl) return null
+        return (
+          <RateLinkPicker line={{ name: pl.name, unit: pl.unit, category: pl.category, purchaseQty: pl.purchaseQty }} items={rl.items} supportsPack={rl.supportsPack}
+            onClose={() => setPickerFor(null)}
+            onPick={link => { sampleRates.current[pl.layerId] = pl.unitCost; rl.setLink(pl.layerId, link); setPickerFor(null) }} />
+        )
+      })()}
     </div>
   )
 }
