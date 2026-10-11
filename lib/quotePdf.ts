@@ -14,6 +14,7 @@ import { clientRows } from './client-items'
 import { PRODUCT_NAME } from './product-config'
 import { toPdfSafeText } from './pdf-text'
 import { companyLegalParts } from './company-legal'
+import { scopeHeadings, stripScopeMarks } from './scope-format'
 
 // ── Colour helpers ────────────────────────────────────────────────────────────
 
@@ -67,26 +68,15 @@ function safe(s: string | undefined | null): string {
  * to the first sentence of each paragraph for plain text.
  */
 function scopeToBullets(scope: string): string[] {
-  // Extract **Heading** or **Heading:** markers (AI scopes always use this format)
-  const headingRx = /\*\*([^*\n]{3,70}?)\*\*/g
-  const seen = new Set<string>()
-  const headings: string[] = []
-  let m: RegExpExecArray | null
-  while ((m = headingRx.exec(scope)) !== null) {
-    const h = m[1].replace(/:$/, '').trim()
-    // Skip very long strings — those are titles/sentences, not section labels
-    if (h.length >= 3 && h.length <= 65 && !seen.has(h)) {
-      seen.add(h)
-      headings.push(h)
-    }
-  }
+  // Bold at the start of a line is a section heading (AI scopes always use this format)
+  const headings = scopeHeadings(scope)
   if (headings.length >= 2) return headings.map(h => `- ${h}`)
 
   // Fallback: clean the text and take the first sentence of each paragraph
-  const clean = scope.replace(/\*\*/g, '').trim()
+  const clean = stripScopeMarks(scope).trim()
   const paras = clean.split(/\n+/).filter(p => p.trim().length > 0)
   return paras.slice(0, 10).map(p => {
-    const s = p.trim().replace(/\s+/g, ' ')
+    const s = p.trim().replace(/^-\s+/, '').replace(/\s+/g, ' ')
     const dot = s.search(/\.\s/)
     const line = dot > 0 && dot < 120 ? s.slice(0, dot + 1) : s.slice(0, 110) + (s.length > 110 ? '...' : '')
     return `- ${line}`

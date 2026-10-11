@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { fmt, quoteTotal, STAGE_LABEL, Q_BADGE, Q_LABEL, jobDisplayTitle, quoteDisplayTitle, jobNumber, quoteExpiryDays, quoteExpiryDate, isQuoteExpired } from '@/lib/utils'
 import { buildHtmlClientView } from '@/lib/quoteHtml'
+import { stripScopeMarks } from '@/lib/scope-format'
 import { buildGanttFromQuote } from '@/lib/gantt-utils'
 import { backfillQuoteItemDescriptions } from '@/lib/back-office-queries'
 import type { Quote } from '@/lib/types'
@@ -191,7 +192,7 @@ export default function SavedQuotesPage() {
     try {
       await addVariation(jobId, {
         title: `${q.ref}${q.customer.name ? ` — ${q.customer.name}` : ''}`,
-        description: q.scope || '',
+        description: stripScopeMarks(q.scope || ''),
         status: 'approved',
         items: [],
         markup: 0,

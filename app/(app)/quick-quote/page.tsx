@@ -25,6 +25,7 @@ import QuoteAttachments from '@/components/QuoteAttachments'
 import QuickQuoteItemsEditor, { quickItemsTotals } from '@/components/QuickQuoteItemsEditor'
 import { reassignQuoteDocuments } from '@/lib/quote-documents'
 import type { QuoteDocument, QuoteMiscItem } from '@/lib/types'
+import ScopeEditor from '@/components/ScopeEditor'
 
 let itemId = 1000
 
@@ -389,16 +390,11 @@ export default function QuickQuotePage() {
           </div>
         )}
 
-        <textarea
+        <ScopeEditor
           value={scope}
-          onChange={e => { setScope(e.target.value); setScopeGenerated(false) }}
-          rows={5}
+          onChange={v => { setScope(v); setScopeGenerated(false) }}
+          minHeight={120}
           placeholder="Describe the scope of works for this project…"
-          style={{
-            width: '100%', padding: '10px 12px', fontSize: 13, boxSizing: 'border-box',
-            border: '1px solid var(--border)', borderRadius: 6, fontFamily: 'inherit',
-            resize: 'vertical', minHeight: 100, lineHeight: 1.6,
-          }}
         />
       </div>
 

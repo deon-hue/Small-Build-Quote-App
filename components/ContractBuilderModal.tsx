@@ -10,6 +10,7 @@ import type { Job, Quote, Contract, ContractFields, ContractPaymentStage } from 
 import { CollapsibleSection } from './assembly-ui'
 import { useDraggableModal } from './useDraggableModal'
 import { syncFromQuote, contractFingerprint } from '@/lib/contract-sync'
+import { stripScopeMarks } from '@/lib/scope-format'
 import ModalResizeHandle from './ModalResizeHandle'
 import ModalMaximizeButton from './ModalMaximizeButton'
 
@@ -70,8 +71,8 @@ function autoFill(job: Job, quote: Quote | undefined, settings: { name: string; 
     f[F.clientName] = quote.customer.name || ''
     f[F.clientAddress] = quote.customer.address || ''
     f[F.clientTelephone] = quote.customer.phone || ''
-    f[F.worksProvided] = quote.scope || ''
-    f[SCOPE_SNAPSHOT] = quote.scope || ''
+    f[F.worksProvided] = stripScopeMarks(quote.scope || '')
+    f[SCOPE_SNAPSHOT] = stripScopeMarks(quote.scope || '')
     f[CHANGES] = quote.scopeNotes?.trim() || ''
     f[CHANGES_SNAPSHOT] = quote.scopeNotes?.trim() || ''
     f[F.price] = fmt(quoteTotal(quote))
@@ -170,7 +171,7 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
       // changed would otherwise keep the old text for ever.
       if (quote) {
         const strOf = (k: string) => (typeof seeded[k] === 'string' ? String(seeded[k]) : undefined)
-        const sc = syncFromQuote(strOf(F.worksProvided) ?? '', quote.scope || '', strOf(SCOPE_SNAPSHOT))
+        const sc = syncFromQuote(stripScopeMarks(strOf(F.worksProvided) ?? ''), stripScopeMarks(quote.scope || ''), strOf(SCOPE_SNAPSHOT) === undefined ? undefined : stripScopeMarks(strOf(SCOPE_SNAPSHOT) ?? ''))
         seeded = { ...seeded, [F.worksProvided]: sc.value, [SCOPE_SNAPSHOT]: sc.snapshot }
         if (sc.status === 'followed') setScopeNote('updated'); else if (sc.status === 'differs') setScopeNote('changed')
 
@@ -482,7 +483,7 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
                   <span style={{ flex: 1 }}>
                     ⚠️ The scope of works on quote <strong>{quote.ref}</strong> is different from the &ldquo;Works provided&rdquo; on this contract. The contract still has its own wording.
                   </span>
-                  <button type="button" className="btn-sm btn-primary" onClick={() => { setFields(prev => ({ ...prev, [F.worksProvided]: quote.scope || '', [SCOPE_SNAPSHOT]: quote.scope || '' })); setScopeNote('') }}>Use the quote&rsquo;s scope</button>
+                  <button type="button" className="btn-sm btn-primary" onClick={() => { setFields(prev => ({ ...prev, [F.worksProvided]: stripScopeMarks(quote.scope || ''), [SCOPE_SNAPSHOT]: stripScopeMarks(quote.scope || '') })); setScopeNote('') }}>Use the quote&rsquo;s scope</button>
                 </div>
               )}
 

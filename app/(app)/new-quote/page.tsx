@@ -37,6 +37,7 @@ import { priceFromBasics, priceElectricsFromScope } from '@/components/ai-priced
 import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchQuoteDefaults, fetchAllQuoteDefaults, upsertTask, fetchLabourTrades, fetchProducts, fetchPlantItems, fetchPhases, fetchSubPhases, fetchTasks } from '@/lib/back-office-queries'
 import type { BOLabourTrade, BOProduct, BOPlantItem, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
 import type { FloorMakeup } from '@/lib/takeoff-types'
+import ScopeEditor from '@/components/ScopeEditor'
 
 let phaseCounter = 0
 let itemCounter = 0
@@ -1801,13 +1802,12 @@ export default function NewQuotePage() {
               </button>
             </div>
           </div>
-          <textarea
+          <ScopeEditor
             value={scope}
-            onChange={e => setScope(e.target.value)}
+            onChange={setScope}
             readOnly={isLockedQuote}
-            rows={6}
+            minHeight={140}
             placeholder={quoteSource === 'ai' ? 'AI-generated scope will appear here — you can edit it freely.' : 'Describe the scope of works… or click "Write with AI" to build it conversationally'}
-            style={{ width: '100%', resize: 'vertical', fontSize: 13, padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 6, boxSizing: 'border-box', fontFamily: 'inherit', color: 'var(--text)', lineHeight: 1.6 }}
           />
         </div>
       )}

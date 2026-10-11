@@ -10,6 +10,8 @@ import PortalQuoteAttachments from './PortalQuoteAttachments'
 import { useDraggableModal } from './useDraggableModal'
 import ModalResizeHandle from './ModalResizeHandle'
 import ModalMaximizeButton from './ModalMaximizeButton'
+import ScopeView from './ScopeView'
+import { scopeToHtml } from '@/lib/scope-format'
 
 interface Props {
   quote: Quote
@@ -109,8 +111,8 @@ export default function PortalQuoteDetailsModal({
 
     const scopeContent = printOptions.includeScope && quote.scope ? `
       <h3 style="margin-top: 24px; margin-bottom: 16px; font-size: 16px; font-weight: 700;">Scope of Works</h3>
-      <div style="white-space: pre-wrap; line-height: 1.7; padding: 12px; background: #fafaf8; border: 1px solid #ddd; border-radius: 4px;">
-        ${quote.scope}
+      <div style="line-height: 1.7; padding: 12px; background: #fafaf8; border: 1px solid #ddd; border-radius: 4px;">
+        ${scopeToHtml(quote.scope)}
       </div>
     ` : ''
 
@@ -331,11 +333,14 @@ export default function PortalQuoteDetailsModal({
                 Scope of Works
               </div>
               <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.8, padding: '14px 16px', background: '#fafaf8', border: '1px solid var(--border)', borderRadius: 8 }}>
-                {quote.scope.split(/\n\n+|\. (?=[A-Z])/g).map((para, idx) => (
-                  <p key={idx} style={{ margin: '0 0 12px 0', wordSpacing: '0.05em', textAlign: 'justify' }}>
-                    {para.trim()}
-                  </p>
-                ))}
+                {/* A scope written as one unbroken block (older quotes) is still split into sentences; one with its own lines keeps them */}
+                {/\n/.test(quote.scope.trim())
+                  ? <ScopeView text={quote.scope} />
+                  : quote.scope.split(/\. (?=[A-Z])/g).map((para, idx) => (
+                    <div key={idx} style={{ margin: '0 0 12px 0', wordSpacing: '0.05em', textAlign: 'justify' }}>
+                      <ScopeView text={para.trim()} />
+                    </div>
+                  ))}
               </div>
             </div>
           )}

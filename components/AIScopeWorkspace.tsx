@@ -13,6 +13,7 @@
 import { useState, useEffect, useRef } from 'react'
 import ScopeChat from '@/components/ScopeChat'
 import { DragHandle } from '@/components/DragHandle'
+import ScopeEditor from '@/components/ScopeEditor'
 
 // ── Job type configuration ────────────────────────────────────────────────────
 
@@ -203,6 +204,7 @@ export default function AIScopeWorkspace({
   const chatWAtStart = useRef(300)
   useEffect(() => { try { const w = Number(localStorage.getItem('buildos-ai-chat-width')); if (w >= 280 && w <= 900) setChatW(w) } catch { /* private mode */ } }, [])
   const [scopeText,  setScopeText]  = useState(config.defaultDescription)
+  const [scopeFocus, setScopeFocus] = useState(false)
 
   const [generatingScope,  setGeneratingScope]   = useState(false)
 
@@ -358,17 +360,13 @@ export default function AIScopeWorkspace({
                 {scopeText.trim() ? scopeText.trim().split(/\s+/).length : 0} words
               </span>
             </div>
-            <textarea
+            <ScopeEditor
               value={scopeText}
-              onChange={e => setScopeText(e.target.value)}
-              style={{
-                flex: 1, width: '100%', padding: '14px', fontSize: 13, lineHeight: 1.7,
-                border: `1.5px solid ${COLORS.border}`, borderRadius: 10,
-                resize: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
-                outline: 'none', minHeight: 360, color: '#1e293b',
-              }}
-              onFocus={e => (e.target.style.borderColor = COLORS.purple)}
-              onBlur={e  => (e.target.style.borderColor = COLORS.border)}
+              onChange={setScopeText}
+              minHeight={360}
+              style={{ padding: 14, lineHeight: 1.7, border: `1.5px solid ${scopeFocus ? COLORS.purple : COLORS.border}`, borderRadius: 10, resize: 'none', color: '#1e293b' }}
+              onFocus={() => setScopeFocus(true)}
+              onBlur={() => setScopeFocus(false)}
               placeholder="Your scope of works will appear here. Use AI Interview to build it, or type directly."
             />
           </div>

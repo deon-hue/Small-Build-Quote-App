@@ -4,6 +4,7 @@ import { VAT, calcItemSell, calcPhaseSell, calcMiscItemSell, phaseMarkup } from 
 import { clientRows } from './client-items'
 import { getPhaseVisual } from './phase-visuals'
 import { companyLegalParts } from './company-legal'
+import { scopeToHtml } from './scope-format'
 
 function esc(s: string): string {
   return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
@@ -193,7 +194,7 @@ ${WHATS_INCLUDED_CSS}
     </div>
   </div>
 
-  ${showScope && q.scope ? `<div class="scope-box"><div class="scope-label">Scope of Works</div><div class="scope-text">${q.scope.replace(/\n/g, '<br>')}</div></div>` : ''}
+  ${showScope && q.scope ? `<div class="scope-box"><div class="scope-label">Scope of Works</div><div class="scope-text">${scopeToHtml(q.scope)}</div></div>` : ''}
   ${showScope && q.scopeNotes?.trim() ? `<div class="scope-box" style="border-left-color:#e0b020;background:#fffdf5"><div class="scope-label" style="color:#8a6a10">Changes to the Scope</div><div class="scope-text">${esc(q.scopeNotes.trim()).replace(/\n/g, '<br>')}</div></div>` : ''}
   ${q.photo ? `<div style="margin:0 40px 24px;text-align:center"><img src="${q.photo}" alt="Property" style="max-width:100%;max-height:280px;border-radius:6px;border:1px solid #e2e8f0;object-fit:cover"></div>` : ''}
 
@@ -402,7 +403,7 @@ ${WHATS_INCLUDED_CSS}
     </div>
   </div>
 
-  ${showScope && q.scope ? `<div class="scope-box"><div class="scope-label">Scope of Works</div><div class="scope-text">${q.scope.replace(/\n/g, '<br>')}</div></div>` : ''}
+  ${showScope && q.scope ? `<div class="scope-box"><div class="scope-label">Scope of Works</div><div class="scope-text">${scopeToHtml(q.scope)}</div></div>` : ''}
   ${showScope && q.scopeNotes?.trim() ? `<div class="scope-box" style="border-left-color:#e0b020;background:#fffdf5"><div class="scope-label" style="color:#8a6a10">Changes to the Scope</div><div class="scope-text">${esc(q.scopeNotes.trim()).replace(/\n/g, '<br>')}</div></div>` : ''}
   ${q.photo ? `<div style="margin:0 40px 24px;text-align:center"><img src="${q.photo}" alt="Property" style="max-width:100%;max-height:280px;border-radius:6px;border:1px solid #e2e8f0;object-fit:cover"></div>` : ''}
 

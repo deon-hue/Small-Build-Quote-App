@@ -15,6 +15,7 @@ import { PDFDocument, PDFForm, PDFCheckBox, PDFTextField, StandardFonts } from '
 import type { Contract, ContractFields, ContractPaymentStage, Job, Quote, Settings } from './types'
 import { quoteTotal } from './utils'
 import { toPdfSafeText } from './pdf-text'
+import { stripScopeMarks } from './scope-format'
 import { appendScopeSchedule, scopeFitsBox, SCOPE_BOX_POINTER } from './contract-scope-page'
 
 // ── Field names ───────────────────────────────────────────────────────────────
@@ -180,7 +181,7 @@ export function autoFillContractFields(job: Job, quote: Quote | undefined, setti
     fields[FIELD.clientName] = quote.customer.name || ''
     fields[FIELD.clientAddress] = quote.customer.address || ''
     fields[FIELD.clientTelephone] = quote.customer.phone || ''
-    fields[FIELD.worksProvided] = quote.scope || ''
+    fields[FIELD.worksProvided] = stripScopeMarks(quote.scope || '')
     if (quote.scopeNotes?.trim()) fields[SCOPE_CHANGES_KEY] = quote.scopeNotes.trim()
     fields[FIELD.price] = fmtGBP(quoteTotal(quote))
     fields[FIELD.clientNameFront] = quote.customer.name || ''
