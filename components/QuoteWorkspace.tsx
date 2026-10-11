@@ -18,6 +18,7 @@ import type { QuotePhase, QuoteItem, QuoteProduct, QuotePlantItem, QuoteMiscItem
 import type { BOLabourTrade, BOProduct, BOPlantItem, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
 import { fmt, calcPhase, calcPhaseSell, calcMiscItemSell, phaseMarkup } from '@/lib/utils'
 import { useSpeechToText } from './useSpeechToText'
+import ReviewNotes from './ReviewNotes'
 import ProductPicker      from '@/components/ProductPicker'
 import PlantPicker        from '@/components/PlantPicker'
 import PhaseReviewModal   from '@/components/PhaseReviewModal'
@@ -1707,6 +1708,8 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
             </div>
           )}
 
+          {builtAssembly && <ReviewNotes notes={p.reviewNotes ?? []} onChange={notes => onUpdate({ ...p, reviewNotes: notes.length ? notes : undefined })} readOnly={isLocked} />}
+
           {/* Cost-category cards — accordion, one open at a time (not for Electrics) */}
           {p.phase !== 'Electrics' && !builtAssembly && (
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -1853,7 +1856,17 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
           phase={p}
           jobType={jobType}
           markup={markup}
+          addAsNotes={!!builtAssembly}
           onAddItem={item => {
+            if (builtAssembly) {
+              // A calculator replaces all of its cost rows when it is saved, so a suggestion would be lost as a row: keep it as a note
+              const label: Record<string, string> = { labour: 'Labour', materials: 'Materials', plant: 'Plant', subcontractors: 'Subcontractor', other: 'Other' }
+              const reason = (item.notes ?? '').replace(/^AI suggestion:\s*/, '').trim()
+              const text = `${label[item.itemType ?? 'other'] ?? 'Other'}: ${item.desc}${reason ? ` — ${reason}` : ''}`
+              if ((p.reviewNotes ?? []).some(n => n.text === text)) return
+              onUpdate({ ...p, reviewNotes: [...(p.reviewNotes ?? []), { id: String(uid()), text }] })
+              return
+            }
             const newItem: QuoteItem = { ...item, id: uid() }
             onUpdate({ ...p, items: [...p.items, newItem] })
           }}
@@ -1883,6 +1896,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
               <div style={{ fontSize: 12, color: '#7c3aed', background: '#fdfaff', border: '1px dashed #e9d5ff', borderRadius: 6, padding: '8px 12px', marginBottom: 14 }}>
                 🧪 Sample rates for now — playing with this doesn't change this quote's actual costs yet.
               </div>
+              <ReviewNotes notes={p.reviewNotes ?? []} onChange={notes => onUpdate({ ...p, reviewNotes: notes.length ? notes : undefined })} />
               {builtAssembly.render({ onSave: applyAssemblyCalculation, labourTrades, ...(p.electricsState && { electrics: { initialState: p.electricsState } }), ...(p.calcState && { calcState: p.calcState }), ...(p.assemblySize && !p.calcState && { externalLengthMm: p.assemblySize.lengthMm, externalWidthMm: p.assemblySize.widthMm, initialHeightMm: p.assemblySize.heightMm, basics: p.assemblySize, noSampleOpenings: true }) })}
             </div>
           </div>

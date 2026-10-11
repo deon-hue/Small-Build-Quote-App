@@ -20,11 +20,13 @@ interface Props {
   jobType:    string
   markup:     number
   onAddItem:  (item: Omit<QuoteItem, 'id'>) => void
+  /** A calculator sub-phase keeps a suggestion as a note (to add when recalculating) instead of a cost row */
+  addAsNotes?: boolean
   onComplete: (image: PhaseImage) => void
   onClose:    () => void
 }
 
-export default function PhaseReviewModal({ phase, jobType, markup, onAddItem, onComplete, onClose }: Props) {
+export default function PhaseReviewModal({ phase, jobType, markup, onAddItem, addAsNotes = false, onComplete, onClose }: Props) {
   const [loading,    setLoading]    = useState(true)
   const [result,     setResult]     = useState<PhaseReviewResult | null>(null)
   const [hasHistory, setHasHistory] = useState(false)
@@ -109,7 +111,7 @@ export default function PhaseReviewModal({ phase, jobType, markup, onAddItem, on
             onClick={() => addSuggestion(s, keyId)}
             disabled={done}
             style={{ padding: '5px 12px', background: done ? '#16a34a' : accent, border: 'none', borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 700, cursor: done ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
-            {done ? '✓ Added' : '+ Add'}
+            {done ? (addAsNotes ? '✓ Noted' : '✓ Added') : (addAsNotes ? '+ Add as note' : '+ Add')}
           </button>
         </div>
       </div>
@@ -148,6 +150,12 @@ export default function PhaseReviewModal({ phase, jobType, markup, onAddItem, on
           {error && (
             <div style={{ padding: '16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#dc2626', fontSize: 13 }}>
               ⚠️ {error}
+            </div>
+          )}
+
+          {result && addAsNotes && (
+            <div style={{ marginBottom: 14, padding: '8px 12px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 8, fontSize: 12.5, color: '#6b21a8', lineHeight: 1.5 }}>
+              This sub-phase is priced by a calculator, so a suggestion is kept as a note on it. When you press Recalculate the notes are shown at the top, ready for you to add.
             </div>
           )}
 
