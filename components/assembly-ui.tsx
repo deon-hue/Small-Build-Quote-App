@@ -301,13 +301,13 @@ export function BreakdownTable({ lines, onRateChange, disabledLayerIds, onToggle
   const sampleRates = useRef<Record<string, number>>({})
   // The line whose product pop-up is open
   const [pickerFor, setPickerFor] = useState<string | null>(null)
-  for (const l of lines) if (sampleRates.current[l.layerId] === undefined && !rl?.links[l.layerId]) sampleRates.current[l.layerId] = l.unitCost
+  for (const l of lines) if (sampleRates.current[l.layerId] === undefined && !rl?.linkFor(l.layerId)) sampleRates.current[l.layerId] = l.unitCost
   // A linked line takes its Back Office item's current price when the calculator is first opened. A calculator opened from a saved copy keeps the saved prices
   // (a quote is a record: only you change it), and offers to update a line instead.
   useEffect(() => {
     if (!rl || rl.frozen) return
     for (const l of lines) {
-      const link = rl.links[l.layerId]
+      const link = rl.linkFor(l.layerId)
       if (!link) continue
       const c = linkedRate(link, rl.items, l.purchaseQty)
       if (c != null && Math.abs(c - l.unitCost) > 0.0005) onRateChange(l.layerId, c)
@@ -348,7 +348,7 @@ export function BreakdownTable({ lines, onRateChange, disabledLayerIds, onToggle
                   const off = disabledLayerIds.has(l.layerId)
                   const sidesEligible = sidesEligibleLayerIds.has(l.layerId)
                   const sides = layerSides[l.layerId] ?? 1
-                  const link = rl?.links[l.layerId]
+                  const link = rl?.linkFor(l.layerId)
                   const linkedItem = link ? rl!.items.find(i => i.kind === link.kind && i.id === link.refId) : undefined
                   const canLink = !!rl && rl.ready && isLinkable(l.layerId, l.category)
                   const canPick = canLink && !link && rl!.items.length > 0

@@ -6,13 +6,15 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { fetchProducts, fetchPlantItems } from '@/lib/back-office-queries'
-import { toRateItems, type RateItem, type RateLink } from '@/lib/rate-links'
+import { toRateItems, linkKey, type RateItem, type RateLink } from '@/lib/rate-links'
 
 interface RateLinksValue {
   assemblyId: string
   items: RateItem[]
-  /** keyed by layer id */
+  /** keyed by what the link is filed under (see linkKey): use linkFor(layerId) to read one */
   links: Record<string, RateLink>
+  /** the link a cost line has, if any */
+  linkFor: (layerId: string) => RateLink | undefined
   ready: boolean
   /** true when the calculator was opened from a saved copy: its prices stay as saved and only change when you change them */
   frozen: boolean
@@ -66,8 +68,11 @@ export function RateLinksProvider({ assemblyId, frozen = false, children }: { as
     return () => { live = false }
   }, [assemblyId])
 
-  const setLink = useCallback(async (layerId: string, link: RateLink | null) => {
+  const linkFor = useCallback((layerId: string) => links[linkKey(assemblyId, layerId)], [links, assemblyId])
+
+  const setLink = useCallback(async (rawLayerId: string, link: RateLink | null) => {
     if (!owner) return
+    const layerId = linkKey(assemblyId, rawLayerId)
     const sb = createClient()
     setLinks(prev => {
       const next = { ...prev }
@@ -79,6 +84,6 @@ export function RateLinksProvider({ assemblyId, frozen = false, children }: { as
     else await sb.from('calculator_rate_links').delete().eq('user_id', owner).eq('assembly_id', assemblyId).eq('layer_id', layerId)
   }, [owner, assemblyId, supportsPack])
 
-  const value = useMemo(() => ({ assemblyId, items, links, ready, frozen, supportsPack, setLink }), [assemblyId, items, links, ready, frozen, supportsPack, setLink])
+  const value = useMemo(() => ({ assemblyId, items, links, linkFor, ready, frozen, supportsPack, setLink }), [assemblyId, items, links, linkFor, ready, frozen, supportsPack, setLink])
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

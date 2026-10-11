@@ -27,10 +27,20 @@ export function normUnit(u: string | null | undefined): string {
   if (['m', 'lm', 'metre', 'metres', 'linearmetre', 'linearmetres', 'linm'].includes(x)) return 'm'
   if (['t', 'tonne', 'tonnes', 'ton', 'tons'].includes(x)) return 'tonne'
   if (['nr', 'no', 'each', 'ea', 'number', 'pc', 'pcs', 'piece', 'item', 'items', 'unit', 'units', 'visit', 'skip', 'sum'].includes(x)) return 'nr'
-  if (['hr', 'hrs', 'hour', 'hours'].includes(x)) return 'hr'
+  if (['hr', 'hrs', 'hour', 'hours', 'h'].includes(x)) return 'hr'
+  if (['l', 'ltr', 'ltrs', 'litre', 'litres', 'liter', 'liters'].includes(x)) return 'l'
+  if (['kg', 'kgs', 'kilo', 'kilos', 'kilogram', 'kilograms'].includes(x)) return 'kg'
   if (['day', 'days'].includes(x)) return 'day'
   if (['wk', 'week', 'weeks', 'prop-week', 'propweek', '-week'].includes(x) || x.endsWith('week')) return 'week'
   return x
+}
+
+/**
+ * What a saved link is filed under. Most calculators' lines are the same every time ("fascia board"), so the line id is the key. The decoration calculator's lines
+ * are per room ("wall-paint|room-1"): a link there is to the KIND of material, so every room's wall paint, in this quote and the next, shares one link.
+ */
+export function linkKey(assemblyId: string, layerId: string): string {
+  return assemblyId === 'deco-internal-walls' ? layerId.split('|')[0] : layerId
 }
 
 export const unitsMatch = (a: string | null | undefined, b: string | null | undefined) => normUnit(a) === normUnit(b)
@@ -58,7 +68,7 @@ export function toRateItems(
 export const linkKindFor = (category: string): RateRefKind | null => category === 'materials' ? 'product' : category === 'plant' ? 'plant' : null
 
 /** Lines the estimator typed in (miscellaneous materials) have an id that changes every session, so a link to one could not be kept. */
-export const isStableLayerId = (layerId: string) => !/^(misc|suggested|profit|trim_extra_|drain_extra_|fitmat\|)/.test(layerId) && layerId.length > 0
+export const isStableLayerId = (layerId: string) => !/^(misc|suggested|profit|trim_extra_|drain_extra_|fitmat\||protect\||prep-sundries\|)/.test(layerId) && layerId.length > 0
 
 export function isLinkable(layerId: string, category: string): boolean {
   return isStableLayerId(layerId) && linkKindFor(category) !== null
@@ -151,6 +161,14 @@ export function guessPackSize(productName: string, lineUnit: string): number | n
     const ar = n.match(/(\d+(?:\.\d+)?)\s*(?:m²|m2|sq\.? ?m|sqm)/)
     if (ar && num(ar[1]) > 0) return num(ar[1])
     return null
+  }
+  if (u === 'l') {
+    const lt = n.match(/(\d+(?:\.\d+)?)\s*(?:l|ltr|ltrs|litre|litres|liter|liters)\b/)
+    return lt && num(lt[1]) > 0 ? num(lt[1]) : null
+  }
+  if (u === 'kg') {
+    const kg = n.match(/(\d+(?:\.\d+)?)\s*(?:kg|kgs|kilo|kilos)\b/)
+    return kg && num(kg[1]) > 0 ? num(kg[1]) : null
   }
   if (u === 'm') {
     const len = n.match(/(\d+(?:\.\d+)?)\s*(?:lm|mtr|mtrs|metre|metres|meter|meters|m)\b(?!\s*[²2x])/)
