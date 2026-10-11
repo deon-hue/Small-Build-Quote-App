@@ -13,7 +13,7 @@
  * Works for all data sources: takeoff import, AI-generated, manual.
  */
 
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import type { QuotePhase, QuoteItem, QuoteProduct, QuotePlantItem, QuoteMiscItem } from '@/lib/types'
 import type { BOLabourTrade, BOProduct, BOPlantItem, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
 import { fmt, calcPhase, calcPhaseSell, calcMiscItemSell, phaseMarkup } from '@/lib/utils'
@@ -2153,6 +2153,9 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
   // Which room the sub-phase being picked goes in ('' = none), chosen in the picker when the phase already has rooms
   const [pickerRoom, setPickerRoom] = useState('')
   const [pickerSearch, setPickerSearch]     = useState('')
+  // The picker opens on the phase you are adding to; 'show all' lists every phase's sub-phases
+  const [pickerShowAll, setPickerShowAll]     = useState(false)
+  useEffect(() => { setPickerShowAll(false) }, [subPhasePicker?.mainPhase])
 
   const toggle = useCallback((k: string) => {
     setCollapsed(prev => {
@@ -2598,13 +2601,34 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
               {(() => {
                 const q = pickerSearch.toLowerCase()
                 const filtered = boSubPhases.filter(sp => !q || sp.name.toLowerCase().includes(q))
+                // The Back Office phase this quote phase is: from the sub-phases already in it (the one most of them come from), else by its name
+                // ("Decoration", or an older "Phase 11 – Decoration")
+                const inThisPhase = phases.filter(p => (p.parentPhase || '(No Phase)') === subPhasePicker.mainPhase)
+                const votes = new Map<string, number>()
+                for (const p of inThisPhase) {
+                  const bo = p.boSubPhaseId ? boSubPhases.find(b => b.id === p.boSubPhaseId) : undefined
+                  if (bo?.phase_id) votes.set(bo.phase_id, (votes.get(bo.phase_id) ?? 0) + 1)
+                }
+                const plain = (n: string) => n.toLowerCase().replace(/^phase\s*\d+\s*[-–—:]?\s*/, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim()
+                const byVotes = [...votes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
+                const currentPhaseId = byVotes ?? boPhases.find(bp => plain(bp.name) === plain(subPhasePicker.mainPhase))?.id
+                const currentPhase = currentPhaseId ? boPhases.find(bp => bp.id === currentPhaseId) : undefined
+                const addedIds = new Set(inThisPhase.map(p => p.boSubPhaseId).filter(Boolean))
+                const onlyThisPhase = !!currentPhase && !pickerShowAll && !q
+                const shown = onlyThisPhase ? filtered.filter(sp => sp.phase_id === currentPhase!.id) : filtered
                 const grouped = boPhases
-                  .map(bp => ({ phase: bp, subs: filtered.filter(sp => sp.phase_id === bp.id) }))
+                  .map(bp => ({ phase: bp, subs: shown.filter(sp => sp.phase_id === bp.id) }))
                   .filter(g => g.subs.length > 0)
+                  .sort((a, b) => (a.phase.id === currentPhaseId ? -1 : 0) - (b.phase.id === currentPhaseId ? -1 : 0))
                 // Also show sub-phases not matched to any known phase
-                const ungrouped = filtered.filter(sp => !boPhases.find(bp => bp.id === sp.phase_id))
+                const ungrouped = onlyThisPhase ? [] : shown.filter(sp => !boPhases.find(bp => bp.id === sp.phase_id))
                 return (
                   <>
+                    {onlyThisPhase && (
+                      <div style={{ padding: '2px 16px 6px', fontSize: 12, color: '#64748b' }}>
+                        Sub-phases of <strong>{currentPhase!.name}</strong>. A tick means it is already in this phase (you can still add it again, for another room).
+                      </div>
+                    )}
                     {grouped.map(g => (
                       <div key={g.phase.id}>
                         <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', padding: '6px 16px 2px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{g.phase.name}</div>
@@ -2615,11 +2639,17 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
                             onMouseEnter={e => (e.currentTarget.style.background = '#f1f5f9')}
                             onMouseLeave={e => (e.currentTarget.style.background = 'none')}
                           >
-                            {sp.name}
+                            {sp.name}{addedIds.has(sp.id) && <span style={{ marginLeft: 8, fontSize: 11, color: '#16a34a' }}>✓ in this phase</span>}
                           </button>
                         ))}
                       </div>
                     ))}
+                    {onlyThisPhase && (
+                      <button type="button" onClick={() => setPickerShowAll(true)}
+                        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 16px', fontSize: 12.5, background: 'none', border: 'none', borderTop: '1px solid #f1f5f9', cursor: 'pointer', color: '#0369a1' }}>
+                        Show sub-phases from all the other phases…
+                      </button>
+                    )}
                     {ungrouped.map(sp => (
                       <button key={sp.id}
                         onClick={() => createSubPhase(subPhasePicker.mainPhase, pickerRoom, sp.name, sp.id)}
@@ -2630,7 +2660,7 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
                         {sp.name}
                       </button>
                     ))}
-                    {filtered.length === 0 && (
+                    {shown.length === 0 && (
                       <div style={{ padding: '12px 16px', fontSize: 13, color: '#94a3b8' }}>No matches — use Custom below.</div>
                     )}
                   </>
