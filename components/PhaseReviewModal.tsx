@@ -150,6 +150,27 @@ export default function PhaseReviewModal({ phase, jobType, markup, onAddItem, on
 
           {result && (
             <>
+              {/* Price check — does the price look right for the work described */}
+              {result.priceCheck && result.priceCheck.summary && (() => {
+                const v = result.priceCheck.verdict
+                const tone = v === 'about right' ? { bg: '#f0fdf4', bd: '#bbf7d0', fg: '#15803d', label: 'Price looks about right' }
+                  : v === 'low' ? { bg: '#fffbeb', bd: '#fde68a', fg: '#b45309', label: 'Price looks low' }
+                  : v === 'high' ? { bg: '#fffbeb', bd: '#fde68a', fg: '#b45309', label: 'Price looks high' }
+                  : { bg: '#f8fafc', bd: '#e2e8f0', fg: '#475569', label: 'Price check: not enough detail to judge' }
+                return (
+                  <div style={{ marginBottom: 18, padding: '12px 14px', background: tone.bg, border: `1px solid ${tone.bd}`, borderRadius: 8 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: tone.fg, marginBottom: 4 }}>{tone.label}</div>
+                    <div style={{ fontSize: 13, color: '#1e293b', lineHeight: 1.5 }}>{result.priceCheck.summary}</div>
+                    {result.priceCheck.reasons.length > 0 && (
+                      <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 12.5, color: '#475569', lineHeight: 1.5 }}>
+                        {result.priceCheck.reasons.map((r, i) => <li key={i}>{r}</li>)}
+                      </ul>
+                    )}
+                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>A prompt to double-check, not a verdict.</div>
+                  </div>
+                )
+              })()}
+
               {/* Gaps — missing required items */}
               {result.gaps.length > 0 && (
                 <div style={{ marginBottom: 18 }}>

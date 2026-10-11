@@ -17,6 +17,7 @@ import React, { useState, useCallback } from 'react'
 import type { QuotePhase, QuoteItem, QuoteProduct, QuotePlantItem, QuoteMiscItem } from '@/lib/types'
 import type { BOLabourTrade, BOProduct, BOPlantItem, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
 import { fmt, calcPhase, calcPhaseSell, calcMiscItemSell, phaseMarkup } from '@/lib/utils'
+import { useSpeechToText } from './useSpeechToText'
 import ProductPicker      from '@/components/ProductPicker'
 import PlantPicker        from '@/components/PlantPicker'
 import PhaseReviewModal   from '@/components/PhaseReviewModal'
@@ -765,6 +766,44 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
   // While the task name is being edited it shows exactly what is typed (even nothing); the fallback wording only shows when it isn't being edited
   const [nameDraft, setNameDraft] = React.useState<string | null>(null)
 
+  // Say or type a few rough words about the work, then "Write it" has the AI turn them into the short scope-of-works description for the quote
+  const [descBusy, setDescBusy] = React.useState(false)
+  const [descMsg, setDescMsg] = React.useState('')
+  const [descUndo, setDescUndo] = React.useState<string | null>(null)
+  const pRef = React.useRef(p); pRef.current = p
+  const onUpdateRef = React.useRef(onUpdate); onUpdateRef.current = onUpdate
+  const dictBase = React.useRef(''); const dictLast = React.useRef('')
+  const { listening: descListening, toggleMic: toggleDescMic } = useSpeechToText(t => {
+    // the recogniser hands over everything it has heard in this go; if it restarted, what came before is kept
+    if (t.length < dictLast.current.length) dictBase.current = (dictBase.current + ' ' + dictLast.current).trim()
+    dictLast.current = t
+    const text = (dictBase.current + ' ' + t).trim()
+    setNameDraft(text)
+    onUpdateRef.current({ ...pRef.current, taskName: text })
+  })
+  function startDescMic() {
+    if (!descListening) { dictBase.current = (nameDraft ?? pRef.current.taskName ?? '').trim(); dictLast.current = ''; setDescMsg('') }
+    toggleDescMic()
+  }
+  async function writeDescription() {
+    const notes = (nameDraft ?? p.taskName ?? '').trim() || derivedTaskName
+    if (!notes) { setDescMsg('Say or type a few words about the work first.'); return }
+    setDescBusy(true); setDescMsg('')
+    try {
+      const res = await fetch('/api/describe-subphase', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes, phase: p.phase, parentPhase: p.parentPhase, jobType, roomLabel: p.roomLabel }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.description) { setDescMsg(data.error ?? 'The AI could not write that. Try again.'); return }
+      setDescUndo(p.taskName ?? '')
+      setNameDraft(null)
+      onUpdate({ ...p, taskName: data.description })
+    } catch {
+      setDescMsg('The AI could not be reached. Check your connection and try again.')
+    } finally { setDescBusy(false) }
+  }
+
   // Task name shown to the user — priority order:
   //   1. Explicit p.taskName (user-edited or BO description)
   //   2. taskGroup values from cost rows (e.g. "Blockwork, DPC")
@@ -1475,9 +1514,29 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
 
           {/* Task description — tells the estimator what work this sub-phase covers */}
           <div style={{ marginBottom: 8 }}>
-            <label style={{ display: 'block', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#94a3b8', marginBottom: 3 }}>
-              Description <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>— shown under the sub-phase name on the quote</span>
-            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
+              <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#94a3b8' }}>
+                Description <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>— shown under the sub-phase name on the quote</span>
+              </label>
+              <span style={{ flex: 1 }} />
+              {!isLocked && (
+                <>
+                  <button type="button" onClick={startDescMic} title={descListening ? 'Stop recording' : 'Say a few words about the work'}
+                    style={{ fontSize: 11, padding: '2px 8px', borderRadius: 5, cursor: 'pointer', border: `1px solid ${descListening ? '#e74c3c' : '#e2e8f0'}`, background: descListening ? '#e74c3c' : '#fff', color: descListening ? '#fff' : '#475569' }}>
+                    {descListening ? '● Stop' : '🎤 Say it'}
+                  </button>
+                  <button type="button" onClick={writeDescription} disabled={descBusy} title="The AI turns your rough words into a short scope-of-works description for the quote"
+                    style={{ fontSize: 11, padding: '2px 8px', borderRadius: 5, cursor: descBusy ? 'wait' : 'pointer', border: '1px solid #ddd6fe', background: '#faf5ff', color: '#7c3aed', fontWeight: 600 }}>
+                    {descBusy ? 'Writing…' : '✦ Write it'}
+                  </button>
+                  {descUndo !== null && (
+                    <button type="button" onClick={() => { setNameDraft(null); onUpdate({ ...p, taskName: descUndo || undefined }); setDescUndo(null) }} title="Put back what was there before"
+                      style={{ fontSize: 11, padding: '2px 6px', border: 'none', background: 'none', color: '#64748b', cursor: 'pointer', textDecoration: 'underline' }}>↶ Undo</button>
+                  )}
+                </>
+              )}
+            </div>
+            {descMsg && <div style={{ fontSize: 11.5, color: '#b45309', marginBottom: 4 }}>{descMsg}</div>}
             <textarea
               rows={2}
               value={nameDraft ?? derivedTaskName}

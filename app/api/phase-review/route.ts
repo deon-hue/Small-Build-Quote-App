@@ -3,6 +3,7 @@ import { createClient }              from '@/lib/supabase/server'
 import { usageGuard } from '@/lib/usage'
 import { fetchSimilarPhases }        from '@/lib/quote-intelligence'
 import type { QuotePhase }           from '@/lib/types'
+import { summarisePhaseForReview } from '@/lib/phase-review-summary'
 
 export const maxDuration = 60
 
@@ -19,7 +20,14 @@ export interface ReviewSuggestion {
   desc:     string   // suggested description to pre-fill the new row
 }
 
+export interface PriceCheck {
+  verdict: 'low' | 'about right' | 'high' | 'unclear'
+  summary: string
+  reasons: string[]
+}
+
 export interface PhaseReviewResult {
+  priceCheck?:    PriceCheck
   gaps:           ReviewSuggestion[]
   suggestions:    ReviewSuggestion[]
   concerns:       string[]
@@ -86,6 +94,9 @@ export async function POST(req: NextRequest) {
     ? `${phase.meta.measurements.qty ?? ''} ${phase.meta.measurements.unit ?? ''} ${phase.meta.measurements.area ? `(area: ${phase.meta.measurements.area}m²)` : ''}`.trim()
     : 'not specified'
 
+  // What the work is, what is priced for it, and the cost, margin and sell: for the price check
+  const sum = summarisePhaseForReview(phase, markup)
+
   // ── Prompt ──────────────────────────────────────────────────────────────────
   const system = `You are an expert UK construction estimator with 20+ years experience across residential extensions, loft conversions, refurbishments and new builds. You understand UK building regulations, typical labour rates, material specifications and contractor workflows.
 
@@ -101,6 +112,14 @@ TASK: ${phase.taskName || phase.phase}
 MEASUREMENTS: ${measurements}
 MARKUP: ${markup}%
 
+DESCRIPTION OF THE WORK (written by the estimator):
+${sum.description}
+
+WHAT IS PRICED (each row, with its cost to the contractor):
+${sum.rows}
+
+PRICING: ${sum.pricing}
+
 COST ENTERED:
 - Labour: £${totals.labour.toFixed(2)}${descs.filter(x => x.cat === 'labour').length ? ' — ' + descs.filter(x => x.cat === 'labour').map(x => x.d).join(', ') : ' (nothing entered)'}
 - Materials: £${totals.materials.toFixed(2)}${descs.filter(x => x.cat === 'materials').length ? ' — ' + descs.filter(x => x.cat === 'materials').map(x => x.d).join(', ') : ' (nothing entered)'}
@@ -113,11 +132,14 @@ ${historyBlock}
 
 Return JSON only:
 {
+  "priceCheck": {"verdict": "low|about right|high|unclear", "summary": "One or two plain sentences: does the SELL price look right for the work in the description, and why", "reasons": ["Short specific reasons, e.g. a quantity or rate that looks off"]},
   "gaps": [{"category": "labour|materials|plant|subcontractors|other", "item": "Short name", "reason": "Why it's typically needed", "desc": "Suggested description for the cost row"}],
   "suggestions": [{"category": "labour|materials|plant|subcontractors|other", "item": "Short name", "reason": "Why to consider", "desc": "Suggested description"}],
   "concerns": ["Any rate or scope concerns as plain strings"],
   "looksComplete": ["Things that look correct and complete"]
 }
+
+For priceCheck: judge whether the SELL price looks right for the work described, using this contractor's own past quotes where given and otherwise typical UK trade prices. Be honest and specific. If the description is too thin to judge, use "unclear" and say what detail would help. It is a prompt to double-check, not a verdict. Treat anything the description mentions that is not in WHAT IS PRICED as a likely gap.
 
 Limit to the most important 3-5 gaps and 2-3 suggestions. Be specific to the trade.`
 
@@ -131,7 +153,7 @@ Limit to the most important 3-5 gaps and 2-3 suggestions. Be specific to the tra
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 2048,
+        max_tokens: 2600,
         system,
         messages: [
           { role: 'user',      content: user_msg },
@@ -142,12 +164,16 @@ Limit to the most important 3-5 gaps and 2-3 suggestions. Be specific to the tra
     const data = await res.json()
     if (data.error) return NextResponse.json({ error: data.error?.message }, { status: 500 })
 
-    let raw = ('{' + (data.content?.[0]?.text ?? '')).trim()
+    // No prefilled "{" is sent, so the reply is the whole JSON (or a fenced block, or text around it); take the object out of it
+    let raw = String(data.content?.[0]?.text ?? '').trim()
     const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/)
     if (fence) raw = fence[1].trim()
     if (!raw.startsWith('{')) { const s = raw.indexOf('{'); const e = raw.lastIndexOf('}'); if (s !== -1 && e !== -1) raw = raw.slice(s, e + 1) }
 
     const result: PhaseReviewResult = JSON.parse(raw)
+    const v = result.priceCheck?.verdict
+    if (result.priceCheck && !(v === 'low' || v === 'about right' || v === 'high' || v === 'unclear')) result.priceCheck.verdict = 'unclear'
+    if (result.priceCheck && !Array.isArray(result.priceCheck.reasons)) result.priceCheck.reasons = []
     return NextResponse.json({ result, hasHistory: similar.length > 0 })
   } catch (e) {
     console.error('[phase-review] error:', e)
