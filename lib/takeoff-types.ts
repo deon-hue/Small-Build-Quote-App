@@ -4,10 +4,11 @@
 
 import type { WallConstructionType, WallFinishType, CalculatedMaterial } from './material-recipes'
 import type { CostedLine } from './assembly-calc'
+import type { ElectricPoint } from './electric-points'
 
 // ── Drawing tools ─────────────────────────────────────────────────────────────
 
-export type DrawingTool = 'select' | 'line' | 'rect' | 'polygon' | 'floor' | 'click'
+export type DrawingTool = 'select' | 'line' | 'rect' | 'polygon' | 'floor' | 'click' | 'electric'
 
 // ── Measurement categories (match quote parentPhase names) ────────────────────
 
@@ -239,6 +240,14 @@ export interface TakeoffItem {
   // tracing. When present, applyTakeoffData() builds the quote phase straight from these
   // costed lines instead of the generic flat-task path.
   assemblyResult?: { name: string; location: string; description: string; detail?: string; lines: CostedLine[] }
+
+  // Electrics: the one "Electrical installation" item holds every point placed on the plan (so they save with the project like everything else),
+  // and what the electrics calculator was last saved as. Its price comes from the calculator (assemblyResult), not from the points.
+  electricsSummary?: boolean
+  electricPoints?: ElectricPoint[]
+  electricsState?: unknown
+  /** the plan's points (as room counts) when the calculator was last saved, to say when the plan has changed since */
+  electricsPricedKey?: string
 }
 
 // ── Construction Layer Cost Records ──────────────────────────────────────────

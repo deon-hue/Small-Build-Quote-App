@@ -33,6 +33,7 @@ import AssemblyFasciaSoffitDemo from '@/components/AssemblyFasciaSoffitDemo'
 import { RateLinksProvider } from '@/components/RateLinks'
 import type { CostedLine } from '@/lib/assembly-calc'
 import type { AssemblyBasics } from '@/lib/assembly-basics'
+import type { PlanRoom, ElectricsSavedState } from '@/lib/electrics-units'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 
 export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation' | 'pad-foundation' | 'piled-foundation' | 'underpinning' | 'electrics'
@@ -41,7 +42,9 @@ export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cav
  * the Back Office preview context, which has no quote to save into. */
 // `description` is the short line for the quote; `detail` (only some calculators write one) is the full
 // part-by-part "What's included" text kept as the phase's `scopeDetail`.
-export interface AssemblySaveResult { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }
+export interface AssemblySaveResult { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[]
+  /** A calculator that can't work out its inputs again from a drawn shape (electrics) hands back what it was set to, to be kept with the Take-off item. */
+  state?: unknown }
 
 export interface AssemblyRenderOpts {
   onSave?: (result: AssemblySaveResult) => void
@@ -60,6 +63,8 @@ export interface AssemblyRenderOpts {
   variant?: string
   /** The sizes an AI quote priced it from, so the calculator opens showing what the AI used. */
   basics?: AssemblyBasics
+  /** Electrics only: the points placed on the Take-off plan (as room counts), and what the calculator was last saved as. */
+  electrics?: { planRooms?: PlanRoom[]; initialState?: ElectricsSavedState }
 }
 
 type BuiltAssemblyEntry = {
@@ -90,7 +95,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'fnd-pad': { icon: 'pad-foundation', render: opts => <AssemblyPadFoundationDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} initial={opts?.basics} /> },
   'fnd-piled': { icon: 'piled-foundation', render: opts => <AssemblyPiledFoundationDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initial={opts?.basics} /> },
   'fnd-underpin': { icon: 'underpinning', render: opts => <AssemblyUnderpinningDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initial={opts?.basics} /> },
-  'elec-install': { icon: 'electrics', render: opts => <AssemblyElectricsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
+  'elec-install': { icon: 'electrics', render: opts => <AssemblyElectricsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} planRooms={opts?.electrics?.planRooms} initialState={opts?.electrics?.initialState} /> },
   'ew-cav-full': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="wool" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initialHeightMm={opts?.initialHeightMm} noSampleOpenings={opts?.noSampleOpenings} /> },
 }
 

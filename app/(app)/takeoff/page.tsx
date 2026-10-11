@@ -9,6 +9,12 @@ import type { BOLabourTrade, BOPhase, BOSubPhase, BOTask } from '@/lib/back-offi
 import { BUILT_ASSEMBLY_CANON_IDS } from '@/lib/built-assemblies'
 import { WALL_MAKEUP_TO_SUBPHASE_CANONICAL } from '@/lib/built-assembly-ids'
 import AssemblyItemPanel from './components/AssemblyWindow'
+import ElectricalPointsPanel, { POINT_GROUP_COLOUR } from './components/ElectricalPointsPanel'
+import { POINT_BY_ID, type ElectricsSavedState } from '@/lib/electrics-units'
+import { planRoomsFromPoints, roomAtPoint, rectToPolygon, POINT_SHORT, type ElectricPoint } from '@/lib/electric-points'
+
+// The one Take-off item that holds every electrical point placed on the plan (and the electrics calculator's saved price).
+const ELECTRICS_ITEM_ID = 'electrics-summary'
 
 // A drawn foundation line's Foundation Type -> its build-up id (see FOUNDATION_MAKEUPS). A type whose build-up has a calculator (WALL_MAKEUP_TO_SUBPHASE_CANONICAL) is priced by it.
 const FOUNDATION_MAKEUP_BY_TYPE: Record<string, string | null> = { trench_fill: 'trench_fill', strip: 'strip_found', pad_edge: 'pad_found', raft_edge: 'raft_found', piled: 'piled_found', underpin: 'underpin', other: null }
@@ -60,7 +66,7 @@ const PHASE_DEFAULT_TOOL: Record<string, DrawingTool> = {
   'Internal Walls & Partitions':  'line',
   'Floors & Screeds':             'polygon',
   'Drainage & Services':          'line',
-  'Electrics':                    'line',
+  'Electrics':                    'electric',
   'Plumbing & Heating':           'line',
   'Plastering & Boarding':        'line',
   'Joinery & Fixtures':           'rect',
@@ -103,6 +109,7 @@ const TOOL_DISPLAY: Record<DrawingTool, string> = {
   polygon: 'Polygon (Area)',
   floor:   'Floor Area',
   click:   'Click to Place Item',
+  electric: 'Place Electrical Point',
 }
 
 // ── ID helpers ────────────────────────────────────────────────────────────────
@@ -610,6 +617,10 @@ export default function TakeoffPage() {
   // The item whose assembly calculator window is open, if any. Tied to an item id so selecting a
   // different wall closes it without any extra bookkeeping.
   const [assemblyWindowItemId, setAssemblyWindowItemId] = useState<string | null>(null)
+  // Electrics: the kind of point and room for the next click, and the placed point that is selected
+  const [electricTypeId, setElectricTypeId] = useState('dbl-socket')
+  const [electricRoom, setElectricRoom] = useState('')
+  const [selectedElectricPointId, setSelectedElectricPointId] = useState<string | null>(null)
   const [selectedTaskSubphaseId, setSelectedTaskSubphaseId] = useState<string | null>(null)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
 
@@ -1091,6 +1102,11 @@ export default function TakeoffPage() {
       })
       return
     }
+    if (tool === 'electric') {
+      if (activePhase !== 'Electrics') { showToast('⚡ Choose the Electrics phase to place electrical points'); return }
+      placeElectricPoint(svgCoords(e))
+      return
+    }
     if (tool === 'select') return
     const pt = svgCoords(e)
 
@@ -1197,6 +1213,7 @@ export default function TakeoffPage() {
   // Type, which is keyed by floorMakeupId (WALL_MAKEUPS/bo_wall_types) — a separate id space from
   // bo_sub_phases, bridged by WALL_MAKEUP_TO_SUBPHASE_CANONICAL.
   function resolveBuiltAssembly(it: TakeoffItem) {
+    if (it.electricsSummary) return BUILT_ASSEMBLY_CANON_IDS['elec-install']
     // External walls and roofs both: a calculator picked by sub-phase, else the Build-up Type.
     if (it.phase === 'External Walls' || it.phase === 'Roof') {
       // A calculator picked by Sub-Phase (dwarf wall, sleeper wall, ...) — those have no Build-up
@@ -1240,6 +1257,101 @@ export default function TakeoffPage() {
     const h = (Math.max(...ys) - Math.min(...ys)) * project.calibration.mpp * 1000
     const long = Math.max(w, h), short = Math.min(w, h)
     return long > 0 ? { lengthMm: Math.round(long), widthMm: Math.round(short) } : undefined
+  }
+
+  // ── Electrical points (Electrics) ─────────────────────────────────────────
+  // Points are kept on one "Electrical installation" item (created the first time one is needed) so they save and load with the project like
+  // everything else. The electrics calculator is fed room counts worked out from them (planRoomsFromPoints) and its saved state is kept here too.
+  const electricsItem = project.items.find(it => it.electricsSummary)
+  const electricPoints: ElectricPoint[] = electricsItem?.electricPoints ?? []
+
+  function newElectricsItem(): TakeoffItem {
+    const sub = boSubPhases.find(sp => sp.canonical_id === 'elec-install')
+    return { id: ELECTRICS_ITEM_ID, name: 'Electrical installation', phase: 'Electrics', qty: 1, unit: 'item', electricsSummary: true, electricPoints: [], ...(sub && { taskSubphaseId: sub.id, subPhase: sub.name }) }
+  }
+
+  function changeElectricItem(fn: (it: TakeoffItem) => TakeoffItem) {
+    setProject(p => {
+      const items = p.items.some(it => it.electricsSummary) ? p.items : [...p.items, newElectricsItem()]
+      return { ...p, items: items.map(it => it.electricsSummary ? fn(it) : it) }
+    })
+  }
+
+  function changeElectricPoints(fn: (pts: ElectricPoint[]) => ElectricPoint[]) {
+    changeElectricItem(it => ({ ...it, electricPoints: fn(it.electricPoints ?? []) }))
+  }
+
+  // Named rooms drawn in Floors, as shapes, so a point takes the room it falls in
+  function electricRoomShapes() {
+    return project.elements
+      .filter(el => el.phase === 'Floors & Screeds' && el.points.length >= 2)
+      .map(el => ({ name: project.items.find(it => it.elementId === el.id)?.roomName ?? '', points: el.type === 'rect' ? rectToPolygon(el.points) : el.points }))
+  }
+
+  function placeElectricPoint(pt: TakeoffPoint) {
+    const room = roomAtPoint(pt, electricRoomShapes()) ?? electricRoom
+    const id = uid()
+    changeElectricPoints(pts => [...pts, { id, typeId: electricTypeId, roomName: room, x: pt.x, y: pt.y }])
+    setSelectedElectricPointId(id)
+  }
+
+  function startElectricPointDrag(e: React.MouseEvent, pt: ElectricPoint) {
+    if (tool !== 'select') return
+    e.stopPropagation()
+    setSelectedElectricPointId(pt.id)
+    setPanelMode('properties')
+    setEditingItem(electricsItem ?? null)
+    const rect = svgRef.current!.getBoundingClientRect()
+    const pan = panOffset, z = zoom
+    const move = (ev: MouseEvent) => {
+      const x = (ev.clientX - rect.left - pan.x) / z, y = (ev.clientY - rect.top - pan.y) / z
+      changeElectricPoints(pts => pts.map(q => q.id === pt.id ? { ...q, x, y } : q))
+    }
+    const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up) }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+  }
+
+  function renderElectricsPanel() {
+    const planRooms = planRoomsFromPoints(electricPoints)
+    const it = electricsItem
+    const built = BUILT_ASSEMBLY_CANON_IDS['elec-install']
+    const roomNames = Array.from(new Set([
+      ...electricRoomShapes().map(r => r.name).filter(Boolean),
+      ...electricPoints.map(q => q.roomName).filter(Boolean),
+    ]))
+    const stale = !!it?.assemblyResult && it.electricsPricedKey !== undefined && it.electricsPricedKey !== JSON.stringify(planRooms)
+    return (
+      <ElectricalPointsPanel
+        points={electricPoints}
+        placing={tool === 'electric'}
+        onPlacing={on => { setTool(on ? 'electric' : 'select'); if (!on) { setDrawPoints([]); setIsDrawing(false) } }}
+        typeId={electricTypeId} onTypeId={setElectricTypeId}
+        roomName={electricRoom} onRoomName={setElectricRoom}
+        roomSuggestions={roomNames}
+        selectedPointId={selectedElectricPointId} onSelectPoint={setSelectedElectricPointId}
+        onUpdatePoint={(id, patch) => changeElectricPoints(pts => pts.map(q => q.id === id ? { ...q, ...patch } : q))}
+        onDeletePoint={id => { changeElectricPoints(pts => pts.filter(q => q.id !== id)); setSelectedElectricPointId(null) }}
+        saved={it?.assemblyResult}
+        stale={stale}
+        calculatorOpen={assemblyWindowItemId === ELECTRICS_ITEM_ID}
+        onOpenCalculator={() => { changeElectricItem(x => x); setAssemblyWindowItemId(ELECTRICS_ITEM_ID) }}
+        onCloseCalculator={() => setAssemblyWindowItemId(null)}
+        calculator={built?.render({
+          labourTrades,
+          electrics: { planRooms, initialState: it?.electricsState as ElectricsSavedState | undefined },
+          onSave: result => {
+            const { state, ...res } = result
+            const sub = boSubPhases.find(sp => sp.canonical_id === 'elec-install')
+            changeElectricItem(x => ({
+              ...x, assemblyResult: res, electricsState: state, electricsPricedKey: JSON.stringify(planRooms), name: result.name,
+              ...(sub && { taskSubphaseId: sub.id, subPhase: sub.name }),
+            }))
+            setAssemblyWindowItemId(null)
+          },
+        })}
+      />
+    )
   }
 
   // Opens the calculator window for an item — only if it has a calculator.
@@ -1460,7 +1572,7 @@ export default function TakeoffPage() {
     setResetInProgress(true)
     createRecoverySnapshot('clear')
     // Keep items that are NOT linked to any element (manually-added, pricing-only rows)
-    const unlinkedItems = project.items.filter(it => !it.elementId)
+    const unlinkedItems = project.items.filter(it => !it.elementId).map(it => it.electricsSummary ? { ...it, electricPoints: [] } : it)
     setProject(p => ({
       ...p,
       elements: [],
@@ -3779,6 +3891,7 @@ export default function TakeoffPage() {
   // ── Properties panel ───────────────────────────────────────────────────────
   function renderProperties() {
     const item = editingItem ?? phaseDefaults
+    if ((activePhase === 'Electrics' && tool === 'electric') || item?.electricsSummary) return renderElectricsPanel()
     if (!item) {
       return (
         <div style={{ padding: '16px', color: 'var(--to-muted)', fontSize: 13, textAlign: 'center', paddingTop: 40 }}>
@@ -4340,10 +4453,11 @@ export default function TakeoffPage() {
             { t: 'rect',    icon: '▭', label: 'Rectangle'  },
             { t: 'polygon', icon: '⬠', label: 'Polygon'    },
             { t: 'click',   icon: '💠', label: 'Click to Place Item' },
-          ] as { t: DrawingTool; icon: string; label: string }[]).map(({ t, icon, label }) => (
+            { t: 'electric', icon: '⚡', label: 'Place Electrical Point' },
+          ] as { t: DrawingTool; icon: string; label: string }[]).filter(({ t }) => t !== 'electric' || activePhase === 'Electrics').map(({ t, icon, label }) => (
             <div
               key={t}
-              onClick={() => { setTool(t); if (t === 'select') { setDrawPoints([]); setIsDrawing(false) } }}
+              onClick={() => { setTool(t); if (t === 'select') { setDrawPoints([]); setIsDrawing(false) } if (t === 'electric') setPanelMode('properties') }}
               style={{
                 display: 'flex', alignItems: 'center', gap: 7,
                 padding: '7px 8px', marginBottom: 3, borderRadius: 5, cursor: 'pointer',
@@ -4509,6 +4623,23 @@ export default function TakeoffPage() {
 
               {/* Drawn elements — skip phases toggled hidden */}
               {project.elements.filter(el => !hiddenPhases.has(el.phase)).map(renderElement)}
+
+              {/* Electrical points — a coloured dot with its letters; a star marks a special fitting. Drag one in Select mode to move it. */}
+              {!hiddenPhases.has('Electrics') && electricPoints.map(pt => {
+                const g = POINT_BY_ID[pt.typeId]?.group
+                const r = 10 / zoom
+                const chosen = pt.id === selectedElectricPointId
+                return (
+                  <g key={pt.id} transform={`translate(${pt.x}, ${pt.y})`}
+                    onMouseDown={ev => startElectricPointDrag(ev, pt)}
+                    onClick={ev => { if (tool === 'select') ev.stopPropagation() }}
+                    style={{ cursor: tool === 'select' ? 'move' : 'inherit' }}>
+                    <circle r={r} fill={g ? POINT_GROUP_COLOUR[g] : '#888'} stroke={chosen ? '#fff' : '#111'} strokeWidth={(chosen ? 2.5 : 1) / zoom} opacity={0.95} />
+                    <text textAnchor="middle" dominantBaseline="central" fontSize={8.5 / zoom} fontWeight={800} fill="#fff" style={{ pointerEvents: 'none' }}>{POINT_SHORT[pt.typeId] ?? '?'}</text>
+                    {pt.fitting && <text x={r * 0.9} y={-r * 0.9} fontSize={11 / zoom} fill="#facc15" stroke="#111" strokeWidth={0.6 / zoom} style={{ pointerEvents: 'none' }}>★</text>}
+                  </g>
+                )
+              })}
 
               {/* Vertex handles — rendered above all elements when an element is selected.
                   Shown in ALL tool modes so the user can immediately adjust a just-drawn

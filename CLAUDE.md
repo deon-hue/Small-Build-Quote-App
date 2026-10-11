@@ -64,8 +64,11 @@ pattern, and **is used from Take-off in the same way** — do not invent a diffe
 per point at an electrician's all-in rate (`lib/electrics-units.ts` engine, `lib/electrics-description.ts`, `components/AssemblyElectricsDemo.tsx`).
 Rooms start empty (added from a kind of room, which brings its usual points); a situation uplift % applies to points for the job or one room; a
 special fitting (chandelier etc.) is an extra install line on top of its point, client-supplied or ours; a room can be priced by the day instead;
-whole-house items (consumer unit, testing/certificate, circuits) are separate, only the certificate in the starting price. Step 2 (not built):
-Take-off "electrical point" clicks per room feed the counts, following the plan until typed over. Do not add per-room sub-phases for it.
+whole-house items (consumer unit, testing/certificate, circuits) are separate, only the certificate in the starting price. In Take-off (Electrics
+phase) the ⚡ tool places electrical points on the plan (`lib/electric-points.ts`, `app/(app)/takeoff/components/ElectricalPointsPanel.tsx`): they are
+kept on ONE Take-off item (`electricsSummary`, id `electrics-summary`, holding `electricPoints`, the calculator's `electricsState` and its priced
+`assemblyResult`) so they save with the project, and `planRoomsFromPoints` turns them into room counts that feed the calculator
+(`mergePlanRooms` in `lib/electrics-units.ts`: a count follows the plan until typed over). Do not add per-room sub-phases for it.
 
 **Build it**
 1. Engine: its own pure module — in `lib/assembly-calc.ts` for a wall/roof costed from drawn geometry

@@ -127,6 +127,8 @@ export interface ElectricsFitting {
   supply: 'client' | 'us'
   /** the price of the fitting itself when we supply it (a provisional sum), £ each */
   fittingCost: number
+  /** set when this fitting was marked on a Take-off plan point: it follows that point */
+  planPointId?: string
 }
 
 export interface ElectricsRoom {
@@ -142,6 +144,12 @@ export interface ElectricsRoom {
   days: number
   dayRate: number
   fittings: ElectricsFitting[]
+  /** the room's name on the Take-off plan, when its counts come from points placed there */
+  planName?: string
+  /** the point types that have followed the plan in this room */
+  planKeys?: string[]
+  /** the point types the estimator has typed over, which stop following the plan */
+  typed?: string[]
 }
 
 export interface ElectricsInput {
@@ -253,4 +261,96 @@ export function calculateElectrics(input: ElectricsInput): ElectricsResult {
 /** The £ for the lines (quantity x unit cost, no profit) — used by the hand tests and to show a subtotal. */
 export function electricsSubtotal(lines: ElectricsLine[]): number {
   return money(lines.reduce((s, l) => s + l.qty * l.unitCost, 0))
+}
+
+// ── Points placed on a Take-off plan feed the calculator's room counts ────────────────────────────────────────────────────────────────────────
+// A plan room is a room name and how many of each point type were clicked in it (and any special fittings marked). The calculator keeps its own
+// rooms; this merges the plan into them: a count follows the plan until the estimator types over it, a point removed from the plan goes back to
+// zero (unless typed), and a room that is on the plan but not in the calculator is added. Pure, so it can be tested.
+
+export interface PlanRoom {
+  name: string
+  counts: Record<string, number>
+  fittings: { pointId: string; typeId: string; name: string }[]
+}
+
+/** The calculator's state, kept with the Take-off item so reopening it gives back what was typed (rooms, fittings, situations, rates, profit...). */
+export interface ElectricsSavedState {
+  rooms: ElectricsRoom[]
+  wholeHouse: Record<string, number>
+  jobSituationId: string
+  situations: Situation[]
+  pointRates: Record<string, number>
+  fittingRates: Record<string, number>
+  wholeHouseRates: Record<string, number>
+  profitPct: number
+  rateOverrides: Record<string, number>
+  disabledLayerIds: string[]
+  labourLines: { id: string; tradeId: string; task: string; hours: number }[]
+  miscMaterialLines: { id: string; name: string; qty: number; unit: string; unitCost: number }[]
+  name: string
+  location: string
+  qty: number
+}
+
+/** The kind of room a name looks like ("Bedroom 2" -> bedroom), for a room that comes from the plan. */
+export function guessRoomType(name: string): string {
+  const n = name.toLowerCase()
+  const has = (...w: string[]) => w.some(x => n.includes(x))
+  if (has('en-suite', 'ensuite', 'en suite')) return 'ensuite'
+  if (has('cloak', 'wc', 'toilet')) return 'cloakroom'
+  if (has('bath', 'shower')) return 'bathroom'
+  if (has('kitchen') && has('diner', 'family', 'living', 'dining')) return 'kitchen-diner'
+  if (has('kitchen')) return 'kitchen'
+  if (has('utility', 'laundry')) return 'utility'
+  if (has('living', 'lounge', 'sitting', 'reception')) return 'living'
+  if (has('dining')) return 'dining'
+  if (has('study', 'office')) return 'study'
+  if (has('bed')) return 'bedroom'
+  if (has('hall', 'landing', 'stair', 'entrance')) return 'hall'
+  if (has('garage')) return 'garage'
+  if (has('garden room', 'outbuilding', 'annexe', 'annex')) return 'garden-room'
+  if (has('outside', 'external', 'garden', 'patio')) return 'outside'
+  return 'other'
+}
+
+const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
+
+export function mergePlanRooms(
+  rooms: ElectricsRoom[], plan: PlanRoom[], makeRoom: (name: string, typeId: string) => ElectricsRoom,
+): ElectricsRoom[] {
+  const next = rooms.map(r => ({ ...r, points: { ...r.points }, fittings: r.fittings.map(f => ({ ...f })), planKeys: [...(r.planKeys ?? [])], typed: [...(r.typed ?? [])] }))
+  for (const pr of plan) {
+    const name = pr.name.trim() || 'Room'
+    let room = next.find(r => r.planName !== undefined && sameName(r.planName, name))
+      ?? next.find(r => r.planName === undefined && sameName(r.name, name))
+    if (!room) {
+      const made = makeRoom(name, guessRoomType(name))
+      room = { ...made, points: {}, fittings: [], planKeys: [], typed: [] }
+      next.push(room)
+    }
+    room.planName = name
+    for (const [typeId, n] of Object.entries(pr.counts)) {
+      if (!room.planKeys!.includes(typeId)) room.planKeys!.push(typeId)
+      if (!room.typed!.includes(typeId)) room.points[typeId] = n
+    }
+    // special fittings marked on the plan: one per marked point
+    const wanted = new Set(pr.fittings.map(f => f.pointId))
+    room.fittings = room.fittings.filter(f => !f.planPointId || wanted.has(f.planPointId))
+    for (const pf of pr.fittings) {
+      if (room.fittings.some(f => f.planPointId === pf.pointId)) continue
+      room.fittings.push({ id: 'fit-plan-' + pf.pointId, typeId: pf.typeId, name: pf.name, count: 1, supply: 'client', fittingCost: 0, planPointId: pf.pointId })
+    }
+  }
+  // a room on the saved calculator whose plan points have all gone: its plan-driven counts go back to zero
+  for (const room of next) {
+    if (room.planName === undefined) continue
+    const pr = plan.find(p => sameName(p.name, room!.planName!))
+    for (const key of room.planKeys ?? []) {
+      if ((room.typed ?? []).includes(key)) continue
+      if (!pr || pr.counts[key] === undefined) room.points[key] = 0
+    }
+    if (!pr) room.fittings = room.fittings.filter(f => !f.planPointId)
+  }
+  return next
 }

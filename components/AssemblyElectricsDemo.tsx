@@ -10,11 +10,11 @@
  * lib/electrics-units.ts. Not drawn from a plan yet: counts are typed here (a later step lets Take-off points fill them in).
  */
 
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
 import {
   calculateElectrics, POINT_TYPES, POINT_BY_ID, GROUP_LABEL, ROOM_TYPES, ROOM_TYPE_BY_ID, DEFAULT_SITUATIONS, FITTING_TYPES, FITTING_BY_ID,
-  WHOLE_HOUSE_ITEMS, type ElectricsRoom, type ElectricsFitting, type Situation, type PointGroup, type ElectricsResult,
+  WHOLE_HOUSE_ITEMS, mergePlanRooms, type ElectricsRoom, type ElectricsFitting, type Situation, type PointGroup, type ElectricsResult, type PlanRoom, type ElectricsSavedState,
 } from '@/lib/electrics-units'
 import { describeElectrics, describeElectricsShort, type ElectricsDescriptionInput } from '@/lib/electrics-description'
 import { fmt } from '@/lib/utils'
@@ -28,8 +28,12 @@ import {
 
 interface Props {
   onClose?: () => void
-  onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }) => void
+  onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[]; state?: ElectricsSavedState }) => void
   labourTrades?: BOLabourTrade[]
+  /** Points placed on the Take-off plan, as room counts: they feed the rooms' counts, which follow the plan until typed over. */
+  planRooms?: PlanRoom[]
+  /** What was saved with the Take-off item last time (rooms, fittings, situations, rates...), so reopening gives it back. */
+  initialState?: ElectricsSavedState
 }
 
 const GROUP_COLOUR: Record<PointGroup, string> = { sockets: '#2563eb', switches: '#7c3aed', lighting: '#f59e0b', appliances: '#16a34a', safety: '#dc2626', data: '#0891b2' }
@@ -39,35 +43,58 @@ let roomSeq = 0
 let fittingSeq = 0
 const lcFirst = (s: string) => (s.length > 1 && /[A-Z]/.test(s[1]) ? s : s.charAt(0).toLowerCase() + s.slice(1))
 
-function newRoom(typeId: string, existingOfType: number): ElectricsRoom {
+function newRoom(typeId: string, existingOfType: number, fixedName?: string): ElectricsRoom {
   const t = ROOM_TYPE_BY_ID[typeId]
   return {
-    id: 'room-' + ++roomSeq, name: existingOfType === 0 ? t.label : `${t.label} ${existingOfType + 1}`, typeId,
-    points: { ...t.points }, situationId: null, mode: 'points', days: 1, dayRate: 260, fittings: [],
+    id: 'room-' + ++roomSeq, name: fixedName ?? (existingOfType === 0 ? t.label : `${t.label} ${existingOfType + 1}`), typeId,
+    points: fixedName !== undefined ? {} : { ...t.points }, situationId: null, mode: 'points', days: 1, dayRate: 260, fittings: [],
   }
 }
 
-export default function AssemblyElectricsDemo({ onClose, onSave, labourTrades = [] }: Props) {
-  const [name, setName]         = useState('Electrical installation')
-  const [location, setLocation] = useState('')
-  const [qty, setQty]           = useState(1)
-  // The job starts with no rooms: you add the ones it has. Only the testing and certificate is in the starting price.
-  const [rooms, setRooms]       = useState<ElectricsRoom[]>([])
-  const [wholeHouse, setWholeHouse] = useState<Record<string, number>>(() => Object.fromEntries(WHOLE_HOUSE_ITEMS.map(w => [w.id, w.defaultQty])))
-  const [jobSituationId, setJobSituationId] = useState('new-build')
-  const [situations, setSituations] = useState<Situation[]>(DEFAULT_SITUATIONS)
-  const [pointRates, setPointRates] = useState<Record<string, number>>({})
-  const [fittingRates, setFittingRates] = useState<Record<string, number>>({})
-  const [wholeHouseRates, setWholeHouseRates] = useState<Record<string, number>>({})
+export default function AssemblyElectricsDemo({ onClose, onSave, labourTrades = [], planRooms, initialState }: Props) {
+  const is = initialState
+  const [name, setName]         = useState(is?.name ?? 'Electrical installation')
+  const [location, setLocation] = useState(is?.location ?? '')
+  const [qty, setQty]           = useState(is?.qty ?? 1)
+  // The job starts with no rooms: you add the ones it has (or they come from points placed on the plan). Only the testing and certificate is in the starting price.
+  const [rooms, setRooms]       = useState<ElectricsRoom[]>(is?.rooms ?? [])
+  const [wholeHouse, setWholeHouse] = useState<Record<string, number>>(() => is?.wholeHouse ?? Object.fromEntries(WHOLE_HOUSE_ITEMS.map(w => [w.id, w.defaultQty])))
+  const [jobSituationId, setJobSituationId] = useState(is?.jobSituationId ?? 'new-build')
+  const [situations, setSituations] = useState<Situation[]>(is?.situations ?? DEFAULT_SITUATIONS)
+  const [pointRates, setPointRates] = useState<Record<string, number>>(is?.pointRates ?? {})
+  const [fittingRates, setFittingRates] = useState<Record<string, number>>(is?.fittingRates ?? {})
+  const [wholeHouseRates, setWholeHouseRates] = useState<Record<string, number>>(is?.wholeHouseRates ?? {})
   const [addType, setAddType]   = useState('kitchen')
-  const [profitPct, setProfitPct] = useState(20)   // default profit margin
-  const [rateOverrides, setRateOverrides] = useState<Record<string, number>>({})
-  const [disabledLayerIds, setDisabledLayerIds] = useState<Set<string>>(new Set())
+  const [profitPct, setProfitPct] = useState(is?.profitPct ?? 20)   // default profit margin
+  const [rateOverrides, setRateOverrides] = useState<Record<string, number>>(is?.rateOverrides ?? {})
+  const [disabledLayerIds, setDisabledLayerIds] = useState<Set<string>>(new Set(is?.disabledLayerIds ?? []))
   function toggleLayer(id: string) { setDisabledLayerIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
   const noSidesLayers = useMemo(() => new Set<string>(), [])
 
+  // Points placed on the Take-off plan feed the rooms' counts (see mergePlanRooms): a count follows the plan until it is typed over
+  const planKey = JSON.stringify(planRooms ?? null)
+  useEffect(() => {
+    if (!planRooms) return
+    setRooms(prev => mergePlanRooms(prev, planRooms, (n, typeId) => newRoom(typeId, 0, n)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planKey])
+  const planCount = (room: ElectricsRoom, pointId: string): number | null => {
+    if (room.planName === undefined || !planRooms) return null
+    const pr = planRooms.find(p => p.name.trim().toLowerCase() === room.planName!.trim().toLowerCase())
+    return pr?.counts[pointId] ?? ((room.planKeys ?? []).includes(pointId) ? 0 : null)
+  }
+  function followPlan(roomId: string, pointId: string) {
+    setRooms(p => p.map(r => {
+      if (r.id !== roomId) return r
+      const typed = (r.typed ?? []).filter(k => k !== pointId)
+      const n = planCount(r, pointId)
+      return { ...r, typed, points: n === null ? r.points : { ...r.points, [pointId]: n } }
+    }))
+  }
   function updateRoom(id: string, patch: Partial<ElectricsRoom>) { setRooms(p => p.map(r => r.id === id ? { ...r, ...patch } : r)) }
-  function setCount(roomId: string, pointId: string, n: number) { setRooms(p => p.map(r => r.id === roomId ? { ...r, points: { ...r.points, [pointId]: Math.max(0, n) } } : r)) }
+  function setCount(roomId: string, pointId: string, n: number) {
+    setRooms(p => p.map(r => r.id === roomId ? { ...r, points: { ...r.points, [pointId]: Math.max(0, n) }, typed: (r.planKeys ?? []).includes(pointId) && !(r.typed ?? []).includes(pointId) ? [...(r.typed ?? []), pointId] : r.typed } : r))
+  }
   function removePoint(roomId: string, pointId: string) { setRooms(p => p.map(r => { if (r.id !== roomId) return r; const pts = { ...r.points }; delete pts[pointId]; return { ...r, points: pts } })) }
   function addFitting(roomId: string) {
     const f: ElectricsFitting = { id: 'fit-' + ++fittingSeq, typeId: 'pendant-cluster', name: '', count: 1, supply: 'client', fittingCost: 0 }
@@ -91,7 +118,7 @@ export default function AssemblyElectricsDemo({ onClose, onSave, labourTrades = 
   const costedLines: CostedLine[] = layers.map(l => costLayer(l, l.fixedQty ?? 0))
 
   // Miscellaneous materials
-  const [miscMaterialLines, setMiscMaterialLines] = useState<MiscMaterialLine[]>([])
+  const [miscMaterialLines, setMiscMaterialLines] = useState<MiscMaterialLine[]>(is?.miscMaterialLines ?? [])
   function addMisc() { setMiscMaterialLines(p => [...p, { id: newMiscMaterialLineId(), name: '', qty: 1, unit: 'item', unitCost: 0 }]) }
   function updateMisc(id: string, patch: Partial<MiscMaterialLine>) { setMiscMaterialLines(p => p.map(m => m.id === id ? { ...m, ...patch } : m)) }
   function removeMisc(id: string) { setMiscMaterialLines(p => p.filter(m => m.id !== id)) }
@@ -101,7 +128,7 @@ export default function AssemblyElectricsDemo({ onClose, onSave, labourTrades = 
   }
 
   // Own labour (e.g. chasing and making good) — starts empty: the electrician's work is in the point prices
-  const [labourLines, setLabourLines] = useState<LabourLine[]>([])
+  const [labourLines, setLabourLines] = useState<LabourLine[]>(is?.labourLines ?? [])
   const addLabour = () => setLabourLines(prev => [...prev, { id: newLabourLineId(), tradeId: prev[0]?.tradeId ?? '', task: '', hours: 0 }])
   const updateLabour = (id: string, patch: Partial<LabourLine>) => setLabourLines(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l))
   const removeLabour = (id: string) => setLabourLines(prev => prev.filter(l => l.id !== id))
@@ -179,7 +206,8 @@ export default function AssemblyElectricsDemo({ onClose, onSave, labourTrades = 
         {r && <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 700, color: '#7ab533' }}>{fmt(totalCost * qty)}</span>}
         {r && <MaterialsListButtons lines={scheduleLines} title={`${name} — schedule of points`} location={location} description={description} compact />}
         {onSave && r && (
-          <button onClick={() => onSave({ name, qty, location, description, detail, lines: [...enabledMaterialLines, ...labourCostedLines, ...(profitLine ? [profitLine] : [])] })}
+          <button onClick={() => onSave({ name, qty, location, description, detail, lines: [...enabledMaterialLines, ...labourCostedLines, ...(profitLine ? [profitLine] : [])],
+            state: { rooms, wholeHouse, jobSituationId, situations, pointRates, fittingRates, wholeHouseRates, profitPct, rateOverrides, disabledLayerIds: Array.from(disabledLayerIds), labourLines, miscMaterialLines, name, location, qty } })}
             title="Replace this sub-phase's cost items with this calculation's costed lines"
             style={{ background: '#16a34a', border: 'none', borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: '6px 12px' }}>💾 Save &amp; Price</button>
         )}
@@ -265,6 +293,13 @@ export default function AssemblyElectricsDemo({ onClose, onSave, labourTrades = 
                         <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                           <span style={{ width: 8, height: 8, borderRadius: '50%', background: GROUP_COLOUR[p.group], flexShrink: 0 }} />
                           <span style={{ fontSize: 11.5, color: '#334155', flex: 1, minWidth: 0 }}>{p.name}{p.unit === 'm²' ? ' (m²)' : ''}</span>
+                          {(() => {
+                            const pc = planCount(rm, p.id)
+                            const typedOver = (rm.typed ?? []).includes(p.id)
+                            return pc !== null && (typedOver
+                              ? <button type="button" onClick={() => followPlan(rm.id, p.id)} title={`You typed over the plan's ${pc}. Press to follow the plan again`} style={{ background: 'none', border: 'none', color: '#0369a1', cursor: 'pointer', fontSize: 10, padding: 0 }}>↻ plan {pc}</button>
+                              : <span title="This count follows the points placed on the plan" style={{ fontSize: 9.5, color: '#16a34a', fontWeight: 700 }}>PLAN</span>)
+                          })()}
                           <input type="number" min={0} step={p.unit === 'm²' ? 0.5 : 1} value={rm.points[p.id]} onChange={e => setCount(rm.id, p.id, +e.target.value || 0)} style={{ ...small, width: 54, textAlign: 'right' }} />
                           <button type="button" onClick={() => removePoint(rm.id, p.id)} title="Take this point type out of the room" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>×</button>
                         </div>
@@ -302,7 +337,9 @@ export default function AssemblyElectricsDemo({ onClose, onSave, labourTrades = 
                           <input type="number" min={0} step={5} value={f.fittingCost} onChange={e => updateFitting(rm.id, f.id, { fittingCost: Math.max(0, +e.target.value || 0) })} style={{ ...small, width: 64, textAlign: 'right' }} title="Price of the fitting itself, each (a provisional sum)" />
                         </span>
                       )}
-                      <button type="button" onClick={() => removeFitting(rm.id, f.id)} title="Remove" style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>×</button>
+                      {f.planPointId
+                        ? <span title="Marked on a point on the plan: take the mark off that point to remove it" style={{ fontSize: 9.5, color: '#16a34a', fontWeight: 700 }}>PLAN</span>
+                        : <button type="button" onClick={() => removeFitting(rm.id, f.id)} title="Remove" style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>×</button>}
                     </div>
                   ))}
                   <button type="button" onClick={() => addFitting(rm.id)} style={{ background: 'none', border: 'none', color: '#0369a1', cursor: 'pointer', fontSize: 11.5, padding: 0 }}>
