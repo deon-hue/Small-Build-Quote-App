@@ -1420,7 +1420,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
             paddingBottom: 1,
           }}
           placeholder="Sub-phase name"
-          title={isLocked ? undefined : 'Click to rename'}
+          title={isLocked ? undefined : 'Rename for this quote only — this does not change Back Office'}
         />
         {!isLocked && !nameFocused && <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0, pointerEvents: 'none' }}>✎</span>}
         {!open && derivedTaskName && (
@@ -1476,7 +1476,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
           {/* Task description — tells the estimator what work this sub-phase covers */}
           <div style={{ marginBottom: 8 }}>
             <label style={{ display: 'block', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#94a3b8', marginBottom: 3 }}>
-              Task Name
+              Description <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>— shown under the sub-phase name on the quote</span>
             </label>
             <textarea
               rows={2}
