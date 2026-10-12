@@ -62,6 +62,37 @@ export interface JobOrder {
   createdAt?: string
 }
 
+/**
+ * One supplier a quote request was sent to, with its own secret link (supabase/job-orders-quotes.sql). The supplier opens the link, no login, and gives a price, a delivery date and
+ * how long the price stands, or says they cannot do it. The builder compares the replies and approves one: the request then becomes an order with the same PO number.
+ */
+export type QuoteStatus = 'invited' | 'replied' | 'declined' | 'chosen' | 'not_chosen'
+export interface OrderQuote {
+  id: string
+  orderId: string
+  token: string
+  supplierId?: string
+  supplierName: string
+  supplierContact: string
+  supplierEmail: string
+  supplierPhone: string
+  status: QuoteStatus
+  sentAt?: string
+  sentVia: string
+  viewedAt?: string
+  /** their price, ex VAT: the whole price when fixed, otherwise per day or per week */
+  price: number | null
+  rateBasis: RateBasis
+  deliveryDate: string
+  validUntil: string
+  notes: string
+  repliedAt?: string
+}
+
+export const QUOTE_STATUS_LABEL: Record<QuoteStatus, string> = {
+  invited: 'Waiting for a reply', replied: 'Quoted', declined: 'Cannot do it', chosen: 'Approved', not_chosen: 'Not chosen',
+}
+
 export const poRef = (n: number) => `PO-${String(n).padStart(4, '0')}`
 
 const DAY_MS = 86_400_000
@@ -213,6 +244,57 @@ export function waLink(phone: string, text: string): string | null {
 
 export const orderDateLabel = shortDate
 
+// ── Quote requests ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Where the job is, without the door: a supplier asked for a quote sees the area, not the street, until a quote is accepted.
+ * "107 Slough Road, Tooting, SW17 0AB" becomes "Tooting, SW17". A single-line address is cut to its postcode area if it has one.
+ */
+export function areaOnly(address: string): string {
+  const POST = /\b([A-Z]{1,2}\d[A-Z\d]?)\s*\d[A-Z]{2}\b/gi
+  const parts = (address || '').split(/[,\n]/).map(p => p.trim()).filter(Boolean).map(p => p.replace(POST, '$1'))
+  if (parts.length === 0) return ''
+  if (parts.length === 1) { const m = /\b[A-Z]{1,2}\d[A-Z\d]?\b/i.exec(parts[0]); return m ? m[0].toUpperCase() : '' }
+  // the first line is the house and street: leave it out
+  return parts.slice(1).join(', ')
+}
+
+/** What a supplier's price comes to for this request: the price, or the rate times the planned time. Ex VAT. */
+export function quoteNet(q: Pick<OrderQuote, 'price' | 'rateBasis'>, plannedUnits: number): number {
+  if (q.price === null || q.price === undefined) return 0
+  return expectedNet({ rate: q.price, rateBasis: q.rateBasis, plannedUnits, deliveryDate: '', offHireDate: '' })
+}
+
+/** The quote that is cheapest (by what it comes to), among the ones that carry a price. */
+export function cheapestQuoteId(quotes: OrderQuote[], plannedUnits: number): string | null {
+  const priced = quotes.filter(q => q.status === 'replied' && q.price !== null)
+  if (priced.length < 2) return null
+  return priced.reduce((a, b) => (quoteNet(b, plannedUnits) < quoteNet(a, plannedUnits) ? b : a)).id
+}
+
+export const quoteLink = (base: string, token: string) => `${base.replace(/\/$/, '')}/supplier-quote/${token}`
+
+/** The message asking for a quote, for WhatsApp, a text or the plain part of an email. Shows the area only. */
+export function quoteRequestText(o: JobOrder, q: Pick<OrderQuote, 'supplierContact'>, link: string, sender: { name: string; company: string }): string {
+  const who = firstName(q.supplierContact)
+  const hi = who ? `Hi ${who}, ` : 'Hi, '
+  const area = areaOnly(o.siteAddress)
+  const body = [
+    o.title + (o.details ? ` (${o.details.replace(/\s+/g, ' ').trim()})` : ''),
+    o.deliveryDate ? `Needed: ${longDate(o.deliveryDate)}${o.deliverySlot ? ', ' + o.deliverySlot : ''}` : '',
+    o.offHireDate ? `Collect: ${longDate(o.offHireDate)}` : '',
+    area ? `Where: ${area}` : '',
+  ].filter(Boolean)
+  return [
+    `${hi}it's ${sender.name || 'the team'} at ${sender.company}. Could you give me a price for this? Ref ${poRef(o.poNumber)}`,
+    '',
+    ...body,
+    '',
+    `Put your price in here, it takes a minute (no login): ${link}`,
+    'Or just reply with your price and earliest date. Thanks!',
+  ].join('\n')
+}
+
 // ── Database ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 const str = (v: unknown) => (typeof v === 'string' ? v : '')
@@ -252,6 +334,52 @@ function orderToRow(o: Partial<JobOrder>) {
   if (o.paidCostId !== undefined) row.paid_cost_id = o.paidCostId || null
   if (o.invoicedCostId !== undefined) row.invoiced_cost_id = o.invoicedCostId || null
   return row
+}
+
+export function rowToQuote(r: Record<string, unknown>): OrderQuote {
+  return {
+    id: r.id as string, orderId: r.order_id as string, token: str(r.token),
+    supplierId: (r.supplier_id as string) || undefined, supplierName: str(r.supplier_name), supplierContact: str(r.supplier_contact), supplierEmail: str(r.supplier_email), supplierPhone: str(r.supplier_phone),
+    status: (r.status as QuoteStatus) ?? 'invited', sentAt: (r.sent_at as string) || undefined, sentVia: str(r.sent_via), viewedAt: (r.viewed_at as string) || undefined,
+    price: r.price === null || r.price === undefined ? null : Number(r.price), rateBasis: (r.rate_basis as RateBasis) ?? 'fixed',
+    deliveryDate: d10(r.delivery_date), validUntil: d10(r.valid_until), notes: str(r.notes), repliedAt: (r.replied_at as string) || undefined,
+  }
+}
+
+/** The quote replies for some requests. An unset table (job-orders-quotes.sql not run) just gives none. */
+export async function fetchOrderQuotes(sb: SupabaseClient, orderIds: string[]): Promise<OrderQuote[]> {
+  if (orderIds.length === 0) return []
+  const { data, error } = await sb.from('job_order_quotes').select('*').in('order_id', orderIds).order('created_at', { ascending: true })
+  if (error) return []
+  return (data ?? []).map(rowToQuote)
+}
+
+export interface QuoteInvitee { supplierId?: string; supplierName: string; supplierContact: string; supplierEmail: string; supplierPhone: string }
+
+export async function insertOrderQuotes(sb: SupabaseClient, ownerId: string, orderId: string, who: QuoteInvitee[]): Promise<{ ok: boolean; error?: string }> {
+  if (who.length === 0) return { ok: true }
+  const rows = who.map(w => ({
+    user_id: ownerId, order_id: orderId, supplier_id: w.supplierId || null, supplier_name: w.supplierName, supplier_contact: w.supplierContact,
+    supplier_email: w.supplierEmail, supplier_phone: w.supplierPhone,
+  }))
+  const { error } = await sb.from('job_order_quotes').insert(rows)
+  return error ? { ok: false, error: error.message } : { ok: true }
+}
+
+export async function updateOrderQuote(sb: SupabaseClient, id: string, p: Partial<Pick<OrderQuote, 'status' | 'sentAt' | 'sentVia' | 'supplierName' | 'supplierContact' | 'supplierEmail' | 'supplierPhone'>>): Promise<void> {
+  const row: Record<string, unknown> = {}
+  if (p.status !== undefined) row.status = p.status
+  if (p.sentAt !== undefined) row.sent_at = p.sentAt || null
+  if (p.sentVia !== undefined) row.sent_via = p.sentVia
+  if (p.supplierName !== undefined) row.supplier_name = p.supplierName
+  if (p.supplierContact !== undefined) row.supplier_contact = p.supplierContact
+  if (p.supplierEmail !== undefined) row.supplier_email = p.supplierEmail
+  if (p.supplierPhone !== undefined) row.supplier_phone = p.supplierPhone
+  await sb.from('job_order_quotes').update(row).eq('id', id)
+}
+
+export async function deleteOrderQuote(sb: SupabaseClient, id: string): Promise<void> {
+  await sb.from('job_order_quotes').delete().eq('id', id)
 }
 
 /** The orders for a job. `missing` is true when the table has not been created yet (supabase/job-orders.sql not run). */
