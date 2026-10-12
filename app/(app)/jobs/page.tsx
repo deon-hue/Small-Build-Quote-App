@@ -11,6 +11,7 @@ import GanttModal from '@/components/GanttModal'
 import { ContactPicker } from '@/components/ContactPicker'
 import VariationModal from '@/components/VariationModal'
 import JobDocumentsModal from '@/components/JobDocumentsModal'
+import JobOrdersModal from '@/components/JobOrdersModal'
 import JobNotesModal from '@/components/JobNotesModal'
 import JobAttachmentsModal from '@/components/JobAttachmentsModal'
 import PaymentRequestsModal from '@/components/PaymentRequestsModal'
@@ -40,6 +41,7 @@ function JobsPageInner() {
   const [saving, setSaving] = useState(false)
   const [notesJob, setNotesJob] = useState<Job | null>(null)
   const [docsJob, setDocsJob] = useState<Job | null>(null)
+  const [ordersJob, setOrdersJob] = useState<Job | null>(null)
   const [attachmentsJob, setAttachmentsJob] = useState<Job | null>(null)
   const [requestsJob, setRequestsJob] = useState<Job | null>(null)
   const [viewQuote, setViewQuote] = useState<Quote | null>(null)
@@ -260,6 +262,7 @@ function JobsPageInner() {
               return latest?.status === 'signed' ? '✅ Contract signed' : latest?.status === 'sent' ? '📤 Contract sent' : '📝 Contract'
             })()}</button>
             <button className="btn-sm btn-outline jb-costs" onClick={() => setDocsJob(j)} title="Scan/upload supplier docs and track costs">💷 Costs</button>
+            <button className="btn-sm btn-outline" onClick={() => setOrdersJob(j)} title="Order a skip, portaloo, plant or materials, send it to the supplier, and track the expected cost">📦 Orders</button>
             <button className="btn-sm btn-outline jb-pay" onClick={() => setRequestsJob(j)} title="Payment requests and received payments">
               💳 Payments{jobPayments.filter(p => p.jobId === j.id).length > 0 ? ` (${jobPayments.filter(p => p.jobId === j.id).length})` : ''}
             </button>
@@ -522,6 +525,15 @@ function JobsPageInner() {
         />
       )}
 
+
+      {ordersJob && (
+        <JobOrdersModal
+          jobId={ordersJob.id}
+          jobLabel={`${jobDisplayTitle(ordersJob)} — ${ordersJob.client}`}
+          jobAddress={ordersJob.address}
+          onClose={() => setOrdersJob(null)}
+        />
+      )}
 
       {/* Documents & Costs modal */}
       {docsJob && (() => {

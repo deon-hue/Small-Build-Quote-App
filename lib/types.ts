@@ -352,6 +352,8 @@ export interface JobCost {
   paymentStatus: PaymentStatus
   source: 'document' | 'manual' | 'timesheet'
   chargeToClient?: boolean
+  /** The purchase order this cost came from or was matched to ("PO-0142"), when it has one */
+  poRef?: string
   createdAt?: string
 }
 

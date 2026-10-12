@@ -47,6 +47,7 @@ function rowToCost(r: Record<string, unknown>): JobCost {
     paymentStatus: (r.payment_status as JobCost['paymentStatus']) ?? 'unknown',
     source: (r.source as JobCost['source']) ?? 'document',
     chargeToClient: Boolean(r.charge_to_client),
+    poRef: (r.po_ref as string) || undefined,
     createdAt: r.created_at as string | undefined,
   }
 }
@@ -67,6 +68,8 @@ function costToRow(c: Partial<JobCost>) {
   if (c.paymentStatus !== undefined) row.payment_status = c.paymentStatus
   if (c.source !== undefined) row.source = c.source
   if (c.chargeToClient !== undefined) row.charge_to_client = c.chargeToClient
+  // only written when there is one, so a database without the po_ref column (supabase/job-orders.sql not run) keeps working for every ordinary cost
+  if (c.poRef) row.po_ref = c.poRef
   return row
 }
 

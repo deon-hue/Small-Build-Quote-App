@@ -38,6 +38,8 @@ export interface EmailShellOptions {
   body: string
   /** The footer line (HTML-safe). Defaults to "Kind regards · Company" */
   footerHtml?: string
+  /** The company's logo as a web address the email can load (an email cannot carry the saved copy of the logo). When given it replaces the initial in the lime square. */
+  logoUrl?: string
 }
 
 export function emailShell(o: EmailShellOptions): string {
@@ -50,13 +52,16 @@ export function emailShell(o: EmailShellOptions): string {
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-bottom:3px solid ${BRAND.lime};background:#f8faf8">
       <tr>
         <td style="padding:26px 32px">
-          <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+          ${o.logoUrl
+            ? `<img src="${o.logoUrl}" alt="${o.company}" style="display:block;max-height:56px;max-width:200px;height:auto;width:auto;border:0">
+          <div style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:${BRAND.muted};margin-top:8px">${o.kicker}</div>`
+            : `<table role="presentation" cellpadding="0" cellspacing="0"><tr>
             <td style="width:52px;height:52px;background:${BRAND.lime};border-radius:8px;text-align:center;vertical-align:middle;color:#ffffff;font-size:24px;font-weight:700">${initialOf(o.company)}</td>
             <td style="padding-left:16px;vertical-align:middle">
               <div style="font-size:18px;font-weight:700;color:${BRAND.ink}">${o.company}</div>
               <div style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:${BRAND.muted};margin-top:2px">${o.kicker}</div>
             </td>
-          </tr></table>
+          </tr></table>`}
         </td>
         ${o.ref ? `<td style="padding:26px 32px 26px 0;text-align:right;vertical-align:middle;font-size:13px;font-weight:700;color:${BRAND.muted};white-space:nowrap">${o.ref}</td>` : ''}
       </tr>

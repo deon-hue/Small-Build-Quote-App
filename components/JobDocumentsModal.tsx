@@ -10,6 +10,8 @@ import type { ExtractedCostLine } from '@/lib/doc-extract/types'
 import { useApp } from '@/contexts/AppContext'
 import { buildJobReportHtml } from '@/lib/jobReportHtml'
 import SendJobReportModal from './SendJobReportModal'
+import JobOrdersModal from './JobOrdersModal'
+import { fetchJobOrders, committedTotals, expectedNet, isCommitted, poRef, matchSuggestions, orderDateLabel, overrunNote, type JobOrder } from '@/lib/job-orders'
 
 interface Props {
   jobId: string; jobLabel: string; budget?: CategoryBudget | null; revenue?: number
@@ -87,6 +89,9 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
   const [showPayments, setShowPayments] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
   const [costs, setCosts] = useState<JobCost[]>([])
+  // Purchase orders for this job (supabase/job-orders.sql): the ones on account and not yet invoiced are EXPECTED costs
+  const [orders, setOrders] = useState<JobOrder[]>([])
+  const [showOrders, setShowOrders] = useState(false)
   const [loading, setLoading] = useState(true)
   const [subContracts, setSubContracts] = useState<SubContract[]>([])
   const [subEntries, setSubEntries] = useState<SubEntry[]>([])
@@ -143,6 +148,7 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
         sb.from('sub_payment_stages').select('id,sub_contract_id,description,amount,paid_date').eq('user_id', user.id),
       ])
       setCosts(jobCosts)
+      fetchJobOrders(sb, jobId).then(r => setOrders(r.orders)).catch(() => {})
       const contracts = (scs ?? []) as SubContract[]
       setSubContracts(contracts)
       const cids = new Set(contracts.map(c => c.id))
@@ -257,6 +263,14 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
   const budgetFor = (cat: JobCostCategory) => budget ? (budget as unknown as Record<string, number>)[cat] ?? 0 : 0
   const margin = revenue !== undefined ? +(revenue - totalNet).toFixed(2) : null
   const marginPct = revenue ? Math.round((margin! / revenue) * 100) : null
+  // Orders on account that no invoice has arrived for yet: costs the job will carry, so the margin allows for them now
+  const committed = committedTotals(orders)
+  const committedOrders = orders.filter(isCommitted)
+  const projectedMargin = revenue !== undefined ? +(revenue - totalNet - committed.total).toFixed(2) : null
+  const projectedPct = revenue ? Math.round((projectedMargin! / revenue) * 100) : null
+  // the margin the quote was priced at, for the warning when the job is heading below it
+  const quotedPct = revenue && budget ? Math.round(((revenue - budget.total) / revenue) * 100) : null
+  const orderSuggestions = matchSuggestions(orders, costs)
 
   return (
     <div style={overlay} onClick={onClose}>
@@ -272,6 +286,7 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
         <div style={{ padding: '16px 20px', overflowY: 'auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
             <button onClick={() => setManual(blankManual())} style={{ ...btn, background: '#4a90a4', color: '#fff', border: 'none' }}>＋ Add cost manually</button>
+            <button onClick={() => setShowOrders(true)} style={btn} title="Raise a skip, portaloo, plant hire or materials order, send it to the supplier, and track it until the invoice arrives">📦 Orders{orders.filter(o => o.status !== 'invoiced' && o.status !== 'cancelled').length > 0 ? ` (${orders.filter(o => o.status !== 'invoiced' && o.status !== 'cancelled').length})` : ''}</button>
             <span style={{ fontSize: 12, color: '#94a3b8' }}>To scan a receipt or invoice, use the <strong>Document Inbox</strong> in Settings, then allocate it to this job.</span>
           </div>
 
@@ -349,6 +364,32 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
             </div>
           )}
 
+          {/* Still to come: orders on account that no invoice has arrived for yet */}
+          {!loading && (committedOrders.length > 0 || orderSuggestions.length > 0) && (
+            <div style={{ border: '1px solid #fde68a', background: '#fffbeb', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: '#92400e' }}>⏳ Still to come <span style={{ fontWeight: 400, fontSize: 11, color: '#a16207' }}>(ordered, not yet invoiced; ex-VAT)</span></div>
+                <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#92400e' }}>{fmt(committed.total)}</span>
+              </div>
+              {committedOrders.map(o => {
+                const warn = overrunNote(o)
+                return (
+                  <div key={o.id} style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap', padding: '4px 0', fontSize: 13, borderTop: '1px solid #fef3c7', color: '#44403c' }}>
+                    <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{poRef(o.poNumber)}</span>
+                    <span style={{ flex: 1, minWidth: 160 }}>{o.title} · {o.supplierName}{o.expectedInvoice ? <span style={{ color: '#a16207' }}> · invoice about {orderDateLabel(o.expectedInvoice)}</span> : null}{warn ? <span style={{ color: '#b45309', fontWeight: 600 }}> · ⚠ {warn}</span> : null}</span>
+                    <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{fmt(expectedNet(o))}</span>
+                  </div>
+                )
+              })}
+              {orderSuggestions.length > 0 && (
+                <div style={{ marginTop: 6, fontSize: 12, color: '#92400e' }}>
+                  ⚠ {orderSuggestions.length === 1 ? 'A cost on this job looks like the invoice for an order above' : 'Some costs on this job look like invoices for orders above'}: the margin is counting both.{' '}
+                  <button onClick={() => setShowOrders(true)} style={{ border: 'none', background: 'none', color: '#0369a1', cursor: 'pointer', textDecoration: 'underline', padding: 0, fontSize: 12 }}>Check and match</button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Financial Summary */}
           {revenue !== undefined && !loading && (() => {
             const totalReceived = paidTotal + localPayments.reduce((s, p) => s + p.amount, 0)
@@ -387,12 +428,32 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
                     <span>Actual costs (ex-VAT)</span>
                     <span style={{ fontFamily: 'monospace', color: '#1e293b', fontWeight: 600 }}>{fmt(totalNet)}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '2px solid #e2e8f0', color: '#64748b' }}>
-                    <span>Gross margin</span>
+                  {committed.total > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #f1f5f9', color: '#92400e' }}>
+                      <span>Expected costs still to come (ordered, not invoiced)</span>
+                      <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{fmt(committed.total)}</span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: committed.total > 0 ? '1px solid #f1f5f9' : '2px solid #e2e8f0', color: '#64748b' }}>
+                    <span>{committed.total > 0 ? 'Margin so far (invoiced costs only)' : 'Gross margin'}</span>
                     <span style={{ fontFamily: 'monospace', fontWeight: 700, color: margin !== null && margin >= 0 ? '#16a34a' : '#dc2626' }}>
                       {fmt(margin ?? 0)}{marginPct !== null ? ` (${marginPct}%)` : ''}
                     </span>
                   </div>
+                  {committed.total > 0 && (() => {
+                    const bad = projectedMargin !== null && projectedMargin < 0
+                    const low = !bad && quotedPct !== null && projectedPct !== null && projectedPct < quotedPct - 3
+                    const col = bad ? '#dc2626' : low ? '#d97706' : '#16a34a'
+                    return (
+                      <div style={{ padding: '6px 0', borderBottom: '2px solid #e2e8f0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#1e293b', fontWeight: 700 }}>
+                          <span>Margin including expected costs</span>
+                          <span style={{ fontFamily: 'monospace', color: col }}>{fmt(projectedMargin ?? 0)}{projectedPct !== null ? ` (${projectedPct}%)` : ''}</span>
+                        </div>
+                        {(bad || low) && quotedPct !== null && <div style={{ fontSize: 11, color: col, marginTop: 2 }}>{bad ? 'The job is heading for a loss.' : `Below the ${quotedPct}% margin this job was quoted at.`}</div>}
+                      </div>
+                    )
+                  })()}
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', marginTop: 6, borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>
                     <span>Invoiced to date</span>
                     <span style={{ fontFamily: 'monospace', color: '#1e293b', fontWeight: 600 }}>{fmt(invoicedTotal)}</span>
@@ -420,18 +481,21 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
                     <th style={{ textAlign: 'left', padding: '4px 6px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Category</th>
                     <th style={{ textAlign: 'right', padding: '4px 6px', fontSize: 10, textTransform: 'uppercase' }}>Quoted</th>
                     <th style={{ textAlign: 'right', padding: '4px 6px', fontSize: 10, textTransform: 'uppercase' }}>Actual</th>
+                    {committed.total > 0 && <th style={{ textAlign: 'right', padding: '4px 6px', fontSize: 10, textTransform: 'uppercase', color: '#92400e' }}>Expected</th>}
                     <th style={{ textAlign: 'right', padding: '4px 6px', fontSize: 10, textTransform: 'uppercase' }}>Variance</th>
                   </tr>
                 </thead>
                 <tbody>
                   {CATS.map(cat => {
-                    const q = budgetFor(cat.value), a = actualNetByCat(cat.value), v = +(a - q).toFixed(2)
-                    if (q === 0 && a === 0) return null
+                    const e = committed[cat.value]
+                    const q = budgetFor(cat.value), a = actualNetByCat(cat.value), v = +(a + e - q).toFixed(2)
+                    if (q === 0 && a === 0 && e === 0) return null
                     return (
                       <tr key={cat.value} style={{ borderBottom: '1px solid #f1f5f9' }}>
                         <td style={{ padding: '5px 6px' }}><span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 99, background: cat.bg, color: cat.color, fontWeight: 600 }}>{cat.emoji} {cat.label}</span></td>
                         <td style={{ padding: '5px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(q)}</td>
                         <td style={{ padding: '5px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(a)}</td>
+                        {committed.total > 0 && <td style={{ padding: '5px 6px', textAlign: 'right', fontFamily: 'monospace', color: '#92400e' }}>{e > 0 ? fmt(e) : '—'}</td>}
                         <td style={{ padding: '5px 6px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, color: v > 0 ? '#dc2626' : '#16a34a' }}>{v > 0 ? '+' : ''}{fmt(v)}</td>
                       </tr>
                     )
@@ -442,7 +506,8 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
                     <td style={{ padding: '6px' }}>Total cost</td>
                     <td style={{ padding: '6px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(budget.total)}</td>
                     <td style={{ padding: '6px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(totalNet)}</td>
-                    <td style={{ padding: '6px', textAlign: 'right', fontFamily: 'monospace', color: totalNet - budget.total > 0 ? '#dc2626' : '#16a34a' }}>{totalNet - budget.total > 0 ? '+' : ''}{fmt(+(totalNet - budget.total).toFixed(2))}</td>
+                    {committed.total > 0 && <td style={{ padding: '6px', textAlign: 'right', fontFamily: 'monospace', color: '#92400e' }}>{fmt(committed.total)}</td>}
+                    <td style={{ padding: '6px', textAlign: 'right', fontFamily: 'monospace', color: totalNet + committed.total - budget.total > 0 ? '#dc2626' : '#16a34a' }}>{totalNet + committed.total - budget.total > 0 ? '+' : ''}{fmt(+(totalNet + committed.total - budget.total).toFixed(2))}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -873,6 +938,9 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
           payments={localPayments}
           onClose={() => setShowSendReport(false)}
         />
+      )}
+      {showOrders && (
+        <JobOrdersModal jobId={jobId} jobLabel={jobLabel} jobAddress={jobAddress} onChanged={load} onClose={() => { setShowOrders(false); load() }} />
       )}
     </div>
   )
