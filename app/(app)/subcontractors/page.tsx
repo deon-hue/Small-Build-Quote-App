@@ -225,6 +225,8 @@ export default function SubcontractorsPage() {
   const [weekStart, setWeekStart] = useState(() => getWeekStart(today()))
   const [weekRows, setWeekRows] = useState<DayRow[]>([])
   const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set())
+  // Whole weeks folded away (the list is grouped by week, newest first)
+  const [closedWeeks, setClosedWeeks] = useState<Set<string>>(new Set())
   const [logFilter, setLogFilter] = useState('')
   const [sendingToBills, setSendingToBills] = useState<string | null>(null)
   const [fixingCosts, setFixingCosts] = useState(false)
@@ -1554,6 +1556,14 @@ export default function SubcontractorsPage() {
           weekGroupMap.get(key)!.logs.push(log)
         }
         const weekGroups = [...weekGroupMap.values()].sort((a, b) => b.ws.localeCompare(a.ws))
+        // One section per week (newest first), the subcontractors' timesheets for that week under it, in name order
+        const weekSections: { ws: string; groups: typeof weekGroups }[] = []
+        for (const g of weekGroups) {
+          let sec = weekSections.find(x => x.ws === g.ws)
+          if (!sec) { sec = { ws: g.ws, groups: [] }; weekSections.push(sec) }
+          sec.groups.push(g)
+        }
+        for (const sec of weekSections) sec.groups.sort((a, b) => contactName(a.contactId).localeCompare(contactName(b.contactId)))
         return (
           <div className="sub-weeks" style={{ marginTop: 40, borderTop: '2px solid #e5e7eb', paddingTop: 28 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
@@ -1575,8 +1585,29 @@ export default function SubcontractorsPage() {
                 No time logs yet. Click &quot;Log Time&quot; or &quot;⏱ Log Time&quot; in the toolbar to enter the first weekly timesheet.
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {weekGroups.map(({ contactId, ws, logs }) => {
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 30 }}>
+                {weekSections.map(section => {
+                  const secLogs = section.groups.flatMap(g => g.logs)
+                  const secTotal = secLogs.reduce((t, l) => t + Number(l.amount), 0)
+                  const secPending = secLogs.filter(l => l.status === 'pending').length
+                  const secClosed = closedWeeks.has(section.ws)
+                  return (
+                  <div key={section.ws} className="sub-week-section">
+                    {/* The week's heading: its dates, how many people and days, and the week's total */}
+                    <div
+                      onClick={() => setClosedWeeks(prev => { const n = new Set(prev); n.has(section.ws) ? n.delete(section.ws) : n.add(section.ws); return n })}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, cursor: 'pointer', padding: '9px 14px', marginBottom: secClosed ? 0 : 10, background: '#eef2f7', borderLeft: '4px solid #7ab533', borderRadius: 6 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 11, color: '#64748b' }}>{secClosed ? '▶' : '▼'}</span>
+                        <span style={{ fontSize: 15, fontWeight: 800, color: '#111827' }}>Week of {fmtWeekRange(section.ws)}</span>
+                        <span style={{ fontSize: 12, color: '#6b7280' }}>{section.groups.length} {section.groups.length === 1 ? 'person' : 'people'} · {secLogs.length} day{secLogs.length === 1 ? '' : 's'}</span>
+                        {secPending > 0 && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#fef9c3', color: '#854d0e', fontWeight: 600 }}>⏳ {secPending} pending</span>}
+                      </div>
+                      <span style={{ fontSize: 15, fontWeight: 800, fontFamily: 'monospace', color: '#111827' }} title="Everything logged for this week">{fmt(secTotal)}</span>
+                    </div>
+                    {!secClosed && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {section.groups.map(({ contactId, ws, logs }) => {
                   const key = `${contactId}_${ws}`
                   const subName = contactName(contactId)
                   const total = logs.reduce((s, l) => s + Number(l.amount), 0)
@@ -1609,7 +1640,6 @@ export default function SubcontractorsPage() {
                           >
                             {isPaye(contactId) ? 'Labour' : 'Sub'}
                           </button>
-                          <span style={{ fontSize: 13, color: '#6b7280' }}>Week of {fmtWeekRange(ws)}</span>
                           <span style={{ fontSize: 12, color: '#9ca3af' }}>· {logs.length} day{logs.length !== 1 ? 's' : ''}</span>
                           {isPaye(contactId) ? (
                             <>
@@ -1700,6 +1730,11 @@ export default function SubcontractorsPage() {
                         </div>
                       )}
                     </div>
+                  )
+                })}
+                    </div>
+                    )}
+                  </div>
                   )
                 })}
               </div>
