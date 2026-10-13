@@ -15,12 +15,15 @@ import {
   quoteRequestText, quoteLink, cheapestQuoteId, quoteNet, areaOnly, QUOTE_STATUS_LABEL, fetchOrderQuotes, insertOrderQuotes, updateOrderQuote, deleteOrderQuote,
   type JobOrder, type OrderType, type PayTerms, type RateBasis, type OrderStatus, type OrderQuote, type QuoteInvitee, type QuoteStatus,
 } from '@/lib/job-orders'
-import type { Supplier } from '@/lib/types'
+import { Recipients } from './OrderRecipients'
 
 interface Props {
-  jobId: string
+  /** null: the requests for a price that are not for a job yet (a calculator's materials list while pricing a quote) */
+  jobId: string | null
   jobLabel: string
   jobAddress?: string
+  /** stacking order; above a calculator window when opened from one */
+  zIndex?: number
   /** told whenever an order or a cost changes, so a window behind this one (the job's costs) can refresh */
   onChanged?: () => void
   onClose: () => void
@@ -41,53 +44,11 @@ const QUOTE_STYLE: Record<QuoteStatus, { bg: string; fg: string }> = {
   invited: { bg: '#f1f5f9', fg: '#475569' }, replied: { bg: '#dcfce7', fg: '#166534' }, declined: { bg: '#fee2e2', fg: '#991b1b' }, chosen: { bg: '#dbeafe', fg: '#1e40af' }, not_chosen: { bg: '#f1f5f9', fg: '#94a3b8' },
 }
 
-const blankWho = (): QuoteInvitee => ({ supplierName: '', supplierContact: '', supplierEmail: '', supplierPhone: '' })
-
-/** Who a request goes to: pick suppliers from Contacts, or type one that is not there. */
-function Recipients({ suppliers, value, onChange, inp, lab, btn }: { suppliers: Supplier[]; value: QuoteInvitee[]; onChange: (v: QuoteInvitee[]) => void; inp: React.CSSProperties; lab: React.CSSProperties; btn: React.CSSProperties }) {
-  const [one, setOne] = useState<QuoteInvitee>(blankWho())
-  const taken = new Set(value.map(v => v.supplierId).filter(Boolean))
-  function addContact(id: string) {
-    const s = suppliers.find(x => x.id === id)
-    if (!s || taken.has(s.id)) return
-    onChange([...value, { supplierId: s.id, supplierName: s.name, supplierContact: s.contactName || '', supplierEmail: s.email || '', supplierPhone: s.phone || '' }])
-  }
-  function addTyped() {
-    if (!one.supplierName.trim()) return
-    onChange([...value, { ...one, supplierName: one.supplierName.trim() }]); setOne(blankWho())
-  }
-  return (
-    <div style={{ border: '1px solid #cbd5e1', borderRadius: 8, padding: 10, background: '#fff' }}>
-      <label style={lab}>Who to ask for a price</label>
-      {value.length === 0 && <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>Add one or more suppliers. Each gets their own link to give a price, and you compare the answers.</div>}
-      {value.map((w, i) => (
-        <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, padding: '3px 0', flexWrap: 'wrap' }}>
-          <strong>{w.supplierName}</strong>
-          <span style={{ color: '#64748b', flex: 1 }}>{[w.supplierContact, w.supplierEmail, w.supplierPhone].filter(Boolean).join(' · ') || 'no email or mobile yet'}</span>
-          <button onClick={() => onChange(value.filter((_, j) => j !== i))} style={{ ...btn, padding: '2px 8px', color: '#dc2626', borderColor: '#fecaca' }}>Remove</button>
-        </div>
-      ))}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8, marginTop: 8 }}>
-        <select style={inp} value="" onChange={e => addContact(e.target.value)}>
-          <option value="">＋ Add from your Contacts…</option>
-          {[...suppliers].filter(s => !taken.has(s.id)).sort((a, b) => a.name.localeCompare(b.name)).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-      </div>
-      <div style={{ fontSize: 11, color: '#94a3b8', margin: '8px 0 4px' }}>Not in Contacts? Type them in:</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
-        <input style={inp} placeholder="Supplier name" value={one.supplierName} onChange={e => setOne({ ...one, supplierName: e.target.value })} />
-        <input style={inp} placeholder="Person there" value={one.supplierContact} onChange={e => setOne({ ...one, supplierContact: e.target.value })} />
-        <input style={inp} type="email" placeholder="Email" value={one.supplierEmail} onChange={e => setOne({ ...one, supplierEmail: e.target.value })} />
-        <input style={inp} placeholder="Mobile (WhatsApp)" value={one.supplierPhone} onChange={e => setOne({ ...one, supplierPhone: e.target.value })} />
-        <button onClick={addTyped} disabled={!one.supplierName.trim()} style={btn}>Add</button>
-      </div>
-    </div>
-  )
-}
-
-export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', onChanged, onClose }: Props) {
+export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zIndex = 1100, onChanged, onClose }: Props) {
   const sb = useMemo(() => createClient(), [])
-  const { suppliers, settings } = useApp()
+  const { suppliers, settings, jobs } = useApp()
+  const loose = jobId === null
+  const [attachId, setAttachId] = useState<Record<string, string>>({})
   const [ownerId, setOwnerId] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [orders, setOrders] = useState<JobOrder[]>([])
@@ -110,7 +71,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', onCha
     setUserId(user.id)
     const { data: owner } = await sb.rpc('get_effective_owner_id')
     setOwnerId((owner as string) || user.id)
-    const [{ orders: o, missing: m }, c] = await Promise.all([fetchJobOrders(sb, jobId), fetchJobCosts(sb, user.id, jobId)])
+    const [{ orders: o, missing: m }, c] = await Promise.all([fetchJobOrders(sb, jobId), loose ? Promise.resolve([] as JobCost[]) : fetchJobCosts(sb, user.id, jobId)])
     setOrders(o); setMissing(m); setCosts(c)
     setQuotes(await fetchOrderQuotes(sb, o.filter(x => x.kind === 'quote_request').map(x => x.id)))
     setLoading(false)
@@ -152,7 +113,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', onCha
       const o = await updateJobOrder(sb, form.id, body)
       if (!o) setNotice({ ok: false, text: 'Could not save the order.' })
     } else {
-      const { order, error } = await insertJobOrder(sb, ownerId, { ...body, jobId, kind: mode === 'request' ? 'quote_request' : 'order', status: 'draft' })
+      const { order, error } = await insertJobOrder(sb, ownerId, { ...body, jobId: jobId ?? '', kind: mode === 'request' ? 'quote_request' : 'order', status: 'draft' })
       if (!order) setNotice({ ok: false, text: `Could not save. ${error ?? ''}` })
       else if (mode === 'request') {
         const r = await insertOrderQuotes(sb, ownerId, order.id, recips)
@@ -170,7 +131,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', onCha
       const net = expectedNet(o, today)
       const vat = +(net * 0.2).toFixed(2)
       const c = await insertJobCost(sb, userId, {
-        jobId, supplier: o.supplierName, docDate: today, docNumber: '', description: `${poRef(o.poNumber)} · ${o.title} (VAT assumed at 20% until the receipt is attached)`,
+        jobId: jobId ?? o.jobId, supplier: o.supplierName, docDate: today, docNumber: '', description: `${poRef(o.poNumber)} · ${o.title} (VAT assumed at 20% until the receipt is attached)`,
         costCategory: o.costCategory, netAmount: net, vatAmount: vat, grossAmount: +(net + vat).toFixed(2), paymentStatus: 'paid', source: 'manual', poRef: poRef(o.poNumber),
       })
       paidCostId = c?.id
@@ -265,6 +226,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', onCha
   /** Approve one reply: the request becomes an order with the same PO number, at their price and date, and counts as an expected cost straight away. */
   async function approveQuote(o: JobOrder, q: OrderQuote) {
     if (q.price === null) return
+    if (!o.jobId) { setNotice({ ok: false, text: 'Attach this request to a job first (the box under it), so the cost lands on the right job. Then approve.' }); return }
     const days = q.deliveryDate || o.deliveryDate
     const asks = `${fmt(q.price)} + VAT${q.rateBasis === 'fixed' ? '' : ' per ' + q.rateBasis}`
     if (!confirm(`Approve ${q.supplierName} at ${asks}?\n\n${poRef(o.poNumber)} becomes an order with them${o.payTerms === 'account' ? ' and counts as an expected cost on the job' : ' and is put on the job as a paid cost'}. The other suppliers are marked as not chosen. You then send ${q.supplierName} the order confirmation with the full address.`)) return
@@ -280,6 +242,16 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', onCha
     await placeOrder(updated, 'quote accepted', false)
     setBusy(null)
     setNotice({ ok: true, text: `${q.supplierName} approved at ${asks}. ${poRef(o.poNumber)} is now an order. Press Send confirmation to send them the full details.` })
+  }
+
+  /** A request made before there was a job: attach it to the job, and it becomes one of that job's own orders. */
+  async function attachToJob(o: JobOrder) {
+    const id = attachId[o.id]
+    const job = jobs.find(j => j.id === id)
+    if (!job) { setNotice({ ok: false, text: 'Pick the job first.' }); return }
+    await updateJobOrder(sb, o.id, { jobId: job.id, siteAddress: job.address || o.siteAddress || '' })
+    setNotice({ ok: true, text: `${poRef(o.poNumber)} is now one of ${job.client}'s orders. Open the job's Orders to approve a price.` })
+    await load(); onChanged?.()
   }
 
   async function copyText(o: JobOrder) {
@@ -313,7 +285,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', onCha
     setBusy('invoice')
     const vat = +(net * 0.2).toFixed(2)
     const c = await insertJobCost(sb, userId, {
-      jobId, supplier: o.supplierName, docDate: invoiceFor.date, docNumber: invoiceFor.docNumber, description: `${poRef(o.poNumber)} · ${o.title}`,
+      jobId: jobId ?? o.jobId, supplier: o.supplierName, docDate: invoiceFor.date, docNumber: invoiceFor.docNumber, description: `${poRef(o.poNumber)} · ${o.title}`,
       costCategory: o.costCategory, netAmount: net, vatAmount: vat, grossAmount: +(net + vat).toFixed(2), paymentStatus: invoiceFor.status, source: 'manual', poRef: poRef(o.poNumber),
     })
     if (c) await updateJobOrder(sb, o.id, { status: 'invoiced', invoicedCostId: c.id })
@@ -352,7 +324,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', onCha
           {live && <span style={{ fontSize: 12, color: '#475569' }}>{qs.length === 0 ? 'no suppliers yet' : `${replied} of ${qs.length} quoted`}</span>}
         </div>
         <div style={{ fontSize: 12, color: '#64748b', marginTop: 3, lineHeight: 1.6 }}>
-          {[when, o.rateBasis !== 'fixed' ? `priced per ${o.rateBasis}, ${o.plannedUnits} planned` : '', areaOnly(o.siteAddress) ? `suppliers see only: ${areaOnly(o.siteAddress)}` : 'suppliers are not shown an address'].filter(Boolean).join(' · ')}
+          {[o.sourceLabel ? `from ${o.sourceLabel}` : '', when, o.rateBasis !== 'fixed' ? `priced per ${o.rateBasis}, ${o.plannedUnits} planned` : '', areaOnly(o.siteAddress) ? `suppliers see only: ${areaOnly(o.siteAddress)}` : 'suppliers are not shown an address'].filter(Boolean).join(' · ')}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
           {qs.map(q => {
@@ -406,6 +378,16 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', onCha
             </div>
           )}
         </div>
+        {live && !o.jobId && (
+          <div style={{ marginTop: 10, padding: '8px 10px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, color: '#92400e', fontWeight: 600 }}>Not for a job yet. Attach it when you have one, to approve a price:</span>
+            <select style={{ ...inp, width: 'auto', minWidth: 180 }} value={attachId[o.id] ?? ''} onChange={e => setAttachId({ ...attachId, [o.id]: e.target.value })}>
+              <option value="">Pick a job…</option>
+              {jobs.filter(j => !j.archived && j.stage !== 'complete').map(j => <option key={j.id} value={j.id}>{j.client} · {j.title || j.type}</option>)}
+            </select>
+            <button onClick={() => attachToJob(o)} disabled={!attachId[o.id]} style={btn}>Attach to this job</button>
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
           {live && addingTo !== o.id && <button onClick={() => { setAddingTo(o.id); setMoreRecips([]) }} style={btn}>＋ Ask another supplier</button>}
           {live && <button onClick={() => editOrder(o)} style={btn}>Edit request</button>}
@@ -419,11 +401,11 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', onCha
   const preview = form ? expectedNet({ rate: form.rate, rateBasis: form.rateBasis, plannedUnits: form.plannedUnits, deliveryDate: form.deliveryDate, offHireDate: form.offHireDate }, today) : 0
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1100, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '28px 14px' }}>
+    <div onClick={e => { e.stopPropagation(); onClose() }} onMouseDown={e => e.stopPropagation()} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '28px 14px' }}>
       <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 880, maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: '1px solid #e2e8f0' }}>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 16 }}>📦 Orders</div>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>{loose ? '💬 Price requests' : '📦 Orders'}</div>
             <div style={{ fontSize: 12, color: '#64748b' }}>{jobLabel}</div>
           </div>
           <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8' }}>×</button>
@@ -441,8 +423,8 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', onCha
           {!loading && !missing && (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
-                <button onClick={() => startForm('order')} style={primary}>＋ New order</button>
-                <button onClick={() => startForm('request')} style={btn} title="Ask one or more suppliers for a price: they get a link, no login, and you compare and approve">💬 Ask for a price</button>
+                {!loose && <button onClick={() => startForm('order')} style={primary}>＋ New order</button>}
+                <button onClick={() => startForm('request')} style={loose ? primary : btn} title="Ask one or more suppliers for a price: they get a link, no login, and you compare and approve">💬 Ask for a price</button>
                 {committed.total > 0 && (
                   <span style={{ fontSize: 13, color: '#334155' }}>
                     Expected costs still to come: <strong style={{ fontFamily: 'monospace' }}>{fmt(committed.total)}</strong> <span style={{ color: '#94a3b8' }}>ex VAT, already counted in the job&apos;s margin</span>
@@ -498,7 +480,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', onCha
                   {mode === 'request' && !form.id && <div style={{ marginTop: 10 }}><Recipients suppliers={suppliers} value={recips} onChange={setRecips} inp={inp} lab={lab} btn={btn} /></div>}
                   <div style={{ display: 'grid', gridTemplateColumns: '2fr 3fr', gap: 10, marginTop: 10 }}>
                     <div><label style={lab}>What *</label><input style={inp} value={form.title} onChange={e => set('title', e.target.value)} placeholder={ORDER_TYPES[form.orderType].example || 'What are you ordering?'} /></div>
-                    <div><label style={lab}>More detail for the supplier</label><input style={inp} value={form.details} onChange={e => set('details', e.target.value)} placeholder="Quantity, size, anything they need to know" /></div>
+                    <div><label style={lab}>More detail for the supplier</label><textarea style={{ ...inp, minHeight: 34, resize: 'vertical' }} rows={form.details.includes('\n') ? 6 : 1} value={form.details} onChange={e => set('details', e.target.value)} placeholder="Quantity, size, anything they need to know" /></div>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 10 }}>
                     <div>
@@ -567,7 +549,9 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', onCha
               {/* The orders */}
               {orders.length === 0 && !form && (
                 <div style={{ textAlign: 'center', padding: 28, color: '#94a3b8', fontSize: 14, border: '1px dashed #d1d5db', borderRadius: 8 }}>
-                  No orders yet for this job. Press <strong>＋ New order</strong> to raise a skip, a portaloo, plant hire or a materials order, or <strong>💬 Ask for a price</strong> to get quotes from suppliers first.
+                  {loose
+                    ? <>No price requests are waiting for a job. On any calculator&apos;s materials list, press <strong>✉ Prices</strong> to ask suppliers to price it, even before there is a job.</>
+                    : <>No orders yet for this job. Press <strong>＋ New order</strong> to raise a skip, a portaloo, plant hire or a materials order, or <strong>💬 Ask for a price</strong> to get quotes from suppliers first.</>}
                 </div>
               )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

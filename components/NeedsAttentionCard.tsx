@@ -129,10 +129,10 @@ export default function NeedsAttentionCard() {
           <>
             <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--muted)', margin: '10px 0 4px' }}>Orders and expected invoices</div>
             {reminders.slice(0, 6).map((r, i) => (
-              <Link key={r.order.id + r.kind + i} href={`/jobs?orders=${encodeURIComponent(r.order.jobId)}`}
+              <Link key={r.order.id + r.kind + i} href={r.order.jobId ? `/jobs?orders=${encodeURIComponent(r.order.jobId)}` : '/jobs?requests=1'}
                 style={{ display: 'block', padding: '8px 0', borderBottom: '1px solid var(--border)', textDecoration: 'none', color: 'inherit' }}>
                 <div style={{ fontSize: 13, color: 'var(--ink)' }}>{r.text}</div>
-                <div style={{ fontSize: 12, color: 'var(--sky, #2a7ab0)', marginTop: 2 }}>{jobLabel(r.order.jobId)} · {poRef(r.order.poNumber)} · open Orders →</div>
+                <div style={{ fontSize: 12, color: 'var(--sky, #2a7ab0)', marginTop: 2 }}>{r.order.jobId ? jobLabel(r.order.jobId) : (r.order.sourceLabel || 'Price request')} · {poRef(r.order.poNumber)} · open {r.order.jobId ? 'Orders' : 'Price requests'} →</div>
               </Link>
             ))}
             {reminders.length > 6 && <div style={{ fontSize: 12, color: 'var(--muted)', padding: '6px 0' }}>and {reminders.length - 6} more — open each job’s Orders.</div>}

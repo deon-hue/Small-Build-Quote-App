@@ -27,6 +27,7 @@ export const ORDER_TYPES: Record<OrderType, { label: string; category: JobCostCa
 
 export interface JobOrder {
   id: string
+  /** the job it is for; empty for a request for a price made before there is a job (a calculator's materials list while pricing a quote) */
   jobId: string
   poNumber: number
   kind: 'order' | 'quote_request'
@@ -60,6 +61,8 @@ export interface JobOrder {
   paidCostId?: string
   invoicedCostId?: string
   createdAt?: string
+  /** where a request came from, e.g. the calculator and quote its materials list was made in (supabase/job-orders-materials.sql) */
+  sourceLabel?: string
 }
 
 /**
@@ -206,6 +209,17 @@ export function orderWording(o: JobOrder): OrderWording {
   }
 }
 
+/** The title and its detail as message lines: a short detail goes in brackets after the title, a list (one item per line, from a calculator) goes underneath, cut short for a message. */
+export function titleAndDetails(title: string, details: string, maxLines = 25): string[] {
+  const d = (details || '').trim()
+  if (!d) return [title]
+  if (!d.includes('\n')) return [`${title} (${d.replace(/\s+/g, ' ')})`]
+  const lines = d.split('\n').map(l => l.trimEnd())
+  const shown = lines.slice(0, maxLines)
+  const more = lines.filter(l => l.trim()).length - shown.filter(l => l.trim()).length
+  return [title, ...shown, ...(more > 0 ? [`…and ${more} more lines`] : [])]
+}
+
 const firstName = (s: string) => (s.trim().split(/\s+/)[0] || '').replace(/[^A-Za-z'’-]/g, '')
 
 /** The WhatsApp / plain-text version of an order, written the way you would say it. */
@@ -214,7 +228,7 @@ export function orderWhatsAppText(o: JobOrder, sender: { name: string; company: 
   const who = firstName(o.supplierContact)
   const hi = who ? `Hi ${who}, ` : 'Hi, '
   const body = [
-    w.title + (o.details ? ` (${o.details.replace(/\s+/g, ' ').trim()})` : ''),
+    ...titleAndDetails(w.title, o.details),
     w.when ? `Deliver: ${w.when}` : '',
     w.where ? `To: ${w.where}` : '',
     w.collect ? `Collect: ${w.collect}` : '',
@@ -255,8 +269,14 @@ export function areaOnly(address: string): string {
   const parts = (address || '').split(/[,\n]/).map(p => p.trim()).filter(Boolean).map(p => p.replace(POST, '$1'))
   if (parts.length === 0) return ''
   if (parts.length === 1) { const m = /\b[A-Z]{1,2}\d[A-Z\d]?\b/i.exec(parts[0]); return m ? m[0].toUpperCase() : '' }
-  // the first line is the house and street: leave it out
-  return parts.slice(1).join(', ')
+  // leave out the house and street lines (a house number, or a street word), and with three or more lines always the first; a bare area such as "Tooting, SW17" is kept whole
+  const POSTCODE_AREA = /^[A-Z]{1,2}\d[A-Z\d]?$/i
+  const STREET = /\b(road|rd|street|st|avenue|ave|lane|ln|close|drive|dr|way|court|ct|gardens|gdns|crescent|place|terrace|grove|mews|hill|park|row|walk|flat|apartment|house)\b/i
+  const streety = (p: string) => !POSTCODE_AREA.test(p) && (/\d/.test(p) || STREET.test(p))
+  let i = 0
+  while (i < parts.length - 1 && streety(parts[i])) i++
+  if (i === 0 && parts.length >= 3) i = 1
+  return parts.slice(i).join(', ')
 }
 
 /** What a supplier's price comes to for this request: the price, or the rate times the planned time. Ex VAT. */
@@ -280,7 +300,7 @@ export function quoteRequestText(o: JobOrder, q: Pick<OrderQuote, 'supplierConta
   const hi = who ? `Hi ${who}, ` : 'Hi, '
   const area = areaOnly(o.siteAddress)
   const body = [
-    o.title + (o.details ? ` (${o.details.replace(/\s+/g, ' ').trim()})` : ''),
+    ...titleAndDetails(o.title, o.details),
     o.deliveryDate ? `Needed: ${longDate(o.deliveryDate)}${o.deliverySlot ? ', ' + o.deliverySlot : ''}` : '',
     o.offHireDate ? `Collect: ${longDate(o.offHireDate)}` : '',
     area ? `Where: ${area}` : '',
@@ -302,7 +322,7 @@ const d10 = (v: unknown) => (typeof v === 'string' ? v.slice(0, 10) : '')
 
 export function rowToOrder(r: Record<string, unknown>): JobOrder {
   return {
-    id: r.id as string, jobId: r.job_id as string, poNumber: Number(r.po_number) || 0,
+    id: r.id as string, jobId: (r.job_id as string) || '', poNumber: Number(r.po_number) || 0,
     kind: (r.kind as JobOrder['kind']) ?? 'order', orderType: (r.order_type as OrderType) ?? 'other', status: (r.status as OrderStatus) ?? 'draft',
     supplierId: (r.supplier_id as string) || undefined, supplierName: str(r.supplier_name), supplierContact: str(r.supplier_contact), supplierEmail: str(r.supplier_email), supplierPhone: str(r.supplier_phone),
     title: str(r.title), details: str(r.details), costCategory: (r.cost_category as JobCostCategory) ?? 'other',
@@ -312,20 +332,23 @@ export function rowToOrder(r: Record<string, unknown>): JobOrder {
     siteAddress: str(r.site_address), siteContact: str(r.site_contact), sitePhone: str(r.site_phone), accessNotes: str(r.access_notes),
     sentAt: (r.sent_at as string) || undefined, sentVia: str(r.sent_via),
     paidCostId: (r.paid_cost_id as string) || undefined, invoicedCostId: (r.invoiced_cost_id as string) || undefined,
-    createdAt: r.created_at as string | undefined,
+    createdAt: r.created_at as string | undefined, sourceLabel: str(r.source_label),
   }
 }
 
 function orderToRow(o: Partial<JobOrder>) {
   const row: Record<string, unknown> = {}
   const map: [keyof JobOrder, string][] = [
-    ['jobId', 'job_id'], ['poNumber', 'po_number'], ['kind', 'kind'], ['orderType', 'order_type'], ['status', 'status'],
+    ['poNumber', 'po_number'], ['kind', 'kind'], ['orderType', 'order_type'], ['status', 'status'],
     ['supplierName', 'supplier_name'], ['supplierContact', 'supplier_contact'], ['supplierEmail', 'supplier_email'], ['supplierPhone', 'supplier_phone'],
     ['title', 'title'], ['details', 'details'], ['costCategory', 'cost_category'], ['payTerms', 'pay_terms'], ['rateBasis', 'rate_basis'],
     ['rate', 'rate'], ['plannedUnits', 'planned_units'], ['deliverySlot', 'delivery_slot'],
     ['siteAddress', 'site_address'], ['siteContact', 'site_contact'], ['sitePhone', 'site_phone'], ['accessNotes', 'access_notes'], ['sentVia', 'sent_via'],
   ]
   for (const [k, col] of map) if (o[k] !== undefined) row[col] = o[k]
+  if (o.jobId !== undefined) row.job_id = o.jobId || null
+  // only written when there is one, so a database without the column (supabase/job-orders-materials.sql not run) keeps working for every ordinary order
+  if (o.sourceLabel) row.source_label = o.sourceLabel
   if (o.supplierId !== undefined) row.supplier_id = o.supplierId || null
   if (o.deliveryDate !== undefined) row.delivery_date = o.deliveryDate || null
   if (o.offHireDate !== undefined) row.off_hire_date = o.offHireDate || null
@@ -383,8 +406,10 @@ export async function deleteOrderQuote(sb: SupabaseClient, id: string): Promise<
 }
 
 /** The orders for a job. `missing` is true when the table has not been created yet (supabase/job-orders.sql not run). */
-export async function fetchJobOrders(sb: SupabaseClient, jobId: string): Promise<{ orders: JobOrder[]; missing: boolean }> {
-  const { data, error } = await sb.from('job_orders').select('*').eq('job_id', jobId).order('po_number', { ascending: false })
+export async function fetchJobOrders(sb: SupabaseClient, jobId: string | null): Promise<{ orders: JobOrder[]; missing: boolean }> {
+  // null: the requests for a price that are not for a job yet
+  const base = sb.from('job_orders').select('*')
+  const { data, error } = await (jobId === null ? base.is('job_id', null) : base.eq('job_id', jobId)).order('po_number', { ascending: false })
   if (error) {
     const missing = /does not exist|schema cache|PGRST205|42P01/i.test(`${error.code ?? ''} ${error.message ?? ''}`)
     return { orders: [], missing }
@@ -513,4 +538,26 @@ export function deliveryMarkers(orders: JobOrder[]): DeliveryMarker[] {
     if (o.offHireDate && ORDER_TYPES[o.orderType]?.hire) out.push({ id: `${o.id}-c`, order: o, kind: 'collect', date: o.offHireDate, done: o.status === 'collected', tentative })
   }
   return out.sort((a, b) => a.date.localeCompare(b.date) || a.order.poNumber - b.order.poNumber || (a.kind === 'delivery' ? -1 : 1))
+}
+
+// ── A calculator's materials list, as a request for prices ───────────────────────────────────────────────────────────────────────────────────────
+
+const qtyText = (n: number) => String(+n.toFixed(2))
+
+/**
+ * The list a supplier is asked to price: what and how much, never what we expect to pay (our own unit costs and totals are not shared, so nobody prices to them).
+ * The quantity is what to buy, waste already allowed for.
+ */
+export function materialsListText(lines: { name: string; purchaseQty: number; unit: string }[]): string {
+  return lines
+    .filter(l => l.purchaseQty > 0 && l.name.trim())
+    .map(l => `• ${qtyText(l.purchaseQty)} ${l.unit.trim()} — ${l.name.trim()}`.replace(/ {2,}/g, ' '))
+    .join('\n')
+}
+
+/** The details of a price request for a materials list: an optional note, then the list. */
+export function materialsRequestDetails(lines: { name: string; purchaseQty: number; unit: string }[], note = ''): string {
+  const list = materialsListText(lines)
+  const ask = 'Please price the following (price for everything delivered, ex VAT; tell us anything you cannot supply or would swap):'
+  return [...(note.trim() ? [note.trim(), ''] : []), ask, list].join('\n')
 }

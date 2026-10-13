@@ -42,6 +42,8 @@ function JobsPageInner() {
   const [notesJob, setNotesJob] = useState<Job | null>(null)
   const [docsJob, setDocsJob] = useState<Job | null>(null)
   const [ordersJob, setOrdersJob] = useState<Job | null>(null)
+  // price requests made from a calculator's materials list before there is a job
+  const [showRequests, setShowRequests] = useState(false)
   const [attachmentsJob, setAttachmentsJob] = useState<Job | null>(null)
   const [requestsJob, setRequestsJob] = useState<Job | null>(null)
   const [viewQuote, setViewQuote] = useState<Quote | null>(null)
@@ -60,6 +62,7 @@ function JobsPageInner() {
   const newNotes = unseenByJob(jobNotes)
   // "?orders=<jobId>" (from the dashboard's Needs your attention card) opens that job's Orders window straight away
   useEffect(() => {
+    if (searchParams.get('requests') && !loading) { setShowRequests(true); router.replace('/jobs') }
     const oid = searchParams.get('orders')
     if (!oid || loading) return
     const oj = jobs.find(j => j.id === oid)
@@ -320,6 +323,7 @@ function JobsPageInner() {
           ))}
         </div>
         <div className="jobs-spacer" style={{ flex: 1 }} />
+        <button className="btn btn-outline tp-hide" onClick={() => setShowRequests(true)} title="Prices you have asked suppliers for on a materials list, before there is a job">💬 Price requests</button>
         <button className="btn btn-primary jobs-add tp-hide" onClick={openNew} aria-label="Add job"><span className="add-plus">+</span><span className="add-label"> Add Job</span></button>
       </div>
 
@@ -533,6 +537,8 @@ function JobsPageInner() {
         />
       )}
 
+
+      {showRequests && <JobOrdersModal jobId={null} jobLabel="Not for a job yet" onClose={() => setShowRequests(false)} />}
 
       {ordersJob && (
         <JobOrdersModal

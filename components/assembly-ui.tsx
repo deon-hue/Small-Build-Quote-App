@@ -8,12 +8,14 @@
 // drawing; everything here is what stays identical across all of them.
 
 import React, { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { AssemblyOpening, CostedLine } from '@/lib/assembly-calc'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import { openMaterialsPrintView, downloadMaterialsCsv } from '@/lib/materials-report'
 import { useRateLinks } from '@/components/RateLinks'
 import { linkedRate, isLinkable, packsFor } from '@/lib/rate-links'
 import RateLinkPicker from '@/components/RateLinkPicker'
+import MaterialsPriceRequest from '@/components/MaterialsPriceRequest'
 
 export const CATEGORY_LABEL: Record<string, string> = { materials: 'Materials', labour: 'Labour', plant: 'Plant', subcontractors: 'Subcontractors', other: 'Other' }
 
@@ -60,6 +62,7 @@ export function MaterialsListButtons({ lines, title, location, description, comp
   compact?: boolean
 }) {
   const materials = lines.filter(l => l.category === 'materials')
+  const [asking, setAsking] = useState(false)
   if (materials.length === 0) return null
   // Solid, higher-contrast style — a faint outline button on a white card was easy to miss
   // entirely. Keeps a short text label even in compact mode (bare icons aren't self-explanatory).
@@ -78,6 +81,11 @@ export function MaterialsListButtons({ lines, title, location, description, comp
         onClick={() => downloadMaterialsCsv(title, materials)}>
         ⬇ CSV
       </button>
+      <button type="button" style={btnStyle} title="Ask suppliers or merchants to price this materials list: they get a link and give you a price, no login"
+        onClick={() => setAsking(true)}>
+        ✉ Prices
+      </button>
+      {asking && createPortal(<MaterialsPriceRequest lines={materials} title={title} location={location} onClose={() => setAsking(false)} />, document.body)}
     </div>
   )
 }

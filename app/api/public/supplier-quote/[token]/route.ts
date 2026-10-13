@@ -43,7 +43,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       logoUrl: settings?.logo ? `/api/public/company-logo/${f.ownerId}` : '',
       ref: poRef(o.poNumber),
       supplierName: q.supplierName,
-      title: o.title, details: o.details,
+      title: o.title, details: o.details, orderType: o.orderType,
       area: areaOnly(o.siteAddress),
       deliveryDate: o.deliveryDate, deliverySlot: o.deliverySlot, offHireDate: o.offHireDate,
       rateBasis: o.rateBasis, plannedUnits: o.plannedUnits,

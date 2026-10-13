@@ -8,7 +8,7 @@ import { useParams } from 'next/navigation'
 
 interface Info {
   company: string; contactPhone: string; contactName: string; logoUrl: string; ref: string; supplierName: string
-  title: string; details: string; area: string; deliveryDate: string; deliverySlot: string; offHireDate: string
+  title: string; details: string; orderType: string; area: string; deliveryDate: string; deliverySlot: string; offHireDate: string
   rateBasis: 'fixed' | 'day' | 'week'; plannedUnits: number
   state: 'open' | 'chosen' | 'closed'; status: string
   reply: { price: number | null; rateBasis: 'fixed' | 'day' | 'week'; deliveryDate: string; validUntil: string; notes: string } | null
@@ -142,7 +142,7 @@ export default function SupplierQuotePage() {
                   <>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                       <div>
-                        <label style={lab}>Your price (£, ex VAT)</label>
+                        <label style={lab}>{info.orderType === 'materials' ? 'Price for everything (£, ex VAT)' : 'Your price (£, ex VAT)'}</label>
                         <input style={inp} type="number" inputMode="decimal" min={0} step="0.01" value={price} onChange={e => setPrice(e.target.value)} placeholder="0.00" />
                       </div>
                       <div>
@@ -162,7 +162,7 @@ export default function SupplierQuotePage() {
                     </div>
                     <div style={{ marginTop: 12 }}>
                       <label style={lab}>Anything we should know</label>
-                      <textarea style={{ ...inp, minHeight: 78, resize: 'vertical' }} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Permit needed, minimum hire, delivery slot, what is included…" maxLength={1000} />
+                      <textarea style={{ ...inp, minHeight: 78, resize: 'vertical' }} value={notes} onChange={e => setNotes(e.target.value)} placeholder={info.orderType === 'materials' ? 'Items you cannot supply or would swap, delivery charge, minimum order…' : 'Permit needed, minimum hire, delivery slot, what is included…'} maxLength={1000} />
                     </div>
                     {formError && <div style={{ marginTop: 12, color: '#991b1b', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 12px', fontSize: 14 }}>{formError}</div>}
                     <button onClick={() => send('quote')} disabled={busy} style={{ marginTop: 16, width: '100%', padding: '14px 18px', background: LIME, color: '#fff', border: 'none', borderRadius: 8, fontSize: 16, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>{busy ? 'Sending…' : info.status === 'replied' ? 'Update my price' : 'Send my price'}</button>
