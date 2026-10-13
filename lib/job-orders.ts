@@ -484,3 +484,33 @@ export async function fetchAllJobOrders(sb: SupabaseClient): Promise<{ orders: J
   }
   return { orders, repliesByOrder }
 }
+
+// ── Deliveries on the calendar ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+export interface DeliveryMarker {
+  id: string
+  order: JobOrder
+  /** a delivery to site, or the collection / off-hire of hired kit */
+  kind: 'delivery' | 'collect'
+  /** the day, as YYYY-MM-DD */
+  date: string
+  /** already happened (marked delivered, or collected) */
+  done: boolean
+  /** the order has not been sent to the supplier yet */
+  tentative: boolean
+}
+
+/**
+ * The dates to put on the calendar: each order's delivery day, and the collection day of skips, portaloos and plant. Requests for a price, cancelled orders and ones already
+ * invoiced are left out. An order not sent yet is still shown, marked tentative, so a planned skip is not forgotten.
+ */
+export function deliveryMarkers(orders: JobOrder[]): DeliveryMarker[] {
+  const out: DeliveryMarker[] = []
+  for (const o of orders) {
+    if (o.kind !== 'order' || o.status === 'cancelled' || o.status === 'invoiced') continue
+    const tentative = o.status === 'draft' || (o.sentVia === 'quote accepted' && !o.sentAt)
+    if (o.deliveryDate) out.push({ id: `${o.id}-d`, order: o, kind: 'delivery', date: o.deliveryDate, done: o.status === 'delivered' || o.status === 'collected', tentative })
+    if (o.offHireDate && ORDER_TYPES[o.orderType]?.hire) out.push({ id: `${o.id}-c`, order: o, kind: 'collect', date: o.offHireDate, done: o.status === 'collected', tentative })
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date) || a.order.poNumber - b.order.poNumber || (a.kind === 'delivery' ? -1 : 1))
+}

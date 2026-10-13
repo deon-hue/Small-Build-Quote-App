@@ -10,6 +10,8 @@ import type { Job, GanttPhase, GanttState } from '@/lib/types'
 import { assignableContacts, assignmentsFor, assignmentKey, assigneesForRow, allAssignees, type AssigneeTag } from '@/lib/task-assignments'
 import AssigneePicker, { picksFromKeys } from '@/components/AssigneePicker'
 import { taskDays as buildTaskDays, bookedDays } from '@/lib/task-days'
+import { createClient } from '@/lib/supabase/client'
+import { fetchAllJobOrders, updateJobOrder, deliveryMarkers, poRef, expectedNet, ORDER_STATUS_LABEL, todayYmd, type JobOrder, type DeliveryMarker } from '@/lib/job-orders'
 
 // ── Date helpers ───────────────────────────────────────────────
 function addDays(d: Date, n: number): Date { const r = new Date(d); r.setDate(r.getDate() + n); return r }
@@ -56,6 +58,11 @@ interface WeekSlot {
 }
 
 // ── Constants ──────────────────────────────────────────────────
+// Deliveries and collections from each job's Orders (supabase/job-orders.sql), drawn as small chips on their day
+const DELIVERY_STYLE = {
+  delivery: { bg: '#e0f2fe', fg: '#075985', solid: '#0369a1', icon: '📦', word: 'Delivery' },
+  collect:  { bg: '#ede9fe', fg: '#6d28d9', solid: '#6d28d9', icon: '↩', word: 'Collect' },
+} as const
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const MIN_ROWS = 3  // a week strip in month view is at least this many task rows tall; it grows to show every task
 const DATE_H   = 26 // px – date-number strip height
@@ -106,6 +113,19 @@ export default function CalendarPage() {
   const [highlightJobId,  setHighlightJobId] = useState<string | null>(null)
   // Show only the tasks one person is booked on ('' = everyone)
   const [personFilter, setPersonFilter] = useState('')
+  // Orders: skips, hire and deliveries show on the calendar on their day
+  const [orders, setOrders] = useState<JobOrder[]>([])
+  const [openDelivery, setOpenDelivery] = useState<DeliveryMarker | null>(null)
+  const [deliveryBusy, setDeliveryBusy] = useState(false)
+  async function reloadOrders() {
+    try { const r = await fetchAllJobOrders(createClient()); setOrders(r.orders) } catch { /* the orders tables may not exist yet: no deliveries to show */ }
+  }
+  useEffect(() => {
+    void reloadOrders()
+    const onVis = () => { if (document.visibilityState === 'visible') void reloadOrders() }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [])
   // Task edit fields in the detail panel — reset whenever a different event is selected.
   const [editLabel, setEditLabel] = useState('')
   const [editStart, setEditStart] = useState('')
@@ -487,6 +507,50 @@ export default function CalendarPage() {
     return fmtFull(anchor)
   }
 
+  // ── Deliveries ───────────────────────────────────────────────
+  // (hidden while the calendar is filtered to one person: a delivery is not anyone's task)
+  const markers = useMemo(
+    () => (personFilter ? [] : deliveryMarkers(orders).filter(m => jobs.some(j => j.id === m.order.jobId))),
+    [orders, jobs, personFilter],
+  )
+  const markersOn = (d: Date) => markers.filter(m => m.date === toISODate(d))
+  const markerJob = (m: DeliveryMarker) => jobs.find(j => j.id === m.order.jobId)
+  const markerLabel = (m: DeliveryMarker) => `${DELIVERY_STYLE[m.kind].icon} ${m.kind === 'collect' ? 'Collect ' : ''}${m.order.title}`
+  function markerTip(m: DeliveryMarker): string {
+    const j = markerJob(m)
+    return `${DELIVERY_STYLE[m.kind].word}: ${m.order.title}\n${m.order.supplierName} · ${poRef(m.order.poNumber)}${j ? ' · ' + j.client : ''}${m.done ? '\n✓ done' : ''}${m.tentative ? '\nnot sent to the supplier yet' : ''}`
+  }
+
+  /** The small coloured chips for one day: the first delivery in a month cell, up to three under a weekday heading, then "+N". */
+  function renderChips(d: Date, mode: 'month' | 'week') {
+    const list = markersOn(d)
+    if (list.length === 0) return null
+    const max = mode === 'month' ? 1 : 3
+    return (
+      <div style={{ display: 'flex', flexDirection: mode === 'week' ? 'column' : 'row', gap: 2, minWidth: 0, flex: 1, alignItems: mode === 'week' ? 'stretch' : 'center' }}>
+        {list.slice(0, max).map(m => {
+          const st = DELIVERY_STYLE[m.kind]
+          return (
+            <button
+              key={m.id}
+              onClick={e => { e.stopPropagation(); setOpenDelivery(m) }}
+              title={markerTip(m)}
+              style={{
+                fontSize: 10, fontWeight: 700, fontFamily: 'inherit', background: st.bg, color: st.fg, borderRadius: 3, padding: '1px 4px',
+                border: m.tentative ? `1px dashed ${st.fg}` : '1px solid transparent', cursor: 'pointer', textAlign: 'left',
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, maxWidth: '100%',
+                opacity: m.done ? 0.55 : 1, textDecoration: m.done ? 'line-through' : 'none',
+              }}
+            >{markerLabel(m)}</button>
+          )
+        })}
+        {list.length > max && (
+          <span onClick={e => { e.stopPropagation(); setView('day'); setAnchor(new Date(d)) }} title={list.map(markerLabel).join('\n')} style={{ fontSize: 10, color: 'var(--muted)', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 700 }}>+{list.length - max}</span>
+        )}
+      </div>
+    )
+  }
+
   // ── Month view ───────────────────────────────────────────────
   function renderMonth() {
     const year = anchor.getFullYear(), month = anchor.getMonth()
@@ -540,6 +604,7 @@ export default function CalendarPage() {
                       borderRight: col < 6 ? '1px solid var(--border)' : 'none',
                       padding: '3px 5px',
                       background: !inMonth ? 'rgba(244,245,243,0.85)' : 'transparent',
+                      display: 'flex', alignItems: 'center', gap: 4, minWidth: 0,
                     }}>
                       <span
                         onClick={() => { setView('day'); setAnchor(new Date(d)) }}
@@ -553,6 +618,7 @@ export default function CalendarPage() {
                           cursor: 'pointer',
                         }}
                       >{d.getDate()}</span>
+                      {renderChips(d, 'month')}
                     </div>
                   )
                 })}
@@ -649,6 +715,7 @@ export default function CalendarPage() {
                 }}>
                   {d.getDate()}
                 </div>
+                {markersOn(d).length > 0 && <div style={{ marginTop: 4, padding: '0 3px' }}>{renderChips(d, 'week')}</div>}
               </div>
             )
           })}
@@ -729,8 +796,9 @@ export default function CalendarPage() {
     const dayEvents = calEvents
       .filter(e => e.startDate < dayEnd && e.endDate > anchor)
       .sort((a, b) => a.startDate.getTime() - b.startDate.getTime() || a.phaseIdx - b.phaseIdx)
+    const dayMarkers = markersOn(anchor)
 
-    if (dayEvents.length === 0) {
+    if (dayEvents.length === 0 && dayMarkers.length === 0) {
       return (
         <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>
           No phases scheduled for {fmtFull(anchor)}
@@ -740,6 +808,28 @@ export default function CalendarPage() {
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {dayMarkers.map(m => {
+          const st = DELIVERY_STYLE[m.kind]
+          const j = markerJob(m)
+          return (
+            <div
+              key={m.id}
+              onClick={() => setOpenDelivery(m)}
+              className="card"
+              style={{ padding: '12px 16px', cursor: 'pointer', background: st.bg, border: m.tentative ? `1px dashed ${st.fg}` : 'none', borderLeft: `4px solid ${st.fg}`, opacity: m.done ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 12 }}
+            >
+              <div style={{ fontSize: 20 }}>{st.icon}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: st.fg }}>{m.done ? '✓ ' : ''}{st.word}: {m.order.title}</div>
+                <div style={{ fontSize: 12, color: '#334155', marginTop: 2 }}>
+                  {m.order.supplierName} · {poRef(m.order.poNumber)}{j ? ` · ${j.client} · ${jobDisplayTitle(j)}` : ''}{m.kind === 'delivery' && m.order.deliverySlot ? ` · ${m.order.deliverySlot}` : ''}
+                </div>
+                {m.order.siteAddress && <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{m.order.siteAddress.split('\n')[0]}</div>}
+              </div>
+              {m.tentative && <span style={{ fontSize: 11, fontWeight: 600, color: st.fg }}>not sent yet</span>}
+            </div>
+          )
+        })}
         {dayEvents.map(evt => {
           const durDays = daysBetween(evt.startDate, evt.endDate)
           const stageColor = STAGE_COLOR[evt.job.stage] || '#888'
@@ -793,6 +883,57 @@ export default function CalendarPage() {
             </div>
           )
         })}
+      </div>
+    )
+  }
+
+  // ── Delivery detail ──────────────────────────────────────────
+  function renderDeliveryDetail() {
+    if (!openDelivery) return null
+    const m = openDelivery
+    const o = m.order
+    const st = DELIVERY_STYLE[m.kind]
+    const j = markerJob(m)
+    const canMarkDelivered = m.kind === 'delivery' && (o.status === 'ordered' || o.status === 'confirmed')
+    const canMarkCollected = m.kind === 'collect' && o.status === 'delivered'
+    async function mark(status: 'delivered' | 'collected') {
+      setDeliveryBusy(true)
+      try {
+        await updateJobOrder(createClient(), o.id, status === 'delivered' ? { status } : { status, offHireDate: o.offHireDate || todayYmd() })
+        await reloadOrders()
+        setOpenDelivery(null)
+      } finally { setDeliveryBusy(false) }
+    }
+    return (
+      <div
+        style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end', padding: 16, background: 'rgba(0,0,0,0.25)' }}
+        onClick={e => { if (e.target === e.currentTarget) setOpenDelivery(null) }}
+      >
+        <div style={{ background: 'var(--cream)', borderRadius: 12, width: 'min(420px,100%)', maxHeight: '85vh', overflow: 'auto', boxShadow: '0 24px 64px rgba(0,0,0,0.3)', animation: 'slideUp 0.2s ease' }}>
+          <div style={{ padding: '16px 18px 12px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+            <div style={{ fontSize: 22, lineHeight: 1 }}>{st.icon}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: 16 }}>{st.word}: {o.title}</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{poRef(o.poNumber)} · {o.supplierName}</div>
+            </div>
+            <button onClick={() => setOpenDelivery(null)} aria-label="Close" style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--muted)' }}>×</button>
+          </div>
+          <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 9 }}>
+            <DetailRow label="When" value={new Date(m.date + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }) + (m.kind === 'delivery' && o.deliverySlot ? ', ' + o.deliverySlot : '')} />
+            <DetailRow label="Status" value={ORDER_STATUS_LABEL[o.status] + (m.tentative ? ' (not sent to the supplier yet)' : '')} />
+            {j && <DetailRow label="Job" value={`${getJobNum(j.id)} · ${j.client} · ${jobDisplayTitle(j)}`} />}
+            {o.siteAddress && <DetailRow label="Where" value={o.siteAddress} />}
+            {(o.siteContact || o.sitePhone) && <DetailRow label="Site contact" value={[o.siteContact, o.sitePhone].filter(Boolean).join(', ')} />}
+            {o.accessNotes && <DetailRow label="Access" value={o.accessNotes} />}
+            {o.supplierPhone && <DetailRow label="Supplier" value={o.supplierPhone} />}
+            <DetailRow label="Cost" value={`${fmt(expectedNet(o))} ex VAT${o.rateBasis !== 'fixed' ? ` (${fmt(o.rate)} per ${o.rateBasis})` : ''}`} />
+          </div>
+          <div style={{ padding: '0 18px 16px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {canMarkDelivered && <button className="btn-sm btn-primary" disabled={deliveryBusy} onClick={() => mark('delivered')}>{deliveryBusy ? 'Saving…' : '✓ It has arrived'}</button>}
+            {canMarkCollected && <button className="btn-sm btn-primary" disabled={deliveryBusy} onClick={() => mark('collected')}>{deliveryBusy ? 'Saving…' : '✓ It has been collected'}</button>}
+            <button className="btn-sm btn-outline" onClick={() => router.push(`/jobs?orders=${encodeURIComponent(o.jobId)}`)}>Open this job&apos;s Orders</button>
+          </div>
+        </div>
       </div>
     )
   }
@@ -1072,6 +1213,7 @@ export default function CalendarPage() {
     ? addDays(getMonday(anchor), 7)
     : addDays(anchor, 1)
   const eventsInView = calEvents.filter(e => e.startDate < viewEnd && e.endDate > viewStart)
+  const viewMarkers = markers.filter(m => m.date >= toISODate(viewStart) && m.date < toISODate(viewEnd))
 
   function jumpToFirst() {
     if (!firstEvent) return
@@ -1174,6 +1316,10 @@ export default function CalendarPage() {
         </div>
       )}
 
+      {markers.length > 0 && (
+        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10 }}>📦 delivery · ↩ collection, from each job&apos;s Orders (dashed = not sent to the supplier yet). Change a date in the job&apos;s Orders.</div>
+      )}
+
       {/* Stats */}
       {jobsOnCalendar > 0 && (
         <div className="tp-hide" style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
@@ -1236,6 +1382,23 @@ export default function CalendarPage() {
           })}
         </div>
       )}
+      {jobs.length > 0 && view !== 'day' && viewMarkers.length > 0 && (
+        <div className="cal-agenda" style={{ marginTop: 10 }}>
+          {viewMarkers.map(m => {
+            const st = DELIVERY_STYLE[m.kind]
+            const j = markerJob(m)
+            return (
+              <div key={m.id} className="cal-ag-item" onClick={() => setOpenDelivery(m)} style={{ '--job-color': st.solid, opacity: m.done ? 0.6 : m.tentative ? 0.8 : 1 } as React.CSSProperties}>
+                <div className="cal-ag-when"><b>{fmtShort(new Date(m.date + 'T12:00:00'))}</b><span>{st.word.toLowerCase()}</span></div>
+                <div className="cal-ag-main">
+                  <div className="cal-ag-title">{st.icon} {m.done ? '✓ ' : ''}{m.order.title}</div>
+                  <div className="cal-ag-sub">{m.order.supplierName} · {poRef(m.order.poNumber)}{j ? ` · ${j.client}` : ''}{m.tentative ? ' · not sent yet' : ''}</div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
       {jobs.length > 0 && view === 'day'   && renderDay()}
 
       {/* Job legend + highlight toggles — on-site jobs only. A planning/on-hold/complete
@@ -1285,6 +1448,7 @@ export default function CalendarPage() {
       )}
 
       {renderDetail()}
+      {renderDeliveryDetail()}
       {renderNewTaskModal()}
     </div>
   )
