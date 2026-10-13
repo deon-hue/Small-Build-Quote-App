@@ -47,6 +47,8 @@ export default function MaterialsPriceRequest({ lines, title, location, onClose 
   }, [sb])
 
   const list = materialsListText(lines)
+  // the same list, as items a supplier prices one by one (what and how much, never our own prices)
+  const items = lines.filter(l => l.purchaseQty > 0 && l.name.trim()).map((l, i) => ({ id: `it-${i + 1}`, name: l.name.trim(), qty: +l.purchaseQty.toFixed(2), unit: l.unit.trim() }))
   const itemCount = list ? list.split('\n').length : 0
   const pickedJob = jobs.find(j => j.id === jobId)
 
@@ -64,12 +66,12 @@ export default function MaterialsPriceRequest({ lines, title, location, onClose 
     setBusy(true); setError('')
     const { order, error: err } = await insertJobOrder(sb, ownerId, {
       jobId, kind: 'quote_request', status: 'draft', orderType: 'materials', costCategory: 'materials', payTerms: 'on_order', rateBasis: 'fixed', rate: 0, plannedUnits: 1,
-      title: name.trim(), details: materialsRequestDetails(lines, note), deliveryDate: needed, siteAddress: where.trim(),
+      title: name.trim(), details: materialsRequestDetails(lines, note), items, deliveryDate: needed, siteAddress: where.trim(),
       supplierName: '', supplierContact: '', supplierEmail: '', supplierPhone: '', sourceLabel: [title, location].filter(Boolean).join(' · '),
     })
     if (!order) {
       setBusy(false)
-      setError(/job_id|null value|violates not-null/i.test(err ?? '') ? 'Asking for prices before there is a job needs a small database update first: run supabase/job-orders-materials.sql in the Supabase SQL editor. Or pick a job.' : `Could not save the request. ${err ?? ''}`)
+      setError(/\bitems\b|PGRST204/i.test(err ?? '') ? 'Pricing item by item needs a small database update first: run supabase/job-orders-lines.sql in the Supabase SQL editor.' : /job_id|null value|violates not-null/i.test(err ?? '') ? 'Asking for prices before there is a job needs a small database update first: run supabase/job-orders-materials.sql in the Supabase SQL editor. Or pick a job.' : `Could not save the request. ${err ?? ''}`)
       return
     }
     const r = await insertOrderQuotes(sb, ownerId, order.id, recips)
@@ -97,7 +99,7 @@ export default function MaterialsPriceRequest({ lines, title, location, onClose 
         </div>
         <div style={{ padding: '16px 20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.5 }}>
-            Each supplier gets their own link and gives you one price for the whole list, with their delivery date and how long the price stands. You compare them side by side. They see what to buy and how much, never your own prices, and only the area of the job.
+            Each supplier gets their own link and prices every item on the list (a unit price each, or "can't supply"), adds any delivery charge, and gives their delivery date and how long the prices stand. You compare them side by side. They see what to buy and how much, never your own prices, and only the area of the job.
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
             <div><label style={lab}>Name of the request</label><input style={inp} value={name} onChange={e => setName(e.target.value)} /></div>

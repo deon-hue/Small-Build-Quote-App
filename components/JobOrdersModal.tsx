@@ -12,7 +12,7 @@ import type { JobCost, JobCostCategory } from '@/lib/types'
 import {
   ORDER_TYPES, ORDER_STATUS_LABEL, poRef, expectedNet, hireUnits, isCommitted, committedTotals, overrunNote, matchSuggestions, orderWhatsAppText, waLink, addDays, todayYmd, orderDateLabel,
   fetchJobOrders, insertJobOrder, updateJobOrder, deleteJobOrder,
-  quoteRequestText, quoteLink, cheapestQuoteId, quoteNet, areaOnly, QUOTE_STATUS_LABEL, fetchOrderQuotes, insertOrderQuotes, updateOrderQuote, deleteOrderQuote,
+  quoteRequestText, quoteLink, cheapestQuoteId, cheapestMix, lineTotal, pricedQuote, quoteNet, areaOnly, QUOTE_STATUS_LABEL, fetchOrderQuotes, insertOrderQuotes, updateOrderQuote, deleteOrderQuote,
   type JobOrder, type OrderType, type PayTerms, type RateBasis, type OrderStatus, type OrderQuote, type QuoteInvitee, type QuoteStatus,
 } from '@/lib/job-orders'
 import { Recipients } from './OrderRecipients'
@@ -49,6 +49,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
   const { suppliers, settings, jobs } = useApp()
   const loose = jobId === null
   const [attachId, setAttachId] = useState<Record<string, string>>({})
+  const [lineView, setLineView] = useState<Record<string, boolean>>({})
   const [ownerId, setOwnerId] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [orders, setOrders] = useState<JobOrder[]>([])
@@ -311,7 +312,9 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
   function renderRequest(o: JobOrder) {
     const qs = quotes.filter(q => q.orderId === o.id)
     const replied = qs.filter(q => q.status === 'replied').length
-    const cheapest = cheapestQuoteId(qs, o.plannedUnits)
+    const items = o.items ?? []
+    const cheapest = cheapestQuoteId(qs, o.plannedUnits, items)
+    const repliedQs = qs.filter(q => q.status === 'replied')
     const live = o.status !== 'cancelled'
     const when = [o.deliveryDate ? `needed ${orderDateLabel(o.deliveryDate)}${o.deliverySlot ? ', ' + o.deliverySlot : ''}` : '', o.offHireDate ? `collect ${orderDateLabel(o.offHireDate)}` : ''].filter(Boolean).join(' · ')
     const sentDay = (q: OrderQuote) => (q.sentAt ? new Date(q.sentAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '')
@@ -355,6 +358,14 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                     {q.notes ? <span style={{ color: '#334155' }}> · “{q.notes}”</span> : ''}
                   </div>
                 )}
+                {q.status === 'replied' && items.length > 0 && (() => {
+                  const pq = pricedQuote(items, q.lines, q.deliveryCharge)
+                  return (
+                    <div style={{ fontSize: 12, marginTop: 2, color: pq.priced < pq.count ? '#b45309' : '#166534', fontWeight: pq.priced < pq.count ? 700 : 400 }}>
+                      {pq.priced} of {pq.count} items priced{pq.priced < pq.count ? ' (left some out, so it is not a like-for-like price)' : ''}{q.deliveryCharge > 0 ? ` · delivery ${fmt(q.deliveryCharge)} included` : ''}
+                    </div>
+                  )
+                })()}
                 {q.status === 'declined' && q.notes && <div style={{ fontSize: 12, color: '#991b1b', marginTop: 3 }}>“{q.notes}”</div>}
                 {open && (
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 7 }}>
@@ -368,6 +379,56 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
               </div>
             )
           })}
+          {items.length > 0 && repliedQs.length > 0 && (
+            <div>
+              <button onClick={() => setLineView({ ...lineView, [o.id]: !lineView[o.id] })} style={btn}>{lineView[o.id] ? '▾ Hide the line by line comparison' : '▸ Compare line by line'}</button>
+              {lineView[o.id] && (() => {
+                const mix = cheapestMix(items, qs)
+                return (
+                  <div style={{ marginTop: 8, overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: 8, background: '#fff' }}>
+                    <table style={{ borderCollapse: 'collapse', fontSize: 12, minWidth: '100%' }}>
+                      <thead>
+                        <tr style={{ background: '#f8fafc', textAlign: 'left' }}>
+                          <th style={{ padding: '6px 8px' }}>Item</th>
+                          {repliedQs.map(q => <th key={q.id} style={{ padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>{q.supplierName}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items.map(it => {
+                          const totals = repliedQs.map(q => lineTotal(it, q.lines.find(l => l.id === it.id)))
+                          const best = Math.min(...totals.filter((x): x is number => x !== null))
+                          return (
+                            <tr key={it.id} style={{ borderTop: '1px solid #f1f5f9' }}>
+                              <td style={{ padding: '6px 8px' }}>{it.name}<div style={{ color: '#94a3b8' }}>{it.qty} {it.unit}</div></td>
+                              {repliedQs.map((q, i) => {
+                                const l = q.lines.find(x => x.id === it.id)
+                                const t = totals[i]
+                                return (
+                                  <td key={q.id} style={{ padding: '6px 8px', textAlign: 'right', verticalAlign: 'top', background: t !== null && t === best && repliedQs.length > 1 ? '#f0fdf4' : undefined }}>
+                                    {l?.unavailable ? <span style={{ color: '#dc2626' }}>can&apos;t supply</span> : t === null ? <span style={{ color: '#94a3b8' }}>not priced</span> : <><strong style={{ fontFamily: 'monospace' }}>{fmt(t)}</strong><div style={{ color: '#94a3b8' }}>{fmt(l!.unitPrice ?? 0)} each</div></>}
+                                    {l?.note ? <div style={{ color: '#475569', fontStyle: 'italic' }}>“{l.note}”</div> : null}
+                                  </td>
+                                )
+                              })}
+                            </tr>
+                          )
+                        })}
+                        <tr style={{ borderTop: '1px solid #e2e8f0' }}>
+                          <td style={{ padding: '6px 8px', color: '#64748b' }}>Delivery</td>
+                          {repliedQs.map(q => <td key={q.id} style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace' }}>{q.deliveryCharge > 0 ? fmt(q.deliveryCharge) : '—'}</td>)}
+                        </tr>
+                        <tr style={{ borderTop: '2px solid #1e293b', fontWeight: 700 }}>
+                          <td style={{ padding: '6px 8px' }}>Total ex VAT</td>
+                          {repliedQs.map(q => <td key={q.id} style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(pricedQuote(items, q.lines, q.deliveryCharge).total)}</td>)}
+                        </tr>
+                      </tbody>
+                    </table>
+                    {repliedQs.length > 1 && <div style={{ padding: '6px 8px', fontSize: 11, color: '#64748b', borderTop: '1px solid #f1f5f9' }}>Green = cheapest for that item. Buying each item from whoever is cheapest would be {fmt(mix.total)} for {mix.covered} of {items.length} items, before delivery, but an order goes to one supplier.</div>}
+                  </div>
+                )
+              })()}
+            </div>
+          )}
           {addingTo === o.id && (
             <div>
               <Recipients suppliers={suppliers.filter(s => !qs.some(q => q.supplierId === s.id))} value={moreRecips} onChange={setMoreRecips} inp={inp} lab={lab} btn={btn} />

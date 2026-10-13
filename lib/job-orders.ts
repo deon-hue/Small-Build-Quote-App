@@ -63,7 +63,14 @@ export interface JobOrder {
   createdAt?: string
   /** where a request came from, e.g. the calculator and quote its materials list was made in (supabase/job-orders-materials.sql) */
   sourceLabel?: string
+  /** the items a request asks to be priced one by one (a calculator's materials list); empty when it asks for one price (supabase/job-orders-lines.sql) */
+  items?: OrderItem[]
 }
+
+/** One thing to be priced on a request: how many, of what. Never carries our own price. */
+export interface OrderItem { id: string; name: string; qty: number; unit: string }
+/** A supplier's answer for one item: a unit price ex VAT, or that they cannot supply it, with an optional note ("can do the 7N block instead"). */
+export interface QuoteLine { id: string; unitPrice: number | null; unavailable: boolean; note: string }
 
 /**
  * One supplier a quote request was sent to, with its own secret link (supabase/job-orders-quotes.sql). The supplier opens the link, no login, and gives a price, a delivery date and
@@ -90,6 +97,10 @@ export interface OrderQuote {
   validUntil: string
   notes: string
   repliedAt?: string
+  /** their price for each item, when the request listed items */
+  lines: QuoteLine[]
+  /** delivery charge ex VAT, added to the items */
+  deliveryCharge: number
 }
 
 export const QUOTE_STATUS_LABEL: Record<QuoteStatus, string> = {
@@ -286,10 +297,41 @@ export function quoteNet(q: Pick<OrderQuote, 'price' | 'rateBasis'>, plannedUnit
 }
 
 /** The quote that is cheapest (by what it comes to), among the ones that carry a price. */
-export function cheapestQuoteId(quotes: OrderQuote[], plannedUnits: number): string | null {
-  const priced = quotes.filter(q => q.status === 'replied' && q.price !== null)
+export function cheapestQuoteId(quotes: OrderQuote[], plannedUnits: number, items: OrderItem[] = []): string | null {
+  // with a list of items, only an answer that prices every item is fairly compared: one that left things out is always cheaper
+  const priced = quotes.filter(q => q.status === 'replied' && q.price !== null && (items.length === 0 || pricedQuote(items, q.lines, q.deliveryCharge).priced === items.length))
   if (priced.length < 2) return null
   return priced.reduce((a, b) => (quoteNet(b, plannedUnits) < quoteNet(a, plannedUnits) ? b : a)).id
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100
+
+/** One item's price from a supplier: quantity x unit price. null if they have not priced it or cannot supply it. */
+export function lineTotal(item: OrderItem, line: QuoteLine | undefined): number | null {
+  if (!line || line.unavailable || line.unitPrice === null || !(line.unitPrice >= 0)) return null
+  return round2(item.qty * line.unitPrice)
+}
+
+/** A supplier's whole answer to a list: the items they priced, plus delivery. `priced` of `count` says how many items they covered. */
+export function pricedQuote(items: OrderItem[], lines: QuoteLine[], delivery = 0): { total: number; priced: number; count: number } {
+  let sum = 0
+  let priced = 0
+  for (const it of items) {
+    const t = lineTotal(it, lines.find(l => l.id === it.id))
+    if (t !== null) { sum += t; priced++ }
+  }
+  return { total: round2(sum + (delivery > 0 ? delivery : 0)), priced, count: items.length }
+}
+
+/** What it would come to buying every item from whoever is cheapest for it, ex VAT and before delivery: just for information, an order goes to one supplier. */
+export function cheapestMix(items: OrderItem[], quotes: OrderQuote[]): { total: number; covered: number } {
+  let total = 0
+  let covered = 0
+  for (const it of items) {
+    const all = quotes.filter(q => q.status === 'replied').map(q => lineTotal(it, q.lines.find(l => l.id === it.id))).filter((x): x is number => x !== null)
+    if (all.length) { total += Math.min(...all); covered++ }
+  }
+  return { total: round2(total), covered }
 }
 
 export const quoteLink = (base: string, token: string) => `${base.replace(/\/$/, '')}/supplier-quote/${token}`
@@ -333,6 +375,7 @@ export function rowToOrder(r: Record<string, unknown>): JobOrder {
     sentAt: (r.sent_at as string) || undefined, sentVia: str(r.sent_via),
     paidCostId: (r.paid_cost_id as string) || undefined, invoicedCostId: (r.invoiced_cost_id as string) || undefined,
     createdAt: r.created_at as string | undefined, sourceLabel: str(r.source_label),
+    items: parseItems(r.items),
   }
 }
 
@@ -349,6 +392,7 @@ function orderToRow(o: Partial<JobOrder>) {
   if (o.jobId !== undefined) row.job_id = o.jobId || null
   // only written when there is one, so a database without the column (supabase/job-orders-materials.sql not run) keeps working for every ordinary order
   if (o.sourceLabel) row.source_label = o.sourceLabel
+  if (o.items && o.items.length) row.items = o.items
   if (o.supplierId !== undefined) row.supplier_id = o.supplierId || null
   if (o.deliveryDate !== undefined) row.delivery_date = o.deliveryDate || null
   if (o.offHireDate !== undefined) row.off_hire_date = o.offHireDate || null
@@ -359,6 +403,22 @@ function orderToRow(o: Partial<JobOrder>) {
   return row
 }
 
+function parseItems(v: unknown): OrderItem[] {
+  if (!Array.isArray(v)) return []
+  return v.filter(x => x && typeof x === 'object').map((x, i) => {
+    const r = x as Record<string, unknown>
+    return { id: typeof r.id === 'string' && r.id ? r.id : `it-${i}`, name: str(r.name), qty: Number(r.qty) || 0, unit: str(r.unit) }
+  })
+}
+function parseLines(v: unknown): QuoteLine[] {
+  if (!Array.isArray(v)) return []
+  return v.filter(x => x && typeof x === 'object').map(x => {
+    const r = x as Record<string, unknown>
+    const p = r.unitPrice === null || r.unitPrice === undefined || r.unitPrice === '' ? null : Number(r.unitPrice)
+    return { id: str(r.id), unitPrice: p !== null && Number.isFinite(p) ? p : null, unavailable: !!r.unavailable, note: str(r.note) }
+  })
+}
+
 export function rowToQuote(r: Record<string, unknown>): OrderQuote {
   return {
     id: r.id as string, orderId: r.order_id as string, token: str(r.token),
@@ -366,6 +426,7 @@ export function rowToQuote(r: Record<string, unknown>): OrderQuote {
     status: (r.status as QuoteStatus) ?? 'invited', sentAt: (r.sent_at as string) || undefined, sentVia: str(r.sent_via), viewedAt: (r.viewed_at as string) || undefined,
     price: r.price === null || r.price === undefined ? null : Number(r.price), rateBasis: (r.rate_basis as RateBasis) ?? 'fixed',
     deliveryDate: d10(r.delivery_date), validUntil: d10(r.valid_until), notes: str(r.notes), repliedAt: (r.replied_at as string) || undefined,
+    lines: parseLines(r.lines), deliveryCharge: Number(r.delivery_charge) || 0,
   }
 }
 
@@ -558,6 +619,6 @@ export function materialsListText(lines: { name: string; purchaseQty: number; un
 /** The details of a price request for a materials list: an optional note, then the list. */
 export function materialsRequestDetails(lines: { name: string; purchaseQty: number; unit: string }[], note = ''): string {
   const list = materialsListText(lines)
-  const ask = 'Please price the following (price for everything delivered, ex VAT; tell us anything you cannot supply or would swap):'
+  const ask = 'Please price each item below (a unit price, ex VAT, on the link) and any delivery charge; tell us anything you cannot supply or would swap:'
   return [...(note.trim() ? [note.trim(), ''] : []), ask, list].join('\n')
 }
