@@ -17,9 +17,11 @@ interface Props {
   products:   BOProduct[]
   onAdd:      (product: QuoteProduct) => void
   onClose:    () => void
+  /** what the products are being added to: a quote (default) or a request for prices */
+  purpose?:   'quote' | 'request'
 }
 
-export default function ProductPicker({ products, onAdd, onClose }: Props) {
+export default function ProductPicker({ products, onAdd, onClose, purpose = 'quote' }: Props) {
   const [search,     setSearch]     = useState('')
   const [catFilter,  setCatFilter]  = useState('All')
   const [qty,        setQty]        = useState<Record<string, number>>({})
@@ -123,7 +125,7 @@ export default function ProductPicker({ products, onAdd, onClose }: Props) {
         {/* Quick-add form */}
         {adding && (
           <div style={{ padding: '14px 18px', background: '#eff6ff', borderBottom: '2px solid #bfdbfe' }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#1d4ed8', marginBottom: 10 }}>New Product — saves to Back Office and adds to quote</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#1d4ed8', marginBottom: 10 }}>New Product — saves to Back Office and adds to {purpose === 'request' ? 'the list to be priced' : 'quote'}</div>
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
               <div>
                 <label style={fLbl}>Product Name *</label>

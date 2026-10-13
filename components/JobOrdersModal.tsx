@@ -12,10 +12,11 @@ import type { JobCost, JobCostCategory } from '@/lib/types'
 import {
   ORDER_TYPES, ORDER_STATUS_LABEL, poRef, expectedNet, hireUnits, isCommitted, committedTotals, overrunNote, matchSuggestions, orderWhatsAppText, waLink, addDays, todayYmd, orderDateLabel,
   fetchJobOrders, insertJobOrder, updateJobOrder, deleteJobOrder,
-  quoteRequestText, quoteLink, cheapestQuoteId, cheapestMix, lineTotal, pricedQuote, quoteNet, areaOnly, QUOTE_STATUS_LABEL, fetchOrderQuotes, insertOrderQuotes, updateOrderQuote, deleteOrderQuote,
+  quoteRequestText, quoteLink, noteOfDetails, cheapestQuoteId, cheapestMix, lineTotal, pricedQuote, quoteNet, areaOnly, QUOTE_STATUS_LABEL, fetchOrderQuotes, insertOrderQuotes, updateOrderQuote, deleteOrderQuote,
   type JobOrder, type OrderType, type PayTerms, type RateBasis, type OrderStatus, type OrderQuote, type QuoteInvitee, type QuoteStatus,
 } from '@/lib/job-orders'
 import { Recipients } from './OrderRecipients'
+import PriceRequestItems from './PriceRequestItems'
 
 interface Props {
   /** null: the requests for a price that are not for a job yet (a calculator's materials list while pricing a quote) */
@@ -108,8 +109,9 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
     if (mode === 'order' && !form.supplierName.trim()) { setNotice({ ok: false, text: 'Say who the supplier is.' }); return }
     if (!form.title.trim()) { setNotice({ ok: false, text: mode === 'request' ? 'Say what you want a price for.' : 'Say what you are ordering.' }); return }
     if (mode === 'request' && !form.id && recips.length === 0) { setNotice({ ok: false, text: 'Add at least one supplier to ask.' }); return }
+    const cleanItems = (form.items ?? []).filter(i => i.name.trim() && i.qty > 0).map(i => ({ ...i, name: i.name.trim(), unit: i.unit.trim() }))
     setBusy('save')
-    const body = { ...form, expectedInvoice: form.payTerms === 'account' ? (form.expectedInvoice || (form.deliveryDate ? addDays(form.deliveryDate, 30) : '')) : '' }
+    const body = { ...form, ...(mode === 'request' && form.orderType === 'materials' && (cleanItems.length > 0 || (form.items ?? []).length > 0) ? { items: cleanItems, details: noteOfDetails(form.details) } : {}), expectedInvoice: form.payTerms === 'account' ? (form.expectedInvoice || (form.deliveryDate ? addDays(form.deliveryDate, 30) : '')) : '' }
     if (form.id) {
       const o = await updateJobOrder(sb, form.id, body)
       if (!o) setNotice({ ok: false, text: 'Could not save the order.' })
@@ -541,8 +543,14 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                   {mode === 'request' && !form.id && <div style={{ marginTop: 10 }}><Recipients suppliers={suppliers} value={recips} onChange={setRecips} inp={inp} lab={lab} btn={btn} /></div>}
                   <div style={{ display: 'grid', gridTemplateColumns: '2fr 3fr', gap: 10, marginTop: 10 }}>
                     <div><label style={lab}>What *</label><input style={inp} value={form.title} onChange={e => set('title', e.target.value)} placeholder={ORDER_TYPES[form.orderType].example || 'What are you ordering?'} /></div>
-                    <div><label style={lab}>More detail for the supplier</label><textarea style={{ ...inp, minHeight: 34, resize: 'vertical' }} rows={form.details.includes('\n') ? 6 : 1} value={form.details} onChange={e => set('details', e.target.value)} placeholder="Quantity, size, anything they need to know" /></div>
+                    <div><label style={lab}>{mode === 'request' && form.orderType === 'materials' ? 'A note for the supplier' : 'More detail for the supplier'}</label><textarea style={{ ...inp, minHeight: 34, resize: 'vertical' }} rows={form.details.includes('\n') ? 6 : 1} value={mode === 'request' && form.orderType === 'materials' && (form.items ?? []).length > 0 ? noteOfDetails(form.details) : form.details} onChange={e => set('details', e.target.value)} placeholder="Quantity, size, anything they need to know" /></div>
                   </div>
+                  {mode === 'request' && form.orderType === 'materials' && (
+                    <div style={{ marginTop: 10 }}>
+                      <PriceRequestItems ownerId={ownerId} items={form.items ?? []} onChange={items => set('items', items)} />
+                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>With items listed, each supplier prices every item (a unit price each) and adds delivery. Without any, they give one price.</div>
+                    </div>
+                  )}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 10 }}>
                     <div>
                       <label style={lab}>Price is</label>

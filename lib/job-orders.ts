@@ -215,7 +215,7 @@ export function orderWording(o: JobOrder): OrderWording {
     : ''
   return {
     poRef: poRef(o.poNumber), title: o.title || ORDER_TYPES[o.orderType].label, when, where: o.siteAddress,
-    collect: o.offHireDate ? longDate(o.offHireDate) : '', details: o.details,
+    collect: o.offHireDate ? longDate(o.offHireDate) : '', details: requestDetails(o),
     contact: [o.siteContact, o.sitePhone].filter(Boolean).join(', '), priceLine,
   }
 }
@@ -239,7 +239,7 @@ export function orderWhatsAppText(o: JobOrder, sender: { name: string; company: 
   const who = firstName(o.supplierContact)
   const hi = who ? `Hi ${who}, ` : 'Hi, '
   const body = [
-    ...titleAndDetails(w.title, o.details),
+    ...titleAndDetails(w.title, requestDetails(o)),
     w.when ? `Deliver: ${w.when}` : '',
     w.where ? `To: ${w.where}` : '',
     w.collect ? `Collect: ${w.collect}` : '',
@@ -342,7 +342,7 @@ export function quoteRequestText(o: JobOrder, q: Pick<OrderQuote, 'supplierConta
   const hi = who ? `Hi ${who}, ` : 'Hi, '
   const area = areaOnly(o.siteAddress)
   const body = [
-    ...titleAndDetails(o.title, o.details),
+    ...titleAndDetails(o.title, requestDetails(o)),
     o.deliveryDate ? `Needed: ${longDate(o.deliveryDate)}${o.deliverySlot ? ', ' + o.deliverySlot : ''}` : '',
     o.offHireDate ? `Collect: ${longDate(o.offHireDate)}` : '',
     area ? `Where: ${area}` : '',
@@ -614,6 +614,23 @@ export function materialsListText(lines: { name: string; purchaseQty: number; un
     .filter(l => l.purchaseQty > 0 && l.name.trim())
     .map(l => `• ${qtyText(l.purchaseQty)} ${l.unit.trim()} — ${l.name.trim()}`.replace(/ {2,}/g, ' '))
     .join('\n')
+}
+
+/** The note part of a request's details: what was written before the "Please price" ask and list (requests made earlier carried the list inside their details). */
+export function noteOfDetails(details: string): string {
+  const d = (details || '').trim()
+  const i = d.indexOf('Please price')
+  return i < 0 ? d : d.slice(0, i).trim()
+}
+
+/**
+ * What a supplier is shown as the detail of a request: the note, and, when it lists items, the ask and the items as a list. Built from the items each time, so changing the items
+ * changes what is sent. A request made before items were kept separately already has its list written into its details, and is left as it is.
+ */
+export function requestDetails(o: { details: string; items?: OrderItem[] }): string {
+  const items = (o.items ?? []).filter(i => i.name.trim() && i.qty > 0)
+  if (items.length === 0 || /^•/m.test(o.details || '')) return o.details || ''
+  return materialsRequestDetails(items.map(i => ({ name: i.name, purchaseQty: i.qty, unit: i.unit })), noteOfDetails(o.details))
 }
 
 /** The details of a price request for a materials list: an optional note, then the list. */

@@ -7,7 +7,7 @@ import { senderFrom, withPoweredBy, escapeHtml } from '@/lib/email-brand'
 import { usageGuard } from '@/lib/usage'
 import { callerIsPortalOnly } from '@/lib/caller-role'
 import { BRAND, emailShell, emailPara, emailCard, emailCallout, emailButton } from '@/lib/email-layout'
-import { rowToOrder, rowToQuote, areaOnly, poRef, quoteLink, quoteRequestText } from '@/lib/job-orders'
+import { rowToOrder, rowToQuote, areaOnly, poRef, quoteLink, quoteRequestText, requestDetails } from '@/lib/job-orders'
 
 interface Branding {
   companyName?: string; companyPhone?: string; companyEmail?: string; senderName?: string
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
       ? `<tr><td style="padding:8px 0;border-bottom:1px solid ${BRAND.line};width:96px;font-size:13px;color:${BRAND.muted};vertical-align:top">${k}</td><td style="padding:8px 0;border-bottom:1px solid ${BRAND.line};font-size:14px;font-weight:600;color:${BRAND.ink};line-height:1.5">${v}</td></tr>`
       : ''
     const rows = [
-      cell('What', e(o.title) + (o.details ? `<br><span style="font-weight:400;color:${BRAND.muted}">${e(o.details).replace(/\n/g, '<br>')}</span>` : '')),
+      cell('What', e(o.title) + (requestDetails(o) ? `<br><span style="font-weight:400;color:${BRAND.muted}">${e(requestDetails(o)).replace(/\n/g, '<br>')}</span>` : '')),
       cell('Needed', e([longDate(o.deliveryDate), o.deliverySlot].filter(Boolean).join(', '))),
       cell('Collect', e(longDate(o.offHireDate))),
       cell('Where', e(areaOnly(o.siteAddress))),

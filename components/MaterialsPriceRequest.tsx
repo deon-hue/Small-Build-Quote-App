@@ -8,8 +8,9 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useApp } from '@/contexts/AppContext'
 import { Recipients } from './OrderRecipients'
+import PriceRequestItems from './PriceRequestItems'
 import JobOrdersModal from './JobOrdersModal'
-import { insertJobOrder, insertOrderQuotes, materialsListText, materialsRequestDetails, type QuoteInvitee } from '@/lib/job-orders'
+import { insertJobOrder, insertOrderQuotes, type OrderItem, type QuoteInvitee } from '@/lib/job-orders'
 
 interface Props {
   lines: { name: string; purchaseQty: number; unit: string }[]
@@ -46,10 +47,10 @@ export default function MaterialsPriceRequest({ lines, title, location, onClose 
     return () => { alive = false }
   }, [sb])
 
-  const list = materialsListText(lines)
-  // the same list, as items a supplier prices one by one (what and how much, never our own prices)
-  const items = lines.filter(l => l.purchaseQty > 0 && l.name.trim()).map((l, i) => ({ id: `it-${i + 1}`, name: l.name.trim(), qty: +l.purchaseQty.toFixed(2), unit: l.unit.trim() }))
-  const itemCount = list ? list.split('\n').length : 0
+  // the calculator's list as items a supplier prices one by one (what and how much, never our own prices); it can be edited, and products added
+  const [items, setItems] = useState<OrderItem[]>(() => lines.filter(l => l.purchaseQty > 0 && l.name.trim()).map((l, i) => ({ id: `it-${i + 1}`, name: l.name.trim(), qty: +l.purchaseQty.toFixed(2), unit: l.unit.trim() })))
+  const cleanItems = items.filter(i => i.name.trim() && i.qty > 0).map(i => ({ ...i, name: i.name.trim(), unit: i.unit.trim() }))
+  const itemCount = cleanItems.length
   const pickedJob = jobs.find(j => j.id === jobId)
 
   function chooseJob(id: string) {
@@ -60,13 +61,13 @@ export default function MaterialsPriceRequest({ lines, title, location, onClose 
 
   async function create() {
     if (!ownerId) return
-    if (itemCount === 0) { setError('There is nothing on the list to price.'); return }
+    if (itemCount === 0) { setError('There is nothing on the list to price. Add an item.'); return }
     if (!name.trim()) { setError('Give the request a name.'); return }
     if (recips.length === 0) { setError('Add at least one supplier to ask.'); return }
     setBusy(true); setError('')
     const { order, error: err } = await insertJobOrder(sb, ownerId, {
       jobId, kind: 'quote_request', status: 'draft', orderType: 'materials', costCategory: 'materials', payTerms: 'on_order', rateBasis: 'fixed', rate: 0, plannedUnits: 1,
-      title: name.trim(), details: materialsRequestDetails(lines, note), items, deliveryDate: needed, siteAddress: where.trim(),
+      title: name.trim(), details: note.trim(), items: cleanItems, deliveryDate: needed, siteAddress: where.trim(),
       supplierName: '', supplierContact: '', supplierEmail: '', supplierPhone: '', sourceLabel: [title, location].filter(Boolean).join(' · '),
     })
     if (!order) {
@@ -114,10 +115,7 @@ export default function MaterialsPriceRequest({ lines, title, location, onClose 
             <div><label style={lab}>Needed by</label><input style={inp} type="date" value={needed} onChange={e => setNeeded(e.target.value)} /></div>
           </div>
           <div><label style={lab}>A note for the suppliers (optional)</label><input style={inp} value={note} onChange={e => setNote(e.target.value)} placeholder="Crane lorry needed, trade account, pick-up is fine…" /></div>
-          <div>
-            <label style={lab}>What they will be asked to price ({itemCount} item{itemCount === 1 ? '' : 's'})</label>
-            <pre style={{ margin: 0, padding: '8px 10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, maxHeight: 150, overflow: 'auto', whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>{list || 'Nothing to price.'}</pre>
-          </div>
+          <PriceRequestItems ownerId={ownerId} items={items} onChange={setItems} />
           <Recipients suppliers={suppliers} value={recips} onChange={setRecips} inp={inp} lab={lab} btn={btn} />
           {error && <div style={{ padding: '8px 12px', borderRadius: 7, fontSize: 13, background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b' }}>{error}</div>}
           <div style={{ display: 'flex', gap: 8 }}>
