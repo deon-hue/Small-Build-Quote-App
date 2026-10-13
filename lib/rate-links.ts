@@ -177,3 +177,14 @@ export function guessPackSize(productName: string, lineUnit: string): number | n
   }
   return null
 }
+
+/**
+ * What to ask a supplier for, for one materials line. A line linked to a Back Office product is bought as that product: its name, in its unit, and for a product sold
+ * in packs or rolls (a pack size is set on the link) the number of WHOLE packs. So a line the calculator counts in m² that is linked to a product sold "per item" is asked
+ * for as that many items, not as m². A line with no link is asked for as the calculator has it.
+ */
+export function purchaseListLine<L extends { name: string; unit: string; purchaseQty: number }>(l: L, link: RateLink | undefined, item: RateItem | undefined): { name: string; unit: string; purchaseQty: number } {
+  if (!link || !item || item.kind !== 'product') return { name: l.name, unit: l.unit, purchaseQty: l.purchaseQty }
+  const qty = link.per && link.per > 0 && link.per !== 1 ? packsFor(l.purchaseQty, link.per) : l.purchaseQty
+  return { name: item.name, unit: item.unit, purchaseQty: qty }
+}

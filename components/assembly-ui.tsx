@@ -13,7 +13,7 @@ import type { AssemblyOpening, CostedLine } from '@/lib/assembly-calc'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import { openMaterialsPrintView, downloadMaterialsCsv } from '@/lib/materials-report'
 import { useRateLinks } from '@/components/RateLinks'
-import { linkedRate, isLinkable, packsFor } from '@/lib/rate-links'
+import { linkedRate, isLinkable, packsFor, purchaseListLine } from '@/lib/rate-links'
 import RateLinkPicker from '@/components/RateLinkPicker'
 import MaterialsPriceRequest from '@/components/MaterialsPriceRequest'
 
@@ -63,7 +63,13 @@ export function MaterialsListButtons({ lines, title, location, description, comp
 }) {
   const materials = lines.filter(l => l.category === 'materials')
   const [asking, setAsking] = useState(false)
+  // for the suppliers, a line linked to a Back Office product is asked for as that product, in its own unit (and whole packs), not in the calculator's unit
+  const rlinks = useRateLinks()
   if (materials.length === 0) return null
+  const supplyLines = materials.map(l => {
+    const link = rlinks?.linkFor(l.layerId)
+    return purchaseListLine(l, link, link ? rlinks!.items.find(i => i.kind === link.kind && i.id === link.refId) : undefined)
+  })
   // Solid, higher-contrast style — a faint outline button on a white card was easy to miss
   // entirely. Keeps a short text label even in compact mode (bare icons aren't self-explanatory).
   const btnStyle: React.CSSProperties = {
@@ -85,7 +91,7 @@ export function MaterialsListButtons({ lines, title, location, description, comp
         onClick={() => setAsking(true)}>
         ✉ Prices
       </button>
-      {asking && createPortal(<MaterialsPriceRequest lines={materials} title={title} location={location} onClose={() => setAsking(false)} />, document.body)}
+      {asking && createPortal(<MaterialsPriceRequest lines={supplyLines} title={title} location={location} onClose={() => setAsking(false)} />, document.body)}
     </div>
   )
 }
