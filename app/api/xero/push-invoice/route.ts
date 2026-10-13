@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getValidConnection, xeroFetch } from '@/lib/xero'
 import type { Invoice, XeroAccountCodes } from '@/lib/types'
 import { DEFAULT_XERO_ACCOUNT_CODES } from '@/lib/types'
+import { invoiceLineView } from '@/lib/invoice-lines'
 
 interface XeroValidationError { Message: string }
 interface XeroElement { ValidationErrors?: XeroValidationError[] }
@@ -29,7 +30,8 @@ export async function POST(req: NextRequest) {
 
     const xeroStatus = invoice.status === 'draft' ? 'DRAFT' : 'AUTHORISED'
 
-    const lineItems = invoice.lineItems.map(l => ({
+    // a stage payment line is a PERCENTAGE of its price: Xero only takes quantity x unit amount, so send the part, not the whole price
+    const lineItems = invoice.lineItems.map(invoiceLineView).map(l => ({
       Description: l.desc || 'Works',
       Quantity: l.qty,
       UnitAmount: l.unitPrice,

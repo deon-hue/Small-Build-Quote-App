@@ -1,4 +1,5 @@
 import type { Invoice, Settings } from './types'
+import { invoiceLineView } from './invoice-lines'
 
 export function buildInvoiceHtml(inv: Invoice, settings: Settings): string {
   const fmt = (n: number) => '£' + Number(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -10,7 +11,7 @@ export function buildInvoiceHtml(inv: Invoice, settings: Settings): string {
     draft: 'DRAFT', sent: 'SENT', paid: 'PAID', overdue: 'OVERDUE',
   }
 
-  const rows = inv.lineItems.map(li => `
+  const rows = inv.lineItems.map(invoiceLineView).map(li => `
     <tr>
       <td style="padding:10px 14px;border-bottom:1px solid #eee;font-size:13px">${li.desc || '—'}</td>
       <td style="padding:10px 14px;border-bottom:1px solid #eee;font-size:13px;text-align:center">${li.qty}</td>
