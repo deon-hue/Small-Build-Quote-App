@@ -92,6 +92,8 @@ export default function SubTimesheetsScreen({ mode }: { mode: 'add' | 'history' 
   const [dayType, setDayType] = useState<DayType>('full')
   const [formJobId2, setFormJobId2] = useState('')
   const [formDesc2, setFormDesc2] = useState('')
+  const [formStart2, setFormStart2] = useState('')
+  const [formFinish2, setFormFinish2] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [submitted, setSubmitted] = useState(false)
@@ -167,7 +169,7 @@ export default function SubTimesheetsScreen({ mode }: { mode: 'add' | 'history' 
     setParsed(BLANK_ENTRY); setAiText('')
     setFormDate(todayISO()); setFormHours(''); setFormStart(''); setFormFinish('')
     setFormBreak('30'); setFormDesc(''); setFormJobId(''); setFormContractId('')
-    setDayType('full'); setFormJobId2(''); setFormDesc2('')
+    setDayType('full'); setFormJobId2(''); setFormDesc2(''); setFormStart2(''); setFormFinish2('')
     setSubmitError(''); setSubmitted(false)
   }
 
@@ -183,7 +185,7 @@ export default function SubTimesheetsScreen({ mode }: { mode: 'add' | 'history' 
       try {
         bodies.push(...buildDayBodies({
           dayType, date: formDate, rates: subRates, jobId: formJobId, description: formDesc, hours: Number(formHours) || 0,
-          startTime: formStart, finishTime: formFinish, breakMins: Number(formBreak) || 0, secondJobId: formJobId2, secondDescription: formDesc2,
+          startTime: formStart, finishTime: formFinish, breakMins: Number(formBreak) || 0, secondJobId: formJobId2, secondDescription: formDesc2, secondStartTime: formStart2, secondFinishTime: formFinish2,
         }))
       } catch (e) { setSubmitError(e instanceof Error ? e.message : 'Please check the form.'); return }
     }
@@ -202,7 +204,7 @@ export default function SubTimesheetsScreen({ mode }: { mode: 'add' | 'history' 
           if (n === 1) {
             // the morning job was sent, the afternoon one was not: leave the form ready to send just the second half
             reload()
-            setFormJobId(formJobId2); setFormDesc(formDesc2); setDayType('half'); setFormJobId2(''); setFormDesc2('')
+            setFormJobId(formJobId2); setFormDesc(formDesc2); setFormStart(formStart2); setFormFinish(formFinish2); setDayType('half'); setFormJobId2(''); setFormDesc2(''); setFormStart2(''); setFormFinish2('')
             setSubmitError('Your first job was sent, but the second one failed: ' + (data.error || 'Submit failed') + ' The form now has just the second job as a half day, so press Submit again.')
           } else setSubmitError(data.error || 'Submit failed')
           return
@@ -215,7 +217,7 @@ export default function SubTimesheetsScreen({ mode }: { mode: 'add' | 'history' 
     } catch {
       if (sent > 0) {
         reload()
-        setFormJobId(formJobId2); setFormDesc(formDesc2); setDayType('half'); setFormJobId2(''); setFormDesc2('')
+        setFormJobId(formJobId2); setFormDesc(formDesc2); setFormStart(formStart2); setFormFinish(formFinish2); setDayType('half'); setFormJobId2(''); setFormDesc2(''); setFormStart2(''); setFormFinish2('')
         setSubmitError('Your first job was sent, but the connection dropped before the second one. The form now has just the second job as a half day, so press Submit again.')
       } else setSubmitError('Network error — please try again.')
     } finally {
@@ -369,7 +371,7 @@ export default function SubTimesheetsScreen({ mode }: { mode: 'add' | 'history' 
                         <button type="button" style={dayBtn(dt === 'half')} onClick={() => setDayType('half')}>Half day</button>
                         <button type="button" style={dayBtn(dt === 'split')} onClick={() => setDayType('split')}>Split day</button>
                       </div>
-                      {dt === 'split' && <div style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>Two jobs on the same day, for example the morning at one and the afternoon at another. Each is paid as a half day.</div>}
+                      {dt === 'split' && <div style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>Two jobs on the same day, for example the morning at one and the afternoon at another. Each is paid as a half day. Put in the times of each half if you can.</div>}
                     </FieldGroup>
                   </div>
                 )}
@@ -418,6 +420,16 @@ export default function SubTimesheetsScreen({ mode }: { mode: 'add' | 'history' 
                   </FieldGroup>
                 </div>
 
+                {/* Split day: when each half was, if they want to say */}
+                {dt === 'split' && (<>
+                  <FieldGroup label="First job: start time">
+                    <input type="time" style={inp} value={formStart} onChange={e => setFormStart(e.target.value)} />
+                  </FieldGroup>
+                  <FieldGroup label="First job: finish time">
+                    <input type="time" style={inp} value={formFinish} onChange={e => setFormFinish(e.target.value)} />
+                  </FieldGroup>
+                </>)}
+
                 {/* Split day: the second job, the other half of the day */}
                 {dt === 'split' && (<>
                   <div style={{ gridColumn: '1 / -1' }}>
@@ -437,6 +449,12 @@ export default function SubTimesheetsScreen({ mode }: { mode: 'add' | 'history' 
                       <input style={inp} value={formDesc2} onChange={e => setFormDesc2(e.target.value)} placeholder="What did you work on?" />
                     </FieldGroup>
                   </div>
+                  <FieldGroup label="Second job: start time">
+                    <input type="time" style={inp} value={formStart2} onChange={e => setFormStart2(e.target.value)} />
+                  </FieldGroup>
+                  <FieldGroup label="Second job: finish time">
+                    <input type="time" style={inp} value={formFinish2} onChange={e => setFormFinish2(e.target.value)} />
+                  </FieldGroup>
                 </>)}
               </div>
 

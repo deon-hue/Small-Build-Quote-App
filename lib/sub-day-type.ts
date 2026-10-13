@@ -41,7 +41,12 @@ export interface DayInput {
   breakMins: number
   secondJobId: string
   secondDescription: string
+  /** a split day: the start and finish of the second job's half (the first job's are startTime and finishTime). Optional. */
+  secondStartTime?: string
+  secondFinishTime?: string
 }
+
+const mins = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + (m || 0) }
 
 /** What to send to the office: one timesheet for a full or half day, two for a split day. Throws a plain-English message when something is missing. */
 export function buildDayBodies(i: DayInput): TimesheetBody[] {
@@ -64,8 +69,13 @@ export function buildDayBodies(i: DayInput): TimesheetBody[] {
   // split day
   if (!i.secondJobId) throw new Error('Please select the second job.')
   if (i.secondJobId === i.jobId) throw new Error('Pick two different jobs for a split day, or choose Half day for one job.')
+  // the times of each half are optional, but when given they have to make sense: each finishes after it starts, and the two do not overlap
+  const s1 = i.startTime || '', f1 = i.finishTime || '', s2 = i.secondStartTime || '', f2 = i.secondFinishTime || ''
+  if (s1 && f1 && mins(f1) <= mins(s1)) throw new Error('On the first job, the finish time has to be after the start time.')
+  if (s2 && f2 && mins(f2) <= mins(s2)) throw new Error('On the second job, the finish time has to be after the start time.')
+  if (s1 && f1 && s2 && f2 && mins(s1) < mins(f2) && mins(s2) < mins(f1)) throw new Error('The two jobs overlap. Check the times: one half should finish before the other starts.')
   return [
-    { jobId: i.jobId, date: i.date, units: 1, description: i.description, startTime: null, finishTime: null, breakMins: 0, rateType: 'half_day', rateAmount: half },
-    { jobId: i.secondJobId, date: i.date, units: 1, description: i.secondDescription, startTime: null, finishTime: null, breakMins: 0, rateType: 'half_day', rateAmount: half },
+    { jobId: i.jobId, date: i.date, units: 1, description: i.description, startTime: s1 || null, finishTime: f1 || null, breakMins: 0, rateType: 'half_day', rateAmount: half },
+    { jobId: i.secondJobId, date: i.date, units: 1, description: i.secondDescription, startTime: s2 || null, finishTime: f2 || null, breakMins: 0, rateType: 'half_day', rateAmount: half },
   ]
 }
