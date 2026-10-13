@@ -155,7 +155,7 @@ export default function SubPortalDashboard() {
           { label: 'Outstanding',       value: fmt(totalOutstanding),         mono: true,  color: totalOutstanding > 0 ? '#f59e0b' : '#94a3b8' },
         ].map(card => (
           <div key={card.label} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#64748b', marginBottom: 4 }}>{card.label}</div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: '#64748b', marginBottom: 4 }}>{card.label}</div>
             <div style={{ fontSize: 28, fontWeight: 700, color: card.color, fontFamily: card.mono ? 'monospace' : undefined }}>{card.value}</div>
           </div>
         ))}

@@ -70,8 +70,8 @@ function SubPortalLayoutInner({ children }: { children: React.ReactNode }) {
   return (
     <div className="portal-wrap">
       <SubPortalNav />
-      {/* "Large" text: the whole page is scaled up a little, so every screen gets bigger writing without changing each one */}
-      <main className="portal-main" style={look.size === 'large' ? { zoom: 1.15 } : undefined}>{children}</main>
+      {/* Text size: the whole page is scaled up a little (Normal a touch, Large more), so every screen gets bigger writing without changing each one */}
+      <main className="portal-main" style={{ zoom: look.size === 'large' ? 1.25 : 1.08 }}>{children}</main>
     </div>
   )
 }
