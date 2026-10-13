@@ -116,8 +116,9 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
       const o = await updateJobOrder(sb, form.id, body)
       if (!o) setNotice({ ok: false, text: 'Could not save the order.' })
     } else {
-      const { order, error } = await insertJobOrder(sb, ownerId, { ...body, jobId: jobId ?? '', kind: mode === 'request' ? 'quote_request' : 'order', status: 'draft' })
+      const { order, error, degraded } = await insertJobOrder(sb, ownerId, { ...body, jobId: jobId ?? '', kind: mode === 'request' ? 'quote_request' : 'order', status: 'draft' })
       if (!order) setNotice({ ok: false, text: `Could not save. ${error ?? ''}` })
+      else if (degraded && (cleanItems.length > 0)) setNotice({ ok: true, text: 'Saved, but as one price for the whole list: pricing item by item needs a small database update first. Run supabase/job-orders-lines.sql in the Supabase SQL editor, then make the request again.' })
       else if (mode === 'request') {
         const r = await insertOrderQuotes(sb, ownerId, order.id, recips)
         if (!r.ok) setNotice({ ok: false, text: /does not exist|schema cache|PGRST205|42P01/i.test(r.error ?? '') ? 'Price requests need a small database update first: run supabase/job-orders-quotes.sql in the Supabase SQL editor.' : `The request was saved but the suppliers were not: ${r.error ?? ''}` })

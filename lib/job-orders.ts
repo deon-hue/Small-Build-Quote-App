@@ -484,19 +484,33 @@ export async function nextPoNumber(sb: SupabaseClient, ownerId: string): Promise
   return ((data?.[0]?.po_number as number | undefined) ?? 0) + 1
 }
 
-export async function insertJobOrder(sb: SupabaseClient, ownerId: string, o: Partial<JobOrder>): Promise<{ order: JobOrder | null; error?: string }> {
-  for (let attempt = 0; attempt < 3; attempt++) {
+/**
+ * A column added by a later SQL file (items, source_label) that this database does not have yet. Rather than refuse to save, the order is saved without it, with the list of items
+ * written into the details instead (one price for the whole list, as before): the screen says so, and per-item pricing starts once the SQL file has been run.
+ */
+const LATER_COLUMN_MISSING = /could not find the '(items|source_label)' column/i
+const withoutLaterColumns = (o: Partial<JobOrder>): Partial<JobOrder> => ({ ...o, details: o.details !== undefined || o.items ? requestDetails({ details: o.details ?? '', items: o.items }) : o.details, items: undefined, sourceLabel: undefined })
+
+export async function insertJobOrder(sb: SupabaseClient, ownerId: string, o: Partial<JobOrder>): Promise<{ order: JobOrder | null; error?: string; degraded?: boolean }> {
+  let cur = o
+  let degraded = false
+  for (let attempt = 0; attempt < 4; attempt++) {
     const poNumber = await nextPoNumber(sb, ownerId)
-    const { data, error } = await sb.from('job_orders').insert({ ...orderToRow({ ...o, poNumber }), user_id: ownerId }).select().single()
-    if (data) return { order: rowToOrder(data) }
+    const { data, error } = await sb.from('job_orders').insert({ ...orderToRow({ ...cur, poNumber }), user_id: ownerId }).select().single()
+    if (data) return { order: rowToOrder(data), degraded }
+    const msg = `${error?.code ?? ''} ${error?.message ?? ''}`
+    if (!degraded && LATER_COLUMN_MISSING.test(msg)) { cur = withoutLaterColumns(cur); degraded = true; continue }
     // two orders raised at the same moment can pick the same number: try the next one
-    if (!/duplicate|unique|23505/i.test(`${error?.code ?? ''} ${error?.message ?? ''}`)) return { order: null, error: error?.message }
+    if (!/duplicate|unique|23505/i.test(msg)) return { order: null, error: error?.message }
   }
   return { order: null, error: 'Could not get a free PO number. Try again.' }
 }
 
 export async function updateJobOrder(sb: SupabaseClient, id: string, o: Partial<JobOrder>): Promise<JobOrder | null> {
-  const { data } = await sb.from('job_orders').update({ ...orderToRow(o), updated_at: new Date().toISOString() }).eq('id', id).select().single()
+  let { data, error } = await sb.from('job_orders').update({ ...orderToRow(o), updated_at: new Date().toISOString() }).eq('id', id).select().single()
+  if (!data && LATER_COLUMN_MISSING.test(error?.message ?? '')) {
+    ;({ data } = await sb.from('job_orders').update({ ...orderToRow(withoutLaterColumns(o)), updated_at: new Date().toISOString() }).eq('id', id).select().single())
+  }
   return data ? rowToOrder(data) : null
 }
 

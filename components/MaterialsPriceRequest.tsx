@@ -65,7 +65,7 @@ export default function MaterialsPriceRequest({ lines, title, location, onClose 
     if (!name.trim()) { setError('Give the request a name.'); return }
     if (recips.length === 0) { setError('Add at least one supplier to ask.'); return }
     setBusy(true); setError('')
-    const { order, error: err } = await insertJobOrder(sb, ownerId, {
+    const { order, error: err, degraded } = await insertJobOrder(sb, ownerId, {
       jobId, kind: 'quote_request', status: 'draft', orderType: 'materials', costCategory: 'materials', payTerms: 'on_order', rateBasis: 'fixed', rate: 0, plannedUnits: 1,
       title: name.trim(), details: note.trim(), items: cleanItems, deliveryDate: needed, siteAddress: where.trim(),
       supplierName: '', supplierContact: '', supplierEmail: '', supplierPhone: '', sourceLabel: [title, location].filter(Boolean).join(' · '),
@@ -78,6 +78,7 @@ export default function MaterialsPriceRequest({ lines, title, location, onClose 
     const r = await insertOrderQuotes(sb, ownerId, order.id, recips)
     setBusy(false)
     if (!r.ok) { setError(/does not exist|schema cache|PGRST205|42P01/i.test(r.error ?? '') ? 'Price requests need a small database update first: run supabase/job-orders-quotes.sql in the Supabase SQL editor.' : `The request was saved but the suppliers were not added: ${r.error ?? ''}`); return }
+    if (degraded) window.alert('Made, but as one price for the whole list: pricing item by item needs a small database update first. Run supabase/job-orders-lines.sql in the Supabase SQL editor, then make the request again. (This one still works, with one price.)')
     setMade({ jobId: jobId || null })
   }
 
