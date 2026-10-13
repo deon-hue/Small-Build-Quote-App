@@ -30,7 +30,7 @@ export function quoteBudget(phases: QuotePhase[]): CategoryBudget {
 }
 
 // ── Row <-> model mapping ─────────────────────────────────────────────────────
-function rowToCost(r: Record<string, unknown>): JobCost {
+export function rowToCost(r: Record<string, unknown>): JobCost {
   return {
     id: r.id as string,
     jobId: (r.job_id as string) || undefined,

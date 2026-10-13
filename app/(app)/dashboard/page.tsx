@@ -5,6 +5,7 @@ import { useApp } from '@/contexts/AppContext'
 import { fmt, fmtK, quoteTotal, STAGE_COLOR, Q_BADGE, Q_LABEL, jobDisplayTitle, quoteDisplayTitle, jobProgress } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { quoteBudget } from '@/lib/job-costs'
+import { fetchAllJobOrders, committedTotals, type JobOrder } from '@/lib/job-orders'
 import NeedsAttentionCard from '@/components/NeedsAttentionCard'
 import DashboardCards, { type DashCard } from '@/components/DashboardCards'
 import { weekOnSite, mondayOf } from '@/lib/week-on-site'
@@ -38,6 +39,12 @@ export default function DashboardPage() {
 
   // ── Job costing: fetch all costs in one query ─────────────────────────────
   const [allJobCosts, setAllJobCosts] = useState<{ job_id: string; net_amount: number }[]>([])
+
+  // Orders on account not yet invoiced: costs the jobs will carry, so a job's margin allows for them from the day they are ordered (supabase/job-orders.sql)
+  const [allOrders, setAllOrders] = useState<JobOrder[]>([])
+  useEffect(() => {
+    fetchAllJobOrders(createClient()).then(r => setAllOrders(r.orders)).catch(() => {})
+  }, [])
 
   useEffect(() => {
     const sb = createClient()
@@ -124,21 +131,23 @@ export default function DashboardPage() {
 
       const contractValue = (Number(j.value) || 0) + approvedVarTotal
       const hasActual     = actualCost > 0
-      const overBudget    = budget !== null && hasActual && actualCost > budget.total
+      // expected costs: ordered on account, no invoice yet
+      const expected      = committedTotals(allOrders.filter(o => o.jobId === j.id)).total
+      const overBudget    = budget !== null && hasActual && actualCost + expected > budget.total
       const budgetUsedPct = budget && budget.total > 0
         ? Math.min(150, Math.round((actualCost / budget.total) * 100))
         : null
 
       // Prefer actual cost for margin; fall back to quoted budget estimate
-      const costForMargin    = hasActual ? actualCost : budget?.total ?? null
+      const costForMargin    = hasActual ? actualCost + expected : budget?.total ?? (expected > 0 ? expected : null)
       const marginPct        = costForMargin !== null && contractValue > 0
         ? Math.round(((contractValue - costForMargin) / contractValue) * 100)
         : null
-      const marginEstimated  = !hasActual && budget !== null
+      const marginEstimated  = !hasActual && (budget !== null || expected > 0)
 
       return {
         job: j, contractValue, budgetTotal: budget?.total ?? null,
-        actualCost, hasActual, invoicedTotal, paidTotal,
+        actualCost, expected, hasActual, invoicedTotal, paidTotal,
         overBudget, budgetUsedPct, marginPct, marginEstimated,
       }
     })
@@ -279,7 +288,7 @@ export default function DashboardPage() {
                   <span style={{ whiteSpace: 'nowrap' }}>
                     {r.marginPct === null
                       ? <span style={{ color: 'var(--muted)' }}>no costs yet</span>
-                      : <><strong style={{ color: marginColor(r.marginPct) }}>{r.marginPct}%</strong>{r.marginEstimated ? <span style={{ color: 'var(--muted)' }}> est.</span> : null}</>}
+                      : <><strong style={{ color: marginColor(r.marginPct) }}>{r.marginPct}%</strong>{r.marginEstimated ? <span style={{ color: 'var(--muted)' }}> est.</span> : null}{r.expected > 0 && !r.marginEstimated ? <span style={{ color: '#b45309', fontSize: 11 }} title="Ordered on account, no invoice yet: already counted in this margin"> incl. {fmt(r.expected)} expected</span> : null}</>}
                   </span>
                 </div>
               ))}
@@ -511,6 +520,7 @@ export default function DashboardPage() {
                           {r.overBudget && '⚠ '}
                           {r.hasActual ? fmt(r.actualCost) : <span style={{ fontSize: 11 }}>No costs entered</span>}
                         </span>
+                        {r.expected > 0 && <span style={{ fontSize: 10, color: '#b45309' }}>+ {fmt(r.expected)} expected</span>}
                         {r.budgetUsedPct !== null && r.hasActual && (
                           <span style={{ fontSize: 10, color: r.overBudget ? '#c0392b' : 'var(--muted)', fontWeight: r.overBudget ? 700 : 400 }}>
                             {r.budgetUsedPct}%

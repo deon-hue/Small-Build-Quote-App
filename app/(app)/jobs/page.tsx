@@ -58,6 +58,14 @@ function JobsPageInner() {
   const jobFormModal = useDraggableModal()
   // subcontractor notes not yet opened, per job (shown as a red "new" badge on the Notes button)
   const newNotes = unseenByJob(jobNotes)
+  // "?orders=<jobId>" (from the dashboard's Needs your attention card) opens that job's Orders window straight away
+  useEffect(() => {
+    const oid = searchParams.get('orders')
+    if (!oid || loading) return
+    const oj = jobs.find(j => j.id === oid)
+    if (oj) { setOrdersJob(oj); router.replace('/jobs') }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, searchParams])
   // "?notes=<jobId>" (from the dashboard's Needs your attention card) opens that job's notes straight away
   useEffect(() => {
     const nid = searchParams.get('notes')

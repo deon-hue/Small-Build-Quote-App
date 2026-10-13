@@ -143,7 +143,7 @@ export function committedTotals(orders: JobOrder[], today = todayYmd()): Committ
 
 /** Hire still on site that has stayed longer than planned, for the amber warning. */
 export function overrunNote(o: JobOrder, today = todayYmd()): string | null {
-  if (!isCommitted(o) || o.status === 'collected' || o.offHireDate || !o.deliveryDate || today <= o.deliveryDate) return null
+  if (!isCommitted(o) || o.status !== 'delivered' || o.offHireDate || !o.deliveryDate || today <= o.deliveryDate) return null
   const days = daysBetween(o.deliveryDate, today)
   const planned = o.plannedUnits > 0 ? o.plannedUnits : 1
   const plannedDays = o.rateBasis === 'week' ? planned * 7 : o.rateBasis === 'day' ? planned : 14
@@ -416,4 +416,71 @@ export async function updateJobOrder(sb: SupabaseClient, id: string, o: Partial<
 
 export async function deleteJobOrder(sb: SupabaseClient, id: string): Promise<void> {
   await sb.from('job_orders').delete().eq('id', id)
+}
+
+// ── What needs your attention (the dashboard) ─────────────────────────────────────────────────────────────────────────────────────────────────────
+
+export type ReminderKind = 'confirm' | 'replies' | 'match' | 'delivery_late' | 'invoice_late' | 'overrun'
+export interface OrderReminder { kind: ReminderKind; order: JobOrder; text: string; days?: number }
+
+const plural = (n: number, one: string, many = one + 's') => `${n} ${n === 1 ? one : many}`
+const gbp = (n: number) => `£${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+/**
+ * The things about orders that someone should look at today, most pressing first:
+ *   confirm       a price was approved but the supplier has not been sent the order;
+ *   replies       suppliers have answered a request for a price and nobody has chosen;
+ *   match         a cost on the job looks like the invoice for an order (the margin counts both until matched);
+ *   delivery_late the delivery date has passed and nobody has said it arrived;
+ *   invoice_late  the invoice was expected by now and has not turned up;
+ *   overrun       hire still on site longer than planned.
+ * `repliesByOrder` is how many suppliers have replied, per request. Nothing here changes anything: it only says what to look at.
+ */
+export function orderReminders(orders: JobOrder[], costs: JobCost[], repliesByOrder: Record<string, number> = {}, today = todayYmd()): OrderReminder[] {
+  const out: OrderReminder[] = []
+  const matches = matchSuggestions(orders, costs)
+  const matched = new Set(matches.map(m => m.order.id))
+  for (const o of orders) {
+    const po = poRef(o.poNumber)
+    if (o.kind === 'quote_request') {
+      const n = repliesByOrder[o.id] ?? 0
+      if (o.status !== 'cancelled' && n > 0) out.push({ kind: 'replies', order: o, text: `${plural(n, 'supplier')} replied to the price request ${po} (${o.title}). Compare and approve one.` })
+      continue
+    }
+    if (o.status === 'cancelled' || o.status === 'invoiced') continue
+    if (o.sentVia === 'quote accepted' && !o.sentAt) out.push({ kind: 'confirm', order: o, text: `You approved ${o.supplierName} for ${po} (${o.title}) but have not sent them the order yet.` })
+    if (!isCommitted(o)) continue
+    const net = expectedNet(o, today)
+    if ((o.status === 'ordered' || o.status === 'confirmed') && o.deliveryDate && o.deliveryDate < today) {
+      const d = daysBetween(o.deliveryDate, today)
+      out.push({ kind: 'delivery_late', order: o, days: d, text: `${o.title} from ${o.supplierName} (${po}) was due ${d === 1 ? 'yesterday' : `${d} days ago`}. Has it arrived?` })
+    }
+    const stillOnSite = o.rateBasis !== 'fixed' && o.status === 'delivered' && !o.offHireDate
+    if (!matched.has(o.id) && !stillOnSite && o.payTerms === 'account' && o.expectedInvoice && o.expectedInvoice < today) {
+      const d = daysBetween(o.expectedInvoice, today)
+      out.push({ kind: 'invoice_late', order: o, days: d, text: `The invoice from ${o.supplierName} for ${po} (${o.title}, about ${gbp(net)}) was expected ${d === 1 ? 'yesterday' : `${d} days ago`}. Chase it, or record it if it has come.` })
+    }
+    const over = overrunNote(o, today)
+    if (over) out.push({ kind: 'overrun', order: o, text: `${o.title} from ${o.supplierName} (${po}): ${over}` })
+  }
+  for (const m of matches) {
+    const c = m.cost
+    out.push({ kind: 'match', order: m.order, text: `${c.supplier}${c.docNumber ? ` invoice ${c.docNumber}` : ' cost'} of ${gbp(c.netAmount)} ${m.strong ? 'names' : 'looks like it could be for'} ${poRef(m.order.poNumber)} (${m.order.title}). Match them so the margin does not count both.` })
+  }
+  const rank: Record<ReminderKind, number> = { confirm: 0, replies: 1, match: 2, delivery_late: 3, invoice_late: 4, overrun: 5 }
+  return out.sort((a, b) => rank[a.kind] - rank[b.kind] || (b.days ?? 0) - (a.days ?? 0))
+}
+
+/** Every order of the company, and how many suppliers have replied to each request for a price. Quiet if the tables are not there yet. */
+export async function fetchAllJobOrders(sb: SupabaseClient): Promise<{ orders: JobOrder[]; repliesByOrder: Record<string, number> }> {
+  const { data, error } = await sb.from('job_orders').select('*')
+  if (error) return { orders: [], repliesByOrder: {} }
+  const orders = (data ?? []).map(rowToOrder)
+  const repliesByOrder: Record<string, number> = {}
+  const reqIds = orders.filter(o => o.kind === 'quote_request' && o.status !== 'cancelled').map(o => o.id)
+  if (reqIds.length) {
+    const { data: qs } = await sb.from('job_order_quotes').select('order_id').eq('status', 'replied').in('order_id', reqIds)
+    for (const q of qs ?? []) repliesByOrder[q.order_id as string] = (repliesByOrder[q.order_id as string] ?? 0) + 1
+  }
+  return { orders, repliesByOrder }
 }

@@ -9,6 +9,8 @@ import { useApp } from '@/contexts/AppContext'
 import { createClient } from '@/lib/supabase/client'
 import { unseenSubNotes, snippet } from '@/lib/note-attention'
 import { jobDisplayTitle } from '@/lib/utils'
+import { fetchAllJobOrders, orderReminders, poRef, type OrderReminder } from '@/lib/job-orders'
+import { rowToCost } from '@/lib/job-costs'
 
 interface PendingRow { name: string; count: number }
 
@@ -24,6 +26,8 @@ function ago(iso: string): string {
 export default function NeedsAttentionCard() {
   const { jobNotes, jobs, clients, invoices } = useApp()
   const [pending, setPending] = useState<PendingRow[]>([])
+  // orders and expected invoices that need a look (supabase/job-orders.sql); quiet until there is something
+  const [reminders, setReminders] = useState<OrderReminder[]>([])
 
   useEffect(() => {
     let alive = true
@@ -52,12 +56,30 @@ export default function NeedsAttentionCard() {
     return () => { alive = false; clearInterval(t) }
   }, [clients])
 
+  useEffect(() => {
+    let alive = true
+    async function loadOrders() {
+      try {
+        const sb = createClient()
+        const { orders, repliesByOrder } = await fetchAllJobOrders(sb)
+        if (orders.length === 0) { if (alive) setReminders([]); return }
+        const jobIds = [...new Set(orders.filter(o => o.kind === 'order').map(o => o.jobId))]
+        const { data: costRows } = jobIds.length ? await sb.from('job_costs').select('*').in('job_id', jobIds) : { data: [] }
+        const costs = (costRows ?? []).map(rowToCost)
+        if (alive) setReminders(orderReminders(orders, costs, repliesByOrder))
+      } catch { if (alive) setReminders([]) }
+    }
+    void loadOrders()
+    const t = setInterval(() => { if (document.visibilityState === 'visible') void loadOrders() }, 120_000)
+    return () => { alive = false; clearInterval(t) }
+  }, [])
+
   const newNotes = unseenSubNotes(jobNotes)
   const pendingTotal = pending.reduce((s, p) => s + p.count, 0)
   const overdueInv = invoices.filter(i => i.status === 'overdue')
   const overdueTotal = overdueInv.reduce((a, i) => a + (Number(i.total) || 0), 0)
   // nothing to do: a calm card rather than no card, so it keeps its place on the dashboard
-  if (newNotes.length === 0 && pendingTotal === 0 && overdueInv.length === 0) {
+  if (newNotes.length === 0 && pendingTotal === 0 && overdueInv.length === 0 && reminders.length === 0) {
     return (
       <div className="card" style={{ borderLeft: '4px solid #7ab533' }}>
         <div className="card-hd">Needs your attention</div>
@@ -72,7 +94,7 @@ export default function NeedsAttentionCard() {
     <div className="card" style={{ borderLeft: '4px solid #c0392b' }}>
       <div className="card-hd" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         Needs your attention
-        <span style={{ background: '#c0392b', color: '#fff', borderRadius: 99, padding: '1px 9px', fontSize: 12, fontWeight: 700 }}>{newNotes.length + (pendingTotal > 0 ? 1 : 0) + (overdueInv.length > 0 ? 1 : 0)}</span>
+        <span style={{ background: '#c0392b', color: '#fff', borderRadius: 99, padding: '1px 9px', fontSize: 12, fontWeight: 700 }}>{newNotes.length + (pendingTotal > 0 ? 1 : 0) + (overdueInv.length > 0 ? 1 : 0) + reminders.length}</span>
       </div>
       <div style={{ padding: '4px 16px 12px' }}>
         {newNotes.length > 0 && (
@@ -101,6 +123,19 @@ export default function NeedsAttentionCard() {
               </div>
               <div style={{ fontSize: 12, color: 'var(--sky, #2a7ab0)', marginTop: 2 }}>Open Subcontractors to approve →</div>
             </Link>
+          </>
+        )}
+        {reminders.length > 0 && (
+          <>
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--muted)', margin: '10px 0 4px' }}>Orders and expected invoices</div>
+            {reminders.slice(0, 6).map((r, i) => (
+              <Link key={r.order.id + r.kind + i} href={`/jobs?orders=${encodeURIComponent(r.order.jobId)}`}
+                style={{ display: 'block', padding: '8px 0', borderBottom: '1px solid var(--border)', textDecoration: 'none', color: 'inherit' }}>
+                <div style={{ fontSize: 13, color: 'var(--ink)' }}>{r.text}</div>
+                <div style={{ fontSize: 12, color: 'var(--sky, #2a7ab0)', marginTop: 2 }}>{jobLabel(r.order.jobId)} · {poRef(r.order.poNumber)} · open Orders →</div>
+              </Link>
+            ))}
+            {reminders.length > 6 && <div style={{ fontSize: 12, color: 'var(--muted)', padding: '6px 0' }}>and {reminders.length - 6} more — open each job’s Orders.</div>}
           </>
         )}
         {overdueInv.length > 0 && (
