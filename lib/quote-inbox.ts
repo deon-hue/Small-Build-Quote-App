@@ -22,7 +22,8 @@ export type InboxResult =
 /** Everything a reply needs from the read quote, saved onto the supplier's row. Always marked to be checked. */
 async function applyReply(sb: SupabaseClient, order: JobOrder, quoteId: string, read: ReadQuote, file: { path: string; name: string }, source: 'email' | 'upload'): Promise<'itemised' | 'total_only'> {
   const reply = buildReply(order.items ?? [], { lines: read.lines, netTotal: read.netTotal, deliveryCharge: read.deliveryCharge })
-  const notes = [reply.note, read.notes].filter(Boolean).join(' ').slice(0, 1000)
+  // only what the supplier wrote goes in their notes: the app's own remark about how it was read (the total-only line) is shown separately
+  const notes = (read.notes || '').slice(0, 1000)
   const { error } = await sb.from('job_order_quotes').update({
     status: 'replied', price: reply.price, rate_basis: 'fixed', lines: reply.lines, delivery_charge: reply.deliveryCharge,
     delivery_date: read.deliveryDate || null, valid_until: read.validUntil || null, notes,
