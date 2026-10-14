@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
   for (const ownerId of owners) {
     try {
       const { data: orderRows } = await sb.from('job_orders').select('*').eq('user_id', ownerId)
-      const orders = (orderRows ?? []).map(rowToOrder)
+      const orders = (orderRows ?? []).map(rowToOrder).filter(o => !o.deletedAt)
       const jobIds = [...new Set(orders.filter(o => o.kind === 'order').map(o => o.jobId).filter(Boolean))]
       const { data: costRows } = jobIds.length ? await sb.from('job_costs').select('*').in('job_id', jobIds) : { data: [] }
       const costs = (costRows ?? []).map(rowToCost)

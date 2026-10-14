@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
     const { data: oRow } = await sb.from('job_orders').select('*').eq('id', q.orderId).maybeSingle()
     if (!oRow) return NextResponse.json({ error: 'Request not found.' }, { status: 404 })
     const o = rowToOrder(oRow)
+    if (o.deletedAt) return NextResponse.json({ error: 'Request not found.' }, { status: 404 })
     if (o.kind !== 'quote_request') return NextResponse.json({ error: 'This is already an order, not a request for a price.' }, { status: 400 })
     if (!EMAIL_RX.test(q.supplierEmail.trim())) return NextResponse.json({ error: 'This supplier has no valid email address.' }, { status: 400 })
 

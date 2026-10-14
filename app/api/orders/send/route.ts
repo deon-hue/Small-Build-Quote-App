@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
     const { data: row } = await sb.from('job_orders').select('*').eq('id', body.orderId).maybeSingle()
     if (!row) return NextResponse.json({ error: 'Order not found.' }, { status: 404 })
     const o = rowToOrder(row)
+    if (o.deletedAt) return NextResponse.json({ error: 'Order not found.' }, { status: 404 })
     if (!EMAIL_RX.test(o.supplierEmail.trim())) return NextResponse.json({ error: 'This order has no valid email address for the supplier.' }, { status: 400 })
 
     const resendKey = process.env.RESEND_API_KEY

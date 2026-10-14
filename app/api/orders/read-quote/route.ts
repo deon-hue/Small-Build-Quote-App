@@ -31,9 +31,9 @@ export async function POST(req: NextRequest) {
   if (file.size > MAX_BYTES) return NextResponse.json({ error: 'That file is too big. Try a PDF under about 4 MB.' }, { status: 413 })
 
   // both must be yours (row security): the request, and the supplier on it
-  const { data: o } = await sb.from('job_orders').select('id, kind, status').eq('id', orderId).maybeSingle()
+  const { data: o } = await sb.from('job_orders').select('*').eq('id', orderId).maybeSingle()
   const { data: q } = await sb.from('job_order_quotes').select('id, order_id').eq('id', quoteId).maybeSingle()
-  if (!o || !q || q.order_id !== orderId) return NextResponse.json({ error: 'Request not found.' }, { status: 404 })
+  if (!o || o.deleted_at || !q || q.order_id !== orderId) return NextResponse.json({ error: 'Request not found.' }, { status: 404 })
   if (o.kind !== 'quote_request' || o.status === 'cancelled') return NextResponse.json({ error: 'That request is closed.' }, { status: 409 })
 
   const { data: owner } = await sb.rpc('get_effective_owner_id')

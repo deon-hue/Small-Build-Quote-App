@@ -11,7 +11,7 @@ import { fetchJobCosts, insertJobCost, updateJobCost } from '@/lib/job-costs'
 import type { JobCost, JobCostCategory } from '@/lib/types'
 import {
   ORDER_TYPES, ORDER_STATUS_LABEL, poRef, expectedNet, hireUnits, isCommitted, committedTotals, overrunNote, matchSuggestions, orderWhatsAppText, waLink, addDays, todayYmd, orderDateLabel,
-  fetchJobOrders, insertJobOrder, updateJobOrder, deleteJobOrder,
+  fetchJobOrders, insertJobOrder, updateJobOrder, deleteJobOrder, fetchDeletedOrders, restoreJobOrder, purgeJobOrder,
   quoteRequestText, quoteLink, noteOfDetails, cheapestQuoteId, cheapestMix, lineTotal, pricedQuote, quoteNet, areaOnly, QUOTE_STATUS_LABEL, fetchOrderQuotes, insertOrderQuotes, updateOrderQuote, deleteOrderQuote, fetchAllJobOrders, fetchIncomingQuotes, type IncomingQuote,
   type JobOrder, type OrderType, type PayTerms, type RateBasis, type OrderStatus, type OrderQuote, type QuoteInvitee, type QuoteStatus,
 } from '@/lib/job-orders'
@@ -62,6 +62,9 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
   const [userId, setUserId] = useState<string | null>(null)
   const [orders, setOrders] = useState<JobOrder[]>([])
   const [quotes, setQuotes] = useState<OrderQuote[]>([])
+  const [deleted, setDeleted] = useState<JobOrder[]>([])
+  const [deletedQuotes, setDeletedQuotes] = useState<OrderQuote[]>([])
+  const [showDeleted, setShowDeleted] = useState(false)
   const [mode, setMode] = useState<'order' | 'request'>('order')
   const [recips, setRecips] = useState<QuoteInvitee[]>([])
   const [addingTo, setAddingTo] = useState<string | null>(null)
@@ -88,6 +91,9 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
     const [{ orders: o, missing: m }, c] = await Promise.all([fetchJobOrders(sb, jobId), loose ? Promise.resolve([] as JobCost[]) : fetchJobCosts(sb, user.id, jobId)])
     setOrders(o); setMissing(m); setCosts(c)
     setQuotes(await fetchOrderQuotes(sb, o.filter(x => x.kind === 'quote_request').map(x => x.id)))
+    const del = await fetchDeletedOrders(sb, jobId)
+    setDeleted(del)
+    setDeletedQuotes(await fetchOrderQuotes(sb, del.filter(x => x.kind === 'quote_request').map(x => x.id)))
     if (jobId === null) {
       const inc = await fetchIncomingQuotes(sb)
       setIncoming(inc)
@@ -324,9 +330,25 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
   }
 
   async function removeOrder(o: JobOrder) {
-    const msg = o.paidCostId ? `Delete ${poRef(o.poNumber)}?\n\nThe paid cost it put on the job stays; delete that from the job's costs if it should go too.` : `Delete ${poRef(o.poNumber)}?`
+    const tail = '\n\nIt goes to Recently deleted at the bottom of this list, with any replies, and can be brought back from there.'
+    const msg = o.paidCostId ? `Delete ${poRef(o.poNumber)}?${tail}\n\nThe paid cost it put on the job stays; delete that from the job's costs if it should go too.` : `Delete ${poRef(o.poNumber)}?${tail}`
     if (!confirm(msg)) return
-    await deleteJobOrder(sb, o.id); await load(); onChanged?.()
+    const r = await deleteJobOrder(sb, o.id)
+    if (r === 'needs-sql') { setNotice({ ok: false, text: 'Nothing was deleted. To make deleting reversible, supabase/job-orders-deleted.sql has to be run on the database first.' }); return }
+    if (r === 'error') { setNotice({ ok: false, text: 'Could not delete it. Try again.' }); return }
+    await load(); onChanged?.()
+    setNotice({ ok: true, text: `${poRef(o.poNumber)} was deleted. You can bring it back from Recently deleted at the bottom.` })
+  }
+
+  async function restoreOrder(o: JobOrder) {
+    if (!(await restoreJobOrder(sb, o.id))) { setNotice({ ok: false, text: 'Could not restore it. Try again.' }); return }
+    await load(); onChanged?.()
+    setNotice({ ok: true, text: `${poRef(o.poNumber)} is back, with its replies.` })
+  }
+
+  async function purgeOrder(o: JobOrder) {
+    if (!confirm(`Delete ${poRef(o.poNumber)} for good?\n\nIts suppliers and their replies are deleted with it and cannot be brought back.`)) return
+    await purgeJobOrder(sb, o.id); await load(); onChanged?.()
   }
 
   async function matchTo(o: JobOrder, c: JobCost) {
@@ -776,6 +798,35 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                   )
                 })}
               </div>
+
+              {/* Deleted ones are kept here until deleted for good */}
+              {deleted.length > 0 && (
+                <div style={{ marginTop: 22, borderTop: '1px solid #e2e8f0', paddingTop: 12 }}>
+                  <button onClick={() => setShowDeleted(v => !v)} style={{ ...btn, color: '#475569' }}>{showDeleted ? '▾' : '▸'} Recently deleted ({deleted.length})</button>
+                  {showDeleted && (
+                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ fontSize: 12, color: '#64748b' }}>Kept here with their suppliers and replies. Restore one to bring it back as it was.</div>
+                      {deleted.map(o => {
+                        const qs = deletedQuotes.filter(q => q.orderId === o.id)
+                        const replied = qs.filter(q => q.status === 'replied' || q.status === 'chosen').length
+                        return (
+                          <div key={o.id} style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 12px', background: '#fafafa', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                            <div style={{ flex: 1, minWidth: 200 }}>
+                              <div style={{ fontSize: 13 }}><strong style={{ fontFamily: 'monospace' }}>{poRef(o.poNumber)}</strong> {o.title}</div>
+                              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                                {o.kind === 'quote_request' ? `Price request to ${qs.map(q => q.supplierName).filter(Boolean).join(', ') || 'no one'}${replied ? `, ${replied} replied` : ''}` : o.supplierName}
+                                {o.deletedAt ? ` · deleted ${new Date(o.deletedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}
+                              </div>
+                            </div>
+                            <button onClick={() => restoreOrder(o)} style={primary}>Restore</button>
+                            <button onClick={() => purgeOrder(o)} style={{ ...btn, color: '#dc2626', borderColor: '#fecaca' }}>Delete for good</button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>

@@ -36,7 +36,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     const f = await load(token)
     if (!f) return NextResponse.json({ error: 'This link is not valid.' }, { status: 404 })
     const { sb, quote: q, order: o, settings } = f
-    const open = o.kind === 'quote_request' && o.status !== 'cancelled'
+    const open = o.kind === 'quote_request' && o.status !== 'cancelled' && !o.deletedAt
     if (!q.viewedAt) await sb.from('job_order_quotes').update({ viewed_at: new Date().toISOString() }).eq('id', q.id)
     return NextResponse.json({
       company: settings?.company_name || 'The builder',
@@ -69,7 +69,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     const f = await load(token)
     if (!f) return NextResponse.json({ error: 'This link is not valid.' }, { status: 404 })
     const { sb, quote: q, order: o, settings } = f
-    if (o.kind !== 'quote_request' || o.status === 'cancelled' || q.status === 'chosen' || q.status === 'not_chosen') {
+    if (o.kind !== 'quote_request' || o.status === 'cancelled' || o.deletedAt || q.status === 'chosen' || q.status === 'not_chosen') {
       return NextResponse.json({ error: 'This request is closed, so it can no longer be answered. Thank you.' }, { status: 409 })
     }
 

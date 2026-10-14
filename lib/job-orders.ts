@@ -65,6 +65,8 @@ export interface JobOrder {
   sourceLabel?: string
   /** the items a request asks to be priced one by one (a calculator's materials list); empty when it asks for one price (supabase/job-orders-lines.sql) */
   items?: OrderItem[]
+  /** when it was deleted; set means it sits in Recently deleted and is left out of every list, reminder and total (supabase/job-orders-deleted.sql) */
+  deletedAt?: string
 }
 
 /** One thing to be priced on a request: how many, of what. Never carries our own price. */
@@ -380,7 +382,7 @@ export function rowToOrder(r: Record<string, unknown>): JobOrder {
     siteAddress: str(r.site_address), siteContact: str(r.site_contact), sitePhone: str(r.site_phone), accessNotes: str(r.access_notes),
     sentAt: (r.sent_at as string) || undefined, sentVia: str(r.sent_via),
     paidCostId: (r.paid_cost_id as string) || undefined, invoicedCostId: (r.invoiced_cost_id as string) || undefined,
-    createdAt: r.created_at as string | undefined, sourceLabel: str(r.source_label),
+    createdAt: r.created_at as string | undefined, sourceLabel: str(r.source_label), deletedAt: (r.deleted_at as string) || undefined,
     items: parseItems(r.items),
   }
 }
@@ -482,7 +484,15 @@ export async function fetchJobOrders(sb: SupabaseClient, jobId: string | null): 
     const missing = /does not exist|schema cache|PGRST205|42P01/i.test(`${error.code ?? ''} ${error.message ?? ''}`)
     return { orders: [], missing }
   }
-  return { orders: (data ?? []).map(rowToOrder), missing: false }
+  return { orders: (data ?? []).map(rowToOrder).filter(o => !o.deletedAt), missing: false }
+}
+
+/** The deleted requests and orders (newest deletion first), for the Recently deleted list. Empty until supabase/job-orders-deleted.sql has been run. */
+export async function fetchDeletedOrders(sb: SupabaseClient, jobId: string | null): Promise<JobOrder[]> {
+  const base = sb.from('job_orders').select('*')
+  const { data, error } = await (jobId === null ? base.is('job_id', null) : base.eq('job_id', jobId))
+  if (error) return []
+  return (data ?? []).map(rowToOrder).filter(o => o.deletedAt).sort((a, b) => (b.deletedAt ?? '').localeCompare(a.deletedAt ?? ''))
 }
 
 /** The next PO number for this company (one running count across every job). */
@@ -521,7 +531,23 @@ export async function updateJobOrder(sb: SupabaseClient, id: string, o: Partial<
   return data ? rowToOrder(data) : null
 }
 
-export async function deleteJobOrder(sb: SupabaseClient, id: string): Promise<void> {
+/**
+ * Deleting moves it to Recently deleted (it is only marked, so its suppliers and their replies stay with it and it can be restored).
+ * If the database has not had supabase/job-orders-deleted.sql run, nothing is deleted: 'needs-sql'.
+ */
+export async function deleteJobOrder(sb: SupabaseClient, id: string): Promise<'trash' | 'needs-sql' | 'error'> {
+  const { error } = await sb.from('job_orders').update({ deleted_at: new Date().toISOString() }).eq('id', id)
+  if (!error) return 'trash'
+  return /deleted_at/i.test(error.message ?? '') ? 'needs-sql' : 'error'
+}
+
+export async function restoreJobOrder(sb: SupabaseClient, id: string): Promise<boolean> {
+  const { error } = await sb.from('job_orders').update({ deleted_at: null }).eq('id', id)
+  return !error
+}
+
+/** Delete forever: the request and, with it, its suppliers and their replies. Only offered from Recently deleted. */
+export async function purgeJobOrder(sb: SupabaseClient, id: string): Promise<void> {
   await sb.from('job_orders').delete().eq('id', id)
 }
 
@@ -582,7 +608,7 @@ export function orderReminders(orders: JobOrder[], costs: JobCost[], repliesByOr
 export async function fetchAllJobOrders(sb: SupabaseClient): Promise<{ orders: JobOrder[]; repliesByOrder: Record<string, number> }> {
   const { data, error } = await sb.from('job_orders').select('*')
   if (error) return { orders: [], repliesByOrder: {} }
-  const orders = (data ?? []).map(rowToOrder)
+  const orders = (data ?? []).map(rowToOrder).filter(o => !o.deletedAt)
   const repliesByOrder: Record<string, number> = {}
   const reqIds = orders.filter(o => o.kind === 'quote_request' && o.status !== 'cancelled').map(o => o.id)
   if (reqIds.length) {

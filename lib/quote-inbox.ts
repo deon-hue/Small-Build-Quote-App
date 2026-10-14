@@ -48,7 +48,7 @@ export async function processQuoteAttachment(
   sb: SupabaseClient, ownerId: string, att: QuoteAttachment, meta: EmailMeta, force?: { orderId: string; quoteId: string },
 ): Promise<InboxResult> {
   const { data: reqRows } = await sb.from('job_orders').select('*').eq('user_id', ownerId).eq('kind', 'quote_request').neq('status', 'cancelled')
-  const requests = (reqRows ?? []).map(rowToOrder)
+  const requests = (reqRows ?? []).map(rowToOrder).filter(r => !r.deletedAt)
   if (requests.length === 0 && !force) return { result: 'not_a_quote' }
 
   const ctx: RequestContext[] = requests.map(r => ({ poNumber: r.poNumber, title: r.title, items: (r.items ?? []).map(i => ({ id: i.id, name: i.name, qty: i.qty, unit: i.unit })) }))
@@ -113,7 +113,7 @@ export async function assignIncomingQuote(sb: SupabaseClient, ownerId: string, i
   const { data: oRow } = await sb.from('job_orders').select('*').eq('id', qRow.order_id).eq('user_id', ownerId).maybeSingle()
   if (!oRow) return { ok: false, error: 'That request was not found.' }
   const order = rowToOrder(oRow)
-  if (order.kind !== 'quote_request' || order.status === 'cancelled') return { ok: false, error: 'That request is closed.' }
+  if (order.kind !== 'quote_request' || order.status === 'cancelled' || order.deletedAt) return { ok: false, error: 'That request is closed.' }
   await applyReply(sb, order, quoteId, inc.extraction as ReadQuote, { path: inc.storage_path as string, name: inc.file_name as string }, 'email')
   await sb.from('incoming_quotes').update({ status: 'assigned' }).eq('id', incomingId)
   return { ok: true }
