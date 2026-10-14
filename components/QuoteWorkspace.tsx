@@ -1753,7 +1753,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
                       </span>
                       <span style={{ fontSize: 11, color: meta.accent, opacity: 0.6 }}>↗</span>
                     </div>
-                    <div style={{ fontSize: 'clamp(9px, 2.8vw, 11px)', fontWeight: 800, color: meta.accent, textTransform: 'uppercase', letterSpacing: '0.03em', overflowWrap: 'anywhere' }}>
+                    <div style={{ fontSize: 'clamp(10.5px, 3.2vw, 12px)', fontWeight: 800, color: meta.accent, textTransform: 'uppercase', letterSpacing: '0.03em', overflowWrap: 'anywhere' }}>
                       {meta.label}
                     </div>
                     <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 15, color: '#0f172a', marginTop: 2 }}>

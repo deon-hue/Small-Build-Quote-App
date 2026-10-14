@@ -685,3 +685,32 @@ textarea{resize:vertical;min-height:56px}
   .stats-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
   .tbl-cards tbody{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+
+/* ── Small text on a phone ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   Most of the app writes its small labels, hints and table text with a size set right on the element (11px, 12px, 13px), which is fine on a computer and hard to read on a phone.
+   On a phone only (a touch screen up to 520px wide) each of those sizes is lifted a step. Headings, names and anything already 14px or more are left alone. Tablets and computers are untouched. */
+@media (hover:none) and (pointer:coarse) and (max-width:520px){
+  .app [style*="font-size: 9px"],
+  .app [style*="font-size: 9.5px"],
+  .app [style*="font-size: 10px"],
+  .app [style*="font-size: 10.5px"],
+  body > div[style*="position: fixed"] [style*="font-size: 9px"],
+  body > div[style*="position: fixed"] [style*="font-size: 9.5px"],
+  body > div[style*="position: fixed"] [style*="font-size: 10px"],
+  body > div[style*="position: fixed"] [style*="font-size: 10.5px"]{font-size:12px !important}
+  .app [style*="font-size: 11px"],
+  .app [style*="font-size: 11.5px"],
+  body > div[style*="position: fixed"] [style*="font-size: 11px"],
+  body > div[style*="position: fixed"] [style*="font-size: 11.5px"]{font-size:13px !important}
+  .app [style*="font-size: 12px"],
+  .app [style*="font-size: 12.5px"],
+  body > div[style*="position: fixed"] [style*="font-size: 12px"],
+  body > div[style*="position: fixed"] [style*="font-size: 12.5px"]{font-size:13.5px !important}
+  .app [style*="font-size: 13px"],
+  .app [style*="font-size: 13.5px"],
+  body > div[style*="position: fixed"] [style*="font-size: 13px"],
+  body > div[style*="position: fixed"] [style*="font-size: 13.5px"]{font-size:14.5px !important}
+  /* the same for the small text that comes from the stylesheet: form labels, table headings, badges, small buttons */
+  .app .fg label,.app .stat-label,.app .tbl th,.app .badge,.app .pip-label,.app .col-heads,.app .fin-card-label,.app .fin-card-sub,.app .sq-ref,.app .nav-section{font-size:12.5px !important}
+  .app .btn-locked,.app .btn-email-pdf,.app .btn-archive,.app .btn-reinstate,.app .sel-status,.app .sel-inline-sm{font-size:13px !important}
+}
