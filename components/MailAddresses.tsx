@@ -1,6 +1,6 @@
 'use client'
 
-// Settings > Your email addresses: the company's own addresses for supplier quotes and for documents. They are the shared address with this company's code after a plus sign, so many builders can
+// Settings > Your email addresses: the company's own addresses for supplier quotes and for documents. They are the shared address with this company's code after a hyphen, so many builders can
 // use one address. Anything emailed to them is read by the app: quotes onto the right price request, other documents into the Documents inbox.
 
 import React, { useEffect, useState } from 'react'
@@ -51,7 +51,7 @@ export default function MailAddresses() {
       <div className="card-hd">Your email addresses</div>
       <div style={{ padding: '16px 20px' }}>
         <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 6px', lineHeight: 1.5 }}>
-          These are yours alone. Keep the part after the plus sign as it is: it is how the app knows an email is for your company.
+          These are yours alone. Keep the code after the hyphen as it is: it is how the app knows an email is for your company.
         </p>
         {row('Supplier quotes', 'Suppliers email their own quote here, with your PO number on it. It is read and added to the right price request for you to check. Your price request emails already tell them.', QUOTES ? withCode(QUOTES, code) : '')}
         {row('Documents', 'Forward or send invoices, receipts and delivery notes here. They go into your Documents inbox.', DOCS ? withCode(DOCS, code) : '')}

@@ -130,7 +130,8 @@ export async function POST(req: NextRequest) {
   // Whose is it? A company code in the address it was sent to (quotes+ab12cd34@...) names the company. With no code it is the default company (the one set in EMAIL_INGEST_USER_ID),
   // as it always was. A code that matches no company is refused rather than filed under someone else.
   const sbLookup = createServiceRoleClient()
-  const code = codeFromRecipients(email.recipients)
+  const ourDomains = [process.env.NEXT_PUBLIC_QUOTES_EMAIL, process.env.NEXT_PUBLIC_DOCUMENTS_EMAIL].map(x => (x || '').split('@')[1] || '').filter(Boolean)
+  const code = codeFromRecipients(email.recipients, ourDomains)
   let userId = defaultUserId
   if (code) {
     const { data: s } = await sbLookup.from('settings').select('user_id').eq('mail_code', code).maybeSingle()
