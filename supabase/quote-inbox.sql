@@ -35,3 +35,23 @@ CREATE POLICY "Own incoming quotes" ON public.incoming_quotes
 -- address and still be told apart. Existing companies are given one now.
 ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS mail_code TEXT NOT NULL DEFAULT substr(replace(gen_random_uuid()::text, '-', ''), 1, 8);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_settings_mail_code ON public.settings (mail_code);
+
+-- A short log of every email that reaches the quotes / documents address and what the app did with it, so "did it arrive?" can be answered from Settings. Each company sees only its own rows.
+CREATE TABLE IF NOT EXISTS public.inbound_email_log (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  received_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  from_address  TEXT NOT NULL DEFAULT '',
+  to_address    TEXT NOT NULL DEFAULT '',
+  subject       TEXT NOT NULL DEFAULT '',
+  file_name     TEXT NOT NULL DEFAULT '',
+  outcome       TEXT NOT NULL DEFAULT '',
+  detail        TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_inbound_email_log_user ON public.inbound_email_log (user_id, received_at DESC);
+
+ALTER TABLE public.inbound_email_log ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Own inbound email log" ON public.inbound_email_log;
+CREATE POLICY "Own inbound email log" ON public.inbound_email_log
+  FOR SELECT TO authenticated
+  USING (user_id = get_effective_owner_id());

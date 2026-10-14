@@ -13,6 +13,7 @@ const DOCS = (process.env.NEXT_PUBLIC_DOCUMENTS_EMAIL || '').trim()
 export default function MailAddresses() {
   const [code, setCode] = useState('')
   const [copied, setCopied] = useState('')
+  const [log, setLog] = useState<{ id: string; at: string; from: string; subject: string; file: string; outcome: string; detail: string }[]>([])
 
   useEffect(() => {
     if (!QUOTES && !DOCS) return
@@ -23,6 +24,8 @@ export default function MailAddresses() {
       const { data: owner } = await sb.rpc('get_effective_owner_id')
       const { data } = await sb.from('settings').select('mail_code').eq('user_id', (owner as string) || user.id).maybeSingle()
       setCode((data?.mail_code as string) || '')
+      const { data: rows } = await sb.from('inbound_email_log').select('*').order('received_at', { ascending: false }).limit(12)
+      setLog((rows ?? []).map(r => ({ id: r.id as string, at: r.received_at as string, from: (r.from_address as string) || '', subject: (r.subject as string) || '', file: (r.file_name as string) || '', outcome: (r.outcome as string) || '', detail: (r.detail as string) || '' })))
     })()
   }, [])
 
@@ -52,6 +55,24 @@ export default function MailAddresses() {
         </p>
         {row('Supplier quotes', 'Suppliers email their own quote here, with your PO number on it. It is read and added to the right price request for you to check. Your price request emails already tell them.', QUOTES ? withCode(QUOTES, code) : '')}
         {row('Documents', 'Forward or send invoices, receipts and delivery notes here. They go into your Documents inbox.', DOCS ? withCode(DOCS, code) : '')}
+        <div style={{ padding: '12px 0 0', borderTop: '1px solid var(--border)', marginTop: 4 }}>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>Emails received</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)', margin: '2px 0 8px', lineHeight: 1.4 }}>The latest emails that reached these addresses, and what the app did with each one.</div>
+          {log.length === 0 ? <div style={{ fontSize: 13, color: 'var(--muted)' }}>Nothing yet.</div> : log.map(l => {
+            const tone = l.outcome === 'quote_attached' ? '#166534' : l.outcome === 'error' || l.outcome === 'unknown_address' ? '#991b1b' : l.outcome === 'quote_unmatched' || l.outcome === 'no_attachments' ? '#92400e' : '#475569'
+            const word = l.outcome === 'quote_attached' ? 'Quote added' : l.outcome === 'quote_unmatched' ? 'Quote to place' : l.outcome === 'filed_as_document' ? 'Document filed' : l.outcome === 'no_attachments' ? 'No attachment' : l.outcome === 'unknown_address' ? 'Unknown address' : 'Problem'
+            return (
+              <div key={l.id} style={{ padding: '7px 0', borderTop: '1px solid var(--border)', fontSize: 13 }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                  <strong style={{ color: tone }}>{word}</strong>
+                  <span style={{ color: 'var(--muted)', fontSize: 12 }}>{new Date(l.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · {l.from || 'unknown sender'}</span>
+                </div>
+                {(l.subject || l.file) && <div style={{ fontSize: 12, color: '#475569' }}>{l.subject ? `“${l.subject}” ` : ''}{l.file ? `· ${l.file}` : ''}</div>}
+                {l.detail && <div style={{ fontSize: 12, color: 'var(--muted)' }}>{l.detail}</div>}
+              </div>
+            )
+          })}
+        </div>
       </div>
     </div>
   )
