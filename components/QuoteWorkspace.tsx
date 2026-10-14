@@ -1959,6 +1959,40 @@ interface RoomBlockProps {
   boTasks?: BOTask[]
 }
 
+/**
+ * A name box that keeps what is being typed to itself and hands the new name over when you leave the box (or press Enter; Escape puts the old name back).
+ * A phase or room is found by its name, so renaming on every key press rebuilt the block after the first letter and the cursor was lost.
+ */
+function CommitInput({ value, onCommit, readOnly, onFocus, onBlur, ...rest }: {
+  value: string
+  onCommit: (v: string) => void
+  readOnly?: boolean
+  onFocus?: () => void
+  onBlur?: () => void
+} & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'onBlur' | 'onFocus' | 'readOnly'>) {
+  const [draft, setDraft] = React.useState(value)
+  const [editing, setEditing] = React.useState(false)
+  React.useEffect(() => { if (!editing) setDraft(value) }, [value, editing])
+  return (
+    <input
+      {...rest}
+      value={draft}
+      readOnly={readOnly}
+      onChange={e => setDraft(e.target.value)}
+      onFocus={() => { setEditing(true); onFocus?.() }}
+      onBlur={() => {
+        setEditing(false)
+        if (!readOnly && draft !== value) onCommit(draft)
+        onBlur?.()
+      }}
+      onKeyDown={e => {
+        if (e.key === 'Enter') e.currentTarget.blur()
+        else if (e.key === 'Escape') { setDraft(value); setEditing(false); e.currentTarget.blur() }
+      }}
+    />
+  )
+}
+
 function RoomBlock({ mainPhase, room, phases, markup, jobType, isLocked, collapsed, toggle, onUpdatePhase, onDeletePhase, onDuplicatePhase, onAddSubPhase, onAddTask, onRenameRoom, onSaveToBO, labourTrades, boProducts, boPlantItems, boPhases = [], boSubPhases = [], boTasks = [] }: RoomBlockProps) {
   const hasRoom = !!room
   const total   = roomTotalSell(phases, mainPhase, room, markup)
@@ -1972,10 +2006,10 @@ function RoomBlock({ mainPhase, room, phases, markup, jobType, isLocked, collaps
           style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', background: '#f0f9f0', borderRadius: 5, marginBottom: 4 }}
         >
           <span style={{ fontSize: 11 }}>📍</span>
-          <input
+          <CommitInput
             value={room}
             readOnly={isLocked}
-            onChange={e => onRenameRoom(mainPhase, room, e.target.value)}
+            onCommit={v => onRenameRoom(mainPhase, room, v)}
             style={{ ...fldStyle, fontWeight: 600, fontSize: 13, color: '#166534', flex: 1 }}
             placeholder="Area / Room label"
           />
@@ -2059,11 +2093,11 @@ function PhaseBlock({ mainPhase, phases, markup, jobType, isLocked, collapsed, t
         onClick={() => toggle(colKey)}
       >
         <span style={{ fontSize: 12, width: 14 }}>{open ? '▾' : '▸'}</span>
-        <input
+        <CommitInput
           value={mainPhase}
           readOnly={isLocked}
           onClick={e => e.stopPropagation()}
-          onChange={e => onRenameMain(mainPhase, e.target.value)}
+          onCommit={v => onRenameMain(mainPhase, v)}
           onFocus={() => setNameFocused(true)}
           onBlur={() => setNameFocused(false)}
           style={{
@@ -2283,14 +2317,37 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
     // Task groups are created implicitly when users add their first item
     // No placeholder items needed
   }
-  function renameMain(oldName: string, newName: string) {
+  // Only this quote's own phase name changes: Back Office and the master templates are never written to.
+  function renameMain(oldName: string, rawName: string) {
+    const newName = rawName.trim()
+    if (!newName || newName === oldName) return
+    if (getMainPhases(phases).includes(newName)) {
+      alert(`This quote already has a phase called "${newName}". Pick a different name.`)
+      return
+    }
     onChange(phases.map(p => (p.parentPhase || '(No Phase)') === oldName ? { ...p, parentPhase: newName } : p))
+    // a phase and its rooms are opened/closed by name, so carry that across the rename
+    setCollapsed(prev => {
+      const next = new Set<string>()
+      prev.forEach(k => {
+        if (k === `mp_${oldName}`) next.add(`mp_${newName}`)
+        else if (k.startsWith(`rm_${oldName}_`)) next.add(`rm_${newName}_${k.slice(`rm_${oldName}_`.length)}`)
+        else next.add(k)
+      })
+      return next
+    })
   }
   function deleteMain(name: string) {
     if (!confirm(`Delete phase "${name}" and all its contents?`)) return
     onChange(phases.filter(p => (p.parentPhase || '(No Phase)') !== name))
   }
-  function renameRoom(mainPhase: string, oldRoom: string, newRoom: string) {
+  function renameRoom(mainPhase: string, oldRoom: string, rawRoom: string) {
+    const newRoom = rawRoom.trim()
+    if (!newRoom || newRoom === oldRoom) return
+    if (getRoomLabels(phases, mainPhase).includes(newRoom)) {
+      alert(`This phase already has a room called "${newRoom}". Pick a different name.`)
+      return
+    }
     onChange(phases.map(p =>
       (p.parentPhase || '(No Phase)') === mainPhase && (p.roomLabel || '') === oldRoom
         ? { ...p, roomLabel: newRoom || undefined }
