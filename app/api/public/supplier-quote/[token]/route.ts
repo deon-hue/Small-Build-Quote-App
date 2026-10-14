@@ -129,7 +129,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
           body:
             emailPara(e(summary), 14) +
             emailCard(`<div style="font-size:13px;color:${BRAND.muted}">${e(poRef(o.poNumber))}</div><div style="font-size:16px;font-weight:700;color:${BRAND.ink};margin-top:2px">${e(o.title)}</div>`) +
-            (appUrl ? emailButton(`${appUrl}/jobs`, 'Open the job to compare and approve', 'Jobs, then the job, then Orders.') : ''),
+            (appUrl ? emailButton(o.jobId ? `${appUrl}/jobs?orders=${encodeURIComponent(o.jobId)}` : `${appUrl}/jobs?requests=1`, 'See the prices', o.jobId ? 'Opens this job\'s Orders, where you compare the prices and approve one.' : 'Opens your Price requests, where you compare the prices. Attach it to a job to approve one.') : ''),
         })
         await fetch('https://api.resend.com/emails', {
           method: 'POST',

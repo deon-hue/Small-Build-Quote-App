@@ -303,7 +303,10 @@ function JobsPageInner() {
           <div className="tp-kicker">Your work</div>
           <h1 className="tp-title">Jobs</h1>
         </div>
-        <button className="tp-btn" onClick={openNew}>+ New job</button>
+        <div className="tp-head-btns">
+          <button className="tp-btn tp-btn-light" onClick={() => setShowRequests(true)}>💬 Price requests</button>
+          <button className="tp-btn" onClick={openNew}>+ New job</button>
+        </div>
       </div>
       <div className="tp-stats">
         <div className="tp-stat"><span>On site</span><b>{activeCount}</b><em>{fmt(activeValue)} contract value</em></div>
