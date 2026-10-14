@@ -187,7 +187,7 @@ export default function SectionPhasesTasks({ userId, onEditViaAssemblies }: Prop
 
   // Allowance sub-phases price from exactly one task — its description + other_cost
   // are the whole story, no Labour/Materials/Plant/Subcontractors breakdown needed.
-  async function saveAllowanceTask(sp: BOSubPhase, patch: Partial<Pick<BOTask, 'description' | 'other_cost'>>) {
+  async function saveAllowanceTask(sp: BOSubPhase, patch: Partial<Pick<BOTask, 'description' | 'other_cost' | 'unit' | 'default_qty'>>) {
     const existing = tasks.find(t => t.sub_phase_id === sp.id)
     if (existing) {
       await patchTask({ ...existing, ...patch })
@@ -751,16 +751,28 @@ const ROW_CATS: Array<{ cat: RowCat; field: keyof BOTask }> = [
 function AllowanceEditor({ task, extraTasks, onSave, onDeleteExtra }: {
   task: BOTask | null
   extraTasks: BOTask[]
-  onSave: (patch: Partial<Pick<BOTask, 'description' | 'other_cost'>>) => void
+  onSave: (patch: Partial<Pick<BOTask, 'description' | 'other_cost' | 'unit' | 'default_qty'>>) => void
   onDeleteExtra: (id: string) => void
 }) {
   const [description, setDescription] = useState(task?.description ?? '')
   const [amount, setAmount] = useState(task?.other_cost ?? 0)
+  const [qty, setQty] = useState(task?.default_qty ?? 1)
+  // An allowance is one figure, or a rate per day / per hour times a number of days / hours (the quote line then reads "5 day x rate", and can be changed there)
+  const mode: 'flat' | 'day' | 'hr' = task?.unit === 'day' ? 'day' : task?.unit === 'hr' ? 'hr' : 'flat'
 
   useEffect(() => {
     setDescription(task?.description ?? '')
     setAmount(task?.other_cost ?? 0)
-  }, [task?.id, task?.description, task?.other_cost])
+    setQty(task?.default_qty ?? 1)
+  }, [task?.id, task?.description, task?.other_cost, task?.default_qty])
+
+  function changeMode(m: 'flat' | 'day' | 'hr') {
+    if (m === mode) return
+    // the old figure is not carried across: £800 flat is not £800 an hour, so the amount starts again and is typed in
+    if (m === 'flat') onSave({ unit: 'item', default_qty: 1, other_cost: 0 })
+    else onSave({ unit: m, default_qty: 1, other_cost: 0 })
+  }
+  const unitWord = mode === 'day' ? 'day' : 'hour'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -775,8 +787,22 @@ function AllowanceEditor({ task, extraTasks, onSave, onDeleteExtra }: {
           style={{ width: '100%', padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 12, color: '#1e293b', resize: 'vertical', boxSizing: 'border-box' }}
         />
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <label style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Allowance £</label>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <label style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Priced as</label>
+        <select
+          value={mode}
+          onChange={e => changeMode(e.target.value as 'flat' | 'day' | 'hr')}
+          style={{ padding: '5px 8px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 12, color: '#1e293b', background: '#fff' }}
+        >
+          <option value="flat">One flat amount</option>
+          <option value="day">A day rate</option>
+          <option value="hr">An hourly rate</option>
+        </select>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <label style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          {mode === 'flat' ? 'Allowance £' : `£ per ${unitWord}`}
+        </label>
         <input
           type="number" min={0} value={amount || ''}
           onChange={e => setAmount(+e.target.value)}
@@ -784,7 +810,30 @@ function AllowanceEditor({ task, extraTasks, onSave, onDeleteExtra }: {
           placeholder="0.00"
           style={{ width: 120, padding: '5px 8px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 13, textAlign: 'right', fontFamily: 'DM Mono, monospace' }}
         />
+        {mode !== 'flat' && (
+          <>
+            <label style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Typical number of {unitWord}s
+            </label>
+            <input
+              type="number" min={0} step="any" value={qty || ''}
+              onFocus={e => e.target.select()}
+              onChange={e => setQty(+e.target.value)}
+              onBlur={() => { if (qty !== (task?.default_qty ?? 1)) onSave({ default_qty: qty }) }}
+              placeholder="0"
+              style={{ width: 90, padding: '5px 8px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 13, textAlign: 'right', fontFamily: 'DM Mono, monospace' }}
+            />
+            <span style={{ fontSize: 12, color: '#475569', fontFamily: 'DM Mono, monospace' }}>
+              = £{((amount || 0) * (qty || 0)).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          </>
+        )}
       </div>
+      {mode !== 'flat' && (
+        <div style={{ fontSize: 11, color: '#94a3b8' }}>
+          In a quote this is one line, {unitWord}s times the rate. Both can be changed there for that job.
+        </div>
+      )}
       {extraTasks.length > 0 && (
         <div style={{ marginTop: 4, padding: '8px 10px', background: '#fffbeb', border: '1px dashed #fde68a', borderRadius: 6 }}>
           <div style={{ fontSize: 11, color: '#92400e', marginBottom: 6 }}>
