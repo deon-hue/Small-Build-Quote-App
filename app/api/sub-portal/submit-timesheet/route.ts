@@ -1,5 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { pushToOwner } from '@/lib/push'
+import { subIdentity } from '@/lib/sub-push'
+
+// a timesheet is waiting for the builder: an alert on their phone (best effort, never changes the answer)
+async function tellBuilder(user: { id: string; email?: string | null }, date: string) {
+  try {
+    const who = await subIdentity(user)
+    if (!who.ownerId) return
+    await pushToOwner(who.ownerId, 'timesheets', {
+      title: `Timesheet from ${who.name || 'a subcontractor'}`,
+      body: `For ${new Date(date + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}. Waiting for you to review.`,
+      url: '/subcontractors', tag: `timesheet-${user.id}-${date}`,
+    })
+  } catch { /* the timesheet is saved */ }
+}
 
 export async function POST(req: NextRequest) {
   const sb = await createClient()
@@ -27,6 +42,7 @@ export async function POST(req: NextRequest) {
       console.error('submit_sub_timesheet error:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
+    await tellBuilder(user, date)
     return NextResponse.json({ id: data })
   }
 
@@ -47,6 +63,7 @@ export async function POST(req: NextRequest) {
       console.error('submit_sub_timesheet_direct error:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
+    await tellBuilder(user, date)
     return NextResponse.json({ id: data })
   }
 

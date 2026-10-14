@@ -74,6 +74,8 @@ export default function SubNotesPage() {
     const sb = createClient()
     const { data: noteId, error: err } = await sb.rpc('add_sub_job_note', { p_job_id: jobId, p_note: text })
     if (err || !noteId) return { saved: false, message: friendlyError(err?.message || '') }
+    // tell the builder on their phone (fire and forget: the note is already saved)
+    void fetch('/api/sub-portal/notify-note', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ noteId: String(noteId) }) }).catch(() => {})
     const { failed, why } = await uploadPhotos(String(noteId), files)
     await loadNotes()
     return failed.length ? { saved: true, noteId: String(noteId), failed, message: photoMessage(failed.length, why) } : { saved: true }

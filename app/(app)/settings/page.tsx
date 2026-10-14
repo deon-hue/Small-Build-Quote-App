@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import type { Settings } from '@/lib/types'
 import XeroConnectionCard from '@/components/XeroConnectionCard'
+import NotificationSettings from '@/components/NotificationSettings'
 import XeroAccountMapping from '@/components/XeroAccountMapping'
 import './touch.css'
 
@@ -52,6 +53,9 @@ export default function SettingsPage() {
           <h1 className="tp-title">Settings</h1>
         </div>
       </div>
+
+      {/* Alerts on your phone and tablet */}
+      <NotificationSettings />
 
       {/* Company logo */}
       <div className="card">

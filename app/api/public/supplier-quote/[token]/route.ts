@@ -7,6 +7,7 @@ import { createServiceRoleClient } from '@/lib/supabase/service-role'
 import { rowToOrder, rowToQuote, areaOnly, poRef, quoteNet, pricedQuote, type QuoteLine } from '@/lib/job-orders'
 import { senderFrom, withPoweredBy, escapeHtml } from '@/lib/email-brand'
 import { BRAND, emailShell, emailPara, emailCard, emailButton } from '@/lib/email-layout'
+import { pushToOwner } from '@/lib/push'
 
 const TOKEN = /^[0-9a-f]{64}$/
 const YMD = /^\d{4}-\d{2}-\d{2}$/
@@ -114,6 +115,14 @@ export async function POST(req: NextRequest, ctx: Ctx) {
 
     const { error } = await sb.from('job_order_quotes').update(patch).eq('id', q.id)
     if (error) return NextResponse.json({ error: 'Could not save your reply. Please try again.' }, { status: 500 })
+
+    // an alert on the builder's phone and tablet, best effort (does nothing until notifications are set up)
+    await pushToOwner(f.ownerId, 'supplier_replies', {
+      title: body.action === 'decline' ? `${q.supplierName} cannot do it` : `Prices in from ${q.supplierName}`,
+      body: `${poRef(o.poNumber)} ${o.title}: ${summary}`.slice(0, 180),
+      url: o.jobId ? `/jobs?orders=${encodeURIComponent(o.jobId)}` : '/jobs?requests=1',
+      tag: `reply-${q.id}`,
+    })
 
     // tell the builder, best effort: the reply is saved either way
     try {
