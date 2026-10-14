@@ -1753,7 +1753,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
                       </span>
                       <span style={{ fontSize: 11, color: meta.accent, opacity: 0.6 }}>↗</span>
                     </div>
-                    <div style={{ fontSize: 11, fontWeight: 800, color: meta.accent, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    <div style={{ fontSize: 'clamp(9px, 2.8vw, 11px)', fontWeight: 800, color: meta.accent, textTransform: 'uppercase', letterSpacing: '0.03em', overflowWrap: 'anywhere' }}>
                       {meta.label}
                     </div>
                     <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 15, color: '#0f172a', marginTop: 2 }}>
@@ -2055,7 +2055,7 @@ function PhaseBlock({ mainPhase, phases, markup, jobType, isLocked, collapsed, t
     <div style={{ marginBottom: 16 }}>
       {/* Phase header */}
       <div
-        style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#1e293b', color: '#fff', padding: '10px 16px', borderRadius: open ? '8px 8px 0 0' : 8, cursor: 'pointer', userSelect: 'none' }}
+        style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, rowGap: 6, background: '#1e293b', color: '#fff', padding: '10px 16px', borderRadius: open ? '8px 8px 0 0' : 8, cursor: 'pointer', userSelect: 'none' }}
         onClick={() => toggle(colKey)}
       >
         <span style={{ fontSize: 12, width: 14 }}>{open ? '▾' : '▸'}</span>
@@ -2067,7 +2067,7 @@ function PhaseBlock({ mainPhase, phases, markup, jobType, isLocked, collapsed, t
           onFocus={() => setNameFocused(true)}
           onBlur={() => setNameFocused(false)}
           style={{
-            ...fldStyle, fontWeight: 700, fontSize: 14, color: '#fff', flex: 1,
+            ...fldStyle, fontWeight: 700, fontSize: 14, color: '#fff', flex: '1 1 140px', minWidth: 0,
             cursor: isLocked ? 'default' : 'text',
             borderBottom: !isLocked && nameFocused ? '2px solid #7ab533' : '2px solid transparent',
             paddingBottom: 1,
@@ -2081,7 +2081,7 @@ function PhaseBlock({ mainPhase, phases, markup, jobType, isLocked, collapsed, t
         </span>
         <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', flexShrink: 0 }}>ex VAT</span>
         {!isLocked && (
-          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
             <button style={{ ...addBtn, border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.8)', fontSize: 11 }}
               onClick={() => onAddRoom(mainPhase)}>+ Room</button>
             <button style={{ ...addBtn, border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.8)', fontSize: 11 }}

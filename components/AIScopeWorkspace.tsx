@@ -203,6 +203,15 @@ export default function AIScopeWorkspace({
   const [chatW, setChatW] = useState(300)
   const chatWAtStart = useRef(300)
   useEffect(() => { try { const w = Number(localStorage.getItem('buildos-ai-chat-width')); if (w >= 280 && w <= 900) setChatW(w) } catch { /* private mode */ } }, [])
+  // On a phone or small tablet there is not room for three columns side by side: the scope and the AI writer take turns, each full width
+  const [narrow, setNarrow] = useState(false)
+  useEffect(() => {
+    const check = () => setNarrow(window.innerWidth < 900)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+  const [tab, setTab] = useState<'scope' | 'chat'>('scope')
   const [scopeText,  setScopeText]  = useState(config.defaultDescription)
   const [scopeFocus, setScopeFocus] = useState(false)
 
@@ -278,7 +287,39 @@ export default function AIScopeWorkspace({
     )
   }
 
-  // ── Phase 2: 3-column scope editor ─────────────────────────────────────────
+  // ── Phase 2: 3-column scope editor (two panels taking turns on a phone) ──────────────
+
+  const leftPanel = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ background: COLORS.purpleLight, border: `1px solid ${COLORS.purpleBorder}`, borderRadius: 10, padding: '14px 14px' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.purple, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Selected Job</div>
+        <div style={{ fontSize: 22, marginBottom: 4 }}>{config.icon}</div>
+        <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>{config.label}</div>
+        <div style={{ fontSize: 11, color: COLORS.muted, lineHeight: 1.5, marginTop: 4 }}>{config.tagline}</div>
+      </div>
+
+      {/* Default phases */}
+      <div style={{ background: '#fff', border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: '12px 14px', flex: 1 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Expected Phases</div>
+        {config.defaultPhases.map((p, i) => (
+          <div key={i} style={{ display: 'flex', gap: 6, fontSize: 11, color: '#374151', marginBottom: 4, alignItems: 'flex-start' }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: COLORS.purple, flexShrink: 0, marginTop: 5 }} />
+            {p}
+          </div>
+        ))}
+      </div>
+
+      {/* Actions */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <button onClick={regenerateScope} disabled={generatingScope} style={{ ...outlineBtn(COLORS.muted), fontSize: 11, justifyContent: 'center', padding: '8px 12px' }}>
+          {generatingScope ? '⏳ Generating…' : '↺ Regenerate Scope'}
+        </button>
+        <button onClick={onBack} style={{ ...outlineBtn('#e74c3c'), fontSize: 11, justifyContent: 'center', padding: '8px 12px' }}>
+          ✕ Cancel
+        </button>
+      </div>
+    </div>
+  )
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '80vh' }}>
@@ -308,41 +349,25 @@ export default function AIScopeWorkspace({
       </div>
 
       {/* 3-column layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: `220px minmax(240px, 1fr) ${chatW}px`, gap: 16, flex: 1, minHeight: 0 }}>
+      <div style={narrow
+        ? { display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0, minWidth: 0 }
+        : { display: 'grid', gridTemplateColumns: `220px minmax(240px, 1fr) ${chatW}px`, gap: 16, flex: 1, minHeight: 0 }}>
 
-        {/* ── LEFT: project setup ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ background: COLORS.purpleLight, border: `1px solid ${COLORS.purpleBorder}`, borderRadius: 10, padding: '14px 14px' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.purple, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Selected Job</div>
-            <div style={{ fontSize: 22, marginBottom: 4 }}>{config.icon}</div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>{config.label}</div>
-            <div style={{ fontSize: 11, color: COLORS.muted, lineHeight: 1.5, marginTop: 4 }}>{config.tagline}</div>
-          </div>
-
-          {/* Default phases */}
-          <div style={{ background: '#fff', border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: '12px 14px', flex: 1 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Expected Phases</div>
-            {config.defaultPhases.map((p, i) => (
-              <div key={i} style={{ display: 'flex', gap: 6, fontSize: 11, color: '#374151', marginBottom: 4, alignItems: 'flex-start' }}>
-                <span style={{ width: 5, height: 5, borderRadius: '50%', background: COLORS.purple, flexShrink: 0, marginTop: 5 }} />
-                {p}
-              </div>
+        {narrow && (
+          <div style={{ display: 'flex', gap: 0, border: `1px solid ${COLORS.border}`, borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+            {([['scope', '📝 Scope of works'], ['chat', '✦ AI writer']] as const).map(([k, label]) => (
+              <button key={k} onClick={() => setTab(k)} aria-pressed={tab === k}
+                style={{ flex: 1, padding: '12px 8px', border: 'none', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', background: tab === k ? COLORS.purple : '#fff', color: tab === k ? '#fff' : '#334155' }}>{label}</button>
             ))}
           </div>
+        )}
 
-          {/* Actions */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <button onClick={regenerateScope} disabled={generatingScope} style={{ ...outlineBtn(COLORS.muted), fontSize: 11, justifyContent: 'center', padding: '8px 12px' }}>
-              {generatingScope ? '⏳ Generating…' : '↺ Regenerate Scope'}
-            </button>
-            <button onClick={onBack} style={{ ...outlineBtn('#e74c3c'), fontSize: 11, justifyContent: 'center', padding: '8px 12px' }}>
-              ✕ Cancel
-            </button>
-          </div>
-        </div>
+        {narrow
+          ? <details style={{ background: '#fff', border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: '10px 12px' }}><summary style={{ cursor: 'pointer', fontSize: 14, fontWeight: 700, color: '#0f172a' }}>Selected job, expected phases and actions</summary><div style={{ marginTop: 12 }}>{leftPanel}</div></details>
+          : leftPanel}
 
         {/* ── CENTRE: scope draft ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: narrow && tab !== 'scope' ? 'none' : 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
           <div>
             <label style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 5 }}>Scope Title</label>
             <input
@@ -374,11 +399,11 @@ export default function AIScopeWorkspace({
         </div>
 
         {/* ── RIGHT: embedded AI chat with mic + file attach ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, position: 'relative' }}>
-          <DragHandle cursor="ew-resize" title="Drag to make the AI writer wider or narrower" onStart={() => { chatWAtStart.current = chatW }}
+        <div style={{ display: narrow && tab !== 'chat' ? 'none' : 'flex', flexDirection: 'column', minHeight: narrow ? 680 : 0, height: narrow ? 'max(680px, calc(100vh - 140px))' : undefined, minWidth: 0, position: 'relative' }}>
+          {!narrow && <DragHandle cursor="ew-resize" title="Drag to make the AI writer wider or narrower" onStart={() => { chatWAtStart.current = chatW }}
             onMove={pulled => setChatW(Math.max(280, Math.min(900, chatWAtStart.current + pulled)))}
             onEnd={() => { try { localStorage.setItem('buildos-ai-chat-width', String(chatW)) } catch { /* private mode */ } }}
-            style={{ left: -12, top: 0, bottom: 0, width: 10 }} />
+            style={{ left: -12, top: 0, bottom: 0, width: 10 }} />}
           <ScopeChat
             embedded
             quoteId={null}
