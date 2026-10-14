@@ -6,7 +6,8 @@ import { createClient } from '@/lib/supabase/server'
 import { senderFrom, withPoweredBy, escapeHtml } from '@/lib/email-brand'
 import { usageGuard } from '@/lib/usage'
 import { callerIsPortalOnly } from '@/lib/caller-role'
-import { BRAND, emailShell, emailPara, emailCard, emailCallout, emailButton } from '@/lib/email-layout'
+import { emailShell } from '@/lib/email-layout'
+import { priceRequestBody } from '@/lib/price-request-email'
 import { rowToOrder, rowToQuote, areaOnly, poRef, quoteLink, quoteRequestText, requestDetails } from '@/lib/job-orders'
 import { withCode } from '@/lib/mail-address'
 
@@ -58,30 +59,21 @@ export async function POST(req: NextRequest) {
     const ref = poRef(o.poNumber)
     const hello = (q.supplierContact.trim().split(/\s+/)[0] || q.supplierName.trim().split(/\s+/)[0] || 'there')
 
-    const cell = (k: string, v: string) => v
-      ? `<tr><td style="padding:8px 0;border-bottom:1px solid ${BRAND.line};width:96px;font-size:13px;color:${BRAND.muted};vertical-align:top">${k}</td><td style="padding:8px 0;border-bottom:1px solid ${BRAND.line};font-size:14px;font-weight:600;color:${BRAND.ink};line-height:1.5">${v}</td></tr>`
-      : ''
-    const rows = [
-      cell('What', e(o.title) + (requestDetails(o) ? `<br><span style="font-weight:400;color:${BRAND.muted}">${e(requestDetails(o)).replace(/\n/g, '<br>')}</span>` : '')),
-      cell('Needed', e([longDate(o.deliveryDate), o.deliverySlot].filter(Boolean).join(', '))),
-      cell('Collect', e(longDate(o.offHireDate))),
-      cell('Where', e(areaOnly(o.siteAddress))),
-      cell('Price for', o.rateBasis === 'fixed' ? '' : e(`${o.plannedUnits} ${o.rateBasis === 'day' ? 'day' : 'week'}${o.plannedUnits === 1 ? '' : 's'}: give your rate per ${o.rateBasis}`)),
-    ].join('')
-
     const html = emailShell({
       company,
       kicker: 'Request for a price',
       title: `Could you quote for this?`,
       ref: e(ref),
       logoUrl: b.logoOwnerId ? `${appUrl}/api/public/company-logo/${encodeURIComponent(b.logoOwnerId)}` : undefined,
-      body:
-        emailPara(`Hello ${e(hello)},`, 12) +
-        emailPara('Please could you give us a price for the following. It takes a minute and you do not need to log in.', 14) +
-        emailCard(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">${rows}</table>`) +
-        emailButton(e(link), 'Give your price', inboxEmail ? `Prefer to send your own quote? Email it to ${e(inboxEmail)} with ${e(ref)} on it and we will pick it up.` : 'Price, earliest delivery date and how long the price stands. Or press reply and tell us.') +
-        emailCallout(`<p style="margin:0;font-size:14px;line-height:1.6;color:${BRAND.ink}">Our reference is <strong>${e(ref)}</strong>. If we go ahead we will send you the order with the full address, and ask you to quote ${e(ref)} on your invoice.</p>`, 'Reference') +
-        emailPara(`Thanks,<br><strong>${e(b.senderName || b.companyName || '')}</strong>${b.companyPhone ? `<br>${e(b.companyPhone)}` : ''}`, 0),
+      body: priceRequestBody({
+        hello, title: o.title, details: requestDetails(o),
+        needed: [longDate(o.deliveryDate), o.deliverySlot].filter(Boolean).join(', '),
+        collect: longDate(o.offHireDate),
+        where: areaOnly(o.siteAddress),
+        priceFor: o.rateBasis === 'fixed' ? '' : `${o.plannedUnits} ${o.rateBasis === 'day' ? 'day' : 'week'}${o.plannedUnits === 1 ? '' : 's'}: give your rate per ${o.rateBasis}`,
+        link, ref, inboxEmail,
+        senderName: b.senderName || '', companyName: b.companyName || '', companyPhone: b.companyPhone || '',
+      }),
       footerHtml: [
         `<strong style="color:#ffffff">${company}</strong>`,
         b.address ? e(b.address).replace(/\n/g, ', ') : '',
