@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceRoleClient } from '@/lib/supabase/service-role'
 import { extractDocument } from '@/lib/doc-extract'
+import { processQuoteAttachment } from '@/lib/quote-inbox'
+import { codeFromRecipients } from '@/lib/mail-address'
+
+// reading a quote with the AI can take a while; give the request room to finish
+export const maxDuration = 60
 
 const ALLOWED_TYPES = new Set([
   'application/pdf',
@@ -23,6 +28,10 @@ interface NormalisedAttachment {
 interface NormalisedEmail {
   from: string
   subject: string
+  /** the words of the email, where the sender mentioned a PO number */
+  body: string
+  /** every address it was sent to, so the company code in the address (quotes+ab12cd34@...) can be read */
+  recipients: string[]
   attachments: NormalisedAttachment[]
 }
 
@@ -35,6 +44,8 @@ function normalise(body: Record<string, unknown>): NormalisedEmail {
     return {
       from:    String(body.from    ?? ''),
       subject: String(body.subject ?? ''),
+      body:    String(body.body ?? body.bodyPreview ?? ''),
+      recipients: [body.to, body.cc, body.toRecipients, body.ccRecipients].flatMap(x => (Array.isArray(x) ? x : [x])).map(x => (typeof x === 'string' ? x : JSON.stringify(x ?? ''))),
       attachments: (body.attachments as Record<string, unknown>[]).map(a => ({
         name:   String(a.name         ?? ''),
         base64: String(a.contentBytes ?? ''),
@@ -49,6 +60,9 @@ function normalise(body: Record<string, unknown>): NormalisedEmail {
   return {
     from:    String(body.From    ?? ''),
     subject: String(body.Subject ?? ''),
+    body:    textBody,
+    recipients: [body.To, body.Cc, body.OriginalRecipient, ...(Array.isArray(body.ToFull) ? body.ToFull : []), ...(Array.isArray(body.CcFull) ? body.CcFull : [])]
+      .map(x => (typeof x === 'string' ? x : JSON.stringify(x ?? ''))),
     attachments: (Array.isArray(body.Attachments) ? body.Attachments as Record<string, unknown>[] : [])
       .filter(a => {
         if (!a.ContentID) return true
@@ -91,11 +105,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const userId = process.env.EMAIL_INGEST_USER_ID
-  if (!userId) {
-    console.error('email-ingest: EMAIL_INGEST_USER_ID not set')
-    return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 })
-  }
+  const defaultUserId = process.env.EMAIL_INGEST_USER_ID
 
   let body: Record<string, unknown>
   try {
@@ -105,6 +115,21 @@ export async function POST(req: NextRequest) {
   }
 
   const email = normalise(body)
+
+  // Whose is it? A company code in the address it was sent to (quotes+ab12cd34@...) names the company. With no code it is the default company (the one set in EMAIL_INGEST_USER_ID),
+  // as it always was. A code that matches no company is refused rather than filed under someone else.
+  const sbLookup = createServiceRoleClient()
+  const code = codeFromRecipients(email.recipients)
+  let userId = defaultUserId
+  if (code) {
+    const { data: s } = await sbLookup.from('settings').select('user_id').eq('mail_code', code).maybeSingle()
+    if (!s) return NextResponse.json({ processed: 0, skipped: 'unknown address' })
+    userId = s.user_id as string
+  }
+  if (!userId) {
+    console.error('email-ingest: no company for this email and EMAIL_INGEST_USER_ID not set')
+    return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 })
+  }
 
   const attachments = email.attachments
     .filter(a => ALLOWED_TYPES.has(a.mime) && a.size <= MAX_BYTES && a.base64)
@@ -121,6 +146,14 @@ export async function POST(req: NextRequest) {
     try {
       const ext = att.mime === 'application/pdf' ? 'pdf' : att.mime.split('/')[1]
       const fileName = att.name || `email-doc-${stamp()}.${ext}`
+
+      // Is this a supplier's quote for one of the open price requests? Then it becomes their reply (to be checked), or waits in the unmatched list. Anything else is filed as a document, as before.
+      try {
+        const q = await processQuoteAttachment(sb, userId, { name: fileName, mime: att.mime, base64: att.base64 }, { from: email.from, subject: email.subject, body: email.body })
+        if (q.result !== 'not_a_quote') { processed++; continue }
+      } catch (err) {
+        console.warn('email-ingest: quote check failed, filing as a document', err)
+      }
       const storagePath = `${userId}/inbox/${stamp()}-${safeName(fileName)}`
       const fileBuffer = Buffer.from(att.base64, 'base64')
 

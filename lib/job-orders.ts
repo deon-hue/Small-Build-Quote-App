@@ -101,6 +101,12 @@ export interface OrderQuote {
   lines: QuoteLine[]
   /** delivery charge ex VAT, added to the items */
   deliveryCharge: number
+  /** 'form' (their price page), 'email' (their own quote, emailed in) or 'upload' (their quote dropped onto the request) */
+  source: 'form' | 'email' | 'upload'
+  /** read from their own quote by the app and not yet confirmed by a person */
+  needsCheck: boolean
+  fileName: string
+  hasFile: boolean
 }
 
 export const QUOTE_STATUS_LABEL: Record<QuoteStatus, string> = {
@@ -299,7 +305,7 @@ export function quoteNet(q: Pick<OrderQuote, 'price' | 'rateBasis'>, plannedUnit
 /** The quote that is cheapest (by what it comes to), among the ones that carry a price. */
 export function cheapestQuoteId(quotes: OrderQuote[], plannedUnits: number, items: OrderItem[] = []): string | null {
   // with a list of items, only an answer that prices every item is fairly compared: one that left things out is always cheaper
-  const priced = quotes.filter(q => q.status === 'replied' && q.price !== null && (items.length === 0 || pricedQuote(items, q.lines, q.deliveryCharge).priced === items.length))
+  const priced = quotes.filter(q => q.status === 'replied' && q.price !== null && (items.length === 0 || q.lines.length === 0 || pricedQuote(items, q.lines, q.deliveryCharge).priced === items.length))
   if (priced.length < 2) return null
   return priced.reduce((a, b) => (quoteNet(b, plannedUnits) < quoteNet(a, plannedUnits) ? b : a)).id
 }
@@ -337,7 +343,7 @@ export function cheapestMix(items: OrderItem[], quotes: OrderQuote[]): { total: 
 export const quoteLink = (base: string, token: string) => `${base.replace(/\/$/, '')}/supplier-quote/${token}`
 
 /** The message asking for a quote, for WhatsApp, a text or the plain part of an email. Shows the area only. */
-export function quoteRequestText(o: JobOrder, q: Pick<OrderQuote, 'supplierContact'>, link: string, sender: { name: string; company: string }): string {
+export function quoteRequestText(o: JobOrder, q: Pick<OrderQuote, 'supplierContact'>, link: string, sender: { name: string; company: string }, inboxEmail = ''): string {
   const who = firstName(q.supplierContact)
   const hi = who ? `Hi ${who}, ` : 'Hi, '
   const area = areaOnly(o.siteAddress)
@@ -353,7 +359,7 @@ export function quoteRequestText(o: JobOrder, q: Pick<OrderQuote, 'supplierConta
     ...body,
     '',
     `Put your price in here, it takes a minute (no login): ${link}`,
-    'Or just reply with your price and earliest date. Thanks!',
+    inboxEmail ? `Or email your own quote to ${inboxEmail} with ${poRef(o.poNumber)} on it. Thanks!` : 'Or just reply with your price and earliest date. Thanks!',
   ].join('\n')
 }
 
@@ -427,6 +433,7 @@ export function rowToQuote(r: Record<string, unknown>): OrderQuote {
     price: r.price === null || r.price === undefined ? null : Number(r.price), rateBasis: (r.rate_basis as RateBasis) ?? 'fixed',
     deliveryDate: d10(r.delivery_date), validUntil: d10(r.valid_until), notes: str(r.notes), repliedAt: (r.replied_at as string) || undefined,
     lines: parseLines(r.lines), deliveryCharge: Number(r.delivery_charge) || 0,
+    source: r.source === 'email' || r.source === 'upload' ? r.source : 'form', needsCheck: !!r.needs_check, fileName: str(r.file_name), hasFile: !!str(r.file_path),
   }
 }
 
@@ -652,4 +659,33 @@ export function materialsRequestDetails(lines: { name: string; purchaseQty: numb
   const list = materialsListText(lines)
   const ask = 'Please price each item below (a unit price, ex VAT, on the link) and any delivery charge; tell us anything you cannot supply or would swap:'
   return [...(note.trim() ? [note.trim(), ''] : []), ask, list].join('\n')
+}
+
+// ── Emailed quotes waiting to be assigned ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+/** A supplier's own quote that came in by email but could not be matched to a request and supplier with confidence (supabase/quote-inbox.sql). */
+export interface IncomingQuote {
+  id: string
+  fileName: string
+  sourceEmail: string
+  subject: string
+  reason: string
+  suggestedOrderId?: string
+  createdAt?: string
+  /** what the reader found, for showing next to the file */
+  supplier: string
+  netTotal: number
+}
+
+export async function fetchIncomingQuotes(sb: SupabaseClient): Promise<IncomingQuote[]> {
+  const { data, error } = await sb.from('incoming_quotes').select('*').eq('status', 'unmatched').order('created_at', { ascending: false })
+  if (error) return []
+  return (data ?? []).map(r => {
+    const x = (r.extraction ?? {}) as { supplier?: string; netTotal?: number }
+    return {
+      id: r.id as string, fileName: str(r.file_name), sourceEmail: str(r.source_email), subject: str(r.subject), reason: str(r.reason),
+      suggestedOrderId: (r.suggested_order_id as string) || undefined, createdAt: r.created_at as string | undefined,
+      supplier: x.supplier ?? '', netTotal: Number(x.netTotal) || 0,
+    }
+  })
 }

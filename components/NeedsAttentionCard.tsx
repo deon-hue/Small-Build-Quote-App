@@ -9,7 +9,7 @@ import { useApp } from '@/contexts/AppContext'
 import { createClient } from '@/lib/supabase/client'
 import { unseenSubNotes, snippet } from '@/lib/note-attention'
 import { jobDisplayTitle } from '@/lib/utils'
-import { fetchAllJobOrders, orderReminders, poRef, type OrderReminder } from '@/lib/job-orders'
+import { fetchAllJobOrders, fetchIncomingQuotes, orderReminders, poRef, type OrderReminder } from '@/lib/job-orders'
 import { rowToCost } from '@/lib/job-costs'
 
 interface PendingRow { name: string; count: number }
@@ -28,6 +28,8 @@ export default function NeedsAttentionCard() {
   const [pending, setPending] = useState<PendingRow[]>([])
   // orders and expected invoices that need a look (supabase/job-orders.sql); quiet until there is something
   const [reminders, setReminders] = useState<OrderReminder[]>([])
+  // supplier quotes that came in by email and are waiting for you to say which request they are for
+  const [emailedQuotes, setEmailedQuotes] = useState(0)
 
   useEffect(() => {
     let alive = true
@@ -61,6 +63,8 @@ export default function NeedsAttentionCard() {
     async function loadOrders() {
       try {
         const sb = createClient()
+        const emailed = await fetchIncomingQuotes(sb)
+        if (alive) setEmailedQuotes(emailed.length)
         const { orders, repliesByOrder } = await fetchAllJobOrders(sb)
         if (orders.length === 0) { if (alive) setReminders([]); return }
         const jobIds = [...new Set(orders.filter(o => o.kind === 'order').map(o => o.jobId))]
@@ -79,7 +83,7 @@ export default function NeedsAttentionCard() {
   const overdueInv = invoices.filter(i => i.status === 'overdue')
   const overdueTotal = overdueInv.reduce((a, i) => a + (Number(i.total) || 0), 0)
   // nothing to do: a calm card rather than no card, so it keeps its place on the dashboard
-  if (newNotes.length === 0 && pendingTotal === 0 && overdueInv.length === 0 && reminders.length === 0) {
+  if (newNotes.length === 0 && pendingTotal === 0 && overdueInv.length === 0 && reminders.length === 0 && emailedQuotes === 0) {
     return (
       <div className="card" style={{ borderLeft: '4px solid #7ab533' }}>
         <div className="card-hd">Needs your attention</div>
@@ -94,7 +98,7 @@ export default function NeedsAttentionCard() {
     <div className="card" style={{ borderLeft: '4px solid #c0392b' }}>
       <div className="card-hd" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         Needs your attention
-        <span style={{ background: '#c0392b', color: '#fff', borderRadius: 99, padding: '1px 9px', fontSize: 12, fontWeight: 700 }}>{newNotes.length + (pendingTotal > 0 ? 1 : 0) + (overdueInv.length > 0 ? 1 : 0) + reminders.length}</span>
+        <span style={{ background: '#c0392b', color: '#fff', borderRadius: 99, padding: '1px 9px', fontSize: 12, fontWeight: 700 }}>{newNotes.length + (pendingTotal > 0 ? 1 : 0) + (overdueInv.length > 0 ? 1 : 0) + reminders.length + (emailedQuotes > 0 ? 1 : 0)}</span>
       </div>
       <div style={{ padding: '4px 16px 12px' }}>
         {newNotes.length > 0 && (
@@ -124,6 +128,12 @@ export default function NeedsAttentionCard() {
               <div style={{ fontSize: 12, color: 'var(--sky, #2a7ab0)', marginTop: 2 }}>Open Subcontractors to approve →</div>
             </Link>
           </>
+        )}
+        {emailedQuotes > 0 && (
+          <Link href="/jobs?requests=1" style={{ display: 'block', padding: '8px 0', borderBottom: '1px solid var(--border)', textDecoration: 'none', color: 'inherit' }}>
+            <div style={{ fontSize: 13, color: 'var(--ink)' }}><strong>{emailedQuotes} emailed quote{emailedQuotes === 1 ? '' : 's'}</strong> came in that the app could not place. Say which request {emailedQuotes === 1 ? 'it is' : 'they are'} for.</div>
+            <div style={{ fontSize: 12, color: 'var(--sky, #2a7ab0)', marginTop: 2 }}>Open Price requests →</div>
+          </Link>
         )}
         {reminders.length > 0 && (
           <>

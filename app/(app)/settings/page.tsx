@@ -5,6 +5,7 @@ import { useApp } from '@/contexts/AppContext'
 import type { Settings } from '@/lib/types'
 import XeroConnectionCard from '@/components/XeroConnectionCard'
 import NotificationSettings from '@/components/NotificationSettings'
+import MailAddresses from '@/components/MailAddresses'
 import XeroAccountMapping from '@/components/XeroAccountMapping'
 import './touch.css'
 
@@ -56,6 +57,9 @@ export default function SettingsPage() {
 
       {/* Alerts on your phone and tablet */}
       <NotificationSettings />
+
+      {/* This company's own addresses for supplier quotes and documents */}
+      <MailAddresses />
 
       {/* Company logo */}
       <div className="card">

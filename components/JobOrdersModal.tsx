@@ -12,11 +12,12 @@ import type { JobCost, JobCostCategory } from '@/lib/types'
 import {
   ORDER_TYPES, ORDER_STATUS_LABEL, poRef, expectedNet, hireUnits, isCommitted, committedTotals, overrunNote, matchSuggestions, orderWhatsAppText, waLink, addDays, todayYmd, orderDateLabel,
   fetchJobOrders, insertJobOrder, updateJobOrder, deleteJobOrder,
-  quoteRequestText, quoteLink, noteOfDetails, cheapestQuoteId, cheapestMix, lineTotal, pricedQuote, quoteNet, areaOnly, QUOTE_STATUS_LABEL, fetchOrderQuotes, insertOrderQuotes, updateOrderQuote, deleteOrderQuote,
+  quoteRequestText, quoteLink, noteOfDetails, cheapestQuoteId, cheapestMix, lineTotal, pricedQuote, quoteNet, areaOnly, QUOTE_STATUS_LABEL, fetchOrderQuotes, insertOrderQuotes, updateOrderQuote, deleteOrderQuote, fetchAllJobOrders, fetchIncomingQuotes, type IncomingQuote,
   type JobOrder, type OrderType, type PayTerms, type RateBasis, type OrderStatus, type OrderQuote, type QuoteInvitee, type QuoteStatus,
 } from '@/lib/job-orders'
 import { Recipients } from './OrderRecipients'
 import PriceRequestItems from './PriceRequestItems'
+import { withCode } from '@/lib/mail-address'
 
 interface Props {
   /** null: the requests for a price that are not for a job yet (a calculator's materials list while pricing a quote) */
@@ -51,6 +52,12 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
   const loose = jobId === null
   const [attachId, setAttachId] = useState<Record<string, string>>({})
   const [lineView, setLineView] = useState<Record<string, boolean>>({})
+  // where a supplier can email their own quote: the shared quotes address with this company's code in it
+  const [inboxEmail, setInboxEmail] = useState('')
+  // emailed quotes the app could not place on its own (shown in the Price requests window), and the requests they could be placed on
+  const [incoming, setIncoming] = useState<IncomingQuote[]>([])
+  const [openReqs, setOpenReqs] = useState<{ order: JobOrder; invites: OrderQuote[] }[]>([])
+  const [assignPick, setAssignPick] = useState<Record<string, string>>({})
   const [ownerId, setOwnerId] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [orders, setOrders] = useState<JobOrder[]>([])
@@ -73,9 +80,23 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
     setUserId(user.id)
     const { data: owner } = await sb.rpc('get_effective_owner_id')
     setOwnerId((owner as string) || user.id)
+    const base = (process.env.NEXT_PUBLIC_QUOTES_EMAIL || '').trim()
+    if (base) {
+      const { data: mc } = await sb.from('settings').select('mail_code').eq('user_id', (owner as string) || user.id).maybeSingle()
+      setInboxEmail(withCode(base, (mc?.mail_code as string) || ''))
+    }
     const [{ orders: o, missing: m }, c] = await Promise.all([fetchJobOrders(sb, jobId), loose ? Promise.resolve([] as JobCost[]) : fetchJobCosts(sb, user.id, jobId)])
     setOrders(o); setMissing(m); setCosts(c)
     setQuotes(await fetchOrderQuotes(sb, o.filter(x => x.kind === 'quote_request').map(x => x.id)))
+    if (jobId === null) {
+      const inc = await fetchIncomingQuotes(sb)
+      setIncoming(inc)
+      if (inc.length > 0) {
+        const all = (await fetchAllJobOrders(sb)).orders.filter(x => x.kind === 'quote_request' && x.status !== 'cancelled')
+        const inv = await fetchOrderQuotes(sb, all.map(x => x.id))
+        setOpenReqs(all.map(order => ({ order, invites: inv.filter(i => i.orderId === order.id) })))
+      } else setOpenReqs([])
+    }
     setLoading(false)
   }, [sb, jobId])
   useEffect(() => { load() }, [load])
@@ -209,14 +230,14 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
   }
 
   async function whatsAppQuoteRequest(o: JobOrder, q: OrderQuote) {
-    const link = waLink(q.supplierPhone, quoteRequestText(o, q, quoteLink(linkBase, q.token), sender))
+    const link = waLink(q.supplierPhone, quoteRequestText(o, q, quoteLink(linkBase, q.token), sender, inboxEmail))
     if (!link) { setNotice({ ok: false, text: `${q.supplierName} has no usable mobile number. Edit it, or copy the message.` }); return }
     window.open(link, '_blank', 'noopener')
     if (confirm(`WhatsApp has opened with the price request for ${q.supplierName}.\n\nPress OK once you have sent it.`)) { await updateOrderQuote(sb, q.id, { sentAt: new Date().toISOString(), sentVia: 'whatsapp' }); await load() }
   }
 
   async function copyQuoteRequest(o: JobOrder, q: OrderQuote) {
-    try { await navigator.clipboard.writeText(quoteRequestText(o, q, quoteLink(linkBase, q.token), sender)); setNotice({ ok: true, text: 'Copied the message with their link. Paste it anywhere.' }) }
+    try { await navigator.clipboard.writeText(quoteRequestText(o, q, quoteLink(linkBase, q.token), sender, inboxEmail)); setNotice({ ok: true, text: 'Copied the message with their link. Paste it anywhere.' }) }
     catch { setNotice({ ok: false, text: 'Could not copy automatically.' }) }
   }
 
@@ -230,6 +251,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
   /** Approve one reply: the request becomes an order with the same PO number, at their price and date, and counts as an expected cost straight away. */
   async function approveQuote(o: JobOrder, q: OrderQuote) {
     if (q.price === null) return
+    if (q.needsCheck) { setNotice({ ok: false, text: `Check ${q.supplierName}'s quote against their file first, then press Looks right.` }); return }
     if (!o.jobId) { setNotice({ ok: false, text: 'Attach this request to a job first (the box under it), so the cost lands on the right job. Then approve.' }); return }
     const days = q.deliveryDate || o.deliveryDate
     const asks = `${fmt(q.price)} + VAT${q.rateBasis === 'fixed' ? '' : ' per ' + q.rateBasis}`
@@ -256,6 +278,39 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
     await updateJobOrder(sb, o.id, { jobId: job.id, siteAddress: job.address || o.siteAddress || '' })
     setNotice({ ok: true, text: `${poRef(o.poNumber)} is now one of ${job.client}'s orders. Open the job's Orders to approve a price.` })
     await load(); onChanged?.()
+  }
+
+  /** Drop a supplier's own quote (PDF or photo) onto their line: the app reads it and records it as their reply, to be checked. */
+  async function readTheirQuote(o: JobOrder, q: OrderQuote, file: File) {
+    setBusy(`rd-${q.id}`); setNotice(null)
+    try {
+      const fd = new FormData()
+      fd.append('file', file); fd.append('orderId', o.id); fd.append('quoteId', q.id)
+      const res = await fetch('/api/orders/read-quote', { method: 'POST', body: fd })
+      const text = await res.text()
+      let d: { ok?: boolean; mode?: string; error?: string } = {}
+      try { d = JSON.parse(text) } catch { d = { error: res.status === 413 ? 'That file is too big. Try a PDF under about 4 MB.' : 'Could not read that quote. Try again.' } }
+      if (!res.ok || d.error) setNotice({ ok: false, text: d.error || 'Could not read that quote.' })
+      else setNotice({ ok: true, text: `Read ${q.supplierName}'s quote${d.mode === 'total_only' ? ' (their total only: it was not set out like the request)' : ''}. Check it against their file, then press Looks right.` })
+      await load()
+    } finally { setBusy(null) }
+  }
+
+  async function confirmQuote(q: OrderQuote) {
+    await sb.from('job_order_quotes').update({ needs_check: false }).eq('id', q.id)
+    await load()
+  }
+
+  async function assignEmailed(inc: IncomingQuote) {
+    const quoteId = assignPick[inc.id]
+    if (!quoteId) { setNotice({ ok: false, text: 'Pick the request and supplier it is for.' }); return }
+    setBusy(`as-${inc.id}`); setNotice(null)
+    try {
+      const res = await fetch('/api/orders/assign-quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ incomingId: inc.id, quoteId }) })
+      const d = await res.json().catch(() => ({})) as { error?: string }
+      setNotice(res.ok ? { ok: true, text: 'Added as their reply. Check it, then press Looks right.' } : { ok: false, text: d.error || 'Could not assign it.' })
+      await load()
+    } finally { setBusy(null) }
   }
 
   async function copyText(o: JobOrder) {
@@ -361,7 +416,22 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                     {q.notes ? <span style={{ color: '#334155' }}> · “{q.notes}”</span> : ''}
                   </div>
                 )}
-                {q.status === 'replied' && items.length > 0 && (() => {
+                {q.status === 'replied' && q.source !== 'form' && (
+                  <div style={{ marginTop: 4, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', fontSize: 12 }}>
+                    <span style={{ fontWeight: 700, color: '#075985' }}>📎 From their own quote{q.source === 'email' ? ', emailed in' : ''}</span>
+                    {q.hasFile && <a href={`/api/orders/quote-file?quoteId=${q.id}`} target="_blank" rel="noreferrer" style={{ color: '#0369a1', fontWeight: 700 }}>View their quote ↗</a>}
+                  </div>
+                )}
+                {q.status === 'replied' && q.needsCheck && (
+                  <div style={{ marginTop: 6, padding: '8px 10px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 12, color: '#92400e' }}>
+                    <span style={{ flex: 1, minWidth: 180 }}><strong>Read by the app, so please check it</strong> against their file before approving: the total, the delivery and the dates.</span>
+                    <button onClick={() => confirmQuote(q)} style={{ ...btn, borderColor: '#d97706', color: '#92400e' }}>✓ Looks right</button>
+                  </div>
+                )}
+                {q.status === 'replied' && items.length > 0 && q.lines.length === 0 && q.price !== null && (
+                  <div style={{ fontSize: 12, marginTop: 2, color: '#475569' }}>Total only: their quote is not set out item by item like the request.{q.deliveryCharge > 0 ? ` Delivery ${fmt(q.deliveryCharge)} included.` : ''}</div>
+                )}
+                {q.status === 'replied' && items.length > 0 && q.lines.length > 0 && (() => {
                   const pq = pricedQuote(items, q.lines, q.deliveryCharge)
                   return (
                     <div style={{ fontSize: 12, marginTop: 2, color: pq.priced < pq.count ? '#b45309' : '#166534', fontWeight: pq.priced < pq.count ? 700 : 400 }}>
@@ -372,7 +442,11 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                 {q.status === 'declined' && q.notes && <div style={{ fontSize: 12, color: '#991b1b', marginTop: 3 }}>“{q.notes}”</div>}
                 {open && (
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 7 }}>
-                    {q.status === 'replied' && <button onClick={() => approveQuote(o, q)} disabled={busy === `ap-${q.id}`} style={{ ...primary, background: '#16a34a', borderColor: '#16a34a' }}>{busy === `ap-${q.id}` ? 'Approving…' : '✔ Approve this price'}</button>}
+                    {q.status === 'replied' && <button onClick={() => approveQuote(o, q)} disabled={busy === `ap-${q.id}` || q.needsCheck} title={q.needsCheck ? 'Check their quote first, then press Looks right' : undefined} style={{ ...primary, background: q.needsCheck ? '#94a3b8' : '#16a34a', borderColor: q.needsCheck ? '#94a3b8' : '#16a34a' }}>{busy === `ap-${q.id}` ? 'Approving…' : '✔ Approve this price'}</button>}
+                    <label style={{ ...btn, display: 'inline-flex', alignItems: 'center', cursor: busy === `rd-${q.id}` ? 'default' : 'pointer', opacity: busy === `rd-${q.id}` ? 0.6 : 1 }} title="Drop in the PDF or photo of their own quote and the app reads it">
+                      {busy === `rd-${q.id}` ? 'Reading their quote…' : '📎 Add their own quote (PDF)'}
+                      <input type="file" accept="application/pdf,image/*" style={{ display: 'none' }} disabled={busy === `rd-${q.id}`} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void readTheirQuote(o, q, f) }} />
+                    </label>
                     <button onClick={() => emailQuoteRequest(o, q)} disabled={busy === `rq-${q.id}`} style={q.sentAt || q.status !== 'invited' ? btn : primary}>{busy === `rq-${q.id}` ? 'Sending…' : q.sentAt ? '✉ Email link again' : '✉ Email the link'}</button>
                     <button onClick={() => whatsAppQuoteRequest(o, q)} style={btn}>🟢 WhatsApp the link</button>
                     <button onClick={() => copyQuoteRequest(o, q)} style={btn}>Copy message</button>
@@ -408,7 +482,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                                 const t = totals[i]
                                 return (
                                   <td key={q.id} style={{ padding: '6px 8px', textAlign: 'right', verticalAlign: 'top', background: t !== null && t === best && repliedQs.length > 1 ? '#f0fdf4' : undefined }}>
-                                    {l?.unavailable ? <span style={{ color: '#dc2626' }}>can&apos;t supply</span> : t === null ? <span style={{ color: '#94a3b8' }}>not priced</span> : <><strong style={{ fontFamily: 'monospace' }}>{fmt(t)}</strong><div style={{ color: '#94a3b8' }}>{fmt(l!.unitPrice ?? 0)} each</div></>}
+                                    {q.lines.length === 0 ? <span style={{ color: '#94a3b8' }}>in their total</span> : l?.unavailable ? <span style={{ color: '#dc2626' }}>can&apos;t supply</span> : t === null ? <span style={{ color: '#94a3b8' }}>not priced</span> : <><strong style={{ fontFamily: 'monospace' }}>{fmt(t)}</strong><div style={{ color: '#94a3b8' }}>{fmt(l!.unitPrice ?? 0)} each</div></>}
                                     {l?.note ? <div style={{ color: '#475569', fontStyle: 'italic' }}>“{l.note}”</div> : null}
                                   </td>
                                 )
@@ -422,7 +496,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                         </tr>
                         <tr style={{ borderTop: '2px solid #1e293b', fontWeight: 700 }}>
                           <td style={{ padding: '6px 8px' }}>Total ex VAT</td>
-                          {repliedQs.map(q => <td key={q.id} style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(pricedQuote(items, q.lines, q.deliveryCharge).total)}</td>)}
+                          {repliedQs.map(q => <td key={q.id} style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(q.lines.length ? pricedQuote(items, q.lines, q.deliveryCharge).total : (q.price ?? 0))}</td>)}
                         </tr>
                       </tbody>
                     </table>
@@ -513,6 +587,33 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                     </div>
                   ))}
                   <div style={{ fontSize: 11, color: '#92400e', marginTop: 4 }}>Until matched, the job&apos;s margin counts the expected cost and this invoice both.</div>
+                </div>
+              )}
+
+              {/* Emailed quotes the app could not place on its own */}
+              {loose && incoming.length > 0 && (
+                <div style={{ marginBottom: 14, border: '1px solid #fde68a', background: '#fffbeb', borderRadius: 10, padding: '10px 14px' }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 }}>📥 Emailed quotes to place ({incoming.length})</div>
+                  {incoming.map(inc => {
+                    const opts = [...openReqs].sort((a, b) => Number(b.order.id === inc.suggestedOrderId) - Number(a.order.id === inc.suggestedOrderId))
+                    return (
+                      <div key={inc.id} style={{ padding: '8px 0', borderTop: '1px solid #fef3c7', fontSize: 13, color: '#44403c' }}>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                          <a href={`/api/orders/quote-file?incomingId=${inc.id}`} target="_blank" rel="noreferrer" style={{ color: '#0369a1', fontWeight: 700 }}>{inc.fileName || 'Quote'} ↗</a>
+                          <span style={{ color: '#78716c' }}>from {inc.sourceEmail || 'unknown'}{inc.subject ? ` · “${inc.subject}”` : ''}</span>
+                        </div>
+                        <div style={{ fontSize: 12, color: '#78716c', marginTop: 2 }}>Read as: {inc.supplier || 'unknown supplier'}{inc.netTotal > 0 ? `, ${fmt(inc.netTotal)} ex VAT` : ''}. {inc.reason}</div>
+                        <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <select style={{ ...inp, width: 'auto', minWidth: 240, flex: 1 }} value={assignPick[inc.id] ?? ''} onChange={e => setAssignPick({ ...assignPick, [inc.id]: e.target.value })}>
+                            <option value="">Which request and supplier is it for?</option>
+                            {opts.map(r => r.invites.map(i => <option key={i.id} value={i.id}>{poRef(r.order.poNumber)} {r.order.title} — {i.supplierName}</option>))}
+                          </select>
+                          <button onClick={() => assignEmailed(inc)} disabled={!assignPick[inc.id] || busy === `as-${inc.id}`} style={primary}>{busy === `as-${inc.id}` ? 'Adding…' : 'Add as their reply'}</button>
+                          <button onClick={async () => { if (confirm('Dismiss this emailed quote? The file is kept but it leaves this list.')) { await sb.from('incoming_quotes').update({ status: 'dismissed' }).eq('id', inc.id); await load() } }} style={btn}>Dismiss</button>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
 

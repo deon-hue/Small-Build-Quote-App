@@ -8,6 +8,7 @@ import { rowToOrder, rowToQuote, areaOnly, poRef, quoteNet, pricedQuote, type Qu
 import { senderFrom, withPoweredBy, escapeHtml } from '@/lib/email-brand'
 import { BRAND, emailShell, emailPara, emailCard, emailButton } from '@/lib/email-layout'
 import { pushToOwner } from '@/lib/push'
+import { withCode } from '@/lib/mail-address'
 
 const TOKEN = /^[0-9a-f]{64}$/
 const YMD = /^\d{4}-\d{2}-\d{2}$/
@@ -25,7 +26,7 @@ async function load(token: string) {
   if (!qRow) return null
   const { data: oRow } = await sb.from('job_orders').select('*').eq('id', qRow.order_id).maybeSingle()
   if (!oRow) return null
-  const { data: s } = await sb.from('settings').select('company_name, phone, email, logo, contact, address').eq('user_id', oRow.user_id).maybeSingle()
+  const { data: s } = await sb.from('settings').select('company_name, phone, email, logo, contact, address, mail_code').eq('user_id', oRow.user_id).maybeSingle()
   return { sb, quote: rowToQuote(qRow), order: rowToOrder(oRow), ownerId: oRow.user_id as string, settings: s as Record<string, string> | null }
 }
 
@@ -49,6 +50,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       deliveryDate: o.deliveryDate, deliverySlot: o.deliverySlot, offHireDate: o.offHireDate,
       rateBasis: o.rateBasis, plannedUnits: o.plannedUnits,
       // open: can still be answered; chosen: they won it; closed: gone elsewhere or withdrawn
+      inboxEmail: withCode((process.env.NEXT_PUBLIC_QUOTES_EMAIL || '').trim(), settings?.mail_code),
       state: q.status === 'chosen' ? 'chosen' : open && q.status !== 'not_chosen' ? 'open' : 'closed',
       status: q.status,
       items: (o.items ?? []).map(i => ({ id: i.id, name: i.name, qty: i.qty, unit: i.unit })),

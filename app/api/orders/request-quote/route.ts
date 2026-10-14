@@ -8,6 +8,7 @@ import { usageGuard } from '@/lib/usage'
 import { callerIsPortalOnly } from '@/lib/caller-role'
 import { BRAND, emailShell, emailPara, emailCard, emailCallout, emailButton } from '@/lib/email-layout'
 import { rowToOrder, rowToQuote, areaOnly, poRef, quoteLink, quoteRequestText, requestDetails } from '@/lib/job-orders'
+import { withCode } from '@/lib/mail-address'
 
 interface Branding {
   companyName?: string; companyPhone?: string; companyEmail?: string; senderName?: string
@@ -46,6 +47,10 @@ export async function POST(req: NextRequest) {
     const appUrl = (process.env.NEXT_PUBLIC_APP_URL || req.headers.get('origin') || '').replace(/\/$/, '')
     if (!appUrl) return NextResponse.json({ error: 'The site address is not set, so the price link cannot be made.' }, { status: 500 })
     const link = quoteLink(appUrl, q.token)
+    // where a supplier can email their own quote instead (set in the host's settings; omitted if there isn't one)
+    const { data: ownerForMail } = await sb.rpc('get_effective_owner_id')
+    const { data: mc } = await sb.from('settings').select('mail_code').eq('user_id', (ownerForMail as string) || user.id).maybeSingle()
+    const inboxEmail = withCode((process.env.NEXT_PUBLIC_QUOTES_EMAIL || '').trim(), (mc?.mail_code as string) || '')
 
     const b = body.branding ?? {}
     const e = escapeHtml
@@ -74,7 +79,7 @@ export async function POST(req: NextRequest) {
         emailPara(`Hello ${e(hello)},`, 12) +
         emailPara('Please could you give us a price for the following. It takes a minute and you do not need to log in.', 14) +
         emailCard(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">${rows}</table>`) +
-        emailButton(e(link), 'Give your price', 'Price, earliest delivery date and how long the price stands. Or press reply and tell us.') +
+        emailButton(e(link), 'Give your price', inboxEmail ? `Prefer to send your own quote? Email it to ${e(inboxEmail)} with ${e(ref)} on it and we will pick it up.` : 'Price, earliest delivery date and how long the price stands. Or press reply and tell us.') +
         emailCallout(`<p style="margin:0;font-size:14px;line-height:1.6;color:${BRAND.ink}">Our reference is <strong>${e(ref)}</strong>. If we go ahead we will send you the order with the full address, and ask you to quote ${e(ref)} on your invoice.</p>`, 'Reference') +
         emailPara(`Thanks,<br><strong>${e(b.senderName || b.companyName || '')}</strong>${b.companyPhone ? `<br>${e(b.companyPhone)}` : ''}`, 0),
       footerHtml: [
@@ -90,7 +95,7 @@ export async function POST(req: NextRequest) {
       to: q.supplierEmail.trim(),
       subject: `Price request ${ref}: ${o.title}`,
       html: withPoweredBy(html),
-      text: quoteRequestText(o, q, link, { name: b.senderName || '', company: b.companyName || 'Your builder' }),
+      text: quoteRequestText(o, q, link, { name: b.senderName || '', company: b.companyName || 'Your builder' }, inboxEmail),
     }
     if (b.companyEmail && EMAIL_RX.test(b.companyEmail)) {
       payload.reply_to = b.companyEmail

@@ -8,7 +8,7 @@ import { useParams } from 'next/navigation'
 
 interface Info {
   company: string; contactPhone: string; contactName: string; logoUrl: string; ref: string; supplierName: string
-  title: string; details: string; orderType: string; items: { id: string; name: string; qty: number; unit: string }[]; area: string; deliveryDate: string; deliverySlot: string; offHireDate: string
+  inboxEmail?: string; title: string; details: string; orderType: string; items: { id: string; name: string; qty: number; unit: string }[]; area: string; deliveryDate: string; deliverySlot: string; offHireDate: string
   rateBasis: 'fixed' | 'day' | 'week'; plannedUnits: number
   state: 'open' | 'chosen' | 'closed'; status: string
   reply: { price: number | null; rateBasis: 'fixed' | 'day' | 'week'; deliveryDate: string; validUntil: string; notes: string; lines?: { id: string; unitPrice: number | null; unavailable: boolean; note: string }[]; deliveryCharge?: number } | null
@@ -234,6 +234,8 @@ export default function SupplierQuotePage() {
                     <button onClick={() => setDeclining(false)} style={{ marginTop: 10, width: '100%', padding: '11px 18px', background: 'none', color: MUTED, border: `1px solid #cbd5e1`, borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Back, I will give a price</button>
                   </>
                 )}
+
+                {info.inboxEmail && <p style={{ margin: '18px 0 0', fontSize: 14, color: MUTED, lineHeight: 1.6, padding: '10px 12px', background: '#f8fafc', border: `1px solid ${LINE}`, borderRadius: 8 }}>Rather use your own quoting system? Email your quote to <strong style={{ color: INK }}>{info.inboxEmail}</strong> with <strong style={{ color: INK }}>{info.ref}</strong> on it, and we will pick it up. You do not need to fill this in as well.</p>}
 
                 {info.contactPhone && <p style={{ margin: '20px 0 0', fontSize: 13, color: MUTED, lineHeight: 1.6 }}>Questions? Call {info.contactName || info.company} on <strong style={{ color: INK }}>{info.contactPhone}</strong>.</p>}
               </>
