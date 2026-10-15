@@ -34,9 +34,18 @@ export interface NormalisedEmail {
   /** every address it was sent to, so the company code in the address (quotes-ab12cd34@...) can be read */
   recipients: string[]
   attachments: NormalisedAttachment[]
+  /** the sender's address on its own (a@b.com), lower case; '' if it could not be read */
+  fromEmail: string
+  /** the email's headers, names in lower case */
+  headers: Record<string, string>
 }
 
 function mimeBase(ct: string) { return ct.split(';')[0].trim().toLowerCase() }
+/** a@b.com out of `Dave <a@b.com>` or a bare address */
+export function emailAddressOf(from: string): string {
+  const m = /<([^<>\s]+@[^<>\s]+)>/.exec(from) || /([^\s<>",;]+@[^\s<>",;]+)/.exec(from)
+  return m ? m[1].trim().toLowerCase() : ''
+}
 const sizeOf = (reported: number, base64: string) => (reported > 0 ? reported : Math.floor((base64.length * 3) / 4))
 
 // Accepts two formats:
@@ -49,6 +58,8 @@ export function normaliseInbound(body: Record<string, unknown>): NormalisedEmail
       from: String(body.from ?? ''),
       subject: String(body.subject ?? ''),
       body: String(body.body ?? body.bodyPreview ?? ''),
+      fromEmail: emailAddressOf(String(body.from ?? '')),
+      headers: {},
       recipients: [body.to, body.cc, body.toRecipients, body.ccRecipients].flatMap(x => (Array.isArray(x) ? x : [x])).map(x => (typeof x === 'string' ? x : JSON.stringify(x ?? ''))),
       attachments: (body.attachments as Record<string, unknown>[]).map(a => {
         const b64 = String(a.contentBytes ?? '')
@@ -63,6 +74,8 @@ export function normaliseInbound(body: Record<string, unknown>): NormalisedEmail
     from: String(body.From ?? ''),
     subject: String(body.Subject ?? ''),
     body: textBody,
+    fromEmail: emailAddressOf(String((body.FromFull as { Email?: string } | undefined)?.Email || body.From || '')),
+    headers: Object.fromEntries((Array.isArray(body.Headers) ? body.Headers as { Name?: string; Value?: string }[] : []).filter(h => h && h.Name).map(h => [String(h.Name).toLowerCase(), String(h.Value ?? '')])),
     recipients: [body.To, body.Cc, body.OriginalRecipient, ...(Array.isArray(body.ToFull) ? body.ToFull : []), ...(Array.isArray(body.CcFull) ? body.CcFull : [])]
       .map(x => (typeof x === 'string' ? x : JSON.stringify(x ?? ''))),
     attachments: (Array.isArray(body.Attachments) ? body.Attachments as Record<string, unknown>[] : []).map(a => {
@@ -117,4 +130,30 @@ export function describeAttachments(email: NormalisedEmail): string {
     return `${a.name || 'unnamed'} (${kind}, ${kb(a.size)}${why.length ? ', ' + why.join(', ') : ''})`
   })
   return `${email.attachments.length} file${email.attachments.length === 1 ? '' : 's'} came with it: ${parts.join('; ')}.`
+}
+
+/**
+ * Is this email from a machine rather than a person: a no-reply address, a bounce, a mailing list, or anything marked as automatic? Such senders are never answered,
+ * so two automatic systems cannot end up replying to each other for ever, and nobody receives a reply to something they did not write.
+ */
+export function looksAutomated(email: NormalisedEmail): boolean {
+  const local = email.fromEmail.split('@')[0] || ''
+  if (!email.fromEmail || /^(no[-_.]?reply|do[-_.]?not[-_.]?reply|mailer[-_.]?daemon|postmaster|bounces?|notifications?|alerts?|auto[-_.]?(reply|response|mail)?|daemon|donotreply)/i.test(local)) return true
+  const h = email.headers
+  const autoSubmitted = (h['auto-submitted'] || '').trim().toLowerCase()
+  if (autoSubmitted && autoSubmitted !== 'no') return true
+  if (/^(bulk|list|junk|auto_reply)$/i.test((h['precedence'] || '').trim())) return true
+  if (h['x-auto-response-suppress'] || h['list-unsubscribe'] || h['list-id'] || h['x-autoreply'] || h['x-autorespond']) return true
+  return false
+}
+
+/** Why none of the files could be read, in a sentence for the supplier ("the quote was pasted into the email instead of attached as a file"). */
+export function whyNothingReadable(email: NormalisedEmail): string {
+  const files = email.attachments
+  if (files.length === 0) return 'there was no file attached to your email'
+  if (files.every(a => a.inline && ALLOWED_TYPES.has(a.mime))) return 'the quote was shown inside the writing of your email (or was only a small picture) rather than attached as a file'
+  const wrong = files.find(a => !ALLOWED_TYPES.has(a.mime))
+  if (wrong) return `the file attached (${wrong.name || 'unnamed'}) is not a PDF or a photo`
+  if (files.some(a => a.size > MAX_BYTES)) return 'the file attached was too big (over 9 MB)'
+  return 'we could not find a PDF or a photo attached to your email'
 }

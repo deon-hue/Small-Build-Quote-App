@@ -242,7 +242,7 @@ export default function SupplierQuotePage() {
                   </>
                 )}
 
-                {info.inboxEmail && <p style={{ margin: '18px 0 0', fontSize: 14, color: MUTED, lineHeight: 1.6, padding: '10px 12px', background: '#f8fafc', border: `1px solid ${LINE}`, borderRadius: 8 }}>Rather use your own quoting system? Forward or email your quote to <strong style={{ color: INK }}>{info.inboxEmail}</strong> with <strong style={{ color: INK }}>{info.ref}</strong> on it, and we will pick it up. You do not need to fill this in as well.</p>}
+                {info.inboxEmail && <p style={{ margin: '18px 0 0', fontSize: 14, color: MUTED, lineHeight: 1.6, padding: '10px 12px', background: '#f8fafc', border: `1px solid ${LINE}`, borderRadius: 8 }}>Rather use your own quoting system? Forward or email your quote, attached to the email as a PDF (not pasted in or as a link), to <strong style={{ color: INK }}>{info.inboxEmail}</strong> with <strong style={{ color: INK }}>{info.ref}</strong> on it, and we will pick it up. You do not need to fill this in as well.</p>}
 
                 {info.contactPhone && <p style={{ margin: '20px 0 0', fontSize: 13, color: MUTED, lineHeight: 1.6 }}>Questions? Call {info.contactName || info.company} on <strong style={{ color: INK }}>{info.contactPhone}</strong>.</p>}
               </>

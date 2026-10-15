@@ -372,7 +372,7 @@ export function quoteRequestText(o: JobOrder, q: Pick<OrderQuote, 'supplierConta
     ...body,
     '',
     `Put your price in here, it takes a minute (no login): ${link}`,
-    inboxEmail ? `Or, if you would rather use your own quoting system, forward or email your quote to ${inboxEmail} with ${poRef(o.poNumber)} on it and we will match it up. Thanks!` : 'Or just reply with your price and earliest date. Thanks!',
+    inboxEmail ? `Or, if you would rather use your own quoting system, email your quote as a PDF attachment (not pasted into the email, and not a link) to ${inboxEmail} with ${poRef(o.poNumber)} on it and we will match it up. Thanks!` : 'Or just reply with your price and earliest date. Thanks!',
   ].join('\n')
 }
 

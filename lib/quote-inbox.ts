@@ -122,3 +122,22 @@ export async function assignIncomingQuote(sb: SupabaseClient, ownerId: string, i
   await sb.from('incoming_quotes').update({ status: 'assigned' }).eq('id', incomingId)
   return { ok: true }
 }
+
+/**
+ * Is an email to the quotes address plausibly a supplier's quote for one of the open price requests? Yes if it names one of their PO numbers, or comes from the exact address of a supplier
+ * who was asked. Used to decide whether to answer a no-attachment email at all: a stranger or a spammer is never answered. Returns the PO reference to quote back when it is known.
+ */
+export async function knownQuoteSender(sb: SupabaseClient, ownerId: string, fromEmail: string, ...texts: string[]): Promise<{ known: boolean; ref: string }> {
+  const { data: reqRows } = await sb.from('job_orders').select('*').eq('user_id', ownerId).eq('kind', 'quote_request').neq('status', 'cancelled')
+  const open = (reqRows ?? []).map(rowToOrder).filter(r => !r.deletedAt)
+  if (open.length === 0) return { known: false, ref: '' }
+  const m = matchRequest(findPoNumbers(...texts), open.map(r => ({ id: r.id, poNumber: r.poNumber })))
+  if (m.kind === 'matched') return { known: true, ref: poRef(m.request.poNumber) }
+  if (m.kind === 'ambiguous') return { known: true, ref: '' }
+  if (!fromEmail) return { known: false, ref: '' }
+  const { data: qs } = await sb.from('job_order_quotes').select('order_id, supplier_email').eq('user_id', ownerId).in('order_id', open.map(r => r.id))
+  const mine = (qs ?? []).filter(q => String(q.supplier_email ?? '').trim().toLowerCase() === fromEmail.toLowerCase())
+  if (mine.length === 0) return { known: false, ref: '' }
+  const orders = [...new Set(mine.map(q => q.order_id as string))]
+  return { known: true, ref: orders.length === 1 ? poRef(open.find(r => r.id === orders[0])?.poNumber ?? 0) : '' }
+}

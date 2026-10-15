@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceRoleClient } from '@/lib/supabase/service-role'
 import { extractDocument } from '@/lib/doc-extract'
 import { processQuoteAttachment } from '@/lib/quote-inbox'
+import { askForAttachment } from '@/lib/ask-for-attachment'
 import { codeFromRecipients } from '@/lib/mail-address'
 import { normaliseInbound, readableAttachments, describeAttachments, type NormalisedEmail } from '@/lib/inbound-email'
 
@@ -66,7 +67,8 @@ export async function POST(req: NextRequest) {
   const attachments = readableAttachments(email)
 
   if (!attachments.length) {
-    await logEmail(userId, email, 'no_attachments', describeAttachments(email))
+    const asked = await askForAttachment(createServiceRoleClient(), userId, email, { quotesEmail: process.env.NEXT_PUBLIC_QUOTES_EMAIL || '', resendKey: process.env.RESEND_API_KEY, fromEmail: process.env.NOTIFY_FROM_EMAIL })
+    await logEmail(userId, email, 'no_attachments', describeAttachments(email) + asked)
     return NextResponse.json({ processed: 0, skipped: 'no valid attachments' })
   }
 
