@@ -19,8 +19,8 @@ export function pushConfigured(): boolean {
   return configured
 }
 
-interface Prefs { enabled: boolean; supplier_replies: boolean; sub_notes: boolean; timesheets: boolean; daily_summary: boolean }
-const DEFAULT_PREFS: Prefs = { enabled: true, supplier_replies: true, sub_notes: true, timesheets: true, daily_summary: true }
+interface Prefs { enabled: boolean; supplier_replies: boolean; sub_notes: boolean; timesheets: boolean; selections: boolean; daily_summary: boolean }
+const DEFAULT_PREFS: Prefs = { enabled: true, supplier_replies: true, sub_notes: true, timesheets: true, selections: true, daily_summary: true }
 
 /**
  * Sends one alert to every device of the given people, for those who have that kind of alert on. `category: null` skips the preferences (a test the person asked for).

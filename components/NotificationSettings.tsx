@@ -8,8 +8,8 @@ import { createClient } from '@/lib/supabase/client'
 import { getPushState, enablePush, disablePush, type PushState } from '@/lib/push-client'
 import { PUSH_CATEGORIES } from '@/lib/push-categories'
 
-type Prefs = { enabled: boolean; supplier_replies: boolean; sub_notes: boolean; timesheets: boolean; daily_summary: boolean }
-const DEFAULTS: Prefs = { enabled: true, supplier_replies: true, sub_notes: true, timesheets: true, daily_summary: true }
+type Prefs = { enabled: boolean; supplier_replies: boolean; sub_notes: boolean; timesheets: boolean; selections: boolean; daily_summary: boolean }
+const DEFAULTS: Prefs = { enabled: true, supplier_replies: true, sub_notes: true, timesheets: true, selections: true, daily_summary: true }
 
 function Switch({ on, onChange, label, hint, disabled }: { on: boolean; onChange: (v: boolean) => void; label: string; hint?: string; disabled?: boolean }) {
   return (
@@ -52,7 +52,9 @@ export default function NotificationSettings() {
     const sb = createClient()
     const { data: { user } } = await sb.auth.getUser()
     if (!user) return
-    const { error } = await sb.from('notification_prefs').upsert({ user_id: user.id, ...next, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+    let { error } = await sb.from('notification_prefs').upsert({ user_id: user.id, ...next, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+    // a database that has not had supabase/job-selections.sql run has no 'selections' column yet: save everything else
+    if (error && /selections/i.test(error.message)) { const { selections: _s, ...rest } = next; void _s; ;({ error } = await sb.from('notification_prefs').upsert({ user_id: user.id, ...rest, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })) }
     if (error) setNotice({ ok: false, text: /does not exist|schema cache|PGRST205|42P01/i.test(error.message) ? 'Notifications need a small database update first: run supabase/push-notifications.sql in the Supabase SQL editor.' : `Could not save that. ${error.message}` })
   }
 

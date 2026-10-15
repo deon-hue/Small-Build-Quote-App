@@ -404,6 +404,8 @@ export interface ClientPortalSettings {
   showInvoicesTab: boolean
   /** Show the Variations tab in the client portal */
   showVariationsTab: boolean
+  /** Show the Selections tab (the client's ideas board) in the client portal. Missing = shown. */
+  showSelectionsTab?: boolean
   /** Show the Programme (Gantt chart) on the Jobs page */
   showProgramme: boolean
   /** Allow client to digitally approve quotes via the portal */
@@ -422,6 +424,7 @@ export const DEFAULT_CLIENT_PORTAL_SETTINGS: ClientPortalSettings = {
   showJobsTab:        true,
   showInvoicesTab:    true,
   showVariationsTab:  true,
+  showSelectionsTab:  true,
   showProgramme:      true,
   allowOnlineApproval: true,
   showDashboardProgress: true,

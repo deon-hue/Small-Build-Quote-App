@@ -12,6 +12,8 @@ import { ContactPicker } from '@/components/ContactPicker'
 import VariationModal from '@/components/VariationModal'
 import JobDocumentsModal from '@/components/JobDocumentsModal'
 import JobOrdersModal from '@/components/JobOrdersModal'
+import JobSelectionsModal from '@/components/JobSelectionsModal'
+import { createClient } from '@/lib/supabase/client'
 import JobNotesModal from '@/components/JobNotesModal'
 import JobAttachmentsModal from '@/components/JobAttachmentsModal'
 import PaymentRequestsModal from '@/components/PaymentRequestsModal'
@@ -42,6 +44,19 @@ function JobsPageInner() {
   const [notesJob, setNotesJob] = useState<Job | null>(null)
   const [docsJob, setDocsJob] = useState<Job | null>(null)
   const [ordersJob, setOrdersJob] = useState<Job | null>(null)
+  // a client's Selections (their ideas board): the window, and how many items the client has added or changed that you have not opened yet, per job
+  const [selectionsJob, setSelectionsJob] = useState<Job | null>(null)
+  const [newSelections, setNewSelections] = useState<Record<string, number>>({})
+  const refreshNewSelections = () => {
+    createClient().from('job_selections').select('job_id').is('builder_seen_at', null).then(({ data, error }) => {
+      if (error) return   // the table is not there yet (supabase/job-selections.sql not run): no counts
+      const m: Record<string, number> = {}
+      for (const r of data ?? []) { const id = r.job_id as string; m[id] = (m[id] ?? 0) + 1 }
+      setNewSelections(m)
+    })
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { refreshNewSelections() }, [selectionsJob])
   // price requests made from a calculator's materials list before there is a job
   const [showRequests, setShowRequests] = useState(false)
   const [attachmentsJob, setAttachmentsJob] = useState<Job | null>(null)
@@ -63,6 +78,9 @@ function JobsPageInner() {
   // "?orders=<jobId>" (from the dashboard's Needs your attention card) opens that job's Orders window straight away
   useEffect(() => {
     if (searchParams.get('requests') && !loading) { setShowRequests(true); router.replace('/jobs') }
+    // "?selections=<jobId>" (from a notification) opens that job's Selections
+    const sid = searchParams.get('selections')
+    if (sid && !loading) { const sj = jobs.find(j => j.id === sid); if (sj) { setSelectionsJob(sj); router.replace('/jobs') } }
     const oid = searchParams.get('orders')
     if (!oid || loading) return
     const oj = jobs.find(j => j.id === oid)
@@ -274,6 +292,7 @@ function JobsPageInner() {
             })()}</button>
             <button className="btn-sm btn-outline jb-costs" onClick={() => setDocsJob(j)} title="Scan/upload supplier docs and track costs">💷 Costs</button>
             <button className="btn-sm btn-outline" onClick={() => setOrdersJob(j)} title="Order a skip, portaloo, plant or materials, send it to the supplier, and track the expected cost">📦 Orders</button>
+            <button className="btn-sm btn-outline" onClick={() => setSelectionsJob(j)} title="What your client has chosen for their home (skirting, lights, taps…), from their portal">🎨 Selections{newSelections[j.id] ? <span style={{ marginLeft: 6, background: '#16a34a', color: '#fff', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 6px' }}>{newSelections[j.id]} new</span> : null}</button>
             <button className="btn-sm btn-outline jb-pay" onClick={() => setRequestsJob(j)} title="Payment requests and received payments">
               💳 Payments{jobPayments.filter(p => p.jobId === j.id).length > 0 ? ` (${jobPayments.filter(p => p.jobId === j.id).length})` : ''}
             </button>
@@ -540,6 +559,15 @@ function JobsPageInner() {
         />
       )}
 
+
+      {selectionsJob && (
+        <JobSelectionsModal
+          jobId={selectionsJob.id}
+          jobLabel={`${jobDisplayTitle(selectionsJob)} — ${selectionsJob.client}`}
+          onChanged={refreshNewSelections}
+          onClose={() => setSelectionsJob(null)}
+        />
+      )}
 
       {showRequests && <JobOrdersModal jobId={null} jobLabel="Not for a job yet" onClose={() => setShowRequests(false)} />}
 

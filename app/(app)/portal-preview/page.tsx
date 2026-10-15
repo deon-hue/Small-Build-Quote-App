@@ -8,6 +8,8 @@ import PortalBuildPlan from '@/components/PortalBuildPlan'
 import PortalQuoteDetailsModal from '@/components/PortalQuoteDetailsModal'
 import PortalContractsView, { PortalFileList, type PortalJobFile } from '@/components/PortalContractsView'
 import PortalDashboardCards from '@/components/PortalDashboardCards'
+import PortalSelectionsView from '@/components/PortalSelectionsView'
+import { rowToSelection, type Selection, type SelectionFile } from '@/lib/selections'
 import PortalIntro from '@/components/PortalIntro'
 import type { PortalContract } from '@/contexts/PortalContext'
 import { useApp } from '@/contexts/AppContext'
@@ -46,7 +48,7 @@ interface PreviewSettings {
   name: string; tagline: string; email: string; phone: string; address: string; logo: string
 }
 
-type Tab = 'dashboard' | 'quotes' | 'variations' | 'invoices' | 'contracts' | 'build-plan'
+type Tab = 'dashboard' | 'quotes' | 'variations' | 'invoices' | 'contracts' | 'build-plan' | 'selections'
 
 // ── Status maps ──────────────────────────────────────────────
 const QUOTE_STATUS_LABEL: Record<string, string> = {
@@ -98,7 +100,7 @@ function PortalPreviewInner() {
   const [variations, setVariations] = useState<PreviewVariation[]>([])
   const [payments, setPayments] = useState<PreviewPayment[]>([])
   const [settings, setSettings] = useState<PreviewSettings | null>(null)
-  const [clientSettings, setClientSettings] = useState<{ quoteView?: 'full' | 'phases' | 'total_only'; showScope?: boolean; showDashboardProgress?: boolean; showQuotesTab?: boolean; showVariationsTab?: boolean; showInvoicesTab?: boolean }>({})
+  const [clientSettings, setClientSettings] = useState<{ quoteView?: 'full' | 'phases' | 'total_only'; showScope?: boolean; showDashboardProgress?: boolean; showQuotesTab?: boolean; showVariationsTab?: boolean; showInvoicesTab?: boolean; showSelectionsTab?: boolean }>({})
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null)
 
@@ -106,6 +108,27 @@ function PortalPreviewInner() {
   // client's portal receives, and shown by the same component the real portal uses (components/PortalContractsView.tsx).
   const { contracts: appContracts } = useApp()
   const [previewContracts, setPreviewContracts] = useState<PortalContract[]>([])
+  // Selections: the client's items for their jobs, read with the builder's own session (they own the rows) and shown by the same component the real portal uses
+  const [previewSelections, setPreviewSelections] = useState<Selection[]>([])
+  const [selectionsMissing, setSelectionsMissing] = useState(false)
+  const [selJobId, setSelJobId] = useState('')
+  useEffect(() => {
+    if (!jobs.length) return
+    if (!selJobId) setSelJobId(jobs[0].id)
+    let live = true
+    ;(async () => {
+      const ids = jobs.map(j => j.id)
+      const { data: rows, error } = await supabase.from('job_selections').select('*').in('job_id', ids).order('created_at', { ascending: false })
+      if (!live) return
+      if (error) { setSelectionsMissing(/does not exist|schema cache|PGRST205|42P01/i.test(error.message)); setPreviewSelections([]); return }
+      setSelectionsMissing(false)
+      let files: Record<string, SelectionFile[]> = {}
+      try { const r = await fetch('/api/selections/urls?jobIds=' + ids.join(',')); const j = await r.json(); files = j.files ?? {} } catch { /* photos just do not show */ }
+      if (!live) return
+      setPreviewSelections((rows ?? []).map(r => rowToSelection(r as AnyRecord, files[(r as AnyRecord).id] ?? [])))
+    })()
+    return () => { live = false }
+  }, [jobs]) // eslint-disable-line react-hooks/exhaustive-deps
   const [filesByJob, setFilesByJob] = useState<Record<string, PortalJobFile[]>>({})
   useEffect(() => {
     if (!jobs.length) return
@@ -176,6 +199,7 @@ function PortalPreviewInner() {
           showQuotesTab: d.client_settings.showQuotesTab !== false,
           showVariationsTab: d.client_settings.showVariationsTab !== false,
           showInvoicesTab: d.client_settings.showInvoicesTab !== false,
+          showSelectionsTab: d.client_settings.showSelectionsTab !== false,
         })
       }
 
@@ -258,7 +282,7 @@ function PortalPreviewInner() {
   )
 
   const TAB_LABELS: Record<Tab, string> = {
-    dashboard: 'Dashboard', quotes: 'Quotes', variations: 'Variations', invoices: 'Invoices', contracts: 'Contracts', 'build-plan': 'Work Schedule',
+    dashboard: 'Dashboard', quotes: 'Quotes', variations: 'Variations', invoices: 'Invoices', contracts: 'Contracts', 'build-plan': 'Work Schedule', selections: 'Selections',
   }
 
   return (
@@ -276,7 +300,7 @@ function PortalPreviewInner() {
           {/* inline display:flex overrides the @media(max-width:640px) display:none rule */}
           {/* Admin preview shows every tab, regardless of the client's hidden-tab settings */}
           <nav className="portal-nav" style={{ display: 'flex' }}>
-            {(['dashboard', 'quotes', 'variations', 'invoices', 'contracts', 'build-plan'] as Tab[]).map(tab => (
+            {(['dashboard', 'quotes', 'variations', 'invoices', 'contracts', 'build-plan', 'selections'] as Tab[]).filter(t => t !== 'selections' || clientSettings.showSelectionsTab !== false).map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -621,6 +645,18 @@ function PortalPreviewInner() {
               jobs={jobs}
               renderFiles={jobId => <PortalFileList files={filesByJob[jobId] || []} />}
               preview
+            />
+          </>
+        )}
+
+        {activeTab === 'selections' && (
+          <>
+            <div style={{ background: '#1e2022', color: '#f0c040', borderRadius: 8, padding: '10px 16px', fontSize: 12, fontWeight: 600, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+              👁 Preview mode — adding and changing items is switched off
+            </div>
+            <PortalSelectionsView
+              items={previewSelections.filter(s => !selJobId || s.jobId === selJobId)} jobs={jobs.map(j => ({ id: j.id, title: j.client, type: j.type, address: j.address }))} jobId={selJobId} onJobChange={setSelJobId}
+              missing={selectionsMissing} today={new Date().toISOString().slice(0, 10)} companyName={settings?.name} preview
             />
           </>
         )}

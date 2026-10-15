@@ -12,7 +12,7 @@ function PortalNav() {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
-  const { settings, clientSettings, contracts } = usePortal()
+  const { settings, clientSettings, contracts, jobs } = usePortal()
   const visibleContracts = contracts.filter(c => c.status === 'sent' || c.status === 'signed')
   const awaitingContracts = contracts.filter(c => c.status === 'sent').length
   const [menuOpen, setMenuOpen] = useState(false)
@@ -58,6 +58,7 @@ function PortalNav() {
           {clientSettings.showInvoicesTab   && navLink('/portal/invoices',    'Invoices')}
           {visibleContracts.length > 0 && navLink('/portal/contracts', 'Contracts', awaitingContracts)}
           {navLink('/portal/build-plan', 'Work Schedule')}
+          {clientSettings.showSelectionsTab !== false && jobs.length > 0 && navLink('/portal/selections', 'Selections')}
           <button className="portal-signout-btn" onClick={signOut}>Sign Out</button>
         </nav>
         <button

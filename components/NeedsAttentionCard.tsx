@@ -30,6 +30,8 @@ export default function NeedsAttentionCard() {
   const [reminders, setReminders] = useState<OrderReminder[]>([])
   // supplier quotes that came in by email and are waiting for you to say which request they are for
   const [emailedQuotes, setEmailedQuotes] = useState(0)
+  // items a client has added or changed on their portal Selections that you have not opened yet (supabase/job-selections.sql), per job
+  const [selections, setSelections] = useState<{ jobId: string; count: number }[]>([])
 
   useEffect(() => {
     let alive = true
@@ -63,6 +65,14 @@ export default function NeedsAttentionCard() {
     async function loadOrders() {
       try {
         const sb = createClient()
+        try {
+          const { data: sel, error: selErr } = await sb.from('job_selections').select('job_id').is('builder_seen_at', null)
+          if (alive) {
+            const m = new Map<string, number>()
+            if (!selErr) for (const r of sel ?? []) m.set(r.job_id as string, (m.get(r.job_id as string) ?? 0) + 1)
+            setSelections([...m].map(([jobId, count]) => ({ jobId, count })))
+          }
+        } catch { /* the table is not there yet */ }
         const emailed = await fetchIncomingQuotes(sb)
         if (alive) setEmailedQuotes(emailed.length)
         const { orders, repliesByOrder } = await fetchAllJobOrders(sb)
@@ -83,7 +93,7 @@ export default function NeedsAttentionCard() {
   const overdueInv = invoices.filter(i => i.status === 'overdue')
   const overdueTotal = overdueInv.reduce((a, i) => a + (Number(i.total) || 0), 0)
   // nothing to do: a calm card rather than no card, so it keeps its place on the dashboard
-  if (newNotes.length === 0 && pendingTotal === 0 && overdueInv.length === 0 && reminders.length === 0 && emailedQuotes === 0) {
+  if (newNotes.length === 0 && pendingTotal === 0 && overdueInv.length === 0 && reminders.length === 0 && emailedQuotes === 0 && selections.length === 0) {
     return (
       <div className="card" style={{ borderLeft: '4px solid #7ab533' }}>
         <div className="card-hd">Needs your attention</div>
@@ -98,7 +108,7 @@ export default function NeedsAttentionCard() {
     <div className="card" style={{ borderLeft: '4px solid #c0392b' }}>
       <div className="card-hd" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         Needs your attention
-        <span style={{ background: '#c0392b', color: '#fff', borderRadius: 99, padding: '1px 9px', fontSize: 12, fontWeight: 700 }}>{newNotes.length + (pendingTotal > 0 ? 1 : 0) + (overdueInv.length > 0 ? 1 : 0) + reminders.length + (emailedQuotes > 0 ? 1 : 0)}</span>
+        <span style={{ background: '#c0392b', color: '#fff', borderRadius: 99, padding: '1px 9px', fontSize: 12, fontWeight: 700 }}>{newNotes.length + (pendingTotal > 0 ? 1 : 0) + (overdueInv.length > 0 ? 1 : 0) + reminders.length + (emailedQuotes > 0 ? 1 : 0) + selections.length}</span>
       </div>
       <div style={{ padding: '4px 16px 12px' }}>
         {newNotes.length > 0 && (
@@ -127,6 +137,17 @@ export default function NeedsAttentionCard() {
               </div>
               <div style={{ fontSize: 12, color: 'var(--sky, #2a7ab0)', marginTop: 2 }}>Open Subcontractors to approve →</div>
             </Link>
+          </>
+        )}
+        {selections.length > 0 && (
+          <>
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--muted)', margin: '8px 0 4px' }}>New selections from clients</div>
+            {selections.map(s => (
+              <Link key={s.jobId} href={`/jobs?selections=${encodeURIComponent(s.jobId)}`} style={{ display: 'block', padding: '8px 0', borderBottom: '1px solid var(--border)', textDecoration: 'none', color: 'inherit' }}>
+                <div style={{ fontSize: 13, color: 'var(--ink)' }}><strong>{jobLabel(s.jobId)}</strong>: {s.count} new or changed selection{s.count === 1 ? '' : 's'} from the client.</div>
+                <div style={{ fontSize: 12, color: 'var(--sky, #2a7ab0)', marginTop: 2 }}>Open Selections →</div>
+              </Link>
+            ))}
           </>
         )}
         {emailedQuotes > 0 && (

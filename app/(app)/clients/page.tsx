@@ -1262,6 +1262,7 @@ function ClientsPageInner() {
                       { key: 'showQuotesTab',    label: 'Quotes tab' },
                       { key: 'showJobsTab',      label: 'Jobs tab' },
                       { key: 'showInvoicesTab',  label: 'Invoices tab' },
+                      { key: 'showSelectionsTab', label: 'Selections tab (ideas board)' },
                       { key: 'showProgramme',    label: 'Programme / Gantt' },
                       { key: 'showDashboardProgress', label: 'Dashboard: next payment, progress & upcoming works' },
                     ] as { key: keyof ClientPortalSettings; label: string }[]
