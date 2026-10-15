@@ -12,6 +12,7 @@ const USES: [string, string][] = [
   ['Changes', 'review and approve any extra or changed work'],
   ['Invoices', 'see what is due and what you have paid'],
   ['Plans and documents', 'download the drawings and paperwork we share with you'],
+  ['Selections', 'add your ideas and web links for the things you want, such as skirting, light fittings, taps and tiles, with photos, so we know what to order and fit'],
 ]
 
 const INSTALL: [string, string][] = [
@@ -38,7 +39,7 @@ export function portalExplainerHtml(): string {
 /** Plain-text lines for WhatsApp. Pass the (reusable) portal address; empty means leave it out. */
 export function portalWhatsAppLines(portalUrl: string): string[] {
   const lines = [
-    `Your client portal lets you view and approve your quote, follow the work schedule, approve any changes and see your invoices.`,
+    `Your client portal lets you view and approve your quote, follow the work schedule, approve any changes and see your invoices. You can also add your ideas and web links for things like skirting, lights and taps under Selections.`,
   ]
   if (portalUrl) lines.push(portalUrl)
   lines.push(

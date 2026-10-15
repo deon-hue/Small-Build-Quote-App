@@ -125,6 +125,7 @@ export default function PortalDashboard() {
         companyName={settings.name} phone={settings.phone} email={settings.email}
         showQuotes={clientSettings.showQuotesTab} showVariations={clientSettings.showVariationsTab} showInvoices={clientSettings.showInvoicesTab}
         showContracts={contracts.some(c => c.status === 'sent' || c.status === 'signed')}
+        showSelections={clientSettings.showSelectionsTab !== false && jobs.length > 0}
       />
 
       {/* ── Financial snapshot ── */}

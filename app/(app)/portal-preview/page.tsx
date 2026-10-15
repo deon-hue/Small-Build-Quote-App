@@ -360,6 +360,7 @@ function PortalPreviewInner() {
               companyName={settings?.name} phone={settings?.phone} email={settings?.email}
               showQuotes={clientSettings.showQuotesTab !== false} showVariations={clientSettings.showVariationsTab !== false} showInvoices={clientSettings.showInvoicesTab !== false}
               showContracts={previewContracts.length > 0}
+              showSelections={clientSettings.showSelectionsTab !== false && jobs.length > 0}
             />
 
             {/* Welcome strip */}
