@@ -12,6 +12,10 @@ export const MAX_ATTACHMENTS = 10
  * a larger one is kept as a possible quote, but only ever looked at as a quote: if it is not one it is left alone rather than filed as a document.
  */
 export const INLINE_MIN_BYTES = 30 * 1024
+/** When nothing else came with the email, a smaller picture inside it (a cropped screenshot of a quote) is still worth a look, down to this size: below it is an icon. */
+export const INLINE_SMALL_MIN_BYTES = 5 * 1024
+/** ...but at most this many of them, largest first, so a row of icons is not read one by one */
+export const INLINE_SMALL_MAX_COUNT = 2
 
 export interface NormalisedAttachment {
   name: string
@@ -81,11 +85,20 @@ export function normaliseInbound(body: Record<string, unknown>): NormalisedEmail
   }
 }
 
-/** The files worth reading: a PDF or photo that is not too big, and (if shown inside the email) not a small logo or icon. */
+const readableType = (a: NormalisedAttachment) => ALLOWED_TYPES.has(a.mime) && a.size <= MAX_BYTES && !!a.base64
+
+/**
+ * The files worth reading: a PDF or photo that is not too big, and (if shown inside the email) not a small logo or icon.
+ * If that leaves nothing, the larger of the smaller pictures inside the email are tried instead: a quote pasted in as a small screenshot is often only a few KB.
+ * (Either way a picture inside the email is only ever looked at as a quote.)
+ */
 export function readableAttachments(email: NormalisedEmail): NormalisedAttachment[] {
+  const normal = email.attachments.filter(a => readableType(a) && (!a.inline || a.size >= INLINE_MIN_BYTES)).slice(0, MAX_ATTACHMENTS)
+  if (normal.length > 0) return normal
   return email.attachments
-    .filter(a => ALLOWED_TYPES.has(a.mime) && a.size <= MAX_BYTES && !!a.base64 && (!a.inline || a.size >= INLINE_MIN_BYTES))
-    .slice(0, MAX_ATTACHMENTS)
+    .filter(a => readableType(a) && a.inline && a.size >= INLINE_SMALL_MIN_BYTES)
+    .sort((a, b) => b.size - a.size)
+    .slice(0, INLINE_SMALL_MAX_COUNT)
 }
 
 const kb = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`)
@@ -100,7 +113,7 @@ export function describeAttachments(email: NormalisedEmail): string {
     if (a.inline) why.push('shown inside the email')
     if (!ALLOWED_TYPES.has(a.mime)) why.push('not a PDF or photo')
     else if (a.size > MAX_BYTES) why.push('too big')
-    else if (a.inline && a.size < INLINE_MIN_BYTES) why.push('too small to be a quote')
+    else if (a.inline && a.size < INLINE_SMALL_MIN_BYTES) why.push('too small to be a quote')
     return `${a.name || 'unnamed'} (${kind}, ${kb(a.size)}${why.length ? ', ' + why.join(', ') : ''})`
   })
   return `${email.attachments.length} file${email.attachments.length === 1 ? '' : 's'} came with it: ${parts.join('; ')}.`
