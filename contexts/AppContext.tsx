@@ -150,6 +150,26 @@ function mapTeamMember(r: Record<string, unknown>): TeamMember {
   }
 }
 
+// A supplier or subcontractor is one row in the clients table but is kept in two lists here: `clients` (Contacts, Subcontractors) and `suppliers` (orders, price requests, the Suppliers page).
+// Both are filled once when the app loads, so whenever one list is changed the other has to be changed with it, or the second shows the old details until the page is reloaded.
+const isSupplierType = (t?: string) => t === 'supplier' || t === 'subcontractor'
+const supplierFromClient = (c: Client, prev?: Supplier): Supplier => ({
+  id: c.id, name: c.name || '', contactName: [c.first, c.last].filter(Boolean).join(' '),
+  phone: c.phone || '', email: c.email || '', address: c.address || '', notes: c.notes || '',
+  accountNumber: prev?.accountNumber || '', addedFrom: c.addedFrom || '', xeroContactId: c.xeroContactId ?? null,
+})
+const withSupplier = (list: Supplier[], s: Supplier): Supplier[] => (list.some(x => x.id === s.id) ? list.map(x => (x.id === s.id ? s : x)) : [...list, s]).sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+
+// a supplier added from the Suppliers page, as it is shown in Contacts
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const clientFromSupplierRow = (d: { [k: string]: any }): Client => ({
+  id: d.id, name: d.name || '', first: d.first_name || '', last: d.last_name || '', phone: d.phone || '', email: d.email || '', address: d.address || '', notes: d.notes || '',
+  paymentTerms: d.payment_terms || 'Payment on receipt', clientType: d.client_type === 'subcontractor' ? 'subcontractor' : 'supplier', addedFrom: d.added_from || '',
+  portalInvitedAt: null, portalStatus: 'not_invited', portalLastLogin: null, portalSettings: DEFAULT_CLIENT_PORTAL_SETTINGS,
+  subHourlyRate: d.sub_hourly_rate ?? null, subDayRate: d.sub_day_rate ?? null, subHalfDayRate: d.sub_half_day_rate ?? null, cisRegistered: d.cis_registered ?? false,
+  cisPercentage: d.cis_percentage ?? null, subPaymentType: d.sub_payment_type || 'invoice', isPaye: d.is_paye ?? false, xeroContactId: d.xero_contact_id || null,
+})
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const supabase = createClient()
   const [jobs, setJobs] = useState<Job[]>([])
@@ -594,6 +614,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       isPaye: data.is_paye ?? false,
       xeroContactId: data.xero_contact_id || null,
     }])
+    if (isSupplierType(data.client_type)) setSuppliers(prev => withSupplier(prev, supplierFromClient({
+      id: data.id, name: data.name, first: data.first_name || '', last: data.last_name || '', phone: data.phone || '', email: data.email || '', address: data.address || '',
+      notes: data.notes || '', addedFrom: data.added_from || '', xeroContactId: data.xero_contact_id || null,
+    } as Client)))
   }, [supabase])
 
   const updateClient = useCallback(async (c: Client) => {
@@ -620,6 +644,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await supabase.from('clients').update(basePayload).eq('id', c.id)
     }
     setClients(prev => prev.map(x => x.id === c.id ? c : x))
+    // the same person in the suppliers list (orders, price requests): follow the change, or drop it if it is no longer a supplier or subcontractor
+    setSuppliers(prev => isSupplierType(c.clientType) ? withSupplier(prev, supplierFromClient(c, prev.find(x => x.id === c.id))) : prev.filter(x => x.id !== c.id))
   }, [supabase])
 
   const deleteClient = useCallback(async (id: string) => {
@@ -630,6 +656,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch { /* not remembered this time */ }
     await supabase.from('clients').delete().eq('id', id)
     setClients(prev => prev.filter(c => c.id !== id))
+    setSuppliers(prev => prev.filter(s => s.id !== id))
   }, [supabase])
 
   const markPortalInvite = useCallback(async (clientId: string) => {
@@ -693,6 +720,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       notes: data.notes || '', accountNumber: data.account_number || '', addedFrom: data.added_from || '',
       xeroContactId: data.xero_contact_id || null,
     }])
+    // and in Contacts
+    setClients(prev => prev.some(x => x.id === data.id) ? prev : [...prev, clientFromSupplierRow(data)])
   }, [supabase])
 
   const updateSupplier = useCallback(async (s: Supplier) => {
@@ -703,11 +732,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       account_number: s.accountNumber, updated_at: new Date().toISOString(),
     }).eq('id', s.id)
     setSuppliers(prev => prev.map(x => x.id === s.id ? s : x))
+    // and in Contacts: the same person, with the same details (their portal and rate settings stay as they are)
+    setClients(prev => prev.map(x => x.id === s.id ? { ...x, name: s.name, first: nameParts[0] || '', last: nameParts.slice(1).join(' ') || '', phone: s.phone, email: s.email, address: s.address, notes: s.notes } : x))
   }, [supabase])
 
   const deleteSupplier = useCallback(async (id: string) => {
     await supabase.from('clients').delete().eq('id', id)
     setSuppliers(prev => prev.filter(s => s.id !== id))
+    setClients(prev => prev.filter(c => c.id !== id))
   }, [supabase])
 
   // ── Settings ─────────────────────────────────────────────────
