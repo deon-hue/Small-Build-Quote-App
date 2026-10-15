@@ -714,3 +714,12 @@ textarea{resize:vertical;min-height:56px}
   .app .fg label,.app .stat-label,.app .tbl th,.app .badge,.app .pip-label,.app .col-heads,.app .fin-card-label,.app .fin-card-sub,.app .sq-ref,.app .nav-section{font-size:12.5px !important}
   .app .btn-locked,.app .btn-email-pdf,.app .btn-archive,.app .btn-reinstate,.app .sel-status,.app .sel-inline-sm{font-size:13px !important}
 }
+
+/* Contacts: the A to Z strip down the side of a long list, and where a jumped-to row lands. On a computer the list scrolls inside the page, so the row can sit at the top;
+   on a phone or tablet the page itself scrolls under the sticky top bar, so there is room left for the bar. */
+.contact-row{scroll-margin-top:8px}
+.az-strip{top:8px}
+@media (max-width:768px), (hover:none) and (pointer:coarse){
+  .contact-row{scroll-margin-top:70px}
+  .az-strip{top:70px}
+}

@@ -409,6 +409,19 @@ function ClientsPageInner() {
   const filtered = (filter === 'all' ? clients : clients.filter(c => (c.clientType || 'client') === filter))
     .filter(c => !term || [c.name, c.email, c.phone].some(v => (v || '').toLowerCase().includes(term)))
 
+  // the list in A to Z order, and a letter strip down its side to jump through a long list (touch or drag along it, as in a phone's contacts)
+  const sortedContacts = [...filtered].sort((a, b) => a.name.localeCompare(b.name))
+  const letterOf = (name: string) => { const ch = (name || '').trim().charAt(0).toUpperCase(); return /[A-Z]/.test(ch) ? ch : '#' }
+  const firstOfLetter = new Map<string, string>()
+  for (const c of sortedContacts) { const l = letterOf(c.name); if (!firstOfLetter.has(l)) firstOfLetter.set(l, c.id) }
+  const letters = [...firstOfLetter.keys()]
+  function jumpToLetter(letter: string) { const id = firstOfLetter.get(letter); const el = id ? document.getElementById('contact-' + id) : null; if (el) el.scrollIntoView({ block: 'start' }) }
+  function pickLetter(e: React.PointerEvent<HTMLDivElement>) {
+    const r = e.currentTarget.getBoundingClientRect()
+    const i = Math.min(letters.length - 1, Math.max(0, Math.floor(((e.clientY - r.top - 4) / Math.max(1, r.height - 8)) * letters.length)))
+    if (letters[i]) jumpToLetter(letters[i])
+  }
+
   return (
     <>
       {/* Phone/tablet header, search and type chips (hidden on desktop by CSS) */}
@@ -455,7 +468,8 @@ function ClientsPageInner() {
         </div>
       )}
 
-      <div className="card tp-plain">
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+      <div className="card tp-plain" style={{ flex: 1, minWidth: 0 }}>
         <table className="tbl tbl-responsive tbl-cards">
           <thead>
             <tr>
@@ -470,13 +484,13 @@ function ClientsPageInner() {
           <tbody>
             {!filtered.length
               ? <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>No contacts yet</td></tr>
-              : filtered.sort((a, b) => a.name.localeCompare(b.name)).map(c => {
+              : sortedContacts.map(c => {
                   const ini = (c.name[0] || '').toUpperCase() + ((c.name.split(' ').pop() || '')[0] || '').toUpperCase()
                   const cJ = getClientJobs(c)
                   const cType = c.clientType || 'client'
                   const status = c.portalStatus || (c.email ? 'not_invited' : 'no_email')
                   return (
-                    <tr key={c.id}>
+                    <tr key={c.id} id={'contact-' + c.id} className="contact-row">
                       <td className="col-hide-mobile">
                         <span style={{
                           display: 'inline-block', padding: '2px 8px', borderRadius: 4,
@@ -575,6 +589,17 @@ function ClientsPageInner() {
             }
           </tbody>
         </table>
+      </div>
+      {sortedContacts.length > 12 && letters.length > 1 && (
+        <div
+          role="navigation" aria-label="Jump to a letter" title="Press or drag along the letters to jump through the list"
+          className="az-strip" style={{ position: 'sticky', flexShrink: 0, width: 24, padding: '6px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'var(--card, #fff)', border: '1px solid var(--border)', borderRadius: 12, touchAction: 'none', userSelect: 'none', cursor: 'pointer', maxHeight: 'calc(100vh - 110px)', overflow: 'hidden' }}
+          onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); pickLetter(e) }}
+          onPointerMove={e => { if (e.buttons) pickLetter(e) }}
+        >
+          {letters.map(l => <div key={l} style={{ fontSize: 11, fontWeight: 700, lineHeight: '16px', color: 'var(--slate)' }}>{l}</div>)}
+        </div>
+      )}
       </div>
 
       {tidyOpen && usageIx && (
