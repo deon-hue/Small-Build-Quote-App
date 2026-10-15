@@ -53,8 +53,10 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       inboxEmail: withCode((process.env.NEXT_PUBLIC_QUOTES_EMAIL || '').trim(), settings?.mail_code),
       state: q.status === 'chosen' ? 'chosen' : open && q.status !== 'not_chosen' ? 'open' : 'closed',
       status: q.status,
+      // set when the request was changed after the supplier last saw it or answered it, so the page can say so
+      amendedAt: o.amendedAt && (q.repliedAt ?? q.sentAt) && Date.parse(o.amendedAt) > Date.parse((q.repliedAt ?? q.sentAt) as string) ? o.amendedAt : '',
       items: (o.items ?? []).map(i => ({ id: i.id, name: i.name, qty: i.qty, unit: i.unit })),
-      reply: q.status === 'replied' || q.status === 'chosen' ? { price: q.price, rateBasis: q.rateBasis, deliveryDate: q.deliveryDate, validUntil: q.validUntil, notes: q.notes, lines: q.lines, deliveryCharge: q.deliveryCharge } : null,
+      reply: q.status === 'replied' || q.status === 'chosen' ? { price: q.price, rateBasis: q.rateBasis, deliveryDate: q.deliveryDate, validUntil: q.validUntil, notes: q.notes, lines: q.lines, deliveryCharge: q.deliveryCharge, supplierRef: q.supplierRef } : null,
     })
   } catch {
     return NextResponse.json({ error: 'Something went wrong. Please try again.' }, { status: 500 })
@@ -115,7 +117,10 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       return NextResponse.json({ error: 'Bad request' }, { status: 400 })
     }
 
-    const { error } = await sb.from('job_order_quotes').update(patch).eq('id', q.id)
+    // their own quote reference (optional; kept only once supabase/job-orders-amend.sql has been run)
+    const ref = typeof body.supplierRef === 'string' ? body.supplierRef.trim().slice(0, 60) : null
+    let { error } = await sb.from('job_order_quotes').update(ref !== null && body.action !== 'decline' ? { ...patch, supplier_ref: ref } : patch).eq('id', q.id)
+    if (error && /supplier_ref/i.test(error.message ?? '')) ({ error } = await sb.from('job_order_quotes').update(patch).eq('id', q.id))
     if (error) return NextResponse.json({ error: 'Could not save your reply. Please try again.' }, { status: 500 })
 
     // an alert on the builder's phone and tablet, best effort (does nothing until notifications are set up)

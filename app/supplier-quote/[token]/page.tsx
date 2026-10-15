@@ -10,8 +10,8 @@ interface Info {
   company: string; contactPhone: string; contactName: string; logoUrl: string; ref: string; supplierName: string
   inboxEmail?: string; title: string; details: string; orderType: string; items: { id: string; name: string; qty: number; unit: string }[]; area: string; deliveryDate: string; deliverySlot: string; offHireDate: string
   rateBasis: 'fixed' | 'day' | 'week'; plannedUnits: number
-  state: 'open' | 'chosen' | 'closed'; status: string
-  reply: { price: number | null; rateBasis: 'fixed' | 'day' | 'week'; deliveryDate: string; validUntil: string; notes: string; lines?: { id: string; unitPrice: number | null; unavailable: boolean; note: string }[]; deliveryCharge?: number } | null
+  state: 'open' | 'chosen' | 'closed'; status: string; amendedAt?: string
+  reply: { price: number | null; rateBasis: 'fixed' | 'day' | 'week'; deliveryDate: string; validUntil: string; notes: string; lines?: { id: string; unitPrice: number | null; unavailable: boolean; note: string }[]; deliveryCharge?: number; supplierRef?: string } | null
 }
 
 const LIME = '#7ab533', CHARCOAL = '#3a4149', INK = '#1e2022', MUTED = '#64748b', LINE = '#e2e8f0'
@@ -28,6 +28,7 @@ export default function SupplierQuotePage() {
   const [delivery, setDelivery] = useState('')
   const [validUntil, setValidUntil] = useState('')
   const [notes, setNotes] = useState('')
+  const [supplierRef, setSupplierRef] = useState('')
   const [declining, setDeclining] = useState(false)
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState<'' | 'quote' | 'decline'>('')
@@ -45,7 +46,7 @@ export default function SupplierQuotePage() {
         if (!r.ok) { setError(d.error || 'This link is not valid.'); return }
         const i = d as Info
         setInfo(i); setBasis(i.reply?.rateBasis ?? i.rateBasis)
-        if (i.reply) { setPrice(i.reply.price ? String(i.reply.price) : ''); setDelivery(i.reply.deliveryDate); setValidUntil(i.reply.validUntil); setNotes(i.reply.notes) }
+        if (i.reply) { setPrice(i.reply.price ? String(i.reply.price) : ''); setDelivery(i.reply.deliveryDate); setValidUntil(i.reply.validUntil); setNotes(i.reply.notes); setSupplierRef(i.reply.supplierRef ?? '') }
         else setDelivery(i.deliveryDate)
         if (i.reply?.lines) {
           const m: Record<string, { price: string; unavailable: boolean; note: string }> = {}
@@ -69,7 +70,7 @@ export default function SupplierQuotePage() {
     try {
       const res = await fetch(`/api/public/supplier-quote/${token}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(action === 'quote' ? (items.length > 0 ? { action, lines: lineBody, deliveryCharge: parseFloat(deliveryCharge) || 0, deliveryDate: delivery, validUntil, notes } : { action, price: parseFloat(price), rateBasis: basis, deliveryDate: delivery, validUntil, notes }) : { action, notes }),
+        body: JSON.stringify({ ...(action === 'quote' ? (items.length > 0 ? { action, lines: lineBody, deliveryCharge: parseFloat(deliveryCharge) || 0, deliveryDate: delivery, validUntil, notes } : { action, price: parseFloat(price), rateBasis: basis, deliveryDate: delivery, validUntil, notes }) : { action, notes }), supplierRef }),
       })
       const d = await res.json().catch(() => ({}))
       if (!res.ok) { setFormError(d.error || 'Could not send your reply. Please try again.'); return }
@@ -147,6 +148,7 @@ export default function SupplierQuotePage() {
                   {row('Price for', info.rateBasis === 'fixed' ? '' : `${info.plannedUnits} ${info.rateBasis === 'day' ? 'day' : 'week'}${info.plannedUnits === 1 ? '' : 's'} (give your rate per ${info.rateBasis})`)}
                 </div>
 
+                {info.amendedAt && info.state === 'open' && <div style={{ background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', borderRadius: 8, padding: '10px 14px', fontSize: 14, marginBottom: 16 }}><strong>This request has been amended</strong> ({new Date(info.amendedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}). Please check the details above{info.status === 'replied' ? ' and update your price if it changes' : ''}.</div>}
                 {info.status === 'replied' && <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', borderRadius: 8, padding: '10px 14px', fontSize: 14, marginBottom: 16 }}>You have already sent a price{info.reply?.price ? ` of ${gbp(info.reply.price)}` : ''}. You can change it below.</div>}
                 {info.status === 'declined' && <div style={{ background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', borderRadius: 8, padding: '10px 14px', fontSize: 14, marginBottom: 16 }}>You told us you cannot do this. You can still give a price below if that has changed.</div>}
 
@@ -214,6 +216,10 @@ export default function SupplierQuotePage() {
                         <label style={lab}>Price valid until</label>
                         <input style={inp} type="date" value={validUntil} onChange={e => setValidUntil(e.target.value)} />
                       </div>
+                    </div>
+                    <div style={{ marginTop: 12 }}>
+                      <label style={lab}>Your quote reference (if you have one)</label>
+                      <input style={inp} value={supplierRef} onChange={e => setSupplierRef(e.target.value)} maxLength={60} placeholder="e.g. your quote number" />
                     </div>
                     <div style={{ marginTop: 12 }}>
                       <label style={lab}>Anything we should know</label>

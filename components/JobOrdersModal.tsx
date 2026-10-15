@@ -11,7 +11,7 @@ import { fetchJobCosts, insertJobCost, updateJobCost } from '@/lib/job-costs'
 import type { JobCost, JobCostCategory } from '@/lib/types'
 import {
   ORDER_TYPES, ORDER_STATUS_LABEL, poRef, expectedNet, hireUnits, isCommitted, committedTotals, overrunNote, matchSuggestions, orderWhatsAppText, waLink, addDays, todayYmd, orderDateLabel,
-  fetchJobOrders, insertJobOrder, updateJobOrder, deleteJobOrder, fetchDeletedOrders, restoreJobOrder, purgeJobOrder,
+  fetchJobOrders, insertJobOrder, updateJobOrder, deleteJobOrder, fetchDeletedOrders, restoreJobOrder, purgeJobOrder, requestChanged, amendedSince,
   quoteRequestText, quoteLink, noteOfDetails, cheapestQuoteId, cheapestMix, lineTotal, pricedQuote, quoteNet, areaOnly, QUOTE_STATUS_LABEL, fetchOrderQuotes, insertOrderQuotes, updateOrderQuote, deleteOrderQuote, fetchAllJobOrders, fetchIncomingQuotes, type IncomingQuote,
   type JobOrder, type OrderType, type PayTerms, type RateBasis, type OrderStatus, type OrderQuote, type QuoteInvitee, type QuoteStatus,
 } from '@/lib/job-orders'
@@ -140,8 +140,13 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
     setBusy('save')
     const body = { ...form, ...(mode === 'request' && form.orderType === 'materials' && (cleanItems.length > 0 || (form.items ?? []).length > 0) ? { items: cleanItems, details: noteOfDetails(form.details) } : {}), expectedInvoice: form.payTerms === 'account' ? (form.expectedInvoice || (form.deliveryDate ? addDays(form.deliveryDate, 30) : '')) : '' }
     if (form.id) {
-      const o = await updateJobOrder(sb, form.id, body)
+      // a price request that suppliers already have, and that has really been changed: mark it amended so they can be sent the new version
+      const prev = orders.find(x => x.id === form.id)
+      const gone = prev?.kind === 'quote_request' && quotes.some(q => q.orderId === form.id && (q.sentAt || q.status === 'replied'))
+      const amended = !!prev && gone && requestChanged(prev, body)
+      const o = await updateJobOrder(sb, form.id, amended ? { ...body, amendedAt: new Date().toISOString() } : body)
       if (!o) setNotice({ ok: false, text: 'Could not save the order.' })
+      else if (amended) setNotice({ ok: true, text: 'Saved. The suppliers who already had it have not been told yet: press Email the amended request on each one, and they are told it has changed.' })
     } else {
       const { order, error, degraded } = await insertJobOrder(sb, ownerId, { ...body, jobId: jobId ?? '', kind: mode === 'request' ? 'quote_request' : 'order', status: 'draft' })
       if (!order) setNotice({ ok: false, text: `Could not save. ${error ?? ''}` })
@@ -259,13 +264,14 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
     if (q.price === null) return
     if (q.needsCheck) { setNotice({ ok: false, text: `Check ${q.supplierName}'s quote against their file first, then press Looks right.` }); return }
     if (!o.jobId) { setNotice({ ok: false, text: 'Attach this request to a job first (the box under it), so the cost lands on the right job. Then approve.' }); return }
+    if (amendedSince(o, q.repliedAt) && !confirm(`${q.supplierName} replied before this request was changed, so their price may be for the earlier version.\n\nApprove it anyway?`)) return
     const days = q.deliveryDate || o.deliveryDate
     const asks = `${fmt(q.price)} + VAT${q.rateBasis === 'fixed' ? '' : ' per ' + q.rateBasis}`
     if (!confirm(`Approve ${q.supplierName} at ${asks}?\n\n${poRef(o.poNumber)} becomes an order with them${o.payTerms === 'account' ? ' and counts as an expected cost on the job' : ' and is put on the job as a paid cost'}. The other suppliers are marked as not chosen. You then send ${q.supplierName} the order confirmation with the full address.`)) return
     setBusy(`ap-${q.id}`)
     const updated = await updateJobOrder(sb, o.id, {
       kind: 'order', status: 'ordered', supplierId: q.supplierId ?? '', supplierName: q.supplierName, supplierContact: q.supplierContact, supplierEmail: q.supplierEmail, supplierPhone: q.supplierPhone,
-      rate: q.price, rateBasis: q.rateBasis, deliveryDate: days, sentVia: 'quote accepted', sentAt: '',
+      rate: q.price, rateBasis: q.rateBasis, deliveryDate: days, sentVia: 'quote accepted', sentAt: '', supplierRef: q.supplierRef,
       expectedInvoice: o.payTerms === 'account' ? (o.expectedInvoice && o.expectedInvoice > days ? o.expectedInvoice : days ? addDays(days, 30) : '') : '',
     })
     if (!updated) { setBusy(null); setNotice({ ok: false, text: 'Could not approve it. Try again.' }); return }
@@ -431,8 +437,14 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                     </span>
                   )}
                 </div>
+                {live && (amendedSince(o, q.sentAt) || (q.status === 'replied' && amendedSince(o, q.repliedAt))) && (
+                  <div style={{ marginTop: 4, padding: '6px 10px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, fontSize: 12, color: '#92400e', fontWeight: 600 }}>
+                    {q.status === 'replied' && amendedSince(o, q.repliedAt) ? 'Their price is for the earlier version of this request.' : 'This request was changed after you sent it.'} Press Email the amended request, and they are told it has changed.
+                  </div>
+                )}
                 {(q.status === 'replied' || q.status === 'chosen') && (
                   <div style={{ fontSize: 12, color: '#475569', marginTop: 3, lineHeight: 1.6 }}>
+                    <span>Their quote ref: <input defaultValue={q.supplierRef} key={`${q.id}-${q.supplierRef}`} placeholder="none given" maxLength={60} onBlur={async e => { const v = e.target.value.trim(); if (v !== q.supplierRef) { if (await updateOrderQuote(sb, q.id, { supplierRef: v })) await load(); else setNotice({ ok: false, text: 'Their quote reference could not be saved. supabase/job-orders-amend.sql needs to be run on the database first.' }) } }} style={{ ...inp, display: 'inline-block', width: 150, padding: '2px 6px', fontSize: 12 }} /></span><br />
                     {q.deliveryDate ? `delivery ${orderDateLabel(q.deliveryDate)}` : 'no delivery date given'}
                     {q.validUntil ? <span style={{ color: expired ? '#dc2626' : undefined, fontWeight: expired ? 700 : undefined }}> · {expired ? 'price expired' : 'valid until'} {orderDateLabel(q.validUntil)}</span> : ''}
                     {q.notes ? <span style={{ color: '#334155' }}> · “{q.notes}”</span> : ''}
@@ -469,7 +481,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                       {busy === `rd-${q.id}` ? 'Reading their quote…' : '📎 Add their own quote (PDF)'}
                       <input type="file" accept="application/pdf,image/*" style={{ display: 'none' }} disabled={busy === `rd-${q.id}`} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void readTheirQuote(o, q, f) }} />
                     </label>
-                    <button onClick={() => emailQuoteRequest(o, q)} disabled={busy === `rq-${q.id}`} style={q.sentAt || q.status !== 'invited' ? btn : primary}>{busy === `rq-${q.id}` ? 'Sending…' : q.sentAt ? '✉ Email link again' : '✉ Email the link'}</button>
+                    <button onClick={() => emailQuoteRequest(o, q)} disabled={busy === `rq-${q.id}`} style={q.sentAt || q.status !== 'invited' ? btn : primary}>{busy === `rq-${q.id}` ? 'Sending…' : amendedSince(o, q.sentAt) || (q.status === 'replied' && amendedSince(o, q.repliedAt)) ? '✉ Email the amended request' : q.sentAt ? '✉ Email link again' : '✉ Email the link'}</button>
                     <button onClick={() => whatsAppQuoteRequest(o, q)} style={btn}>🟢 WhatsApp the link</button>
                     <button onClick={() => copyQuoteRequest(o, q)} style={btn}>Copy message</button>
                     <button onClick={async () => { if (confirm(`Take ${q.supplierName} off this request?`)) { await deleteOrderQuote(sb, q.id); await load() } }} style={{ ...btn, color: '#dc2626', borderColor: '#fecaca' }}>Remove</button>
@@ -767,7 +779,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                         <span style={{ fontFamily: 'monospace', fontWeight: 700 }} title="Ex VAT">{fmt(invoicedCost ? invoicedCost.netAmount : paidCost ? paidCost.netAmount : net)}</span>
                       </div>
                       <div style={{ fontSize: 12, color: '#64748b', marginTop: 3, lineHeight: 1.6 }}>
-                        {o.supplierName}{o.deliveryDate ? ` · delivery ${orderDateLabel(o.deliveryDate)}${o.deliverySlot ? ', ' + o.deliverySlot : ''}` : ''}{o.offHireDate ? ` · collected ${orderDateLabel(o.offHireDate)}` : ''}
+                        {o.supplierName}{o.supplierRef ? ` · their quote ref ${o.supplierRef}` : ''}{o.deliveryDate ? ` · delivery ${orderDateLabel(o.deliveryDate)}${o.deliverySlot ? ', ' + o.deliverySlot : ''}` : ''}{o.offHireDate ? ` · collected ${orderDateLabel(o.offHireDate)}` : ''}
                         {o.rateBasis !== 'fixed' && o.rate > 0 ? ` · ${fmt(o.rate)} per ${o.rateBasis} × ${hireUnits(o, today)}` : ''}
                         {isCommitted(o) && o.expectedInvoice ? ` · invoice expected about ${orderDateLabel(o.expectedInvoice)}` : ''}
                         {o.sentAt ? ` · sent ${new Date(o.sentAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}${o.sentVia ? ' by ' + o.sentVia : ''}` : ''}

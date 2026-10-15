@@ -8,7 +8,7 @@ import { usageGuard } from '@/lib/usage'
 import { callerIsPortalOnly } from '@/lib/caller-role'
 import { emailShell } from '@/lib/email-layout'
 import { priceRequestBody } from '@/lib/price-request-email'
-import { rowToOrder, rowToQuote, areaOnly, poRef, quoteLink, quoteRequestText, requestDetails } from '@/lib/job-orders'
+import { rowToOrder, rowToQuote, areaOnly, poRef, quoteLink, quoteRequestText, requestDetails, amendedSince } from '@/lib/job-orders'
 import { withCode } from '@/lib/mail-address'
 
 interface Branding {
@@ -58,12 +58,14 @@ export async function POST(req: NextRequest) {
     const e = escapeHtml
     const company = e(b.companyName || 'Your builder')
     const ref = poRef(o.poNumber)
+    // the request was changed after this supplier was last sent it: say so
+    const amended = amendedSince(o, q.sentAt)
     const hello = (q.supplierContact.trim().split(/\s+/)[0] || q.supplierName.trim().split(/\s+/)[0] || 'there')
 
     const html = emailShell({
       company,
-      kicker: 'Request for a price',
-      title: `Could you quote for this?`,
+      kicker: amended ? 'Amended request for a price' : 'Request for a price',
+      title: amended ? 'This request has been amended' : `Could you quote for this?`,
       ref: e(ref),
       logoUrl: b.logoOwnerId ? `${appUrl}/api/public/company-logo/${encodeURIComponent(b.logoOwnerId)}` : undefined,
       body: priceRequestBody({
@@ -72,7 +74,7 @@ export async function POST(req: NextRequest) {
         collect: longDate(o.offHireDate),
         where: areaOnly(o.siteAddress),
         priceFor: o.rateBasis === 'fixed' ? '' : `${o.plannedUnits} ${o.rateBasis === 'day' ? 'day' : 'week'}${o.plannedUnits === 1 ? '' : 's'}: give your rate per ${o.rateBasis}`,
-        link, ref, inboxEmail,
+        link, ref, inboxEmail, amended, theirRef: q.supplierRef,
         senderName: b.senderName || '', companyName: b.companyName || '', companyPhone: b.companyPhone || '',
       }),
       footerHtml: [
@@ -86,9 +88,9 @@ export async function POST(req: NextRequest) {
     const payload: Record<string, unknown> = {
       from: senderFrom(fromEmail, b.companyName),
       to: q.supplierEmail.trim(),
-      subject: `Price request ${ref}: ${o.title}`,
+      subject: `${amended ? 'Amended price request' : 'Price request'} ${ref}: ${o.title}`,
       html: withPoweredBy(html),
-      text: quoteRequestText(o, q, link, { name: b.senderName || '', company: b.companyName || 'Your builder' }, inboxEmail),
+      text: quoteRequestText(o, q, link, { name: b.senderName || '', company: b.companyName || 'Your builder' }, inboxEmail, amended),
     }
     if (b.companyEmail && EMAIL_RX.test(b.companyEmail)) {
       payload.reply_to = b.companyEmail

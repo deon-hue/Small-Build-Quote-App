@@ -67,6 +67,10 @@ export interface JobOrder {
   items?: OrderItem[]
   /** when it was deleted; set means it sits in Recently deleted and is left out of every list, reminder and total (supabase/job-orders-deleted.sql) */
   deletedAt?: string
+  /** when a request that had already been sent was last changed, so suppliers can be sent the amended version (supabase/job-orders-amend.sql) */
+  amendedAt?: string
+  /** the supplier's own reference for the quote this order came from, so it can be quoted back to them (supabase/job-orders-amend.sql) */
+  supplierRef?: string
 }
 
 /** One thing to be priced on a request: how many, of what. Never carries our own price. */
@@ -109,6 +113,8 @@ export interface OrderQuote {
   needsCheck: boolean
   fileName: string
   hasFile: boolean
+  /** the supplier's own quote reference (supabase/job-orders-amend.sql) */
+  supplierRef: string
 }
 
 export const QUOTE_STATUS_LABEL: Record<QuoteStatus, string> = {
@@ -214,7 +220,7 @@ export function matchSuggestions(orders: JobOrder[], costs: JobCost[]): OrderMat
 const longDate = (s: string) => (s ? ymd(s)!.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }) : '')
 const shortDate = (s: string) => (s ? ymd(s)!.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) : '')
 
-export interface OrderWording { poRef: string; title: string; when: string; where: string; collect: string; details: string; contact: string; priceLine: string }
+export interface OrderWording { poRef: string; title: string; when: string; where: string; collect: string; details: string; contact: string; priceLine: string; theirRef: string }
 
 export function orderWording(o: JobOrder): OrderWording {
   const when = [longDate(o.deliveryDate), o.deliverySlot].filter(Boolean).join(', ')
@@ -224,7 +230,7 @@ export function orderWording(o: JobOrder): OrderWording {
   return {
     poRef: poRef(o.poNumber), title: o.title || ORDER_TYPES[o.orderType].label, when, where: o.siteAddress,
     collect: o.offHireDate ? longDate(o.offHireDate) : '', details: requestDetails(o),
-    contact: [o.siteContact, o.sitePhone].filter(Boolean).join(', '), priceLine,
+    contact: [o.siteContact, o.sitePhone].filter(Boolean).join(', '), priceLine, theirRef: (o.supplierRef || '').trim(),
   }
 }
 
@@ -254,6 +260,7 @@ export function orderWhatsAppText(o: JobOrder, sender: { name: string; company: 
     w.contact ? `Site contact: ${w.contact}` : '',
     o.accessNotes ? `Access: ${o.accessNotes}` : '',
     w.priceLine,
+    w.theirRef ? `Your quote ref: ${w.theirRef}` : '',
   ].filter(Boolean)
   return [
     `${hi}it's ${sender.name || 'the team'} at ${sender.company}. Order ${w.poRef}:`,
@@ -345,7 +352,7 @@ export function cheapestMix(items: OrderItem[], quotes: OrderQuote[]): { total: 
 export const quoteLink = (base: string, token: string) => `${base.replace(/\/$/, '')}/supplier-quote/${token}`
 
 /** The message asking for a quote, for WhatsApp, a text or the plain part of an email. Shows the area only. */
-export function quoteRequestText(o: JobOrder, q: Pick<OrderQuote, 'supplierContact'>, link: string, sender: { name: string; company: string }, inboxEmail = ''): string {
+export function quoteRequestText(o: JobOrder, q: Pick<OrderQuote, 'supplierContact'>, link: string, sender: { name: string; company: string }, inboxEmail = '', amended = false): string {
   const who = firstName(q.supplierContact)
   const hi = who ? `Hi ${who}, ` : 'Hi, '
   const area = areaOnly(o.siteAddress)
@@ -356,7 +363,9 @@ export function quoteRequestText(o: JobOrder, q: Pick<OrderQuote, 'supplierConta
     area ? `Where: ${area}` : '',
   ].filter(Boolean)
   return [
-    `${hi}it's ${sender.name || 'the team'} at ${sender.company}. Could you give me a price for this? Ref ${poRef(o.poNumber)}`,
+    amended
+      ? `${hi}it's ${sender.name || 'the team'} at ${sender.company}. We have changed our price request ${poRef(o.poNumber)}, so please check it below and update your price if it changes.`
+      : `${hi}it's ${sender.name || 'the team'} at ${sender.company}. Could you give me a price for this? Ref ${poRef(o.poNumber)}`,
     '',
     ...body,
     '',
@@ -383,6 +392,7 @@ export function rowToOrder(r: Record<string, unknown>): JobOrder {
     sentAt: (r.sent_at as string) || undefined, sentVia: str(r.sent_via),
     paidCostId: (r.paid_cost_id as string) || undefined, invoicedCostId: (r.invoiced_cost_id as string) || undefined,
     createdAt: r.created_at as string | undefined, sourceLabel: str(r.source_label), deletedAt: (r.deleted_at as string) || undefined,
+    amendedAt: (r.amended_at as string) || undefined, supplierRef: str(r.supplier_ref),
     items: parseItems(r.items),
   }
 }
@@ -400,6 +410,8 @@ function orderToRow(o: Partial<JobOrder>) {
   if (o.jobId !== undefined) row.job_id = o.jobId || null
   // only written when there is one, so a database without the column (supabase/job-orders-materials.sql not run) keeps working for every ordinary order
   if (o.sourceLabel) row.source_label = o.sourceLabel
+  if (o.amendedAt) row.amended_at = o.amendedAt
+  if (o.supplierRef) row.supplier_ref = o.supplierRef
   if (o.items && o.items.length) row.items = o.items
   if (o.supplierId !== undefined) row.supplier_id = o.supplierId || null
   if (o.deliveryDate !== undefined) row.delivery_date = o.deliveryDate || null
@@ -435,7 +447,7 @@ export function rowToQuote(r: Record<string, unknown>): OrderQuote {
     price: r.price === null || r.price === undefined ? null : Number(r.price), rateBasis: (r.rate_basis as RateBasis) ?? 'fixed',
     deliveryDate: d10(r.delivery_date), validUntil: d10(r.valid_until), notes: str(r.notes), repliedAt: (r.replied_at as string) || undefined,
     lines: parseLines(r.lines), deliveryCharge: Number(r.delivery_charge) || 0,
-    source: r.source === 'email' || r.source === 'upload' ? r.source : 'form', needsCheck: !!r.needs_check, fileName: str(r.file_name), hasFile: !!str(r.file_path),
+    source: r.source === 'email' || r.source === 'upload' ? r.source : 'form', needsCheck: !!r.needs_check, fileName: str(r.file_name), hasFile: !!str(r.file_path), supplierRef: str(r.supplier_ref),
   }
 }
 
@@ -459,7 +471,7 @@ export async function insertOrderQuotes(sb: SupabaseClient, ownerId: string, ord
   return error ? { ok: false, error: error.message } : { ok: true }
 }
 
-export async function updateOrderQuote(sb: SupabaseClient, id: string, p: Partial<Pick<OrderQuote, 'status' | 'sentAt' | 'sentVia' | 'supplierName' | 'supplierContact' | 'supplierEmail' | 'supplierPhone'>>): Promise<void> {
+export async function updateOrderQuote(sb: SupabaseClient, id: string, p: Partial<Pick<OrderQuote, 'status' | 'sentAt' | 'sentVia' | 'supplierName' | 'supplierContact' | 'supplierEmail' | 'supplierPhone' | 'supplierRef'>>): Promise<boolean> {
   const row: Record<string, unknown> = {}
   if (p.status !== undefined) row.status = p.status
   if (p.sentAt !== undefined) row.sent_at = p.sentAt || null
@@ -468,7 +480,20 @@ export async function updateOrderQuote(sb: SupabaseClient, id: string, p: Partia
   if (p.supplierContact !== undefined) row.supplier_contact = p.supplierContact
   if (p.supplierEmail !== undefined) row.supplier_email = p.supplierEmail
   if (p.supplierPhone !== undefined) row.supplier_phone = p.supplierPhone
-  await sb.from('job_order_quotes').update(row).eq('id', id)
+  if (p.supplierRef !== undefined) row.supplier_ref = p.supplierRef
+  const { error } = await sb.from('job_order_quotes').update(row).eq('id', id)
+  return !error
+}
+
+/** Has a request that was already sent been changed in a way a supplier would care about? (the wording, the items, when, where or how it is priced) */
+export function requestChanged(prev: JobOrder, next: Partial<JobOrder>): boolean {
+  const key = (o: Partial<JobOrder>) => JSON.stringify([o.title ?? '', o.details ?? '', (o.items ?? []).map(i => [i.name, i.qty, i.unit]), o.deliveryDate ?? '', o.deliverySlot ?? '', o.offHireDate ?? '', areaOnly(o.siteAddress ?? ''), o.rateBasis ?? 'fixed', o.plannedUnits ?? 1])
+  return key(prev) !== key({ ...prev, ...next })
+}
+
+/** Was this request changed after the supplier was last sent it (or after they answered it)? */
+export function amendedSince(o: Pick<JobOrder, 'amendedAt'>, since?: string): boolean {
+  return !!o.amendedAt && !!since && Date.parse(o.amendedAt) > Date.parse(since)
 }
 
 export async function deleteOrderQuote(sb: SupabaseClient, id: string): Promise<void> {
@@ -506,6 +531,7 @@ export async function nextPoNumber(sb: SupabaseClient, ownerId: string): Promise
  * written into the details instead (one price for the whole list, as before): the screen says so, and per-item pricing starts once the SQL file has been run.
  */
 const LATER_COLUMN_MISSING = /could not find the '(items|source_label)' column/i
+const AMEND_COLUMN_MISSING = /could not find the '(amended_at|supplier_ref)' column/i
 const withoutLaterColumns = (o: Partial<JobOrder>): Partial<JobOrder> => ({ ...o, details: o.details !== undefined || o.items ? requestDetails({ details: o.details ?? '', items: o.items }) : o.details, items: undefined, sourceLabel: undefined })
 
 export async function insertJobOrder(sb: SupabaseClient, ownerId: string, o: Partial<JobOrder>): Promise<{ order: JobOrder | null; error?: string; degraded?: boolean }> {
@@ -527,6 +553,10 @@ export async function updateJobOrder(sb: SupabaseClient, id: string, o: Partial<
   let { data, error } = await sb.from('job_orders').update({ ...orderToRow(o), updated_at: new Date().toISOString() }).eq('id', id).select().single()
   if (!data && LATER_COLUMN_MISSING.test(error?.message ?? '')) {
     ;({ data } = await sb.from('job_orders').update({ ...orderToRow(withoutLaterColumns(o)), updated_at: new Date().toISOString() }).eq('id', id).select().single())
+  } else if (!data && AMEND_COLUMN_MISSING.test(error?.message ?? '')) {
+    // supabase/job-orders-amend.sql has not been run: save everything else (the amended mark and the supplier's reference simply are not kept)
+    const row = orderToRow(o); delete row.amended_at; delete row.supplier_ref
+    ;({ data } = await sb.from('job_orders').update({ ...row, updated_at: new Date().toISOString() }).eq('id', id).select().single())
   }
   return data ? rowToOrder(data) : null
 }

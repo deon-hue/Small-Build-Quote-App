@@ -24,11 +24,15 @@ async function applyReply(sb: SupabaseClient, order: JobOrder, quoteId: string, 
   const reply = buildReply(order.items ?? [], { lines: read.lines, netTotal: read.netTotal, deliveryCharge: read.deliveryCharge })
   // only what the supplier wrote goes in their notes: the app's own remark about how it was read (the total-only line) is shown separately
   const notes = (read.notes || '').slice(0, 1000)
-  const { error } = await sb.from('job_order_quotes').update({
+  const base = {
     status: 'replied', price: reply.price, rate_basis: 'fixed', lines: reply.lines, delivery_charge: reply.deliveryCharge,
     delivery_date: read.deliveryDate || null, valid_until: read.validUntil || null, notes,
     replied_at: new Date().toISOString(), source, needs_check: true, file_path: file.path, file_name: file.name,
-  }).eq('id', quoteId)
+  }
+  // the quote number printed on their own quote (kept once supabase/job-orders-amend.sql has been run)
+  const theirRef = (read.quoteNumber || '').trim().slice(0, 60)
+  let { error } = await sb.from('job_order_quotes').update(theirRef ? { ...base, supplier_ref: theirRef } : base).eq('id', quoteId)
+  if (error && /supplier_ref/i.test(error.message ?? '')) ({ error } = await sb.from('job_order_quotes').update(base).eq('id', quoteId))
   if (error) throw new Error(error.message)
   return reply.mode
 }

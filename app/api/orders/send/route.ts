@@ -59,6 +59,7 @@ export async function POST(req: NextRequest) {
       cell('Site contact', e(w.contact)),
       cell('Access', e(o.accessNotes).replace(/\n/g, '<br>')),
       cell('Price', e(w.priceLine.replace(/^Agreed (price|rate) /, ''))),
+      cell('Your quote', e(w.theirRef)),
     ].join('')
 
     const notes = (body.note || '').trim()
