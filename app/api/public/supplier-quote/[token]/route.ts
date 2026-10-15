@@ -9,6 +9,7 @@ import { senderFrom, withPoweredBy, escapeHtml } from '@/lib/email-brand'
 import { BRAND, emailShell, emailPara, emailCard, emailButton } from '@/lib/email-layout'
 import { pushToOwner } from '@/lib/push'
 import { withCode } from '@/lib/mail-address'
+import { accountNumberFor } from '@/lib/supplier-account'
 
 const TOKEN = /^[0-9a-f]{64}$/
 const YMD = /^\d{4}-\d{2}-\d{2}$/
@@ -37,6 +38,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     if (!f) return NextResponse.json({ error: 'This link is not valid.' }, { status: 404 })
     const { sb, quote: q, order: o, settings } = f
     const open = o.kind === 'quote_request' && o.status !== 'cancelled' && !o.deletedAt
+    const account = await accountNumberFor(sb, q.supplierId, q.supplierName, f.ownerId)
     if (!q.viewedAt) await sb.from('job_order_quotes').update({ viewed_at: new Date().toISOString() }).eq('id', q.id)
     return NextResponse.json({
       company: settings?.company_name || 'The builder',
@@ -53,6 +55,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       inboxEmail: withCode((process.env.NEXT_PUBLIC_QUOTES_EMAIL || '').trim(), settings?.mail_code),
       state: q.status === 'chosen' ? 'chosen' : open && q.status !== 'not_chosen' ? 'open' : 'closed',
       status: q.status,
+      account,
       // set when the request was changed after the supplier last saw it or answered it, so the page can say so
       amendedAt: o.amendedAt && (q.repliedAt ?? q.sentAt) && Date.parse(o.amendedAt) > Date.parse((q.repliedAt ?? q.sentAt) as string) ? o.amendedAt : '',
       items: (o.items ?? []).map(i => ({ id: i.id, name: i.name, qty: i.qty, unit: i.unit })),

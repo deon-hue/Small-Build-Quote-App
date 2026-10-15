@@ -10,7 +10,7 @@ interface Info {
   company: string; contactPhone: string; contactName: string; logoUrl: string; ref: string; supplierName: string
   inboxEmail?: string; title: string; details: string; orderType: string; items: { id: string; name: string; qty: number; unit: string }[]; area: string; deliveryDate: string; deliverySlot: string; offHireDate: string
   rateBasis: 'fixed' | 'day' | 'week'; plannedUnits: number
-  state: 'open' | 'chosen' | 'closed'; status: string; amendedAt?: string
+  state: 'open' | 'chosen' | 'closed'; status: string; amendedAt?: string; account?: string
   reply: { price: number | null; rateBasis: 'fixed' | 'day' | 'week'; deliveryDate: string; validUntil: string; notes: string; lines?: { id: string; unitPrice: number | null; unavailable: boolean; note: string }[]; deliveryCharge?: number; supplierRef?: string } | null
 }
 
@@ -145,6 +145,7 @@ export default function SupplierQuotePage() {
                   {row('Needed', [longDate(info.deliveryDate), info.deliverySlot].filter(Boolean).join(', '))}
                   {row('Collect', longDate(info.offHireDate))}
                   {row('Where', info.area)}
+                  {row('Our account', info.account ?? '')}
                   {row('Price for', info.rateBasis === 'fixed' ? '' : `${info.plannedUnits} ${info.rateBasis === 'day' ? 'day' : 'week'}${info.plannedUnits === 1 ? '' : 's'} (give your rate per ${info.rateBasis})`)}
                 </div>
 

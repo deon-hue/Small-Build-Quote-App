@@ -10,6 +10,7 @@ import { emailShell } from '@/lib/email-layout'
 import { priceRequestBody } from '@/lib/price-request-email'
 import { rowToOrder, rowToQuote, areaOnly, poRef, quoteLink, quoteRequestText, requestDetails, amendedSince } from '@/lib/job-orders'
 import { withCode } from '@/lib/mail-address'
+import { accountNumberFor } from '@/lib/supplier-account'
 
 interface Branding {
   companyName?: string; companyPhone?: string; companyEmail?: string; senderName?: string
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest) {
     const ref = poRef(o.poNumber)
     // the request was changed after this supplier was last sent it: say so
     const amended = amendedSince(o, q.sentAt)
+    const account = await accountNumberFor(sb, q.supplierId, q.supplierName)
     const hello = (q.supplierContact.trim().split(/\s+/)[0] || q.supplierName.trim().split(/\s+/)[0] || 'there')
 
     const html = emailShell({
@@ -74,7 +76,7 @@ export async function POST(req: NextRequest) {
         collect: longDate(o.offHireDate),
         where: areaOnly(o.siteAddress),
         priceFor: o.rateBasis === 'fixed' ? '' : `${o.plannedUnits} ${o.rateBasis === 'day' ? 'day' : 'week'}${o.plannedUnits === 1 ? '' : 's'}: give your rate per ${o.rateBasis}`,
-        link, ref, inboxEmail, amended, theirRef: q.supplierRef,
+        link, ref, inboxEmail, amended, theirRef: q.supplierRef, account,
         senderName: b.senderName || '', companyName: b.companyName || '', companyPhone: b.companyPhone || '',
       }),
       footerHtml: [
@@ -90,7 +92,7 @@ export async function POST(req: NextRequest) {
       to: q.supplierEmail.trim(),
       subject: `${amended ? 'Amended price request' : 'Price request'} ${ref}: ${o.title}`,
       html: withPoweredBy(html),
-      text: quoteRequestText(o, q, link, { name: b.senderName || '', company: b.companyName || 'Your builder' }, inboxEmail, amended),
+      text: quoteRequestText(o, q, link, { name: b.senderName || '', company: b.companyName || 'Your builder' }, inboxEmail, amended, account),
     }
     if (b.companyEmail && EMAIL_RX.test(b.companyEmail)) {
       payload.reply_to = b.companyEmail

@@ -156,7 +156,7 @@ const isSupplierType = (t?: string) => t === 'supplier' || t === 'subcontractor'
 const supplierFromClient = (c: Client, prev?: Supplier): Supplier => ({
   id: c.id, name: c.name || '', contactName: [c.first, c.last].filter(Boolean).join(' '),
   phone: c.phone || '', email: c.email || '', address: c.address || '', notes: c.notes || '',
-  accountNumber: prev?.accountNumber || '', addedFrom: c.addedFrom || '', xeroContactId: c.xeroContactId ?? null,
+  accountNumber: c.accountNumber ?? prev?.accountNumber ?? '', addedFrom: c.addedFrom || '', xeroContactId: c.xeroContactId ?? null,
 })
 const withSupplier = (list: Supplier[], s: Supplier): Supplier[] => (list.some(x => x.id === s.id) ? list.map(x => (x.id === s.id ? s : x)) : [...list, s]).sort((a, b) => (a.name || '').localeCompare(b.name || ''))
 
@@ -167,7 +167,7 @@ const clientFromSupplierRow = (d: { [k: string]: any }): Client => ({
   paymentTerms: d.payment_terms || 'Payment on receipt', clientType: d.client_type === 'subcontractor' ? 'subcontractor' : 'supplier', addedFrom: d.added_from || '',
   portalInvitedAt: null, portalStatus: 'not_invited', portalLastLogin: null, portalSettings: DEFAULT_CLIENT_PORTAL_SETTINGS,
   subHourlyRate: d.sub_hourly_rate ?? null, subDayRate: d.sub_day_rate ?? null, subHalfDayRate: d.sub_half_day_rate ?? null, cisRegistered: d.cis_registered ?? false,
-  cisPercentage: d.cis_percentage ?? null, subPaymentType: d.sub_payment_type || 'invoice', isPaye: d.is_paye ?? false, xeroContactId: d.xero_contact_id || null,
+  cisPercentage: d.cis_percentage ?? null, subPaymentType: d.sub_payment_type || 'invoice', isPaye: d.is_paye ?? false, xeroContactId: d.xero_contact_id || null, accountNumber: d.account_number || '',
 })
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -319,6 +319,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           subPaymentType: r.sub_payment_type || 'invoice',
           isPaye: r.is_paye ?? false,
           xeroContactId: r.xero_contact_id || null,
+          accountNumber: r.account_number || '',
         })))
       }
 
@@ -597,6 +598,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (nm) await supabase.from('deleted_contacts').delete().eq('user_id', ownerId).ilike('name', escapeLike(nm))
       if (em) await supabase.from('deleted_contacts').delete().eq('user_id', ownerId).ilike('email', escapeLike(em))
     } catch { /* nothing to forget */ }
+    if (c.accountNumber) await supabase.from('clients').update({ account_number: c.accountNumber }).eq('id', data.id)
     setClients(prev => [...prev, {
       id: data.id, name: data.name, first: data.first_name || '', last: data.last_name || '',
       phone: data.phone || '', email: data.email || '', address: data.address || '',
@@ -605,6 +607,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addedFrom: data.added_from || '',
       portalInvitedAt: null, portalStatus: 'not_invited', portalLastLogin: null,
       portalSettings,
+      accountNumber: c.accountNumber || '',
       subHourlyRate: data.sub_hourly_rate ?? null,
       subDayRate: data.sub_day_rate ?? null,
       subHalfDayRate: data.sub_half_day_rate ?? null,
@@ -616,7 +619,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }])
     if (isSupplierType(data.client_type)) setSuppliers(prev => withSupplier(prev, supplierFromClient({
       id: data.id, name: data.name, first: data.first_name || '', last: data.last_name || '', phone: data.phone || '', email: data.email || '', address: data.address || '',
-      notes: data.notes || '', addedFrom: data.added_from || '', xeroContactId: data.xero_contact_id || null,
+      notes: data.notes || '', addedFrom: data.added_from || '', xeroContactId: data.xero_contact_id || null, accountNumber: c.accountNumber || '',
     } as Client)))
   }, [supabase])
 
@@ -643,6 +646,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (error) {
       await supabase.from('clients').update(basePayload).eq('id', c.id)
     }
+    // our account number with a supplier, written on its own so a database without the column still saves everything else
+    if (c.accountNumber !== undefined) await supabase.from('clients').update({ account_number: c.accountNumber }).eq('id', c.id)
     setClients(prev => prev.map(x => x.id === c.id ? c : x))
     // the same person in the suppliers list (orders, price requests): follow the change, or drop it if it is no longer a supplier or subcontractor
     setSuppliers(prev => isSupplierType(c.clientType) ? withSupplier(prev, supplierFromClient(c, prev.find(x => x.id === c.id))) : prev.filter(x => x.id !== c.id))
@@ -733,7 +738,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }).eq('id', s.id)
     setSuppliers(prev => prev.map(x => x.id === s.id ? s : x))
     // and in Contacts: the same person, with the same details (their portal and rate settings stay as they are)
-    setClients(prev => prev.map(x => x.id === s.id ? { ...x, name: s.name, first: nameParts[0] || '', last: nameParts.slice(1).join(' ') || '', phone: s.phone, email: s.email, address: s.address, notes: s.notes } : x))
+    setClients(prev => prev.map(x => x.id === s.id ? { ...x, name: s.name, first: nameParts[0] || '', last: nameParts.slice(1).join(' ') || '', phone: s.phone, email: s.email, address: s.address, notes: s.notes, accountNumber: s.accountNumber } : x))
   }, [supabase])
 
   const deleteSupplier = useCallback(async (id: string) => {

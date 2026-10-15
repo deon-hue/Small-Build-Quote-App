@@ -18,7 +18,7 @@ import { buildUsageIndex, usageOf, type UsageIndex } from '@/lib/contact-usage'
 import { escapeLike } from '@/lib/email-match'
 import { snippet } from '@/lib/note-attention'
 
-const BLANK_FORM = { name: '', first: '', last: '', email: '', phone: '', address: '', notes: '', paymentTerms: 'Payment on receipt', clientType: 'client' as 'client' | 'supplier' | 'subcontractor' }
+const BLANK_FORM = { name: '', first: '', last: '', email: '', phone: '', address: '', notes: '', accountNumber: '', paymentTerms: 'Payment on receipt', clientType: 'client' as 'client' | 'supplier' | 'subcontractor' }
 
 // ── Portal status helpers ───────────────────────────────────
 const STATUS_LABEL: Record<PortalStatus, string> = {
@@ -211,7 +211,7 @@ function ClientsPageInner() {
 
   function openEdit(c: Client) {
     setEditingClient(c)
-    setForm({ name: c.name, first: c.first, last: c.last, email: c.email, phone: c.phone, address: c.address, notes: c.notes, paymentTerms: c.paymentTerms || 'Payment on receipt', clientType: c.clientType || 'client' })
+    setForm({ name: c.name, first: c.first, last: c.last, email: c.email, phone: c.phone, address: c.address, notes: c.notes, accountNumber: c.accountNumber || '', paymentTerms: c.paymentTerms || 'Payment on receipt', clientType: c.clientType || 'client' })
     setFormPortalSettings({ ...DEFAULT_CLIENT_PORTAL_SETTINGS, ...(c.portalSettings || {}) })
     setFormSubRates({
       subHourlyRate: c.subHourlyRate?.toString() ?? '',
@@ -709,6 +709,7 @@ function ClientsPageInner() {
                     <div>{selected.phone || '—'}</div>
                     <div style={{ color: 'var(--muted)', fontSize: 12 }}>{selected.address || '—'}</div>
                     {selected.clientType === 'supplier' && selected.paymentTerms && <div style={{ color: 'var(--muted)', fontSize: 12 }}>Payment terms: {selected.paymentTerms}</div>}
+                    {selected.clientType !== 'client' && selected.accountNumber && <div style={{ color: 'var(--muted)', fontSize: 12 }}>Our account no.: <span className="mono">{selected.accountNumber}</span></div>}
                   </div>
                 </div>
                 {selected.clientType === 'client' && (
@@ -1166,6 +1167,12 @@ function ClientsPageInner() {
                 <label>Address</label>
                 <textarea value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} rows={2} placeholder="14 Thornton Road, London" />
               </div>
+              {form.clientType !== 'client' && (
+                <div className="fg">
+                  <label>Our account number with them</label>
+                  <input value={form.accountNumber} onChange={e => setForm(f => ({ ...f, accountNumber: e.target.value }))} placeholder="Shown on price requests and orders, so they know which account" />
+                </div>
+              )}
               <div className="fg">
                 <label>Notes</label>
                 <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Any extra info…" />

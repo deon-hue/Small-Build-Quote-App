@@ -220,9 +220,9 @@ export function matchSuggestions(orders: JobOrder[], costs: JobCost[]): OrderMat
 const longDate = (s: string) => (s ? ymd(s)!.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }) : '')
 const shortDate = (s: string) => (s ? ymd(s)!.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) : '')
 
-export interface OrderWording { poRef: string; title: string; when: string; where: string; collect: string; details: string; contact: string; priceLine: string; theirRef: string }
+export interface OrderWording { poRef: string; title: string; when: string; where: string; collect: string; details: string; contact: string; priceLine: string; theirRef: string; account: string }
 
-export function orderWording(o: JobOrder): OrderWording {
+export function orderWording(o: JobOrder, account = ''): OrderWording {
   const when = [longDate(o.deliveryDate), o.deliverySlot].filter(Boolean).join(', ')
   const priceLine = o.rate > 0
     ? o.rateBasis === 'fixed' ? `Agreed price £${o.rate.toFixed(2)} + VAT` : `Agreed rate £${o.rate.toFixed(2)} + VAT per ${o.rateBasis}`
@@ -230,7 +230,7 @@ export function orderWording(o: JobOrder): OrderWording {
   return {
     poRef: poRef(o.poNumber), title: o.title || ORDER_TYPES[o.orderType].label, when, where: o.siteAddress,
     collect: o.offHireDate ? longDate(o.offHireDate) : '', details: requestDetails(o),
-    contact: [o.siteContact, o.sitePhone].filter(Boolean).join(', '), priceLine, theirRef: (o.supplierRef || '').trim(),
+    contact: [o.siteContact, o.sitePhone].filter(Boolean).join(', '), priceLine, theirRef: (o.supplierRef || '').trim(), account: account.trim(),
   }
 }
 
@@ -248,8 +248,8 @@ export function titleAndDetails(title: string, details: string, maxLines = 25): 
 const firstName = (s: string) => (s.trim().split(/\s+/)[0] || '').replace(/[^A-Za-z'’-]/g, '')
 
 /** The WhatsApp / plain-text version of an order, written the way you would say it. */
-export function orderWhatsAppText(o: JobOrder, sender: { name: string; company: string }): string {
-  const w = orderWording(o)
+export function orderWhatsAppText(o: JobOrder, sender: { name: string; company: string }, account = ''): string {
+  const w = orderWording(o, account)
   const who = firstName(o.supplierContact)
   const hi = who ? `Hi ${who}, ` : 'Hi, '
   const body = [
@@ -261,6 +261,7 @@ export function orderWhatsAppText(o: JobOrder, sender: { name: string; company: 
     o.accessNotes ? `Access: ${o.accessNotes}` : '',
     w.priceLine,
     w.theirRef ? `Your quote ref: ${w.theirRef}` : '',
+    w.account ? `Our account with you: ${w.account}` : '',
   ].filter(Boolean)
   return [
     `${hi}it's ${sender.name || 'the team'} at ${sender.company}. Order ${w.poRef}:`,
@@ -352,7 +353,7 @@ export function cheapestMix(items: OrderItem[], quotes: OrderQuote[]): { total: 
 export const quoteLink = (base: string, token: string) => `${base.replace(/\/$/, '')}/supplier-quote/${token}`
 
 /** The message asking for a quote, for WhatsApp, a text or the plain part of an email. Shows the area only. */
-export function quoteRequestText(o: JobOrder, q: Pick<OrderQuote, 'supplierContact'>, link: string, sender: { name: string; company: string }, inboxEmail = '', amended = false): string {
+export function quoteRequestText(o: JobOrder, q: Pick<OrderQuote, 'supplierContact'>, link: string, sender: { name: string; company: string }, inboxEmail = '', amended = false, account = ''): string {
   const who = firstName(q.supplierContact)
   const hi = who ? `Hi ${who}, ` : 'Hi, '
   const area = areaOnly(o.siteAddress)
@@ -361,6 +362,7 @@ export function quoteRequestText(o: JobOrder, q: Pick<OrderQuote, 'supplierConta
     o.deliveryDate ? `Needed: ${longDate(o.deliveryDate)}${o.deliverySlot ? ', ' + o.deliverySlot : ''}` : '',
     o.offHireDate ? `Collect: ${longDate(o.offHireDate)}` : '',
     area ? `Where: ${area}` : '',
+    account ? `Our account with you: ${account}` : '',
   ].filter(Boolean)
   return [
     amended

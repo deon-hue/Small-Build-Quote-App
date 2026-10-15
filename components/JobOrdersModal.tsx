@@ -111,6 +111,8 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
   const committed = committedTotals(orders, today)
   const suggestions = matchSuggestions(orders, costs)
   const sender = { name: settings.contact || '', company: settings.name || 'Your builder' }
+  /** our account number with a supplier, from Contacts (by the contact it was made from, else by an exact name) */
+  const accountFor = (id: string | undefined, name: string) => (suppliers.find(s => s.id === id) ?? suppliers.find(s => s.name.trim().toLowerCase() === name.trim().toLowerCase()))?.accountNumber?.trim() || ''
 
   function blank(type: OrderType = 'skip'): Form {
     const t = ORDER_TYPES[type]
@@ -206,7 +208,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
   }
 
   async function sendWhatsApp(o: JobOrder) {
-    const link = waLink(o.supplierPhone, orderWhatsAppText(o, sender))
+    const link = waLink(o.supplierPhone, orderWhatsAppText(o, sender, accountFor(o.supplierId, o.supplierName)))
     if (!link) { setNotice({ ok: false, text: 'This order has no usable phone number for the supplier. Edit it to add one, or copy the text.' }); return }
     window.open(link, '_blank', 'noopener')
     if ((o.status === 'draft' || unconfirmed(o)) && confirm(`WhatsApp has opened with ${poRef(o.poNumber)} ready to send.\n\nPress OK once you have sent it, to mark the order as ordered.`)) await placeOrder(o, 'whatsapp')
@@ -241,14 +243,14 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
   }
 
   async function whatsAppQuoteRequest(o: JobOrder, q: OrderQuote) {
-    const link = waLink(q.supplierPhone, quoteRequestText(o, q, quoteLink(linkBase, q.token), sender, inboxEmail))
+    const link = waLink(q.supplierPhone, quoteRequestText(o, q, quoteLink(linkBase, q.token), sender, inboxEmail, amendedSince(o, q.sentAt), accountFor(q.supplierId, q.supplierName)))
     if (!link) { setNotice({ ok: false, text: `${q.supplierName} has no usable mobile number. Edit it, or copy the message.` }); return }
     window.open(link, '_blank', 'noopener')
     if (confirm(`WhatsApp has opened with the price request for ${q.supplierName}.\n\nPress OK once you have sent it.`)) { await updateOrderQuote(sb, q.id, { sentAt: new Date().toISOString(), sentVia: 'whatsapp' }); await load() }
   }
 
   async function copyQuoteRequest(o: JobOrder, q: OrderQuote) {
-    try { await navigator.clipboard.writeText(quoteRequestText(o, q, quoteLink(linkBase, q.token), sender, inboxEmail)); setNotice({ ok: true, text: 'Copied the message with their link. Paste it anywhere.' }) }
+    try { await navigator.clipboard.writeText(quoteRequestText(o, q, quoteLink(linkBase, q.token), sender, inboxEmail, amendedSince(o, q.sentAt), accountFor(q.supplierId, q.supplierName))); setNotice({ ok: true, text: 'Copied the message with their link. Paste it anywhere.' }) }
     catch { setNotice({ ok: false, text: 'Could not copy automatically.' }) }
   }
 
@@ -326,7 +328,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
   }
 
   async function copyText(o: JobOrder) {
-    try { await navigator.clipboard.writeText(orderWhatsAppText(o, sender)); setNotice({ ok: true, text: 'Copied. Paste it into a message, a text or an email.' }) }
+    try { await navigator.clipboard.writeText(orderWhatsAppText(o, sender, accountFor(o.supplierId, o.supplierName))); setNotice({ ok: true, text: 'Copied. Paste it into a message, a text or an email.' }) }
     catch { setNotice({ ok: false, text: 'Could not copy automatically.' }) }
   }
 

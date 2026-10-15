@@ -24,6 +24,8 @@ export interface PriceRequestEmailInput {
   amended?: boolean
   /** their own quote reference from an earlier reply, if they gave one */
   theirRef?: string
+  /** our account number with this supplier ('' when there is none) */
+  account?: string
 }
 
 const esc = (s: unknown) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -39,6 +41,7 @@ export function priceRequestBody(p: PriceRequestEmailInput): string {
     cell('Collect', e(p.collect)),
     cell('Where', e(p.where)),
     cell('Price for', e(p.priceFor)),
+    cell('Our account', e(p.account ?? '')),
   ].join('')
 
   return (

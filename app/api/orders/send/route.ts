@@ -8,6 +8,7 @@ import { usageGuard } from '@/lib/usage'
 import { callerIsPortalOnly } from '@/lib/caller-role'
 import { BRAND, emailShell, emailPara, emailCard, emailCallout } from '@/lib/email-layout'
 import { rowToOrder, orderWording, orderWhatsAppText, requestDetails } from '@/lib/job-orders'
+import { accountNumberFor } from '@/lib/supplier-account'
 
 interface Branding {
   companyName?: string; companyPhone?: string; companyEmail?: string; senderName?: string
@@ -45,7 +46,8 @@ export async function POST(req: NextRequest) {
     const b = body.branding ?? {}
     const e = escapeHtml
     const company = e(b.companyName || 'Your builder')
-    const w = orderWording(o)
+    const account = await accountNumberFor(sb, o.supplierId, o.supplierName)
+    const w = orderWording(o, account)
     const hello = (o.supplierContact.trim().split(/\s+/)[0] || o.supplierName.trim().split(/\s+/)[0] || 'there')
 
     const cell = (k: string, v: string) => v
@@ -60,6 +62,7 @@ export async function POST(req: NextRequest) {
       cell('Access', e(o.accessNotes).replace(/\n/g, '<br>')),
       cell('Price', e(w.priceLine.replace(/^Agreed (price|rate) /, ''))),
       cell('Your quote', e(w.theirRef)),
+      cell('Our account', e(w.account)),
     ].join('')
 
     const notes = (body.note || '').trim()
@@ -89,7 +92,7 @@ export async function POST(req: NextRequest) {
       to: o.supplierEmail.trim(),
       subject: `Order ${w.poRef}: ${w.title}${o.deliveryDate ? ` (${new Date(o.deliveryDate + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })})` : ''}`,
       html: withPoweredBy(html),
-      text: orderWhatsAppText(o, { name: b.senderName || '', company: b.companyName || 'Your builder' }),
+      text: orderWhatsAppText(o, { name: b.senderName || '', company: b.companyName || 'Your builder' }, account),
     }
     if (b.companyEmail && EMAIL_RX.test(b.companyEmail)) {
       payload.reply_to = b.companyEmail

@@ -460,6 +460,8 @@ export interface Client {
   cisPercentage?: number | null
   subPaymentType?: string
   isPaye?: boolean
+  /** our own account number with this supplier (suppliers and subcontractors), quoted on price requests and orders */
+  accountNumber?: string
   /** The contact's ID in Xero, once the Xero contact sync has linked it (null = not linked) */
   xeroContactId?: string | null
 }
