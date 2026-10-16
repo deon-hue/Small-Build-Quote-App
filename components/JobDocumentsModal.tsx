@@ -11,7 +11,7 @@ import { useApp } from '@/contexts/AppContext'
 import { buildJobReportHtml } from '@/lib/jobReportHtml'
 import SendJobReportModal from './SendJobReportModal'
 import JobOrdersModal from './JobOrdersModal'
-import { fetchJobOrders, committedTotals, expectedNet, isCommitted, poRef, matchSuggestions, orderDateLabel, overrunNote, type JobOrder } from '@/lib/job-orders'
+import { fetchJobOrders, insertJobOrder, expectedCostOrders, committedTotals, expectedNet, isCommitted, poRef, matchSuggestions, orderDateLabel, overrunNote, type JobOrder } from '@/lib/job-orders'
 
 interface Props {
   jobId: string; jobLabel: string; budget?: CategoryBudget | null; revenue?: number
@@ -39,10 +39,18 @@ interface ManualState {
   docNumber: string
   paymentStatus: PaymentStatus
   lines: ExtractedCostLine[]
+  /** an EXPECTED cost (not invoiced yet) rather than a real invoice or receipt: saved as a placed order on account that counts as still to come */
+  expected: boolean
+  expTitle: string
+  expCategory: JobCostCategory
+  expAmount: string
+  expDate: string
+  expMonths: string
 }
 const blankManual = (): ManualState => ({
   supplier: '', docDate: '', docNumber: '', paymentStatus: 'unknown',
   lines: [{ description: '', costCategory: 'materials', netAmount: 0, vatAmount: 0, grossAmount: 0 }],
+  expected: false, expTitle: '', expCategory: 'other', expAmount: '', expDate: '', expMonths: '1',
 })
 
 interface SubContract { id: string; contact_id: string | null; type: 'rate' | 'fixed'; description: string; rate_type: 'hourly' | 'daily' | null; rate_amount: number | null; quoted_amount: number | null; status: string }
@@ -98,6 +106,7 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
   const [subStages, setSubStages] = useState<SubStage[]>([])
   const [saving, setSaving] = useState(false)
   const [manual, setManual] = useState<ManualState | null>(null)
+  const [expError, setExpError] = useState('')
   const [supplierDrop, setSupplierDrop] = useState(false)
   const supplierRef = useRef<HTMLDivElement>(null)
   const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set())
@@ -187,6 +196,26 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
 
   async function saveManual() {
     if (!manual || !userId) return
+    if (manual.expected) {
+      const amount = parseFloat(manual.expAmount)
+      const months = Math.max(1, Math.min(60, parseInt(manual.expMonths || '1', 10) || 1))
+      if (!manual.expTitle.trim()) { setExpError('Say what the cost is for.'); return }
+      if (!(amount > 0)) { setExpError('Enter the amount, not including VAT.'); return }
+      setSaving(true); setExpError('')
+      try {
+        const { data: owner } = await sb.rpc('get_effective_owner_id')
+        const ownerId = (owner as string) || userId
+        let made = 0
+        for (const o of expectedCostOrders({ jobId, supplier: manual.supplier, description: manual.expTitle, category: manual.expCategory, netAmount: amount, firstDate: manual.expDate, months })) {
+          const r = await insertJobOrder(sb, ownerId, o)
+          if (!r.order) { setExpError(`Saved ${made} of ${months}. ${r.error || 'The rest could not be saved.'}${/job_orders|schema cache|does not exist/i.test(r.error ?? '') ? ' (Orders need supabase/job-orders.sql to have been run.)' : ''}`); await fetchJobOrders(sb, jobId).then(x => setOrders(x.orders)).catch(() => {}); return }
+          made++
+        }
+        await fetchJobOrders(sb, jobId).then(x => setOrders(x.orders)).catch(() => {})
+        setManual(null)
+      } finally { setSaving(false) }
+      return
+    }
     setSaving(true)
     try {
       const created: JobCost[] = []
@@ -293,7 +322,15 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
           {/* Manual add form */}
           {manual && (
             <div style={{ border: '2px solid #4a90a4', borderRadius: 10, padding: 14, marginBottom: 16, background: '#f8fcfd' }}>
-              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10 }}>Add cost</div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                {([false, true] as const).map(exp => (
+                  <button key={String(exp)} onClick={() => { setExpError(''); setManual(m => m && { ...m, expected: exp }) }}
+                    style={{ ...btn, flex: '1 1 220px', textAlign: 'left', padding: '8px 12px', background: manual.expected === exp ? (exp ? '#fffbeb' : '#ecfeff') : '#fff', borderColor: manual.expected === exp ? (exp ? '#d97706' : '#4a90a4') : '#d1d5db', borderWidth: 2, color: '#1e293b' }}>
+                    <div style={{ fontWeight: 700, fontSize: 13 }}>{exp ? '⏳ An expected cost (not invoiced yet)' : '🧾 A real invoice or receipt'}</div>
+                    <div style={{ fontSize: 11, fontWeight: 400, color: '#64748b', marginTop: 2 }}>{exp ? 'Counts as still to come, not as a real cost. Good for monthly hire or fees you know are coming.' : 'A cost you have an invoice or receipt for.'}</div>
+                  </button>
+                ))}
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 10 }}>
                 <Field label="Supplier">
                   <div ref={supplierRef} style={{ position: 'relative' }}>
@@ -332,6 +369,7 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
                     )}
                   </div>
                 </Field>
+                {!manual.expected && (<>
                 <Field label="Date"><input type="date" style={inp} value={manual.docDate} onChange={e => setManual(m => m && { ...m, docDate: e.target.value })} /></Field>
                 <Field label="Invoice / receipt #"><input style={inp} value={manual.docNumber} onChange={e => setManual(m => m && { ...m, docNumber: e.target.value })} /></Field>
                 <Field label="Payment">
@@ -339,7 +377,33 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
                     {PAYMENTS.map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </Field>
+                </>)}
               </div>
+              {manual.expected && (
+                <div style={{ borderTop: '1px dashed #fde68a', paddingTop: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.4fr 1fr', gap: 8, marginBottom: 10 }}>
+                    <Field label="What is it for?"><input style={inp} placeholder="e.g. Portaloo hire, monthly" value={manual.expTitle} onChange={e => setManual(m => m && { ...m, expTitle: e.target.value })} /></Field>
+                    <Field label="Cost type">
+                      <select style={inp} value={manual.expCategory} onChange={e => setManual(m => m && { ...m, expCategory: e.target.value as JobCostCategory })}>
+                        {CATS.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Amount each time (£, ex VAT)"><input type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={manual.expAmount} onChange={e => setManual(m => m && { ...m, expAmount: e.target.value })} /></Field>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 2fr', gap: 8, marginBottom: 6, alignItems: 'end' }}>
+                    <Field label="First invoice expected"><input type="date" style={inp} value={manual.expDate} onChange={e => setManual(m => m && { ...m, expDate: e.target.value })} /></Field>
+                    <Field label="Repeat monthly for"><input type="number" min={1} max={60} step="1" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={manual.expMonths} onChange={e => setManual(m => m && { ...m, expMonths: e.target.value })} /></Field>
+                    <div style={{ fontSize: 12, color: '#92400e', paddingBottom: 8 }}>{(() => { const a = parseFloat(manual.expAmount) || 0; const n = Math.max(1, Math.min(60, parseInt(manual.expMonths || '1', 10) || 1)); return `${n} month${n === 1 ? '' : 's'} × ${fmt(a)} = ${fmt(a * n)} ex VAT still to come` })()}</div>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>Each month is kept as its own line under Orders. When an invoice arrives, press <strong>Invoice arrived</strong> on that month and it becomes the real cost.</div>
+                  {expError && <div style={{ margin: '6px 0', padding: '6px 10px', borderRadius: 6, background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', fontSize: 12 }}>{expError}</div>}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 12, marginTop: 8 }}>
+                    <button onClick={() => { setManual(null); setExpError('') }} style={btn}>Cancel</button>
+                    <button onClick={saveManual} disabled={saving} style={{ ...btn, background: '#d97706', color: '#fff', border: 'none' }}>{saving ? 'Saving…' : 'Save as expected'}</button>
+                  </div>
+                </div>
+              )}
+              {!manual.expected && (<>
               <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#94a3b8', marginBottom: 4 }}>Cost lines</div>
               <div style={{ display: 'grid', gap: 6 }}>
                 {manual.lines.map((ln, i) => (
@@ -361,6 +425,7 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
                 <button onClick={() => setManual(null)} style={btn}>Cancel</button>
                 <button onClick={saveManual} disabled={saving} style={{ ...btn, background: '#16a34a', color: '#fff', border: 'none' }}>{saving ? 'Saving…' : 'Save'}</button>
               </div>
+              </>)}
             </div>
           )}
 
@@ -368,7 +433,7 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
           {!loading && (committedOrders.length > 0 || orderSuggestions.length > 0) && (
             <div style={{ border: '1px solid #fde68a', background: '#fffbeb', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, gap: 8, flexWrap: 'wrap' }}>
-                <div style={{ fontWeight: 700, fontSize: 14, color: '#92400e' }}>⏳ Still to come <span style={{ fontWeight: 400, fontSize: 11, color: '#a16207' }}>(ordered, not yet invoiced; ex-VAT)</span></div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: '#92400e' }}>⏳ Still to come <span style={{ fontWeight: 400, fontSize: 11, color: '#a16207' }}>(not invoiced yet; ex-VAT)</span></div>
                 <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#92400e' }}>{fmt(committed.total)}</span>
               </div>
               {committedOrders.map(o => {
@@ -378,6 +443,7 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
                     <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{poRef(o.poNumber)}</span>
                     <span style={{ flex: 1, minWidth: 160 }}>{o.title} · {o.supplierName}{o.expectedInvoice ? <span style={{ color: '#a16207' }}> · invoice about {orderDateLabel(o.expectedInvoice)}</span> : null}{warn ? <span style={{ color: '#b45309', fontWeight: 600 }}> · ⚠ {warn}</span> : null}</span>
                     <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{fmt(expectedNet(o))}</span>
+                    <button onClick={() => setShowOrders(true)} title="Open the Orders window to record the invoice when it arrives" style={{ border: 'none', background: 'none', color: '#0369a1', cursor: 'pointer', textDecoration: 'underline', padding: 0, fontSize: 12 }}>Invoice arrived →</button>
                   </div>
                 )
               })}
@@ -430,12 +496,12 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
                   </div>
                   {committed.total > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #f1f5f9', color: '#92400e' }}>
-                      <span>Expected costs still to come (ordered, not invoiced)</span>
+                      <span>Expected costs still to come (not invoiced yet)</span>
                       <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{fmt(committed.total)}</span>
                     </div>
                   )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: committed.total > 0 ? '1px solid #f1f5f9' : '2px solid #e2e8f0', color: '#64748b' }}>
-                    <span>{committed.total > 0 ? 'Margin so far (invoiced costs only)' : 'Gross margin'}</span>
+                    <span>{committed.total > 0 ? 'Margin so far (real: invoiced costs only)' : 'Gross margin'}</span>
                     <span style={{ fontFamily: 'monospace', fontWeight: 700, color: margin !== null && margin >= 0 ? '#16a34a' : '#dc2626' }}>
                       {fmt(margin ?? 0)}{marginPct !== null ? ` (${marginPct}%)` : ''}
                     </span>
@@ -447,7 +513,7 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
                     return (
                       <div style={{ padding: '6px 0', borderBottom: '2px solid #e2e8f0' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', color: '#1e293b', fontWeight: 700 }}>
-                          <span>Margin including expected costs</span>
+                          <span>Margin at end of job (including expected costs)</span>
                           <span style={{ fontFamily: 'monospace', color: col }}>{fmt(projectedMargin ?? 0)}{projectedPct !== null ? ` (${projectedPct}%)` : ''}</span>
                         </div>
                         {(bad || low) && quotedPct !== null && <div style={{ fontSize: 11, color: col, marginTop: 2 }}>{bad ? 'The job is heading for a loss.' : `Below the ${quotedPct}% margin this job was quoted at.`}</div>}
@@ -511,6 +577,17 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
                   </tr>
                 </tfoot>
               </table>
+              {(() => {
+                const leftReal = +(budget.total - totalNet).toFixed(2)
+                const leftEnd = +(budget.total - totalNet - committed.total).toFixed(2)
+                const col = (n: number) => (n < 0 ? '#dc2626' : '#16a34a')
+                return (
+                  <div style={{ marginTop: 10, padding: '8px 10px', background: '#f8fafc', borderRadius: 8, fontSize: 13 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, color: '#475569' }}><span>Budget left so far <span style={{ fontSize: 11, color: '#94a3b8' }}>(quoted cost minus real costs)</span></span><strong style={{ fontFamily: 'monospace', color: col(leftReal) }}>{fmt(leftReal)}</strong></div>
+                    {committed.total > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 4, color: '#92400e', fontWeight: 700 }}><span>Budget left at end of job <span style={{ fontSize: 11, fontWeight: 400 }}>(after {fmt(committed.total)} still to come)</span></span><span style={{ fontFamily: 'monospace', color: col(leftEnd) }}>{fmt(leftEnd)}</span></div>}
+                  </div>
+                )
+              })()}
               {/* Invoices */}
               {localInvoices.length > 0 && (
                 <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>

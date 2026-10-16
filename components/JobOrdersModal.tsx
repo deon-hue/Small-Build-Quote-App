@@ -10,7 +10,7 @@ import { useApp } from '@/contexts/AppContext'
 import { fetchJobCosts, insertJobCost, updateJobCost } from '@/lib/job-costs'
 import type { JobCost, JobCostCategory } from '@/lib/types'
 import {
-  ORDER_TYPES, ORDER_STATUS_LABEL, poRef, expectedNet, hireUnits, isCommitted, committedTotals, overrunNote, matchSuggestions, orderWhatsAppText, waLink, addDays, todayYmd, orderDateLabel,
+  ORDER_TYPES, ORDER_STATUS_LABEL, isExpectedCost, poRef, expectedNet, hireUnits, isCommitted, committedTotals, overrunNote, matchSuggestions, orderWhatsAppText, waLink, addDays, todayYmd, orderDateLabel,
   fetchJobOrders, insertJobOrder, updateJobOrder, deleteJobOrder, fetchDeletedOrders, restoreJobOrder, purgeJobOrder, requestChanged, amendedSince,
   quoteRequestText, quoteLink, noteOfDetails, cheapestQuoteId, cheapestMix, lineTotal, pricedQuote, quoteNet, areaOnly, QUOTE_STATUS_LABEL, fetchOrderQuotes, insertOrderQuotes, updateOrderQuote, deleteOrderQuote, fetchAllJobOrders, fetchIncomingQuotes, type IncomingQuote,
   type JobOrder, type OrderType, type PayTerms, type RateBasis, type OrderStatus, type OrderQuote, type QuoteInvitee, type QuoteStatus,
@@ -781,7 +781,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                         <span style={{ fontFamily: 'monospace', fontWeight: 700 }} title="Ex VAT">{fmt(invoicedCost ? invoicedCost.netAmount : paidCost ? paidCost.netAmount : net)}</span>
                       </div>
                       <div style={{ fontSize: 12, color: '#64748b', marginTop: 3, lineHeight: 1.6 }}>
-                        {o.supplierName}{o.supplierRef ? ` · their quote ref ${o.supplierRef}` : ''}{o.deliveryDate ? ` · delivery ${orderDateLabel(o.deliveryDate)}${o.deliverySlot ? ', ' + o.deliverySlot : ''}` : ''}{o.offHireDate ? ` · collected ${orderDateLabel(o.offHireDate)}` : ''}
+                        {isExpectedCost(o) ? 'Expected cost (not sent to anyone) · ' : ''}{o.supplierName}{o.supplierRef ? ` · their quote ref ${o.supplierRef}` : ''}{o.deliveryDate ? ` · delivery ${orderDateLabel(o.deliveryDate)}${o.deliverySlot ? ', ' + o.deliverySlot : ''}` : ''}{o.offHireDate ? ` · collected ${orderDateLabel(o.offHireDate)}` : ''}
                         {o.rateBasis !== 'fixed' && o.rate > 0 ? ` · ${fmt(o.rate)} per ${o.rateBasis} × ${hireUnits(o, today)}` : ''}
                         {isCommitted(o) && o.expectedInvoice ? ` · invoice expected about ${orderDateLabel(o.expectedInvoice)}` : ''}
                         {o.sentAt ? ` · sent ${new Date(o.sentAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}${o.sentVia ? ' by ' + o.sentVia : ''}` : ''}
@@ -796,12 +796,12 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                           <button onClick={() => copyText(o)} style={btn}>Copy text</button>
                           <button onClick={() => { if (confirm(`Mark ${poRef(o.poNumber)} as ordered without sending a message? Use this when you phoned it through.`)) placeOrder(o, 'phone') }} style={btn}>Ordered another way</button>
                         </>}
-                        {live && o.status !== 'draft' && <>
+                        {live && o.status !== 'draft' && !isExpectedCost(o) && <>
                           <button onClick={() => sendEmail(o)} style={unconfirmed(o) ? primary : btn} title={unconfirmed(o) ? 'Send the order with the full address' : 'Send the order email again'}>{unconfirmed(o) ? '✉ Send confirmation' : '✉ Email again'}</button>
                           <button onClick={() => sendWhatsApp(o)} style={btn}>🟢 WhatsApp</button>
                         </>}
-                        {live && o.status === 'ordered' && <button onClick={() => setStatus(o, 'confirmed')} style={btn}>Supplier confirmed</button>}
-                        {live && (o.status === 'ordered' || o.status === 'confirmed') && <button onClick={() => setStatus(o, 'delivered', o.deliveryDate ? {} : { deliveryDate: today })} style={btn}>{ORDER_TYPES[o.orderType].hire ? 'Delivered / on site' : 'Delivered'}</button>}
+                        {live && o.status === 'ordered' && !isExpectedCost(o) && <button onClick={() => setStatus(o, 'confirmed')} style={btn}>Supplier confirmed</button>}
+                        {live && !isExpectedCost(o) && (o.status === 'ordered' || o.status === 'confirmed') && <button onClick={() => setStatus(o, 'delivered', o.deliveryDate ? {} : { deliveryDate: today })} style={btn}>{ORDER_TYPES[o.orderType].hire ? 'Delivered / on site' : 'Delivered'}</button>}
                         {live && o.status === 'delivered' && ORDER_TYPES[o.orderType].hire && <button onClick={() => setStatus(o, 'collected', { offHireDate: o.offHireDate || today })} style={btn}>Collected / off-hire</button>}
                         {live && o.payTerms === 'account' && o.status !== 'draft' && <button onClick={() => setInvoiceFor({ order: o, net: net ? net.toFixed(2) : '', docNumber: '', date: today, status: 'unpaid' })} style={{ ...btn, borderColor: '#16a34a', color: '#166534' }}>Invoice arrived…</button>}
                         {live && <button onClick={() => editOrder(o)} style={btn}>Edit</button>}

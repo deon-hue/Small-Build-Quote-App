@@ -151,6 +151,38 @@ export function expectedNet(o: Pick<JobOrder, 'rate' | 'rateBasis' | 'plannedUni
   return money(o.rate * hireUnits(o, today))
 }
 
+/** Marks an order that stands for an EXPECTED COST entered by hand in the job's Costs window (rent, monthly hire, a fee not invoiced yet): it is never sent to anyone. */
+export const EXPECTED_COST_VIA = 'expected cost'
+export const isExpectedCost = (o: Pick<JobOrder, 'sentVia'>) => o.sentVia === EXPECTED_COST_VIA
+
+/** Add whole months to a YYYY-MM-DD date, keeping the day where the month has it and using the month's last day where it does not (31 Jan + 1 month = 28 Feb). */
+export function addMonthsYmd(ymdStr: string, n: number): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymdStr)
+  if (!m) return ''
+  const total = Number(m[1]) * 12 + (Number(m[2]) - 1) + n
+  const y = Math.floor(total / 12), mo = total % 12
+  const last = new Date(Date.UTC(y, mo + 1, 0)).getUTCDate()
+  return `${y}-${String(mo + 1).padStart(2, '0')}-${String(Math.min(Number(m[3]), last)).padStart(2, '0')}`
+}
+
+/**
+ * The orders that stand for expected costs: one per month for `months` months, the first invoice expected on `firstDate`. Each is placed and on account (so it counts as still to come),
+ * a fixed price with no delivery, and carries the marker so the Orders window does not offer to send it. The caller saves them with insertJobOrder, which gives each its PO number.
+ */
+export function expectedCostOrders(p: { jobId: string; supplier: string; description: string; category: JobCostCategory; netAmount: number; firstDate: string; months: number }): Partial<JobOrder>[] {
+  const months = Math.max(1, Math.min(60, Math.floor(p.months) || 1))
+  const out: Partial<JobOrder>[] = []
+  for (let i = 0; i < months; i++) {
+    out.push({
+      jobId: p.jobId, kind: 'order', orderType: 'other', status: 'ordered', supplierName: p.supplier.trim() || 'To be confirmed', supplierContact: '', supplierEmail: '', supplierPhone: '',
+      title: months > 1 ? `${p.description.trim()} (${i + 1} of ${months})` : p.description.trim(), details: '', costCategory: p.category, payTerms: 'account', rateBasis: 'fixed',
+      rate: +p.netAmount.toFixed(2), plannedUnits: 1, deliveryDate: '', deliverySlot: '', offHireDate: '', expectedInvoice: p.firstDate ? addMonthsYmd(p.firstDate, i) : '',
+      siteAddress: '', siteContact: '', sitePhone: '', accessNotes: '', sentVia: EXPECTED_COST_VIA,
+    })
+  }
+  return out
+}
+
 /** An order that is placed, on account, and not yet invoiced: money the job will owe that no invoice shows yet. */
 export function isCommitted(o: Pick<JobOrder, 'payTerms' | 'status' | 'kind'>): boolean {
   return o.kind === 'order' && o.payTerms === 'account' && (o.status === 'ordered' || o.status === 'confirmed' || o.status === 'delivered' || o.status === 'collected')
