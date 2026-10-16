@@ -463,6 +463,8 @@ export interface Client {
   cisPercentage?: number | null
   subPaymentType?: string
   isPaye?: boolean
+  /** paid through PAYE payroll (no bill, never sent to Xero). Empty = never set: a Direct Labour worker counts as on payroll, as always. See lib/payroll.ts */
+  paidViaPayroll?: boolean | null
   /** our own account number with this supplier (suppliers and subcontractors), quoted on price requests and orders */
   accountNumber?: string
   /** The contact's ID in Xero, once the Xero contact sync has linked it (null = not linked) */

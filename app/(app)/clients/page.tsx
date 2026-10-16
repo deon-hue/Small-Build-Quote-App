@@ -68,7 +68,7 @@ function ClientsPageInner() {
   const router = useRouter()
   const [filter, setFilter] = useState<'all' | 'client' | 'supplier' | 'subcontractor'>('all')
   const [search, setSearch] = useState('') // phone/tablet only: the search box is hidden on desktop by CSS
-  const BLANK_SUB_RATES = { subHourlyRate: '', subDayRate: '', subHalfDayRate: '', cisRegistered: false, cisPercentage: '', subPaymentType: 'invoice', isPaye: false }
+  const BLANK_SUB_RATES = { subHourlyRate: '', subDayRate: '', subHalfDayRate: '', cisRegistered: false, cisPercentage: '', subPaymentType: 'invoice', isPaye: false, paidViaPayroll: false }
   const [formSubRates, setFormSubRates] = useState(BLANK_SUB_RATES)
   const detailModal = useDraggableModal()
   const formModal = useDraggableModal()
@@ -221,6 +221,8 @@ function ClientsPageInner() {
       cisPercentage: c.cisPercentage?.toString() ?? '',
       subPaymentType: c.subPaymentType || 'invoice',
       isPaye: c.isPaye ?? false,
+      // never set means a Direct Labour worker has always been treated as on payroll
+      paidViaPayroll: c.isPaye ? c.paidViaPayroll !== false : false,
     })
     setSelected(null)
     setShowForm(true)
@@ -238,6 +240,7 @@ function ClientsPageInner() {
         cisPercentage: formSubRates.cisPercentage ? Number(formSubRates.cisPercentage) : null,
         subPaymentType: formSubRates.subPaymentType,
         isPaye: formSubRates.isPaye,
+        paidViaPayroll: formSubRates.isPaye && formSubRates.paidViaPayroll,
       } : {}
       if (editingClient) {
         await updateClient({ ...editingClient, ...form, portalSettings: formPortalSettings, ...subRateFields })
@@ -755,7 +758,7 @@ function ClientsPageInner() {
                     <div><span style={{ color: 'var(--muted)' }}>Half day:</span> <span className="mono">{selected.subHalfDayRate != null ? fmt(selected.subHalfDayRate) : '—'}</span></div>
                     <div><span style={{ color: 'var(--muted)' }}>Hourly:</span> <span className="mono">{selected.subHourlyRate != null ? fmt(selected.subHourlyRate) : '—'}</span></div>
                     <div style={{ color: 'var(--muted)', fontSize: 12 }}>
-                      {selected.isPaye ? 'Direct labour (PAYE)' : 'Subcontractor'}{selected.subPaymentType ? ' · paid ' + selected.subPaymentType : ''}{selected.cisRegistered ? ' · CIS' + (selected.cisPercentage != null ? ' ' + selected.cisPercentage + '%' : '') : ''}
+                      {selected.isPaye ? (selected.paidViaPayroll === false ? 'Direct labour (billed)' : 'Direct labour (PAYE payroll)') : 'Subcontractor'}{selected.subPaymentType ? ' · paid ' + selected.subPaymentType : ''}{selected.cisRegistered ? ' · CIS' + (selected.cisPercentage != null ? ' ' + selected.cisPercentage + '%' : '') : ''}
                     </div>
                   </div>
                 </div>
@@ -1332,8 +1335,19 @@ function ClientsPageInner() {
                       onChange={e => setFormSubRates(s => ({ ...s, isPaye: e.target.checked }))}
                       style={{ width: 14, height: 14, flexShrink: 0, cursor: 'pointer' }}
                     />
-                    Direct Labour
+                    Direct Labour <span style={{ color: 'var(--muted)', fontWeight: 400 }}>(costs go in the Labour category)</span>
                   </label>
+                  {formSubRates.isPaye && (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12 }} title="Tick for staff paid by payroll. Leave unticked for someone who invoices you (for example a full-time worker on CIS): their week then becomes a bill you can send to Xero.">
+                      <input
+                        type="checkbox"
+                        checked={formSubRates.paidViaPayroll}
+                        onChange={e => setFormSubRates(s => ({ ...s, paidViaPayroll: e.target.checked }))}
+                        style={{ width: 14, height: 14, flexShrink: 0, cursor: 'pointer' }}
+                      />
+                      Paid through PAYE payroll <span style={{ color: 'var(--muted)', fontWeight: 400 }}>(no bill, not sent to Xero)</span>
+                    </label>
+                  )}
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12 }}>
                     <input
                       type="checkbox"

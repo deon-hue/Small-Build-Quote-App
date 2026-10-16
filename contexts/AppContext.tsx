@@ -318,6 +318,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           cisPercentage: r.cis_percentage ?? null,
           subPaymentType: r.sub_payment_type || 'invoice',
           isPaye: r.is_paye ?? false,
+          paidViaPayroll: typeof r.paid_via_payroll === 'boolean' ? r.paid_via_payroll : null,
           xeroContactId: r.xero_contact_id || null,
           accountNumber: r.account_number || '',
         })))
@@ -599,6 +600,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (em) await supabase.from('deleted_contacts').delete().eq('user_id', ownerId).ilike('email', escapeLike(em))
     } catch { /* nothing to forget */ }
     if (c.accountNumber) await supabase.from('clients').update({ account_number: c.accountNumber }).eq('id', data.id)
+    if (c.paidViaPayroll !== undefined && c.paidViaPayroll !== null) await supabase.from('clients').update({ paid_via_payroll: c.paidViaPayroll }).eq('id', data.id)
     setClients(prev => [...prev, {
       id: data.id, name: data.name, first: data.first_name || '', last: data.last_name || '',
       phone: data.phone || '', email: data.email || '', address: data.address || '',
@@ -646,6 +648,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (error) {
       await supabase.from('clients').update(basePayload).eq('id', c.id)
     }
+    // paid through payroll or billed: written on its own so a database without the column (supabase/sub-payroll.sql) still saves everything else
+    if (c.paidViaPayroll !== undefined) await supabase.from('clients').update({ paid_via_payroll: c.paidViaPayroll }).eq('id', c.id)
     // our account number with a supplier, written on its own so a database without the column still saves everything else
     if (c.accountNumber !== undefined) await supabase.from('clients').update({ account_number: c.accountNumber }).eq('id', c.id)
     setClients(prev => prev.map(x => x.id === c.id ? c : x))

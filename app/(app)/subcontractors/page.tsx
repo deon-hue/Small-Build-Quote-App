@@ -1,5 +1,6 @@
 'use client'
 
+import { isOnPayroll } from '@/lib/payroll'
 import { showUrlDocument } from '@/lib/open-document'
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
@@ -362,7 +363,10 @@ export default function SubcontractorsPage() {
 
   // Derived helpers
   const contactName = (id: string | null) => id ? (clients.find(c => c.id === id)?.name ?? '—') : '—'
+  // Direct Labour: the costs go in the Labour category.
   const isPaye = (id: string | null) => !!clients.find(c => c.id === id)?.isPaye
+  // Paid through payroll: never made into a bill, never sent to Xero (Cash / PAYE buttons instead). Direct Labour who invoice, for example a full-time worker on CIS, are NOT on payroll. See lib/payroll.ts.
+  const isPayroll = (id: string | null) => isOnPayroll(clients.find(c => c.id === id))
 
   async function togglePaye(contactId: string) {
     const contact = clients.find(c => c.id === contactId)
@@ -775,8 +779,8 @@ export default function SubcontractorsPage() {
   }
 
   async function sendToBills(contactId: string, ws: string) {
-    // PAYE employees are paid through payroll, so their hours never become a bill.
-    if (isPaye(contactId)) return
+    // People paid through payroll are never made into a bill.
+    if (isPayroll(contactId)) return
     const key = `${contactId}_${ws}`
     setSendingToBills(key)
     try {
@@ -1641,7 +1645,7 @@ export default function SubcontractorsPage() {
                             {isPaye(contactId) ? 'Labour' : 'Sub'}
                           </button>
                           <span style={{ fontSize: 12, color: '#9ca3af' }}>· {logs.length} day{logs.length !== 1 ? 's' : ''}</span>
-                          {isPaye(contactId) ? (
+                          {isPayroll(contactId) ? (
                             <>
                               {paidBy('cash') > 0 && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>💵 {paidBy('cash')} cash</span>}
                               {paidBy('paye') > 0 && <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#e0e7ff', color: '#4338ca', fontWeight: 600 }}>✓ {paidBy('paye')} PAYE</span>}
@@ -1661,15 +1665,15 @@ export default function SubcontractorsPage() {
                             : billPaid
                               ? null
                               : allPaid
-                                ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#f3f4f6', color: '#374151', fontWeight: 600 }}>{isPaye(contactId) ? '✓ Paid' : '✓ Cash paid'}</span>
-                                : billableCount > 0 && !wb && isPaye(contactId)
+                                ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#f3f4f6', color: '#374151', fontWeight: 600 }}>{isPayroll(contactId) ? '✓ Paid' : '✓ Cash paid'}</span>
+                                : billableCount > 0 && !wb && isPayroll(contactId)
                                   ? <>
                                       <button onClick={() => markWeekPaid(contactId, ws, 'cash')} title="Marks every unpaid day this week as paid in cash and records it on the job. Nothing is sent to Xero." style={{ fontSize: 11, padding: '3px 10px', background: '#fff', border: '1px solid #d1d5db', color: '#374151', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>💵 All cash</button>
                                       <button onClick={() => markWeekPaid(contactId, ws, 'paye')} title="Marks every unpaid day this week as paid through PAYE and records it on the job. Nothing is sent to Xero." style={{ fontSize: 11, padding: '3px 10px', background: '#fff', border: '1px solid #d1d5db', color: '#374151', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>All PAYE</button>
                                     </>
                                   : null
                           }
-                          {billableCount > 0 && !wb && !isPaye(contactId) && (
+                          {billableCount > 0 && !wb && !isPayroll(contactId) && (
                             <button
                               onClick={() => sendToBills(contactId, ws)}
                               disabled={sendingToBills === key}
@@ -1709,14 +1713,14 @@ export default function SubcontractorsPage() {
                                 {hasXero
                                   ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#dbeafe', color: '#1e40af', fontWeight: 600 }}>✓ Xero</span>
                                   : isPaid
-                                    ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#f3f4f6', color: '#374151', fontWeight: 600 }}>{isPaye(log.contact_id) ? (log.paid_method === 'cash' ? '✓ Cash' : log.paid_method === 'paye' ? '✓ PAYE' : '✓ Paid') : '✓ Cash'}</span>
+                                    ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#f3f4f6', color: '#374151', fontWeight: 600 }}>{isPayroll(log.contact_id) ? (log.paid_method === 'cash' ? '✓ Cash' : log.paid_method === 'paye' ? '✓ PAYE' : '✓ Paid') : '✓ Cash'}</span>
                                     : billPaid
                                       ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>✓ Bill paid</span>
                                       : billSent
                                         ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#ede9fe', color: '#6d28d9', fontWeight: 600 }}>↗ In bills</span>
                                         : <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                                             <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#fef9c3', color: '#854d0e', fontWeight: 600 }}>⏳ Pending</span>
-                                            {isPaye(log.contact_id) && (
+                                            {isPayroll(log.contact_id) && (
                                               <>
                                                 <button onClick={() => markDayPaid(log, 'cash')} title="Paid in cash — records it on the job (nothing goes to Xero)" style={{ fontSize: 10, padding: '2px 7px', background: '#f9fafb', border: '1px solid #d1d5db', color: '#374151', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>💵 Cash</button>
                                                 <button onClick={() => markDayPaid(log, 'paye')} title="Paid through PAYE — records it on the job (nothing goes to Xero)" style={{ fontSize: 10, padding: '2px 7px', background: '#f9fafb', border: '1px solid #d1d5db', color: '#374151', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>PAYE</button>
@@ -2000,7 +2004,7 @@ export default function SubcontractorsPage() {
                     <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', fontSize: 11 }}>Job</th>
                     <th style={{ padding: '8px 10px', textAlign: 'left', width: 160, fontWeight: 600, color: '#374151', fontSize: 11 }}>Rate</th>
                     <th style={{ padding: '8px 10px', textAlign: 'right', width: 80, fontWeight: 600, color: '#374151', fontSize: 11 }}>Amount</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'center', width: 72, fontWeight: 600, color: '#374151', fontSize: 11 }}>{isPaye(weekSub) ? 'Paid?' : 'Cash paid?'}</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'center', width: 72, fontWeight: 600, color: '#374151', fontSize: 11 }}>{isPayroll(weekSub) ? 'Paid?' : 'Cash paid?'}</th>
                     <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', fontSize: 11 }}>Notes</th>
                   </tr>
                 </thead>
@@ -2075,8 +2079,8 @@ export default function SubcontractorsPage() {
                         </td>
                         <td className="wk-cash" style={{ padding: '6px 8px', textAlign: 'center' }}>
                           {row.active ? (<>
-                            <span className="wk-lbl">{isPaye(weekSub) ? 'Paid' : 'Cash paid'}</span>
-                            {isPaye(weekSub) ? (
+                            <span className="wk-lbl">{isPayroll(weekSub) ? 'Paid' : 'Cash paid'}</span>
+                            {isPayroll(weekSub) ? (
                               <select
                                 value={row.paidCash ? (row.paidMethod || 'paid') : ''}
                                 title="How this day was paid — recorded on the job, nothing is sent to Xero"
@@ -2119,7 +2123,7 @@ export default function SubcontractorsPage() {
                       Total · {new Set(weekRows.filter(r => r.active).map(r => r.date)).size} day{new Set(weekRows.filter(r => r.active).map(r => r.date)).size === 1 ? '' : 's'} worked
                       {weekRows.some(r => r.active && r.paidCash) && (
                         <span style={{ marginLeft: 10, fontSize: 11, color: '#16a34a', fontWeight: 500 }}>
-                          · {weekRows.filter(r => r.active && r.paidCash).length} {isPaye(weekSub) ? 'paid' : 'cash paid'}
+                          · {weekRows.filter(r => r.active && r.paidCash).length} {isPayroll(weekSub) ? 'paid' : 'cash paid'}
                         </span>
                       )}
                     </td>

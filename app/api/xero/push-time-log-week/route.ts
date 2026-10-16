@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getValidConnection, xeroFetch } from '@/lib/xero'
+import { rowIsOnPayroll } from '@/lib/payroll'
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -33,9 +34,9 @@ export async function POST(req: NextRequest) {
     const labourCode = ac.billLabour ?? '400'
 
     // Look up subcontractor's Xero contact
-    const { data: sub } = await sb.from('clients').select('xero_contact_id, name, is_paye').eq('id', contactId).single()
+    const { data: sub } = await sb.from('clients').select('*').eq('id', contactId).single()
     // PAYE employees are paid through payroll, not bills — their hours stay in job costs only.
-    if (sub?.is_paye) return NextResponse.json({ error: `${sub.name ?? 'This worker'} is on PAYE payroll — their hours aren't sent to Xero as a bill.` }, { status: 400 })
+    if (rowIsOnPayroll(sub)) return NextResponse.json({ error: `${sub.name ?? 'This worker'} is on PAYE payroll — their hours aren't sent to Xero as a bill.` }, { status: 400 })
     const xeroContact = sub?.xero_contact_id
       ? { ContactID: sub.xero_contact_id }
       : { Name: sub?.name ?? 'Unknown Subcontractor' }
