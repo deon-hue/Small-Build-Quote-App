@@ -1682,6 +1682,15 @@ export default function SubcontractorsPage() {
                               {sendingToBills === key ? '…' : '→ Bills'}
                             </button>
                           )}
+                          {billableCount > 0 && !wb && !isPayroll(contactId) && (
+                            <button
+                              onClick={() => { if (confirm(`Mark every unpaid day this week for ${contactName(contactId)} as paid in cash?\n\nIt is recorded on the job and nothing is sent to Xero.`)) markWeekPaid(contactId, ws, 'cash') }}
+                              title="Paid in cash: marks every unpaid day this week as paid and records it on the job. No bill, nothing is sent to Xero."
+                              style={{ fontSize: 11, padding: '3px 10px', background: '#fff', border: '1px solid #d1d5db', color: '#374151', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}
+                            >
+                              💵 Cash
+                            </button>
+                          )}
                           {billPaid && approvedCount === 0 && cashCount > 0 && (
                             <button
                               onClick={() => { if (confirm('Reset these days from Cash to Bill paid? Only do this if they were sent to a bill, not paid in cash.')) repairWeekBillStatus(contactId, ws) }}
@@ -1720,6 +1729,9 @@ export default function SubcontractorsPage() {
                                         ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#ede9fe', color: '#6d28d9', fontWeight: 600 }}>↗ In bills</span>
                                         : <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                                             <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: '#fef9c3', color: '#854d0e', fontWeight: 600 }}>⏳ Pending</span>
+                                            {!isPayroll(log.contact_id) && (
+                                              <button onClick={() => { if (confirm('Mark this day as paid in cash? It is recorded on the job and nothing is sent to Xero.')) markDayPaid(log, 'cash') }} title="Paid in cash: records it on the job (no bill, nothing goes to Xero)" style={{ fontSize: 10, padding: '2px 7px', background: '#f9fafb', border: '1px solid #d1d5db', color: '#374151', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>💵 Cash</button>
+                                            )}
                                             {isPayroll(log.contact_id) && (
                                               <>
                                                 <button onClick={() => markDayPaid(log, 'cash')} title="Paid in cash — records it on the job (nothing goes to Xero)" style={{ fontSize: 10, padding: '2px 7px', background: '#f9fafb', border: '1px solid #d1d5db', color: '#374151', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>💵 Cash</button>
