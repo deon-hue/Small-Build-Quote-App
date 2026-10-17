@@ -673,7 +673,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
       <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 880, maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: '1px solid #e2e8f0' }}>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 16 }}>{loose ? '💬 Prices not on a job' : '📦 Orders'}</div>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>{loose ? '💬 Price requests (no job)' : '📦 Orders'}</div>
             <div style={{ fontSize: 12, color: '#64748b' }}>{jobLabel}</div>
           </div>
           <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8' }}>×</button>
