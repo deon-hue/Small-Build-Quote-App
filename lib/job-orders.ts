@@ -4,6 +4,7 @@
 //   * paid when ordered (materials you pay for at once): a real, paid cost goes on the job when the order is placed.
 // The pure parts (the sums, the matching, the wording of the messages) live here so they can be tested; the database calls are at the end.
 
+import { SUPPLIER_PRICE_FORM_ON, showSupplierPriceForm } from './supplier-quote-config'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { JobCost, JobCostCategory } from './types'
 
@@ -411,6 +412,18 @@ export function quoteRequestText(o: JobOrder, q: Pick<OrderQuote, 'supplierConta
     area ? `Where: ${area}` : '',
     account ? `Our account with you: ${account}` : '',
   ].filter(Boolean)
+  if (!showSupplierPriceForm(inboxEmail)) {
+    // the supplier quotes from their own system and emails it to us: a plain list, and exactly how to send the quote back
+    return [
+      amended
+        ? `${hi}it's ${sender.name || 'the team'} at ${sender.company}. We have changed our price request ${poRef(o.poNumber)}, so please look at it below and send us an updated quote.`
+        : `${hi}it's ${sender.name || 'the team'} at ${sender.company}. Could you quote for the following please? Our purchase order ref is ${poRef(o.poNumber)}`,
+      '',
+      ...body,
+      '',
+      `Please quote from your own system and email the quote as a PDF attached to the email to ${inboxEmail}. It must show our purchase order number ${poRef(o.poNumber)}, so please put it on the quote and in the email subject. A quote pasted into the email, or sent as a link, cannot be read. Thanks!`,
+    ].join('\n')
+  }
   return [
     amended
       ? `${hi}it's ${sender.name || 'the team'} at ${sender.company}. We have changed our price request ${poRef(o.poNumber)}, so please check it below and update your price if it changes.`
@@ -755,14 +768,17 @@ export function noteOfDetails(details: string): string {
  */
 export function requestDetails(o: { details: string; items?: OrderItem[] }): string {
   const items = (o.items ?? []).filter(i => i.name.trim() && i.qty > 0)
-  if (items.length === 0 || /^•/m.test(o.details || '')) return o.details || ''
+  // an older request has the ask written into its details: when there is no price link any more, it must not say "on the link"
+  if (items.length === 0 || /^•/m.test(o.details || '')) return SUPPLIER_PRICE_FORM_ON ? (o.details || '') : (o.details || '').replace('(a unit price, ex VAT, on the link)', '(a unit price for each, ex VAT)')
   return materialsRequestDetails(items.map(i => ({ name: i.name, purchaseQty: i.qty, unit: i.unit })), noteOfDetails(o.details))
 }
 
 /** The details of a price request for a materials list: an optional note, then the list. */
 export function materialsRequestDetails(lines: { name: string; purchaseQty: number; unit: string }[], note = ''): string {
   const list = materialsListText(lines)
-  const ask = 'Please price each item below (a unit price, ex VAT, on the link) and any delivery charge; tell us anything you cannot supply or would swap:'
+  const ask = SUPPLIER_PRICE_FORM_ON
+    ? 'Please price each item below (a unit price, ex VAT, on the link) and any delivery charge; tell us anything you cannot supply or would swap:'
+    : 'Please price each item below (a unit price for each, ex VAT) and any delivery charge; tell us anything you cannot supply or would swap:'
   return [...(note.trim() ? [note.trim(), ''] : []), ask, list].join('\n')
 }
 

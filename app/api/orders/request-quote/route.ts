@@ -11,6 +11,7 @@ import { priceRequestBody } from '@/lib/price-request-email'
 import { rowToOrder, rowToQuote, areaOnly, poRef, quoteLink, quoteRequestText, requestDetails, amendedSince } from '@/lib/job-orders'
 import { withCode } from '@/lib/mail-address'
 import { accountNumberFor } from '@/lib/supplier-account'
+import { showSupplierPriceForm } from '@/lib/supplier-quote-config'
 
 interface Branding {
   companyName?: string; companyPhone?: string; companyEmail?: string; senderName?: string
@@ -76,7 +77,7 @@ export async function POST(req: NextRequest) {
         collect: longDate(o.offHireDate),
         where: areaOnly(o.siteAddress),
         priceFor: o.rateBasis === 'fixed' ? '' : `${o.plannedUnits} ${o.rateBasis === 'day' ? 'day' : 'week'}${o.plannedUnits === 1 ? '' : 's'}: give your rate per ${o.rateBasis}`,
-        link, ref, inboxEmail, amended, theirRef: q.supplierRef, account,
+        link, ref, inboxEmail, amended, theirRef: q.supplierRef, account, listOnly: !showSupplierPriceForm(inboxEmail),
         senderName: b.senderName || '', companyName: b.companyName || '', companyPhone: b.companyPhone || '',
       }),
       footerHtml: [

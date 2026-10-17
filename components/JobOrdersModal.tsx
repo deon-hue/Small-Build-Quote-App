@@ -15,6 +15,7 @@ import {
   quoteRequestText, quoteLink, noteOfDetails, cheapestQuoteId, cheapestMix, lineTotal, pricedQuote, quoteNet, areaOnly, QUOTE_STATUS_LABEL, fetchOrderQuotes, insertOrderQuotes, updateOrderQuote, deleteOrderQuote, fetchAllJobOrders, fetchIncomingQuotes, type IncomingQuote,
   type JobOrder, type OrderType, type PayTerms, type RateBasis, type OrderStatus, type OrderQuote, type QuoteInvitee, type QuoteStatus,
 } from '@/lib/job-orders'
+import { showSupplierPriceForm } from '@/lib/supplier-quote-config'
 import { Recipients } from './OrderRecipients'
 import PriceRequestItems from './PriceRequestItems'
 import { withCode } from '@/lib/mail-address'
@@ -215,11 +216,13 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
     if ((o.status === 'draft' || unconfirmed(o)) && confirm(`WhatsApp has opened with ${poRef(o.poNumber)} ready to send.\n\nPress OK once you have sent it, to mark the order as ordered.`)) await placeOrder(o, 'whatsapp')
   }
 
+  // no price form (lib/supplier-quote-config.ts): the supplier is sent a list and emails their own quote back, so nothing here is a "link"
+  const listOnly = !showSupplierPriceForm(inboxEmail)
   const linkBase = (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_APP_URL) || (typeof window !== 'undefined' ? window.location.origin : '')
 
   async function emailQuoteRequest(o: JobOrder, q: OrderQuote) {
-    if (!q.supplierEmail.trim()) { setNotice({ ok: false, text: `${q.supplierName} has no email address. Use WhatsApp or copy the link.` }); return }
-    if (!confirm(`Email the price request ${poRef(o.poNumber)} to ${q.supplierEmail}?\n\nThey get a link to give their price. The job's street address is not in it, only the area. A copy goes to you.`)) return
+    if (!q.supplierEmail.trim()) { setNotice({ ok: false, text: `${q.supplierName} has no email address. Use WhatsApp or copy the message.` }); return }
+    if (!confirm(`Email the price request ${poRef(o.poNumber)} to ${q.supplierEmail}?\n\n${listOnly ? 'They get a list of what you need, and email their own quote back to your quotes address with the PO number on it.' : 'They get a link to give their price.'} The job's street address is not in it, only the area. A copy goes to you.`)) return
     setBusy(`rq-${q.id}`); setNotice(null)
     try {
       const res = await fetch('/api/orders/request-quote', {
@@ -251,14 +254,14 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
   }
 
   async function copyQuoteRequest(o: JobOrder, q: OrderQuote) {
-    try { await navigator.clipboard.writeText(quoteRequestText(o, q, quoteLink(linkBase, q.token), sender, inboxEmail, amendedSince(o, q.sentAt), accountFor(q.supplierId, q.supplierName))); setNotice({ ok: true, text: 'Copied the message with their link. Paste it anywhere.' }) }
+    try { await navigator.clipboard.writeText(quoteRequestText(o, q, quoteLink(linkBase, q.token), sender, inboxEmail, amendedSince(o, q.sentAt), accountFor(q.supplierId, q.supplierName))); setNotice({ ok: true, text: 'Copied the message. Paste it anywhere.' }) }
     catch { setNotice({ ok: false, text: 'Could not copy automatically.' }) }
   }
 
   async function addSuppliersTo(o: JobOrder) {
     if (!ownerId || moreRecips.length === 0) return
     const r = await insertOrderQuotes(sb, ownerId, o.id, moreRecips)
-    setNotice(r.ok ? { ok: true, text: 'Added. Send them their link below.' } : { ok: false, text: `Could not add them: ${r.error ?? ''}` })
+    setNotice(r.ok ? { ok: true, text: listOnly ? 'Added. Send them the request below.' : 'Added. Send them their link below.' } : { ok: false, text: `Could not add them: ${r.error ?? ''}` })
     setAddingTo(null); setMoreRecips([]); await load()
   }
 
@@ -431,7 +434,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                   <span style={{ fontSize: 11, padding: '1px 8px', borderRadius: 10, background: sty.bg, color: sty.fg, fontWeight: 700 }}>{QUOTE_STATUS_LABEL[q.status]}</span>
                   {q.id === cheapest && <span style={{ fontSize: 11, color: '#15803d', fontWeight: 700 }}>CHEAPEST</span>}
                   <span style={{ fontSize: 11, color: '#94a3b8' }}>
-                    {q.sentAt ? `link sent ${sentDay(q)}${q.sentVia ? ' by ' + q.sentVia : ''}` : 'link not sent yet'}{q.viewedAt && q.status === 'invited' ? ' · opened' : ''}
+                    {q.sentAt ? `${listOnly ? 'request' : 'link'} sent ${sentDay(q)}${q.sentVia ? ' by ' + q.sentVia : ''}` : `${listOnly ? 'request' : 'link'} not sent yet`}{q.viewedAt && q.status === 'invited' ? ' · opened' : ''}
                   </span>
                   <span style={{ flex: 1 }} />
                   {q.status === 'replied' && q.price !== null && (
@@ -484,8 +487,8 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                       {busy === `rd-${q.id}` ? 'Reading their quote…' : '📎 Add their own quote (PDF)'}
                       <input type="file" accept="application/pdf,image/*" style={{ display: 'none' }} disabled={busy === `rd-${q.id}`} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void readTheirQuote(o, q, f) }} />
                     </label>
-                    <button onClick={() => emailQuoteRequest(o, q)} disabled={busy === `rq-${q.id}`} style={q.sentAt || q.status !== 'invited' ? btn : primary}>{busy === `rq-${q.id}` ? 'Sending…' : amendedSince(o, q.sentAt) || (q.status === 'replied' && amendedSince(o, q.repliedAt)) ? '✉ Email the amended request' : q.sentAt ? '✉ Email link again' : '✉ Email the link'}</button>
-                    <button onClick={() => whatsAppQuoteRequest(o, q)} style={btn}>🟢 WhatsApp the link</button>
+                    <button onClick={() => emailQuoteRequest(o, q)} disabled={busy === `rq-${q.id}`} style={q.sentAt || q.status !== 'invited' ? btn : primary}>{busy === `rq-${q.id}` ? 'Sending…' : amendedSince(o, q.sentAt) || (q.status === 'replied' && amendedSince(o, q.repliedAt)) ? '✉ Email the amended request' : q.sentAt ? (listOnly ? '✉ Email request again' : '✉ Email link again') : (listOnly ? '✉ Email the request' : '✉ Email the link')}</button>
+                    <button onClick={() => whatsAppQuoteRequest(o, q)} style={btn}>🟢 WhatsApp the {listOnly ? 'request' : 'link'}</button>
                     <button onClick={() => copyQuoteRequest(o, q)} style={btn}>Copy message</button>
                     <button onClick={async () => { if (confirm(`Take ${q.supplierName} off this request?`)) { await deleteOrderQuote(sb, q.id); await load() } }} style={{ ...btn, color: '#dc2626', borderColor: '#fecaca' }}>Remove</button>
                   </div>
@@ -599,7 +602,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
                 {!loose && <button onClick={() => startForm('order')} style={primary}>＋ New order</button>}
-                <button onClick={() => startForm('request')} style={loose ? primary : btn} title="Ask one or more suppliers for a price: they get a link, no login, and you compare and approve">💬 Ask for a price</button>
+                <button onClick={() => startForm('request')} style={loose ? primary : btn} title="Ask one or more suppliers for a price: they quote from their own system and email it back, and you compare and approve">💬 Ask for a price</button>
                 {committed.total > 0 && (
                   <span style={{ fontSize: 13, color: '#334155' }}>
                     Expected costs still to come: <strong style={{ fontFamily: 'monospace' }}>{fmt(committed.total)}</strong> <span style={{ color: '#94a3b8' }}>ex VAT, already counted in the job&apos;s margin</span>
