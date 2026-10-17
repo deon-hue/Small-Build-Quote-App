@@ -323,7 +323,7 @@ function JobsPageInner() {
           <h1 className="tp-title">Jobs</h1>
         </div>
         <div className="tp-head-btns">
-          <button className="tp-btn tp-btn-light" onClick={() => setShowRequests(true)}>💬 Price requests</button>
+          <button className="tp-btn tp-btn-light" onClick={() => setShowRequests(true)}>💬 Prices not on a job</button>
           <button className="tp-btn" onClick={openNew}>+ New job</button>
         </div>
       </div>
@@ -345,7 +345,7 @@ function JobsPageInner() {
           ))}
         </div>
         <div className="jobs-spacer" style={{ flex: 1 }} />
-        <button className="btn btn-outline tp-hide" onClick={() => setShowRequests(true)} title="Prices you have asked suppliers for on a materials list, before there is a job">💬 Price requests</button>
+        <button className="btn btn-outline tp-hide" onClick={() => setShowRequests(true)} title="Prices asked for from a calculator before there is a job, and supplier quotes emailed in that need placing">💬 Prices not on a job</button>
         <button className="btn btn-primary jobs-add tp-hide" onClick={openNew} aria-label="Add job"><span className="add-plus">+</span><span className="add-label"> Add Job</span></button>
       </div>
 
