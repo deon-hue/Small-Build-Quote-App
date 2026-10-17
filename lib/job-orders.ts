@@ -252,17 +252,31 @@ export function matchSuggestions(orders: JobOrder[], costs: JobCost[]): OrderMat
 const longDate = (s: string) => (s ? ymd(s)!.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }) : '')
 const shortDate = (s: string) => (s ? ymd(s)!.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) : '')
 
-export interface OrderWording { poRef: string; title: string; when: string; where: string; collect: string; details: string; contact: string; priceLine: string; theirRef: string; account: string }
+export interface OrderWording { poRef: string; title: string; when: string; where: string; collect: string; details: string; contact: string; priceLine: string; theirRef: string; account: string; fromQuote: boolean }
 
-export function orderWording(o: JobOrder, account = ''): OrderWording {
-  const when = [longDate(o.deliveryDate), o.deliverySlot].filter(Boolean).join(', ')
+/**
+ * What the order is for, as the supplier should read it on an ORDER: the note and the items as a plain list ("• 10 nr — blocks"). A request's own wording ("Please price each item below…") is never carried onto an order.
+ */
+export function orderDetailsText(o: Pick<JobOrder, 'details' | 'items'>): string {
+  const items = (o.items ?? []).filter(i => i.name.trim() && i.qty > 0)
+  if (items.length > 0) return [noteOfDetails(o.details), materialsListText(items.map(i => ({ name: i.name, purchaseQty: i.qty, unit: i.unit })))].filter(Boolean).join('\n')
+  // a request made before items were kept separately has the ask written into its details: drop that line, keep the list
+  return (o.details || '').replace(/^.*Please price each item below[^\n]*\n?/m, '').trim()
+}
+
+/** Did this order come from a supplier's quote the builder approved? (the quote is marked chosen, or its reference came across, or it is waiting to be confirmed to them) */
+export const orderIsFromQuote = (o: Pick<JobOrder, 'sentVia' | 'supplierRef'>, hasChosenQuote = false) => hasChosenQuote || o.sentVia === 'quote accepted' || !!(o.supplierRef || '').trim()
+
+export function orderWording(o: JobOrder, account = '', fromQuote = false): OrderWording {
+  // a time of day with no date is no delivery date: the supplier is asked for one
+  const when = o.deliveryDate ? [longDate(o.deliveryDate), o.deliverySlot].filter(Boolean).join(', ') : ''
   const priceLine = o.rate > 0
     ? o.rateBasis === 'fixed' ? `Agreed price £${o.rate.toFixed(2)} + VAT` : `Agreed rate £${o.rate.toFixed(2)} + VAT per ${o.rateBasis}`
     : ''
   return {
     poRef: poRef(o.poNumber), title: o.title || ORDER_TYPES[o.orderType].label, when, where: o.siteAddress,
-    collect: o.offHireDate ? longDate(o.offHireDate) : '', details: requestDetails(o),
-    contact: [o.siteContact, o.sitePhone].filter(Boolean).join(', '), priceLine, theirRef: (o.supplierRef || '').trim(), account: account.trim(),
+    collect: o.offHireDate ? longDate(o.offHireDate) : '', details: orderDetailsText(o),
+    contact: [o.siteContact, o.sitePhone].filter(Boolean).join(', '), priceLine, theirRef: (o.supplierRef || '').trim(), account: account.trim(), fromQuote: orderIsFromQuote(o, fromQuote),
   }
 }
 
@@ -270,7 +284,7 @@ export function orderWording(o: JobOrder, account = ''): OrderWording {
 export function titleAndDetails(title: string, details: string, maxLines = 25): string[] {
   const d = (details || '').trim()
   if (!d) return [title]
-  if (!d.includes('\n')) return [`${title} (${d.replace(/\s+/g, ' ')})`]
+  if (!d.includes('\n') && !d.startsWith('•')) return [`${title} (${d.replace(/\s+/g, ' ')})`]
   const lines = d.split('\n').map(l => l.trimEnd())
   const shown = lines.slice(0, maxLines)
   const more = lines.filter(l => l.trim()).length - shown.filter(l => l.trim()).length
@@ -279,29 +293,30 @@ export function titleAndDetails(title: string, details: string, maxLines = 25): 
 
 const firstName = (s: string) => (s.trim().split(/\s+/)[0] || '').replace(/[^A-Za-z'’-]/g, '')
 
-/** The WhatsApp / plain-text version of an order, written the way you would say it. */
-export function orderWhatsAppText(o: JobOrder, sender: { name: string; company: string }, account = ''): string {
-  const w = orderWording(o, account)
+/**
+ * The order as a short, plain message (WhatsApp, the plain-text copy of the email, Copy text): yes, go ahead; our order reference and their quote reference; what; where to; the delivery date to confirm.
+ * `fromQuote`: it follows a quote the builder approved, so it starts by thanking them for it.
+ */
+export function orderWhatsAppText(o: JobOrder, sender: { name: string; company: string }, account = '', fromQuote = false): string {
+  const w = orderWording(o, account, fromQuote)
   const who = firstName(o.supplierContact)
   const hi = who ? `Hi ${who}, ` : 'Hi, '
-  const body = [
-    ...titleAndDetails(w.title, requestDetails(o)),
-    w.when ? `Deliver: ${w.when}` : '',
-    w.where ? `To: ${w.where}` : '',
+  const open = w.fromQuote
+    ? `Thank you for your quote${w.theirRef ? ` (your ref ${w.theirRef})` : ''}. Yes, we would like you to go ahead with this order.`
+    : 'We would like to place the following order with you.'
+  const refs = [`Our order ref: ${w.poRef}`, w.theirRef ? `Your quote ref: ${w.theirRef}` : '', w.account ? `Our account with you: ${w.account}` : ''].filter(Boolean)
+  const where = [
+    w.where ? `Deliver to: ${w.where}` : '',
+    w.when ? `Delivery date: ${w.when}` : 'Delivery date: please tell us when you can deliver',
     w.collect ? `Collect: ${w.collect}` : '',
     w.contact ? `Site contact: ${w.contact}` : '',
     o.accessNotes ? `Access: ${o.accessNotes}` : '',
     w.priceLine,
-    w.theirRef ? `Your quote ref: ${w.theirRef}` : '',
-    w.account ? `Our account with you: ${w.account}` : '',
   ].filter(Boolean)
-  return [
-    `${hi}it's ${sender.name || 'the team'} at ${sender.company}. Order ${w.poRef}:`,
-    '',
-    ...body,
-    '',
-    `Please quote ${w.poRef} on your invoice, and reply to confirm. Thanks!`,
-  ].join('\n')
+  const close = w.when
+    ? `Please reply to confirm you will deliver on ${w.when}, and quote ${w.poRef} on your invoice. Thanks!`
+    : `Please reply with the date you can deliver, and quote ${w.poRef} on your invoice. Thanks!`
+  return [`${hi}it's ${sender.name || 'the team'} at ${sender.company}.`, '', open, '', ...refs, '', ...titleAndDetails(w.title, w.details), '', ...where, '', close].join('\n')
 }
 
 /** A wa.me link for a UK (or international) number, with the message ready to send. null if there is no usable number. */

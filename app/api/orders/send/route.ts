@@ -6,8 +6,9 @@ import { createClient } from '@/lib/supabase/server'
 import { senderFrom, withPoweredBy, escapeHtml } from '@/lib/email-brand'
 import { usageGuard } from '@/lib/usage'
 import { callerIsPortalOnly } from '@/lib/caller-role'
-import { BRAND, emailShell, emailPara, emailCard, emailCallout } from '@/lib/email-layout'
-import { rowToOrder, orderWording, orderWhatsAppText, requestDetails } from '@/lib/job-orders'
+import { emailShell } from '@/lib/email-layout'
+import { rowToOrder, orderWording, orderWhatsAppText, orderIsFromQuote } from '@/lib/job-orders'
+import { orderConfirmationBody } from '@/lib/order-confirmation-email'
 import { accountNumberFor } from '@/lib/supplier-account'
 
 interface Branding {
@@ -47,38 +48,23 @@ export async function POST(req: NextRequest) {
     const e = escapeHtml
     const company = e(b.companyName || 'Your builder')
     const account = await accountNumberFor(sb, o.supplierId, o.supplierName)
-    const w = orderWording(o, account)
+    // did this follow a supplier's quote the builder approved? (the quote is marked chosen, its reference came across, or it is still waiting to be confirmed)
+    const { data: chosen } = await sb.from('job_order_quotes').select('id').eq('order_id', o.id).eq('status', 'chosen').limit(1)
+    const fromQuote = orderIsFromQuote(o, (chosen ?? []).length > 0)
+    const w = orderWording(o, account, fromQuote)
     const hello = (o.supplierContact.trim().split(/\s+/)[0] || o.supplierName.trim().split(/\s+/)[0] || 'there')
 
-    const cell = (k: string, v: string) => v
-      ? `<tr><td style="padding:8px 0;border-bottom:1px solid ${BRAND.line};width:96px;font-size:13px;color:${BRAND.muted};vertical-align:top">${k}</td><td style="padding:8px 0;border-bottom:1px solid ${BRAND.line};font-size:14px;font-weight:600;color:${BRAND.ink};line-height:1.5">${v}</td></tr>`
-      : ''
-    const rows = [
-      cell('What', e(w.title) + (requestDetails(o) ? `<br><span style="font-weight:400;color:${BRAND.muted}">${e(requestDetails(o)).replace(/\n/g, '<br>')}</span>` : '')),
-      cell('Deliver', e(w.when)),
-      cell('To', e(w.where).replace(/\n/g, '<br>')),
-      cell('Collect', e(w.collect)),
-      cell('Site contact', e(w.contact)),
-      cell('Access', e(o.accessNotes).replace(/\n/g, '<br>')),
-      cell('Price', e(w.priceLine.replace(/^Agreed (price|rate) /, ''))),
-      cell('Your quote', e(w.theirRef)),
-      cell('Our account', e(w.account)),
-    ].join('')
-
-    const notes = (body.note || '').trim()
     const html = emailShell({
       company,
-      kicker: 'Purchase order',
-      title: `Order ${e(w.poRef)}`,
+      kicker: fromQuote ? 'Order confirmed' : 'Purchase order',
+      title: fromQuote ? 'Please go ahead with this order' : `Order ${e(w.poRef)}`,
       ref: e(w.poRef),
       logoUrl: b.logoOwnerId && appUrl ? `${appUrl.replace(/\/$/, '')}/api/public/company-logo/${encodeURIComponent(b.logoOwnerId)}` : undefined,
-      body:
-        emailPara(`Hello ${e(hello)},`, 12) +
-        emailPara('Please could you supply the following. Our order reference is below.', 14) +
-        emailCard(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">${rows}</table>`) +
-        (notes ? emailCallout(`<p style="margin:0;font-size:14px;line-height:1.6;color:${BRAND.ink}">${e(notes).replace(/\n/g, '<br>')}</p>`) : '') +
-        emailCallout(`<p style="margin:0;font-size:14px;line-height:1.6;color:${BRAND.ink}">Please <strong>quote ${e(w.poRef)}</strong> on your invoice, and reply to this email to confirm the date.</p>`, 'Reference') +
-        emailPara(`Thanks,<br><strong>${e(b.senderName || b.companyName || '')}</strong>${b.companyPhone ? `<br>${e(b.companyPhone)}` : ''}`, 0),
+      body: orderConfirmationBody({
+        hello, fromQuote: w.fromQuote, poRef: w.poRef, theirRef: w.theirRef, account: w.account, title: w.title, details: w.details,
+        deliverTo: w.where, when: w.when, collect: w.collect, contact: w.contact, access: o.accessNotes, price: w.priceLine.replace(/^Agreed (price|rate) /, ''),
+        note: (body.note || '').trim(), senderName: b.senderName || '', companyName: b.companyName || '', companyPhone: b.companyPhone || '',
+      }),
       footerHtml: [
         `<strong style="color:#ffffff">${company}</strong>`,
         b.address ? e(b.address).replace(/\n/g, ', ') : '',
@@ -90,9 +76,9 @@ export async function POST(req: NextRequest) {
     const payload: Record<string, unknown> = {
       from: senderFrom(fromEmail, b.companyName),
       to: o.supplierEmail.trim(),
-      subject: `Order ${w.poRef}: ${w.title}${o.deliveryDate ? ` (${new Date(o.deliveryDate + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })})` : ''}`,
+      subject: `${fromQuote ? 'Please go ahead: order' : 'Order'} ${w.poRef}: ${w.title}${o.deliveryDate ? ` (${new Date(o.deliveryDate + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })})` : ''}`,
       html: withPoweredBy(html),
-      text: orderWhatsAppText(o, { name: b.senderName || '', company: b.companyName || 'Your builder' }, account),
+      text: orderWhatsAppText(o, { name: b.senderName || '', company: b.companyName || 'Your builder' }, account, fromQuote),
     }
     if (b.companyEmail && EMAIL_RX.test(b.companyEmail)) {
       payload.reply_to = b.companyEmail

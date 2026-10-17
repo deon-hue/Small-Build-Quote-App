@@ -10,7 +10,7 @@ import { useApp } from '@/contexts/AppContext'
 import { fetchJobCosts, insertJobCost, updateJobCost } from '@/lib/job-costs'
 import type { JobCost, JobCostCategory } from '@/lib/types'
 import {
-  ORDER_TYPES, ORDER_STATUS_LABEL, isExpectedCost, poRef, expectedNet, hireUnits, isCommitted, committedTotals, overrunNote, matchSuggestions, orderWhatsAppText, waLink, addDays, todayYmd, orderDateLabel,
+  ORDER_TYPES, ORDER_STATUS_LABEL, isExpectedCost, orderIsFromQuote, poRef, expectedNet, hireUnits, isCommitted, committedTotals, overrunNote, matchSuggestions, orderWhatsAppText, waLink, addDays, todayYmd, orderDateLabel,
   fetchJobOrders, insertJobOrder, updateJobOrder, deleteJobOrder, fetchDeletedOrders, restoreJobOrder, purgeJobOrder, requestChanged, amendedSince,
   quoteRequestText, quoteLink, noteOfDetails, cheapestQuoteId, cheapestMix, lineTotal, pricedQuote, quoteNet, areaOnly, QUOTE_STATUS_LABEL, fetchOrderQuotes, insertOrderQuotes, updateOrderQuote, deleteOrderQuote, fetchAllJobOrders, fetchIncomingQuotes, type IncomingQuote,
   type JobOrder, type OrderType, type PayTerms, type RateBasis, type OrderStatus, type OrderQuote, type QuoteInvitee, type QuoteStatus,
@@ -90,7 +90,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
     }
     const [{ orders: o, missing: m }, c] = await Promise.all([fetchJobOrders(sb, jobId), loose ? Promise.resolve([] as JobCost[]) : fetchJobCosts(sb, user.id, jobId)])
     setOrders(o); setMissing(m); setCosts(c)
-    setQuotes(await fetchOrderQuotes(sb, o.filter(x => x.kind === 'quote_request').map(x => x.id)))
+    setQuotes(await fetchOrderQuotes(sb, o.map(x => x.id)))
     const del = await fetchDeletedOrders(sb, jobId)
     setDeleted(del)
     setDeletedQuotes(await fetchOrderQuotes(sb, del.filter(x => x.kind === 'quote_request').map(x => x.id)))
@@ -111,6 +111,8 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
   const committed = committedTotals(orders, today)
   const suggestions = matchSuggestions(orders, costs)
   const sender = { name: settings.contact || '', company: settings.name || 'Your builder' }
+  /** did this order follow a quote you approved? (so the message starts by thanking them for it) */
+  const fromQuoteOf = (o: JobOrder) => orderIsFromQuote(o, quotes.some(q => q.orderId === o.id && q.status === 'chosen'))
   /** our account number with a supplier, from Contacts (by the contact it was made from, else by an exact name) */
   const accountFor = (id: string | undefined, name: string) => (suppliers.find(s => s.id === id) ?? suppliers.find(s => s.name.trim().toLowerCase() === name.trim().toLowerCase()))?.accountNumber?.trim() || ''
 
@@ -190,7 +192,6 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           orderId: o.id,
-          note: unconfirmed(o) ? `Thank you for your price${o.rate > 0 ? ` of ${fmt(o.rate)} + VAT${o.rateBasis === 'fixed' ? '' : ' per ' + o.rateBasis}` : ''}. Please treat this email as our order.` : undefined,
           branding: {
             companyName: settings.name, companyPhone: settings.phone, companyEmail: settings.email, senderName: settings.contact,
             address: settings.address, companyNumber: settings.companyNumber, vatNumber: settings.vatNumber, website: settings.website,
@@ -208,7 +209,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
   }
 
   async function sendWhatsApp(o: JobOrder) {
-    const link = waLink(o.supplierPhone, orderWhatsAppText(o, sender, accountFor(o.supplierId, o.supplierName)))
+    const link = waLink(o.supplierPhone, orderWhatsAppText(o, sender, accountFor(o.supplierId, o.supplierName), fromQuoteOf(o)))
     if (!link) { setNotice({ ok: false, text: 'This order has no usable phone number for the supplier. Edit it to add one, or copy the text.' }); return }
     window.open(link, '_blank', 'noopener')
     if ((o.status === 'draft' || unconfirmed(o)) && confirm(`WhatsApp has opened with ${poRef(o.poNumber)} ready to send.\n\nPress OK once you have sent it, to mark the order as ordered.`)) await placeOrder(o, 'whatsapp')
@@ -328,7 +329,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
   }
 
   async function copyText(o: JobOrder) {
-    try { await navigator.clipboard.writeText(orderWhatsAppText(o, sender, accountFor(o.supplierId, o.supplierName))); setNotice({ ok: true, text: 'Copied. Paste it into a message, a text or an email.' }) }
+    try { await navigator.clipboard.writeText(orderWhatsAppText(o, sender, accountFor(o.supplierId, o.supplierName), fromQuoteOf(o))); setNotice({ ok: true, text: 'Copied. Paste it into a message, a text or an email.' }) }
     catch { setNotice({ ok: false, text: 'Could not copy automatically.' }) }
   }
 
