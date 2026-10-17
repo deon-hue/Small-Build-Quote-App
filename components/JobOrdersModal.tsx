@@ -690,7 +690,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                   {mode === 'request' && form.orderType === 'materials' && (
                     <div style={{ marginTop: 10 }}>
                       <PriceRequestItems ownerId={ownerId} items={form.items ?? []} onChange={items => set('items', items)} />
-                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>With items listed, each supplier prices every item (a unit price each) and adds delivery. Without any, they give one price.</div>
+                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>With items listed, the supplier is sent them as a list to quote from. Without any, they quote for what you write in the note above.</div>
                     </div>
                   )}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 10 }}>

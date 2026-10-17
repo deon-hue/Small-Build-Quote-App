@@ -34,7 +34,7 @@ export default function PriceRequestItems({ ownerId, items, onChange }: { ownerI
   return (
     <div style={{ border: '1px solid #cbd5e1', borderRadius: 8, padding: 10, background: '#fff' }}>
       <label style={lab}>Items to be priced ({items.filter(i => i.name.trim() && i.qty > 0).length})</label>
-      {items.length === 0 && <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>Add what you need priced, with the quantity. Each supplier gives a unit price for every item.</div>}
+      {items.length === 0 && <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>Add what you need priced, with the quantity. The supplier is sent them as a list to quote from.</div>}
       {items.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 80px 70px 28px', gap: 6, alignItems: 'center', marginBottom: 8 }}>
           <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase' }}>What</div>
