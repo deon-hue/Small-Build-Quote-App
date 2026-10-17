@@ -377,6 +377,8 @@ export interface Supplier {
   phone: string
   email: string
   address: string
+  /** postcode, kept on its own so it can be used for finding the nearest supplier and the like (supabase/client-postcode.sql) */
+  postcode?: string
   notes: string
   accountNumber: string
   addedFrom: string
@@ -467,6 +469,8 @@ export interface Client {
   paidViaPayroll?: boolean | null
   /** our own account number with this supplier (suppliers and subcontractors), quoted on price requests and orders */
   accountNumber?: string
+  /** postcode, kept on its own (supabase/client-postcode.sql) */
+  postcode?: string
   /** The contact's ID in Xero, once the Xero contact sync has linked it (null = not linked) */
   xeroContactId?: string | null
 }

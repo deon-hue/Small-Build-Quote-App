@@ -337,16 +337,16 @@ export const orderDateLabel = shortDate
 // ── Quote requests ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /**
- * Where the job is, without the door: a supplier asked for a quote sees the area, not the street, until a quote is accepted.
- * "107 Slough Road, Tooting, SW17 0AB" becomes "Tooting, SW17". A single-line address is cut to its postcode area if it has one.
+ * Where the job is, without the door: a supplier asked for a quote sees the town and the full postcode (a skip or hire firm needs it to price the delivery), not the house or street, until a quote is accepted.
+ * "107 Slough Road, Tooting, SW17 0AB" becomes "Tooting, SW17 0AB". A single-line address is cut to its postcode if it has one.
  */
 export function areaOnly(address: string): string {
-  const POST = /\b([A-Z]{1,2}\d[A-Z\d]?)\s*\d[A-Z]{2}\b/gi
-  const parts = (address || '').split(/[,\n]/).map(p => p.trim()).filter(Boolean).map(p => p.replace(POST, '$1'))
+  const POST = /\b([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})\b/gi
+  const parts = (address || '').split(/[,\n]/).map(p => p.trim()).filter(Boolean).map(p => p.replace(POST, (_m, out: string, inw: string) => `${out.toUpperCase()} ${inw.toUpperCase()}`))
   if (parts.length === 0) return ''
-  if (parts.length === 1) { const m = /\b[A-Z]{1,2}\d[A-Z\d]?\b/i.exec(parts[0]); return m ? m[0].toUpperCase() : '' }
+  if (parts.length === 1) { const m = /\b[A-Z]{1,2}\d[A-Z\d]?(?: \d[A-Z]{2})?\b/i.exec(parts[0]); return m ? m[0].toUpperCase() : '' }
   // leave out the house and street lines (a house number, or a street word), and with three or more lines always the first; a bare area such as "Tooting, SW17" is kept whole
-  const POSTCODE_AREA = /^[A-Z]{1,2}\d[A-Z\d]?$/i
+  const POSTCODE_AREA = /^[A-Z]{1,2}\d[A-Z\d]?( \d[A-Z]{2})?$/i
   const STREET = /\b(road|rd|street|st|avenue|ave|lane|ln|close|drive|dr|way|court|ct|gardens|gdns|crescent|place|terrace|grove|mews|hill|park|row|walk|flat|apartment|house)\b/i
   const streety = (p: string) => !POSTCODE_AREA.test(p) && (/\d/.test(p) || STREET.test(p))
   let i = 0

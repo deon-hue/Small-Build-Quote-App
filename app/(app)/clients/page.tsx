@@ -18,7 +18,7 @@ import { buildUsageIndex, usageOf, type UsageIndex } from '@/lib/contact-usage'
 import { escapeLike } from '@/lib/email-match'
 import { snippet } from '@/lib/note-attention'
 
-const BLANK_FORM = { name: '', first: '', last: '', email: '', phone: '', address: '', notes: '', accountNumber: '', paymentTerms: 'Payment on receipt', clientType: 'client' as 'client' | 'supplier' | 'subcontractor' }
+const BLANK_FORM = { name: '', first: '', last: '', email: '', phone: '', address: '', postcode: '', notes: '', accountNumber: '', paymentTerms: 'Payment on receipt', clientType: 'client' as 'client' | 'supplier' | 'subcontractor' }
 
 // ── Portal status helpers ───────────────────────────────────
 const STATUS_LABEL: Record<PortalStatus, string> = {
@@ -211,7 +211,7 @@ function ClientsPageInner() {
 
   function openEdit(c: Client) {
     setEditingClient(c)
-    setForm({ name: c.name, first: c.first, last: c.last, email: c.email, phone: c.phone, address: c.address, notes: c.notes, accountNumber: c.accountNumber || '', paymentTerms: c.paymentTerms || 'Payment on receipt', clientType: c.clientType || 'client' })
+    setForm({ name: c.name, first: c.first, last: c.last, email: c.email, phone: c.phone, address: c.address, postcode: c.postcode || '', notes: c.notes, accountNumber: c.accountNumber || '', paymentTerms: c.paymentTerms || 'Payment on receipt', clientType: c.clientType || 'client' })
     setFormPortalSettings({ ...DEFAULT_CLIENT_PORTAL_SETTINGS, ...(c.portalSettings || {}) })
     setFormSubRates({
       subHourlyRate: c.subHourlyRate?.toString() ?? '',
@@ -735,7 +735,7 @@ function ClientsPageInner() {
                   <div style={{ padding: '12px 16px', fontSize: 13, lineHeight: 1.9 }}>
                     <div>{selected.email || '—'}</div>
                     <div>{selected.phone || '—'}</div>
-                    <div style={{ color: 'var(--muted)', fontSize: 12 }}>{selected.address || '—'}</div>
+                    <div style={{ color: 'var(--muted)', fontSize: 12 }}>{selected.address || '—'}{selected.postcode && !(selected.address || '').toUpperCase().replace(/\s/g, '').includes(selected.postcode.toUpperCase().replace(/\s/g, '')) ? `, ${selected.postcode}` : ''}</div>
                     {selected.clientType === 'supplier' && selected.paymentTerms && <div style={{ color: 'var(--muted)', fontSize: 12 }}>Payment terms: {selected.paymentTerms}</div>}
                     {selected.clientType !== 'client' && selected.accountNumber && <div style={{ color: 'var(--muted)', fontSize: 12 }}>Our account no.: <span className="mono">{selected.accountNumber}</span></div>}
                   </div>
@@ -1194,6 +1194,10 @@ function ClientsPageInner() {
               <div className="fg">
                 <label>Address</label>
                 <textarea value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} rows={2} placeholder="14 Thornton Road, London" />
+              </div>
+              <div className="fg">
+                <label>Postcode</label>
+                <input value={form.postcode} onChange={e => setForm(f => ({ ...f, postcode: e.target.value.toUpperCase() }))} placeholder="SW17 0AB" maxLength={10} />
               </div>
               {form.clientType !== 'client' && (
                 <div className="fg">

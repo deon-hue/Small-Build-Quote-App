@@ -259,7 +259,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
 
   async function emailQuoteRequest(o: JobOrder, q: OrderQuote) {
     if (!q.supplierEmail.trim()) { setNotice({ ok: false, text: `${q.supplierName} has no email address. Use WhatsApp or copy the message.` }); return }
-    if (!confirm(`Email the price request ${poRef(o.poNumber)} to ${q.supplierEmail}?\n\n${listOnly ? 'They get a list of what you need, and email their own quote back to your quotes address with the PO number on it.' : 'They get a link to give their price.'} The job's street address is not in it, only the area. A copy goes to you.`)) return
+    if (!confirm(`Email the price request ${poRef(o.poNumber)} to ${q.supplierEmail}?\n\n${listOnly ? 'They get a list of what you need, and email their own quote back to your quotes address with the PO number on it.' : 'They get a link to give their price.'} The job's house number and street are not in it, only the town and postcode. A copy goes to you.`)) return
     setBusy(`rq-${q.id}`); setNotice(null)
     try {
       const res = await fetch('/api/orders/request-quote', {
@@ -846,7 +846,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                     </div>
                     {form.payTerms === 'account' && <div><label style={lab}>Invoice expected about</label><input style={inp} type="date" value={form.expectedInvoice || (form.deliveryDate ? addDays(form.deliveryDate, 30) : '')} onChange={e => set('expectedInvoice', e.target.value)} /></div>}
                   </div>
-                  {mode === 'request' ? <div style={{ fontSize: 12, color: '#475569', margin: '8px 0 0' }}>Suppliers give the price{asksIfCanDo(form) ? ' and say whether they can do it' : ''}. Where it is hire by the day or week, they quote a rate and it is worked out for the time you gave. The supplier sees the area only, never the street, site contact or access notes, until you approve a price.</div> : <div style={{ fontSize: 12, color: '#475569', margin: '8px 0 0' }}>
+                  {mode === 'request' ? <div style={{ fontSize: 12, color: '#475569', margin: '8px 0 0' }}>Suppliers give the price{asksIfCanDo(form) ? ' and say whether they can do it' : ''}. Where it is hire by the day or week, they quote a rate and it is worked out for the time you gave. The supplier sees the town and postcode only, never the house or street, site contact or access notes, until you approve a price.</div> : <div style={{ fontSize: 12, color: '#475569', margin: '8px 0 0' }}>
                     Expected cost: <strong style={{ fontFamily: 'monospace' }}>{fmt(preview)}</strong> ex VAT
                     {form.rateBasis !== 'fixed' && form.rate > 0 ? ` (${fmt(form.rate)} × ${hireUnits({ rateBasis: form.rateBasis, plannedUnits: form.plannedUnits, deliveryDate: form.deliveryDate, offHireDate: form.offHireDate }, today)} ${form.rateBasis}${hireUnits({ rateBasis: form.rateBasis, plannedUnits: form.plannedUnits, deliveryDate: form.deliveryDate, offHireDate: form.offHireDate }, today) === 1 ? '' : 's'})` : ''}
                     {form.payTerms === 'on_order' ? ' · goes onto the job as a paid cost when you place the order' : ' · counts against the job until the invoice is matched'}
