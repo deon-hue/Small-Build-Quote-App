@@ -12,10 +12,11 @@ import type { JobCost, JobCostCategory } from '@/lib/types'
 import {
   ORDER_TYPES, ORDER_STATUS_LABEL, isExpectedCost, orderIsFromQuote, poRef, expectedNet, hireUnits, isCommitted, committedTotals, overrunNote, matchSuggestions, orderWhatsAppText, waLink, addDays, todayYmd, orderDateLabel,
   fetchJobOrders, insertJobOrder, updateJobOrder, deleteJobOrder, fetchDeletedOrders, restoreJobOrder, purgeJobOrder, requestChanged, amendedSince,
-  quoteRequestText, quoteLink, noteOfDetails, cheapestQuoteId, cheapestMix, lineTotal, pricedQuote, quoteNet, areaOnly, QUOTE_STATUS_LABEL, fetchOrderQuotes, insertOrderQuotes, updateOrderQuote, deleteOrderQuote, fetchAllJobOrders, fetchIncomingQuotes, type IncomingQuote,
+  asksIfCanDo, quoteRequestText, quoteLink, noteOfDetails, cheapestQuoteId, cheapestMix, lineTotal, pricedQuote, quoteNet, areaOnly, QUOTE_STATUS_LABEL, fetchOrderQuotes, insertOrderQuotes, updateOrderQuote, deleteOrderQuote, fetchAllJobOrders, fetchIncomingQuotes, type IncomingQuote,
   type JobOrder, type OrderType, type PayTerms, type RateBasis, type OrderStatus, type OrderQuote, type QuoteInvitee, type QuoteStatus,
 } from '@/lib/job-orders'
 import { showSupplierPriceForm } from '@/lib/supplier-quote-config'
+import { TYPE_SPEC, parseSpec, composeSpec, parseHowLong, howLongText, HOW_LONG_KEY, type HowLongUnit } from '@/lib/order-spec'
 import { Recipients } from './OrderRecipients'
 import PriceRequestItems from './PriceRequestItems'
 import { withCode } from '@/lib/mail-address'
@@ -77,6 +78,8 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null)
   const [invoiceFor, setInvoiceFor] = useState<{ order: JobOrder; net: string; docNumber: string; date: string; status: 'unpaid' | 'paid' } | null>(null)
+  // typing in what a supplier told you (by phone, WhatsApp or a reply to the email): can they do it, and the price
+  const [priceFor, setPriceFor] = useState<{ q: OrderQuote; can: 'yes' | 'no'; price: string; per: RateBasis; date: string; ref: string; notes: string } | null>(null)
 
   const load = useCallback(async () => {
     const { data: { user } } = await sb.auth.getUser()
@@ -126,9 +129,35 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
       siteAddress: jobAddress, siteContact: settings.contact || '', sitePhone: settings.phone || '', accessNotes: '',
     }
   }
-  const startForm = (m: 'order' | 'request') => { setNotice(null); setMode(m); setRecips([]); setForm(blank()) }
+  const startForm = (m: 'order' | 'request') => { setNotice(null); setPriceFor(null); setMode(m); setRecips([]); setForm(blank()) }
   function changeType(type: OrderType) {
-    setForm(f => { if (!f) return f; const t = ORDER_TYPES[type]; return { ...f, orderType: type, costCategory: t.category, payTerms: t.payTerms, rateBasis: t.rateBasis } })
+    setForm(f => {
+      if (!f) return f
+      const t = ORDER_TYPES[type]
+      // keep the note, and the answers the new kind of order asks as well (how long for, delivery); the rest belong to the old kind
+      const old = parseSpec(f.orderType, f.details)
+      const keep: Record<string, string> = {}
+      for (const k of ['handover', HOW_LONG_KEY]) if (old.values[k] !== undefined) keep[k] = old.values[k]
+      const details = composeSpec(type, keep, old.note)
+      const hl = t.rateBasis !== 'fixed' ? parseHowLong(parseSpec(type, details).values[HOW_LONG_KEY] ?? '') : null
+      return { ...f, orderType: type, details, costCategory: t.category, payTerms: t.payTerms, rateBasis: hl ? hl.unit : t.rateBasis, plannedUnits: hl ? hl.n : f.plannedUnits }
+    })
+  }
+  // the questions a kind of order asks are kept as lines at the top of its details (lib/order-spec.ts), so the form reads and writes them there
+  function setSpec(key: string, v: string) {
+    setForm(f => { if (!f) return f; const s = parseSpec(f.orderType, f.details); return { ...f, details: composeSpec(f.orderType, { ...s.values, [key]: v }, s.note) } })
+  }
+  function setNote(v: string) {
+    setForm(f => { if (!f) return f; const s = parseSpec(f.orderType, f.details); return { ...f, details: composeSpec(f.orderType, s.values, v) } })
+  }
+  /** How long for: the line the supplier reads, and for hire priced by the day or week the planned time and the basis too, so the supplier's rate is worked out for it. */
+  function setHowLong(n: number | null, unit: HowLongUnit) {
+    setForm(f => {
+      if (!f) return f
+      const s = parseSpec(f.orderType, f.details)
+      const rated = ORDER_TYPES[f.orderType].rateBasis !== 'fixed'
+      return { ...f, details: composeSpec(f.orderType, { ...s.values, [HOW_LONG_KEY]: n ? howLongText(n, unit) : '' }, s.note), ...(rated && n ? { rateBasis: unit as RateBasis, plannedUnits: n } : {}) }
+    })
   }
   function pickSupplier(id: string) {
     const s = suppliers.find(x => x.id === id)
@@ -139,11 +168,19 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
   async function save() {
     if (!form || !ownerId) return
     if (mode === 'order' && !form.supplierName.trim()) { setNotice({ ok: false, text: 'Say who the supplier is.' }); return }
-    if (!form.title.trim()) { setNotice({ ok: false, text: mode === 'request' ? 'Say what you want a price for.' : 'Say what you are ordering.' }); return }
+    // a skip, a digger, a portaloo... need no headline of their own: the kind of order is the headline
+    const title = form.title.trim() || (form.orderType === 'other' || form.orderType === 'materials' ? '' : ORDER_TYPES[form.orderType].label)
+    if (!title) { setNotice({ ok: false, text: mode === 'request' ? 'Say what you want a price for.' : 'Say what you are ordering.' }); return }
     if (mode === 'request' && !form.id && recips.length === 0) { setNotice({ ok: false, text: 'Add at least one supplier to ask.' }); return }
     const cleanItems = (form.items ?? []).filter(i => i.name.trim() && i.qty > 0).map(i => ({ ...i, name: i.name.trim(), unit: i.unit.trim() }))
-    setBusy('save')
-    const body = { ...form, ...(mode === 'request' && form.orderType === 'materials' && (cleanItems.length > 0 || (form.items ?? []).length > 0) ? { items: cleanItems, details: noteOfDetails(form.details) } : {}), expectedInvoice: form.payTerms === 'account' ? (form.expectedInvoice || (form.deliveryDate ? addDays(form.deliveryDate, 30) : '')) : '' }
+    setNotice(null); setBusy('save')
+    // hire priced by the day or week: the supplier is always told how long, even when the box was left as it started
+    let details = form.details
+    if (mode === 'request' && TYPE_SPEC[form.orderType].duration && ORDER_TYPES[form.orderType].rateBasis !== 'fixed' && form.rateBasis !== 'fixed') {
+      const s = parseSpec(form.orderType, details)
+      if (!parseHowLong(s.values[HOW_LONG_KEY] ?? '')) details = composeSpec(form.orderType, { ...s.values, [HOW_LONG_KEY]: howLongText(form.plannedUnits, form.rateBasis === 'day' ? 'day' : 'week') }, s.note)
+    }
+    const body = { ...form, title, details, ...(form.orderType === 'materials' && (cleanItems.length > 0 || (form.items ?? []).length > 0) ? { items: cleanItems, details: noteOfDetails(form.details) } : {}), expectedInvoice: form.payTerms === 'account' ? (form.expectedInvoice || (form.deliveryDate ? addDays(form.deliveryDate, 30) : '')) : '' }
     if (form.id) {
       // a price request that suppliers already have, and that has really been changed: mark it amended so they can be sent the new version
       const prev = orders.find(x => x.id === form.id)
@@ -286,6 +323,28 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
     await placeOrder(updated, 'quote accepted', false)
     setBusy(null)
     setNotice({ ok: true, text: `${q.supplierName} approved at ${asks}. ${poRef(o.poNumber)} is now an order. Press Send confirmation to send them the full details.` })
+  }
+
+  function openPrice(o: JobOrder, q: OrderQuote) {
+    setNotice(null)
+    setPriceFor({ q, can: q.status === 'declined' ? 'no' : 'yes', price: q.price !== null ? String(q.price) : '', per: q.status === 'replied' ? q.rateBasis : o.rateBasis, date: q.deliveryDate || o.deliveryDate, ref: q.supplierRef, notes: q.notes })
+  }
+
+  /** The supplier answered by phone, WhatsApp or by replying to the email: record it as their reply, so it can be compared and approved like any other. */
+  async function savePrice() {
+    if (!priceFor) return
+    const p = priceFor
+    const price = parseFloat(p.price)
+    if (p.can === 'yes' && !(price >= 0)) { setNotice({ ok: false, text: 'Enter their price, not including VAT.' }); return }
+    setBusy(`pr-${p.q.id}`)
+    const now = new Date().toISOString()
+    const ok = await updateOrderQuote(sb, p.q.id, p.can === 'yes'
+      ? { status: 'replied', price, rateBasis: p.per, deliveryDate: p.date, notes: p.notes.trim(), supplierRef: p.ref.trim(), repliedAt: now }
+      : { status: 'declined', notes: p.notes.trim(), repliedAt: now })
+    setBusy(null)
+    if (!ok) { setNotice({ ok: false, text: 'Could not save their answer. Try again.' }); return }
+    setNotice({ ok: true, text: p.can === 'yes' ? `${p.q.supplierName}'s price is saved. Approve it when you are ready.` : `Saved: ${p.q.supplierName} cannot do it.` })
+    setPriceFor(null); await load()
   }
 
   /** A request made before there was a job: attach it to the job, and it becomes one of that job's own orders. */
@@ -432,6 +491,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
                   <strong>{q.supplierName}</strong>
                   <span style={{ fontSize: 11, padding: '1px 8px', borderRadius: 10, background: sty.bg, color: sty.fg, fontWeight: 700 }}>{QUOTE_STATUS_LABEL[q.status]}</span>
+                  {q.status === 'replied' && asksIfCanDo(o) && <span style={{ fontSize: 11, color: '#15803d', fontWeight: 700 }}>✔ CAN DO IT</span>}
                   {q.id === cheapest && <span style={{ fontSize: 11, color: '#15803d', fontWeight: 700 }}>CHEAPEST</span>}
                   <span style={{ fontSize: 11, color: '#94a3b8' }}>
                     {q.sentAt ? `${listOnly ? 'request' : 'link'} sent ${sentDay(q)}${q.sentVia ? ' by ' + q.sentVia : ''}` : `${listOnly ? 'request' : 'link'} not sent yet`}{q.viewedAt && q.status === 'invited' ? ' · opened' : ''}
@@ -483,6 +543,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                 {open && (
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 7 }}>
                     {q.status === 'replied' && <button onClick={() => approveQuote(o, q)} disabled={busy === `ap-${q.id}` || q.needsCheck} title={q.needsCheck ? 'Check their quote first, then press Looks right' : undefined} style={{ ...primary, background: q.needsCheck ? '#94a3b8' : '#16a34a', borderColor: q.needsCheck ? '#94a3b8' : '#16a34a' }}>{busy === `ap-${q.id}` ? 'Approving…' : '✔ Approve this price'}</button>}
+                    <button onClick={() => openPrice(o, q)} style={asksIfCanDo(o) && q.sentAt && q.status === 'invited' ? primary : btn} title="They told you by phone, WhatsApp or in a reply to the email: type in what they said">{q.status === 'replied' ? '✎ Change their price' : '✎ Enter their price'}</button>
                     <label style={{ ...btn, display: 'inline-flex', alignItems: 'center', cursor: busy === `rd-${q.id}` ? 'default' : 'pointer', opacity: busy === `rd-${q.id}` ? 0.6 : 1 }} title="Drop in the PDF or photo of their own quote and the app reads it">
                       {busy === `rd-${q.id}` ? 'Reading their quote…' : '📎 Add their own quote (PDF)'}
                       <input type="file" accept="application/pdf,image/*" style={{ display: 'none' }} disabled={busy === `rd-${q.id}`} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void readTheirQuote(o, q, f) }} />
@@ -491,6 +552,35 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                     <button onClick={() => whatsAppQuoteRequest(o, q)} style={btn}>🟢 WhatsApp the {listOnly ? 'request' : 'link'}</button>
                     <button onClick={() => copyQuoteRequest(o, q)} style={btn}>Copy message</button>
                     <button onClick={async () => { if (confirm(`Take ${q.supplierName} off this request?`)) { await deleteOrderQuote(sb, q.id); await load() } }} style={{ ...btn, color: '#dc2626', borderColor: '#fecaca' }}>Remove</button>
+                  </div>
+                )}
+                {priceFor?.q.id === q.id && (
+                  <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid #bae6fd', borderRadius: 8, background: '#f8fcff' }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#075985', marginBottom: 8 }}>What {q.supplierName} told you</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+                      <div>
+                        <label style={lab}>Can they do it?</label>
+                        <select style={inp} value={priceFor.can} onChange={e => setPriceFor({ ...priceFor, can: e.target.value as 'yes' | 'no' })}>
+                          <option value="yes">Yes, they can</option><option value="no">No, they cannot</option>
+                        </select>
+                      </div>
+                      {priceFor.can === 'yes' && <>
+                        <div><label style={lab}>Their price (£, ex VAT)</label><input style={inp} type="number" min={0} step="0.01" value={priceFor.price} onChange={e => setPriceFor({ ...priceFor, price: e.target.value })} /></div>
+                        <div>
+                          <label style={lab}>Price is</label>
+                          <select style={inp} value={priceFor.per} onChange={e => setPriceFor({ ...priceFor, per: e.target.value as RateBasis })}>
+                            <option value="fixed">One price</option><option value="day">Per day</option><option value="week">Per week</option>
+                          </select>
+                        </div>
+                        <div><label style={lab}>Date they can do it</label><input style={inp} type="date" value={priceFor.date} onChange={e => setPriceFor({ ...priceFor, date: e.target.value })} /></div>
+                        <div><label style={lab}>Their quote ref (if any)</label><input style={inp} maxLength={60} value={priceFor.ref} onChange={e => setPriceFor({ ...priceFor, ref: e.target.value })} /></div>
+                      </>}
+                    </div>
+                    <div style={{ marginTop: 10 }}><label style={lab}>What they said (optional)</label><input style={inp} maxLength={500} value={priceFor.notes} onChange={e => setPriceFor({ ...priceFor, notes: e.target.value })} placeholder={priceFor.can === 'yes' ? 'Yes we have a digger free that week, minimum 2 days' : 'Fully booked that week'} /></div>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                      <button onClick={savePrice} disabled={busy === `pr-${q.id}`} style={primary}>{busy === `pr-${q.id}` ? 'Saving…' : 'Save their answer'}</button>
+                      <button onClick={() => setPriceFor(null)} style={btn}>Cancel</button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -601,8 +691,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
           {!loading && !missing && (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
-                {!loose && <button onClick={() => startForm('order')} style={primary}>＋ New order</button>}
-                <button onClick={() => startForm('request')} style={loose ? primary : btn} title="Ask one or more suppliers for a price: they quote from their own system and email it back, and you compare and approve">💬 Ask for a price</button>
+                <button onClick={() => startForm('request')} style={primary} title="Choose what you need and who to ask: they send their price, and you compare and approve">{loose ? '💬 Ask for a price' : '＋ New order'}</button>
                 {committed.total > 0 && (
                   <span style={{ fontSize: 13, color: '#334155' }}>
                     Expected costs still to come: <strong style={{ fontFamily: 'monospace' }}>{fmt(committed.total)}</strong> <span style={{ color: '#94a3b8' }}>ex VAT, already counted in the job&apos;s margin</span>
@@ -660,7 +749,12 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
               {/* The order form */}
               {form && (
                 <div style={{ border: '2px solid #0369a1', borderRadius: 10, padding: 14, marginBottom: 16, background: '#f8fcff' }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10 }}>{form.id ? `Edit ${poRef(form.poNumber ?? 0)}` : mode === 'request' ? 'Ask suppliers for a price' : 'New order'}</div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14 }}>{form.id ? `Edit ${poRef(form.poNumber ?? 0)}` : mode === 'request' ? 'New order' : 'New order: price already agreed'}</div>
+                    {!form.id && !loose && mode === 'request' && <button onClick={() => setMode('order')} style={{ background: 'none', border: 'none', padding: 0, color: '#0369a1', fontSize: 12, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }} title="You already have a price from them: go straight to the order, with no quote">I already have a price: skip the quote</button>}
+                    {!form.id && !loose && mode === 'order' && <button onClick={() => setMode('request')} style={{ background: 'none', border: 'none', padding: 0, color: '#0369a1', fontSize: 12, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}>← Ask suppliers for a price instead</button>}
+                  </div>
+                  {!form.id && mode === 'request' && <div style={{ fontSize: 12, color: '#475569', margin: '-4px 0 10px' }}>Pick who to ask. They reply with their price, and whether they can do it. Approve one and it becomes the order.</div>}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
                     <div>
                       <label style={lab}>What kind of order</label>
@@ -684,24 +778,60 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                   </div>
                   {mode === 'request' && !form.id && <div style={{ marginTop: 10 }}><Recipients suppliers={suppliers} value={recips} onChange={setRecips} inp={inp} lab={lab} btn={btn} /></div>}
                   <div style={{ display: 'grid', gridTemplateColumns: '2fr 3fr', gap: 10, marginTop: 10 }}>
-                    <div><label style={lab}>What *</label><input style={inp} value={form.title} onChange={e => set('title', e.target.value)} placeholder={ORDER_TYPES[form.orderType].example || 'What are you ordering?'} /></div>
-                    <div><label style={lab}>{mode === 'request' && form.orderType === 'materials' ? 'A note for the supplier' : 'More detail for the supplier'}</label><textarea style={{ ...inp, minHeight: 34, resize: 'vertical' }} rows={form.details.includes('\n') ? 6 : 1} value={mode === 'request' && form.orderType === 'materials' && (form.items ?? []).length > 0 ? noteOfDetails(form.details) : form.details} onChange={e => set('details', e.target.value)} placeholder="Quantity, size, anything they need to know" /></div>
+                    <div><label style={lab}>What{form.orderType === 'other' || form.orderType === 'materials' ? ' *' : ''}</label><input style={inp} value={form.title} onChange={e => set('title', e.target.value)} placeholder={ORDER_TYPES[form.orderType].example || 'What are you ordering?'} /></div>
+                    {(() => {
+                      const materialsList = form.orderType === 'materials' && (form.items ?? []).length > 0
+                      const note = materialsList ? noteOfDetails(form.details) : parseSpec(form.orderType, form.details).note
+                      return <div><label style={lab}>{form.orderType === 'materials' ? 'A note for the supplier' : 'Notes for the supplier'}</label><textarea style={{ ...inp, minHeight: 34, resize: 'vertical' }} rows={note.includes('\n') ? 6 : 1} value={note} onChange={e => (form.orderType === 'materials' ? set('details', e.target.value) : setNote(e.target.value))} placeholder={form.orderType === 'materials' ? 'Quantity, size, anything they need to know' : 'Anything else they need to know'} /></div>
+                    })()}
                   </div>
-                  {mode === 'request' && form.orderType === 'materials' && (
+                  {(() => {
+                    const spec = parseSpec(form.orderType, form.details)
+                    const fields = TYPE_SPEC[form.orderType].fields
+                    // plant and portaloos are priced per day or week: in order mode that is the Price is box further down, so only a skip asks it here
+                    const showHowLong = TYPE_SPEC[form.orderType].duration && (mode === 'request' || form.orderType === 'skip')
+                    if (fields.length === 0 && !showHowLong) return null
+                    const rated = ORDER_TYPES[form.orderType].rateBasis !== 'fixed'
+                    const hl = parseHowLong(spec.values[HOW_LONG_KEY] ?? '')
+                    const hlN = hl?.n ?? (rated ? form.plannedUnits : null)
+                    const hlUnit: HowLongUnit = hl?.unit ?? (rated && form.rateBasis === 'day' ? 'day' : 'week')
+                    return (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10, marginTop: 10 }}>
+                        {fields.map(f => (
+                          <div key={f.key}>
+                            <label style={lab}>{f.label}</label>
+                            {f.options
+                              ? <select style={inp} value={spec.values[f.key] ?? ''} onChange={e => setSpec(f.key, e.target.value)}><option value="">Not said</option>{f.options.map(op => <option key={op} value={op}>{op}</option>)}</select>
+                              : <input style={inp} value={spec.values[f.key] ?? ''} onChange={e => setSpec(f.key, e.target.value)} placeholder={f.placeholder} />}
+                          </div>
+                        ))}
+                        {showHowLong && (
+                          <div>
+                            <label style={lab}>How long for</label>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <input style={{ ...inp, width: 80 }} type="number" min={1} step="1" value={hlN ?? ''} onChange={e => setHowLong(e.target.value === '' ? null : Math.max(1, Math.round(+e.target.value) || 1), hlUnit)} placeholder="2" />
+                              <select style={inp} value={hlUnit} onChange={e => setHowLong(hlN, e.target.value as HowLongUnit)}><option value="day">days</option><option value="week">weeks</option></select>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+                  {form.orderType === 'materials' && (
                     <div style={{ marginTop: 10 }}>
                       <PriceRequestItems ownerId={ownerId} items={form.items ?? []} onChange={items => set('items', items)} />
-                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>With items listed, the supplier is sent them as a list to quote from. Without any, they quote for what you write in the note above.</div>
+                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>{mode === 'request' ? 'With items listed, the supplier is sent them as a list to quote from. Without any, they quote for what you write in the note above.' : 'With items listed, the supplier is sent them as the list to deliver.'}</div>
                     </div>
                   )}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 10 }}>
-                    <div>
+                    {(mode === 'order' || form.orderType === 'other') && <div>
                       <label style={lab}>Price is</label>
                       <select style={inp} value={form.rateBasis} onChange={e => set('rateBasis', e.target.value as RateBasis)}>
                         <option value="fixed">One price</option><option value="day">Per day</option><option value="week">Per week</option>
                       </select>
-                    </div>
+                    </div>}
                     {mode === 'order' && <div><label style={lab}>{form.rateBasis === 'fixed' ? 'Price (£, ex VAT)' : `Rate per ${form.rateBasis} (£, ex VAT)`}</label><input style={inp} type="number" min={0} step="0.01" value={form.rate || ''} onChange={e => set('rate', Math.max(0, +e.target.value || 0))} /></div>}
-                    {form.rateBasis !== 'fixed' && <div><label style={lab}>Planned {form.rateBasis === 'day' ? 'days' : 'weeks'}</label><input style={inp} type="number" min={1} step="1" value={form.plannedUnits} onChange={e => set('plannedUnits', Math.max(1, +e.target.value || 1))} /></div>}
+                    {(mode === 'order' || form.orderType === 'other') && form.rateBasis !== 'fixed' && <div><label style={lab}>Planned {form.rateBasis === 'day' ? 'days' : 'weeks'}</label><input style={inp} type="number" min={1} step="1" value={form.plannedUnits} onChange={e => set('plannedUnits', Math.max(1, +e.target.value || 1))} /></div>}
                     <div>
                       <label style={lab}>Cost category</label>
                       <select style={inp} value={form.costCategory} onChange={e => set('costCategory', e.target.value as JobCostCategory)}>
@@ -716,13 +846,13 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                     </div>
                     {form.payTerms === 'account' && <div><label style={lab}>Invoice expected about</label><input style={inp} type="date" value={form.expectedInvoice || (form.deliveryDate ? addDays(form.deliveryDate, 30) : '')} onChange={e => set('expectedInvoice', e.target.value)} /></div>}
                   </div>
-                  {mode === 'request' ? <div style={{ fontSize: 12, color: '#475569', margin: '8px 0 0' }}>Suppliers give the price. Where it is hire by the day or week, they quote a rate and it is worked out for the planned time. The supplier sees the area only, never the street, site contact or access notes, until you approve a price.</div> : <div style={{ fontSize: 12, color: '#475569', margin: '8px 0 0' }}>
+                  {mode === 'request' ? <div style={{ fontSize: 12, color: '#475569', margin: '8px 0 0' }}>Suppliers give the price{asksIfCanDo(form) ? ' and say whether they can do it' : ''}. Where it is hire by the day or week, they quote a rate and it is worked out for the time you gave. The supplier sees the area only, never the street, site contact or access notes, until you approve a price.</div> : <div style={{ fontSize: 12, color: '#475569', margin: '8px 0 0' }}>
                     Expected cost: <strong style={{ fontFamily: 'monospace' }}>{fmt(preview)}</strong> ex VAT
                     {form.rateBasis !== 'fixed' && form.rate > 0 ? ` (${fmt(form.rate)} × ${hireUnits({ rateBasis: form.rateBasis, plannedUnits: form.plannedUnits, deliveryDate: form.deliveryDate, offHireDate: form.offHireDate }, today)} ${form.rateBasis}${hireUnits({ rateBasis: form.rateBasis, plannedUnits: form.plannedUnits, deliveryDate: form.deliveryDate, offHireDate: form.offHireDate }, today) === 1 ? '' : 's'})` : ''}
                     {form.payTerms === 'on_order' ? ' · goes onto the job as a paid cost when you place the order' : ' · counts against the job until the invoice is matched'}
                   </div>}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginTop: 10 }}>
-                    <div><label style={lab}>Delivery date</label><input style={inp} type="date" value={form.deliveryDate} onChange={e => set('deliveryDate', e.target.value)} /></div>
+                    <div><label style={lab}>{mode === 'request' ? 'Needed on' : 'Delivery date'}</label><input style={inp} type="date" value={form.deliveryDate} onChange={e => set('deliveryDate', e.target.value)} /></div>
                     <div><label style={lab}>Time slot</label><input style={inp} value={form.deliverySlot} onChange={e => set('deliverySlot', e.target.value)} placeholder="Morning, 8 to 10am" /></div>
                     {ORDER_TYPES[form.orderType].hire && <div><label style={lab}>Collect / off-hire date</label><input style={inp} type="date" value={form.offHireDate} onChange={e => set('offHireDate', e.target.value)} /></div>}
                   </div>
@@ -733,7 +863,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                   </div>
                   <div style={{ marginTop: 10 }}><label style={lab}>Access notes</label><input style={inp} value={form.accessNotes} onChange={e => set('accessNotes', e.target.value)} placeholder="Parking, permit, gate code, where to put it" /></div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                    <button onClick={save} disabled={busy === 'save'} style={primary}>{busy === 'save' ? 'Saving…' : form.id ? 'Save changes' : mode === 'request' ? 'Save the request' : 'Save order'}</button>
+                    <button onClick={save} disabled={busy === 'save'} style={primary}>{busy === 'save' ? 'Saving…' : form.id ? 'Save changes' : mode === 'request' ? 'Save order' : 'Save order'}</button>
                     <button onClick={() => setForm(null)} style={btn}>Cancel</button>
                   </div>
                 </div>
@@ -762,7 +892,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                 <div style={{ textAlign: 'center', padding: 28, color: '#94a3b8', fontSize: 14, border: '1px dashed #d1d5db', borderRadius: 8 }}>
                   {loose
                     ? <>No price requests are waiting for a job. On any calculator&apos;s materials list, press <strong>✉ Prices</strong> to ask suppliers to price it, even before there is a job.</>
-                    : <>No orders yet for this job. Press <strong>＋ New order</strong> to raise a skip, a portaloo, plant hire or a materials order, or <strong>💬 Ask for a price</strong> to get quotes from suppliers first.</>}
+                    : <>No orders yet for this job. Press <strong>＋ New order</strong> to ask suppliers for a skip, a portaloo, plant hire, a grab lorry or materials. They reply with their price, and you approve one.</>}
                 </div>
               )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

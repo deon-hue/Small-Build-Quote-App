@@ -101,7 +101,7 @@ export default function MaterialsPriceRequest({ lines, title, location, onClose 
         </div>
         <div style={{ padding: '16px 20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.5 }}>
-            Each supplier gets their own link and prices every item on the list (a unit price each, or "can't supply"), adds any delivery charge, and gives their delivery date and how long the prices stand. You compare them side by side. They see what to buy and how much, never your own prices, and only the area of the job.
+            Each supplier is sent what to buy and how much, and sends back their price for it. You compare them side by side. They never see your own prices, and only the area of the job.
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
             <div><label style={lab}>Name of the request</label><input style={inp} value={name} onChange={e => setName(e.target.value)} /></div>

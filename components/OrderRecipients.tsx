@@ -24,7 +24,7 @@ export function Recipients({ suppliers, value, onChange, inp, lab, btn }: { supp
   return (
     <div style={{ border: '1px solid #cbd5e1', borderRadius: 8, padding: 10, background: '#fff' }}>
       <label style={lab}>Who to ask for a price</label>
-      {value.length === 0 && <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>Add one or more suppliers. Each gets their own link to give a price, and you compare the answers.</div>}
+      {value.length === 0 && <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>Add one or more suppliers. Each is sent the request, and you compare the answers.</div>}
       {value.map((w, i) => (
         <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, padding: '3px 0', flexWrap: 'wrap' }}>
           <strong>{w.supplierName}</strong>

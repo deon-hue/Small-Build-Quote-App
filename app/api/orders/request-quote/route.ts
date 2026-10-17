@@ -8,7 +8,7 @@ import { usageGuard } from '@/lib/usage'
 import { callerIsPortalOnly } from '@/lib/caller-role'
 import { emailShell } from '@/lib/email-layout'
 import { priceRequestBody } from '@/lib/price-request-email'
-import { rowToOrder, rowToQuote, areaOnly, poRef, quoteLink, quoteRequestText, requestDetails, amendedSince } from '@/lib/job-orders'
+import { rowToOrder, rowToQuote, areaOnly, poRef, quoteLink, quoteRequestText, requestDetails, amendedSince, asksIfCanDo } from '@/lib/job-orders'
 import { withCode } from '@/lib/mail-address'
 import { accountNumberFor } from '@/lib/supplier-account'
 import { showSupplierPriceForm } from '@/lib/supplier-quote-config'
@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
         collect: longDate(o.offHireDate),
         where: areaOnly(o.siteAddress),
         priceFor: o.rateBasis === 'fixed' ? '' : `${o.plannedUnits} ${o.rateBasis === 'day' ? 'day' : 'week'}${o.plannedUnits === 1 ? '' : 's'}: give your rate per ${o.rateBasis}`,
-        link, ref, inboxEmail, amended, theirRef: q.supplierRef, account, listOnly: !showSupplierPriceForm(inboxEmail),
+        link, ref, inboxEmail, amended, theirRef: q.supplierRef, account, listOnly: !showSupplierPriceForm(inboxEmail), askIfCanDo: asksIfCanDo(o),
         senderName: b.senderName || '', companyName: b.companyName || '', companyPhone: b.companyPhone || '',
       }),
       footerHtml: [

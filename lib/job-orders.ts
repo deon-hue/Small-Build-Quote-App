@@ -11,7 +11,7 @@ import type { JobCost, JobCostCategory } from './types'
 export type OrderStatus = 'draft' | 'ordered' | 'confirmed' | 'delivered' | 'collected' | 'invoiced' | 'cancelled'
 export type PayTerms = 'account' | 'on_order'
 export type RateBasis = 'fixed' | 'day' | 'week'
-export type OrderType = 'skip' | 'portaloo' | 'plant' | 'materials' | 'other'
+export type OrderType = 'skip' | 'portaloo' | 'plant' | 'waste' | 'materials' | 'other'
 
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   draft: 'Not sent yet', ordered: 'Ordered', confirmed: 'Confirmed by supplier', delivered: 'On site', collected: 'Collected', invoiced: 'Invoiced', cancelled: 'Cancelled',
@@ -21,7 +21,8 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
 export const ORDER_TYPES: Record<OrderType, { label: string; category: JobCostCategory; payTerms: PayTerms; rateBasis: RateBasis; hire: boolean; example: string }> = {
   skip:      { label: 'Skip hire',          category: 'other',     payTerms: 'account',  rateBasis: 'fixed', hire: true,  example: '8-yard skip (builders\' waste)' },
   portaloo:  { label: 'Portaloo hire',      category: 'other',     payTerms: 'account',  rateBasis: 'week',  hire: true,  example: 'Portaloo, weekly service' },
-  plant:     { label: 'Plant hire',         category: 'plant',     payTerms: 'account',  rateBasis: 'week',  hire: true,  example: '3-tonne mini digger with driver' },
+  plant:     { label: 'Plant hire',         category: 'plant',     payTerms: 'account',  rateBasis: 'week',  hire: true,  example: '3-tonne mini digger' },
+  waste:     { label: 'Waste removal / grab lorry', category: 'other', payTerms: 'account', rateBasis: 'fixed', hire: false, example: 'Grab lorry to clear soil' },
   materials: { label: 'Materials delivery', category: 'materials', payTerms: 'on_order', rateBasis: 'fixed', hire: false, example: 'Materials as per list' },
   other:     { label: 'Something else',     category: 'other',     payTerms: 'account',  rateBasis: 'fixed', hire: false, example: '' },
 }
@@ -400,6 +401,9 @@ export function cheapestMix(items: OrderItem[], quotes: OrderQuote[]): { total: 
 
 export const quoteLink = (base: string, token: string) => `${base.replace(/\/$/, '')}/supplier-quote/${token}`
 
+/** A request that is not a materials list (a skip, a digger, a portaloo, a grab lorry...): the supplier replies with a price and whether they can do it, rather than sending a quote to read. */
+export const asksIfCanDo = (o: Pick<JobOrder, 'orderType'>) => o.orderType !== 'materials'
+
 /** The message asking for a quote, for WhatsApp, a text or the plain part of an email. Shows the area only. */
 export function quoteRequestText(o: JobOrder, q: Pick<OrderQuote, 'supplierContact'>, link: string, sender: { name: string; company: string }, inboxEmail = '', amended = false, account = ''): string {
   const who = firstName(q.supplierContact)
@@ -409,11 +413,25 @@ export function quoteRequestText(o: JobOrder, q: Pick<OrderQuote, 'supplierConta
     ...titleAndDetails(o.title, requestDetails(o)),
     o.deliveryDate ? `Needed: ${longDate(o.deliveryDate)}${o.deliverySlot ? ', ' + o.deliverySlot : ''}` : '',
     o.offHireDate ? `Collect: ${longDate(o.offHireDate)}` : '',
+    o.rateBasis !== 'fixed' ? `Price: your rate per ${o.rateBasis}` : '',
     area ? `Where: ${area}` : '',
     account ? `Our account with you: ${account}` : '',
   ].filter(Boolean)
   if (!showSupplierPriceForm(inboxEmail)) {
     // the supplier quotes from their own system and emails it to us: a plain list, and exactly how to send the quote back
+    if (asksIfCanDo(o)) {
+      // a skip, a digger, a portaloo: they reply with a price and whether they can do it; a written PDF quote is still welcome
+      const day = o.deliveryDate ? longDate(o.deliveryDate) : ''
+      return [
+        amended
+          ? `${hi}it's ${sender.name || 'the team'} at ${sender.company}. We have changed our price request ${poRef(o.poNumber)}, so please look at it below and let us know your price again, and whether you can still do it.`
+          : `${hi}it's ${sender.name || 'the team'} at ${sender.company}. Could you give us a price for the following, and tell us if you can do it? Our purchase order ref is ${poRef(o.poNumber)}`,
+        '',
+        ...body,
+        '',
+        `Please reply with your price (ex VAT) and whether you can do it${day ? ' on ' + day : ''}.${inboxEmail ? ` If you would rather send a written quote, email it as a PDF attached to the email to ${inboxEmail} with our purchase order number ${poRef(o.poNumber)} on it and in the email subject.` : ''} Thanks!`,
+      ].join('\n')
+    }
     return [
       amended
         ? `${hi}it's ${sender.name || 'the team'} at ${sender.company}. We have changed our price request ${poRef(o.poNumber)}, so please look at it below and send us an updated quote.`
@@ -533,8 +551,13 @@ export async function insertOrderQuotes(sb: SupabaseClient, ownerId: string, ord
   return error ? { ok: false, error: error.message } : { ok: true }
 }
 
-export async function updateOrderQuote(sb: SupabaseClient, id: string, p: Partial<Pick<OrderQuote, 'status' | 'sentAt' | 'sentVia' | 'supplierName' | 'supplierContact' | 'supplierEmail' | 'supplierPhone' | 'supplierRef'>>): Promise<boolean> {
+export async function updateOrderQuote(sb: SupabaseClient, id: string, p: Partial<Pick<OrderQuote, 'status' | 'sentAt' | 'sentVia' | 'supplierName' | 'supplierContact' | 'supplierEmail' | 'supplierPhone' | 'supplierRef' | 'price' | 'rateBasis' | 'deliveryDate' | 'notes' | 'repliedAt'>>): Promise<boolean> {
   const row: Record<string, unknown> = {}
+  if (p.price !== undefined) row.price = p.price
+  if (p.rateBasis !== undefined) row.rate_basis = p.rateBasis
+  if (p.deliveryDate !== undefined) row.delivery_date = p.deliveryDate || null
+  if (p.notes !== undefined) row.notes = p.notes
+  if (p.repliedAt !== undefined) row.replied_at = p.repliedAt || null
   if (p.status !== undefined) row.status = p.status
   if (p.sentAt !== undefined) row.sent_at = p.sentAt || null
   if (p.sentVia !== undefined) row.sent_via = p.sentVia
