@@ -36,7 +36,7 @@ export const LABOUR_RATES = {
   groundworker: { trimLm: 0.25, concreteM3: 1.5, backfillM3: 0.5, cavityFillM3: 1.0, raftTrimM2: 0.06, raftHardcoreM2: 0.12, raftBlindM2: 0.10, raftInsulationM2: 0.08, raftMeshM2PerLayer: 0.12, raftFormworkLm: 0.3, raftFinishM2: 0.12, padPitNr: 0.4, padBlindNr: 0.3, padFormworkM2: 0.8, padRebarKg: 0.025, beamBlindLm: 0.15, beamFormworkM2: 0.35, beamCageLm: 0.2, pileCutNr: 0.5, underpinDigM3: 10, underpinShutterM2: 1.0, underpinPinNr: 2.0, underpinPourM3: 2.5, underpinPackNr: 1.0, underpinSteelKg: 0.025 },
   renderer: { renderM2: 0.6 },
   plumber: { gutterLm: 0.3, fittingNr: 0.15, downpipeLm: 0.35, shoeNr: 0.15, hopperNr: 0.5, offsetNr: 0.3 },
-  labourer: { carryM2: 0.15, bricklayerShare: 0.5, screedPrepM2: 0.05, screedInsulationM2: 0.1, screedDpmM2: 0.04, screedEdgeLm: 0.02, screedMeshM2: 0.08 },
+  labourer: { carryM2: 0.15, bricklayerShare: 0.5, screedPrepM2: 0.05, overlayPrepM2: 0.08, overlayPrimeM2: 0.02, overlayPourM2: 0.06, overlayEdgeLm: 0.02, screedInsulationM2: 0.1, screedDpmM2: 0.04, screedEdgeLm: 0.02, screedMeshM2: 0.08 },
   fitter: { lantern: 4, 'roof-window': 3, dome: 2, hatch: 1.5 } as Record<RoofOpeningKind, number>,
 } as const
 
@@ -528,4 +528,20 @@ export function suggestRoofJoinCoveringLabour(x: { valleyLm: number; joinAbutmen
     ]),
   ]
   return out.filter((v): v is LabourSuggestion => v !== null)
+}
+
+/** The labour for an existing floor overlay (Floors & Screeds → Existing Floor Overlay): a labourer prepares the floor, primes it, fits the edge strip and mixes and pours the self-levelling compound; a carpenter
+ * lays and screws down a plywood overlay. Rough estimates, as everywhere here. */
+export function suggestFloorOverlayLabour(g: { kind: 'self-levelling' | 'plywood'; areaM2: number; primerLitres: number; edgeStripLm: number }): LabourSuggestion[] {
+  const l = LABOUR_RATES.labourer
+  if (g.kind === 'plywood') {
+    return [line('overlay-ply', 'carpenter', 'Secure the old floor and lay and screw down the plywood overlay', [{ qty: g.areaM2, unit: 'm²', what: 'ply overlay', rate: 0.35 }])]
+      .filter((x): x is LabourSuggestion => x !== null)
+  }
+  return [line('overlay-slc', 'labourer', 'Prepare and prime the floor, fit the edge strip, and mix and pour the self-levelling compound', [
+    { qty: g.areaM2, unit: 'm²', what: 'prepared', rate: l.overlayPrepM2 },
+    { qty: g.primerLitres > 0 ? g.areaM2 : 0, unit: 'm²', what: 'primed', rate: l.overlayPrimeM2 },
+    { qty: g.edgeStripLm, unit: 'lm', what: 'edge strip', rate: l.overlayEdgeLm },
+    { qty: g.areaM2, unit: 'm²', what: 'poured', rate: l.overlayPourM2 },
+  ])].filter((x): x is LabourSuggestion => x !== null)
 }
