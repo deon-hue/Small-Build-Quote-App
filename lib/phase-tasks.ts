@@ -421,6 +421,15 @@ const internalWallsSubphases: PhaseSubphase[] = [
 // ── 6. DRAINAGE & SERVICES ────────────────────────────────────────────────────
 
 const drainageSubphases: PhaseSubphase[] = [
+  // Underground drainage priced by the run (assembly calculator): trench, pipe, bed and surround, backfill, chambers, connections. Sits beside the task-based sub-phases below, which are untouched.
+  {
+    id: 'drain-runs',
+    phase: 'Drainage & Services',
+    name: 'Underground Drainage (by run)',
+    markupPct: 18,
+    ukWarning: 'Works to public sewers require the water company\'s consent and adoption needs SuDS compliance. Building Control inspect and test the drain before it is covered.',
+    tasks: [],  // priced by the Underground drainage calculator (runs: use, size, length, depth, how dug, surface; chambers, connections, CCTV)
+  },
   {
     id: 'drain-underground',
     phase: 'Drainage & Services',

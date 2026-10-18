@@ -24,6 +24,8 @@ const FOUNDATION_LINE_CALCS = new Set(['fnd-strip', 'fnd-trench-fill', 'fnd-pile
 // A raft (sized from its box) and pad foundations (counted in the calculator: the shape is only a placemarker) are shapes.
 const FOUNDATION_SHAPE_CALCS = new Set(['fnd-raft', 'fnd-pad'])
 // A floor is a shape (its footprint) priced by its calculator from the area and perimeter drawn: the sub-phases of Floors & Screeds that have one
+/** Phases where picking a calculator sub-phase makes the item a marker on the plan and the calculator card opens (Decoration, Plumbing & Heating, Drainage & Services): the sizes are typed in the calculator. */
+const MARKER_CALC_PHASES = new Set<string>(['Decoration', 'Plumbing & Heating', 'Drainage & Services'])
 const FLOOR_SHAPE_CALCS = new Set(['fs-screeded-floor', 'fs-floor-overlay', 'fs-concrete-slab', 'fs-block-beam', 'fs-suspended-timber', 'fs-insulated-concrete'])
 import LabourCostBuilder from './components/LabourCostBuilder'
 import ClientProjectModal from './components/ClientProjectModal'
@@ -891,12 +893,12 @@ export default function TakeoffPage() {
     // sub-phase that has a calculator (the others aren't used by the roof screen).
     if (!taskSubphaseId && selectedTaskSubphaseId &&
         ((el.type === 'line' && (item.phase === 'External Walls' || item.phase === 'Internal Walls & Partitions' || item.phase === 'Foundations')) ||
-          item.phase === 'Roof' || item.phase === 'Decoration' || item.phase === 'Plumbing & Heating' || (item.phase === 'Foundations' && el.type !== 'line'))) {
+          item.phase === 'Roof' || MARKER_CALC_PHASES.has(item.phase) || (item.phase === 'Foundations' && el.type !== 'line'))) {
       const bo = boSubPhases.find(sp => sp.id === selectedTaskSubphaseId)
       const boPhaseName = bo ? boPhases.find(p => p.id === bo.phase_id)?.name : undefined
       const hasCalculator = !!(bo?.canonical_id && BUILT_ASSEMBLY_CANON_IDS[bo.canonical_id])
       const foundationFits = item.phase !== 'Foundations' || (el.type === 'line' ? FOUNDATION_LINE_CALCS.has(bo?.canonical_id ?? '') : FOUNDATION_SHAPE_CALCS.has(bo?.canonical_id ?? ''))
-      if (bo && boPhaseName === item.phase && foundationFits && ((item.phase !== 'Roof' && item.phase !== 'Foundations' && item.phase !== 'Decoration' && item.phase !== 'Plumbing & Heating') || hasCalculator)) {
+      if (bo && boPhaseName === item.phase && foundationFits && ((item.phase !== 'Roof' && item.phase !== 'Foundations' && !MARKER_CALC_PHASES.has(item.phase)) || hasCalculator)) {
         item.taskSubphaseId = bo.id
         item.subPhase = bo.name
         if (item.phase === 'Foundations') {
@@ -1227,7 +1229,7 @@ export default function TakeoffPage() {
       const canonical = it.floorMakeupId ? WALL_MAKEUP_TO_SUBPHASE_CANONICAL[it.floorMakeupId] : undefined
       return canonical ? BUILT_ASSEMBLY_CANON_IDS[canonical] : undefined
     }
-    if ((it.phase === 'Decoration' || it.phase === 'Plumbing & Heating') && !it.taskId) {
+    if (MARKER_CALC_PHASES.has(it.phase) && !it.taskId) {
       // (an item that already carries a flat task from before the calculator existed stays a task item until its sub-phase is changed)
       const boSub = it.taskSubphaseId ? boSubPhases.find(sp => sp.id === it.taskSubphaseId) : undefined
       return boSub?.canonical_id ? BUILT_ASSEMBLY_CANON_IDS[boSub.canonical_id] : undefined
@@ -2520,7 +2522,7 @@ export default function TakeoffPage() {
     const isFoundationLine = item.phase === 'Foundations' && isLineBased
     const isTurf           = isBuildup && item.phase === 'External Works & Landscaping'
     // Decoration is a task phase, except when the sub-phase picked has a calculator (Internal decoration): then the calculator prices it
-    const isDecoCalc       = (item.phase === 'Decoration' || item.phase === 'Plumbing & Heating') && !!resolveBuiltAssembly(item)
+    const isDecoCalc       = MARKER_CALC_PHASES.has(item.phase) && !!resolveBuiltAssembly(item)
     const isTaskPhase      = _phaseHasTasks && !isBuildup && !isExtWall && !isPlaster && !isIntWall && !isDemo && !isFoundationLine && !isDecoCalc
     const showWallLine     = isLineBased && (isExtWall || isIntWall || isPlaster)
     const hasOpenings      = (isExtWall || isIntWall || isPlaster) && isLineBased
@@ -3353,7 +3355,7 @@ export default function TakeoffPage() {
                   onChange={e => {
                     const sp = getAllSubphasesForPhase(item.phase).find(s => s.id === e.target.value)
                     const canon = sp ? boSubPhases.find(b => b.id === sp.id)?.canonical_id : undefined
-                    if (sp && (item.phase === 'Decoration' || item.phase === 'Plumbing & Heating') && canon && BUILT_ASSEMBLY_CANON_IDS[canon]) {
+                    if (sp && MARKER_CALC_PHASES.has(item.phase) && canon && BUILT_ASSEMBLY_CANON_IDS[canon]) {
                       // to a sub-phase with a calculator: drop the flat task, the calculator prices it
                       saveItemEdit({ ...item, taskSubphaseId: sp.id, subPhase: sp.name, taskId: undefined, taskLabour: undefined, taskMaterials: undefined, taskPlant: undefined, taskSubcontractor: undefined, taskOther: undefined, assemblyResult: undefined, assemblyCalcState: undefined })
                     } else if (sp?.tasks[0]) applyPhaseTask(sp.id, sp.tasks[0].id)
@@ -4022,7 +4024,7 @@ export default function TakeoffPage() {
                 }}>
                   <div style={{ fontWeight: 600, marginBottom: 4 }}>🧮 {selectedSub?.name}</div>
                   <div style={{ fontSize: 11, color: 'var(--to-muted)' }}>
-                    Priced with its own calculator — there are no tasks to pick. {activePhase === 'Decoration' ? 'Draw an area on the plan (it is only a marker), then open the calculator to price it.' : activePhase === 'Plumbing & Heating' ? 'Draw a line on the plan (it is only a marker), then open the calculator to price it.' : 'Draw the wall, then open the calculator to price it.'}
+                    Priced with its own calculator — there are no tasks to pick. {activePhase === 'Decoration' ? 'Draw an area on the plan (it is only a marker), then open the calculator to price it.' : (activePhase === 'Plumbing & Heating' || activePhase === 'Drainage & Services') ? 'Draw a line on the plan (it is only a marker), then open the calculator to price it.' : 'Draw the wall, then open the calculator to price it.'}
                   </div>
                 </div>
               )}
