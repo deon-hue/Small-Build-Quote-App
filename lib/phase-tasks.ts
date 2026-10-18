@@ -700,6 +700,14 @@ function plumbBathroomItems(prefix: string): PhaseTask[] {
 }
 
 const plumbingSubphases: PhaseSubphase[] = [
+  // Plumbing installation, priced room by room (assembly calculator): fittings at an all-in plumber's rate, special fittings, whole-house items
+  {
+    id: 'plumb-install',
+    phase: 'Plumbing & Heating',
+    name: 'Plumbing Installation (by room)',
+    markupPct: 20,
+    tasks: [],  // priced by the Plumbing installation calculator (rooms: fittings, special fittings, whole house)
+  },
   {
     id: 'plumb-kitchen',
     phase: 'Plumbing & Heating',
