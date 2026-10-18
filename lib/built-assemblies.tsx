@@ -31,6 +31,7 @@ import AssemblyScreedFloorDemo from '@/components/AssemblyScreedFloorDemo'
 import AssemblyFloorOverlayDemo from '@/components/AssemblyFloorOverlayDemo'
 import AssemblyConcreteSlabFloorDemo from '@/components/AssemblyConcreteSlabFloorDemo'
 import AssemblyBlockBeamFloorDemo from '@/components/AssemblyBlockBeamFloorDemo'
+import AssemblySuspendedTimberFloorDemo from '@/components/AssemblySuspendedTimberFloorDemo'
 import AssemblyRoofStructureDemo from '@/components/AssemblyRoofStructureDemo'
 import AssemblyRoofCoveringDemo from '@/components/AssemblyRoofCoveringDemo'
 import AssemblyRooflightsDemo from '@/components/AssemblyRooflightsDemo'
@@ -43,7 +44,7 @@ import type { AssemblyBasics } from '@/lib/assembly-basics'
 import type { PlanRoom, ElectricsSavedState } from '@/lib/electrics-units'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 
-export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation' | 'pad-foundation' | 'piled-foundation' | 'underpinning' | 'electrics' | 'decoration' | 'screed-floor' | 'floor-overlay' | 'concrete-slab' | 'block-beam'
+export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation' | 'pad-foundation' | 'piled-foundation' | 'underpinning' | 'electrics' | 'decoration' | 'screed-floor' | 'floor-overlay' | 'concrete-slab' | 'block-beam' | 'timber-floor'
 
 /** Fired when a calculator's "Save & Price" is used from inside a real quote — absent in
  * the Back Office preview context, which has no quote to save into. */
@@ -117,6 +118,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'fs-floor-overlay': { icon: 'floor-overlay', render: opts => <AssemblyFloorOverlayDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} /> },
   'fs-concrete-slab': { icon: 'concrete-slab', render: opts => <AssemblyConcreteSlabFloorDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} /> },
   'fs-block-beam': { icon: 'block-beam', render: opts => <AssemblyBlockBeamFloorDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} /> },
+  'fs-suspended-timber': { icon: 'timber-floor', render: opts => <AssemblySuspendedTimberFloorDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} /> },
   'deco-internal-walls': { icon: 'decoration', render: opts => <AssemblyDecorationDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'elec-install': { icon: 'electrics', render: opts => <AssemblyElectricsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} planRooms={opts?.electrics?.planRooms} initialState={opts?.electrics?.initialState} /> },
   'ew-cav-full': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="wool" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initialHeightMm={opts?.initialHeightMm} noSampleOpenings={opts?.noSampleOpenings} /> },
@@ -259,6 +261,16 @@ export function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; siz
           <rect x="2" y="5" width="20" height="3.5" stroke="#d97706" strokeWidth="1.4" />
           <rect x="2" y="8.5" width="20" height="4" stroke="#64748b" strokeWidth="1.5" />
           <path d="M5 12.5v4M12 12.5v4M19 12.5v4" stroke="#334155" strokeWidth="2.2" />
+          <line x1="2" y1="21" x2="22" y2="21" stroke="#a8a29e" strokeWidth="1.6" />
+        </svg>
+      )
+    case 'timber-floor':
+      // Joists in section with decking on top and insulation between them.
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="2" y="5" width="20" height="2.5" stroke="#b45309" strokeWidth="1.4" />
+          <path d="M5 7.5v10M10 7.5v10M15 7.5v10M20 7.5v10" stroke="#92400e" strokeWidth="2.2" />
+          <path d="M6.5 10.5h2M11.5 10.5h2M16.5 10.5h2" stroke="#ca8a04" strokeWidth="2" />
           <line x1="2" y1="21" x2="22" y2="21" stroke="#a8a29e" strokeWidth="1.6" />
         </svg>
       )

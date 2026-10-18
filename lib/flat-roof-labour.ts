@@ -598,3 +598,32 @@ export function suggestBlockBeamFloorLabour(g: {
   ]))
   return out.filter((x): x is LabourSuggestion => x !== null)
 }
+
+/** The labour for a suspended timber floor (Floors & Screeds → Suspended Timber Floor — a ground, upper or loft floor): a carpenter lays the wall plates (and the DPC under them) or fixes the joist hangers, fits the joists and
+ * strutting and fixes the decking; a labourer lays any ground cover, the insulation and the vapour control layer. Rough estimates, as everywhere here. */
+export function suggestSuspendedTimberFloorLabour(g: {
+  areaM2: number; joistNr: number; plateLm: number; dpcLm: number; hangerNr: number; struttingLm: number; deckAreaM2: number
+  coverAreaM2: number; coverKind: 'none' | 'gravel' | 'concrete'; coverVolumeM3: number; insulationAreaM2: number; vclAreaM2: number
+}): LabourSuggestion[] {
+  const c = LABOUR_RATES.carpenter
+  const l = LABOUR_RATES.labourer
+  const w = LABOUR_RATES.groundworker
+  const cover = line('st-cover', 'labourer', g.coverKind === 'concrete' ? 'Lay the membrane and pour and level the concrete oversite' : 'Lay the membrane and spread the gravel', [
+    { qty: g.coverAreaM2, unit: 'm²', what: 'membrane', rate: l.screedDpmM2 },
+    { qty: g.coverKind === 'gravel' ? g.coverAreaM2 : 0, unit: 'm²', what: 'gravel spread', rate: w.slabHardcoreM2 },
+    { qty: g.coverKind === 'concrete' ? g.coverVolumeM3 : 0, unit: 'm³', what: 'concrete placed and levelled', rate: w.concreteM3 },
+  ])
+  const frame = line('st-frame', 'carpenter', 'Lay the wall plates and DPC or fix the joist hangers, fit the joists and strutting', [
+    { qty: g.plateLm, unit: 'lm', what: 'wall plate', rate: c.wallPlateLm },
+    { qty: g.dpcLm, unit: 'lm', what: 'DPC', rate: LABOUR_RATES.bricklayer.dpcLm },
+    { qty: g.hangerNr, unit: 'hangers', what: 'fixed', rate: c.hangerNr },
+    { qty: g.joistNr, unit: 'joists', what: 'cut and fixed', rate: c.joist },
+    { qty: g.struttingLm, unit: 'lm', what: 'strutting', rate: c.firringLm },
+  ])
+  const fill = line('st-fill', 'labourer', 'Fit the insulation and lay the vapour control layer', [
+    { qty: g.insulationAreaM2, unit: 'm²', what: 'insulation', rate: l.screedInsulationM2 },
+    { qty: g.vclAreaM2, unit: 'm²', what: 'vapour control layer', rate: l.screedDpmM2 },
+  ])
+  const deck = line('st-deck', 'carpenter', 'Fix the decking', [{ qty: g.deckAreaM2, unit: 'm²', what: 'decking laid and screwed', rate: c.deckM2 }])
+  return [cover, frame, fill, deck].filter((x): x is LabourSuggestion => x !== null)
+}
