@@ -48,6 +48,8 @@ interface Props {
    * and offers to add/change/expand rather than starting from scratch.
    */
   initialScope?: string
+  /** The estimate is being built from the scope right now: the Build Estimate buttons say so and cannot be pressed again */
+  building?: boolean
 }
 
 // ── Job-type opening questions ────────────────────────────────────────────────
@@ -189,7 +191,7 @@ const MAX_TOTAL_BASE64 = 4 * 1024 * 1024        // 4MB total base64 payload ceil
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function ScopeChat({ quoteId, jobType, address, phases, onInsert, onClose, onBuildEstimate, embedded = false, initialScope }: Props) {
+export default function ScopeChat({ quoteId, jobType, address, phases, onInsert, onClose, onBuildEstimate, embedded = false, initialScope, building = false }: Props) {
   const supabase = createClient()
 
   const [messages, setMessages] = useState<Message[]>([])
@@ -607,10 +609,11 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
                       <div style={{ marginTop: 10, display: 'flex', gap: 6 }}>
                         {onBuildEstimate && (
                           <button
-                            onClick={() => { onBuildEstimate(scope); onClose() }}
-                            style={{ flex: 2, background: '#e67e22', color: '#fff', border: 'none', borderRadius: 6, padding: '7px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                            onClick={() => { if (!building) { onBuildEstimate(scope); onClose() } }}
+                            disabled={building}
+                            style={{ flex: 2, background: building ? '#f1c9a0' : '#e67e22', color: '#fff', border: 'none', borderRadius: 6, padding: '7px 12px', fontSize: 11, fontWeight: 700, cursor: building ? 'wait' : 'pointer' }}
                           >
-                            ✦ Build Estimate
+                            {building ? '⏳ Building…' : '✦ Build Estimate'}
                           </button>
                         )}
                         <button
@@ -629,7 +632,10 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
 
           {loading && (
             <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 10 }}>
-              <div style={{ background: '#f0f2ee', borderRadius: '16px 16px 16px 4px', padding: '12px 16px', fontSize: 18, letterSpacing: 2, color: 'var(--muted)' }}>···</div>
+              <div role="status" aria-label="The AI is thinking" style={{ background: '#f0f2ee', borderRadius: '16px 16px 16px 4px', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 5 }}>
+                {[0, 1, 2].map(i => <span key={i} style={{ width: 8, height: 8, borderRadius: '50%', background: '#7ab533', display: 'inline-block', animation: 'dotBounce 1.2s infinite ease-in-out', animationDelay: i * 0.18 + 's' }} />)}
+                <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--muted)' }}>Thinking…</span>
+              </div>
             </div>
           )}
           <div ref={bottomRef} />
@@ -726,23 +732,23 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
 
           {onBuildEstimate && (
             <button
-              onClick={() => { if (latestScope) { onBuildEstimate(latestScope); onClose() } }}
-              disabled={!latestScope}
-              title="Analyse scope and auto-populate all phases"
+              onClick={() => { if (latestScope && !building) { onBuildEstimate(latestScope); onClose() } }}
+              disabled={!latestScope || building}
+              title={building ? 'Building the estimate…' : 'Analyse scope and auto-populate all phases'}
               style={{
-                background: latestScope ? '#e67e22' : '#e0e0e0',
+                background: building ? '#f1c9a0' : latestScope ? '#e67e22' : '#e0e0e0',
                 color: latestScope ? '#fff' : '#999',
                 border: 'none',
                 borderRadius: 6,
                 padding: '8px 14px',
                 fontSize: 12,
                 fontWeight: 600,
-                cursor: latestScope ? 'pointer' : 'not-allowed',
+                cursor: building ? 'wait' : latestScope ? 'pointer' : 'not-allowed',
                 whiteSpace: 'nowrap',
                 transition: 'all 0.2s',
               }}
             >
-              ✦ Build Estimate
+              {building ? '⏳ Building…' : '✦ Build Estimate'}
             </button>
           )}
 
@@ -915,6 +921,10 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
       @keyframes slideUp {
         from { transform: translateY(20px); opacity: 0; }
         to   { transform: translateY(0);    opacity: 1; }
+      }
+      @keyframes dotBounce {
+        0%, 80%, 100% { transform: translateY(0); opacity: 0.35; }
+        40%           { transform: translateY(-6px); opacity: 1; }
       }
       @keyframes micPulse {
         0%, 100% { transform: scale(1);    opacity: 1; }

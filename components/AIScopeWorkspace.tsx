@@ -412,6 +412,7 @@ export default function AIScopeWorkspace({
             phases={[]}
             onInsert={text => { setScopeText(text); onScopeChange(text) }}
             onClose={() => {/* no-op in embedded mode */}}
+            building={generating}
             onBuildEstimate={text => { setScopeText(text); onScopeChange(text); onBuildEstimate(text) }}
           />
         </div>
