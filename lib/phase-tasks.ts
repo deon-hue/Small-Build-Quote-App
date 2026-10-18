@@ -725,6 +725,14 @@ const plumbingSubphases: PhaseSubphase[] = [
     markupPct: 15,
     tasks: [],  // priced by the Underfloor heating calculator (zones: pipe, loops, fixing, manifold, controls, commissioning)
   },
+  // Pipework priced by the run (assembly calculator): the lengths a fitting's all-in price in the Plumbing Installation calculator does not cover
+  {
+    id: 'plumb-pipework',
+    phase: 'Plumbing & Heating',
+    name: 'Pipework Runs',
+    markupPct: 20,
+    tasks: [],  // priced by the Pipework runs calculator (runs: kind of pipe, size, material, length, route, lagging)
+  },
   {
     id: 'plumb-kitchen',
     phase: 'Plumbing & Heating',
