@@ -1,6 +1,8 @@
 // The words for pad foundations on the quote: a short line (printed on the quote) and a full part-by-part description (the "What's included" text).
 // Pure and tested, so they follow the calculator's inputs until they are edited by hand. No imports needed from the engine.
 
+import type { PlacingMethod } from './concrete-placing'
+
 export interface PadDescriptionGroup { count: number; lengthMm: number; widthMm: number; depthMm: number }
 
 export interface PadDescriptionInput {
@@ -11,6 +13,8 @@ export interface PadDescriptionInput {
   formwork: boolean
   rebar: boolean
   starters: boolean
+  /** how the concrete gets to the pads when the lorry cannot reach them (default: it reaches, nothing to say) */
+  placing?: PlacingMethod
 }
 
 const sizeOf = (g: PadDescriptionGroup) => `${g.lengthMm} × ${g.widthMm} × ${g.depthMm}mm`
@@ -33,6 +37,8 @@ export function describePadFoundation(i: PadDescriptionInput): string {
   if (i.rebar) lines.push('Fix the reinforcement to each pad, to the engineer\'s design.')
   if (i.starters) lines.push('Set holding-down bolts or column starter bars in each pad.')
   lines.push(`Pour ${i.concreteMix} ready-mixed concrete to each pad and level it.`)
+  if (i.placing === 'pump') lines.push('The concrete is placed by pump, as the concrete lorry cannot get up to the pads.')
+  else if (i.placing === 'barrow') lines.push('The concrete is carried to the pads by wheelbarrow, as the concrete lorry cannot get up to them.')
   if (i.formwork) lines.push('Strike the formwork once the concrete has gone off, and backfill and compact round each pad.')
   lines.push('Not included: the engineer\'s design, any reinforcement or sizes they require beyond what is shown, ground beams linking the pads, or the columns and steelwork on top of them.')
   return lines.join('\n')

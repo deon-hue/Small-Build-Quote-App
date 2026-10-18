@@ -2,6 +2,7 @@
 // Pure and tested, so they follow the calculator's inputs until they are edited by hand. Type-only import from the engine (see CLAUDE.md).
 
 import type { StripWallBuild } from './strip-foundation'
+import type { PlacingMethod } from './concrete-placing'
 
 export interface StripFoundationDescriptionInput {
   lengthM: number
@@ -15,6 +16,8 @@ export interface StripFoundationDescriptionInput {
   takeAllSpoilAway: boolean
   /** A trench fill (concrete up to near ground level) instead of a traditional strip. Default 'strip'. */
   variant?: 'strip' | 'trench-fill'
+  /** how the concrete gets to the trench when the lorry cannot reach it (default: the lorry reaches, nothing to say) */
+  placing?: PlacingMethod
 }
 
 const mm = (n: number) => n.toLocaleString('en-GB')
@@ -37,6 +40,8 @@ export function describeStripFoundation(i: StripFoundationDescriptionInput): str
   } else {
     lines.push(`Build the wall up from the concrete as two 100mm dense concrete block leaves with a 100mm cavity, tied together, the cavity filled with concrete, to a DPC ${i.dpcAboveGroundMm}mm above finished ground level, with the DPC laid across both leaves.`)
   }
+  if (i.placing === 'pump') lines.push('The concrete is placed by pump, as the concrete lorry cannot get up to the trench.')
+  else if (i.placing === 'barrow') lines.push('The concrete is carried to the trench by wheelbarrow, as the concrete lorry cannot get up to it.')
   lines.push(i.variant === 'trench-fill' ? 'Backfill and compact the top of the trench round the finished wall.' : 'Backfill round the finished wall in layers and compact it.')
   lines.push(i.takeAllSpoilAway
     ? 'All the soil dug out is taken away from site.'

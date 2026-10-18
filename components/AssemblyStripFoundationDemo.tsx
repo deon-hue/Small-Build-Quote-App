@@ -15,6 +15,8 @@
 import React, { useMemo, useState, useEffect } from 'react'
 import NumInput from '@/components/NumInput'
 import { useCalcState } from '@/components/calc-state'
+import ConcretePlacingSection from '@/components/ConcretePlacingSection'
+import { planConcretePlacing, placingLayers, placingLabour, type PlacingMethod, type PlacingPlan } from '@/lib/concrete-placing'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
 import { calculateStripFoundationGeometry, type StripWallBuild, type StripFoundationInput, type StripFoundationGeometry } from '@/lib/strip-foundation'
 import { describeStripFoundation, describeStripFoundationShort } from '@/lib/strip-foundation-description'
@@ -59,7 +61,7 @@ interface Props {
   initial?: AssemblyBasics
 }
 
-function buildStripFoundationLayers(g: StripFoundationGeometry, o: { wall: StripWallBuild; mix: Mix; wastePct: number }): AssemblyLayerDef[] {
+function buildStripFoundationLayers(g: StripFoundationGeometry, o: { wall: StripWallBuild; mix: Mix; wastePct: number; placing?: PlacingPlan }): AssemblyLayerDef[] {
   const w = o.wastePct
   const L: AssemblyLayerDef[] = []
   const fixed = (l: Omit<AssemblyLayerDef, 'source'> & { qty: number }): AssemblyLayerDef => { const { qty, ...rest } = l; return { ...rest, source: 'fixed', fixedQty: qty } }
@@ -82,6 +84,8 @@ function buildStripFoundationLayers(g: StripFoundationGeometry, o: { wall: Strip
     const days = Math.max(0.5, Math.round((g.backfillM3 / 15) * 2) / 2)
     L.push(fixed({ id: 'wacker', name: 'Compaction plate hire — compacting the backfill', category: 'plant', unit: 'day', unitCost: WACKER_PER_DAY, qty: days }))
   }
+  // the lorry cannot reach the trench: a pump, or barrows (nothing when it can)
+  if (o.placing) L.push(...placingLayers(o.placing))
   return L
 }
 
@@ -122,6 +126,9 @@ export default function AssemblyStripFoundationDemo({ onClose, onSave, labourTra
   const [wall, setWall] = useCalcState<StripWallBuild>('AssemblyStripFoundationDemo', 'wall', 'solid-flat')
   const [mix, setMix] = useCalcState<Mix>('AssemblyStripFoundationDemo', 'mix', 'C25')
   const [allSpoil, setAllSpoil] = useCalcState('AssemblyStripFoundationDemo', 'allSpoil', false)
+  const [placingMethod, setPlacingMethod] = useCalcState<PlacingMethod>('AssemblyStripFoundationDemo', 'placingMethod', 'direct')
+  const [placingDistanceM, setPlacingDistanceM] = useCalcState('AssemblyStripFoundationDemo', 'placingDistanceM', 25)
+  const [placingMen, setPlacingMen] = useCalcState('AssemblyStripFoundationDemo', 'placingMen', 2)
   const [wastePct, setWastePct] = useCalcState('AssemblyStripFoundationDemo', 'wastePct', 10)
   const [profitPct, setProfitPct] = useCalcState('AssemblyStripFoundationDemo', 'profitPct', 20)   // default profit margin
   const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>('AssemblyStripFoundationDemo', 'rateOverrides', {})
@@ -137,10 +144,14 @@ export default function AssemblyStripFoundationDemo({ onClose, onSave, labourTra
   }, [lengthMm, widthMm, depthMm, concreteMm, dpcAbove, wall, allSpoil])
   const g = geometryResult.ok ? geometryResult.geometry : null
 
+  // all the concrete poured: the trench, and the cavity fill when the wall is built that way
+  const placingVolumeM3 = g ? g.concreteVolumeM3 + g.cavityFillM3 : 0
+  const placing = useMemo(() => planConcretePlacing({ method: placingMethod, volumeM3: placingVolumeM3, distanceM: placingDistanceM, men: placingMen }), [placingMethod, placingVolumeM3, placingDistanceM, placingMen])
+
   const layers = useMemo(() => {
     if (!g) return []
-    return buildStripFoundationLayers(g, { wall, mix, wastePct }).map(l => rateOverrides[l.id] != null ? { ...l, unitCost: rateOverrides[l.id] } : l)
-  }, [g, wall, mix, wastePct, rateOverrides])
+    return buildStripFoundationLayers(g, { wall, mix, wastePct, placing }).map(l => rateOverrides[l.id] != null ? { ...l, unitCost: rateOverrides[l.id] } : l)
+  }, [g, wall, mix, wastePct, placing, rateOverrides])
   const costedLines: CostedLine[] = layers.map(l => costLayer(l, l.fixedQty ?? 0))
 
   // Miscellaneous materials
@@ -154,9 +165,10 @@ export default function AssemblyStripFoundationDemo({ onClose, onSave, labourTra
   }
 
   // Labour — suggested from the foundation, following it until edited
-  const labourSuggestions: LabourSuggestion[] = g ? suggestStripFoundationLabour({
+  const barrowing = placingLabour(placing)
+  const labourSuggestions: LabourSuggestion[] = g ? [...suggestStripFoundationLabour({
     lm: g.lengthM, concreteM3: g.concreteVolumeM3, backfillM3: g.backfillM3, masonryAreaM2: g.masonryAreaM2, wall, cavityFillM3: g.cavityFillM3,
-  }) : []
+  }), ...(barrowing ? [barrowing] : [])] : []
   const suggestedLabour = toLabourLines(labourSuggestions, labourTrades, false)
   const [labourOverride, setLabourOverride] = useCalcState<LabourLine[] | null>('AssemblyStripFoundationDemo', 'labourOverride', null)
   const suggestedRef = React.useRef<LabourLine[]>([])
@@ -185,7 +197,7 @@ export default function AssemblyStripFoundationDemo({ onClose, onSave, labourTra
   const totalCost = costSubtotal + profitAmount
 
   // The customer's description follows the foundation until it's edited by hand
-  const descInput = g ? { lengthM: g.lengthM, widthMm, depthMm, concreteThicknessMm: concreteMm, dpcAboveGroundMm: dpcAbove, wall, concreteMix: mix, takeAllSpoilAway: allSpoil, variant } : null
+  const descInput = g ? { lengthM: g.lengthM, widthMm, depthMm, concreteThicknessMm: concreteMm, dpcAboveGroundMm: dpcAbove, wall, concreteMix: mix, takeAllSpoilAway: allSpoil, variant, placing: placingMethod } : null
   const [descriptionOverride, setDescriptionOverride] = useCalcState<string | null>('AssemblyStripFoundationDemo', 'descriptionOverride', null)
   const [detailOverride, setDetailOverride] = useCalcState<string | null>('AssemblyStripFoundationDemo', 'detailOverride', null)
   const description = descriptionOverride ?? (descInput ? describeStripFoundationShort(descInput) : '')
@@ -274,6 +286,8 @@ export default function AssemblyStripFoundationDemo({ onClose, onSave, labourTra
               </select>
             </PropRow>
           </CollapsibleSection>
+
+          <ConcretePlacingSection method={placingMethod} onMethod={setPlacingMethod} distanceM={placingDistanceM} onDistance={setPlacingDistanceM} men={placingMen} onMen={setPlacingMen} plan={placing} volumeM3={placingVolumeM3} />
 
           <CollapsibleSection title="Wall up to the DPC" borderColor="#bae6fd">
             <PropRow label="Built as">

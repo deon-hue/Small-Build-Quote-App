@@ -12,6 +12,8 @@
 import React, { useMemo, useState } from 'react'
 import NumInput from '@/components/NumInput'
 import { useCalcState } from '@/components/calc-state'
+import ConcretePlacingSection from '@/components/ConcretePlacingSection'
+import { planConcretePlacing, placingLayers, placingLabour, type PlacingMethod, type PlacingPlan } from '@/lib/concrete-placing'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
 import { calculatePadFoundationGeometry, type PadFoundationInput, type PadFoundationGeometry, type PadGroup } from '@/lib/pad-foundation'
 import { describePadFoundation, describePadFoundationShort } from '@/lib/pad-foundation-description'
@@ -50,7 +52,7 @@ interface Props {
 let groupSeq = 0
 const newGroup = (count: number, l: number, w: number, d: number): PadGroup => ({ id: 'pad-g-' + ++groupSeq, count, lengthMm: l, widthMm: w, depthMm: d })
 
-function buildPadLayers(g: PadFoundationGeometry, o: { mix: Mix; wastePct: number; formwork: boolean }): AssemblyLayerDef[] {
+function buildPadLayers(g: PadFoundationGeometry, o: { mix: Mix; wastePct: number; formwork: boolean; placing?: PlacingPlan }): AssemblyLayerDef[] {
   const w = o.wastePct
   const L: AssemblyLayerDef[] = []
   const fixed = (l: Omit<AssemblyLayerDef, 'source'> & { qty: number }): AssemblyLayerDef => { const { qty, ...rest } = l; return { ...rest, source: 'fixed', fixedQty: qty } }
@@ -63,6 +65,8 @@ function buildPadLayers(g: PadFoundationGeometry, o: { mix: Mix; wastePct: numbe
   if (g.starterCount > 0) L.push(fixed({ id: 'starters', name: 'Holding-down bolts / column starter bars, one set per pad', category: 'materials', unit: 'nr', unitCost: STARTER_PER_PAD, roundToWhole: true, qty: g.starterCount }))
   L.push(fixed({ id: 'concrete', name: `Ready-mixed concrete ${o.mix} (the pads)`, category: 'materials', unit: 'm³', unitCost: MIXES[o.mix].cost, wastePct: Math.max(w, 5), qty: g.concreteM3 }))
   if (g.plateDays > 0) L.push(fixed({ id: 'plate', name: 'Compaction plate hire — backfill round the pads', category: 'plant', unit: 'day', unitCost: PLATE_PER_DAY, qty: g.plateDays }))
+  // the lorry cannot reach the pads: a pump, or barrows (nothing when it can)
+  if (o.placing) L.push(...placingLayers(o.placing))
   return L
 }
 
@@ -111,10 +115,16 @@ export default function AssemblyPadFoundationDemo({ onClose, onSave, labourTrade
   }, [groups, blindingMm, formwork, rebarOn, rebarKg, starters])
   const g = geometryResult.ok ? geometryResult.geometry : null
 
+  const [placingMethod, setPlacingMethod] = useCalcState<PlacingMethod>('AssemblyPadFoundationDemo', 'placingMethod', 'direct')
+  const [placingDistanceM, setPlacingDistanceM] = useCalcState('AssemblyPadFoundationDemo', 'placingDistanceM', 25)
+  const [placingMen, setPlacingMen] = useCalcState('AssemblyPadFoundationDemo', 'placingMen', 2)
+  const placingVolumeM3 = g ? g.concreteM3 : 0
+  const placing = useMemo(() => planConcretePlacing({ method: placingMethod, volumeM3: placingVolumeM3, distanceM: placingDistanceM, men: placingMen }), [placingMethod, placingVolumeM3, placingDistanceM, placingMen])
+
   const layers = useMemo(() => {
     if (!g) return []
-    return buildPadLayers(g, { mix, wastePct, formwork }).map(l => rateOverrides[l.id] != null ? { ...l, unitCost: rateOverrides[l.id] } : l)
-  }, [g, mix, wastePct, formwork, rateOverrides])
+    return buildPadLayers(g, { mix, wastePct, formwork, placing }).map(l => rateOverrides[l.id] != null ? { ...l, unitCost: rateOverrides[l.id] } : l)
+  }, [g, mix, wastePct, formwork, placing, rateOverrides])
   const costedLines: CostedLine[] = layers.map(l => costLayer(l, l.fixedQty ?? 0))
 
   // Miscellaneous materials
@@ -128,9 +138,10 @@ export default function AssemblyPadFoundationDemo({ onClose, onSave, labourTrade
   }
 
   // Labour — suggested from the pads, following them until edited
-  const labourSuggestions: LabourSuggestion[] = g ? suggestPadFoundationLabour({
+  const barrowing = placingLabour(placing)
+  const labourSuggestions: LabourSuggestion[] = g ? [...suggestPadFoundationLabour({
     padCount: g.padCount, concreteM3: g.concreteM3, formworkM2: g.formworkM2, rebarKg: g.rebarKg, backfillM3: g.backfillM3,
-  }) : []
+  }), ...(barrowing ? [barrowing] : [])] : []
   const suggestedLabour = toLabourLines(labourSuggestions, labourTrades, false)
   const [labourOverride, setLabourOverride] = useCalcState<LabourLine[] | null>('AssemblyPadFoundationDemo', 'labourOverride', null)
   const suggestedRef = React.useRef<LabourLine[]>([])
@@ -159,7 +170,7 @@ export default function AssemblyPadFoundationDemo({ onClose, onSave, labourTrade
   const totalCost = costSubtotal + profitAmount
 
   // The customer's description follows the pads until it's edited by hand
-  const descInput = g ? { groups: groups.map(x => ({ count: x.count, lengthMm: x.lengthMm, widthMm: x.widthMm, depthMm: x.depthMm })), blindingMm, concreteMix: mix, formwork, rebar: rebarOn && rebarKg > 0, starters } : null
+  const descInput = g ? { groups: groups.map(x => ({ count: x.count, lengthMm: x.lengthMm, widthMm: x.widthMm, depthMm: x.depthMm })), blindingMm, concreteMix: mix, formwork, rebar: rebarOn && rebarKg > 0, starters, placing: placingMethod } : null
   const [descriptionOverride, setDescriptionOverride] = useCalcState<string | null>('AssemblyPadFoundationDemo', 'descriptionOverride', null)
   const [detailOverride, setDetailOverride] = useCalcState<string | null>('AssemblyPadFoundationDemo', 'detailOverride', null)
   const description = descriptionOverride ?? (descInput ? describePadFoundationShort(descInput) : '')
@@ -262,6 +273,8 @@ export default function AssemblyPadFoundationDemo({ onClose, onSave, labourTrade
               </select>
             </PropRow>
           </CollapsibleSection>
+
+          <ConcretePlacingSection method={placingMethod} onMethod={setPlacingMethod} distanceM={placingDistanceM} onDistance={setPlacingDistanceM} men={placingMen} onMen={setPlacingMen} plan={placing} volumeM3={placingVolumeM3} />
 
           <CollapsibleSection title="Options" borderColor="#bae6fd">
             {check('Formwork to the pad sides', formwork, setFormwork, 'Off: the concrete is poured against the sides of the pit. On: the pit is 200mm bigger each side and backfilled afterwards.')}
