@@ -708,6 +708,15 @@ const plumbingSubphases: PhaseSubphase[] = [
     markupPct: 20,
     tasks: [],  // priced by the Plumbing installation calculator (rooms: fittings, special fittings, whole house)
   },
+  // Heating plant, priced itemised (assembly calculator): so far a gas combi boiler. The older 'Boiler & Heating System' sub-phase below stays for system boilers, cylinders and heat pumps until the calculator covers them.
+  {
+    id: 'plumb-heating-plant',
+    phase: 'Plumbing & Heating',
+    name: 'Heating Plant (by system)',
+    markupPct: 15,
+    ukWarning: 'Gas Safe registered engineer MUST install and commission the boiler. Gas boiler replacement requires Building Regulations notification.',
+    tasks: [],  // priced by the Heating plant calculator (boiler, flue, controls, filter, flush, pipework, commissioning)
+  },
   {
     id: 'plumb-kitchen',
     phase: 'Plumbing & Heating',
