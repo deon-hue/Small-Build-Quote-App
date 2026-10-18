@@ -4,6 +4,7 @@
 // cannot do it. Everything it shows and saves goes through /api/public/supplier-quote/[token]. The street address is never shown here, only the area.
 
 import { useEffect, useState } from 'react'
+import NumInput from '@/components/NumInput'
 import { useParams } from 'next/navigation'
 
 interface Info {
@@ -175,7 +176,7 @@ export default function SupplierQuotePage() {
                                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 8, alignItems: 'end' }}>
                                     <div>
                                       <label style={lab}>Unit price (£)</label>
-                                      <input style={{ ...inp, opacity: l.unavailable ? 0.5 : 1 }} type="number" inputMode="decimal" min={0} step="0.01" disabled={l.unavailable} value={l.price} onChange={e => set({ price: e.target.value })} placeholder="0.00" />
+                                      <NumInput style={{ ...inp, opacity: l.unavailable ? 0.5 : 1 }} type="number" inputMode="decimal" min={0} step="0.01" disabled={l.unavailable} value={l.price} onChange={e => set({ price: e.target.value })} placeholder="0.00" />
                                     </div>
                                     <div style={{ paddingBottom: 11, fontSize: 15, fontWeight: 700, textAlign: 'right' }}>{l.unavailable ? <span style={{ color: MUTED, fontWeight: 400 }}>not supplied</span> : lt !== null ? gbp(lt) : <span style={{ color: MUTED, fontWeight: 400 }}>—</span>}</div>
                                   </div>
@@ -189,7 +190,7 @@ export default function SupplierQuotePage() {
                           </div>
                           <div style={{ marginTop: 12 }}>
                             <label style={lab}>Delivery charge (£, ex VAT, if any)</label>
-                            <input style={inp} type="number" inputMode="decimal" min={0} step="0.01" value={deliveryCharge} onChange={e => setDeliveryCharge(e.target.value)} placeholder="0.00" />
+                            <NumInput style={inp} type="number" inputMode="decimal" min={0} step="0.01" value={deliveryCharge} onChange={e => setDeliveryCharge(e.target.value)} placeholder="0.00" />
                           </div>
                           <div style={{ marginTop: 12, padding: '12px 14px', background: '#f8faf8', border: `1px solid ${LINE}`, borderLeft: `3px solid ${LIME}`, borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
                             <span style={{ fontSize: 13, color: MUTED }}>{priced} of {info.items.length} items priced{del > 0 ? ' · delivery included' : ''}, ex VAT</span>
@@ -201,7 +202,7 @@ export default function SupplierQuotePage() {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                       {info.items.length === 0 && <><div>
                         <label style={lab}>{info.orderType === 'materials' ? 'Price for everything (£, ex VAT)' : 'Your price (£, ex VAT)'}</label>
-                        <input style={inp} type="number" inputMode="decimal" min={0} step="0.01" value={price} onChange={e => setPrice(e.target.value)} placeholder="0.00" />
+                        <NumInput style={inp} type="number" inputMode="decimal" min={0} step="0.01" value={price} onChange={e => setPrice(e.target.value)} placeholder="0.00" />
                       </div>
                       <div>
                         <label style={lab}>Price is</label>

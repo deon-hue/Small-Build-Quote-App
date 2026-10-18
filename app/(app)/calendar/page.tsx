@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useRef } from 'react'
+import NumInput from '@/components/NumInput'
 import type { ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { useApp } from '@/contexts/AppContext'
@@ -1048,7 +1049,7 @@ export default function CalendarPage() {
             } />
             <DetailRow label="Duration (working days)" value={
               <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <input
+                <NumInput
                   type="number"
                   min={1}
                   value={editDur}
@@ -1070,7 +1071,7 @@ export default function CalendarPage() {
             } />
             <DetailRow label="% complete" value={
               <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                <input
+                <NumInput
                   type="number"
                   min={0}
                   max={100}
@@ -1205,7 +1206,7 @@ export default function CalendarPage() {
                   </div>
                   <div className="fg" style={{ margin: 0, width: 90 }}>
                     <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Working days</label>
-                    <input type="number" min={1} value={newTaskDur} onChange={e => setNewTaskDur(Math.max(1, Number(e.target.value) || 1))} style={{ width: '100%' }} />
+                    <NumInput type="number" min={1} value={newTaskDur} onChange={e => setNewTaskDur(Math.max(1, Number(e.target.value) || 1))} style={{ width: '100%' }} />
                   </div>
                 </div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>

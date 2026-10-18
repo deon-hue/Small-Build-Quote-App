@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import NumInput from '@/components/NumInput'
 import TalkButton from '@/components/TalkButton'
 import { useDictatedText } from '@/components/useDictatedText'
 import Link from 'next/link'
@@ -393,7 +394,7 @@ export default function SubTimesheetsScreen({ mode }: { mode: 'add' | 'history' 
 
                 {dt === 'full' && (
                   <FieldGroup label="Total hours *">
-                    <input type="number" inputMode="decimal" min={0.25} step={0.25} style={inp} value={formHours} onChange={e => setFormHours(e.target.value)} placeholder="worked out for you" />
+                    <NumInput type="number" inputMode="decimal" min={0.25} step={0.25} style={inp} value={formHours} onChange={e => setFormHours(e.target.value)} placeholder="worked out for you" />
                   </FieldGroup>
                 )}
 
@@ -407,7 +408,7 @@ export default function SubTimesheetsScreen({ mode }: { mode: 'add' | 'history' 
                   </FieldGroup>
 
                   <FieldGroup label="Lunch / break (mins)">
-                    <input type="number" inputMode="numeric" min={0} step={5} style={inp} value={formBreak} onChange={e => setTimes({ brk: e.target.value })} />
+                    <NumInput type="number" inputMode="numeric" min={0} step={5} style={inp} value={formBreak} onChange={e => setTimes({ brk: e.target.value })} />
                   </FieldGroup>
                 </>)}
 

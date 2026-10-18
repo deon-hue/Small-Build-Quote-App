@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import NumInput from '@/components/NumInput'
 import { createClient } from '@/lib/supabase/client'
 import {
   fetchTakeoffTools, upsertTakeoffTool, deleteTakeoffTool,
@@ -212,11 +213,11 @@ export default function SectionTakeoffMapping({ userId }: Props) {
                                     style={{ width: '100%', padding: '3px 6px', border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 12, fontFamily: 'monospace' }} />
                                 </td>
                                 <td style={{ padding: '5px 6px' }}>
-                                  <input type="number" min={0} value={m.waste_pct} onChange={e => updateMapping({ ...m, waste_pct: +e.target.value })}
+                                  <NumInput type="number" min={0} value={m.waste_pct} onChange={e => updateMapping({ ...m, waste_pct: +e.target.value })}
                                     style={{ width: 60, padding: '3px 6px', border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 12, textAlign: 'right' }} />
                                 </td>
                                 <td style={{ padding: '5px 6px' }}>
-                                  <input type="number" min={0} value={m.markup_pct} onChange={e => updateMapping({ ...m, markup_pct: +e.target.value })}
+                                  <NumInput type="number" min={0} value={m.markup_pct} onChange={e => updateMapping({ ...m, markup_pct: +e.target.value })}
                                     style={{ width: 60, padding: '3px 6px', border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 12, textAlign: 'right' }} />
                                 </td>
                                 <td style={{ padding: '5px 4px', textAlign: 'right' }}>

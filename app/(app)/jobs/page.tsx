@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
+import NumInput from '@/components/NumInput'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useApp } from '@/contexts/AppContext'
 import { fmt, resolveJobColor, JOB_COLORS, jobDisplayTitle, findLinkedQuote, jobNumber, STAGE_BADGE, STAGE_LABEL, JOB_TYPES, jobProgress } from '@/lib/utils'
@@ -471,7 +472,7 @@ function JobsPageInner() {
               <div className="row2">
                 <div className="fg">
                   <label>Contract Value (£)</label>
-                  <input type="number" value={form.value || ''} onChange={e => setForm(f => ({ ...f, value: Number(e.target.value) }))} placeholder="64000" />
+                  <NumInput type="number" value={form.value || ''} onChange={e => setForm(f => ({ ...f, value: Number(e.target.value) }))} placeholder="64000" />
                 </div>
                 <div className="fg">
                   <label>Stage</label>
@@ -490,7 +491,7 @@ function JobsPageInner() {
                 </div>
                 <div className="fg">
                   <label>Duration (weeks)</label>
-                  <input type="number" value={form.weeks} onChange={e => setForm(f => ({ ...f, weeks: Number(e.target.value) }))} min={1} />
+                  <NumInput type="number" value={form.weeks} onChange={e => setForm(f => ({ ...f, weeks: Number(e.target.value) }))} min={1} />
                 </div>
               </div>
               <div className="fg">

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import NumInput from '@/components/NumInput'
 import { createClient } from '@/lib/supabase/client'
 import type {
   FloorLayer, FloorMakeup, TakeoffItem,
@@ -415,18 +416,18 @@ export default function ConstructionLayerModal({
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 1fr 1fr', gap: 8, marginBottom: 10 }}>
-            <div><label style={lbl}>Qty</label><input type="number" step="0.5" min={0} style={inp} value={f.qty ?? 1} onChange={e => up({ qty: +e.target.value })} /></div>
+            <div><label style={lbl}>Qty</label><NumInput type="number" step="0.5" min={0} style={inp} value={f.qty ?? 1} onChange={e => up({ qty: +e.target.value })} /></div>
             <div><label style={lbl}>Unit</label>
               <select style={inp} value={f.unit ?? 'hr'} onChange={e => up({ unit: e.target.value as 'hr' | 'day' })}>
                 <option value="hr">hr</option><option value="day">day</option>
               </select>
             </div>
-            <div><label style={lbl}>Rate (£/unit)</label><input type="number" step="0.5" min={0} style={inp} value={f.rate ?? 0} onChange={e => up({ rate: +e.target.value })} /></div>
+            <div><label style={lbl}>Rate (£/unit)</label><NumInput type="number" step="0.5" min={0} style={inp} value={f.rate ?? 0} onChange={e => up({ rate: +e.target.value })} /></div>
             <div><label style={lbl}>Total</label><div style={{ ...inp, color: accentColor, fontWeight: 700, fontFamily: 'monospace' }}>£{f2(total)}</div></div>
           </div>
           <div style={{ marginBottom: 10 }}>
             <label style={lbl}>Output rate (optional, e.g. m²/hr)</label>
-            <input type="number" step="any" min={0} style={inp} value={f.outputRate ?? ''} placeholder="0.5"
+            <NumInput type="number" step="any" min={0} style={inp} value={f.outputRate ?? ''} placeholder="0.5"
               onChange={e => up({ outputRate: e.target.value ? +e.target.value : undefined })} />
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -465,9 +466,9 @@ export default function ConstructionLayerModal({
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
-            <div><label style={lbl}>Qty (net)</label><input type="number" step="any" min={0} style={inp} value={f.qty ?? 0} onChange={e => up({ qty: +e.target.value })} /></div>
-            <div><label style={lbl}>Unit cost (£)</label><input type="number" step="0.01" min={0} style={inp} value={f.unitCost ?? 0} onChange={e => up({ unitCost: +e.target.value })} /></div>
-            <div><label style={lbl}>Waste %</label><input type="number" step="1" min={0} max={100} style={inp} value={f.wastePct ?? 0} onChange={e => up({ wastePct: +e.target.value })} /></div>
+            <div><label style={lbl}>Qty (net)</label><NumInput type="number" step="any" min={0} style={inp} value={f.qty ?? 0} onChange={e => up({ qty: +e.target.value })} /></div>
+            <div><label style={lbl}>Unit cost (£)</label><NumInput type="number" step="0.01" min={0} style={inp} value={f.unitCost ?? 0} onChange={e => up({ unitCost: +e.target.value })} /></div>
+            <div><label style={lbl}>Waste %</label><NumInput type="number" step="1" min={0} max={100} style={inp} value={f.wastePct ?? 0} onChange={e => up({ wastePct: +e.target.value })} /></div>
             <div><label style={lbl}>Total (inc. waste)</label><div style={{ ...inp, color: accentColor, fontWeight: 700, fontFamily: 'monospace' }}>£{f2(total)}</div></div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
@@ -505,8 +506,8 @@ export default function ConstructionLayerModal({
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 10 }}>
-            <div><label style={lbl}>Qty</label><input type="number" step="0.5" min={0} style={inp} value={f.qty ?? 1} onChange={e => up({ qty: +e.target.value })} /></div>
-            <div><label style={lbl}>Hire rate (£/unit)</label><input type="number" step="0.5" min={0} style={inp} value={f.hireRate ?? 0} onChange={e => up({ hireRate: +e.target.value })} /></div>
+            <div><label style={lbl}>Qty</label><NumInput type="number" step="0.5" min={0} style={inp} value={f.qty ?? 1} onChange={e => up({ qty: +e.target.value })} /></div>
+            <div><label style={lbl}>Hire rate (£/unit)</label><NumInput type="number" step="0.5" min={0} style={inp} value={f.hireRate ?? 0} onChange={e => up({ hireRate: +e.target.value })} /></div>
             <div><label style={lbl}>Total</label><div style={{ ...inp, color: accentColor, fontWeight: 700, fontFamily: 'monospace' }}>£{f2(total)}</div></div>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -543,10 +544,10 @@ export default function ConstructionLayerModal({
           <div style={{ marginBottom: 8 }}><label style={lbl}>Description / scope</label><input style={inp} value={f.description ?? ''} onChange={e => up({ description: e.target.value })} /></div>
           <div style={{ display: 'grid', gridTemplateColumns: isFixed ? '1fr 1fr' : '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 10 }}>
             {!isFixed && <>
-              <div><label style={lbl}>Qty</label><input type="number" step="any" min={0} style={inp} value={f.qty ?? 1} onChange={e => up({ qty: +e.target.value })} /></div>
+              <div><label style={lbl}>Qty</label><NumInput type="number" step="any" min={0} style={inp} value={f.qty ?? 1} onChange={e => up({ qty: +e.target.value })} /></div>
               <div><label style={lbl}>Unit</label><input style={inp} value={f.unit ?? 'item'} onChange={e => up({ unit: e.target.value })} /></div>
             </>}
-            <div><label style={lbl}>{isFixed ? 'Fixed price (£)' : 'Rate (£/unit)'}</label><input type="number" step="1" min={0} style={inp} value={f.rate ?? 0} onChange={e => up({ rate: +e.target.value })} /></div>
+            <div><label style={lbl}>{isFixed ? 'Fixed price (£)' : 'Rate (£/unit)'}</label><NumInput type="number" step="1" min={0} style={inp} value={f.rate ?? 0} onChange={e => up({ rate: +e.target.value })} /></div>
             <div><label style={lbl}>Total</label><div style={{ ...inp, color: accentColor, fontWeight: 700, fontFamily: 'monospace' }}>£{f2(total)}</div></div>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -573,9 +574,9 @@ export default function ConstructionLayerModal({
           </div>
           <div style={{ marginBottom: 8 }}><label style={lbl}>Description</label><input style={inp} value={f.description ?? ''} onChange={e => up({ description: e.target.value })} placeholder="e.g. Provisional sum, allowance, fee" /></div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 1fr 1fr', gap: 8, marginBottom: 10 }}>
-            <div><label style={lbl}>Qty</label><input type="number" step="any" min={0} style={inp} value={f.qty ?? 1} onChange={e => up({ qty: +e.target.value })} /></div>
+            <div><label style={lbl}>Qty</label><NumInput type="number" step="any" min={0} style={inp} value={f.qty ?? 1} onChange={e => up({ qty: +e.target.value })} /></div>
             <div><label style={lbl}>Unit</label><input style={inp} value={f.unit ?? 'item'} onChange={e => up({ unit: e.target.value })} /></div>
-            <div><label style={lbl}>Unit cost (£)</label><input type="number" step="0.01" min={0} style={inp} value={f.unitCost ?? 0} onChange={e => up({ unitCost: +e.target.value })} /></div>
+            <div><label style={lbl}>Unit cost (£)</label><NumInput type="number" step="0.01" min={0} style={inp} value={f.unitCost ?? 0} onChange={e => up({ unitCost: +e.target.value })} /></div>
             <div><label style={lbl}>Total</label><div style={{ ...inp, color: accentColor, fontWeight: 700, fontFamily: 'monospace' }}>£{f2(total)}</div></div>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -733,7 +734,7 @@ export default function ConstructionLayerModal({
           {layer.thickness > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontSize: 11, color: muted }}>Thickness:</span>
-              <input type="number" step={5} min={0} style={{ ...inp, width: 70, padding: '3px 6px' }}
+              <NumInput type="number" step={5} min={0} style={{ ...inp, width: 70, padding: '3px 6px' }}
                 value={thickness} onChange={e => setThickness(+e.target.value)} />
               <span style={{ fontSize: 11, color: muted }}>mm</span>
             </div>

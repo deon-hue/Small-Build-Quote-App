@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import NumInput from '@/components/NumInput'
 import { createClient } from '@/lib/supabase/client'
 import { fetchProducts, upsertProduct, deleteProduct } from '@/lib/back-office-queries'
 import type { BOProduct } from '@/lib/back-office-types'
@@ -597,7 +598,7 @@ export default function SectionProducts({ userId }: Props) {
                 </div>
                 <div>
                   <label style={lbl}>Default Cost (£)</label>
-                  <input type="number" min={0} step={0.01} value={editing.default_cost} onChange={e => setEditing({ ...editing, default_cost: +e.target.value })} style={inp} />
+                  <NumInput type="number" min={0} step={0.01} value={editing.default_cost} onChange={e => setEditing({ ...editing, default_cost: +e.target.value })} style={inp} />
                 </div>
                 <div>
                   <label style={lbl}>Supplier</label>
@@ -607,11 +608,11 @@ export default function SectionProducts({ userId }: Props) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={lbl}>Waste % (order allowance)</label>
-                  <input type="number" min={0} max={50} step={1} value={editing.waste_pct} onChange={e => setEditing({ ...editing, waste_pct: +e.target.value })} style={inp} />
+                  <NumInput type="number" min={0} max={50} step={1} value={editing.waste_pct} onChange={e => setEditing({ ...editing, waste_pct: +e.target.value })} style={inp} />
                 </div>
                 <div>
                   <label style={lbl}>Markup %</label>
-                  <input type="number" min={0} max={200} step={1} value={editing.markup_pct} onChange={e => setEditing({ ...editing, markup_pct: +e.target.value })} style={inp} />
+                  <NumInput type="number" min={0} max={200} step={1} value={editing.markup_pct} onChange={e => setEditing({ ...editing, markup_pct: +e.target.value })} style={inp} />
                 </div>
               </div>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
@@ -714,13 +715,13 @@ export default function SectionProducts({ userId }: Props) {
                             <input value={p.unit} onChange={e => setAIProducts(prev => prev.map((x, j) => j === i ? { ...x, unit: e.target.value } : x))} style={{ border: 'none', fontSize: 12, width: 50, outline: 'none', background: 'transparent' }} />
                           </td>
                           <td style={{ padding: '6px 10px' }}>
-                            <input type="number" step="0.01" value={p.default_cost} onChange={e => setAIProducts(prev => prev.map((x, j) => j === i ? { ...x, default_cost: +e.target.value } : x))} style={{ border: 'none', fontSize: 12, width: 60, outline: 'none', background: 'transparent', textAlign: 'right' }} />
+                            <NumInput type="number" step="0.01" value={p.default_cost} onChange={e => setAIProducts(prev => prev.map((x, j) => j === i ? { ...x, default_cost: +e.target.value } : x))} style={{ border: 'none', fontSize: 12, width: 60, outline: 'none', background: 'transparent', textAlign: 'right' }} />
                           </td>
                           <td style={{ padding: '6px 10px' }}>
-                            <input type="number" value={p.waste_pct} onChange={e => setAIProducts(prev => prev.map((x, j) => j === i ? { ...x, waste_pct: +e.target.value } : x))} style={{ border: 'none', fontSize: 12, width: 40, outline: 'none', background: 'transparent', textAlign: 'right' }} />
+                            <NumInput type="number" value={p.waste_pct} onChange={e => setAIProducts(prev => prev.map((x, j) => j === i ? { ...x, waste_pct: +e.target.value } : x))} style={{ border: 'none', fontSize: 12, width: 40, outline: 'none', background: 'transparent', textAlign: 'right' }} />
                           </td>
                           <td style={{ padding: '6px 10px' }}>
-                            <input type="number" value={p.markup_pct} onChange={e => setAIProducts(prev => prev.map((x, j) => j === i ? { ...x, markup_pct: +e.target.value } : x))} style={{ border: 'none', fontSize: 12, width: 40, outline: 'none', background: 'transparent', textAlign: 'right' }} />
+                            <NumInput type="number" value={p.markup_pct} onChange={e => setAIProducts(prev => prev.map((x, j) => j === i ? { ...x, markup_pct: +e.target.value } : x))} style={{ border: 'none', fontSize: 12, width: 40, outline: 'none', background: 'transparent', textAlign: 'right' }} />
                           </td>
                         </tr>
                       ))}

@@ -1,6 +1,7 @@
 'use client'
 
 import { showUrlDocument } from '@/lib/open-document'
+import NumInput from '@/components/NumInput'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -457,15 +458,15 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose: onClos
                     </div>
                     <div>
                       <label style={miniLabel}>Net £</label>
-                      <input type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={ln.netAmount} onChange={e => updateLine(i, { netAmount: Math.max(0, +e.target.value) })} title="Net" />
+                      <NumInput type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={ln.netAmount} onChange={e => updateLine(i, { netAmount: Math.max(0, +e.target.value) })} title="Net" />
                     </div>
                     <div>
                       <label style={miniLabel}>VAT £</label>
-                      <input type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={ln.vatAmount} onChange={e => updateLine(i, { vatAmount: Math.max(0, +e.target.value) })} title="VAT" />
+                      <NumInput type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={ln.vatAmount} onChange={e => updateLine(i, { vatAmount: Math.max(0, +e.target.value) })} title="VAT" />
                     </div>
                     <div>
                       <label style={miniLabel}>Gross £</label>
-                      <input type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }} value={ln.grossAmount} onChange={e => updateLine(i, { grossAmount: Math.max(0, +e.target.value) })} title="Gross" />
+                      <NumInput type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }} value={ln.grossAmount} onChange={e => updateLine(i, { grossAmount: Math.max(0, +e.target.value) })} title="Gross" />
                     </div>
                     <label
                       title="Charge to client as an expense"
@@ -562,7 +563,7 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose: onClos
                         <input value={fqDesc} onChange={e => setFqDesc(e.target.value)} placeholder="Description of the work, e.g. Roofing - rear extension" style={{ padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 12 }} />
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <span style={{ color: '#64748b' }}>Quoted amount (£)</span>
-                          <input type="number" min={0} step="0.01" value={fqAmount} onChange={e => setFqAmount(e.target.value)} style={{ width: 120, padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 12, fontFamily: 'monospace' }} />
+                          <NumInput type="number" min={0} step="0.01" value={fqAmount} onChange={e => setFqAmount(e.target.value)} style={{ width: 120, padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 12, fontFamily: 'monospace' }} />
                           <span style={{ color: '#94a3b8', fontSize: 11 }}>from the document: {fmt(lines.reduce((a, l) => a + (Number(l.netAmount) || 0), 0))} ex VAT, {fmt(lines.reduce((a, l) => a + (Number(l.grossAmount) || 0), 0))} inc VAT</span>
                         </div>
                       </div>

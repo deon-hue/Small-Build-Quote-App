@@ -9,6 +9,7 @@
  */
 
 import React, { useMemo, useRef, useState } from 'react'
+import NumInput from '@/components/NumInput'
 import { useCalcState } from '@/components/calc-state'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
 import { fmt } from '@/lib/utils'
@@ -167,11 +168,11 @@ export default function AssemblyDecorationDemo({ onClose, onSave, labourTrades =
   const box: React.CSSProperties = { width: '100%', fontSize: 12, lineHeight: 1.5, color: '#1e293b', padding: '6px 9px', border: '1px solid #e2e8f0', borderRadius: 5, boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }
   const lbl: React.CSSProperties = { fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4 }
   const num = (v: number, set: (n: number) => void, min = 0, step = 0.1) => (
-    <input type="number" min={min} step={step} value={v} onChange={e => set(Math.max(min, +e.target.value || 0))} style={miniInput} />
+    <NumInput type="number" min={min} step={step} value={v} onChange={e => set(Math.max(min, +e.target.value || 0))} style={miniInput} />
   )
   /** a number that is worked out until typed over: empty means "use the sum", shown as the placeholder */
   const autoNum = (v: number | null, auto: number, set: (n: number | null) => void, step = 0.1) => (
-    <input type="number" min={0} step={step} value={v ?? ''} placeholder={`auto ${Math.round(auto * 10) / 10}`} title="Worked out from the room. Type a number to use your own; clear the box to go back to the sum."
+    <NumInput type="number" min={0} step={step} value={v ?? ''} placeholder={`auto ${Math.round(auto * 10) / 10}`} title="Worked out from the room. Type a number to use your own; clear the box to go back to the sum."
       onChange={e => set(e.target.value === '' ? null : Math.max(0, +e.target.value || 0))} style={miniInput} />
   )
   const select = <T extends string>(v: T, set: (v: T) => void, opts: Record<string, string>) => (
@@ -201,7 +202,7 @@ export default function AssemblyDecorationDemo({ onClose, onSave, labourTrades =
         <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Room / location" title="Which room or location this is — becomes the quote's room grouping when saved"
           style={{ fontSize: 12, color: '#0369a1', width: 140, padding: '4px 8px', border: '1px solid #bae6fd', borderRadius: 5, background: '#f5fbff' }} />
         <label style={{ fontSize: 11, color: '#64748b' }}>Qty</label>
-        <input type="number" min={1} value={qty} onChange={e => setQty(Math.max(1, +e.target.value || 1))} style={{ width: 48, fontSize: 12, padding: '3px 5px', border: '1px solid #e2e8f0', borderRadius: 4 }} />
+        <NumInput type="number" min={1} value={qty} onChange={e => setQty(Math.max(1, +e.target.value || 1))} style={{ width: 48, fontSize: 12, padding: '3px 5px', border: '1px solid #e2e8f0', borderRadius: 4 }} />
         {r && <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 700, color: '#7ab533' }}>{fmt(totalCost * qty)}</span>}
         {r && <MaterialsListButtons lines={enabledMaterialLines} title={`${name} — paint and materials`} location={location} description={description} compact />}
         {onSave && r && (
@@ -397,7 +398,7 @@ export default function AssemblyDecorationDemo({ onClose, onSave, labourTrades =
             {situations.map(s => (
               <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                 <span style={{ fontSize: 11.5, color: '#334155', flex: 1 }}>{s.label}</span>
-                <input type="number" step={1} value={s.upliftPct} onChange={e => setSituations(p => p.map(x => x.id === s.id ? { ...x, upliftPct: +e.target.value || 0 } : x))} style={{ ...small, width: 54, textAlign: 'right' }} />
+                <NumInput type="number" step={1} value={s.upliftPct} onChange={e => setSituations(p => p.map(x => x.id === s.id ? { ...x, upliftPct: +e.target.value || 0 } : x))} style={{ ...small, width: 54, textAlign: 'right' }} />
                 <span style={{ fontSize: 11, color: '#94a3b8' }}>%</span>
               </div>
             ))}
@@ -408,7 +409,7 @@ export default function AssemblyDecorationDemo({ onClose, onSave, labourTrades =
               <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
                 <span style={{ fontSize: 11.5, color: '#334155', flex: 1 }}>{label}</span>
                 <span style={{ fontSize: 10.5, color: '#94a3b8' }}>{unit}</span>
-                <input type="number" min={0} step={0.1} value={rates[k] ?? MATERIAL_RATES[k]} onChange={e => setRates(p => ({ ...p, [k]: Math.max(0, +e.target.value || 0) }))} style={{ ...small, width: 62, textAlign: 'right' }} />
+                <NumInput type="number" min={0} step={0.1} value={rates[k] ?? MATERIAL_RATES[k]} onChange={e => setRates(p => ({ ...p, [k]: Math.max(0, +e.target.value || 0) }))} style={{ ...small, width: 62, textAlign: 'right' }} />
               </div>
             ))}
             <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 4 }}>Sample rates — use your own trade prices. You can also change any single line in the cost breakdown below.</div>

@@ -1,6 +1,7 @@
 'use client'
 
 import { showHtmlDocument } from '@/lib/open-document'
+import NumInput from '@/components/NumInput'
 import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { ContactPicker } from '@/components/ContactPicker'
@@ -655,9 +656,9 @@ export default function InvoicesPage() {
                   {lineItems.map(l => (
                     <div key={l.id} style={{ display: 'grid', gridTemplateColumns: '1fr 50px 80px 70px 90px 28px', gap: 8, borderTop: '1px solid var(--border)', padding: '4px 6px', alignItems: 'center' }}>
                       <input value={l.desc} onChange={e => updateLine(l.id, 'desc', e.target.value)} placeholder="Description" style={{ border: 'none', outline: 'none', fontSize: 13, padding: '4px 4px' }} />
-                      <input type="number" value={l.qty} onChange={e => updateLine(l.id, 'qty', Number(e.target.value))} style={{ border: 'none', outline: 'none', fontSize: 13, textAlign: 'center', padding: '4px 2px' }} />
-                      <input type="number" value={l.unitPrice} onChange={e => updateLine(l.id, 'unitPrice', Number(e.target.value))} style={{ border: 'none', outline: 'none', fontSize: 13, textAlign: 'right', padding: '4px 4px' }} />
-                      <input type="number" value={l.percentage ?? 100} onChange={e => updateLine(l.id, 'percentage', Math.min(100, Math.max(0, Number(e.target.value))))} min="0" max="100" style={{ border: 'none', outline: 'none', fontSize: 13, textAlign: 'center', padding: '4px 2px' }} />
+                      <NumInput type="number" value={l.qty} onChange={e => updateLine(l.id, 'qty', Number(e.target.value))} style={{ border: 'none', outline: 'none', fontSize: 13, textAlign: 'center', padding: '4px 2px' }} />
+                      <NumInput type="number" value={l.unitPrice} onChange={e => updateLine(l.id, 'unitPrice', Number(e.target.value))} style={{ border: 'none', outline: 'none', fontSize: 13, textAlign: 'right', padding: '4px 4px' }} />
+                      <NumInput type="number" value={l.percentage ?? 100} onChange={e => updateLine(l.id, 'percentage', Math.min(100, Math.max(0, Number(e.target.value))))} min="0" max="100" style={{ border: 'none', outline: 'none', fontSize: 13, textAlign: 'center', padding: '4px 2px' }} />
                       <span style={{ fontSize: 13, textAlign: 'right', fontFamily: 'DM Mono, monospace', padding: '0 4px' }}>{fmt(l.total)}</span>
                       <button className="rm-btn" onClick={() => setLineItems(p => p.filter(x => x.id !== l.id))}>×</button>
                     </div>
@@ -765,7 +766,7 @@ export default function InvoicesPage() {
                             placeholder="e.g. Site Establishment — Materials"
                             style={{ border: 'none', outline: 'none', fontSize: 13, padding: '4px 4px' }}
                           />
-                          <input
+                          <NumInput
                             type="number"
                             value={m.amount || ''}
                             onChange={e => updateMilestone(m.id, 'amount', Number(e.target.value))}

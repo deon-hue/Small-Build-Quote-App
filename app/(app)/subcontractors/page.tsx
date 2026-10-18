@@ -1,6 +1,7 @@
 'use client'
 
 import { isOnPayroll } from '@/lib/payroll'
+import NumInput from '@/components/NumInput'
 import { showUrlDocument } from '@/lib/open-document'
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
@@ -1857,7 +1858,7 @@ export default function SubcontractorsPage() {
 
               <div>
                 <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Quoted Amount (£) *</label>
-                <input type="number" min="0" step="0.01" value={form.quotedAmount} onChange={e => setForm(f => ({ ...f, quotedAmount: e.target.value }))} placeholder="e.g. 4500"
+                <NumInput type="number" min="0" step="0.01" value={form.quotedAmount} onChange={e => setForm(f => ({ ...f, quotedAmount: e.target.value }))} placeholder="e.g. 4500"
                   style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
               </div>
 
@@ -1956,7 +1957,7 @@ export default function SubcontractorsPage() {
                 <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>
                   Units ({contracts.find(c => c.id === entryContractId)?.rate_type === 'hourly' ? 'hours' : 'days'}) *
                 </label>
-                <input type="number" min="0.5" step="0.5" value={entryForm.units} onChange={e => setEntryForm(f => ({ ...f, units: e.target.value }))} placeholder="e.g. 1"
+                <NumInput type="number" min="0.5" step="0.5" value={entryForm.units} onChange={e => setEntryForm(f => ({ ...f, units: e.target.value }))} placeholder="e.g. 1"
                   style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
               </div>
               <div>
@@ -2075,11 +2076,11 @@ export default function SubcontractorsPage() {
                                 <option value="hourly">Hourly</option>
                                 <option value="custom">Custom</option>
                               </select>
-                              <input type="number" min="0" step="0.01" value={row.rateAmount}
+                              <NumInput type="number" min="0" step="0.01" value={row.rateAmount}
                                 onChange={e => setWeekRows(rows => rows.map((r, idx) => idx === i ? { ...r, rateAmount: e.target.value } : r))}
                                 style={{ width: 58, padding: '5px 6px', border: '1px solid #d1d5db', borderRadius: 5, fontSize: 12 }} />
                               {row.rateType === 'hourly' && (
-                                <input type="number" min="0" step="0.5" value={row.hours} placeholder="hrs"
+                                <NumInput type="number" min="0" step="0.5" value={row.hours} placeholder="hrs"
                                   onChange={e => setWeekRows(rows => rows.map((r, idx) => idx === i ? { ...r, hours: e.target.value } : r))}
                                   style={{ width: 42, padding: '5px 4px', border: '1px solid #d1d5db', borderRadius: 5, fontSize: 12 }} />
                               )}
@@ -2172,7 +2173,7 @@ export default function SubcontractorsPage() {
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: 12, color: '#374151', marginBottom: 4, fontWeight: 500 }}>Amount (£) *</label>
-                <input type="number" min="0" step="0.01" value={stageForm.amount} onChange={e => setStageForm(f => ({ ...f, amount: e.target.value }))} placeholder="e.g. 1500"
+                <NumInput type="number" min="0" step="0.01" value={stageForm.amount} onChange={e => setStageForm(f => ({ ...f, amount: e.target.value }))} placeholder="e.g. 1500"
                   style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }} />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>

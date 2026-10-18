@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import NumInput from '@/components/NumInput'
 import { createClient } from '@/lib/supabase/client'
 import { useApp } from '@/contexts/AppContext'
 import type { Job, JobPayment, PaymentMethod } from '@/lib/types'
@@ -276,7 +277,7 @@ export default function PaymentRequestsModal({ job, onClose }: Props) {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                     <div>
                       <label style={lbl}>Amount (£) *</label>
-                      <input type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" style={inp} autoFocus />
+                      <NumInput type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" style={inp} autoFocus />
                     </div>
                     <div>
                       <label style={lbl}>Due Date</label>
@@ -428,7 +429,7 @@ export default function PaymentRequestsModal({ job, onClose }: Props) {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
                   <div>
                     <label style={lbl}>Amount (£)</label>
-                    <input type="number" min="0.01" step="0.01" value={payAmount} onChange={e => setPayAmount(e.target.value)} placeholder="0.00" style={inp} autoFocus />
+                    <NumInput type="number" min="0.01" step="0.01" value={payAmount} onChange={e => setPayAmount(e.target.value)} placeholder="0.00" style={inp} autoFocus />
                   </div>
                   <div>
                     <label style={lbl}>Date</label>

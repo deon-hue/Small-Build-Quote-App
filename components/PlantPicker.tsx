@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import NumInput from '@/components/NumInput'
 import { createClient } from '@/lib/supabase/client'
 import type { BOPlantItem } from '@/lib/back-office-types'
 import type { QuotePlantItem } from '@/lib/types'
@@ -102,11 +103,11 @@ export default function PlantPicker({ items, onAdd, onClose }: Props) {
               </div>
               <div>
                 <label style={fLbl}>Hire rate (£/unit)</label>
-                <input type="number" min={0} step={1} value={form.default_cost} onChange={e => setForm(f => ({ ...f, default_cost: +e.target.value }))} style={fInp} />
+                <NumInput type="number" min={0} step={1} value={form.default_cost} onChange={e => setForm(f => ({ ...f, default_cost: +e.target.value }))} style={fInp} />
               </div>
               <div>
                 <label style={fLbl}>Markup %</label>
-                <input type="number" min={0} max={200} step={1} value={form.markup_pct} onChange={e => setForm(f => ({ ...f, markup_pct: +e.target.value }))} style={fInp} />
+                <NumInput type="number" min={0} max={200} step={1} value={form.markup_pct} onChange={e => setForm(f => ({ ...f, markup_pct: +e.target.value }))} style={fInp} />
               </div>
             </div>
             {saveErr && <div style={{ fontSize: 11, color: '#dc2626', marginBottom: 8 }}>⚠️ {saveErr}</div>}
@@ -159,7 +160,7 @@ export default function PlantPicker({ items, onAdd, onClose }: Props) {
                       <td style={{ padding: '8px 10px', fontFamily: 'monospace', color: '#374151' }}>£{i.default_cost.toFixed(2)}</td>
                       <td style={{ padding: '8px 10px', fontFamily: 'monospace', fontWeight: 600, color: '#16a34a' }}>£{sell.toFixed(2)}</td>
                       <td style={{ padding: '8px 6px', width: 64 }}>
-                        <input type="number" min={0} step={0.5} value={itemQty}
+                        <NumInput type="number" min={0} step={0.5} value={itemQty}
                           onChange={e => setQty(prev => ({ ...prev, [i.id]: Math.max(0, +e.target.value) }))}
                           style={{ width: '100%', padding: '4px 6px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 12, textAlign: 'right' }} />
                       </td>

@@ -9,6 +9,7 @@
  */
 
 import type { QuoteMiscItem } from '@/lib/types'
+import NumInput from '@/components/NumInput'
 import { fmt, uid, VAT, calcMiscItemSell } from '@/lib/utils'
 
 export function quickItemsTotals(items: QuoteMiscItem[]) {
@@ -67,13 +68,13 @@ export default function QuickQuoteItemsEditor({ items, onChange, vatOn, locked =
                   <td style={{ padding: '5px 6px' }}>
                     <div style={{ position: 'relative' }}>
                       <span style={{ position: 'absolute', left: 3, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--muted)' }}>£</span>
-                      <input type="number" step={10} value={mi.cost} readOnly={locked}
+                      <NumInput type="number" step={10} value={mi.cost} readOnly={locked}
                         onChange={e => updateItem({ ...mi, cost: +e.target.value })}
                         style={{ width: '100%', border: 'none', outline: 'none', background: 'transparent', fontFamily: 'DM Mono, monospace', fontSize: 13, textAlign: 'right', paddingLeft: 12 }} />
                     </div>
                   </td>
                   <td style={{ padding: '5px 6px' }}>
-                    <input type="number" step={1} value={mi.markupPct} readOnly={locked}
+                    <NumInput type="number" step={1} value={mi.markupPct} readOnly={locked}
                       onChange={e => updateItem({ ...mi, markupPct: +e.target.value })}
                       style={{ width: '100%', border: 'none', outline: 'none', background: 'transparent', fontFamily: 'DM Mono, monospace', fontSize: 13, textAlign: 'right' }} />
                   </td>

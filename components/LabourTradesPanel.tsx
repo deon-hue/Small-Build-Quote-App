@@ -7,6 +7,7 @@
 // Per-quote overrides are supported — the Back Office default is never changed.
 
 import { useState } from 'react'
+import NumInput from '@/components/NumInput'
 import { HardHat, X, Plus, ChevronDown, RotateCcw } from 'lucide-react'
 import {
   TRADE_TYPES,
@@ -114,7 +115,7 @@ function TradeRow({
         </div>
 
         {/* Qty */}
-        <input
+        <NumInput
           type="number" value={trade.qty} min={0.5} step={0.5}
           onChange={e => update({ qty: Math.max(0.5, Number(e.target.value)) })}
           style={baseInp}
@@ -141,7 +142,7 @@ function TradeRow({
         {/* Day Rate — master editable field + derived rates below */}
         <div>
           <div style={{ position: 'relative' }}>
-            <input
+            <NumInput
               type="number" value={trade.dayRate} min={0} step={5}
               title="Day rate (£/day) — master rate"
               onChange={e => update({ dayRate: Math.max(0, Number(e.target.value)) })}
@@ -193,7 +194,7 @@ function TradeRow({
         </div>
 
         {/* Markup % */}
-        <input
+        <NumInput
           type="number" value={trade.markup} min={0} step={1}
           title="Markup %"
           onChange={e => update({ markup: Math.max(0, Number(e.target.value)) })}

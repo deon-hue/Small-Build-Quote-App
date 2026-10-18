@@ -13,6 +13,7 @@
  */
 
 import type { BOLabourTrade } from '@/lib/back-office-types'
+import NumInput from '@/components/NumInput'
 import type { TakeoffLabourLine, LabourRateType } from '@/lib/takeoff-types'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -199,7 +200,7 @@ export default function LabourCostBuilder({ labourLines, trades, onChange }: Pro
               {/* Quantity */}
               <div>
                 <label style={lbl}>{RATE_TYPE_QTY_LABEL[line.rateType]}</label>
-                <input type="number" min={0} step={0.5} style={inp}
+                <NumInput type="number" min={0} step={0.5} style={inp}
                   value={line.quantity}
                   onChange={e => updateLine(line.id, { quantity: Math.max(0, +e.target.value || 0) })} />
               </div>
@@ -207,7 +208,7 @@ export default function LabourCostBuilder({ labourLines, trades, onChange }: Pro
               {/* Operatives */}
               <div>
                 <label style={lbl}>Workers</label>
-                <input type="number" min={1} max={99} step={1} style={inp}
+                <NumInput type="number" min={1} max={99} step={1} style={inp}
                   value={line.operatives}
                   onChange={e => updateLine(line.id, { operatives: Math.max(1, +e.target.value || 1) })} />
               </div>

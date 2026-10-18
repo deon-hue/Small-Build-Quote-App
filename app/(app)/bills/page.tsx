@@ -1,6 +1,7 @@
 'use client'
 
 import { showUrlDocument } from '@/lib/open-document'
+import NumInput from '@/components/NumInput'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { fmt, fmtDate, jobDisplayTitle } from '@/lib/utils'
@@ -634,7 +635,7 @@ export default function BillsPage() {
                           </select>
                         </td>
                         <td style={{ padding: '4px 6px' }}>
-                          <input type="number" min="0" step="0.01" value={l.amount || ''}
+                          <NumInput type="number" min="0" step="0.01" value={l.amount || ''}
                             onChange={e => setLine(i, 'amount', e.target.value)}
                             style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 13, textAlign: 'right', boxSizing: 'border-box' }} />
                         </td>

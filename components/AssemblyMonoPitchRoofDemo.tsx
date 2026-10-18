@@ -11,6 +11,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import NumInput from '@/components/NumInput'
 import { useCalcState } from '@/components/calc-state'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
 import { fmt } from '@/lib/utils'
@@ -239,7 +240,7 @@ export default function AssemblyMonoPitchRoofDemo({ onClose, onSave, labourTrade
   const detail = detailOverride ?? (descInput ? describeMonoPitchRoof(descInput) : '')
 
   const numInput = (v: number, set: (n: number) => void, min = 0) => (
-    <input type="number" min={min} value={v} onChange={e => set(Math.max(min, +e.target.value || 0))} style={propInput} />
+    <NumInput type="number" min={min} value={v} onChange={e => set(Math.max(min, +e.target.value || 0))} style={propInput} />
   )
   const box: React.CSSProperties = { width: '100%', fontSize: 12, lineHeight: 1.5, color: '#1e293b', padding: '6px 9px', border: '1px solid #e2e8f0', borderRadius: 5, boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }
   const following = (override: string | null, reset: () => void, what: string) => override === null
@@ -260,7 +261,7 @@ export default function AssemblyMonoPitchRoofDemo({ onClose, onSave, labourTrade
         <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Room / location" title="Which room or location this is — becomes the quote's room grouping when saved"
           style={{ fontSize: 12, color: '#0369a1', width: 140, padding: '4px 8px', border: '1px solid #bae6fd', borderRadius: 5, background: '#f5fbff' }} />
         <label style={{ fontSize: 11, color: '#64748b' }}>Qty</label>
-        <input type="number" min={1} value={qty} onChange={e => setQty(Math.max(1, +e.target.value || 1))} style={{ width: 48, fontSize: 12, padding: '3px 5px', border: '1px solid #e2e8f0', borderRadius: 4 }} />
+        <NumInput type="number" min={1} value={qty} onChange={e => setQty(Math.max(1, +e.target.value || 1))} style={{ width: 48, fontSize: 12, padding: '3px 5px', border: '1px solid #e2e8f0', borderRadius: 4 }} />
         {geometryResult.ok && <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 700, color: '#7ab533' }}>{fmt(totalCost * qty)}</span>}
         {geometryResult.ok && <MaterialsListButtons lines={enabledLines} title={name} location={location} description={description} compact />}
         {onSave && geometryResult.ok && (
@@ -375,13 +376,13 @@ export default function AssemblyMonoPitchRoofDemo({ onClose, onSave, labourTrade
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4 }}>
                   <div><div style={{ fontSize: 9, color: '#94a3b8' }}>Width</div>
-                    <input type="number" min={1} value={o.widthMm} onChange={e => updateOpening(o.id, { widthMm: Math.max(1, +e.target.value || 0) })} style={miniInput} /></div>
+                    <NumInput type="number" min={1} value={o.widthMm} onChange={e => updateOpening(o.id, { widthMm: Math.max(1, +e.target.value || 0) })} style={miniInput} /></div>
                   <div><div style={{ fontSize: 9, color: '#94a3b8' }}>Length</div>
-                    <input type="number" min={1} value={o.depthMm} onChange={e => updateOpening(o.id, { depthMm: Math.max(1, +e.target.value || 0) })} style={miniInput} /></div>
+                    <NumInput type="number" min={1} value={o.depthMm} onChange={e => updateOpening(o.id, { depthMm: Math.max(1, +e.target.value || 0) })} style={miniInput} /></div>
                   <div><div style={{ fontSize: 9, color: '#94a3b8' }}>From left</div>
-                    <input type="number" min={0} value={o.offsetMm} onChange={e => updateOpening(o.id, { offsetMm: Math.max(0, +e.target.value || 0) })} style={miniInput} /></div>
+                    <NumInput type="number" min={0} value={o.offsetMm} onChange={e => updateOpening(o.id, { offsetMm: Math.max(0, +e.target.value || 0) })} style={miniInput} /></div>
                   <div><div style={{ fontSize: 9, color: '#94a3b8' }}>From low wall</div>
-                    <input type="number" min={0} value={o.offsetSpanMm} onChange={e => updateOpening(o.id, { offsetSpanMm: Math.max(0, +e.target.value || 0) })} style={miniInput} /></div>
+                    <NumInput type="number" min={0} value={o.offsetSpanMm} onChange={e => updateOpening(o.id, { offsetSpanMm: Math.max(0, +e.target.value || 0) })} style={miniInput} /></div>
                 </div>
                 <div style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'center' }}>
                   <label style={{ fontSize: 9, color: '#94a3b8' }}>Trimmers</label>
@@ -390,7 +391,7 @@ export default function AssemblyMonoPitchRoofDemo({ onClose, onSave, labourTrade
                     <option value={3}>Tripled</option>
                   </select>
                   <label style={{ fontSize: 9, color: '#94a3b8' }}>Kerb (mm)</label>
-                  <input type="number" min={0} value={o.kerbHeightMm ?? 200} onChange={e => updateOpening(o.id, { kerbHeightMm: Math.max(0, +e.target.value || 0) })} style={miniInput} />
+                  <NumInput type="number" min={0} value={o.kerbHeightMm ?? 200} onChange={e => updateOpening(o.id, { kerbHeightMm: Math.max(0, +e.target.value || 0) })} style={miniInput} />
                 </div>
               </div>
             ))}
@@ -505,11 +506,11 @@ function RafterSpanPanel({ chart, check, grade, spanMm, centresMm, depthMm, pick
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center', fontSize: 10, color: '#64748b' }}>
           <label>Roof build-up load (kN/m²)
-            <input type="number" step={0.05} min={0.2} value={loads.deadKnM2} onChange={e => onLoads({ ...loads, deadKnM2: Math.max(0.2, +e.target.value || 0.2) })}
+            <NumInput type="number" step={0.05} min={0.2} value={loads.deadKnM2} onChange={e => onLoads({ ...loads, deadKnM2: Math.max(0.2, +e.target.value || 0.2) })}
               style={{ ...miniInput, width: 56, marginLeft: 4 }} />
           </label>
           <label>Snow / access (kN/m²)
-            <input type="number" step={0.05} min={0.25} value={loads.imposedKnM2} onChange={e => onLoads({ ...loads, imposedKnM2: Math.max(0.25, +e.target.value || 0.25) })}
+            <NumInput type="number" step={0.05} min={0.25} value={loads.imposedKnM2} onChange={e => onLoads({ ...loads, imposedKnM2: Math.max(0.25, +e.target.value || 0.25) })}
               style={{ ...miniInput, width: 56, marginLeft: 4 }} />
           </label>
         </div>

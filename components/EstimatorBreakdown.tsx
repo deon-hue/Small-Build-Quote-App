@@ -3,6 +3,7 @@
 // Summary / Detail views, colour-coded categories, inline warnings, mobile-friendly
 
 import { useState, useEffect } from 'react'
+import NumInput from '@/components/NumInput'
 import type { QuotePhase, QuoteItem } from '@/lib/types'
 import type { EstimatorItem, EstimatorItemTemplate } from '@/lib/estimator'
 import {
@@ -137,7 +138,7 @@ function RateField({
         <Icon size={10} strokeWidth={2.2} style={{ flexShrink: 0 }} />
         {label}
       </div>
-      <input
+      <NumInput
         type="number" value={val} min={0} step={0.5}
         onChange={e => onChange(Number(e.target.value))}
         style={{
@@ -358,7 +359,7 @@ function ItemRow({
             })}
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Waste %</div>
-              <input
+              <NumInput
                 type="number" value={item.wastePercent} min={0} step={1}
                 onChange={e => onUpdate(calcEstimatorItem({ ...item, wastePercent: Number(e.target.value) }))}
                 style={{ width: '100%', textAlign: 'right', fontSize: 12, padding: '5px 7px', borderRadius: 4, fontFamily: 'DM Mono, monospace' }}

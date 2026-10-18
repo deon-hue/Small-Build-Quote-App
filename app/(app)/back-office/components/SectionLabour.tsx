@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import NumInput from '@/components/NumInput'
 import { createClient } from '@/lib/supabase/client'
 import {
   fetchLabourTrades, upsertLabourTrade, deleteLabourTrade,
@@ -106,7 +107,7 @@ export default function SectionLabour({ userId }: Props) {
             />
 
             {/* Day Rate — PRIMARY */}
-            <input
+            <NumInput
               type="number" value={trade.day_rate} min={0} step={5}
               onChange={e => updateLocal(trade.id, { day_rate: +e.target.value })}
               onBlur={() => saveTrade(trade)}
@@ -115,7 +116,7 @@ export default function SectionLabour({ userId }: Props) {
 
             {/* Half-Day */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <input
+              <NumInput
                 type="number" value={halfValue} min={0} step={5}
                 onChange={e => {
                   const v = +e.target.value
@@ -150,7 +151,7 @@ export default function SectionLabour({ userId }: Props) {
 
             {/* Markup % */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <input
+              <NumInput
                 type="number" value={trade.markup_pct} min={0} max={200} step={1}
                 onChange={e => updateLocal(trade.id, { markup_pct: +e.target.value })}
                 onBlur={() => saveTrade(trade)}

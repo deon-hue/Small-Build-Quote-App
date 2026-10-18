@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import NumInput from '@/components/NumInput'
 import { useApp } from '@/contexts/AppContext'
 import type { Job, JobPayment, PaymentMethod } from '@/lib/types'
 import { jobDisplayTitle } from '@/lib/utils'
@@ -94,7 +95,7 @@ export default function CashPaymentModal({ job, onClose }: Props) {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
               <div>
                 <label style={lbl}>Amount (£)</label>
-                <input style={inp} type="number" min="0.01" step="0.01" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} />
+                <NumInput style={inp} type="number" min="0.01" step="0.01" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} />
               </div>
               <div>
                 <label style={lbl}>Date</label>

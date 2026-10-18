@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import NumInput from '@/components/NumInput'
 import { useOwnerData, ErrorNote, PageTitle, TH, TD, Badge } from '@/components/OwnerUi'
 import { ownerRpc, fmtDate } from '@/lib/owner-api'
 
@@ -58,7 +59,7 @@ export default function OwnerInvitesPage() {
           </div>
           <div className="fg" style={{ margin: 0, width: 150 }}>
             <label>Valid for (days)</label>
-            <input type="number" min={0} max={365} value={days} onChange={e => setDays(e.target.value)} />
+            <NumInput type="number" min={0} max={365} value={days} onChange={e => setDays(e.target.value)} />
           </div>
           <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? 'Making…' : 'Make code'}</button>
         </form>

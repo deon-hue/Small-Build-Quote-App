@@ -11,6 +11,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react'
+import NumInput from '@/components/NumInput'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
 import {
   calculateElectrics, POINT_TYPES, POINT_BY_ID, GROUP_LABEL, ROOM_TYPES, ROOM_TYPE_BY_ID, DEFAULT_SITUATIONS, FITTING_TYPES, FITTING_BY_ID,
@@ -184,7 +185,7 @@ export default function AssemblyElectricsDemo({ onClose, onSave, labourTrades = 
   const detail = detailOverride ?? (descInput ? describeElectrics(descInput) : '')
 
   const numInput = (v: number, set: (n: number) => void, min = 0, step = 1) => (
-    <input type="number" min={min} step={step} value={v} onChange={e => set(Math.max(min, +e.target.value || 0))} style={propInput} />
+    <NumInput type="number" min={min} step={step} value={v} onChange={e => set(Math.max(min, +e.target.value || 0))} style={propInput} />
   )
   const small: React.CSSProperties = { fontSize: 12, padding: '3px 5px', border: '1px solid #e2e8f0', borderRadius: 4, boxSizing: 'border-box' }
   const box: React.CSSProperties = { width: '100%', fontSize: 12, lineHeight: 1.5, color: '#1e293b', padding: '6px 9px', border: '1px solid #e2e8f0', borderRadius: 5, boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }
@@ -207,7 +208,7 @@ export default function AssemblyElectricsDemo({ onClose, onSave, labourTrades = 
         <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Room / location" title="Which room or location this is — becomes the quote's room grouping when saved"
           style={{ fontSize: 12, color: '#0369a1', width: 140, padding: '4px 8px', border: '1px solid #bae6fd', borderRadius: 5, background: '#f5fbff' }} />
         <label style={{ fontSize: 11, color: '#64748b' }}>Qty</label>
-        <input type="number" min={1} value={qty} onChange={e => setQty(Math.max(1, +e.target.value || 1))} style={{ width: 48, fontSize: 12, padding: '3px 5px', border: '1px solid #e2e8f0', borderRadius: 4 }} />
+        <NumInput type="number" min={1} value={qty} onChange={e => setQty(Math.max(1, +e.target.value || 1))} style={{ width: 48, fontSize: 12, padding: '3px 5px', border: '1px solid #e2e8f0', borderRadius: 4 }} />
         {r && <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 700, color: '#7ab533' }}>{fmt(totalCost * qty)}</span>}
         {r && <MaterialsListButtons lines={scheduleLines} title={`${name} — schedule of points`} location={location} description={description} compact />}
         {onSave && r && (
@@ -305,7 +306,7 @@ export default function AssemblyElectricsDemo({ onClose, onSave, labourTrades = 
                               ? <button type="button" onClick={() => followPlan(rm.id, p.id)} title={`You typed over the plan's ${pc}. Press to follow the plan again`} style={{ background: 'none', border: 'none', color: '#0369a1', cursor: 'pointer', fontSize: 10, padding: 0 }}>↻ plan {pc}</button>
                               : <span title="This count follows the points placed on the plan" style={{ fontSize: 9.5, color: '#16a34a', fontWeight: 700 }}>PLAN</span>)
                           })()}
-                          <input type="number" min={0} step={p.unit === 'm²' ? 0.5 : 1} value={rm.points[p.id]} onChange={e => setCount(rm.id, p.id, +e.target.value || 0)} style={{ ...small, width: 54, textAlign: 'right' }} />
+                          <NumInput type="number" min={0} step={p.unit === 'm²' ? 0.5 : 1} value={rm.points[p.id]} onChange={e => setCount(rm.id, p.id, +e.target.value || 0)} style={{ ...small, width: 54, textAlign: 'right' }} />
                           <button type="button" onClick={() => removePoint(rm.id, p.id)} title="Take this point type out of the room" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>×</button>
                         </div>
                       ))}
@@ -331,7 +332,7 @@ export default function AssemblyElectricsDemo({ onClose, onSave, labourTrades = 
                         {FITTING_TYPES.map(t => <option key={t.id} value={t.id}>{t.name} — £{(fittingRates[t.id] ?? t.installRate)} install</option>)}
                       </select>
                       <input value={f.name} onChange={e => updateFitting(rm.id, f.id, { name: e.target.value })} placeholder="What it is (optional), e.g. breakfast bar pendants" style={{ ...small, flex: 1, minWidth: 140 }} />
-                      <input type="number" min={0} value={f.count} onChange={e => updateFitting(rm.id, f.id, { count: Math.max(0, +e.target.value || 0) })} style={{ ...small, width: 46, textAlign: 'right' }} title="How many" />
+                      <NumInput type="number" min={0} value={f.count} onChange={e => updateFitting(rm.id, f.id, { count: Math.max(0, +e.target.value || 0) })} style={{ ...small, width: 46, textAlign: 'right' }} title="How many" />
                       <select value={f.supply} onChange={e => updateFitting(rm.id, f.id, { supply: e.target.value as 'client' | 'us' })} style={small} title="Who buys the fitting">
                         <option value="client">Client supplies</option>
                         <option value="us">We supply</option>
@@ -339,7 +340,7 @@ export default function AssemblyElectricsDemo({ onClose, onSave, labourTrades = 
                       {f.supply === 'us' && (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
                           <span style={{ fontSize: 11, color: '#94a3b8' }}>£</span>
-                          <input type="number" min={0} step={5} value={f.fittingCost} onChange={e => updateFitting(rm.id, f.id, { fittingCost: Math.max(0, +e.target.value || 0) })} style={{ ...small, width: 64, textAlign: 'right' }} title="Price of the fitting itself, each (a provisional sum)" />
+                          <NumInput type="number" min={0} step={5} value={f.fittingCost} onChange={e => updateFitting(rm.id, f.id, { fittingCost: Math.max(0, +e.target.value || 0) })} style={{ ...small, width: 64, textAlign: 'right' }} title="Price of the fitting itself, each (a provisional sum)" />
                         </span>
                       )}
                       {f.planPointId
@@ -376,9 +377,9 @@ export default function AssemblyElectricsDemo({ onClose, onSave, labourTrades = 
             {WHOLE_HOUSE_ITEMS.map(w => (
               <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                 <span style={{ fontSize: 11.5, color: '#334155', flex: 1 }}>{w.name}</span>
-                <input type="number" min={0} value={wholeHouse[w.id] ?? 0} onChange={e => setWholeHouse(p => ({ ...p, [w.id]: Math.max(0, +e.target.value || 0) }))} style={{ ...small, width: 46, textAlign: 'right' }} />
+                <NumInput type="number" min={0} value={wholeHouse[w.id] ?? 0} onChange={e => setWholeHouse(p => ({ ...p, [w.id]: Math.max(0, +e.target.value || 0) }))} style={{ ...small, width: 46, textAlign: 'right' }} />
                 <span style={{ fontSize: 10.5, color: '#94a3b8' }}>£</span>
-                <input type="number" min={0} value={wholeHouseRates[w.id] ?? w.rate} onChange={e => setWholeHouseRates(p => ({ ...p, [w.id]: Math.max(0, +e.target.value || 0) }))} style={{ ...small, width: 58, textAlign: 'right' }} title="Price each" />
+                <NumInput type="number" min={0} value={wholeHouseRates[w.id] ?? w.rate} onChange={e => setWholeHouseRates(p => ({ ...p, [w.id]: Math.max(0, +e.target.value || 0) }))} style={{ ...small, width: 58, textAlign: 'right' }} title="Price each" />
               </div>
             ))}
           </CollapsibleSection>
@@ -387,7 +388,7 @@ export default function AssemblyElectricsDemo({ onClose, onSave, labourTrades = 
             {situations.map(s => (
               <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                 <span style={{ fontSize: 11.5, color: '#334155', flex: 1 }}>{s.label}</span>
-                <input type="number" step={1} value={s.upliftPct} onChange={e => setSituations(p => p.map(x => x.id === s.id ? { ...x, upliftPct: +e.target.value || 0 } : x))} style={{ ...small, width: 54, textAlign: 'right' }} />
+                <NumInput type="number" step={1} value={s.upliftPct} onChange={e => setSituations(p => p.map(x => x.id === s.id ? { ...x, upliftPct: +e.target.value || 0 } : x))} style={{ ...small, width: 54, textAlign: 'right' }} />
                 <span style={{ fontSize: 11, color: '#94a3b8' }}>%</span>
               </div>
             ))}
@@ -401,7 +402,7 @@ export default function AssemblyElectricsDemo({ onClose, onSave, labourTrades = 
                   <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
                     <span style={{ fontSize: 11.5, color: '#334155', flex: 1 }}>{p.name}{p.unit === 'm²' ? ' (per m²)' : ''}</span>
                     <span style={{ fontSize: 10.5, color: '#94a3b8' }}>£</span>
-                    <input type="number" min={0} value={pointRates[p.id] ?? p.rate} onChange={e => setPointRates(prev => ({ ...prev, [p.id]: Math.max(0, +e.target.value || 0) }))} style={{ ...small, width: 62, textAlign: 'right' }} />
+                    <NumInput type="number" min={0} value={pointRates[p.id] ?? p.rate} onChange={e => setPointRates(prev => ({ ...prev, [p.id]: Math.max(0, +e.target.value || 0) }))} style={{ ...small, width: 62, textAlign: 'right' }} />
                   </div>
                 ))}
               </div>
@@ -411,7 +412,7 @@ export default function AssemblyElectricsDemo({ onClose, onSave, labourTrades = 
               <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
                 <span style={{ fontSize: 11.5, color: '#334155', flex: 1 }}>{t.name}</span>
                 <span style={{ fontSize: 10.5, color: '#94a3b8' }}>£</span>
-                <input type="number" min={0} value={fittingRates[t.id] ?? t.installRate} onChange={e => setFittingRates(prev => ({ ...prev, [t.id]: Math.max(0, +e.target.value || 0) }))} style={{ ...small, width: 62, textAlign: 'right' }} />
+                <NumInput type="number" min={0} value={fittingRates[t.id] ?? t.installRate} onChange={e => setFittingRates(prev => ({ ...prev, [t.id]: Math.max(0, +e.target.value || 0) }))} style={{ ...small, width: 62, textAlign: 'right' }} />
               </div>
             ))}
             <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 4 }}>Sample rates — use your electrician's own prices. You can also change any single line in the cost breakdown below.</div>

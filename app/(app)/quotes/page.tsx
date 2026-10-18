@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import NumInput from '@/components/NumInput'
 import { useApp } from '@/contexts/AppContext'
 import { fmt, quoteTotal, STAGE_LABEL, Q_BADGE, Q_LABEL, jobDisplayTitle, quoteDisplayTitle, jobNumber, quoteExpiryDays, quoteExpiryDate, isQuoteExpired } from '@/lib/utils'
 import { buildHtmlClientView } from '@/lib/quoteHtml'
@@ -415,7 +416,7 @@ export default function SavedQuotesPage() {
                         {editingExpiryId === q.id ? (
                           <span onClick={e => e.stopPropagation()} style={{ marginLeft: 4 }}>
                             (
-                            <input
+                            <NumInput
                               type="number"
                               min={1}
                               autoFocus

@@ -15,6 +15,7 @@
  */
 
 import React, { useMemo, useState, useEffect } from 'react'
+import NumInput from '@/components/NumInput'
 import { useCalcState } from '@/components/calc-state'
 import {
   calculateSleeperWallGeometry, calculateSleeperWallCost,
@@ -225,7 +226,7 @@ export default function AssemblySleeperWallDemo({ onClose, onSave, labourTrades 
 
   const g = geometryResult.ok ? geometryResult.geometry : null
   const numInput = (v: number, set: (n: number) => void, min = 0) => (
-    <input type="number" min={min} value={v} onChange={e => set(Math.max(min, +e.target.value || 0))} style={propInput} />
+    <NumInput type="number" min={min} value={v} onChange={e => set(Math.max(min, +e.target.value || 0))} style={propInput} />
   )
 
   return (
@@ -256,7 +257,7 @@ export default function AssemblySleeperWallDemo({ onClose, onSave, labourTrades 
           title="Which room or location this is — becomes the quote's room grouping when saved"
           style={{ fontSize: 12, color: '#0e7490', width: 140, padding: '4px 8px', border: '1px solid #a5e3f0', borderRadius: 5, background: '#f4fbfd' }} />
         <label style={{ fontSize: 11, color: '#64748b' }}>Qty</label>
-        <input type="number" min={1} value={qty} onChange={e => setQty(Math.max(1, +e.target.value || 1))}
+        <NumInput type="number" min={1} value={qty} onChange={e => setQty(Math.max(1, +e.target.value || 1))}
           style={{ width: 48, fontSize: 12, padding: '3px 5px', border: '1px solid #e2e8f0', borderRadius: 4 }} />
         {result.ok && (
           <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 700, color: '#7ab533' }}>

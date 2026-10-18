@@ -25,6 +25,7 @@
  */
 
 import React, { useMemo, useState, useEffect, useRef } from 'react'
+import NumInput from '@/components/NumInput'
 import { useCalcState } from '@/components/calc-state'
 import {
   calculateFlatRoofGeometry, calculateFlatRoofCost, studPositionsMm, flatRoofJoistLayout, openingTrimZoneMm, JOIST_THICKNESS_MM,
@@ -686,10 +687,10 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
   const totalCost = costSubtotal + profitAmount
 
   const numInput = (v: number, set: (n: number) => void, min = 0) => (
-    <input type="number" min={min} value={v} onChange={e => set(Math.max(min, +e.target.value || 0))} style={propInput} />
+    <NumInput type="number" min={min} value={v} onChange={e => set(Math.max(min, +e.target.value || 0))} style={propInput} />
   )
   const miniNum = (v: number, set: (n: number) => void, min = 0) => (
-    <input type="number" min={min} value={v} onChange={e => set(Math.max(min, +e.target.value || 0))} style={miniInput} />
+    <NumInput type="number" min={min} value={v} onChange={e => set(Math.max(min, +e.target.value || 0))} style={miniInput} />
   )
   const edgeSelect = (which: keyof FlatRoofEdges, label: string) => (
     <div style={{ flex: 1 }}>
@@ -729,7 +730,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
           title="Which room or location this is — becomes the quote's room grouping when saved"
           style={{ fontSize: 12, color: '#0369a1', width: 140, padding: '4px 8px', border: '1px solid #bae6fd', borderRadius: 5, background: '#f5fbff' }} />
         <label style={{ fontSize: 11, color: '#64748b' }}>Qty</label>
-        <input type="number" min={1} value={qty} onChange={e => setQty(Math.max(1, +e.target.value || 1))}
+        <NumInput type="number" min={1} value={qty} onChange={e => setQty(Math.max(1, +e.target.value || 1))}
           style={{ width: 48, fontSize: 12, padding: '3px 5px', border: '1px solid #e2e8f0', borderRadius: 4 }} />
         {result.ok && (
           <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 700, color: '#7ab533' }}>
@@ -942,7 +943,7 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
                     <select value={o.edge} onChange={e => updateOutlet(o.id, { edge: e.target.value as EdgeKey })} style={{ ...miniInput, flex: 1.1 }}>
                       {EDGE_ORDER.filter(e => edges[e] === 'parapet' || e === o.edge).map(e => <option key={e} value={e}>{EDGE_NAME[e]}</option>)}
                     </select>
-                    <input type="number" min={0} value={o.positionMm} title={o.edge === 'left' || o.edge === 'right' ? 'mm from the high edge' : 'mm from the left'}
+                    <NumInput type="number" min={0} value={o.positionMm} title={o.edge === 'left' || o.edge === 'right' ? 'mm from the high edge' : 'mm from the left'}
                       onChange={e => updateOutlet(o.id, { positionMm: Math.max(0, +e.target.value || 0) })} style={{ ...miniInput, flex: 0.9 }} />
                     <button onClick={() => removeOutlet(o.id)} aria-label={`Delete outlet ${i + 1}`}
                       style={{ background: 'none', border: 'none', color: '#c0392b', cursor: 'pointer', fontSize: 14, padding: '0 4px' }}>×</button>
@@ -1008,11 +1009,11 @@ export default function AssemblyFlatRoofDemo({ onClose, onSave, labourTrades = [
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#475569' }}>
                 Downpipes
-                <input type="number" min={0} value={downpipes} onChange={e => setDownpipes(Math.max(0, +e.target.value || 0))} style={{ ...miniInput, width: 48 }} />
+                <NumInput type="number" min={0} value={downpipes} onChange={e => setDownpipes(Math.max(0, +e.target.value || 0))} style={{ ...miniInput, width: 48 }} />
               </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#475569' }}>
                 Drop (m)
-                <input type="number" min={0.5} step={0.1} value={dropM} onChange={e => setDropM(Math.max(0.5, +e.target.value || 0.5))} style={{ ...miniInput, width: 56 }} />
+                <NumInput type="number" min={0.5} step={0.1} value={dropM} onChange={e => setDropM(Math.max(0.5, +e.target.value || 0.5))} style={{ ...miniInput, width: 56 }} />
               </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#475569', cursor: 'pointer' }}>
                 <input type="checkbox" checked={fascia} onChange={e => setFascia(e.target.checked)} style={{ width: 'auto' }} />
@@ -1227,7 +1228,7 @@ function CoveringTrimsPanel({ covering, roof, trims, areaM2, wastePct, onPick, e
           return (
             <div key={x.id} style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4, fontSize: 11, color: '#334155' }}>
               <span style={{ flex: 1 }}>{trimOptionLabel(covering, x.code)}</span>
-              <input type="number" min={0} step={p.unit === 'nr' ? 1 : 0.5} value={x.qty} onChange={e => onExtraQty(x.id, Math.max(0, +e.target.value || 0))} style={{ ...miniInput, width: 56 }} />
+              <NumInput type="number" min={0} step={p.unit === 'nr' ? 1 : 0.5} value={x.qty} onChange={e => onExtraQty(x.id, Math.max(0, +e.target.value || 0))} style={{ ...miniInput, width: 56 }} />
               <span style={{ width: 18 }}>{p.unit === 'nr' ? 'nr' : 'lm'}</span>
               <button onClick={() => onRemoveExtra(x.id)} aria-label="Remove" style={{ background: 'none', border: 'none', color: '#c0392b', cursor: 'pointer', fontSize: 14, padding: '0 4px' }}>×</button>
             </div>
@@ -1238,7 +1239,7 @@ function CoveringTrimsPanel({ covering, roof, trims, areaM2, wastePct, onPick, e
             <option value="">Choose a trim…</option>
             {catalogue.map(p => <option key={p.code} value={p.code}>{trimOptionLabel(covering, p.code)}</option>)}
           </select>
-          <input type="number" min={0} value={addQty} onChange={e => setAddQty(Math.max(0, +e.target.value || 0))} style={{ ...miniInput, width: 56 }} />
+          <NumInput type="number" min={0} value={addQty} onChange={e => setAddQty(Math.max(0, +e.target.value || 0))} style={{ ...miniInput, width: 56 }} />
           <button disabled={!addCode || !(addQty > 0)} onClick={() => { onAddExtra(addCode, addQty); setAddCode('') }}
             style={{ fontSize: 11, padding: '3px 8px', border: '1px dashed #7dd3fc', borderRadius: 999, background: 'none', color: '#0369a1', cursor: addCode && addQty > 0 ? 'pointer' : 'default', opacity: addCode && addQty > 0 ? 1 : 0.5 }}>+ Add</button>
         </div>
@@ -1392,7 +1393,7 @@ function DrainagePanel({ roof, drain, onPick, extras, onAddExtra, onExtraQty, on
           return (
             <div key={x.id} style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4, fontSize: 11, color: '#334155' }}>
               <span style={{ flex: 1 }}>{p.name}</span>
-              <input type="number" min={0} step={p.unit === 'nr' ? 1 : 0.5} value={x.qty} onChange={e => onExtraQty(x.id, Math.max(0, +e.target.value || 0))} style={{ ...miniInput, width: 56 }} />
+              <NumInput type="number" min={0} step={p.unit === 'nr' ? 1 : 0.5} value={x.qty} onChange={e => onExtraQty(x.id, Math.max(0, +e.target.value || 0))} style={{ ...miniInput, width: 56 }} />
               <span style={{ width: 18 }}>{p.unit === 'nr' ? 'nr' : 'lm'}</span>
               <button onClick={() => onRemoveExtra(x.id)} aria-label="Remove" style={{ background: 'none', border: 'none', color: '#c0392b', cursor: 'pointer', fontSize: 14, padding: '0 4px' }}>×</button>
             </div>
@@ -1403,7 +1404,7 @@ function DrainagePanel({ roof, drain, onPick, extras, onAddExtra, onExtraQty, on
             <option value="">Choose a part…</option>
             {DRAIN_PRODUCTS.map(p => <option key={p.code} value={p.code}>{p.name}</option>)}
           </select>
-          <input type="number" min={0} value={addQty} onChange={e => setAddQty(Math.max(0, +e.target.value || 0))} style={{ ...miniInput, width: 56 }} />
+          <NumInput type="number" min={0} value={addQty} onChange={e => setAddQty(Math.max(0, +e.target.value || 0))} style={{ ...miniInput, width: 56 }} />
           <button disabled={!addCode || !(addQty > 0)} onClick={() => { onAddExtra(addCode, addQty); setAddCode('') }}
             style={{ fontSize: 11, padding: '3px 8px', border: '1px dashed #7dd3fc', borderRadius: 999, background: 'none', color: '#0369a1', cursor: addCode && addQty > 0 ? 'pointer' : 'default', opacity: addCode && addQty > 0 ? 1 : 0.5 }}>+ Add</button>
         </div>
@@ -1483,11 +1484,11 @@ function SpanChartPanel({ chart, check, grade, spanMm, centresMm, depthMm, picke
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center', fontSize: 10, color: '#64748b' }}>
           <label>Roof build-up load (kN/m²)
-            <input type="number" step={0.05} min={0.2} value={loads.deadKnM2} onChange={e => onLoads({ ...loads, deadKnM2: Math.max(0.2, +e.target.value || 0.2) })}
+            <NumInput type="number" step={0.05} min={0.2} value={loads.deadKnM2} onChange={e => onLoads({ ...loads, deadKnM2: Math.max(0.2, +e.target.value || 0.2) })}
               style={{ ...miniInput, width: 56, marginLeft: 4 }} />
           </label>
           <label>Snow / access (kN/m²)
-            <input type="number" step={0.05} min={0.25} value={loads.imposedKnM2} onChange={e => onLoads({ ...loads, imposedKnM2: Math.max(0.25, +e.target.value || 0.25) })}
+            <NumInput type="number" step={0.05} min={0.25} value={loads.imposedKnM2} onChange={e => onLoads({ ...loads, imposedKnM2: Math.max(0.25, +e.target.value || 0.25) })}
               style={{ ...miniInput, width: 56, marginLeft: 4 }} />
           </label>
         </div>

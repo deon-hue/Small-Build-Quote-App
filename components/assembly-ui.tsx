@@ -8,6 +8,7 @@
 // drawing; everything here is what stays identical across all of them.
 
 import React, { useEffect, useRef, useState } from 'react'
+import NumInput from '@/components/NumInput'
 import { createPortal } from 'react-dom'
 import type { AssemblyOpening, CostedLine } from '@/lib/assembly-calc'
 import type { BOLabourTrade } from '@/lib/back-office-types'
@@ -149,7 +150,7 @@ export function LabourSection({ labourLines, labourTrades, onAdd, onUpdate, onRe
                 </select>
                 <input value={l.task} onChange={e => onUpdate(l.id, { task: e.target.value })}
                   placeholder="e.g. Build stud wall" style={miniInput} />
-                <input type="number" min={0} step={0.5} value={l.hours}
+                <NumInput type="number" min={0} step={0.5} value={l.hours}
                   onChange={e => onUpdate(l.id, { hours: +e.target.value || 0 })} style={miniInput} />
                 <div style={{ fontSize: 11, fontFamily: 'monospace', color: '#94a3b8' }}>{trade ? `£${rate.toFixed(2)}/hr` : '—'}</div>
                 <div style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 600 }}>{trade ? `£${cost.toFixed(2)}` : '—'}</div>
@@ -199,13 +200,13 @@ export function MiscMaterialsSection({ miscMaterialLines, onAdd, onUpdate, onRem
           <div key={m.id} style={{ display: 'grid', gridTemplateColumns: '2fr 70px 80px 90px 90px 20px', gap: 6, marginBottom: 4, alignItems: 'center' }}>
             <input value={m.name} onChange={e => onUpdate(m.id, { name: e.target.value })}
               placeholder="e.g. Fixings" style={miniInput} />
-            <input type="number" min={0} step={0.5} value={m.qty}
+            <NumInput type="number" min={0} step={0.5} value={m.qty}
               onChange={e => onUpdate(m.id, { qty: Math.max(0, +e.target.value || 0) })} style={miniInput} />
             <input value={m.unit} onChange={e => onUpdate(m.id, { unit: e.target.value })}
               placeholder="item" style={miniInput} />
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
               <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#94a3b8' }}>£</span>
-              <input type="number" min={0} step={0.01} value={m.unitCost}
+              <NumInput type="number" min={0} step={0.01} value={m.unitCost}
                 onChange={e => onUpdate(m.id, { unitCost: Math.max(0, +e.target.value || 0) })} style={miniInput} />
             </div>
             <div style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 600 }}>£{cost.toFixed(2)}</div>
@@ -257,10 +258,10 @@ export function OpeningsEditor({ openings, onAdd, onUpdate, onRemove, extraRow }
             <option value="door">Door</option>
             <option value="custom">Custom</option>
           </select>
-          <input type="number" title="Width of the opening (mm)" value={o.widthMm} onChange={e => onUpdate(o.id, { widthMm: +e.target.value || 0 })} style={miniInput} />
-          <input type="number" title="Height of the opening itself (mm)" value={o.heightMm} onChange={e => onUpdate(o.id, { heightMm: +e.target.value || 0 })} style={miniInput} />
-          <input type="number" title="Distance from the wall's left end to the opening's left edge (mm)" value={o.offsetMm} onChange={e => onUpdate(o.id, { offsetMm: +e.target.value || 0 })} style={miniInput} />
-          <input type="number" title="Sill height — floor to the bottom of the opening (mm), 0 for a door" value={o.sillHeightMm} onChange={e => onUpdate(o.id, { sillHeightMm: +e.target.value || 0 })} style={miniInput} disabled={o.kind === 'door'} />
+          <NumInput type="number" title="Width of the opening (mm)" value={o.widthMm} onChange={e => onUpdate(o.id, { widthMm: +e.target.value || 0 })} style={miniInput} />
+          <NumInput type="number" title="Height of the opening itself (mm)" value={o.heightMm} onChange={e => onUpdate(o.id, { heightMm: +e.target.value || 0 })} style={miniInput} />
+          <NumInput type="number" title="Distance from the wall's left end to the opening's left edge (mm)" value={o.offsetMm} onChange={e => onUpdate(o.id, { offsetMm: +e.target.value || 0 })} style={miniInput} />
+          <NumInput type="number" title="Sill height — floor to the bottom of the opening (mm), 0 for a door" value={o.sillHeightMm} onChange={e => onUpdate(o.id, { sillHeightMm: +e.target.value || 0 })} style={miniInput} disabled={o.kind === 'door'} />
           <button onClick={() => onRemove(o.id)} title="Remove opening"
             style={{ background: 'none', border: 'none', color: '#e74c3c', cursor: 'pointer', fontSize: 14 }}>×</button>
         </div>
@@ -403,7 +404,7 @@ export function BreakdownTable({ lines, onRateChange, disabledLayerIds, onToggle
                       <td style={{ padding: '3px 4px', textAlign: 'right' }}>
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
                           <span style={{ fontFamily: 'monospace', color: '#94a3b8' }}>£</span>
-                          <input
+                          <NumInput
                             type="number" min={0} step={0.01} value={l.unitCost} disabled={off || (!!link && !rl?.frozen)}
                             onChange={e => onRateChange(l.layerId, +e.target.value)}
                             title={link && !rl?.frozen ? 'This price comes from Back Office — unlink to type your own' : 'Edit this rate'}

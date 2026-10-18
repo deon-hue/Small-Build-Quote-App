@@ -14,6 +14,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react'
+import NumInput from '@/components/NumInput'
 import type { QuotePhase, QuoteItem, QuoteProduct, QuotePlantItem, QuoteMiscItem } from '@/lib/types'
 import type { BOLabourTrade, BOProduct, BOPlantItem, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
 import { fmt, calcPhase, calcPhaseSell, calcMiscItemSell, phaseMarkup } from '@/lib/utils'
@@ -464,7 +465,7 @@ function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst, lab
 
       {/* Col 3: Qty — 52px */}
       <td style={{ padding: '5px 4px', width: 52, verticalAlign: 'top' }}>
-        <input type="number"
+        <NumInput type="number"
           style={{ ...cellInp, width: '100%' }}
           value={item.qty} readOnly={isLocked}
           onChange={e => setField('qty', +e.target.value || 0)} />
@@ -483,7 +484,7 @@ function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst, lab
         <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <div style={{ position: 'relative', flex: 1 }}>
             <span style={{ position: 'absolute', left: 4, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: '#cbd5e1', pointerEvents: 'none' }}>£</span>
-            <input type="number"
+            <NumInput type="number"
               style={{ ...cellInp, paddingLeft: 14, width: '100%' }}
               value={item[catKey] ?? 0} readOnly={isLocked}
               onChange={e => setNum(catKey, e.target.value)} />
@@ -546,10 +547,10 @@ function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst, lab
                       <option key={rt} value={rt}>{LABOUR_RATE_LABELS[rt]} £{trade ? boLabourRate(trade, rt).toFixed(0) : '—'}</option>
                     ))}
                   </select>
-                  <input type="number" min={0} step={0.5} value={tl.qty}
+                  <NumInput type="number" min={0} step={0.5} value={tl.qty}
                     onChange={e => updateTradeLine(tl.id, { qty: Math.max(0, +e.target.value) })}
                     style={{ padding: '4px 6px', border: '1px solid #f59e0b', borderRadius: 5, fontSize: 12, width: '100%' }} />
-                  <input type="number" min={1} step={1} value={tl.workers}
+                  <NumInput type="number" min={1} step={1} value={tl.workers}
                     onChange={e => updateTradeLine(tl.id, { workers: Math.max(1, +e.target.value) })}
                     style={{ padding: '4px 6px', border: '1px solid #f59e0b', borderRadius: 5, fontSize: 12, width: '100%' }} />
                   <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: '#92400e' }}>£{lineTotal.toFixed(2)}</span>
@@ -593,7 +594,7 @@ function CostRow({ item, isLocked, onUpdate, onDelete, onDuplicate, isFirst, lab
                 </div>
                 <div>
                   <div style={{ fontSize: 9, color: '#92400e', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Day Rate (£)</div>
-                  <input type="number" min={0} step={10} value={newTradeRate} onChange={e => setNewTradeRate(+e.target.value)}
+                  <NumInput type="number" min={0} step={10} value={newTradeRate} onChange={e => setNewTradeRate(+e.target.value)}
                     style={{ padding: '4px 7px', border: '1px solid #f59e0b', borderRadius: 5, fontSize: 12, width: 80, outline: 'none' }} />
                 </div>
                 <button onClick={saveNewTrade} disabled={savingTrade || !newTradeName.trim()}
@@ -1069,7 +1070,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
                     {prod.category && <div style={{ fontSize: 10, color: '#94a3b8' }}>{prod.category}</div>}
                   </td>
                   <td style={{ padding: '4px 4px' }}>
-                    <input type="number" min={0} step={0.1} value={prod.qty} readOnly={isLocked}
+                    <NumInput type="number" min={0} step={0.1} value={prod.qty} readOnly={isLocked}
                       onChange={e => updateProduct({ ...prod, qty: Math.max(0, +e.target.value) })}
                       style={{ ...cellInp, width: '100%' }} />
                   </td>
@@ -1081,7 +1082,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
                   <td style={{ padding: '4px 6px' }}>
                     <div style={{ position: 'relative' }}>
                       <span style={{ position: 'absolute', left: 3, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: '#cbd5e1' }}>£</span>
-                      <input type="number" min={0} step={0.01} value={prod.costPrice} readOnly={isLocked}
+                      <NumInput type="number" min={0} step={0.01} value={prod.costPrice} readOnly={isLocked}
                         onChange={e => updateProduct({ ...prod, costPrice: Math.max(0, +e.target.value) })}
                         style={{ ...cellInp, paddingLeft: 12, width: '100%' }} />
                     </div>
@@ -1089,7 +1090,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
                   <td style={{ padding: '4px 6px' }}>
                     <div style={{ position: 'relative' }}>
                       <span style={{ position: 'absolute', left: 3, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: '#cbd5e1' }}>£</span>
-                      <input type="number" min={0} step={0.01} value={prod.sellPrice} readOnly={isLocked}
+                      <NumInput type="number" min={0} step={0.01} value={prod.sellPrice} readOnly={isLocked}
                         onChange={e => updateProduct({ ...prod, sellPrice: Math.max(0, +e.target.value) })}
                         style={{ ...cellInp, paddingLeft: 12, fontWeight: en ? 600 : 400, width: '100%', color: en ? '#16a34a' : '#94a3b8' }} />
                     </div>
@@ -1151,7 +1152,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
                       style={{ ...fldStyle, fontSize: 12, fontWeight: 500 }} />
                   </td>
                   <td style={{ padding: '4px 4px' }}>
-                    <input type="number" min={0} step={0.5} value={pl.qty} readOnly={isLocked}
+                    <NumInput type="number" min={0} step={0.5} value={pl.qty} readOnly={isLocked}
                       onChange={e => updatePlant({ ...pl, qty: Math.max(0, +e.target.value) })}
                       style={{ ...cellInp, width: '100%' }} />
                   </td>
@@ -1163,7 +1164,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
                   <td style={{ padding: '4px 6px' }}>
                     <div style={{ position: 'relative' }}>
                       <span style={{ position: 'absolute', left: 3, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: '#cbd5e1' }}>£</span>
-                      <input type="number" min={0} step={0.01} value={pl.costPrice} readOnly={isLocked}
+                      <NumInput type="number" min={0} step={0.01} value={pl.costPrice} readOnly={isLocked}
                         onChange={e => updatePlant({ ...pl, costPrice: Math.max(0, +e.target.value) })}
                         style={{ ...cellInp, paddingLeft: 12, width: '100%' }} />
                     </div>
@@ -1171,7 +1172,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
                   <td style={{ padding: '4px 6px' }}>
                     <div style={{ position: 'relative' }}>
                       <span style={{ position: 'absolute', left: 3, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: '#cbd5e1' }}>£</span>
-                      <input type="number" min={0} step={0.01} value={pl.sellPrice} readOnly={isLocked}
+                      <NumInput type="number" min={0} step={0.01} value={pl.sellPrice} readOnly={isLocked}
                         onChange={e => updatePlant({ ...pl, sellPrice: Math.max(0, +e.target.value) })}
                         style={{ ...cellInp, paddingLeft: 12, fontWeight: en ? 600 : 400, width: '100%', color: en ? '#7c3aed' : '#94a3b8' }} />
                     </div>
@@ -1230,13 +1231,13 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
                     <td style={{ padding: '4px 6px' }}>
                       <div style={{ position: 'relative' }}>
                         <span style={{ position: 'absolute', left: 3, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: '#cbd5e1' }}>£</span>
-                        <input type="number" min={0} step={0.01} value={mi.cost} readOnly={isLocked}
+                        <NumInput type="number" min={0} step={0.01} value={mi.cost} readOnly={isLocked}
                           onChange={e => updateMiscItem({ ...mi, cost: Math.max(0, +e.target.value) })}
                           style={{ ...cellInp, paddingLeft: 12, width: '100%' }} />
                       </div>
                     </td>
                     <td style={{ padding: '4px 6px' }}>
-                      <input type="number" min={0} step={1} value={mi.markupPct} readOnly={isLocked}
+                      <NumInput type="number" min={0} step={1} value={mi.markupPct} readOnly={isLocked}
                         onChange={e => updateMiscItem({ ...mi, markupPct: Math.max(0, +e.target.value) })}
                         style={{ ...cellInp, width: '100%' }} />
                     </td>
@@ -1307,7 +1308,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
                 </div>
                 <div>
                   <div style={{ fontSize: 10, color: '#92400e', marginBottom: 3 }}>Qty</div>
-                  <input type="number" min={0} step={0.5} value={boLabourQty} onChange={e => setBoLabourQty(Math.max(0, +e.target.value))}
+                  <NumInput type="number" min={0} step={0.5} value={boLabourQty} onChange={e => setBoLabourQty(Math.max(0, +e.target.value))}
                     style={{ width: '100%', padding: '5px 8px', border: '1px solid #fde68a', borderRadius: 5, fontSize: 12, textAlign: 'right' }} />
                 </div>
               </div>
@@ -1490,7 +1491,7 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
               {builtAssembly || isLocked ? <>{phaseMarkup(p, markup)}%</> : (
                 <>
                   {/* An ordinary sub-phase takes the quote's margin unless you give it its own here (a calculator sub-phase sets its margin in the calculator) */}
-                  <input type="number" min={0} max={200} step={1} value={phaseMarkup(p, markup)}
+                  <NumInput type="number" min={0} max={200} step={1} value={phaseMarkup(p, markup)}
                     onClick={e => e.stopPropagation()}
                     onChange={e => onUpdate({ ...p, markupPct: Math.max(0, Math.min(200, +e.target.value || 0)) })}
                     title={p.markupPct === undefined ? `Uses the quote's margin (${markup}%). Type a number to give this sub-phase its own.` : `This sub-phase's own margin. The rest of the quote uses ${markup}%.`}

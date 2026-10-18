@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import NumInput from '@/components/NumInput'
 import { useApp } from '@/contexts/AppContext'
 import type { Settings } from '@/lib/types'
 import XeroConnectionCard from '@/components/XeroConnectionCard'
@@ -118,13 +119,13 @@ export default function SettingsPage() {
           <div className="row2">
             <div className="fg">
               <label>Markup on costs (%)</label>
-              <input type="number" min={0} max={200} step={0.5}
+              <NumInput type="number" min={0} max={200} step={0.5}
                 value={form.defaultMarkup ?? 20}
                 onChange={e => setForm(p => ({ ...p, defaultMarkup: e.target.value === '' ? 0 : Number(e.target.value) }))} />
             </div>
             <div className="fg">
               <label>VAT rate (%)</label>
-              <input type="number" min={0} max={100} step={0.5}
+              <NumInput type="number" min={0} max={100} step={0.5}
                 value={form.vatRate ?? 20} disabled={!form.vatRegistered}
                 onChange={e => setForm(p => ({ ...p, vatRate: e.target.value === '' ? 0 : Number(e.target.value) }))} />
             </div>
@@ -168,7 +169,7 @@ export default function SettingsPage() {
             <div className="fg">
               <label>Default Payment Due</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input
+                <NumInput
                   type="number" min={1} max={365}
                   value={form.invoicePaymentDays ?? 30}
                   onChange={e => setForm(p => ({ ...p, invoicePaymentDays: +e.target.value }))}

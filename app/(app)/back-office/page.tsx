@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import NumInput from '@/components/NumInput'
 import { useApp } from '@/contexts/AppContext'
 import { createClient } from '@/lib/supabase/client'
 import { syncBackOfficeFromProduct, backfillElectricalDescriptions } from '@/lib/back-office-queries'
@@ -119,7 +120,7 @@ function EstimatorEditor({ phase, onLoad, onAdd, onUpdate, onRemove }: Estimator
                     {MEAS_TYPES.map(t => <option key={t} value={t}>{MEASUREMENT_LABELS[t].label} ({MEASUREMENT_LABELS[t].unit})</option>)}
                   </select>
                   {([['materialsRate', item.materialsRate] as const, ['plantRate', item.plantRate] as const, ['subRate', item.subRate] as const, ['otherRate', item.otherRate] as const, ['wastePercent', item.wastePercent] as const]).map(([key, val]) => (
-                    <input key={key} type="number" value={val} min={0} step={0.5} onChange={e => onUpdate({ ...item, [key]: Number(e.target.value) })} style={{ padding: '3px 4px', border: `1px solid ${val > 0 ? '#c7d7e0' : '#e2e8f0'}`, borderRadius: 4, fontSize: 12, textAlign: 'right', background: val > 0 ? '#f0f8fc' : '#fafafa' }} />
+                    <NumInput key={key} type="number" value={val} min={0} step={0.5} onChange={e => onUpdate({ ...item, [key]: Number(e.target.value) })} style={{ padding: '3px 4px', border: `1px solid ${val > 0 ? '#c7d7e0' : '#e2e8f0'}`, borderRadius: 4, fontSize: 12, textAlign: 'right', background: val > 0 ? '#f0f8fc' : '#fafafa' }} />
                   ))}
                   <button onClick={() => onRemove(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1', fontSize: 15, padding: 0, lineHeight: 1, textAlign: 'center' }}>×</button>
                 </div>

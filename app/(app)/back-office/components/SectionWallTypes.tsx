@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import NumInput from '@/components/NumInput'
 import { createClient } from '@/lib/supabase/client'
 import {
   fetchWallTypesWithLayers,
@@ -102,7 +103,7 @@ function LayerRow({ layer, userId, wallTypeId, onSaved, onDeleted }: LayerRowPro
         <input style={inp} value={draft.name} onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} placeholder="Layer name" />
       </td>
       <td style={{ padding: '6px 8px' }}>
-        <input type="number" min={0} step={0.5} style={{ ...inp, width: 80 }} value={draft.thickness_mm}
+        <NumInput type="number" min={0} step={0.5} style={{ ...inp, width: 80 }} value={draft.thickness_mm}
           onChange={e => setDraft(d => ({ ...d, thickness_mm: +e.target.value }))} />
       </td>
       <td style={{ padding: '6px 8px' }}>
@@ -277,13 +278,13 @@ function WallTypeCard({ wallType, userId, onUpdated, onDeleted }: WallTypeCardPr
               </div>
               <div>
                 <label style={lbl}>Labour hrs/m²</label>
-                <input type="number" min={0} step={0.1} style={inp}
+                <NumInput type="number" min={0} step={0.1} style={inp}
                   value={draft.labour_hrs_per_m2}
                   onChange={e => setDraft(d => ({ ...d, labour_hrs_per_m2: +e.target.value }))} />
               </div>
               <div>
                 <label style={lbl}>Waste %</label>
-                <input type="number" min={0} max={50} step={1} style={inp}
+                <NumInput type="number" min={0} max={50} step={1} style={inp}
                   value={draft.waste_percent}
                   onChange={e => setDraft(d => ({ ...d, waste_percent: +e.target.value }))} />
               </div>

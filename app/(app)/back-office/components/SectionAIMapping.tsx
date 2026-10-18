@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import NumInput from '@/components/NumInput'
 import { createClient } from '@/lib/supabase/client'
 import { fetchAIScopeMappings, upsertAIScopeMapping, deleteAIScopeMapping, fetchPhases, fetchSubPhases, fetchTasks } from '@/lib/back-office-queries'
 import type { BOAIScopeMapping, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
@@ -170,7 +171,7 @@ export default function SectionAIMapping({ userId }: Props) {
               </div>
               <div>
                 <label style={lbl}>Weight (1–10)</label>
-                <input type="number" min={1} max={10} value={editing.weight} onChange={e => setEditing({ ...editing, weight: Math.min(10, Math.max(1, +e.target.value)) })} style={{ ...inp, width: 80 }} />
+                <NumInput type="number" min={1} max={10} value={editing.weight} onChange={e => setEditing({ ...editing, weight: Math.min(10, Math.max(1, +e.target.value)) })} style={{ ...inp, width: 80 }} />
                 <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>Higher weight = AI more likely to suggest this mapping when keyword is found.</div>
               </div>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import NumInput from '@/components/NumInput'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useOwnerData, ErrorNote, PageTitle, TH, TD, Badge } from '@/components/OwnerUi'
@@ -88,11 +89,11 @@ export default function OwnerCompanyPage() {
           <form onSubmit={saveLimits} style={{ padding: '14px 18px' }}>
             <div className="fg">
               <label>AI uses per day <span style={{ color: 'var(--muted)', fontWeight: 400 }}>(blank = default 100)</span></label>
-              <input type="number" min={0} max={100000} value={aiLimit} onChange={e => setAiLimit(e.target.value)} placeholder="100" />
+              <NumInput type="number" min={0} max={100000} value={aiLimit} onChange={e => setAiLimit(e.target.value)} placeholder="100" />
             </div>
             <div className="fg">
               <label>Messages per day <span style={{ color: 'var(--muted)', fontWeight: 400 }}>(blank = default 60)</span></label>
-              <input type="number" min={0} max={100000} value={sendLimit} onChange={e => setSendLimit(e.target.value)} placeholder="60" />
+              <NumInput type="number" min={0} max={100000} value={sendLimit} onChange={e => setSendLimit(e.target.value)} placeholder="60" />
             </div>
             <div style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 10 }}>
               Today: {company.ai_today}/{company.ai_limit} AI · {company.send_today}/{company.send_limit} messages

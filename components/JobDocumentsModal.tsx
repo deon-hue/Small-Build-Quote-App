@@ -1,6 +1,7 @@
 'use client'
 
 import { showHtmlDocument } from '@/lib/open-document'
+import NumInput from '@/components/NumInput'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { fetchJobCosts, insertJobCost, deleteJobCost } from '@/lib/job-costs'
@@ -388,11 +389,11 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
                         {CATS.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}
                       </select>
                     </Field>
-                    <Field label="Amount each time (£, ex VAT)"><input type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={manual.expAmount} onChange={e => setManual(m => m && { ...m, expAmount: e.target.value })} /></Field>
+                    <Field label="Amount each time (£, ex VAT)"><NumInput type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={manual.expAmount} onChange={e => setManual(m => m && { ...m, expAmount: e.target.value })} /></Field>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 2fr', gap: 8, marginBottom: 6, alignItems: 'end' }}>
                     <Field label="First invoice expected"><input type="date" style={inp} value={manual.expDate} onChange={e => setManual(m => m && { ...m, expDate: e.target.value })} /></Field>
-                    <Field label="Repeat monthly for"><input type="number" min={1} max={60} step="1" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={manual.expMonths} onChange={e => setManual(m => m && { ...m, expMonths: e.target.value })} /></Field>
+                    <Field label="Repeat monthly for"><NumInput type="number" min={1} max={60} step="1" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={manual.expMonths} onChange={e => setManual(m => m && { ...m, expMonths: e.target.value })} /></Field>
                     <div style={{ fontSize: 12, color: '#92400e', paddingBottom: 8 }}>{(() => { const a = parseFloat(manual.expAmount) || 0; const n = Math.max(1, Math.min(60, parseInt(manual.expMonths || '1', 10) || 1)); return `${n} month${n === 1 ? '' : 's'} × ${fmt(a)} = ${fmt(a * n)} ex VAT still to come` })()}</div>
                   </div>
                   <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>Each month is kept as its own line under Orders. When an invoice arrives, press <strong>Invoice arrived</strong> on that month and it becomes the real cost.</div>
@@ -412,9 +413,9 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
                     <select style={inp} value={ln.costCategory} onChange={e => updateLine(i, { costCategory: e.target.value as JobCostCategory })}>
                       {CATS.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}
                     </select>
-                    <input type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={ln.netAmount} onChange={e => updateLine(i, { netAmount: Math.max(0, +e.target.value) })} title="Net" />
-                    <input type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={ln.vatAmount} onChange={e => updateLine(i, { vatAmount: Math.max(0, +e.target.value) })} title="VAT" />
-                    <input type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={ln.grossAmount} onChange={e => updateLine(i, { grossAmount: Math.max(0, +e.target.value) })} title="Gross" />
+                    <NumInput type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={ln.netAmount} onChange={e => updateLine(i, { netAmount: Math.max(0, +e.target.value) })} title="Net" />
+                    <NumInput type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={ln.vatAmount} onChange={e => updateLine(i, { vatAmount: Math.max(0, +e.target.value) })} title="VAT" />
+                    <NumInput type="number" min={0} step="0.01" style={{ ...inp, textAlign: 'right', fontFamily: 'monospace' }} value={ln.grossAmount} onChange={e => updateLine(i, { grossAmount: Math.max(0, +e.target.value) })} title="Gross" />
                     <button onClick={() => removeLine(i)} style={{ border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 15 }}>×</button>
                   </div>
                 ))}

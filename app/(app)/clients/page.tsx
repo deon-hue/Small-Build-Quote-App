@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
+import NumInput from '@/components/NumInput'
 import { useApp } from '@/contexts/AppContext'
 import { createClient } from '@/lib/supabase/client'
 import { fmt, quoteTotal, STAGE_COLOR, STAGE_LABEL, Q_BADGE, Q_LABEL, jobDisplayTitle, quoteDisplayTitle, jobProgress } from '@/lib/utils'
@@ -1311,16 +1312,16 @@ function ClientsPageInner() {
                 <div className="row2" style={{ marginBottom: 10 }}>
                   <div className="fg">
                     <label>Day Rate (£)</label>
-                    <input type="number" value={formSubRates.subDayRate} onChange={e => setFormSubRates(s => ({ ...s, subDayRate: e.target.value }))} placeholder="e.g. 250.00" min="0" step="5" />
+                    <NumInput type="number" value={formSubRates.subDayRate} onChange={e => setFormSubRates(s => ({ ...s, subDayRate: e.target.value }))} placeholder="e.g. 250.00" min="0" step="5" />
                   </div>
                   <div className="fg">
                     <label>Half Day Rate (£)</label>
-                    <input type="number" value={formSubRates.subHalfDayRate} onChange={e => setFormSubRates(s => ({ ...s, subHalfDayRate: e.target.value }))} placeholder="e.g. 140.00" min="0" step="5" />
+                    <NumInput type="number" value={formSubRates.subHalfDayRate} onChange={e => setFormSubRates(s => ({ ...s, subHalfDayRate: e.target.value }))} placeholder="e.g. 140.00" min="0" step="5" />
                   </div>
                 </div>
                 <div className="fg" style={{ marginBottom: 10 }}>
                   <label>Hourly Rate (£)</label>
-                  <input type="number" value={formSubRates.subHourlyRate} onChange={e => setFormSubRates(s => ({ ...s, subHourlyRate: e.target.value }))} placeholder="e.g. 35.00" min="0" step="0.50" />
+                  <NumInput type="number" value={formSubRates.subHourlyRate} onChange={e => setFormSubRates(s => ({ ...s, subHourlyRate: e.target.value }))} placeholder="e.g. 35.00" min="0" step="0.50" />
                 </div>
                 <div className="fg" style={{ marginBottom: 10 }}>
                   <label>Payment Type</label>
@@ -1364,7 +1365,7 @@ function ClientsPageInner() {
                   {formSubRates.cisRegistered && (
                     <div className="fg" style={{ flex: 1, minWidth: 140, marginBottom: 0 }}>
                       <label>CIS Deduction %</label>
-                      <input type="number" value={formSubRates.cisPercentage} onChange={e => setFormSubRates(s => ({ ...s, cisPercentage: e.target.value }))} placeholder="20" min="0" max="30" step="1" />
+                      <NumInput type="number" value={formSubRates.cisPercentage} onChange={e => setFormSubRates(s => ({ ...s, cisPercentage: e.target.value }))} placeholder="20" min="0" max="30" step="1" />
                     </div>
                   )}
                 </div>

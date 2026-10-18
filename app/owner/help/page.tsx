@@ -4,6 +4,7 @@
 // Everything goes through the owner_help_* database functions, which refuse anyone but the owner signed in with two-step verification.
 
 import { useState } from 'react'
+import NumInput from '@/components/NumInput'
 import { useOwnerData, ErrorNote, PageTitle, TH, TD, Badge } from '@/components/OwnerUi'
 import { ownerRpc } from '@/lib/owner-api'
 import { type HelpItem, parseVideoUrl } from '@/lib/help'
@@ -95,7 +96,7 @@ export default function OwnerHelpPage() {
               </div>
               <div className="fg" style={{ margin: 0, width: 110 }}>
                 <label>Order</label>
-                <input type="number" value={draft.sort} onChange={e => set({ sort: e.target.value })} />
+                <NumInput type="number" value={draft.sort} onChange={e => set({ sort: e.target.value })} />
               </div>
             </div>
             <div className="fg" style={{ margin: 0 }}>

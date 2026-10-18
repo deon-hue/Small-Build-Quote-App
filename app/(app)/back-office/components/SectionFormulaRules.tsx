@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import NumInput from '@/components/NumInput'
 import { createClient } from '@/lib/supabase/client'
 import { fetchFormulaRules, upsertFormulaRule, deleteFormulaRule } from '@/lib/back-office-queries'
 import type { BOFormulaRule, FormulaVariable } from '@/lib/back-office-types'
@@ -170,7 +171,7 @@ export default function SectionFormulaRules({ userId }: Props) {
                   <div key={i} style={{ display: 'grid', gridTemplateColumns: '100px 1fr 90px 28px', gap: 8, marginBottom: 6, alignItems: 'center' }}>
                     <input value={v.name} onChange={e => updateVariable(i, { name: e.target.value })} placeholder="var name" style={{ ...inp, fontFamily: 'monospace', fontSize: 12 }} />
                     <input value={v.label} onChange={e => updateVariable(i, { label: e.target.value })} placeholder="Display label" style={{ ...inp, fontSize: 12 }} />
-                    <input type="number" value={v.defaultValue} onChange={e => updateVariable(i, { defaultValue: +e.target.value })} placeholder="Default" style={{ ...inp, fontSize: 12 }} />
+                    <NumInput type="number" value={v.defaultValue} onChange={e => updateVariable(i, { defaultValue: +e.target.value })} placeholder="Default" style={{ ...inp, fontSize: 12 }} />
                     <button onClick={() => removeVariable(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#fca5a5', padding: 2 }}><Trash2 size={13} /></button>
                   </div>
                 ))}
@@ -183,7 +184,7 @@ export default function SectionFormulaRules({ userId }: Props) {
                   {editing.variables.map(v => (
                     <label key={v.name} style={{ fontSize: 12, color: '#374151' }}>
                       {v.label}:&nbsp;
-                      <input type="number" value={previewVars[v.name] ?? 0} onChange={e => setPreviewVars(prev => ({ ...prev, [v.name]: +e.target.value }))}
+                      <NumInput type="number" value={previewVars[v.name] ?? 0} onChange={e => setPreviewVars(prev => ({ ...prev, [v.name]: +e.target.value }))}
                         style={{ width: 60, padding: '2px 6px', border: '1px solid #86efac', borderRadius: 4, fontSize: 12 }} />
                     </label>
                   ))}

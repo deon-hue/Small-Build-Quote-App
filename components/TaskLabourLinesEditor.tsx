@@ -5,6 +5,7 @@
 // later by calcPhaseSell, consistent with the rest of the estimator.
 
 import { HardHat, RotateCcw, Plus } from 'lucide-react'
+import NumInput from '@/components/NumInput'
 import {
   TRADE_TYPES,
   LABOUR_UNIT_OPTIONS,
@@ -129,7 +130,7 @@ export default function TaskLabourLinesEditor({ lines, onChange }: Props) {
                 <div style={{ fontSize: 9, fontWeight: 700, color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 3 }}>
                   Qty
                 </div>
-                <input
+                <NumInput
                   type="number" value={line.qty} min={0.5} step={0.5}
                   onChange={e => updateLine(line.id, { qty: Number(e.target.value) })}
                   style={{
@@ -179,7 +180,7 @@ export default function TaskLabourLinesEditor({ lines, onChange }: Props) {
                     </button>
                   )}
                 </div>
-                <input
+                <NumInput
                   type="number" value={line.dayRate} min={0} step={5}
                   onChange={e => updateLine(line.id, { dayRate: Number(e.target.value) })}
                   style={{

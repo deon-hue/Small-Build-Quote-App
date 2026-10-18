@@ -1,6 +1,7 @@
 'use client'
 
 import { showUrlDocument } from '@/lib/open-document'
+import NumInput from '@/components/NumInput'
 import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { createClient } from '@/lib/supabase/client'
@@ -585,7 +586,7 @@ export default function ContractBuilderModal({ job, quote, onClose }: Props) {
                       <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
                         <input placeholder="Date (dd/mm/yyyy)" value={stage.date} onChange={e => updateStage(i, { date: e.target.value })}
                           style={{ flex: 1, padding: '6px 8px', fontSize: 12 }} />
-                        <input placeholder="Amount" type="number" value={stage.amount || ''} onChange={e => updateStage(i, { amount: Number(e.target.value) || 0 })}
+                        <NumInput placeholder="Amount" type="number" value={stage.amount || ''} onChange={e => updateStage(i, { amount: Number(e.target.value) || 0 })}
                           style={{ width: 110, padding: '6px 8px', fontSize: 12 }} />
                         <button type="button" className="btn-sm btn-danger" onClick={() => removeStage(i)}>✕</button>
                       </div>

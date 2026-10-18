@@ -4,6 +4,7 @@
 // product can be created there and then, which saves it to Back Office), or typed in by hand. It never carries a price of ours.
 
 import React, { useState } from 'react'
+import NumInput from '@/components/NumInput'
 import { createClient } from '@/lib/supabase/client'
 import { fetchProducts } from '@/lib/back-office-queries'
 import type { BOProduct } from '@/lib/back-office-types'
@@ -44,7 +45,7 @@ export default function PriceRequestItems({ ownerId, items, onChange }: { ownerI
           {items.map(it => (
             <React.Fragment key={it.id}>
               <input style={inp} value={it.name} onChange={e => update(it.id, { name: e.target.value })} placeholder="e.g. Dense concrete block 100mm" />
-              <input style={inp} type="number" min={0} step="any" value={it.qty || ''} onChange={e => update(it.id, { qty: Math.max(0, +e.target.value || 0) })} />
+              <NumInput style={inp} type="number" min={0} step="any" value={it.qty || ''} onChange={e => update(it.id, { qty: Math.max(0, +e.target.value || 0) })} />
               <input style={inp} value={it.unit} onChange={e => update(it.id, { unit: e.target.value })} placeholder="no, m, m²…" />
               <button onClick={() => onChange(items.filter(i => i.id !== it.id))} aria-label="Remove this item" style={{ ...btn, padding: '4px 0', color: '#dc2626', borderColor: '#fecaca' }}>×</button>
             </React.Fragment>

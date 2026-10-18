@@ -20,6 +20,7 @@
  */
 
 import React, { useMemo, useState, useEffect } from 'react'
+import NumInput from '@/components/NumInput'
 import { useCalcState } from '@/components/calc-state'
 import {
   calculateCavityGeometry, calculateCavityWallCost,
@@ -434,7 +435,7 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
           title="Which room or location this is — becomes the quote's room grouping when saved"
           style={{ fontSize: 12, color: '#b45309', width: 140, padding: '4px 8px', border: '1px solid #fde68a', borderRadius: 5, background: '#fffbeb' }} />
         <label style={{ fontSize: 11, color: '#64748b' }}>Qty</label>
-        <input type="number" min={1} value={qty} onChange={e => setQty(Math.max(1, +e.target.value || 1))}
+        <NumInput type="number" min={1} value={qty} onChange={e => setQty(Math.max(1, +e.target.value || 1))}
           style={{ width: 48, fontSize: 12, padding: '3px 5px', border: '1px solid #e2e8f0', borderRadius: 4 }} />
         {result.ok && (
           <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 700, color: '#7ab533' }}>
@@ -506,10 +507,10 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <PropRow label="Length (mm)">
-              <input type="number" value={lengthMm} onChange={e => setLengthMm(Math.max(1, +e.target.value || 0))} style={propInput} />
+              <NumInput type="number" value={lengthMm} onChange={e => setLengthMm(Math.max(1, +e.target.value || 0))} style={propInput} />
             </PropRow>
             <PropRow label="Height — DPC to wall plate (mm)">
-              <input type="number" value={heightMm} onChange={e => setHeightMm(Math.max(1, +e.target.value || 0))} style={propInput} />
+              <NumInput type="number" value={heightMm} onChange={e => setHeightMm(Math.max(1, +e.target.value || 0))} style={propInput} />
             </PropRow>
             <PropRow label="Outer leaf">
               <select value={outerLeaf} onChange={e => setOuterLeaf(e.target.value as CavityLeafType)} style={propInput}>
@@ -540,7 +541,7 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
               </div>
             </PropRow>
             <PropRow label="Cavity width (mm)">
-              <input type="number" min={50} max={300} step={5} value={cavityWidthMm}
+              <NumInput type="number" min={50} max={300} step={5} value={cavityWidthMm}
                 onChange={e => setCavityWidthMm(Math.max(1, +e.target.value || 0))} style={propInput} />
             </PropRow>
             <PropRow label="Cavity insulation">

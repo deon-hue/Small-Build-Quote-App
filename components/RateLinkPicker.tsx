@@ -5,6 +5,7 @@
 // from a 50 m roll costs the whole roll, but a 20 m roll costs just that. Each row shows what this line would cost from it, and the cheapest is marked.
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import NumInput from '@/components/NumInput'
 import { searchRateItems, guessPackSize, costForQty, packsFor, type RateItem, type RateLink } from '@/lib/rate-links'
 
 export interface PickerLine { name: string; unit: string; category: string; /** how much of the line's unit the line buys (after waste) */ purchaseQty: number }
@@ -101,7 +102,7 @@ export default function RateLinkPicker({ line, items, supportsPack, onPick, onCl
                   <div style={{ padding: '4px 16px 12px', background: '#f0f9ff', fontSize: 12.5, color: '#334155' }}>
                     <div style={{ marginBottom: 6 }}>
                       1 {r.item.unit} of <strong>{r.item.name}</strong> covers{' '}
-                      <input type="number" min={0} step="any" value={per} onChange={e => setPer(e.target.value)} autoFocus
+                      <NumInput type="number" min={0} step="any" value={per} onChange={e => setPer(e.target.value)} autoFocus
                         style={{ width: 80, padding: '3px 6px', border: '1px solid #bae6fd', borderRadius: 5, fontSize: 13, textAlign: 'right' }} /> {line.unit}
                       {r.guess ? <span style={{ fontSize: 11, color: '#94a3b8' }}> (read from the name — change it if wrong)</span> : null}
                     </div>

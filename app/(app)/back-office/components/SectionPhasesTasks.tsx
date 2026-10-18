@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import NumInput from '@/components/NumInput'
 import { createClient } from '@/lib/supabase/client'
 import {
   fetchPhases, upsertPhase, deletePhase,
@@ -593,7 +594,7 @@ export default function SectionPhasesTasks({ userId, onEditViaAssemblies }: Prop
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }} onClick={e => e.stopPropagation()}>
                           <span style={{ fontSize: 11, color: '#64748b' }}>Markup</span>
-                          <input
+                          <NumInput
                             type="number" min={0} max={200} value={sp.markup_pct}
                             onChange={e => updateSubPhaseMarkup(sp.id, +e.target.value)}
                             style={{ width: 52, padding: '2px 6px', border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 12, textAlign: 'right' }}
@@ -803,7 +804,7 @@ function AllowanceEditor({ task, extraTasks, onSave, onDeleteExtra }: {
         <label style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           {mode === 'flat' ? 'Allowance £' : `£ per ${unitWord}`}
         </label>
-        <input
+        <NumInput
           type="number" min={0} value={amount || ''}
           onChange={e => setAmount(+e.target.value)}
           onBlur={() => { if (amount !== (task?.other_cost ?? 0)) onSave({ other_cost: amount }) }}
@@ -815,7 +816,7 @@ function AllowanceEditor({ task, extraTasks, onSave, onDeleteExtra }: {
             <label style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Typical number of {unitWord}s
             </label>
-            <input
+            <NumInput
               type="number" min={0} step="any" value={qty || ''}
               onFocus={e => e.target.select()}
               onChange={e => setQty(+e.target.value)}
@@ -1100,7 +1101,7 @@ function CategoryEditPopover({ task, cat, labourTrades, products, plantItems, on
         <label style={lbl}>{label}</label>
         <div style={{ position: 'relative' }}>
           <span style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: '#94a3b8' }}>£</span>
-          <input type="number" min={0} step={1} value={draft[field] as number}
+          <NumInput type="number" min={0} step={1} value={draft[field] as number}
             onChange={e => setField(field, +e.target.value as never)}
             style={{ ...inp, paddingLeft: 20, fontFamily: 'monospace', fontWeight: 600 }} autoFocus />
         </div>
@@ -1142,7 +1143,7 @@ function CategoryEditPopover({ task, cat, labourTrades, products, plantItems, on
                           <option key={rt} value={rt}>{RATE_LABELS[rt]} £{effectiveRate(t ?? labourTrades[0], rt).toFixed(0)}</option>
                         ))}
                       </select>
-                      <input type="number" min={0} step={0.5} value={line.qty}
+                      <NumInput type="number" min={0} step={0.5} value={line.qty}
                         onChange={e => updateLabourLine(i, { qty: Math.max(0, +e.target.value) })}
                         style={{ ...inp, fontSize: 12, padding: '5px 6px', textAlign: 'right' }} />
                       <div style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 700, color: m.accent, textAlign: 'right' }}>
@@ -1247,7 +1248,7 @@ function CategoryEditPopover({ task, cat, labourTrades, products, plantItems, on
                       </div>
                       <div>
                         <div style={{ fontSize: 10, fontWeight: 600, color: '#166534', marginBottom: 2, textTransform: 'uppercase' }}>Rate £</div>
-                        <input type="number" min={0} step={1} value={newPlantRate} onChange={e => setNewPlantRate(+e.target.value)}
+                        <NumInput type="number" min={0} step={1} value={newPlantRate} onChange={e => setNewPlantRate(+e.target.value)}
                           style={{ ...inp, fontSize: 12, padding: '4px 7px' }} />
                       </div>
                     </div>
@@ -1275,8 +1276,8 @@ function CategoryEditPopover({ task, cat, labourTrades, products, plantItems, on
             {plantList.map((p, i) => (
               <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '1fr 52px 70px 64px 22px', gap: 6, alignItems: 'center' }}>
                 <span style={{ fontSize: 12, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${p.name} (per ${p.unit})`}>{p.name}</span>
-                <input type="number" min={0} step={0.5} value={p.qty} onChange={e => updatePlantRow(i, { qty: Math.max(0, +e.target.value) })} style={{ ...inp, fontSize: 12, padding: '5px 6px', textAlign: 'center' }} />
-                <input type="number" min={0} step={1} value={p.hireRate} onChange={e => updatePlantRow(i, { hireRate: Math.max(0, +e.target.value) })} style={{ ...inp, fontSize: 12, padding: '5px 6px', textAlign: 'right' }} />
+                <NumInput type="number" min={0} step={0.5} value={p.qty} onChange={e => updatePlantRow(i, { qty: Math.max(0, +e.target.value) })} style={{ ...inp, fontSize: 12, padding: '5px 6px', textAlign: 'center' }} />
+                <NumInput type="number" min={0} step={1} value={p.hireRate} onChange={e => updatePlantRow(i, { hireRate: Math.max(0, +e.target.value) })} style={{ ...inp, fontSize: 12, padding: '5px 6px', textAlign: 'right' }} />
                 <span style={{ fontFamily: 'monospace', fontSize: 12, textAlign: 'right', color: '#0f172a' }}>£{p.total.toFixed(2)}</span>
                 <button onClick={() => removePlantRow(i)} title="Remove" style={{ border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 15, padding: 0 }}>×</button>
               </div>
@@ -1496,7 +1497,7 @@ function TaskModal({ task, isNew, labourTrades, onChange, onSave, saving, saveEr
                             <option key={rt} value={rt}>{RATE_LABELS[rt]} £{effectiveRate(t ?? labourTrades[0], rt).toFixed(0)}</option>
                           ))}
                         </select>
-                        <input type="number" min={0} step={0.5} value={line.qty}
+                        <NumInput type="number" min={0} step={0.5} value={line.qty}
                           onChange={e => updateModalLabourLine(i, { qty: Math.max(0, +e.target.value) })}
                           style={{ ...inp, fontSize: 12, padding: '6px 8px', textAlign: 'right' }} />
                         <div style={{ fontSize: 13, fontFamily: 'monospace', fontWeight: 700, color: '#92400e', textAlign: 'right' }}>
@@ -1532,7 +1533,7 @@ function TaskModal({ task, isNew, labourTrades, onChange, onSave, saving, saveEr
                     <label style={{ ...lbl, fontSize: 11 }}>Labour Cost (ex-VAT)</label>
                     <div style={{ position: 'relative' }}>
                       <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: '#94a3b8' }}>£</span>
-                      <input type="number" min={0} step={1} value={task.labour_cost}
+                      <NumInput type="number" min={0} step={1} value={task.labour_cost}
                         onChange={e => set('labour_cost', +e.target.value)}
                         style={{ ...inp, paddingLeft: 18, background: '#fef3c7' }} />
                     </div>
@@ -1552,7 +1553,7 @@ function TaskModal({ task, isNew, labourTrades, onChange, onSave, saving, saveEr
                 </div>
                 <div style={{ position: 'relative' }}>
                   <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: meta.accent, opacity: 0.6 }}>£</span>
-                  <input type="number" min={0} step={1}
+                  <NumInput type="number" min={0} step={1}
                     value={task[key] as number}
                     onChange={e => set(key, +e.target.value)}
                     style={{ width: '100%', padding: '6px 6px 6px 18px', border: `1px solid ${meta.border}`, borderRadius: 6, fontSize: 13, background: '#fff', boxSizing: 'border-box', color: '#0f172a', fontFamily: 'monospace', fontWeight: 600 }} />
@@ -1565,11 +1566,11 @@ function TaskModal({ task, isNew, labourTrades, onChange, onSave, saving, saveEr
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <label style={lbl}>Default Qty</label>
-              <input type="number" min={0} value={task.default_qty} onChange={e => set('default_qty', +e.target.value)} style={inp} />
+              <NumInput type="number" min={0} value={task.default_qty} onChange={e => set('default_qty', +e.target.value)} style={inp} />
             </div>
             <div>
               <label style={lbl}>Markup %</label>
-              <input type="number" min={0} max={200} value={task.markup_pct} onChange={e => set('markup_pct', +e.target.value)} style={inp} />
+              <NumInput type="number" min={0} max={200} value={task.markup_pct} onChange={e => set('markup_pct', +e.target.value)} style={inp} />
             </div>
           </div>
 

@@ -15,6 +15,7 @@
  */
 
 import React, { useMemo, useState, useRef, useEffect } from 'react'
+import NumInput from '@/components/NumInput'
 import { useCalcState } from '@/components/calc-state'
 import {
   calculateWallCost, studPositionsMm,
@@ -310,7 +311,7 @@ export default function AssemblyWallDemo({ system = 'timber', onClose, onSave, l
           title="Which room or location this is — becomes the quote's room grouping when saved"
           style={{ fontSize: 12, color: '#7c3aed', width: 140, padding: '4px 8px', border: '1px solid #e9d5ff', borderRadius: 5, background: '#fdfaff' }} />
         <label style={{ fontSize: 11, color: '#64748b' }}>Qty</label>
-        <input type="number" min={1} value={qty} onChange={e => setQty(Math.max(1, +e.target.value || 1))}
+        <NumInput type="number" min={1} value={qty} onChange={e => setQty(Math.max(1, +e.target.value || 1))}
           style={{ width: 48, fontSize: 12, padding: '3px 5px', border: '1px solid #e2e8f0', borderRadius: 4 }} />
         {result.ok && (
           <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 700, color: '#7ab533' }}>
@@ -371,10 +372,10 @@ export default function AssemblyWallDemo({ system = 'timber', onClose, onSave, l
           {/* Right: properties */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <PropRow label="Length (mm)">
-              <input type="number" value={lengthMm} onChange={e => setLengthMm(Math.max(1, +e.target.value || 0))} style={propInput} />
+              <NumInput type="number" value={lengthMm} onChange={e => setLengthMm(Math.max(1, +e.target.value || 0))} style={propInput} />
             </PropRow>
             <PropRow label="Height (mm)">
-              <input type="number" value={heightMm} onChange={e => setHeightMm(Math.max(1, +e.target.value || 0))} style={propInput} />
+              <NumInput type="number" value={heightMm} onChange={e => setHeightMm(Math.max(1, +e.target.value || 0))} style={propInput} />
             </PropRow>
             <PropRow label="Stud centres (mm)">
               <select value={centresMm} onChange={e => setCentresMm(+e.target.value)} style={propInput}>

@@ -5,6 +5,7 @@
 // paid cost straight away. See lib/job-orders.ts for the rules and supabase/job-orders.sql for the table.
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import NumInput from '@/components/NumInput'
 import { createClient } from '@/lib/supabase/client'
 import { useApp } from '@/contexts/AppContext'
 import { fetchJobCosts, insertJobCost, updateJobCost } from '@/lib/job-costs'
@@ -565,7 +566,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                         </select>
                       </div>
                       {priceFor.can === 'yes' && <>
-                        <div><label style={lab}>Their price (£, ex VAT)</label><input style={inp} type="number" min={0} step="0.01" value={priceFor.price} onChange={e => setPriceFor({ ...priceFor, price: e.target.value })} /></div>
+                        <div><label style={lab}>Their price (£, ex VAT)</label><NumInput style={inp} type="number" min={0} step="0.01" value={priceFor.price} onChange={e => setPriceFor({ ...priceFor, price: e.target.value })} /></div>
                         <div>
                           <label style={lab}>Price is</label>
                           <select style={inp} value={priceFor.per} onChange={e => setPriceFor({ ...priceFor, per: e.target.value as RateBasis })}>
@@ -809,7 +810,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                           <div>
                             <label style={lab}>How long for</label>
                             <div style={{ display: 'flex', gap: 6 }}>
-                              <input style={{ ...inp, width: 80 }} type="number" min={1} step="1" value={hlN ?? ''} onChange={e => setHowLong(e.target.value === '' ? null : Math.max(1, Math.round(+e.target.value) || 1), hlUnit)} placeholder="2" />
+                              <NumInput style={{ ...inp, width: 80 }} type="number" min={1} step="1" value={hlN ?? ''} onChange={e => setHowLong(e.target.value === '' ? null : Math.max(1, Math.round(+e.target.value) || 1), hlUnit)} placeholder="2" />
                               <select style={inp} value={hlUnit} onChange={e => setHowLong(hlN, e.target.value as HowLongUnit)}><option value="day">days</option><option value="week">weeks</option></select>
                             </div>
                           </div>
@@ -830,8 +831,8 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                         <option value="fixed">One price</option><option value="day">Per day</option><option value="week">Per week</option>
                       </select>
                     </div>}
-                    {mode === 'order' && <div><label style={lab}>{form.rateBasis === 'fixed' ? 'Price (£, ex VAT)' : `Rate per ${form.rateBasis} (£, ex VAT)`}</label><input style={inp} type="number" min={0} step="0.01" value={form.rate || ''} onChange={e => set('rate', Math.max(0, +e.target.value || 0))} /></div>}
-                    {(mode === 'order' || form.orderType === 'other') && form.rateBasis !== 'fixed' && <div><label style={lab}>Planned {form.rateBasis === 'day' ? 'days' : 'weeks'}</label><input style={inp} type="number" min={1} step="1" value={form.plannedUnits} onChange={e => set('plannedUnits', Math.max(1, +e.target.value || 1))} /></div>}
+                    {mode === 'order' && <div><label style={lab}>{form.rateBasis === 'fixed' ? 'Price (£, ex VAT)' : `Rate per ${form.rateBasis} (£, ex VAT)`}</label><NumInput style={inp} type="number" min={0} step="0.01" value={form.rate || ''} onChange={e => set('rate', Math.max(0, +e.target.value || 0))} /></div>}
+                    {(mode === 'order' || form.orderType === 'other') && form.rateBasis !== 'fixed' && <div><label style={lab}>Planned {form.rateBasis === 'day' ? 'days' : 'weeks'}</label><NumInput style={inp} type="number" min={1} step="1" value={form.plannedUnits} onChange={e => set('plannedUnits', Math.max(1, +e.target.value || 1))} /></div>}
                     <div>
                       <label style={lab}>Cost category</label>
                       <select style={inp} value={form.costCategory} onChange={e => set('costCategory', e.target.value as JobCostCategory)}>
@@ -874,7 +875,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                 <div style={{ border: '2px solid #16a34a', borderRadius: 10, padding: 14, marginBottom: 16, background: '#f0fdf4' }}>
                   <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>Invoice arrived for {poRef(invoiceFor.order.poNumber)} ({invoiceFor.order.title})</div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
-                    <div><label style={lab}>Invoice amount (£, ex VAT)</label><input style={inp} type="number" min={0} step="0.01" value={invoiceFor.net} onChange={e => setInvoiceFor({ ...invoiceFor, net: e.target.value })} /></div>
+                    <div><label style={lab}>Invoice amount (£, ex VAT)</label><NumInput style={inp} type="number" min={0} step="0.01" value={invoiceFor.net} onChange={e => setInvoiceFor({ ...invoiceFor, net: e.target.value })} /></div>
                     <div><label style={lab}>Their invoice number</label><input style={inp} value={invoiceFor.docNumber} onChange={e => setInvoiceFor({ ...invoiceFor, docNumber: e.target.value })} /></div>
                     <div><label style={lab}>Invoice date</label><input style={inp} type="date" value={invoiceFor.date} onChange={e => setInvoiceFor({ ...invoiceFor, date: e.target.value })} /></div>
                     <div><label style={lab}>Paid yet?</label><select style={inp} value={invoiceFor.status} onChange={e => setInvoiceFor({ ...invoiceFor, status: e.target.value as 'unpaid' | 'paid' })}><option value="unpaid">Not yet</option><option value="paid">Paid</option></select></div>

@@ -20,6 +20,7 @@
  */
 
 import React, { useMemo, useState, useRef, useEffect } from 'react'
+import NumInput from '@/components/NumInput'
 import { useCalcState } from '@/components/calc-state'
 import {
   calculateMasonryWallCost,
@@ -329,7 +330,7 @@ export default function AssemblyMasonryWallDemo({ context = 'partition', onClose
           title="Which room or location this is — becomes the quote's room grouping when saved"
           style={{ fontSize: 12, color: '#b45309', width: 140, padding: '4px 8px', border: '1px solid #fde68a', borderRadius: 5, background: '#fffbeb' }} />
         <label style={{ fontSize: 11, color: '#64748b' }}>Qty</label>
-        <input type="number" min={1} value={qty} onChange={e => setQty(Math.max(1, +e.target.value || 1))}
+        <NumInput type="number" min={1} value={qty} onChange={e => setQty(Math.max(1, +e.target.value || 1))}
           style={{ width: 48, fontSize: 12, padding: '3px 5px', border: '1px solid #e2e8f0', borderRadius: 4 }} />
         {result.ok && (
           <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 700, color: '#7ab533' }}>
@@ -386,10 +387,10 @@ export default function AssemblyMasonryWallDemo({ context = 'partition', onClose
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <PropRow label="Length (mm)">
-              <input type="number" value={lengthMm} onChange={e => setLengthMm(Math.max(1, +e.target.value || 0))} style={propInput} />
+              <NumInput type="number" value={lengthMm} onChange={e => setLengthMm(Math.max(1, +e.target.value || 0))} style={propInput} />
             </PropRow>
             <PropRow label="Height (mm)">
-              <input type="number" value={heightMm} onChange={e => setHeightMm(Math.max(1, +e.target.value || 0))} style={propInput} />
+              <NumInput type="number" value={heightMm} onChange={e => setHeightMm(Math.max(1, +e.target.value || 0))} style={propInput} />
             </PropRow>
             <PropRow label="Block type">
               <select value={blockType} onChange={e => setBlockType(e.target.value as BlockType)} style={propInput}>

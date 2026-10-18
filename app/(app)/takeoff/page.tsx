@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback, ChangeEvent } from 'react'
+import NumInput from '@/components/NumInput'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { makeDebouncedSave, loadTakeoffFromSupabase } from '@/lib/takeoff-sync'
@@ -2120,7 +2121,7 @@ export default function TakeoffPage() {
         {isLineBased && (
           <div style={{ marginBottom: 10 }}>
             <label style={labelStyle}>Wall / Storey Height (m)</label>
-            <input type="number" step={0.05} min={0.1} max={10}
+            <NumInput type="number" step={0.05} min={0.1} max={10}
               style={{ ...inputStyle, color: accent2 }}
               value={wallHeight}
               onChange={e => recalcAndSave({ wallHeight: Math.max(0.1, +e.target.value || 2.4) })} />
@@ -2192,12 +2193,12 @@ export default function TakeoffPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                 <div>
                   <label style={{ ...labelStyle, fontSize: 9 }}>Width (m)</label>
-                  <input type="number" step={0.05} min={0.1} style={{ ...inputStyle, fontSize: 11 }}
+                  <NumInput type="number" step={0.05} min={0.1} style={{ ...inputStyle, fontSize: 11 }}
                     value={op.width} onChange={e => updateOpening(op.id, { width: Math.max(0.1, +e.target.value || 0.9) })} />
                 </div>
                 <div>
                   <label style={{ ...labelStyle, fontSize: 9 }}>Height (m)</label>
-                  <input type="number" step={0.05} min={0.1} style={{ ...inputStyle, fontSize: 11 }}
+                  <NumInput type="number" step={0.05} min={0.1} style={{ ...inputStyle, fontSize: 11 }}
                     value={op.height} onChange={e => updateOpening(op.id, { height: Math.max(0.1, +e.target.value || 2.1) })} />
                 </div>
               </div>
@@ -2242,12 +2243,12 @@ export default function TakeoffPage() {
                   </div>
                   <div style={{ fontSize: 9, color: '#6a8a6a' }}>{m.unit}{m.wastePercent > 0 ? ` +${m.wastePercent}%` : ''}</div>
                 </div>
-                <input type="number" step="any" min={0}
+                <NumInput type="number" step="any" min={0}
                   style={{ width: '100%', background: darkMode ? '#162216' : '#f0f4f0', border: `1px solid ${darkMode ? '#2a3a2a' : '#c8d8c8'}`, borderRadius: 3, color: m.isOverridden ? '#e67e22' : (darkMode ? '#c8d8a8' : '#2b3a2b'), fontSize: 10, padding: '2px 3px', textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
                   value={m.qty}
                   onChange={e => updateMaterial(m.id, { qty: Math.max(0, +e.target.value || 0) })}
                 />
-                <input type="number" step="any" min={0}
+                <NumInput type="number" step="any" min={0}
                   style={{ width: '100%', background: darkMode ? '#162216' : '#f0f4f0', border: `1px solid ${darkMode ? '#2a3a2a' : '#c8d8c8'}`, borderRadius: 3, color: m.isOverridden ? '#e67e22' : (darkMode ? '#c8d8a8' : '#2b3a2b'), fontSize: 10, padding: '2px 3px', textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
                   value={m.unitRate}
                   onChange={e => updateMaterial(m.id, { unitRate: Math.max(0, +e.target.value || 0) })}
@@ -2789,7 +2790,7 @@ export default function TakeoffPage() {
                   <div style={{ fontSize: 11, color: enabled ? 'var(--to-text)' : 'var(--to-muted)', lineHeight: 1.2 }}>{layer.name}</div>
                   {layer.thickness > 0 && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginTop: 1 }}>
-                      <input type="number" value={thk} min={0}
+                      <NumInput type="number" value={thk} min={0}
                         onChange={ev => saveItemEdit({ ...itm, floorLayerThicknesses: { ...thks, [layer.id]: +ev.target.value } })}
                         style={{ width: 36, background: darkMode ? '#162216' : '#f0f8f0', border: '1px solid var(--to-input-bd)', borderRadius: 3, color: 'var(--to-sub)', fontSize: 10, padding: '1px 3px', textAlign: 'right', outline: 'none' }}
                       />
@@ -3389,7 +3390,7 @@ export default function TakeoffPage() {
             <>
               <div style={{ marginBottom: 10 }}>
                 <label style={labelStyle}>Wall / Storey Height (m)</label>
-                <input type="number" step={0.05} min={0.1} max={12}
+                <NumInput type="number" step={0.05} min={0.1} max={12}
                   style={{ ...inputStyle, color: accent }}
                   value={wallHeight}
                   onChange={e => recalcWallAndSave({ wallHeight: Math.max(0.1, +e.target.value || wallHeight) })}
@@ -3478,7 +3479,7 @@ export default function TakeoffPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
                 <div>
                   <label style={labelStyle}>Width (mm)</label>
-                  <input type="number" step={50} min={100} max={5000}
+                  <NumInput type="number" step={50} min={100} max={5000}
                     style={{ ...inputStyle, color: accent, fontWeight: 600 }}
                     value={foundWidthMM}
                     onChange={e => recalcFoundationAndSave({ foundationWidth: Math.max(50, +e.target.value || 600) })}
@@ -3486,7 +3487,7 @@ export default function TakeoffPage() {
                 </div>
                 <div>
                   <label style={labelStyle}>Depth (mm)</label>
-                  <input type="number" step={50} min={100} max={5000}
+                  <NumInput type="number" step={50} min={100} max={5000}
                     style={{ ...inputStyle, color: accent, fontWeight: 600 }}
                     value={foundDepthMM}
                     onChange={e => recalcFoundationAndSave({ foundationDepth: Math.max(50, +e.target.value || 1000) })}
@@ -3523,7 +3524,7 @@ export default function TakeoffPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8 }}>
                 <div>
                   <label style={labelStyle}>Qty</label>
-                  <input type="number" step="any" min={0} style={inputStyle} value={item.qty}
+                  <NumInput type="number" step="any" min={0} style={inputStyle} value={item.qty}
                     onChange={e => {
                       const q = +e.target.value
                       if (isTaskPhase && taskSelTask) {
@@ -3703,13 +3704,13 @@ export default function TakeoffPage() {
                       border: '1px solid var(--to-border)',
                     }}>
                       <div style={{ fontSize: 11, color: 'var(--to-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{op.label}</div>
-                      <input type="number" step={0.05} min={0.1}
+                      <NumInput type="number" step={0.05} min={0.1}
                         style={{ ...inputStyle, textAlign: 'center', padding: '3px 4px', fontSize: 11 }}
                         value={op.width}
                         onChange={e => updateOpening(op.id, { width: Math.max(0.1, +e.target.value || op.width) })}
                       />
                       <span style={{ fontSize: 10, color: 'var(--to-muted)', textAlign: 'center' }}>×</span>
-                      <input type="number" step={0.05} min={0.1}
+                      <NumInput type="number" step={0.05} min={0.1}
                         style={{ ...inputStyle, textAlign: 'center', padding: '3px 4px', fontSize: 11 }}
                         value={op.height}
                         onChange={e => updateOpening(op.id, { height: Math.max(0.1, +e.target.value || op.height) })}
@@ -3764,13 +3765,13 @@ export default function TakeoffPage() {
                     <div style={{ width: 6, height: 6, borderRadius: '50%', background: CAT_COLOR[mat.category] ?? '#95a5a6', cursor: 'pointer' }}
                       onClick={() => toggleMaterial(mat.id, !mat.enabled)} />
                     <div style={{ fontSize: 10, color: mat.isOverridden ? '#f39c12' : 'var(--to-text)', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={mat.name}>{mat.name}</div>
-                    <input type="number" step="any" min={0}
+                    <NumInput type="number" step="any" min={0}
                       style={{ ...inputStyle, fontSize: 10, padding: '2px 4px', textAlign: 'right' }}
                       value={+mat.qty.toFixed(3)}
                       onChange={e => updateMaterial(mat.id, { qty: +e.target.value })}
                     />
                     <span style={{ fontSize: 9, color: 'var(--to-muted)', textAlign: 'center' }}>{mat.unit}</span>
-                    <input type="number" step="any" min={0}
+                    <NumInput type="number" step="any" min={0}
                       style={{ ...inputStyle, fontSize: 10, padding: '2px 4px', textAlign: 'right' }}
                       value={+mat.unitRate.toFixed(2)}
                       onChange={e => updateMaterial(mat.id, { unitRate: +e.target.value })}
@@ -3807,7 +3808,7 @@ export default function TakeoffPage() {
                   <span style={{ fontSize: 11, color: 'var(--to-sub)' }}>{label}</span>
                   <div style={{ position: 'relative' }}>
                     <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--to-muted)' }}>£</span>
-                    <input type="number" min={0} step={1} style={{ ...inputStyle, paddingLeft: 18 }}
+                    <NumInput type="number" min={0} step={1} style={{ ...inputStyle, paddingLeft: 18 }}
                       value={val}
                       onChange={e => saveItemEdit({ ...item, [key]: Math.max(0, +e.target.value || 0) })}
                     />
@@ -3817,7 +3818,7 @@ export default function TakeoffPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8, marginBottom: 4 }}>
                 <div>
                   <label style={labelStyle}>Markup %</label>
-                  <input type="number" min={0} max={200} step={1} style={inputStyle}
+                  <NumInput type="number" min={0} max={200} step={1} style={inputStyle}
                     value={demoMarkup}
                     onChange={e => saveItemEdit({ ...item, demoMarkupPct: Math.max(0, +e.target.value || 0) })}
                   />
@@ -3846,7 +3847,7 @@ export default function TakeoffPage() {
               ] as { key: keyof TakeoffItem; label: string; color: string }[]).map(({ key, label, color }) => (
                 <div key={key as string} style={{ display: 'grid', gridTemplateColumns: '110px 1fr', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                   <span style={{ fontSize: 12, color, fontWeight: 600 }}>{label}</span>
-                  <input type="number" step="any" min={0} style={inputStyle}
+                  <NumInput type="number" step="any" min={0} style={inputStyle}
                     value={(item[key] as number | undefined) ?? 0}
                     onChange={e => saveItemEdit({ ...item, [key]: +e.target.value })}
                   />
@@ -3855,7 +3856,7 @@ export default function TakeoffPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8, borderTop: '1px solid var(--to-border)', paddingTop: 8 }}>
                 <div>
                   <label style={labelStyle}>Markup %</label>
-                  <input type="number" min={0} max={200} style={inputStyle}
+                  <NumInput type="number" min={0} max={200} style={inputStyle}
                     value={taskMarkup}
                     onChange={e => saveItemEdit({ ...item, taskMarkupPct: +e.target.value })}
                   />
@@ -3909,7 +3910,7 @@ export default function TakeoffPage() {
               ] as { key: keyof TakeoffItem; label: string; color: string }[]).map(({ key, label, color }) => (
                 <div key={key as string} style={{ display: 'grid', gridTemplateColumns: '120px 1fr', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                   <span style={{ fontSize: 12, color, fontWeight: 600 }}>{label}</span>
-                  <input type="number" step="any" min={0} style={inputStyle}
+                  <NumInput type="number" step="any" min={0} style={inputStyle}
                     value={(item[key] as number | undefined) ?? 0}
                     onChange={e => saveItemEdit({ ...item, [key]: +e.target.value })}
                   />
@@ -4927,7 +4928,7 @@ export default function TakeoffPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
                 <div>
                   <label style={labelStyle}>Real length (metres)</label>
-                  <input type="number" style={inputStyle} placeholder="e.g. 5.0"
+                  <NumInput type="number" style={inputStyle} placeholder="e.g. 5.0"
                     value={calibReal} onChange={e => setCalibReal(e.target.value)} />
                 </div>
                 <div>

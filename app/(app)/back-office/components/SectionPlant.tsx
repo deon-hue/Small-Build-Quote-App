@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import NumInput from '@/components/NumInput'
 import { createClient } from '@/lib/supabase/client'
 import { fetchPlantItems, upsertPlantItem, deletePlantItem, seedPlantLibrary } from '@/lib/back-office-queries'
 import type { BOPlantItem } from '@/lib/back-office-types'
@@ -230,16 +231,16 @@ export default function SectionPlant({ userId }: Props) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, alignItems: 'end' }}>
                 <div>
                   <label style={lbl}>Cost Rate (£)</label>
-                  <input type="number" min={0} step={1} value={editing.default_cost} onChange={e => setEditing({ ...editing, default_cost: +e.target.value })} style={inp} />
+                  <NumInput type="number" min={0} step={1} value={editing.default_cost} onChange={e => setEditing({ ...editing, default_cost: +e.target.value })} style={inp} />
                 </div>
                 <div>
                   <label style={lbl}>Markup %</label>
-                  <input type="number" min={0} max={200} step={1} value={editing.markup_pct} onChange={e => setEditing({ ...editing, markup_pct: +e.target.value })} style={inp} />
+                  <NumInput type="number" min={0} max={200} step={1} value={editing.markup_pct} onChange={e => setEditing({ ...editing, markup_pct: +e.target.value })} style={inp} />
                 </div>
                 <div>
                   <label style={lbl}>Charge Rate (£)</label>
                   <div style={{ display: 'flex', gap: 4 }}>
-                    <input type="number" min={0} step={1} value={editing.charge_rate} onChange={e => setEditing({ ...editing, charge_rate: +e.target.value })} style={inp} />
+                    <NumInput type="number" min={0} step={1} value={editing.charge_rate} onChange={e => setEditing({ ...editing, charge_rate: +e.target.value })} style={inp} />
                     <button onClick={() => setEditing({ ...editing, charge_rate: Math.round(editing.default_cost * (1 + editing.markup_pct / 100)) })} title="Recalculate charge from cost + markup" style={{ flexShrink: 0, padding: '0 8px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#f8fafc', color: '#475569', fontSize: 14, cursor: 'pointer' }}>↻</button>
                   </div>
                 </div>

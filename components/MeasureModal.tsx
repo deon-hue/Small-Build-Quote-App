@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import NumInput from '@/components/NumInput'
 import type { EstimatorItem } from '@/lib/estimator'
 import { calcMeasurement, MEASUREMENT_LABELS } from '@/lib/estimator'
 import { useDraggableModal } from './useDraggableModal'
@@ -62,7 +63,7 @@ export default function MeasureModal({ item, onConfirm, onClose }: Props) {
           {manual ? (
             <div className="fg">
               <label>Measurement ({item.unit})</label>
-              <input type="number" value={manVal} min={0} step={0.01}
+              <NumInput type="number" value={manVal} min={0} step={0.01}
                 onChange={e => setManVal(Number(e.target.value))} autoFocus />
             </div>
           ) : (
@@ -71,13 +72,13 @@ export default function MeasureModal({ item, onConfirm, onClose }: Props) {
                 <div className={item.measurementType === 'area' || item.measurementType === 'volume' ? 'row2' : ''}>
                   <div className="fg">
                     <label>Length (m)</label>
-                    <input type="number" value={length} min={0} step={0.1}
+                    <NumInput type="number" value={length} min={0} step={0.1}
                       onChange={e => setLength(Number(e.target.value))} autoFocus />
                   </div>
                   {(item.measurementType === 'area' || item.measurementType === 'volume') && (
                     <div className="fg">
                       <label>Width (m)</label>
-                      <input type="number" value={width} min={0} step={0.1}
+                      <NumInput type="number" value={width} min={0} step={0.1}
                         onChange={e => setWidth(Number(e.target.value))} />
                     </div>
                   )}
@@ -86,13 +87,13 @@ export default function MeasureModal({ item, onConfirm, onClose }: Props) {
               {item.measurementType === 'volume' && (
                 <div className="fg">
                   <label>Depth (m)</label>
-                  <input type="number" value={depth} min={0} step={0.01}
+                  <NumInput type="number" value={depth} min={0} step={0.01}
                     onChange={e => setDepth(Number(e.target.value))} />
                 </div>
               )}
               <div className="fg">
                 <label>{qtyLabel}</label>
-                <input type="number" value={qty} min={1} step={1}
+                <NumInput type="number" value={qty} min={1} step={1}
                   onChange={e => setQty(Number(e.target.value))} />
               </div>
             </>

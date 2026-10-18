@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+import NumInput from '@/components/NumInput'
 import { useApp } from '@/contexts/AppContext'
 import type { Job, Variation, VariationLineItem, VariationStatus } from '@/lib/types'
 import { fmt, jobDisplayTitle } from '@/lib/utils'
@@ -549,7 +550,7 @@ export default function VariationModal({ job, onClose }: Props) {
                       style={{ fontSize: 12, padding: '3px 6px', border: '1px solid var(--border)', borderRadius: 3, background: canEdit ? '#fff' : '#f8fafc', marginLeft: 6 }}
                     />
                     {/* Qty */}
-                    <input
+                    <NumInput
                       type="number"
                       value={item.qty}
                       onChange={e => updateItem(item.id, { qty: Number(e.target.value) })}
@@ -567,7 +568,7 @@ export default function VariationModal({ job, onClose }: Props) {
                     </select>
                     {/* Rate + Negate button */}
                     <div style={{ display: 'flex', gap: 2, alignItems: 'center', marginLeft: 4 }}>
-                      <input
+                      <NumInput
                         type="number"
                         value={item.rate}
                         onChange={e => updateItem(item.id, { rate: Number(e.target.value) })}
@@ -614,7 +615,7 @@ export default function VariationModal({ job, onClose }: Props) {
           <div className="row2" style={{ marginBottom: 18 }}>
             <div className="fg">
               <label>Markup %</label>
-              <input
+              <NumInput
                 type="number"
                 value={form.markup}
                 onChange={e => setForm(f => ({ ...f, markup: Number(e.target.value) }))}

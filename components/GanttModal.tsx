@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
+import NumInput from '@/components/NumInput'
 import { useApp } from '@/contexts/AppContext'
 import type { Job, QuotePhase, GanttState, GanttPhase } from '@/lib/types'
 import type { Quote } from '@/lib/types'
@@ -1173,7 +1174,7 @@ export default function GanttModal({ job, phases, linkedQuotes, onClose }: Props
                 </div>
                 <div style={{ flex: 1, minWidth: 90 }}>
                   <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', marginBottom: 3 }}>Duration (working days)</div>
-                  <input
+                  <NumInput
                     type="number" min={1}
                     value={editingRow.durDays}
                     onChange={e => setEditingRow(r => r ? { ...r, durDays: parseInt(e.target.value) || 1 } : r)}
