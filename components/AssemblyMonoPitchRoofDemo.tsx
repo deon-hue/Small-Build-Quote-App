@@ -20,7 +20,10 @@ import {
   type MonoPitchWallConnection, type MonoPitchRoofGeometry, type MonoPitchOpening, type MonoPitchOpeningKind,
 } from '@/lib/mono-pitch-roof'
 import { describeMonoPitchRoof, describeMonoPitchRoofShort } from '@/lib/mono-pitch-roof-description'
-import { suggestMonoPitchRoofLabour, toLabourLines, type LabourSuggestion } from '@/lib/flat-roof-labour'
+import { suggestMonoPitchRoofLabour, suggestRoofExtrasLabour, toLabourLines, type LabourSuggestion } from '@/lib/flat-roof-labour'
+import { useRoofExtras, CeilingSection, RoofJoinPanel } from '@/components/RoofExtras'
+import { calculateRoofJoin, describeRoofJoin, isRoofJoin, ROOF_JOIN_LABEL, type RoofJoinGeometry, type RoofJoinKind } from '@/lib/roof-extras'
+import { roofJoinLayers } from '@/lib/roof-extras-layers'
 import { LabourSuggestionPanel } from '@/components/AssemblyFlatRoofDemo'
 import {
   checkFlatRoofJoist, flatRoofSpanChart, DEFAULT_JOIST_SPAN_LOADS, SPAN_CHART_CENTRES_MM,
@@ -36,7 +39,7 @@ import {
 
 interface Props {
   onClose?: () => void
-  onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }) => void
+  onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[]; vaultedCeiling?: boolean }) => void
   labourTrades?: BOLabourTrade[]
   externalLengthMm?: number
   externalWidthMm?: number
@@ -53,9 +56,13 @@ function timberRate(grade: SolidJoistGrade, depthMm: number): number {
   return +(grade === 'c24' ? c16 * C24_FACTOR : c16).toFixed(2)
 }
 
-const WALL_CONNECTION_LABEL: Record<MonoPitchWallConnection, string> = {
+// The high edge: a wall (a ledger on an existing wall, or the roof's own wall plate) or an existing roof. A lean-to meets an existing roof along its length, which is either goes up onto the slope or built over part of it.
+type HighEdge = 'ledger' | 'bearing' | 'roof-abut' | 'roof-over'
+const WALL_CONNECTION_LABEL: Record<HighEdge, string> = {
   ledger: 'Ledger bolted to the existing wall, rafters in hangers',
   bearing: 'Rafters bear on their own wall plate, strapped',
+  'roof-abut': ROOF_JOIN_LABEL['roof-abut'],
+  'roof-over': ROOF_JOIN_LABEL['roof-over'],
 }
 
 // Roof windows and the like — the units themselves are supplied and fitted under Roof → Rooflights &
@@ -120,7 +127,11 @@ export default function AssemblyMonoPitchRoofDemo({ onClose, onSave, labourTrade
   const [pitchDeg, setPitchDeg] = useCalcState('AssemblyMonoPitchRoofDemo', 'pitchDeg', 15)
   const [rafterCentresMm, setRafterCentresMm] = useCalcState('AssemblyMonoPitchRoofDemo', 'rafterCentresMm', 400)
   const [eavesOverhangMm, setEavesOverhangMm] = useCalcState('AssemblyMonoPitchRoofDemo', 'eavesOverhangMm', 300)
-  const [highWallConnection, setHighWallConnection] = useCalcState<MonoPitchWallConnection>('AssemblyMonoPitchRoofDemo', 'highWallConnection', 'ledger')
+  // (the old key is kept, so a calculator saved before roof joins opens the same)
+  const [highEdge, setHighEdge] = useCalcState<HighEdge>('AssemblyMonoPitchRoofDemo', 'highWallConnection', 'ledger')
+  const highWallConnection: MonoPitchWallConnection = isRoofJoin(highEdge) ? 'roof' : highEdge
+  // a vaulted ceiling, and a high edge that meets an existing roof (lib/roof-extras.ts)
+  const { ceiling, setCeiling, strippedA, setStrippedA } = useRoofExtras('AssemblyMonoPitchRoofDemo')
 
   const [rafterGrade, setRafterGrade] = useCalcState<SolidJoistGrade>('AssemblyMonoPitchRoofDemo', 'rafterGrade', 'c24')
   const [rafterDepthMm, setRafterDepthMm] = useCalcState('AssemblyMonoPitchRoofDemo', 'rafterDepthMm', 150)
@@ -138,6 +149,14 @@ export default function AssemblyMonoPitchRoofDemo({ onClose, onSave, labourTrade
     catch (e: any) { return { ok: false as const, error: e.message as string } }
   }, [lengthMm, spanMm, pitchDeg, rafterCentresMm, eavesOverhangMm, highWallConnection, openings])
   const g: MonoPitchRoofGeometry | null = geometryResult.ok ? geometryResult.geometry : null
+
+  // a high edge that meets an existing roof is as long as the eaves
+  const joinResult = useMemo(() => {
+    try {
+      return { ok: true as const, join: isRoofJoin(highEdge) ? calculateRoofJoin({ kind: highEdge as RoofJoinKind, joinMm: lengthMm, spanMm, pitchDeg, rafterCentresMm, strippedAreaM2: strippedA }) : null }
+    } catch (e: any) { return { ok: false as const, error: e.message as string } }
+  }, [highEdge, lengthMm, spanMm, pitchDeg, rafterCentresMm, strippedA])
+  const join: RoofJoinGeometry | null = joinResult.ok ? joinResult.join : null
 
   const spanChart = useMemo(() => flatRoofSpanChart(rafterGrade, spanLoads), [rafterGrade, spanLoads])
   const rafterCheck = useMemo(
@@ -172,6 +191,7 @@ export default function AssemblyMonoPitchRoofDemo({ onClose, onSave, labourTrade
     if (g.hangerCount > 0) out.push({ id: 'hangers', name: 'Joist hangers', category: 'materials', source: 'fixed', fixedQty: g.hangerCount, unit: 'nr', unitCost: 2.40, roundToWhole: true })
     if (g.strapCount > 0) out.push({ id: 'straps', name: 'Lateral restraint straps', category: 'materials', source: 'fixed', fixedQty: g.strapCount, unit: 'nr', unitCost: 4.20, roundToWhole: true })
     if (g.trimLm > 0) out.push({ id: 'trimmers', name: `${rafterSectionLabel} — trimmers and headers round the rooflight openings`, category: 'materials', source: 'fixed', fixedQty: g.trimLm, unit: 'lm', unitCost: rafterRate, wastePct })
+    if (join) out.push(...roofJoinLayers('joinHigh', 'high edge', join, wastePct))
     if (g.kerbLm > 0) {
       out.push({ id: 'kerb_timber', name: 'Kerb timber 47×150 (rooflight kerbs)', category: 'materials', source: 'fixed', fixedQty: g.kerbLm, unit: 'lm', unitCost: 3.60, wastePct })
       out.push({ id: 'kerb_cladding', name: 'Kerb cladding 18mm ply', category: 'materials', source: 'fixed', fixedQty: g.kerbFaceAreaM2, unit: 'm²', unitCost: 7.50, wastePct })
@@ -205,7 +225,7 @@ export default function AssemblyMonoPitchRoofDemo({ onClose, onSave, labourTrade
   // until edited by hand. Fitting the rooflights themselves is optional — off by default, since it's
   // normally priced under Roof → Rooflights & Dormers instead.
   const [includeFitting, setIncludeFitting] = useCalcState('AssemblyMonoPitchRoofDemo', 'includeFitting', false)
-  const labourSuggestions: LabourSuggestion[] = g ? suggestMonoPitchRoofLabour({ ...g, openings }) : []
+  const labourSuggestions: LabourSuggestion[] = g ? [...suggestMonoPitchRoofLabour({ ...g, openings }), ...suggestRoofExtrasLabour({ ridgeBeamLm: 0, joins: join ? [{ label: 'high edge', ...join }] : [] })] : []
   const suggestedLabour = toLabourLines(labourSuggestions, labourTrades, includeFitting)
   const [labourOverride, setLabourOverride] = useCalcState<LabourLine[] | null>('AssemblyMonoPitchRoofDemo', 'labourOverride', null)
   const suggestedRef = useRef<LabourLine[]>([])
@@ -231,7 +251,7 @@ export default function AssemblyMonoPitchRoofDemo({ onClose, onSave, labourTrade
 
   // The customer's description follows the roof until it's edited by hand
   const descInput = g ? {
-    lengthM: g.lengthM, spanM: g.spanM, pitchDeg: g.pitchDeg, rafterCount: g.rafterCount, rafterSectionLabel, highWallConnection, slopeAreaM2: g.slopeAreaM2,
+    lengthM: g.lengthM, spanM: g.spanM, pitchDeg: g.pitchDeg, rafterCount: g.rafterCount, rafterSectionLabel, highWallConnection, slopeAreaM2: g.slopeAreaM2, ceiling, extraLines: join ? [describeRoofJoin(join)] : [],
     openings: openings.map(o => ({ kind: o.kind, widthMm: o.widthMm, depthMm: o.depthMm, trimmers: o.trimmers ?? 2 })),
   } : null
   const [descriptionOverride, setDescriptionOverride] = useCalcState<string | null>('AssemblyMonoPitchRoofDemo', 'descriptionOverride', null)
@@ -265,7 +285,7 @@ export default function AssemblyMonoPitchRoofDemo({ onClose, onSave, labourTrade
         {geometryResult.ok && <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 700, color: '#7ab533' }}>{fmt(totalCost * qty)}</span>}
         {geometryResult.ok && <MaterialsListButtons lines={enabledLines} title={name} location={location} description={description} compact />}
         {onSave && geometryResult.ok && (
-          <button onClick={() => onSave({ name, qty, location, description, detail, lines: [...enabledLines, ...labourCostedLines, ...(profitLine ? [profitLine] : [])] })}
+          <button onClick={() => onSave({ name, qty, location, description, detail, lines: [...enabledLines, ...labourCostedLines, ...(profitLine ? [profitLine] : [])], vaultedCeiling: ceiling === 'vaulted' })}
             title="Replace this sub-phase's cost items with this calculation's costed lines"
             style={{ background: '#16a34a', border: 'none', borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: '6px 12px' }}>💾 Save &amp; Price</button>
         )}
@@ -286,6 +306,7 @@ export default function AssemblyMonoPitchRoofDemo({ onClose, onSave, labourTrade
         <textarea value={detail} onChange={e => setDetailOverride(e.target.value)} rows={7} style={box} />
       </div>
 
+      {!joinResult.ok && <div style={{ color: '#c0392b', fontSize: 12, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, padding: '6px 10px', marginBottom: 10 }}>⚠ {joinResult.error}</div>}
       {!geometryResult.ok && <div style={{ color: '#c0392b', fontSize: 12, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, padding: '6px 10px', marginBottom: 10 }}>⚠ {geometryResult.error}</div>}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16 }}>
@@ -349,13 +370,18 @@ export default function AssemblyMonoPitchRoofDemo({ onClose, onSave, labourTrade
           </CollapsibleSection>
 
           <CollapsibleSection title="High wall connection" borderColor="#bae6fd">
-            <PropRow label="How the rafters meet the high wall">
-              <select value={highWallConnection} onChange={e => setHighWallConnection(e.target.value as MonoPitchWallConnection)} style={propInput}>
-                {(Object.entries(WALL_CONNECTION_LABEL) as [MonoPitchWallConnection, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            <PropRow label="How the rafters meet the high wall or roof">
+              <select value={highEdge} onChange={e => setHighEdge(e.target.value as HighEdge)} style={propInput}>
+                {(Object.entries(WALL_CONNECTION_LABEL) as [HighEdge, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </PropRow>
-            <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>The low (eaves) wall always gets a wall plate. This is only for the high wall — an existing wall the lean-to is built against.</div>
+            {join && <RoofJoinPanel title="High edge" geo={join} stripped={strippedA} onStripped={setStrippedA} />}
+            <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>The low (eaves) wall always gets a wall plate. This is only for the high edge — an existing wall the lean-to is built against, or an existing roof it goes up onto.</div>
           </CollapsibleSection>
+
+          <CeilingSection roof="mono" ceiling={ceiling} onCeiling={setCeiling} ridgeBeam="lvl" onRidgeBeam={() => {}} hasRidge={false}>
+            <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>A flat ceiling under the lean-to is not priced in this calculator.</div>
+          </CeilingSection>
 
           <CollapsibleSection title="Rooflight openings" borderColor="#bae6fd">
             <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6, lineHeight: 1.4 }}>

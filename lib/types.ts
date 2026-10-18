@@ -103,6 +103,8 @@ export interface QuotePhase {
    * it behind a "What's included" toggle, and printing leaves it out unless asked. Optional and absent on
    * every existing quote and phase, so nothing changes for those. */
   scopeDetail?: string
+  /** A pitched roof structure saved with a VAULTED ceiling. Its insulation and plasterboard lining are priced under Plastering & Boarding, not in the roof, so the quote reminds you to add them until a vaulted ceiling line is there (lib/quote-warnings.ts). */
+  vaultedCeiling?: boolean
   items: QuoteItem[]
   estimatorItems?: EstimatorItem[]
   useEstimator?: boolean  // true = lump sums auto-computed from estimatorItems

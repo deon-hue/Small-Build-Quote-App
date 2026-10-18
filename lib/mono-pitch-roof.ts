@@ -19,7 +19,8 @@
 // length is the plan length over cos(pitch) — the same factor the plain rafters already use; a member running
 // parallel to the eaves (a header, or a kerb side across the slope) is horizontal and needs no such scaling.
 
-export type MonoPitchWallConnection = 'ledger' | 'bearing'
+// 'roof': the high edge meets an existing ROOF, not a wall. There is then no ledger and no wall plate at the high edge; the rafters are tied to a bearer on the existing roof, which the screen prices (lib/roof-extras.ts).
+export type MonoPitchWallConnection = 'ledger' | 'bearing' | 'roof'
 export type MonoPitchOpeningKind = 'lantern' | 'roof-window' | 'dome' | 'hatch'
 
 /** The thickness of a rafter, and so of each member of a doubled or tripled trimmer or header — same
@@ -223,7 +224,9 @@ export function calculateMonoPitchRoofGeometry(input: MonoPitchRoofInput): MonoP
   }
 
   let ledgerMm = 0, ledgerBolts = 0, hangers = 0, wallPlateMm = L, straps = Math.ceil(L / RESTRAINT_STRAP_CENTRES_MM) + 1
-  if (highWallConnection === 'ledger') {
+  if (highWallConnection === 'roof') {
+    // the high edge is tied to an existing roof: the bearer, ties and hangers for that are the join's, priced by the screen
+  } else if (highWallConnection === 'ledger') {
     ledgerMm = L
     ledgerBolts = Math.ceil(L / LEDGER_BOLT_CENTRES_MM) + 1
     hangers = rafterCount

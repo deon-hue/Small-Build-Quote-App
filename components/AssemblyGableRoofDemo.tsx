@@ -19,7 +19,10 @@ import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembl
 import { fmt } from '@/lib/utils'
 import { calculateGableRoofGeometry, type GableRoofGeometry, type GableEndTreatment } from '@/lib/gable-roof'
 import { describeGableRoof, describeGableRoofShort } from '@/lib/gable-roof-description'
-import { suggestGableRoofLabour, toLabourLines, type LabourSuggestion } from '@/lib/flat-roof-labour'
+import { suggestGableRoofLabour, suggestRoofExtrasLabour, toLabourLines, type LabourSuggestion } from '@/lib/flat-roof-labour'
+import { useRoofExtras, CeilingSection, RoofJoinPanel } from '@/components/RoofExtras'
+import { calculateRoofJoin, describeRoofJoin, isRoofJoin, ROOF_JOIN_LABEL, type RoofJoinGeometry } from '@/lib/roof-extras'
+import { ridgeBeamLayers, roofJoinLayers } from '@/lib/roof-extras-layers'
 import {
   checkFlatRoofJoist, flatRoofSpanChart, DEFAULT_JOIST_SPAN_LOADS, SPAN_CHART_CENTRES_MM,
   type JoistSpanLoads, type SolidJoistGrade,
@@ -34,7 +37,7 @@ import {
 
 interface Props {
   onClose?: () => void
-  onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }) => void
+  onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[]; vaultedCeiling?: boolean }) => void
   labourTrades?: BOLabourTrade[]
   externalLengthMm?: number
   externalWidthMm?: number
@@ -54,6 +57,9 @@ function timberRate(grade: SolidJoistGrade, depthMm: number): number {
 const END_TREATMENT_LABEL: Record<GableEndTreatment, string> = {
   gable: 'New gable wall (priced under External Walls)',
   'existing-wall': 'Against an existing wall — no new wall needed',
+  'roof-abut': ROOF_JOIN_LABEL['roof-abut'],
+  'roof-valley': ROOF_JOIN_LABEL['roof-valley'],
+  'roof-over': ROOF_JOIN_LABEL['roof-over'],
 }
 
 export default function AssemblyGableRoofDemo({ onClose, onSave, labourTrades = [], externalLengthMm, externalWidthMm }: Props) {
@@ -82,12 +88,24 @@ export default function AssemblyGableRoofDemo({ onClose, onSave, labourTrades = 
   const [depthPicked, setDepthPicked] = useCalcState('AssemblyGableRoofDemo', 'depthPicked', false)
 
   const [ceilingJoistDepthMm, setCeilingJoistDepthMm] = useCalcState('AssemblyGableRoofDemo', 'ceilingJoistDepthMm', 100)
+  // a vaulted ceiling, and the ends that join an existing roof (lib/roof-extras.ts)
+  const { ceiling, setCeiling, ridgeBeam, setRidgeBeam, strippedA, setStrippedA, strippedB, setStrippedB } = useRoofExtras('AssemblyGableRoofDemo')
 
   const geometryResult = useMemo(() => {
-    try { return { ok: true as const, geometry: calculateGableRoofGeometry({ lengthMm, spanMm, pitchDeg, rafterCentresMm, eavesOverhangMm, endA, endB }) } }
+    try { return { ok: true as const, geometry: calculateGableRoofGeometry({ lengthMm, spanMm, pitchDeg, rafterCentresMm, eavesOverhangMm, endA, endB, ceiling }) } }
     catch (e: any) { return { ok: false as const, error: e.message as string } }
-  }, [lengthMm, spanMm, pitchDeg, rafterCentresMm, eavesOverhangMm, endA, endB])
+  }, [lengthMm, spanMm, pitchDeg, rafterCentresMm, eavesOverhangMm, endA, endB, ceiling])
   const g: GableRoofGeometry | null = geometryResult.ok ? geometryResult.geometry : null
+
+  // an end that joins an existing roof is as wide as the span
+  const joinsResult = useMemo(() => {
+    try {
+      const of = (end: GableEndTreatment, stripped: number | null): RoofJoinGeometry | null => isRoofJoin(end) ? calculateRoofJoin({ kind: end, joinMm: spanMm, spanMm, pitchDeg, rafterCentresMm, strippedAreaM2: stripped }) : null
+      return { ok: true as const, a: of(endA, strippedA), b: of(endB, strippedB) }
+    } catch (e: any) { return { ok: false as const, error: e.message as string } }
+  }, [endA, endB, strippedA, strippedB, spanMm, pitchDeg, rafterCentresMm])
+  const joinA = joinsResult.ok ? joinsResult.a : null
+  const joinB = joinsResult.ok ? joinsResult.b : null
 
   const spanChart = useMemo(() => flatRoofSpanChart(rafterGrade, spanLoads), [rafterGrade, spanLoads])
   const rafterCheck = useMemo(
@@ -116,13 +134,17 @@ export default function AssemblyGableRoofDemo({ onClose, onSave, labourTrades = 
     if (!g) return []
     const out: AssemblyLayerDef[] = []
     out.push({ id: 'rafters', name: `${rafterSectionLabel} rafters, both faces`, category: 'materials', source: 'fixed', fixedQty: g.rafterLm, unit: 'lm', unitCost: rafterRate, wastePct })
-    out.push({ id: 'ridge', name: `Ridge board 47×${ridgeDepthMm} C24`, category: 'materials', source: 'fixed', fixedQty: g.ridgeLm, unit: 'lm', unitCost: ridgeRate, wastePct })
+    // a vaulted roof has a ridge beam (and bearings) instead of a ridge board
+    if (ceiling === 'vaulted') out.push(...ridgeBeamLayers(g.ridgeLm, ridgeBeam, wastePct))
+    else out.push({ id: 'ridge', name: `Ridge board 47×${ridgeDepthMm} C24`, category: 'materials', source: 'fixed', fixedQty: g.ridgeLm, unit: 'lm', unitCost: ridgeRate, wastePct })
     out.push({ id: 'wall_plate', name: 'Wall plate 100×50 treated, both eaves walls', category: 'materials', source: 'fixed', fixedQty: g.wallPlateLm, unit: 'lm', unitCost: 2.80, wastePct })
     if (g.strapCount > 0) out.push({ id: 'straps', name: 'Lateral restraint straps', category: 'materials', source: 'fixed', fixedQty: g.strapCount, unit: 'nr', unitCost: 4.20, roundToWhole: true })
-    out.push({ id: 'ceiling_joists', name: `Ceiling joists 47×${ceilingJoistDepthMm} C16`, category: 'materials', source: 'fixed', fixedQty: g.ceilingJoistLm, unit: 'lm', unitCost: ceilingJoistRate, wastePct })
+    if (g.ceilingJoistLm > 0) out.push({ id: 'ceiling_joists', name: `Ceiling joists 47×${ceilingJoistDepthMm} C16`, category: 'materials', source: 'fixed', fixedQty: g.ceilingJoistLm, unit: 'lm', unitCost: ceilingJoistRate, wastePct })
+    if (joinA) out.push(...roofJoinLayers('joinA', 'start end', joinA, wastePct))
+    if (joinB) out.push(...roofJoinLayers('joinB', 'far end', joinB, wastePct))
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [g, rafterSectionLabel, rafterRate, ridgeDepthMm, ridgeRate, ceilingJoistDepthMm, ceilingJoistRate, wastePct])
+  }, [g, rafterSectionLabel, rafterRate, ridgeDepthMm, ridgeRate, ceilingJoistDepthMm, ceilingJoistRate, wastePct, ceiling, ridgeBeam, joinA, joinB])
 
   const costedLines: CostedLine[] = useMemo(() => layers.map(l => {
     const withRate = rateOverrides[l.id] != null ? { ...l, unitCost: rateOverrides[l.id] } : l
@@ -147,7 +169,11 @@ export default function AssemblyGableRoofDemo({ onClose, onSave, labourTrades = 
 
   // Labour — the carpenter fixing the wall plates/ridge/rafters and the ceiling joists, following the roof
   // until edited by hand
-  const labourSuggestions: LabourSuggestion[] = g ? suggestGableRoofLabour(g) : []
+  const joinsForLabour = [
+    ...(joinA ? [{ label: 'start end', ...joinA }] : []),
+    ...(joinB ? [{ label: 'far end', ...joinB }] : []),
+  ]
+  const labourSuggestions: LabourSuggestion[] = g ? [...suggestGableRoofLabour(g), ...suggestRoofExtrasLabour({ ridgeBeamLm: ceiling === 'vaulted' ? g.ridgeLm : 0, joins: joinsForLabour })] : []
   const suggestedLabour = toLabourLines(labourSuggestions, labourTrades, false)
   const [labourOverride, setLabourOverride] = useCalcState<LabourLine[] | null>('AssemblyGableRoofDemo', 'labourOverride', null)
   const suggestedRef = useRef<LabourLine[]>([])
@@ -172,7 +198,7 @@ export default function AssemblyGableRoofDemo({ onClose, onSave, labourTrades = 
   const totalCost = costSubtotal + profitAmount
 
   // The customer's description follows the roof until it's edited by hand
-  const descInput = g ? { lengthM: g.lengthM, spanM: g.spanM, pitchDeg: g.pitchDeg, endA: g.endA, endB: g.endB, rafterCount: g.rafterCount, rafterSectionLabel, ridgeLm: g.ridgeLm, ceilingJoistCount: g.ceilingJoistCount, slopeAreaM2: g.slopeAreaM2 } : null
+  const descInput = g ? { lengthM: g.lengthM, spanM: g.spanM, pitchDeg: g.pitchDeg, endA: g.endA, endB: g.endB, rafterCount: g.rafterCount, rafterSectionLabel, ridgeLm: g.ridgeLm, ceilingJoistCount: g.ceilingJoistCount, slopeAreaM2: g.slopeAreaM2, ceiling, extraLines: [joinA, joinB].filter((x): x is RoofJoinGeometry => !!x).map(describeRoofJoin) } : null
   const [descriptionOverride, setDescriptionOverride] = useCalcState<string | null>('AssemblyGableRoofDemo', 'descriptionOverride', null)
   const [detailOverride, setDetailOverride] = useCalcState<string | null>('AssemblyGableRoofDemo', 'detailOverride', null)
   const description = descriptionOverride ?? (descInput ? describeGableRoofShort(descInput) : '')
@@ -204,7 +230,7 @@ export default function AssemblyGableRoofDemo({ onClose, onSave, labourTrades = 
         {geometryResult.ok && <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 700, color: '#7ab533' }}>{fmt(totalCost * qty)}</span>}
         {geometryResult.ok && <MaterialsListButtons lines={enabledLines} title={name} location={location} description={description} compact />}
         {onSave && geometryResult.ok && (
-          <button onClick={() => onSave({ name, qty, location, description, detail, lines: [...enabledLines, ...labourCostedLines, ...(profitLine ? [profitLine] : [])] })}
+          <button onClick={() => onSave({ name, qty, location, description, detail, lines: [...enabledLines, ...labourCostedLines, ...(profitLine ? [profitLine] : [])], vaultedCeiling: ceiling === 'vaulted' })}
             title="Replace this sub-phase's cost items with this calculation's costed lines"
             style={{ background: '#16a34a', border: 'none', borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: '6px 12px' }}>💾 Save &amp; Price</button>
         )}
@@ -226,6 +252,7 @@ export default function AssemblyGableRoofDemo({ onClose, onSave, labourTrades = 
       </div>
 
       {!geometryResult.ok && <div style={{ color: '#c0392b', fontSize: 12, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, padding: '6px 10px', marginBottom: 10 }}>⚠ {geometryResult.error}</div>}
+      {!joinsResult.ok && <div style={{ color: '#c0392b', fontSize: 12, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, padding: '6px 10px', marginBottom: 10 }}>⚠ {joinsResult.error}</div>}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16 }}>
         <div>
@@ -298,18 +325,20 @@ export default function AssemblyGableRoofDemo({ onClose, onSave, labourTrades = 
               </PropRow></div>
             </div>
             <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>
-              Each end — at the ridge's two ends, not the long eaves — is a new gable wall (priced under External Walls, not here) or built against an existing wall (a rear extension tied into the house at one end, say). The rafter framing is the same either way; an existing-wall end just gets restraint straps instead of a new wall to bear on.
+              Each end — at the ridge's two ends, not the long eaves — is a new gable wall (priced under External Walls, not here) or built against an existing wall (a rear extension tied into the house at one end, say). The rafter framing is the same either way; an existing-wall end just gets restraint straps instead of a new wall to bear on. An end that joins an existing roof is priced for the join below.
             </div>
+            {joinA && <RoofJoinPanel title="Start end" geo={joinA} stripped={strippedA} onStripped={setStrippedA} />}
+            {joinB && <RoofJoinPanel title="Far end" geo={joinB} stripped={strippedB} onStripped={setStrippedB} />}
           </CollapsibleSection>
 
-          <CollapsibleSection title="Ceiling joists" borderColor="#bae6fd">
+          <CeilingSection roof="gable" ceiling={ceiling} onCeiling={setCeiling} ridgeBeam={ridgeBeam} onRidgeBeam={setRidgeBeam} hasRidge>
             <PropRow label="Ceiling joist section">
               <select value={ceilingJoistDepthMm} onChange={e => setCeilingJoistDepthMm(+e.target.value)} style={propInput}>
                 {TIMBER_DEPTHS_MM.map(d => <option key={d} value={d}>47×{d} C16</option>)}
               </select>
             </PropRow>
             <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>Tie the rafter feet together across the full span, resting on both wall plates — one per rafter pair. Not checked against a span chart; a long span may need a binder or an engineer's design.</div>
-          </CollapsibleSection>
+          </CeilingSection>
 
           <PropRow label={`Waste % (${wastePct}%)`}>
             <input type="range" min={0} max={25} value={wastePct} onChange={e => setWastePct(+e.target.value)} style={{ width: '100%' }} />

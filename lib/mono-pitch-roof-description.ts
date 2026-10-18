@@ -23,14 +23,18 @@ export interface MonoPitchDescriptionInput {
   rafterSectionLabel: string
   highWallConnection: MonoPitchWallConnection
   slopeAreaM2: number
+  /** default 'flat' */
+  ceiling?: 'flat' | 'vaulted'
+  /** a sentence for the join to an existing roof, written by the screen (lib/roof-extras.ts describeRoofJoin) */
+  extraLines?: string[]
   openings: { kind: MonoPitchOpeningKind; widthMm: number; depthMm: number; trimmers: 2 | 3 }[]
 }
 
 export function describeMonoPitchRoofShort(i: MonoPitchDescriptionInput): string {
   if (i.rafterCount === 0) return 'Mono-pitch (lean-to) roof structure — not set up yet.'
-  const highWall = i.highWallConnection === 'ledger' ? 'ledgered to the existing wall' : 'bearing on its own wall plate'
+  const highWall = i.highWallConnection === 'ledger' ? 'ledgered to the existing wall' : i.highWallConnection === 'roof' ? 'tied into the existing roof' : 'bearing on its own wall plate'
   const openings = i.openings.length ? ` and ${i.openings.length} rooflight ${plural(i.openings.length, 'opening', 'openings')}` : ''
-  return `Mono-pitch (lean-to) roof structure, ${i.lengthM.toFixed(1)}m × ${i.spanM.toFixed(1)}m at ${i.pitchDeg}°: ${i.rafterCount} ${i.rafterSectionLabel} rafters, ${highWall} at the high wall${openings}.`
+  return `Mono-pitch (lean-to) roof structure, ${i.lengthM.toFixed(1)}m × ${i.spanM.toFixed(1)}m at ${i.pitchDeg}°: ${i.rafterCount} ${i.rafterSectionLabel} rafters, ${highWall} at the high ${i.highWallConnection === 'roof' ? 'edge' : 'wall'}${openings}${i.ceiling === 'vaulted' ? ', with a vaulted ceiling' : ''}.`
 }
 
 export function describeMonoPitchRoof(i: MonoPitchDescriptionInput): string {
@@ -41,11 +45,13 @@ export function describeMonoPitchRoof(i: MonoPitchDescriptionInput): string {
     `plan (${i.slopeAreaM2.toFixed(1)}m² of slope) over a ${i.lengthM.toFixed(1)}m eaves length.`,
   )
   lines.push('A wall plate is fixed along the low (eaves) wall, and the rafters are strapped to it.')
-  lines.push(
+  if (i.highWallConnection === 'roof') for (const l of i.extraLines ?? []) lines.push(l)
+  else lines.push(
     i.highWallConnection === 'ledger'
       ? 'At the high wall, a ledger plate is bolted to the existing wall and the rafters hang from joist hangers.'
       : 'At the high wall, the rafters bear on their own wall plate, strapped to the wall for lateral restraint.',
   )
+  if (i.ceiling === 'vaulted') lines.push('Vaulted ceiling: the ceiling follows the rafters, which are visible from below. Not included: the insulation between the rafters and the plasterboard lining of the vaulted ceiling, which are priced separately.')
   if (i.openings.length) {
     const list = i.openings.map(o => `${KIND_PHRASE[o.kind]} (${o.widthMm} × ${o.depthMm}mm, ${o.trimmers === 3 ? 'tripled' : 'doubled'} trimmers)`)
     const joined = list.length > 1 ? `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}` : list[0]

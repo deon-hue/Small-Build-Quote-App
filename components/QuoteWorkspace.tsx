@@ -916,6 +916,8 @@ function SubPhaseBlock({ p, markup, jobType = '', isLocked, collapsed, toggle, o
       ...p, items: newItems, taskName: p.calcDescription !== undefined && p.taskName?.trim() && p.taskName !== p.calcDescription ? p.taskName : result.description, calcDescription: result.description, assemblyLines: result.lines,
       // Always set (even to undefined): re-saving a calculator that no longer writes a detail must not leave a stale one.
       scopeDetail: result.detail,
+      // set (or cleared) every time: a roof saved again as a flat ceiling must lose the reminder
+      vaultedCeiling: result.vaultedCeiling ? true : undefined,
       electricsState: result.state as ElectricsSavedState | undefined,
       calcState: result.calcState,
       // The calculator's profit % is this sub-phase's margin, applied like any other margin (not a cost row of its own)

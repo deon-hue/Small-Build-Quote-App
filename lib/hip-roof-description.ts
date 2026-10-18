@@ -4,12 +4,15 @@
 // just a plain three-value union, restated locally), so — unlike most lib/*-description.ts modules — there's
 // nothing to import at all.
 
-export type HipRoofEndTreatment = 'hip' | 'gable' | 'existing-wall'
+export type HipRoofEndTreatment = 'hip' | 'gable' | 'existing-wall' | 'roof-abut' | 'roof-valley' | 'roof-over'
 
 const END_PHRASE: Record<HipRoofEndTreatment, string> = {
   hip: 'hipped',
   gable: 'a gable end',
   'existing-wall': 'built against the existing wall',
+  'roof-abut': 'going up onto the existing roof',
+  'roof-valley': 'joined into the existing roof',
+  'roof-over': 'built over part of the existing roof',
 }
 
 export interface HipRoofDescriptionInput {
@@ -26,6 +29,10 @@ export interface HipRoofDescriptionInput {
   jackRafterCount: number
   ceilingJoistCount: number
   slopeAreaM2: number
+  /** default 'flat' */
+  ceiling?: 'flat' | 'vaulted'
+  /** one sentence for each end that joins an existing roof, written by the screen (lib/roof-extras.ts describeRoofJoin) */
+  extraLines?: string[]
 }
 
 const totalRafters = (i: HipRoofDescriptionInput) => i.commonRafterCount + i.hipRafterCount + i.jackRafterCount
@@ -40,7 +47,7 @@ export function describeHipRoofShort(i: HipRoofDescriptionInput): string {
       ? `${i.commonRafterCount} common, ${i.hipRafterCount} hip and ${i.jackRafterCount} jack ${i.rafterSectionLabel} rafters ${ridge}`
       : `${i.commonRafterCount} common ${i.rafterSectionLabel} rafters ${ridge}`
   const ends = bothHipped(i) ? '' : i.endA === i.endB ? ` — each end ${END_PHRASE[i.endA]}` : ` — one end ${END_PHRASE[i.endA]}, the other ${END_PHRASE[i.endB]}`
-  return `Hip roof structure, ${i.lengthM.toFixed(1)}m × ${i.spanM.toFixed(1)}m at ${i.pitchDeg}°: ${rafters}${ends}.`
+  return `Hip roof structure, ${i.lengthM.toFixed(1)}m × ${i.spanM.toFixed(1)}m at ${i.pitchDeg}°: ${rafters}${ends}${i.ceiling === 'vaulted' ? ', with a vaulted ceiling' : ''}.`
 }
 
 export function describeHipRoof(i: HipRoofDescriptionInput): string {
@@ -73,8 +80,13 @@ export function describeHipRoof(i: HipRoofDescriptionInput): string {
     )
     lines.push('A wall plate is fixed along every eaves wall and any new gable end, and the rafters are strapped to it.')
     if (i.endA === 'gable' || i.endB === 'gable') lines.push('The gable end wall itself is priced separately, under External Walls.')
+    for (const l of i.extraLines ?? []) lines.push(l)
   }
-  lines.push(`Ceiling joists: ${i.ceilingJoistCount} joists span the full width, tying the wall plates together, including under any hipped end.`)
+  if (i.ceiling === 'vaulted') {
+    lines.push('Vaulted ceiling: there are no ceiling joists. The ridge is a beam, carried on a bearing at each end, and the ceiling follows the rafters. Not included: the insulation and the plasterboard lining of the vaulted ceiling, which are priced separately.')
+  } else {
+    lines.push(`Ceiling joists: ${i.ceilingJoistCount} joists span the full width, tying the wall plates together, including under any hipped end.`)
+  }
   lines.push('Not included: the roof covering, gutters and downpipes, and any fascia, soffit and barge boards, which are priced separately.')
   return lines.join('\n')
 }

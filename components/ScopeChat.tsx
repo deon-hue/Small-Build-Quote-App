@@ -59,7 +59,7 @@ const OPENING_QUESTIONS: Record<string, string[]> = {
     'Single storey or two storey?',
     'Wall construction: standard cavity blockwork, timber frame, or ICF?',
     'External finish: brick to match, render, cladding, or mixed?',
-    'Roof: flat GRP/EPDM or pitched to match the house?',
+    'Roof: flat GRP/EPDM or pitched to match the house? If pitched: flat or vaulted ceiling, and does it join onto the existing roof?',
     'Knock-through to existing house — new steel beam required?',
   ],
   'Side Extension': [

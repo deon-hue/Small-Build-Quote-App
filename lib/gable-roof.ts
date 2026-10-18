@@ -17,7 +17,9 @@
 // add restraint straps tying the ridge and end rafters back to it, since there's no new wall bearing them to
 // rely on instead.
 
-export type GableEndTreatment = 'gable' | 'existing-wall'
+// 'roof-abut', 'roof-valley' and 'roof-over' are the three ways an end joins an existing ROOF (lib/roof-extras.ts prices the join itself); for the rafters, ridge and wall plates they are the same as an existing wall:
+// no new gable wall is built there, and the end rafters are strapped back to what is already there.
+export type GableEndTreatment = 'gable' | 'existing-wall' | 'roof-abut' | 'roof-valley' | 'roof-over'
 
 export interface GableRoofInput {
   lengthMm: number          // ridge length — the rafter pairs are spaced along this
@@ -29,6 +31,8 @@ export interface GableRoofInput {
   endA?: GableEndTreatment
   /** The end at length-position lengthMm. Default 'gable'. */
   endB?: GableEndTreatment
+  /** 'flat' (default): ceiling joists across the span. 'vaulted': none, the ceiling follows the rafters and the ridge is a beam (priced by the screen, lib/roof-extras.ts). */
+  ceiling?: 'flat' | 'vaulted'
 }
 
 export interface GableRoofGeometry {
@@ -37,6 +41,7 @@ export interface GableRoofGeometry {
   pitchDeg: number
   endA: GableEndTreatment
   endB: GableEndTreatment
+  ceiling: 'flat' | 'vaulted'
   /** Rafter positions along the ridge — one pair (both faces) at each. */
   rafterPairCount: number
   /** Every rafter, both faces. */
@@ -73,6 +78,8 @@ export function calculateGableRoofGeometry(input: GableRoofInput): GableRoofGeom
   const { lengthMm: L, spanMm: S, pitchDeg, rafterCentresMm: C, eavesOverhangMm: overhang } = input
   const endA: GableEndTreatment = input.endA ?? 'gable'
   const endB: GableEndTreatment = input.endB ?? 'gable'
+  const ceiling = input.ceiling === 'vaulted' ? 'vaulted' : 'flat'
+  const existing = (t: GableEndTreatment) => t !== 'gable'
   if (!(L > 0)) throw new Error('The ridge length must be greater than zero.')
   if (!(S > 0)) throw new Error('The span must be greater than zero.')
   if (!(C > 0)) throw new Error('The rafter centres must be greater than zero.')
@@ -90,15 +97,15 @@ export function calculateGableRoofGeometry(input: GableRoofInput): GableRoofGeom
   const rafterCount = rafterPairCount * 2
   const rafterLm = (rafterCount * rafterRunMm) / 1000
   const ridgeLm = L / 1000
-  const ceilingJoistCount = rafterPairCount
+  const ceilingJoistCount = ceiling === 'vaulted' ? 0 : rafterPairCount
   const ceilingJoistLm = (ceilingJoistCount * S) / 1000
   const wallPlateLm = (2 * L) / 1000
   const strapsPerEnd = Math.ceil(S / RESTRAINT_STRAP_CENTRES_MM) + 1
   const strapCount =
     2 * (Math.ceil(L / RESTRAINT_STRAP_CENTRES_MM) + 1) +
-    (endA === 'existing-wall' ? strapsPerEnd : 0) +
-    (endB === 'existing-wall' ? strapsPerEnd : 0)
-  const existingWallLm = ((endA === 'existing-wall' ? S : 0) + (endB === 'existing-wall' ? S : 0)) / 1000
+    (existing(endA) ? strapsPerEnd : 0) +
+    (existing(endB) ? strapsPerEnd : 0)
+  const existingWallLm = ((existing(endA) ? S : 0) + (existing(endB) ? S : 0)) / 1000
 
   const warnings: string[] = []
   if (pitchDeg < 15) warnings.push(`A ${pitchDeg}° pitch is low for most tiles and slates — check the covering's minimum pitch before committing to it.`)
@@ -106,7 +113,7 @@ export function calculateGableRoofGeometry(input: GableRoofInput): GableRoofGeom
 
   return {
     lengthM: +(L / 1000).toFixed(3), spanM: +(S / 1000).toFixed(3), pitchDeg,
-    endA, endB,
+    endA, endB, ceiling,
     rafterPairCount, rafterCount, rafterRunMm: +rafterRunMm.toFixed(1), rafterLm: +rafterLm.toFixed(3),
     ridgeLm: +ridgeLm.toFixed(3), ceilingJoistCount, ceilingJoistLm: +ceilingJoistLm.toFixed(3),
     riseMm: +riseMm.toFixed(1), slopeAreaM2: +slopeAreaM2.toFixed(3),

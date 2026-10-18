@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useApp } from '@/contexts/AppContext'
 import { QuoteGoneError, quoteSaveMessage } from '@/lib/quote-errors'
+import VaultedCeilingReminder from '@/components/VaultedCeilingReminder'
 import { fmt, VAT, JOB_TYPES, calcPhase, calcPhaseSell, uid } from '@/lib/utils'
 import { PRODUCT_NAME } from '@/lib/product-config'
 import type { QuotePhase, QuoteItem, Quote, TakeoffPhaseMeta, QuoteDocument, QuoteMiscItem } from '@/lib/types'
@@ -1138,6 +1139,7 @@ export default function NewQuotePage() {
               ...ph,
               source: 'manual', itemStatus: 'bo-default',
               ...(asmMargin !== undefined && { markupPct: asmMargin }),
+              ...(asmResult.vaultedCeiling && { vaultedCeiling: true }),
               taskName: asmResult.description,
               ...(asmResult.detail?.trim() && { scopeDetail: asmResult.detail }),
               assemblyLines: asmResult.lines,
@@ -2053,6 +2055,7 @@ export default function NewQuotePage() {
                   <span style={{ color: '#64748b' }}>— costs based on your configured defaults</span>
                 </div>
               )}
+              <VaultedCeilingReminder phases={phases} />
               <QuoteWorkspace
                 phases={phases}
                 markup={markup}

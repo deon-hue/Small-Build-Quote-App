@@ -88,6 +88,9 @@ const plasterSubphases: PhaseSubphase[] = [
       t('plaster-ceil-skim',        'Skim coat to ceiling plasterboard',      'm²',  20, 5.00,  1.20,  0,    0,    0,  'Thistle MultiFinish 2mm'),
       t('plaster-ceil-coving',      'Plaster coving or cornice (fix only)',   'lm',  20, 4.50,  5.50,  0,    0,    0,  '100mm cove to walls/ceiling junction'),
       t('plaster-ceil-access',      'Access hatch frame & board',             'nr',   2, 45,    35,    0,    0,    0,  'Loft / service hatch'),
+      t('plaster-ceil-vault-insul', 'Vaulted ceiling: insulation between and under the rafters', 'm²', 20, 7.50, 28.00, 0, 0, 0, 'Not in the roof structure: PIR between the rafters and a layer under them, with the vapour control layer'),
+      t('plaster-ceil-vault-board', 'Vaulted ceiling: plasterboard to the rafters', 'm²', 20, 8.50, 4.50, 0, 0, 0, '12.5mm plasterboard fixed to the underside of a sloping vaulted ceiling'),
+      t('plaster-ceil-vault-skim',  'Vaulted ceiling: skim to the sloping plasterboard', 'm²', 20, 6.50, 1.20, 0, 0, 0, 'Skim coat to a vaulted ceiling (follows the roof slope: slower than a flat ceiling)'),
     ],
   },
   {

@@ -240,7 +240,7 @@ export interface TakeoffItem {
   // assemblies.ts) — saved from the embedded calculator in the properties panel while
   // tracing. When present, applyTakeoffData() builds the quote phase straight from these
   // costed lines instead of the generic flat-task path.
-  assemblyResult?: { name: string; location: string; description: string; detail?: string; lines: CostedLine[] }
+  assemblyResult?: { name: string; location: string; description: string; detail?: string; lines: CostedLine[]; vaultedCeiling?: boolean }
 
   // Electrics: the one "Electrical installation" item holds every point placed on the plan (so they save with the project like everything else),
   // and what the electrics calculator was last saved as. Its price comes from the calculator (assemblyResult), not from the points.

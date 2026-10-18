@@ -24,6 +24,10 @@ export interface PitchedRoofCoveringDescriptionInput {
   flashingPhrase?: string
   /** lead soakers up a sloping abutment */
   soakerCount?: number
+  /** where the roof joins an existing roof: valley lining, the flashing along the join, and the existing tiling made good */
+  valleyLm?: number
+  joinAbutmentLm?: number
+  makeGoodM2?: number
 }
 
 export function describePitchedRoofCoveringShort(i: PitchedRoofCoveringDescriptionInput): string {
@@ -33,6 +37,7 @@ export function describePitchedRoofCoveringShort(i: PitchedRoofCoveringDescripti
   if (i.hipLm > 0) bits.push(`${i.hipLm.toFixed(1)}m hips`)
   if (i.vergeLm > 0) bits.push(`${i.vergeLm.toFixed(1)}m verge`)
   if (i.abutmentLm > 0) bits.push(`${i.abutmentLm.toFixed(1)}m abutment flashing`)
+  if ((i.valleyLm ?? 0) > 0) bits.push(`${(i.valleyLm ?? 0).toFixed(1)}m of lead valleys`)
   return `Pitched roof covering: ${bits.join(', ')}.`
 }
 
@@ -44,14 +49,19 @@ export function describePitchedRoofCovering(i: PitchedRoofCoveringDescriptionInp
   if (i.ridgeLm > 0) trims.push(`${i.ridgeLm.toFixed(1)}m of ridge capping`)
   if (i.hipLm > 0) trims.push(`${i.hipLm.toFixed(1)}m of hip capping`)
   if (i.vergeLm > 0) trims.push(`${i.vergeLm.toFixed(1)}m of verge`)
-  if (i.abutmentLm > 0) {
+  const joinFlash = i.joinAbutmentLm ?? 0
+  const wallFlash = Math.max(0, i.abutmentLm - joinFlash)
+  if (wallFlash > 0) {
     const soakers = (i.soakerCount ?? 0) > 0 ? `, with ${i.soakerCount} soakers` : ''
-    trims.push(`${i.abutmentLm.toFixed(1)}m of ${i.flashingPhrase ?? 'lead flashing'} where the roof meets a wall${soakers}, chased into the brickwork and pointed`)
+    trims.push(`${wallFlash.toFixed(1)}m of ${i.flashingPhrase ?? 'lead flashing'} where the roof meets a wall${soakers}, chased into the brickwork and pointed`)
   }
+  if (joinFlash > 0) trims.push(`${joinFlash.toFixed(1)}m of ${i.flashingPhrase ?? 'lead flashing'} where the new roof meets the existing roof`)
+  if ((i.valleyLm ?? 0) > 0) trims.push(`${(i.valleyLm ?? 0).toFixed(1)}m of lead-lined valleys`)
   if (trims.length) {
     const joined = trims.length > 1 ? `${trims.slice(0, -1).join(', ')} and ${trims[trims.length - 1]}` : trims[0]
     lines.push(`Trims: ${joined}.`)
   }
+  if ((i.makeGoodM2 ?? 0) > 0) lines.push(`Where the new roof joins the existing roof, about ${(i.makeGoodM2 ?? 0).toFixed(1)}m² of the existing tiling is lifted and relaid, with any broken tiles replaced.`)
   lines.push('Not included: the roof structure, gutters and downpipes, and any fascia, soffit and barge boards, which are priced separately.')
   return lines.join('\n')
 }

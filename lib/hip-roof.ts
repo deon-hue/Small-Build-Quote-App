@@ -31,7 +31,9 @@
 // calculator's scope regardless of who built the wall under it. An existing-wall end gets no wall plate at
 // all — nothing new is built there — but still gets restraint straps tying the end rafters back to it.
 
-export type HipEndTreatment = 'hip' | 'gable' | 'existing-wall'
+// 'roof-abut', 'roof-valley' and 'roof-over' are the three ways an end joins an existing ROOF (lib/roof-extras.ts prices the join itself): for the rafters, wall plates and straps they are the same as an
+// existing wall (no hips or jacks, no new wall plate, end rafters strapped back to what is there).
+export type HipEndTreatment = 'hip' | 'gable' | 'existing-wall' | 'roof-abut' | 'roof-valley' | 'roof-over'
 
 export interface HipRoofInput {
   lengthMm: number          // ridge-direction length — the building's longer run, ideally
@@ -43,6 +45,8 @@ export interface HipRoofInput {
   endA?: HipEndTreatment
   /** The end at length-position lengthMm. Default 'hip'. */
   endB?: HipEndTreatment
+  /** 'flat' (default): ceiling joists across the span. 'vaulted': none, the ceiling follows the rafters and the ridge is a beam (priced by the screen, lib/roof-extras.ts). */
+  ceiling?: 'flat' | 'vaulted'
 }
 
 export interface HipRoofGeometry {
@@ -51,6 +55,7 @@ export interface HipRoofGeometry {
   pitchDeg: number
   endA: HipEndTreatment
   endB: HipEndTreatment
+  ceiling: 'flat' | 'vaulted'
   /** Whether both ends are hipped and the ridge length comes out at zero — hips meeting at a point. */
   isPyramid: boolean
   ridgeLm: number
@@ -95,6 +100,9 @@ export function calculateHipRoofGeometry(input: HipRoofInput): HipRoofGeometry {
   const { lengthMm: L, spanMm: S, pitchDeg, rafterCentresMm: C, eavesOverhangMm: overhang } = input
   const endA: HipEndTreatment = input.endA ?? 'hip'
   const endB: HipEndTreatment = input.endB ?? 'hip'
+  const ceiling = input.ceiling === 'vaulted' ? 'vaulted' : 'flat'
+  // an end that is neither hipped nor a new gable is built against something that is already there: a wall or a roof
+  const existing = (t: HipEndTreatment) => t !== 'hip' && t !== 'gable'
   if (!(L > 0)) throw new Error('The ridge-direction length must be greater than zero.')
   if (!(S > 0)) throw new Error('The span must be greater than zero.')
   if (!(C > 0)) throw new Error('The rafter centres must be greater than zero.')
@@ -166,21 +174,21 @@ export function calculateHipRoofGeometry(input: HipRoofInput): HipRoofGeometry {
   // The two long eaves always get a wall plate. Each end gets one too, unless it's built against an existing
   // wall — nothing new there. Straps go wherever there's an eaves wall, and at an existing-wall end too
   // (tying the end rafters back to it), just without a wall plate.
-  const wallPlateMm = 2 * L + (endA !== 'existing-wall' ? S : 0) + (endB !== 'existing-wall' ? S : 0)
+  const wallPlateMm = 2 * L + (!existing(endA) ? S : 0) + (!existing(endB) ? S : 0)
   const wallPlateLm = wallPlateMm / 1000
-  const existingWallLm = ((endA === 'existing-wall' ? S : 0) + (endB === 'existing-wall' ? S : 0)) / 1000
+  const existingWallLm = ((existing(endA) ? S : 0) + (existing(endB) ? S : 0)) / 1000
   const strapsPerEnd = Math.ceil(S / RESTRAINT_STRAP_CENTRES_MM) + 1
   const strapCount = 2 * (Math.ceil(L / RESTRAINT_STRAP_CENTRES_MM) + 1) + 2 * strapsPerEnd // every end, whatever it is
 
   // Ceiling joists tie the two long wall plates together across the full span, at every position along the
   // full length — including under the hipped ends, same as a real ceiling would.
   const ceilingPositions = studPositions(L, C)
-  const ceilingJoistCount = ceilingPositions.length
+  const ceilingJoistCount = ceiling === 'vaulted' ? 0 : ceilingPositions.length
   const ceilingJoistLm = (ceilingJoistCount * S) / 1000
 
   return {
     lengthM: +(L / 1000).toFixed(3), spanM: +(S / 1000).toFixed(3), pitchDeg,
-    endA, endB,
+    endA, endB, ceiling,
     isPyramid, ridgeLm: +ridgeLm.toFixed(3),
     commonRafterPairCount, commonRafterCount, commonRafterRunMm: +commonRafterRunMm.toFixed(1), commonRafterLm: +commonRafterLm.toFixed(3),
     hipRafterCount, hipRafterRunMm: +hipRafterRunMm.toFixed(1), hipRafterLm: +hipRafterLm.toFixed(3),

@@ -493,3 +493,39 @@ export function suggestScreedFloorLabour(g: { areaM2: number; perimeterLm: numbe
   const mesh = line('screed-mesh', 'labourer', 'Lay the reinforcing mesh', [{ qty: g.meshAreaM2, unit: 'm²', what: 'mesh', rate: l.screedMeshM2 }])
   return [prep, mesh].filter((x): x is LabourSuggestion => x !== null)
 }
+
+/** The extra labour a vaulted ceiling and a join to an existing roof bring to a pitched roof structure: the carpenter lifting and fixing the ridge beam, tying the new roof to the old (bearer, ties, valley rafters,
+ * trimmers) and the roofer opening up and protecting the existing roof. Hours per unit are rough estimates, as everywhere here. Each join is one entry with a label for the task. */
+export interface RoofJoinLabourInput { label: string; bearerLm: number; fixingCount: number; valleyRafterLm: number; trimmerLm: number; strippedAreaM2: number; protectionM2: number }
+export function suggestRoofExtrasLabour(x: { ridgeBeamLm: number; joins: RoofJoinLabourInput[] }): LabourSuggestion[] {
+  const out: (LabourSuggestion | null)[] = []
+  out.push(line('carp-ridge-beam', 'carpenter', 'Lift and fix the ridge beam and its bearings', [
+    { qty: x.ridgeBeamLm, unit: 'lm', what: 'ridge beam', rate: 0.8 },
+    { qty: x.ridgeBeamLm > 0 ? 2 : 0, unit: 'bearings', what: '', rate: 0.75 },
+  ]))
+  x.joins.forEach((j, i) => {
+    out.push(line('carp-join-' + i, 'carpenter', 'Tie the new roof to the existing roof (' + j.label + ')', [
+      { qty: j.bearerLm, unit: 'lm', what: 'bearer', rate: 0.3 },
+      { qty: j.fixingCount, unit: 'ties and hangers', what: '', rate: 0.1 },
+      { qty: j.valleyRafterLm, unit: 'lm', what: 'valley rafters', rate: 0.6 },
+      { qty: j.trimmerLm, unit: 'lm', what: 'trimmers', rate: 0.3 },
+    ]))
+    out.push(line('roof-open-' + i, 'roofer', 'Open up and protect the existing roof (' + j.label + ')', [
+      { qty: j.strippedAreaM2, unit: 'm²', what: 'stripped', rate: 0.4 },
+      { qty: j.protectionM2, unit: 'm²', what: 'protected', rate: 0.1 },
+    ]))
+  })
+  return out.filter((v): v is LabourSuggestion => v !== null)
+}
+
+/** The roofer's extra work where a pitched covering meets an existing roof: lining the valleys, flashing the join, and relaying the existing tiling round it. Rough estimates, as everywhere here. */
+export function suggestRoofJoinCoveringLabour(x: { valleyLm: number; joinAbutmentLm: number; makeGoodM2: number }): LabourSuggestion[] {
+  const out = [
+    line('cover-join', 'roofer', 'Line the valleys, flash the join to the existing roof and make good the existing tiling', [
+      { qty: x.valleyLm, unit: 'lm', what: 'valley lining', rate: 0.8 },
+      { qty: x.joinAbutmentLm, unit: 'lm', what: 'flashing', rate: 0.5 },
+      { qty: x.makeGoodM2, unit: 'm²', what: 'existing tiling made good', rate: 0.6 },
+    ]),
+  ]
+  return out.filter((v): v is LabourSuggestion => v !== null)
+}

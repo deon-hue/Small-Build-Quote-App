@@ -19,7 +19,9 @@ import NumInput from '@/components/NumInput'
 import { useCalcState } from '@/components/calc-state'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
 import { fmt } from '@/lib/utils'
-import { calculateMonoPitchRoofGeometry, type MonoPitchWallConnection } from '@/lib/mono-pitch-roof'
+import { calculateMonoPitchRoofGeometry } from '@/lib/mono-pitch-roof'
+import { calculateRoofJoin, isRoofJoin, ROOF_JOIN_LABEL, type RoofJoinGeometry } from '@/lib/roof-extras'
+import { suggestRoofJoinCoveringLabour } from '@/lib/flat-roof-labour'
 import { calculateGableRoofGeometry, type GableEndTreatment } from '@/lib/gable-roof'
 import { calculateHipRoofGeometry, type HipEndTreatment } from '@/lib/hip-roof'
 import { calculatePitchedRoofCoveringGeometry, ABUTMENT_FLASHING, SOAKER_RATE, CHASE_MATERIALS_RATE, soakerCountFor, type AbutmentFlashing, type PitchedCoveringMaterial, type PitchedRoofCoveringGeometry } from '@/lib/pitched-roof-covering'
@@ -49,44 +51,64 @@ const MATERIAL_LABEL: Record<PitchedCoveringMaterial, string> = {
   'natural-slate': 'Natural slate', 'fibre-cement-slate': 'Fibre cement slate',
 }
 const MATERIAL_RATE: Record<PitchedCoveringMaterial, number> = { 'concrete-tile': 14, 'clay-tile': 28, 'natural-slate': 45, 'fibre-cement-slate': 20 }
-const MONO_CONNECTION_LABEL: Record<MonoPitchWallConnection, string> = { ledger: 'Ledger bolted to the existing wall', bearing: 'Bears on its own wall plate' }
-const GABLE_END_LABEL: Record<GableEndTreatment, string> = { gable: 'New gable wall', 'existing-wall': 'Against an existing wall' }
-const HIP_END_LABEL: Record<HipEndTreatment, string> = { hip: 'Hipped', gable: 'New gable wall', 'existing-wall': 'Against an existing wall' }
+// The high edge of a lean-to: a wall (ledgered, or its own wall plate) or an existing roof it goes up onto or is built over (the same choices as the roof structure calculator).
+type MonoHighEdge = 'ledger' | 'bearing' | 'roof-abut' | 'roof-over'
+const MONO_CONNECTION_LABEL: Record<MonoHighEdge, string> = { ledger: 'Ledger bolted to the existing wall', bearing: 'Bears on its own wall plate', 'roof-abut': ROOF_JOIN_LABEL['roof-abut'], 'roof-over': ROOF_JOIN_LABEL['roof-over'] }
+const GABLE_END_LABEL: Record<GableEndTreatment, string> = { gable: 'New gable wall', 'existing-wall': 'Against an existing wall', 'roof-abut': ROOF_JOIN_LABEL['roof-abut'], 'roof-valley': ROOF_JOIN_LABEL['roof-valley'], 'roof-over': ROOF_JOIN_LABEL['roof-over'] }
+const HIP_END_LABEL: Record<HipEndTreatment, string> = { hip: 'Hipped', gable: 'New gable wall', 'existing-wall': 'Against an existing wall', 'roof-abut': ROOF_JOIN_LABEL['roof-abut'], 'roof-valley': ROOF_JOIN_LABEL['roof-valley'], 'roof-over': ROOF_JOIN_LABEL['roof-over'] }
+const VALLEY_LEAD_PER_LM = 28   // £ per metre of lead-lined valley, supplied (sample)
 
 /** Which roof-type/per-end choices give which covering edge lengths — the shape-to-edges wiring lives here,
  * in the screen, since it just calls the already-tested structure engines with no new maths of its own. */
 function deriveCoveringEdges(shape: {
   roofType: PitchedRoofShapeType
   lengthMm: number; spanMm: number; pitchDeg: number; eavesOverhangMm: number
-  monoHighWallConnection: MonoPitchWallConnection
+  monoHighWallConnection: MonoHighEdge
   gableEndA: GableEndTreatment; gableEndB: GableEndTreatment
   hipEndA: HipEndTreatment; hipEndB: HipEndTreatment
-}): { ok: true; slopeAreaM2: number; ridgeLm: number; hipLm: number; vergeLm: number; abutmentLm: number; eavesLm: number; warnings: string[] } | { ok: false; error: string } {
+}): { ok: true; slopeAreaM2: number; ridgeLm: number; hipLm: number; vergeLm: number; abutmentLm: number; eavesLm: number; warnings: string[]
+  /** of the abutment, the part that meets a WALL (chased in, soakers) and the part along an existing ROOF; valley lining; existing tiling made good */
+  wallAbutmentLm: number; joinAbutmentLm: number; valleyLm: number; makeGoodM2: number } | { ok: false; error: string } {
   const { roofType, lengthMm, spanMm, pitchDeg, eavesOverhangMm } = shape
   const PLACEHOLDER_CENTRES_MM = 400 // rafter centres don't affect any covering quantity; a fixed, unexposed value
+  // an end that joins an existing roof is as wide as the span (a lean-to's high edge as long as the eaves)
+  const joinFor = (kind: string, joinMm: number): RoofJoinGeometry | null => isRoofJoin(kind) ? calculateRoofJoin({ kind, joinMm, spanMm, pitchDeg, rafterCentresMm: PLACEHOLDER_CENTRES_MM }) : null
+  const sumJoins = (js: (RoofJoinGeometry | null)[]) => ({
+    joinAbutmentLm: js.reduce((s, j) => s + (j?.abutmentLm ?? 0), 0), valleyLm: js.reduce((s, j) => s + (j?.valleyLeadLm ?? 0), 0),
+    makeGoodM2: js.reduce((s, j) => s + (j?.makeGoodM2 ?? 0), 0), warnings: js.flatMap(j => j?.warnings ?? []),
+  })
   try {
     if (roofType === 'mono') {
-      const g = calculateMonoPitchRoofGeometry({ lengthMm, spanMm, pitchDeg, eavesOverhangMm, rafterCentresMm: PLACEHOLDER_CENTRES_MM, highWallConnection: shape.monoHighWallConnection })
-      return { ok: true, slopeAreaM2: g.slopeAreaM2, ridgeLm: 0, hipLm: 0, vergeLm: 2 * (g.rafterRunMm / 1000), abutmentLm: g.lengthM, eavesLm: g.lengthM, warnings: g.warnings }
+      const edge = shape.monoHighWallConnection
+      const j = sumJoins([joinFor(edge, lengthMm)])
+      const g = calculateMonoPitchRoofGeometry({ lengthMm, spanMm, pitchDeg, eavesOverhangMm, rafterCentresMm: PLACEHOLDER_CENTRES_MM, highWallConnection: isRoofJoin(edge) ? 'roof' : edge })
+      const wall = isRoofJoin(edge) ? 0 : g.lengthM
+      return { ok: true, slopeAreaM2: g.slopeAreaM2, ridgeLm: 0, hipLm: 0, vergeLm: 2 * (g.rafterRunMm / 1000), abutmentLm: wall + j.joinAbutmentLm, eavesLm: g.lengthM, warnings: [...g.warnings, ...j.warnings], wallAbutmentLm: wall, joinAbutmentLm: j.joinAbutmentLm, valleyLm: j.valleyLm, makeGoodM2: j.makeGoodM2 }
     }
     if (roofType === 'gable') {
       const g = calculateGableRoofGeometry({ lengthMm, spanMm, pitchDeg, eavesOverhangMm, rafterCentresMm: PLACEHOLDER_CENTRES_MM, endA: shape.gableEndA, endB: shape.gableEndB })
       const ends = [shape.gableEndA, shape.gableEndB]
+      const j = sumJoins(ends.map(e => joinFor(e, spanMm)))
+      const wall = ends.filter(e => e === 'existing-wall').length * 2 * (g.rafterRunMm / 1000)
       return {
         ok: true, slopeAreaM2: g.slopeAreaM2, ridgeLm: g.ridgeLm,
         hipLm: 0,
         vergeLm: ends.filter(e => e === 'gable').length * 2 * (g.rafterRunMm / 1000),
-        abutmentLm: ends.filter(e => e === 'existing-wall').length * 2 * (g.rafterRunMm / 1000),
-        eavesLm: g.wallPlateLm, warnings: g.warnings,
+        abutmentLm: wall + j.joinAbutmentLm,
+        eavesLm: g.wallPlateLm, warnings: [...g.warnings, ...j.warnings],
+        wallAbutmentLm: wall, joinAbutmentLm: j.joinAbutmentLm, valleyLm: j.valleyLm, makeGoodM2: j.makeGoodM2,
       }
     }
     const g = calculateHipRoofGeometry({ lengthMm, spanMm, pitchDeg, eavesOverhangMm, rafterCentresMm: PLACEHOLDER_CENTRES_MM, endA: shape.hipEndA, endB: shape.hipEndB })
     const ends = [shape.hipEndA, shape.hipEndB]
+    const j = sumJoins(ends.map(e => joinFor(e, spanMm)))
+    const wall = ends.filter(e => e === 'existing-wall').length * 2 * (g.commonRafterRunMm / 1000)
     return {
       ok: true, slopeAreaM2: g.slopeAreaM2, ridgeLm: g.ridgeLm, hipLm: g.hipRafterLm,
       vergeLm: ends.filter(e => e === 'gable').length * 2 * (g.commonRafterRunMm / 1000),
-      abutmentLm: ends.filter(e => e === 'existing-wall').length * 2 * (g.commonRafterRunMm / 1000),
-      eavesLm: g.wallPlateLm, warnings: g.warnings,
+      abutmentLm: wall + j.joinAbutmentLm,
+      eavesLm: g.wallPlateLm, warnings: [...g.warnings, ...j.warnings],
+      wallAbutmentLm: wall, joinAbutmentLm: j.joinAbutmentLm, valleyLm: j.valleyLm, makeGoodM2: j.makeGoodM2,
     }
   } catch (e: any) {
     return { ok: false, error: e.message as string }
@@ -106,7 +128,7 @@ export default function AssemblyPitchedRoofCoveringDemo({ onClose, onSave, labou
   const [roofType, setRoofType] = useCalcState<PitchedRoofShapeType>('AssemblyPitchedRoofCoveringDemo', 'roofType', 'gable')
   const [pitchDeg, setPitchDeg] = useCalcState('AssemblyPitchedRoofCoveringDemo', 'pitchDeg', 30)
   const [eavesOverhangMm, setEavesOverhangMm] = useCalcState('AssemblyPitchedRoofCoveringDemo', 'eavesOverhangMm', 300)
-  const [monoHighWallConnection, setMonoHighWallConnection] = useCalcState<MonoPitchWallConnection>('AssemblyPitchedRoofCoveringDemo', 'monoHighWallConnection', 'ledger')
+  const [monoHighWallConnection, setMonoHighWallConnection] = useCalcState<MonoHighEdge>('AssemblyPitchedRoofCoveringDemo', 'monoHighWallConnection', 'ledger')
   const [gableEndA, setGableEndA] = useCalcState<GableEndTreatment>('AssemblyPitchedRoofCoveringDemo', 'gableEndA', 'gable')
   const [gableEndB, setGableEndB] = useCalcState<GableEndTreatment>('AssemblyPitchedRoofCoveringDemo', 'gableEndB', 'gable')
   const [hipEndA, setHipEndA] = useCalcState<HipEndTreatment>('AssemblyPitchedRoofCoveringDemo', 'hipEndA', 'hip')
@@ -145,7 +167,11 @@ export default function AssemblyPitchedRoofCoveringDemo({ onClose, onSave, labou
   const noSidesLayers = useMemo(() => new Set<string>(), [])
 
   // A gable or hip end built against a wall runs UP the slope (soakers at every course); a lean-to's high wall is level (an apron flashing, no soakers)
-  const soakers = g ? soakerCountFor(g.abutmentLm, battenGaugeMm, roofType !== 'mono', flashing) : 0
+  const wallAbutmentLm = edges.ok ? edges.wallAbutmentLm : 0
+  const joinAbutmentLm = edges.ok ? edges.joinAbutmentLm : 0
+  const valleyLm = edges.ok ? edges.valleyLm : 0
+  const makeGoodM2 = edges.ok ? edges.makeGoodM2 : 0
+  const soakers = g ? soakerCountFor(wallAbutmentLm, battenGaugeMm, roofType !== 'mono', flashing) : 0
 
   const layers: AssemblyLayerDef[] = useMemo(() => {
     if (!g) return []
@@ -160,12 +186,15 @@ export default function AssemblyPitchedRoofCoveringDemo({ onClose, onSave, labou
       const fl = ABUTMENT_FLASHING[flashing]
       out.push({ id: 'abutment', name: fl.line, category: 'materials', source: 'fixed', fixedQty: g.abutmentLm, unit: 'lm', unitCost: fl.rate, wastePct })
       if (soakers > 0) out.push({ id: 'abutment_soakers', name: 'Lead soakers, one per course up the abutment', category: 'materials', source: 'fixed', fixedQty: soakers, unit: 'nr', unitCost: SOAKER_RATE, roundToWhole: true, wastePct: 0 })
-      out.push({ id: 'abutment_chase', name: 'Lead wedges, mortar and sealant for the chase', category: 'materials', source: 'fixed', fixedQty: g.abutmentLm, unit: 'lm', unitCost: CHASE_MATERIALS_RATE, wastePct })
+      if (wallAbutmentLm > 0) out.push({ id: 'abutment_chase', name: 'Lead wedges, mortar and sealant for the chase', category: 'materials', source: 'fixed', fixedQty: wallAbutmentLm, unit: 'lm', unitCost: CHASE_MATERIALS_RATE, wastePct })
     }
+    // where the new roof joins an existing roof: lead-lined valleys, and the existing tiling made good (a quarter of it replaced, with new battens and membrane)
+    if (valleyLm > 0) out.push({ id: 'valley_lead', name: 'Lead-lined valley, with valley boards (the join to the existing roof)', category: 'materials', source: 'fixed', fixedQty: valleyLm, unit: 'lm', unitCost: VALLEY_LEAD_PER_LM, wastePct })
+    if (makeGoodM2 > 0) out.push({ id: 'make_good', name: `Replacement ${MATERIAL_LABEL[material].toLowerCase()}, battens and membrane to make good the existing roof at the join`, category: 'materials', source: 'fixed', fixedQty: makeGoodM2, unit: 'm²', unitCost: +(MATERIAL_RATE[material] * 0.25 + 2).toFixed(2), wastePct })
     if (g.eavesLm > 0) out.push({ id: 'eaves', name: 'Eaves felt support tray / eaves closure', category: 'materials', source: 'fixed', fixedQty: g.eavesLm, unit: 'lm', unitCost: 3.50, wastePct })
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [g, material, membraneType, wastePct, flashing, soakers])
+  }, [g, material, membraneType, wastePct, flashing, soakers, wallAbutmentLm, valleyLm, makeGoodM2])
 
   const costedLines: CostedLine[] = useMemo(() => layers.map(l => {
     const withRate = rateOverrides[l.id] != null ? { ...l, unitCost: rateOverrides[l.id] } : l
@@ -190,7 +219,7 @@ export default function AssemblyPitchedRoofCoveringDemo({ onClose, onSave, labou
 
   // Labour — the roofer laying the membrane, battens, covering and dressing the trims, following the roof
   // until edited by hand
-  const labourSuggestions: LabourSuggestion[] = g ? suggestPitchedRoofCoveringLabour({ material, ...g, soakerCount: soakers }) : []
+  const labourSuggestions: LabourSuggestion[] = g ? [...suggestPitchedRoofCoveringLabour({ material, ...g, soakerCount: soakers }), ...suggestRoofJoinCoveringLabour({ valleyLm, joinAbutmentLm, makeGoodM2 })] : []
   const suggestedLabour = toLabourLines(labourSuggestions, labourTrades, false)
   const [labourOverride, setLabourOverride] = useCalcState<LabourLine[] | null>('AssemblyPitchedRoofCoveringDemo', 'labourOverride', null)
   const suggestedRef = useRef<LabourLine[]>([])
@@ -215,7 +244,7 @@ export default function AssemblyPitchedRoofCoveringDemo({ onClose, onSave, labou
   const totalCost = costSubtotal + profitAmount
 
   // The customer's description follows the roof until it's edited by hand
-  const descInput = g ? { material, slopeAreaM2: g.slopeAreaM2, battenGaugeMm, ridgeLm: g.ridgeLm, hipLm: g.hipLm, vergeLm: g.vergeLm, abutmentLm: g.abutmentLm, flashingPhrase: ABUTMENT_FLASHING[flashing].phrase, soakerCount: soakers } : null
+  const descInput = g ? { material, slopeAreaM2: g.slopeAreaM2, battenGaugeMm, ridgeLm: g.ridgeLm, hipLm: g.hipLm, vergeLm: g.vergeLm, abutmentLm: g.abutmentLm, flashingPhrase: ABUTMENT_FLASHING[flashing].phrase, soakerCount: soakers, valleyLm, joinAbutmentLm, makeGoodM2 } : null
   const [descriptionOverride, setDescriptionOverride] = useCalcState<string | null>('AssemblyPitchedRoofCoveringDemo', 'descriptionOverride', null)
   const [detailOverride, setDetailOverride] = useCalcState<string | null>('AssemblyPitchedRoofCoveringDemo', 'detailOverride', null)
   const description = descriptionOverride ?? (descInput ? describePitchedRoofCoveringShort(descInput) : '')
@@ -315,8 +344,8 @@ export default function AssemblyPitchedRoofCoveringDemo({ onClose, onSave, labou
             <div style={{ marginTop: 6 }}><PropRow label="Eaves overhang (mm)">{numInput(eavesOverhangMm, setEavesOverhangMm, 0)}</PropRow></div>
             {roofType === 'mono' && (
               <div style={{ marginTop: 6 }}><PropRow label="High wall">
-                <select value={monoHighWallConnection} onChange={e => setMonoHighWallConnection(e.target.value as MonoPitchWallConnection)} style={propInput}>
-                  {(Object.entries(MONO_CONNECTION_LABEL) as [MonoPitchWallConnection, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                <select value={monoHighWallConnection} onChange={e => setMonoHighWallConnection(e.target.value as MonoHighEdge)} style={propInput}>
+                  {(Object.entries(MONO_CONNECTION_LABEL) as [MonoHighEdge, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
               </PropRow></div>
             )}
