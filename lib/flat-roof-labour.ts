@@ -33,7 +33,7 @@ export const LABOUR_RATES = {
     membraneM2: 0.15, battenLm: 0.08, ridgeLm: 0.35, hipLm: 0.4, vergeLm: 0.3, abutmentLm: 0.4, eavesLm: 0.15, chaseLm: 0.3, soakerNr: 0.05,
   },
   bricklayer: { cavityM2: 1.4, solidM2: 1.0, solidBrickM2: 1.8, copingLm: 0.35, trayLm: 0.15, outletOpeningNr: 0.5, dpcLm: 0.05 },
-  groundworker: { trimLm: 0.25, concreteM3: 1.5, backfillM3: 0.5, cavityFillM3: 1.0, raftTrimM2: 0.06, raftHardcoreM2: 0.12, raftBlindM2: 0.10, raftInsulationM2: 0.08, raftMeshM2PerLayer: 0.12, raftFormworkLm: 0.3, raftFinishM2: 0.12, padPitNr: 0.4, padBlindNr: 0.3, padFormworkM2: 0.8, padRebarKg: 0.025, beamBlindLm: 0.15, beamFormworkM2: 0.35, beamCageLm: 0.2, pileCutNr: 0.5, underpinDigM3: 10, underpinShutterM2: 1.0, underpinPinNr: 2.0, underpinPourM3: 2.5, underpinPackNr: 1.0, underpinSteelKg: 0.025 },
+  groundworker: { trimLm: 0.25, concreteM3: 1.5, backfillM3: 0.5, cavityFillM3: 1.0, raftTrimM2: 0.06, raftHardcoreM2: 0.12, raftBlindM2: 0.10, raftInsulationM2: 0.08, raftMeshM2PerLayer: 0.12, raftFormworkLm: 0.3, raftFinishM2: 0.12, padPitNr: 0.4, padBlindNr: 0.3, padFormworkM2: 0.8, padRebarKg: 0.025, beamBlindLm: 0.15, beamFormworkM2: 0.35, beamCageLm: 0.2, pileCutNr: 0.5, underpinDigM3: 10, underpinShutterM2: 1.0, underpinPinNr: 2.0, underpinPourM3: 2.5, underpinPackNr: 1.0, underpinSteelKg: 0.025, slabTrimM2: 0.06, slabHardcoreM2: 0.12, slabBlindM2: 0.05, slabDpmM2: 0.04, slabInsulationM2: 0.08, slabMeshM2PerLayer: 0.1, slabEdgeLm: 0.03, slabFinishM2: 0.12 },
   renderer: { renderM2: 0.6 },
   plumber: { gutterLm: 0.3, fittingNr: 0.15, downpipeLm: 0.35, shoeNr: 0.15, hopperNr: 0.5, offsetNr: 0.3 },
   labourer: { carryM2: 0.15, bricklayerShare: 0.5, screedPrepM2: 0.05, overlayPrepM2: 0.08, overlayPrimeM2: 0.02, overlayPourM2: 0.06, overlayEdgeLm: 0.02, screedInsulationM2: 0.1, screedDpmM2: 0.04, screedEdgeLm: 0.02, screedMeshM2: 0.08 },
@@ -544,4 +544,28 @@ export function suggestFloorOverlayLabour(g: { kind: 'self-levelling' | 'plywood
     { qty: g.edgeStripLm, unit: 'lm', what: 'edge strip', rate: l.overlayEdgeLm },
     { qty: g.areaM2, unit: 'm²', what: 'poured', rate: l.overlayPourM2 },
   ])].filter((x): x is LabourSuggestion => x !== null)
+}
+
+/** The labour for a concrete slab floor (Floors & Screeds → Concrete Slab Floor): a labour gang to trim the formation, spread and compact the hardcore, blind it and lay the membrane and any insulation, fix the mesh and
+ * edge strip, then place and level the concrete and power-float it. The digging is the machine and its operator, priced as plant in the calculator, so it is not in these hours. */
+export function suggestConcreteSlabFloorLabour(g: {
+  areaM2: number; hardcoreM3: number; blindingM3: number; dpmAreaM2: number; insulationAreaM2: number; meshAreaM2: number; edgeStripLm: number; concreteM3: number; powerFloatAreaM2: number
+}): LabourSuggestion[] {
+  const w = LABOUR_RATES.groundworker
+  const prep = line('slab-prep', 'labourer', 'Trim the formation, spread and compact the hardcore, blind it and lay the membrane and insulation', [
+    { qty: g.areaM2, unit: 'm²', what: 'formation trimmed', rate: w.slabTrimM2 },
+    { qty: g.hardcoreM3 > 0 ? g.areaM2 : 0, unit: 'm²', what: 'hardcore spread and compacted', rate: w.slabHardcoreM2 },
+    { qty: g.blindingM3 > 0 ? g.areaM2 : 0, unit: 'm²', what: 'blinding', rate: w.slabBlindM2 },
+    { qty: g.dpmAreaM2, unit: 'm²', what: 'membrane', rate: w.slabDpmM2 },
+    { qty: g.insulationAreaM2, unit: 'm²', what: 'insulation', rate: w.slabInsulationM2 },
+  ])
+  const steel = line('slab-steel', 'labourer', 'Fix the mesh on spacers and the edge strip', [
+    { qty: g.meshAreaM2, unit: 'm² of mesh', what: 'fixed', rate: w.slabMeshM2PerLayer },
+    { qty: g.edgeStripLm, unit: 'lm', what: 'edge strip', rate: w.slabEdgeLm },
+  ])
+  const pour = line('slab-pour', 'labourer', 'Place and level the concrete and finish the slab', [
+    { qty: g.concreteM3, unit: 'm³', what: 'concrete placed and levelled', rate: w.concreteM3 },
+    { qty: g.powerFloatAreaM2, unit: 'm²', what: 'power-floated', rate: w.slabFinishM2 },
+  ])
+  return [prep, steel, pour].filter((x): x is LabourSuggestion => x !== null)
 }

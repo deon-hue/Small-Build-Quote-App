@@ -31,6 +31,7 @@ export const BUILT_ASSEMBLY_CANONICAL_IDS = new Set<string>([
   'deco-internal-walls',
   'fs-screeded-floor',
   'fs-floor-overlay',
+  'fs-concrete-slab',
 ])
 
 // Bridges Take-off's External Walls "Build-up Type" system (keyed by WALL_MAKEUPS/
@@ -61,4 +62,5 @@ export const WALL_MAKEUP_TO_SUBPHASE_CANONICAL: Record<string, string> = {
   // Floor build-ups (FLOOR_MAKEUPS): a drawn floor's Build-Up Type pairs with its calculator the same way.
   screeded_floor: 'fs-screeded-floor',
   floor_overlay: 'fs-floor-overlay',
+  concrete_slab: 'fs-concrete-slab',
 }
