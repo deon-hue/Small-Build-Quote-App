@@ -421,33 +421,6 @@ const internalWallsSubphases: PhaseSubphase[] = [
 // ── 6. DRAINAGE & SERVICES ────────────────────────────────────────────────────
 
 const drainageSubphases: PhaseSubphase[] = [
-  // Underground drainage priced by the run (assembly calculator): trench, pipe, bed and surround, backfill, chambers, connections. Sits beside the task-based sub-phases below, which are untouched.
-  {
-    id: 'drain-runs',
-    phase: 'Drainage & Services',
-    name: 'Underground Drainage (by run)',
-    markupPct: 18,
-    ukWarning: 'Works to public sewers require the water company\'s consent and adoption needs SuDS compliance. Building Control inspect and test the drain before it is covered.',
-    tasks: [],  // priced by the Underground drainage calculator (runs: use, size, length, depth, how dug, surface; chambers, connections, CCTV)
-  },
-  // A soakaway sized from the roof and paving that drain to it, with channel drains, gullies, downpipe connections and water butts (assembly calculator). Sits beside the task-based Rainwater sub-phase, which is untouched.
-  {
-    id: 'drain-soakaway',
-    phase: 'Drainage & Services',
-    name: 'Soakaway & Rainwater (by area)',
-    markupPct: 18,
-    ukWarning: 'A soakaway must be sized from an infiltration test (BRE Digest 365), at least 5m from a building, and away from boundaries and slopes without checks.',
-    tasks: [],  // priced by the Soakaway & rainwater calculator (areas draining to it, the soakaway, channel drains, gullies, downpipe connections, butts)
-  },
-  // New and diverted supplies of water, gas, electricity and telecoms, and cap-offs (assembly calculator). Sits beside the task-based Services Cap-off & Diversions sub-phase, which is untouched.
-  {
-    id: 'drain-services',
-    phase: 'Drainage & Services',
-    name: 'Services Connections (by service)',
-    markupPct: 20,
-    ukWarning: 'Gas work must be carried out by a Gas Safe registered engineer. Water, gas and electricity connections are made by the utility or its approved contractor, whose charges and waiting times vary.',
-    tasks: [],  // priced by the Services connections calculator (a service per supply: utility, new/divert/cap-off, trench length, utility charge)
-  },
   {
     id: 'drain-underground',
     phase: 'Drainage & Services',
@@ -500,6 +473,33 @@ const drainageSubphases: PhaseSubphase[] = [
       t('drain-rw-gully',           'Yard / trapped gully & cover',          'nr',   2,  65,   75,    0,    0,    0,  'UPVC gully with grating'),
       t('drain-rw-downpipe-connect','Downpipe connection to drain',          'nr',   4,  45,   35,    0,    0,    0,  'Pipe run from downpipe to drain'),
     ],
+  },
+  // Underground drainage priced by the run (assembly calculator): trench, pipe, bed and surround, backfill, chambers, connections. Sits beside the task-based sub-phases below, which are untouched.
+  {
+    id: 'drain-runs',
+    phase: 'Drainage & Services',
+    name: 'Underground Drainage (by run)',
+    markupPct: 18,
+    ukWarning: 'Works to public sewers require the water company\'s consent and adoption needs SuDS compliance. Building Control inspect and test the drain before it is covered.',
+    tasks: [],  // priced by the Underground drainage calculator (runs: use, size, length, depth, how dug, surface; chambers, connections, CCTV)
+  },
+  // A soakaway sized from the roof and paving that drain to it, with channel drains, gullies, downpipe connections and water butts (assembly calculator). Sits beside the task-based Rainwater sub-phase, which is untouched.
+  {
+    id: 'drain-soakaway',
+    phase: 'Drainage & Services',
+    name: 'Soakaway & Rainwater (by area)',
+    markupPct: 18,
+    ukWarning: 'A soakaway must be sized from an infiltration test (BRE Digest 365), at least 5m from a building, and away from boundaries and slopes without checks.',
+    tasks: [],  // priced by the Soakaway & rainwater calculator (areas draining to it, the soakaway, channel drains, gullies, downpipe connections, butts)
+  },
+  // New and diverted supplies of water, gas, electricity and telecoms, and cap-offs (assembly calculator). Sits beside the task-based Services Cap-off & Diversions sub-phase, which is untouched.
+  {
+    id: 'drain-services',
+    phase: 'Drainage & Services',
+    name: 'Services Connections (by service)',
+    markupPct: 20,
+    ukWarning: 'Gas work must be carried out by a Gas Safe registered engineer. Water, gas and electricity connections are made by the utility or its approved contractor, whose charges and waiting times vary.',
+    tasks: [],  // priced by the Services connections calculator (a service per supply: utility, new/divert/cap-off, trench length, utility charge)
   },
 ]
 
@@ -727,39 +727,6 @@ function plumbBathroomItems(prefix: string): PhaseTask[] {
 }
 
 const plumbingSubphases: PhaseSubphase[] = [
-  // Plumbing installation, priced room by room (assembly calculator): fittings at an all-in plumber's rate, special fittings, whole-house items
-  {
-    id: 'plumb-install',
-    phase: 'Plumbing & Heating',
-    name: 'Plumbing Installation (by room)',
-    markupPct: 20,
-    tasks: [],  // priced by the Plumbing installation calculator (rooms: fittings, special fittings, whole house)
-  },
-  // Heating plant, priced itemised (assembly calculator): so far a gas combi boiler. The older 'Boiler & Heating System' sub-phase below stays for system boilers, cylinders and heat pumps until the calculator covers them.
-  {
-    id: 'plumb-heating-plant',
-    phase: 'Plumbing & Heating',
-    name: 'Heating Plant (by system)',
-    markupPct: 15,
-    ukWarning: 'Gas Safe registered engineer MUST install and commission the boiler. Gas boiler replacement requires Building Regulations notification.',
-    tasks: [],  // priced by the Heating plant calculator (boiler, flue, controls, filter, flush, pipework, commissioning)
-  },
-  // Warm water underfloor heating, priced zone by zone (assembly calculator). Deon decided UFH belongs under Plumbing; the screed over it is the Screeded Floor calculator.
-  {
-    id: 'plumb-ufh',
-    phase: 'Plumbing & Heating',
-    name: 'Underfloor Heating',
-    markupPct: 15,
-    tasks: [],  // priced by the Underfloor heating calculator (zones: pipe, loops, fixing, manifold, controls, commissioning)
-  },
-  // Pipework priced by the run (assembly calculator): the lengths a fitting's all-in price in the Plumbing Installation calculator does not cover
-  {
-    id: 'plumb-pipework',
-    phase: 'Plumbing & Heating',
-    name: 'Pipework Runs',
-    markupPct: 20,
-    tasks: [],  // priced by the Pipework runs calculator (runs: kind of pipe, size, material, length, route, lagging)
-  },
   {
     id: 'plumb-kitchen',
     phase: 'Plumbing & Heating',
@@ -838,6 +805,39 @@ const plumbingSubphases: PhaseSubphase[] = [
       t('plumb-heat-pump-ashp',     'Air source heat pump (supply & inst.)', 'sum',  1,   0,    0,    0, 8500,    0,  'MCS certified — qualifies for BUS grant'),
       t('plumb-heat-commission',    'System flush, balance & commission',    'sum',  1,   0,    0,    0,  320,    0,  'MagnaCleanse + inhibitor, pressure test'),
     ],
+  },
+  // Plumbing installation, priced room by room (assembly calculator): fittings at an all-in plumber's rate, special fittings, whole-house items
+  {
+    id: 'plumb-install',
+    phase: 'Plumbing & Heating',
+    name: 'Plumbing Installation (by room)',
+    markupPct: 20,
+    tasks: [],  // priced by the Plumbing installation calculator (rooms: fittings, special fittings, whole house)
+  },
+  // Heating plant, priced itemised (assembly calculator): so far a gas combi boiler. The older 'Boiler & Heating System' sub-phase below stays for system boilers, cylinders and heat pumps until the calculator covers them.
+  {
+    id: 'plumb-heating-plant',
+    phase: 'Plumbing & Heating',
+    name: 'Heating Plant (by system)',
+    markupPct: 15,
+    ukWarning: 'Gas Safe registered engineer MUST install and commission the boiler. Gas boiler replacement requires Building Regulations notification.',
+    tasks: [],  // priced by the Heating plant calculator (boiler, flue, controls, filter, flush, pipework, commissioning)
+  },
+  // Warm water underfloor heating, priced zone by zone (assembly calculator). Deon decided UFH belongs under Plumbing; the screed over it is the Screeded Floor calculator.
+  {
+    id: 'plumb-ufh',
+    phase: 'Plumbing & Heating',
+    name: 'Underfloor Heating',
+    markupPct: 15,
+    tasks: [],  // priced by the Underfloor heating calculator (zones: pipe, loops, fixing, manifold, controls, commissioning)
+  },
+  // Pipework priced by the run (assembly calculator): the lengths a fitting's all-in price in the Plumbing Installation calculator does not cover
+  {
+    id: 'plumb-pipework',
+    phase: 'Plumbing & Heating',
+    name: 'Pipework Runs',
+    markupPct: 20,
+    tasks: [],  // priced by the Pipework runs calculator (runs: kind of pipe, size, material, length, route, lagging)
   },
 ]
 
