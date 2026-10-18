@@ -152,7 +152,7 @@ function JobsPageInner() {
         // Mark quote as converted if we have a quoteId
         if (prefillQuoteId && newJob?.id) {
           const q = quotes.find(q => q.id === prefillQuoteId)
-          if (q) await updateQuote({ ...q, convertedToJob: true })
+          if (q) { try { await updateQuote({ ...q, convertedToJob: true }) } catch (e) { console.warn('Could not mark the quote as converted:', e) } }
           // Copy any plan attachments from the quote into the job's files section
           fetch('/api/copy-quote-plans', {
             method: 'POST',

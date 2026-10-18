@@ -8,10 +8,13 @@ import { FULL_PERMISSIONS, DEFAULT_CLIENT_PORTAL_SETTINGS } from '@/lib/types'
 import { assignmentsFor, diffAssignments, type AssigneePick } from '@/lib/task-assignments'
 import { uid, JOB_TEMPLATES } from '@/lib/utils'
 import { escapeLike } from '@/lib/email-match'
+import { QuoteGoneError } from '@/lib/quote-errors'
 
 interface AppContextType {
   jobs: Job[]
   quotes: Quote[]
+  /** quotes in Recently deleted: kept in the database with the status 'deleted', in no list but that one */
+  deletedQuotes: Quote[]
   clients: Client[]
   settings: Settings
   ganttStates: Record<string, GanttState>
@@ -37,7 +40,11 @@ interface AppContextType {
 
   addQuote: (quote: Omit<Quote, 'id' | 'ref' | 'savedDate'>) => Promise<Quote>
   updateQuote: (quote: Quote) => Promise<void>
+  /** moves the quote (and any versions made from it) to Recently deleted */
   deleteQuote: (id: string) => Promise<void>
+  restoreQuote: (id: string) => Promise<void>
+  /** deletes a quote that is in Recently deleted for good */
+  purgeQuote: (id: string) => Promise<void>
 
   addClient: (client: Omit<Client, 'id'>) => Promise<void>
   updateClient: (client: Client) => Promise<void>
@@ -170,10 +177,33 @@ const clientFromSupplierRow = (d: { [k: string]: any }): Client => ({
   cisPercentage: d.cis_percentage ?? null, subPaymentType: d.sub_payment_type || 'invoice', isPaye: d.is_paye ?? false, xeroContactId: d.xero_contact_id || null, accountNumber: d.account_number || '', postcode: d.postcode || '',
 })
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const quoteFromRow = (r: { [k: string]: any }): Quote => ({
+  id: r.id, ref: r.ref, savedDate: r.saved_date, lastEdited: r.last_edited,
+  status: r.status, jobType: r.job_type, title: r.title || '', markup: Number(r.markup),
+  vatIncluded: r.vat_included, scope: r.scope, photo: r.photo,
+  scopeNotes: 'scope_notes' in r ? (r.scope_notes || '') : undefined,   // undefined = column not added yet
+  convertedToJob: r.converted_to_job, customer: r.customer, phases: r.phases,
+  quoteSource: r.quote_source || undefined,
+  clientApprovedAt: r.client_approved_at || null,
+  clientApprovedBy: r.client_approved_by || null,
+  versionNumber: r.version_number || undefined,
+  parentQuoteId: r.parent_quote_id || null,
+  createdFromVersionId: r.created_from_version_id || null,
+  expiryDays: r.expiry_days ?? null,
+  preArchiveStatus: r.pre_archive_status || null,
+})
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const supabase = createClient()
   const [jobs, setJobs] = useState<Job[]>([])
   const [quotes, setQuotes] = useState<Quote[]>([])
+  const [deletedQuotes, setDeletedQuotes] = useState<Quote[]>([])
+  // the same lists as refs, so delete and restore can read them without being remade on every change
+  const quotesRef = useRef<Quote[]>([])
+  const deletedQuotesRef = useRef<Quote[]>([])
+  useEffect(() => { quotesRef.current = quotes }, [quotes])
+  useEffect(() => { deletedQuotesRef.current = deletedQuotes }, [deletedQuotes])
   const [clients, setClients] = useState<Client[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
@@ -281,21 +311,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
       if (quotesRes.data) {
-        setQuotes(quotesRes.data.map(r => ({
-          id: r.id, ref: r.ref, savedDate: r.saved_date, lastEdited: r.last_edited,
-          status: r.status, jobType: r.job_type, title: r.title || '', markup: Number(r.markup),
-          vatIncluded: r.vat_included, scope: r.scope, photo: r.photo,
-          scopeNotes: 'scope_notes' in r ? (r.scope_notes || '') : undefined,   // undefined = column not added yet
-          convertedToJob: r.converted_to_job, customer: r.customer, phases: r.phases,
-          quoteSource: r.quote_source || undefined,
-          clientApprovedAt: r.client_approved_at || null,
-          clientApprovedBy: r.client_approved_by || null,
-          versionNumber: r.version_number || undefined,
-          parentQuoteId: r.parent_quote_id || null,
-          createdFromVersionId: r.created_from_version_id || null,
-          expiryDays: r.expiry_days ?? null,
-          preArchiveStatus: r.pre_archive_status || null,
-        })))
+        // a deleted quote is kept (status 'deleted') but is in no list but Recently deleted
+        setQuotes(quotesRes.data.filter(r => r.status !== 'deleted').map(quoteFromRow))
+        setDeletedQuotes(quotesRes.data.filter(r => r.status === 'deleted').map(quoteFromRow))
       }
 
       if (clientsRes.data) {
@@ -547,8 +565,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return newQuote
   }, [supabase])
 
+  // Saving a quote checks what the database said: an error, or an update that changed no quote at all (it has been deleted, or is not yours), is thrown, so the screen can say so
+  // instead of "updated successfully".
   const updateQuote = useCallback(async (q: Quote) => {
-    await supabase.from('quotes').update({
+    const { data: changed, error } = await supabase.from('quotes').update({
       status: q.status, job_type: q.jobType, title: q.title || '', markup: q.markup,
       vat_included: q.vatIncluded, scope: q.scope, photo: q.photo,
       converted_to_job: q.convertedToJob, customer: q.customer, phases: q.phases,
@@ -558,13 +578,50 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // only sent when the column is known to exist, so an update never fails on a database that hasn't had quote-scope-notes.sql run
       ...(q.scopeNotes !== undefined ? { scope_notes: q.scopeNotes } : {}),
       last_edited: new Date().toLocaleDateString('en-GB'),
-    }).eq('id', q.id)
+    }).eq('id', q.id).select('id')
+    if (error) throw error
+    if (!changed || changed.length === 0) throw new QuoteGoneError()
     setQuotes(prev => prev.map(x => x.id === q.id ? { ...q, lastEdited: new Date().toLocaleDateString('en-GB') } : x))
   }, [supabase])
 
+  // Delete moves a quote (and any versions made from it) to Recently deleted: its status becomes 'deleted' and the status it had is kept in pre_archive_status, so it can be put back.
+  // A deleted quote is hidden everywhere, including from the client portal, which only ever shows sent / approved / rejected quotes.
   const deleteQuote = useCallback(async (id: string) => {
-    await supabase.from('quotes').delete().eq('id', id)
-    setQuotes(prev => prev.filter(q => q.id !== id))
+    const group = quotesRef.current.filter(q => q.id === id || q.parentQuoteId === id)
+    if (group.length === 0) return
+    for (const q of group) {
+      // an archived quote keeps the status it was archived from, so putting it back reinstates it
+      const was = q.status === 'archived' ? (q.preArchiveStatus || 'accepted') : q.status
+      const { data, error } = await supabase.from('quotes').update({ status: 'deleted', pre_archive_status: was }).eq('id', q.id).select('id')
+      if (error) throw error
+      if (!data || data.length === 0) throw new QuoteGoneError()
+    }
+    const ids = new Set(group.map(q => q.id))
+    setQuotes(prev => prev.filter(q => !ids.has(q.id)))
+    setDeletedQuotes(prev => [...group.map(q => ({ ...q, status: 'deleted' as const, preArchiveStatus: q.status === 'archived' ? (q.preArchiveStatus || 'accepted') : q.status })), ...prev])
+  }, [supabase])
+
+  const restoreQuote = useCallback(async (id: string) => {
+    const group = deletedQuotesRef.current.filter(q => q.id === id || q.parentQuoteId === id)
+    if (group.length === 0) return
+    const back: Quote[] = []
+    for (const q of group) {
+      const to = (q.preArchiveStatus || 'draft') as Quote['status']
+      const { data, error } = await supabase.from('quotes').update({ status: to, pre_archive_status: null }).eq('id', q.id).select('id')
+      if (error) throw error
+      if (!data || data.length === 0) throw new QuoteGoneError()
+      back.push({ ...q, status: to, preArchiveStatus: null })
+    }
+    const ids = new Set(group.map(q => q.id))
+    setDeletedQuotes(prev => prev.filter(q => !ids.has(q.id)))
+    setQuotes(prev => [...prev, ...back])
+  }, [supabase])
+
+  // Only a quote that is already in Recently deleted can be destroyed here, never a live one
+  const purgeQuote = useCallback(async (id: string) => {
+    const { error } = await supabase.from('quotes').delete().eq('id', id).eq('status', 'deleted')
+    if (error) throw error
+    setDeletedQuotes(prev => prev.filter(q => q.id !== id && q.parentQuoteId !== id))
   }, [supabase])
 
   // ── Clients ──────────────────────────────────────────────────
@@ -1301,10 +1358,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider value={{
-      jobs, quotes, clients, settings, ganttStates, invoices, jobNotes, jobPayments, variations, contracts, customTemplates, loading, pageTitle, setPageTitle,
+      jobs, quotes, deletedQuotes, clients, settings, ganttStates, invoices, jobNotes, jobPayments, variations, contracts, customTemplates, loading, pageTitle, setPageTitle,
       teamMembers, currentMember, isOwner, hasCompany, permissions,
       addJob, updateJob, deleteJob,
-      addQuote, updateQuote, deleteQuote,
+      addQuote, updateQuote, deleteQuote, restoreQuote, purgeQuote,
       addClient, updateClient, deleteClient, upsertClientFromQuote, markPortalInvite,
       suppliers, addSupplier, updateSupplier, deleteSupplier,
       saveSettings,

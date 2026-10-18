@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useApp } from '@/contexts/AppContext'
+import { QuoteGoneError, quoteSaveMessage } from '@/lib/quote-errors'
 import { fmt, VAT, JOB_TYPES, calcPhase, calcPhaseSell, uid } from '@/lib/utils'
 import { PRODUCT_NAME } from '@/lib/product-config'
 import type { QuotePhase, QuoteItem, Quote, TakeoffPhaseMeta, QuoteDocument, QuoteMiscItem } from '@/lib/types'
@@ -295,6 +296,7 @@ export default function NewQuotePage() {
   const [saving, setSaving] = useState(false)
   const [autoSaving,  setAutoSaving]  = useState(false)
   const [lastSaved,   setLastSaved]   = useState<Date | null>(null)
+  const [autoSaveFailed, setAutoSaveFailed] = useState(false)
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Guards the one-shot init effect below against running twice for the same
   // mount. Must be a ref, not state — a second invocation can happen before
@@ -531,7 +533,8 @@ export default function NewQuotePage() {
         }
         await updateQuote({ ...existing, ...qData })
         setLastSaved(new Date())
-      } catch { /* silent — user can still save manually */ }
+        setAutoSaveFailed(false)
+      } catch { setAutoSaveFailed(true) }   // shown beside the Saved tick: the quote is NOT saved yet
       finally { setAutoSaving(false) }
     }, 2000)
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current) }
@@ -888,7 +891,15 @@ export default function NewQuotePage() {
           alert('This quote currently has no lines — refusing to overwrite the saved version, which still has data. Reload the page before continuing.')
           return
         }
-        await updateQuote({ ...existing, ...qData })
+        try { await updateQuote({ ...existing, ...qData }) }
+        catch (e) {
+          if (e instanceof QuoteGoneError && confirm(quoteSaveMessage(e) + '\n\nSave what is on screen as a NEW draft quote instead?')) {
+            const newQuote = await addQuote(qData)
+            setEditingId(newQuote.id)
+            alert('Saved as a new draft — ref: ' + newQuote.ref)
+          } else if (!(e instanceof QuoteGoneError)) alert(quoteSaveMessage(e))
+          return
+        }
         alert('Draft updated.')
       } else {
         const newQuote = await addQuote(qData)
@@ -1514,7 +1525,16 @@ export default function NewQuotePage() {
         ...(editingId && scopeNotes !== undefined ? { scopeNotes } : {}) }
       if (editingId) {
         const existing = quotes.find(q => q.id === editingId)!
-        await updateQuote({ ...existing, ...qData })
+        // the answer is checked: "updated" is only said when the database took it, and what is on screen is kept when it did not
+        try { await updateQuote({ ...existing, ...qData }) }
+        catch (e) {
+          if (e instanceof QuoteGoneError && confirm(quoteSaveMessage(e) + '\n\nSave what is on screen as a NEW quote instead?')) {
+            const newQuote = await addQuote(qData)
+            setEditingId(newQuote.id)
+            alert('Saved as a new quote — ref: ' + newQuote.ref)
+          } else if (!(e instanceof QuoteGoneError)) alert(quoteSaveMessage(e))
+          return
+        }
         setEditingId(null)
         alert('Quote updated successfully.')
       } else {
@@ -1540,7 +1560,7 @@ export default function NewQuotePage() {
     setSaving(true)
     try {
       const customer = { name: custName, address: custAddr, email: custEmail, phone: custPhone }
-      await updateQuote({ ...existing, customer })
+      try { await updateQuote({ ...existing, customer }) } catch (e) { alert(quoteSaveMessage(e)); return }
       alert('Customer updated for this quote.')
     } finally {
       setSaving(false)
@@ -1558,7 +1578,7 @@ export default function NewQuotePage() {
     }
     setSaving(true)
     try {
-      await updateQuote({ ...existing, scopeNotes: (scopeNotes ?? '').trim() })
+      try { await updateQuote({ ...existing, scopeNotes: (scopeNotes ?? '').trim() }) } catch (e) { alert(quoteSaveMessage(e)); return }
       setScopeNotes((scopeNotes ?? '').trim())
       alert('Changes to the scope saved. They will show on the quote, the client portal and the contract.')
     } finally {
@@ -1715,7 +1735,10 @@ export default function NewQuotePage() {
             {autoSaving && (
               <span style={{ fontSize: 11, color: '#4a90a4' }}>⟳ Saving…</span>
             )}
-            {!autoSaving && lastSaved && (
+            {!autoSaving && autoSaveFailed && (
+              <span style={{ fontSize: 11, color: '#b91c1c', fontWeight: 700 }} title="The last automatic save did not go through. Press Save to try again: your changes are still on this screen.">⚠ Not saved</span>
+            )}
+            {!autoSaving && !autoSaveFailed && lastSaved && (
               <span style={{ fontSize: 11, color: '#64748b' }}>
                 ✓ Saved {Math.round((Date.now() - lastSaved.getTime()) / 1000)}s ago
               </span>

@@ -34,6 +34,7 @@ export async function GET(req: NextRequest) {
       .select('id, ref, version_number, status, savedDate, lastEdited, created_from_version_id')
       .or(`id.eq.${rootId},parent_quote_id.eq.${rootId}`)
       .eq('user_id', user.id)
+      .neq('status', 'deleted')   // a quote in Recently deleted is not part of the history
       .order('version_number', { ascending: true })
 
     if (versionsError) {

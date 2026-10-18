@@ -17,13 +17,15 @@ import QuoteCommentsSection from '@/components/QuoteCommentsSection'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { extractQuoteIntelligence } from '@/lib/quote-intelligence'
+import { quoteSaveMessage } from '@/lib/quote-errors'
 
 export default function SavedQuotesPage() {
-  const { quotes, jobs, variations, settings, clients, updateQuote, deleteQuote, deleteJob, addJob, addVariation, saveGanttState, loading } = useApp()
+  const { quotes, deletedQuotes, jobs, variations, settings, clients, updateQuote, deleteQuote, restoreQuote, purgeQuote, deleteJob, addJob, addVariation, saveGanttState, loading } = useApp()
   const [previewQuote, setPreviewQuote]   = useState<Quote | null>(null)
   const [commentsQuote, setCommentsQuote] = useState<Quote | null>(null)
   const [emailingQuote, setEmailingQuote] = useState<Quote | null>(null)
   const [archiveOpen, setArchiveOpen]     = useState(false)
+  const [deletedOpen, setDeletedOpen]     = useState(false)
   const [pushVarQuote, setPushVarQuote]   = useState<Quote | null>(null)
   const [pushVarJobId, setPushVarJobId]   = useState('')
   const [pushingVar, setPushingVar]       = useState(false)
@@ -92,8 +94,14 @@ export default function SavedQuotesPage() {
   const sentCount = active.filter(q => q.status === 'sent').length
   const wonValue = active.filter(q => q.status === 'accepted' || q.status === 'approved').reduce((s, q) => s + quoteTotal(q), 0)
 
+  /** Saves a change to a quote. If the database does not take it, say so (and carry on with nothing): never behave as if it had saved. */
+  async function save(q: Quote): Promise<boolean> {
+    try { await updateQuote(q); return true }
+    catch (e) { alert(quoteSaveMessage(e)); return false }
+  }
+
   async function handleStatusChange(quote: Quote, status: Quote['status']) {
-    await updateQuote({ ...quote, status })
+    if (!(await save({ ...quote, status }))) return
     if (status === 'accepted' || status === 'rejected' || status === 'declined') {
       try {
         const sb = createClient()
@@ -113,13 +121,13 @@ export default function SavedQuotesPage() {
 
   async function handleArchive(q: Quote) {
     if (!confirm(`Archive quote ${q.ref || ''}?\n\nIt will move to the Archived section and can be reinstated at any time.`)) return
-    await updateQuote({ ...q, status: 'archived', preArchiveStatus: q.status })
+    await save({ ...q, status: 'archived', preArchiveStatus: q.status })
   }
 
   async function handleReinstate(q: Quote) {
     const restoreTo = q.preArchiveStatus || 'accepted'
     if (!confirm(`Reinstate quote ${q.ref || ''}?\n\nIt will move back to Saved Quotes with ${Q_LABEL[restoreTo] || restoreTo} status.`)) return
-    await updateQuote({ ...q, status: restoreTo, preArchiveStatus: null })
+    await save({ ...q, status: restoreTo, preArchiveStatus: null })
   }
 
   async function handleDelete(q: Quote) {
@@ -141,10 +149,10 @@ export default function SavedQuotesPage() {
       if (choice === null) return
       deleteLinkedJobs = choice
     } else {
-      if (!confirm(`Delete quote ${q.ref || ''}? This cannot be undone.`)) return
+      if (!confirm(`Delete quote ${q.ref || ''}?\n\nIt moves to Recently deleted at the bottom of this page, and can be brought back from there.`)) return
     }
 
-    await deleteQuote(q.id)
+    try { await deleteQuote(q.id) } catch (e) { alert(quoteSaveMessage(e)); return }
     if (deleteLinkedJobs) {
       for (const j of linkedJobs) await deleteJob(j.id)
     }
@@ -179,7 +187,7 @@ export default function SavedQuotesPage() {
         body: JSON.stringify({ quoteId: q.id, jobId: newJob.id }),
       }).catch(err => console.warn('Could not copy quote plans to job:', err))
     }
-    await updateQuote({ ...q, convertedToJob: true })
+    await save({ ...q, convertedToJob: true })
     alert('Job created! Find it in the Jobs section.')
     router.push('/jobs')
   }
@@ -207,7 +215,7 @@ export default function SavedQuotesPage() {
         clientRejectionReason: null,
         sentAt: null,
       })
-      await updateQuote({ ...q, convertedToJob: true })
+      await save({ ...q, convertedToJob: true })
       setPushVarQuote(null)
       setPushVarJobId('')
       alert(`Done — variation added to "${jobDisplayTitle(job)} — ${job.client}". The contract value has been updated.`)
@@ -276,14 +284,14 @@ export default function SavedQuotesPage() {
   }
 
   async function handleSetExpiryDays(q: Quote, days: number) {
-    await updateQuote({ ...q, expiryDays: days > 0 ? days : null })
+    await save({ ...q, expiryDays: days > 0 ? days : null })
     setEditingExpiryId(null)
   }
 
   async function handleArchiveExpired() {
     if (!expiredActive.length) return
     if (!confirm(`Archive ${expiredActive.length} expired quote${expiredActive.length > 1 ? 's' : ''}?\n\nThey'll move to the Archived section and can be reinstated at any time.`)) return
-    for (const q of expiredActive) await updateQuote({ ...q, status: 'archived', preArchiveStatus: q.status })
+    for (const q of expiredActive) await save({ ...q, status: 'archived', preArchiveStatus: q.status })
   }
 
   return (
@@ -610,16 +618,51 @@ export default function SavedQuotesPage() {
                     className="btn-sm btn-danger"
                     onClick={() => {
                       if (confirm(
-                        `Permanently delete archived quote ${q.ref || q.id}?\n\n` +
+                        `Delete archived quote ${q.ref || q.id}?\n\n` +
                         `Client: ${q.customer.name || '—'}\n` +
                         `Value: ${fmt(quoteTotal(q))}\n\n` +
-                        `⚠ This cannot be undone.`
+                        `It moves to Recently deleted and can be brought back.`
                       )) handleDelete(q)
                     }}
-                    title="Permanently delete this archived quote"
+                    title="Move this archived quote to Recently deleted"
                   >
                     ✕ Delete
                   </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Recently deleted ───────────────────────────────────── */}
+      {deletedQuotes.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <button
+            onClick={() => setDeletedOpen(o => !o)}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 14px', fontSize: 12, fontWeight: 600, color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit', width: '100%', marginBottom: deletedOpen ? 10 : 0 }}
+          >
+            <span style={{ fontSize: 14 }}>{deletedOpen ? '▾' : '▸'}</span>
+            🗑 Recently deleted ({deletedQuotes.filter(q => !q.parentQuoteId).length})
+            <span style={{ marginLeft: 'auto', fontWeight: 400, fontSize: 11 }}>{deletedOpen ? 'Hide' : 'Show'}</span>
+          </button>
+          {deletedOpen && (
+            <div style={{ fontSize: 12, color: 'var(--muted)', margin: '0 0 8px' }}>Kept here with all their lines. Restore one to bring it back as it was. Delete for good removes it for ever.</div>
+          )}
+          {deletedOpen && deletedQuotes.filter(q => !q.parentQuoteId).map(q => (
+            <div key={q.id} className="sq-card" style={{ borderLeft: '3px solid #fca5a5', opacity: 0.9 }}>
+              <div className="sq-ref" style={{ color: 'var(--muted)' }}>{q.ref || '—'}</div>
+              <div className="sq-info">
+                <div className="sq-title" style={{ color: 'var(--muted)' }}>{quoteDisplayTitle(q)} — {q.customer.name || '—'}</div>
+                <div className="sq-sub">{q.customer.address || ''} · Saved {q.savedDate || '—'}</div>
+              </div>
+              <div className="sq-val" style={{ color: 'var(--muted)' }}>{fmt(quoteTotal(q))}</div>
+              <div style={{ textAlign: 'center', minWidth: 200 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' }}>DELETED</span>
+                <div className="sq-actions" style={{ marginTop: 6 }}>
+                  <button className="btn-sm btn-outline" onClick={() => setPreviewQuote(q)}>View</button>
+                  <button className="btn-sm btn-reinstate" onClick={async () => { try { await restoreQuote(q.id) } catch (e) { alert(quoteSaveMessage(e)) } }}>↩ Restore</button>
+                  <button className="btn-sm btn-danger" onClick={async () => { if (confirm(`Delete ${q.ref || q.id} for good?\n\nClient: ${q.customer.name || '—'}\nValue: ${fmt(quoteTotal(q))}\n\n⚠ This cannot be undone.`)) { try { await purgeQuote(q.id) } catch (e) { alert(quoteSaveMessage(e)) } } }}>✕ Delete for good</button>
                 </div>
               </div>
             </div>
@@ -639,7 +682,7 @@ export default function SavedQuotesPage() {
         <SendQuoteModal
           quote={emailingQuote}
           onClose={() => setEmailingQuote(null)}
-          onSent={() => updateQuote({ ...emailingQuote, status: 'sent' })}
+          onSent={() => { void save({ ...emailingQuote, status: 'sent' }) }}
         />
       )}
     </>

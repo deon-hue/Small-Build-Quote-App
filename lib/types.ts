@@ -177,6 +177,7 @@ export interface Quote {
     | 'archived'     // closed / filed
     | 'accepted'     // legacy alias for approved
     | 'declined'     // legacy alias for rejected
+    | 'deleted'      // moved to Recently deleted: kept, hidden from every list and from the client portal until restored or deleted for good
   /** How the quote was created */
   quoteSource?: 'takeoff' | 'ai' | 'manual' | 'quick'
   jobType: string
