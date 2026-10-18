@@ -29,6 +29,7 @@ export const BUILT_ASSEMBLY_CANONICAL_IDS = new Set<string>([
   'fnd-underpin',
   'elec-install',
   'deco-internal-walls',
+  'fs-screeded-floor',
 ])
 
 // Bridges Take-off's External Walls "Build-up Type" system (keyed by WALL_MAKEUPS/
@@ -56,4 +57,6 @@ export const WALL_MAKEUP_TO_SUBPHASE_CANONICAL: Record<string, string> = {
   piled_found: 'fnd-piled',
   // Underpinning has no build-up in FOUNDATION_MAKEUPS; Take-off's Foundation Type 'Underpinning' pairs with its calculator through this key.
   underpin: 'fnd-underpin',
+  // Floor build-ups (FLOOR_MAKEUPS): a drawn floor's Build-Up Type pairs with its calculator the same way.
+  screeded_floor: 'fs-screeded-floor',
 }

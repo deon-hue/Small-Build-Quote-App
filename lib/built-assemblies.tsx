@@ -27,6 +27,7 @@ import AssemblyPiledFoundationDemo from '@/components/AssemblyPiledFoundationDem
 import AssemblyUnderpinningDemo from '@/components/AssemblyUnderpinningDemo'
 import AssemblyElectricsDemo from '@/components/AssemblyElectricsDemo'
 import AssemblyDecorationDemo from '@/components/AssemblyDecorationDemo'
+import AssemblyScreedFloorDemo from '@/components/AssemblyScreedFloorDemo'
 import AssemblyRoofStructureDemo from '@/components/AssemblyRoofStructureDemo'
 import AssemblyRoofCoveringDemo from '@/components/AssemblyRoofCoveringDemo'
 import AssemblyRooflightsDemo from '@/components/AssemblyRooflightsDemo'
@@ -39,7 +40,7 @@ import type { AssemblyBasics } from '@/lib/assembly-basics'
 import type { PlanRoom, ElectricsSavedState } from '@/lib/electrics-units'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 
-export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation' | 'pad-foundation' | 'piled-foundation' | 'underpinning' | 'electrics' | 'decoration'
+export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation' | 'pad-foundation' | 'piled-foundation' | 'underpinning' | 'electrics' | 'decoration' | 'screed-floor'
 
 /** Fired when a calculator's "Save & Price" is used from inside a real quote — absent in
  * the Back Office preview context, which has no quote to save into. */
@@ -65,6 +66,9 @@ export interface AssemblyRenderOpts {
   noSampleOpenings?: boolean
   /** A roof's drawn width (the shorter side) — the joists span it. Only roofs use it; walls have no width. */
   externalWidthMm?: number
+  /** A floor's drawn area (m²) and perimeter (m): a floor calculator is sized from them, not from a length. */
+  externalAreaM2?: number
+  externalPerimeterM?: number
   /** Which variant the calculator opens on, where it has more than one — the flat roof's warm/cold,
    * taken from the Take-off Build-Up Type. Ignored by calculators that have no variants. */
   variant?: string
@@ -104,6 +108,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'fnd-pad': { icon: 'pad-foundation', render: opts => <AssemblyPadFoundationDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} initial={opts?.basics} /> },
   'fnd-piled': { icon: 'piled-foundation', render: opts => <AssemblyPiledFoundationDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initial={opts?.basics} /> },
   'fnd-underpin': { icon: 'underpinning', render: opts => <AssemblyUnderpinningDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initial={opts?.basics} /> },
+  'fs-screeded-floor': { icon: 'screed-floor', render: opts => <AssemblyScreedFloorDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} /> },
   'deco-internal-walls': { icon: 'decoration', render: opts => <AssemblyDecorationDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'elec-install': { icon: 'electrics', render: opts => <AssemblyElectricsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} planRooms={opts?.electrics?.planRooms} initialState={opts?.electrics?.initialState} /> },
   'ew-cav-full': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="wool" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initialHeightMm={opts?.initialHeightMm} noSampleOpenings={opts?.noSampleOpenings} /> },
@@ -207,6 +212,16 @@ export function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; siz
           <rect x="3" y="3" width="15" height="6" rx="1.5" stroke="#0891b2" strokeWidth="1.6" />
           <path d="M18 6h2.5v5.5H11v3" stroke="#0891b2" strokeWidth="1.5" strokeLinejoin="round" />
           <rect x="9.5" y="14.5" width="3" height="7" rx="1" stroke="#0891b2" strokeWidth="1.5" />
+        </svg>
+      )
+    case 'screed-floor':
+      // A floor in section: the slab, a layer of insulation on it and the screed on top, with an edge strip against the wall.
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="2" y="15" width="20" height="6" stroke="#78716c" strokeWidth="1.5" />
+          <rect x="2" y="11.5" width="20" height="3.5" stroke="#b45309" strokeWidth="1.4" />
+          <rect x="2" y="6" width="20" height="5.5" stroke="#0369a1" strokeWidth="1.5" />
+          <line x1="2" y1="2.5" x2="2" y2="11.5" stroke="#57534e" strokeWidth="1.6" />
         </svg>
       )
     case 'underpinning':

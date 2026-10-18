@@ -36,7 +36,7 @@ export const LABOUR_RATES = {
   groundworker: { trimLm: 0.25, concreteM3: 1.5, backfillM3: 0.5, cavityFillM3: 1.0, raftTrimM2: 0.06, raftHardcoreM2: 0.12, raftBlindM2: 0.10, raftInsulationM2: 0.08, raftMeshM2PerLayer: 0.12, raftFormworkLm: 0.3, raftFinishM2: 0.12, padPitNr: 0.4, padBlindNr: 0.3, padFormworkM2: 0.8, padRebarKg: 0.025, beamBlindLm: 0.15, beamFormworkM2: 0.35, beamCageLm: 0.2, pileCutNr: 0.5, underpinDigM3: 10, underpinShutterM2: 1.0, underpinPinNr: 2.0, underpinPourM3: 2.5, underpinPackNr: 1.0, underpinSteelKg: 0.025 },
   renderer: { renderM2: 0.6 },
   plumber: { gutterLm: 0.3, fittingNr: 0.15, downpipeLm: 0.35, shoeNr: 0.15, hopperNr: 0.5, offsetNr: 0.3 },
-  labourer: { carryM2: 0.15, bricklayerShare: 0.5 },
+  labourer: { carryM2: 0.15, bricklayerShare: 0.5, screedPrepM2: 0.05, screedInsulationM2: 0.1, screedDpmM2: 0.04, screedEdgeLm: 0.02, screedMeshM2: 0.08 },
   fitter: { lantern: 4, 'roof-window': 3, dome: 2, hatch: 1.5 } as Record<RoofOpeningKind, number>,
 } as const
 
@@ -478,4 +478,18 @@ export function suggestFasciaSoffitLabour(g: {
     { qty: g.eaveStopEnds + g.vergeStopEnds, unit: 'end caps', what: '', rate: c.endCapNr },
   ])
   return line1 ? [line1] : []
+}
+
+/** The labour for a screeded floor (Floors & Screeds → Screeded Floor): ours is only the work round the screed. The screeding firm lays the screed with its own men, pump and materials, so none of that is in these hours.
+ * A labourer clears and prepares the floor, lays the membrane and the insulation, fits the edge strip and lays any mesh. */
+export function suggestScreedFloorLabour(g: { areaM2: number; perimeterLm: number; insulationAreaM2: number; dpmAreaM2: number; edgeStripLm: number; meshAreaM2: number }): LabourSuggestion[] {
+  const l = LABOUR_RATES.labourer
+  const prep = line('screed-prep', 'labourer', 'Clear and prepare the floor, lay the membrane, insulation and edge strip', [
+    { qty: g.areaM2, unit: 'm²', what: 'cleared', rate: l.screedPrepM2 },
+    { qty: g.dpmAreaM2, unit: 'm²', what: 'membrane', rate: l.screedDpmM2 },
+    { qty: g.insulationAreaM2, unit: 'm²', what: 'insulation', rate: l.screedInsulationM2 },
+    { qty: g.edgeStripLm, unit: 'lm', what: 'edge strip', rate: l.screedEdgeLm },
+  ])
+  const mesh = line('screed-mesh', 'labourer', 'Lay the reinforcing mesh', [{ qty: g.meshAreaM2, unit: 'm²', what: 'mesh', rate: l.screedMeshM2 }])
+  return [prep, mesh].filter((x): x is LabourSuggestion => x !== null)
 }
