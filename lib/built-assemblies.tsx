@@ -30,6 +30,7 @@ import AssemblyDecorationDemo from '@/components/AssemblyDecorationDemo'
 import AssemblyScreedFloorDemo from '@/components/AssemblyScreedFloorDemo'
 import AssemblyFloorOverlayDemo from '@/components/AssemblyFloorOverlayDemo'
 import AssemblyConcreteSlabFloorDemo from '@/components/AssemblyConcreteSlabFloorDemo'
+import AssemblyBlockBeamFloorDemo from '@/components/AssemblyBlockBeamFloorDemo'
 import AssemblyRoofStructureDemo from '@/components/AssemblyRoofStructureDemo'
 import AssemblyRoofCoveringDemo from '@/components/AssemblyRoofCoveringDemo'
 import AssemblyRooflightsDemo from '@/components/AssemblyRooflightsDemo'
@@ -42,7 +43,7 @@ import type { AssemblyBasics } from '@/lib/assembly-basics'
 import type { PlanRoom, ElectricsSavedState } from '@/lib/electrics-units'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 
-export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation' | 'pad-foundation' | 'piled-foundation' | 'underpinning' | 'electrics' | 'decoration' | 'screed-floor' | 'floor-overlay' | 'concrete-slab'
+export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation' | 'pad-foundation' | 'piled-foundation' | 'underpinning' | 'electrics' | 'decoration' | 'screed-floor' | 'floor-overlay' | 'concrete-slab' | 'block-beam'
 
 /** Fired when a calculator's "Save & Price" is used from inside a real quote — absent in
  * the Back Office preview context, which has no quote to save into. */
@@ -115,6 +116,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'fs-screeded-floor': { icon: 'screed-floor', render: opts => <AssemblyScreedFloorDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} /> },
   'fs-floor-overlay': { icon: 'floor-overlay', render: opts => <AssemblyFloorOverlayDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} /> },
   'fs-concrete-slab': { icon: 'concrete-slab', render: opts => <AssemblyConcreteSlabFloorDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} /> },
+  'fs-block-beam': { icon: 'block-beam', render: opts => <AssemblyBlockBeamFloorDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} /> },
   'deco-internal-walls': { icon: 'decoration', render: opts => <AssemblyDecorationDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'elec-install': { icon: 'electrics', render: opts => <AssemblyElectricsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} planRooms={opts?.electrics?.planRooms} initialState={opts?.electrics?.initialState} /> },
   'ew-cav-full': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="wool" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initialHeightMm={opts?.initialHeightMm} noSampleOpenings={opts?.noSampleOpenings} /> },
@@ -248,6 +250,16 @@ export function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; siz
           <rect x="2" y="6" width="20" height="7.5" stroke="#475569" strokeWidth="1.6" />
           <line x1="5" y1="9.8" x2="19" y2="9.8" stroke="#b91c1c" strokeWidth="1.2" strokeDasharray="2 1.5" />
           <line x1="2" y1="2.5" x2="2" y2="13.5" stroke="#57534e" strokeWidth="1.6" />
+        </svg>
+      )
+    case 'block-beam':
+      // Beams with blocks between them, over a void, with a layer of insulation on top.
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="2" y="5" width="20" height="3.5" stroke="#d97706" strokeWidth="1.4" />
+          <rect x="2" y="8.5" width="20" height="4" stroke="#64748b" strokeWidth="1.5" />
+          <path d="M5 12.5v4M12 12.5v4M19 12.5v4" stroke="#334155" strokeWidth="2.2" />
+          <line x1="2" y1="21" x2="22" y2="21" stroke="#a8a29e" strokeWidth="1.6" />
         </svg>
       )
     case 'underpinning':

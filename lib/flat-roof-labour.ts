@@ -32,7 +32,7 @@ export const LABOUR_RATES = {
     trimLm: 0.3, cornerNr: 0.2, leadLm: 0.5, outletNr: 0.75, overflowNr: 0.5,
     membraneM2: 0.15, battenLm: 0.08, ridgeLm: 0.35, hipLm: 0.4, vergeLm: 0.3, abutmentLm: 0.4, eavesLm: 0.15, chaseLm: 0.3, soakerNr: 0.05,
   },
-  bricklayer: { cavityM2: 1.4, solidM2: 1.0, solidBrickM2: 1.8, copingLm: 0.35, trayLm: 0.15, outletOpeningNr: 0.5, dpcLm: 0.05 },
+  bricklayer: { cavityM2: 1.4, solidM2: 1.0, solidBrickM2: 1.8, copingLm: 0.35, trayLm: 0.15, outletOpeningNr: 0.5, dpcLm: 0.05, beamNr: 0.35, beamBlockNr: 0.025, beamGroutM2: 0.03 },
   groundworker: { trimLm: 0.25, concreteM3: 1.5, backfillM3: 0.5, cavityFillM3: 1.0, raftTrimM2: 0.06, raftHardcoreM2: 0.12, raftBlindM2: 0.10, raftInsulationM2: 0.08, raftMeshM2PerLayer: 0.12, raftFormworkLm: 0.3, raftFinishM2: 0.12, padPitNr: 0.4, padBlindNr: 0.3, padFormworkM2: 0.8, padRebarKg: 0.025, beamBlindLm: 0.15, beamFormworkM2: 0.35, beamCageLm: 0.2, pileCutNr: 0.5, underpinDigM3: 10, underpinShutterM2: 1.0, underpinPinNr: 2.0, underpinPourM3: 2.5, underpinPackNr: 1.0, underpinSteelKg: 0.025, slabTrimM2: 0.06, slabHardcoreM2: 0.12, slabBlindM2: 0.05, slabDpmM2: 0.04, slabInsulationM2: 0.08, slabMeshM2PerLayer: 0.1, slabEdgeLm: 0.03, slabFinishM2: 0.12 },
   renderer: { renderM2: 0.6 },
   plumber: { gutterLm: 0.3, fittingNr: 0.15, downpipeLm: 0.35, shoeNr: 0.15, hopperNr: 0.5, offsetNr: 0.3 },
@@ -568,4 +568,33 @@ export function suggestConcreteSlabFloorLabour(g: {
     { qty: g.powerFloatAreaM2, unit: 'm²', what: 'power-floated', rate: w.slabFinishM2 },
   ])
   return [prep, steel, pour].filter((x): x is LabourSuggestion => x !== null)
+}
+
+/** The labour for a block and beam floor (Floors & Screeds → Block and Beam Floor): a bricklayer lays the beams (lifted in by the crane), the blocks and the grout and the DPC under the beam ends, with a labourer serving them;
+ * a labourer trims and lays any hardcore and blinding, and lays the insulation, membrane and edge strip. The digging is the machine and its operator, priced as plant in the calculator, so it is not in these hours. Rough estimates, as everywhere here. */
+export function suggestBlockBeamFloorLabour(g: {
+  areaM2: number; beamNr: number; blockNr: number; groutAreaM2: number; dpcLm: number; hardcoreM3: number; blindingM3: number; insulationAreaM2: number; dpmAreaM2: number; edgeStripLm: number
+}): LabourSuggestion[] {
+  const b = LABOUR_RATES.bricklayer
+  const w = LABOUR_RATES.groundworker
+  const l = LABOUR_RATES.labourer
+  const ground = line('bb-ground', 'labourer', 'Trim the ground and lay the hardcore and blinding under the floor', [
+    { qty: g.hardcoreM3 > 0 || g.blindingM3 > 0 ? g.areaM2 : 0, unit: 'm²', what: 'ground trimmed', rate: w.slabTrimM2 },
+    { qty: g.hardcoreM3 > 0 ? g.areaM2 : 0, unit: 'm²', what: 'hardcore spread and compacted', rate: w.slabHardcoreM2 },
+    { qty: g.blindingM3 > 0 ? g.areaM2 : 0, unit: 'm²', what: 'blinding', rate: w.slabBlindM2 },
+  ])
+  const lay = line('bb-lay', 'bricklayer', 'Lay the DPC and the beams, lay the infill blocks and grout the joints', [
+    { qty: g.dpcLm, unit: 'lm', what: 'DPC under the beam ends', rate: b.dpcLm },
+    { qty: g.beamNr, unit: 'beams', what: 'laid and levelled', rate: b.beamNr },
+    { qty: g.blockNr, unit: 'blocks', what: 'laid between the beams', rate: b.beamBlockNr },
+    { qty: g.groutAreaM2, unit: 'm²', what: 'grouted', rate: b.beamGroutM2 },
+  ])
+  const out: (LabourSuggestion | null)[] = [ground, lay]
+  out.push(line('bb-help', 'labourer', 'Lift and carry blocks and mix grout for the bricklayer', [{ qty: lay?.hours ?? 0, unit: 'h', what: 'bricklayer', rate: l.bricklayerShare }]))
+  out.push(line('bb-top', 'labourer', 'Lay the insulation and membrane and fit the edge strip', [
+    { qty: g.insulationAreaM2, unit: 'm²', what: 'insulation', rate: l.screedInsulationM2 },
+    { qty: g.dpmAreaM2, unit: 'm²', what: 'membrane', rate: l.screedDpmM2 },
+    { qty: g.edgeStripLm, unit: 'lm', what: 'edge strip', rate: l.screedEdgeLm },
+  ]))
+  return out.filter((x): x is LabourSuggestion => x !== null)
 }
