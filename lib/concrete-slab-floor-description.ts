@@ -15,13 +15,15 @@ export interface ConcreteSlabDescriptionInput {
   edgeStrip: boolean
   powerFloat: boolean
   placing: 'direct' | 'pump' | 'barrow'
+  /** the Insulated Concrete Floor sub-phase: named as such, and its insulation said to be high-performance */
+  insulated?: boolean
 }
 
 export function describeConcreteSlabFloorShort(i: ConcreteSlabDescriptionInput): string {
   const parts = [`${i.slabMm}mm ${i.mix} concrete slab`]
   if (i.hardcoreMm > 0) parts.push(`on ${i.hardcoreMm}mm of compacted hardcore`)
   if (i.insulationMm > 0) parts.push(`with ${i.insulationMm}mm insulation`)
-  return `Concrete floor slab, ${i.areaM2.toFixed(1)}m²: ${parts.join(', ')}.`
+  return `${i.insulated ? 'Insulated concrete floor' : 'Concrete floor slab'}, ${i.areaM2.toFixed(1)}m²: ${parts.join(', ')}.`
 }
 
 export function describeConcreteSlabFloor(i: ConcreteSlabDescriptionInput): string {
@@ -30,7 +32,7 @@ export function describeConcreteSlabFloor(i: ConcreteSlabDescriptionInput): stri
   if (i.hardcoreMm > 0) lines.push(`Lay and compact ${i.hardcoreMm}mm of hardcore in layers.`)
   if (i.blindingMm > 0) lines.push(`Blind the hardcore with ${i.blindingMm}mm of sand.`)
   if (i.dpm) lines.push('Lay a damp-proof membrane over it, lapped and taped.')
-  if (i.insulationMm > 0) lines.push(`Lay ${i.insulationMm}mm of rigid insulation board under the slab.`)
+  if (i.insulationMm > 0) lines.push(`Lay ${i.insulationMm}mm of ${i.insulated ? 'high-performance PIR' : 'rigid'} insulation board under the slab.`)
   if (i.edgeStrip) lines.push('Fit edge insulation strip round the edges of the slab, against the walls.')
   if (i.meshLayers > 0) lines.push(`Fix ${i.meshLayers === 1 ? 'one layer' : 'two layers'} of reinforcing mesh on spacers, lapped.`)
   const how = i.placing === 'pump' ? ', placed by pump' : i.placing === 'barrow' ? ', carried in by wheelbarrow' : ''

@@ -29,8 +29,8 @@ export const PLATE_PER_DAY = 40          // compaction plate hire
 export const POWER_FLOAT_PER_DAY = 65    // power float hire
 export const MUCKAWAY_PER_M3 = 28        // soil carted away, per m³ bulked
 export const SPOIL_BULKING = 1.3
-export const INSULATION_THICKNESSES_MM = [0, 50, 75, 100, 120, 150]
-export const INSULATION_PER_M2: Record<number, number> = { 50: 14, 75: 19, 100: 25, 120: 29, 150: 36 }
+export const INSULATION_THICKNESSES_MM = [0, 50, 75, 100, 120, 150, 175, 200]
+export const INSULATION_PER_M2: Record<number, number> = { 50: 14, 75: 19, 100: 25, 120: 29, 150: 36, 175: 42, 200: 47 }
 /** how much one machine day digs under a floor, m³ (a mini excavator, spreading and removing) */
 export const DIG_M3_PER_DAY = 25
 

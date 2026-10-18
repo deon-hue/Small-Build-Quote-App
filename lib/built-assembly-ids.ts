@@ -34,6 +34,7 @@ export const BUILT_ASSEMBLY_CANONICAL_IDS = new Set<string>([
   'fs-concrete-slab',
   'fs-block-beam',
   'fs-suspended-timber',
+  'fs-insulated-concrete',
 ])
 
 // Bridges Take-off's External Walls "Build-up Type" system (keyed by WALL_MAKEUPS/
@@ -67,4 +68,5 @@ export const WALL_MAKEUP_TO_SUBPHASE_CANONICAL: Record<string, string> = {
   concrete_slab: 'fs-concrete-slab',
   block_beam: 'fs-block-beam',
   suspended_timber: 'fs-suspended-timber',
+  insulated_concrete: 'fs-insulated-concrete',
 }

@@ -39,6 +39,8 @@ interface Props {
   externalAreaM2?: number
   /** The perimeter of the drawn floor, m (the edge strip). */
   externalPerimeterM?: number
+  /** 'insulated' is the Insulated Concrete Floor sub-phase: the same build-up, starting with a thicker insulation under a thinner slab (and its own saved state). */
+  variant?: 'slab' | 'insulated'
 }
 
 function buildSlabLayers(g: ConcreteSlabGeometry, o: {
@@ -69,9 +71,10 @@ function buildSlabLayers(g: ConcreteSlabGeometry, o: {
   return L
 }
 
-export default function AssemblyConcreteSlabFloorDemo({ onClose, onSave, labourTrades = [], externalAreaM2, externalPerimeterM }: Props) {
-  const ID = 'AssemblyConcreteSlabFloorDemo'
-  const [name, setName] = useCalcState(ID, 'name', 'Concrete slab floor')
+export default function AssemblyConcreteSlabFloorDemo({ onClose, onSave, labourTrades = [], externalAreaM2, externalPerimeterM, variant = 'slab' }: Props) {
+  const insulated = variant === 'insulated'
+  const ID = insulated ? 'AssemblyInsulatedConcreteFloorDemo' : 'AssemblyConcreteSlabFloorDemo'
+  const [name, setName] = useCalcState(ID, 'name', insulated ? 'Insulated concrete floor' : 'Concrete slab floor')
   const [location, setLocation] = useCalcState(ID, 'location', '')
   const [qty, setQty] = useCalcState(ID, 'qty', 1)
   const [areaM2, setAreaM2] = useCalcState(ID, 'areaM2', externalAreaM2 && externalAreaM2 > 0 ? +externalAreaM2.toFixed(2) : 30)
@@ -82,8 +85,8 @@ export default function AssemblyConcreteSlabFloorDemo({ onClose, onSave, labourT
   const [hardcoreMm, setHardcoreMm] = useCalcState(ID, 'hardcoreMm', 150)
   const [blindingMm, setBlindingMm] = useCalcState(ID, 'blindingMm', 50)
   const [dpm, setDpm] = useCalcState(ID, 'dpm', true)
-  const [insulationMm, setInsulationMm] = useCalcState(ID, 'insulationMm', 100)
-  const [slabMm, setSlabMm] = useCalcState(ID, 'slabMm', 150)
+  const [insulationMm, setInsulationMm] = useCalcState(ID, 'insulationMm', insulated ? 150 : 100)
+  const [slabMm, setSlabMm] = useCalcState(ID, 'slabMm', insulated ? 100 : 150)
   const [mix, setMix] = useCalcState<SlabMix>(ID, 'mix', 'C25')
   const [meshLayers, setMeshLayers] = useCalcState(ID, 'meshLayers', 1)
   const [edgeStrip, setEdgeStrip] = useCalcState(ID, 'edgeStrip', true)
@@ -160,7 +163,7 @@ export default function AssemblyConcreteSlabFloorDemo({ onClose, onSave, labourT
   // The customer's description follows the floor until it's edited by hand
   const descInput = g ? {
     areaM2: g.areaM2, digDepthMm, hardcoreMm, blindingMm, dpm: g.dpmAreaM2 > 0, insulationMm: g.insulationMm, slabMm, mix, meshLayers: g.meshLayers, edgeStrip: g.edgeStripLm > 0,
-    powerFloat: g.powerFloatDays > 0, placing: placingMethod,
+    powerFloat: g.powerFloatDays > 0, placing: placingMethod, insulated,
   } : null
   const [descriptionOverride, setDescriptionOverride] = useCalcState<string | null>(ID, 'descriptionOverride', null)
   const [detailOverride, setDetailOverride] = useCalcState<string | null>(ID, 'detailOverride', null)
@@ -227,6 +230,7 @@ export default function AssemblyConcreteSlabFloorDemo({ onClose, onSave, labourT
         <div>
           {g && (<>
             <SlabSectionSvg hardcoreMm={hardcoreMm} blindingMm={blindingMm} dpm={g.dpmAreaM2 > 0} insulationMm={g.insulationMm} slabMm={slabMm} meshLayers={g.meshLayers} edgeStrip={g.edgeStripLm > 0} />
+            {insulated && g.insulationMm === 0 && <div style={{ fontSize: 11, color: '#c0392b', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, padding: '4px 8px', marginTop: 6 }}>⚠ An insulated concrete floor has insulation under the slab: pick a thickness under Sub-base and membrane, or use the Concrete Slab Floor calculator.</div>}
             {g.warnings.map((w, i) => (
               <div key={i} style={{ fontSize: 11, color: '#c0392b', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, padding: '4px 8px', marginTop: 6 }}>⚠ {w}</div>
             ))}
