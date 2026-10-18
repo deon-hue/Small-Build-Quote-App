@@ -16,6 +16,8 @@ import { plumbingPromptGuide } from '@/lib/plumbing-ai'
 export const maxDuration = 300
 
 // the plumbing calculators the AI can price from the scope (lib/plumbing-ai.ts): each is told to give a "calc" object
+// calculators the AI quote does not price yet: left out of its library so it keeps choosing the task-based lines for that work
+const AI_SKIPS_CALC = new Set(['demo-wall-removal-calc'])
 const PLUMBING_ASK_IDS = new Set(['plumb-install', 'plumb-heating-plant', 'plumb-ufh', 'plumb-pipework'])
 import { ESTIMATOR_PHASE_DEFAULTS } from '@/lib/estimatorDefaults'
 
@@ -89,7 +91,7 @@ async function buildLibraryFromDB(userId: string): Promise<{
     if (h && !hintByName[sp.name as string]) hintByName[sp.name as string] = h
   }
   const calcPhases = (subPhases ?? [])
-    .filter(sp => sp.canonical_id && BUILT_ASSEMBLY_CANONICAL_IDS.has(sp.canonical_id) && phaseById[sp.phase_id])
+    .filter(sp => sp.canonical_id && BUILT_ASSEMBLY_CANONICAL_IDS.has(sp.canonical_id) && !AI_SKIPS_CALC.has(sp.canonical_id as string) && phaseById[sp.phase_id])
     .map(sp => ({ name: sp.name as string, parent: phaseById[sp.phase_id] as string, ask: BASICS_NEEDS[sp.canonical_id as string]?.ask ?? (sp.canonical_id === 'elec-install' ? 'an "electrics" object describing the rooms and points, as set out in the rules' : PLUMBING_ASK_IDS.has(sp.canonical_id as string) ? 'a "calc" object describing what the scope states for it, as set out in the rules' : ''), hint: hintByName[sp.name as string] ?? '' }))
   const subPhaseById = Object.fromEntries((subPhases ?? []).map(sp => [sp.id, { name: sp.name, phaseId: sp.phase_id }]))
 

@@ -1217,8 +1217,15 @@ export default function TakeoffPage() {
   // through the real Back Office sub-phase (taskSubphaseId); external walls through the Build-up
   // Type, which is keyed by floorMakeupId (WALL_MAKEUPS/bo_wall_types) — a separate id space from
   // bo_sub_phases, bridged by WALL_MAKEUP_TO_SUBPHASE_CANONICAL.
+  // A demolition item picked on a calculator entry in the Construction Type list (Wall Removal / Knock-Through): the entry, or undefined
+  function demoCalcSub(it: TakeoffItem) {
+    if (!(it.phase === 'Demolition' || (it.phase as string) === 'Site Setup & Demolition') || !it.demoSubphaseId) return undefined
+    return getAllDemoSubphases(customDemoSubphases).find(s => s.id === it.demoSubphaseId && !!s.calculatorId)
+  }
   function resolveBuiltAssembly(it: TakeoffItem) {
     if (it.electricsSummary) return BUILT_ASSEMBLY_CANON_IDS['elec-install']
+    const demoCalc = demoCalcSub(it)
+    if (demoCalc?.calculatorId) return BUILT_ASSEMBLY_CANON_IDS[demoCalc.calculatorId]
     // External walls and roofs both: a calculator picked by sub-phase, else the Build-up Type.
     if (it.phase === 'External Walls' || it.phase === 'Roof') {
       // A calculator picked by Sub-Phase (dwarf wall, sleeper wall, ...) — those have no Build-up
@@ -2514,7 +2521,10 @@ export default function TakeoffPage() {
 
     // ── 3. Phase flags ─────────────────────────────────────────────────────
     const isLineBased      = linkedEl?.type === 'line'
-    const isDemo           = item.phase === 'Demolition' || (item.phase as string) === 'Site Setup & Demolition'
+    const isDemoPhase      = item.phase === 'Demolition' || (item.phase as string) === 'Site Setup & Demolition'
+    // a demolition item priced by a calculator (Wall Removal / Knock-Through) is not a task item
+    const isDemoCalc       = isDemoPhase && !!demoCalcSub(item)
+    const isDemo           = isDemoPhase && !isDemoCalc
     const isExtWall        = item.phase === 'External Walls'
     const isIntWall        = item.phase === 'Internal Walls & Partitions' && isLineBased
     const isPlaster        = item.phase === 'Plastering & Boarding'
@@ -2539,8 +2549,8 @@ export default function TakeoffPage() {
     const isFoundationShape = item.phase === 'Foundations' && !isLineBased && !!linkedEl
     // A floor is a shape too, sized from its area and perimeter
     const isFloorShape = item.phase === 'Floors & Screeds' && !isLineBased && !!linkedEl
-    const builtAssembly = (isIntWall || isExtWall || isRoof || isFoundationLine || isFoundationShape || isFloorShape || isDecoCalc) ? resolveBuiltAssembly(item) : undefined
-    const hideForBuiltAssembly = (isIntWall || isExtWall || isRoof || isFoundationLine || isFoundationShape || isFloorShape || isDecoCalc) && !!builtAssembly
+    const builtAssembly = (isIntWall || isExtWall || isRoof || isFoundationLine || isFoundationShape || isFloorShape || isDecoCalc || isDemoCalc) ? resolveBuiltAssembly(item) : undefined
+    const hideForBuiltAssembly = (isIntWall || isExtWall || isRoof || isFoundationLine || isFoundationShape || isFloorShape || isDecoCalc || isDemoCalc) && !!builtAssembly
 
     // The calculator is too big for this ~300px panel, so the panel shows a summary card and the
     // calculator itself opens full size in a window (see AssemblyWindow.tsx). A wall is sized by its
@@ -2672,7 +2682,7 @@ export default function TakeoffPage() {
     }
 
     // ── 7. Demo data & helpers ─────────────────────────────────────────────
-    const allDemoSubs  = isDemo ? getAllDemoSubphases(customDemoSubphases) : []
+    const allDemoSubs  = (isDemo || isDemoCalc) ? getAllDemoSubphases(customDemoSubphases) : []
     const demoSub      = allDemoSubs.find(s => s.id === item.demoSubphaseId) ?? allDemoSubs[0]
     const demoTask     = demoSub?.tasks.find(t => t.id === item.demoTaskId) ?? demoSub?.tasks[0]
     const demoMarkup   = item.demoMarkupPct ?? demoSub?.markupPct ?? 20
@@ -2689,6 +2699,8 @@ export default function TakeoffPage() {
       const q = item.qty > 0 ? item.qty : newTask.defaultQty
       saveItemEdit({
         ...item, name: newTask.name, spec: newTask.clientDescription,
+        // (coming from a calculator entry: drop its price and its link to the calculator)
+        assemblyResult: undefined, assemblyCalcState: undefined, taskSubphaseId: undefined,
         demoSubphaseId: newSub.id, demoTaskId: newTask.id, demoMarkupPct: newSub.markupPct,
         subPhase: newSub.name, unit: newTask.unit, qty: q,
         demoLabour:        +(newTask.labourCost        * q).toFixed(2),
@@ -2697,6 +2709,16 @@ export default function TakeoffPage() {
         demoWaste:         +(newTask.wasteCost         * q).toFixed(2),
         demoSubcontractor: +(newTask.subcontractorCost * q).toFixed(2),
         demoOther:         +(newTask.otherCost         * q).toFixed(2),
+      })
+    }
+
+    // Picking a calculator entry in the Construction Type list: the item is priced by that calculator (linked to its Back Office sub-phase, so the quote can reopen it)
+    function applyDemoCalc(ns: DemoSubphase) {
+      const boSub = boSubPhases.find(b => b.canonical_id === 'demo-' + ns.id)
+      saveItemEdit({
+        ...item, name: ns.name, spec: '', demoSubphaseId: ns.id, demoTaskId: undefined, demoMarkupPct: ns.markupPct, subPhase: ns.name,
+        taskSubphaseId: boSub?.id, assemblyResult: undefined, assemblyCalcState: undefined,
+        demoLabour: 0, demoMaterials: 0, demoPlant: 0, demoWaste: 0, demoSubcontractor: 0, demoOther: 0,
       })
     }
 
@@ -3300,7 +3322,8 @@ export default function TakeoffPage() {
                 <select style={{ ...inputStyle, color: accent }} value={demoSub.id}
                   onChange={e => {
                     const ns = allDemoSubs.find(s => s.id === e.target.value) ?? allDemoSubs[0]
-                    applyDemoTask(ns, ns.tasks[0])
+                    if (ns.calculatorId) applyDemoCalc(ns)
+                    else applyDemoTask(ns, ns.tasks[0])
                   }}>
                   {allDemoSubs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
@@ -3315,6 +3338,27 @@ export default function TakeoffPage() {
                   {demoSub.tasks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
               </div>
+            </>
+          )}
+
+          {/* Demolition priced by its calculator (Wall Removal / Knock-Through): the Construction Type picker and the calculator card. The length of the drawn line is the length of wall taken out. */}
+          {isDemoCalc && builtAssembly && (
+            <>
+              <div style={{ marginBottom: 10 }}>
+                <label style={labelStyle}>Construction Type</label>
+                <select style={{ ...inputStyle, color: accent }} value={item.demoSubphaseId ?? ''}
+                  onChange={e => {
+                    const ns = allDemoSubs.find(s => s.id === e.target.value) ?? allDemoSubs[0]
+                    if (ns.calculatorId) applyDemoCalc(ns)
+                    else applyDemoTask(ns, ns.tasks[0])
+                  }}>
+                  {allDemoSubs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--to-muted)', marginBottom: 8 }}>
+                Priced with its own calculator. The length of the line drawn here is the length of wall taken out: set its height, thickness and what it is made of in the calculator.
+              </div>
+              {renderAssemblyPanel({})}
             </>
           )}
 

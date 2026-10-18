@@ -39,6 +39,8 @@ export interface DemoSubphase {
   markupPct: number
   tasks:     DemoTask[]
   warnings?: string[]
+  /** priced by an assembly calculator (its id in lib/built-assemblies.tsx) instead of tasks: it has no tasks of its own */
+  calculatorId?: string
 }
 
 // ── Default demolition data ────────────────────────────────────────────────────
@@ -705,6 +707,15 @@ export const DEFAULT_DEMO_SUBPHASES: DemoSubphase[] = [
         aiKeywords: ['clean down', 'final clean', 'sweep', 'post demolition clean'],
       },
     ],
+  },
+  // Priced by the Wall Removal / Knock-Through calculator (lib/wall-removal-units.ts): no tasks of its own. Kept last so a new demolition line still starts on a task.
+  {
+    id: 'wall-removal-calc',
+    name: 'Wall Removal / Knock-Through (calculator)',
+    markupPct: 25,
+    warnings: ["A load-bearing wall must not be touched without a structural engineer's design and Building Control."],
+    tasks: [],
+    calculatorId: 'demo-wall-removal-calc',
   },
 ]
 

@@ -700,3 +700,26 @@ export function suggestServicesLabour(g: {
   ])
   return [dig, lay, surface].filter((x): x is LabourSuggestion => x !== null)
 }
+
+/** The labour for removing a wall or knocking through (Demolition → Wall Removal / Knock-Through): a labourer takes the wall down and clears the rubble (hours for each m³ depend on what it is built of), a carpenter
+ * puts up the needles and props, the beam is lifted in by a labourer and the padstones set by a bricklayer, and a plasterer and carpenter make good. Rough estimates, as everywhere here. */
+export function suggestWallRemovalLabour(g: {
+  wallVolumeM3: number; hoursPerM3: number; structural: boolean; lengthM: number; propWeeks: number; plasterM2: number; floorM2: number; boxInLm: number; dustProtection: boolean
+}): LabourSuggestion[] {
+  const demo = line('wall-demo', 'labourer', 'Take down the wall, clear and load the rubble to the skip', [
+    { qty: g.dustProtection ? 1 : 0, unit: 'job', what: 'dust protection', rate: 0.75 },
+    { qty: g.wallVolumeM3, unit: 'm³', what: 'wall taken down and loaded', rate: g.hoursPerM3 },
+  ])
+  const props = line('wall-props', 'carpenter', 'Put up the needles and props, and take them down again', [{ qty: g.structural ? g.lengthM : 0, unit: 'lm', what: 'needles and props', rate: 1.5 }])
+  const beam = line('wall-beam', 'labourer', 'Lift the steel beam into place and pack it', [
+    { qty: g.structural ? 1 : 0, unit: 'beam', what: 'set up and lifted', rate: 6 },
+    { qty: g.structural ? g.lengthM : 0, unit: 'lm', what: 'beam positioned', rate: 1.2 },
+  ])
+  const pads = line('wall-pads', 'bricklayer', 'Set the padstones and make up the brickwork at the beam ends', [{ qty: g.structural ? 2 : 0, unit: 'padstones', what: 'set', rate: 1.5 }])
+  const plaster = line('wall-plaster', 'renderer', 'Make good the plaster and box in the steel', [
+    { qty: g.plasterM2, unit: 'm²', what: 'plaster make-good', rate: 0.8 },
+    { qty: g.boxInLm, unit: 'lm', what: 'steel boxed in', rate: 0.4 },
+  ])
+  const floor = line('wall-floor', 'carpenter', 'Patch the floor where the wall stood', [{ qty: g.floorM2, unit: 'm²', what: 'floor patched', rate: 0.6 }])
+  return [demo, props, beam, pads, plaster, floor].filter((x): x is LabourSuggestion => x !== null)
+}
