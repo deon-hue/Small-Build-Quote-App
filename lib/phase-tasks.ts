@@ -717,6 +717,14 @@ const plumbingSubphases: PhaseSubphase[] = [
     ukWarning: 'Gas Safe registered engineer MUST install and commission the boiler. Gas boiler replacement requires Building Regulations notification.',
     tasks: [],  // priced by the Heating plant calculator (boiler, flue, controls, filter, flush, pipework, commissioning)
   },
+  // Warm water underfloor heating, priced zone by zone (assembly calculator). Deon decided UFH belongs under Plumbing; the screed over it is the Screeded Floor calculator.
+  {
+    id: 'plumb-ufh',
+    phase: 'Plumbing & Heating',
+    name: 'Underfloor Heating',
+    markupPct: 15,
+    tasks: [],  // priced by the Underfloor heating calculator (zones: pipe, loops, fixing, manifold, controls, commissioning)
+  },
   {
     id: 'plumb-kitchen',
     phase: 'Plumbing & Heating',

@@ -34,6 +34,7 @@ import AssemblyBlockBeamFloorDemo from '@/components/AssemblyBlockBeamFloorDemo'
 import AssemblySuspendedTimberFloorDemo from '@/components/AssemblySuspendedTimberFloorDemo'
 import AssemblyPlumbingDemo from '@/components/AssemblyPlumbingDemo'
 import AssemblyHeatingDemo from '@/components/AssemblyHeatingDemo'
+import AssemblyUfhDemo from '@/components/AssemblyUfhDemo'
 import AssemblyRoofStructureDemo from '@/components/AssemblyRoofStructureDemo'
 import AssemblyRoofCoveringDemo from '@/components/AssemblyRoofCoveringDemo'
 import AssemblyRooflightsDemo from '@/components/AssemblyRooflightsDemo'
@@ -46,7 +47,7 @@ import type { AssemblyBasics } from '@/lib/assembly-basics'
 import type { PlanRoom, ElectricsSavedState } from '@/lib/electrics-units'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 
-export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation' | 'pad-foundation' | 'piled-foundation' | 'underpinning' | 'electrics' | 'decoration' | 'screed-floor' | 'floor-overlay' | 'concrete-slab' | 'block-beam' | 'timber-floor' | 'insulated-concrete' | 'plumbing' | 'heating'
+export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation' | 'pad-foundation' | 'piled-foundation' | 'underpinning' | 'electrics' | 'decoration' | 'screed-floor' | 'floor-overlay' | 'concrete-slab' | 'block-beam' | 'timber-floor' | 'insulated-concrete' | 'plumbing' | 'heating' | 'ufh'
 
 /** Fired when a calculator's "Save & Price" is used from inside a real quote — absent in
  * the Back Office preview context, which has no quote to save into. */
@@ -124,6 +125,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'fs-insulated-concrete': { icon: 'insulated-concrete', render: opts => <AssemblyConcreteSlabFloorDemo variant="insulated" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} /> },
   'plumb-install': { icon: 'plumbing', render: opts => <AssemblyPlumbingDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'plumb-heating-plant': { icon: 'heating', render: opts => <AssemblyHeatingDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
+  'plumb-ufh': { icon: 'ufh', render: opts => <AssemblyUfhDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'deco-internal-walls': { icon: 'decoration', render: opts => <AssemblyDecorationDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'elec-install': { icon: 'electrics', render: opts => <AssemblyElectricsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} planRooms={opts?.electrics?.planRooms} initialState={opts?.electrics?.initialState} /> },
   'ew-cav-full': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="wool" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initialHeightMm={opts?.initialHeightMm} noSampleOpenings={opts?.noSampleOpenings} /> },
@@ -308,6 +310,15 @@ export function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; siz
           <path d="M10 15c-2 0 -3 -1.5 -3 -3 0 -1.6 1.4 -2.2 1.6 -4 1.4 .9 2.4 2.2 2.4 3.4.4 -.3.7 -.8.8 -1.4 .8 .8 1.2 1.7 1.2 2.6 0 1.4 -1.1 2.4 -3 2.4z" stroke="#f59e0b" strokeWidth="1.2" strokeLinejoin="round" />
           <path d="M16 8h4v10" stroke="#dc2626" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
           <path d="M7 21h6" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      )
+    case 'ufh':
+      // A floor in section with a looping pipe in it and heat rising.
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="2" y="12" width="20" height="8" stroke="#78716c" strokeWidth="1.5" />
+          <path d="M4 16h3a1.5 1.5 0 0 0 0-3h2.5a1.5 1.5 0 0 1 0 3H12a1.5 1.5 0 0 0 0-3h2.5a1.5 1.5 0 0 1 0 3H17a1.5 1.5 0 0 0 0-3h3" stroke="#dc2626" strokeWidth="1.4" strokeLinecap="round" />
+          <path d="M7 9c0-1.5 1.2-1.5 1.2-3M12 9c0-1.5 1.2-1.5 1.2-3M17 9c0-1.5 1.2-1.5 1.2-3" stroke="#ea580c" strokeWidth="1.3" strokeLinecap="round" />
         </svg>
       )
     case 'underpinning':

@@ -37,6 +37,7 @@ export const BUILT_ASSEMBLY_CANONICAL_IDS = new Set<string>([
   'fs-insulated-concrete',
   'plumb-install',
   'plumb-heating-plant',
+  'plumb-ufh',
 ])
 
 // Bridges Take-off's External Walls "Build-up Type" system (keyed by WALL_MAKEUPS/
