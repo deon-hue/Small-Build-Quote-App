@@ -32,7 +32,7 @@ interface Props {
 }
 
 const TYPE_COLOUR: Record<RunType, string> = { cold: '#2563eb', hot: '#dc2626', heating: '#ea580c', gas: '#ca8a04', waste: '#64748b', soil: '#57534e' }
-const ROUTED_WORDS: Record<Route, string> = {
+export const ROUTED_WORDS: Record<Route, string> = {
   surface: 'clipped on the surface', void: 'run in the floor or ceiling void', chased: 'chased into the wall', screed: 'buried in the screed, sleeved', external: 'run outside, clipped to the wall',
 }
 const TYPES = Object.keys(RUN_TYPES) as RunType[]

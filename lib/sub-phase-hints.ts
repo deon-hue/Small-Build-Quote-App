@@ -65,7 +65,11 @@ const HINTS: Record<string, string> = {
   'drain-cap-off': 'capping off, diverting or moving existing drains and services',
   'drain-rainwater': 'rainwater and surface water disposal at ground level: soakaways and drains',
   // Heating, joinery, tiling, decoration
-  'plumb-boiler-heating': 'boiler, radiators and the central heating system',
+  'plumb-boiler-heating': 'system boilers with an unvented cylinder, heat pumps and other heating plant (a gas combi boiler is the Heating Plant line, and radiators are in the plumbing rooms)',
+  'plumb-install': 'the plumbing priced room by room: baths, showers, basins, WCs, kitchen and utility sinks, appliance connections, radiators and towel rails, freestanding baths and wet rooms, pressure test',
+  'plumb-heating-plant': 'replacing or installing a gas combi boiler with its flue, controls, filter, system clean and commissioning (radiators are in the plumbing rooms)',
+  'plumb-ufh': 'warm water underfloor heating by zone: pipe, loops, manifold, thermostats and commissioning (the screed over it is a screed line)',
+  'plumb-pipework': 'pipework by length that the scope states in metres: long hot, cold, heating, gas, waste and soil runs',
   'join-staircase': 'new staircase and balustrade',
   'join-fitted-furniture': 'fitted wardrobes and bespoke furniture',
   'join-kitchen': 'fitting a kitchen: units, worktops and appliance installation',

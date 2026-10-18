@@ -28,7 +28,7 @@ interface Props {
   labourTrades?: BOLabourTrade[]
 }
 
-const LAID: Record<UfhFloor, string> = {
+export const LAID: Record<UfhFloor, string> = {
   screed: 'clipped to insulation in the screed',
   overlay: 'in low-profile overlay panels',
   joisted: 'between the joists on spreader plates',

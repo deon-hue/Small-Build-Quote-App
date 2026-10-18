@@ -36,6 +36,7 @@ import { BUILT_ASSEMBLY_CANONICAL_IDS } from '@/lib/built-assembly-ids'
 import { assemblyLinesToItems, profitPctOf } from '@/lib/assembly-quote-items'
 import { basicsFor, describeBasics, BASICS_NEEDS } from '@/lib/assembly-basics'
 import { priceFromBasics, priceElectricsFromScope } from '@/components/ai-priced-calculators'
+import { pricePlumbingCalcFromScope, PLUMBING_AI_IDS } from '@/components/ai-plumbing-pricing'
 import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchQuoteDefaults, fetchAllQuoteDefaults, upsertTask, fetchLabourTrades, fetchProducts, fetchPlantItems, fetchPhases, fetchSubPhases, fetchTasks } from '@/lib/back-office-queries'
 import type { BOLabourTrade, BOProduct, BOPlantItem, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
 import type { FloorMakeup } from '@/lib/takeoff-types'
@@ -89,6 +90,8 @@ interface ScopeToQuotePhase {
   measurements?: { lengthM?: number; widthM?: number; heightM?: number; depthM?: number; count?: number }
   /** the rooms, points and special fittings the AI heard, for the electrical installation calculator */
   electrics?: unknown
+  /** what the AI heard for a plumbing calculator line (rooms and fittings, boiler, underfloor zones or pipe runs), checked in lib/plumbing-ai.ts */
+  calc?: unknown
   extraTasks?: {
     name: string
     description?: string
@@ -152,6 +155,22 @@ function buildPhasesFromScopeToQuote(
               reviewNote: `Priced by the electrical calculator from the rooms in your scope (${el.summary}) with the calculator's standard rates, per point.${el.usualRooms.length > 0 ? ` No points were stated for ${el.usualRooms.join(', ')}, so those use the usual points for that kind of room.` : ''} Open the calculator to check the points and change anything.`,
             }
           : { reviewNote: 'Priced by its calculator, but no electrical rooms or points were found in the scope. Open the calculator and add the rooms.' }),
+      }
+    }
+    if (calcSub && calcSub.canonical_id && PLUMBING_AI_IDS.has(calcSub.canonical_id)) {
+      // The plumbing calculators are priced from what the scope says (rooms and fittings, the boiler, underfloor zones with an area, pipe runs with a length),
+      // with the calculator's standard settings. Nothing is invented: what was not stated is left out or said in the note, for the estimator to check.
+      const pl = pricePlumbingCalcFromScope({ canonicalId: calcSub.canonical_id, spec: sp.calc, labourTrades })
+      const plPhase = makePhase(sp.phase, pl ? assemblyLinesToItems(pl.lines) : defaultTypedItems(), sp.parentPhase || undefined)
+      return {
+        ...plPhase,
+        source: 'ai' as const,
+        itemStatus: 'ai' as const,
+        boSubPhaseId: calcSub.id,
+        needsReview: true,
+        ...(pl
+          ? { taskName: pl.description, calcDescription: pl.description, markupPct: profitPctOf(pl.lines), ...(pl.detail && { scopeDetail: pl.detail }), assemblyLines: pl.lines, calcState: pl.calcState, reviewNote: pl.note }
+          : { reviewNote: 'Priced by its calculator, but nothing for it was found in the scope. Open the calculator and add what the job needs.' }),
       }
     }
     if (calcSub) {
