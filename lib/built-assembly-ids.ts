@@ -41,6 +41,7 @@ export const BUILT_ASSEMBLY_CANONICAL_IDS = new Set<string>([
   'plumb-pipework',
   'drain-runs',
   'drain-soakaway',
+  'drain-services',
 ])
 
 // Bridges Take-off's External Walls "Build-up Type" system (keyed by WALL_MAKEUPS/

@@ -439,6 +439,15 @@ const drainageSubphases: PhaseSubphase[] = [
     ukWarning: 'A soakaway must be sized from an infiltration test (BRE Digest 365), at least 5m from a building, and away from boundaries and slopes without checks.',
     tasks: [],  // priced by the Soakaway & rainwater calculator (areas draining to it, the soakaway, channel drains, gullies, downpipe connections, butts)
   },
+  // New and diverted supplies of water, gas, electricity and telecoms, and cap-offs (assembly calculator). Sits beside the task-based Services Cap-off & Diversions sub-phase, which is untouched.
+  {
+    id: 'drain-services',
+    phase: 'Drainage & Services',
+    name: 'Services Connections (by service)',
+    markupPct: 20,
+    ukWarning: 'Gas work must be carried out by a Gas Safe registered engineer. Water, gas and electricity connections are made by the utility or its approved contractor, whose charges and waiting times vary.',
+    tasks: [],  // priced by the Services connections calculator (a service per supply: utility, new/divert/cap-off, trench length, utility charge)
+  },
   {
     id: 'drain-underground',
     phase: 'Drainage & Services',

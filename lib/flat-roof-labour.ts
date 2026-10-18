@@ -33,7 +33,7 @@ export const LABOUR_RATES = {
     membraneM2: 0.15, battenLm: 0.08, ridgeLm: 0.35, hipLm: 0.4, vergeLm: 0.3, abutmentLm: 0.4, eavesLm: 0.15, chaseLm: 0.3, soakerNr: 0.05,
   },
   bricklayer: { cavityM2: 1.4, solidM2: 1.0, solidBrickM2: 1.8, copingLm: 0.35, trayLm: 0.15, outletOpeningNr: 0.5, dpcLm: 0.05, beamNr: 0.35, beamBlockNr: 0.025, beamGroutM2: 0.03 },
-  groundworker: { trimLm: 0.25, concreteM3: 1.5, backfillM3: 0.5, cavityFillM3: 1.0, raftTrimM2: 0.06, raftHardcoreM2: 0.12, raftBlindM2: 0.10, raftInsulationM2: 0.08, raftMeshM2PerLayer: 0.12, raftFormworkLm: 0.3, raftFinishM2: 0.12, padPitNr: 0.4, padBlindNr: 0.3, padFormworkM2: 0.8, padRebarKg: 0.025, beamBlindLm: 0.15, beamFormworkM2: 0.35, beamCageLm: 0.2, pileCutNr: 0.5, underpinDigM3: 10, underpinShutterM2: 1.0, underpinPinNr: 2.0, underpinPourM3: 2.5, underpinPackNr: 1.0, underpinSteelKg: 0.025, slabTrimM2: 0.06, slabHardcoreM2: 0.12, slabBlindM2: 0.05, slabDpmM2: 0.04, slabInsulationM2: 0.08, slabMeshM2PerLayer: 0.1, slabEdgeLm: 0.03, slabFinishM2: 0.12, drainLayLm: 0.35, drainHandDigM3: 2.5, drainGravelM3: 0.8, drainSoftM2: 0.05, drainPavingM2: 0.5, drainTarmacM2: 0.3, drainConcreteM2: 0.4, drainShallowIc: 1.5, drainDeepIc: 3, drainManhole: 8, drainRoddingEye: 0.5, soakCrateM3: 3, soakStoneM3: 1.2, soakRing: 2.5, soakWrapM2: 0.05, soakSilt: 1, channelLm: 0.5, gullyNr: 1.2, dpConnNr: 0.8, buttNr: 0.5 },
+  groundworker: { trimLm: 0.25, concreteM3: 1.5, backfillM3: 0.5, cavityFillM3: 1.0, raftTrimM2: 0.06, raftHardcoreM2: 0.12, raftBlindM2: 0.10, raftInsulationM2: 0.08, raftMeshM2PerLayer: 0.12, raftFormworkLm: 0.3, raftFinishM2: 0.12, padPitNr: 0.4, padBlindNr: 0.3, padFormworkM2: 0.8, padRebarKg: 0.025, beamBlindLm: 0.15, beamFormworkM2: 0.35, beamCageLm: 0.2, pileCutNr: 0.5, underpinDigM3: 10, underpinShutterM2: 1.0, underpinPinNr: 2.0, underpinPourM3: 2.5, underpinPackNr: 1.0, underpinSteelKg: 0.025, slabTrimM2: 0.06, slabHardcoreM2: 0.12, slabBlindM2: 0.05, slabDpmM2: 0.04, slabInsulationM2: 0.08, slabMeshM2PerLayer: 0.1, slabEdgeLm: 0.03, slabFinishM2: 0.12, drainLayLm: 0.35, drainHandDigM3: 2.5, drainGravelM3: 0.8, drainSoftM2: 0.05, drainPavingM2: 0.5, drainTarmacM2: 0.3, drainConcreteM2: 0.4, drainShallowIc: 1.5, drainDeepIc: 3, drainManhole: 8, drainRoddingEye: 0.5, soakCrateM3: 3, soakStoneM3: 1.2, soakRing: 2.5, soakWrapM2: 0.05, soakSilt: 1, channelLm: 0.5, gullyNr: 1.2, dpConnNr: 0.8, buttNr: 0.5, servMeterBox: 1.5 },
   renderer: { renderM2: 0.6 },
   plumber: { gutterLm: 0.3, fittingNr: 0.15, downpipeLm: 0.35, shoeNr: 0.15, hopperNr: 0.5, offsetNr: 0.3 },
   labourer: { carryM2: 0.15, bricklayerShare: 0.5, screedPrepM2: 0.05, overlayPrepM2: 0.08, overlayPrimeM2: 0.02, overlayPourM2: 0.06, overlayEdgeLm: 0.02, screedInsulationM2: 0.1, screedDpmM2: 0.04, screedEdgeLm: 0.02, screedMeshM2: 0.08 },
@@ -677,4 +677,26 @@ export function suggestSoakawayLabour(g: {
     { qty: g.waterButts, unit: 'nr', what: 'water butts', rate: w.buttNr },
   ])
   return [build, fit].filter((x): x is LabourSuggestion => x !== null)
+}
+
+/** The labour for services connections (Drainage & Services → Services Connections): a groundworker hand-digs where the machine cannot reach, lays the duct or pipe on its sand bed with the warning tape, backfills,
+ * sets the meter boxes and puts the surface back. The machine digging is the digger and its operator, priced as plant in the calculator. The utility company's own work is its provisional charge, not these hours. */
+export function suggestServicesLabour(g: {
+  layLm: number; handDigM3: number; sandM3: number; backfillM3: number; softM2: number; pavingM2: number; tarmacM2: number; concreteM2: number; boxes: number
+}): LabourSuggestion[] {
+  const w = LABOUR_RATES.groundworker
+  const dig = line('serv-dig', 'labourer', 'Hand-dig the trench where the machine cannot reach', [{ qty: g.handDigM3, unit: 'm³', what: 'dug by hand', rate: w.drainHandDigM3 }])
+  const lay = line('serv-lay', 'labourer', 'Lay the duct or pipe on its sand bed with warning tape, backfill and set the meter boxes', [
+    { qty: g.layLm, unit: 'lm', what: 'duct or pipe laid', rate: w.drainLayLm },
+    { qty: g.sandM3, unit: 'm³', what: 'sand bed and cover', rate: w.drainGravelM3 },
+    { qty: g.backfillM3, unit: 'm³', what: 'backfilled and compacted', rate: w.backfillM3 },
+    { qty: g.boxes, unit: 'nr', what: 'meter boxes set', rate: w.servMeterBox },
+  ])
+  const surface = line('serv-surface', 'labourer', 'Reinstate the surface over the trench', [
+    { qty: g.softM2, unit: 'm²', what: 'soft ground', rate: w.drainSoftM2 },
+    { qty: g.pavingM2, unit: 'm²', what: 'block paving relaid', rate: w.drainPavingM2 },
+    { qty: g.tarmacM2, unit: 'm²', what: 'tarmac', rate: w.drainTarmacM2 },
+    { qty: g.concreteM2, unit: 'm²', what: 'concrete', rate: w.drainConcreteM2 },
+  ])
+  return [dig, lay, surface].filter((x): x is LabourSuggestion => x !== null)
 }
