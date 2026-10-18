@@ -12,6 +12,8 @@
 import React, { useMemo, useState, useEffect } from 'react'
 import NumInput from '@/components/NumInput'
 import { useCalcState } from '@/components/calc-state'
+import DiggerOnSiteSection from '@/components/DiggerOnSiteSection'
+import { planDigger, diggerLayers } from '@/lib/digger-on-site'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
 import { calculateRaftFoundationGeometry, type RaftFoundationInput, type RaftFoundationGeometry } from '@/lib/raft-foundation'
 import { describeRaftFoundation, describeRaftFoundationShort } from '@/lib/raft-foundation-description'
@@ -31,7 +33,6 @@ import type { AssemblyBasics } from '@/lib/assembly-basics'
 // Sample rates, like every calculator here — editable per line in the breakdown until Back Office products and plant replace them.
 const MIXES = { C25: { label: 'C25', cost: 105 }, C30: { label: 'C30 (usual for a raft)', cost: 112 }, C35: { label: 'C35', cost: 120 } } as const
 type Mix = keyof typeof MIXES
-const EXCAVATOR_PER_DAY = 260   // a mini or midi excavator and its operator
 const MUCKAWAY_PER_M3 = 28      // grab lorry and tip, per m³ of bulked soil
 const PLATE_PER_DAY = 40
 const PUMP_PER_VISIT = 450
@@ -48,13 +49,14 @@ interface Props {
 }
 
 function buildRaftLayers(g: RaftFoundationGeometry, o: {
-  mix: Mix; wastePct: number; slabMm: number; underSlabMm: number; edgeInsulation: boolean; pumped: boolean; hasEdgeBeam: boolean
+  mix: Mix; wastePct: number; slabMm: number; underSlabMm: number; edgeInsulation: boolean; pumped: boolean; hasEdgeBeam: boolean; diggerDays?: number | null
 }): AssemblyLayerDef[] {
   const w = o.wastePct
   const L: AssemblyLayerDef[] = []
   const fixed = (l: Omit<AssemblyLayerDef, 'source'> & { qty: number }): AssemblyLayerDef => { const { qty, ...rest } = l; return { ...rest, source: 'fixed', fixedQty: qty } }
 
-  L.push(fixed({ id: 'excavator', name: 'Excavator with operator — stripping and digging the formation', category: 'plant', unit: 'day', unitCost: EXCAVATOR_PER_DAY, qty: g.excavatorDays }))
+  // the digger: the days it is on site, its fuel, and delivery and collection
+  L.push(...diggerLayers(planDigger(g.excavatorDays, o.diggerDays ?? null), 'stripping and digging the formation', 'Excavator with operator'))
   L.push(fixed({ id: 'spoil', name: 'Spoil carted away (grab lorry and tip, soil bulked up 30%)', category: 'other', unit: 'm³', unitCost: MUCKAWAY_PER_M3, qty: g.spoilAwayM3 }))
   L.push(fixed({ id: 'hardcore', name: `Hardcore (MOT Type 1), ${Math.round(g.hardcoreVolumeM3 / Math.max(g.areaM2, 0.0001) * 1000)}mm compacted`, category: 'materials', unit: 'tonne', unitCost: 28, wastePct: w, qty: g.hardcoreTonnes }))
   L.push(fixed({ id: 'plate', name: 'Compaction plate hire — compacting the hardcore', category: 'plant', unit: 'day', unitCost: PLATE_PER_DAY, qty: g.plateDays }))
@@ -113,6 +115,7 @@ export default function AssemblyRaftFoundationDemo({ onClose, onSave, labourTrad
   const [edgeInsulation, setEdgeInsulation] = useCalcState('AssemblyRaftFoundationDemo', 'edgeInsulation', true)
   const [pumped, setPumped] = useCalcState('AssemblyRaftFoundationDemo', 'pumped', false)
   const [wastePct, setWastePct] = useCalcState('AssemblyRaftFoundationDemo', 'wastePct', 10)
+  const [diggerDays, setDiggerDays] = useCalcState<number | null>('AssemblyRaftFoundationDemo', 'diggerDays', null)
   const [profitPct, setProfitPct] = useCalcState('AssemblyRaftFoundationDemo', 'profitPct', 20)   // default profit margin
   const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>('AssemblyRaftFoundationDemo', 'rateOverrides', {})
   const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>('AssemblyRaftFoundationDemo', 'disabledLayerIds', new Set())
@@ -130,9 +133,9 @@ export default function AssemblyRaftFoundationDemo({ onClose, onSave, labourTrad
 
   const layers = useMemo(() => {
     if (!g) return []
-    return buildRaftLayers(g, { mix, wastePct, slabMm, underSlabMm, edgeInsulation, pumped, hasEdgeBeam: !!edgeBeam && g.edgeExtraVolumeM3 > 0 })
+    return buildRaftLayers(g, { mix, wastePct, slabMm, underSlabMm, edgeInsulation, pumped, hasEdgeBeam: !!edgeBeam && g.edgeExtraVolumeM3 > 0, diggerDays })
       .map(l => rateOverrides[l.id] != null ? { ...l, unitCost: rateOverrides[l.id] } : l)
-  }, [g, mix, wastePct, slabMm, underSlabMm, edgeInsulation, pumped, edgeBeamOn, rateOverrides])
+  }, [g, mix, wastePct, slabMm, underSlabMm, edgeInsulation, pumped, edgeBeamOn, diggerDays, rateOverrides])
   const costedLines: CostedLine[] = layers.map(l => costLayer(l, l.fixedQty ?? 0))
 
   // Miscellaneous materials
@@ -307,6 +310,8 @@ export default function AssemblyRaftFoundationDemo({ onClose, onSave, labourTrad
           <CollapsibleSection title="Pouring" borderColor="#bae6fd">
             {check('Pump the concrete', pumped, setPumped, 'A pump visit is added to the price')}
           </CollapsibleSection>
+
+          <DiggerOnSiteSection diggingDays={g ? g.excavatorDays : 0} daysOnSite={diggerDays} onDaysOnSite={setDiggerDays} />
 
           <PropRow label={`Waste % (${wastePct}%)`}><input type="range" min={0} max={25} value={wastePct} onChange={e => setWastePct(+e.target.value)} style={{ width: '100%' }} /></PropRow>
           <PropRow label={`Profit % (${profitPct}%)`}><input type="range" min={0} max={50} value={profitPct} onChange={e => setProfitPct(+e.target.value)} style={{ width: '100%' }} /></PropRow>

@@ -12,6 +12,8 @@
 import React, { useMemo, useState } from 'react'
 import NumInput from '@/components/NumInput'
 import { useCalcState } from '@/components/calc-state'
+import DiggerOnSiteSection from '@/components/DiggerOnSiteSection'
+import { planDigger, diggerLayers } from '@/lib/digger-on-site'
 import ConcretePlacingSection from '@/components/ConcretePlacingSection'
 import { planConcretePlacing, placingLayers, placingLabour, type PlacingMethod, type PlacingPlan } from '@/lib/concrete-placing'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
@@ -33,7 +35,6 @@ import type { AssemblyBasics } from '@/lib/assembly-basics'
 // Sample rates, like every calculator here — editable per line in the breakdown until Back Office products and plant replace them.
 const MIXES = { C25: { label: 'C25', cost: 105 }, C30: { label: 'C30 (usual for pads)', cost: 112 }, C35: { label: 'C35', cost: 120 } } as const
 type Mix = keyof typeof MIXES
-const EXCAVATOR_PER_DAY = 260   // a mini excavator and its operator
 const MUCKAWAY_PER_M3 = 28      // grab lorry and tip, per m³ of bulked soil
 const PLATE_PER_DAY = 40
 const BLINDING_PER_M3 = 95      // C10 blinding concrete
@@ -52,12 +53,13 @@ interface Props {
 let groupSeq = 0
 const newGroup = (count: number, l: number, w: number, d: number): PadGroup => ({ id: 'pad-g-' + ++groupSeq, count, lengthMm: l, widthMm: w, depthMm: d })
 
-function buildPadLayers(g: PadFoundationGeometry, o: { mix: Mix; wastePct: number; formwork: boolean; placing?: PlacingPlan }): AssemblyLayerDef[] {
+function buildPadLayers(g: PadFoundationGeometry, o: { mix: Mix; wastePct: number; formwork: boolean; placing?: PlacingPlan; diggerDays?: number | null }): AssemblyLayerDef[] {
   const w = o.wastePct
   const L: AssemblyLayerDef[] = []
   const fixed = (l: Omit<AssemblyLayerDef, 'source'> & { qty: number }): AssemblyLayerDef => { const { qty, ...rest } = l; return { ...rest, source: 'fixed', fixedQty: qty } }
 
-  L.push(fixed({ id: 'excavator', name: 'Mini excavator with operator — digging the pits', category: 'plant', unit: 'day', unitCost: EXCAVATOR_PER_DAY, qty: g.excavatorDays }))
+  // the digger: the days it is on site, its fuel, and delivery and collection
+  L.push(...diggerLayers(planDigger(g.excavatorDays, o.diggerDays ?? null), 'digging the pits', 'Mini excavator with operator'))
   L.push(fixed({ id: 'spoil', name: 'Spoil carted away (grab lorry and tip, soil bulked up 30%)', category: 'other', unit: 'm³', unitCost: MUCKAWAY_PER_M3, qty: g.spoilAwayM3 }))
   if (g.blindingM3 > 0) L.push(fixed({ id: 'blinding', name: 'Blinding concrete C10 under each pad', category: 'materials', unit: 'm³', unitCost: BLINDING_PER_M3, wastePct: Math.max(w, 5), qty: g.blindingM3 }))
   if (o.formwork && g.formworkM2 > 0) L.push(fixed({ id: 'formwork', name: 'Formwork to the pad sides (ply and timber, reused)', category: 'materials', unit: 'm²', unitCost: FORMWORK_PER_M2, qty: g.formworkM2 }))
@@ -100,6 +102,7 @@ export default function AssemblyPadFoundationDemo({ onClose, onSave, labourTrade
   const [starters, setStarters] = useCalcState('AssemblyPadFoundationDemo', 'starters', false)
   const [mix, setMix] = useCalcState<Mix>('AssemblyPadFoundationDemo', 'mix', 'C30')
   const [wastePct, setWastePct] = useCalcState('AssemblyPadFoundationDemo', 'wastePct', 10)
+  const [diggerDays, setDiggerDays] = useCalcState<number | null>('AssemblyPadFoundationDemo', 'diggerDays', null)
   const [profitPct, setProfitPct] = useCalcState('AssemblyPadFoundationDemo', 'profitPct', 20)   // default profit margin
   const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>('AssemblyPadFoundationDemo', 'rateOverrides', {})
   const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>('AssemblyPadFoundationDemo', 'disabledLayerIds', new Set())
@@ -123,8 +126,8 @@ export default function AssemblyPadFoundationDemo({ onClose, onSave, labourTrade
 
   const layers = useMemo(() => {
     if (!g) return []
-    return buildPadLayers(g, { mix, wastePct, formwork, placing }).map(l => rateOverrides[l.id] != null ? { ...l, unitCost: rateOverrides[l.id] } : l)
-  }, [g, mix, wastePct, formwork, placing, rateOverrides])
+    return buildPadLayers(g, { mix, wastePct, formwork, placing, diggerDays }).map(l => rateOverrides[l.id] != null ? { ...l, unitCost: rateOverrides[l.id] } : l)
+  }, [g, mix, wastePct, formwork, placing, diggerDays, rateOverrides])
   const costedLines: CostedLine[] = layers.map(l => costLayer(l, l.fixedQty ?? 0))
 
   // Miscellaneous materials
@@ -282,6 +285,8 @@ export default function AssemblyPadFoundationDemo({ onClose, onSave, labourTrade
             {rebarOn && <PropRow label="Steel (kg per m³ of concrete)">{numInput(rebarKg, setRebarKg, 0)}</PropRow>}
             {check('Holding-down bolts / column starters', starters, setStarters, 'One set per pad')}
           </CollapsibleSection>
+
+          <DiggerOnSiteSection diggingDays={g ? g.excavatorDays : 0} daysOnSite={diggerDays} onDaysOnSite={setDiggerDays} />
 
           <PropRow label={`Waste % (${wastePct}%)`}><input type="range" min={0} max={25} value={wastePct} onChange={e => setWastePct(+e.target.value)} style={{ width: '100%' }} /></PropRow>
           <PropRow label={`Profit % (${profitPct}%)`}><input type="range" min={0} max={50} value={profitPct} onChange={e => setProfitPct(+e.target.value)} style={{ width: '100%' }} /></PropRow>

@@ -15,6 +15,8 @@
 import React, { useMemo, useState, useEffect } from 'react'
 import NumInput from '@/components/NumInput'
 import { useCalcState } from '@/components/calc-state'
+import DiggerOnSiteSection from '@/components/DiggerOnSiteSection'
+import { planDigger, diggerLayers } from '@/lib/digger-on-site'
 import ConcretePlacingSection from '@/components/ConcretePlacingSection'
 import { planConcretePlacing, placingLayers, placingLabour, type PlacingMethod, type PlacingPlan } from '@/lib/concrete-placing'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
@@ -45,7 +47,6 @@ const WALL_LABEL: Record<StripWallBuild, string> = {
   'solid-flat': 'Solid 215mm blocks laid flat',
   'cavity-filled': 'Two 100mm block leaves, cavity filled with concrete',
 }
-const EXCAVATOR_PER_DAY = 260   // a mini excavator and its operator
 const MUCKAWAY_PER_M3 = 28      // grab lorry and tip, per m³ of bulked soil
 const WACKER_PER_DAY = 40
 
@@ -61,12 +62,13 @@ interface Props {
   initial?: AssemblyBasics
 }
 
-function buildStripFoundationLayers(g: StripFoundationGeometry, o: { wall: StripWallBuild; mix: Mix; wastePct: number; placing?: PlacingPlan }): AssemblyLayerDef[] {
+function buildStripFoundationLayers(g: StripFoundationGeometry, o: { wall: StripWallBuild; mix: Mix; wastePct: number; placing?: PlacingPlan; diggerDays?: number | null }): AssemblyLayerDef[] {
   const w = o.wastePct
   const L: AssemblyLayerDef[] = []
   const fixed = (l: Omit<AssemblyLayerDef, 'source'> & { qty: number }): AssemblyLayerDef => { const { qty, ...rest } = l; return { ...rest, source: 'fixed', fixedQty: qty } }
 
-  L.push(fixed({ id: 'excavator', name: 'Mini excavator with operator — digging the trench', category: 'plant', unit: 'day', unitCost: EXCAVATOR_PER_DAY, qty: g.excavatorDays }))
+  // the digger: the days it is on site, its fuel, and delivery and collection
+  L.push(...diggerLayers(planDigger(g.excavatorDays, o.diggerDays ?? null), 'digging the trench', 'Mini excavator with operator'))
   if (g.spoilAwayM3 > 0) L.push(fixed({ id: 'spoil', name: 'Spoil carted away (grab lorry and tip, soil bulked up 30%)', category: 'other', unit: 'm³', unitCost: MUCKAWAY_PER_M3, qty: g.spoilAwayM3 }))
   L.push(fixed({ id: 'concrete', name: `Ready-mixed concrete ${o.mix} (in the trench)`, category: 'materials', unit: 'm³', unitCost: CONCRETE_MIXES[o.mix].cost, qty: g.concreteVolumeM3, wastePct: w }))
 
@@ -130,6 +132,7 @@ export default function AssemblyStripFoundationDemo({ onClose, onSave, labourTra
   const [placingDistanceM, setPlacingDistanceM] = useCalcState('AssemblyStripFoundationDemo', 'placingDistanceM', 25)
   const [placingMen, setPlacingMen] = useCalcState('AssemblyStripFoundationDemo', 'placingMen', 2)
   const [wastePct, setWastePct] = useCalcState('AssemblyStripFoundationDemo', 'wastePct', 10)
+  const [diggerDays, setDiggerDays] = useCalcState<number | null>('AssemblyStripFoundationDemo', 'diggerDays', null)
   const [profitPct, setProfitPct] = useCalcState('AssemblyStripFoundationDemo', 'profitPct', 20)   // default profit margin
   const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>('AssemblyStripFoundationDemo', 'rateOverrides', {})
   const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>('AssemblyStripFoundationDemo', 'disabledLayerIds', new Set())
@@ -150,8 +153,8 @@ export default function AssemblyStripFoundationDemo({ onClose, onSave, labourTra
 
   const layers = useMemo(() => {
     if (!g) return []
-    return buildStripFoundationLayers(g, { wall, mix, wastePct, placing }).map(l => rateOverrides[l.id] != null ? { ...l, unitCost: rateOverrides[l.id] } : l)
-  }, [g, wall, mix, wastePct, placing, rateOverrides])
+    return buildStripFoundationLayers(g, { wall, mix, wastePct, placing, diggerDays }).map(l => rateOverrides[l.id] != null ? { ...l, unitCost: rateOverrides[l.id] } : l)
+  }, [g, wall, mix, wastePct, placing, diggerDays, rateOverrides])
   const costedLines: CostedLine[] = layers.map(l => costLayer(l, l.fixedQty ?? 0))
 
   // Miscellaneous materials
@@ -305,6 +308,8 @@ export default function AssemblyStripFoundationDemo({ onClose, onSave, labourTra
             </label>
             <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>Otherwise only the surplus is taken away: what the concrete and the wall below ground displace. The rest goes back as backfill.</div>
           </CollapsibleSection>
+
+          <DiggerOnSiteSection diggingDays={g ? g.excavatorDays : 0} daysOnSite={diggerDays} onDaysOnSite={setDiggerDays} />
 
           <PropRow label={`Waste % (${wastePct}%)`}><input type="range" min={0} max={25} value={wastePct} onChange={e => setWastePct(+e.target.value)} style={{ width: '100%' }} /></PropRow>
           <PropRow label={`Profit % (${profitPct}%)`}><input type="range" min={0} max={50} value={profitPct} onChange={e => setProfitPct(+e.target.value)} style={{ width: '100%' }} /></PropRow>

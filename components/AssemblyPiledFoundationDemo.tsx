@@ -12,6 +12,8 @@
 import React, { useMemo, useState, useEffect } from 'react'
 import NumInput from '@/components/NumInput'
 import { useCalcState } from '@/components/calc-state'
+import DiggerOnSiteSection from '@/components/DiggerOnSiteSection'
+import { planDigger, diggerLayers } from '@/lib/digger-on-site'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
 import { calculatePiledFoundationGeometry, type PiledFoundationInput, type PiledFoundationGeometry } from '@/lib/piled-foundation'
 import { describePiledFoundation, describePiledFoundationShort } from '@/lib/piled-foundation-description'
@@ -33,7 +35,6 @@ const MIXES = { C25: { label: 'C25', cost: 105 }, C30: { label: 'C30 (usual for 
 type Mix = keyof typeof MIXES
 const PILE_PER_M = 45           // a specialist piling subcontractor, per metre of pile (300mm)
 const RIG_MOBILISATION = 1200   // bringing the piling rig to site and taking it away again
-const EXCAVATOR_PER_DAY = 260
 const MUCKAWAY_PER_M3 = 28
 const PLATE_PER_DAY = 40
 const BLINDING_PER_M3 = 95
@@ -51,14 +52,15 @@ interface Props {
   externalLengthMm?: number
 }
 
-function buildPiledLayers(g: PiledFoundationGeometry, o: { mix: Mix; wastePct: number; pileDiameterMm: number; beamDepthMm: number }): AssemblyLayerDef[] {
+function buildPiledLayers(g: PiledFoundationGeometry, o: { mix: Mix; wastePct: number; pileDiameterMm: number; beamDepthMm: number; diggerDays?: number | null }): AssemblyLayerDef[] {
   const w = o.wastePct
   const L: AssemblyLayerDef[] = []
   const fixed = (l: Omit<AssemblyLayerDef, 'source'> & { qty: number }): AssemblyLayerDef => { const { qty, ...rest } = l; return { ...rest, source: 'fixed', fixedQty: qty } }
 
   L.push(fixed({ id: 'piles', name: `Piling by specialist subcontractor — ${g.pileCount} piles, ${o.pileDiameterMm}mm, per metre of pile`, category: 'subcontractors', unit: 'm', unitCost: PILE_PER_M, qty: g.pileLm }))
   L.push(fixed({ id: 'rig', name: 'Piling rig — bringing to site and taking away', category: 'subcontractors', unit: 'item', unitCost: RIG_MOBILISATION, qty: 1 }))
-  L.push(fixed({ id: 'excavator', name: 'Mini excavator with operator — the beam trench', category: 'plant', unit: 'day', unitCost: EXCAVATOR_PER_DAY, qty: g.excavatorDays }))
+  // the digger: the days it is on site, its fuel, and delivery and collection
+  L.push(...diggerLayers(planDigger(g.excavatorDays, o.diggerDays ?? null), 'the beam trench', 'Mini excavator with operator'))
   L.push(fixed({ id: 'spoil', name: 'Spoil carted away (piling arisings and beam trench, bulked up 30%)', category: 'other', unit: 'm³', unitCost: MUCKAWAY_PER_M3, qty: g.spoilAwayM3 }))
   if (g.blindingM3 > 0) L.push(fixed({ id: 'blinding', name: 'Blinding concrete C10 under the beam', category: 'materials', unit: 'm³', unitCost: BLINDING_PER_M3, wastePct: Math.max(w, 5), qty: g.blindingM3 }))
   if (g.voidFormerM2 > 0) L.push(fixed({ id: 'void', name: 'Void former under the beam', category: 'materials', unit: 'm²', unitCost: VOID_FORMER_PER_M2, wastePct: w, qty: g.voidFormerM2 }))
@@ -102,6 +104,7 @@ export default function AssemblyPiledFoundationDemo({ onClose, onSave, labourTra
   const [voidFormer, setVoidFormer] = useCalcState('AssemblyPiledFoundationDemo', 'voidFormer', false)
   const [mix, setMix] = useCalcState<Mix>('AssemblyPiledFoundationDemo', 'mix', 'C30')
   const [wastePct, setWastePct] = useCalcState('AssemblyPiledFoundationDemo', 'wastePct', 10)
+  const [diggerDays, setDiggerDays] = useCalcState<number | null>('AssemblyPiledFoundationDemo', 'diggerDays', null)
   const [profitPct, setProfitPct] = useCalcState('AssemblyPiledFoundationDemo', 'profitPct', 20)   // default profit margin
   const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>('AssemblyPiledFoundationDemo', 'rateOverrides', {})
   const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>('AssemblyPiledFoundationDemo', 'disabledLayerIds', new Set())
@@ -121,8 +124,8 @@ export default function AssemblyPiledFoundationDemo({ onClose, onSave, labourTra
 
   const layers = useMemo(() => {
     if (!g) return []
-    return buildPiledLayers(g, { mix, wastePct, pileDiameterMm: pileDiaMm, beamDepthMm: beamD }).map(l => rateOverrides[l.id] != null ? { ...l, unitCost: rateOverrides[l.id] } : l)
-  }, [g, mix, wastePct, pileDiaMm, beamD, rateOverrides])
+    return buildPiledLayers(g, { mix, wastePct, pileDiameterMm: pileDiaMm, beamDepthMm: beamD, diggerDays }).map(l => rateOverrides[l.id] != null ? { ...l, unitCost: rateOverrides[l.id] } : l)
+  }, [g, mix, wastePct, pileDiaMm, beamD, diggerDays, rateOverrides])
   const costedLines: CostedLine[] = layers.map(l => costLayer(l, l.fixedQty ?? 0))
 
   // Miscellaneous materials
@@ -268,6 +271,8 @@ export default function AssemblyPiledFoundationDemo({ onClose, onSave, labourTra
               <span>Void former under the beam<span style={{ display: 'block', fontSize: 10.5, color: '#94a3b8' }}>For clay, where the ground can swell</span></span>
             </label>
           </CollapsibleSection>
+
+          <DiggerOnSiteSection diggingDays={g ? g.excavatorDays : 0} daysOnSite={diggerDays} onDaysOnSite={setDiggerDays} />
 
           <PropRow label={`Waste % (${wastePct}%)`}><input type="range" min={0} max={25} value={wastePct} onChange={e => setWastePct(+e.target.value)} style={{ width: '100%' }} /></PropRow>
           <PropRow label={`Profit % (${profitPct}%)`}><input type="range" min={0} max={50} value={profitPct} onChange={e => setProfitPct(+e.target.value)} style={{ width: '100%' }} /></PropRow>
