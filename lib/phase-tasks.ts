@@ -430,6 +430,15 @@ const drainageSubphases: PhaseSubphase[] = [
     ukWarning: 'Works to public sewers require the water company\'s consent and adoption needs SuDS compliance. Building Control inspect and test the drain before it is covered.',
     tasks: [],  // priced by the Underground drainage calculator (runs: use, size, length, depth, how dug, surface; chambers, connections, CCTV)
   },
+  // A soakaway sized from the roof and paving that drain to it, with channel drains, gullies, downpipe connections and water butts (assembly calculator). Sits beside the task-based Rainwater sub-phase, which is untouched.
+  {
+    id: 'drain-soakaway',
+    phase: 'Drainage & Services',
+    name: 'Soakaway & Rainwater (by area)',
+    markupPct: 18,
+    ukWarning: 'A soakaway must be sized from an infiltration test (BRE Digest 365), at least 5m from a building, and away from boundaries and slopes without checks.',
+    tasks: [],  // priced by the Soakaway & rainwater calculator (areas draining to it, the soakaway, channel drains, gullies, downpipe connections, butts)
+  },
   {
     id: 'drain-underground',
     phase: 'Drainage & Services',

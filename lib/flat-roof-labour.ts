@@ -33,7 +33,7 @@ export const LABOUR_RATES = {
     membraneM2: 0.15, battenLm: 0.08, ridgeLm: 0.35, hipLm: 0.4, vergeLm: 0.3, abutmentLm: 0.4, eavesLm: 0.15, chaseLm: 0.3, soakerNr: 0.05,
   },
   bricklayer: { cavityM2: 1.4, solidM2: 1.0, solidBrickM2: 1.8, copingLm: 0.35, trayLm: 0.15, outletOpeningNr: 0.5, dpcLm: 0.05, beamNr: 0.35, beamBlockNr: 0.025, beamGroutM2: 0.03 },
-  groundworker: { trimLm: 0.25, concreteM3: 1.5, backfillM3: 0.5, cavityFillM3: 1.0, raftTrimM2: 0.06, raftHardcoreM2: 0.12, raftBlindM2: 0.10, raftInsulationM2: 0.08, raftMeshM2PerLayer: 0.12, raftFormworkLm: 0.3, raftFinishM2: 0.12, padPitNr: 0.4, padBlindNr: 0.3, padFormworkM2: 0.8, padRebarKg: 0.025, beamBlindLm: 0.15, beamFormworkM2: 0.35, beamCageLm: 0.2, pileCutNr: 0.5, underpinDigM3: 10, underpinShutterM2: 1.0, underpinPinNr: 2.0, underpinPourM3: 2.5, underpinPackNr: 1.0, underpinSteelKg: 0.025, slabTrimM2: 0.06, slabHardcoreM2: 0.12, slabBlindM2: 0.05, slabDpmM2: 0.04, slabInsulationM2: 0.08, slabMeshM2PerLayer: 0.1, slabEdgeLm: 0.03, slabFinishM2: 0.12, drainLayLm: 0.35, drainHandDigM3: 2.5, drainGravelM3: 0.8, drainSoftM2: 0.05, drainPavingM2: 0.5, drainTarmacM2: 0.3, drainConcreteM2: 0.4, drainShallowIc: 1.5, drainDeepIc: 3, drainManhole: 8, drainRoddingEye: 0.5 },
+  groundworker: { trimLm: 0.25, concreteM3: 1.5, backfillM3: 0.5, cavityFillM3: 1.0, raftTrimM2: 0.06, raftHardcoreM2: 0.12, raftBlindM2: 0.10, raftInsulationM2: 0.08, raftMeshM2PerLayer: 0.12, raftFormworkLm: 0.3, raftFinishM2: 0.12, padPitNr: 0.4, padBlindNr: 0.3, padFormworkM2: 0.8, padRebarKg: 0.025, beamBlindLm: 0.15, beamFormworkM2: 0.35, beamCageLm: 0.2, pileCutNr: 0.5, underpinDigM3: 10, underpinShutterM2: 1.0, underpinPinNr: 2.0, underpinPourM3: 2.5, underpinPackNr: 1.0, underpinSteelKg: 0.025, slabTrimM2: 0.06, slabHardcoreM2: 0.12, slabBlindM2: 0.05, slabDpmM2: 0.04, slabInsulationM2: 0.08, slabMeshM2PerLayer: 0.1, slabEdgeLm: 0.03, slabFinishM2: 0.12, drainLayLm: 0.35, drainHandDigM3: 2.5, drainGravelM3: 0.8, drainSoftM2: 0.05, drainPavingM2: 0.5, drainTarmacM2: 0.3, drainConcreteM2: 0.4, drainShallowIc: 1.5, drainDeepIc: 3, drainManhole: 8, drainRoddingEye: 0.5, soakCrateM3: 3, soakStoneM3: 1.2, soakRing: 2.5, soakWrapM2: 0.05, soakSilt: 1, channelLm: 0.5, gullyNr: 1.2, dpConnNr: 0.8, buttNr: 0.5 },
   renderer: { renderM2: 0.6 },
   plumber: { gutterLm: 0.3, fittingNr: 0.15, downpipeLm: 0.35, shoeNr: 0.15, hopperNr: 0.5, offsetNr: 0.3 },
   labourer: { carryM2: 0.15, bricklayerShare: 0.5, screedPrepM2: 0.05, overlayPrepM2: 0.08, overlayPrimeM2: 0.02, overlayPourM2: 0.06, overlayEdgeLm: 0.02, screedInsulationM2: 0.1, screedDpmM2: 0.04, screedEdgeLm: 0.02, screedMeshM2: 0.08 },
@@ -654,4 +654,27 @@ export function suggestUndergroundDrainageLabour(g: {
     { qty: g.concreteM2, unit: 'm²', what: 'concrete', rate: w.drainConcreteM2 },
   ])
   return [dig, lay, chambers, surface].filter((x): x is LabourSuggestion => x !== null)
+}
+
+/** The labour for a soakaway and rainwater fittings (Drainage & Services → Soakaway & Rainwater): a groundworker builds the soakaway (crates, stone or rings, wrapped in geotextile, with its silt chamber), backfills it, lays the
+ * channel drains and fits the gullies, downpipe connections and water butts. The digging is the machine and its operator, priced as plant in the calculator. Rough estimates, as everywhere here. */
+export function suggestSoakawayLabour(g: {
+  kind: 'crates' | 'stone' | 'rings'; installedM3: number; rings: number; wrapM2: number; silts: number; backfillM3: number; channelLm: number; gullies: number; downpipeConnections: number; waterButts: number
+}): LabourSuggestion[] {
+  const w = LABOUR_RATES.groundworker
+  const build = line('soak-build', 'labourer', 'Build the soakaway, wrap it, fit the silt chamber and backfill', [
+    { qty: g.kind === 'crates' ? g.installedM3 : 0, unit: 'm³', what: 'crates laid and connected', rate: w.soakCrateM3 },
+    { qty: g.kind === 'stone' ? g.installedM3 : 0, unit: 'm³', what: 'stone placed', rate: w.soakStoneM3 },
+    { qty: g.rings, unit: 'rings', what: 'set and surrounded with stone', rate: w.soakRing },
+    { qty: g.wrapM2, unit: 'm²', what: 'geotextile wrapped', rate: w.soakWrapM2 },
+    { qty: g.silts, unit: 'nr', what: 'silt chambers', rate: w.soakSilt },
+    { qty: g.backfillM3, unit: 'm³', what: 'backfilled', rate: w.backfillM3 },
+  ])
+  const fit = line('soak-fit', 'labourer', 'Lay the channel drains and fit the gullies, downpipe connections and water butts', [
+    { qty: g.channelLm, unit: 'lm', what: 'channel drain laid and haunched', rate: w.channelLm },
+    { qty: g.gullies, unit: 'nr', what: 'gullies', rate: w.gullyNr },
+    { qty: g.downpipeConnections, unit: 'nr', what: 'downpipe connections', rate: w.dpConnNr },
+    { qty: g.waterButts, unit: 'nr', what: 'water butts', rate: w.buttNr },
+  ])
+  return [build, fit].filter((x): x is LabourSuggestion => x !== null)
 }
