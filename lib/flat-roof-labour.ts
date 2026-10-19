@@ -723,3 +723,25 @@ export function suggestWallRemovalLabour(g: {
   const floor = line('wall-floor', 'carpenter', 'Patch the floor where the wall stood', [{ qty: g.floorM2, unit: 'm²', what: 'floor patched', rate: 0.6 }])
   return [demo, props, beam, pads, plaster, floor].filter((x): x is LabourSuggestion => x !== null)
 }
+
+/** The labour for a strip-out by room (Demolition → Strip-Out by Room): a labourer takes out each room's items (the hours for each unit come from the calculator's own table and are passed in), one task for each room. Rough
+ * estimates, as everywhere here. */
+export function suggestStripOutLabour(rooms: { id: string; name: string; parts: { qty: number; unit: string; what: string; rate: number }[] }[]): LabourSuggestion[] {
+  return rooms
+    .map(r => line('strip-' + r.id, 'labourer', 'Strip out ' + r.name, r.parts))
+    .filter((x): x is LabourSuggestion => x !== null)
+}
+
+/** The labour to load skips (Demolition → Waste & Skips), when the job's own work does not already include it: a labourer, an hour for each m³ of waste. Rough estimates, as everywhere here. */
+export function suggestWasteLabour(g: { loadM3: number }): LabourSuggestion[] {
+  return [line('waste-load', 'labourer', 'Load the waste to the skips and sweep up', [{ qty: g.loadM3, unit: 'm³', what: 'waste loaded', rate: 1 }])]
+    .filter((x): x is LabourSuggestion => x !== null)
+}
+
+/** The labour for outbuildings and external demolition (Demolition → Outbuildings & External): a labourer takes each thing down and loads the waste, one task for each (the hours come from the calculator's own table and are
+ * passed in). The mini excavator and breaker are plant, priced in the calculator. Rough estimates, as everywhere here. */
+export function suggestExternalDemoLabour(items: { id: string; name: string; hours: number }[]): LabourSuggestion[] {
+  return items
+    .map(x => line('ext-' + x.id, 'labourer', 'Take down ' + x.name + ' and load the waste', [{ qty: x.hours, unit: 'h', what: 'hours', rate: 1 }]))
+    .filter((x): x is LabourSuggestion => x !== null)
+}

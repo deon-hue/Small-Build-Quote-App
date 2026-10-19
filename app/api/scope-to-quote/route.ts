@@ -17,7 +17,7 @@ export const maxDuration = 300
 
 // the plumbing calculators the AI can price from the scope (lib/plumbing-ai.ts): each is told to give a "calc" object
 // calculators the AI quote does not price yet: left out of its library so it keeps choosing the task-based lines for that work
-const AI_SKIPS_CALC = new Set(['demo-wall-removal-calc'])
+const AI_SKIPS_CALC = new Set(['demo-wall-removal-calc', 'demo-strip-out-calc', 'demo-waste-skips-calc', 'demo-external-calc'])
 const PLUMBING_ASK_IDS = new Set(['plumb-install', 'plumb-heating-plant', 'plumb-ufh', 'plumb-pipework'])
 import { ESTIMATOR_PHASE_DEFAULTS } from '@/lib/estimatorDefaults'
 

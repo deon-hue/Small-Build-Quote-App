@@ -717,6 +717,33 @@ export const DEFAULT_DEMO_SUBPHASES: DemoSubphase[] = [
     tasks: [],
     calculatorId: 'demo-wall-removal-calc',
   },
+  // Priced by the Strip-Out by Room calculator (lib/strip-out-units.ts): no tasks of its own.
+  {
+    id: 'strip-out-calc',
+    name: 'Strip-Out by Room (calculator)',
+    markupPct: 25,
+    warnings: ['Check for asbestos in buildings before 2000, and for gas, electric and water services, before anything is stripped out.'],
+    tasks: [],
+    calculatorId: 'demo-strip-out-calc',
+  },
+  // Priced by the Waste & Skips calculator (lib/waste-units.ts): no tasks of its own.
+  {
+    id: 'waste-skips-calc',
+    name: 'Waste & Skips (calculator)',
+    markupPct: 20,
+    warnings: ['Use a licensed waste carrier and keep the waste transfer notes.'],
+    tasks: [],
+    calculatorId: 'demo-waste-skips-calc',
+  },
+  // Priced by the Outbuildings & External calculator (lib/external-demo-units.ts): no tasks of its own.
+  {
+    id: 'external-calc',
+    name: 'Outbuildings & External (calculator)',
+    markupPct: 25,
+    warnings: ['Prefab garages can have asbestos cement roofs: a licensed contractor must remove them first.'],
+    tasks: [],
+    calculatorId: 'demo-external-calc',
+  },
 ]
 
 // ── LocalStorage helpers ──────────────────────────────────────────────────────
