@@ -2534,8 +2534,8 @@ export default function TakeoffPage() {
     const isTurf           = isBuildup && item.phase === 'External Works & Landscaping'
     // Decoration is a task phase, except when the sub-phase picked has a calculator (Internal decoration): then the calculator prices it
     const isDecoCalc       = MARKER_CALC_PHASES.has(item.phase) && !!resolveBuiltAssembly(item)
-    // the external render calculator takes its first wall's length from the drawn line, so the card shows the length, not a marker
-    const _lengthFedCalc    = isDecoCalc && item.phase === 'Plastering & Boarding' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'plaster-render'
+    // the external render and wall insulation calculators take their first wall's length from the drawn line, so the card shows the length, not a marker
+    const _lengthFedCalc    = isDecoCalc && item.phase === 'Plastering & Boarding' && ['plaster-render', 'plaster-insul-wall'].includes(boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id ?? '')
     const isTaskPhase      = _phaseHasTasks && !isBuildup && !isExtWall && !isPlaster && !isIntWall && !isDemo && !isFoundationLine && !isDecoCalc
     const showWallLine     = isLineBased && (isExtWall || isIntWall || isPlaster)
     const hasOpenings      = (isExtWall || isIntWall || isPlaster) && isLineBased
@@ -3409,7 +3409,7 @@ export default function TakeoffPage() {
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--to-muted)', marginBottom: 8 }}>
                   {_lengthFedCalc
-                    ? "Priced wall by wall with its own calculator. The length of the line drawn here is the first wall's length: add the height, openings and the render in the calculator."
+                    ? "Priced wall by wall with its own calculator. The length of the line drawn here is the first wall's length: add the height, openings and the finish in the calculator."
                     : `Priced room by room with its own calculator. The ${_plasterLine ? 'line' : 'area'} drawn here is only a marker on the plan: add the rooms in the calculator.`}
                 </div>
                 {renderAssemblyPanel({})}

@@ -31,6 +31,7 @@ export const BUILT_ASSEMBLY_CANONICAL_IDS = new Set<string>([
   'deco-internal-walls',
   'plaster-rooms',
   'plaster-render',
+  'plaster-insul-wall',
   'fs-screeded-floor',
   'fs-floor-overlay',
   'fs-concrete-slab',

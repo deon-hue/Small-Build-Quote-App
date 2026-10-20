@@ -160,6 +160,15 @@ const plasterSubphases: PhaseSubphase[] = [
     markupPct: 20,
     tasks: [],  // priced by the External render calculator (walls: length, height, openings, render system, beads)
   },
+  // Internal wall insulation and backing, priced wall by wall (assembly calculator): insulated plasterboard, PIR between battens or mineral wool between studs, VCL, reveals, metal lath, backing. Listed last so a new line in Take-off still starts on a task.
+  {
+    id: 'plaster-insul-wall',
+    phase: 'Plastering & Boarding',
+    name: 'Wall Insulation & Backing (by wall)',
+    markupPct: 20,
+    ukWarning: 'Internal wall insulation must be assessed for interstitial condensation risk and the wall checked for damp first. Vapour control layer required on the warm side.',
+    tasks: [],  // priced by the Wall insulation calculator (walls: length, height, lining system and thickness, VCL, reveals, lath, backing)
+  },
 ]
 
 // ── 2. STRUCTURAL FRAME ───────────────────────────────────────────────────────
