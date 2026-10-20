@@ -144,6 +144,14 @@ const plasterSubphases: PhaseSubphase[] = [
       t('plaster-ins-lath',         'Expanded metal lath (EML)',             'm²',  20, 3.50,  5.50,  0,    0,    0,  'To structural steelwork / soffits'),
     ],
   },
+  // Internal plastering and boarding, priced room by room (assembly calculator): what each wall and ceiling gets, with beads, coving and hatches. Listed last so a new line in Take-off still starts on a task.
+  {
+    id: 'plaster-rooms',
+    phase: 'Plastering & Boarding',
+    name: 'Internal Plastering & Boarding (by room)',
+    markupPct: 20,
+    tasks: [],  // priced by the Internal plastering calculator (rooms: walls and ceiling by system, beads, coving, hatches)
+  },
 ]
 
 // ── 2. STRUCTURAL FRAME ───────────────────────────────────────────────────────

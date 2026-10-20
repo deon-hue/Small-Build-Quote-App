@@ -745,3 +745,11 @@ export function suggestExternalDemoLabour(items: { id: string; name: string; hou
     .map(x => line('ext-' + x.id, 'labourer', 'Take down ' + x.name + ' and load the waste', [{ qty: x.hours, unit: 'h', what: 'hours', rate: 1 }]))
     .filter((x): x is LabourSuggestion => x !== null)
 }
+
+/** The labour for internal plastering and boarding by room (Plastering & Boarding → Internal Plastering & Boarding (by room)): the plasterer's tasks for each room and the labourer who carries the board and mixes, as the calculator's own
+ * engine works them out (the hours and the working come from its table and are passed in). Rough estimates, as everywhere here. */
+export function suggestPlasterLabour(tasks: { key: string; trade: 'plasterer' | 'labourer'; task: string; hours: number; basis: string }[]): LabourSuggestion[] {
+  return tasks
+    .filter(t => t.hours > 0)
+    .map(t => ({ key: 'plaster-' + t.key, trade: (t.trade === 'plasterer' ? 'renderer' : 'labourer') as LabourTradeKind, task: t.task, hours: t.hours, basis: t.basis }))
+}

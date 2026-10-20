@@ -25,7 +25,7 @@ const FOUNDATION_LINE_CALCS = new Set(['fnd-strip', 'fnd-trench-fill', 'fnd-pile
 const FOUNDATION_SHAPE_CALCS = new Set(['fnd-raft', 'fnd-pad'])
 // A floor is a shape (its footprint) priced by its calculator from the area and perimeter drawn: the sub-phases of Floors & Screeds that have one
 /** Phases where picking a calculator sub-phase makes the item a marker on the plan and the calculator card opens (Decoration, Plumbing & Heating, Drainage & Services): the sizes are typed in the calculator. */
-const MARKER_CALC_PHASES = new Set<string>(['Decoration', 'Plumbing & Heating', 'Drainage & Services'])
+const MARKER_CALC_PHASES = new Set<string>(['Decoration', 'Plumbing & Heating', 'Drainage & Services', 'Plastering & Boarding'])
 const FLOOR_SHAPE_CALCS = new Set(['fs-screeded-floor', 'fs-floor-overlay', 'fs-concrete-slab', 'fs-block-beam', 'fs-suspended-timber', 'fs-insulated-concrete'])
 import LabourCostBuilder from './components/LabourCostBuilder'
 import ClientProjectModal from './components/ClientProjectModal'
@@ -2434,8 +2434,9 @@ export default function TakeoffPage() {
       }
     }
 
-    // Plastering
-    if (item.phase === 'Plastering & Boarding') {
+    // Plastering: a line is priced by Finish Type and wall height, unless the room calculator (Internal Plastering & Boarding by room) was picked for it
+    const _plasterCalc = item.phase === 'Plastering & Boarding' && !!resolveBuiltAssembly(item)
+    if (item.phase === 'Plastering & Boarding' && !_plasterCalc) {
       if (!item.floorMakeupId) {
         item = { ...item, floorMakeupId: PLASTER_MAKEUPS[0].id, spec: PLASTER_MAKEUPS[0].clientDescription }
         saveItemEdit(item)
@@ -2483,7 +2484,7 @@ export default function TakeoffPage() {
 
     // Buildup (Floors, Foundations, rect/polygon External Walls, Plastering rect)
     const _phaseMakeups = PHASE_MAKEUPS[item.phase]
-    const _isBuildupItem = !!item.floorMakeupId || (!!_phaseMakeups && !!linkedEl && linkedEl.type !== 'line')
+    const _isBuildupItem = (!!item.floorMakeupId || (!!_phaseMakeups && !!linkedEl && linkedEl.type !== 'line')) && !_plasterCalc
     if (_isBuildupItem && !item.floorMakeupId) {
       const _idx = item.phase === 'Floors & Screeds' ? 1 : 0
       const _dm  = (_phaseMakeups ?? FLOOR_MAKEUPS)[_idx]
@@ -2527,7 +2528,7 @@ export default function TakeoffPage() {
     const isDemo           = isDemoPhase && !isDemoCalc
     const isExtWall        = item.phase === 'External Walls'
     const isIntWall        = item.phase === 'Internal Walls & Partitions' && isLineBased
-    const isPlaster        = item.phase === 'Plastering & Boarding'
+    const isPlaster        = item.phase === 'Plastering & Boarding' && !_plasterCalc
     const isBuildup        = _isBuildupItem
     const isFoundationLine = item.phase === 'Foundations' && isLineBased
     const isTurf           = isBuildup && item.phase === 'External Works & Landscaping'
@@ -3211,6 +3212,25 @@ export default function TakeoffPage() {
 
           {/* Plastering: Finish Type */}
           {isPlaster && (() => {
+            // the sub-phases of this phase that have a calculator (Internal Plastering & Boarding by room): picking one makes this line a marker and the calculator prices it
+            const _calcSubs = getAllSubphasesForPhase('Plastering & Boarding').filter(sp => { const c = boSubPhases.find(b => b.id === sp.id)?.canonical_id; return !!(c && BUILT_ASSEMBLY_CANON_IDS[c]) })
+            if (_calcSubs.length === 0) return null
+            return (
+              <div style={{ marginBottom: 10 }}>
+                <label style={labelStyle}>Priced by</label>
+                <select style={{ ...inputStyle, color: accent }} value=""
+                  onChange={e => {
+                    const sp = _calcSubs.find(x => x.id === e.target.value)
+                    if (sp) saveItemEdit({ ...item, taskSubphaseId: sp.id, subPhase: sp.name, taskId: undefined, floorMakeupId: undefined, assemblyResult: undefined, assemblyCalcState: undefined })
+                  }}>
+                  <option value="">Finish Type, by wall length and height (below)</option>
+                  {_calcSubs.map(sp => <option key={sp.id} value={sp.id}>{sp.name}</option>)}
+                </select>
+              </div>
+            )
+          })()}
+
+          {isPlaster && (() => {
             const _pMakeup = PLASTER_MAKEUPS.find(m => m.id === item.floorMakeupId)
             return (
               <div style={{ marginBottom: 10 }}>
@@ -3364,13 +3384,16 @@ export default function TakeoffPage() {
 
           {/* Decoration priced by its calculator (Internal decoration): the Sub-Phase picker and the calculator card. The drawn area is only a marker. */}
           {isDecoCalc && builtAssembly && (() => {
-            const decoSubs = getAllSubphasesForPhase(item.phase)
+            // a plaster line shows only the calculator sub-phases here (its other sub-phases are tasks, and a plaster line is not a task line), with a way back to Finish Type
+            const _plasterLine = item.phase === 'Plastering & Boarding'
+            const decoSubs = getAllSubphasesForPhase(item.phase).filter(sp => { if (!_plasterLine) return true; const c = boSubPhases.find(b => b.id === sp.id)?.canonical_id; return !!(c && BUILT_ASSEMBLY_CANON_IDS[c]) })
             return (
               <>
                 <div style={{ marginBottom: 10 }}>
-                  <label style={labelStyle}>Sub-Phase</label>
+                  <label style={labelStyle}>{_plasterLine ? 'Priced by' : 'Sub-Phase'}</label>
                   <select style={{ ...inputStyle, color: accent }} value={item.taskSubphaseId ?? ''}
                     onChange={e => {
+                      if (_plasterLine && e.target.value === '') { saveItemEdit({ ...item, taskSubphaseId: undefined, subPhase: undefined, assemblyResult: undefined, assemblyCalcState: undefined }); return }
                       const sp = decoSubs.find(x => x.id === e.target.value)
                       if (!sp) return
                       const canon = boSubPhases.find(b => b.id === sp.id)?.canonical_id
@@ -3378,11 +3401,12 @@ export default function TakeoffPage() {
                         saveItemEdit({ ...item, taskSubphaseId: sp.id, subPhase: sp.name, taskId: undefined, assemblyResult: undefined, assemblyCalcState: undefined })
                       } else if (sp.tasks[0]) applyPhaseTask(sp.id, sp.tasks[0].id)
                     }}>
+                    {_plasterLine && <option value="">Finish Type, by wall length and height</option>}
                     {decoSubs.map(sp => <option key={sp.id} value={sp.id}>{sp.name}</option>)}
                   </select>
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--to-muted)', marginBottom: 8 }}>
-                  Priced room by room with its own calculator. The area drawn here is only a marker on the plan: add the rooms in the calculator.
+                  Priced room by room with its own calculator. The {_plasterLine ? 'line' : 'area'} drawn here is only a marker on the plan: add the rooms in the calculator.
                 </div>
                 {renderAssemblyPanel({})}
               </>
