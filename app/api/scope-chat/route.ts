@@ -208,7 +208,7 @@ IMPORTANT: Never output [READY_TO_BUILD] without a [SCOPE] block. Only generate 
   // Use Haiku for file attachments (4-5× faster than Sonnet, processes images in <10s)
   // Use Sonnet for text-only chat (better reasoning for multi-turn interview)
   const model     = hasFiles ? 'claude-haiku-4-5-20251001' : 'claude-sonnet-4-6'
-  const maxTokens = hasFiles ? 4000 : 5000
+  const maxTokens = 8000   // a scope read from plans can be long: when it ran out of room the closing [/SCOPE] never came and the Build Estimate button stayed grey
 
   // Matches lib/doc-extract/claude.ts's existing pattern — required for the PDF
   // document content-block type to be accepted reliably.
@@ -248,6 +248,7 @@ IMPORTANT: Never output [READY_TO_BUILD] without a [SCOPE] block. Only generate 
     if (!reader) throw new Error('No response body')
 
     let fullText = ''
+    let cutOff = false
 
     return new NextResponse(
       new ReadableStream({
@@ -257,6 +258,10 @@ IMPORTANT: Never output [READY_TO_BUILD] without a [SCOPE] block. Only generate 
             while (true) {
               const { done, value } = await reader.read()
               if (done) {
+                // Say so if the AI ran out of room, so the chat can tell the user instead of showing a scope with no end
+                if (cutOff) controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'truncated' })}
+
+`))
                 // Send final complete text
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'complete', text: fullText })}\n\n`))
                 controller.close()
@@ -271,6 +276,7 @@ IMPORTANT: Never output [READY_TO_BUILD] without a [SCOPE] block. Only generate 
                 if (line.startsWith('data: ')) {
                   try {
                     const event = JSON.parse(line.slice(6))
+                    if (event.type === 'message_delta' && event.delta?.stop_reason === 'max_tokens') cutOff = true
                     if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
                       fullText += event.delta.text
                       // Stream each chunk to client

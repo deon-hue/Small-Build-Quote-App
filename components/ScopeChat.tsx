@@ -1,5 +1,6 @@
 'use client'
 
+import { parseMessage, scopeFromReply } from '@/lib/scope-parse'
 import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useSpeechToText } from './useSpeechToText'
@@ -127,20 +128,6 @@ const OPENING_QUESTIONS: Record<string, string[]> = {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function parseMessage(text: string): { scope: string | null; commentary: string; readyToBuild: boolean } {
-  // Detect and strip the [READY_TO_BUILD] signal before rendering
-  const readyToBuild = text.includes('[READY_TO_BUILD]')
-  const cleaned = text.replace(/\[READY_TO_BUILD\]/g, '').trim()
-
-  const match = cleaned.match(/\[SCOPE\]([\s\S]*?)\[\/SCOPE\]/i)
-  if (match) {
-    const scope = match[1].trim()
-    const commentary = cleaned.replace(/\[SCOPE\][\s\S]*?\[\/SCOPE\]/i, '').trim()
-    return { scope, commentary, readyToBuild }
-  }
-  return { scope: null, commentary: cleaned, readyToBuild }
-}
 
 function fmtBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`
@@ -413,6 +400,8 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
 
       // Handle streaming response
       let reply = ''
+      let sawChunk = false
+      let cutOff = false
       const reader = res.body?.getReader()
       if (!reader) throw new Error('No response body')
 
@@ -431,9 +420,9 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
           if (line.startsWith('data: ')) {
             try {
               const event = JSON.parse(line.slice(6))
-              if (event.type === 'chunk' || event.type === 'complete') {
-                reply += event.text
-              }
+              if (event.type === 'chunk') { sawChunk = true; reply += event.text }
+              else if (event.type === 'complete' && !sawChunk) reply += event.text
+              else if (event.type === 'truncated') cutOff = true
             } catch { /* ignore parse errors */ }
           }
         }
@@ -442,10 +431,16 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
       if (!reply) reply = 'Sorry, something went wrong. Please try again.'
 
       setMessages(prev => [...prev, { role: 'assistant', content: reply }])
-      const { scope, readyToBuild: rdy } = parseMessage(reply)
+      const { scope, readyToBuild: rdy, unclosed } = parseMessage(reply)
       console.log('[ScopeChat] Parsed scope:', scope ? `${scope.substring(0, 50)}...` : 'null')
       if (scope) setLatestScope(scope)
       if (rdy)   setReadyToBuild(true)
+      // Say so when the reply ran out of room, instead of leaving the buttons grey with no explanation
+      if (cutOff || unclosed) {
+        setMessages(prev => [...prev, { role: 'assistant', content: scope
+          ? '⚠️ That scope was long and may be cut off at the end. Check the last lines, then Build Estimate, or press Generate Scope to write it again.'
+          : '⚠️ That reply ran out of room before the scope was finished. Press Generate Scope to try again, or ask for a shorter scope.' }])
+      }
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err)
       console.error('scope-chat fetch error:', detail)
@@ -642,7 +637,7 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
         </div>
 
         {/* ── Quick prompts ── */}
-        {!loading && !readyToBuild && (
+        {!loading && (!readyToBuild || !latestScope) && (
           <div style={{ padding: '6px 16px 0', display: 'flex', flexWrap: 'wrap', gap: 6, flexShrink: 0 }}>
             {/* Show "Generate Scope" button during interview phase */}
             {messages.length > 1 && !latestScope && (
@@ -660,6 +655,20 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
                 ✦ Generate Scope
               </button>
             )}
+            {/* The AI replied but the reply has no [SCOPE] block (or it was cut off): let the last reply be used as the scope, so Build Estimate is never stuck grey */}
+            {messages.length > 1 && !latestScope && (() => {
+              const last = [...messages].reverse().find(m => m.role === 'assistant')
+              const text = last ? scopeFromReply(last.content) : null
+              return text ? (
+                <button
+                  onClick={() => { setLatestScope(text); setReadyToBuild(true) }}
+                  title="Use the AI's last reply, as it is, as the scope of works"
+                  style={{ background: '#fff', border: '1.5px solid #7ab533', borderRadius: 20, padding: '6px 14px', fontSize: 11, fontWeight: 600, color: '#3a7a1a', cursor: 'pointer', fontFamily: 'inherit' }}
+                >
+                  ✓ Use the AI's last reply as the scope
+                </button>
+              ) : null
+            })()}
             {quickPrompts.map(p => {
               // Short interview-response chips send immediately; descriptive starter chips set input
               const inInterviewPhase = messages.length > 1 && !latestScope
