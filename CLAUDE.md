@@ -269,3 +269,14 @@ Existing tabs not yet shared this way: Quotes, Variations, Invoices, Build Plan 
 - Supabase PostgreSQL + RLS
 - Netlify auto-deploy from GitHub `master` branch
 - TypeScript errors silently block Netlify builds — always run `npx tsc --noEmit` before pushing
+
+## New database tables need explicit grants (REQUIRED, from 30 Oct 2026)
+
+Supabase stopped automatically granting Data API access to new tables in the `public` schema on 30 October 2026. A table created without
+grants returns "permission denied" to supabase-js and the app, which looks like a feature that silently won't save or load. So every SQL file that
+`create table`s in `public` must, in the SAME file, also:
+1. `grant select, insert, update, delete on public.<table> to authenticated;` and `... to service_role;` (add `grant usage, select on` any sequence it uses).
+2. Grant `select` to `anon` ONLY if the table is meant to be readable when signed out. Most are not (nothing sensitive to `anon`). Decide per table.
+3. Keep `enable row level security` and its policies as before: the grant opens the door to the API, the policies still decide which rows.
+Tables created before 30 Oct 2026 keep their access, so old SQL files are left alone. `supabase/job-selections.sql` is a good example to copy.
+If a database is ever rebuilt from the SQL files (new project, preview branch, `supabase db reset`), the older files that lack grants need a one-off pass first.
