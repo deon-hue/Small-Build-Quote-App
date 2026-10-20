@@ -35,7 +35,7 @@ interface Props {
 }
 
 const UTILITY_COLOUR: Record<Utility, string> = { water: '#2563eb', gas: '#ca8a04', electric: '#dc2626', telecoms: '#7c3aed' }
-const UTILITY_WORDS: Record<Utility, string> = { water: 'water', gas: 'gas', electric: 'electricity', telecoms: 'telecoms and broadband' }
+export const UTILITY_WORDS: Record<Utility, string> = { water: 'water', gas: 'gas', electric: 'electricity', telecoms: 'telecoms and broadband' }
 const UTILITIES_LIST = Object.keys(UTILITIES) as Utility[]
 const uid = () => Math.random().toString(36).slice(2, 9)
 

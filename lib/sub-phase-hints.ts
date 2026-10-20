@@ -64,6 +64,14 @@ const HINTS: Record<string, string> = {
   'drain-above-ground': 'soil and waste pipes above ground, stacks and vents',
   'drain-cap-off': 'capping off, diverting or moving existing drains and services',
   'drain-rainwater': 'rainwater and surface water disposal at ground level: soakaways and drains',
+  'drain-runs': 'new underground drain runs priced by length and trench depth: foul, surface water or combined drains, with inspection chambers, manholes, connections to the sewer and a CCTV survey',
+  'drain-soakaway': 'a soakaway sized from the roof and paved areas that drain to it, with channel drains, yard gullies, downpipe connections and water butts',
+  'drain-services': 'new utility connections: water, gas, electricity and telecoms supplies to the building, with the trench, duct, meter box and the utility company charge',
+  // Demolition (calculators)
+  'demo-wall-removal-calc': 'taking out or knocking through a wall, or forming a wider opening in one: stud, block, brick or thick walls, with the props, steel beam, rubble and making good when it is load-bearing',
+  'demo-strip-out-calc': 'stripping out rooms back to the shell, room by room: floor coverings, ceilings, wall finishes and tiles, kitchens, bathrooms, doors, skirting and radiators, with disconnection and the skips for those rooms',
+  'demo-waste-skips-calc': 'waste and skips on their own, where the scope gives volumes of waste to clear: skips, grab lorries and hazardous waste. The strip-out calculator already includes the skips for the rooms it strips',
+  'demo-external-calc': 'demolishing outbuildings and external structures: sheds, garages, conservatories, lean-tos, concrete, tarmac and paved areas, garden walls and fences',
   // Heating, joinery, tiling, decoration
   'plumb-boiler-heating': 'system boilers with an unvented cylinder, heat pumps and other heating plant (a gas combi boiler is the Heating Plant line, and radiators are in the plumbing rooms)',
   'plumb-install': 'the plumbing priced room by room: baths, showers, basins, WCs, kitchen and utility sinks, appliance connections, radiators and towel rails, freestanding baths and wet rooms, pressure test',

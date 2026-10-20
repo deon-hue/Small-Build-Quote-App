@@ -32,7 +32,7 @@ interface Props {
   labourTrades?: BOLabourTrade[]
 }
 
-const KIND_WORDS: Record<SoakawayKind, string> = { crates: 'soakaway crates', stone: 'a stone-filled pit', rings: 'perforated concrete rings' }
+export const KIND_WORDS: Record<SoakawayKind, string> = { crates: 'soakaway crates', stone: 'a stone-filled pit', rings: 'perforated concrete rings' }
 
 export default function AssemblySoakawayDemo({ onClose, onSave, labourTrades = [] }: Props) {
   const ID = 'AssemblySoakawayDemo'

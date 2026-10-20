@@ -37,6 +37,8 @@ import { assemblyLinesToItems, profitPctOf } from '@/lib/assembly-quote-items'
 import { basicsFor, describeBasics, BASICS_NEEDS } from '@/lib/assembly-basics'
 import { priceFromBasics, priceElectricsFromScope } from '@/components/ai-priced-calculators'
 import { pricePlumbingCalcFromScope, PLUMBING_AI_IDS } from '@/components/ai-plumbing-pricing'
+import { priceDrainageCalcFromScope, DRAINAGE_AI_IDS } from '@/components/ai-drainage-pricing'
+import { priceDemolitionCalcFromScope, DEMOLITION_AI_IDS } from '@/components/ai-demolition-pricing'
 import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchQuoteDefaults, fetchAllQuoteDefaults, upsertTask, fetchLabourTrades, fetchProducts, fetchPlantItems, fetchPhases, fetchSubPhases, fetchTasks } from '@/lib/back-office-queries'
 import type { BOLabourTrade, BOProduct, BOPlantItem, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
 import type { FloorMakeup } from '@/lib/takeoff-types'
@@ -90,7 +92,7 @@ interface ScopeToQuotePhase {
   measurements?: { lengthM?: number; widthM?: number; heightM?: number; depthM?: number; count?: number }
   /** the rooms, points and special fittings the AI heard, for the electrical installation calculator */
   electrics?: unknown
-  /** what the AI heard for a plumbing calculator line (rooms and fittings, boiler, underfloor zones or pipe runs), checked in lib/plumbing-ai.ts */
+  /** what the AI heard for a plumbing, drainage or demolition calculator line (rooms and fittings, boiler, drain runs, soakaway areas, services, a wall, strip-out rooms, waste, outbuildings...), checked in lib/plumbing-ai.ts, lib/drainage-ai.ts or lib/demolition-ai.ts */
   calc?: unknown
   extraTasks?: {
     name: string
@@ -157,10 +159,12 @@ function buildPhasesFromScopeToQuote(
           : { reviewNote: 'Priced by its calculator, but no electrical rooms or points were found in the scope. Open the calculator and add the rooms.' }),
       }
     }
-    if (calcSub && calcSub.canonical_id && PLUMBING_AI_IDS.has(calcSub.canonical_id)) {
-      // The plumbing calculators are priced from what the scope says (rooms and fittings, the boiler, underfloor zones with an area, pipe runs with a length),
-      // with the calculator's standard settings. Nothing is invented: what was not stated is left out or said in the note, for the estimator to check.
-      const pl = pricePlumbingCalcFromScope({ canonicalId: calcSub.canonical_id, spec: sp.calc, labourTrades })
+    if (calcSub && calcSub.canonical_id && (PLUMBING_AI_IDS.has(calcSub.canonical_id) || DRAINAGE_AI_IDS.has(calcSub.canonical_id) || DEMOLITION_AI_IDS.has(calcSub.canonical_id))) {
+      // The plumbing, drainage and demolition calculators are priced from what the scope says (rooms and fittings, the boiler, zones with an area, runs with a length, a wall with a length,
+      // rooms to strip out, volumes of waste, buildings with a size...), with the calculator's standard settings. Nothing is invented: what was not stated is left out or said in the note,
+      // for the estimator to check.
+      const pricer = PLUMBING_AI_IDS.has(calcSub.canonical_id) ? pricePlumbingCalcFromScope : DRAINAGE_AI_IDS.has(calcSub.canonical_id) ? priceDrainageCalcFromScope : priceDemolitionCalcFromScope
+      const pl = pricer({ canonicalId: calcSub.canonical_id, spec: sp.calc, labourTrades })
       const plPhase = makePhase(sp.phase, pl ? assemblyLinesToItems(pl.lines) : defaultTypedItems(), sp.parentPhase || undefined)
       return {
         ...plPhase,

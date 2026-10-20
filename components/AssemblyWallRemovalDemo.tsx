@@ -32,7 +32,7 @@ interface Props {
   externalLengthMm?: number
 }
 
-const WALL_WORDS: Record<WallKind, string> = { stud: 'stud partition', block: 'block partition', brick: 'solid brick wall', cavity: 'thick or cavity wall' }
+export const WALL_WORDS: Record<WallKind, string> = { stud: 'stud partition', block: 'block partition', brick: 'solid brick wall', cavity: 'thick or cavity wall' }
 
 export default function AssemblyWallRemovalDemo({ onClose, onSave, labourTrades = [], externalLengthMm }: Props) {
   const ID = 'AssemblyWallRemovalDemo'

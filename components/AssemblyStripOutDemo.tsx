@@ -46,7 +46,7 @@ function newRoom(kind: string, existing: number): StripRoom {
   }
 }
 
-const unitWord = (it: { unit: string }, n: number) => (it.unit === 'nr' ? '' : it.unit === 'lm' ? 'lm' : 'm²')
+export const unitWord = (it: { unit: string }, n: number) => (it.unit === 'nr' ? '' : it.unit === 'lm' ? 'lm' : 'm²')
 
 export default function AssemblyStripOutDemo({ onClose, onSave, labourTrades = [] }: Props) {
   const ID = 'AssemblyStripOutDemo'

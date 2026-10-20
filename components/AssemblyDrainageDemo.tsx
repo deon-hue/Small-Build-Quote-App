@@ -36,8 +36,8 @@ interface Props {
 }
 
 const USE_COLOUR: Record<DrainUse, string> = { foul: '#92400e', surface: '#2563eb', combined: '#7c3aed' }
-const CHAMBER_KINDS = Object.keys(CHAMBERS) as ChamberKind[]
-const CHAMBER_WORDS: Record<ChamberKind, [string, string]> = {
+export const CHAMBER_KINDS = Object.keys(CHAMBERS) as ChamberKind[]
+export const CHAMBER_WORDS: Record<ChamberKind, [string, string]> = {
   'ic-shallow': ['shallow inspection chamber', 'shallow inspection chambers'], 'ic-deep': ['deeper inspection chamber', 'deeper inspection chambers'], manhole: ['manhole', 'manholes'], 'rodding-eye': ['rodding eye', 'rodding eyes'],
 }
 const uid = () => Math.random().toString(36).slice(2, 9)
