@@ -44,6 +44,7 @@ const HINTS: Record<string, string> = {
   site_disposal_waste: 'rubbish removal and disposal from site',
   // Plastering and boarding
   'plaster-rooms': 'all the internal plastering and boarding priced room by room: skim coats, two-coat plaster to masonry, plasterboard dabbed or fixed and skimmed, taped and jointed board, ceilings, beads, coving and access hatches. Not vaulted ceilings, external render, partitions or floor screeds',
+  'plaster-render': 'rendering the outside walls, wall by wall: sand and cement scratch and float coats, monocouche, thin-coat silicone render, beads, movement joints and masonry paint. Not external wall insulation boards, internal plastering or brick repairs',
   'plaster-internal': 'plastering internal walls: skim, hard wall plaster, patching',
   'plaster-ceiling': 'ceiling boarding and plastering or skimming',
   'plaster-drylining': 'plasterboard drylining and metal stud lining to walls (lining, not new masonry)',

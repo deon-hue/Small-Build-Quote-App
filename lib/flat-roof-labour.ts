@@ -753,3 +753,11 @@ export function suggestPlasterLabour(tasks: { key: string; trade: 'plasterer' | 
     .filter(t => t.hours > 0)
     .map(t => ({ key: 'plaster-' + t.key, trade: (t.trade === 'plasterer' ? 'renderer' : 'labourer') as LabourTradeKind, task: t.task, hours: t.hours, basis: t.basis }))
 }
+
+/** The labour for external rendering wall by wall (Plastering & Boarding → External Render (by wall)): the plasterer's tasks for each wall and the labourer who mixes and carries, as the calculator's own engine works them out
+ * (the hours and the working come from its table and are passed in). Rough estimates, as everywhere here. */
+export function suggestRenderLabour(tasks: { key: string; trade: 'plasterer' | 'labourer'; task: string; hours: number; basis: string }[]): LabourSuggestion[] {
+  return tasks
+    .filter(t => t.hours > 0)
+    .map(t => ({ key: 'render-' + t.key, trade: (t.trade === 'plasterer' ? 'renderer' : 'labourer') as LabourTradeKind, task: t.task, hours: t.hours, basis: t.basis }))
+}

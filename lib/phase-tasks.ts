@@ -152,6 +152,14 @@ const plasterSubphases: PhaseSubphase[] = [
     markupPct: 20,
     tasks: [],  // priced by the Internal plastering calculator (rooms: walls and ceiling by system, beads, coving, hatches)
   },
+  // External rendering, priced wall by wall (assembly calculator): sand and cement, monocouche or thin-coat silicone, beads, movement joints. Listed last so a new line in Take-off still starts on a task.
+  {
+    id: 'plaster-render',
+    phase: 'Plastering & Boarding',
+    name: 'External Render (by wall)',
+    markupPct: 20,
+    tasks: [],  // priced by the External render calculator (walls: length, height, openings, render system, beads)
+  },
 ]
 
 // ── 2. STRUCTURAL FRAME ───────────────────────────────────────────────────────

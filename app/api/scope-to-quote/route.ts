@@ -19,7 +19,7 @@ export const maxDuration = 300
 
 // the plumbing, drainage and demolition calculators the AI can price from the scope (lib/plumbing-ai.ts, lib/drainage-ai.ts, lib/demolition-ai.ts): each is told to give a "calc" object
 // calculators the AI quote does not price yet: left out of its library so it keeps choosing the task-based lines for that work
-const AI_SKIPS_CALC = new Set(['plaster-rooms'])
+const AI_SKIPS_CALC = new Set(['plaster-rooms', 'plaster-render'])
 const CALC_OBJECT_ASK_IDS = new Set([
   'plumb-install', 'plumb-heating-plant', 'plumb-ufh', 'plumb-pipework',
   'drain-runs', 'drain-soakaway', 'drain-services',

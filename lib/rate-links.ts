@@ -40,7 +40,7 @@ export function normUnit(u: string | null | undefined): string {
  * are per room ("wall-paint|room-1"): a link there is to the KIND of material, so every room's wall paint, in this quote and the next, shares one link.
  */
 export function linkKey(assemblyId: string, layerId: string): string {
-  return assemblyId === 'deco-internal-walls' || assemblyId === 'plaster-rooms' ? layerId.split('|')[0] : layerId
+  return assemblyId === 'deco-internal-walls' || assemblyId === 'plaster-rooms' || assemblyId === 'plaster-render' ? layerId.split('|')[0] : layerId
 }
 
 export const unitsMatch = (a: string | null | undefined, b: string | null | undefined) => normUnit(a) === normUnit(b)

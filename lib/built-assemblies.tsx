@@ -28,6 +28,7 @@ import AssemblyUnderpinningDemo from '@/components/AssemblyUnderpinningDemo'
 import AssemblyElectricsDemo from '@/components/AssemblyElectricsDemo'
 import AssemblyDecorationDemo from '@/components/AssemblyDecorationDemo'
 import AssemblyPlasterRoomsDemo from '@/components/AssemblyPlasterRoomsDemo'
+import AssemblyRenderDemo from '@/components/AssemblyRenderDemo'
 import AssemblyScreedFloorDemo from '@/components/AssemblyScreedFloorDemo'
 import AssemblyFloorOverlayDemo from '@/components/AssemblyFloorOverlayDemo'
 import AssemblyConcreteSlabFloorDemo from '@/components/AssemblyConcreteSlabFloorDemo'
@@ -56,7 +57,7 @@ import type { AssemblyBasics } from '@/lib/assembly-basics'
 import type { PlanRoom, ElectricsSavedState } from '@/lib/electrics-units'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 
-export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation' | 'pad-foundation' | 'piled-foundation' | 'underpinning' | 'electrics' | 'decoration' | 'plaster-rooms' | 'screed-floor' | 'floor-overlay' | 'concrete-slab' | 'block-beam' | 'timber-floor' | 'insulated-concrete' | 'plumbing' | 'heating' | 'ufh' | 'pipework' | 'drainage' | 'soakaway' | 'services' | 'wall-removal' | 'strip-out' | 'waste-skips' | 'external-demo'
+export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation' | 'pad-foundation' | 'piled-foundation' | 'underpinning' | 'electrics' | 'decoration' | 'plaster-rooms' | 'render' | 'screed-floor' | 'floor-overlay' | 'concrete-slab' | 'block-beam' | 'timber-floor' | 'insulated-concrete' | 'plumbing' | 'heating' | 'ufh' | 'pipework' | 'drainage' | 'soakaway' | 'services' | 'wall-removal' | 'strip-out' | 'waste-skips' | 'external-demo'
 
 /** Fired when a calculator's "Save & Price" is used from inside a real quote — absent in
  * the Back Office preview context, which has no quote to save into. */
@@ -143,6 +144,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'demo-strip-out-calc': { icon: 'strip-out', render: opts => <AssemblyStripOutDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'demo-waste-skips-calc': { icon: 'waste-skips', render: opts => <AssemblyWasteDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'demo-external-calc': { icon: 'external-demo', render: opts => <AssemblyExternalDemoDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
+  'plaster-render': { icon: 'render', render: opts => <AssemblyRenderDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'plaster-rooms': { icon: 'plaster-rooms', render: opts => <AssemblyPlasterRoomsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'deco-internal-walls': { icon: 'decoration', render: opts => <AssemblyDecorationDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'elec-install': { icon: 'electrics', render: opts => <AssemblyElectricsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} planRooms={opts?.electrics?.planRooms} initialState={opts?.electrics?.initialState} /> },
@@ -247,6 +249,15 @@ export function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; siz
           <rect x="3" y="3" width="15" height="6" rx="1.5" stroke="#0891b2" strokeWidth="1.6" />
           <path d="M18 6h2.5v5.5H11v3" stroke="#0891b2" strokeWidth="1.5" strokeLinejoin="round" />
           <rect x="9.5" y="14.5" width="3" height="7" rx="1" stroke="#0891b2" strokeWidth="1.5" />
+        </svg>
+      )
+    case 'render':
+      // A wall with a trowel of render being spread across it.
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="3" width="18" height="18" rx="1" stroke="#78716c" strokeWidth="1.5" />
+          <path d="M3 9h12M3 15h18M9 3v6M15 9v6M9 15v6" stroke="#d6d3d1" strokeWidth="1" />
+          <path d="M8 12l8-4 2 4-8 4z" fill="#fef3c7" stroke="#a16207" strokeWidth="1.4" strokeLinejoin="round" />
         </svg>
       )
     case 'plaster-rooms':
