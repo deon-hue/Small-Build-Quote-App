@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback, ChangeEvent } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo, ChangeEvent } from 'react'
 import NumInput from '@/components/NumInput'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -758,6 +758,29 @@ export default function TakeoffPage() {
   const [customDemoSubphases, setCustomDemoSubphases] = useState<DemoSubphase[]>([])
   useEffect(() => { setCustomDemoSubphases(loadCustomDemoSubphases()) }, [])
 
+  // The Demolition list (Construction Type) follows Back Office like every other phase: its names, order, prices and markups, and only what is kept (a sub-phase deleted or hidden there is gone here).
+  // The ids stay the old built-in ones ('structural', 'wall-removal-calc' ...) for the standard entries, so take-off items saved before this still find theirs; a sub-phase or task added in Back Office
+  // uses its own id. A calculator entry keeps its calculator. Until Back Office has loaded (or if it has no Demolition sub-phases at all) the built-in list is used, so the picker is never empty.
+  const liveDemoSubs = useMemo((): DemoSubphase[] => {
+    const phase = boPhases.find(p => p.name === 'Demolition') ?? boPhases.find(p => p.name === 'Site Setup & Demolition')
+    const subs = phase ? boSubPhases.filter(sp => sp.phase_id === phase.id).sort((a, b) => a.display_order - b.display_order) : []
+    if (subs.length === 0) return getAllDemoSubphases(customDemoSubphases)
+    return subs.map((sp): DemoSubphase => {
+      const id = sp.canonical_id?.startsWith('demo-') ? sp.canonical_id.slice(5) : sp.id
+      const builtIn = DEFAULT_DEMO_SUBPHASES.find(d => d.id === id)
+      const tasks = boTasks.filter(t => t.sub_phase_id === sp.id).sort((a, b) => a.display_order - b.display_order).map((t): DemoTask => {
+        const tc = (t as unknown as { canonical_id?: string | null }).canonical_id
+        return {
+          id: tc?.startsWith('demo-') ? tc.slice(5) : t.id, name: t.name, clientDescription: t.client_description || t.description || '',
+          unit: (t.unit || 'item') as DemoTask['unit'], defaultQty: t.default_qty || 1,
+          labourCost: t.labour_cost, materialCost: t.materials_cost, plantCost: t.plant_cost, wasteCost: t.waste_cost, subcontractorCost: t.subcontract_cost, otherCost: t.other_cost,
+          showInTakeoff: true, showInAiScope: true,
+        }
+      })
+      return { id, name: sp.name, markupPct: sp.markup_pct, tasks, ...(builtIn?.calculatorId ? { calculatorId: builtIn.calculatorId } : {}) }
+    })
+  }, [boPhases, boSubPhases, boTasks, customDemoSubphases])
+
   // Refs
   const svgRef = useRef<SVGSVGElement>(null)
   const queuedFinishRef = useRef<DrawnElement | null>(null)
@@ -1383,7 +1406,7 @@ export default function TakeoffPage() {
   // A demolition item picked on a calculator entry in the Construction Type list (Wall Removal / Knock-Through): the entry, or undefined
   function demoCalcSub(it: TakeoffItem) {
     if (!(it.phase === 'Demolition' || (it.phase as string) === 'Site Setup & Demolition') || !it.demoSubphaseId) return undefined
-    return getAllDemoSubphases(customDemoSubphases).find(s => s.id === it.demoSubphaseId && !!s.calculatorId)
+    return liveDemoSubs.find(s => s.id === it.demoSubphaseId && !!s.calculatorId)
   }
   function resolveBuiltAssembly(it: TakeoffItem) {
     if (it.electricsSummary) return BUILT_ASSEMBLY_CANON_IDS['elec-install']
@@ -2787,9 +2810,10 @@ export default function TakeoffPage() {
 
     // Demo
     if ((item.phase === 'Demolition' || (item.phase as string) === 'Site Setup & Demolition') && !item.demoSubphaseId) {
-      const _allSubs = getAllDemoSubphases(customDemoSubphases)
-      const _defSub  = _allSubs[0]
-      const _defTask = _defSub.tasks[0]
+      // a new line starts on the first sub-phase that has tasks (a calculator entry has none)
+      const _defSub  = liveDemoSubs.find(sb => !sb.calculatorId && sb.tasks.length > 0)
+      const _defTask = _defSub?.tasks[0]
+      if (_defSub && _defTask) {
       const _q = item.qty > 0 ? item.qty : _defTask.defaultQty
       item = {
         ...item,
@@ -2805,6 +2829,7 @@ export default function TakeoffPage() {
         demoOther:         +(_defTask.otherCost         * _q).toFixed(2),
       }
       saveItemEdit(item)
+      }
     }
 
     // External Walls
@@ -3074,7 +3099,7 @@ export default function TakeoffPage() {
     }
 
     // ── 7. Demo data & helpers ─────────────────────────────────────────────
-    const allDemoSubs  = (isDemo || isDemoCalc) ? getAllDemoSubphases(customDemoSubphases) : []
+    const allDemoSubs  = (isDemo || isDemoCalc) ? liveDemoSubs : []
     const demoSub      = allDemoSubs.find(s => s.id === item.demoSubphaseId) ?? allDemoSubs[0]
     const demoTask     = demoSub?.tasks.find(t => t.id === item.demoTaskId) ?? demoSub?.tasks[0]
     const demoMarkup   = item.demoMarkupPct ?? demoSub?.markupPct ?? 20
