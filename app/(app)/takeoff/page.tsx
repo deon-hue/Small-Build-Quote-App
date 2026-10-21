@@ -5588,7 +5588,7 @@ export default function TakeoffPage() {
                   opacity: resetInProgress ? 0.5 : 1,
                 }}
               >
-                Reset Takeoff
+                Reset
               </button>
             </div>
           </div>
