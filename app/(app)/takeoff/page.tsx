@@ -1056,6 +1056,30 @@ export default function TakeoffPage() {
       item.unit = 'nr'
     }
 
+    // Demolition: a Sub-Phase (and Task) picked before drawing, or a click-placed item, arrives as that Demolition type: a calculator entry opens its calculator, a task entry carries the task's pricing.
+    // (Demolition items keep their own demo* fields, so the generic carry-over below does not apply to them.)
+    if (item.phase === 'Demolition' && !item.demoSubphaseId) {
+      const pickedSubId = taskSubphaseId ?? selectedTaskSubphaseId
+      const pickedTaskId = taskId ?? selectedTaskId
+      const bo = pickedSubId ? boSubPhases.find(sp => sp.id === pickedSubId) : undefined
+      if (bo && boPhases.find(p => p.id === bo.phase_id)?.name === 'Demolition') {
+        const dsId = bo.canonical_id?.startsWith('demo-') ? bo.canonical_id.slice(5) : bo.id
+        const ds = liveDemoSubs.find(d => d.id === dsId)
+        if (ds?.calculatorId) {
+          Object.assign(item, { name: ds.name, spec: '', demoSubphaseId: ds.id, demoTaskId: undefined, demoMarkupPct: ds.markupPct, subPhase: ds.name, taskSubphaseId: bo.id, taskId: undefined,
+            demoLabour: 0, demoMaterials: 0, demoPlant: 0, demoWaste: 0, demoSubcontractor: 0, demoOther: 0 })
+        } else if (ds && ds.tasks.length > 0) {
+          const boT = pickedTaskId ? boTasks.find(t => t.id === pickedTaskId) : undefined
+          const dt = ds.tasks.find(t => t.name === boT?.name) ?? ds.tasks[0]
+          const q = item.qty > 0 ? item.qty : dt.defaultQty
+          Object.assign(item, { name: dt.name, spec: dt.clientDescription, demoSubphaseId: ds.id, demoTaskId: dt.id, demoMarkupPct: ds.markupPct, subPhase: ds.name, unit: dt.unit, qty: q,
+            taskSubphaseId: undefined, taskId: undefined,
+            demoLabour: +(dt.labourCost * q).toFixed(2), demoMaterials: +(dt.materialCost * q).toFixed(2), demoPlant: +(dt.plantCost * q).toFixed(2),
+            demoWaste: +(dt.wasteCost * q).toFixed(2), demoSubcontractor: +(dt.subcontractorCost * q).toFixed(2), demoOther: +(dt.otherCost * q).toFixed(2) })
+        }
+      }
+    }
+
     // A Sub-Phase picked in the properties panel before drawing carries onto the wall it draws.
     // Without this the wall screens ignored it and fell back to their own default (the first
     // build-up type for external walls, the first sub-phase for internal walls). Only an explicit
@@ -2829,6 +2853,18 @@ export default function TakeoffPage() {
         demoOther:         +(_defTask.otherCost         * _q).toFixed(2),
       }
       saveItemEdit(item)
+      } else {
+        // no Demolition sub-phase has tasks (Back Office keeps only calculator entries): start on the first calculator entry rather than an unpriced blank line
+        const _calcSub = liveDemoSubs.find(sb => sb.calculatorId)
+        if (_calcSub) {
+          const _boSub = boSubPhases.find(b => b.canonical_id === 'demo-' + _calcSub.id)
+          item = {
+            ...item, name: _calcSub.name, spec: '', demoSubphaseId: _calcSub.id, demoTaskId: undefined, demoMarkupPct: _calcSub.markupPct, subPhase: _calcSub.name,
+            taskSubphaseId: _boSub?.id, assemblyResult: undefined, assemblyCalcState: undefined,
+            demoLabour: 0, demoMaterials: 0, demoPlant: 0, demoWaste: 0, demoSubcontractor: 0, demoOther: 0,
+          }
+          saveItemEdit(item)
+        }
       }
     }
 
