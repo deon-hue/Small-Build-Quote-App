@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { makeDebouncedSave, loadTakeoffFromSupabase, saveTakeoffToSupabase, listTakeoffSummaries, deleteTakeoffProject, type TakeoffSummary } from '@/lib/takeoff-sync'
 import { activeSheetIdOf, onActiveSheet, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet } from '@/lib/takeoff-sheets'
 import { putSheetImage, getSheetImage, deleteProjectImages } from '@/lib/takeoff-sheet-images'
+import { uploadSheetPicture, downloadSheetPicture, listCloudPictureSheetIds, deleteProjectPictures } from '@/lib/takeoff-sheet-cloud'
 import type { TakeoffSheet } from '@/lib/takeoff-types'
 import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchLabourTrades, fetchPhases, fetchSubPhases, fetchTasks } from '@/lib/back-office-queries'
 import type { BOLabourTrade, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
@@ -769,6 +770,11 @@ export default function TakeoffPage() {
   const activeSheetId = activeSheetIdOf(project)
   const [sheetImageMissing, setSheetImageMissing] = useState(false)
   const [imageNonce, setImageNonce] = useState(0)
+  // Plan pictures are kept on this device AND in the account (so a take-off's plans open on any computer): where each sheet's copy in the account has got to
+  const [sheetImageLoading, setSheetImageLoading] = useState(false)
+  const [pictureSync, setPictureSync] = useState<Record<string, 'saving' | 'saved' | 'failed' | 'too-big'>>({})
+  const uploadAttempted = useRef(new Set<string>())
+  const cloudPictureIds = useRef<{ key: string; ids: Set<string> | null } | null>(null)
   const [scheduleSheetFilter, setScheduleSheetFilter] = useState<string>('all')
   // My Take-offs: the list of take-offs saved to the account
   const [showTakeoffList, setShowTakeoffList] = useState(false)
@@ -802,12 +808,26 @@ export default function TakeoffPage() {
     })()
   }, []) // run once on mount
 
-  // Show the picture of the sheet that is showing (kept on this device). A sheet whose picture is not here (the take-off was opened on another computer) says so, and Add Plan fills it.
+  // Show the picture of the sheet that is showing: the copy on this device first, then the copy in the account (a take-off opened on another computer), which is kept on this device from then on.
+  // A sheet whose picture is in neither place says so, and Add Plan fills it.
   const sheetImageLoadedOnce = useRef(false)
   useEffect(() => {
+    setSheetImageLoading(false)
     if (!activeSheetId) return
     let alive = true
-    getSheetImage(project.id, activeSheetId).then(url => {
+    ;(async () => {
+      let url = await getSheetImage(project.id, activeSheetId)
+      if (!url && userId) {
+        if (!alive) return
+        setSheetImageLoading(true)
+        url = await downloadSheetPicture(createClient(), userId, project.id, activeSheetId)
+        if (!alive) return
+        setSheetImageLoading(false)
+        if (url) {
+          await putSheetImage(project.id, activeSheetId, url)
+          setPictureSync(m => ({ ...m, [activeSheetId]: 'saved' }))
+        }
+      }
       if (!alive) return
       setSheetImageMissing(!url)
       setPlanImage(url)
@@ -821,9 +841,50 @@ export default function TakeoffPage() {
         sheetImageLoadedOnce.current = true
       }
       img.src = url
-    })
+    })()
     return () => { alive = false }
-  }, [activeSheetId, project.id, imageNonce]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeSheetId, project.id, imageNonce, userId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Puts a sheet's picture in the account in the background (drawing never waits for it). */
+  async function savePictureToAccount(projectId: string, sheetId: string, dataUrl: string) {
+    if (!userId) return
+    uploadAttempted.current.add(userId + ':' + projectId + ':' + sheetId)
+    setPictureSync(m => ({ ...m, [sheetId]: 'saving' }))
+    const result = await uploadSheetPicture(createClient(), userId, projectId, sheetId, dataUrl)
+    setPictureSync(m => ({ ...m, [sheetId]: result }))
+    if (result === 'saved') {
+      if (cloudPictureIds.current?.ids) cloudPictureIds.current.ids.add(sheetId)
+    } else if (result === 'too-big') {
+      showToast('That plan is too big to save to your account (over 10MB even squeezed). It is kept on this computer only.')
+    } else {
+      showToast('Could not save a plan to your account just now. It is kept on this computer: press the warning on its sheet tab to try again.')
+    }
+  }
+
+  async function retryPictureToAccount(sheetId: string) {
+    const local = await getSheetImage(project.id, sheetId)
+    if (local) await savePictureToAccount(project.id, sheetId, local)
+  }
+
+  // Plans loaded before pictures were kept in the account (or while offline) are put there once, when the take-off is open.
+  useEffect(() => {
+    if (!userId || !project.sheets?.length) return
+    ;(async () => {
+      const sb = createClient()
+      const key = userId + ':' + project.id
+      if (cloudPictureIds.current?.key !== key) cloudPictureIds.current = { key, ids: await listCloudPictureSheetIds(sb, userId, project.id) }
+      const ids = cloudPictureIds.current.ids
+      if (!ids) return   // could not read the account's list just now: try again next visit rather than upload blind
+      for (const sh of project.sheets ?? []) {
+        const k = key + ':' + sh.id
+        if (uploadAttempted.current.has(k)) continue
+        uploadAttempted.current.add(k)
+        if (ids.has(sh.id)) { setPictureSync(m => (m[sh.id] ? m : { ...m, [sh.id]: 'saved' })); continue }
+        const local = await getSheetImage(project.id, sh.id)
+        if (local) await savePictureToAccount(project.id, sh.id, local)
+      }
+    })()
+  }, [userId, project.id, project.sheets?.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Phase layer visibility — phases in this set are hidden on the canvas
   const [hiddenPhases, setHiddenPhases] = useState<Set<TakeoffPhase>>(new Set())
@@ -1544,6 +1605,7 @@ export default function TakeoffPage() {
     let rest = plans
     if (sheetImageMissing && activeSheetId) {
       savedOnDevice = (await putSheetImage(project.id, activeSheetId, plans[0].url)) && savedOnDevice
+      savePictureToAccount(project.id, activeSheetId, plans[0].url)
       rest = plans.slice(1)
       setImageNonce(n => n + 1)
     }
@@ -1551,6 +1613,7 @@ export default function TakeoffPage() {
     for (const pl of rest) {
       const sheet = makeSheet(uid(), pl.name)
       savedOnDevice = (await putSheetImage(project.id, sheet.id, pl.url)) && savedOnDevice
+      savePictureToAccount(project.id, sheet.id, pl.url)
       created.push(sheet)
     }
     if (created.length > 0) {
@@ -1913,11 +1976,12 @@ export default function TakeoffPage() {
 
   async function deleteSavedTakeoff(t: TakeoffSummary) {
     if (!userId || takeoffBusy) return
-    if (!window.confirm('Delete "' + t.name + '"?\n\nIts drawings, priced items and sheets are removed from your account, and its plans from this computer. This cannot be undone.')) return
+    if (!window.confirm('Delete "' + t.name + '"?\n\nIts drawings, priced items, sheets and plan pictures are removed from your account and from this computer. This cannot be undone.')) return
     setTakeoffBusy(true)
     try {
       await deleteTakeoffProject(createClient(), t.id, userId)
       deleteProjectImages(t.id)
+      await deleteProjectPictures(createClient(), userId, t.id)
       setTakeoffList(list => (list ? list.filter(x => x.id !== t.id) : list))
       if (t.id === project.id) startBlankTakeoff('')   // the one on screen was deleted: start a blank one
       showToast('Deleted "' + t.name + '".')
@@ -5000,6 +5064,12 @@ export default function TakeoffPage() {
                       style={{ background: 'none', border: 'none', color: 'var(--to-text)', fontSize: 12, fontWeight: on ? 700 : 500, padding: '4px 8px', cursor: 'pointer', whiteSpace: 'nowrap', maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {s.name}{!s.scaleSet && <span style={{ color: '#f39c12' }}> ⚠</span>}
                     </button>
+                    {pictureSync[s.id] === 'saving' && <span title="Saving this plan to your account…" style={{ fontSize: 10, color: 'var(--to-muted)' }}>☁…</span>}
+                    {pictureSync[s.id] === 'saved' && <span title="This plan is saved in your account, so it opens on any computer" style={{ fontSize: 10, color: '#7ab533' }}>☁✓</span>}
+                    {(pictureSync[s.id] === 'failed' || pictureSync[s.id] === 'too-big') && (
+                      <button onClick={() => retryPictureToAccount(s.id)} title={pictureSync[s.id] === 'too-big' ? 'This plan is too big to save to your account: it is on this computer only' : 'This plan is NOT saved in your account yet (kept on this computer). Press to try again'}
+                        style={{ background: 'none', border: 'none', color: '#f39c12', fontSize: 11, padding: '0 2px', cursor: 'pointer' }}>☁⚠</button>
+                    )}
                     {on && <span style={{ fontSize: 10, color: 'var(--to-muted)' }}>{s.calibration.label ?? 'custom'}</span>}
                     <button onClick={() => deleteSheetConfirm(s.id)} title="Remove this sheet and everything drawn on it"
                       style={{ background: 'none', border: 'none', color: 'var(--to-muted)', fontSize: 13, padding: '2px 6px', cursor: 'pointer' }}>×</button>
@@ -5010,9 +5080,14 @@ export default function TakeoffPage() {
                 style={{ ...btnStyle, padding: '4px 10px', fontSize: 11, flexShrink: 0 }}>+ Plan</button>
             </div>
           )}
-          {sheetImageMissing && activeSheetId && (
+          {sheetImageLoading && (
+            <div style={{ position: 'absolute', top: 50, left: '50%', transform: 'translateX(-50%)', zIndex: 5, background: 'var(--to-panel)', border: '1px solid var(--to-border)', color: 'var(--to-text)', borderRadius: 8, padding: '8px 14px', fontSize: 12 }}>
+              ⏳ Getting this plan from your account…
+            </div>
+          )}
+          {sheetImageMissing && !sheetImageLoading && activeSheetId && (
             <div style={{ position: 'absolute', top: 50, left: '50%', transform: 'translateX(-50%)', zIndex: 5, background: '#fff7e6', border: '1px solid #f0c080', color: '#7a4a00', borderRadius: 8, padding: '8px 14px', fontSize: 12, maxWidth: 420, textAlign: 'center' }}>
-              The picture for <strong>{sheetName(project, activeSheetId)}</strong> is not on this device. Press <strong>Add Plan</strong> to load it again: it fills this sheet and keeps its drawings and scale.
+              The picture for <strong>{sheetName(project, activeSheetId)}</strong> is not on this computer or in your account. Press <strong>Add Plan</strong> to load it again: it fills this sheet and keeps its drawings and scale.
             </div>
           )}
           <svg
@@ -5424,7 +5499,7 @@ export default function TakeoffPage() {
               <button onClick={() => setShowTakeoffList(false)} disabled={takeoffBusy} style={{ ...btnStyle, padding: '4px 10px' }}>Close</button>
             </div>
             <p style={{ margin: '0 0 12px', color: 'var(--to-muted)', fontSize: 12, lineHeight: 1.5 }}>
-              Each take-off is saved to your account as you work. Open one to carry on where you left off. The plan pictures stay on the computer where you loaded them.
+              Each take-off is saved to your account as you work, plan pictures included. Open one on any computer to carry on where you left off.
             </p>
 
             <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
