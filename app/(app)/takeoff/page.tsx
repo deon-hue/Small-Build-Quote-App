@@ -118,6 +118,7 @@ const TOOL_DISPLAY: Record<DrawingTool, string> = {
   floor:   'Floor Area',
   click:   'Click to Place Item',
   electric: 'Place Electrical Point',
+  measure: 'Measure',
 }
 
 // ── ID helpers ────────────────────────────────────────────────────────────────
@@ -613,6 +614,9 @@ export default function TakeoffPage() {
   // Canvas / drawing state
   const [tool, setTool] = useState<DrawingTool>('select')
   const [drawPoints, setDrawPoints] = useState<TakeoffPoint[]>([])
+  // The measure tool's finished line stays on the plan until it is cleared. It is never saved and never priced.
+  const [measureDone, setMeasureDone] = useState<{ points: TakeoffPoint[] } | null>(null)
+  useEffect(() => { if (tool !== 'measure') setMeasureDone(null) }, [tool])
   const [mousePos, setMousePos] = useState<TakeoffPoint>({ x: 0, y: 0 })
   const [isDrawing, setIsDrawing] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -1152,6 +1156,12 @@ export default function TakeoffPage() {
       placeElectricPoint(svgCoords(e))
       return
     }
+    if (tool === 'measure') {
+      setMeasureDone(null)
+      setDrawPoints(prev => [...prev, svgCoords(e)])
+      setIsDrawing(true)
+      return
+    }
     if (tool === 'select') return
     const pt = svgCoords(e)
 
@@ -1209,6 +1219,15 @@ export default function TakeoffPage() {
   }
 
   function handleSvgDblClick(e: React.MouseEvent<SVGSVGElement>) {
+    if (tool === 'measure') {
+      e.preventDefault()
+      // the double-click's two clicks leave a repeated point at the end: drop points that sit on the one before
+      const pts = drawPoints.filter((p, i) => i === 0 || Math.hypot(p.x - drawPoints[i - 1].x, p.y - drawPoints[i - 1].y) > 1.5)
+      setDrawPoints([])
+      setIsDrawing(false)
+      if (pts.length >= 2) setMeasureDone({ points: pts })
+      return
+    }
     if (tool === 'select' || tool === 'rect') return
     if (tool === 'floor' && floorDrawMode === 'rect') return
     e.preventDefault()
@@ -1589,6 +1608,7 @@ export default function TakeoffPage() {
     setSelectedElectricPointId(null)
     setDrawPoints([])
     setIsDrawing(false)
+    setMeasureDone(null)
     setCalibDrawing(false)
     setCalibPts([])
     setAssemblyWindowItemId(null)
@@ -1893,6 +1913,7 @@ export default function TakeoffPage() {
       if (e.key === 'Escape') {
         setDrawPoints([])
         setIsDrawing(false)
+        setMeasureDone(null)
         if (calibDrawing) { setCalibDrawing(false); setCalibPts([]) }
       }
     }
@@ -2067,6 +2088,7 @@ export default function TakeoffPage() {
 
   // ── Render: in-progress drawing ghost ─────────────────────────────────────
   function renderGhost() {
+    if (tool === 'measure') return null   // the measure tool draws its own line (renderMeasure)
     if (!isDrawing || drawPoints.length === 0) return null
     const isFloor = tool === 'floor'
     const color = isFloor ? PHASE_COLORS['Floors & Screeds'] : PHASE_COLORS[activePhase]
@@ -2123,6 +2145,43 @@ export default function TakeoffPage() {
         {total > 0 && (
           <text x={mousePos.x + 14} y={mousePos.y - 10} textAnchor="start"
             fontSize={12} fill={color} fontFamily="monospace" fontWeight={700}>
+            Σ {fmtM(total)}
+          </text>
+        )}
+      </g>
+    )
+  }
+
+  // ── Render: the measure tool's line (nothing here is saved or priced) ───────────────────────────────────
+  function renderMeasure() {
+    const live = tool === 'measure' && isDrawing && drawPoints.length > 0
+    const pts = live ? [...drawPoints, mousePos] : (measureDone?.points ?? [])
+    if (pts.length < 1) return null
+    const mpp = project.calibration.mpp
+    const c = '#00d4ff'
+    const total = polylineLength(pts, mpp)
+    return (
+      <g style={{ pointerEvents: 'none' }}>
+        <polyline points={pts.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke={c} strokeWidth={2.5 / zoom} strokeDasharray={live ? `${6 / zoom} ${4 / zoom}` : undefined} strokeLinecap="round" strokeLinejoin="round" />
+        {pts.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={4 / zoom} fill={c} stroke="#000" strokeWidth={1 / zoom} />)}
+        {/* each segment's length, beside the line */}
+        {pts.slice(1).map((p, i) => {
+          const a = pts[i]
+          const dx = p.x - a.x, dy = p.y - a.y
+          const segLen = Math.sqrt(dx * dx + dy * dy)
+          if (segLen * zoom < 28) return null   // too short on screen to label without clutter
+          const nx = -dy / segLen, ny = dx / segLen
+          return (
+            <text key={i} x={(a.x + p.x) / 2 + nx * 13 / zoom} y={(a.y + p.y) / 2 + ny * 13 / zoom} textAnchor="middle" dominantBaseline="middle"
+              fontSize={12 / zoom} fill={c} stroke="#000" strokeWidth={3 / zoom} paintOrder="stroke" fontFamily="monospace" fontWeight={700}>
+              {fmtM(+(segLen * mpp).toFixed(3))}
+            </text>
+          )
+        })}
+        {/* the running total at the end of the line */}
+        {pts.length > 2 && total > 0 && (
+          <text x={pts[pts.length - 1].x + 14 / zoom} y={pts[pts.length - 1].y - 12 / zoom} textAnchor="start"
+            fontSize={13 / zoom} fill="#fff" stroke="#000" strokeWidth={3.5 / zoom} paintOrder="stroke" fontFamily="monospace" fontWeight={800}>
             Σ {fmtM(total)}
           </text>
         )}
@@ -4685,12 +4744,13 @@ export default function TakeoffPage() {
             { t: 'line',    icon: '╱', label: 'Line'       },
             { t: 'rect',    icon: '▭', label: 'Rectangle'  },
             { t: 'polygon', icon: '⬠', label: 'Polygon'    },
+            { t: 'measure', icon: '📏', label: 'Measure'    },
             { t: 'click',   icon: '💠', label: 'Click to Place Item' },
             { t: 'electric', icon: '⚡', label: 'Place Electrical Point' },
           ] as { t: DrawingTool; icon: string; label: string }[]).filter(({ t }) => t !== 'electric' || activePhase === 'Electrics').map(({ t, icon, label }) => (
             <div
               key={t}
-              onClick={() => { setTool(t); if (t === 'select') { setDrawPoints([]); setIsDrawing(false) } if (t === 'electric') setPanelMode('properties') }}
+              onClick={() => { if (tool === 'measure' || t === 'measure') { setDrawPoints([]); setIsDrawing(false) } setTool(t); if (t === 'select') { setDrawPoints([]); setIsDrawing(false) } if (t === 'electric') setPanelMode('properties') }}
               style={{
                 display: 'flex', alignItems: 'center', gap: 7,
                 padding: '7px 8px', marginBottom: 3, borderRadius: 5, cursor: 'pointer',
@@ -4798,6 +4858,34 @@ export default function TakeoffPage() {
           ref={containerRef}
           style={{ flex: 1, overflow: 'hidden', position: 'relative', background: 'var(--to-bg)' }}
         >
+          {/* Measure tool: what is being measured, with a reminder that nothing is saved or priced */}
+          {(tool === 'measure' || measureDone) && (() => {
+            const live = tool === 'measure' && isDrawing && drawPoints.length > 0
+            const pts = live ? [...drawPoints, mousePos] : (measureDone?.points ?? [])
+            const mpp = project.calibration.mpp
+            const total = polylineLength(pts, mpp)
+            const last = pts.length >= 2 ? polylineLength(pts.slice(-2), mpp) : 0
+            const closed = pts.length >= 3 ? { area: polygonArea(pts, mpp), perimeter: total + polylineLength([pts[pts.length - 1], pts[0]], mpp) } : null
+            const activeSheet = project.sheets?.find(s => s.id === activeSheetId)
+            return (
+              <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 6, background: 'var(--to-panel)', border: '1px solid #00d4ff', color: 'var(--to-text)', borderRadius: 8, padding: '7px 12px', fontSize: 12, boxShadow: '0 2px 12px rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', justifyContent: 'center', maxWidth: '70%' }}>
+                <strong style={{ color: '#00d4ff' }}>📏 Measure</strong>
+                {pts.length < 2 ? (
+                  <span style={{ color: 'var(--to-sub)' }}>Click the start, click along the route, double-click to finish. Esc clears it. Nothing is saved or priced.</span>
+                ) : (
+                  <>
+                    <span>Total <strong style={{ fontFamily: 'monospace' }}>{fmtM(total)}</strong></span>
+                    {pts.length > 2 && <span style={{ color: 'var(--to-sub)' }}>last <span style={{ fontFamily: 'monospace' }}>{fmtM(last)}</span></span>}
+                    {closed && <span style={{ color: 'var(--to-sub)' }}>if closed: <span style={{ fontFamily: 'monospace' }}>{fmt2(closed.area)} m²</span>, perimeter <span style={{ fontFamily: 'monospace' }}>{fmtM(closed.perimeter)}</span></span>}
+                    {!live && <button onClick={() => setMeasureDone(null)} style={{ ...btnStyle, padding: '2px 8px', fontSize: 11 }}>Clear</button>}
+                  </>
+                )}
+                <span style={{ color: 'var(--to-muted)', fontSize: 11 }}>scale {project.calibration.label || '1:100'}</span>
+                {activeSheet && !activeSheet.scaleSet && <span style={{ color: '#f39c12', fontSize: 11 }}>⚠ this sheet's scale is not set yet: set it first or the length will be wrong</span>}
+              </div>
+            )
+          })()}
+
           {/* Sheets: each plan has its own picture, its own scale and its own drawings */}
           {(project.sheets?.length ?? 0) > 0 && (
             <div style={{ position: 'absolute', left: 8, bottom: 8, right: 150, zIndex: 5, display: 'flex', alignItems: 'center', gap: 4, overflowX: 'auto', padding: '4px 6px', background: 'var(--to-panel)', border: '1px solid var(--to-border)', borderRadius: 8, boxShadow: '0 2px 10px rgba(0,0,0,0.25)' }}>
@@ -4951,6 +5039,9 @@ export default function TakeoffPage() {
               {/* Calibration ghost */}
               {renderCalibGhost()}
 
+              {/* Measure tool */}
+              {renderMeasure()}
+
             </g>
 
             {/* Fixed UI — outside transform group so it stays at screen position */}
@@ -5034,6 +5125,9 @@ export default function TakeoffPage() {
               tool === 'select' ? 'Select' :
               tool === 'line' ? 'Line / Polyline (dbl-click to finish)' :
               tool === 'rect' ? 'Rectangle (click start, click finish)' :
+              tool === 'measure' ? 'Measure (click along the route, dbl-click to finish: nothing is saved)' :
+              tool === 'click' ? 'Click to place an item' :
+              tool === 'electric' ? 'Place electrical points' :
               tool === 'floor' ? `⬛ Floor — ${FLOOR_MAKEUPS.find(m => m.id === activeFloorMakeup)?.name} (${floorDrawMode === 'rect' ? 'click two corners' : 'click points, dbl-click to close'})` :
               'Polygon (dbl-click to close)'
             }</strong></span>
