@@ -32,6 +32,14 @@ function metaOf(p: TakeoffProject): TakeoffMeta | undefined {
   return Object.keys(m).length ? m : undefined
 }
 
+/** The take-offs table's id column is a UUID, so a take-off needs a real UUID to be saved to the account (the screen used to make short random ids, which the database refused: those take-offs only ever lived on the one computer). */
+export const isUuid = (id: unknown): id is string => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+
+export function newProjectId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.floor(Math.random() * 16); return (c === 'x' ? r : (r & 3) | 8).toString(16) })
+}
+
 /** True for a take-off nobody has started: nothing drawn, priced or loaded and no name, address or customer. These are not saved to the account, so a fresh take-off does not clutter My Take-offs. */
 export function isEmptyTakeoff(p: TakeoffProject): boolean {
   const name = (p.name ?? '').trim()
@@ -106,6 +114,7 @@ export async function saveTakeoffToSupabase(
   project: TakeoffProject,
   userId: string,
 ): Promise<{ error: string | null }> {
+  if (!isUuid(project.id)) return { error: 'This take-off still has an old-style reference and is being updated: try again in a moment.' }
   const row = projectToRow(project, userId)
   const { error } = await sb
     .from('takeoff_projects')

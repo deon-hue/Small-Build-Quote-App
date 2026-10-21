@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback, ChangeEvent } from 'react'
 import NumInput from '@/components/NumInput'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { makeDebouncedSave, isEmptyTakeoff, loadTakeoffFromSupabase, saveTakeoffToSupabase, listTakeoffSummaries, deleteTakeoffProject, type TakeoffSummary } from '@/lib/takeoff-sync'
+import { makeDebouncedSave, isEmptyTakeoff, isUuid, newProjectId, loadTakeoffFromSupabase, saveTakeoffToSupabase, listTakeoffSummaries, deleteTakeoffProject, type TakeoffSummary } from '@/lib/takeoff-sync'
 import { activeSheetIdOf, onActiveSheet, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet } from '@/lib/takeoff-sheets'
 import { putSheetImage, getSheetImage, deleteProjectImages } from '@/lib/takeoff-sheet-images'
 import { uploadSheetPicture, downloadSheetPicture, listCloudPictureSheetIds, deleteProjectPictures } from '@/lib/takeoff-sheet-cloud'
@@ -334,7 +334,7 @@ function saveProject(p: TakeoffProject) {
 
 function blankProject(): TakeoffProject {
   return {
-    id: uid(),
+    id: newProjectId(),
     name: '',
     address: '',
     jobType: 'Rear Extension',
@@ -774,6 +774,10 @@ export default function TakeoffPage() {
   const [sheetImageLoading, setSheetImageLoading] = useState(false)
   const [pictureSync, setPictureSync] = useState<Record<string, 'saving' | 'saved' | 'failed' | 'too-big'>>({})
   const uploadAttempted = useRef(new Set<string>())
+  const autosaveErrorShown = useRef(false)
+  const lastSaveError = useRef('')
+  const idMigration = useRef<string | null>(null)
+  const oldPictureFolders = useRef<string[]>([])
   const cloudPictureIds = useRef<{ key: string; ids: Set<string> | null } | null>(null)
   const [scheduleSheetFilter, setScheduleSheetFilter] = useState<string>('all')
   // My Take-offs: the list of take-offs saved to the account
@@ -844,6 +848,31 @@ export default function TakeoffPage() {
     })()
     return () => { alive = false }
   }, [activeSheetId, project.id, imageNonce, userId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A take-off made before this fix has a short random id, which the account's database refuses (its id is a UUID), so it was only ever saved on this computer. Give it a real id, moving its plan pictures across, then it saves normally.
+  useEffect(() => {
+    if (isUuid(project.id) || idMigration.current === project.id) return
+    if (!project.sheets?.length && project.planImageUrl) return   // a very old one-plan take-off is moved into a sheet first
+    idMigration.current = project.id
+    const oldId = project.id
+    const newId = newProjectId()
+    const sheetIds = (project.sheets ?? []).map(s => s.id)
+    ;(async () => {
+      for (const sid of sheetIds) {
+        const url = await getSheetImage(oldId, sid)
+        if (url) await putSheetImage(newId, sid, url)
+      }
+      oldPictureFolders.current.push(oldId)
+      setProject(p => (p.id === oldId ? { ...p, id: newId } : p))
+      deleteProjectImages(oldId)
+    })()
+  }, [project.id, project.sheets?.length, project.planImageUrl]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Pictures uploaded to the account under the old reference are removed once the account is known
+  useEffect(() => {
+    if (!userId) return
+    for (const oldId of oldPictureFolders.current.splice(0)) deleteProjectPictures(createClient(), userId, oldId)
+  }, [userId, project.id])
 
   /** Puts a sheet's picture in the account in the background (drawing never waits for it). */
   async function savePictureToAccount(projectId: string, sheetId: string, dataUrl: string) {
@@ -917,7 +946,11 @@ export default function TakeoffPage() {
     // Tier 3 — debounced async write to Supabase (system of record)
     if (userId && !isEmptyTakeoff(p)) {
       const sb = createClient()
-      debouncedSaveRef.current(sb, p, userId)
+      debouncedSaveRef.current(sb, p, userId, msg => {
+        if (autosaveErrorShown.current) return
+        autosaveErrorShown.current = true
+        showToast('Could not save this take-off to your account: ' + msg + ' It is still kept on this computer.')
+      })
     }
   }, [project, planImage, userId])
 
@@ -1724,7 +1757,7 @@ export default function TakeoffPage() {
         const data = JSON.parse(ev.target?.result as string)
         if (data.version !== 1) { alert('Unrecognised take-off file version.'); return }
         setProject({
-          id: data.id ?? uid(),
+          id: isUuid(data.id) ? data.id : newProjectId(),
           name: data.name ?? 'Imported Take-off',
           address: data.address ?? '',
           jobType: data.jobType ?? '',
@@ -1901,9 +1934,11 @@ export default function TakeoffPage() {
 
   /** Puts what is on screen into your account now (the automatic save waits a couple of seconds after the last change). */
   async function saveCurrentToCloud(): Promise<boolean> {
-    if (!userId) return false
+    lastSaveError.current = ''
+    if (!userId) { lastSaveError.current = 'You are not signed in.'; return false }
     if (isEmptyTakeoff(project)) return true   // nothing started: nothing to keep
     const { error } = await saveTakeoffToSupabase(createClient(), { ...project, updatedAt: new Date().toISOString() }, userId)
+    lastSaveError.current = error ?? ''
     return !error
   }
 
@@ -1935,7 +1970,7 @@ export default function TakeoffPage() {
     setTakeoffListError('')
     if (!userId) { setTakeoffListError('Sign in to see your saved take-offs.'); return }
     const saved = await saveCurrentToCloud()
-    if (!saved) setTakeoffListError('Could not save this take-off to your account just now, so it may be missing from the list. It is still on this computer.')
+    if (!saved) setTakeoffListError('Could not save this take-off to your account just now, so it may be missing from the list. It is still on this computer.' + (lastSaveError.current ? ' Reason: ' + lastSaveError.current : ''))
     try { setTakeoffList(await listTakeoffSummaries(createClient(), userId)) }
     catch { setTakeoffList([]); setTakeoffListError('Could not load your saved take-offs. Check your connection and try again.') }
   }
@@ -1995,7 +2030,7 @@ export default function TakeoffPage() {
   async function handleClose() {
     if (isEmptyTakeoff(project)) { showToast('This take-off is empty: nothing to close. Use My Take-offs to open a job.'); return }
     const kept = await saveCurrentToCloud()
-    if (!kept && !confirm('This take-off could NOT be saved to your account just now, so closing it would lose it.\n\nClose it anyway?')) return
+    if (!kept && !confirm('This take-off could NOT be saved to your account just now, so closing it would lose it.' + (lastSaveError.current ? '\n\nReason: ' + lastSaveError.current : '') + '\n\nClose it anyway?')) return
     const name = project.name.trim() || 'Untitled take-off'
     startBlankTakeoff('')
     showToast(kept ? '"' + name + '" is saved in My Take-offs. Here is a fresh take-off.' : 'Closed without saving.')
