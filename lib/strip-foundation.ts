@@ -7,6 +7,23 @@
 
 export type StripWallBuild = 'solid-flat' | 'cavity-filled'
 
+/** A cavity-filled wall built in courses: facing brick (splash courses) at the top of the outer leaf, block below it, the inner leaf in block to the DPC. */
+export interface StripCoursing {
+  /** Courses of facing brick at the top of the outer leaf, up to the DPC. */
+  brickCourses: number
+  /** Courses of block under the brick on the outer leaf. Left out (or null): as many as fit up to the DPC. */
+  blockCourses?: number | null
+}
+
+/** A brick course is 75mm with its joint, a block course 225mm: three brick courses make one block course. */
+export const BRICK_COURSE_MM = 75
+export const BLOCK_COURSE_MM = 225
+/** A brick with its joint: 215mm + 10mm. A 100mm block on its side with its joint: 450mm. */
+const BRICK_LENGTH_M = 0.225
+const BLOCK_LENGTH_M = 0.45
+/** Mortar per m² of a 102mm brick leaf. */
+const MORTAR_M3_PER_M2_BRICK = 0.028
+
 export interface StripFoundationInput {
   /** The trench's length along the wall, mm. */
   lengthMm: number
@@ -20,12 +37,40 @@ export interface StripFoundationInput {
   dpcAboveGroundMm: number
   /** The wall from the concrete to the DPC: solid 215mm blocks laid flat, or two 100mm leaves with the 100mm cavity filled with concrete. */
   wall: StripWallBuild
+  /** Build a cavity-filled wall in courses (brick splash courses on a block base), so the courses decide the wall height. Leave out for the older all-block wall worked out from the height alone. */
+  coursing?: StripCoursing
   /** Take all the dug soil away, instead of only the surplus the concrete and wall displace. Default false. */
   takeAllSpoilAway?: boolean
 }
 
+/** What the courses come to, when the wall is built in courses. */
+export interface StripCoursesResult {
+  brickCourses: number
+  blockCourses: number
+  /** The wall as the courses build it, from the top of the concrete to the DPC, mm. */
+  builtHeightMm: number
+  /** What the trench, concrete and DPC level asked for, mm. */
+  requiredHeightMm: number
+  /** required minus built: positive = the concrete is made this much thicker to make up; negative = the DPC ends up this much higher than asked. */
+  gapMm: number
+  brickCount: number
+  outerBlockCount: number
+  innerBlockCount: number
+  /** Height of the brick and of the block part of the outer leaf, mm. */
+  brickMm: number
+  blockMm: number
+}
+
 export interface StripFoundationGeometry {
   lengthM: number
+  /** The concrete thickness actually used (thicker than asked when the courses fall short of the DPC), mm. */
+  concreteThicknessMm: number
+  /** How far the DPC actually ends up above ground, mm. */
+  dpcAboveGroundMm: number
+  /** Set when the wall is built in courses. */
+  courses?: StripCoursesResult
+  /** Bricks of the splash courses (0 when the wall has none). */
+  brickCount: number
   trenchVolumeM3: number
   concreteVolumeM3: number
   /** Blockwork height, from the top of the concrete up to the DPC, mm. */
@@ -71,20 +116,54 @@ export function calculateStripFoundationGeometry(input: StripFoundationInput): S
   if (concreteThicknessMm >= depthMm) throw new Error('The concrete must be thinner than the trench is deep, so there is room for the wall above it.')
   if (dpcAboveGroundMm < 0) throw new Error('The DPC cannot be below ground level.')
 
-  const L = toM(lengthMm), W = toM(widthMm), D = toM(depthMm), T = toM(concreteThicknessMm)
   const cavity = input.wall === 'cavity-filled'
   const wallThicknessMm = cavity ? 300 : 215
-  const wallHeightMm = depthMm - concreteThicknessMm + dpcAboveGroundMm
+  const requiredHeightMm = depthMm - concreteThicknessMm + dpcAboveGroundMm
+  // Built in courses (cavity wall only): the courses decide the wall height. A shortfall to the DPC is made up in the concrete, so the DPC never ends up lower than asked; courses that stand
+  // taller than the space put the DPC higher.
+  let courses: StripCoursesResult | undefined
+  let effConcreteMm = concreteThicknessMm
+  let effDpcMm = dpcAboveGroundMm
+  let wallHeightMm = requiredHeightMm
+  if (cavity && input.coursing) {
+    const brick = Math.max(0, Math.round(input.coursing.brickCourses))
+    const brickMm = brick * BRICK_COURSE_MM
+    const asked = input.coursing.blockCourses
+    const block = asked == null ? Math.max(0, Math.floor((requiredHeightMm - brickMm + 1) / BLOCK_COURSE_MM)) : Math.max(0, Math.round(asked))
+    const blockMm = block * BLOCK_COURSE_MM
+    const builtHeightMm = blockMm + brickMm
+    if (builtHeightMm <= 0) throw new Error('The wall needs at least one course of brick or block.')
+    const gapMm = requiredHeightMm - builtHeightMm
+    if (gapMm > 0) effConcreteMm = concreteThicknessMm + gapMm
+    else effDpcMm = dpcAboveGroundMm - gapMm
+    if (effConcreteMm >= depthMm) throw new Error('The courses are too short for this trench: the concrete would have to fill it. Add courses or make the trench shallower.')
+    wallHeightMm = builtHeightMm
+    courses = {
+      brickCourses: brick, blockCourses: block, builtHeightMm, requiredHeightMm, gapMm, brickMm, blockMm,
+      brickCount: 0, outerBlockCount: 0, innerBlockCount: 0,   // counted below, once the length is known
+    }
+  }
+  const L = toM(lengthMm), W = toM(widthMm), D = toM(depthMm), T = toM(effConcreteMm)
   const H = toM(wallHeightMm)
-  const belowGroundM = toM(depthMm - concreteThicknessMm)
+  const belowGroundM = toM(depthMm - effConcreteMm)
 
   const trenchVolumeM3 = L * W * D
   const concreteVolumeM3 = L * W * T
   const masonryAreaM2 = L * H
   const masonryBelowGroundM3 = L * toM(wallThicknessMm) * belowGroundM
   // Solid: one skin of 215mm blocks laid flat. Cavity-filled: two 100mm leaves, with the 100mm cavity filled with concrete up to the DPC.
-  const blockCount = cavity ? 2 * masonryAreaM2 / LEAF_BLOCK_FACE_M2 : masonryAreaM2 / FLAT_BLOCK_FACE_M2
-  const mortarM3 = cavity ? 2 * masonryAreaM2 * MORTAR_M3_PER_M2_LEAF : masonryAreaM2 * MORTAR_M3_PER_M2_FLAT
+  let blockCount = cavity ? 2 * masonryAreaM2 / LEAF_BLOCK_FACE_M2 : masonryAreaM2 / FLAT_BLOCK_FACE_M2
+  let mortarM3 = cavity ? 2 * masonryAreaM2 * MORTAR_M3_PER_M2_LEAF : masonryAreaM2 * MORTAR_M3_PER_M2_FLAT
+  let brickCount = 0
+  if (courses) {
+    // outer leaf: brick on top, block below; inner leaf: block all the way up to the DPC
+    courses.brickCount = courses.brickCourses * L / BRICK_LENGTH_M
+    courses.outerBlockCount = courses.blockCourses * L / BLOCK_LENGTH_M
+    courses.innerBlockCount = (wallHeightMm / BLOCK_COURSE_MM) * L / BLOCK_LENGTH_M
+    brickCount = courses.brickCount
+    blockCount = courses.outerBlockCount + courses.innerBlockCount
+    mortarM3 = L * (toM(courses.brickMm) * MORTAR_M3_PER_M2_BRICK + toM(courses.blockMm) * MORTAR_M3_PER_M2_LEAF + H * MORTAR_M3_PER_M2_LEAF)
+  }
   const cavityFillM3 = cavity ? L * 0.1 * H : 0
   const tieCount = cavity ? Math.ceil(masonryAreaM2 * TIES_PER_M2) : 0
 
@@ -97,12 +176,19 @@ export function calculateStripFoundationGeometry(input: StripFoundationInput): S
   const warnings: string[] = []
   const projectionMm = (widthMm - wallThicknessMm) / 2
   if (widthMm < wallThicknessMm + 200) warnings.push(`A ${widthMm}mm trench leaves under 100mm of concrete each side of a ${wallThicknessMm}mm wall — the trench is normally wider than that.`)
-  else if (concreteThicknessMm < projectionMm) warnings.push(`The concrete (${concreteThicknessMm}mm) is thinner than it projects each side of the wall (${Math.round(projectionMm)}mm). A strip foundation is normally at least as thick as its projection — check with the designer.`)
+  else if (effConcreteMm < projectionMm) warnings.push(`The concrete (${effConcreteMm}mm) is thinner than it projects each side of the wall (${Math.round(projectionMm)}mm). A strip foundation is normally at least as thick as its projection — check with the designer.`)
+  if (effDpcMm < 150) warnings.push(`The DPC is only ${Math.round(effDpcMm)}mm above ground level: it is normally at least 150mm above, so splashing rain does not bridge it.`)
+  if (courses && courses.gapMm < 0) warnings.push(`These courses build ${-courses.gapMm}mm higher than the DPC level asked for, so the DPC would sit ${Math.round(effDpcMm)}mm above ground. Take a course off, or make the trench deeper.`)
+  if (courses && courses.gapMm > 0) warnings.push(`The courses stop ${courses.gapMm}mm short of the DPC level, so the concrete is made ${courses.gapMm}mm thicker (${Math.round(effConcreteMm)}mm) to bring the wall up to it.`)
   if (depthMm < 750) warnings.push('A foundation less than about 750mm deep is only suitable where the ground and frost depth allow — confirm the depth with building control or the engineer.')
   if (depthMm > 1200) warnings.push('A trench deeper than 1.2m normally needs its sides supported while people work in it. Support is not priced here.')
 
   return {
     lengthM: L,
+    concreteThicknessMm: effConcreteMm,
+    dpcAboveGroundMm: effDpcMm,
+    ...(courses ? { courses } : {}),
+    brickCount,
     trenchVolumeM3: +trenchVolumeM3.toFixed(4),
     concreteVolumeM3: +concreteVolumeM3.toFixed(4),
     wallHeightMm,

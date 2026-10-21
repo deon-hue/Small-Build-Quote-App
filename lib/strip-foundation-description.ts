@@ -16,6 +16,8 @@ export interface StripFoundationDescriptionInput {
   takeAllSpoilAway: boolean
   /** A trench fill (concrete up to near ground level) instead of a traditional strip. Default 'strip'. */
   variant?: 'strip' | 'trench-fill'
+  /** The wall built in courses: facing brick (splash courses) at the top of the outer leaf, block below it. Cavity wall only. */
+  courses?: { brickCourses: number; blockCourses: number }
   /** how the concrete gets to the trench when the lorry cannot reach it (default: the lorry reaches, nothing to say) */
   placing?: PlacingMethod
 }
@@ -38,7 +40,10 @@ export function describeStripFoundation(i: StripFoundationDescriptionInput): str
   if (i.wall === 'solid-flat') {
     lines.push(`Build the wall up from the concrete in 215mm dense concrete blocks laid flat, to a DPC ${i.dpcAboveGroundMm}mm above finished ground level, with the DPC laid on the top course.`)
   } else {
-    lines.push(`Build the wall up from the concrete as two 100mm dense concrete block leaves with a 100mm cavity, tied together, the cavity filled with concrete, to a DPC ${i.dpcAboveGroundMm}mm above finished ground level, with the DPC laid across both leaves.`)
+    const facing = i.courses && i.courses.brickCourses > 0
+      ? ` The outer leaf is finished in ${i.courses.brickCourses} course${i.courses.brickCourses === 1 ? '' : 's'} of facing brick (splash courses) on ${i.courses.blockCourses} course${i.courses.blockCourses === 1 ? '' : 's'} of block; the inner leaf is block to the DPC.`
+      : ''
+    lines.push(`Build the wall up from the concrete as two 100mm dense concrete block leaves with a 100mm cavity, tied together, the cavity filled with concrete, to a DPC ${i.dpcAboveGroundMm}mm above finished ground level, with the DPC laid across both leaves.${facing}`)
   }
   if (i.placing === 'pump') lines.push('The concrete is placed by pump, as the concrete lorry cannot get up to the trench.')
   else if (i.placing === 'barrow') lines.push('The concrete is carried to the trench by wheelbarrow, as the concrete lorry cannot get up to it.')
