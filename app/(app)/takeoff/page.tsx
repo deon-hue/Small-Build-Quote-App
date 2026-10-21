@@ -5,6 +5,9 @@ import NumInput from '@/components/NumInput'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { makeDebouncedSave, loadTakeoffFromSupabase } from '@/lib/takeoff-sync'
+import { activeSheetIdOf, onActiveSheet, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet } from '@/lib/takeoff-sheets'
+import { putSheetImage, getSheetImage } from '@/lib/takeoff-sheet-images'
+import type { TakeoffSheet } from '@/lib/takeoff-types'
 import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchLabourTrades, fetchPhases, fetchSubPhases, fetchTasks } from '@/lib/back-office-queries'
 import type { BOLabourTrade, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
 import { BUILT_ASSEMBLY_CANON_IDS } from '@/lib/built-assemblies'
@@ -417,9 +420,12 @@ function recalcItemsForMpp(
   items: TakeoffItem[],
   elements: DrawnElement[],
   mpp: number,
+  /** only remeasure the items drawn with these drawings (the showing sheet's: every other sheet has its own scale) */
+  onlyElementIds?: Set<string>,
 ): TakeoffItem[] {
   return items.map(item => {
     if (!item.elementId) return item               // manual items: leave untouched
+    if (onlyElementIds && !onlyElementIds.has(item.elementId)) return item
     const el = elements.find(e => e.id === item.elementId)
     if (!el) return item
 
@@ -753,12 +759,13 @@ export default function TakeoffPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const importJsonRef = useRef<HTMLInputElement>(null)
 
-  // PDF state
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pdfDocRef = useRef<any>(null)
-  const [pdfCurrentPage, setPdfCurrentPage] = useState(1)
-  const [pdfTotalPages, setPdfTotalPages] = useState(0)
+  // Loading a plan (a PDF's pages take a moment to draw)
   const [pdfLoading, setPdfLoading] = useState(false)
+  // Sheets (plans): the one showing, whether its picture is missing from this device, and a nudge to reload the picture after it is put back
+  const activeSheetId = activeSheetIdOf(project)
+  const [sheetImageMissing, setSheetImageMissing] = useState(false)
+  const [imageNonce, setImageNonce] = useState(0)
+  const [scheduleSheetFilter, setScheduleSheetFilter] = useState<string>('all')
 
   // Zoom / pan state
   const [zoom, setZoom] = useState(1)
@@ -769,17 +776,44 @@ export default function TakeoffPage() {
   const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 })
   const hasPannedRef = useRef(false)
 
-  // When the plan image is restored from localStorage on mount, measure its
-  // dimensions so the canvas fits correctly (same as after a fresh upload).
+  // A take-off from before sheets keeps its one plan inside the project: move it into Sheet 1. The picture goes to the device's own database (off the 5MB localStorage, where one big plan could stop
+  // the whole take-off from saving), and the project keeps only the sheet's name and scale.
   useEffect(() => {
     const saved = loadProject()
-    if (!saved?.planImageUrl) return
-    const img = new Image()
-    img.onload = () => {
-      setCanvasImgSize({ w: img.naturalWidth, h: img.naturalHeight })
-    }
-    img.src = saved.planImageUrl
+    if (!saved?.planImageUrl || saved.sheets?.length) return
+    const sheetId = uid()
+    ;(async () => {
+      await putSheetImage(saved.id, sheetId, saved.planImageUrl!)
+      setProject(p => {
+        if (p.sheets?.length) return p
+        const { planImageUrl: _moved, ...rest } = p
+        return addSheets(rest as TakeoffProject, [makeSheet(sheetId, 'Plan 1')])
+      })
+    })()
   }, []) // run once on mount
+
+  // Show the picture of the sheet that is showing (kept on this device). A sheet whose picture is not here (the take-off was opened on another computer) says so, and Add Plan fills it.
+  const sheetImageLoadedOnce = useRef(false)
+  useEffect(() => {
+    if (!activeSheetId) return
+    let alive = true
+    getSheetImage(project.id, activeSheetId).then(url => {
+      if (!alive) return
+      setSheetImageMissing(!url)
+      setPlanImage(url)
+      if (!url) { setCanvasImgSize(null); return }
+      const img = new Image()
+      img.onload = () => {
+        if (!alive) return
+        setCanvasImgSize({ w: img.naturalWidth, h: img.naturalHeight })
+        // the first picture after opening the page keeps the view as it was; changing sheet fits the new plan to the screen
+        if (sheetImageLoadedOnce.current) fitToScreen(img.naturalWidth, img.naturalHeight)
+        sheetImageLoadedOnce.current = true
+      }
+      img.src = url
+    })
+    return () => { alive = false }
+  }, [activeSheetId, project.id, imageNonce]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Phase layer visibility — phases in this set are hidden on the canvas
   const [hiddenPhases, setHiddenPhases] = useState<Set<TakeoffPhase>>(new Set())
@@ -804,7 +838,9 @@ export default function TakeoffPage() {
   // ── Persist on change ──────────────────────────────────────────────────────
   useEffect(() => {
     const p = { ...project, updatedAt: new Date().toISOString() }
-    if (planImage) p.planImageUrl = planImage
+    // Plans are kept in the device's own database once the take-off has sheets: never inside the saved project (localStorage holds about 5MB, and one big plan filling it stopped the whole take-off saving)
+    if (p.sheets?.length) delete p.planImageUrl
+    else if (planImage) p.planImageUrl = planImage
     // Tier 3 — synchronous write to localStorage (immediate cache + recovery)
     saveProject(p)
     // Tier 3 — debounced async write to Supabase (system of record)
@@ -855,6 +891,8 @@ export default function TakeoffPage() {
         setProject(prev => ({
           ...remote,
           planImageUrl: prev.planImageUrl,
+          sheets: remote.sheets ?? prev.sheets,
+          activeSheetId: remote.activeSheetId ?? prev.activeSheetId,
         }))
       }
     })
@@ -875,6 +913,8 @@ export default function TakeoffPage() {
     queuedTaskNameRef.current = null
 
     const item = itemFromElement(el, project.calibration.mpp)
+    // With several plans, each priced item notes which sheet it was drawn on (editable, and it travels to the quote)
+    if ((project.sheets?.length ?? 0) > 1) item.drawingRef = sheetName(project, el.sheetId) || item.drawingRef
 
     // Apply task info if this was a click-placed item
     if (taskSubphaseId && taskId) {
@@ -1073,7 +1113,7 @@ export default function TakeoffPage() {
       dragRef.current = null
       setIsDraggingEl(false)
       // Recalculate measurements after move
-      setProject(p => ({ ...p, items: recalcItemsForMpp(p.items, p.elements, p.calibration.mpp) }))
+      setProject(p => ({ ...p, items: recalcItemsForMpp(p.items, p.elements, p.calibration.mpp, activeSheetElementIds(p)) }))
       return
     }
     if (isPanning) setIsPanning(false)
@@ -1189,7 +1229,7 @@ export default function TakeoffPage() {
     const label = isFloor
       ? `Floor area ${shortId}`
       : `${activePhase} ${shortId}`
-    const el: DrawnElement = { id: uid(), type, points: pts, phase, label, color }
+    const el: DrawnElement = { id: uid(), type, points: pts, phase, label, color, ...(activeSheetId ? { sheetId: activeSheetId } : {}) }
     // Capture floor makeup before state update
     if (isFloor) queuedFloorMakeupRef.current = activeFloorMakeup
     setDrawPoints(_ => {
@@ -1322,7 +1362,7 @@ export default function TakeoffPage() {
 
   // Named rooms drawn in Floors, as shapes, so a point takes the room it falls in
   function electricRoomShapes() {
-    return project.elements
+    return elementsOnActiveSheet(project)
       .filter(el => el.phase === 'Floors & Screeds' && el.points.length >= 2)
       .map(el => ({ name: project.items.find(it => it.elementId === el.id)?.roomName ?? '', points: el.type === 'rect' ? rectToPolygon(el.points) : el.points }))
   }
@@ -1330,7 +1370,7 @@ export default function TakeoffPage() {
   function placeElectricPoint(pt: TakeoffPoint) {
     const room = roomAtPoint(pt, electricRoomShapes()) ?? electricRoom
     const id = uid()
-    changeElectricPoints(pts => [...pts, { id, typeId: electricTypeId, roomName: room, x: pt.x, y: pt.y }])
+    changeElectricPoints(pts => [...pts, { id, typeId: electricTypeId, roomName: room, x: pt.x, y: pt.y, ...(activeSheetId ? { sheetId: activeSheetId } : {}) }])
     setSelectedElectricPointId(id)
   }
 
@@ -1455,75 +1495,134 @@ export default function TakeoffPage() {
     setPanelMode('properties')
   }
 
-  // ── Render a PDF page to planImage ────────────────────────────────────────
-  async function renderPdfPage(pageNum: number) {
-    if (!pdfDocRef.current) return
+  // ── Plans are sheets ────────────────────────────────────────────────────────
+  // Every plan loaded (and every PDF page chosen) becomes a sheet with its own picture, scale and drawings. The pictures are kept on this device (lib/takeoff-sheet-images.ts), not in the project.
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function renderPdfPageToDataUrl(pdf: any, pageNum: number): Promise<string> {
+    const page = await pdf.getPage(pageNum)
+    const viewport = page.getViewport({ scale: 2.0 })
+    const canvas = document.createElement('canvas')
+    canvas.width = viewport.width
+    canvas.height = viewport.height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('no canvas')
+    await page.render({ canvasContext: ctx, viewport }).promise
+    return canvas.toDataURL('image/jpeg', 0.9)
+  }
+
+  /** Adds loaded plans as new sheets, or, when the showing sheet's picture is missing from this device, puts the first one back into that sheet (keeping its drawings and scale) */
+  async function addPlansAsSheets(plans: { name: string; url: string }[]) {
+    if (plans.length === 0) return
+    const hadSheets = (project.sheets?.length ?? 0) > 0
+    let savedOnDevice = true
+    let rest = plans
+    if (sheetImageMissing && activeSheetId) {
+      savedOnDevice = (await putSheetImage(project.id, activeSheetId, plans[0].url)) && savedOnDevice
+      rest = plans.slice(1)
+      setImageNonce(n => n + 1)
+    }
+    const created: TakeoffSheet[] = []
+    for (const pl of rest) {
+      const sheet = makeSheet(uid(), pl.name)
+      savedOnDevice = (await putSheetImage(project.id, sheet.id, pl.url)) && savedOnDevice
+      created.push(sheet)
+    }
+    if (created.length > 0) {
+      setProject(p => switchActiveSheet(addSheets(p, created), created[0].id))
+      // the new sheet starts clean: nothing selected from the sheet we were on
+      setSelectedId(null); setEditingElement(null); setEditingItem(null); setSelectedElectricPointId(null); setDrawPoints([]); setIsDrawing(false); setAssemblyWindowItemId(null)
+    }
+    if (!savedOnDevice) showToast('This browser cannot keep plans between visits (a private window?). They will be lost when you close the page.')
+    else if (created.length > 1) showToast(created.length + ' sheets added. Set the scale of each before you draw on it.')
+    else if (created.length === 1 && hadSheets) showToast('Sheet added. Set its scale before you draw on it.')
+  }
+
+  async function handleImageLoad(e: ChangeEvent<HTMLInputElement>) {
+    const input = e.target
+    const file = input.files?.[0]
+    input.value = ''   // so the same file can be chosen again
+    if (!file) return
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
     setPdfLoading(true)
     try {
-      const page = await pdfDocRef.current.getPage(pageNum)
-      const viewport = page.getViewport({ scale: 2.0 })
-      const canvas = document.createElement('canvas')
-      canvas.width  = viewport.width
-      canvas.height = viewport.height
-      const ctx = canvas.getContext('2d')
-      if (!ctx) return
-      await page.render({ canvasContext: ctx, viewport }).promise
-      setPlanImage(canvas.toDataURL('image/png'))
-      setCanvasImgSize({ w: viewport.width, h: viewport.height })
-      fitToScreen(viewport.width, viewport.height)
-      setPdfCurrentPage(pageNum)
+      if (isPdf) {
+        // Dynamic import avoids SSR issues and keeps the bundle lean
+        const pdfjsLib = await import('pdfjs-dist')
+        // Use CDN worker — avoids Next.js bundling complexity
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
+        const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise
+        let pages = [1]
+        if (pdf.numPages > 1) {
+          const answer = window.prompt('This PDF has ' + pdf.numPages + ' pages. Which pages should become sheets? Each page becomes its own sheet with its own scale.\n\nType all, or pages like 1-3, 5', 'all')
+          if (answer === null) return
+          const parsed = parsePageList(answer, pdf.numPages)
+          if (!parsed) { alert('Could not read that list of pages. Type all, or numbers like 1-3, 5.'); return }
+          pages = parsed
+        }
+        const plans: { name: string; url: string }[] = []
+        for (const n of pages) plans.push({ name: sheetNameFromFile(file.name, n, pdf.numPages), url: await renderPdfPageToDataUrl(pdf, n) })
+        await addPlansAsSheets(plans)
+      } else {
+        const url = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.onerror = () => reject(reader.error)
+          reader.readAsDataURL(file)
+        })
+        await addPlansAsSheets([{ name: sheetNameFromFile(file.name), url }])
+      }
+    } catch (err) {
+      console.error('Plan load error:', err)
+      alert('Could not load that plan. Make sure it is a valid image or PDF file.')
     } finally {
       setPdfLoading(false)
     }
   }
 
-  // ── Load plan image (image or PDF) ─────────────────────────────────────────
-  async function handleImageLoad(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
+  /** Shows another sheet: its plan, its scale and only its drawings. keepSelection is for jumping to the sheet of an item you just picked. */
+  function switchSheet(id: string, keepSelection = false) {
+    if (id === activeSheetId) return
+    const target = project.sheets?.find(s => s.id === id)
+    setProject(p => switchActiveSheet(p, id))
+    if (!keepSelection) { setSelectedId(null); setEditingElement(null); setEditingItem(null) }
+    setSelectedElectricPointId(null)
+    setDrawPoints([])
+    setIsDrawing(false)
+    setCalibDrawing(false)
+    setCalibPts([])
+    setAssemblyWindowItemId(null)
+    if (target && !target.scaleSet) showToast('Set the scale for ' + target.name + ' before you draw on it.')
+  }
 
-    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+  function renameSheetPrompt(id: string) {
+    const next = window.prompt('Name this sheet', sheetName(project, id))
+    if (next !== null && next.trim()) setProject(p => renameSheet(p, id, next))
+  }
 
-    if (isPdf) {
-      setPdfLoading(true)
-      try {
-        // Dynamic import avoids SSR issues and keeps the bundle lean
-        const pdfjsLib = await import('pdfjs-dist')
-        // Use CDN worker — avoids Next.js bundling complexity
-        pdfjsLib.GlobalWorkerOptions.workerSrc =
-          `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
+  function deleteSheetConfirm(id: string) {
+    const dry = removeSheet(project, id)
+    if (!window.confirm('Remove "' + sheetName(project, id) + '"?\n\nThis also removes the ' + dry.removedElements + ' drawing(s) and ' + dry.removedItems + ' priced item(s) drawn on it. A recovery copy is kept.')) return
+    createRecoverySnapshot('clear')
+    setProject(p => removeSheet(p, id).project)
+    setSelectedId(null)
+    setEditingElement(null)
+    setEditingItem(null)
+    setDrawPoints([])
+    setIsDrawing(false)
+    setSelectedElectricPointId(null)
+    showToast('Sheet removed. Recovery copy saved.')
+  }
 
-        const arrayBuffer = await file.arrayBuffer()
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
-        pdfDocRef.current = pdf
-        setPdfTotalPages(pdf.numPages)
-        setPdfCurrentPage(1)
-        await renderPdfPage(1)
-      } catch (err) {
-        console.error('PDF load error:', err)
-        alert('Could not load PDF. Make sure it is a valid PDF file.')
-      } finally {
-        setPdfLoading(false)
-      }
-      return
-    }
-
-    // Regular image
-    pdfDocRef.current = null
-    setPdfTotalPages(0)
-    const reader = new FileReader()
-    reader.onload = ev => {
-      const dataUrl = ev.target?.result as string
-      setPlanImage(dataUrl)
-      // Get natural dimensions then fit to screen
-      const img = new Image()
-      img.onload = () => {
-        setCanvasImgSize({ w: img.naturalWidth, h: img.naturalHeight })
-        fitToScreen(img.naturalWidth, img.naturalHeight)
-      }
-      img.src = dataUrl
-    }
-    reader.readAsDataURL(file)
+  /** Sets the showing sheet's scale and remeasures ONLY the drawings on that sheet (the other sheets have their own scales). Returns how many priced items were remeasured. */
+  function rescaleActiveSheet(mpp: number, label: string): number {
+    const ids = activeSheetElementIds(project)
+    const n = project.items.filter(it => it.elementId && ids.has(it.elementId)).length
+    setProject(p => {
+      const q = setActiveSheetCalibration(p, { mpp, label })
+      return { ...q, items: recalcItemsForMpp(q.items, q.elements, mpp, activeSheetElementIds(q)) }
+    })
+    return n
   }
 
   // ── Import JSON ────────────────────────────────────────────────────────────
@@ -1541,6 +1640,8 @@ export default function TakeoffPage() {
           address: data.address ?? '',
           jobType: data.jobType ?? '',
           calibration: data.calibration ?? { mpp: DEFAULT_MPP, label: '1:100' },
+          sheets: data.sheets,
+          activeSheetId: data.activeSheetId,
           elements: data.elements ?? [],
           items: data.items ?? [],
           createdAt: data.createdAt ?? new Date().toISOString(),
@@ -1575,7 +1676,7 @@ export default function TakeoffPage() {
       timestamp:   now.toISOString(),
       projectName: project.name,
       project:     { ...projectData },
-      planImageUrl: planImage ?? undefined,
+      planImageUrl: project.sheets?.length ? undefined : (planImage ?? undefined),
     }
     saveRecoverySnapshot(snap)
     setRecoverySnap(snap)
@@ -1730,13 +1831,7 @@ export default function TakeoffPage() {
     const pixLen = Math.sqrt(dx * dx + dy * dy)
     const mpp = realM / pixLen
     const lbl = calibLabel || `${realM}m ref`
-    const updatedItems = recalcItemsForMpp(project.items, project.elements, mpp)
-    const n = updatedItems.filter(it => !!it.elementId).length
-    setProject(p => ({
-      ...p,
-      calibration: { mpp, label: lbl },
-      items: recalcItemsForMpp(p.items, p.elements, mpp),
-    }))
+    const n = rescaleActiveSheet(mpp, lbl)
     showToast(`Calibration applied (${lbl}) — ${n} item${n !== 1 ? 's' : ''} recalculated ✓`)
     setShowCalib(false)
     setCalibDrawing(false)
@@ -1746,7 +1841,7 @@ export default function TakeoffPage() {
   // ── Phase summary for schedule panel ──────────────────────────────────────
   const phaseGroups = livePhaseNames.map(ph => ({
     phase: ph,
-    items: project.items.filter(it => it.phase === ph),
+    items: project.items.filter(it => it.phase === ph && (scheduleSheetFilter === 'all' || itemSheetId(it, project) === scheduleSheetFilter)),
   })).filter(g => g.items.length > 0)
 
   // ── Export for quote import ────────────────────────────────────────────────
@@ -4239,6 +4334,17 @@ export default function TakeoffPage() {
           </span>
         </div>
 
+        {/* With several plans: show the items from one sheet, or all of them */}
+        {(project.sheets?.length ?? 0) > 1 && (
+          <div style={{ padding: '6px 14px', borderBottom: '1px solid var(--to-border)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 11, color: 'var(--to-muted)' }}>Show</span>
+            <select style={{ ...inputStyle, height: 26, flex: 1 }} value={scheduleSheetFilter} onChange={e => setScheduleSheetFilter(e.target.value)}>
+              <option value="all">All sheets</option>
+              {project.sheets!.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+        )}
+
         {/* Phase groups */}
         {phaseGroups.map(g => (
           <div key={g.phase} data-phase={g.phase}>
@@ -4253,6 +4359,9 @@ export default function TakeoffPage() {
               <div
                 key={item.id}
                 onClick={() => {
+                  // an item drawn on another sheet: show that sheet first (keeping this item selected)
+                  const itemSheet = itemSheetId(item, project)
+                  if (itemSheet && itemSheet !== activeSheetId) switchSheet(itemSheet, true)
                   setEditingItem(item)
                   const el = item.elementId ? project.elements.find(e => e.id === item.elementId) ?? null : null
                   setEditingElement(el)
@@ -4279,6 +4388,7 @@ export default function TakeoffPage() {
                     <span style={{ color: '#6a8a6a' }}>, {fmt2(item.perimeter)}m perim</span>
                   )}
                   {item.drawingRef ? <span style={{ color: '#4a7a4a' }}> [{item.drawingRef}]</span> : ''}
+                  {(project.sheets?.length ?? 0) > 1 && (() => { const sid = itemSheetId(item, project); const nm = sid ? sheetName(project, sid) : ''; return nm && nm !== item.drawingRef ? <span style={{ color: '#6a7a8a' }}> · {nm}</span> : null })()}
                 </div>
               </div>
             ))}
@@ -4404,14 +4514,7 @@ export default function TakeoffPage() {
             const preset = SCALE_PRESETS.find(s => s.label === e.target.value)
             if (!preset) return
             if (preset.mpp === 0) { setShowCalib(true); return }
-            // Snapshot current items/elements for the toast count (outside updater)
-            const updatedItems = recalcItemsForMpp(project.items, project.elements, preset.mpp)
-            const n = updatedItems.filter(it => !!it.elementId).length
-            setProject(p => ({
-              ...p,
-              calibration: { mpp: preset.mpp, label: preset.label },
-              items: recalcItemsForMpp(p.items, p.elements, preset.mpp),
-            }))
+            const n = rescaleActiveSheet(preset.mpp, preset.label)
             showToast(`Scale set to ${preset.label} — ${n} item${n !== 1 ? 's' : ''} recalculated ✓`)
           }}
         >
@@ -4435,27 +4538,8 @@ export default function TakeoffPage() {
 
         <input type="file" accept="image/*,application/pdf,.pdf" ref={fileInputRef} style={{ display: 'none' }} onChange={handleImageLoad} />
         <button style={btnStyle} onClick={() => fileInputRef.current?.click()} disabled={pdfLoading}>
-          {pdfLoading ? '⏳ Loading…' : '🖼 Load Plan'}
+          {pdfLoading ? '⏳ Loading…' : (project.sheets?.length ? '🖼 Add Plan' : '🖼 Load Plan')}
         </button>
-
-        {/* PDF page navigation */}
-        {pdfTotalPages > 1 && (
-          <>
-            <button style={{ ...btnStyle, padding: '6px 8px' }}
-              disabled={pdfCurrentPage <= 1 || pdfLoading}
-              onClick={() => renderPdfPage(pdfCurrentPage - 1)}>
-              ◀
-            </button>
-            <span style={{ fontSize: 12, color: '#c8d8a8', whiteSpace: 'nowrap' }}>
-              p.{pdfCurrentPage}/{pdfTotalPages}
-            </span>
-            <button style={{ ...btnStyle, padding: '6px 8px' }}
-              disabled={pdfCurrentPage >= pdfTotalPages || pdfLoading}
-              onClick={() => renderPdfPage(pdfCurrentPage + 1)}>
-              ▶
-            </button>
-          </>
-        )}
 
         {/* Zoom controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -4714,6 +4798,35 @@ export default function TakeoffPage() {
           ref={containerRef}
           style={{ flex: 1, overflow: 'hidden', position: 'relative', background: 'var(--to-bg)' }}
         >
+          {/* Sheets: each plan has its own picture, its own scale and its own drawings */}
+          {(project.sheets?.length ?? 0) > 0 && (
+            <div style={{ position: 'absolute', left: 8, bottom: 8, right: 150, zIndex: 5, display: 'flex', alignItems: 'center', gap: 4, overflowX: 'auto', padding: '4px 6px', background: 'var(--to-panel)', border: '1px solid var(--to-border)', borderRadius: 8, boxShadow: '0 2px 10px rgba(0,0,0,0.25)' }}>
+              {project.sheets!.map(s => {
+                const on = s.id === activeSheetId
+                return (
+                  <div key={s.id} style={{ display: 'flex', alignItems: 'center', flexShrink: 0, borderRadius: 6, border: '1px solid ' + (on ? '#7ab533' : 'var(--to-border)'), background: on ? 'rgba(122,181,51,0.18)' : 'transparent' }}>
+                    <button
+                      onClick={() => switchSheet(s.id)}
+                      onDoubleClick={() => renameSheetPrompt(s.id)}
+                      title={s.name + ' · scale ' + (s.calibration.label ?? 'custom') + (s.scaleSet ? '' : ' (not set yet)') + ' · double-click to rename'}
+                      style={{ background: 'none', border: 'none', color: 'var(--to-text)', fontSize: 12, fontWeight: on ? 700 : 500, padding: '4px 8px', cursor: 'pointer', whiteSpace: 'nowrap', maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {s.name}{!s.scaleSet && <span style={{ color: '#f39c12' }}> ⚠</span>}
+                    </button>
+                    {on && <span style={{ fontSize: 10, color: 'var(--to-muted)' }}>{s.calibration.label ?? 'custom'}</span>}
+                    <button onClick={() => deleteSheetConfirm(s.id)} title="Remove this sheet and everything drawn on it"
+                      style={{ background: 'none', border: 'none', color: 'var(--to-muted)', fontSize: 13, padding: '2px 6px', cursor: 'pointer' }}>×</button>
+                  </div>
+                )
+              })}
+              <button onClick={() => fileInputRef.current?.click()} disabled={pdfLoading} title="Add another plan as a new sheet"
+                style={{ ...btnStyle, padding: '4px 10px', fontSize: 11, flexShrink: 0 }}>+ Plan</button>
+            </div>
+          )}
+          {sheetImageMissing && activeSheetId && (
+            <div style={{ position: 'absolute', top: 50, left: '50%', transform: 'translateX(-50%)', zIndex: 5, background: '#fff7e6', border: '1px solid #f0c080', color: '#7a4a00', borderRadius: 8, padding: '8px 14px', fontSize: 12, maxWidth: 420, textAlign: 'center' }}>
+              The picture for <strong>{sheetName(project, activeSheetId)}</strong> is not on this device. Press <strong>Add Plan</strong> to load it again: it fills this sheet and keeps its drawings and scale.
+            </div>
+          )}
           <svg
             ref={svgRef}
             width={svgSize.w}
@@ -4771,10 +4884,10 @@ export default function TakeoffPage() {
               })()}
 
               {/* Drawn elements — skip phases toggled hidden */}
-              {project.elements.filter(el => !hiddenPhases.has(el.phase)).map(renderElement)}
+              {elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)).map(renderElement)}
 
               {/* Electrical points — a coloured dot with its letters; a star marks a special fitting. Drag one in Select mode to move it. */}
-              {!hiddenPhases.has('Electrics') && electricPoints.map(pt => {
+              {!hiddenPhases.has('Electrics') && electricPoints.filter(pt => onActiveSheet(pt, project)).map(pt => {
                 const g = POINT_BY_ID[pt.typeId]?.group
                 const r = 10 / zoom
                 const chosen = pt.id === selectedElectricPointId
@@ -4797,7 +4910,7 @@ export default function TakeoffPage() {
                   handleSvgClick (which would add a draw point in line/polygon mode). */}
               {selectedId && (() => {
                 const el = project.elements.find(e => e.id === selectedId)
-                if (!el) return null
+                if (!el || !onActiveSheet(el, project)) return null
                 if (hiddenPhases.has(el.phase)) return null   // hide handles when phase is toggled off
                 const handles = getElVertexHandles(el)
                 const hr  = 5 / zoom    // handle radius — stays constant screen size
@@ -4864,7 +4977,7 @@ export default function TakeoffPage() {
 
           {/* ── Layers panel — top of canvas, only shown when there are drawn elements ── */}
           {(() => {
-            const drawnPhases = livePhaseNames.filter(ph => project.elements.some(el => el.phase === ph))
+            const drawnPhases = livePhaseNames.filter(ph => elementsOnActiveSheet(project).some(el => el.phase === ph))
             if (drawnPhases.length === 0) return null
             const hiddenCount = drawnPhases.filter(ph => hiddenPhases.has(ph)).length
             return (
@@ -4987,7 +5100,7 @@ export default function TakeoffPage() {
                 {SCALE_PRESETS.filter(s => s.mpp > 0).map(s => (
                   <button key={s.label} style={{ ...btnStyle, fontSize: 11 }}
                     onClick={() => {
-                      setProject(p => ({ ...p, calibration: { mpp: s.mpp, label: s.label } }))
+                      rescaleActiveSheet(s.mpp, s.label)
                       setShowCalib(false)
                     }}>
                     {s.label}

@@ -17,7 +17,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { TakeoffProject } from './takeoff-types'
+import type { TakeoffProject, TakeoffSheet } from './takeoff-types'
 
 // ── DB row shape ──────────────────────────────────────────────────────────────
 
@@ -27,7 +27,8 @@ export interface TakeoffProjectRow {
   name:        string
   address:     string
   job_type:    string
-  calibration: TakeoffProject['calibration']
+  /** The scale of the showing sheet. The sheets (names, scales) and which one is showing ride along inside it, so no new database column is needed. */
+  calibration: TakeoffProject['calibration'] & { sheets?: TakeoffSheet[]; activeSheetId?: string }
   elements:    TakeoffProject['elements']
   items:       TakeoffProject['items']
   created_at:  string
@@ -46,7 +47,7 @@ function projectToRow(
     name:        project.name,
     address:     project.address,
     job_type:    project.jobType,
-    calibration: project.calibration,
+    calibration: project.sheets?.length ? { ...project.calibration, sheets: project.sheets, activeSheetId: project.activeSheetId } : project.calibration,
     elements:    project.elements,
     items:       project.items,
     updated_at:  project.updatedAt,
@@ -59,7 +60,8 @@ function rowToProject(row: TakeoffProjectRow): Omit<TakeoffProject, 'planImageUr
     name:        row.name,
     address:     row.address,
     jobType:     row.job_type,
-    calibration: row.calibration,
+    calibration: { mpp: row.calibration?.mpp ?? 0.0265, label: row.calibration?.label } as TakeoffProject['calibration'],
+    ...(row.calibration?.sheets?.length ? { sheets: row.calibration.sheets, activeSheetId: row.calibration.activeSheetId } : {}),
     elements:    row.elements ?? [],
     items:       row.items ?? [],
     createdAt:   row.created_at,

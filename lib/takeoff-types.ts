@@ -105,6 +105,8 @@ export interface DrawnElement {
   volume?:     number   // m³
   qty?:        number   // count
   unit?:       string   // 'm', 'm²', 'm³', 'nr', 'item'
+  /** the sheet (plan) it was drawn on; undefined = the first sheet (drawn before there were sheets) */
+  sheetId?:    string
 }
 
 // ── Wall openings ─────────────────────────────────────────────────────────────
@@ -325,6 +327,15 @@ export interface ScaleCalibration {
   label?: string
 }
 
+/** One plan in a take-off: its own picture (kept on this device, see lib/takeoff-sheet-images.ts) and its own scale. Drawings belong to the sheet they were drawn on. */
+export interface TakeoffSheet {
+  id:          string
+  name:        string
+  calibration: ScaleCalibration
+  /** the scale has been set for this sheet (a new sheet starts at 1:100 until it is) */
+  scaleSet:    boolean
+}
+
 export const SCALE_PRESETS: { label: string; mpp: number }[] = [
   { label: '1:50  (A3)',   mpp: 0.05  / 50   },    // 1px ≈ 0.05m at 50dpi — approximate
   { label: '1:100 (A3)',   mpp: 0.10  / 50   },
@@ -354,7 +365,10 @@ export interface TakeoffProject {
   name:         string
   address:      string
   jobType:      string
-  planImageUrl?: string  // data: URI or object URL
+  planImageUrl?: string  // data: URI or object URL (only a project from before sheets, until it is moved into Sheet 1)
+  /** The plans (sheets) in this take-off. Empty/undefined until a plan is loaded. `calibration` below is always the ACTIVE sheet's scale. */
+  sheets?:        TakeoffSheet[]
+  activeSheetId?: string
   calibration:  ScaleCalibration
   elements:     DrawnElement[]
   items:        TakeoffItem[]

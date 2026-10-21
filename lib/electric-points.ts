@@ -9,6 +9,8 @@ export interface ElectricPoint {
   /** where on the drawing (the plan's own pixel coordinates) */
   x: number
   y: number
+  /** the sheet (plan) the point was placed on; undefined = the first sheet */
+  sheetId?: string
   /** a special fitting on this point: the fitting kind and what it is called */
   fitting?: { typeId: string; name: string }
 }
