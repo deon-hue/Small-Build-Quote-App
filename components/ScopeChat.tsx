@@ -1,6 +1,9 @@
 'use client'
 
 import { parseMessage, scopeFromReply } from '@/lib/scope-parse'
+import { uploadQuoteDocument, fetchQuoteDocuments, signedQuoteDocumentUrl } from '@/lib/quote-documents'
+import { showUrlDocument } from '@/lib/open-document'
+import type { QuoteDocument } from '@/lib/types'
 import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useSpeechToText } from './useSpeechToText'
@@ -51,6 +54,8 @@ interface Props {
   initialScope?: string
   /** The estimate is being built from the scope right now: the Build Estimate buttons say so and cannot be pressed again */
   building?: boolean
+  /** Called with the quote's saved files whenever the chat adds one, so the page's own Attachments list stays in step */
+  onFilesChanged?: (docs: QuoteDocument[]) => void
 }
 
 // ── Job-type opening questions ────────────────────────────────────────────────
@@ -178,8 +183,15 @@ const MAX_TOTAL_BASE64 = 4 * 1024 * 1024        // 4MB total base64 payload ceil
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function ScopeChat({ quoteId, jobType, address, phases, onInsert, onClose, onBuildEstimate, embedded = false, initialScope, building = false }: Props) {
+export default function ScopeChat({ quoteId, jobType, address, phases, onInsert, onClose, onBuildEstimate, embedded = false, initialScope, building = false, onFilesChanged }: Props) {
   const supabase = createClient()
+  // Files are saved against the quote (its real id, or a per-session draft key that is linked to the quote when it is saved). Never the shared literal 'draft'.
+  const [localKey] = useState(() => 'draft-' + Math.random().toString(36).slice(2, 10))
+  const fileKey = quoteId || localKey
+  const [savedFiles, setSavedFiles] = useState<QuoteDocument[]>([])
+  useEffect(() => { fetchQuoteDocuments(supabase, fileKey).then(setSavedFiles).catch(() => {}) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // tell the page whenever the quote's saved files change, so its own Attachments list stays in step
+  useEffect(() => { if (savedFiles.length > 0) onFilesChanged?.(savedFiles) }, [savedFiles]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -319,21 +331,44 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
   async function uploadToStorage(att: AttachedFile, uploadable: File | Blob) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    const safeName  = att.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-    const path      = `${user.id}/${quoteId || 'draft'}/${Date.now()}-${safeName}`
-    const { data }  = await supabase.storage
-      .from('quote-documents')
-      .upload(path, uploadable, { contentType: att.mimeType })
-    if (!data) return
-    setAttachments(prev => prev.map(a => a.id === att.id ? { ...a, storageKey: data.path } : a))
-    await supabase.from('quote_documents').insert({
-      user_id:      user.id,
-      quote_id:     quoteId || 'draft',
-      filename:     att.name,
-      storage_path: data.path,
-      mime_type:    att.originalType,
-      file_size:    att.size,
-    })
+    const file = uploadable instanceof File ? uploadable : new File([uploadable], att.name, { type: att.mimeType })
+    const result = await uploadQuoteDocument(supabase, user.id, fileKey, file, 'plan', '')
+    if (!('document' in result)) return
+    const doc = result.document
+    setAttachments(prev => prev.map(x => x.id === att.id ? { ...x, storageKey: doc.storagePath } : x))
+    setSavedFiles(prev => (prev.some(x => x.id === doc.id) ? prev : [...prev, doc]))
+  }
+
+  /** Opens one of the quote's saved files so you can look at it while you work on the scope */
+  async function openSaved(doc: QuoteDocument) {
+    const url = await signedQuoteDocumentUrl(supabase, doc.storagePath)
+    if (!url) { alert('Could not open that file.'); return }
+    if (!showUrlDocument(url, { title: doc.label || doc.fileName || 'Attachment', mime: doc.mimeType })) window.open(url, '_blank')
+  }
+
+  /** Hands one of the quote's saved files back to the AI: it is added to your next message, so the AI can read the plan again while it changes the scope */
+  async function addExistingDoc(doc: QuoteDocument) {
+    if (attachments.some(x => x.storageKey === doc.storagePath)) return
+    if (attachments.length >= MAX_ATTACH) { alert(`Max ${MAX_ATTACH} files per message. Remove some first.`); return }
+    setProcessing(true)
+    try {
+      const url = await signedQuoteDocumentUrl(supabase, doc.storagePath)
+      if (!url) throw new Error('no link')
+      const blob = await (await fetch(url)).blob()
+      const isPdf = doc.mimeType === 'application/pdf' || /\.pdf$/i.test(doc.fileName)
+      const type = isPdf ? 'application/pdf' : (blob.type || doc.mimeType || 'image/jpeg')
+      const isImage = !isPdf && type.startsWith('image/')
+      if (!isImage && !isPdf) { alert(`"${doc.fileName}" is not a plan or photo the AI can read (images and PDFs only).`); return }
+      const file = new File([blob], doc.fileName, { type })
+      if (file.size > (isPdf ? MAX_PDF_BYTES : MAX_FILE_BYTES)) { alert(`"${doc.fileName}" is too large to send to the AI again.`); return }
+      const dataBase64 = isImage ? await compressImage(file) : await readAsBase64(file)
+      const att: AttachedFile = { id: Math.random().toString(36).slice(2, 9), name: doc.fileName, mimeType: isImage ? 'image/jpeg' : 'application/pdf', originalType: type, dataBase64, size: file.size, isImage, storageKey: doc.storagePath }
+      setAttachments(prev => [...prev, att])
+    } catch {
+      alert(`Could not load "${doc.fileName}" for the AI. Try again.`)
+    } finally {
+      setProcessing(false)
+    }
   }
 
   // ── Send ───────────────────────────────────────────────────
@@ -556,6 +591,27 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
           )}
         </div>
 
+        {/* ── Files saved on this quote: view them, or hand them back to the AI ── */}
+        {savedFiles.length > 0 && (
+          <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)', background: '#f7f9f4', flexShrink: 0, maxHeight: 150, overflowY: 'auto' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>📎 Files saved on this quote ({savedFiles.length})</div>
+            {savedFiles.map(d => {
+              const ready = attachments.some(x => x.storageKey === d.storagePath)
+              return (
+                <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3, fontSize: 11.5 }}>
+                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={d.fileName}>{d.fileName}</span>
+                  <button type="button" onClick={() => openSaved(d)} style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 5, padding: '2px 8px', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>View</button>
+                  <button type="button" onClick={() => addExistingDoc(d)} disabled={ready || processing} title="Add this file to your next message so the AI can read it again"
+                    style={{ background: ready ? '#e8f4dc' : '#fff', border: '1px solid #b8e08a', color: '#3a7a1a', borderRadius: 5, padding: '2px 8px', fontSize: 11, cursor: ready || processing ? 'default' : 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                    {ready ? '✓ Ready to send' : 'Show the AI'}
+                  </button>
+                </div>
+              )
+            })}
+            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>View a file to check it yourself. Show the AI adds it to your next message, so it can read the plan again while it changes the scope.</div>
+          </div>
+        )}
+
         {/* ── Messages ── */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px 4px' }}>
           {messages.map((m, i) => {
@@ -615,7 +671,7 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
                           onClick={() => { onInsert(scope); onClose() }}
                           style={{ flex: 1, background: 'var(--moss)', color: '#fff', border: 'none', borderRadius: 6, padding: '7px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
                         >
-                          ✓ Scope Only
+                          ✓ Update scope only
                         </button>
                       </div>
                     </div>
@@ -713,6 +769,11 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
           flexShrink: 0,
           transition: 'background 0.3s',
         }}>
+          {initialScope?.trim() && onBuildEstimate && (
+            <div style={{ flexBasis: '100%', fontSize: 10.5, color: 'var(--muted)', lineHeight: 1.4 }}>
+              <strong>Update scope only</strong> changes the written scope and leaves every phase and price on the quote as it is. <strong>Build Estimate</strong> replaces all the phases from the scope.
+            </div>
+          )}
           {readyToBuild && (
             <div style={{ fontSize: 11, color: '#3a7a1a', fontWeight: 600, alignSelf: 'center', flex: 1 }}>
               ✅ Interview complete — choose an action
@@ -778,7 +839,7 @@ export default function ScopeChat({ quoteId, jobType, address, phases, onInsert,
               transition: 'all 0.2s',
             }}
           >
-            ✓ Scope Only
+            ✓ Update scope only
           </button>
         </div>
 

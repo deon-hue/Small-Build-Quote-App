@@ -23,7 +23,7 @@ import { createClient } from '@/lib/supabase/client'
 import ScopeChat from '@/components/ScopeChat'
 import QuoteAttachments from '@/components/QuoteAttachments'
 import QuickQuoteItemsEditor, { quickItemsTotals } from '@/components/QuickQuoteItemsEditor'
-import { reassignQuoteDocuments } from '@/lib/quote-documents'
+import { reassignQuoteDocuments, reassignDraftDocuments } from '@/lib/quote-documents'
 import type { QuoteDocument, QuoteMiscItem } from '@/lib/types'
 import ScopeEditor from '@/components/ScopeEditor'
 
@@ -173,6 +173,7 @@ export default function QuickQuotePage() {
       })
       await upsertClientFromQuote(customer)
       if (attachments.length) await reassignQuoteDocuments(createClient(), attachments.map(a => a.id), newQuote.id)
+      await reassignDraftDocuments(createClient(), draftKey, newQuote.id)
       alert(`Quick quote saved! Reference: ${newQuote.ref}`)
       router.push('/quotes')
     } catch (err) {
@@ -476,7 +477,8 @@ export default function QuickQuotePage() {
       {/* ── AI Scope Chat modal ── */}
       {showChat && (
         <ScopeChat
-          quoteId={null}
+          quoteId={draftKey}
+          onFilesChanged={docs => setAttachments(prev => { const have = new Set(prev.map(a => a.id)); const add = docs.filter(d => !have.has(d.id)); return add.length ? [...prev, ...add] : prev })}
           jobType={jobType}
           address={custAddr}
           phases={[]}

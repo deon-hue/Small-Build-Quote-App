@@ -91,6 +91,17 @@ export async function reassignQuoteDocuments(
   await sb.from('quote_documents').update({ quote_id: realQuoteId }).in('id', ids)
 }
 
+/** Points every file saved under a not-yet-saved quote's own draft key at the quote's real id, the first time it is saved. The draft key is made up per session ('draft-' plus a random id), so this can
+ *  never touch another quote's files; the bare shared 'draft' is refused. Used for files added in the AI scope chat, which may not be in the page's own list of attachments. */
+export async function reassignDraftDocuments(
+  sb: SupabaseClient,
+  draftKey: string,
+  realQuoteId: string,
+): Promise<void> {
+  if (!draftKey || draftKey === 'draft' || !draftKey.startsWith('draft-')) return
+  await sb.from('quote_documents').update({ quote_id: realQuoteId }).eq('quote_id', draftKey)
+}
+
 function rowToDocument(r: Record<string, unknown>): QuoteDocument {
   return {
     id:          r.id as string,

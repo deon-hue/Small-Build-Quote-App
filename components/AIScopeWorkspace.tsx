@@ -185,10 +185,13 @@ interface Props {
   onBack:           () => void
   generating:       boolean
   initialJobType?:  string
+  /** The quote's real id, or the page's per-session draft key: the chat saves the plans you attach against it */
+  quoteId?:         string
+  onFilesChanged?:  (docs: import('@/lib/types').QuoteDocument[]) => void
 }
 
 export default function AIScopeWorkspace({
-  onBuildEstimate, onScopeChange, onJobTypeChange, onBack, generating, initialJobType,
+  onBuildEstimate, onScopeChange, onJobTypeChange, onBack, generating, initialJobType, quoteId, onFilesChanged,
 }: Props) {
 
   // Phase 1: job selection  Phase 2: scope editor
@@ -406,7 +409,8 @@ export default function AIScopeWorkspace({
             style={{ left: -12, top: 0, bottom: 0, width: 10 }} />}
           <ScopeChat
             embedded
-            quoteId={null}
+            quoteId={quoteId ?? null}
+            onFilesChanged={onFilesChanged}
             jobType={config.label}
             address=""
             phases={[]}

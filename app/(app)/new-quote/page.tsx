@@ -10,7 +10,7 @@ import { PRODUCT_NAME } from '@/lib/product-config'
 import type { QuotePhase, QuoteItem, Quote, TakeoffPhaseMeta, QuoteDocument, QuoteMiscItem } from '@/lib/types'
 import QuoteAttachments from '@/components/QuoteAttachments'
 import QuickQuoteItemsEditor from '@/components/QuickQuoteItemsEditor'
-import { reassignQuoteDocuments } from '@/lib/quote-documents'
+import { reassignQuoteDocuments, reassignDraftDocuments } from '@/lib/quote-documents'
 import { itemFromTemplate, estimatorAggregates } from '@/lib/estimator'
 import type { EstimatorItem, EstimatorItemTemplate, MeasurementType } from '@/lib/estimator'
 import { getPhaseEstimatorDefaults } from '@/lib/estimatorDefaults'
@@ -316,6 +316,8 @@ export default function NewQuotePage() {
   // Per-session key so a brand-new, not-yet-saved quote's attachments never collide with
   // a different abandoned draft's — see lib/quote-documents.ts.
   const [draftKey] = useState(() => 'draft-' + uid())
+  /** files the AI scope chat saves are added to the quote's Attachments list too */
+  const mergeChatFiles = (docs: QuoteDocument[]) => setAttachments(prev => { const have = new Set(prev.map(a => a.id)); const add = docs.filter(d => !have.has(d.id)); return add.length ? [...prev, ...add] : prev })
   const [isLockedQuote, setIsLockedQuote] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -930,6 +932,7 @@ export default function NewQuotePage() {
         const newQuote = await addQuote(qData)
         await upsertClientFromQuote(customer)
         if (attachments.length) await reassignQuoteDocuments(createClient(), attachments.map(a => a.id), newQuote.id)
+        await reassignDraftDocuments(createClient(), draftKey, newQuote.id)
         alert('Saved as draft — ref: ' + newQuote.ref)
       }
     } finally {
@@ -1567,6 +1570,7 @@ export default function NewQuotePage() {
         const newQuote = await addQuote(qData)
         await upsertClientFromQuote(customer)
         if (attachments.length) await reassignQuoteDocuments(createClient(), attachments.map(a => a.id), newQuote.id)
+        await reassignDraftDocuments(createClient(), draftKey, newQuote.id)
         alert('Quote saved! Reference: ' + newQuote.ref)
       }
       setCustName(''); setCustAddr(''); setCustEmail(''); setCustPhone('')
@@ -1721,6 +1725,8 @@ export default function NewQuotePage() {
           onBack={() => setStep('landing')}
           generating={generatingPhases}
           initialJobType={jobType !== 'Rear Extension' ? jobType : undefined}
+          quoteId={editingId || draftKey}
+          onFilesChanged={mergeChatFiles}
         />
         {/* Interview is now embedded in AIScopeWorkspace — no separate modal needed */}
       </>
@@ -2209,7 +2215,8 @@ export default function NewQuotePage() {
 
       {showScopeChat && (
         <ScopeChat
-          quoteId={editingId}
+          quoteId={editingId || draftKey}
+          onFilesChanged={mergeChatFiles}
           jobType={jobType}
           address={custAddr}
           phases={phases.map(p => p.phase)}

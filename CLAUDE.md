@@ -256,6 +256,10 @@ go through `lib/client-items.ts` (folds any old "Profit" rows into the other row
   `/get-quote/<name>-test` page (public per `middleware.ts`), delete it before committing, and ask the user to
   check the Take-off flow live.
 
+## AI scope chat and quote files (REQUIRED if you touch `components/ScopeChat.tsx`)
+
+Plans and photos attached in the AI scope chat are saved as the quote's own attachments (`uploadQuoteDocument`, category plan) against `quoteId || localKey`, where the key is the quote's real id or the page's per-session `draft-…` key (NEVER the bare shared literal 'draft': files saved that way belong to no quote and can never be shown). The pages pass `quoteId={editingId || draftKey}` and `onFilesChanged` (so the quote's Attachments list stays in step), and on the first save `reassignDraftDocuments` links everything under the draft key to the new quote (`new-quote` and `quick-quote`, beside `reassignQuoteDocuments`). Opened on a saved quote the chat lists its saved files with View and "Show the AI" (hands the file back to the AI on the next message); "Update scope only" changes the written scope and leaves every phase and price, "Build Estimate" replaces all the phases. Files saved before this change sit under the shared 'draft' key and are not linked to any quote.
+
 ## Client portal: keep the builder's Preview in step (REQUIRED)
 
 The builder's "preview what the client sees" page (`app/(app)/portal-preview/page.tsx`, reached from a client's Contacts card) is a
