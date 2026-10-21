@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback, ChangeEvent } from 'react'
 import NumInput from '@/components/NumInput'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { makeDebouncedSave, loadTakeoffFromSupabase, saveTakeoffToSupabase, listTakeoffSummaries, deleteTakeoffProject, type TakeoffSummary } from '@/lib/takeoff-sync'
+import { makeDebouncedSave, isEmptyTakeoff, loadTakeoffFromSupabase, saveTakeoffToSupabase, listTakeoffSummaries, deleteTakeoffProject, type TakeoffSummary } from '@/lib/takeoff-sync'
 import { activeSheetIdOf, onActiveSheet, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet } from '@/lib/takeoff-sheets'
 import { putSheetImage, getSheetImage, deleteProjectImages } from '@/lib/takeoff-sheet-images'
 import { uploadSheetPicture, downloadSheetPicture, listCloudPictureSheetIds, deleteProjectPictures } from '@/lib/takeoff-sheet-cloud'
@@ -335,7 +335,7 @@ function saveProject(p: TakeoffProject) {
 function blankProject(): TakeoffProject {
   return {
     id: uid(),
-    name: 'New Take-off',
+    name: '',
     address: '',
     jobType: 'Rear Extension',
     calibration: { mpp: DEFAULT_MPP, label: '1:100' },
@@ -915,7 +915,7 @@ export default function TakeoffPage() {
     // Tier 3 — synchronous write to localStorage (immediate cache + recovery)
     saveProject(p)
     // Tier 3 — debounced async write to Supabase (system of record)
-    if (userId) {
+    if (userId && !isEmptyTakeoff(p)) {
       const sb = createClient()
       debouncedSaveRef.current(sb, p, userId)
     }
@@ -1902,6 +1902,7 @@ export default function TakeoffPage() {
   /** Puts what is on screen into your account now (the automatic save waits a couple of seconds after the last change). */
   async function saveCurrentToCloud(): Promise<boolean> {
     if (!userId) return false
+    if (isEmptyTakeoff(project)) return true   // nothing started: nothing to keep
     const { error } = await saveTakeoffToSupabase(createClient(), { ...project, updatedAt: new Date().toISOString() }, userId)
     return !error
   }
@@ -1958,7 +1959,7 @@ export default function TakeoffPage() {
 
   function startBlankTakeoff(name: string) {
     resetScreenForOtherTakeoff()
-    setProject({ ...blankProject(), name: name.trim() || 'New Take-off' })
+    setProject({ ...blankProject(), name: name.trim() })
     setShowTakeoffList(false)
     setNewTakeoffName('')
   }
@@ -1990,13 +1991,14 @@ export default function TakeoffPage() {
     }
   }
 
-  async function handleNew() {
+  /** Closes the take-off on screen: it is saved to My Take-offs under its name, and the screen is left as a fresh, empty take-off ready for the next job. */
+  async function handleClose() {
+    if (isEmptyTakeoff(project)) { showToast('This take-off is empty: nothing to close. Use My Take-offs to open a job.'); return }
     const kept = await saveCurrentToCloud()
-    const message = kept
-      ? 'Start a new take-off?\n\nThis one is saved to your account: open it again any time from 📁 My Take-offs.'
-      : 'This take-off could NOT be saved to your account just now, so starting a new one would lose it.\n\nStart a new take-off anyway?'
-    if (!confirm(message)) return
+    if (!kept && !confirm('This take-off could NOT be saved to your account just now, so closing it would lose it.\n\nClose it anyway?')) return
+    const name = project.name.trim() || 'Untitled take-off'
     startBlankTakeoff('')
+    showToast(kept ? '"' + name + '" is saved in My Take-offs. Here is a fresh take-off.' : 'Closed without saving.')
   }
 
   // ── Calibration ────────────────────────────────────────────────────────────
@@ -4686,7 +4688,7 @@ export default function TakeoffPage() {
               padding: '3px 6px', borderRadius: 4, border: '1px solid transparent' }}
             title="Click to edit project name"
           >
-            📐 {project.name}
+            📐 {project.name || <span style={{ color: 'var(--to-muted)', fontWeight: 500 }}>Name this take-off…</span>}
           </div>
         )}
 
@@ -4844,8 +4846,8 @@ export default function TakeoffPage() {
         </button>
 
         <button style={{ ...btnStyle, background: '#c0392b33', borderColor: '#c0392b', color: '#e57373' }}
-          onClick={handleNew} title="Start a new take-off. This one is saved and can be opened again from My Take-offs">
-          + New
+          onClick={handleClose} title="Save this take-off under its name in My Take-offs and clear the screen for a fresh one">
+          ✕ Close take-off
         </button>
       </div>
 

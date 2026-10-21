@@ -32,6 +32,14 @@ function metaOf(p: TakeoffProject): TakeoffMeta | undefined {
   return Object.keys(m).length ? m : undefined
 }
 
+/** True for a take-off nobody has started: nothing drawn, priced or loaded and no name, address or customer. These are not saved to the account, so a fresh take-off does not clutter My Take-offs. */
+export function isEmptyTakeoff(p: TakeoffProject): boolean {
+  const name = (p.name ?? '').trim()
+  return !p.elements.length && !p.items.length && !p.sheets?.length
+    && (name === '' || name === 'New Take-off') && !(p.address ?? '').trim()
+    && !p.client && !p.clientId && !p.projectName && !p.takeoffRef && !p.siteAddress
+}
+
 // ── DB row shape ──────────────────────────────────────────────────────────────
 
 export interface TakeoffProjectRow {
