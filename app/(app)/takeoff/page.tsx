@@ -4,9 +4,9 @@ import { useState, useRef, useEffect, useCallback, ChangeEvent } from 'react'
 import NumInput from '@/components/NumInput'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { makeDebouncedSave, loadTakeoffFromSupabase } from '@/lib/takeoff-sync'
+import { makeDebouncedSave, loadTakeoffFromSupabase, saveTakeoffToSupabase, listTakeoffSummaries, deleteTakeoffProject, type TakeoffSummary } from '@/lib/takeoff-sync'
 import { activeSheetIdOf, onActiveSheet, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet } from '@/lib/takeoff-sheets'
-import { putSheetImage, getSheetImage } from '@/lib/takeoff-sheet-images'
+import { putSheetImage, getSheetImage, deleteProjectImages } from '@/lib/takeoff-sheet-images'
 import type { TakeoffSheet } from '@/lib/takeoff-types'
 import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchLabourTrades, fetchPhases, fetchSubPhases, fetchTasks } from '@/lib/back-office-queries'
 import type { BOLabourTrade, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
@@ -770,6 +770,12 @@ export default function TakeoffPage() {
   const [sheetImageMissing, setSheetImageMissing] = useState(false)
   const [imageNonce, setImageNonce] = useState(0)
   const [scheduleSheetFilter, setScheduleSheetFilter] = useState<string>('all')
+  // My Take-offs: the list of take-offs saved to the account
+  const [showTakeoffList, setShowTakeoffList] = useState(false)
+  const [takeoffList, setTakeoffList] = useState<TakeoffSummary[] | null>(null)
+  const [takeoffListError, setTakeoffListError] = useState('')
+  const [newTakeoffName, setNewTakeoffName] = useState('')
+  const [takeoffBusy, setTakeoffBusy] = useState(false)
 
   // Zoom / pan state
   const [zoom, setZoom] = useState(1)
@@ -1827,16 +1833,106 @@ export default function TakeoffPage() {
   }
 
   // ── New project ────────────────────────────────────────────────────────────
-  function handleNew() {
-    if (!confirm('Start a new take-off? Unsaved changes will be lost.')) return
-    const p = blankProject()
-    setProject(p)
+  // ── My Take-offs: the take-offs saved to your account, to open again later ──────────────────────────────────
+  // The screen always works on one take-off (kept on this computer and, a couple of seconds after each change, in your account). These put the one on screen safely away and bring another back.
+
+  /** Puts what is on screen into your account now (the automatic save waits a couple of seconds after the last change). */
+  async function saveCurrentToCloud(): Promise<boolean> {
+    if (!userId) return false
+    const { error } = await saveTakeoffToSupabase(createClient(), { ...project, updatedAt: new Date().toISOString() }, userId)
+    return !error
+  }
+
+  function resetScreenForOtherTakeoff() {
     setPlanImage(null)
+    setCanvasImgSize(null)
+    setSheetImageMissing(false)
     setDrawPoints([])
     setIsDrawing(false)
     setSelectedId(null)
     setEditingElement(null)
     setEditingItem(null)
+    setPhaseDefaults(null)
+    setSelectedElectricPointId(null)
+    setAssemblyWindowItemId(null)
+    setMeasureDone(null)
+    setCalibDrawing(false)
+    setCalibPts([])
+    setScheduleSheetFilter('all')
+    setPanelMode('schedule')
+    setZoom(1)
+    setPanOffset({ x: 0, y: 0 })
+    sheetImageLoadedOnce.current = false
+  }
+
+  async function openTakeoffList() {
+    setShowTakeoffList(true)
+    setTakeoffList(null)
+    setTakeoffListError('')
+    if (!userId) { setTakeoffListError('Sign in to see your saved take-offs.'); return }
+    const saved = await saveCurrentToCloud()
+    if (!saved) setTakeoffListError('Could not save this take-off to your account just now, so it may be missing from the list. It is still on this computer.')
+    try { setTakeoffList(await listTakeoffSummaries(createClient(), userId)) }
+    catch { setTakeoffList([]); setTakeoffListError('Could not load your saved take-offs. Check your connection and try again.') }
+  }
+
+  async function openSavedTakeoff(id: string) {
+    if (!userId || takeoffBusy) return
+    if (id === project.id) { setShowTakeoffList(false); return }
+    setTakeoffBusy(true)
+    try {
+      await saveCurrentToCloud()   // what is on screen is put away first
+      const remote = await loadTakeoffFromSupabase(createClient(), id, userId)
+      if (!remote) { alert('Could not open that take-off. Check your connection and try again.'); return }
+      resetScreenForOtherTakeoff()
+      setProject({ ...remote, updatedAt: new Date().toISOString() })
+      setShowTakeoffList(false)
+      showToast('Opened "' + (remote.name || 'take-off') + '".')
+    } finally {
+      setTakeoffBusy(false)
+    }
+  }
+
+  function startBlankTakeoff(name: string) {
+    resetScreenForOtherTakeoff()
+    setProject({ ...blankProject(), name: name.trim() || 'New Take-off' })
+    setShowTakeoffList(false)
+    setNewTakeoffName('')
+  }
+
+  async function startNewTakeoffFromList() {
+    if (takeoffBusy) return
+    setTakeoffBusy(true)
+    try {
+      await saveCurrentToCloud()
+      startBlankTakeoff(newTakeoffName)
+    } finally {
+      setTakeoffBusy(false)
+    }
+  }
+
+  async function deleteSavedTakeoff(t: TakeoffSummary) {
+    if (!userId || takeoffBusy) return
+    if (!window.confirm('Delete "' + t.name + '"?\n\nIts drawings, priced items and sheets are removed from your account, and its plans from this computer. This cannot be undone.')) return
+    setTakeoffBusy(true)
+    try {
+      await deleteTakeoffProject(createClient(), t.id, userId)
+      deleteProjectImages(t.id)
+      setTakeoffList(list => (list ? list.filter(x => x.id !== t.id) : list))
+      if (t.id === project.id) startBlankTakeoff('')   // the one on screen was deleted: start a blank one
+      showToast('Deleted "' + t.name + '".')
+    } finally {
+      setTakeoffBusy(false)
+    }
+  }
+
+  async function handleNew() {
+    const kept = await saveCurrentToCloud()
+    const message = kept
+      ? 'Start a new take-off?\n\nThis one is saved to your account: open it again any time from 📁 My Take-offs.'
+      : 'This take-off could NOT be saved to your account just now, so starting a new one would lose it.\n\nStart a new take-off anyway?'
+    if (!confirm(message)) return
+    startBlankTakeoff('')
   }
 
   // ── Calibration ────────────────────────────────────────────────────────────
@@ -4623,11 +4719,11 @@ export default function TakeoffPage() {
         </div>
 
         <input type="file" accept=".json" ref={importJsonRef} style={{ display: 'none' }} onChange={handleImportJson} />
-        <button style={btnStyle} onClick={() => importJsonRef.current?.click()}>
+        <button style={btnStyle} onClick={() => importJsonRef.current?.click()} title="Load a take-off from a backup file (JSON). Your saved take-offs are under My Take-offs.">
           📂 Open
         </button>
 
-        <button style={btnStyle} onClick={() => exportJSON(project)}>
+        <button style={btnStyle} onClick={() => exportJSON(project)} title="Download a backup file of this take-off (drawings and pricing, not the plan pictures)">
           💾 JSON
         </button>
         <button style={btnStyle} onClick={() => exportCSV(project)}>
@@ -4679,8 +4775,12 @@ export default function TakeoffPage() {
 
         <div style={{ width: 1, height: 28, background: 'var(--to-border)' }} />
 
+        <button style={btnStyle} onClick={openTakeoffList} title="Your saved take-offs: open one to carry on, or start a new one">
+          📁 My Take-offs
+        </button>
+
         <button style={{ ...btnStyle, background: '#c0392b33', borderColor: '#c0392b', color: '#e57373' }}
-          onClick={handleNew}>
+          onClick={handleNew} title="Start a new take-off. This one is saved and can be opened again from My Take-offs">
           + New
         </button>
       </div>
@@ -5309,6 +5409,56 @@ export default function TakeoffPage() {
               >
                 Clear Drawings
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── My Take-offs: open a saved take-off, or start a new one ─────────────────────────────────────── */}
+      {showTakeoffList && (
+        <div style={{ position: 'fixed', inset: 0, background: 'var(--to-scrim)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}
+          onClick={() => { if (!takeoffBusy) setShowTakeoffList(false) }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--to-panel)', border: '1px solid var(--to-border)', borderRadius: 12, padding: 22, width: 640, maxWidth: '94vw', maxHeight: '86vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(0,0,0,0.55)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
+              <h3 style={{ margin: 0, color: 'var(--to-text)', fontSize: 17, flex: 1 }}>📁 My Take-offs</h3>
+              <button onClick={() => setShowTakeoffList(false)} disabled={takeoffBusy} style={{ ...btnStyle, padding: '4px 10px' }}>Close</button>
+            </div>
+            <p style={{ margin: '0 0 12px', color: 'var(--to-muted)', fontSize: 12, lineHeight: 1.5 }}>
+              Each take-off is saved to your account as you work. Open one to carry on where you left off. The plan pictures stay on the computer where you loaded them.
+            </p>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <input value={newTakeoffName} onChange={e => setNewTakeoffName(e.target.value)} placeholder="Name for a new take-off, e.g. 14 Elm Road rear extension"
+                onKeyDown={e => { if (e.key === 'Enter') startNewTakeoffFromList() }} style={{ ...inputStyle, flex: 1, height: 32 }} />
+              <button onClick={startNewTakeoffFromList} disabled={takeoffBusy} style={{ ...btnStyle, background: '#2563eb', color: '#fff', borderColor: '#1d4ed8', fontWeight: 600 }}>+ New take-off</button>
+            </div>
+
+            {takeoffListError && <div style={{ fontSize: 12, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '6px 10px', marginBottom: 10 }}>{takeoffListError}</div>}
+
+            <div style={{ overflowY: 'auto', flex: 1, minHeight: 80 }}>
+              {takeoffList === null && !takeoffListError && <div style={{ color: 'var(--to-muted)', fontSize: 13, padding: 16, textAlign: 'center' }}>⏳ Loading your take-offs…</div>}
+              {takeoffList && takeoffList.length === 0 && <div style={{ color: 'var(--to-muted)', fontSize: 13, padding: 16, textAlign: 'center' }}>Nothing saved yet. Your take-offs appear here as you work.</div>}
+              {takeoffList?.map(t => {
+                const current = t.id === project.id
+                return (
+                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', marginBottom: 6, borderRadius: 8, border: '1px solid ' + (current ? '#7ab533' : 'var(--to-border)'), background: current ? 'rgba(122,181,51,0.10)' : 'var(--to-alt)' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--to-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {t.name}{current && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, color: '#7ab533', textTransform: 'uppercase' }}>open now</span>}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--to-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {[t.clientName, t.address, t.jobType].filter(Boolean).join(' · ') || 'No customer or address yet'}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--to-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        Changed {new Date(t.updatedAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        {t.sheetNames.length > 0 && <> · {t.sheetNames.length} sheet{t.sheetNames.length === 1 ? '' : 's'}: {t.sheetNames.join(', ')}</>}
+                      </div>
+                    </div>
+                    <button onClick={() => openSavedTakeoff(t.id)} disabled={takeoffBusy} style={{ ...btnStyle, background: current ? 'transparent' : '#2563eb', color: current ? 'var(--to-text)' : '#fff', borderColor: current ? 'var(--to-border)' : '#1d4ed8', fontWeight: 600 }}>{current ? 'Keep working' : 'Open'}</button>
+                    <button onClick={() => deleteSavedTakeoff(t)} disabled={takeoffBusy} title="Delete this take-off" style={{ ...btnStyle, color: '#e74c3c', borderColor: '#5a1a1a', padding: '6px 9px' }}>🗑</button>
+                  </div>
+                )
+              })}
             </div>
           </div>
         </div>
