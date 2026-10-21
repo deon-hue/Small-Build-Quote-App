@@ -2913,6 +2913,8 @@ export default function TakeoffPage() {
     // a demolition item priced by a calculator (Wall Removal / Knock-Through) is not a task item
     const isDemoCalc       = isDemoPhase && !!demoCalcSub(item)
     const isDemo           = isDemoPhase && !isDemoCalc
+    // Only Wall Removal is sized by the drawn line; the other demolition calculators take typed sizes, so the line is just a marker
+    const _demoMarker      = isDemoCalc && demoCalcSub(item)?.calculatorId !== 'demo-wall-removal-calc'
     const isExtWall        = item.phase === 'External Walls'
     const isIntWall        = item.phase === 'Internal Walls & Partitions' && isLineBased
     const isPlaster        = item.phase === 'Plastering & Boarding' && !_plasterCalc
@@ -2923,7 +2925,7 @@ export default function TakeoffPage() {
     const isDecoCalc       = MARKER_CALC_PHASES.has(item.phase) && !!resolveBuiltAssembly(item)
     // the external render and wall insulation calculators take their first wall's length from the drawn line, so the card shows the length, not a marker
     const _lengthFedCalc    = isDecoCalc && item.phase === 'Plastering & Boarding' && ['plaster-render', 'plaster-insul-wall'].includes(boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id ?? '')
-    const isTaskPhase      = _phaseHasTasks && !isBuildup && !isExtWall && !isPlaster && !isIntWall && !isDemo && !isFoundationLine && !isDecoCalc
+    const isTaskPhase      = _phaseHasTasks && !isBuildup && !isExtWall && !isPlaster && !isIntWall && !isDemo && !isDemoCalc && !isFoundationLine && !isDecoCalc
     const showWallLine     = isLineBased && (isExtWall || isIntWall || isPlaster)
     const hasOpenings      = (isExtWall || isIntWall || isPlaster) && isLineBased
 
@@ -2952,8 +2954,8 @@ export default function TakeoffPage() {
       <AssemblyItemPanel
         name={item.name}
         lengthM={item.length ?? 0}
-        measureLabel={isBoxShape ? 'Size' : isFloorShape ? 'Area' : isDecoCalc && !_lengthFedCalc ? 'Marker' : undefined}
-        measureText={isBoxShape ? (roofBox ? `${(roofBox.lengthMm / 1000).toFixed(2)} × ${(roofBox.widthMm / 1000).toFixed(2)} m` : 'Not drawn') : isFloorShape ? (floorDims ? `${floorDims.areaM2.toFixed(1)} m²` : 'Not drawn') : isDecoCalc && !_lengthFedCalc ? 'rooms are set in the calculator' : undefined}
+        measureLabel={isBoxShape ? 'Size' : isFloorShape ? 'Area' : (isDecoCalc && !_lengthFedCalc) || _demoMarker ? 'Marker' : undefined}
+        measureText={isBoxShape ? (roofBox ? `${(roofBox.lengthMm / 1000).toFixed(2)} × ${(roofBox.widthMm / 1000).toFixed(2)} m` : 'Not drawn') : isFloorShape ? (floorDims ? `${floorDims.areaM2.toFixed(1)} m²` : 'Not drawn') : _demoMarker ? 'sizes are typed in the calculator' : isDecoCalc && !_lengthFedCalc ? 'rooms are set in the calculator' : undefined}
         saved={item.assemblyResult}
         open={assemblyWindowItemId === item.id}
         onOpen={() => setAssemblyWindowItemId(item.id)}
@@ -3765,7 +3767,9 @@ export default function TakeoffPage() {
                 </select>
               </div>
               <div style={{ fontSize: 11, color: 'var(--to-muted)', marginBottom: 8 }}>
-                Priced with its own calculator. The length of the line drawn here is the length of wall taken out: set its height, thickness and what it is made of in the calculator.
+                {_demoMarker
+                  ? 'Priced with its own calculator. The line drawn here is only a marker on the plan: the rooms, waste, buildings and sizes are typed in the calculator.'
+                  : 'Priced with its own calculator. The length of the line drawn here is the length of wall taken out: set its height, thickness and what it is made of in the calculator.'}
               </div>
               {renderAssemblyPanel({})}
             </>
