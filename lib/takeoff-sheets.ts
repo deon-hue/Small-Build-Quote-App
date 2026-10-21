@@ -47,6 +47,15 @@ export function makeSheet(id: string, name: string, calibration: ScaleCalibratio
   return { id, name: name.trim() || 'Plan', calibration: { ...calibration }, scaleSet }
 }
 
+/** Records (or, with no value, forgets) how big a pixel of the sheet's picture is on paper. */
+export function setSheetPaper(p: TakeoffProject, sheetId: string, paper: string | undefined, mmPerPx: number | undefined): TakeoffProject {
+  return { ...p, sheets: p.sheets?.map(s => {
+    if (s.id !== sheetId) return s
+    const { paperMmPerPx: _a, paper: _b, ...rest } = s
+    return mmPerPx ? { ...rest, paperMmPerPx: mmPerPx, ...(paper ? { paper } : {}) } : rest
+  }) }
+}
+
 /** A sheet name from a file name ("Ground floor.pdf" -> "Ground floor"), with the page number for a PDF page. */
 export function sheetNameFromFile(fileName: string, page?: number, pages?: number): string {
   const base = fileName.replace(/\.[a-z0-9]+$/i, '').replace(/[_]+/g, ' ').trim() || 'Plan'

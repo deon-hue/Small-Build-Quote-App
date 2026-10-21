@@ -5,7 +5,8 @@ import NumInput from '@/components/NumInput'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { makeDebouncedSave, isEmptyTakeoff, isUuid, newProjectId, loadTakeoffFromSupabase, saveTakeoffToSupabase, listTakeoffSummaries, deleteTakeoffProject, type TakeoffSummary } from '@/lib/takeoff-sync'
-import { activeSheetIdOf, onActiveSheet, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet } from '@/lib/takeoff-sheets'
+import { activeSheetIdOf, onActiveSheet, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet, setSheetPaper } from '@/lib/takeoff-sheets'
+import { PDF_RENDER_MM_PER_PX, PAPER_SIZES, SCALE_DENOMS, scaleLabel, denomFromLabel, mppForScale, paperFromMm, inferPdfPaper, mmPerPxForPaper } from '@/lib/takeoff-paper'
 import { putSheetImage, getSheetImage, deleteProjectImages } from '@/lib/takeoff-sheet-images'
 import { uploadSheetPicture, downloadSheetPicture, listCloudPictureSheetIds, deleteProjectPictures } from '@/lib/takeoff-sheet-cloud'
 import type { TakeoffSheet } from '@/lib/takeoff-types'
@@ -642,6 +643,9 @@ export default function TakeoffPage() {
 
   // Calibration dialog
   const [showCalib, setShowCalib] = useState(false)
+  // Scale presets need the paper size: asked once per plan that is not a PDF page of a known size
+  const [showPaperModal, setShowPaperModal] = useState(false)
+  const [pendingDenom, setPendingDenom] = useState<number | null>(null)
   const [calibDrawing, setCalibDrawing] = useState(false)
   const [calibPts, setCalibPts] = useState<TakeoffPoint[]>([])
   const [calibReal, setCalibReal] = useState('')
@@ -1618,8 +1622,11 @@ export default function TakeoffPage() {
   // Every plan loaded (and every PDF page chosen) becomes a sheet with its own picture, scale and drawings. The pictures are kept on this device (lib/takeoff-sheet-images.ts), not in the project.
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async function renderPdfPageToDataUrl(pdf: any, pageNum: number): Promise<string> {
+  async function renderPdfPageToDataUrl(pdf: any, pageNum: number): Promise<{ url: string; paper?: string; mmPerPx: number }> {
     const page = await pdf.getPage(pageNum)
+    // the page's size on paper (in 1/72 inch points), so the scale presets know what a pixel of the picture is
+    const natural = page.getViewport({ scale: 1.0 })
+    const paper = paperFromMm(Math.max(natural.width, natural.height) * 25.4 / 72, Math.min(natural.width, natural.height) * 25.4 / 72)?.name
     const viewport = page.getViewport({ scale: 2.0 })
     const canvas = document.createElement('canvas')
     canvas.width = viewport.width
@@ -1627,11 +1634,11 @@ export default function TakeoffPage() {
     const ctx = canvas.getContext('2d')
     if (!ctx) throw new Error('no canvas')
     await page.render({ canvasContext: ctx, viewport }).promise
-    return canvas.toDataURL('image/jpeg', 0.9)
+    return { url: canvas.toDataURL('image/jpeg', 0.9), paper, mmPerPx: PDF_RENDER_MM_PER_PX }
   }
 
   /** Adds loaded plans as new sheets, or, when the showing sheet's picture is missing from this device, puts the first one back into that sheet (keeping its drawings and scale) */
-  async function addPlansAsSheets(plans: { name: string; url: string }[]) {
+  async function addPlansAsSheets(plans: { name: string; url: string; paper?: string; mmPerPx?: number }[]) {
     if (plans.length === 0) return
     const hadSheets = (project.sheets?.length ?? 0) > 0
     let savedOnDevice = true
@@ -1639,12 +1646,13 @@ export default function TakeoffPage() {
     if (sheetImageMissing && activeSheetId) {
       savedOnDevice = (await putSheetImage(project.id, activeSheetId, plans[0].url)) && savedOnDevice
       savePictureToAccount(project.id, activeSheetId, plans[0].url)
+      setProject(p => setSheetPaper(p, activeSheetId, plans[0].paper, plans[0].mmPerPx))   // a different picture may have a different paper size
       rest = plans.slice(1)
       setImageNonce(n => n + 1)
     }
     const created: TakeoffSheet[] = []
     for (const pl of rest) {
-      const sheet = makeSheet(uid(), pl.name)
+      const sheet: TakeoffSheet = { ...makeSheet(uid(), pl.name), ...(pl.mmPerPx ? { paperMmPerPx: pl.mmPerPx, ...(pl.paper ? { paper: pl.paper } : {}) } : {}) }
       savedOnDevice = (await putSheetImage(project.id, sheet.id, pl.url)) && savedOnDevice
       savePictureToAccount(project.id, sheet.id, pl.url)
       created.push(sheet)
@@ -1681,8 +1689,8 @@ export default function TakeoffPage() {
           if (!parsed) { alert('Could not read that list of pages. Type all, or numbers like 1-3, 5.'); return }
           pages = parsed
         }
-        const plans: { name: string; url: string }[] = []
-        for (const n of pages) plans.push({ name: sheetNameFromFile(file.name, n, pdf.numPages), url: await renderPdfPageToDataUrl(pdf, n) })
+        const plans: { name: string; url: string; paper?: string; mmPerPx?: number }[] = []
+        for (const n of pages) { const r = await renderPdfPageToDataUrl(pdf, n); plans.push({ name: sheetNameFromFile(file.name, n, pdf.numPages), url: r.url, paper: r.paper, mmPerPx: r.mmPerPx }) }
         await addPlansAsSheets(plans)
       } else {
         const url = await new Promise<string>((resolve, reject) => {
@@ -1734,6 +1742,34 @@ export default function TakeoffPage() {
     setIsDrawing(false)
     setSelectedElectricPointId(null)
     showToast('Sheet removed. Recovery copy saved.')
+  }
+
+  /** What a pixel of the showing sheet's picture is on paper: what was recorded for the sheet, or worked out when the picture is the size of a PDF page of an A size. Null when it must be asked. */
+  function paperInfoForActiveSheet(): { mmPerPx: number; paper: string } | null {
+    const sh = project.sheets?.find(s => s.id === activeSheetId)
+    if (sh?.paperMmPerPx) return { mmPerPx: sh.paperMmPerPx, paper: sh.paper ?? '' }
+    if (canvasImgSize) return inferPdfPaper(canvasImgSize.w, canvasImgSize.h)
+    return null
+  }
+
+  /** A scale preset (1:150 ...): the real size of a pixel follows from the paper size, so a plan printed at that scale measures right. */
+  function applyScaleDenom(denom: number, info = paperInfoForActiveSheet()) {
+    if (!canvasImgSize) { showToast('Load a plan first, then set its scale.'); return }
+    if (!info) { setPendingDenom(denom); setShowPaperModal(true); return }
+    const label = scaleLabel(denom)
+    const n = rescaleActiveSheet(mppForScale(info.mmPerPx, denom), label)
+    showToast(`Scale set to ${label}${info.paper ? ' on ' + info.paper : ''} — ${n} item${n !== 1 ? 's' : ''} recalculated ✓`)
+  }
+
+  /** The user says what paper this plan is: remembered on the sheet, then any waiting scale is applied. */
+  function choosePaper(paperName: string) {
+    if (!canvasImgSize || !activeSheetId) return
+    const mmPerPx = mmPerPxForPaper(paperName, canvasImgSize.w, canvasImgSize.h)
+    if (!mmPerPx) return
+    setProject(p => setSheetPaper(p, activeSheetId, paperName, mmPerPx))
+    setShowPaperModal(false)
+    if (pendingDenom) applyScaleDenom(pendingDenom, { mmPerPx, paper: paperName })
+    setPendingDenom(null)
   }
 
   /** Sets the showing sheet's scale and remeasures ONLY the drawings on that sheet (the other sheets have their own scales). Returns how many priced items were remeasured. */
@@ -4777,19 +4813,23 @@ export default function TakeoffPage() {
           style={{ ...inputStyle, width: 130, height: 28 }}
           value={project.calibration.label ?? ''}
           onChange={e => {
-            const preset = SCALE_PRESETS.find(s => s.label === e.target.value)
-            if (!preset) return
-            if (preset.mpp === 0) { setShowCalib(true); return }
-            const n = rescaleActiveSheet(preset.mpp, preset.label)
-            showToast(`Scale set to ${preset.label} — ${n} item${n !== 1 ? 's' : ''} recalculated ✓`)
+            if (e.target.value === 'custom') { setShowCalib(true); return }
+            { const d = denomFromLabel(e.target.value); if (d) applyScaleDenom(d) }
           }}
+          title="Scale the plan was printed at. The paper size is used to work out real distances: check it with the paper button next to this, or use Calibrate with a known length."
         >
-          {SCALE_PRESETS.map(s => <option key={s.label} value={s.label}>{s.label}</option>)}
+          {SCALE_DENOMS.map(d => <option key={d} value={scaleLabel(d)}>{scaleLabel(d)}</option>)}
           {/* Show current custom calibration label if it isn't one of the presets */}
-          {project.calibration.label && !SCALE_PRESETS.some(s => s.label === project.calibration.label) && (
+          {project.calibration.label && !SCALE_DENOMS.some(d => scaleLabel(d) === project.calibration.label) && (
             <option value={project.calibration.label}>{project.calibration.label}</option>
           )}
+          <option value="custom">Custom…</option>
         </select>
+        <button style={{ ...btnStyle, padding: '4px 8px', fontSize: 11 }} disabled={!canvasImgSize}
+          onClick={() => { setPendingDenom(null); setShowPaperModal(true) }}
+          title="The paper size this plan is printed on. The scale presets need it to measure correctly.">
+          📄 {paperInfoForActiveSheet()?.paper || 'Paper?'}
+        </button>
 
         <button style={btnStyle} onClick={() => setShowCalib(true)} title="Calibrate scale from drawing">
           📏 Calibrate
@@ -5403,13 +5443,13 @@ export default function TakeoffPage() {
             <div style={{ marginBottom: 16 }}>
               <label style={labelStyle}>Quick Presets</label>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {SCALE_PRESETS.filter(s => s.mpp > 0).map(s => (
-                  <button key={s.label} style={{ ...btnStyle, fontSize: 11 }}
+                {SCALE_DENOMS.map(d => (
+                  <button key={d} style={{ ...btnStyle, fontSize: 11 }}
                     onClick={() => {
-                      rescaleActiveSheet(s.mpp, s.label)
                       setShowCalib(false)
+                      applyScaleDenom(d)
                     }}>
-                    {s.label}
+                    {scaleLabel(d)}
                   </button>
                 ))}
               </div>
@@ -5521,6 +5561,30 @@ export default function TakeoffPage() {
               >
                 Clear Drawings
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Paper size: the scale presets work out real distances from it ──────────────────────────────── */}
+      {showPaperModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'var(--to-scrim)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}
+          onClick={() => { setShowPaperModal(false); setPendingDenom(null) }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--to-panel)', border: '1px solid var(--to-border)', borderRadius: 12, padding: 22, width: 420, maxWidth: '94vw', boxShadow: '0 24px 64px rgba(0,0,0,0.55)' }}>
+            <h3 style={{ margin: '0 0 6px', color: 'var(--to-text)', fontSize: 17 }}>📄 What paper is this plan?</h3>
+            <p style={{ margin: '0 0 14px', color: 'var(--to-muted)', fontSize: 12, lineHeight: 1.5 }}>
+              A plan printed at {pendingDenom ? scaleLabel(pendingDenom) : 'a scale such as 1:100'} is only the right size on the right paper: 1mm on an A1 sheet is not the same distance as 1mm on an A3. Pick the sheet size it was drawn for, and the picture is taken as the whole sheet.
+              Scanned or cropped plans may not match: check a known length with the Measure tool, or use Calibrate.
+            </p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {PAPER_SIZES.map(ps => (
+                <button key={ps.name} onClick={() => choosePaper(ps.name)} style={{ ...btnStyle, fontWeight: 700, padding: '8px 16px', background: paperInfoForActiveSheet()?.paper === ps.name ? 'rgba(122,181,51,0.25)' : undefined }}>
+                  {ps.name}<span style={{ fontWeight: 400, fontSize: 10, marginLeft: 6, color: 'var(--to-muted)' }}>{ps.longMm}×{ps.shortMm}</span>
+                </button>
+              ))}
+            </div>
+            <div style={{ marginTop: 14, textAlign: 'right' }}>
+              <button onClick={() => { setShowPaperModal(false); setPendingDenom(null) }} style={btnStyle}>Cancel</button>
             </div>
           </div>
         </div>

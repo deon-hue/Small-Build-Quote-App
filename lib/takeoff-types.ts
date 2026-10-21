@@ -334,6 +334,10 @@ export interface TakeoffSheet {
   calibration: ScaleCalibration
   /** the scale has been set for this sheet (a new sheet starts at 1:100 until it is) */
   scaleSet:    boolean
+  /** how many mm of paper one pixel of this plan's picture is, once known (a PDF page: always 25.4/144; a plain image: from the paper size the user said). The scale presets need it. */
+  paperMmPerPx?: number
+  /** the paper size name (A1 ...) when known, for display */
+  paper?:      string
 }
 
 export const SCALE_PRESETS: { label: string; mpp: number }[] = [
