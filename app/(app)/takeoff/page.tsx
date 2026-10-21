@@ -4692,6 +4692,16 @@ export default function TakeoffPage() {
           </div>
         )}
 
+        {/* Job buttons sit next to the name so they are always on screen (the right-hand end of this bar runs off narrower screens) */}
+        <button style={btnStyle} onClick={openTakeoffList} title="Your saved take-offs: open one to carry on, or start a new one">
+          📁 My Take-offs
+        </button>
+
+        <button style={{ ...btnStyle, background: '#c0392b33', borderColor: '#c0392b', color: '#e57373', whiteSpace: 'nowrap' }}
+          onClick={handleClose} title="Save this take-off under its name in My Take-offs and clear the screen for a fresh one">
+          ✕ Close take-off
+        </button>
+
         <input
           style={{ ...inputStyle, width: 200, height: 28, fontSize: 12 }}
           placeholder="Address / project ref"
@@ -4839,16 +4849,6 @@ export default function TakeoffPage() {
           {darkMode ? '☀' : '◑'} {darkMode ? 'Light' : 'Dark'}
         </button>
 
-        <div style={{ width: 1, height: 28, background: 'var(--to-border)' }} />
-
-        <button style={btnStyle} onClick={openTakeoffList} title="Your saved take-offs: open one to carry on, or start a new one">
-          📁 My Take-offs
-        </button>
-
-        <button style={{ ...btnStyle, background: '#c0392b33', borderColor: '#c0392b', color: '#e57373' }}
-          onClick={handleClose} title="Save this take-off under its name in My Take-offs and clear the screen for a fresh one">
-          ✕ Close take-off
-        </button>
       </div>
 
       {/* ── Main 3-column layout ─────────────────────────────────────────── */}
