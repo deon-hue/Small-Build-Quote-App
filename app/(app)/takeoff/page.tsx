@@ -4684,6 +4684,19 @@ export default function TakeoffPage() {
                     <span style={{ color: '#6a8a6a' }}>, {fmt2(item.perimeter)}m perim</span>
                   )}
                   {item.drawingRef ? <span style={{ color: '#4a7a4a' }}> [{item.drawingRef}]</span> : ''}
+                  {/* An item whose drawing is gone (deleted by an older version, or removed some other way) says so, and can be removed here */}
+                  {item.elementId && !project.elements.some(e => e.id === item.elementId) && (
+                    <span style={{ marginLeft: 6 }}>
+                      <span style={{ color: '#f39c12' }}>⚠ its drawing is gone</span>
+                      <button title="Remove this item from the schedule"
+                        onClick={e => { e.stopPropagation(); setProject(p => ({ ...p, items: p.items.filter(it => it.id !== item.id) })); if (editingItem?.id === item.id) { setEditingItem(null); setEditingElement(null) } showToast('Item removed.') }}
+                        style={{ marginLeft: 6, padding: '0 6px', fontSize: 10, border: '1px solid #c0392b', borderRadius: 4, background: 'transparent', color: '#e57373', cursor: 'pointer' }}>Remove</button>
+                    </span>
+                  )}
+                  {/* A drawing on a hidden layer is still in the schedule: say why it is not on the plan */}
+                  {item.elementId && project.elements.some(e => e.id === item.elementId) && hiddenPhases.has(item.phase as TakeoffPhase) && (
+                    <span style={{ marginLeft: 6, color: '#6a7a8a' }}>👁 layer hidden</span>
+                  )}
                   {(project.sheets?.length ?? 0) > 1 && (() => { const sid = itemSheetId(item, project); const nm = sid ? sheetName(project, sid) : ''; return nm && nm !== item.drawingRef ? <span style={{ color: '#6a7a8a' }}> · {nm}</span> : null })()}
                 </div>
               </div>
