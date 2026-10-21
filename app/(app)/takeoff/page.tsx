@@ -4830,7 +4830,7 @@ export default function TakeoffPage() {
           disabled={resetInProgress}
           title="Full reset — wipes everything and returns to a blank takeoff"
         >
-          ↺ Takeoff
+          ↺ Reset
         </button>
 
         {/* Theme toggle */}
