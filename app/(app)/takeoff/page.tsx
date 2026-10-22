@@ -2429,7 +2429,7 @@ export default function TakeoffPage() {
         : el.type === 'rect' ? fmt2(rectArea(el.points, mpp)) + ' m²'
         : fmt2(polygonArea(el.points, mpp)) + ' m²'
       const anchor = el.type === 'line' ? polylineMidpoint(el.points) : centroid(el.points)
-      return { id: el.id, text: tagText(linked?.name || el.label, measure), ax: anchor.x, ay: anchor.y, dx: el.tagDx, dy: el.tagDy }
+      return { id: el.id, text: tagText(el.label || linked?.name || '', measure), ax: anchor.x, ay: anchor.y, dx: el.tagDx, dy: el.tagDy }
     })
     const boxes = layoutTags(inputs, zoom)
     return boxes.map(t => {
@@ -3303,7 +3303,9 @@ export default function TakeoffPage() {
     // ── 9. Buildup data ────────────────────────────────────────────────────
     const bMakeups   = _phaseMakeups ?? FLOOR_MAKEUPS
     const bMakeup    = isBuildup ? bMakeups.find(m => m.id === item.floorMakeupId) : undefined
-    const buildArea  = item.area ?? 0
+    // A wall priced by its calculator keeps its height there, not on the item: the area is the drawn length times that height
+    const _calcHeightM = (() => { for (const ns of Object.values(item.assemblyCalcState?.values ?? {})) { const h = (ns as Record<string, unknown>)?.heightMm; if (typeof h === 'number' && h > 0) return h / 1000 } return 0 })()
+    const buildArea  = (item.area ?? 0) > 0 ? (item.area ?? 0) : (isLineBased && _calcHeightM > 0 ? +((item.length ?? 0) * _calcHeightM).toFixed(3) : 0)
     const buildPerim = item.perimeter ??
       (linkedEl?.type === 'rect'    ? rectPerimeter(linkedEl.points, project.calibration.mpp)
         : linkedEl?.type === 'polygon' ? polyPerimeter(linkedEl.points, project.calibration.mpp)
@@ -3566,8 +3568,8 @@ export default function TakeoffPage() {
                   <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 2 }}>m² area</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--to-textb)', fontFamily: 'monospace', lineHeight: 1 }}>{fmt2(buildPerim)}</div>
-                  <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 2 }}>lm perimeter</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--to-textb)', fontFamily: 'monospace', lineHeight: 1 }}>{fmt2(isLineBased ? (item.length ?? 0) : buildPerim)}</div>
+                  <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 2 }}>{isLineBased ? 'm run' : 'lm perimeter'}</div>
                 </div>
               </div>
             </div>
