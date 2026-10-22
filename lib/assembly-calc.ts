@@ -75,7 +75,7 @@ export type AssemblyQuantitySource = WallQuantitySource | MasonryQuantitySource 
 
 export interface AssemblyOpening {
   id: string
-  kind: 'window' | 'door' | 'custom'
+  kind: 'window' | 'door' | 'bifold' | 'custom'
   widthMm: number
   heightMm: number
   offsetMm: number     // distance from the wall's left end to the opening's left (rough) edge
@@ -385,10 +385,12 @@ export function calculateMasonryWallCost(input: MasonryWallInput, layers: Assemb
 
 export type CavityLeafType = 'brick' | 'block'
 export type CavityInsulationType = 'none' | 'pir' | 'wool'
-export type LintelType = 'steel-cavity' | 'concrete-pair' | 'concrete-steel-angle'
+export type LintelType = 'steel-cavity' | 'concrete-pair' | 'concrete-steel-angle' | 'steel-beam'
 
 export interface CavityOpening extends AssemblyOpening {
   lintelType: LintelType
+  /** For a 'steel-beam' lintel: the section specified, e.g. 'UB 178x102x19' (the designer's choice; this only prices it). */
+  steelSize?: string
 }
 
 export interface CavityWallInput {
@@ -405,7 +407,13 @@ export interface CavityWallInput {
   brickLengthMm?: number  // coordinating size incl. one mortar joint; default 225 (215 + 10)
   brickHeightMm?: number  // default 75 (65 + 10)
   lintelBearingMm?: number // bearing each side of an opening; default 150 — confirm on site
+  /** How deep the finished inside reveal is, from the inside face to the frame, mm. Default 150. */
+  revealDepthMm?: number
 }
+
+/** Steel beam sections offered over a wide opening (a bi-fold door, a knocked-through opening). The size is the designer's; these are the usual universal beams. */
+export const STEEL_BEAM_SIZES = ['UB 152x89x16', 'UB 178x102x19', 'UB 203x133x25', 'UB 254x146x31', 'UB 305x165x40'] as const
+export const DEFAULT_STEEL_BEAM = 'UB 178x102x19'
 
 export const BRICK_OUTER_LEAF_MM = 102.5
 export const BLOCK_OUTER_LEAF_MM = 100
@@ -430,6 +438,14 @@ export interface CavityWallGeometry {
   steelCavityLintels: number
   concreteLintels: number
   steelAngles: number
+  /** Steel beams over openings: the section and the length with its bearing, one per such opening. */
+  steelBeams: { openingId: string; size: string; lengthM: number }[]
+  /** Concrete padstones under the ends of the steel beams (two each). */
+  padstones: number
+  /** The inside reveals of every opening: both jambs and the head, in metres, the depth they are finished to, and the area of board or plaster that makes. */
+  revealLm: number
+  revealDepthMm: number
+  revealAreaM2: number
   trayCount: number
   weepCount: number
   closerLm: number
@@ -482,7 +498,9 @@ export function calculateCavityGeometry(input: CavityWallInput): CavityWallGeome
   const sorted = [...openings].sort((a, b) => a.offsetMm - b.offsetMm)
   const lintels: CavityWallGeometry['lintels'] = []
   let steelCavityLintels = 0, concreteLintels = 0, steelAngles = 0
-  let trayCount = 0, weepCount = 0, closerLm = 0, revealTies = 0
+  let trayCount = 0, weepCount = 0, closerLm = 0, revealTies = 0, revealLm = 0, padstones = 0
+  const steelBeams: CavityWallGeometry['steelBeams'] = []
+  const revealDepthMm = input.revealDepthMm ?? 150
 
   for (let i = 0; i < sorted.length; i++) {
     const o = sorted[i]
@@ -511,6 +529,14 @@ export function calculateCavityGeometry(input: CavityWallInput): CavityWallGeome
         steelAngles += 1     // carries the brick/block outer leaf
         trayCount += 1
         break
+      case 'steel-beam':
+        steelBeams.push({ openingId: o.id, size: o.steelSize || DEFAULT_STEEL_BEAM, lengthM: toM(o.widthMm + bearing * 2) })
+        padstones += 2       // one under each end
+        trayCount += 1       // a cavity tray over the beam, as over any separate lintel
+        break
+    }
+    if (o.widthMm > 2400 && o.lintelType !== 'steel-beam') {
+      warnings.push(`Opening "${o.id}" is ${o.widthMm}mm wide: an opening this wide normally needs a steel beam specified by the designer rather than a standard lintel.`)
     }
 
     // A tray runs the length of the lintel; weep vents at 900mm centres, never fewer than two.
@@ -520,6 +546,8 @@ export function calculateCavityGeometry(input: CavityWallInput): CavityWallGeome
     // Cavity closer down both reveals, and extra ties at 300mm centres up each reveal.
     closerLm += (2 * o.heightMm) / 1000
     revealTies += 2 * (Math.ceil(o.heightMm / 300) + 1)
+    // The inside reveal is finished down both jambs and across the head (a cill, if there is one, is a window board: not counted here)
+    revealLm += (2 * o.heightMm + o.widthMm) / 1000
   }
 
   const tieCount = Math.ceil(netAreaM2 * TIES_PER_M2 + revealTies)
@@ -533,7 +561,8 @@ export function calculateCavityGeometry(input: CavityWallInput): CavityWallGeome
     outerLeafThicknessMm, insulationThicknessMm, retainedCavityMm,
     overallThicknessMm: input.innerLeafThicknessMm + cavity + outerLeafThicknessMm,
     tieCount, tieLengthMm,
-    lintels, steelCavityLintels, concreteLintels, steelAngles,
+    lintels, steelCavityLintels, concreteLintels, steelAngles, steelBeams, padstones,
+    revealLm: +revealLm.toFixed(3), revealDepthMm, revealAreaM2: +((revealLm * revealDepthMm) / 1000).toFixed(3),
     trayCount, weepCount, closerLm: +closerLm.toFixed(2),
     headClosureLm: toM(L), wallPlateLm: toM(L),
     strapCount: Math.ceil(L / 2000) + 1,

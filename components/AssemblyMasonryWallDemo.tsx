@@ -545,7 +545,7 @@ export function MasonryElevationSvg({ input, onOpeningOffsetChange }: {
           <g key={o.id}>
             <rect
               x={ox} y={oyTop} width={ow} height={oh}
-              fill={o.kind === 'door' ? '#fef3c7' : '#dbeafe'}
+              fill={o.kind === 'door' || o.kind === 'bifold' ? '#fef3c7' : '#dbeafe'}
               stroke={dragging ? '#b45309' : '#4a90a4'} strokeWidth={dragging ? 2.5 : 1.5}
               cursor="grab"
               onPointerDown={e => handlePointerDown(e, o.id)}
@@ -554,7 +554,7 @@ export function MasonryElevationSvg({ input, onOpeningOffsetChange }: {
                 to the void with cut blocks, not a doubled stud). */}
             <line x1={ox} y1={oyTop} x2={ox + ow} y2={oyTop} stroke="#c0392b" strokeWidth={3} />
             <text x={ox + ow / 2} y={oyTop + oh / 2 - 5} textAnchor="middle" dominantBaseline="middle" fontSize={9} fill="#1d4ed8" pointerEvents="none">
-              {o.kind === 'door' ? '🚪' : '🪟'} {o.widthMm}×{o.heightMm}
+              {o.kind === 'door' || o.kind === 'bifold' ? '🚪' : '🪟'} {o.widthMm}×{o.heightMm}
             </text>
             <text x={ox + ow / 2} y={oyTop + oh / 2 + 8} textAnchor="middle" dominantBaseline="middle" fontSize={8} fill="#94a3b8" pointerEvents="none">
               ⋮⋮ drag to move

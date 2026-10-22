@@ -24,7 +24,7 @@ import NumInput from '@/components/NumInput'
 import { useCalcState } from '@/components/calc-state'
 import {
   calculateCavityGeometry, calculateCavityWallCost,
-  BRICK_OUTER_LEAF_MM, BLOCK_OUTER_LEAF_MM,
+  BRICK_OUTER_LEAF_MM, BLOCK_OUTER_LEAF_MM, STEEL_BEAM_SIZES, DEFAULT_STEEL_BEAM,
   type CavityWallInput, type CavityOpening, type CavityLeafType, type CavityInsulationType,
   type LintelType, type AssemblyLayerDef, type CostedLine,
 } from '@/lib/assembly-calc'
@@ -64,7 +64,11 @@ const LINTEL_LABEL: Record<LintelType, string> = {
   'steel-cavity': 'Steel cavity lintel (one, spans both leaves)',
   'concrete-pair': 'Two concrete lintels (one per leaf)',
   'concrete-steel-angle': 'Concrete inner lintel + steel angle for the outer leaf',
+  'steel-beam': 'Steel beam over (specified size, with padstones and a tray)',
 }
+// Sample rates for the steel sections, per metre of beam including its bearing: the size itself is the designer's choice
+const STEEL_BEAM_PER_M: Record<string, number> = { 'UB 152x89x16': 34, 'UB 178x102x19': 40, 'UB 203x133x25': 52, 'UB 254x146x31': 64, 'UB 305x165x40': 82 }
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
 const INSULATION_LABEL: Record<CavityInsulationType, string> = {
   none: 'None (empty cavity)',
   pir: 'Partial fill — rigid board',
@@ -82,6 +86,11 @@ interface LayerOpts {
   externalFinish: ExternalFinishType
   finishType: FinishType
   counts: { steelCavity: number; concrete: number; angles: number; trays: number; weeps: number; closerLm: number }
+  /** Steel beams over openings (the section and the length of each with its bearing) and the padstones under them */
+  steel?: { size: string; lengthM: number }[]
+  padstones?: number
+  /** The inside reveals of the openings finished with board (or plaster) returns and beads: their length and area. Left out: no reveal finish is priced. */
+  reveals?: { lm: number; areaM2: number } | null
 }
 
 function buildCavityLayers(o: LayerOpts): AssemblyLayerDef[] {
@@ -135,7 +144,26 @@ function buildCavityLayers(o: LayerOpts): AssemblyLayerDef[] {
   if (c.angles > 0)      layers.push({ id: 'lintel_angle', name: 'Steel support angle (outer leaf)', category: 'materials', source: 'steelAngleCount', unit: 'nr', unitCost: 24.00, roundToWhole: true })
   if (c.trays > 0)       layers.push({ id: 'cavity_tray', name: 'Cavity tray (over separate lintels)', category: 'materials', source: 'trayCount', unit: 'nr', unitCost: 9.50, roundToWhole: true })
   if (c.weeps > 0)       layers.push({ id: 'weeps', name: 'Weep vent (over openings)', category: 'materials', source: 'weepCount', unit: 'nr', unitCost: 0.85, roundToWhole: true })
-  if (c.closerLm > 0)    layers.push({ id: 'closers', name: 'Cavity closer (opening reveals)', category: 'materials', source: 'closerLm', unit: 'm', unitCost: 3.20, wastePct: w })
+  if (c.closerLm > 0)    layers.push({ id: 'closers', name: 'Cavity closer (down both reveals of each opening)', category: 'materials', source: 'closerLm', unit: 'm', unitCost: 3.20, wastePct: w })
+  // Steel beams over wide openings: one line for each section used, then the padstones under their ends
+  const bySize = new Map<string, number>()
+  for (const b of o.steel ?? []) bySize.set(b.size, (bySize.get(b.size) ?? 0) + b.lengthM)
+  for (const [size, lm] of bySize) layers.push({ id: 'steel_' + slug(size), name: `Steel beam ${size} over openings (with bearing)`, category: 'materials', source: 'fixed', fixedQty: +lm.toFixed(3), unit: 'm', unitCost: STEEL_BEAM_PER_M[size] ?? 55 })
+  if ((o.padstones ?? 0) > 0) layers.push({ id: 'padstones', name: 'Concrete padstones (under the steel beam ends)', category: 'materials', source: 'fixed', fixedQty: o.padstones!, unit: 'nr', unitCost: 22.00, roundToWhole: true })
+  // The inside reveals: returns finished the same way as the wall's inside face, and beads on their arrises
+  if (o.reveals && o.reveals.areaM2 > 0) {
+    const rv = o.reveals
+    if (o.finishType === 'wet-plaster') {
+      layers.push({ id: 'reveal_plaster', name: 'Plaster to the opening reveals', category: 'materials', source: 'fixed', fixedQty: rv.areaM2, unit: 'm²', unitCost: 9.00, wastePct: w })
+    } else {
+      layers.push({ id: 'reveal_board', name: 'Plasterboard returns to the opening reveals', category: 'materials', source: 'fixed', fixedQty: rv.areaM2, unit: 'm²', unitCost: 6.90, wastePct: w })
+      if (o.finishType === 'dot-dab') layers.push({ id: 'reveal_adhesive', name: 'Dot & dab adhesive (reveal returns)', category: 'materials', source: 'fixed', fixedQty: rv.areaM2, unit: 'bag', unitCost: 9.50, coveragePerUnit: 12, roundToWhole: true, wastePct: w })
+    }
+    layers.push(
+      { id: 'reveal_bead', name: 'Angle bead on the reveal arrises', category: 'materials', source: 'fixed', fixedQty: rv.lm, unit: 'm', unitCost: 1.20, wastePct: w },
+      { id: 'reveal_stop', name: 'Stop bead against the frames', category: 'materials', source: 'fixed', fixedQty: rv.lm, unit: 'm', unitCost: 1.10, wastePct: w },
+    )
+  }
 
   // Base and top of the wall
   layers.push(
@@ -171,6 +199,8 @@ interface DescribeOpts {
   lengthMm: number; heightMm: number; outerLeaf: CavityLeafType; externalFinish: ExternalFinishType
   insulation: CavityInsulationType; boardThicknessMm: number; cavityWidthMm: number
   innerThicknessMm: number; innerType: InnerBlockType; finishType: FinishType; openings: CavityOpening[]
+  /** the reveals are finished (board returns and beads) */
+  reveals?: boolean
 }
 
 /** The one-line quote description. Shared by the screen and by priceCavityWallFromBasics so the two never word it differently. */
@@ -190,8 +220,10 @@ export function cavityAutoDescription(o: DescribeOpts): string {
   ]
   let text = parts.join(', ') + '.'
   if (o.openings.length) {
-    const list = o.openings.map(op => `${op.kind} (${op.widthMm}×${op.heightMm}mm, ${LINTEL_LABEL[op.lintelType].split(' (')[0].toLowerCase()})`).join(', ')
-    text += ` Includes ${o.openings.length} opening${o.openings.length !== 1 ? 's' : ''}: ${list}.`
+    const kindName = (k: string) => (k === 'bifold' ? 'bi-fold door' : k)
+    const lintelName = (op: CavityOpening) => (op.lintelType === 'steel-beam' ? `${op.steelSize || DEFAULT_STEEL_BEAM} steel beam over` : LINTEL_LABEL[op.lintelType].split(' (')[0].toLowerCase())
+    const list = o.openings.map(op => `${kindName(op.kind)} (${op.widthMm}×${op.heightMm}mm, ${lintelName(op)})`).join(', ')
+    text += ` Includes ${o.openings.length} opening${o.openings.length !== 1 ? 's' : ''}: ${list}, with cavity closers${o.reveals ? ' and plastered or boarded reveals' : ''}.`
   }
   return text
 }
@@ -228,6 +260,7 @@ export function priceCavityWallFromBasics(o: { lengthMm: number; heightMm: numbe
     wastePct, outerLeaf, innerType, innerThicknessMm, insulation: o.insulation,
     insulationThicknessMm: g.insulationThicknessMm, tieLengthMm: g.tieLengthMm, externalFinish, finishType,
     counts: { steelCavity: g.steelCavityLintels, concrete: g.concreteLintels, angles: g.steelAngles, trays: g.trayCount, weeps: g.weepCount, closerLm: g.closerLm },
+    steel: g.steelBeams, padstones: g.padstones, reveals: g.revealAreaM2 > 0 ? { lm: g.revealLm, areaM2: g.revealAreaM2 } : null,
   })
   let cost
   try { cost = calculateCavityWallCost(input, layers) } catch { return null }
@@ -249,7 +282,7 @@ export function priceCavityWallFromBasics(o: { lengthMm: number; heightMm: numbe
 
   return {
     name: isFull ? 'Cavity Wall — Full Fill' : 'Cavity Wall — Partial Fill', qty: 1, location: '',
-    description: cavityAutoDescription({ lengthMm: o.lengthMm, heightMm: o.heightMm, outerLeaf, externalFinish, insulation: o.insulation, boardThicknessMm, cavityWidthMm, innerThicknessMm, innerType, finishType, openings }),
+    description: cavityAutoDescription({ lengthMm: o.lengthMm, heightMm: o.heightMm, outerLeaf, externalFinish, insulation: o.insulation, boardThicknessMm, cavityWidthMm, innerThicknessMm, innerType, finishType, openings, reveals: g.revealAreaM2 > 0 }),
     lines,
   }
 }
@@ -274,6 +307,9 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
   const [wastePct, setWastePct] = useCalcState('AssemblyCavityWallDemo', 'wastePct', 10)
   const [openings, setOpenings] = useCalcState<CavityOpening[]>('AssemblyCavityWallDemo', 'openings', noSampleOpenings ? [] : sampleOpenings)
   const [location, setLocation] = useCalcState('AssemblyCavityWallDemo', 'location', '')
+  // The inside reveals of the openings (board or plaster returns and beads): on by default, how deep they are is typed
+  const [finishReveals, setFinishReveals] = useCalcState('AssemblyCavityWallDemo', 'finishReveals', true)
+  const [revealDepthMm, setRevealDepthMm] = useCalcState('AssemblyCavityWallDemo', 'revealDepthMm', 150)
 
   const [miscMaterialLines, setMiscMaterialLines] = useCalcState<MiscMaterialLine[]>('AssemblyCavityWallDemo', 'miscMaterialLines', [])
   function addMiscMaterialLine() {
@@ -300,13 +336,13 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
   const noSidesLayers = useMemo(() => new Set<string>(), [])
 
   function buildAutoDescription(): string {
-    return cavityAutoDescription({ lengthMm, heightMm, outerLeaf, externalFinish, insulation, boardThicknessMm, cavityWidthMm, innerThicknessMm, innerType, finishType, openings })
+    return cavityAutoDescription({ lengthMm, heightMm, outerLeaf, externalFinish, insulation, boardThicknessMm, cavityWidthMm, innerThicknessMm, innerType, finishType, openings, reveals: finishReveals })
   }
   const [description, setDescription] = useCalcState('AssemblyCavityWallDemo', 'description', buildAutoDescription)
 
   const input: CavityWallInput = {
     lengthMm, heightMm, outerLeaf, innerLeafThicknessMm: innerThicknessMm, cavityWidthMm,
-    insulation, insulationThicknessMm: boardThicknessMm, openings,
+    insulation, insulationThicknessMm: boardThicknessMm, openings, revealDepthMm,
   }
   const openingsKey = JSON.stringify(openings)
 
@@ -314,7 +350,7 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
     try { return { ok: true as const, geometry: calculateCavityGeometry(input) } }
     catch (e: any) { return { ok: false as const, error: e.message as string } }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lengthMm, heightMm, outerLeaf, innerThicknessMm, cavityWidthMm, insulation, boardThicknessMm, openingsKey])
+  }, [lengthMm, heightMm, outerLeaf, innerThicknessMm, cavityWidthMm, insulation, boardThicknessMm, openingsKey, revealDepthMm])
 
   // Labour starts as one line sized from the wall (1 hour per m², the bricklayer trade if there is one) and follows the wall until it is edited by hand
   const startingLabour = cavityStartingLabour(geometryResult.ok ? geometryResult.geometry.netAreaM2 : 0, labourTrades)
@@ -341,9 +377,10 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
       insulationThicknessMm: g.insulationThicknessMm, tieLengthMm: g.tieLengthMm,
       externalFinish, finishType,
       counts: { steelCavity: g.steelCavityLintels, concrete: g.concreteLintels, angles: g.steelAngles, trays: g.trayCount, weeps: g.weepCount, closerLm: g.closerLm },
+      steel: g.steelBeams, padstones: g.padstones, reveals: finishReveals && g.revealAreaM2 > 0 ? { lm: g.revealLm, areaM2: g.revealAreaM2 } : null,
     })
     return base.map(l => rateOverrides[l.id] != null ? { ...l, unitCost: rateOverrides[l.id] } : l)
-  }, [geometryResult, wastePct, outerLeaf, innerType, innerThicknessMm, insulation, externalFinish, finishType, rateOverrides])
+  }, [geometryResult, wastePct, outerLeaf, innerType, innerThicknessMm, insulation, externalFinish, finishType, rateOverrides, finishReveals])
 
   function setRate(layerId: string, unitCost: number) {
     setRateOverrides(prev => ({ ...prev, [layerId]: Math.max(0, unitCost) }))
@@ -396,7 +433,9 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
   const totalCost = costSubtotal + profitAmount
 
   function updateOpening(id: string, patch: Partial<CavityOpening>) {
-    setOpenings(prev => prev.map(o => o.id === id ? { ...o, ...patch } : o))
+    // a bi-fold door starts as a wide opening to the floor under a steel beam (all of it editable after)
+    const withBifold: Partial<CavityOpening> = patch.kind === 'bifold' ? { widthMm: 3000, heightMm: 2100, sillHeightMm: 0, lintelType: 'steel-beam', steelSize: DEFAULT_STEEL_BEAM, ...patch } : patch
+    setOpenings(prev => prev.map(o => o.id === id ? { ...o, ...withBifold } : o))
   }
   function removeOpening(id: string) {
     setOpenings(prev => prev.filter(o => o.id !== id))
@@ -576,17 +615,38 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
             </PropRow>
 
             <OpeningsEditor
-              openings={openings} onAdd={addOpening} onUpdate={updateOpening} onRemove={removeOpening}
+              openings={openings} onAdd={addOpening} onUpdate={updateOpening} onRemove={removeOpening} withBifold
               extraRow={o => (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 8px', flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.3, width: 34 }}>Lintel</span>
                   <select value={(o as CavityOpening).lintelType}
-                    onChange={e => updateOpening(o.id, { lintelType: e.target.value as LintelType })} style={miniInput}>
+                    onChange={e => updateOpening(o.id, { lintelType: e.target.value as LintelType })} style={{ ...miniInput, flex: 1, minWidth: 160 }}>
                     {(Object.keys(LINTEL_LABEL) as LintelType[]).map(k => <option key={k} value={k}>{LINTEL_LABEL[k]}</option>)}
                   </select>
+                  {(o as CavityOpening).lintelType === 'steel-beam' && (
+                    <select value={(o as CavityOpening).steelSize || DEFAULT_STEEL_BEAM} title="The steel section the designer has specified (this only prices it)"
+                      onChange={e => updateOpening(o.id, { steelSize: e.target.value })} style={{ ...miniInput, width: 130 }}>
+                      {STEEL_BEAM_SIZES.map(sz => <option key={sz} value={sz}>{sz}</option>)}
+                    </select>
+                  )}
                 </div>
               )}
             />
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#334155', cursor: 'pointer', marginTop: 8 }}>
+              <input type="checkbox" checked={finishReveals} onChange={e => setFinishReveals(e.target.checked)} style={{ width: 'auto' }} />
+              Finish the inside reveals (board or plaster returns, and beads)
+            </label>
+            {finishReveals && openings.length > 0 && (
+              <PropRow label="Reveal depth, inside face to the frame (mm)">
+                <NumInput type="number" min={0} value={revealDepthMm} onChange={e => setRevealDepthMm(Math.max(0, +e.target.value || 0))} style={propInput} />
+              </PropRow>
+            )}
+            {g && openings.length > 0 && (
+              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4, lineHeight: 1.4 }}>
+                Cavity closers are counted down both reveals of every opening ({g.closerLm.toFixed(1)}m).{finishReveals ? ` The reveals are ${g.revealLm.toFixed(1)}m round the openings, ${g.revealAreaM2.toFixed(2)} m² of returns.` : ''}
+                {g.steelBeams.length > 0 ? ` ${g.steelBeams.length} steel beam${g.steelBeams.length > 1 ? 's' : ''}: the section is for the designer to specify.` : ''}
+              </div>
+            )}
           </div>
 
           <LabourSection labourLines={labourLines} labourTrades={labourTrades}

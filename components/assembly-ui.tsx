@@ -229,13 +229,15 @@ export function MiscMaterialsSection({ miscMaterialLines, onAdd, onUpdate, onRem
 let _openingId = 0
 export const newOpeningId = () => `op-${++_openingId}`
 
-export function OpeningsEditor({ openings, onAdd, onUpdate, onRemove, extraRow }: {
+export function OpeningsEditor({ openings, onAdd, onUpdate, onRemove, extraRow, withBifold }: {
   openings: AssemblyOpening[]
   onAdd: () => void
   onUpdate: (id: string, patch: Partial<AssemblyOpening>) => void
   onRemove: (id: string) => void
   /** Optional per-opening extra line under its row — e.g. the cavity wall's lintel type. */
   extraRow?: (o: AssemblyOpening) => React.ReactNode
+  /** Offer a bi-fold door as a kind of opening (a wide opening that runs to the floor). */
+  withBifold?: boolean
 }) {
   return (
     <div style={{ marginTop: 4 }}>
@@ -253,9 +255,10 @@ export function OpeningsEditor({ openings, onAdd, onUpdate, onRemove, extraRow }
       {openings.map(o => (
         <React.Fragment key={o.id}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr 20px', gap: 4, marginBottom: 4, alignItems: 'center' }}>
-          <select value={o.kind} onChange={e => onUpdate(o.id, { kind: e.target.value as AssemblyOpening['kind'], sillHeightMm: e.target.value === 'door' ? 0 : (o.sillHeightMm || 900) })} style={miniInput}>
+          <select value={o.kind} onChange={e => onUpdate(o.id, { kind: e.target.value as AssemblyOpening['kind'], sillHeightMm: e.target.value === 'door' || e.target.value === 'bifold' ? 0 : (o.sillHeightMm || 900) })} style={miniInput}>
             <option value="window">Window</option>
             <option value="door">Door</option>
+            {(withBifold || o.kind === 'bifold') && <option value="bifold">Bi-fold door</option>}
             <option value="custom">Custom</option>
           </select>
           <NumInput type="number" title="Width of the opening (mm)" value={o.widthMm} onChange={e => onUpdate(o.id, { widthMm: +e.target.value || 0 })} style={miniInput} />
