@@ -107,6 +107,9 @@ export interface DrawnElement {
   unit?:       string   // 'm', 'm²', 'm³', 'nr', 'item'
   /** the sheet (plan) it was drawn on; undefined = the first sheet (drawn before there were sheets) */
   sheetId?:    string
+  /** where the user dragged this drawing's name tag to, as an offset (plan pixels) from where it sits by itself */
+  tagDx?:      number
+  tagDy?:      number
 }
 
 // ── Wall openings ─────────────────────────────────────────────────────────────

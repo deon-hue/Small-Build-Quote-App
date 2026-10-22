@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { makeDebouncedSave, isEmptyTakeoff, isUuid, newProjectId, loadTakeoffFromSupabase, saveTakeoffToSupabase, listTakeoffSummaries, deleteTakeoffProject, type TakeoffSummary } from '@/lib/takeoff-sync'
 import { activeSheetIdOf, onActiveSheet, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet, setSheetPaper } from '@/lib/takeoff-sheets'
+import { layoutTags, polylineMidpoint, textColorFor, tagText, TAG_HEIGHT_PX } from '@/lib/takeoff-tags'
 import { PDF_RENDER_MM_PER_PX, PAPER_SIZES, SCALE_DENOMS, scaleLabel, denomFromLabel, mppForScale, paperFromMm, inferPdfPaper, mmPerPxForPaper } from '@/lib/takeoff-paper'
 import { putSheetImage, getSheetImage, deleteProjectImages } from '@/lib/takeoff-sheet-images'
 import { uploadSheetPicture, downloadSheetPicture, listCloudPictureSheetIds, deleteProjectPictures } from '@/lib/takeoff-sheet-cloud'
@@ -802,6 +803,22 @@ export default function TakeoffPage() {
   const [pictureSync, setPictureSync] = useState<Record<string, 'saving' | 'saved' | 'failed' | 'too-big'>>({})
   const uploadAttempted = useRef(new Set<string>())
   const autosaveErrorShown = useRef(false)
+  // How drawings show on a busy plan (kept per person in this browser, not in the take-off): a white halo under each, a name tag on each, and how much the plan picture is faded
+  const [viewHalo, setViewHalo] = useState(true)
+  const [viewTags, setViewTags] = useState(true)
+  const [viewFade, setViewFade] = useState(30)
+  const tagDragRef = useRef<{ id: string; sx: number; sy: number; dx0: number; dy0: number } | null>(null)
+  useEffect(() => {
+    try {
+      const r = JSON.parse(localStorage.getItem('sbc_takeoff_view') ?? 'null')
+      if (r && typeof r === 'object') {
+        if (typeof r.halo === 'boolean') setViewHalo(r.halo)
+        if (typeof r.tags === 'boolean') setViewTags(r.tags)
+        if (typeof r.fade === 'number' && r.fade >= 0 && r.fade <= 75) setViewFade(r.fade)
+      }
+    } catch {}
+  }, [])
+  useEffect(() => { try { localStorage.setItem('sbc_takeoff_view', JSON.stringify({ halo: viewHalo, tags: viewTags, fade: viewFade })) } catch {} }, [viewHalo, viewTags, viewFade])
   const lastSaveError = useRef('')
   const idMigration = useRef<string | null>(null)
   const oldPictureFolders = useRef<string[]>([])
@@ -1201,6 +1218,14 @@ export default function TakeoffPage() {
 
   // ── Mouse handlers ─────────────────────────────────────────────────────────
   function handleMouseMove(e: React.MouseEvent<SVGSVGElement>) {
+    // a name tag being dragged out of the way (the offset is kept on its drawing)
+    if (tagDragRef.current) {
+      const pt = svgCoords(e)
+      const d = tagDragRef.current
+      const dx = d.dx0 + (pt.x - d.sx), dy = d.dy0 + (pt.y - d.sy)
+      setProject(p => ({ ...p, elements: p.elements.map(el => (el.id === d.id ? { ...el, tagDx: dx, tagDy: dy } : el)) }))
+      return
+    }
     // Element / vertex drag takes priority over everything
     if (dragRef.current) {
       const pt = svgCoords(e)
@@ -1258,6 +1283,7 @@ export default function TakeoffPage() {
   }
 
   function handleMouseUp() {
+    if (tagDragRef.current) { tagDragRef.current = null; hasPannedRef.current = true; return }
     if (dragRef.current) {
       // Mark as "panned" so handleSvgClick ignores the synthetic click that fires
       // after mouseup. When mousedown is on the vertex circle and mouseup lands on
@@ -2225,7 +2251,9 @@ export default function TakeoffPage() {
     const sel = selectedId === el.id
     const isWall = el.phase === 'External Walls'
     const stroke = sel ? '#fff' : el.color
-    const sw = sel ? 3 : 2
+    // with the halo on, a line never gets thinner than a few screen pixels, however far the plan is zoomed out
+    const sw = Math.max(sel ? 3 : 2, viewHalo ? (sel ? 4.5 : 3.5) / zoom : 0)
+    const faceSw = Math.max(sel ? 2.5 : 2, viewHalo ? 3 / zoom : 0)
     const fill = el.color + '33'
 
     // Drag initiator — attached to every element <g>
@@ -2259,14 +2287,14 @@ export default function TakeoffPage() {
       return (
         <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
           <polygon points={bodyPts} fill={fillC} stroke="none" />
-          <polyline points={outerPts} fill="none" stroke={faceC} strokeWidth={sel ? 2.5 : 2} strokeLinecap="square" strokeLinejoin="miter" />
-          <polyline points={innerPts} fill="none" stroke={faceC} strokeWidth={sel ? 2.5 : 2} strokeLinecap="square" strokeLinejoin="miter" />
+          <polyline points={outerPts} fill="none" stroke={faceC} strokeWidth={faceSw} strokeLinecap="square" strokeLinejoin="miter" />
+          <polyline points={innerPts} fill="none" stroke={faceC} strokeWidth={faceSw} strokeLinecap="square" strokeLinejoin="miter" />
           <polyline points={centrePts} fill="none" stroke={caviC} strokeWidth={0.8} strokeDasharray="5 4" strokeOpacity={sel ? 0.7 : 0.4} />
           {sel && <polygon points={bodyPts} fill="none" stroke="#fff" strokeWidth={1} strokeOpacity={0.5} strokeDasharray="5 3" />}
-          <text x={mid.x} y={mid.y - (halfW + 5)} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : WALL_LINE_COLOR} fontFamily="monospace" fontWeight={700}>
+          <text className="to-lbl" x={mid.x} y={mid.y - (halfW + 5)} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : WALL_LINE_COLOR} fontFamily="monospace" fontWeight={700}>
             {el.label}
           </text>
-          <text x={mid.x} y={mid.y + (halfW + 13)} textAnchor="middle" fontSize={10} fill={sel ? '#ccc' : '#999'} fontFamily="monospace">
+          <text className="to-lbl" x={mid.x} y={mid.y + (halfW + 13)} textAnchor="middle" fontSize={10} fill={sel ? '#ccc' : '#999'} fontFamily="monospace">
             {fmtM(polylineLength(el.points, project.calibration.mpp))}
           </text>
         </g>
@@ -2284,10 +2312,10 @@ export default function TakeoffPage() {
         <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
           <rect x={x} y={y} width={w} height={h} fill={WALL_FILL_COLOR + '20'} stroke={wallStroke} strokeWidth={wallSw} />
           {sel && <rect x={x} y={y} width={w} height={h} fill="none" stroke="#fff" strokeWidth={1} strokeOpacity={0.5} strokeDasharray="5 3" />}
-          <text x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : WALL_LINE_COLOR} fontFamily="monospace" fontWeight={700}>
+          <text className="to-lbl" x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : WALL_LINE_COLOR} fontFamily="monospace" fontWeight={700}>
             {el.label}
           </text>
-          <text x={mid.x} y={mid.y + 8} textAnchor="middle" fontSize={10} fill={sel ? '#ccc' : '#999'} fontFamily="monospace">
+          <text className="to-lbl" x={mid.x} y={mid.y + 8} textAnchor="middle" fontSize={10} fill={sel ? '#ccc' : '#999'} fontFamily="monospace">
             {fmt2(rectArea(el.points, project.calibration.mpp))} m²
           </text>
         </g>
@@ -2305,10 +2333,10 @@ export default function TakeoffPage() {
         <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
           <polygon points={pts} fill={WALL_FILL_COLOR + '20'} stroke={wallStroke} strokeWidth={wallSw} strokeLinejoin="miter" />
           {sel && <polygon points={pts} fill="none" stroke="#fff" strokeWidth={1} strokeOpacity={0.5} strokeDasharray="5 3" />}
-          <text x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : WALL_LINE_COLOR} fontFamily="monospace" fontWeight={700}>
+          <text className="to-lbl" x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : WALL_LINE_COLOR} fontFamily="monospace" fontWeight={700}>
             {el.label}
           </text>
-          <text x={mid.x} y={mid.y + 8} textAnchor="middle" fontSize={10} fill={sel ? '#ccc' : '#999'} fontFamily="monospace">
+          <text className="to-lbl" x={mid.x} y={mid.y + 8} textAnchor="middle" fontSize={10} fill={sel ? '#ccc' : '#999'} fontFamily="monospace">
             {fmt2(polygonArea(el.points, project.calibration.mpp))} m²
           </text>
         </g>
@@ -2323,10 +2351,10 @@ export default function TakeoffPage() {
         <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
           <polyline points={pts} fill="none" stroke={stroke} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
           {sel && <polyline points={pts} fill="none" stroke="#fff" strokeWidth={1} strokeOpacity={0.4} strokeDasharray="4 3" />}
-          <text x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : el.color} fontFamily="monospace" fontWeight={600}>
+          <text className="to-lbl" x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : el.color} fontFamily="monospace" fontWeight={600}>
             {el.label}
           </text>
-          <text x={mid.x} y={mid.y + 8} textAnchor="middle" fontSize={10} fill={sel ? '#ccc' : '#999'} fontFamily="monospace">
+          <text className="to-lbl" x={mid.x} y={mid.y + 8} textAnchor="middle" fontSize={10} fill={sel ? '#ccc' : '#999'} fontFamily="monospace">
             {fmtM(polylineLength(el.points, project.calibration.mpp))}
           </text>
         </g>
@@ -2338,10 +2366,10 @@ export default function TakeoffPage() {
       return (
         <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
           <rect x={x} y={y} width={w} height={h} fill={fill} stroke={stroke} strokeWidth={sw} />
-          <text x={x + w / 2} y={y + h / 2 - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : el.color} fontFamily="monospace" fontWeight={600}>
+          <text className="to-lbl" x={x + w / 2} y={y + h / 2 - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : el.color} fontFamily="monospace" fontWeight={600}>
             {el.label}
           </text>
-          <text x={x + w / 2} y={y + h / 2 + 8} textAnchor="middle" fontSize={10} fill={sel ? '#ccc' : '#999'} fontFamily="monospace">
+          <text className="to-lbl" x={x + w / 2} y={y + h / 2 + 8} textAnchor="middle" fontSize={10} fill={sel ? '#ccc' : '#999'} fontFamily="monospace">
             {fmt2(rectArea(el.points, project.calibration.mpp))} m²
           </text>
         </g>
@@ -2354,16 +2382,82 @@ export default function TakeoffPage() {
       return (
         <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
           <polygon points={pts} fill={fill} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
-          <text x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : el.color} fontFamily="monospace" fontWeight={600}>
+          <text className="to-lbl" x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : el.color} fontFamily="monospace" fontWeight={600}>
             {el.label}
           </text>
-          <text x={mid.x} y={mid.y + 8} textAnchor="middle" fontSize={10} fill={sel ? '#ccc' : '#999'} fontFamily="monospace">
+          <text className="to-lbl" x={mid.x} y={mid.y + 8} textAnchor="middle" fontSize={10} fill={sel ? '#ccc' : '#999'} fontFamily="monospace">
             {fmt2(polygonArea(el.points, project.calibration.mpp))} m²
           </text>
         </g>
       )
     }
     return null
+  }
+
+  // ── A white halo under a drawing, so its colour stands out on a busy plan ──────────────────────────────
+  function renderHalo(el: DrawnElement) {
+    const sel = selectedId === el.id
+    const isWall = el.phase === 'External Walls'
+    const extra = 5 / zoom
+    const common = { fill: 'none', stroke: '#ffffff', strokeOpacity: 0.92, strokeLinejoin: 'round' as const, strokeLinecap: 'round' as const }
+    const linked = project.items.find(it => it.elementId === el.id)
+    const pts = el.points.map(p => `${p.x},${p.y}`).join(' ')
+    if (isWall && el.type === 'line') {
+      const half = linked?.wallBandPx ?? 9
+      const face = Math.max(sel ? 2.5 : 2, 3 / zoom)
+      const outer = offsetPoly(el.points, half).map(p => `${p.x},${p.y}`).join(' ')
+      const inner = offsetPoly(el.points, -half).map(p => `${p.x},${p.y}`).join(' ')
+      return (
+        <g key={'halo-' + el.id}>
+          <polyline points={outer} {...common} strokeWidth={face + extra} />
+          <polyline points={inner} {...common} strokeWidth={face + extra} />
+        </g>
+      )
+    }
+    const base = isWall ? (linked?.wallBandPx ?? 9) * 2 : Math.max(sel ? 3 : 2, (sel ? 4.5 : 3.5) / zoom)
+    if (el.type === 'line') return <polyline key={'halo-' + el.id} points={pts} {...common} strokeWidth={base + extra} />
+    if (el.type === 'rect') { const r = rectAttrs(el.points); return <rect key={'halo-' + el.id} x={r.x} y={r.y} width={r.width} height={r.height} {...common} strokeWidth={base + extra} /> }
+    return <polygon key={'halo-' + el.id} points={pts} {...common} strokeWidth={base + extra} />
+  }
+
+  // ── A name tag on each drawing: the name and its measurement, the same size on screen at any zoom, movable ──
+  function renderTags(els: DrawnElement[]) {
+    const mpp = project.calibration.mpp
+    const inputs = els.map(el => {
+      const linked = project.items.find(it => it.elementId === el.id)
+      const measure = el.type === 'line' ? fmtM(polylineLength(el.points, mpp))
+        : el.type === 'rect' ? fmt2(rectArea(el.points, mpp)) + ' m²'
+        : fmt2(polygonArea(el.points, mpp)) + ' m²'
+      const anchor = el.type === 'line' ? polylineMidpoint(el.points) : centroid(el.points)
+      return { id: el.id, text: tagText(linked?.name || el.label, measure), ax: anchor.x, ay: anchor.y, dx: el.tagDx, dy: el.tagDy }
+    })
+    const boxes = layoutTags(inputs, zoom)
+    return boxes.map(t => {
+      const el = els.find(e => e.id === t.id)!
+      const sel = selectedId === el.id
+      const fillC = el.phase === 'External Walls' ? WALL_LINE_COLOR : el.color
+      const textC = textColorFor(fillC)
+      const fs = 12 / zoom
+      const interactive = tool === 'select'
+      // the leader runs from the tag's nearest edge to the thing it names
+      const fromY = t.y + t.h / 2 < t.ay ? t.y + t.h : t.y
+      return (
+        <g key={'tag-' + el.id} style={{ pointerEvents: interactive ? undefined : 'none', cursor: interactive ? (tagDragRef.current?.id === el.id ? 'grabbing' : 'grab') : 'default' }}
+          onClick={e => { e.stopPropagation(); selectElement(el) }}
+          onMouseDown={e => {
+            if (!interactive) return
+            e.stopPropagation()
+            selectElement(el)
+            const p = svgCoords(e)
+            tagDragRef.current = { id: el.id, sx: p.x, sy: p.y, dx0: el.tagDx ?? 0, dy0: el.tagDy ?? 0 }
+          }}>
+          <line x1={t.x + t.w / 2} y1={fromY} x2={t.ax} y2={t.ay} stroke={fillC} strokeWidth={1.5 / zoom} style={{ pointerEvents: 'none' }} />
+          <circle cx={t.ax} cy={t.ay} r={2.5 / zoom} fill={fillC} stroke="#ffffff" strokeWidth={1 / zoom} style={{ pointerEvents: 'none' }} />
+          <rect x={t.x} y={t.y} width={t.w} height={t.h} rx={4 / zoom} fill={fillC} stroke={sel ? '#ffffff' : '#00000055'} strokeWidth={(sel ? 2 : 1) / zoom} />
+          <text x={t.x + t.w / 2} y={t.y + t.h / 2} textAnchor="middle" dominantBaseline="central" fontSize={fs} fontWeight={600} fill={textC} fontFamily="monospace" style={{ pointerEvents: 'none' }}>{t.text}</text>
+        </g>
+      )
+    })
   }
 
   // ── Render: in-progress drawing ghost ─────────────────────────────────────
@@ -5235,6 +5329,20 @@ export default function TakeoffPage() {
                 style={{ ...btnStyle, padding: '4px 10px', fontSize: 11, flexShrink: 0 }}>+ Plan</button>
             </div>
           )}
+          <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 6, display: 'flex', alignItems: 'center', gap: 10, padding: '5px 10px', background: 'var(--to-panel)', border: '1px solid var(--to-border)', borderRadius: 8, fontSize: 11, color: 'var(--to-text)', boxShadow: '0 2px 10px rgba(0,0,0,0.25)' }}
+            title="How your drawings show on the plan (kept on this computer)">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }} title="A white outline under each drawing so its colour stands out on a busy plan">
+              <input type="checkbox" checked={viewHalo} onChange={e => setViewHalo(e.target.checked)} style={{ width: 'auto' }} /> Halo
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }} title="A name tag on each drawing. Drag a tag in Select mode to move it out of the way">
+              <input type="checkbox" checked={viewTags} onChange={e => setViewTags(e.target.checked)} style={{ width: 'auto' }} /> Names
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4 }} title="Wash out the plan picture so your drawings stand out">
+              Fade plan
+              <input type="range" min={0} max={75} step={5} value={viewFade} onChange={e => setViewFade(+e.target.value)} style={{ width: 80 }} />
+              <span style={{ minWidth: 28, fontFamily: 'monospace' }}>{viewFade}%</span>
+            </label>
+          </div>
           {sheetImageLoading && (
             <div style={{ position: 'absolute', top: 50, left: '50%', transform: 'translateX(-50%)', zIndex: 5, background: 'var(--to-panel)', border: '1px solid var(--to-border)', color: 'var(--to-text)', borderRadius: 8, padding: '8px 14px', fontSize: 12 }}>
               ⏳ Getting this plan from your account…
@@ -5247,6 +5355,7 @@ export default function TakeoffPage() {
           )}
           <svg
             ref={svgRef}
+            className={viewTags ? 'to-tags-on' : undefined}
             width={svgSize.w}
             height={svgSize.h}
             style={{
@@ -5263,18 +5372,23 @@ export default function TakeoffPage() {
             onMouseLeave={handleMouseUp}
             onWheel={handleWheel}
           >
+            <style>{'.to-tags-on .to-lbl { display: none }'}</style>
             {/* Everything inside this group is zoomed/panned together */}
             <g transform={`translate(${panOffset.x}, ${panOffset.y}) scale(${zoom})`}>
 
               {/* Plan image */}
               {planImage && canvasImgSize && (
-                <image
-                  href={planImage}
-                  x={0} y={0}
-                  width={canvasImgSize.w}
-                  height={canvasImgSize.h}
-                  preserveAspectRatio="none"
-                />
+                <>
+                  {viewFade > 0 && <rect x={0} y={0} width={canvasImgSize.w} height={canvasImgSize.h} fill="#ffffff" />}
+                  <image
+                    href={planImage}
+                    x={0} y={0}
+                    width={canvasImgSize.w}
+                    height={canvasImgSize.h}
+                    opacity={1 - viewFade / 100}
+                    preserveAspectRatio="none"
+                  />
+                </>
               )}
 
               {/* Grid */}
@@ -5302,7 +5416,9 @@ export default function TakeoffPage() {
               })()}
 
               {/* Drawn elements — skip phases toggled hidden */}
+              {viewHalo && <g style={{ pointerEvents: 'none' }}>{elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)).map(renderHalo)}</g>}
               {elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)).map(renderElement)}
+              {viewTags && renderTags(elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)))}
 
               {/* Electrical points — a coloured dot with its letters; a star marks a special fitting. Drag one in Select mode to move it. */}
               {!hiddenPhases.has('Electrics') && electricPoints.filter(pt => onActiveSheet(pt, project)).map(pt => {
