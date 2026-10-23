@@ -18,7 +18,7 @@ export async function createPortalSignInLink(
   email: string,
   appUrl: string,
   next = '/portal',
-): Promise<{ url: string } | { error: string }> {
+): Promise<{ url: string; code?: string } | { error: string }> {
   const { data, error } = await createServiceRoleClient().auth.admin.generateLink({
     type: 'magiclink',
     email,
@@ -27,5 +27,7 @@ export async function createPortalSignInLink(
   const { hashed_token, verification_type } = data.properties
   if (!hashed_token) return { error: 'Supabase did not return a sign-in token.' }
   const params = new URLSearchParams({ token_hash: hashed_token, type: verification_type, next })
-  return { url: `${appUrl}/auth/callback?${params.toString()}` }
+  // the same sign-in as a 6-digit code, for typing into the page (when Supabase gives one)
+  const code = typeof data.properties.email_otp === 'string' && data.properties.email_otp ? data.properties.email_otp : undefined
+  return { url: `${appUrl}/auth/callback?${params.toString()}`, code }
 }

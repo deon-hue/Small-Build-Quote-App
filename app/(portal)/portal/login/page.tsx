@@ -3,6 +3,8 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import PortalSignInForm from '@/components/PortalSignInForm'
+import Link from 'next/link'
 
 const COOLDOWN_SECS = 90
 const COOLDOWN_KEY = 'portal_otp_cooldown'
@@ -173,36 +175,8 @@ function PortalLoginForm() {
         {message && <div className="portal-alert portal-alert-success">{message}</div>}
 
         {mode === 'link' ? (
-          /* ── Magic link ── */
-          <form onSubmit={handleMagicLink}>
-            <div className="fg">
-              <label>Email Address</label>
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-                autoFocus
-                placeholder="your@email.com"
-              />
-            </div>
-            <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
-              We&apos;ll email you a secure one-click sign-in link — no password needed.
-            </div>
-            <button
-              className="btn btn-primary"
-              style={{ width: '100%' }}
-              type="submit"
-              disabled={loading || cooldown > 0}
-            >
-              {loading ? 'Sending…' : cooldown > 0 ? `Resend available in ${cooldown}s` : '📧 Send sign-in link'}
-            </button>
-            {cooldown > 0 && (
-              <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 10 }}>
-                Check your inbox (and spam folder). The link expires in 60 minutes.
-              </p>
-            )}
-          </form>
+          /* ── Email code (and a one-tap button) ── */
+          <PortalSignInForm kind="client" next="/portal" initialEmail={email} />
         ) : mode === 'password' ? (
           /* ── Password ── */
           <form onSubmit={handlePassword}>
@@ -288,6 +262,9 @@ function PortalLoginForm() {
             </p>
           </form>
         )}
+        <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 18, lineHeight: 1.6 }}>
+          Are you a subcontractor? <Link href="/sub-portal/login" style={{ color: 'var(--link)', fontWeight: 600 }}>Sign in to the subcontractor portal</Link> (no password needed).
+        </p>
       </div>
     </div>
   )

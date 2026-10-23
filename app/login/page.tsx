@@ -167,6 +167,15 @@ export default function LoginPage() {
         <div style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', marginTop: 14 }}>
           Have an invite code? <Link href="/register" style={{ color: 'inherit', textDecoration: 'underline' }}>Create your account</Link>
         </div>
+        <div style={{ marginTop: 22, paddingTop: 16, borderTop: '1px solid var(--border)', textAlign: 'center', fontSize: 13, color: 'var(--muted)', lineHeight: 1.7 }}>
+          <strong style={{ color: 'var(--ink)' }}>Not a builder?</strong> This page is for builders and their team.
+          <br />
+          Subcontractor: <Link href="/sub-portal/login" style={{ color: 'var(--moss)', fontWeight: 600 }}>sign in to your portal</Link>
+          <br />
+          Client: <Link href="/portal/login" style={{ color: 'var(--moss)', fontWeight: 600 }}>sign in to your project portal</Link>
+          <br />
+          <span style={{ fontSize: 12 }}>Both use an emailed code: no password.</span>
+        </div>
       </div>
     </div>
   )
