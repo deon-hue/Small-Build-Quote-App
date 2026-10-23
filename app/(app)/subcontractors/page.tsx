@@ -11,6 +11,7 @@ import { ContactPicker } from '@/components/ContactPicker'
 import { signedDocUrl, insertJobCost, updateJobCost, deleteJobCost } from '@/lib/job-costs'
 import type { PaymentMethod } from '@/lib/types'
 import { jobDisplayTitle } from '@/lib/utils'
+import { ukToday } from '@/lib/uk-today'
 import './touch.css'
 
 const STAGE_PAYMENT_METHODS: Record<PaymentMethod, string> = {
@@ -740,7 +741,7 @@ export default function SubcontractorsPage() {
         }
 
         if (row.paidCash && logId) {
-          await sb.from('sub_admin_time_logs').update({ status: 'paid', paid_date: new Date().toISOString().slice(0, 10) }).eq('id', logId)
+          await sb.from('sub_admin_time_logs').update({ status: 'paid', paid_date: ukToday() }).eq('id', logId)
           if (row.paidMethod) await recordPaidMethod([logId], row.paidMethod)
           if (row.jobId) {
             const existingLog = timeLogs.find(l => l.id === logId)
@@ -830,7 +831,7 @@ export default function SubcontractorsPage() {
       await addBill({
         supplierId: contactId, supplierName: contactName(contactId),
         jobId: '',
-        billDate: weekEnd.toISOString().slice(0, 10), dueDate: '',
+        billDate: ukToday(), dueDate: '',
         description: `Week of ${fmtWeekRange(ws)}`,
         lineItems, labourAmount: total, materialsAmount: 0, plantAmount: 0, otherAmount: 0,
         subtotal: total, cisRate, cisDeduction, totalPayable: total - cisDeduction,
@@ -911,7 +912,7 @@ export default function SubcontractorsPage() {
     // Only days not already paid, so an earlier day paid a different way keeps its own method.
     const weekLogs = timeLogs.filter(l => l.contact_id === contactId && (l.week_start ?? getWeekStart(l.entry_date)) === ws && l.status !== 'paid')
     for (const log of weekLogs) {
-      await sb.from('sub_admin_time_logs').update({ status: 'paid', paid_date: new Date().toISOString().slice(0, 10) }).eq('id', log.id)
+      await sb.from('sub_admin_time_logs').update({ status: 'paid', paid_date: ukToday() }).eq('id', log.id)
       if (log.job_id) {
         if (log.job_cost_id) {
           await sb.from('job_costs').update({ payment_status: 'paid' }).eq('id', log.job_cost_id)
@@ -935,7 +936,7 @@ export default function SubcontractorsPage() {
   async function markDayPaid(log: AdminTimeLog, method: PaidMethod) {
     const { data: { user } } = await sb.auth.getUser()
     if (!user) return
-    await sb.from('sub_admin_time_logs').update({ status: 'paid', paid_date: new Date().toISOString().slice(0, 10) }).eq('id', log.id)
+    await sb.from('sub_admin_time_logs').update({ status: 'paid', paid_date: ukToday() }).eq('id', log.id)
     if (log.job_id) {
       if (log.job_cost_id) {
         await sb.from('job_costs').update({ payment_status: 'paid' }).eq('id', log.job_cost_id)

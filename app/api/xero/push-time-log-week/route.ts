@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getValidConnection, xeroFetch } from '@/lib/xero'
 import { rowIsOnPayroll } from '@/lib/payroll'
+import { ukToday } from '@/lib/uk-today'
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -75,8 +76,9 @@ export async function POST(req: NextRequest) {
     const xeroPayload = {
       Type: 'ACCPAY',
       Contact: xeroContact,
-      Date: weekEndStr,
-      DueDate: weekEndStr,
+      // dated the day the bill is made (not the Sunday that ends the week: that is in the reference)
+      Date: ukToday(),
+      DueDate: ukToday(),
       Status: 'DRAFT',
       LineAmountTypes: 'Exclusive',
       Reference: `Week of ${startFmt} – ${endFmt}`,
