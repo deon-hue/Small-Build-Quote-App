@@ -29,9 +29,6 @@ function SubPortalLoginForm() {
           View your jobs, log timesheets and track your payments — all in one place.
         </p>
         <PortalSignInForm kind="sub" next="/sub-portal" initialEmail={email} notice={notice} />
-        <p style={{ textAlign: 'center', fontSize: 13, marginTop: 18 }}>
-          <a href="/how-to-sign-in" style={{ color: 'var(--link)', fontWeight: 600 }}>▶ Watch how to sign in (1 minute)</a>
-        </p>
       </div>
     </div>
   )
