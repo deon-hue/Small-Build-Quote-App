@@ -8,8 +8,8 @@ export type PortalKind = 'sub' | 'client'
 
 export const portalCodeSubject = (kind: PortalKind): string => (kind === 'sub' ? 'Your subcontractor portal sign-in code' : 'Your client portal sign-in code')
 
-/** A 6-digit code spaced for reading: 123 456. */
-export const spacedCode = (code: string): string => (code.length === 6 ? `${code.slice(0, 3)} ${code.slice(3)}` : code)
+/** A code spaced for reading: 123 456 (6 digits) or 1234 5678 (8). The length is whatever the Supabase project is set to send. */
+export const spacedCode = (code: string): string => (code.length >= 6 && code.length % 2 === 0 ? `${code.slice(0, code.length / 2)} ${code.slice(code.length / 2)}` : code)
 
 export function buildPortalCodeEmail(o: { kind: PortalKind; code: string; signInUrl: string; product: string }): string {
   const who = o.kind === 'sub' ? 'subcontractor portal' : 'client portal'
@@ -22,7 +22,7 @@ export function buildPortalCodeEmail(o: { kind: PortalKind; code: string; signIn
       emailPara(`Type this code into the ${who} sign-in page to get in. There is no password to remember.`, 18),
       code,
       emailButton(o.signInUrl, 'Or tap here to sign in →', 'The code and this button work once and run out after 60 minutes. If you did not ask to sign in, you can ignore this email.'),
-      emailCallout('If the button says the link has already been used, do not worry: some email apps open links before you do. Use the 6-digit code above instead, on the page you were already on.', 'Tip'),
+      emailCallout('If the button says the link has already been used, do not worry: some email apps open links before you do. Use the code above instead, on the page you were already on.', 'Tip'),
     ].join('\n      '),
     footerHtml: `Sent by ${o.product}`,
   })

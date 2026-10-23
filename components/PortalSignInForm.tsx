@@ -19,6 +19,8 @@ export default function PortalSignInForm({ kind, next, initialEmail, notice }: {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(notice ?? '')
   const [cooldown, setCooldown] = useState(0)
+  // how many digits the emailed code has (the server says; it is 6 unless the Supabase project is set otherwise)
+  const [codeLength, setCodeLength] = useState<number | null>(null)
 
   useEffect(() => { if (initialEmail) setEmail(initialEmail) }, [initialEmail])
   useEffect(() => { if (notice) setError(notice) }, [notice])
@@ -42,6 +44,7 @@ export default function PortalSignInForm({ kind, next, initialEmail, notice }: {
       const res = await fetch('/api/portal/send-code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, kind }) })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) { setError(data?.error || 'Could not send the code. Please try again.'); return }
+      setCodeLength(typeof data?.codeLength === 'number' ? data.codeLength : null)
       setStep('code'); setCode('')
       try { localStorage.setItem(cooldownKey, String(Date.now() + COOLDOWN_SECS * 1000)) } catch { /* unavailable */ }
       setCooldown(COOLDOWN_SECS)
@@ -71,9 +74,9 @@ export default function PortalSignInForm({ kind, next, initialEmail, notice }: {
   }
 
   function onCodeChange(v: string) {
-    const digits = v.replace(/\D/g, '').slice(0, 6)
+    const digits = v.replace(/\D/g, '').slice(0, 10)
     setCode(digits)
-    if (digits.length === 6 && !busy) verify(digits)
+    if (codeLength && digits.length === codeLength && !busy) verify(digits)
   }
 
   if (step === 'code') {
@@ -81,17 +84,17 @@ export default function PortalSignInForm({ kind, next, initialEmail, notice }: {
       <div>
         {error && <div className="portal-alert portal-alert-error">{error}</div>}
         <div className="portal-alert portal-alert-success" style={{ lineHeight: 1.5 }}>
-          If <strong>{email}</strong> is registered, we have just emailed it a 6-digit code. Type it below, or tap the button in the email.
+          If <strong>{email}</strong> is registered, we have just emailed it a sign-in code. Type it below, or tap the button in the email.
         </div>
         <div className="fg">
-          <label>6-digit code</label>
+          <label>Sign-in code</label>
           <input
-            value={code} onChange={e => onCodeChange(e.target.value)} inputMode="numeric" autoComplete="one-time-code" autoFocus maxLength={7}
-            placeholder="123456" aria-label="6-digit sign-in code"
+            value={code} onChange={e => onCodeChange(e.target.value)} inputMode="numeric" autoComplete="one-time-code" autoFocus maxLength={12}
+            placeholder={codeLength ? '0'.repeat(codeLength) : '123456'} aria-label="Sign-in code from your email"
             style={{ fontSize: 26, letterSpacing: 8, textAlign: 'center', fontFamily: 'monospace' }}
           />
         </div>
-        <button className="btn btn-primary" style={{ width: '100%' }} disabled={busy || code.length !== 6} onClick={() => verify(code)}>
+        <button className="btn btn-primary" style={{ width: '100%' }} disabled={busy || code.length < 6} onClick={() => verify(code)}>
           {busy ? 'Checking…' : 'Sign in'}
         </button>
         <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 12, lineHeight: 1.6 }}>
@@ -117,7 +120,7 @@ export default function PortalSignInForm({ kind, next, initialEmail, notice }: {
         <input type="email" value={email} onChange={e => setEmail(e.target.value)} required autoFocus placeholder="your@email.com" autoComplete="email" />
       </div>
       <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
-        We&apos;ll email you a 6-digit code to type in here (and a one-tap button). No password to remember.
+        We&apos;ll email you a code to type in here (and a one-tap button). No password to remember.
       </div>
       <button className="btn btn-primary" style={{ width: '100%' }} type="submit" disabled={busy || cooldown > 0}>
         {busy ? 'Sending…' : cooldown > 0 ? `Send again in ${cooldown}s` : '📧 Email me a sign-in code'}

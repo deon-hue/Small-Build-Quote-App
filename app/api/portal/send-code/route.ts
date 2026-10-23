@@ -75,5 +75,6 @@ export async function POST(req: NextRequest) {
 
   lastSent.set(key, now)
   try { await logPortalActivity(email, 'magic_link_sent') } catch { /* logging must never block a sign-in */ }
-  return NextResponse.json({ ok: true })
+  // the length of the code Supabase made (6 by default, but the project can be set to send more), so the page knows when the whole code has been typed
+  return NextResponse.json({ ok: true, codeLength: link.code.length })
 }

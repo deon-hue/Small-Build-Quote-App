@@ -14,7 +14,7 @@ function SubPortalLoginForm() {
     const emailParam = searchParams.get('email')
     if (emailParam) setEmail(emailParam)
     if (searchParams.get('error') === 'auth') {
-      setNotice('That sign-in link has expired or was already used (some email apps open links before you do). Get a 6-digit code instead: it works every time.')
+      setNotice('That sign-in link has expired or was already used (some email apps open links before you do). Get a sign-in code instead: it works every time.')
     }
   }, [searchParams])
 

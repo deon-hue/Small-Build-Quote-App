@@ -54,7 +54,7 @@ function buildEmail(o: { firstName: string; company: string; signInUrl: string; 
       emailPara(`Dear ${esc(o.firstName)},`),
       emailPara(`${company} has set up a secure client portal for you. Press the button below to sign in. There is no password to remember.`, 22),
       emailButton(o.signInUrl, 'Open your portal →',
-        `This button signs you in once and then expires. If it has stopped working, go to ${emailLink(o.loginUrl, 'the portal sign-in page')} and choose &ldquo;Email me a sign-in code&rdquo; and type the 6-digit code we send you.`),
+        `This button signs you in once and then expires. If it has stopped working, go to ${emailLink(o.loginUrl, 'the portal sign-in page')} and choose &ldquo;Email me a sign-in code&rdquo; and type the code we send you.`),
       portalExplainerHtml(),
       emailContact('If anything is unclear, just get in touch.', o.companyPhone ? esc(o.companyPhone) : undefined, o.companyEmail ? esc(o.companyEmail) : undefined),
     ].join('\n      '),
