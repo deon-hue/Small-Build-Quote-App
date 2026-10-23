@@ -40,6 +40,7 @@ export function buildSubInviteEmail(o: {
       emailPara(`${company} has set up a secure portal for you. Press the button below to sign in. There is no password to remember.`, 22),
       emailButton(o.signInUrl, 'Open your portal →',
         `This button signs you in once and then expires. If it has stopped working, go to ${emailLink(o.loginUrl, 'the portal sign-in page')} and choose &ldquo;Email me a sign-in code&rdquo; and type the code we send you.`),
+      emailPara(`New to this? <a href="${o.loginUrl.split('/sub-portal')[0]}/how-to-sign-in" style="color:${BRAND.limeDark};font-weight:700;text-decoration:none">Watch a one-minute how-to</a> showing how to sign in.`, 22),
       emailCallout(
         `<ul style="margin:0 0 18px;padding-left:18px;font-size:13.5px;color:#4a5568;line-height:1.7">${uses}</ul>
         <div style="font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:${BRAND.limeDark};margin-bottom:6px">Keep it one tap away</div>
