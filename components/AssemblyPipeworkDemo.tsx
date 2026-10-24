@@ -7,7 +7,7 @@
  * Counts and prices only: pipe sizes and falls are the plumber's to confirm and gas pipework is a Gas Safe engineer's. The engine is lib/pipework-units.ts.
  */
 
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import NumInput from '@/components/NumInput'
 import { useCalcState } from '@/components/calc-state'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
@@ -29,6 +29,8 @@ interface Props {
   onClose?: () => void
   onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }) => void
   labourTrades?: BOLabourTrade[]
+  /** The length of the pipe line drawn in Take-off, mm: the first run's length. Whenever it changes it overwrites the calculator's own. */
+  externalLengthMm?: number
 }
 
 const TYPE_COLOUR: Record<RunType, string> = { cold: '#2563eb', hot: '#dc2626', heating: '#ea580c', gas: '#ca8a04', waste: '#64748b', soil: '#57534e' }
@@ -38,13 +40,19 @@ export const ROUTED_WORDS: Record<Route, string> = {
 const TYPES = Object.keys(RUN_TYPES) as RunType[]
 const uid = () => Math.random().toString(36).slice(2, 9)
 
-export default function AssemblyPipeworkDemo({ onClose, onSave, labourTrades = [] }: Props) {
+export default function AssemblyPipeworkDemo({ onClose, onSave, labourTrades = [], externalLengthMm }: Props) {
+  const fromLine = externalLengthMm && externalLengthMm > 0 ? +(externalLengthMm / 1000).toFixed(2) : 0
+  const firstRun = (lengthM: number): PipeRun => ({ id: 'run-' + uid(), name: 'Pipe run', type: 'cold', size: 15, material: 'copper', lengthM, route: 'surface', lagged: false })
   const ID = 'AssemblyPipeworkDemo'
   const [name, setName] = useCalcState(ID, 'name', 'Pipework')
   const [location, setLocation] = useCalcState(ID, 'location', '')
   const [qty, setQty] = useCalcState(ID, 'qty', 1)
   // The job starts with no runs: you add the ones it has
-  const [runs, setRuns] = useCalcState<PipeRun[]>(ID, 'runs', [])
+  // The job starts with no runs, unless it comes from a pipe drawn in Take-off: then that drawn line is the first run, and follows the drawing
+  const [runs, setRuns] = useCalcState<PipeRun[]>(ID, 'runs', () => (fromLine > 0 ? [firstRun(fromLine)] : []))
+  useEffect(() => {
+    if (fromLine > 0) setRuns(p => (p.length === 0 ? [firstRun(fromLine)] : p.map((r, i) => (i === 0 ? { ...r, lengthM: fromLine } : r))))
+  }, [fromLine]) // eslint-disable-line react-hooks/exhaustive-deps
   const [valves, setValves] = useCalcState(ID, 'valves', 0)
   const [boxingLm, setBoxingLm] = useCalcState(ID, 'boxingLm', 0)
   const [pressureTest, setPressureTest] = useCalcState(ID, 'pressureTest', true)
