@@ -224,3 +224,56 @@ export function nextOpeningRef(existing: { ref: string; kind: OpeningKind }[], k
   while (used.has(`${g}${n}`)) n++
   return `${g}${n}`
 }
+
+// ── What a wall takes from its openings ──────────────────────────────────────────────────────────────────────────────
+
+/** The kind of opening a wall's own opening list (Properties: window, door, bifold, French doors, garage door) calls it */
+export function wallOpeningTypeFor(kind: OpeningKind): 'window' | 'door' | 'bifold' | 'french_door' | 'garage_door' {
+  if (kind.startsWith('win-')) return 'window'
+  if (kind === 'door-bifold') return 'bifold'
+  if (kind === 'door-french') return 'french_door'
+  if (kind === 'door-garage') return 'garage_door'
+  return 'door'
+}
+
+/** An opening as the cavity wall calculator knows it: where it is along the wall (mm from the wall's first end to its LEFT edge), its size and its kind */
+export interface PlanWallOpening { id: string; ref: string; kind: 'window' | 'door' | 'bifold' | 'custom'; widthMm: number; heightMm: number; offsetMm: number }
+
+/** The openings placed on one wall, as that wall's calculator wants them (a garage door is a custom opening, and any door that is not a bi-fold is a door) */
+export function planWallOpenings(placed: PlacedOpening[], wallId: string, mpp: number): PlanWallOpening[] {
+  if (!(mpp > 0)) return []
+  return placed.filter(o => o.wallId === wallId).sort((a, b) => a.distPx - b.distPx).map(o => ({
+    id: o.id,
+    ref: o.ref,
+    kind: o.kind.startsWith('win-') ? 'window' : o.kind === 'door-bifold' ? 'bifold' : o.kind === 'door-garage' ? 'custom' : 'door',
+    widthMm: o.widthMm,
+    heightMm: o.heightMm,
+    offsetMm: Math.max(0, Math.round(o.distPx * mpp * 1000 - o.widthMm / 2)),
+  }))
+}
+
+export const planWallSig = (p: PlanWallOpening) => [p.kind, p.widthMm, p.heightMm, p.offsetMm, p.ref].join('|')
+
+/**
+ * A wall calculator's openings brought in step with the drawing, the way mergePlanOpenings does for the schedule: a drawn opening is added (`make` gives a new one with its kind's usual lintel), one already there follows the drawing
+ * when the drawing's opening changes and is otherwise left as typed (so its lintel choice stays), and one whose drawing opening has gone leaves. Openings typed in the calculator with no drawing opening are never touched.
+ */
+export function mergePlanWallOpenings<T extends { id: string; kind: PlanWallOpening['kind']; widthMm: number; heightMm: number; offsetMm: number; planId?: string; fromPlan?: string }>(
+  existing: T[], plan: PlanWallOpening[], make: (p: PlanWallOpening) => T,
+): T[] {
+  const byPlan = new Map(plan.map(p => [p.id, p]))
+  const out: T[] = []
+  const seen = new Set<string>()
+  for (const e of existing) {
+    if (!e.planId) { out.push(e); continue }
+    const p = byPlan.get(e.planId)
+    if (!p) continue
+    seen.add(p.id)
+    const sig = planWallSig(p)
+    if (e.fromPlan === sig) { out.push(e); continue }
+    const base = e.kind === p.kind ? e : { ...make(p), id: e.id }
+    out.push({ ...base, kind: p.kind, widthMm: p.widthMm, heightMm: p.heightMm, offsetMm: p.offsetMm, planId: p.id, fromPlan: sig })
+  }
+  for (const p of plan) if (!seen.has(p.id)) out.push({ ...make(p), id: 'po-' + p.id, planId: p.id, fromPlan: planWallSig(p) })
+  return out
+}

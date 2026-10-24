@@ -391,6 +391,9 @@ export interface CavityOpening extends AssemblyOpening {
   lintelType: LintelType
   /** For a 'steel-beam' lintel: the section specified, e.g. 'UB 178x102x19' (the designer's choice; this only prices it). */
   steelSize?: string
+  /** the opening placed on the Take-off drawing this one follows (it keeps following until typed over), and what it was last fed from it */
+  planId?: string
+  fromPlan?: string
 }
 
 export interface CavityWallInput {

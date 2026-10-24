@@ -29,6 +29,7 @@ import {
   type LintelType, type AssemblyLayerDef, type CostedLine,
 } from '@/lib/assembly-calc'
 import { fmt } from '@/lib/utils'
+import { mergePlanWallOpenings, planWallSig, type PlanWallOpening } from '@/lib/wall-openings'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import {
   propInput, miniInput, PropRow, BreakdownTable, HDim,
@@ -189,6 +190,8 @@ interface Props {
   initialHeightMm?: number
   /** Start with no sample window (the AI quote's wall has none). */
   noSampleOpenings?: boolean
+  /** The doors and windows drawn on this wall in Take-off: added to the openings, and kept in step with the drawing until typed over. */
+  planOpenings?: PlanWallOpening[]
 }
 
 function sampleOpenings(): CavityOpening[] {
@@ -287,7 +290,7 @@ export function priceCavityWallFromBasics(o: { lengthMm: number; heightMm: numbe
   }
 }
 
-export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onClose, onSave, labourTrades = [], externalLengthMm, initialHeightMm, noSampleOpenings }: Props) {
+export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onClose, onSave, labourTrades = [], externalLengthMm, initialHeightMm, noSampleOpenings, planOpenings }: Props) {
   const isFullFill = insulationDefault === 'wool'
   const [name, setName] = useCalcState('AssemblyCavityWallDemo', 'name', isFullFill ? 'Cavity Wall — Full Fill' : 'Cavity Wall — Partial Fill')
   const [qty, setQty] = useCalcState('AssemblyCavityWallDemo', 'qty', 1)
@@ -305,7 +308,16 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
   const [boardThicknessMm, setBoardThicknessMm] = useCalcState('AssemblyCavityWallDemo', 'boardThicknessMm', 75)
   const [finishType, setFinishType] = useCalcState<FinishType>('AssemblyCavityWallDemo', 'finishType', 'dot-dab')
   const [wastePct, setWastePct] = useCalcState('AssemblyCavityWallDemo', 'wastePct', 10)
-  const [openings, setOpenings] = useCalcState<CavityOpening[]>('AssemblyCavityWallDemo', 'openings', noSampleOpenings ? [] : sampleOpenings)
+  const [openings, setOpenings] = useCalcState<CavityOpening[]>('AssemblyCavityWallDemo', 'openings', noSampleOpenings || (planOpenings && planOpenings.length > 0) ? [] : sampleOpenings)
+  // the doors and windows drawn on this wall: added with their kind's usual lintel, and they follow the drawing (position, size, kind) until typed over
+  const planKey = planOpenings ? planOpenings.map(planWallSig).join(';') + '#' + planOpenings.map(p => p.id).join(',') : null
+  useEffect(() => {
+    if (!planOpenings) return
+    const make = (p: PlanWallOpening): CavityOpening => (p.kind === 'bifold'
+      ? { id: newOpeningId(), kind: 'bifold', widthMm: p.widthMm, heightMm: p.heightMm, offsetMm: p.offsetMm, sillHeightMm: 0, lintelType: 'steel-beam', steelSize: DEFAULT_STEEL_BEAM }
+      : { id: newOpeningId(), kind: p.kind, widthMm: p.widthMm, heightMm: p.heightMm, offsetMm: p.offsetMm, sillHeightMm: p.kind === 'window' ? 900 : 0, lintelType: 'steel-cavity' })
+    setOpenings(prev => mergePlanWallOpenings(prev, planOpenings, make))
+  }, [planKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const [location, setLocation] = useCalcState('AssemblyCavityWallDemo', 'location', '')
   // The inside reveals of the openings (board or plaster returns and beads): on by default, how deep they are is typed
   const [finishReveals, setFinishReveals] = useCalcState('AssemblyCavityWallDemo', 'finishReveals', true)

@@ -43,7 +43,7 @@ import ClientProjectModal from './components/ClientProjectModal'
 import ClientFilePicker from '@/components/ClientFilePicker'
 import { planResize, applyResize } from '@/lib/calc-size'
 import { wallDrawing, wallBand, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, specFromMakeupLayers, defaultWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
-import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, type PlacedOpening, type WallBand } from '@/lib/wall-openings'
+import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, type PlacedOpening, type WallBand } from '@/lib/wall-openings'
 import { KIND_BY_ID as WD_KIND_BY_ID, planOpeningSig, type OpeningKind, type WdSwing, type PlanOpening } from '@/lib/wd-units'
 import { cornersOf, snapPoint, anchorsFor, parseTyped, pointAtDistance, rectCornerAt, rotateShape, type SnapResult } from '@/lib/takeoff-snap'
 import { newHistory, observe as observeHistory, undoStep, redoStep, type History } from '@/lib/takeoff-history'
@@ -432,6 +432,32 @@ function itemFromElement(el: DrawnElement, mpp: number): TakeoffItem {
   }
 }
 
+// ── Openings a wall takes off: the ones typed in Properties and the doors and windows drawn on it ──────────
+const openingsAreaOf = (item: TakeoffItem) => [...(item.openings ?? []), ...(item.drawnOpenings ?? [])].reduce((s, o) => s + o.width * o.height, 0)
+
+/** The wall items kept in step with the doors and windows placed on their walls: each wall item carries the openings drawn on it (drawnOpenings) and its net area (and an internal wall's materials) follow. Nothing changes where nothing was drawn. */
+function withDrawnOpenings(items: TakeoffItem[], placed: PlacedOpening[]): TakeoffItem[] {
+  return items.map(item => {
+    if (!item.elementId || (item.phase !== 'External Walls' && item.phase !== 'Internal Walls & Partitions')) return item
+    const drawn: WallOpening[] = placed.filter(o => o.wallId === item.elementId).map(o => ({
+      id: 'po-' + o.id, type: wallOpeningTypeFor(o.kind), label: o.ref, width: o.widthMm / 1000, height: o.heightMm / 1000,
+    }))
+    if (JSON.stringify(drawn) === JSON.stringify(item.drawnOpenings ?? [])) return item
+    const next: TakeoffItem = { ...item, drawnOpenings: drawn.length ? drawn : undefined }
+    // an area-priced wall (net = gross less every opening); a wall priced another way keeps its own quantity
+    if (next.unit === 'm²' && next.area != null) {
+      const net = +Math.max(0, next.area - openingsAreaOf(next)).toFixed(3)
+      next.qty = net
+      if (next.phase === 'Internal Walls & Partitions' && next.calculatedMaterials) {
+        const sides = (next.finishSides ?? 2) as 1 | 2
+        next.calculatedMaterials = calcMaterialLines((next.wallConstructionType ?? 'stud_metal_70') as WallConstructionType, (next.wallFinishType ?? 'board_skim') as WallFinishType, sides, net, next.calculatedMaterials)
+        next.materialsConfirmed = false
+      }
+    }
+    return next
+  })
+}
+
 // ── Recalculate all element-linked item quantities for a new mpp ──────────────
 function recalcItemsForMpp(
   items: TakeoffItem[],
@@ -455,7 +481,7 @@ function recalcItemsForMpp(
       // Wall items: recalculate gross area and net area from new length
       if (item.phase === 'External Walls' && item.wallHeight != null) {
         area = +(length * item.wallHeight).toFixed(3)
-        const openingsArea = (item.openings ?? []).reduce((s, o) => s + o.width * o.height, 0)
+        const openingsArea = openingsAreaOf(item)
         qty = +(Math.max(0, area - openingsArea)).toFixed(3)
       } else if (item.phase === 'Foundations' && item.foundationWidth != null) {
         // Foundation line: qty = lm; area = footprint; volume = excavation/concrete
@@ -471,7 +497,7 @@ function recalcItemsForMpp(
       area = rectArea(el.points, mpp)
       // Wall items: preserve opening deductions
       if (item.phase === 'External Walls') {
-        const openingsArea = (item.openings ?? []).reduce((s, o) => s + o.width * o.height, 0)
+        const openingsArea = openingsAreaOf(item)
         qty = +(Math.max(0, area - openingsArea)).toFixed(3)
       } else {
         qty = area
@@ -480,7 +506,7 @@ function recalcItemsForMpp(
       area = polygonArea(el.points, mpp)
       // Wall items: preserve opening deductions
       if (item.phase === 'External Walls') {
-        const openingsArea = (item.openings ?? []).reduce((s, o) => s + o.width * o.height, 0)
+        const openingsArea = openingsAreaOf(item)
         qty = +(Math.max(0, area - openingsArea)).toFixed(3)
       } else {
         qty = area
@@ -1657,7 +1683,17 @@ export default function TakeoffPage() {
     })
   }
   function changePlaced(fn: (list: PlacedOpening[]) => PlacedOpening[]) {
-    changeWdItem(it => ({ ...it, placedOpenings: fn(it.placedOpenings ?? []) }))
+    setProject(p => {
+      const base = p.items.some(it => it.wdSummary) ? p.items : [...p.items, newWdItem()]
+      let placed: PlacedOpening[] = []
+      const items = base.map(it => {
+        if (!it.wdSummary) return it
+        placed = fn(it.placedOpenings ?? [])
+        return { ...it, placedOpenings: placed }
+      })
+      // an opening whose wall is gone takes nothing off, and the walls it is on take it off their area
+      return { ...p, items: withDrawnOpenings(items, placed.filter(o => p.elements.some(e => e.id === o.wallId))) }
+    })
   }
   function pickOpeningKind(k: OpeningKind) {
     const info = WD_KIND_BY_ID[k]
@@ -3101,7 +3137,7 @@ export default function TakeoffPage() {
     const confirmed      = item.materialsConfirmed ?? false
 
     const grossArea    = +(wallLength * wallHeight).toFixed(3)
-    const openingsArea = +openings.reduce((s, o) => s + o.width * o.height, 0).toFixed(3)
+    const openingsArea = +openingsAreaOf(item).toFixed(3)
     const netArea      = +(Math.max(0, grossArea - openingsArea)).toFixed(3)
     const finishArea   = +(netArea * finishSidesVal).toFixed(3)
     const totals       = sumByCategory(mats)
@@ -3110,7 +3146,7 @@ export default function TakeoffPage() {
       const merged   = { ...item, ...patch }
       const h        = merged.wallHeight    ?? wallHeight
       const sides    = (merged.finishSides  ?? finishSidesVal) as 1 | 2
-      const ops      = merged.openings      ?? openings
+      const ops      = [...(merged.openings ?? openings), ...(item.drawnOpenings ?? [])]
       const ct       = (merged.wallConstructionType ?? ctype) as WallConstructionType
       const ft       = (merged.wallFinishType ?? ftype) as WallFinishType
       const newGross = +(wallLength * h).toFixed(3)
@@ -3629,6 +3665,7 @@ export default function TakeoffPage() {
           variant: item.floorMakeupId === 'cold_flat_roof' ? 'cold' : undefined,
           labourTrades,
           calcState: item.assemblyCalcState,
+          wallOpenings: isExtWall && item.elementId ? planWallOpenings(livePlaced, item.elementId, project.calibration.mpp) : undefined,
           onSave: result => {
             const { calcState, state: _state, size, ...res } = result
             saveItemEdit({
@@ -3657,7 +3694,7 @@ export default function TakeoffPage() {
     const wallHeight     = item.wallHeight ?? (isExtWall ? 2.7 : 2.4)
     const openings       = item.openings ?? []
     const grossArea      = showWallLine ? +(wallLength * wallHeight).toFixed(3) : (item.area ?? 0)
-    const openingsArea   = +openings.reduce((s, o) => s + o.width * o.height, 0).toFixed(3)
+    const openingsArea   = +openingsAreaOf(item).toFixed(3)
     const netArea        = +(Math.max(0, grossArea - openingsArea)).toFixed(3)
     const finishSidesVal = (item.finishSides ?? 2) as 1 | 2
     const plasterSides   = (item.plasterFinishSides ?? 1) as 1 | 2
@@ -3706,7 +3743,7 @@ export default function TakeoffPage() {
     function recalcWallAndSave(patch: Partial<TakeoffItem>) {
       const merged = { ...item, ...patch }
       const h    = merged.wallHeight    ?? wallHeight
-      const ops  = merged.openings      ?? openings
+      const ops  = [...(merged.openings ?? openings), ...(item.drawnOpenings ?? [])]
       const newGross = +(wallLength * h).toFixed(3)
       const newOpA   = +ops.reduce((s, o) => s + o.width * o.height, 0).toFixed(3)
       const newNet   = +(Math.max(0, newGross - newOpA)).toFixed(3)
@@ -4876,8 +4913,15 @@ export default function TakeoffPage() {
                   </button>
                 ))}
               </div>
+              {(item.drawnOpenings ?? []).length > 0 && (
+                <div style={{ marginBottom: 8, padding: '5px 7px', borderRadius: 4, border: '1px dashed var(--to-border)', fontSize: 11, color: 'var(--to-text)' }}>
+                  <div style={{ fontSize: 9, color: 'var(--to-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 3 }}>Drawn on this wall (taken off automatically)</div>
+                  {(item.drawnOpenings ?? []).map(op => <div key={op.id} style={{ display: 'flex', justifyContent: 'space-between' }}><span>{op.label} · {WALL_OPENING_LABELS[op.type]}</span><span style={{ fontFamily: 'monospace' }}>{op.width.toFixed(2)} × {op.height.toFixed(2)} m</span></div>)}
+                  <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 3 }}>Move or delete them with the Place Window / Door tool in the Windows & Doors phase.</div>
+                </div>
+              )}
               {openings.length === 0 ? (
-                <div style={{ fontSize: 11, color: 'var(--to-muted)', fontStyle: 'italic' }}>No openings — net area = gross area</div>
+                <div style={{ fontSize: 11, color: 'var(--to-muted)', fontStyle: 'italic' }}>{(item.drawnOpenings ?? []).length > 0 ? 'No openings typed here' : 'No openings — net area = gross area'}</div>
               ) : (
                 <>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 52px 12px 52px 28px', gap: 3, padding: '2px 0', marginBottom: 3, fontSize: 9, color: 'var(--to-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
@@ -4908,7 +4952,7 @@ export default function TakeoffPage() {
                     </div>
                   ))}
                   <div style={{ fontSize: 11, color: 'var(--to-muted)', textAlign: 'right', marginTop: 4 }}>
-                    Deductions: <strong style={{ color: '#e74c3c' }}>{fmt2(openingsArea)} m²</strong>
+                    Deductions: <strong style={{ color: '#e74c3c' }}>{fmt2(openingsArea)} m²</strong>{(item.drawnOpenings ?? []).length > 0 ? ' (including the drawn ones)' : ''}
                   </div>
                 </>
               )}

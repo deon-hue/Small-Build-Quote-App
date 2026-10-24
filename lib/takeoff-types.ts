@@ -195,6 +195,8 @@ export interface TakeoffItem {
   // Wall-specific
   wallHeight?:   number           // metres — storey height for LINE-drawn walls
   openings?:     WallOpening[]    // deducted openings (windows, doors, bifolds, etc.)
+  /** the doors and windows placed on this wall in the drawing (kept in step by Take-off, ids po-...): deducted like `openings`, but not edited here */
+  drawnOpenings?: WallOpening[]
   wallBandPx?:   number           // half-width of wall band on canvas in pixels (default 9)
   /** a wall drawn at its real thickness builds to the right of the way it was drawn (the inside of a house drawn clockwise); true builds to the other side */
   wallFlip?:     boolean

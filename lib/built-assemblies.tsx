@@ -62,6 +62,7 @@ import type { CostedLine } from '@/lib/assembly-calc'
 import type { AssemblyBasics } from '@/lib/assembly-basics'
 import type { PlanRoom, ElectricsSavedState } from '@/lib/electrics-units'
 import type { PlanOpening } from '@/lib/wd-units'
+import type { PlanWallOpening } from '@/lib/wall-openings'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import type { CalcSize } from '@/lib/calc-size'
 
@@ -109,6 +110,8 @@ export interface AssemblyRenderOpts {
   electrics?: { planRooms?: PlanRoom[]; initialState?: ElectricsSavedState }
   /** Windows & Doors only: the doors and windows placed on the Take-off plan, which the calculator adds and follows. */
   planOpenings?: PlanOpening[]
+  /** A wall calculator with openings of its own (the cavity wall): the doors and windows drawn on this wall, which it adds and follows. */
+  wallOpenings?: PlanWallOpening[]
 }
 
 type BuiltAssemblyEntry = {
@@ -132,7 +135,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'roof-rooflights': { icon: 'rooflights', render: opts => <AssemblyRooflightsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'roof-fascia-soffit': { icon: 'fascia-soffit', render: opts => <AssemblyFasciaSoffitDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} externalWidthMm={opts?.externalWidthMm} /> },
   'roof-flat': { icon: 'flat-roof', render: opts => <AssemblyFlatRoofDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} externalWidthMm={opts?.externalWidthMm} buildUpDefault={opts?.variant === 'cold' ? 'cold' : 'warm'} /> },
-  'ew-cav-partial': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="pir" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initialHeightMm={opts?.initialHeightMm} noSampleOpenings={opts?.noSampleOpenings} /> },
+  'ew-cav-partial': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="pir" planOpenings={opts?.wallOpenings} onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initialHeightMm={opts?.initialHeightMm} noSampleOpenings={opts?.noSampleOpenings} /> },
   'fnd-strip': { icon: 'strip-foundation', render: opts => <AssemblyStripFoundationDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initial={opts?.basics} /> },
   'fnd-trench-fill': { icon: 'strip-foundation', render: opts => <AssemblyStripFoundationDemo variant="trench-fill" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initial={opts?.basics} /> },
   'fnd-raft': { icon: 'raft-foundation', render: opts => <AssemblyRaftFoundationDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} externalWidthMm={opts?.externalWidthMm} initial={opts?.basics} /> },
@@ -166,7 +169,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'plaster-rooms': { icon: 'plaster-rooms', render: opts => <AssemblyPlasterRoomsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'deco-internal-walls': { icon: 'decoration', render: opts => <AssemblyDecorationDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'elec-install': { icon: 'electrics', render: opts => <AssemblyElectricsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} planRooms={opts?.electrics?.planRooms} initialState={opts?.electrics?.initialState} /> },
-  'ew-cav-full': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="wool" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initialHeightMm={opts?.initialHeightMm} noSampleOpenings={opts?.noSampleOpenings} /> },
+  'ew-cav-full': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="wool" planOpenings={opts?.wallOpenings} onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initialHeightMm={opts?.initialHeightMm} noSampleOpenings={opts?.noSampleOpenings} /> },
 }
 
 /** Every calculator is drawn inside the rate-link provider, so its cost table can link a line to a Back Office product or plant item without each screen knowing about it. */
