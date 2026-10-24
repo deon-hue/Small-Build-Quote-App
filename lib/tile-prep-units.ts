@@ -67,6 +67,9 @@ export interface TilePrepRoom extends RoomShapeExtras {
   protect: boolean
   /** the drawn area and perimeter (from Take-off) this room was last sized from: it follows them until they change */
   fromPlan?: { areaM2: number; perimeterM: number }
+  /** the room on the Take-off plan this one was made from, and what the plan said when it was last fed (it follows the plan until the plan's room changes) */
+  planRoomId?: string
+  planRoomSig?: string
 }
 
 export function newTilePrepRoom(id: string, name: string, kindId: string, k: { lengthM: number; widthM: number; heightM: number; collars: number }, zones: PrepZone[]): TilePrepRoom {

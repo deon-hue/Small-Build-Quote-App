@@ -8,10 +8,14 @@
  * cost and the paint are shown room by room. Rates and hours are samples to be checked against real jobs. The engine is lib/decoration-units.ts.
  */
 
-import React, { useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import NumInput from '@/components/NumInput'
 import { useCalcState } from '@/components/calc-state'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
+import PlanRoomsBar from '@/components/PlanRoomsBar'
+import type { PlanRoomInfo } from '@/lib/rooms-from-walls'
+import { followPlanRooms, planRoomSig, plasterKindFor, planWallAreaM2 } from '@/lib/rooms-merge'
+import { sidesFromAreaPerimeter } from '@/lib/tiling-common'
 import { fmt } from '@/lib/utils'
 import {
   calculateDecoration, newDecoRoom, ROOM_KINDS, ROOM_KIND_BY_ID, DEFAULT_DECO_SITUATIONS, MATERIAL_RATES,
@@ -33,6 +37,8 @@ interface Props {
   onClose?: () => void
   onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }) => void
   labourTrades?: BOLabourTrade[]
+  /** the rooms found on the Take-off plan: they can be added with their sizes, and follow the plan until typed over */
+  planRooms?: PlanRoomInfo[]
 }
 
 const NS = 'AssemblyDecorationDemo'
@@ -47,7 +53,7 @@ const RATE_LABELS: [keyof typeof MATERIAL_RATES, string, string][] = [
   ['steamerDay', 'Wallpaper steamer hire', '£/day'], ['towerWeek', 'Access tower hire', '£/week'],
 ]
 
-export default function AssemblyDecorationDemo({ onClose, onSave, labourTrades = [] }: Props) {
+export default function AssemblyDecorationDemo({ onClose, onSave, labourTrades = [], planRooms }: Props) {
   const [name, setName] = useCalcState(NS, 'name', 'Internal decoration')
   const [location, setLocation] = useCalcState(NS, 'location', '')
   const [qty, setQty] = useCalcState(NS, 'qty', 1)
@@ -73,6 +79,22 @@ export default function AssemblyDecorationDemo({ onClose, onSave, labourTrades =
   function updateWood(id: string, patch: Partial<DecoRoom['woodwork']>) { setRooms(p => p.map(r => r.id === id ? { ...r, woodwork: { ...r.woodwork, ...patch } } : r)) }
   function updateDoors(id: string, patch: Partial<DecoRoom['doorWork']>) { setRooms(p => p.map(r => r.id === id ? { ...r, doorWork: { ...r.doorWork, ...patch } } : r)) }
   function updateFrames(id: string, patch: Partial<DecoRoom['frames']>) { setRooms(p => p.map(r => r.id === id ? { ...r, frames: { ...r.frames, ...patch } } : r)) }
+  // a room from the Take-off plan: its floor and wall length from the true area and perimeter, its height, doors and windows, and the wall and ceiling areas as drawn
+  const fitToPlan = (r: DecoRoom, pr: PlanRoomInfo): DecoRoom => {
+    const sides = sidesFromAreaPerimeter(pr.areaM2, pr.perimeterM)
+    return { ...r, lengthM: sides.long, widthM: sides.short, heightM: pr.heightM, doors: pr.doors, windows: pr.windows, wallAreaOverrideM2: planWallAreaM2(pr), ceilingAreaOverrideM2: pr.areaM2 }
+  }
+  function addPlanRooms(list: PlanRoomInfo[]) {
+    setRooms(p => {
+      const made = list.filter(pr => !p.some(r => r.planRoomId === pr.id)).map(pr => ({ ...fitToPlan(newDecoRoom(newRoomId(), pr.name, plasterKindFor(pr.kind)), pr), planRoomId: pr.id, planRoomSig: planRoomSig(pr) }))
+      return [...p, ...made]
+    })
+  }
+  const planRoomsKey = planRooms ? planRooms.map(p => p.id + ':' + planRoomSig(p)).join(';') : null
+  useEffect(() => {
+    if (planRooms) setRooms(p => followPlanRooms(p, planRooms, fitToPlan))
+  }, [planRoomsKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
   function addRoom() {
     const k = ROOM_KIND_BY_ID[addKind]
     setRooms(p => {
@@ -235,6 +257,7 @@ export default function AssemblyDecorationDemo({ onClose, onSave, labourTrades =
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16 }}>
         <div>
+          <PlanRoomsBar planRooms={planRooms} isAdded={id => rooms.some(r => r.planRoomId === id)} onAdd={r => addPlanRooms([r])} onAddAll={addPlanRooms} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>Rooms</span>
             <select value={addKind} onChange={e => setAddKind(e.target.value)} style={{ ...small, minWidth: 170 }}>

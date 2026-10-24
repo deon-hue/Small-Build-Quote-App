@@ -15,6 +15,9 @@ import {
   calculateTileUfh, newTileUfhRoom, heatedAreaM2, UFH_KITS, THERMOSTAT_INFO, INSULATION_INFO,
   type TileUfhRoom, type TileUfhResult, type UfhKit, type UfhThermostat, type UfhInsulation,
 } from '@/lib/tile-ufh-units'
+import PlanRoomsBar from '@/components/PlanRoomsBar'
+import type { PlanRoomInfo } from '@/lib/rooms-from-walls'
+import { followPlanRooms, planRoomSig, tilingKindFor } from '@/lib/rooms-merge'
 import { DEFAULT_TILING_SITUATIONS, TILING_ROOM_KINDS, TILING_ROOM_KIND_BY_ID, sidesFromAreaPerimeter } from '@/lib/tiling-common'
 import { describeTileUfh, describeTileUfhShort, type TilingDescriptionInput } from '@/lib/tiling-description'
 import type { BOLabourTrade } from '@/lib/back-office-types'
@@ -25,6 +28,8 @@ interface Props {
   onClose?: () => void
   onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }) => void
   labourTrades?: BOLabourTrade[]
+  /** the rooms found on the Take-off plan: they can be added with their sizes, and follow the plan until typed over */
+  planRooms?: PlanRoomInfo[]
   /** Take-off's drawn area (m²) and perimeter (m): the first room is sized from them and follows them */
   externalAreaM2?: number
   externalPerimeterM?: number
@@ -34,7 +39,7 @@ const uid = () => Math.random().toString(36).slice(2, 9)
 const THERMOSTATS = Object.keys(THERMOSTAT_INFO) as UfhThermostat[]
 const INSULATIONS = Object.keys(INSULATION_INFO) as UfhInsulation[]
 
-export default function AssemblyTileUfhDemo({ onClose, onSave, labourTrades = [], externalAreaM2, externalPerimeterM }: Props) {
+export default function AssemblyTileUfhDemo({ onClose, onSave, labourTrades = [], externalAreaM2, externalPerimeterM, planRooms }: Props) {
   const ID = 'AssemblyTileUfhDemo'
   // The area drawn in Take-off (if any) sizes the first room, which follows it until the drawing changes
   const planArea = externalAreaM2 && externalAreaM2 > 0 ? externalAreaM2 : 0
@@ -56,6 +61,27 @@ export default function AssemblyTileUfhDemo({ onClose, onSave, labourTrades = []
   const [startInsulation, setStartInsulation] = useCalcState<UfhInsulation>(ID, 'startInsulation', '6mm')
   const [jobSituationId, setJobSituationId] = useCalcState(ID, 'jobSituationId', 'empty')
   const [electricianIncluded, setElectricianIncluded] = useCalcState(ID, 'electricianIncluded', true)
+
+  // a room from the Take-off plan: its true floor area and wall length (the heated area is that less what is fixed and a margin round the walls)
+  const fitToPlan = (r: TileUfhRoom, pr: PlanRoomInfo): TileUfhRoom => {
+    const sides = sidesFromAreaPerimeter(pr.areaM2, pr.perimeterM)
+    return { ...r, lengthM: sides.long, widthM: sides.short, heatedAreaOverrideM2: null, shape: 'other', otherAreaM2: pr.areaM2, otherPerimeterM: pr.perimeterM }
+  }
+  function addPlanRooms(list: PlanRoomInfo[]) {
+    setRooms(p => {
+      const made = list.filter(pr => !p.some(r => r.planRoomId === pr.id)).map(pr => {
+        const kindId = tilingKindFor(pr.kind)
+        const k = TILING_ROOM_KIND_BY_ID[kindId] ?? TILING_ROOM_KIND_BY_ID.other
+        const room = fitToPlan(newTileUfhRoom('room-' + uid(), pr.name, kindId, k, { kit: startKit, insulation: startInsulation }), pr)
+        return { ...room, planRoomId: pr.id, planRoomSig: planRoomSig(pr) }
+      })
+      return [...p, ...made]
+    })
+  }
+  const planRoomsKey = planRooms ? planRooms.map(p => p.id + ':' + planRoomSig(p)).join(';') : null
+  useEffect(() => {
+    if (planRooms) setRooms(p => followPlanRooms(p, planRooms, fitToPlan))
+  }, [planRoomsKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function addRoom() {
     setRooms(p => {
@@ -88,6 +114,7 @@ export default function AssemblyTileUfhDemo({ onClose, onSave, labourTrades = []
       {({ roomCost }) => ({
         main: (
           <>
+            <PlanRoomsBar planRooms={planRooms} isAdded={id => rooms.some(r => r.planRoomId === id)} onAdd={r => addPlanRooms([r])} onAddAll={addPlanRooms} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>Rooms</span>
               <select value={addKind} onChange={e => setAddKind(e.target.value)} style={{ ...tilingSmall, minWidth: 150 }}>

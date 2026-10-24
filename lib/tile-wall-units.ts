@@ -34,6 +34,9 @@ export interface TileWallRoom {
   /** silicone to the bath or tray and the internal corners, lm; null = worked out from the areas */
   siliconeLm: number | null
   sealed: boolean
+  /** the room on the Take-off plan this one was made from, and what the plan said when it was last fed (it follows the plan until the plan's room changes) */
+  planRoomId?: string
+  planRoomSig?: string
   situationId: string | null
   protect: boolean
   /** the drawn length (from Take-off) this room's first wall area was last sized from: it follows it until it changes */

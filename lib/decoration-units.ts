@@ -88,6 +88,9 @@ export interface DecoRoom {
   woodwork: WoodworkWork
   doorWork: DoorWork
   frames: FrameWork
+  /** the room on the Take-off plan this one was made from, and what the plan said when it was last fed (it follows the plan until the plan's room changes) */
+  planRoomId?: string
+  planRoomSig?: string
 }
 
 /** What a new room starts as: walls and ceiling painted, the woodwork and doors off until they are wanted. */
