@@ -197,3 +197,52 @@ export const LAYER_STYLE: Record<LayerKind, { fill: string; line: string; hatch:
   solid:      { fill: '#cfcfcf', line: '#444444', hatch: 'cross' },
 }
 
+
+// ── Joining walls that meet ──────────────────────────────────────────────────────────────────────────────────────
+// Each wall is drawn as its own line, so where two meet at a corner their bands cross and the layers do not follow the corner. Walls of the same kind whose ends meet (they were snapped to each other, so the points are
+// the same) are drawn as ONE run with a proper mitred corner, and a run that comes back to where it started is a closed ring. Where a wall ends on the side of another (a partition into an outside wall) the longer wall
+// is painted over the shorter's end, so the shorter stops at its face.
+
+export interface WallPiece {
+  id: string
+  points: Pt[]
+  /** a rectangle or polygon outline: drawn as it is, never joined to anything */
+  closed: boolean
+  flip: boolean
+  /** walls only join walls with the same group: the same class (external / internal), reference and make-up */
+  group: string
+}
+export interface WallChain { ids: string[]; points: Pt[]; closed: boolean; flip: boolean; group: string }
+
+const near = (a: Pt, b: Pt, tol: number) => Math.hypot(a.x - b.x, a.y - b.y) <= tol
+const lengthOf = (pts: Pt[]) => pts.slice(1).reduce((s, p, i) => s + Math.hypot(p.x - pts[i].x, p.y - pts[i].y), 0)
+
+/** The runs the pieces make, painted shortest first within each kind so the longest wall ends up on top. `tol` is how close two ends must be (plan pixels) to count as meeting. */
+export function chainWalls(pieces: WallPiece[], tol = 3): WallChain[] {
+  const out: WallChain[] = []
+  const open: { id: string; pts: Pt[]; group: string }[] = []
+  for (const p of pieces) {
+    if (p.closed) out.push({ ids: [p.id], points: p.points, closed: true, flip: p.flip, group: p.group })
+    else if (p.points.length >= 2) open.push({ id: p.id, pts: p.flip ? p.points.slice().reverse() : p.points, group: p.group })   // a flipped wall is drawn from its other end so the inside is always to the right of travel
+  }
+  const used = new Set<string>()
+  for (const start of open) {
+    if (used.has(start.id)) continue
+    used.add(start.id)
+    let pts = start.pts.slice()
+    const ids = [start.id]
+    let grew = true
+    while (grew) {
+      grew = false
+      for (const c of open) {
+        if (used.has(c.id) || c.group !== start.group) continue
+        if (near(pts[pts.length - 1], c.pts[0], tol)) { pts = [...pts, ...c.pts.slice(1)]; ids.push(c.id); used.add(c.id); grew = true; break }
+        if (near(c.pts[c.pts.length - 1], pts[0], tol)) { pts = [...c.pts, ...pts.slice(1)]; ids.unshift(c.id); used.add(c.id); grew = true; break }
+      }
+    }
+    const closed = pts.length >= 4 && near(pts[0], pts[pts.length - 1], tol)
+    out.push({ ids, points: closed ? pts.slice(0, -1) : pts, closed, flip: false, group: start.group })
+  }
+  // external and internal kinds separately, shortest first, so a long wall covers the end of a short one that butts into it
+  return out.sort((a, b) => (a.group < b.group ? -1 : a.group > b.group ? 1 : lengthOf(a.points) - lengthOf(b.points)))
+}

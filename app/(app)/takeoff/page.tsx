@@ -39,7 +39,7 @@ import { sharedWallRoomsFrom } from '@/lib/tiling-share'
 import ClientProjectModal from './components/ClientProjectModal'
 import ClientFilePicker from '@/components/ClientFilePicker'
 import { planResize, applyResize } from '@/lib/calc-size'
-import { wallDrawing, cavityWallSpec, solidBlockSpec, specFromMakeupLayers, defaultWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
+import { wallDrawing, chainWalls, cavityWallSpec, solidBlockSpec, specFromMakeupLayers, defaultWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
 import { cornersOf, snapPoint, anchorsFor, parseTyped, pointAtDistance, rectCornerAt, rotateShape, type SnapResult } from '@/lib/takeoff-snap'
 import { newHistory, observe as observeHistory, undoStep, redoStep, type History } from '@/lib/takeoff-history'
 import ConstructionLayerModal, { saveLayerCostToBackOffice } from './components/ConstructionLayerModal'
@@ -2444,6 +2444,53 @@ export default function TakeoffPage() {
     return item ? wallSpecForItem(item) : null
   }
 
+  // The walls drawn at real thickness, all together: walls of the same kind whose ends meet are one run with a mitred corner (four walls round a house are one ring); internal walls are painted first and external walls over
+  // them, and within a kind the longer wall over the shorter, so a partition stops at the face of the wall it butts into. Nothing here takes the mouse: clicking is in renderElement.
+  function renderWallVisuals(els: DrawnElement[]) {
+    const mpp = project.calibration.mpp
+    const pieces: { id: string; points: TakeoffPoint[]; closed: boolean; flip: boolean; group: string }[] = []
+    const kinds = new Map<string, NonNullable<ReturnType<typeof wallSpecFor>>>()
+    for (const el of els) {
+      const w = wallSpecFor(el)
+      if (!w) continue
+      const group = `${el.phase === 'External Walls' ? '2-ext' : '1-int'}|${w.ref}|${JSON.stringify(w.spec.layers)}`
+      pieces.push({ id: el.id, points: el.type === 'rect' ? cornersOf(el) : el.points, closed: el.type !== 'line', flip: w.flip, group })
+      kinds.set(group, w)
+    }
+    if (pieces.length === 0) return null
+    return (
+      <g style={{ pointerEvents: 'none' }}>
+        {chainWalls(pieces, 3).map(ch => {
+          const w = kinds.get(ch.group)
+          const wd = w ? wallDrawing(ch.points, w.spec, mpp, { ref: w.ref, closed: ch.closed, flip: ch.flip }) : null
+          if (!wd) return null
+          return (
+            <g key={'wv-' + ch.ids.join('-')}>
+              {wd.strips.map((st, i) => {
+                const style = LAYER_STYLE[st.kind]
+                const showHatch = style.hatch !== 'none' && (st.mm / (mpp * 1000)) * zoom >= 3   // only when the layer is wide enough on screen to show it
+                return (
+                  <g key={i}>
+                    <path d={st.d} fillRule="evenodd" fill={style.fill} />
+                    {showHatch && <path d={st.d} fillRule="evenodd" fill={`url(#wl-${style.hatch})`} />}
+                    <path d={st.d} fillRule="evenodd" fill="none" stroke={style.line} strokeWidth={0.8 / zoom} strokeLinejoin="miter" />
+                  </g>
+                )
+              })}
+            </g>
+          )
+        })}
+        {/* the selected wall's outline, over the paint */}
+        {(() => {
+          const picked = els.find(e => e.id === selectedId)
+          const w = picked ? wallSpecFor(picked) : null
+          const wd = picked && w ? wallDrawing(picked.type === 'rect' ? cornersOf(picked) : picked.points, w.spec, mpp, { ref: w.ref, closed: picked.type !== 'line', flip: w.flip }) : null
+          return wd ? <path d={wd.bodyD} fillRule="evenodd" fill="none" stroke="#1565c0" strokeWidth={2.5 / zoom} strokeDasharray={`${6 / zoom} ${3 / zoom}`} /> : null
+        })()}
+      </g>
+    )
+  }
+
   function renderElement(el: DrawnElement) {
     const sel = selectedId === el.id
     const isWall = el.phase === 'External Walls'
@@ -2467,7 +2514,7 @@ export default function TakeoffPage() {
       setIsDraggingEl(true)
     }
 
-    // ── A wall with a known make-up: its real thickness, layer by layer (brick, cavity, insulation, block...) ──
+    // ── A wall with a known make-up is painted at its real thickness by renderWallVisuals (joined to the walls it meets); this carries the clicking and the selection outline ──
     const ws = wallSpecFor(el)
     if (ws) {
       const mpp = project.calibration.mpp
@@ -2481,18 +2528,6 @@ export default function TakeoffPage() {
             {closed
               ? <polygon points={hit} fill="none" stroke="transparent" strokeWidth={hitW} />
               : <polyline points={hit} fill="none" stroke="transparent" strokeWidth={hitW} />}
-            {wd.strips.map((st, i) => {
-              const style = LAYER_STYLE[st.kind]
-              const showHatch = style.hatch !== 'none' && (st.mm / (mpp * 1000)) * zoom >= 3   // only when the layer is wide enough on screen to show it
-              return (
-                <g key={i}>
-                  <path d={st.d} fillRule="evenodd" fill={style.fill} />
-                  {showHatch && <path d={st.d} fillRule="evenodd" fill={`url(#wl-${style.hatch})`} />}
-                  <path d={st.d} fillRule="evenodd" fill="none" stroke={style.line} strokeWidth={0.8 / zoom} strokeLinejoin="miter" />
-                </g>
-              )
-            })}
-            {sel && <path d={wd.bodyD} fillRule="evenodd" fill="none" stroke="#1565c0" strokeWidth={2.5 / zoom} strokeDasharray={`${6 / zoom} ${3 / zoom}`} />}
           </g>
         )
       }
@@ -5738,6 +5773,7 @@ export default function TakeoffPage() {
               {/* Drawn elements — skip phases toggled hidden */}
               {viewHalo && <g style={{ pointerEvents: 'none' }}>{elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)).map(renderHalo)}</g>}
               {elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)).map(renderElement)}
+              {renderWallVisuals(elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)))}
               {viewTags && renderTags(elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)))}
 
               {/* Electrical points — a coloured dot with its letters; a star marks a special fitting. Drag one in Select mode to move it. */}
