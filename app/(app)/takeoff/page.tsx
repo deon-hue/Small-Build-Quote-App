@@ -5,7 +5,7 @@ import NumInput from '@/components/NumInput'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { makeDebouncedSave, isEmptyTakeoff, isUuid, newProjectId, loadTakeoffFromSupabase, saveTakeoffToSupabase, listTakeoffSummaries, deleteTakeoffProject, type TakeoffSummary } from '@/lib/takeoff-sync'
-import { roomLabelsOf, setRoomLabels, activeSheetIdOf, onActiveSheet, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet, setSheetPaper } from '@/lib/takeoff-sheets'
+import { roomLabelsOf, setRoomLabels, roomShapesOf, setRoomShapes, activeSheetIdOf, onActiveSheet, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet, setSheetPaper } from '@/lib/takeoff-sheets'
 import { layoutTags, polylineMidpoint, textColorFor, tagText, TAG_HEIGHT_PX } from '@/lib/takeoff-tags'
 import { PDF_RENDER_MM_PER_PX, PAPER_SIZES, SCALE_DENOMS, scaleLabel, denomFromLabel, mppForScale, paperFromMm, inferPdfPaper, mmPerPxForPaper } from '@/lib/takeoff-paper'
 import { putSheetImage, getSheetImage, deleteProjectImages } from '@/lib/takeoff-sheet-images'
@@ -19,7 +19,7 @@ import AssemblyItemPanel from './components/AssemblyWindow'
 import ElectricalPointsPanel, { POINT_GROUP_COLOUR } from './components/ElectricalPointsPanel'
 import OpeningsPanel from './components/OpeningsPanel'
 import RoomsPanel from './components/RoomsPanel'
-import { detectRooms, roomIndexAt, describeRooms, labelIndexForRooms, ROOM_KIND_BY_ID, type DetectedRoom, type PlanRoomInfo, type RoomLabel, type RoomWithOpenings } from '@/lib/rooms-from-walls'
+import { detectRooms, roomFromPolygon, sortRooms, roomIndexAt, describeRooms, labelIndexForRooms, ROOM_KIND_BY_ID, type DetectedRoom, type PlanRoomInfo, type RoomLabel, type RoomWithOpenings } from '@/lib/rooms-from-walls'
 import { POINT_BY_ID, type ElectricsSavedState } from '@/lib/electrics-units'
 import { planRoomsFromPoints, roomAtPoint, rectToPolygon, POINT_SHORT, type ElectricPoint } from '@/lib/electric-points'
 
@@ -861,6 +861,9 @@ export default function TakeoffPage() {
   const [viewFade, setViewFade] = useState(30)
   const [viewRooms, setViewRooms] = useState(true)
   const [selectedRoomPt, setSelectedRoomPt] = useState<TakeoffPoint | null>(null)
+  // the rectangle or polygon tool is drawing a ROOM (picked while the Rooms tool was active, or from the Rooms panel), not a priced drawing
+  const [roomDraw, setRoomDraw] = useState(false)
+  useEffect(() => { if (tool !== 'rect' && tool !== 'polygon') setRoomDraw(false) }, [tool])
   const tagDragRef = useRef<{ id: string; sx: number; sy: number; dx0: number; dy0: number } | null>(null)
   useEffect(() => {
     try {
@@ -1508,7 +1511,20 @@ export default function TakeoffPage() {
     }
   }
 
+  /** A room drawn as a shape: just an outline on the sheet (no priced item), named and given a kind in the Rooms panel */
+  function addDrawnRoom(type: 'rect' | 'polygon', pts: TakeoffPoint[]) {
+    const poly = type === 'rect' ? cornersOf({ type: 'rect', points: pts } as DrawnElement) : pts
+    const room = roomFromPolygon(poly, project.calibration.mpp)
+    setDrawPoints([]); setIsDrawing(false); setTyped('')
+    if (!room) { showToast('That shape has no area, so it is not a room'); return }
+    setProject(p => setRoomShapes(p, [...roomShapesOf(p), { id: uid(), points: poly }]))
+    setRoomDraw(false); setTool('room'); setPanelMode('properties'); setEditingItem(null); setEditingElement(null); setSelectedId(null)
+    setSelectedRoomPt(room.labelAt)
+    showToast(`Room drawn: ${room.areaM2.toFixed(1)} m². Name it and say what kind of room it is in the panel.`)
+  }
+
   function finishElement(type: 'line' | 'rect' | 'polygon', pts: TakeoffPoint[], isFloor = false) {
+    if (roomDraw && (type === 'rect' || type === 'polygon')) { addDrawnRoom(type, pts); return }
     const phase: TakeoffPhase = isFloor ? 'Floors & Screeds' : activePhase
     const color = PHASE_COLORS[phase]
     const shortId = Date.now().toString(36).slice(-4)
@@ -1710,6 +1726,9 @@ export default function TakeoffPage() {
       if (shape && g) { solids.push([shape.gap]); gaps.push({ shape, band: g.band, kind: o.kind, w: o.widthMm / 1000, h: o.heightMm / 1000 }) }
     }
     const det = detectRooms(solids, { mpp })
+    // rooms drawn as shapes join the ones found from walls
+    const drawnRooms = roomShapesOf(project).map(sh => roomFromPolygon(sh.points, mpp, sh.id)).filter((r): r is DetectedRoom => !!r)
+    det.rooms = sortRooms([...det.rooms, ...drawnRooms], mpp)
     const counts: RoomWithOpenings[] = det.rooms.map(() => ({ doors: 0, windows: 0, doorWidthM: 0, doorAreaM2: 0, windowAreaM2: 0 }))
     const reach = 0.15 / mpp
     for (const gp of gaps) {
@@ -1723,7 +1742,7 @@ export default function TakeoffPage() {
         else { counts[i].doors++; counts[i].doorWidthM += gp.w; counts[i].doorAreaM2 += gp.w * gp.h }
       }
     }
-    return { rooms: det.rooms, counts, cellMm: det.cellMm, hasWalls: solids.length > 0, sheetId: project.activeSheetId }
+    return { rooms: det.rooms, counts, cellMm: det.cellMm, hasWalls: solids.length > 0 || drawnRooms.length > 0, sheetId: project.activeSheetId }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomTick, boSubPhases, allWallMakeups.length])
   const roomInfos: PlanRoomInfo[] = roomData ? describeRooms(roomData.rooms, roomLabels, roomData.counts) : []
@@ -1773,6 +1792,21 @@ export default function TakeoffPage() {
     const blank = !cur?.name?.trim() || (!!oldAuto && cur!.name.replace(/ \d+$/, '') === oldAuto)
     roomLabelPatch(idx, { kind: kindId, ...(blank ? { name: sameKind > 0 ? `${kind.label} ${sameKind + 1}` : kind.label } : {}) })
   }
+  /** a room that was drawn as a shape is removed (with its name); a room found from walls goes when its walls do */
+  function deleteDrawnRoom(idx: number) {
+    const drawnId = roomData?.rooms[idx]?.drawnId
+    if (!drawnId) return
+    const li = roomLabelIdx[idx]
+    setProject(p => {
+      const q = setRoomShapes(p, roomShapesOf(p).filter(s => s.id !== drawnId))
+      return li >= 0 ? setRoomLabels(q, roomLabelsOf(q).filter((_, k) => k !== li)) : q
+    })
+    setSelectedRoomPt(null)
+  }
+  function startRoomDraw(kind: 'rect' | 'polygon') {
+    setRoomDraw(true); setTool(kind); setDrawPoints([]); setIsDrawing(false); setTyped('')
+    showToast(kind === 'rect' ? 'Click two opposite corners of the room (or type its size, like 4.5x3, and press Enter)' : 'Click each corner of the room, double-click to finish')
+  }
   function roomRemoveName(idx: number) {
     const li = roomLabelIdx[idx]
     if (li < 0) return
@@ -1817,6 +1851,9 @@ export default function TakeoffPage() {
         onUpdate={roomLabelPatch}
         onKind={roomKindPatch}
         onRemoveName={roomRemoveName}
+        onDraw={startRoomDraw}
+        isDrawn={i => !!roomData?.rooms[i]?.drawnId}
+        onDeleteDrawn={deleteDrawnRoom}
         hasWalls={!!roomData?.hasWalls}
         wallsButNoRooms={!!roomData?.hasWalls && roomInfos.length === 0}
         cellMm={roomData?.cellMm ?? 10}
@@ -5941,7 +5978,7 @@ export default function TakeoffPage() {
           ] as { t: DrawingTool; icon: string; label: string }[]).filter(({ t }) => (t !== 'electric' || activePhase === 'Electrics') && (t !== 'opening' || activePhase === 'Windows & Doors')).map(({ t, icon, label }) => (
             <div
               key={t}
-              onClick={() => { if (tool === 'measure' || t === 'measure') { setDrawPoints([]); setIsDrawing(false) } setTool(t); if (t === 'select') { setDrawPoints([]); setIsDrawing(false) } if (t === 'electric') setPanelMode('properties'); if (t === 'opening' || t === 'room') { setPanelMode('properties'); setEditingItem(null); setEditingElement(null); setSelectedId(null) } }}
+              onClick={() => { if (tool === 'measure' || t === 'measure') { setDrawPoints([]); setIsDrawing(false) } if (tool === 'room' && (t === 'rect' || t === 'polygon')) startRoomDraw(t); else setTool(t); if (t === 'select') { setDrawPoints([]); setIsDrawing(false) } if (t === 'electric') setPanelMode('properties'); if (t === 'opening' || t === 'room') { setPanelMode('properties'); setEditingItem(null); setEditingElement(null); setSelectedId(null) } }}
               style={{
                 display: 'flex', alignItems: 'center', gap: 7,
                 padding: '7px 8px', marginBottom: 3, borderRadius: 5, cursor: 'pointer',
@@ -6375,6 +6412,8 @@ export default function TakeoffPage() {
           }}>
             <span>Tool: <strong style={{ color: tool === 'floor' ? '#f39c12' : 'var(--to-text)' }}>{
               calibDrawing ? '📏 CALIBRATING' :
+              (roomDraw && tool === 'rect') ? 'Drawing a ROOM: click two corners (or type the size)' :
+              (roomDraw && tool === 'polygon') ? 'Drawing a ROOM: click each corner, double-click to finish' :
               tool === 'select' ? 'Select' :
               tool === 'line' ? 'Line / Polyline (dbl-click to finish)' :
               tool === 'rect' ? 'Rectangle (click start, click finish)' :

@@ -18,6 +18,11 @@ interface Props {
   onUpdate: (idx: number, patch: Partial<RoomLabel>) => void
   onKind: (idx: number, kind: string) => void
   onRemoveName: (idx: number) => void
+  /** draw a room as a rectangle or a polygon */
+  onDraw: (kind: 'rect' | 'polygon') => void
+  /** this room was drawn as a shape (it can be deleted here) rather than found from walls */
+  isDrawn: (idx: number) => boolean
+  onDeleteDrawn: (idx: number) => void
   /** the plan has walls but no closed room was found among them */
   wallsButNoRooms: boolean
   hasWalls: boolean
@@ -50,13 +55,22 @@ export default function RoomsPanel(p: Props) {
     <div style={{ padding: 12 }}>
       <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--to-textb)', marginBottom: 2 }}>🏠 Rooms</div>
       <div style={{ fontSize: 11, color: 'var(--to-muted)', marginBottom: 10, lineHeight: 1.45 }}>
-        Rooms are found from the walls you have drawn: each closed space between the walls. A door or window does not join two rooms. Click a room on the plan, name it and say what it is, and the by-room calculators (tiling, plastering, decoration) can add it with its size.
+        A room is either drawn here (a rectangle or any shape) or found from the walls you have drawn: each closed space between the walls (a door or window does not join two rooms). Click a room on the plan, name it and say what it is, and the by-room calculators (tiling, plastering) can add it with its size.
+      </div>
+
+      <div style={box}>
+        <div style={label}>Draw a room</div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button type="button" onClick={() => p.onDraw('rect')} style={{ flex: 1, padding: '7px', fontSize: 12, fontWeight: 600, borderRadius: 5, cursor: 'pointer', border: '1px solid var(--to-border)', background: 'var(--to-bg)', color: 'var(--to-text)', fontFamily: 'inherit' }}>▭ Rectangle</button>
+          <button type="button" onClick={() => p.onDraw('polygon')} style={{ flex: 1, padding: '7px', fontSize: 12, fontWeight: 600, borderRadius: 5, cursor: 'pointer', border: '1px solid var(--to-border)', background: 'var(--to-bg)', color: 'var(--to-text)', fontFamily: 'inherit' }}>⬠ Any shape</button>
+        </div>
+        <div style={{ fontSize: 10.5, color: 'var(--to-muted)', marginTop: 5, lineHeight: 1.4 }}>For a room with no walls drawn round it: its outline is the floor. Or draw the walls and the room is found by itself.</div>
       </div>
 
       {p.rooms.length === 0 && (
         <div style={{ ...box, fontSize: 11.5, color: 'var(--to-muted)', lineHeight: 1.5 }}>
           {!p.hasWalls
-            ? 'No walls yet. Draw the walls in External Walls and Internal Walls & Partitions first.'
+            ? 'No rooms yet. Draw one above, or draw the walls in External Walls and Internal Walls & Partitions and the rooms are found.'
             : p.wallsButNoRooms
               ? 'No closed room found. Check the walls make a closed shape with no gaps: their ends should meet (snap them together) and a partition should reach the walls on both sides.'
               : 'No rooms found.'}
@@ -97,6 +111,7 @@ export default function RoomsPanel(p: Props) {
               Floor <strong>{sel.areaM2.toFixed(2)} m²</strong> · {sel.lengthM.toFixed(2)} × {sel.widthM.toFixed(2)} m<br />
               Walls round it <strong>{sel.perimeterM.toFixed(2)} m</strong> · wall area {wallArea.toFixed(1)} m² (less {sel.doors} door{sel.doors === 1 ? '' : 's'} and {sel.windows} window{sel.windows === 1 ? '' : 's'})
             </div>
+            {p.isDrawn(p.selectedIdx) && <button type="button" onClick={() => p.onDeleteDrawn(p.selectedIdx)} style={{ padding: '5px', fontSize: 11.5, borderRadius: 5, cursor: 'pointer', border: '1px solid #c0392b', background: '#c0392b', color: '#fff', fontFamily: 'inherit' }}>🗑 Delete this drawn room</button>}
             {lab && <button type="button" onClick={() => p.onRemoveName(p.selectedIdx)} style={{ padding: '5px', fontSize: 11.5, borderRadius: 5, cursor: 'pointer', border: '1px solid var(--to-border)', background: 'transparent', color: 'var(--to-text)', fontFamily: 'inherit' }}>Remove the name</button>}
           </div>
         </div>

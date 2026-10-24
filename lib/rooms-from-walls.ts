@@ -16,6 +16,8 @@ export interface DetectedRoom {
   /** the length and width of the box round it, metres (the long side first) */
   lengthM: number
   widthM: number
+  /** set for a room that was drawn as a shape (not found from walls): the id of its shape */
+  drawnId?: string
 }
 
 export interface DetectResult {
@@ -217,6 +219,43 @@ export function detectRooms(solids: Pt[][][], o: { mpp: number; cellMm?: number;
   }
   rooms.sort((a, b) => (Math.abs(a.labelAt.y - b.labelAt.y) > 1 / mpp ? a.labelAt.y - b.labelAt.y : a.labelAt.x - b.labelAt.x))
   return { rooms, cellMm, solids: solids.length }
+}
+
+// ── Rooms drawn as a shape ───────────────────────────────────────────────────────────────────────────────────────────
+/** A room drawn directly (the Rooms tool with Rectangle or Polygon) instead of being found from walls: just its outline, its name and kind are a RoomLabel like any other room's. */
+export interface DrawnRoomShape { id: string; points: Pt[] }
+
+const distToSegment = (p: Pt, a: Pt, b: Pt) => {
+  const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy
+  const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2))
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy))
+}
+
+/** A drawn outline as a room: its floor area, the length round it, the box it fits and the roomiest point inside it (where its name goes). Null if it has no area. */
+export function roomFromPolygon(points: Pt[], mpp: number, drawnId?: string): DetectedRoom | null {
+  if (!(mpp > 0) || points.length < 3) return null
+  const area = Math.abs(ringArea(points)) * mpp * mpp
+  if (!(area > 0)) return null
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+  for (const p of points) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y) }
+  let best: Pt = { x: (x0 + x1) / 2, y: (y0 + y1) / 2 }, bestD = -1
+  const N = 24
+  for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) {
+    const q = { x: x0 + ((x1 - x0) * i) / N, y: y0 + ((y1 - y0) * j) / N }
+    if (!pointInPolygon(q, points)) continue
+    let d = Infinity
+    for (let k = 0; k < points.length; k++) d = Math.min(d, distToSegment(q, points[k], points[(k + 1) % points.length]))
+    // the roomiest point; of those as roomy (the ridge of a rectangle), the one nearest the middle of the box
+    const mid = Math.hypot(q.x - (x0 + x1) / 2, q.y - (y0 + y1) / 2), bestMid = Math.hypot(best.x - (x0 + x1) / 2, best.y - (y0 + y1) / 2)
+    if (d > bestD + 1e-9 || (Math.abs(d - bestD) <= 1e-9 && mid < bestMid)) { bestD = d; best = q }
+  }
+  const w = (x1 - x0) * mpp, h = (y1 - y0) * mpp
+  return { polygon: points, areaM2: area, perimeterM: ringLength(points) * mpp, labelAt: best, lengthM: Math.max(w, h), widthM: Math.min(w, h), ...(drawnId ? { drawnId } : {}) }
+}
+
+/** Rooms in reading order (top to bottom, then left to right), the order Room 1, Room 2 ... are given in */
+export function sortRooms<T extends { labelAt: Pt }>(rooms: T[], mpp: number): T[] {
+  return rooms.slice().sort((a, b) => (Math.abs(a.labelAt.y - b.labelAt.y) > 1 / mpp ? a.labelAt.y - b.labelAt.y : a.labelAt.x - b.labelAt.x))
 }
 
 // ── Naming and describing the rooms ──────────────────────────────────────────────────────────────────────────────────
