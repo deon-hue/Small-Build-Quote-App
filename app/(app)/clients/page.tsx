@@ -15,6 +15,7 @@ import ModalResizeHandle from '@/components/ModalResizeHandle'
 import ModalMaximizeButton from '@/components/ModalMaximizeButton'
 import DeleteContactsDialog, { type DeleteTarget } from '@/components/DeleteContactsDialog'
 import ClientFilesSection from '@/components/ClientFilesSection'
+import { quotesForClient, jobsForClient } from '@/lib/client-match'
 import TidyUpContactsDialog from '@/components/TidyUpContactsDialog'
 import { buildUsageIndex, usageOf, type UsageIndex } from '@/lib/contact-usage'
 import { escapeLike } from '@/lib/email-match'
@@ -343,19 +344,11 @@ function ClientsPageInner() {
   }
 
   function getClientQuotes(c: Client) {
-    const n = (c.name || '').toLowerCase()
-    return quotes.filter(q => {
-      const qn = (q.customer.name || '').toLowerCase()
-      return qn === n || qn.includes(n) || n.includes(qn)
-    })
+    return quotesForClient(c.name, quotes)
   }
 
   function getClientJobs(c: Client) {
-    const n = (c.name || '').toLowerCase()
-    return jobs.filter(j => {
-      const jn = (j.client || '').toLowerCase()
-      return jn === n || jn.includes(n) || n.includes(jn)
-    })
+    return jobsForClient(c.name, jobs)
   }
 
   // ── Deleting contacts, and tidying up ────────────────────────────────────

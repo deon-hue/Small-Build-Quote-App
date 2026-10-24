@@ -37,6 +37,7 @@ import LabourCostBuilder from './components/LabourCostBuilder'
 import { SharedWallAreasProvider } from '@/components/TilingShareContext'
 import { sharedWallRoomsFrom } from '@/lib/tiling-share'
 import ClientProjectModal from './components/ClientProjectModal'
+import ClientFilePicker from '@/components/ClientFilePicker'
 import ConstructionLayerModal, { saveLayerCostToBackOffice } from './components/ConstructionLayerModal'
 import {
   TAKEOFF_PHASES, PHASE_COLORS, DEFAULT_MPP, SCALE_PRESETS,
@@ -796,6 +797,9 @@ export default function TakeoffPage() {
 
   // Loading a plan (a PDF's pages take a moment to draw)
   const [pdfLoading, setPdfLoading] = useState(false)
+  // Adding a plan: from this computer, or from a customer's files (the contact card's Files)
+  const [planChooserOpen, setPlanChooserOpen] = useState(false)
+  const [filePickerOpen, setFilePickerOpen] = useState(false)
   // Sheets (plans): the one showing, whether its picture is missing from this device, and a nudge to reload the picture after it is put back
   const activeSheetId = activeSheetIdOf(project)
   const [sheetImageMissing, setSheetImageMissing] = useState(false)
@@ -1747,6 +1751,11 @@ export default function TakeoffPage() {
     const file = input.files?.[0]
     input.value = ''   // so the same file can be chosen again
     if (!file) return
+    await loadPlanFile(file)
+  }
+
+  /** Loads a plan (a picture or a PDF) as a new sheet: a file chosen from this computer, or one fetched from a customer's files. */
+  async function loadPlanFile(file: File) {
     const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
     setPdfLoading(true)
     try {
@@ -5025,7 +5034,7 @@ export default function TakeoffPage() {
         <div style={{ flex: 1 }} />
 
         <input type="file" accept="image/*,application/pdf,.pdf" ref={fileInputRef} style={{ display: 'none' }} onChange={handleImageLoad} />
-        <button style={btnStyle} onClick={() => fileInputRef.current?.click()} disabled={pdfLoading}>
+        <button style={btnStyle} onClick={() => setPlanChooserOpen(true)} disabled={pdfLoading}>
           {pdfLoading ? '⏳ Loading…' : (project.sheets?.length ? '🖼 Add Plan' : '🖼 Load Plan')}
         </button>
 
@@ -5335,7 +5344,7 @@ export default function TakeoffPage() {
                   </div>
                 )
               })}
-              <button onClick={() => fileInputRef.current?.click()} disabled={pdfLoading} title="Add another plan as a new sheet"
+              <button onClick={() => setPlanChooserOpen(true)} disabled={pdfLoading} title="Add another plan as a new sheet"
                 style={{ ...btnStyle, padding: '4px 10px', fontSize: 11, flexShrink: 0 }}>+ Plan</button>
             </div>
           )}
@@ -5934,6 +5943,26 @@ export default function TakeoffPage() {
           />
         )
       })()}
+
+      {/* ── Adding a plan: from this computer or from a customer's files ───── */}
+      {planChooserOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={e => { if (e.target === e.currentTarget) setPlanChooserOpen(false) }}>
+          <div style={{ background: 'var(--to-panel, #fff)', color: 'var(--to-text, #1e293b)', border: '1px solid var(--to-border, #e2e8f0)', borderRadius: 10, width: 'min(420px, 92vw)', padding: 18, boxShadow: '0 12px 48px rgba(0,0,0,0.4)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, flex: 1 }}>{project.sheets?.length ? 'Add a plan' : 'Load a plan'}</div>
+              <button onClick={() => setPlanChooserOpen(false)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'inherit', lineHeight: 1 }} aria-label="Close">×</button>
+            </div>
+            <button onClick={() => { setPlanChooserOpen(false); fileInputRef.current?.click() }} style={{ ...btnStyle, display: 'block', width: '100%', textAlign: 'left', padding: '12px 14px', marginBottom: 8, fontSize: 13 }}>
+              💻 From this computer<div style={{ fontSize: 11, opacity: 0.7, fontWeight: 400, marginTop: 2 }}>A picture or PDF from your own folders</div>
+            </button>
+            <button onClick={() => { setPlanChooserOpen(false); setFilePickerOpen(true) }} style={{ ...btnStyle, display: 'block', width: '100%', textAlign: 'left', padding: '12px 14px', fontSize: 13 }}>
+              📁 From a customer's files<div style={{ fontSize: 11, opacity: 0.7, fontWeight: 400, marginTop: 2 }}>Files on their contact card, quotes and jobs</div>
+            </button>
+          </div>
+        </div>
+      )}
+      <ClientFilePicker open={filePickerOpen} onClose={() => setFilePickerOpen(false)} takeoffClient={{ id: project.clientId, name: project.client?.name }}
+        onPick={file => { setFilePickerOpen(false); loadPlanFile(file) }} />
 
       {/* ── Client / Project modal ─────────────────────────────────────────── */}
       <ClientProjectModal

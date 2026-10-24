@@ -12,17 +12,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { showUrlDocument } from '@/lib/open-document'
 import { buildZip, uniquePaths } from '@/lib/zip-store'
-import { fetchClientFiles, uploadClientFile, deleteClientFile, CLIENT_FILE_MAX_BYTES, type ClientFile, type ClientFileCategory } from '@/lib/client-files'
+import { uploadClientFile, deleteClientFile, CLIENT_FILE_MAX_BYTES, type ClientFileCategory } from '@/lib/client-files'
+import { fetchClientFileGroups, type FileItem, type FileGroup as Group } from '@/lib/client-file-groups'
 
 interface Props {
   client: { id: string; name: string }
   quotes: { id: string; ref: string; title: string }[]
   jobs: { id: string; title: string }[]
 }
-
-type Bucket = 'quote-documents' | 'job-documents'
-interface FileItem { key: string; bucket: Bucket; path: string; name: string; mime: string; size: number; category: string; label: string; at?: string; own?: ClientFile }
-interface Group { id: string; kind: 'customer' | 'quote' | 'job'; title: string; files: FileItem[] }
 
 const CATEGORY_LABEL: Record<string, string> = { photo: '📷 Photo', plan: '📐 Plan', document: '📄 Document', contract: '📝 Contract' }
 const ZIP_WARN_BYTES = 1024 * 1024 * 1024        // ask first above 1 GB
@@ -59,37 +56,10 @@ export default function ClientFilesSection({ client, quotes, jobs }: Props) {
   const jobKey = jobs.map(j => j.id).join(',')
 
   const load = useCallback(async () => {
-    setReadErr('')
-    const out: Group[] = []
-    const own = await fetchClientFiles(sb, client.id)
-    setNotSetUp(own.notSetUp)
-    out.push({
-      id: 'customer', kind: 'customer', title: 'Customer files',
-      files: own.files.map(f => ({ key: 'c-' + f.id, bucket: 'job-documents' as Bucket, path: f.storagePath, name: f.fileName, mime: f.mimeType, size: f.fileSize, category: f.category, label: f.label, at: f.createdAt, own: f })),
-    })
-    try {
-      const qIds = quotes.map(q => q.id)
-      if (qIds.length > 0) {
-        const { data, error } = await sb.from('quote_documents').select('id, quote_id, filename, storage_path, mime_type, file_size, category, label, uploaded_at').in('quote_id', qIds).order('uploaded_at', { ascending: true })
-        if (error) throw error
-        for (const q of quotes) {
-          const rows = (data ?? []).filter(d => d.quote_id === q.id)
-          if (rows.length > 0) out.push({ id: 'q-' + q.id, kind: 'quote', title: `Quote ${q.ref || ''} ${q.title ? '— ' + q.title : ''}`.trim(), files: rows.map(d => ({ key: 'q-' + d.id, bucket: 'quote-documents' as Bucket, path: d.storage_path, name: d.filename, mime: d.mime_type ?? '', size: Number(d.file_size) || 0, category: d.category || 'document', label: d.label ?? '', at: d.uploaded_at })) })
-        }
-      }
-      const jIds = jobs.map(j => j.id)
-      if (jIds.length > 0) {
-        const { data, error } = await sb.from('job_attachments').select('id, job_id, file_name, storage_path, mime_type, file_size, category, label, created_at').in('job_id', jIds).order('created_at', { ascending: true })
-        if (error) throw error
-        for (const j of jobs) {
-          const rows = (data ?? []).filter(d => d.job_id === j.id)
-          if (rows.length > 0) out.push({ id: 'j-' + j.id, kind: 'job', title: `Job — ${j.title}`, files: rows.map(d => ({ key: 'j-' + d.id, bucket: 'job-documents' as Bucket, path: d.storage_path, name: d.file_name, mime: d.mime_type ?? '', size: Number(d.file_size) || 0, category: d.category || 'document', label: d.label ?? '', at: d.created_at })) })
-        }
-      }
-    } catch (e) {
-      setReadErr(`Some quote or job files could not be read (${(e as { message?: string })?.message || 'unknown problem'}).`)
-    }
-    setGroups(out)
+    const r = await fetchClientFileGroups(sb, client, quotes, jobs)
+    setNotSetUp(r.notSetUp)
+    setReadErr(r.readError)
+    setGroups(r.groups)
     setLoading(false)
   }, [sb, client.id, quoteKey, jobKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
