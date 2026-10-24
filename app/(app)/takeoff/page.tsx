@@ -46,7 +46,7 @@ import { sharedWallRoomsFrom } from '@/lib/tiling-share'
 import ClientProjectModal from './components/ClientProjectModal'
 import ClientFilePicker from '@/components/ClientFilePicker'
 import { planResize, applyResize } from '@/lib/calc-size'
-import { wallDrawing, wallBand, offsetPolyline, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, specFromMakeupLayers, defaultWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
+import { wallDrawing, wallBand, offsetPolyline, totalMm, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, specFromMakeupLayers, defaultWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
 import { sidesOf, splitOpenings } from '@/lib/wall-split'
 import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
 import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, type PlacedOpening, type WallBand } from '@/lib/wall-openings'
@@ -1861,7 +1861,7 @@ export default function TakeoffPage() {
   /** every wall as the rings it fills (joined where walls meet, as they are painted) */
   function wallSolids(els: DrawnElement[]): TakeoffPoint[][][] {
     const mpp = project.calibration.mpp
-    const pieces: { id: string; points: TakeoffPoint[]; closed: boolean; flip: boolean; group: string }[] = []
+    const pieces: { id: string; points: TakeoffPoint[]; closed: boolean; flip: boolean; group: string; reachPx?: number }[] = []
     const kinds = new Map<string, NonNullable<ReturnType<typeof wallSpecFor>>>()
     for (const el of els) {
       if (el.phase !== 'External Walls' && el.phase !== 'Internal Walls & Partitions') continue
@@ -1871,7 +1871,7 @@ export default function TakeoffPage() {
         w = { spec: { layers: [{ kind: 'solid', mm: 2 * half * mpp * 1000 }], label: '' }, ref: 'centre', flip: false }
       }
       const group = `${el.phase === 'External Walls' ? '2-ext' : '1-int'}|${w.ref}|${JSON.stringify(w.spec.layers)}`
-      pieces.push({ id: el.id, points: el.type === 'rect' ? cornersOf(el) : el.points, closed: el.type !== 'line', flip: w.flip, group })
+      pieces.push({ id: el.id, points: el.type === 'rect' ? cornersOf(el) : el.points, closed: el.type !== 'line', flip: w.flip, group, reachPx: (1.5 * totalMm(w.spec.layers)) / (mpp * 1000) })
       kinds.set(group, w)
     }
     const out: TakeoffPoint[][][] = []
@@ -3238,13 +3238,13 @@ export default function TakeoffPage() {
   // them, and within a kind the longer wall over the shorter, so a partition stops at the face of the wall it butts into. Nothing here takes the mouse: clicking is in renderElement.
   function renderWallVisuals(els: DrawnElement[]) {
     const mpp = project.calibration.mpp
-    const pieces: { id: string; points: TakeoffPoint[]; closed: boolean; flip: boolean; group: string }[] = []
+    const pieces: { id: string; points: TakeoffPoint[]; closed: boolean; flip: boolean; group: string; reachPx?: number }[] = []
     const kinds = new Map<string, NonNullable<ReturnType<typeof wallSpecFor>>>()
     for (const el of els) {
       const w = wallSpecFor(el)
       if (!w) continue
       const group = `${el.phase === 'External Walls' ? '2-ext' : '1-int'}|${w.ref}|${JSON.stringify(w.spec.layers)}`
-      pieces.push({ id: el.id, points: el.type === 'rect' ? cornersOf(el) : el.points, closed: el.type !== 'line', flip: w.flip, group })
+      pieces.push({ id: el.id, points: el.type === 'rect' ? cornersOf(el) : el.points, closed: el.type !== 'line', flip: w.flip, group, reachPx: (1.5 * totalMm(w.spec.layers)) / (mpp * 1000) })
       kinds.set(group, w)
     }
     if (pieces.length === 0) return null

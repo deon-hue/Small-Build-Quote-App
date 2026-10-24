@@ -231,6 +231,8 @@ export interface WallPiece {
   flip: boolean
   /** walls only join walls with the same group: the same class (external / internal), reference and make-up */
   group: string
+  /** how far (plan pixels) an end may be from the corner where its line crosses the other wall's line and still be taken as meeting there: about one and a half wall thicknesses. Without it, ends must be on the same point. */
+  reachPx?: number
 }
 export interface WallChain { ids: string[]; points: Pt[]; closed: boolean; flip: boolean; group: string }
 
@@ -244,6 +246,43 @@ export function chainWalls(pieces: WallPiece[], tol = 3): WallChain[] {
   for (const p of pieces) {
     if (p.closed) out.push({ ids: [p.id], points: p.points, closed: true, flip: p.flip, group: p.group })
     else if (p.points.length >= 2) open.push({ id: p.id, pts: p.flip ? p.points.slice().reverse() : p.points, group: p.group })   // a flipped wall is drawn from its other end so the inside is always to the right of travel
+  }
+  // Two walls of the same make-up whose ends stop short of, or run past, the point where their lines cross are one corner (a gap, an overshoot, or walls drawn to each other's faces): they are painted as meeting exactly there,
+  // so the skins join round the corner. Only the painting is changed (the walls' own lines and lengths are not): the Join Corner tool makes it real. A wall that carries on past the crossing (a tee) is not a corner.
+  const reach = new Map(pieces.map(p => [p.id, p.reachPx ?? 0]))
+  for (let i = 0; i < open.length; i++) {
+    for (let j = i + 1; j < open.length; j++) {
+      const a = open[i], b = open[j]
+      const r = Math.min(reach.get(a.id) ?? 0, reach.get(b.id) ?? 0)
+      if (a.group !== b.group || !(r > 0)) continue
+      let joined = false
+      for (const ea of ['start', 'end'] as const) {
+        if (joined) break
+        for (const eb of ['start', 'end'] as const) {
+          const ia = ea === 'start' ? 0 : a.pts.length - 1, ib = eb === 'start' ? 0 : b.pts.length - 1
+          const a2 = a.pts[ea === 'start' ? 1 : a.pts.length - 2], b2 = b.pts[eb === 'start' ? 1 : b.pts.length - 2]
+          if (!a2 || !b2) continue
+          const A = a.pts[ia], B = b.pts[ib]
+          const rx = A.x - a2.x, ry = A.y - a2.y, sx = B.x - b2.x, sy = B.y - b2.y
+          const det = rx * sy - ry * sx
+          if (Math.abs(det) < 1e-6 * Math.hypot(rx, ry) * Math.hypot(sx, sy)) continue   // parallel
+          const t = ((b2.x - a2.x) * sy - (b2.y - a2.y) * sx) / det
+          const P = { x: a2.x + t * rx, y: a2.y + t * ry }
+          // the crossing must be out beyond the next point of each wall (a wall is never turned back on itself)
+          if ((P.x - a2.x) * rx + (P.y - a2.y) * ry <= 0 || (P.x - b2.x) * sx + (P.y - b2.y) * sy <= 0) continue
+          const dA = Math.hypot(A.x - P.x, A.y - P.y), dB = Math.hypot(B.x - P.x, B.y - P.y)
+          if (dA <= tol && dB <= tol) continue   // already meet
+          // an end that stops SHORT of the crossing may be up to the reach away (a gap); one that runs PAST it only half that (an overshoot at a corner: a wall that goes on much further is a tee, not a corner)
+          const limit = (end: Pt, from: Pt, dir: Pt) => ((P.x - end.x) * dir.x + (P.y - end.y) * dir.y >= 0 ? r : r / 2)
+          if (dA > limit(A, a2, { x: rx, y: ry }) || dB > limit(B, b2, { x: sx, y: sy })) continue
+          // each wall is moved only ALONG its own line, to the crossing
+          a.pts = a.pts.slice(); b.pts = b.pts.slice()
+          a.pts[ia] = { x: P.x, y: P.y }; b.pts[ib] = { x: P.x, y: P.y }
+          joined = true
+          break
+        }
+      }
+    }
   }
   const used = new Set<string>()
   for (const start of open) {
