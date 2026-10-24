@@ -4,8 +4,8 @@
 // Pure (apart from the calculators' own tables), so it can be tested with a loader that resolves the extension-less imports.
 
 import {
-  TILING_ROOM_KINDS, TILING_ROOM_KIND_BY_ID, DEFAULT_TILING_SITUATIONS, TILE_SIZES, TILE_LAYOUTS, GROUT_KINDS, zonesFromKind, allWallsZone, newZoneId,
-  type TileSizeId, type TileLayoutId, type GroutId, type TilingZone,
+  TILING_ROOM_KINDS, TILING_ROOM_KIND_BY_ID, DEFAULT_TILING_SITUATIONS, TILE_SIZES, TILE_LAYOUTS, GROUT_KINDS, zonesFromKind, allWallsZone, newZoneId, roomFootprint,
+  type RoomShape, type RoomShapeExtras, type TileSizeId, type TileLayoutId, type GroutId, type TilingZone,
 } from './tiling-common'
 import { newTileFloorRoom, type TileFloorRoom } from './tile-floor-units'
 import { newTileWallRoom, type TileWallRoom } from './tile-wall-units'
@@ -23,6 +23,36 @@ const TILE_IDS = TILE_SIZES.map(t => t.id) as TileSizeId[]
 const LAYOUT_IDS = TILE_LAYOUTS.map(l => l.id) as TileLayoutId[]
 const GROUT_IDS = GROUT_KINDS.map(g => g.id) as GroutId[]
 const BACKER_IDS = BACKER_BOARDS.map(b => b.id) as BackerId[]
+const SHAPE_IDS: RoomShape[] = ['rectangle', 'square', 'l', 't', 'u', 'other']
+
+/** Gives a room the shape the scope describes, if it described one AND gave the sizes it needs (never an invented size): a square needs a side (or an area), an L, T or U shape its overall length and width and the cut-out,
+ * 'other' its floor area (and the wall length if known). Otherwise the room stays a rectangle and the note says why. Returns true when a shape was applied. */
+function applyRoomShape(room: RoomShapeExtras & { lengthM: number; widthM: number }, raw: Record<string, unknown>, name: string, notes: string[]): boolean {
+  const shape = oneOf(raw.shape, SHAPE_IDS)
+  if (!shape || shape === 'rectangle') return false
+  const l = between(raw.lengthM, 0, 40), w = between(raw.widthM, 0, 40), a = between(raw.cutLengthM, 0, 40), b = between(raw.cutWidthM, 0, 40)
+  const area = between(raw.areaM2, 0, 500), per = between(raw.perimeterM, 0, 500)
+  const label = shape === 'l' ? 'L-shaped' : shape === 't' ? 'T-shaped' : shape === 'u' ? 'U-shaped' : shape === 'square' ? 'square' : 'oddly shaped'
+  if (shape === 'square') {
+    const side = l ?? w ?? (area !== null ? +Math.sqrt(area).toFixed(2) : null)
+    if (side === null) { notes.push(`${name}: a square room was mentioned with no size, so it is priced as a rectangle`); return false }
+    room.shape = 'square'; room.lengthM = side; room.widthM = side
+    return true
+  }
+  if (shape === 'other') {
+    if (area === null) { notes.push(`${name}: an oddly shaped room was mentioned with no floor area, so it is priced as a rectangle`); return false }
+    room.shape = 'other'; room.otherAreaM2 = area
+    if (per !== null) room.otherPerimeterM = per
+    return true
+  }
+  if (l === null || w === null || a === null || b === null) { notes.push(`${name}: ${label} room mentioned without its overall length, width and cut-out, so it is priced as a rectangle`); return false }
+  const probe = { lengthM: l, widthM: w, shape, cutLengthM: a, cutWidthM: b }
+  if (roomFootprint(probe).error) { notes.push(`${name}: the sizes given for the ${label} room do not fit (the cut-out is bigger than the room), so it is priced as a rectangle`); return false }
+  Object.assign(room, probe)
+  return true
+}
+/** a room whose shape gave its size is no longer a "typical size" room */
+const dropTypical = (typical: string[], name: string) => { for (let i = typical.length - 1; i >= 0; i--) if (typical[i].startsWith(name + ' (')) typical.splice(i, 1) }
 
 /** The kind of room a name looks like ("Ensuite" -> bathroom, "Wet room" -> shower), for a room the AI named without a kind. */
 export function guessTilingRoomKind(name: string): string {
@@ -53,6 +83,7 @@ export function tileFloorFromScope(spec: unknown): AiTileFloor | null {
   if (!isObj(spec)) return null
   const rooms: TileFloorRoom[] = []
   const typicalRooms: string[] = []
+  const shapeNotes: string[] = []
   const unnamedTile: string[] = []
   const list = Array.isArray(spec.rooms) ? spec.rooms.slice(0, 30) : []
   for (const raw of list) {
@@ -73,6 +104,7 @@ export function tileFloorFromScope(spec: unknown): AiTileFloor | null {
       const nt = between(raw.notTiledM2, 0, 100)
       if (nt !== null) room.notTiledM2 = nt
     }
+    if (applyRoomShape(room, raw, name, shapeNotes)) { room.areaOverrideM2 = null; dropTypical(typicalRooms, name) }
     room.doors = whole(raw.doors, 0, 20) ?? room.doors
     room.clientSupplies = raw.clientSupplies === true
     room.tilePriceM2 = room.clientSupplies ? null : between(raw.tilePriceM2, 0, 1000)
@@ -83,7 +115,7 @@ export function tileFloorFromScope(spec: unknown): AiTileFloor | null {
     rooms.push(room)
   }
   if (rooms.length === 0) return null
-  const assumed: string[] = []
+  const assumed: string[] = [...shapeNotes]
   if (unnamedTile.length > 0) assumed.push(`no tile was named for ${unnamedTile.join(', ')}, so 600 x 600 tiles at a sample allowance were used`)
   return { rooms, jobSituationId: situationOf(spec.situation), typicalRooms, assumed }
 }
@@ -186,6 +218,7 @@ export function tilePrepFromScope(spec: unknown): AiTilePrep | null {
       if (w !== null) room.widthM = w
       if (l === null || w === null) typicalRooms.push(sizeNote(name, l, w, k))
     }
+    if (applyRoomShape(room, raw, name, assumed)) { room.floorAreaOverrideM2 = null; dropTypical(typicalRooms, name) }
     if (usualWet) assumed.push(`${name}: the usual wet areas for that kind of room were boarded and waterproofed`)
     if (raw.inheritedFromWallTiling === true) assumed.push(`${name}: the wall areas are the ones in the Wall Tiling line (the wet ones boarded and waterproofed)`)
     const f = isObj(raw.floor) ? raw.floor : {}
@@ -240,6 +273,7 @@ export function tileUfhFromScope(spec: unknown): AiTileUfh | null {
   if (!isObj(spec)) return null
   const rooms: TileUfhRoom[] = []
   const typicalRooms: string[] = []
+  const shapeNotes: string[] = []
   const list = Array.isArray(spec.rooms) ? spec.rooms.slice(0, 30) : []
   for (const raw of list) {
     if (!isObj(raw)) continue
@@ -257,12 +291,13 @@ export function tileUfhFromScope(spec: unknown): AiTileUfh | null {
       const fx = between(raw.fixedM2, 0, 100)
       if (fx !== null) room.fixedM2 = fx
     }
+    if (applyRoomShape(room, raw, name, shapeNotes)) dropTypical(typicalRooms, name)
     room.thermostat = oneOf(raw.thermostat, Object.keys(THERMOSTAT_INFO) as UfhThermostat[]) ?? 'digital'
     room.coverMm = whole(raw.coverMm, 0, 20) ?? 0
     rooms.push(room)
   }
   if (rooms.length === 0) return null
-  return { rooms, jobSituationId: situationOf(spec.situation), electricianIncluded: spec.electricianByOthers !== true, typicalRooms, assumed: [] }
+  return { rooms, jobSituationId: situationOf(spec.situation), electricianIncluded: spec.electricianByOthers !== true, typicalRooms, assumed: shapeNotes }
 }
 
 // ── What the AI is told ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -277,7 +312,7 @@ export function tilingPromptGuide(): string {
   const covers = Object.keys(FLOOR_COVER_LABEL).filter(c => c !== 'none').join('/')
   const ceilings = Object.keys(CEILING_LABEL).filter(c => c !== 'none').map(c => `${c} = ${CEILING_LABEL[c as CeilingKind].toLowerCase()}`).join('; ')
   const kits = UFH_KITS.map(k => `${k.id} = ${k.short}`).join('; ')
-  return `For a Tiling & Finishes calculator line, add "calc": {…} with the shape for THAT line only, describing ONLY the work the scope mentions (never invent a size or area; if the scope has nothing for that line, leave "calc" out). "kind" is one of: ${kinds}. "situation" is "empty"|"occupied"|"hard" ("occupied" only if the scope says the house is lived in). Leave out any size, tile or option the scope does not state.
+  return `For a Tiling & Finishes calculator line, add "calc": {…} with the shape for THAT line only, describing ONLY the work the scope mentions (never invent a size or area; if the scope has nothing for that line, leave "calc" out). "kind" is one of: ${kinds}. "situation" is "empty"|"occupied"|"hard" ("occupied" only if the scope says the house is lived in). Leave out any size, tile or option the scope does not state. For the floor, preparation and heating lines a room can have a "shape": "rectangle" (the default: leave it out), "square" (give its side as "lengthM"), "l", "t" or "u" (give the OVERALL "lengthM" and "widthM" and the cut-out "cutLengthM" along the length and "cutWidthM" along the width: an L has one corner cut out, a T two equal corner cut-outs, a U one notch in the middle of a side, its width along the length and its depth along the width) or "other" (give "areaM2" and, if stated, "perimeterM", the length of wall round it). Give a shape ONLY when the scope describes it and states the sizes; otherwise leave "shape" out.
   - "Floor Tiling (by room)": "calc": {"situation": "empty", "rooms": [{"name": "Kitchen", "kind": "<room kind>", "lengthM": <m>, "widthM": <m>, "areaM2": <m², instead of length and width>, "notTiledM2": <m² under units>, "tile": "<tile>", "layout": "${layouts}", "clientSupplies": true, "tilePriceM2": <£/m²>, "grout": "${grouts}", "sealed": true, "skirtingLm": <m>, "movementJointLm": <m>}]}. One entry per room whose FLOOR is tiled. Tiles: ${tiles}. "clientSupplies" true only if the scope says the client supplies the tiles. "tilePriceM2" only if the scope gives a tile price or allowance. "sealed" for natural stone or unglazed tile. Use this line for floor tiling instead of the general floor tile task lines.
   - "Wall Tiling (by room)": "calc": {"situation": "empty", "rooms": [{"name": "Bathroom", "kind": "<room kind>", "areas": [{"name": "Bath surround", "lengthM": <m>, "heightM": <m>, "areaM2": <m², instead of length and height>, "lessM2": <m² window or niche>}], "fullHeight": true, "heightM": <room height>, "lengthM": <room length>, "widthM": <room width>, "doors": <nr>, "windows": <nr>, "tile": "<tile>", "layout": "${layouts}", "clientSupplies": true, "tilePriceM2": <£/m²>, "grout": "${grouts}", "niches": <nr>, "externalCornerLm": <m>, "sealed": true}]}. One entry per room with tiled WALLS. Give "areas" for the parts the scope tiles (a bath surround, shower walls, a splashback) with their sizes if stated; "fullHeight": true if the scope says all the walls are tiled floor to ceiling. If the scope gives no areas, leave "areas" out and the usual tiled areas for that kind of room are used. Tiles: ${tiles}. Use this line for wall tiling instead of the general wall tile task lines.
   - "Tiling Preparation (by room)": "calc": {"situation": "empty", "tankSystem": "liquid"|"sheet", "rooms": [{"name": "Shower room", "kind": "<room kind>", "lengthM": <m>, "widthM": <m>, "areaM2": <floor m²>, "heightM": <m>, "floor": {"primer": true, "levelMm": <mm of self-levelling compound>, "cover": "${covers}", "board": "<floor board>", "tanked": true}, "walls": [{"name": "Shower walls", "lengthM": <m>, "heightM": <m>, "areaM2": <m²>, "board": "<board>"|"none", "base": "studs"|"masonry", "tanked": true}], "usualWetAreas": true, "cuffs": <floor waste nr>, "ceiling": "<ceiling>", "ceilingBoard": "<board>"}]}. One entry per room with preparation work (tile backer board, waterproofing or tanking, levelling, primer, decoupling mat, moisture-resistant or backer ceiling board). Boards: ${boards}. Ceilings: ${ceilings}. "usualWetAreas": true when the scope says to board and tank the wet areas of a bathroom or shower room without sizing them (if the Wall Tiling line has tiled areas for the same room, they are used for it). "tanked" true only where the scope says to waterproof it. Use this line for tiling preparation instead of the general surface preparation task lines.
