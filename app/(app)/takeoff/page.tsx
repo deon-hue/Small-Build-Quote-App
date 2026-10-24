@@ -48,7 +48,8 @@ import { wallDrawing, wallBand, signedArea, chainWalls, cavityWallSpec, solidBlo
 import { sidesOf, splitOpenings } from '@/lib/wall-split'
 import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, type PlacedOpening, type WallBand } from '@/lib/wall-openings'
 import { KIND_BY_ID as WD_KIND_BY_ID, planOpeningSig, type OpeningKind, type WdSwing, type PlanOpening } from '@/lib/wd-units'
-import { cornersOf, snapPoint, anchorsFor, parseTyped, pointAtDistance, rectCornerAt, rotateShape, type SnapResult } from '@/lib/takeoff-snap'
+import { buildDragLinks, applyLink, type DragLink } from '@/lib/wall-links'
+import { cornersOf, segmentsFor, snapPoint, anchorsFor, parseTyped, pointAtDistance, rectCornerAt, rotateShape, type SnapResult } from '@/lib/takeoff-snap'
 import { newHistory, observe as observeHistory, undoStep, redoStep, type History } from '@/lib/takeoff-history'
 import ConstructionLayerModal, { saveLayerCostToBackOffice } from './components/ConstructionLayerModal'
 import {
@@ -1052,6 +1053,8 @@ export default function TakeoffPage() {
     startSvgY: number
     origPoints: TakeoffPoint[]
     vertexIndex?: number   // set = drag single vertex; undefined = drag whole shape
+    /** points of other walls that follow this drag (joined corners, tees) */
+    links?: DragLink[]
   } | null>(null)
   const [isDraggingEl, setIsDraggingEl] = useState(false)
 
@@ -1322,15 +1325,25 @@ export default function TakeoffPage() {
         const handle = dragged ? getElVertexHandles({ ...dragged, points: orig })[vi] : undefined
         if (dragged && handle) {
           const want = { x: handle.x + dx, y: handle.y + dy }
-          const r = snapPoint(want, { anchors: anchorsFor(elementsOnActiveSheet(project).filter(el => el.id !== id && !hiddenPhases.has(el.phase))), radius: 10 / zoom, snap: snapOn, ortho: false, grid: gridSnap ? { stepPx: gridMinorPx() } : undefined })
+          // (the walls that are joined to this corner come with it, so they are not snapped to)
+          const joined = new Set((dragRef.current?.links ?? []).map(l => l.elId))
+          const r = snapPoint(want, { anchors: anchorsFor(elementsOnActiveSheet(project).filter(el => el.id !== id && !joined.has(el.id) && !hiddenPhases.has(el.phase))), radius: 10 / zoom, snap: snapOn, ortho: false, grid: gridSnap ? { stepPx: gridMinorPx() } : undefined, segments: snapOn ? segmentsFor(wallsOnSheet().filter(el => el.id !== id && !joined.has(el.id))) : undefined })
           dx += r.pt.x - want.x; dy += r.pt.y - want.y
           setSnapInfo(r.kind === 'none' ? null : r)
         }
       }
+      const links = dragRef.current?.links ?? []
       setProject(prev => ({
         ...prev,
         elements: prev.elements.map(el => {
-          if (el.id !== id) return el
+          if (el.id !== id) {
+            // a wall joined to the one being moved: its joined end comes along (a tee end slides along its own line to stay on the moved wall)
+            const mine = links.filter(l => l.elId === el.id)
+            if (mine.length === 0) return el
+            const pts = el.points.map(p => ({ ...p }))
+            for (const l of mine) if (pts[l.k]) pts[l.k] = applyLink(l, dx, dy)
+            return { ...el, points: pts }
+          }
           if (vi === undefined) {
             // Whole-shape drag (existing behaviour)
             return { ...el, points: orig.map(p => ({ x: p.x + dx, y: p.y + dy })) }
@@ -2885,6 +2898,16 @@ export default function TakeoffPage() {
     return base * 100
   }
 
+  /** the walls (lines, polygons, rectangles) on the showing sheet */
+  function wallsOnSheet(): DrawnElement[] {
+    return elementsOnActiveSheet(project).filter(el => (el.phase === 'External Walls' || el.phase === 'Internal Walls & Partitions') && !hiddenPhases.has(el.phase))
+  }
+  /** the points of other walls that come along when this wall (or one of its corners) is dragged: joined corners and tees. Hold Alt to move a wall on its own. */
+  function linksForDrag(el: DrawnElement, vertexIndex: number | undefined, alt: boolean): DragLink[] {
+    if (alt || (el.phase !== 'External Walls' && el.phase !== 'Internal Walls & Partitions')) return []
+    return buildDragLinks(el, vertexIndex, wallsOnSheet(), 3)
+  }
+
   function drawingPoint(raw: TakeoffPoint): SnapResult {
     const drawingTool = tool === 'line' || tool === 'polygon' || tool === 'rect' || tool === 'floor' || tool === 'measure' || tool === 'click' || calibDrawing
     const ortho = orthoOn || shiftHeld
@@ -2894,7 +2917,7 @@ export default function TakeoffPage() {
       ? (calibPts.length === 1 ? calibPts[0] : undefined)
       : (isDrawing && polyMode && drawPoints.length > 0 ? drawPoints[drawPoints.length - 1] : undefined)
     const anchors = snapOn ? anchorsFor(elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)), drawPoints.slice(0, -1)) : []
-    return snapPoint(raw, { anchors, last, radius: 10 / zoom, snap: snapOn, ortho, grid: gridSnap ? { stepPx: gridMinorPx() } : undefined })
+    return snapPoint(raw, { anchors, last, radius: 10 / zoom, snap: snapOn, ortho, grid: gridSnap ? { stepPx: gridMinorPx() } : undefined, segments: snapOn ? segmentsFor(wallsOnSheet()) : undefined })
   }
 
   /** Typing a length is on while a line, polygon, rectangle or floor is being drawn (not the measure tool or calibration). */
@@ -3160,7 +3183,7 @@ export default function TakeoffPage() {
       e.stopPropagation()   // prevent canvas pan from starting
       selectElement(el)
       const pt = svgCoords(e)
-      dragRef.current = { id: el.id, startSvgX: pt.x, startSvgY: pt.y, origPoints: [...el.points] }
+      dragRef.current = { id: el.id, startSvgX: pt.x, startSvgY: pt.y, origPoints: [...el.points], links: linksForDrag(el, undefined, e.altKey) }
       setIsDraggingEl(true)
     }
 
@@ -3449,6 +3472,14 @@ export default function TakeoffPage() {
   function renderSnapMarker() {
     if (!snapInfo?.target) return null
     const r = 6 / zoom, t = snapInfo.target
+    if (snapInfo.kind === 'edge') {
+      return (
+        <g style={{ pointerEvents: 'none' }}>
+          <circle cx={t.x} cy={t.y} r={r * 0.8} fill="none" stroke="#f97316" strokeWidth={2 / zoom} />
+          <circle cx={t.x} cy={t.y} r={1.6 / zoom} fill="#f97316" />
+        </g>
+      )
+    }
     if (snapInfo.kind === 'grid') {
       return (
         <g style={{ pointerEvents: 'none' }}>
@@ -6526,6 +6557,7 @@ export default function TakeoffPage() {
                         startSvgY: ptY,
                         origPoints: [...el.points],
                         vertexIndex: i,
+                        links: linksForDrag(el, i, ev.altKey),
                       }
                       setIsDraggingEl(true)
                     }}
