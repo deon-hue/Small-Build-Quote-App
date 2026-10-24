@@ -49,7 +49,7 @@ import { planResize, applyResize } from '@/lib/calc-size'
 import { wallDrawing, wallBand, offsetPolyline, totalMm, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, specFromMakeupLayers, defaultWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
 import { sidesOf, splitOpenings } from '@/lib/wall-split'
 import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
-import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, type PlacedOpening, type WallBand } from '@/lib/wall-openings'
+import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, segmentMiddle, flippedSwing, type PlacedOpening, type WallBand } from '@/lib/wall-openings'
 import { KIND_BY_ID as WD_KIND_BY_ID, planOpeningSig, type OpeningKind, type WdSwing, type PlanOpening } from '@/lib/wd-units'
 import { buildDragLinks, applyLink, joinCorner, type DragLink } from '@/lib/wall-links'
 import { cornersOf, segmentsFor, snapPoint, anchorsFor, parseTyped, pointAtDistance, rectCornerAt, rotateShape, type SnapResult } from '@/lib/takeoff-snap'
@@ -1834,6 +1834,34 @@ export default function TakeoffPage() {
     const t = setTimeout(() => setRoomTick(n => n + 1), 250)
     return () => clearTimeout(t)
   }, [roomsOn, project.elements, project.items, project.calibration.mpp, project.activeSheetId, project.sheets, project.roomEdges])
+  // Walls drawn as separate sides that make a CLOSED run are painted building INWARD whichever way round each side was drawn (the run's direction decides). A side on its own builds to the right of its own travel, which for a side
+  // drawn the other way round is OUTWARD, so everything measured on a side (its doors and windows, the foundation under it, its selection outline) uses the direction the run actually paints it: this map, by wall id.
+  const wallDirOverride = useMemo(() => {
+    const map = new Map<string, 1 | -1>()
+    const mpp = project.calibration.mpp
+    if (!(mpp > 0)) return map
+    const pieces: { id: string; points: TakeoffPoint[]; closed: boolean; flip: boolean; group: string; reachPx?: number }[] = []
+    const flips = new Map<string, boolean>()
+    for (const el of wallsOnSheet()) {
+      const w = wallSpecFor(el)
+      if (!w) continue
+      pieces.push({ id: el.id, points: el.type === 'rect' ? cornersOf(el) : el.points, closed: el.type !== 'line', flip: w.flip, group: `${el.phase === 'External Walls' ? '2-ext' : '1-int'}|${w.ref}|${JSON.stringify(w.spec.layers)}`, reachPx: (1.5 * totalMm(w.spec.layers)) / (mpp * 1000) })
+      flips.set(el.id, w.flip)
+    }
+    for (const ch of chainWalls(pieces, 3)) {
+      if (!ch.closed || ch.ids.length < 2) continue
+      const dirChain: 1 | -1 = signedArea(ch.points) < 0 ? -1 : 1
+      for (const id of ch.ids) map.set(id, (flips.get(id) ? -dirChain : dirChain) as 1 | -1)
+    }
+    return map
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.elements, project.items, project.calibration.mpp, project.activeSheetId, boSubPhases, allWallMakeups.length, hiddenPhases])
+  /** how a wall's own band is worked out so it matches how it is painted (see wallDirOverride) */
+  function wallPaintOpts(el: DrawnElement, ws: { ref: 'outer' | 'centre'; flip: boolean }) {
+    const o = wallDirOverride.get(el.id)
+    return o !== undefined && el.type === 'line' ? { ref: ws.ref, closed: false, flip: o === -1 } : { ref: ws.ref, closed: el.type !== 'line', flip: ws.flip }
+  }
+
   const roomCore = useMemo(() => {
     const mpp = project.calibration.mpp
     if (!roomsOn || !(mpp > 0)) return null
@@ -2160,7 +2188,7 @@ export default function TakeoffPage() {
     const path = el.type === 'rect' ? cornersOf(el) : el.points
     if (path.length < 2) return null
     const ws = wallSpecFor(el)
-    let band: WallBand | null = ws ? wallBand(path, ws.spec, mpp, { ref: ws.ref, closed, flip: ws.flip }) : null
+    let band: WallBand | null = ws ? wallBand(path, ws.spec, mpp, wallPaintOpts(el, ws)) : null
     if (!band) {
       const half = project.items.find(it => it.elementId === el.id)?.wallBandPx ?? 9   // a wall not drawn at real thickness is a band centred on the line
       band = { lo: -half, hi: half, inside: closed && signedArea(path) < 0 ? -1 : 1 }
@@ -2210,6 +2238,20 @@ export default function TakeoffPage() {
     if (!o || !g) return
     const mpp = project.calibration.mpp
     changePlaced(list => list.map(q => q.id === id ? { ...q, distPx: clampDist(g.path, g.closed, mm / (mpp * 1000), q.widthMm / (mpp * 1000) / 2) } : q))
+  }
+
+  /** puts an opening in the middle of its side of the wall (the straight length it is on) */
+  function centreOpening(id: string) {
+    const o = allPlaced.find(q => q.id === id)
+    const el = o && project.elements.find(e => e.id === o.wallId)
+    const g = el && wallGeometry(el)
+    if (!o || !g) return
+    changePlaced(list => list.map(q => (q.id === id ? { ...q, distPx: segmentMiddle(g.path, g.closed, q.distPx) } : q)))
+    showToast('Centred on its side of the wall')
+  }
+  /** turns an opening over to face the other side of the wall: a door swings the other way (the hinge stays at the same end), a bay projects the other way, a bi-fold folds the other way */
+  function flipOpening(id: string) {
+    changePlaced(list => list.map(q => (q.id !== id ? q : hasSwing(q.kind) ? { ...q, swing: flippedSwing(q.swing) } : { ...q, flipped: !q.flipped })))
   }
 
   function startOpeningDrag(e: React.MouseEvent, o: PlacedOpening) {
@@ -2301,6 +2343,8 @@ export default function TakeoffPage() {
         onDelete={deleteOpening}
         selectedAlong={sel && selGeo && mpp > 0 ? { mm: sel.distPx * mpp * 1000, wallMm: pathLength(selGeo.path, selGeo.closed) * mpp * 1000 } : undefined}
         onMoveAlong={moveOpeningAlong}
+        onCentre={centreOpening}
+        onFlip={flipOpening}
         saved={it?.assemblyResult}
         stale={stale}
         calculatorOpen={assemblyWindowItemId === WD_ITEM_ID}
@@ -2989,7 +3033,7 @@ export default function TakeoffPage() {
       const ws = wallSpecFor(w)
       if (!ws) continue
       const closed = w.type !== 'line'
-      const wd = wallDrawing(w.type === 'rect' ? cornersOf(w) : w.points, ws.spec, mpp, { ref: ws.ref, closed, flip: ws.flip })
+      const wd = wallDrawing(w.type === 'rect' ? cornersOf(w) : w.points, ws.spec, mpp, wallPaintOpts(w, ws))
       const loc = wd ? locateOnPath(wd.centre, closed, M) : null
       if (loc && (!found || loc.off < found.off)) found = { off: loc.off, q: { x: loc.x, y: loc.y }, w }
     }
@@ -3367,7 +3411,7 @@ export default function TakeoffPage() {
         {(() => {
           const picked = els.find(e => e.id === selectedId)
           const w = picked ? wallSpecFor(picked) : null
-          const wd = picked && w ? wallDrawing(picked.type === 'rect' ? cornersOf(picked) : picked.points, w.spec, mpp, { ref: w.ref, closed: picked.type !== 'line', flip: w.flip }) : null
+          const wd = picked && w ? wallDrawing(picked.type === 'rect' ? cornersOf(picked) : picked.points, w.spec, mpp, wallPaintOpts(picked, w)) : null
           return wd ? <path d={wd.bodyD} fillRule="evenodd" fill="none" stroke="#1565c0" strokeWidth={2.5 / zoom} strokeDasharray={`${6 / zoom} ${3 / zoom}`} /> : null
         })()}
       </g>
@@ -3402,7 +3446,7 @@ export default function TakeoffPage() {
     if (ws) {
       const mpp = project.calibration.mpp
       const closed = el.type !== 'line'
-      const wd = wallDrawing(el.type === 'rect' ? cornersOf(el) : el.points, ws.spec, mpp, { ref: ws.ref, closed, flip: ws.flip })
+      const wd = wallDrawing(el.type === 'rect' ? cornersOf(el) : el.points, ws.spec, mpp, wallPaintOpts(el, ws))
       if (wd) {
         const hit = wd.centre.map(p => `${p.x},${p.y}`).join(' ')
         const hitW = Math.max(14 / zoom, wd.totalPx)
@@ -3574,7 +3618,7 @@ export default function TakeoffPage() {
     const pts = el.points.map(p => `${p.x},${p.y}`).join(' ')
     const wsHalo = wallSpecFor(el)
     if (wsHalo) {
-      const wdh = wallDrawing(el.type === 'rect' ? cornersOf(el) : el.points, wsHalo.spec, project.calibration.mpp, { ref: wsHalo.ref, closed: el.type !== 'line', flip: wsHalo.flip })
+      const wdh = wallDrawing(el.type === 'rect' ? cornersOf(el) : el.points, wsHalo.spec, project.calibration.mpp, wallPaintOpts(el, wsHalo))
       if (wdh) return <path key={'halo-' + el.id} d={wdh.bodyD} fillRule="evenodd" fill="#ffffff" fillOpacity={0.9} stroke="#ffffff" strokeOpacity={0.92} strokeWidth={Math.max(extra, 6 / zoom)} strokeLinejoin="round" />
     }
     if (isWall && el.type === 'line') {

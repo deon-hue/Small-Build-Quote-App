@@ -24,6 +24,8 @@ export interface PlacedOpening {
   location?: string
   /** the plan (sheet) the wall is on */
   sheetId?: string
+  /** turned over to face the other side of the wall: a bay window projecting inside instead of outside, a bi-fold folding the other way (a door that swings is turned by changing its swing) */
+  flipped?: boolean
 }
 
 const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y)
@@ -125,7 +127,7 @@ export const bifoldPanels = (widthMm: number) => Math.max(2, Math.round(widthMm 
  * How an opening is drawn. `path` is the wall's line, `band` its two faces, `mpp` the plan's metres per pixel, `labelGapPx` how far clear of the wall the label sits (a screen size divided by the zoom).
  * Returns null if the wall has no length. Coordinates are plan pixels; with `p(a, b)` = the point `a` along the wall and `b` across it from the line.
  */
-export function openingShape(path: Pt[], closed: boolean, o: Pick<PlacedOpening, 'distPx' | 'kind' | 'widthMm' | 'swing'>, mpp: number, band: WallBand, labelGapPx = 10): OpeningShape | null {
+export function openingShape(path: Pt[], closed: boolean, o: Pick<PlacedOpening, 'distPx' | 'kind' | 'widthMm' | 'swing'> & { flipped?: boolean }, mpp: number, band: WallBand, labelGapPx = 10): OpeningShape | null {
   if (!(mpp > 0)) return null
   const w = o.widthMm / (mpp * 1000)
   const half = w / 2
@@ -158,9 +160,10 @@ export function openingShape(path: Pt[], closed: boolean, o: Pick<PlacedOpening,
     prims.push({ type: 'line', a: p(-half, mid - thick * 0.08), b: p(half, mid - thick * 0.08), style: 'glass' })
     prims.push({ type: 'line', a: p(-half, mid + thick * 0.08), b: p(half, mid + thick * 0.08), style: 'glass' })
     if (kind === 'win-bay') {
-      // the bay's projection, dashed, outside the wall
-      const o1 = inside === 1 ? lo : hi
-      const out = -inside
+      // the bay's projection, dashed: outside the wall, or inside it when the window is turned over
+      const faceOut = inside === 1 ? lo : hi, faceIn = inside === 1 ? hi : lo
+      const o1 = o.flipped ? faceIn : faceOut
+      const out = o.flipped ? inside : -inside
       const dep = Math.min(w * 0.25, thick * 3)
       prims.push({ type: 'line', a: p(-half, o1), b: p(-half * 0.7, o1 + out * dep), style: 'dash' })
       prims.push({ type: 'line', a: p(-half * 0.7, o1 + out * dep), b: p(half * 0.7, o1 + out * dep), style: 'dash' })
@@ -186,9 +189,10 @@ export function openingShape(path: Pt[], closed: boolean, o: Pick<PlacedOpening,
   } else if (kind === 'door-bifold') {
     const n = bifoldPanels(o.widthMm)
     const dep = Math.min(w / n, Math.max(thick * 1.5, w * 0.08))
+    const foldN = o.flipped ? -swingN : swingN   // which way the panels fold, turned over with the door
     let prev = p(-half, mid)
     for (let i = 1; i <= n; i++) {
-      const next = p(-half + (w * i) / n, mid + (i === n ? 0 : i % 2 === 1 ? swingN * dep : 0))
+      const next = p(-half + (w * i) / n, mid + (i === n ? 0 : i % 2 === 1 ? foldN * dep : 0))
       prims.push({ type: 'line', a: prev, b: next, style: 'leaf' })
       prev = next
     }
@@ -213,6 +217,22 @@ export function openingShape(path: Pt[], closed: boolean, o: Pick<PlacedOpening,
   const reach = Math.abs(hi - lo) / 2 + labelGapPx
   const labelAt = p(0, mid + labelSide * reach)
   return { centre: C, tangent: T, widthPx: w, prims, labelAt, gap }
+}
+
+/** The distance along the wall of the middle of the straight length that a distance falls on: where to put an opening to centre it on its side of the wall. */
+export function segmentMiddle(points: Pt[], closed: boolean, d: number): number {
+  const ls = legs(points, closed)
+  if (ls.length === 0) return 0
+  const total = ls[ls.length - 1].start + ls[ls.length - 1].len
+  const at = closed ? ((d % total) + total) % total : Math.max(0, Math.min(total, d))
+  const l = ls.find(x => at <= x.start + x.len + 1e-9) ?? ls[ls.length - 1]
+  return l.start + l.len / 2
+}
+
+/** The swing of a door turned over to the other side of the wall, with the hinge staying at the same end: in becomes out and left becomes right (seen from the side you push it open from, which has changed). */
+export function flippedSwing(swing: WdSwing): WdSwing {
+  const [dir, hand] = swing.split('-') as ['in' | 'out', 'left' | 'right']
+  return ((dir === 'in' ? 'out' : 'in') + '-' + (hand === 'left' ? 'right' : 'left')) as WdSwing
 }
 
 /** The next reference for an opening of a kind among those already placed: W1, W2 (windows), D1, D2 (external doors), ID1, ID2 (internal doors). */

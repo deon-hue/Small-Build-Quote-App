@@ -34,6 +34,10 @@ interface Props {
   /** where the selected opening's centre is along its wall, in mm, and how long that wall is */
   selectedAlong?: { mm: number; wallMm: number }
   onMoveAlong: (id: string, mm: number) => void
+  /** put the selected opening in the middle of its side of the wall */
+  onCentre: (id: string) => void
+  /** turn it over to face the other side of the wall */
+  onFlip: (id: string) => void
   saved?: { lines: CostedLine[]; location?: string }
   stale?: boolean
   calculatorOpen: boolean
@@ -149,6 +153,10 @@ export default function OpeningsPanel(p: Props) {
                 {SWINGS.map(s => <option key={s} value={s}>{SWING_LABEL[s]}</option>)}
               </select>
             )}
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button type="button" onClick={() => p.onCentre(selected.id)} title="Put it in the middle of its side of the wall" style={{ flex: 1, padding: '6px', fontSize: 12, borderRadius: 5, cursor: 'pointer', border: '1px solid var(--to-border)', background: 'var(--to-bg)', color: 'var(--to-text)', fontFamily: 'inherit', fontWeight: 600 }}>↔ Centre on the wall</button>
+              <button type="button" onClick={() => p.onFlip(selected.id)} title="Turn it over to face the other side of the wall (a door swings the other way, a bay projects the other way)" style={{ flex: 1, padding: '6px', fontSize: 12, borderRadius: 5, cursor: 'pointer', border: '1px solid var(--to-border)', background: 'var(--to-bg)', color: 'var(--to-text)', fontFamily: 'inherit', fontWeight: 600 }}>⇄ Flip to the other side</button>
+            </div>
             {p.selectedAlong && (
               <div>
                 <div style={tiny}>Centre of the opening, along its wall (the wall is {(p.selectedAlong.wallMm / 1000).toFixed(2)} m)</div>
