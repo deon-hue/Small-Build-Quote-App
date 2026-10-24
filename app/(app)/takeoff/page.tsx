@@ -5,7 +5,7 @@ import NumInput from '@/components/NumInput'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { makeDebouncedSave, isEmptyTakeoff, isUuid, newProjectId, loadTakeoffFromSupabase, saveTakeoffToSupabase, listTakeoffSummaries, deleteTakeoffProject, type TakeoffSummary } from '@/lib/takeoff-sync'
-import { roomLabelsOf, setRoomLabels, roomShapesOf, setRoomShapes, roomEdgesOf, setRoomEdges, activeSheetIdOf, onActiveSheet, onActiveLevel, activeLevelIdOf, levelOf, levelName, ghostLevel, elementsOnGhostLevel, viewKey, itemLevelId, addLevel, switchActiveLevel, renameLevel, setLevelHeight, removeLevel, moveElementToLevel, levelInsertIndex, LEVEL_PRESETS, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet, setSheetPaper } from '@/lib/takeoff-sheets'
+import { roomLabelsOf, setRoomLabels, roomShapesOf, setRoomShapes, roomEdgesOf, setRoomEdges, activeSheetIdOf, onActiveSheet, onActiveLevel, activeLevelIdOf, levelOf, levelName, ghostLevel, elementsOnGhostLevel, viewKey, itemLevelId, addLevel, switchActiveLevel, renameLevel, setLevelHeight, removeLevel, moveElementToLevel, copyLevelContents, levelInsertIndex, LEVEL_PRESETS, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet, setSheetPaper } from '@/lib/takeoff-sheets'
 import { layoutTags, polylineMidpoint, textColorFor, tagText, TAG_HEIGHT_PX } from '@/lib/takeoff-tags'
 import { PDF_RENDER_MM_PER_PX, PAPER_SIZES, SCALE_DENOMS, scaleLabel, denomFromLabel, mppForScale, paperFromMm, inferPdfPaper, mmPerPxForPaper } from '@/lib/takeoff-paper'
 import { putSheetImage, getSheetImage, deleteProjectImages } from '@/lib/takeoff-sheet-images'
@@ -867,6 +867,10 @@ export default function TakeoffPage() {
   const activeLevelId = activeLevelIdOf(project)
   const [viewGhost, setViewGhost] = useState(true)
   const [levelMenuOpen, setLevelMenuOpen] = useState(false)
+  // copying the showing level onto another: whether the box is open, where to, and which kinds of drawing
+  const [copyOpen, setCopyOpen] = useState(false)
+  const [copyTo, setCopyTo] = useState('')
+  const [copyPhases, setCopyPhases] = useState<Set<string>>(new Set())
   const [sheetImageMissing, setSheetImageMissing] = useState(false)
   const [imageNonce, setImageNonce] = useState(0)
   // Plan pictures are kept on this device AND in the account (so a take-off's plans open on any computer): where each sheet's copy in the account has got to
@@ -2651,6 +2655,47 @@ export default function TakeoffPage() {
     const next = window.prompt('Name the new level (for example Garage roof, Basement, Annexe)', '')
     if (next !== null && next.trim()) addLevelNamed(next)
     else setLevelMenuOpen(false)
+  }
+
+  function openCopyLevel() {
+    const levels = project.levels ?? []
+    const phases = Array.from(new Set(elementsOnActiveSheet(project).map(e => e.phase)))
+    if (phases.length === 0) { showToast('Nothing is drawn on this level to copy yet'); return }
+    setCopyPhases(new Set(phases.filter(ph => ph !== 'Foundations')))
+    setCopyTo(levels[levels.findIndex(l => l.id === activeLevelId) + 1]?.id ?? '__new')
+    setCopyOpen(true)
+    setLevelMenuOpen(false)
+  }
+
+  /** Copies the showing level (its walls and the other chosen kinds of drawing, with their prices, doors and windows) onto another level, exactly on top, ready to take walls out or move them to suit. Shows that level. */
+  function copyLevelNow() {
+    const from = activeLevelId
+    if (!from || !copyTo) return
+    let q = project
+    let to = copyTo
+    if (to === '__new') {
+      const name = window.prompt('Name the new level to copy onto', 'First floor')
+      if (name === null || !name.trim()) return
+      to = uid()
+      q = addLevel(q, to, name.trim(), undefined, levelInsertIndex(q.levels ?? [], name))
+    }
+    const r = copyLevelContents(q, from, to, uid, copyPhases)
+    if (r.copiedElements === 0) { showToast('Nothing to copy: tick at least one kind of drawing'); return }
+    q = r.project
+    // the doors and windows placed on the copied walls come too (each with its own reference), in the one list they all live in
+    const onCopied = allPlaced.filter(o => r.idMap.has(o.wallId))
+    if (onCopied.length > 0 && q.items.some(it => it.wdSummary)) {
+      let all = [...allPlaced]
+      for (const o of onCopied) all = [...all, { ...o, id: uid(), wallId: r.idMap.get(o.wallId)!, ref: nextOpeningRef(all, o.kind) }]
+      const items = q.items.map(it => (it.wdSummary ? { ...it, placedOpenings: all } : it))
+      const elements = q.elements
+      q = { ...q, items: withDrawnOpenings(items, all.filter(o => elements.some(e => e.id === o.wallId))) }
+    }
+    const done = switchActiveLevel(q, to)
+    setProject(() => done)
+    clearViewState()
+    setCopyOpen(false)
+    showToast('Copied ' + r.copiedElements + ' drawing(s) onto "' + levelName(done, to) + '"' + (onCopied.length ? ' with ' + onCopied.length + ' door/window(s)' : '') + '. Delete or move what is different upstairs.')
   }
 
   function renameLevelPrompt(id: string) {
@@ -6835,6 +6880,39 @@ export default function TakeoffPage() {
                     style={{ ...btnStyle, padding: '4px 10px', fontSize: 11 }}>{levels.length ? '+ Level' : '＋ Levels'}</button>
                   {levelMenuOpen && menu}
                 </div>
+                {levels.length > 0 && (
+                  <div style={{ position: 'relative', flexShrink: 0 }}>
+                    <button onClick={() => (copyOpen ? setCopyOpen(false) : openCopyLevel())} title="Copy what is drawn on this level onto another (ground floor onto first floor), then take out the walls and foundations that are different"
+                      style={{ ...btnStyle, padding: '4px 10px', fontSize: 11 }}>⧉ Copy level</button>
+                    {copyOpen && (() => {
+                      const phases = Array.from(new Set(elementsOnActiveSheet(project).map(e => e.phase)))
+                      return (
+                        <div style={{ position: 'absolute', left: 0, bottom: '100%', marginBottom: 4, width: 270, background: 'var(--to-panel)', border: '1px solid var(--to-border)', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.35)', padding: 10, zIndex: 8, color: 'var(--to-text)', fontSize: 12 }}>
+                          <div style={{ fontWeight: 700, marginBottom: 6 }}>Copy "{active?.name}" onto</div>
+                          <select value={copyTo} onChange={e => setCopyTo(e.target.value)} style={{ width: '100%', fontSize: 12, padding: '4px', marginBottom: 8 }}>
+                            {levels.filter(l => l.id !== activeLevelId).map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                            <option value="__new">＋ A new level…</option>
+                          </select>
+                          <div style={{ color: 'var(--to-muted)', fontSize: 11, marginBottom: 4 }}>Copy these (they land exactly on top; what is already there stays):</div>
+                          <div style={{ maxHeight: 150, overflowY: 'auto', marginBottom: 8 }}>
+                            {phases.map(ph => (
+                              <label key={ph} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0', cursor: 'pointer' }}>
+                                <input type="checkbox" style={{ width: 'auto' }} checked={copyPhases.has(ph)}
+                                  onChange={e => setCopyPhases(s => { const n = new Set(s); if (e.target.checked) n.add(ph); else n.delete(ph); return n })} />
+                                {ph}
+                              </label>
+                            ))}
+                          </div>
+                          <div style={{ color: 'var(--to-muted)', fontSize: 11, marginBottom: 8 }}>Doors and windows on the copied walls come too. Room names and electrical points do not.</div>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button onClick={copyLevelNow} style={{ ...btnStyle, flex: 1, justifyContent: 'center', background: '#2563eb', borderColor: '#1d4ed8', color: '#fff', fontWeight: 700 }}>Copy</button>
+                            <button onClick={() => setCopyOpen(false)} style={{ ...btnStyle, justifyContent: 'center' }}>Cancel</button>
+                          </div>
+                        </div>
+                      )
+                    })()}
+                  </div>
+                )}
                 {levels.length > 0 && (
                   <>
                     <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--to-text)', cursor: 'pointer', flexShrink: 0 }} title="Show the neighbouring level faintly, to draw over: the level below, or for the lowest level the one above (the walls the foundations sit under)">

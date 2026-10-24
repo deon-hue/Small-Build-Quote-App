@@ -349,3 +349,31 @@ export function removeLevel(p: TakeoffProject, id: string): { project: TakeoffPr
   else if (wasActive) next = { ...next, activeLevelId: (below ?? remaining[0]).id }
   return { project: next, removedElements: doomed.size, removedItems: p.items.length - items.length }
 }
+
+/** Copies what is drawn on one level (on the showing sheet) onto another level: the drawings of the chosen phases, their priced items, and the room edges and drawn rooms. The copies are exactly on top of the originals, so a ground floor copied
+ *  onto the first floor has the same outline, and are then deleted or changed to suit the rooms upstairs. NOT copied: room names, electrical points, and the doors and windows placed on the walls (the screen copies those, its list lives on one item).
+ *  Whatever is already on the other level stays. `phases` limits it to those phases (all when not given). `idMap` says which new drawing is a copy of which. */
+export function copyLevelContents(p: TakeoffProject, fromId: string, toId: string, newId: () => string, phases?: Set<string>): { project: TakeoffProject; idMap: Map<string, string>; copiedElements: number; copiedItems: number } {
+  const none = { project: p, idMap: new Map<string, string>(), copiedElements: 0, copiedItems: 0 }
+  if (fromId === toId || !p.levels?.some(l => l.id === fromId) || !p.levels?.some(l => l.id === toId)) return none
+  const sources = p.elements.filter(el => onActiveSheet(el, p) && levelOf(el, p) === fromId && (!phases || phases.has(el.phase)))
+  const idMap = new Map<string, string>()
+  const elements: DrawnElement[] = sources.map(el => {
+    const id = newId()
+    idMap.set(el.id, id)
+    return { ...el, id, levelId: toId, points: el.points.map(pt => ({ ...pt })), tagDx: undefined, tagDy: undefined }
+  })
+  const items: TakeoffItem[] = p.items
+    .filter(it => it.elementId && idMap.has(it.elementId) && !it.electricsSummary && !it.wdSummary)
+    .map(it => ({ ...it, id: newId(), elementId: idMap.get(it.elementId!)!, drawnOpenings: undefined }))
+  const sheetId = activeSheetIdOf(p)
+  const copyList = <T extends OnLevel & { id: string; points: { x: number; y: number }[] }>(list: T[] | undefined): T[] =>
+    (list ?? []).filter(x => levelOf(x, p) === fromId).map(x => ({ ...x, id: newId(), levelId: toId, points: x.points.map(pt => ({ ...pt })) }))
+  const owner = sheetId ? p.sheets?.find(s => s.id === sheetId) : undefined
+  const edges = copyList(owner ? owner.roomEdges : p.roomEdges)
+  const shapes = copyList(owner ? owner.roomShapes : p.roomShapes)
+  let project: TakeoffProject = { ...p, elements: [...p.elements, ...elements], items: [...p.items, ...items] }
+  if (owner) project = { ...project, sheets: p.sheets!.map(s => (s.id === owner.id ? { ...s, roomEdges: [...(s.roomEdges ?? []), ...edges], roomShapes: [...(s.roomShapes ?? []), ...shapes] } : s)) }
+  else project = { ...project, roomEdges: [...(p.roomEdges ?? []), ...edges], roomShapes: [...(p.roomShapes ?? []), ...shapes] }
+  return { project, idMap, copiedElements: elements.length, copiedItems: items.length }
+}
