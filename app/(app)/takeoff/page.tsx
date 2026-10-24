@@ -5095,6 +5095,10 @@ export default function TakeoffPage() {
     background: 'var(--to-hover)', border: '1px solid var(--to-btn-bd)', borderRadius: 5,
     color: 'var(--to-text)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
   }
+  // The tool bar's groups, and an on/off button that reads clearly: lit green with white text when on, the normal button when off
+  const tbGroup: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px', border: '1px solid var(--to-border)', borderRadius: 8, background: 'var(--to-alt)' }
+  const tbGroupLabel: React.CSSProperties = { fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--to-muted)', marginRight: 3, userSelect: 'none' }
+  const toggleBtn = (on: boolean): React.CSSProperties => ({ ...btnStyle, padding: '6px 9px', ...(on ? { background: '#2f6f2f', borderColor: '#7ab533', color: '#ffffff', fontWeight: 600 } : {}) })
   const dimRow: React.CSSProperties = {
     display: 'flex', justifyContent: 'space-between', color: 'var(--to-link)', fontSize: 12, marginBottom: 3,
   }
@@ -5113,201 +5117,206 @@ export default function TakeoffPage() {
       overflow: 'hidden',
     }}>
 
-      {/* ── Top bar ──────────────────────────────────────────────────────── */}
-      <div style={{
-        height: 48, background: 'var(--to-panel)', borderBottom: '1px solid var(--to-border)',
-        display: 'flex', alignItems: 'center', padding: '0 12px', gap: 8, flexShrink: 0,
-      }}>
-        {/* Project name */}
-        {editingName ? (
+      {/* ── Top bar: row 1 is the job (name, address, customer, files); row 2 is the tools, in groups ───────── */}
+      <div style={{ background: 'var(--to-panel)', borderBottom: '1px solid var(--to-border)', flexShrink: 0 }}>
+        {/* Row 1: the job */}
+        <div style={{ minHeight: 46, display: 'flex', alignItems: 'center', flexWrap: 'wrap', padding: '4px 12px', gap: 8 }}>
+          {editingName ? (
+            <input
+              autoFocus
+              style={{ ...inputStyle, width: 180, height: 28, fontSize: 13, fontWeight: 700 }}
+              value={project.name}
+              onChange={e => setProject(p => ({ ...p, name: e.target.value }))}
+              onBlur={() => setEditingName(false)}
+              onKeyDown={e => e.key === 'Enter' && setEditingName(false)}
+            />
+          ) : (
+            <div
+              onClick={() => setEditingName(true)}
+              style={{ fontWeight: 700, fontSize: 14, color: 'var(--to-text)', cursor: 'text', minWidth: 120,
+                padding: '3px 6px', borderRadius: 4, border: '1px solid transparent' }}
+              title="Click to edit project name"
+            >
+              📐 {project.name || <span style={{ color: 'var(--to-muted)', fontWeight: 500 }}>Name this take-off…</span>}
+            </div>
+          )}
+
+          <button style={btnStyle} onClick={openTakeoffList} title="Your saved take-offs: open one to carry on, or start a new one">
+            📁 My Take-offs
+          </button>
+          <button style={{ ...btnStyle, background: '#c0392b33', borderColor: '#c0392b', color: '#e57373', whiteSpace: 'nowrap' }}
+            onClick={handleClose} title="Save this take-off under its name in My Take-offs and clear the screen for a fresh one">
+            ✕ Close take-off
+          </button>
+
+          <div style={{ width: 1, height: 28, background: 'var(--to-border)', margin: '0 2px' }} />
+
           <input
-            autoFocus
-            style={{ ...inputStyle, width: 180, height: 28, fontSize: 13, fontWeight: 700 }}
-            value={project.name}
-            onChange={e => setProject(p => ({ ...p, name: e.target.value }))}
-            onBlur={() => setEditingName(false)}
-            onKeyDown={e => e.key === 'Enter' && setEditingName(false)}
+            style={{ ...inputStyle, width: 200, height: 28, fontSize: 12 }}
+            placeholder="Address / project ref"
+            value={project.address}
+            onChange={e => setProject(p => ({ ...p, address: e.target.value }))}
           />
-        ) : (
-          <div
-            onClick={() => setEditingName(true)}
-            style={{ fontWeight: 700, fontSize: 13, color: 'var(--to-text)', cursor: 'text', minWidth: 120,
-              padding: '3px 6px', borderRadius: 4, border: '1px solid transparent' }}
-            title="Click to edit project name"
-          >
-            📐 {project.name || <span style={{ color: 'var(--to-muted)', fontWeight: 500 }}>Name this take-off…</span>}
-          </div>
-        )}
 
-        {/* Job buttons sit next to the name so they are always on screen (the right-hand end of this bar runs off narrower screens) */}
-        <button style={btnStyle} onClick={openTakeoffList} title="Your saved take-offs: open one to carry on, or start a new one">
-          📁 My Take-offs
-        </button>
-
-        <button style={{ ...btnStyle, background: '#c0392b33', borderColor: '#c0392b', color: '#e57373', whiteSpace: 'nowrap' }}
-          onClick={handleClose} title="Save this take-off under its name in My Take-offs and clear the screen for a fresh one">
-          ✕ Close take-off
-        </button>
-
-        <input
-          style={{ ...inputStyle, width: 200, height: 28, fontSize: 12 }}
-          placeholder="Address / project ref"
-          value={project.address}
-          onChange={e => setProject(p => ({ ...p, address: e.target.value }))}
-        />
-
-        {/* Client / project info */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 4px' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--to-text)', lineHeight: 1.2, whiteSpace: 'nowrap', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {project.client?.name ?? 'No client assigned'}
-            </span>
-            {(project.siteAddress ?? project.client?.address ?? '') && (
-              <span style={{ fontSize: 10, color: 'var(--to-muted)', lineHeight: 1.2, whiteSpace: 'nowrap', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {project.siteAddress ?? project.client?.address ?? ''}
+          {/* Client / project info */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 4px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--to-text)', lineHeight: 1.2, whiteSpace: 'nowrap', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {project.client?.name ?? 'No client assigned'}
               </span>
-            )}
-            {project.projectName && (
-              <span style={{ fontSize: 10, color: 'var(--to-dim)', lineHeight: 1.2, whiteSpace: 'nowrap', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {project.projectName}
-              </span>
-            )}
+              {(project.siteAddress ?? project.client?.address ?? '') && (
+                <span style={{ fontSize: 10, color: 'var(--to-muted)', lineHeight: 1.2, whiteSpace: 'nowrap', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {project.siteAddress ?? project.client?.address ?? ''}
+                </span>
+              )}
+              {project.projectName && (
+                <span style={{ fontSize: 10, color: 'var(--to-dim)', lineHeight: 1.2, whiteSpace: 'nowrap', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {project.projectName}
+                </span>
+              )}
+            </div>
+            <button
+              style={{ ...btnStyle, fontSize: 11, padding: '4px 8px', whiteSpace: 'nowrap' }}
+              onClick={() => setShowClientModal(true)}
+              title="Edit client and project details"
+            >
+              Edit Client
+            </button>
           </div>
+
+          <div style={{ flex: 1 }} />
+
+          {/* Files */}
+          <div style={tbGroup}>
+            <span style={tbGroupLabel}>File</span>
+            <input type="file" accept=".json" ref={importJsonRef} style={{ display: 'none' }} onChange={handleImportJson} />
+            <button style={btnStyle} onClick={() => importJsonRef.current?.click()} title="Load a take-off from a backup file (JSON). Your saved take-offs are under My Take-offs.">
+              📂 Open
+            </button>
+            <button style={btnStyle} onClick={() => exportJSON(project)} title="Download a backup file of this take-off (drawings and pricing, not the plan pictures)">
+              💾 JSON
+            </button>
+            <button style={btnStyle} onClick={() => exportCSV(project)} title="Download the schedule as a spreadsheet">
+              📊 CSV
+            </button>
+          </div>
+
+          {/* Theme toggle */}
           <button
-            style={{ ...btnStyle, fontSize: 11, padding: '4px 8px', whiteSpace: 'nowrap' }}
-            onClick={() => setShowClientModal(true)}
-            title="Edit client and project details"
+            onClick={toggleTheme}
+            title={darkMode ? 'Switch to light theme' : 'Switch to dark theme'}
+            style={{ ...btnStyle, padding: '6px 10px', background: darkMode ? 'var(--to-hover)' : 'rgba(122,181,51,0.12)', borderColor: 'var(--to-accent)', color: 'var(--to-accent)', gap: 4 }}
           >
-            Edit Client
+            {darkMode ? '☀' : '◑'} {darkMode ? 'Light' : 'Dark'}
           </button>
         </div>
 
-        <div style={{ width: 1, height: 28, background: 'var(--to-border)', margin: '0 4px' }} />
+        {/* Row 2: the tools, in groups */}
+        <div style={{ minHeight: 46, display: 'flex', alignItems: 'center', flexWrap: 'wrap', padding: '4px 12px 6px', gap: 8, borderTop: '1px solid var(--to-border)' }}>
+          {/* Plan: the picture and its scale */}
+          <div style={tbGroup}>
+            <span style={tbGroupLabel}>Plan</span>
+            <input type="file" accept="image/*,application/pdf,.pdf" ref={fileInputRef} style={{ display: 'none' }} onChange={handleImageLoad} />
+            <button style={btnStyle} onClick={() => setPlanChooserOpen(true)} disabled={pdfLoading} title="Add a plan from this computer or from a customer's files">
+              {pdfLoading ? '⏳ Loading…' : (project.sheets?.length ? '🖼 Add Plan' : '🖼 Load Plan')}
+            </button>
+            <select
+              style={{ ...inputStyle, width: 120, height: 28 }}
+              value={project.calibration.label ?? ''}
+              onChange={e => {
+                if (e.target.value === 'custom') { setShowCalib(true); return }
+                { const d = denomFromLabel(e.target.value); if (d) applyScaleDenom(d) }
+              }}
+              title="Scale the plan was printed at. The paper size is used to work out real distances: check it with the paper button next to this, or use Calibrate with a known length."
+            >
+              {SCALE_DENOMS.map(d => <option key={d} value={scaleLabel(d)}>{scaleLabel(d)}</option>)}
+              {/* Show current custom calibration label if it isn't one of the presets */}
+              {project.calibration.label && !SCALE_DENOMS.some(d => scaleLabel(d) === project.calibration.label) && (
+                <option value={project.calibration.label}>{project.calibration.label}</option>
+              )}
+              <option value="custom">Custom…</option>
+            </select>
+            <button style={{ ...btnStyle, padding: '4px 8px', fontSize: 11 }} disabled={!canvasImgSize}
+              onClick={() => { setPendingDenom(null); setShowPaperModal(true) }}
+              title="The paper size this plan is printed on. The scale presets need it to measure correctly.">
+              📄 {paperInfoForActiveSheet()?.paper || 'Paper?'}
+            </button>
+            <button style={btnStyle} onClick={() => setShowCalib(true)} title="Calibrate scale from drawing">
+              📏 Calibrate
+            </button>
+          </div>
 
-        {/* Scale */}
-        <select
-          style={{ ...inputStyle, width: 130, height: 28 }}
-          value={project.calibration.label ?? ''}
-          onChange={e => {
-            if (e.target.value === 'custom') { setShowCalib(true); return }
-            { const d = denomFromLabel(e.target.value); if (d) applyScaleDenom(d) }
-          }}
-          title="Scale the plan was printed at. The paper size is used to work out real distances: check it with the paper button next to this, or use Calibrate with a known length."
-        >
-          {SCALE_DENOMS.map(d => <option key={d} value={scaleLabel(d)}>{scaleLabel(d)}</option>)}
-          {/* Show current custom calibration label if it isn't one of the presets */}
-          {project.calibration.label && !SCALE_DENOMS.some(d => scaleLabel(d) === project.calibration.label) && (
-            <option value={project.calibration.label}>{project.calibration.label}</option>
-          )}
-          <option value="custom">Custom…</option>
-        </select>
-        <button style={{ ...btnStyle, padding: '4px 8px', fontSize: 11 }} disabled={!canvasImgSize}
-          onClick={() => { setPendingDenom(null); setShowPaperModal(true) }}
-          title="The paper size this plan is printed on. The scale presets need it to measure correctly.">
-          📄 {paperInfoForActiveSheet()?.paper || 'Paper?'}
-        </button>
+          {/* Draw: undo, and the aids that help place a point */}
+          <div style={tbGroup}>
+            <span style={tbGroupLabel}>Draw</span>
+            <button style={{ ...btnStyle, padding: '6px 9px', opacity: (historyRef.current?.undo.length ?? 0) > 0 || (isDrawing && drawPoints.length > 0) ? 1 : 0.5 }} onClick={undoDrawing} title="Undo (Ctrl+Z). While you are drawing it takes back the last point.">↶ Undo</button>
+            <button style={{ ...btnStyle, padding: '6px 9px', opacity: (historyRef.current?.redo.length ?? 0) > 0 ? 1 : 0.5 }} onClick={redoDrawing} title="Redo (Ctrl+Y)">↷ Redo</button>
+            <div style={{ width: 1, height: 20, background: 'var(--to-border)', margin: '0 2px' }} />
+            <button style={toggleBtn(snapOn)} aria-pressed={snapOn} onClick={() => setSnapOn(v => !v)} title="Snap to the corners, ends and mid-points of drawings already on the plan">🧲 Snap{snapOn ? ' ✓' : ''}</button>
+            <button style={toggleBtn(orthoOn)} aria-pressed={orthoOn} onClick={() => setOrthoOn(v => !v)} title="Keep each line horizontal or vertical (hold Shift to do it for one line)">⊾ Ortho{orthoOn ? ' ✓' : ''}</button>
+            <button style={toggleBtn(showGrid)} aria-pressed={showGrid} onClick={() => setShowGrid(v => !v)} title="Show the grid">⊞ Grid{showGrid ? ' ✓' : ''}</button>
+          </div>
 
-        <button style={btnStyle} onClick={() => setShowCalib(true)} title="Calibrate scale from drawing">
-          📏 Calibrate
-        </button>
+          {/* The selected drawing */}
+          <div style={tbGroup}>
+            <span style={tbGroupLabel}>Selected</span>
+            <button style={{ ...btnStyle, padding: '6px 9px', opacity: selectedId ? 1 : 0.5 }} onClick={duplicateSelected} title="Copy the selected drawing and its item (Ctrl+D)">⧉ Copy</button>
+            <button style={{ ...btnStyle, padding: '6px 9px', opacity: selectedId ? 1 : 0.5 }} onClick={() => rotateSelected(null)} title="Rotate the selected drawing (R turns it a quarter turn)">⟳ Rotate</button>
+          </div>
 
-        <button style={{ ...btnStyle, background: showGrid ? '#2b5a2b' : '#1e2e1e' }}
-          onClick={() => setShowGrid(v => !v)} title="Toggle grid">
-          ⊞ Grid
-        </button>
+          {/* View: zoom */}
+          <div style={tbGroup}>
+            <span style={tbGroupLabel}>View</span>
+            <button style={{ ...btnStyle, padding: '6px 9px' }} onClick={() => {
+              const rect = svgRef.current!.getBoundingClientRect()
+              const cx = rect.width / 2, cy = rect.height / 2
+              const nz = Math.max(zoom / 1.25, 0.05)
+              setPanOffset({ x: cx - (cx - panOffset.x) * (nz / zoom), y: cy - (cy - panOffset.y) * (nz / zoom) })
+              setZoom(nz)
+            }} title="Zoom out">−</button>
+            <span style={{ fontSize: 11, color: 'var(--to-text)', minWidth: 40, textAlign: 'center', fontFamily: 'monospace' }}>
+              {Math.round(zoom * 100)}%
+            </span>
+            <button style={{ ...btnStyle, padding: '6px 9px' }} onClick={() => {
+              const rect = svgRef.current!.getBoundingClientRect()
+              const cx = rect.width / 2, cy = rect.height / 2
+              const nz = Math.min(zoom * 1.25, 20)
+              setPanOffset({ x: cx - (cx - panOffset.x) * (nz / zoom), y: cy - (cy - panOffset.y) * (nz / zoom) })
+              setZoom(nz)
+            }} title="Zoom in (scroll wheel)">+</button>
+            <button style={btnStyle} onClick={() => fitToScreen()} title="Fit plan to screen">⊡ Fit</button>
+            <button
+              style={{ ...btnStyle, color: '#7ab533', borderColor: '#3a5a2a' }}
+              onClick={resetView}
+              title="Reset zoom and pan only — drawings are kept"
+            >
+              ⟲ Reset view
+            </button>
+          </div>
 
-        {/* Drawing aids */}
-        <button style={{ ...btnStyle, padding: '6px 8px', opacity: (historyRef.current?.undo.length ?? 0) > 0 || (isDrawing && drawPoints.length > 0) ? 1 : 0.5 }} onClick={undoDrawing} title="Undo (Ctrl+Z). While you are drawing it takes back the last point.">↶ Undo</button>
-        <button style={{ ...btnStyle, padding: '6px 8px', opacity: (historyRef.current?.redo.length ?? 0) > 0 ? 1 : 0.5 }} onClick={redoDrawing} title="Redo (Ctrl+Y)">↷ Redo</button>
-        <button style={{ ...btnStyle, padding: '6px 8px', background: snapOn ? '#2b5a2b' : '#1e2e1e' }} onClick={() => setSnapOn(v => !v)} title="Snap to the corners, ends and mid-points of drawings already on the plan">🧲 Snap</button>
-        <button style={{ ...btnStyle, padding: '6px 8px', background: orthoOn ? '#2b5a2b' : '#1e2e1e' }} onClick={() => setOrthoOn(v => !v)} title="Keep each line horizontal or vertical (hold Shift to do it for one line)">⊾ Ortho</button>
-        <button style={{ ...btnStyle, padding: '6px 8px', opacity: selectedId ? 1 : 0.5 }} onClick={duplicateSelected} title="Copy the selected drawing and its item (Ctrl+D)">⧉ Copy</button>
-        <button style={{ ...btnStyle, padding: '6px 8px', opacity: selectedId ? 1 : 0.5 }} onClick={() => rotateSelected(null)} title="Rotate the selected drawing (R turns it a quarter turn)">⟳ Rotate</button>
+          <div style={{ flex: 1 }} />
 
-        <div style={{ flex: 1 }} />
-
-        <input type="file" accept="image/*,application/pdf,.pdf" ref={fileInputRef} style={{ display: 'none' }} onChange={handleImageLoad} />
-        <button style={btnStyle} onClick={() => setPlanChooserOpen(true)} disabled={pdfLoading}>
-          {pdfLoading ? '⏳ Loading…' : (project.sheets?.length ? '🖼 Add Plan' : '🖼 Load Plan')}
-        </button>
-
-        {/* Zoom controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <button style={{ ...btnStyle, padding: '6px 8px' }} onClick={() => {
-            const rect = svgRef.current!.getBoundingClientRect()
-            const cx = rect.width / 2, cy = rect.height / 2
-            const nz = Math.min(zoom * 1.25, 20)
-            setPanOffset({ x: cx - (cx - panOffset.x) * (nz / zoom), y: cy - (cy - panOffset.y) * (nz / zoom) })
-            setZoom(nz)
-          }} title="Zoom in (scroll wheel)">+</button>
-          <span style={{ fontSize: 11, color: '#c8d8a8', minWidth: 38, textAlign: 'center', fontFamily: 'monospace' }}>
-            {Math.round(zoom * 100)}%
-          </span>
-          <button style={{ ...btnStyle, padding: '6px 8px' }} onClick={() => {
-            const rect = svgRef.current!.getBoundingClientRect()
-            const cx = rect.width / 2, cy = rect.height / 2
-            const nz = Math.max(zoom / 1.25, 0.05)
-            setPanOffset({ x: cx - (cx - panOffset.x) * (nz / zoom), y: cy - (cy - panOffset.y) * (nz / zoom) })
-            setZoom(nz)
-          }} title="Zoom out">−</button>
-          <button style={btnStyle} onClick={() => fitToScreen()} title="Fit plan to screen">⊡</button>
+          {/* Clearing: kept apart and in warning colours so they are not pressed by mistake */}
+          <div style={{ ...tbGroup, borderColor: 'rgba(192,57,43,0.4)' }}>
+            <span style={{ ...tbGroupLabel, color: '#c0392b' }}>Clear</span>
+            <button
+              style={{ ...btnStyle, color: '#f39c12', borderColor: '#5a3a0a', opacity: resetInProgress ? 0.5 : 1 }}
+              onClick={() => setShowClearModal(true)}
+              disabled={resetInProgress}
+              title="Remove all drawings but keep phases, tasks and pricing"
+            >
+              🗑 Drawings
+            </button>
+            <button
+              style={{ ...btnStyle, color: '#e74c3c', borderColor: '#5a1a1a', opacity: resetInProgress ? 0.5 : 1 }}
+              onClick={() => setShowResetModal(true)}
+              disabled={resetInProgress}
+              title="Full reset — wipes everything and returns to a blank takeoff"
+            >
+              ↺ Reset
+            </button>
+          </div>
         </div>
-
-        <input type="file" accept=".json" ref={importJsonRef} style={{ display: 'none' }} onChange={handleImportJson} />
-        <button style={btnStyle} onClick={() => importJsonRef.current?.click()} title="Load a take-off from a backup file (JSON). Your saved take-offs are under My Take-offs.">
-          📂 Open
-        </button>
-
-        <button style={btnStyle} onClick={() => exportJSON(project)} title="Download a backup file of this take-off (drawings and pricing, not the plan pictures)">
-          💾 JSON
-        </button>
-        <button style={btnStyle} onClick={() => exportCSV(project)}>
-          📊 CSV
-        </button>
-
-        <div style={{ width: 1, height: 28, background: 'var(--to-border)' }} />
-
-        {/* Reset cluster */}
-        <button
-          style={{ ...btnStyle, color: '#7ab533', borderColor: '#3a5a2a' }}
-          onClick={resetView}
-          title="Reset zoom and pan only — drawings are kept"
-        >
-          ⊡ View
-        </button>
-        <button
-          style={{ ...btnStyle, color: '#f39c12', borderColor: '#5a3a0a', opacity: resetInProgress ? 0.5 : 1 }}
-          onClick={() => setShowClearModal(true)}
-          disabled={resetInProgress}
-          title="Remove all drawings but keep phases, tasks and pricing"
-        >
-          🗑 Drawings
-        </button>
-        <button
-          style={{ ...btnStyle, color: '#e74c3c', borderColor: '#5a1a1a', opacity: resetInProgress ? 0.5 : 1 }}
-          onClick={() => setShowResetModal(true)}
-          disabled={resetInProgress}
-          title="Full reset — wipes everything and returns to a blank takeoff"
-        >
-          ↺ Reset
-        </button>
-
-        {/* Theme toggle */}
-        <button
-          onClick={toggleTheme}
-          title={darkMode ? 'Switch to light theme' : 'Switch to dark theme'}
-          style={{
-            ...btnStyle,
-            padding: '6px 10px',
-            background: darkMode ? 'var(--to-hover)' : 'rgba(122,181,51,0.12)',
-            borderColor: 'var(--to-accent)',
-            color: 'var(--to-accent)',
-            gap: 4,
-          }}
-        >
-          {darkMode ? '☀' : '◑'} {darkMode ? 'Light' : 'Dark'}
-        </button>
-
       </div>
 
       {/* ── Main 3-column layout ─────────────────────────────────────────── */}
