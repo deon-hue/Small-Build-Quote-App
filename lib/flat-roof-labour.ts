@@ -779,3 +779,11 @@ export function suggestTilingLabour(tasks: { key: string; trade: 'tiler' | 'plas
     .filter(t => t.hours > 0)
     .map(t => ({ key: 'tiling-' + t.key, trade: (t.trade === 'tiler' ? 'tiler' : t.trade === 'plasterer' ? 'renderer' : 'labourer') as LabourTradeKind, task: t.task, hours: t.hours, basis: t.basis }))
 }
+
+/** The labour for the Windows and Doors calculator (Windows & Doors → Windows & Doors Schedule (by opening)): the window fitter's time on each window and external door, a carpenter's on each internal door and its trims, and the
+ * labourer who helps, as the calculator's own engine works them out (the hours and the working come from its table and are passed in). Rough estimates, as everywhere here. */
+export function suggestWindowsDoorsLabour(tasks: { key: string; trade: 'fitter' | 'carpenter' | 'labourer'; task: string; hours: number; basis: string }[]): LabourSuggestion[] {
+  return tasks
+    .filter(t => t.hours > 0)
+    .map(t => ({ key: 'wd-' + t.key, trade: t.trade as LabourTradeKind, task: t.task, hours: t.hours, basis: t.basis }))
+}

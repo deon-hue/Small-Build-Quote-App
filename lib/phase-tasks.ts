@@ -390,6 +390,15 @@ const windowsDoorSubphases: PhaseSubphase[] = [
       t('wd-int-pocket-door',       'Pocket slide door (supply & fit)',      'nr',   2, 150,  380,    0,    0,    0,  'Sliding into wall cavity'),
     ],
   },
+  // Windows and doors priced as a schedule, one line per opening (assembly calculator): windows, external doors (front, back, French, bi-fold, sliding, garage) and internal doors, with cills, linings and ironmongery. Listed last so a new line in Take-off still starts on a task.
+  {
+    id: 'wd-schedule',
+    phase: 'Windows & Doors',
+    name: 'Windows & Doors Schedule (by opening)',
+    markupPct: 20,
+    ukWarning: 'Replacement windows and external doors in England need FENSA, Certass or Building Control approval. Bedroom windows need an openable area of at least 0.33m² for escape. Fire doors need fire-rated lining and ironmongery.',
+    tasks: [],  // priced by the Windows and doors calculator (one line per opening: type, size, material, glazing, who supplies it, cill, lining, architrave, ironmongery)
+  },
 ]
 
 // ── 5. INTERNAL WALLS & PARTITIONS ───────────────────────────────────────────

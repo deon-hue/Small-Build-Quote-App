@@ -23,6 +23,10 @@ import {
 } from '@/components/assembly-ui'
 import { LabourSuggestionPanel } from '@/components/AssemblyFlatRoofDemo'
 
+/** A cost line and a labour task as any by-room (or by-opening) calculator's engine hands them over */
+export interface FrameLine { id: string; name: string; category: 'materials' | 'plant' | 'subcontractors'; unit: string; unitCost: number; qty: number }
+export interface FrameLabourTask { key: string; trade: string; task: string; hours: number; basis: string }
+
 export interface TilingSaveResult { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }
 
 interface FrameProps {
@@ -31,8 +35,10 @@ interface FrameProps {
   defaultName: string
   /** what the labour is for, in the labour panel's wording ("floor tiling") */
   subject: string
-  lines: TilingLine[]
-  labourTasks: TilingLabourTask[]
+  lines: FrameLine[]
+  labourTasks: FrameLabourTask[]
+  /** turns the engine's labour tasks into the suggestions the labour section shows; the tiling suggester when not given */
+  suggestLabour?: (tasks: FrameLabourTask[]) => LabourSuggestion[]
   error: string | null
   warnings: string[]
   /** the descriptions written from the rooms; '' while the engine has an error */
@@ -46,7 +52,7 @@ interface FrameProps {
   children: (ctx: { roomCost: (roomId: string) => number }) => { main: React.ReactNode; side: React.ReactNode }
 }
 
-export default function TilingCalcFrame({ id, defaultName, subject, lines, labourTasks, error, warnings, descShort, descFull, hasResult, onClose, onSave, labourTrades, children }: FrameProps) {
+export default function TilingCalcFrame({ id, defaultName, subject, lines, labourTasks, error, warnings, descShort, descFull, hasResult, onClose, onSave, labourTrades, suggestLabour, children }: FrameProps) {
   const [name, setName] = useCalcState(id, 'name', defaultName)
   const [location, setLocation] = useCalcState(id, 'location', '')
   const [qty, setQty] = useCalcState(id, 'qty', 1)
@@ -74,7 +80,7 @@ export default function TilingCalcFrame({ id, defaultName, subject, lines, labou
   }
 
   // Labour, suggested from the rooms and following them until edited
-  const labourSuggestions: LabourSuggestion[] = suggestTilingLabour(labourTasks)
+  const labourSuggestions: LabourSuggestion[] = suggestLabour ? suggestLabour(labourTasks) : suggestTilingLabour(labourTasks as Parameters<typeof suggestTilingLabour>[0])
   const suggestedLabour = toLabourLines(labourSuggestions, labourTrades, false)
   const [labourOverride, setLabourOverride] = useCalcState<LabourLine[] | null>(id, 'labourOverride', null)
   const suggestedRef = React.useRef<LabourLine[]>([])
