@@ -7,7 +7,7 @@
  * foundation calculators. Chambers and manholes, rodding eyes, connections to an existing drain or the sewer and a CCTV survey are counted for the job. The engine is lib/drain-units.ts.
  */
 
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import NumInput from '@/components/NumInput'
 import { useCalcState } from '@/components/calc-state'
 import DiggerOnSiteSection from '@/components/DiggerOnSiteSection'
@@ -33,6 +33,8 @@ interface Props {
   onClose?: () => void
   onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }) => void
   labourTrades?: BOLabourTrade[]
+  /** The length of the drain line drawn in Take-off, mm: the first run's length. Whenever it changes it overwrites the calculator's own. */
+  externalLengthMm?: number
 }
 
 const USE_COLOUR: Record<DrainUse, string> = { foul: '#92400e', surface: '#2563eb', combined: '#7c3aed' }
@@ -42,13 +44,19 @@ export const CHAMBER_WORDS: Record<ChamberKind, [string, string]> = {
 }
 const uid = () => Math.random().toString(36).slice(2, 9)
 
-export default function AssemblyDrainageDemo({ onClose, onSave, labourTrades = [] }: Props) {
+export default function AssemblyDrainageDemo({ onClose, onSave, labourTrades = [], externalLengthMm }: Props) {
   const ID = 'AssemblyDrainageDemo'
+  const fromLine = externalLengthMm && externalLengthMm > 0 ? +(externalLengthMm / 1000).toFixed(2) : 0
+  const firstRun = (lengthM: number): DrainRun => ({ id: 'run-' + uid(), name: 'Drain run', use: 'foul', size: 110, lengthM, depthMm: 900, dig: 'machine', surface: 'soft' })
   const [name, setName] = useCalcState(ID, 'name', 'Underground drainage')
   const [location, setLocation] = useCalcState(ID, 'location', '')
   const [qty, setQty] = useCalcState(ID, 'qty', 1)
   // The job starts with no runs: you add the ones it has
-  const [runs, setRuns] = useCalcState<DrainRun[]>(ID, 'runs', [])
+  // The job starts with no runs, unless it comes from a drain drawn in Take-off: then that drawn line is the first run, and follows the drawing
+  const [runs, setRuns] = useCalcState<DrainRun[]>(ID, 'runs', () => (fromLine > 0 ? [firstRun(fromLine)] : []))
+  useEffect(() => {
+    if (fromLine > 0) setRuns(p => (p.length === 0 ? [firstRun(fromLine)] : p.map((r, i) => (i === 0 ? { ...r, lengthM: fromLine } : r))))
+  }, [fromLine]) // eslint-disable-line react-hooks/exhaustive-deps
   const [chambers, setChambers] = useCalcState<Record<ChamberKind, number>>(ID, 'chambers', { 'ic-shallow': 0, 'ic-deep': 0, manhole: 0, 'rodding-eye': 0 })
   const [connectExisting, setConnectExisting] = useCalcState(ID, 'connectExisting', 0)
   const [connectSewer, setConnectSewer] = useCalcState(ID, 'connectSewer', 0)

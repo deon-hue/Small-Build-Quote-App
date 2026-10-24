@@ -155,7 +155,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'plumb-heating-plant': { icon: 'heating', render: opts => <AssemblyHeatingDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'plumb-ufh': { icon: 'ufh', render: opts => <AssemblyUfhDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'plumb-pipework': { icon: 'pipework', render: opts => <AssemblyPipeworkDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
-  'drain-runs': { icon: 'drainage', render: opts => <AssemblyDrainageDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
+  'drain-runs': { icon: 'drainage', render: opts => <AssemblyDrainageDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'drain-soakaway': { icon: 'soakaway', render: opts => <AssemblySoakawayDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'drain-services': { icon: 'services', render: opts => <AssemblyServicesDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'demo-wall-removal-calc': { icon: 'wall-removal', render: opts => <AssemblyWallRemovalDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },

@@ -1231,6 +1231,13 @@ export default function TakeoffPage() {
       }
     }
 
+    // A line drawn in Drainage & Services is a drain run: it starts as the Underground Drainage (by run) calculator (its length is the first run), unless another sub-phase was picked first
+    if (item.phase === 'Drainage & Services' && el.type === 'line' && !item.taskSubphaseId && !taskSubphaseId) {
+      const drainPhase = boPhases.find(p => p.name === 'Drainage & Services')
+      const bo = boSubPhases.find(b => b.canonical_id === 'drain-runs' && (!drainPhase || b.phase_id === drainPhase.id))
+      if (bo) { item.taskSubphaseId = bo.id; item.subPhase = bo.name }
+    }
+
     // Apply phase defaults to the new item
     if (phaseDefaults) {
       // Copy over phase default properties (but keep element-specific ones)
@@ -4191,7 +4198,7 @@ export default function TakeoffPage() {
     // Decoration is a task phase, except when the sub-phase picked has a calculator (Internal decoration): then the calculator prices it
     const isDecoCalc       = MARKER_CALC_PHASES.has(item.phase) && !!resolveBuiltAssembly(item)
     // the external render and wall insulation calculators take their first wall's length from the drawn line, so the card shows the length, not a marker
-    const _lengthFedCalc    = isDecoCalc && item.phase === 'Plastering & Boarding' && ['plaster-render', 'plaster-insul-wall'].includes(boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id ?? '')
+    const _lengthFedCalc    = isDecoCalc && ((item.phase === 'Plastering & Boarding' && ['plaster-render', 'plaster-insul-wall'].includes(boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id ?? '')) || (item.phase === 'Drainage & Services' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'drain-runs'))
     // the tiling calculators are sized from what is drawn: an area gives the first room its size, a line gives wall tiling its first wall's length
     const _tileCalc        = isDecoCalc && item.phase === 'Tiling & Finishes'
     const isTaskPhase      = _phaseHasTasks && !isBuildup && !isExtWall && !isPlaster && !isIntWall && !isDemo && !isDemoCalc && !isFoundationLine && !isDecoCalc
