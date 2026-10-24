@@ -962,6 +962,39 @@ const tilingSubphases: PhaseSubphase[] = [
       t('tile-prep-self-level',     'Self-levelling compound (before tile)',  'm²',  20,   3.50,  6.50,  0,    0,    0,  'Level out floor prior to tiling'),
     ],
   },
+  // The four calculators below price Tiling & Finishes room by room (assembly calculators). Listed last so a new line in Take-off still starts on a task.
+  {
+    id: 'tile-floor-rooms',
+    phase: 'Tiling & Finishes',
+    name: 'Floor Tiling (by room)',
+    markupPct: 20,
+    ukWarning: 'Floors to be tiled should be sound, dry and flat; large format tiles need a floor flat to about 3mm over 2m. Movement joints per BS 5385.',
+    tasks: [],  // priced by the Floor tiling calculator (rooms: size, tile, layout, supply, adhesive, grout, trims, skirting, movement joints)
+  },
+  {
+    id: 'tile-wall-rooms',
+    phase: 'Tiling & Finishes',
+    name: 'Wall Tiling (by room)',
+    markupPct: 20,
+    ukWarning: 'Wet room and shower walls need a water-resistant backer board and waterproofing before tiling (BS 5385 Part 1).',
+    tasks: [],  // priced by the Wall tiling calculator (rooms: tiled areas, tile, layout, supply, grout, trims, niches, silicone)
+  },
+  {
+    id: 'tile-prep-rooms',
+    phase: 'Tiling & Finishes',
+    name: 'Tiling Preparation (by room)',
+    markupPct: 20,
+    ukWarning: 'Waterproofing goes onto a sound water-resistant base such as backer board, never plaster or standard plasterboard, and needs time to cure before tiling.',
+    tasks: [],  // priced by the Tiling preparation calculator (rooms: floor primer, levelling, backer board, decoupling, waterproofing, ceiling board)
+  },
+  {
+    id: 'tile-ufh-electric',
+    phase: 'Tiling & Finishes',
+    name: 'Electric Underfloor Heating',
+    markupPct: 20,
+    ukWarning: 'Electric underfloor heating must be on a dedicated circuit with a 30mA RCD, connected by a qualified electrician (Part P). Do not run it under fixed baths or units.',
+    tasks: [],  // priced by the Electric underfloor heating calculator (rooms: heated area, mat or cable kit, thermostat, insulation, electrician)
+  },
 ]
 
 // ── 11. DECORATION ────────────────────────────────────────────────────────────

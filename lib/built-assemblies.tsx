@@ -38,6 +38,10 @@ import AssemblySuspendedTimberFloorDemo from '@/components/AssemblySuspendedTimb
 import AssemblyPlumbingDemo from '@/components/AssemblyPlumbingDemo'
 import AssemblyHeatingDemo from '@/components/AssemblyHeatingDemo'
 import AssemblyUfhDemo from '@/components/AssemblyUfhDemo'
+import AssemblyTileFloorDemo from '@/components/AssemblyTileFloorDemo'
+import AssemblyTileWallDemo from '@/components/AssemblyTileWallDemo'
+import AssemblyTilePrepDemo from '@/components/AssemblyTilePrepDemo'
+import AssemblyTileUfhDemo from '@/components/AssemblyTileUfhDemo'
 import AssemblyPipeworkDemo from '@/components/AssemblyPipeworkDemo'
 import AssemblyDrainageDemo from '@/components/AssemblyDrainageDemo'
 import AssemblySoakawayDemo from '@/components/AssemblySoakawayDemo'
@@ -58,7 +62,7 @@ import type { AssemblyBasics } from '@/lib/assembly-basics'
 import type { PlanRoom, ElectricsSavedState } from '@/lib/electrics-units'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 
-export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation' | 'pad-foundation' | 'piled-foundation' | 'underpinning' | 'electrics' | 'decoration' | 'plaster-rooms' | 'render' | 'wall-insulation' | 'screed-floor' | 'floor-overlay' | 'concrete-slab' | 'block-beam' | 'timber-floor' | 'insulated-concrete' | 'plumbing' | 'heating' | 'ufh' | 'pipework' | 'drainage' | 'soakaway' | 'services' | 'wall-removal' | 'strip-out' | 'waste-skips' | 'external-demo'
+export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation' | 'pad-foundation' | 'piled-foundation' | 'underpinning' | 'electrics' | 'decoration' | 'plaster-rooms' | 'render' | 'wall-insulation' | 'screed-floor' | 'floor-overlay' | 'concrete-slab' | 'block-beam' | 'timber-floor' | 'insulated-concrete' | 'plumbing' | 'heating' | 'ufh' | 'pipework' | 'drainage' | 'soakaway' | 'services' | 'wall-removal' | 'strip-out' | 'waste-skips' | 'external-demo' | 'tile-floor' | 'tile-wall' | 'tile-prep' | 'tile-ufh'
 
 /** Fired when a calculator's "Save & Price" is used from inside a real quote — absent in
  * the Back Office preview context, which has no quote to save into. */
@@ -145,6 +149,10 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'demo-strip-out-calc': { icon: 'strip-out', render: opts => <AssemblyStripOutDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'demo-waste-skips-calc': { icon: 'waste-skips', render: opts => <AssemblyWasteDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'demo-external-calc': { icon: 'external-demo', render: opts => <AssemblyExternalDemoDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
+  'tile-floor-rooms': { icon: 'tile-floor', render: opts => <AssemblyTileFloorDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
+  'tile-wall-rooms': { icon: 'tile-wall', render: opts => <AssemblyTileWallDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
+  'tile-prep-rooms': { icon: 'tile-prep', render: opts => <AssemblyTilePrepDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
+  'tile-ufh-electric': { icon: 'tile-ufh', render: opts => <AssemblyTileUfhDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'plaster-insul-wall': { icon: 'wall-insulation', render: opts => <AssemblyWallInsulationDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'plaster-render': { icon: 'render', render: opts => <AssemblyRenderDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'plaster-rooms': { icon: 'plaster-rooms', render: opts => <AssemblyPlasterRoomsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
@@ -270,6 +278,38 @@ export function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; siz
           <rect x="3" y="3" width="18" height="18" rx="1" stroke="#78716c" strokeWidth="1.5" />
           <path d="M3 9h12M3 15h18M9 3v6M15 9v6M9 15v6" stroke="#d6d3d1" strokeWidth="1" />
           <path d="M8 12l8-4 2 4-8 4z" fill="#fef3c7" stroke="#a16207" strokeWidth="1.4" strokeLinejoin="round" />
+        </svg>
+      )
+    case 'tile-floor':
+      // A floor of tiles: a grid of square tiles with a joint between each.
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          {[3, 9, 15].flatMap(y => [3, 9, 15].map(x => <rect key={x + '-' + y} x={x} y={y} width="5.5" height="5.5" rx="0.6" fill="#ccfbf1" stroke="#0f766e" strokeWidth="1.3" />))}
+        </svg>
+      )
+    case 'tile-wall':
+      // A wall of tiles laid in brick bond: rows of tiles, each row offset from the one below.
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="3" width="18" height="18" rx="1" stroke="#0f766e" strokeWidth="1.5" />
+          <path d="M3 9h18M3 15h18M12 3v6M7.5 9v6M16.5 9v6M12 15v6" stroke="#0f766e" strokeWidth="1.2" />
+        </svg>
+      )
+    case 'tile-prep':
+      // Layers under a tile: backer board, a membrane line and the base.
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="4" width="18" height="4.5" rx="0.8" fill="#ccfbf1" stroke="#0f766e" strokeWidth="1.4" />
+          <path d="M3 12c2-1.6 4-1.6 6 0s4 1.6 6 0 4-1.6 6 0" stroke="#0891b2" strokeWidth="1.6" strokeLinecap="round" />
+          <rect x="3" y="15.5" width="18" height="5" rx="0.8" fill="#f1f5f9" stroke="#64748b" strokeWidth="1.4" />
+        </svg>
+      )
+    case 'tile-ufh':
+      // A heating mat: a wire snaking back and forth in a floor.
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="3" width="18" height="18" rx="1.5" stroke="#78716c" strokeWidth="1.4" />
+          <path d="M6 7h12M18 7v4M18 11H6M6 11v4M6 15h12M18 15v2" stroke="#ea580c" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       )
     case 'plaster-rooms':

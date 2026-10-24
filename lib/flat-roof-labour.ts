@@ -11,7 +11,7 @@
 
 import type { RoofOpeningKind } from './assembly-calc'
 
-export type LabourTradeKind = 'carpenter' | 'roofer' | 'bricklayer' | 'renderer' | 'plumber' | 'labourer' | 'fitter' | 'painter'
+export type LabourTradeKind = 'carpenter' | 'roofer' | 'bricklayer' | 'renderer' | 'plumber' | 'labourer' | 'fitter' | 'painter' | 'tiler'
 
 export const LABOUR_TRADE_LABEL: Record<LabourTradeKind, string> = {
   carpenter:  'Carpenter',
@@ -22,6 +22,7 @@ export const LABOUR_TRADE_LABEL: Record<LabourTradeKind, string> = {
   labourer:   'Labourer',
   fitter:     'Window / rooflight fitter',
   painter:    'Painter and decorator',
+  tiler:      'Tiler',
 }
 
 /** Hours per unit — rough estimates, one operative. */
@@ -194,6 +195,7 @@ const TRADE_PATTERN: Record<LabourTradeKind, RegExp> = {
   labourer:   /labourer|general operative|site labour|^labour/i,
   fitter:     /glaz|window|fitter|rooflight/i,
   painter:    /paint|decorat/i,
+  tiler:      /tiler|tiling|tile/i,
 }
 
 /** The Back Office trade that suits a kind of work, judged by its name; undefined when none does. */
@@ -768,4 +770,12 @@ export function suggestInsulationLabour(tasks: { key: string; trade: 'plasterer'
   return tasks
     .filter(t => t.hours > 0)
     .map(t => ({ key: 'insul-' + t.key, trade: (t.trade === 'plasterer' ? 'renderer' : t.trade === 'carpenter' ? 'carpenter' : 'labourer') as LabourTradeKind, task: t.task, hours: t.hours, basis: t.basis }))
+}
+
+/** The labour for the four Tiling & Finishes calculators (floor tiling, wall tiling, preparation, electric underfloor heating): the tiler's tasks for each room, a plasterer/dryliner for any moisture-resistant ceiling board, and the labourer who
+ * carries, mixes and clears up, as each calculator's own engine works them out (the hours and the working come from its table and are passed in). Rough estimates, as everywhere here. */
+export function suggestTilingLabour(tasks: { key: string; trade: 'tiler' | 'plasterer' | 'labourer'; task: string; hours: number; basis: string }[]): LabourSuggestion[] {
+  return tasks
+    .filter(t => t.hours > 0)
+    .map(t => ({ key: 'tiling-' + t.key, trade: (t.trade === 'tiler' ? 'tiler' : t.trade === 'plasterer' ? 'renderer' : 'labourer') as LabourTradeKind, task: t.task, hours: t.hours, basis: t.basis }))
 }

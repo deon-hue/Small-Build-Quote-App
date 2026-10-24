@@ -49,6 +49,10 @@ export const BUILT_ASSEMBLY_CANONICAL_IDS = new Set<string>([
   'demo-strip-out-calc',
   'demo-waste-skips-calc',
   'demo-external-calc',
+  'tile-floor-rooms',
+  'tile-wall-rooms',
+  'tile-prep-rooms',
+  'tile-ufh-electric',
 ])
 
 // Bridges Take-off's External Walls "Build-up Type" system (keyed by WALL_MAKEUPS/

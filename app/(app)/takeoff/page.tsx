@@ -31,7 +31,7 @@ const FOUNDATION_LINE_CALCS = new Set(['fnd-strip', 'fnd-trench-fill', 'fnd-pile
 const FOUNDATION_SHAPE_CALCS = new Set(['fnd-raft', 'fnd-pad'])
 // A floor is a shape (its footprint) priced by its calculator from the area and perimeter drawn: the sub-phases of Floors & Screeds that have one
 /** Phases where picking a calculator sub-phase makes the item a marker on the plan and the calculator card opens (Decoration, Plumbing & Heating, Drainage & Services): the sizes are typed in the calculator. */
-const MARKER_CALC_PHASES = new Set<string>(['Decoration', 'Plumbing & Heating', 'Drainage & Services', 'Plastering & Boarding'])
+const MARKER_CALC_PHASES = new Set<string>(['Decoration', 'Plumbing & Heating', 'Drainage & Services', 'Plastering & Boarding', 'Tiling & Finishes'])
 const FLOOR_SHAPE_CALCS = new Set(['fs-screeded-floor', 'fs-floor-overlay', 'fs-concrete-slab', 'fs-block-beam', 'fs-suspended-timber', 'fs-insulated-concrete'])
 import LabourCostBuilder from './components/LabourCostBuilder'
 import ClientProjectModal from './components/ClientProjectModal'
@@ -4644,7 +4644,7 @@ export default function TakeoffPage() {
                 }}>
                   <div style={{ fontWeight: 600, marginBottom: 4 }}>🧮 {selectedSub?.name}</div>
                   <div style={{ fontSize: 11, color: 'var(--to-muted)' }}>
-                    Priced with its own calculator — there are no tasks to pick. {activePhase === 'Decoration' ? 'Draw an area on the plan (it is only a marker), then open the calculator to price it.' : (activePhase === 'Plumbing & Heating' || activePhase === 'Drainage & Services') ? 'Draw a line on the plan (it is only a marker), then open the calculator to price it.' : 'Draw the wall, then open the calculator to price it.'}
+                    Priced with its own calculator — there are no tasks to pick. {(activePhase === 'Decoration' || activePhase === 'Tiling & Finishes') ? 'Draw an area on the plan (it is only a marker), then open the calculator to price it.' : (activePhase === 'Plumbing & Heating' || activePhase === 'Drainage & Services') ? 'Draw a line on the plan (it is only a marker), then open the calculator to price it.' : 'Draw the wall, then open the calculator to price it.'}
                   </div>
                 </div>
               )}
