@@ -1518,8 +1518,9 @@ export default function TakeoffPage() {
     if (tool === 'select' || tool === 'rect') return
     if (tool === 'floor' && floorDrawMode === 'rect') return
     e.preventDefault()
-    const pts = [...drawPoints]
-    if (pts.length < 2) { setDrawPoints([]); setIsDrawing(false); return }
+    // the double-click's two clicks leave a repeated point (or one a pixel away) at the end: drop points within a few screen pixels of the one before, so there is no stub or zero length side
+    const pts = drawPoints.filter((p, i) => i === 0 || Math.hypot(p.x - drawPoints[i - 1].x, p.y - drawPoints[i - 1].y) > 4 / zoom)
+    if (pts.length < 2) { setDrawPoints([]); setIsDrawing(false); showToast('Nothing drawn: click at least two different points'); return }
     if (tool === 'floor') {
       if (pts.length < 3) { setDrawPoints([]); setIsDrawing(false); return }
       finishElement('polygon', pts, true)
@@ -1542,7 +1543,7 @@ export default function TakeoffPage() {
 
   /** One wall for each side of a wall drawn as one run (a line of several sides, a rectangle or a polygon): each side keeps the wall's type, height and typed openings (on the first side), and starts with no priced calculator (its length has changed) */
   function buildWallSides(el: DrawnElement, item: TakeoffItem) {
-    const sides = sidesOf(el)
+    const sides = sidesOf(el, 0.05 / (project.calibration.mpp || DEFAULT_MPP))   // (a side under 5cm is a stub from a double-click, not a wall)
     const ext = el.phase === 'External Walls'
     const els: DrawnElement[] = sides.map((pts, i) => ({ ...el, id: uid(), type: 'line' as const, points: pts, label: `${el.label} ${i + 1}/${sides.length}`, tagDx: undefined, tagDy: undefined }))
     const made: TakeoffItem[] = els.map((e, i) => ({

@@ -5,8 +5,8 @@ import type { PlacedOpening } from './wall-openings'
 
 export interface Pt { x: number; y: number }
 
-/** The sides of a drawn wall as two-point lines: a line's own segments, or every side of a rectangle (given as two corners) or a polygon, closed. A side of no length is left out. */
-export function sidesOf(el: { type: 'line' | 'rect' | 'polygon'; points: Pt[] }): Pt[][] {
+/** The sides of a drawn wall as two-point lines: a line's own segments, or every side of a rectangle (given as two corners) or a polygon, closed. A side shorter than `minLen` (plan pixels; none by default) is left out: the stub a double-click leaves at the end of a wall is not a wall. */
+export function sidesOf(el: { type: 'line' | 'rect' | 'polygon'; points: Pt[] }, minLen = 1e-9): Pt[][] {
   let pts = el.points
   let closed = false
   if (el.type === 'rect' && pts.length >= 2) {
@@ -19,7 +19,7 @@ export function sidesOf(el: { type: 'line' | 'rect' | 'polygon'; points: Pt[] })
   const count = closed ? n : n - 1
   for (let i = 0; i < count; i++) {
     const a = pts[i], b = pts[(i + 1) % n]
-    if (Math.hypot(b.x - a.x, b.y - a.y) > 1e-9) out.push([{ x: a.x, y: a.y }, { x: b.x, y: b.y }])
+    if (Math.hypot(b.x - a.x, b.y - a.y) > minLen) out.push([{ x: a.x, y: a.y }, { x: b.x, y: b.y }])
   }
   return out
 }
