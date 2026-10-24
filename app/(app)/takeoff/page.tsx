@@ -39,6 +39,8 @@ import { sharedWallRoomsFrom } from '@/lib/tiling-share'
 import ClientProjectModal from './components/ClientProjectModal'
 import ClientFilePicker from '@/components/ClientFilePicker'
 import { planResize, applyResize } from '@/lib/calc-size'
+import { snapPoint, anchorsFor, parseTyped, pointAtDistance, rectCornerAt, rotateShape, type SnapResult } from '@/lib/takeoff-snap'
+import { newHistory, observe as observeHistory, undoStep, redoStep, type History } from '@/lib/takeoff-history'
 import ConstructionLayerModal, { saveLayerCostToBackOffice } from './components/ConstructionLayerModal'
 import {
   TAKEOFF_PHASES, PHASE_COLORS, DEFAULT_MPP, SCALE_PRESETS,
@@ -843,6 +845,14 @@ export default function TakeoffPage() {
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 })
   const [isPanning, setIsPanning] = useState(false)
   const [spaceHeld, setSpaceHeld] = useState(false)
+  // Drawing aids: snap to the corners, ends and mid-points of drawings already on the plan, keep a line horizontal or vertical (Shift does it for one line), type an exact length while drawing, undo and redo
+  const [snapOn, setSnapOn] = useState(true)
+  const [orthoOn, setOrthoOn] = useState(false)
+  const [shiftHeld, setShiftHeld] = useState(false)
+  const [snapInfo, setSnapInfo] = useState<SnapResult | null>(null)
+  const [typed, setTyped] = useState('')
+  const [, setHistoryTick] = useState(0)
+  const historyRef = useRef<History<{ elements: DrawnElement[]; items: TakeoffItem[] }> | null>(null)
   const [canvasImgSize, setCanvasImgSize] = useState<{ w: number; h: number } | null>(null)
   const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 })
   const hasPannedRef = useRef(false)
@@ -1236,11 +1246,22 @@ export default function TakeoffPage() {
     // Element / vertex drag takes priority over everything
     if (dragRef.current) {
       const pt = svgCoords(e)
-      const dx = pt.x - dragRef.current.startSvgX
-      const dy = pt.y - dragRef.current.startSvgY
+      let dx = pt.x - dragRef.current.startSvgX
+      let dy = pt.y - dragRef.current.startSvgY
       const id = dragRef.current.id
       const orig = dragRef.current.origPoints
       const vi = dragRef.current.vertexIndex
+      // a corner being dragged snaps to the corners, ends and mid-points of the other drawings
+      if (vi !== undefined && snapOn) {
+        const dragged = project.elements.find(el => el.id === id)
+        const handle = dragged ? getElVertexHandles({ ...dragged, points: orig })[vi] : undefined
+        if (dragged && handle) {
+          const want = { x: handle.x + dx, y: handle.y + dy }
+          const r = snapPoint(want, { anchors: anchorsFor(elementsOnActiveSheet(project).filter(el => el.id !== id && !hiddenPhases.has(el.phase))), radius: 10 / zoom, snap: true, ortho: false })
+          dx += r.pt.x - want.x; dy += r.pt.y - want.y
+          setSnapInfo(r.kind === 'none' ? null : r)
+        }
+      }
       setProject(prev => ({
         ...prev,
         elements: prev.elements.map(el => {
@@ -1275,7 +1296,9 @@ export default function TakeoffPage() {
       })
       return
     }
-    setMousePos(svgCoords(e))
+    const snapped = drawingPoint(svgCoords(e))
+    setMousePos(snapped.pt)
+    setSnapInfo(snapped.kind === 'none' ? null : snapped)
   }
 
   function handleMouseDown(e: React.MouseEvent<SVGSVGElement>) {
@@ -1300,6 +1323,7 @@ export default function TakeoffPage() {
       hasPannedRef.current = true
       dragRef.current = null
       setIsDraggingEl(false)
+      setSnapInfo(null)
       // Recalculate measurements after move
       setProject(p => ({ ...p, items: recalcItemsForMpp(p.items, p.elements, p.calibration.mpp, activeSheetElementIds(p)) }))
       return
@@ -1326,7 +1350,7 @@ export default function TakeoffPage() {
     if (hasPannedRef.current) { hasPannedRef.current = false; return }
     // Calibration takes priority over everything else
     if (calibDrawing) {
-      const pt = svgCoords(e)
+      const pt = drawingPoint(svgCoords(e)).pt
       setCalibPts(prev => {
         const next = [...prev, pt]
         // After 2nd point, auto-reopen the dialog so user can enter the real length
@@ -1342,12 +1366,14 @@ export default function TakeoffPage() {
     }
     if (tool === 'measure') {
       setMeasureDone(null)
-      setDrawPoints(prev => [...prev, svgCoords(e)])
+      const mp = drawingPoint(svgCoords(e)).pt
+      setDrawPoints(prev => [...prev, mp])
       setIsDrawing(true)
       return
     }
     if (tool === 'select') return
-    const pt = svgCoords(e)
+    const pt = drawingPoint(svgCoords(e)).pt
+    setTyped('')
 
     // Click tool for item-based tasks
     if (tool === 'click') {
@@ -2210,6 +2236,124 @@ export default function TakeoffPage() {
     router.push('/new-quote')
   }
 
+  // ── Drawing aids: snapping, typed lengths, undo / redo, copy and rotate ─────────────────────────────
+  /** Where the cursor really lands: snapped to a corner, end or mid-point of a drawing on this sheet (within 10 screen pixels), and kept horizontal or vertical from the last point when Ortho is on or Shift is held. */
+  function drawingPoint(raw: TakeoffPoint): SnapResult {
+    const drawingTool = tool === 'line' || tool === 'polygon' || tool === 'rect' || tool === 'floor' || tool === 'measure' || tool === 'click' || calibDrawing
+    const ortho = orthoOn || shiftHeld
+    if (!drawingTool || (!snapOn && !ortho)) return { pt: raw, kind: 'none' }
+    const polyMode = tool === 'line' || tool === 'polygon' || tool === 'measure' || (tool === 'floor' && floorDrawMode === 'polygon')
+    const last = calibDrawing
+      ? (calibPts.length === 1 ? calibPts[0] : undefined)
+      : (isDrawing && polyMode && drawPoints.length > 0 ? drawPoints[drawPoints.length - 1] : undefined)
+    const anchors = snapOn ? anchorsFor(elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)), drawPoints.slice(0, -1)) : []
+    return snapPoint(raw, { anchors, last, radius: 10 / zoom, snap: snapOn, ortho })
+  }
+
+  /** Typing a length is on while a line, polygon, rectangle or floor is being drawn (not the measure tool or calibration). */
+  function typedAllowed() {
+    return isDrawing && drawPoints.length > 0 && !calibDrawing && (tool === 'line' || tool === 'polygon' || tool === 'rect' || tool === 'floor')
+  }
+
+  /** Enter after typing: a length places the next point that far from the last one, the way the cursor points; "4.5x3" completes a rectangle. */
+  function commitTyped() {
+    const parsed = parseTyped(typed)
+    if (!parsed) { showToast('Type a length in metres, like 3.45 (or 4.5x3 for a rectangle)'); return }
+    if (project.sheets?.find(s => s.id === activeSheetId)?.scaleSet === false) { showToast('Set the scale for this sheet first: a typed length needs it'); return }
+    const mpp = project.calibration.mpp
+    const isRect = tool === 'rect' || (tool === 'floor' && floorDrawMode === 'rect')
+    if (isRect) {
+      if (parsed.b === undefined) { showToast('Type the width and height, like 4.5x3'); return }
+      finishElement('rect', [drawPoints[0], rectCornerAt(drawPoints[0], mousePos, parsed.a, parsed.b, mpp)], tool === 'floor')
+      setTyped('')
+      return
+    }
+    if (parsed.b !== undefined) { showToast('Type just one length here, like 3.45'); return }
+    const last = drawPoints[drawPoints.length - 1]
+    const np = pointAtDistance(last, mousePos, parsed.a, mpp)
+    if (!np) { showToast('Move the cursor the way the line should run, then type its length'); return }
+    setDrawPoints(prev => [...prev, np])
+    setTyped('')
+  }
+
+  /** Enter on its own finishes a line, polygon or floor (the same as a double-click). */
+  function finishFromKeys() {
+    if (tool === 'rect' || (tool === 'floor' && floorDrawMode === 'rect')) return
+    const pts = [...drawPoints]
+    if (tool === 'floor') {
+      if (pts.length < 3) { showToast('A floor needs at least three corners'); return }
+      finishElement('polygon', pts, true)
+    } else {
+      if (pts.length < 2) { showToast('Click the next point first'); return }
+      finishElement(tool as 'line' | 'polygon', pts)
+    }
+    setTyped('')
+  }
+
+  /** Undo: while drawing it takes back the last point; otherwise it goes back one step in the drawings and items. */
+  function undoDrawing() {
+    if (isDrawing && drawPoints.length > 0 && tool !== 'measure') {
+      setDrawPoints(p => p.slice(0, -1))
+      if (drawPoints.length <= 1) setIsDrawing(false)
+      setTyped('')
+      return
+    }
+    const h = historyRef.current
+    const snap = h ? undoStep(h, { elements: project.elements, items: project.items }) : null
+    if (!snap) { showToast('Nothing to undo'); return }
+    restoreDrawings(snap)
+  }
+  function redoDrawing() {
+    const h = historyRef.current
+    const snap = h ? redoStep(h, { elements: project.elements, items: project.items }) : null
+    if (!snap) { showToast('Nothing to redo'); return }
+    restoreDrawings(snap)
+  }
+  function restoreDrawings(snap: { elements: DrawnElement[]; items: TakeoffItem[] }) {
+    setProject(p => ({ ...p, elements: snap.elements, items: snap.items }))
+    setSelectedId(null); setEditingElement(null); setEditingItem(null); setSelectedElectricPointId(null)
+    setHistoryTick(t => t + 1)
+  }
+
+  /** Copy the selected drawing and its priced item: the copy is a little down and to the right, selected, ready to drag into place. */
+  function duplicateSelected() {
+    const el = selectedId ? project.elements.find(e => e.id === selectedId) : undefined
+    if (!el) { showToast('Select a drawing first, then copy it'); return }
+    const item = project.items.find(it => it.elementId === el.id && !it.electricsSummary)
+    const off = 30 / zoom
+    const copy: DrawnElement = { ...el, id: uid(), points: el.points.map(p => ({ ...p, x: p.x + off, y: p.y + off })), tagDx: undefined, tagDy: undefined }
+    const copyItem: TakeoffItem | null = item ? { ...item, id: uid(), elementId: copy.id } : null
+    setProject(p => ({ ...p, elements: [...p.elements, copy], items: copyItem ? [...p.items, copyItem] : p.items }))
+    setSelectedId(copy.id)
+    showToast('Copied. The copy is selected: drag it into place.')
+  }
+
+  /** Turn the selected drawing about its middle (clockwise is positive). With no angle it asks. */
+  function rotateSelected(deg: number | null) {
+    const el = selectedId ? project.elements.find(e => e.id === selectedId) : undefined
+    if (!el) { showToast('Select a drawing first, then rotate it'); return }
+    let d = deg
+    if (d === null) {
+      const a = window.prompt('Turn the selected drawing by how many degrees? Clockwise is positive, anticlockwise negative.', '90')
+      if (a === null) return
+      d = parseFloat(a)
+      if (!Number.isFinite(d) || d === 0) return
+    }
+    const turned = rotateShape(el, d)
+    setProject(p => {
+      const elements = p.elements.map(e => (e.id === el.id ? { ...e, type: turned.type, points: turned.points } : e))
+      return { ...p, elements, items: recalcItemsForMpp(p.items, elements, p.calibration.mpp, new Set([el.id])) }
+    })
+  }
+
+  // Undo history: the drawings and items, one step per burst of changes. It starts again for another take-off or when the sheets change (a deleted sheet's drawings must not come back without it).
+  const historyKey = project.id + '|' + (project.sheets ?? []).map(s => s.id).join(',')
+  useEffect(() => {
+    const cur = { elements: project.elements, items: project.items }
+    if (!historyRef.current) { historyRef.current = newHistory(cur, historyKey); return }
+    if (observeHistory(historyRef.current, cur, historyKey, Date.now(), (a, b) => a.elements === b.elements && a.items === b.items)) setHistoryTick(t => t + 1)
+  }, [project.elements, project.items, historyKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -2224,19 +2368,35 @@ export default function TakeoffPage() {
         e.preventDefault()
         setSpaceHeld(true)
       }
-      if ((e.key === 'Delete' || e.key === 'Backspace') &&
-          !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
+      const inField = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement
+      if (e.key === 'Shift') setShiftHeld(true)
+      if (!inField && (e.ctrlKey || e.metaKey)) {
+        const k = e.key.toLowerCase()
+        if (k === 'z' && !e.shiftKey) { e.preventDefault(); undoDrawing(); return }
+        if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redoDrawing(); return }
+        if (k === 'd') { e.preventDefault(); duplicateSelected(); return }
+      }
+      // while drawing: type a length (or width x height for a rectangle), Enter places it, Backspace takes back a typed digit and then the last point, Enter on its own finishes
+      if (!inField && !e.ctrlKey && !e.metaKey && !e.altKey && typedAllowed()) {
+        if (/^[0-9.,x*]$/i.test(e.key)) { e.preventDefault(); setTyped(t => t + e.key.toLowerCase()); return }
+        if (e.key === 'Backspace') { e.preventDefault(); if (typed) setTyped(t => t.slice(0, -1)); else undoDrawing(); return }
+        if (e.key === 'Enter') { e.preventDefault(); if (typed) commitTyped(); else finishFromKeys(); return }
+      }
+      if (!inField && !e.ctrlKey && !e.metaKey && !isDrawing && selectedId && (e.key === 'r' || e.key === 'R')) { rotateSelected(90); return }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !inField && !isDrawing) {
         deleteSelected()
       }
       if (e.key === 'Escape') {
         setDrawPoints([])
         setIsDrawing(false)
         setMeasureDone(null)
+        setTyped('')
         if (calibDrawing) { setCalibDrawing(false); setCalibPts([]) }
       }
     }
     function onKeyUp(e: KeyboardEvent) {
       if (e.key === ' ') { setSpaceHeld(false); setIsPanning(false) }
+      if (e.key === 'Shift') setShiftHeld(false)
     }
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
@@ -2534,6 +2694,19 @@ export default function TakeoffPage() {
             Σ {fmtM(total)}
           </text>
         )}
+      </g>
+    )
+  }
+
+  // ── Render: where the cursor has snapped to: a square at a corner or end, a triangle at a mid-point ─────────
+  function renderSnapMarker() {
+    if (!snapInfo?.target) return null
+    const r = 6 / zoom, t = snapInfo.target
+    return (
+      <g style={{ pointerEvents: 'none' }}>
+        {snapInfo.kind === 'end'
+          ? <rect x={t.x - r} y={t.y - r} width={2 * r} height={2 * r} fill="none" stroke="#7fdc3c" strokeWidth={2 / zoom} />
+          : <polygon points={`${t.x},${t.y - r * 1.2} ${t.x - r * 1.1},${t.y + r * 0.8} ${t.x + r * 1.1},${t.y + r * 0.8}`} fill="none" stroke="#f1c40f" strokeWidth={2 / zoom} />}
       </g>
     )
   }
@@ -5043,6 +5216,14 @@ export default function TakeoffPage() {
           ⊞ Grid
         </button>
 
+        {/* Drawing aids */}
+        <button style={{ ...btnStyle, padding: '6px 8px', opacity: (historyRef.current?.undo.length ?? 0) > 0 || (isDrawing && drawPoints.length > 0) ? 1 : 0.5 }} onClick={undoDrawing} title="Undo (Ctrl+Z). While you are drawing it takes back the last point.">↶ Undo</button>
+        <button style={{ ...btnStyle, padding: '6px 8px', opacity: (historyRef.current?.redo.length ?? 0) > 0 ? 1 : 0.5 }} onClick={redoDrawing} title="Redo (Ctrl+Y)">↷ Redo</button>
+        <button style={{ ...btnStyle, padding: '6px 8px', background: snapOn ? '#2b5a2b' : '#1e2e1e' }} onClick={() => setSnapOn(v => !v)} title="Snap to the corners, ends and mid-points of drawings already on the plan">🧲 Snap</button>
+        <button style={{ ...btnStyle, padding: '6px 8px', background: orthoOn ? '#2b5a2b' : '#1e2e1e' }} onClick={() => setOrthoOn(v => !v)} title="Keep each line horizontal or vertical (hold Shift to do it for one line)">⊾ Ortho</button>
+        <button style={{ ...btnStyle, padding: '6px 8px', opacity: selectedId ? 1 : 0.5 }} onClick={duplicateSelected} title="Copy the selected drawing and its item (Ctrl+D)">⧉ Copy</button>
+        <button style={{ ...btnStyle, padding: '6px 8px', opacity: selectedId ? 1 : 0.5 }} onClick={() => rotateSelected(null)} title="Rotate the selected drawing (R turns it a quarter turn)">⟳ Rotate</button>
+
         <div style={{ flex: 1 }} />
 
         <input type="file" accept="image/*,application/pdf,.pdf" ref={fileInputRef} style={{ display: 'none' }} onChange={handleImageLoad} />
@@ -5302,6 +5483,19 @@ export default function TakeoffPage() {
           ref={containerRef}
           style={{ flex: 1, overflow: 'hidden', position: 'relative', background: 'var(--to-bg)' }}
         >
+          {/* Drawing aids: what to type while drawing, and what has been typed */}
+          {typedAllowed() && (
+            <div style={{ position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 6, background: 'var(--to-panel)', border: '1px solid var(--to-border)', color: 'var(--to-text)', borderRadius: 8, padding: '6px 12px', fontSize: 12, display: 'flex', gap: 10, alignItems: 'center', pointerEvents: 'none' }}>
+              <strong style={{ fontFamily: 'monospace', minWidth: 60, color: typed ? '#7fdc3c' : 'var(--to-sub)' }}>{typed ? typed + ' m' : (tool === 'rect' || (tool === 'floor' && floorDrawMode === 'rect')) ? 'type 4.5x3' : 'type a length'}</strong>
+              <span style={{ color: 'var(--to-sub)' }}>
+                {tool === 'rect' || (tool === 'floor' && floorDrawMode === 'rect')
+                  ? 'width x height in metres, then Enter · Backspace takes back the first corner'
+                  : 'metres, then Enter places the point · Enter alone finishes · Backspace takes back a point'}
+                {(orthoOn || shiftHeld) ? ' · straight (ortho)' : ''}
+              </span>
+            </div>
+          )}
+
           {/* Measure tool: what is being measured, with a reminder that nothing is saved or priced */}
           {(tool === 'measure' || measureDone) && (() => {
             const live = tool === 'measure' && isDrawing && drawPoints.length > 0
@@ -5518,6 +5712,9 @@ export default function TakeoffPage() {
 
               {/* Measure tool */}
               {renderMeasure()}
+
+              {/* Snap marker */}
+              {renderSnapMarker()}
 
             </g>
 
