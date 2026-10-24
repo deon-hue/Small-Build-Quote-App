@@ -38,6 +38,7 @@ import { SharedWallAreasProvider } from '@/components/TilingShareContext'
 import { sharedWallRoomsFrom } from '@/lib/tiling-share'
 import ClientProjectModal from './components/ClientProjectModal'
 import ClientFilePicker from '@/components/ClientFilePicker'
+import { planResize, applyResize } from '@/lib/calc-size'
 import ConstructionLayerModal, { saveLayerCostToBackOffice } from './components/ConstructionLayerModal'
 import {
   TAKEOFF_PHASES, PHASE_COLORS, DEFAULT_MPP, SCALE_PRESETS,
@@ -1622,7 +1623,7 @@ export default function TakeoffPage() {
           labourTrades,
           electrics: { planRooms, initialState: it?.electricsState as ElectricsSavedState | undefined },
           onSave: result => {
-            const { state, ...res } = result
+            const { state, size: _size, ...res } = result
             const sub = boSubPhases.find(sp => sp.canonical_id === 'elec-install')
             changeElectricItem(x => ({
               ...x, assemblyResult: res, electricsState: state, electricsPricedKey: JSON.stringify(planRooms), name: result.name,
@@ -3139,11 +3140,22 @@ export default function TakeoffPage() {
           labourTrades,
           calcState: item.assemblyCalcState,
           onSave: result => {
-            const { calcState, state: _state, ...res } = result
+            const { calcState, state: _state, size, ...res } = result
             saveItemEdit({
               ...item, ...savePatch, assemblyResult: res, assemblyCalcState: calcState, name: result.name, roomName: result.location || item.roomName,
             })
             setAssemblyWindowItemId(null)
+            // A size typed over inside the calculator carries back to the drawing: the drawn line, roof box or floor is scaled to match, and its quantity, label and area follow (the drawing is what Take-off measures from)
+            const drawn = item.elementId ? project.elements.find(e => e.id === item.elementId) : undefined
+            const kind = isBoxShape ? 'box' : isFloorShape ? 'area' : isLineBased ? 'line' : null
+            const plan = drawn && kind && size ? planResize(kind, drawn.points, project.calibration.mpp, size) : null
+            if (drawn && plan) {
+              setProject(p => {
+                const elements = p.elements.map(e => (e.id === drawn.id ? { ...e, points: applyResize(e.points, plan) } : e))
+                return { ...p, elements, items: recalcItemsForMpp(p.items, elements, p.calibration.mpp, new Set([drawn.id])) }
+              })
+              showToast(`Drawing changed to match the calculator: ${plan.was} → ${plan.now}`)
+            }
           },
         })}
         </SharedWallAreasProvider>

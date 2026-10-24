@@ -61,6 +61,7 @@ import type { CostedLine } from '@/lib/assembly-calc'
 import type { AssemblyBasics } from '@/lib/assembly-basics'
 import type { PlanRoom, ElectricsSavedState } from '@/lib/electrics-units'
 import type { BOLabourTrade } from '@/lib/back-office-types'
+import type { CalcSize } from '@/lib/calc-size'
 
 export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation' | 'pad-foundation' | 'piled-foundation' | 'underpinning' | 'electrics' | 'decoration' | 'plaster-rooms' | 'render' | 'wall-insulation' | 'screed-floor' | 'floor-overlay' | 'concrete-slab' | 'block-beam' | 'timber-floor' | 'insulated-concrete' | 'plumbing' | 'heating' | 'ufh' | 'pipework' | 'drainage' | 'soakaway' | 'services' | 'wall-removal' | 'strip-out' | 'waste-skips' | 'external-demo' | 'tile-floor' | 'tile-wall' | 'tile-prep' | 'tile-ufh'
 
@@ -76,7 +77,9 @@ export interface AssemblySaveResult { name: string; qty: number; location: strin
   /** A calculator that can't work out its inputs again from a drawn shape (electrics) hands back what it was set to, to be kept with the Take-off item. */
   state?: unknown
   /** What was typed into the calculator, to keep with the quote or Take-off item so it can be opened again and edited. */
-  calcState?: CalcStateSnapshot }
+  calcState?: CalcStateSnapshot
+  /** The length, width or floor area the calculator was left at (lib/calc-size.ts): Take-off scales the drawing to match it. */
+  size?: CalcSize }
 
 export interface AssemblyRenderOpts {
   onSave?: (result: AssemblySaveResult) => void

@@ -10,6 +10,7 @@
 
 import React, { createContext, useContext, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
+import { sizeFromValues } from '@/lib/calc-size'
 
 export type { CalcStateSnapshot }
 
@@ -38,9 +39,12 @@ export function CalcScope({ assemblyId, initial, onSave, children }: {
   children: (onSave: ((result: { [k: string]: unknown }) => void) | undefined) => React.ReactNode
 }) {
   const values = useRef<Record<string, Record<string, unknown>>>({})
+  // when each namespace last wrote a value, so the size a calculator was left at is read from the one on screen (a roof switched from one type to another leaves the old type's values behind)
+  const stamps = useRef<Record<string, number>>({})
+  const counter = useRef(0)
   const ctx = useRef<Ctx>({
     initial: initial && initial.id === assemblyId ? initial.values : undefined,
-    record: (ns, key, value) => { (values.current[ns] ??= {})[key] = value },
+    record: (ns, key, value) => { (values.current[ns] ??= {})[key] = value; stamps.current[ns] = ++counter.current },
   })
   // The profit % the calculator was set to is its state named profitPct (the electrics calculator keeps it in its own saved state)
   const profitOf = (result: { [k: string]: unknown }): number | undefined => {
@@ -49,7 +53,7 @@ export function CalcScope({ assemblyId, initial, onSave, children }: {
     return typeof st?.profitPct === 'number' ? st.profitPct : undefined
   }
   const wrapped = onSave
-    ? (result: { [k: string]: unknown }) => (onSave as (r: unknown) => void)({ ...result, profitPct: profitOf(result), calcState: { id: assemblyId, values: toPlain(values.current) } satisfies CalcStateSnapshot })
+    ? (result: { [k: string]: unknown }) => (onSave as (r: unknown) => void)({ ...result, profitPct: profitOf(result), size: sizeFromValues(values.current, stamps.current), calcState: { id: assemblyId, values: toPlain(values.current) } satisfies CalcStateSnapshot })
     : undefined
   return <CalcCtx.Provider value={ctx.current}>{children(wrapped)}</CalcCtx.Provider>
 }
