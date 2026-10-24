@@ -4,7 +4,7 @@
 // The project's own `calibration` is always the ACTIVE sheet's scale, so every measurement already in the screen keeps working unchanged; switching sheets swaps it. A drawing with no sheetId (drawn
 // before there were sheets) belongs to the first sheet. When the first plan is added, anything already drawn is stamped with that sheet's id, so deleting a sheet later never adopts another's drawings.
 
-import type { TakeoffProject, TakeoffSheet, DrawnElement, TakeoffItem, ScaleCalibration } from './takeoff-types'
+import type { TakeoffProject, TakeoffSheet, TakeoffLevel, DrawnElement, TakeoffItem, ScaleCalibration } from './takeoff-types'
 import type { RoomLabel, DrawnRoomShape, RoomEdge } from './rooms-from-walls'
 import type { ElectricPoint } from './electric-points'
 
@@ -30,10 +30,73 @@ export function onActiveSheet(thing: { sheetId?: string }, p: Pick<TakeoffProjec
   return !active || sheetOf(thing, p) === active
 }
 
-export const elementsOnActiveSheet = (p: Pick<TakeoffProject, 'sheets' | 'activeSheetId' | 'elements'>): DrawnElement[] => p.elements.filter(el => onActiveSheet(el, p))
+// ── Levels ──────────────────────────────────────────────────────────────────
+// A take-off can be split into levels (Foundations, Ground floor, First floor, Loft...), named by the user and kept bottom to top. A drawing, an electrical point, a room name, a drawn room and a room edge each belong to
+// ONE level (`levelId`; one with none, or one whose level was deleted, belongs to the FIRST level) and only the showing level's are shown, snapped to, joined, found as rooms and worked on. A level applies to every sheet.
+// With no levels at all everything is on the one (invisible) level, exactly as before levels existed. When a level is added, whatever has no level yet is stamped with the level it already belonged to, so putting
+// Foundations BELOW an existing Ground floor never moves the ground floor's drawings down onto it.
 
-/** The ids of the drawings on the showing sheet: the only ones a scale change may remeasure. */
-export const activeSheetElementIds = (p: Pick<TakeoffProject, 'sheets' | 'activeSheetId' | 'elements'>): Set<string> => new Set(elementsOnActiveSheet(p).map(e => e.id))
+type OnLevel = { levelId?: string }
+type LevelState = Pick<TakeoffProject, 'levels' | 'activeLevelId'>
+
+export const levelsOf = (p: Pick<TakeoffProject, 'levels'>): TakeoffLevel[] => p.levels ?? []
+
+/** The level that is showing: the chosen one if it exists, otherwise the first. Undefined when the take-off has no levels. */
+export function activeLevelIdOf(p: LevelState): string | undefined {
+  if (!p.levels?.length) return undefined
+  return p.levels.some(l => l.id === p.activeLevelId) ? p.activeLevelId : p.levels[0].id
+}
+
+/** Which level a drawing, point, room name, drawn room or room edge belongs to. */
+export function levelOf(thing: OnLevel, p: Pick<TakeoffProject, 'levels'>): string | undefined {
+  if (!p.levels?.length) return undefined
+  return thing.levelId && p.levels.some(l => l.id === thing.levelId) ? thing.levelId : p.levels[0].id
+}
+
+/** True when the thing is on the level that is showing. With no levels at all, everything is. */
+export function onActiveLevel(thing: OnLevel, p: LevelState): boolean {
+  const active = activeLevelIdOf(p)
+  return !active || levelOf(thing, p) === active
+}
+
+export const levelName = (p: Pick<TakeoffProject, 'levels'>, id: string | undefined): string => p.levels?.find(l => l.id === id)?.name ?? ''
+
+/** The level underneath the given one (the showing one by default), if any: it is shown faintly as a guide. */
+export function levelBelow(p: LevelState, id: string | undefined = activeLevelIdOf(p)): TakeoffLevel | undefined {
+  const i = p.levels?.findIndex(l => l.id === id) ?? -1
+  return i > 0 ? p.levels![i - 1] : undefined
+}
+
+/** The level above the given one (the showing one by default), if any. */
+export function levelAbove(p: LevelState, id: string | undefined = activeLevelIdOf(p)): TakeoffLevel | undefined {
+  const i = p.levels?.findIndex(l => l.id === id) ?? -1
+  return i >= 0 ? p.levels![i + 1] : undefined
+}
+
+/** The level shown faintly as a guide under the showing one: the level below, or for the lowest level (Foundations) the level above, so the walls that stand on the foundations can be seen and the foundations lined up under them. */
+export function ghostLevel(p: LevelState): { level: TakeoffLevel; side: 'below' | 'above' } | undefined {
+  const below = levelBelow(p)
+  if (below) return { level: below, side: 'below' }
+  const above = levelAbove(p)
+  return above ? { level: above, side: 'above' } : undefined
+}
+
+/** The drawings of the ghost level (see ghostLevel) on the showing sheet. */
+export function elementsOnGhostLevel(p: Pick<TakeoffProject, 'sheets' | 'activeSheetId' | 'elements' | 'levels' | 'activeLevelId'>): DrawnElement[] {
+  const g = ghostLevel(p)
+  return g ? p.elements.filter(el => onActiveSheet(el, p) && levelOf(el, p) === g.level.id) : []
+}
+
+/** Which sheet and level are showing, as one text: what a calculation of the showing view (rooms) is stamped with, so it is never taken for another view's. */
+export const viewKey = (p: Pick<TakeoffProject, 'sheets' | 'activeSheetId' | 'levels' | 'activeLevelId'>): string => (activeSheetIdOf(p) ?? '') + '|' + (activeLevelIdOf(p) ?? '')
+
+export const elementsOnActiveSheet = (p: Pick<TakeoffProject, 'sheets' | 'activeSheetId' | 'elements' | 'levels' | 'activeLevelId'>): DrawnElement[] => p.elements.filter(el => onActiveSheet(el, p) && onActiveLevel(el, p))
+
+/** Every drawing on the showing sheet, whatever its level (the sheet's scale applies to all of them). */
+export const sheetElements = (p: Pick<TakeoffProject, 'sheets' | 'activeSheetId' | 'elements'>): DrawnElement[] => p.elements.filter(el => onActiveSheet(el, p))
+
+/** The ids of the drawings on the showing sheet, on ALL its levels: the only ones a scale change may remeasure (the scale belongs to the sheet, not the level). */
+export const activeSheetElementIds = (p: Pick<TakeoffProject, 'sheets' | 'activeSheetId' | 'elements'>): Set<string> => new Set(sheetElements(p).map(e => e.id))
 
 /** The sheet a priced item was drawn on (by its drawing), or undefined for an item with no drawing. */
 export function itemSheetId(item: TakeoffItem, p: Pick<TakeoffProject, 'sheets' | 'elements'>): string | undefined {
@@ -52,37 +115,50 @@ export function makeSheet(id: string, name: string, calibration: ScaleCalibratio
 export function roomLabelsOf(p: TakeoffProject): RoomLabel[] {
   const id = activeSheetIdOf(p)
   // (a take-off with no plan loaded yet keeps them on the project itself, and they move onto the first sheet when one is added)
-  return (id ? p.sheets?.find(s => s.id === id)?.roomLabels : p.roomLabels) ?? []
+  return onLevelOnly((id ? p.sheets?.find(s => s.id === id)?.roomLabels : p.roomLabels) ?? [], p)
+}
+
+/** Of a sheet's list (room names, drawn rooms, room edges), the entries on the showing level. The list itself when there are no levels or all of it is on the level. */
+function onLevelOnly<T extends OnLevel>(list: T[], p: LevelState & Pick<TakeoffProject, 'levels'>): T[] {
+  if (!activeLevelIdOf(p)) return list
+  return list.every(x => onActiveLevel(x, p)) ? list : list.filter(x => onActiveLevel(x, p))
+}
+
+/** The sheet's list with the showing level's entries replaced by the new ones (stamped with the level); the other levels' entries are kept. */
+function replaceOnLevel<T extends OnLevel>(old: T[] | undefined, next: T[], p: LevelState & Pick<TakeoffProject, 'levels'>): T[] {
+  const a = activeLevelIdOf(p)
+  if (!a) return next
+  return [...(old ?? []).filter(x => !onActiveLevel(x, p)), ...next.map(x => (x.levelId === a ? x : { ...x, levelId: a }))]
 }
 
 /** Sets the room names of the showing sheet. */
 export function setRoomLabels(p: TakeoffProject, labels: RoomLabel[]): TakeoffProject {
   const id = activeSheetIdOf(p)
-  if (!id) return { ...p, roomLabels: labels }
-  return { ...p, sheets: p.sheets?.map(s => (s.id === id ? { ...s, roomLabels: labels } : s)) }
+  if (!id) return { ...p, roomLabels: replaceOnLevel(p.roomLabels, labels, p) }
+  return { ...p, sheets: p.sheets?.map(s => (s.id === id ? { ...s, roomLabels: replaceOnLevel(s.roomLabels, labels, p) } : s)) }
 }
 
 /** The rooms drawn as shapes on the showing sheet (or on the project, before there is a sheet). */
 export function roomShapesOf(p: TakeoffProject): DrawnRoomShape[] {
   const id = activeSheetIdOf(p)
-  return (id ? p.sheets?.find(s => s.id === id)?.roomShapes : p.roomShapes) ?? []
+  return onLevelOnly((id ? p.sheets?.find(s => s.id === id)?.roomShapes : p.roomShapes) ?? [], p)
 }
 
 export function setRoomShapes(p: TakeoffProject, shapes: DrawnRoomShape[]): TakeoffProject {
   const id = activeSheetIdOf(p)
-  if (!id) return { ...p, roomShapes: shapes }
-  return { ...p, sheets: p.sheets?.map(s => (s.id === id ? { ...s, roomShapes: shapes } : s)) }
+  if (!id) return { ...p, roomShapes: replaceOnLevel(p.roomShapes, shapes, p) }
+  return { ...p, sheets: p.sheets?.map(s => (s.id === id ? { ...s, roomShapes: replaceOnLevel(s.roomShapes, shapes, p) } : s)) }
 }
 
 export function roomEdgesOf(p: TakeoffProject): RoomEdge[] {
   const id = activeSheetIdOf(p)
-  return (id ? p.sheets?.find(s => s.id === id)?.roomEdges : p.roomEdges) ?? []
+  return onLevelOnly((id ? p.sheets?.find(s => s.id === id)?.roomEdges : p.roomEdges) ?? [], p)
 }
 
 export function setRoomEdges(p: TakeoffProject, edges: RoomEdge[]): TakeoffProject {
   const id = activeSheetIdOf(p)
-  if (!id) return { ...p, roomEdges: edges }
-  return { ...p, sheets: p.sheets?.map(s => (s.id === id ? { ...s, roomEdges: edges } : s)) }
+  if (!id) return { ...p, roomEdges: replaceOnLevel(p.roomEdges, edges, p) }
+  return { ...p, sheets: p.sheets?.map(s => (s.id === id ? { ...s, roomEdges: replaceOnLevel(s.roomEdges, edges, p) } : s)) }
 }
 
 /** Records (or, with no value, forgets) how big a pixel of the sheet's picture is on paper. */
@@ -169,5 +245,107 @@ export function removeSheet(p: TakeoffProject, id: string): { project: TakeoffPr
   let next: TakeoffProject = { ...p, sheets: remaining, elements, items }
   if (remaining.length === 0) { delete next.activeSheetId }
   else if (wasActive) next = { ...next, activeSheetId: remaining[0].id, calibration: { ...remaining[0].calibration } }
+  return { project: next, removedElements: doomed.size, removedItems: p.items.length - items.length }
+}
+
+// ── Levels: adding, renaming, switching, deleting ────────────────────────────
+
+/** The usual levels of a house, bottom to top. Picking one from the list puts it in its place among the levels already there. */
+export const LEVEL_PRESETS: { name: string }[] = [
+  { name: 'Foundations' },
+  { name: 'Ground floor' },
+  { name: 'First floor' },
+  { name: 'Second floor' },
+  { name: 'Loft' },
+  { name: 'Roof' },
+]
+
+/** Where a new level goes among the existing ones: a usual level (Foundations, Ground floor...) goes before the first existing level that is usually higher, any other name goes on top. */
+export function levelInsertIndex(levels: TakeoffLevel[], name: string): number {
+  const rank = (n: string) => LEVEL_PRESETS.findIndex(x => x.name.toLowerCase() === n.trim().toLowerCase())
+  const r = rank(name)
+  if (r < 0) return levels.length
+  const i = levels.findIndex(l => { const o = rank(l.name); return o > r })
+  return i < 0 ? levels.length : i
+}
+
+const stampLevel = <T extends OnLevel>(x: T, known: TakeoffLevel[], target: string): T => (x.levelId && known.some(l => l.id === x.levelId) ? x : { ...x, levelId: target })
+
+/** Adds a level (at index from the bottom, on top by default) and shows it. What had no level yet is first stamped with the level it already belonged to. */
+export function addLevel(p: TakeoffProject, id: string, name: string, heightMm?: number, index?: number): TakeoffProject {
+  const existing = p.levels ?? []
+  const target = existing.length ? existing[0].id : id
+  const st = <T extends OnLevel>(x: T) => stampLevel(x, existing, target)
+  const stampList = <T extends OnLevel>(l: T[] | undefined): T[] | undefined => (l ? l.map(st) : l)
+  const level: TakeoffLevel = { id, name: name.trim() || 'Level', ...(heightMm ? { heightMm } : {}) }
+  const at = Math.max(0, Math.min(existing.length, index ?? existing.length))
+  const levels = [...existing.slice(0, at), level, ...existing.slice(at)]
+  const sheets = p.sheets?.map(s => ({ ...s, roomLabels: stampList(s.roomLabels), roomShapes: stampList(s.roomShapes), roomEdges: stampList(s.roomEdges) }))
+  return {
+    ...p,
+    levels,
+    activeLevelId: id,
+    elements: p.elements.map(st),
+    items: p.items.map(it => (it.electricPoints ? { ...it, electricPoints: it.electricPoints.map(st) } : it)),
+    ...(sheets ? { sheets } : {}),
+    ...(p.roomLabels ? { roomLabels: stampList(p.roomLabels) } : {}),
+    ...(p.roomShapes ? { roomShapes: stampList(p.roomShapes) } : {}),
+    ...(p.roomEdges ? { roomEdges: stampList(p.roomEdges) } : {}),
+  }
+}
+
+/** Shows another level. */
+export function switchActiveLevel(p: TakeoffProject, id: string): TakeoffProject {
+  return p.levels?.some(l => l.id === id) ? { ...p, activeLevelId: id } : p
+}
+
+export const renameLevel = (p: TakeoffProject, id: string, name: string): TakeoffProject => ({ ...p, levels: p.levels?.map(l => (l.id === id ? { ...l, name: name.trim() || l.name } : l)) })
+
+/** Sets (or, with no number, clears) a level's floor to floor height, mm. */
+export const setLevelHeight = (p: TakeoffProject, id: string, heightMm: number | undefined): TakeoffProject => ({
+  ...p,
+  levels: p.levels?.map(l => {
+    if (l.id !== id) return l
+    const { heightMm: _old, ...rest } = l
+    return heightMm && heightMm > 0 ? { ...rest, heightMm } : rest
+  }),
+})
+
+/** Moves a drawing to another level (it stays on its sheet). */
+export function moveElementToLevel(p: TakeoffProject, elementId: string, levelId: string): TakeoffProject {
+  if (!p.levels?.some(l => l.id === levelId)) return p
+  return { ...p, elements: p.elements.map(e => (e.id === elementId ? { ...e, levelId } : e)) }
+}
+
+/** The level a priced item was drawn on (by its drawing), or undefined for an item with no drawing or when there are no levels. */
+export function itemLevelId(item: TakeoffItem, p: Pick<TakeoffProject, 'levels' | 'elements'>): string | undefined {
+  if (!item.elementId) return undefined
+  const el = p.elements.find(e => e.id === item.elementId)
+  return el ? levelOf(el, p) : undefined
+}
+
+/** Removes a level with its drawings, the priced items drawn on them, its electrical points, room names, drawn rooms and room edges. The showing level becomes the one below (or the first). */
+export function removeLevel(p: TakeoffProject, id: string): { project: TakeoffProject; removedElements: number; removedItems: number } {
+  if (!p.levels?.some(l => l.id === id)) return { project: p, removedElements: 0, removedItems: 0 }
+  const onIt = (thing: OnLevel) => levelOf(thing, p) === id
+  const doomed = new Set(p.elements.filter(onIt).map(e => e.id))
+  const items = p.items.filter(it => !(it.elementId && doomed.has(it.elementId))).map(it => (it.electricPoints ? { ...it, electricPoints: it.electricPoints.filter(pt => !onIt(pt)) } : it))
+  const keep = <T extends OnLevel>(l: T[] | undefined): T[] | undefined => (l ? l.filter(x => !onIt(x)) : l)
+  const sheets = p.sheets?.map(s => ({ ...s, roomLabels: keep(s.roomLabels), roomShapes: keep(s.roomShapes), roomEdges: keep(s.roomEdges) }))
+  const remaining = p.levels.filter(l => l.id !== id)
+  const wasActive = activeLevelIdOf(p) === id
+  const below = levelBelow(p, id)
+  let next: TakeoffProject = {
+    ...p,
+    levels: remaining,
+    elements: p.elements.filter(e => !doomed.has(e.id)),
+    items,
+    ...(sheets ? { sheets } : {}),
+    ...(p.roomLabels ? { roomLabels: keep(p.roomLabels) } : {}),
+    ...(p.roomShapes ? { roomShapes: keep(p.roomShapes) } : {}),
+    ...(p.roomEdges ? { roomEdges: keep(p.roomEdges) } : {}),
+  }
+  if (remaining.length === 0) { delete next.levels; delete next.activeLevelId }
+  else if (wasActive) next = { ...next, activeLevelId: (below ?? remaining[0]).id }
   return { project: next, removedElements: doomed.size, removedItems: p.items.length - items.length }
 }

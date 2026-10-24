@@ -241,8 +241,8 @@ export function detectRooms(wallSolids: Pt[][][], o: { mpp: number; cellMm?: num
 // ── Rooms drawn as a shape ───────────────────────────────────────────────────────────────────────────────────────────
 /** A room drawn directly (the Rooms tool with Rectangle or Polygon) instead of being found from walls: just its outline, its name and kind are a RoomLabel like any other room's. */
 /** A line that closes a room where there is no wall (the open side of three walls) or splits an open space into rooms: not a wall, nothing is painted or priced for it. */
-export interface RoomEdge { id: string; points: Pt[] }
-export interface DrawnRoomShape { id: string; points: Pt[]; /** drawn as a rectangle: dragging a corner keeps it a rectangle */ rect?: boolean }
+export interface RoomEdge { id: string; points: Pt[]; /** the level it is on (undefined = the first level) */ levelId?: string }
+export interface DrawnRoomShape { id: string; points: Pt[]; /** the level it is on (undefined = the first level) */ levelId?: string; /** drawn as a rectangle: dragging a corner keeps it a rectangle */ rect?: boolean }
 
 const distToSegment = (p: Pt, a: Pt, b: Pt) => {
   const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy
@@ -346,7 +346,7 @@ export const ROOM_KINDS: RoomKind[] = [
 export const ROOM_KIND_BY_ID: Record<string, RoomKind> = Object.fromEntries(ROOM_KINDS.map(k => [k.id, k]))
 
 /** A name (and kind) given to the room that contains this point; it follows the room if the walls are changed. */
-export interface RoomLabel { id: string; x: number; y: number; name: string; kind?: string; /** the ceiling height, m (2.4 when not given) */ heightM?: number }
+export interface RoomLabel { id: string; x: number; y: number; name: string; /** the level it is on (undefined = the first level) */ levelId?: string; kind?: string; /** the ceiling height, m (2.4 when not given) */ heightM?: number }
 export const DEFAULT_ROOM_HEIGHT_M = 2.4
 
 /** The label that belongs to each room (the first whose point is inside it), by room index; -1 where a room has none. */

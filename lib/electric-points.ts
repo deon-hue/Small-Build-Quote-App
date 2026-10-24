@@ -11,6 +11,8 @@ export interface ElectricPoint {
   y: number
   /** the sheet (plan) the point was placed on; undefined = the first sheet */
   sheetId?: string
+  /** the level the point was placed on; undefined = the first level */
+  levelId?: string
   /** a special fitting on this point: the fitting kind and what it is called */
   fitting?: { typeId: string; name: string }
 }

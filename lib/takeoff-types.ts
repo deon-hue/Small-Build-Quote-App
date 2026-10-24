@@ -109,6 +109,8 @@ export interface DrawnElement {
   unit?:       string   // 'm', 'm²', 'm³', 'nr', 'item'
   /** the sheet (plan) it was drawn on; undefined = the first sheet (drawn before there were sheets) */
   sheetId?:    string
+  /** the level (Foundations, Ground floor, First floor, Loft...) it belongs to; undefined = the first level (see lib/takeoff-sheets.ts) */
+  levelId?:    string
   /** where the user dragged this drawing's name tag to, as an offset (plan pixels) from where it sits by itself */
   tagDx?:      number
   tagDy?:      number
@@ -387,6 +389,14 @@ export interface TakeoffClient {
   address?:    string
 }
 
+/** A level of the building (Foundations, Ground floor, First floor, Loft...), named by the user and kept bottom to top. Each drawing belongs to one level and only the showing level's drawings are shown and worked on. */
+export interface TakeoffLevel {
+  id: string
+  name: string
+  /** the wall height new walls drawn on this level start with, mm (blank = the usual height for the kind of wall) */
+  heightMm?: number
+}
+
 export interface TakeoffProject {
   id:           string
   name:         string
@@ -396,6 +406,9 @@ export interface TakeoffProject {
   /** The plans (sheets) in this take-off. Empty/undefined until a plan is loaded. `calibration` below is always the ACTIVE sheet's scale. */
   sheets?:        TakeoffSheet[]
   activeSheetId?: string
+  /** The levels of the building, bottom to top. Empty/undefined = no levels (everything is shown together, as before). A level applies to every sheet. */
+  levels?:        TakeoffLevel[]
+  activeLevelId?: string
   calibration:  ScaleCalibration
   elements:     DrawnElement[]
   items:        TakeoffItem[]

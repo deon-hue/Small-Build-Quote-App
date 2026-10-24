@@ -5,7 +5,7 @@ import NumInput from '@/components/NumInput'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { makeDebouncedSave, isEmptyTakeoff, isUuid, newProjectId, loadTakeoffFromSupabase, saveTakeoffToSupabase, listTakeoffSummaries, deleteTakeoffProject, type TakeoffSummary } from '@/lib/takeoff-sync'
-import { roomLabelsOf, setRoomLabels, roomShapesOf, setRoomShapes, roomEdgesOf, setRoomEdges, activeSheetIdOf, onActiveSheet, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet, setSheetPaper } from '@/lib/takeoff-sheets'
+import { roomLabelsOf, setRoomLabels, roomShapesOf, setRoomShapes, roomEdgesOf, setRoomEdges, activeSheetIdOf, onActiveSheet, onActiveLevel, activeLevelIdOf, levelOf, levelName, ghostLevel, elementsOnGhostLevel, viewKey, itemLevelId, addLevel, switchActiveLevel, renameLevel, setLevelHeight, removeLevel, moveElementToLevel, levelInsertIndex, LEVEL_PRESETS, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet, setSheetPaper } from '@/lib/takeoff-sheets'
 import { layoutTags, polylineMidpoint, textColorFor, tagText, TAG_HEIGHT_PX } from '@/lib/takeoff-tags'
 import { PDF_RENDER_MM_PER_PX, PAPER_SIZES, SCALE_DENOMS, scaleLabel, denomFromLabel, mppForScale, paperFromMm, inferPdfPaper, mmPerPxForPaper } from '@/lib/takeoff-paper'
 import { putSheetImage, getSheetImage, deleteProjectImages } from '@/lib/takeoff-sheet-images'
@@ -863,6 +863,10 @@ export default function TakeoffPage() {
   const [filePickerOpen, setFilePickerOpen] = useState(false)
   // Sheets (plans): the one showing, whether its picture is missing from this device, and a nudge to reload the picture after it is put back
   const activeSheetId = activeSheetIdOf(project)
+  // Levels (Foundations, Ground floor, First floor, Loft...): the one showing, and whether the level underneath is shown faintly as a guide
+  const activeLevelId = activeLevelIdOf(project)
+  const [viewGhost, setViewGhost] = useState(true)
+  const [levelMenuOpen, setLevelMenuOpen] = useState(false)
   const [sheetImageMissing, setSheetImageMissing] = useState(false)
   const [imageNonce, setImageNonce] = useState(0)
   // Plan pictures are kept on this device AND in the account (so a take-off's plans open on any computer): where each sheet's copy in the account has got to
@@ -896,6 +900,7 @@ export default function TakeoffPage() {
         if (typeof r.halo === 'boolean') setViewHalo(r.halo)
         if (typeof r.tags === 'boolean') setViewTags(r.tags)
         if (typeof r.rooms === 'boolean') setViewRooms(r.rooms)
+        if (typeof r.ghost === 'boolean') setViewGhost(r.ghost)
         if (typeof r.splitWalls === 'boolean') setSplitWalls(r.splitWalls)
         if (typeof r.gridSnap === 'boolean') setGridSnap(r.gridSnap)
         if (typeof r.gridStep === 'number' && r.gridStep > 0) setGridStep(r.gridStep)
@@ -903,7 +908,7 @@ export default function TakeoffPage() {
       }
     } catch {}
   }, [])
-  useEffect(() => { try { localStorage.setItem('sbc_takeoff_view', JSON.stringify({ halo: viewHalo, tags: viewTags, fade: viewFade, rooms: viewRooms, splitWalls, gridSnap, gridStep })) } catch {} }, [viewHalo, viewTags, viewFade, viewRooms, splitWalls, gridSnap, gridStep])
+  useEffect(() => { try { localStorage.setItem('sbc_takeoff_view', JSON.stringify({ halo: viewHalo, tags: viewTags, fade: viewFade, rooms: viewRooms, ghost: viewGhost, splitWalls, gridSnap, gridStep })) } catch {} }, [viewHalo, viewTags, viewFade, viewRooms, viewGhost, splitWalls, gridSnap, gridStep])
   const lastSaveError = useRef('')
   const idMigration = useRef<string | null>(null)
   const oldPictureFolders = useRef<string[]>([])
@@ -1248,7 +1253,8 @@ export default function TakeoffPage() {
     // Apply phase defaults to the new item
     if (phaseDefaults) {
       // Copy over phase default properties (but keep element-specific ones)
-      item.wallHeight = item.wallHeight ?? phaseDefaults.wallHeight
+      const levelWallMm = (item.phase === 'External Walls' || item.phase === 'Internal Walls & Partitions') ? project.levels?.find(l => l.id === levelOf(el, project))?.heightMm : undefined
+      item.wallHeight = item.wallHeight ?? (levelWallMm ? levelWallMm / 1000 : undefined) ?? phaseDefaults.wallHeight
       item.wallBandPx = item.wallBandPx ?? phaseDefaults.wallBandPx
       item.foundationWidth = item.foundationWidth ?? phaseDefaults.foundationWidth
       item.foundationDepth = item.foundationDepth ?? phaseDefaults.foundationDepth
@@ -1652,7 +1658,7 @@ export default function TakeoffPage() {
     const label = isFloor
       ? `Floor area ${shortId}`
       : `${activePhase} ${shortId}`
-    const el: DrawnElement = { id: uid(), type, points: pts, phase, label, color, ...(activeSheetId ? { sheetId: activeSheetId } : {}) }
+    const el: DrawnElement = { id: uid(), type, points: pts, phase, label, color, ...(activeSheetId ? { sheetId: activeSheetId } : {}), ...(activeLevelId ? { levelId: activeLevelId } : {}) }
     // Capture floor makeup before state update
     if (isFloor) queuedFloorMakeupRef.current = activeFloorMakeup
     setDrawPoints(_ => {
@@ -1795,7 +1801,7 @@ export default function TakeoffPage() {
   function placeElectricPoint(pt: TakeoffPoint) {
     const room = roomAtPoint(pt, electricRoomShapes()) ?? electricRoom
     const id = uid()
-    changeElectricPoints(pts => [...pts, { id, typeId: electricTypeId, roomName: room, x: pt.x, y: pt.y, ...(activeSheetId ? { sheetId: activeSheetId } : {}) }])
+    changeElectricPoints(pts => [...pts, { id, typeId: electricTypeId, roomName: room, x: pt.x, y: pt.y, ...(activeSheetId ? { sheetId: activeSheetId } : {}), ...(activeLevelId ? { levelId: activeLevelId } : {}) }])
     setSelectedElectricPointId(id)
   }
 
@@ -1833,7 +1839,7 @@ export default function TakeoffPage() {
   useEffect(() => {
     const t = setTimeout(() => setRoomTick(n => n + 1), 250)
     return () => clearTimeout(t)
-  }, [roomsOn, project.elements, project.items, project.calibration.mpp, project.activeSheetId, project.sheets, project.roomEdges])
+  }, [roomsOn, project.elements, project.items, project.calibration.mpp, project.activeSheetId, project.sheets, project.roomEdges, project.levels, project.activeLevelId])
   // Walls drawn as separate sides that make a CLOSED run are painted building INWARD whichever way round each side was drawn (the run's direction decides). A side on its own builds to the right of its own travel, which for a side
   // drawn the other way round is OUTWARD, so everything measured on a side (its doors and windows, the foundation under it, its selection outline) uses the direction the run actually paints it: this map, by wall id.
   const wallDirOverride = useMemo(() => {
@@ -1842,10 +1848,10 @@ export default function TakeoffPage() {
     if (!(mpp > 0)) return map
     const pieces: { id: string; points: TakeoffPoint[]; closed: boolean; flip: boolean; group: string; reachPx?: number }[] = []
     const flips = new Map<string, boolean>()
-    for (const el of wallsOnSheet()) {
+    for (const el of [...wallsOnSheet(), ...ghostWalls()]) {
       const w = wallSpecFor(el)
       if (!w) continue
-      pieces.push({ id: el.id, points: el.type === 'rect' ? cornersOf(el) : el.points, closed: el.type !== 'line', flip: w.flip, group: `${el.phase === 'External Walls' ? '2-ext' : '1-int'}|${w.ref}|${JSON.stringify(w.spec.layers)}`, reachPx: (1.5 * totalMm(w.spec.layers)) / (mpp * 1000) })
+      pieces.push({ id: el.id, points: el.type === 'rect' ? cornersOf(el) : el.points, closed: el.type !== 'line', flip: w.flip, group: `${levelOf(el, project) ?? ''}|${el.phase === 'External Walls' ? '2-ext' : '1-int'}|${w.ref}|${JSON.stringify(w.spec.layers)}`, reachPx: (1.5 * totalMm(w.spec.layers)) / (mpp * 1000) })
       flips.set(el.id, w.flip)
     }
     for (const ch of chainWalls(pieces, 3)) {
@@ -1855,7 +1861,7 @@ export default function TakeoffPage() {
     }
     return map
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project.elements, project.items, project.calibration.mpp, project.activeSheetId, boSubPhases, allWallMakeups.length, hiddenPhases])
+  }, [project.elements, project.items, project.calibration.mpp, project.activeSheetId, project.levels, project.activeLevelId, boSubPhases, allWallMakeups.length, hiddenPhases])
   /** how a wall's own band is worked out so it matches how it is painted (see wallDirOverride) */
   function wallPaintOpts(el: DrawnElement, ws: { ref: 'outer' | 'centre'; flip: boolean }) {
     const o = wallDirOverride.get(el.id)
@@ -1888,7 +1894,7 @@ export default function TakeoffPage() {
         else { counts[i].doors++; counts[i].doorWidthM += gp.w; counts[i].doorAreaM2 += gp.w * gp.h }
       }
     }
-    return { found: det.rooms, counts, cellMm: det.cellMm, hasWalls: solids.length > 0, sheetId: project.activeSheetId }
+    return { found: det.rooms, counts, cellMm: det.cellMm, hasWalls: solids.length > 0, sheetId: viewKey(project) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomTick, boSubPhases, allWallMakeups.length])
   // the rooms drawn as shapes, each cut into pieces where a room edge crosses it (always as they are now, so dragging one is smooth)
@@ -1904,7 +1910,7 @@ export default function TakeoffPage() {
     }
     return out
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomsOn, project.sheets, project.roomShapes, project.roomEdges, project.activeSheetId, project.calibration.mpp])
+  }, [roomsOn, project.sheets, project.roomShapes, project.roomEdges, project.activeSheetId, project.levels, project.activeLevelId, project.calibration.mpp])
   // the rooms found from walls (a moment behind the walls) and the rooms drawn as shapes, in reading order
   const roomData = (() => {
     if (!roomCore) return null
@@ -2044,7 +2050,7 @@ export default function TakeoffPage() {
 
   /** the handles and grab areas of the drawn rooms, over the walls: only while the Rooms tool is on */
   function renderRoomEditors() {
-    if (tool !== 'room' || !roomData || roomData.sheetId !== project.activeSheetId) return null
+    if (tool !== 'room' || !roomData || roomData.sheetId !== viewKey(project)) return null
     return (
       <g>
         {roomEdgesOf(project).map(e => (
@@ -2086,7 +2092,7 @@ export default function TakeoffPage() {
 
   /** the rooms shaded on the plan, each with its name and floor area (clickable with the Rooms tool) */
   function renderRooms() {
-    if (!roomData || !roomsOn || roomData.sheetId !== project.activeSheetId) return null
+    if (!roomData || !roomsOn || roomData.sheetId !== viewKey(project)) return null
     const mpp = project.calibration.mpp
     return (
       <g style={{ pointerEvents: 'none' }}>
@@ -2607,6 +2613,76 @@ export default function TakeoffPage() {
     if (target && !target.scaleSet) showToast('Set the scale for ' + target.name + ' before you draw on it.')
   }
 
+  /** Clears what belonged to the view being left (the selection, a half-drawn shape, an open calculator) when another level shows. */
+  function clearViewState(keepSelection = false) {
+    if (!keepSelection) { setSelectedId(null); setEditingElement(null); setEditingItem(null) }
+    setSelectedElectricPointId(null)
+    setSelectedOpeningId(null)
+    setSelectedEdgeId(null)
+    setSelectedRoomPt(null)
+    setDrawPoints([])
+    setIsDrawing(false)
+    setMeasureDone(null)
+    setAssemblyWindowItemId(null)
+  }
+
+  /** Shows another level: only its drawings are shown and worked on (the level below shows faintly as a guide). keepSelection is for jumping to the level of an item you just picked. */
+  function switchLevel(id: string, keepSelection = false) {
+    if (id === activeLevelId) return
+    setProject(p => switchActiveLevel(p, id))
+    clearViewState(keepSelection)
+  }
+
+  /** Adds a level with a name (a usual one goes in its place among the others, any other name on top) and shows it. */
+  function addLevelNamed(name: string) {
+    const nm = name.trim()
+    if (!nm) return
+    const first = !(project.levels?.length)
+    const id = uid()
+    setProject(p => addLevel(p, id, nm, undefined, levelInsertIndex(p.levels ?? [], nm)))
+    clearViewState()
+    setLevelMenuOpen(false)
+    showToast(first && project.elements.length > 0
+      ? 'Levels on. Everything already drawn is on "' + nm + '". To put a drawing on another level, pick it and change its Level in Properties.'
+      : '"' + nm + '" added. Draw on it: the level below shows faintly as a guide.')
+  }
+
+  function addCustomLevel() {
+    const next = window.prompt('Name the new level (for example Garage roof, Basement, Annexe)', '')
+    if (next !== null && next.trim()) addLevelNamed(next)
+    else setLevelMenuOpen(false)
+  }
+
+  function renameLevelPrompt(id: string) {
+    const next = window.prompt('Name this level', levelName(project, id))
+    if (next !== null && next.trim()) setProject(p => renameLevel(p, id, next))
+  }
+
+  function deleteLevelConfirm(id: string) {
+    const dry = removeLevel(project, id)
+    if (!window.confirm('Remove "' + levelName(project, id) + '"?\n\nThis also removes the ' + dry.removedElements + ' drawing(s) and ' + dry.removedItems + ' priced item(s) drawn on it, with its room names. A recovery copy is kept.')) return
+    createRecoverySnapshot('clear')
+    setProject(p => removeLevel(p, id).project)
+    clearViewState()
+    showToast('Level removed. Recovery copy saved.')
+  }
+
+  /** The Level field of a selected drawing's item: moves the drawing to another level and shows that level. */
+  function renderLevelField(item: TakeoffItem) {
+    const levels = project.levels ?? []
+    const el = item.elementId ? project.elements.find(e => e.id === item.elementId) : undefined
+    if (levels.length === 0 || !el) return null
+    return (
+      <div style={{ marginBottom: 10 }}>
+        <label style={labelStyle}>Level</label>
+        <select style={inputStyle} value={levelOf(el, project) ?? ''}
+          onChange={e => { const to = e.target.value; setProject(p => switchActiveLevel(moveElementToLevel(p, el.id, to), to)); showToast('Moved to ' + levelName(project, to)) }}>
+          {levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+        </select>
+      </div>
+    )
+  }
+
   function renameSheetPrompt(id: string) {
     const next = window.prompt('Name this sheet', sheetName(project, id))
     if (next !== null && next.trim()) setProject(p => renameSheet(p, id, next))
@@ -2682,6 +2758,8 @@ export default function TakeoffPage() {
           calibration: data.calibration ?? { mpp: DEFAULT_MPP, label: '1:100' },
           sheets: data.sheets,
           activeSheetId: data.activeSheetId,
+          levels: data.levels,
+          activeLevelId: data.activeLevelId,
           elements: data.elements ?? [],
           items: data.items ?? [],
           createdAt: data.createdAt ?? new Date().toISOString(),
@@ -3029,7 +3107,7 @@ export default function TakeoffPage() {
     const T = { x: (b.x - a.x) / bl, y: (b.y - a.y) / bl }, N = { x: -T.y, y: T.x }
     const M = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
     let found: { off: number; q: TakeoffPoint; w: DrawnElement } | null = null
-    for (const w of wallsOnSheet()) {
+    for (const w of [...wallsOnSheet(), ...ghostWalls()]) {
       const ws = wallSpecFor(w)
       if (!ws) continue
       const closed = w.type !== 'line'
@@ -3117,6 +3195,10 @@ export default function TakeoffPage() {
   /** the walls (lines, polygons, rectangles) on the showing sheet */
   function wallsOnSheet(): DrawnElement[] {
     return elementsOnActiveSheet(project).filter(el => (el.phase === 'External Walls' || el.phase === 'Internal Walls & Partitions') && !hiddenPhases.has(el.phase))
+  }
+  /** the walls of the ghost level (the level below, or above the lowest level): not drawn on or snapped to, but a foundation lines up under them */
+  function ghostWalls(): DrawnElement[] {
+    return elementsOnGhostLevel(project).filter(el => (el.phase === 'External Walls' || el.phase === 'Internal Walls & Partitions') && !hiddenPhases.has(el.phase))
   }
   /** the points of other walls that come along when this wall (or one of its corners) is dragged: joined corners and tees. Hold Alt to move a wall on its own. */
   function linksForDrag(el: DrawnElement, vertexIndex: number | undefined, alt: boolean): DragLink[] {
@@ -3271,7 +3353,7 @@ export default function TakeoffPage() {
   }
 
   // Undo history: the drawings and items, one step per burst of changes. It starts again for another take-off or when the sheets change (a deleted sheet's drawings must not come back without it).
-  const historyKey = project.id + '|' + (project.sheets ?? []).map(s => s.id).join(',')
+  const historyKey = project.id + '|' + (project.sheets ?? []).map(s => s.id).join(',') + '|' + (project.levels ?? []).map(l => l.id).join(',')
   useEffect(() => {
     const cur = { elements: project.elements, items: project.items }
     if (!historyRef.current) { historyRef.current = newHistory(cur, historyKey); return }
@@ -4137,6 +4219,7 @@ export default function TakeoffPage() {
           <label style={labelStyle}>Drawing Ref</label>
           <input style={inputStyle} value={item.drawingRef ?? ''} onChange={e => saveItemEdit({ ...item, drawingRef: e.target.value })} />
         </div>
+        {renderLevelField(item)}
 
         <div style={{ marginBottom: 12 }}>
           <label style={labelStyle}>Building Regs Notes</label>
@@ -5301,6 +5384,7 @@ export default function TakeoffPage() {
                 onChange={e => saveItemEdit({ ...item, drawingRef: e.target.value })} />
             </div>
           </div>
+          {renderLevelField(item)}
 
           <div>
             <label style={labelStyle}>Notes</label>
@@ -6184,6 +6268,9 @@ export default function TakeoffPage() {
                   // an item drawn on another sheet: show that sheet first (keeping this item selected)
                   const itemSheet = itemSheetId(item, project)
                   if (itemSheet && itemSheet !== activeSheetId) switchSheet(itemSheet, true)
+                  // ... and on another level: show that level too
+                  const itemLevel = itemLevelId(item, project)
+                  if (itemLevel && itemLevel !== activeLevelId) switchLevel(itemLevel, true)
                   setEditingItem(item)
                   const el = item.elementId ? project.elements.find(e => e.id === item.elementId) ?? null : null
                   setEditingElement(el)
@@ -6224,6 +6311,7 @@ export default function TakeoffPage() {
                     <span style={{ marginLeft: 6, color: '#6a7a8a' }}>👁 layer hidden</span>
                   )}
                   {(project.sheets?.length ?? 0) > 1 && (() => { const sid = itemSheetId(item, project); const nm = sid ? sheetName(project, sid) : ''; return nm && nm !== item.drawingRef ? <span style={{ color: '#6a7a8a' }}> · {nm}</span> : null })()}
+                  {(project.levels?.length ?? 0) > 0 && (() => { const lid = itemLevelId(item, project); const nm = lid ? levelName(project, lid) : ''; return nm ? <span style={{ color: '#7a8aa8' }}> · {nm}</span> : null })()}
                 </div>
               </div>
             ))}
@@ -6713,6 +6801,60 @@ export default function TakeoffPage() {
             )
           })()}
 
+          {/* Levels: Foundations, Ground floor, First floor, Loft... each drawing belongs to one and only the showing level is drawn on */}
+          {(() => {
+            const levels = project.levels ?? []
+            const bottom = (project.sheets?.length ?? 0) > 0 ? 54 : 8
+            const have = new Set(levels.map(l => l.name.trim().toLowerCase()))
+            const menu = (
+              <div style={{ position: 'absolute', left: 0, bottom: '100%', marginBottom: 4, minWidth: 180, background: 'var(--to-panel)', border: '1px solid var(--to-border)', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.35)', padding: 4, zIndex: 8 }}>
+                {LEVEL_PRESETS.filter(x => !have.has(x.name.toLowerCase())).map(x => (
+                  <button key={x.name} onClick={() => addLevelNamed(x.name)} style={{ display: 'block', width: '100%', textAlign: 'left', background: 'none', border: 'none', color: 'var(--to-text)', fontSize: 12, padding: '6px 10px', cursor: 'pointer', borderRadius: 5 }}>{x.name}</button>
+                ))}
+                <button onClick={addCustomLevel} style={{ display: 'block', width: '100%', textAlign: 'left', background: 'none', border: 'none', borderTop: '1px solid var(--to-border)', color: 'var(--to-text)', fontSize: 12, padding: '6px 10px', cursor: 'pointer' }}>Other name…</button>
+              </div>
+            )
+            const active = levels.find(l => l.id === activeLevelId)
+            return (
+              <div style={{ position: 'absolute', left: 8, bottom, right: 150, zIndex: 5, display: 'flex', alignItems: 'center', gap: 4, padding: levels.length ? '4px 6px' : 0, background: levels.length ? 'var(--to-panel)' : 'transparent', border: levels.length ? '1px solid var(--to-border)' : 'none', borderRadius: 8, boxShadow: levels.length ? '0 2px 10px rgba(0,0,0,0.25)' : 'none' }}>
+                {levels.length > 0 && <span style={{ fontSize: 11, color: 'var(--to-muted)', flexShrink: 0 }}>Levels</span>}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, overflowX: 'auto', minWidth: 0 }}>
+                  {[...levels].reverse().map(l => {
+                    const on = l.id === activeLevelId
+                    return (
+                      <div key={l.id} style={{ display: 'flex', alignItems: 'center', flexShrink: 0, borderRadius: 6, border: '1px solid ' + (on ? '#2563eb' : 'var(--to-border)'), background: on ? 'rgba(37,99,235,0.18)' : 'transparent' }}>
+                        <button onClick={() => switchLevel(l.id)} onDoubleClick={() => renameLevelPrompt(l.id)} title={l.name + ' · double-click to rename'}
+                          style={{ background: 'none', border: 'none', color: 'var(--to-text)', fontSize: 12, fontWeight: on ? 700 : 500, padding: '4px 8px', cursor: 'pointer', whiteSpace: 'nowrap', maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.name}</button>
+                        {levels.length > 1 && <button onClick={() => deleteLevelConfirm(l.id)} title="Remove this level and everything drawn on it" style={{ background: 'none', border: 'none', color: 'var(--to-muted)', fontSize: 13, padding: '2px 6px', cursor: 'pointer' }}>×</button>}
+                      </div>
+                    )
+                  })}
+                </div>
+                <div style={{ position: 'relative', flexShrink: 0 }}>
+                  <button onClick={() => setLevelMenuOpen(o => !o)} title={levels.length ? 'Add a level (Foundations, First floor, Loft...)' : 'Split the building into levels: Foundations, Ground floor, First floor, Loft...'}
+                    style={{ ...btnStyle, padding: '4px 10px', fontSize: 11 }}>{levels.length ? '+ Level' : '＋ Levels'}</button>
+                  {levelMenuOpen && menu}
+                </div>
+                {levels.length > 0 && (
+                  <>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--to-text)', cursor: 'pointer', flexShrink: 0 }} title="Show the neighbouring level faintly, to draw over: the level below, or for the lowest level the one above (the walls the foundations sit under)">
+                      <input type="checkbox" checked={viewGhost} onChange={e => setViewGhost(e.target.checked)} style={{ width: 'auto' }} /> {ghostLevel(project)?.side === 'above' ? 'Level above' : 'Level below'}
+                    </label>
+                    {active && (
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--to-text)', flexShrink: 0 }} title="The wall height (m) a new wall drawn on this level starts with. Leave blank for the usual height for the kind of wall.">
+                        Walls
+                        <input type="number" min={0} step={0.1} placeholder="usual" value={active.heightMm ? +(active.heightMm / 1000).toFixed(3) : ''}
+                          onChange={e => { const v = parseFloat(e.target.value); setProject(p => setLevelHeight(p, active.id, v > 0 ? Math.round(v * 1000) : undefined)) }}
+                          style={{ width: 54, fontSize: 11, padding: '2px 4px' }} />
+                        m
+                      </label>
+                    )}
+                  </>
+                )}
+              </div>
+            )
+          })()}
+
           {/* Sheets: each plan has its own picture, its own scale and its own drawings */}
           {(project.sheets?.length ?? 0) > 0 && (
             <div style={{ position: 'absolute', left: 8, bottom: 8, right: 150, zIndex: 5, display: 'flex', alignItems: 'center', gap: 4, overflowX: 'auto', padding: '4px 6px', background: 'var(--to-panel)', border: '1px solid var(--to-border)', borderRadius: 8, boxShadow: '0 2px 10px rgba(0,0,0,0.25)' }}>
@@ -6839,6 +6981,11 @@ export default function TakeoffPage() {
               {renderRooms()}
 
               {/* Drawn elements — skip phases toggled hidden */}
+              {/* the level underneath, faint and grey, as a guide to draw over (it cannot be clicked, snapped to or worked on) */}
+              {viewGhost && (() => {
+                const below = elementsOnGhostLevel(project).filter(el => !hiddenPhases.has(el.phase))
+                return below.length > 0 ? <g style={{ pointerEvents: 'none', filter: 'grayscale(1)' }} opacity={0.28}>{below.map(renderElement)}{renderWallVisuals(below)}</g> : null
+              })()}
               {viewHalo && <g style={{ pointerEvents: 'none' }}>{elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)).map(renderHalo)}</g>}
               {elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)).map(renderElement)}
               {renderWallVisuals(elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)))}
@@ -6848,7 +6995,7 @@ export default function TakeoffPage() {
               {viewTags && renderTags(elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)))}
 
               {/* Electrical points — a coloured dot with its letters; a star marks a special fitting. Drag one in Select mode to move it. */}
-              {!hiddenPhases.has('Electrics') && electricPoints.filter(pt => onActiveSheet(pt, project)).map(pt => {
+              {!hiddenPhases.has('Electrics') && electricPoints.filter(pt => onActiveSheet(pt, project) && onActiveLevel(pt, project)).map(pt => {
                 const g = POINT_BY_ID[pt.typeId]?.group
                 const r = 10 / zoom
                 const chosen = pt.id === selectedElectricPointId
@@ -6871,7 +7018,7 @@ export default function TakeoffPage() {
                   handleSvgClick (which would add a draw point in line/polygon mode). */}
               {selectedId && (() => {
                 const el = project.elements.find(e => e.id === selectedId)
-                if (!el || !onActiveSheet(el, project)) return null
+                if (!el || !onActiveSheet(el, project) || !onActiveLevel(el, project)) return null
                 if (hiddenPhases.has(el.phase)) return null   // hide handles when phase is toggled off
                 const handles = getElVertexHandles(el)
                 const hr  = 5 / zoom    // handle radius — stays constant screen size
