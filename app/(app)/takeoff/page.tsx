@@ -863,6 +863,9 @@ export default function TakeoffPage() {
   const [viewRooms, setViewRooms] = useState(true)
   // a wall drawn as one run of several sides becomes one wall per side (so each can be clicked, edited and deleted on its own)
   const [splitWalls, setSplitWalls] = useState(true)
+  // snap the cursor to the grid (its spacing in metres); the grid itself is the Grid tick
+  const [gridSnap, setGridSnap] = useState(false)
+  const [gridStep, setGridStep] = useState(1)
   const [selectedRoomPt, setSelectedRoomPt] = useState<TakeoffPoint | null>(null)
   // the rectangle or polygon tool is drawing a ROOM (picked while the Rooms tool was active, or from the Rooms panel), not a priced drawing
   const [roomDraw, setRoomDraw] = useState<false | 'room' | 'edge'>(false)
@@ -877,11 +880,13 @@ export default function TakeoffPage() {
         if (typeof r.tags === 'boolean') setViewTags(r.tags)
         if (typeof r.rooms === 'boolean') setViewRooms(r.rooms)
         if (typeof r.splitWalls === 'boolean') setSplitWalls(r.splitWalls)
+        if (typeof r.gridSnap === 'boolean') setGridSnap(r.gridSnap)
+        if (typeof r.gridStep === 'number' && r.gridStep > 0) setGridStep(r.gridStep)
         if (typeof r.fade === 'number' && r.fade >= 0 && r.fade <= 75) setViewFade(r.fade)
       }
     } catch {}
   }, [])
-  useEffect(() => { try { localStorage.setItem('sbc_takeoff_view', JSON.stringify({ halo: viewHalo, tags: viewTags, fade: viewFade, rooms: viewRooms, splitWalls })) } catch {} }, [viewHalo, viewTags, viewFade, viewRooms, splitWalls])
+  useEffect(() => { try { localStorage.setItem('sbc_takeoff_view', JSON.stringify({ halo: viewHalo, tags: viewTags, fade: viewFade, rooms: viewRooms, splitWalls, gridSnap, gridStep })) } catch {} }, [viewHalo, viewTags, viewFade, viewRooms, splitWalls, gridSnap, gridStep])
   const lastSaveError = useRef('')
   const idMigration = useRef<string | null>(null)
   const oldPictureFolders = useRef<string[]>([])
@@ -1312,12 +1317,12 @@ export default function TakeoffPage() {
       const orig = dragRef.current.origPoints
       const vi = dragRef.current.vertexIndex
       // a corner being dragged snaps to the corners, ends and mid-points of the other drawings
-      if (vi !== undefined && snapOn) {
+      if (vi !== undefined && (snapOn || gridSnap)) {
         const dragged = project.elements.find(el => el.id === id)
         const handle = dragged ? getElVertexHandles({ ...dragged, points: orig })[vi] : undefined
         if (dragged && handle) {
           const want = { x: handle.x + dx, y: handle.y + dy }
-          const r = snapPoint(want, { anchors: anchorsFor(elementsOnActiveSheet(project).filter(el => el.id !== id && !hiddenPhases.has(el.phase))), radius: 10 / zoom, snap: true, ortho: false })
+          const r = snapPoint(want, { anchors: anchorsFor(elementsOnActiveSheet(project).filter(el => el.id !== id && !hiddenPhases.has(el.phase))), radius: 10 / zoom, snap: snapOn, ortho: false, grid: gridSnap ? { stepPx: gridMinorPx() } : undefined })
           dx += r.pt.x - want.x; dy += r.pt.y - want.y
           setSnapInfo(r.kind === 'none' ? null : r)
         }
@@ -2871,16 +2876,24 @@ export default function TakeoffPage() {
 
   // ── Drawing aids: snapping, typed lengths, undo / redo, copy and rotate ─────────────────────────────
   /** Where the cursor really lands: snapped to a corner, end or mid-point of a drawing on this sheet (within 10 screen pixels), and kept horizontal or vertical from the last point when Ortho is on or Shift is held. */
+  /** The grid's spacing in plan pixels: the chosen step, or a multiple of it when that would be too close together to see at this zoom (the lines on screen and the snapping always agree) */
+  function gridMinorPx(): number {
+    const mpp = project.calibration.mpp || DEFAULT_MPP
+    const base = Math.max(0.01, gridStep) / mpp
+    for (const f of [1, 2, 5, 10, 20, 50, 100]) if (base * f * zoom >= 8) return base * f
+    return base * 100
+  }
+
   function drawingPoint(raw: TakeoffPoint): SnapResult {
     const drawingTool = tool === 'line' || tool === 'polygon' || tool === 'rect' || tool === 'floor' || tool === 'measure' || tool === 'click' || calibDrawing
     const ortho = orthoOn || shiftHeld
-    if (!drawingTool || (!snapOn && !ortho)) return { pt: raw, kind: 'none' }
+    if (!drawingTool || (!snapOn && !ortho && !gridSnap)) return { pt: raw, kind: 'none' }
     const polyMode = tool === 'line' || tool === 'polygon' || tool === 'measure' || (tool === 'floor' && floorDrawMode === 'polygon')
     const last = calibDrawing
       ? (calibPts.length === 1 ? calibPts[0] : undefined)
       : (isDrawing && polyMode && drawPoints.length > 0 ? drawPoints[drawPoints.length - 1] : undefined)
     const anchors = snapOn ? anchorsFor(elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)), drawPoints.slice(0, -1)) : []
-    return snapPoint(raw, { anchors, last, radius: 10 / zoom, snap: snapOn, ortho })
+    return snapPoint(raw, { anchors, last, radius: 10 / zoom, snap: snapOn, ortho, grid: gridSnap ? { stepPx: gridMinorPx() } : undefined })
   }
 
   /** Typing a length is on while a line, polygon, rectangle or floor is being drawn (not the measure tool or calibration). */
@@ -3435,6 +3448,14 @@ export default function TakeoffPage() {
   function renderSnapMarker() {
     if (!snapInfo?.target) return null
     const r = 6 / zoom, t = snapInfo.target
+    if (snapInfo.kind === 'grid') {
+      return (
+        <g style={{ pointerEvents: 'none' }}>
+          <line x1={t.x - r} y1={t.y} x2={t.x + r} y2={t.y} stroke="#0ea5e9" strokeWidth={2 / zoom} />
+          <line x1={t.x} y1={t.y - r} x2={t.x} y2={t.y + r} stroke="#0ea5e9" strokeWidth={2 / zoom} />
+        </g>
+      )
+    }
     return (
       <g style={{ pointerEvents: 'none' }}>
         {snapInfo.kind === 'end'
@@ -6030,6 +6051,10 @@ export default function TakeoffPage() {
             <button style={toggleBtn(snapOn)} aria-pressed={snapOn} onClick={() => setSnapOn(v => !v)} title="Snap to the corners, ends and mid-points of drawings already on the plan">🧲 Snap{snapOn ? ' ✓' : ''}</button>
             <button style={toggleBtn(orthoOn)} aria-pressed={orthoOn} onClick={() => setOrthoOn(v => !v)} title="Keep each line horizontal or vertical (hold Shift to do it for one line)">⊾ Ortho{orthoOn ? ' ✓' : ''}</button>
             <button style={toggleBtn(showGrid)} aria-pressed={showGrid} onClick={() => setShowGrid(v => !v)} title="Show the grid">⊞ Grid{showGrid ? ' ✓' : ''}</button>
+            <button style={toggleBtn(gridSnap)} aria-pressed={gridSnap} onClick={() => { setGridSnap(v => !v); if (!gridSnap) setShowGrid(true) }} title="Snap each point you draw to the nearest grid line crossing (a corner of another drawing still wins when you are right on it)">▦ Snap to grid{gridSnap ? ' ✓' : ''}</button>
+            <select value={gridStep} onChange={e => setGridStep(+e.target.value)} title="How far apart the grid lines are" style={{ background: 'var(--to-alt)', color: 'var(--to-text)', border: '1px solid var(--to-border)', borderRadius: 5, fontSize: 11, padding: '4px 4px', fontFamily: 'inherit' }}>
+              <option value={0.1}>100 mm</option><option value={0.25}>250 mm</option><option value={0.5}>500 mm</option><option value={1}>1 m</option>
+            </select>
           </div>
 
           {/* The selected drawing */}
@@ -6413,9 +6438,7 @@ export default function TakeoffPage() {
 
               {/* Grid */}
               {showGrid && (() => {
-                const mpp = project.calibration.mpp || DEFAULT_MPP
-                const pxPerM = 1 / mpp
-                const minor = Math.max(4, pxPerM)
+                const minor = gridMinorPx()
                 const major = minor * 5
                 const gridW = canvasImgSize?.w ?? svgSize.w / zoom
                 const gridH = canvasImgSize?.h ?? svgSize.h / zoom

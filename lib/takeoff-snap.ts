@@ -3,7 +3,7 @@
 
 export interface Pt { x: number; y: number }
 export interface SnapAnchor extends Pt { kind: 'end' | 'mid' }
-export type SnapKind = 'end' | 'mid' | 'ortho' | 'none'
+export type SnapKind = 'end' | 'mid' | 'ortho' | 'grid' | 'none'
 export interface SnapResult { pt: Pt; kind: SnapKind; /** the point snapped to (for the marker), if any */ target?: Pt }
 
 interface ShapeLike { type: 'line' | 'rect' | 'polygon'; points: Pt[] }
@@ -38,8 +38,9 @@ export function anchorsFor(elements: ShapeLike[], extra: Pt[] = []): SnapAnchor[
  * Where a click lands. `radius` is how close (in plan pixels: divide screen pixels by the zoom) the cursor has to be to a point to snap to it.
  *   ortho  with a previous point, the line from it is locked to horizontal or vertical (whichever the cursor is nearer to)
  *   snap   to the nearest corner or end (a corner wins over a mid-point that is a little nearer); while locked to ortho, a point that sits on the locked line is snapped to ALONG it
+ *   grid   when nothing else is near, the point goes to the nearest grid intersection (`stepPx` plan pixels apart, from the plan's top left corner); while locked to ortho only the free coordinate goes to a grid line
  */
-export function snapPoint(raw: Pt, o: { anchors: SnapAnchor[]; last?: Pt; radius: number; snap: boolean; ortho: boolean }): SnapResult {
+export function snapPoint(raw: Pt, o: { anchors: SnapAnchor[]; last?: Pt; radius: number; snap: boolean; ortho: boolean; grid?: { stepPx: number } }): SnapResult {
   let p: Pt = { x: raw.x, y: raw.y }
   let kind: SnapKind = 'none'
   let horizontal = false
@@ -62,6 +63,11 @@ export function snapPoint(raw: Pt, o: { anchors: SnapAnchor[]; last?: Pt; radius
       if (locked && o.last) return { pt: horizontal ? { x: best.x, y: o.last.y } : { x: o.last.x, y: best.y }, kind: best.kind, target }
       return { pt: target, kind: best.kind, target }
     }
+  }
+  if (o.grid && o.grid.stepPx > 0) {
+    const s = o.grid.stepPx, r = (v: number) => Math.round(v / s) * s
+    const g = locked ? (horizontal ? { x: r(p.x), y: p.y } : { x: p.x, y: r(p.y) }) : { x: r(p.x), y: r(p.y) }
+    return { pt: g, kind: 'grid', target: g }
   }
   return { pt: p, kind }
 }
