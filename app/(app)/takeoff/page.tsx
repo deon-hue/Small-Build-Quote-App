@@ -1878,9 +1878,15 @@ export default function TakeoffPage() {
     if (!roomCore) return null
     const mpp = project.calibration.mpp
     const none: RoomWithOpenings = { doors: 0, windows: 0, doorWidthM: 0, doorAreaM2: 0, windowAreaM2: 0 }
-    const drawnNow = drawnRooms
+    // a room you drew and then built walls round is the same room twice: the room the walls make wins (it is measured between the wall faces), and the drawn one is left out of the list, the plan labels and the calculators
+    const coveredIds = new Set<string>()
+    const drawnNow = drawnRooms.filter(d => {
+      const covered = roomCore.found.some(f => pointInPolygon(d.labelAt, f.polygon) || pointInPolygon(f.labelAt, d.polygon))
+      if (covered && d.drawnId) coveredIds.add(d.drawnId)
+      return !covered
+    })
     const all = sortRooms([...roomCore.found.map((r, i) => ({ labelAt: r.labelAt, r, c: roomCore.counts[i] })), ...drawnNow.map(r => ({ labelAt: r.labelAt, r, c: none }))], mpp)
-    return { rooms: all.map(x => x.r), counts: all.map(x => x.c), cellMm: roomCore.cellMm, hasWalls: roomCore.hasWalls || drawnNow.length > 0, sheetId: roomCore.sheetId }
+    return { rooms: all.map(x => x.r), counts: all.map(x => x.c), cellMm: roomCore.cellMm, hasWalls: roomCore.hasWalls || drawnNow.length > 0, sheetId: roomCore.sheetId, coveredDrawn: Array.from(coveredIds).filter(id => !drawnNow.some(d => d.drawnId === id)) }
   })()
   const roomInfos: PlanRoomInfo[] = roomData ? describeRooms(roomData.rooms, roomLabels, roomData.counts) : []
   const roomLabelIdx = roomData ? labelIndexForRooms(roomData.rooms, roomLabels) : []
@@ -2029,6 +2035,13 @@ export default function TakeoffPage() {
     setProject(p => setRoomEdges(p, roomEdgesOf(p).filter(e => e.id !== id)))
     setSelectedEdgeId(null)
   }
+  /** the rooms drawn under walls that now make the same room: only the drawn outlines go (the names stay, they belong to the rooms the walls make) */
+  function deleteCoveredDrawn() {
+    const ids = new Set(roomData?.coveredDrawn ?? [])
+    if (ids.size === 0) return
+    setProject(p => setRoomShapes(p, roomShapesOf(p).filter(s => !ids.has(s.id))))
+    showToast('The drawn outline' + (ids.size > 1 ? 's' : '') + ' under the walls removed')
+  }
   function startRoomDraw(kind: 'rect' | 'polygon' | 'edge') {
     setRoomDraw(kind === 'edge' ? 'edge' : 'room'); setTool(kind === 'edge' ? 'line' : kind); setDrawPoints([]); setIsDrawing(false); setTyped('')
     showToast(kind === 'edge' ? 'Click where the room edge starts and where it ends (it closes the room along that line); double-click to finish' : kind === 'rect' ? 'Click two opposite corners of the room (or type its size, like 4.5x3, and press Enter)' : 'Click each corner of the room, double-click to finish')
@@ -2083,6 +2096,8 @@ export default function TakeoffPage() {
         onDraw={startRoomDraw}
         isDrawn={i => !!roomData?.rooms[i]?.drawnId}
         onDeleteDrawn={deleteDrawnRoom}
+        coveredDrawn={roomData?.coveredDrawn.length ?? 0}
+        onDeleteCovered={deleteCoveredDrawn}
         drawnSize={(() => {
           const mpp = project.calibration.mpp
           const id = roomData?.rooms[selectedRoomIdx]?.drawnId
@@ -3058,7 +3073,9 @@ export default function TakeoffPage() {
   /** the points of other walls that come along when this wall (or one of its corners) is dragged: joined corners and tees. Hold Alt to move a wall on its own. */
   function linksForDrag(el: DrawnElement, vertexIndex: number | undefined, alt: boolean): DragLink[] {
     if (alt || (el.phase !== 'External Walls' && el.phase !== 'Internal Walls & Partitions')) return []
-    return buildDragLinks(el, vertexIndex, wallsOnSheet(), 3)
+    // a partition never drags the outside walls with it (it only meets them): an internal wall carries only other internal walls joined to it; an outside wall carries what is joined to it, partitions included
+    const others = wallsOnSheet().filter(w => el.phase === 'Internal Walls & Partitions' ? w.phase === 'Internal Walls & Partitions' : true)
+    return buildDragLinks(el, vertexIndex, others, 3)
   }
 
   function drawingPoint(raw: TakeoffPoint): SnapResult {

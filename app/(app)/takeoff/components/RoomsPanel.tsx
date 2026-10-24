@@ -28,6 +28,9 @@ interface Props {
   /** this room was drawn as a shape (it can be deleted here) rather than found from walls */
   isDrawn: (idx: number) => boolean
   onDeleteDrawn: (idx: number) => void
+  /** how many rooms drawn as shapes now lie under walls that make the same room (they are not counted), and a way to remove their outlines */
+  coveredDrawn: number
+  onDeleteCovered: () => void
   /** the selected drawn rectangle's width and depth, m (null for any other room) and a way to change them (its top-left corner stays) */
   drawnSize: { widthM: number; depthM: number } | null
   onResizeDrawn: (idx: number, widthM: number, depthM: number) => void
@@ -87,6 +90,13 @@ export default function RoomsPanel(p: Props) {
         )}
         <div style={{ fontSize: 10.5, color: 'var(--to-muted)', marginTop: 5, lineHeight: 1.4 }}>For a room with no walls drawn round it: its outline is the floor. Or draw the walls and the room is found by itself.</div>
       </div>
+
+      {p.coveredDrawn > 0 && (
+        <div style={{ ...box, borderColor: '#d97706', fontSize: 11.5, color: 'var(--to-text)', lineHeight: 1.5 }}>
+          You drew {p.coveredDrawn === 1 ? 'a room' : p.coveredDrawn + ' rooms'} and then built walls round {p.coveredDrawn === 1 ? 'it' : 'them'}. The walls make the room (measured between their faces), so the drawn outline{p.coveredDrawn === 1 ? ' is' : 's are'} not counted twice.
+          <div><button type="button" onClick={p.onDeleteCovered} style={{ marginTop: 6, padding: '4px 9px', fontSize: 11.5, borderRadius: 5, cursor: 'pointer', border: '1px solid #d97706', background: 'transparent', color: '#d97706', fontFamily: 'inherit' }}>Remove the drawn outline{p.coveredDrawn === 1 ? '' : 's'}</button></div>
+        </div>
+      )}
 
       {p.rooms.length === 0 && (
         <div style={{ ...box, fontSize: 11.5, color: 'var(--to-muted)', lineHeight: 1.5 }}>
