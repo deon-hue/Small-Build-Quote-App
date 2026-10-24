@@ -8,13 +8,13 @@
  * the tiling calculators is components/TilingCalcFrame.tsx.
  */
 
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import { useCalcState } from '@/components/calc-state'
 import type { CostedLine } from '@/lib/assembly-calc'
 import {
-  calculateWindowsDoors, newOpening, unitPrice, KINDS, KIND_BY_ID, isInternalDoor, isWindow, DEFAULT_WD_SITUATIONS,
+  calculateWindowsDoors, newOpening, unitPrice, mergePlanOpenings, planOpeningSig, KINDS, KIND_BY_ID, isInternalDoor, isWindow, DEFAULT_WD_SITUATIONS,
   MATERIAL_LABEL, GLAZING_LABEL, SUPPLY_LABEL, SWING_LABEL, CILL_LABEL,
-  type WdOpening, type WdResult, type OpeningKind, type WdMaterial, type WdGlazing, type WdSupply, type WdSwing, type CillChoice,
+  type WdOpening, type PlanOpening, type WdResult, type OpeningKind, type WdMaterial, type WdGlazing, type WdSupply, type WdSwing, type CillChoice,
 } from '@/lib/wd-units'
 import { describeWd, describeWdShort, type WdDescriptionInput } from '@/lib/wd-description'
 import { suggestWindowsDoorsLabour } from '@/lib/flat-roof-labour'
@@ -26,6 +26,8 @@ interface Props {
   onClose?: () => void
   onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }) => void
   labourTrades?: BOLabourTrade[]
+  /** the doors and windows placed on the Take-off drawing: they are added here, and follow the drawing until typed over */
+  planOpenings?: PlanOpening[]
 }
 
 const uid = () => Math.random().toString(36).slice(2, 9)
@@ -43,12 +45,18 @@ function nextRef(openings: WdOpening[], kind: OpeningKind): string {
   return `${prefix}${used + 1}`
 }
 
-export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades = [] }: Props) {
+export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades = [], planOpenings }: Props) {
   const ID = 'AssemblyWindowsDoorsDemo'
   // The job starts with no openings: you add the ones the job has
   const [openings, setOpenings] = useCalcState<WdOpening[]>(ID, 'openings', [])
   const [addKind, setAddKind] = useCalcState<OpeningKind>(ID, 'addKind', 'win-casement')
   const [jobSituationId, setJobSituationId] = useCalcState(ID, 'jobSituationId', 'ground')
+
+  // the openings drawn on the plan: added here, kept in step with the drawing (one typed over stays as typed until the drawing's opening changes)
+  const planKey = planOpenings ? planOpenings.map(planOpeningSig).join(';') + '#' + planOpenings.map(p => p.id).join(',') : null
+  useEffect(() => {
+    if (planOpenings) setOpenings(p => mergePlanOpenings(p, planOpenings))
+  }, [planKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function addOpening() {
     setOpenings(p => [...p, newOpening('op-' + uid(), nextRef(p, addKind), addKind)])
@@ -57,7 +65,7 @@ export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades
   /** a different kind of opening: its standard size, material and trims (what was typed in the old one's fields is dropped, but the reference, room and number stay) */
   function changeKind(o: WdOpening, kind: OpeningKind) {
     const fresh = newOpening(o.id, nextRef(openings.filter(x => x.id !== o.id), kind), kind, o.location)
-    setOpenings(p => p.map(x => (x.id === o.id ? { ...fresh, qty: o.qty, supply: o.supply, pcEach: o.pcEach, removeOld: o.removeOld } : x)))
+    setOpenings(p => p.map(x => (x.id === o.id ? { ...fresh, qty: o.qty, supply: o.supply, pcEach: o.pcEach, removeOld: o.removeOld, planId: o.planId, fromPlan: o.fromPlan } : x)))
   }
 
   const result = useMemo((): { ok: true; r: WdResult } | { ok: false; error: string } => {

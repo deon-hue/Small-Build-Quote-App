@@ -61,6 +61,7 @@ import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
 import type { CostedLine } from '@/lib/assembly-calc'
 import type { AssemblyBasics } from '@/lib/assembly-basics'
 import type { PlanRoom, ElectricsSavedState } from '@/lib/electrics-units'
+import type { PlanOpening } from '@/lib/wd-units'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import type { CalcSize } from '@/lib/calc-size'
 
@@ -106,6 +107,8 @@ export interface AssemblyRenderOpts {
   calcState?: CalcStateSnapshot
   /** Electrics only: the points placed on the Take-off plan (as room counts), and what the calculator was last saved as. */
   electrics?: { planRooms?: PlanRoom[]; initialState?: ElectricsSavedState }
+  /** Windows & Doors only: the doors and windows placed on the Take-off plan, which the calculator adds and follows. */
+  planOpenings?: PlanOpening[]
 }
 
 type BuiltAssemblyEntry = {
@@ -153,7 +156,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'demo-strip-out-calc': { icon: 'strip-out', render: opts => <AssemblyStripOutDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'demo-waste-skips-calc': { icon: 'waste-skips', render: opts => <AssemblyWasteDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'demo-external-calc': { icon: 'external-demo', render: opts => <AssemblyExternalDemoDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
-  'wd-schedule': { icon: 'windows-doors', render: opts => <AssemblyWindowsDoorsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
+  'wd-schedule': { icon: 'windows-doors', render: opts => <AssemblyWindowsDoorsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} planOpenings={opts?.planOpenings} /> },
   'tile-floor-rooms': { icon: 'tile-floor', render: opts => <AssemblyTileFloorDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} /> },
   'tile-wall-rooms': { icon: 'tile-wall', render: opts => <AssemblyTileWallDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} externalLengthMm={opts?.externalLengthMm} /> },
   'tile-prep-rooms': { icon: 'tile-prep', render: opts => <AssemblyTilePrepDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} /> },

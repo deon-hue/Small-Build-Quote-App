@@ -184,6 +184,20 @@ export function wallDrawing(points: Pt[], spec: WallSpec, mpp: number, o: { ref:
   return { strips, body: [...outerLine, ...innerLine.slice().reverse()], bodyD: o.closed ? ring(outerLine) + ring(innerLine) : ring([...outerLine, ...innerLine.slice().reverse()]), centre, totalPx: total }
 }
 
+/** The two faces of a wall as offsets across its drawn line (to the right of the way it runs), and which side the inside of the building is: where doors and windows are cut into it. Same rules as wallDrawing. */
+export function wallBand(points: Pt[], spec: WallSpec, mpp: number, o: { ref: 'outer' | 'centre'; closed: boolean; flip?: boolean }): { lo: number; hi: number; inside: 1 | -1 } | null {
+  if (!(mpp > 0) || points.length < 2) return null
+  const pts = dedupe(points, o.closed)
+  if (pts.length < 2 || (o.closed && pts.length < 3)) return null
+  const total = totalMm(spec.layers) / (mpp * 1000)
+  let dir = 1
+  if (o.closed && signedArea(pts) < 0) dir = -1
+  if (o.flip) dir = -dir
+  const start = o.ref === 'outer' ? 0 : -total / 2
+  const a = start * dir, b = (start + total) * dir
+  return { lo: Math.min(a, b), hi: Math.max(a, b), inside: dir as 1 | -1 }
+}
+
 /** How each kind of layer is painted: a fill colour, a line colour, and the hatching convention (on screen it is only drawn when the layer is wide enough to show it). */
 export const LAYER_STYLE: Record<LayerKind, { fill: string; line: string; hatch: 'diag' | 'cross' | 'dots' | 'zig' | 'none' | 'wood' }> = {
   brick:      { fill: '#e9b8a4', line: '#8c3a1f', hatch: 'diag' },

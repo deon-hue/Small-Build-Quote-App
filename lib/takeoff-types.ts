@@ -5,11 +5,12 @@
 import type { WallConstructionType, WallFinishType, CalculatedMaterial } from './material-recipes'
 import type { CostedLine } from './assembly-calc'
 import type { ElectricPoint } from './electric-points'
+import type { PlacedOpening } from './wall-openings'
 import type { CalcStateSnapshot } from './calc-snapshot'
 
 // ── Drawing tools ─────────────────────────────────────────────────────────────
 
-export type DrawingTool = 'select' | 'line' | 'rect' | 'polygon' | 'floor' | 'click' | 'electric' | 'measure'
+export type DrawingTool = 'select' | 'line' | 'rect' | 'polygon' | 'floor' | 'click' | 'electric' | 'opening' | 'measure'
 
 // ── Measurement categories (match quote parentPhase names) ────────────────────
 
@@ -258,6 +259,12 @@ export interface TakeoffItem {
   electricsState?: unknown
   /** the plan's points (as room counts) when the calculator was last saved, to say when the plan has changed since */
   electricsPricedKey?: string
+
+  // Windows & Doors: the one "Windows and doors" item holds every door and window placed on a drawn wall (so they save with the project) and what the Windows & Doors calculator was last saved as.
+  wdSummary?: boolean
+  placedOpenings?: PlacedOpening[]
+  /** the openings on the plan when the calculator was last saved, to say when the plan has changed since */
+  wdPricedKey?: string
 }
 
 // ── Construction Layer Cost Records ──────────────────────────────────────────

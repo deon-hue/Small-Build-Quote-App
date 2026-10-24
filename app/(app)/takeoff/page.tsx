@@ -17,11 +17,14 @@ import { BUILT_ASSEMBLY_CANON_IDS } from '@/lib/built-assemblies'
 import { WALL_MAKEUP_TO_SUBPHASE_CANONICAL } from '@/lib/built-assembly-ids'
 import AssemblyItemPanel from './components/AssemblyWindow'
 import ElectricalPointsPanel, { POINT_GROUP_COLOUR } from './components/ElectricalPointsPanel'
+import OpeningsPanel from './components/OpeningsPanel'
 import { POINT_BY_ID, type ElectricsSavedState } from '@/lib/electrics-units'
 import { planRoomsFromPoints, roomAtPoint, rectToPolygon, POINT_SHORT, type ElectricPoint } from '@/lib/electric-points'
 
 // The one Take-off item that holds every electrical point placed on the plan (and the electrics calculator's saved price).
 const ELECTRICS_ITEM_ID = 'electrics-summary'
+const WD_ITEM_ID = 'wd-summary'
+const OPENING_COLOUR = { win: '#2b6cb0', ext: '#7c3aed', int: '#b45309' }
 
 // A drawn foundation line's Foundation Type -> its build-up id (see FOUNDATION_MAKEUPS). A type whose build-up has a calculator (WALL_MAKEUP_TO_SUBPHASE_CANONICAL) is priced by it.
 const FOUNDATION_MAKEUP_BY_TYPE: Record<string, string | null> = { trench_fill: 'trench_fill', strip: 'strip_found', pad_edge: 'pad_found', raft_edge: 'raft_found', piled: 'piled_found', underpin: 'underpin', other: null }
@@ -39,7 +42,9 @@ import { sharedWallRoomsFrom } from '@/lib/tiling-share'
 import ClientProjectModal from './components/ClientProjectModal'
 import ClientFilePicker from '@/components/ClientFilePicker'
 import { planResize, applyResize } from '@/lib/calc-size'
-import { wallDrawing, chainWalls, cavityWallSpec, solidBlockSpec, specFromMakeupLayers, defaultWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
+import { wallDrawing, wallBand, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, specFromMakeupLayers, defaultWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
+import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, type PlacedOpening, type WallBand } from '@/lib/wall-openings'
+import { KIND_BY_ID as WD_KIND_BY_ID, planOpeningSig, type OpeningKind, type WdSwing, type PlanOpening } from '@/lib/wd-units'
 import { cornersOf, snapPoint, anchorsFor, parseTyped, pointAtDistance, rectCornerAt, rotateShape, type SnapResult } from '@/lib/takeoff-snap'
 import { newHistory, observe as observeHistory, undoStep, redoStep, type History } from '@/lib/takeoff-history'
 import ConstructionLayerModal, { saveLayerCostToBackOffice } from './components/ConstructionLayerModal'
@@ -80,7 +85,7 @@ const PHASE_DEFAULT_TOOL: Record<string, DrawingTool> = {
   'Structural Frame':             'line',
   'External Walls':               'line',
   'Roof':                         'polygon',
-  'Windows & Doors':              'rect',
+  'Windows & Doors':              'opening',
   'Internal Walls & Partitions':  'line',
   'Floors & Screeds':             'polygon',
   'Drainage & Services':          'line',
@@ -128,6 +133,7 @@ const TOOL_DISPLAY: Record<DrawingTool, string> = {
   floor:   'Floor Area',
   click:   'Click to Place Item',
   electric: 'Place Electrical Point',
+  opening: 'Place Window / Door',
   measure: 'Measure',
 }
 
@@ -646,6 +652,11 @@ export default function TakeoffPage() {
   const [electricTypeId, setElectricTypeId] = useState('dbl-socket')
   const [electricRoom, setElectricRoom] = useState('')
   const [selectedElectricPointId, setSelectedElectricPointId] = useState<string | null>(null)
+  // Windows & Doors: the kind, size and swing of the next opening, the placed opening that is selected, and where the pointer is (unsnapped) for the ghost
+  const [openingKind, setOpeningKind] = useState<OpeningKind>('win-casement')
+  const [openingNext, setOpeningNext] = useState<{ widthMm: number; heightMm: number; swing: WdSwing }>({ widthMm: 1200, heightMm: 1200, swing: 'in-left' })
+  const [selectedOpeningId, setSelectedOpeningId] = useState<string | null>(null)
+  const [rawMouse, setRawMouse] = useState<TakeoffPoint | null>(null)
   const [selectedTaskSubphaseId, setSelectedTaskSubphaseId] = useState<string | null>(null)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
 
@@ -1297,6 +1308,7 @@ export default function TakeoffPage() {
       })
       return
     }
+    if (tool === 'opening') setRawMouse(svgCoords(e))
     const snapped = drawingPoint(svgCoords(e))
     setMousePos(snapped.pt)
     setSnapInfo(snapped.kind === 'none' ? null : snapped)
@@ -1363,6 +1375,10 @@ export default function TakeoffPage() {
     if (tool === 'electric') {
       if (activePhase !== 'Electrics') { showToast('⚡ Choose the Electrics phase to place electrical points'); return }
       placeElectricPoint(svgCoords(e))
+      return
+    }
+    if (tool === 'opening') {
+      placeOpening(svgCoords(e))
       return
     }
     if (tool === 'measure') {
@@ -1494,6 +1510,7 @@ export default function TakeoffPage() {
   }
   function resolveBuiltAssembly(it: TakeoffItem) {
     if (it.electricsSummary) return BUILT_ASSEMBLY_CANON_IDS['elec-install']
+    if (it.wdSummary) return BUILT_ASSEMBLY_CANON_IDS['wd-schedule']
     const demoCalc = demoCalcSub(it)
     if (demoCalc?.calculatorId) return BUILT_ASSEMBLY_CANON_IDS[demoCalc.calculatorId]
     // External walls and roofs both: a calculator picked by sub-phase, else the Build-up Type.
@@ -1621,6 +1638,206 @@ export default function TakeoffPage() {
     window.addEventListener('mouseup', up)
   }
 
+  // ── Doors and windows placed on walls (Windows & Doors) ───────────────────
+  // They are kept on one "Windows and doors" item (created the first time one is placed) so they save and load with the project; each is a distance along its wall's drawn line, so it keeps its place when the wall is reshaped.
+  // The Windows & Doors calculator is fed them (PlanOpening) and keeps its own openings in step with the plan until one is typed over.
+  const wdItem = project.items.find(it => it.wdSummary)
+  const allPlaced: PlacedOpening[] = wdItem?.placedOpenings ?? []
+  // an opening whose wall has been deleted is not shown or counted (and comes back with the wall if the deletion is undone)
+  const livePlaced = allPlaced.filter(o => project.elements.some(e => e.id === o.wallId))
+
+  function newWdItem(): TakeoffItem {
+    const sub = boSubPhases.find(sp => sp.canonical_id === 'wd-schedule')
+    return { id: WD_ITEM_ID, name: 'Windows and doors', phase: 'Windows & Doors', qty: 1, unit: 'item', wdSummary: true, placedOpenings: [], ...(sub && { taskSubphaseId: sub.id, subPhase: sub.name }) }
+  }
+  function changeWdItem(fn: (it: TakeoffItem) => TakeoffItem) {
+    setProject(p => {
+      const items = p.items.some(it => it.wdSummary) ? p.items : [...p.items, newWdItem()]
+      return { ...p, items: items.map(it => it.wdSummary ? fn(it) : it) }
+    })
+  }
+  function changePlaced(fn: (list: PlacedOpening[]) => PlacedOpening[]) {
+    changeWdItem(it => ({ ...it, placedOpenings: fn(it.placedOpenings ?? []) }))
+  }
+  function pickOpeningKind(k: OpeningKind) {
+    const info = WD_KIND_BY_ID[k]
+    setOpeningKind(k)
+    setOpeningNext(n => ({ ...n, widthMm: info.stdW, heightMm: info.stdH }))
+  }
+
+  /** a drawn wall's line (a rectangle or polygon wall is a closed outline) and its two faces: where an opening is cut and drawn */
+  function wallGeometry(el: DrawnElement): { path: TakeoffPoint[]; closed: boolean; band: WallBand } | null {
+    if (el.phase !== 'External Walls' && el.phase !== 'Internal Walls & Partitions') return null
+    const mpp = project.calibration.mpp
+    if (!(mpp > 0)) return null
+    const closed = el.type !== 'line'
+    const path = el.type === 'rect' ? cornersOf(el) : el.points
+    if (path.length < 2) return null
+    const ws = wallSpecFor(el)
+    let band: WallBand | null = ws ? wallBand(path, ws.spec, mpp, { ref: ws.ref, closed, flip: ws.flip }) : null
+    if (!band) {
+      const half = project.items.find(it => it.elementId === el.id)?.wallBandPx ?? 9   // a wall not drawn at real thickness is a band centred on the line
+      band = { lo: -half, hi: half, inside: closed && signedArea(path) < 0 ? -1 : 1 }
+    }
+    return { path, closed, band }
+  }
+
+  /** the wall (on the showing sheet) nearest a point, if the point is on it or close beside it */
+  function nearestWall(pt: TakeoffPoint) {
+    let best: { el: DrawnElement; g: NonNullable<ReturnType<typeof wallGeometry>>; dist: number; score: number; off: number } | null = null
+    for (const el of elementsOnActiveSheet(project)) {
+      if (hiddenPhases.has(el.phase)) continue
+      const g = wallGeometry(el)
+      if (!g) continue
+      const loc = locateOnPath(g.path, g.closed, pt)
+      if (!loc) continue
+      const across = (pt.x - loc.x) * -loc.ty + (pt.y - loc.y) * loc.tx   // which side of the line, and how far, the point is
+      const score = across < g.band.lo ? g.band.lo - across : across > g.band.hi ? across - g.band.hi : 0
+      if (!best || score < best.score || (score === best.score && loc.off < best.off)) best = { el, g, dist: loc.dist, score, off: loc.off }
+    }
+    return best && best.score <= 24 / zoom ? best : null
+  }
+
+  function placeOpening(pt: TakeoffPoint) {
+    const mpp = project.calibration.mpp
+    if (!(mpp > 0)) { showToast('Set the scale of the plan first, so the openings are the right size'); return }
+    const hit = nearestWall(pt)
+    if (!hit) { showToast('Click on a wall to put the opening in it (draw the walls first in External Walls or Internal Walls & Partitions)'); return }
+    const half = openingNext.widthMm / (mpp * 1000) / 2
+    const id = uid()
+    const ref = nextOpeningRef(allPlaced, openingKind)
+    const distPx = clampDist(hit.g.path, hit.g.closed, hit.dist, half)
+    changePlaced(list => [...list, { id, wallId: hit.el.id, distPx, kind: openingKind, widthMm: openingNext.widthMm, heightMm: openingNext.heightMm, swing: openingNext.swing, ref, ...(activeSheetId ? { sheetId: activeSheetId } : {}) }])
+    setSelectedOpeningId(id)
+  }
+
+  function deleteOpening(id: string) {
+    changePlaced(list => list.filter(o => o.id !== id))
+    setSelectedOpeningId(null)
+  }
+
+  /** moves an opening to a distance (mm to its centre) along its own wall */
+  function moveOpeningAlong(id: string, mm: number) {
+    const o = allPlaced.find(q => q.id === id)
+    const el = o && project.elements.find(e => e.id === o.wallId)
+    const g = el && wallGeometry(el)
+    if (!o || !g) return
+    const mpp = project.calibration.mpp
+    changePlaced(list => list.map(q => q.id === id ? { ...q, distPx: clampDist(g.path, g.closed, mm / (mpp * 1000), q.widthMm / (mpp * 1000) / 2) } : q))
+  }
+
+  function startOpeningDrag(e: React.MouseEvent, o: PlacedOpening) {
+    if (tool !== 'select') return
+    e.stopPropagation()
+    setSelectedOpeningId(o.id)
+    setSelectedId(null); setEditingElement(null)
+    setPanelMode('properties')
+    setEditingItem(wdItem ?? null)
+    const rect = svgRef.current!.getBoundingClientRect()
+    const pan = panOffset, z = zoom
+    const mpp = project.calibration.mpp
+    const move = (ev: MouseEvent) => {
+      const pt = { x: (ev.clientX - rect.left - pan.x) / z, y: (ev.clientY - rect.top - pan.y) / z }
+      const hit = nearestWall(pt)
+      if (!hit) return
+      const distPx = clampDist(hit.g.path, hit.g.closed, hit.dist, o.widthMm / (mpp * 1000) / 2)
+      changePlaced(list => list.map(q => q.id === o.id ? { ...q, wallId: hit.el.id, distPx } : q))
+    }
+    const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up) }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+  }
+
+  /** the openings drawn on the walls: the wall is cut (a white gap), the jambs, a window's glass, a door's leaf and swing arc, bi-fold panels; with the ghost of the next one under the pointer while placing */
+  function renderOpenings() {
+    const mpp = project.calibration.mpp
+    if (!(mpp > 0) || hiddenPhases.has('Windows & Doors')) return null
+    const els = elementsOnActiveSheet(project)
+    const colourOf = (k: OpeningKind) => (k.startsWith('win-') ? OPENING_COLOUR.win : k.startsWith('door-int-') ? OPENING_COLOUR.int : OPENING_COLOUR.ext)
+    const sw = (n: number) => n / zoom
+    const draw = (shape: NonNullable<ReturnType<typeof openingShape>>, colour: string, key: string, text: string | null, picked: boolean) => (
+      <g key={key}>
+        {shape.prims.map((pr, i) => {
+          if (pr.type === 'poly') return <polygon key={i} points={pr.pts.map(q => q.x + ',' + q.y).join(' ')} fill="#ffffff" stroke="none" />
+          if (pr.type === 'arc') return <path key={i} d={`M${pr.from.x} ${pr.from.y}A${pr.r} ${pr.r} 0 0 ${pr.sweep} ${pr.to.x} ${pr.to.y}`} fill="none" stroke={colour} strokeWidth={sw(1)} strokeDasharray={`${sw(4)} ${sw(3)}`} />
+          const st = pr.style
+          return <line key={i} x1={pr.a.x} y1={pr.a.y} x2={pr.b.x} y2={pr.b.y} stroke={st === 'jamb' ? '#222' : st === 'glass' ? colour : colour} strokeWidth={sw(st === 'jamb' ? 1.6 : st === 'leaf' ? 2.2 : st === 'frame' ? 1.4 : 1.1)} strokeDasharray={st === 'dash' ? `${sw(5)} ${sw(3)}` : undefined} strokeLinecap="round" />
+        })}
+        {picked && <polygon points={shape.gap.map(q => q.x + ',' + q.y).join(' ')} fill="none" stroke="#1565c0" strokeWidth={sw(2.5)} strokeDasharray={`${sw(6)} ${sw(3)}`} />}
+        {text !== null && <text x={shape.labelAt.x} y={shape.labelAt.y} textAnchor="middle" dominantBaseline="central" fontSize={sw(10)} fontWeight={700} fill={colour} stroke="#fff" strokeWidth={sw(3)} paintOrder="stroke" style={{ pointerEvents: 'none' }}>{text}</text>}
+      </g>
+    )
+    const placed = allPlaced.map(o => {
+      const el = els.find(e => e.id === o.wallId)
+      const g = el && wallGeometry(el)
+      const shape = g ? openingShape(g.path, g.closed, o, mpp, g.band, sw(10)) : null
+      if (!shape) return null
+      return (
+        <g key={'op-' + o.id} onMouseDown={ev => startOpeningDrag(ev, o)} onClick={ev => { if (tool === 'select') ev.stopPropagation() }}
+          style={{ cursor: tool === 'select' ? 'move' : 'inherit', pointerEvents: tool === 'select' ? undefined : 'none' }}>
+          {draw(shape, colourOf(o.kind), 'd', o.ref, o.id === selectedOpeningId)}
+          <polygon points={shape.gap.map(q => q.x + ',' + q.y).join(' ')} fill="rgba(0,0,0,0.001)" stroke="none" />
+        </g>
+      )
+    })
+    let ghost: React.ReactNode = null
+    if (tool === 'opening' && rawMouse) {
+      const hit = nearestWall(rawMouse)
+      if (hit) {
+        const half = openingNext.widthMm / (mpp * 1000) / 2
+        const shape = openingShape(hit.g.path, hit.g.closed, { distPx: clampDist(hit.g.path, hit.g.closed, hit.dist, half), kind: openingKind, widthMm: openingNext.widthMm, swing: openingNext.swing }, mpp, hit.g.band, sw(10))
+        if (shape) ghost = <g key="ghost" opacity={0.6} style={{ pointerEvents: 'none' }}>{draw(shape, colourOf(openingKind), 'g', nextOpeningRef(allPlaced, openingKind), false)}</g>
+      }
+    }
+    return <g>{placed}{ghost}</g>
+  }
+
+  function renderOpeningsPanel() {
+    const mpp = project.calibration.mpp
+    const it = wdItem
+    const built = BUILT_ASSEMBLY_CANON_IDS['wd-schedule']
+    const plan: PlanOpening[] = livePlaced.map(o => ({ id: o.id, ref: o.ref, location: o.location, kind: o.kind, widthMm: o.widthMm, heightMm: o.heightMm, swing: o.swing }))
+    const planKey = plan.map(planOpeningSig).join(';') + '#' + plan.map(o => o.id).join(',')
+    const stale = !!it?.assemblyResult && it.wdPricedKey !== undefined && it.wdPricedKey !== planKey
+    const sel = livePlaced.find(o => o.id === selectedOpeningId)
+    const selEl = sel ? project.elements.find(e => e.id === sel.wallId) : undefined
+    const selGeo = selEl ? wallGeometry(selEl) : null
+    return (
+      <OpeningsPanel
+        openings={livePlaced}
+        placing={tool === 'opening'}
+        onPlacing={on => { setTool(on ? 'opening' : 'select'); if (!on) { setDrawPoints([]); setIsDrawing(false); setRawMouse(null) } }}
+        kind={openingKind} onKind={pickOpeningKind}
+        widthMm={openingNext.widthMm} heightMm={openingNext.heightMm} swing={openingNext.swing}
+        onNext={patch => setOpeningNext(n => ({ ...n, ...patch }))}
+        selectedId={selectedOpeningId} onSelect={setSelectedOpeningId}
+        onUpdate={(id, patch) => changePlaced(list => list.map(q => q.id === id ? { ...q, ...patch } : q))}
+        onDelete={deleteOpening}
+        selectedAlong={sel && selGeo && mpp > 0 ? { mm: sel.distPx * mpp * 1000, wallMm: pathLength(selGeo.path, selGeo.closed) * mpp * 1000 } : undefined}
+        onMoveAlong={moveOpeningAlong}
+        saved={it?.assemblyResult}
+        stale={stale}
+        calculatorOpen={assemblyWindowItemId === WD_ITEM_ID}
+        onOpenCalculator={() => { changeWdItem(x => x); setAssemblyWindowItemId(WD_ITEM_ID) }}
+        onCloseCalculator={() => setAssemblyWindowItemId(null)}
+        calculator={built?.render({
+          labourTrades,
+          calcState: it?.assemblyCalcState,
+          planOpenings: plan,
+          onSave: result => {
+            const { calcState, state: _state, size: _size, ...res } = result
+            const sub = boSubPhases.find(sp => sp.canonical_id === 'wd-schedule')
+            changeWdItem(x => ({
+              ...x, assemblyResult: res, assemblyCalcState: calcState, wdPricedKey: planKey, name: result.name,
+              ...(sub && { taskSubphaseId: sub.id, subPhase: sub.name }),
+            }))
+            setAssemblyWindowItemId(null)
+          },
+        })}
+      />
+    )
+  }
+
   function renderElectricsPanel() {
     const planRooms = planRoomsFromPoints(electricPoints)
     const it = electricsItem
@@ -1678,6 +1895,7 @@ export default function TakeoffPage() {
   // ── Select element ─────────────────────────────────────────────────────────
   function selectElement(el: DrawnElement) {
     if (tool !== 'select') return
+    setSelectedOpeningId(null)
     setSelectedId(el.id)
     setEditingElement(el)
     const item = project.items.find(it => it.elementId === el.id) ?? null
@@ -1982,7 +2200,7 @@ export default function TakeoffPage() {
     setResetInProgress(true)
     createRecoverySnapshot('clear')
     // Keep items that are NOT linked to any element (manually-added, pricing-only rows)
-    const unlinkedItems = project.items.filter(it => !it.elementId).map(it => it.electricsSummary ? { ...it, electricPoints: [] } : it)
+    const unlinkedItems = project.items.filter(it => !it.elementId).map(it => it.electricsSummary ? { ...it, electricPoints: [] } : it.wdSummary ? { ...it, placedOpenings: [] } : it)
     setProject(p => ({
       ...p,
       elements: [],
@@ -2385,9 +2603,11 @@ export default function TakeoffPage() {
       }
       if (!inField && !e.ctrlKey && !e.metaKey && !isDrawing && selectedId && (e.key === 'r' || e.key === 'R')) { rotateSelected(90); return }
       if ((e.key === 'Delete' || e.key === 'Backspace') && !inField && !isDrawing) {
-        deleteSelected()
+        if (selectedOpeningId) deleteOpening(selectedOpeningId)
+        else deleteSelected()
       }
       if (e.key === 'Escape') {
+        setSelectedOpeningId(null)
         setDrawPoints([])
         setIsDrawing(false)
         setMeasureDone(null)
@@ -4906,6 +5126,7 @@ export default function TakeoffPage() {
   function renderProperties() {
     const item = editingItem ?? phaseDefaults
     if ((activePhase === 'Electrics' && tool === 'electric') || item?.electricsSummary) return renderElectricsPanel()
+    if ((activePhase === 'Windows & Doors' && tool === 'opening') || item?.wdSummary) return renderOpeningsPanel()
     if (!item) {
       return (
         <div style={{ padding: '16px', color: 'var(--to-muted)', fontSize: 13, textAlign: 'center', paddingTop: 40 }}>
@@ -5496,10 +5717,11 @@ export default function TakeoffPage() {
             { t: 'measure', icon: '📏', label: 'Measure'    },
             { t: 'click',   icon: '💠', label: 'Click to Place Item' },
             { t: 'electric', icon: '⚡', label: 'Place Electrical Point' },
-          ] as { t: DrawingTool; icon: string; label: string }[]).filter(({ t }) => t !== 'electric' || activePhase === 'Electrics').map(({ t, icon, label }) => (
+            { t: 'opening', icon: '🪟', label: 'Place Window / Door' },
+          ] as { t: DrawingTool; icon: string; label: string }[]).filter(({ t }) => (t !== 'electric' || activePhase === 'Electrics') && (t !== 'opening' || activePhase === 'Windows & Doors')).map(({ t, icon, label }) => (
             <div
               key={t}
-              onClick={() => { if (tool === 'measure' || t === 'measure') { setDrawPoints([]); setIsDrawing(false) } setTool(t); if (t === 'select') { setDrawPoints([]); setIsDrawing(false) } if (t === 'electric') setPanelMode('properties') }}
+              onClick={() => { if (tool === 'measure' || t === 'measure') { setDrawPoints([]); setIsDrawing(false) } setTool(t); if (t === 'select') { setDrawPoints([]); setIsDrawing(false) } if (t === 'electric') setPanelMode('properties'); if (t === 'opening') { setPanelMode('properties'); setEditingItem(null); setEditingElement(null); setSelectedId(null) } }}
               style={{
                 display: 'flex', alignItems: 'center', gap: 7,
                 padding: '7px 8px', marginBottom: 3, borderRadius: 5, cursor: 'pointer',
@@ -5774,6 +5996,7 @@ export default function TakeoffPage() {
               {viewHalo && <g style={{ pointerEvents: 'none' }}>{elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)).map(renderHalo)}</g>}
               {elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)).map(renderElement)}
               {renderWallVisuals(elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)))}
+              {renderOpenings()}
               {viewTags && renderTags(elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)))}
 
               {/* Electrical points — a coloured dot with its letters; a star marks a special fitting. Drag one in Select mode to move it. */}
@@ -5933,6 +6156,7 @@ export default function TakeoffPage() {
               tool === 'measure' ? 'Measure (click along the route, dbl-click to finish: nothing is saved)' :
               tool === 'click' ? 'Click to place an item' :
               tool === 'electric' ? 'Place electrical points' :
+              tool === 'opening' ? 'Place windows and doors (click a wall)' :
               tool === 'floor' ? `⬛ Floor — ${FLOOR_MAKEUPS.find(m => m.id === activeFloorMakeup)?.name} (${floorDrawMode === 'rect' ? 'click two corners' : 'click points, dbl-click to close'})` :
               'Polygon (dbl-click to close)'
             }</strong></span>

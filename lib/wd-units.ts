@@ -93,6 +93,9 @@ export interface WdOpening {
   architrave: boolean
   ironmongery: boolean
   removeOld: boolean
+  /** the opening placed on the Take-off drawing this one follows (it keeps following until typed over), and what it was last fed from it */
+  planId?: string
+  fromPlan?: string
 }
 
 /** A new opening of a kind: its standard size and what usually goes with it (an internal door gets its lining, architrave and ironmongery; a window gets an inside board). */
@@ -238,4 +241,34 @@ export function calculateWindowsDoors(input: WdInput): WdResult {
   const helper = totalHelperHours > 0 ? hoursOf(totalHelperHours) : 0
   if (helper > 0) labour.push({ key: 'labourer|job', roomId: '', trade: 'labourer', task: 'Help to lift and fit, carry and clear up', hours: helper, basis: `${Math.round(LABOURER_SHARE * 100)}% of the fitting hours, and a second pair of hands on the big units (over ${BIG_UNIT_M2}m²)` })
   return { lines, labour, openings: summaries, totalUnits, totalAreaM2: money(totalAreaM2), totalFitterHours: money(totalFitterHours), warnings }
+}
+
+// ── Openings placed on the Take-off drawing ──────────────────────────────────────────────────────────────────────────
+/** An opening as the drawing knows it (lib/wall-openings.ts PlacedOpening, without where on the wall it is) */
+export interface PlanOpening { id: string; ref: string; location?: string; kind: OpeningKind; widthMm: number; heightMm: number; swing: WdSwing }
+export const planOpeningSig = (p: PlanOpening) => [p.kind, p.widthMm, p.heightMm, p.swing, p.ref, p.location ?? ''].join('|')
+
+/**
+ * The calculator's openings brought in step with the drawing: an opening placed on the plan is added (with the usual trims for its kind), one that is already in the calculator follows the drawing when the drawing's opening
+ * changes (a different size, kind, swing, reference) and is otherwise left as typed, and one whose drawing opening has been deleted goes. Openings typed in the calculator with no drawing opening are never touched.
+ */
+export function mergePlanOpenings(existing: WdOpening[], plan: PlanOpening[]): WdOpening[] {
+  const byPlan = new Map(plan.map(p => [p.id, p]))
+  const out: WdOpening[] = []
+  const seen = new Set<string>()
+  for (const e of existing) {
+    if (!e.planId) { out.push(e); continue }
+    const p = byPlan.get(e.planId)
+    if (!p) continue
+    seen.add(p.id)
+    const sig = planOpeningSig(p)
+    if (e.fromPlan === sig) { out.push(e); continue }
+    const base = e.kind === p.kind ? e : { ...newOpening(e.id, p.ref, p.kind, e.location), qty: e.qty, supply: e.supply, pcEach: e.pcEach, removeOld: e.removeOld }
+    out.push({ ...base, ref: p.ref, location: p.location ?? base.location, kind: p.kind, widthMm: p.widthMm, heightMm: p.heightMm, swing: p.swing, planId: p.id, fromPlan: sig })
+  }
+  for (const p of plan) {
+    if (seen.has(p.id)) continue
+    out.push({ ...newOpening('op-' + p.id, p.ref, p.kind, p.location ?? ''), widthMm: p.widthMm, heightMm: p.heightMm, swing: p.swing, planId: p.id, fromPlan: planOpeningSig(p) })
+  }
+  return out
 }
