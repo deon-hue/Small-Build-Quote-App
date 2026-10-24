@@ -175,7 +175,8 @@ export function tilePrepFromScope(spec: unknown): AiTilePrep | null {
       pz.tanked = a.tanked === true
       zones.push(pz)
     }
-    const usualWet = raw.usualWetAreas === true && zones.length === 0
+    const wetRequested = raw.usualWetAreas === true
+    const usualWet = wetRequested && zones.length === 0
     const base = zones.length > 0 ? zones : usualWet ? zonesFromKind(kindId).map(newPrepZone) : []
     const room = newTilePrepRoom('ai-room-' + ++seq, name, kindId, { lengthM: k.lengthM, widthM: k.widthM, heightM, collars: k.collars }, base)
     const l = between(raw.lengthM, 0, 40), w = between(raw.widthM, 0, 40), area = between(raw.areaM2, 0, 500)
@@ -186,12 +187,13 @@ export function tilePrepFromScope(spec: unknown): AiTilePrep | null {
       if (l === null || w === null) typicalRooms.push(sizeNote(name, l, w, k))
     }
     if (usualWet) assumed.push(`${name}: the usual wet areas for that kind of room were boarded and waterproofed`)
+    if (raw.inheritedFromWallTiling === true) assumed.push(`${name}: the wall areas are the ones in the Wall Tiling line (the wet ones boarded and waterproofed)`)
     const f = isObj(raw.floor) ? raw.floor : {}
     const levelMm = whole(f.levelMm, 0, 40) ?? 0
     const cover = oneOf(f.cover, Object.keys(FLOOR_COVER_LABEL) as FloorCover[]) ?? 'none'
     room.floor = {
       primer: f.primer === true || levelMm > 0 || cover !== 'none', levelMm, cover, coverBoardId: oneOf(f.board, BACKER_IDS) ?? 'cement-12',
-      tanked: f.tanked === true || (usualWet && kindId === 'shower'),
+      tanked: f.tanked === true || (wetRequested && kindId === 'shower'),
     }
     room.tankSystem = oneOf(raw.tankSystem, Object.keys(TANK_LABEL) as TankSystem[]) ?? 'liquid'
     room.cuffs = whole(raw.cuffs, 0, 10) ?? (room.floor.tanked && kindId === 'shower' ? 1 : 0)
@@ -203,6 +205,31 @@ export function tilePrepFromScope(spec: unknown): AiTilePrep | null {
   }
   if (rooms.length === 0) return null
   return { rooms, jobSituationId: situationOf(spec.situation), typicalRooms, assumed }
+}
+
+/** The wall tiling line's tiled areas, handed to the preparation line: a preparation room that asks for the wet areas to be boarded and waterproofed (without sizing them) takes the areas the Wall Tiling line
+ * states for the same room, instead of the kind's usual ones, so the same bath surround or shower walls are not typed (or guessed) twice. Only the areas with a stated size move across; the wet ones (a shower, a bath
+ * surround) get backer board and waterproofing, a splashback does not. Anything else in the preparation spec is untouched. Pure. */
+export function prepSpecWithWallTilingAreas(prepSpec: unknown, wallSpec: unknown): unknown {
+  if (!isObj(prepSpec) || !isObj(wallSpec) || !Array.isArray(prepSpec.rooms) || !Array.isArray(wallSpec.rooms)) return prepSpec
+  const wallRooms = wallSpec.rooms.filter(isObj)
+  const wet = (n: string) => /shower|bath|wet/i.test(n)
+  const rooms = prepSpec.rooms.map(raw => {
+    if (!isObj(raw) || raw.usualWetAreas !== true || (Array.isArray(raw.walls) && raw.walls.length > 0)) return raw
+    const name = str(raw.name, 60).toLowerCase()
+    const match = name ? wallRooms.find(w => str(w.name, 60).toLowerCase() === name) : undefined
+    const areas = match && Array.isArray(match.areas) ? match.areas.filter(isObj) : []
+    const walls = areas.flatMap(a => {
+      const aName = str(a.name, 60) || 'Wall area'
+      const len = between(a.lengthM, 0, 100), h = between(a.heightM, 0, 8), m2 = between(a.areaM2, 0, 500)
+      if (!((len !== null && h !== null) || m2 !== null)) return []
+      const isWet = wet(aName)
+      return [{ name: aName, ...(len !== null && h !== null ? { lengthM: len, heightM: h } : { areaM2: m2 }), ...(between(a.lessM2, 0, 100) !== null && { lessM2: a.lessM2 }), board: isWet ? 'foam-10' : 'none', tanked: isWet }]
+    })
+    if (walls.length === 0) return raw
+    return { ...raw, walls, heightM: raw.heightM ?? match?.heightM, inheritedFromWallTiling: true }
+  })
+  return { ...prepSpec, rooms }
 }
 
 // ── Electric underfloor heating, by room ───────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -253,7 +280,7 @@ export function tilingPromptGuide(): string {
   return `For a Tiling & Finishes calculator line, add "calc": {…} with the shape for THAT line only, describing ONLY the work the scope mentions (never invent a size or area; if the scope has nothing for that line, leave "calc" out). "kind" is one of: ${kinds}. "situation" is "empty"|"occupied"|"hard" ("occupied" only if the scope says the house is lived in). Leave out any size, tile or option the scope does not state.
   - "Floor Tiling (by room)": "calc": {"situation": "empty", "rooms": [{"name": "Kitchen", "kind": "<room kind>", "lengthM": <m>, "widthM": <m>, "areaM2": <m², instead of length and width>, "notTiledM2": <m² under units>, "tile": "<tile>", "layout": "${layouts}", "clientSupplies": true, "tilePriceM2": <£/m²>, "grout": "${grouts}", "sealed": true, "skirtingLm": <m>, "movementJointLm": <m>}]}. One entry per room whose FLOOR is tiled. Tiles: ${tiles}. "clientSupplies" true only if the scope says the client supplies the tiles. "tilePriceM2" only if the scope gives a tile price or allowance. "sealed" for natural stone or unglazed tile. Use this line for floor tiling instead of the general floor tile task lines.
   - "Wall Tiling (by room)": "calc": {"situation": "empty", "rooms": [{"name": "Bathroom", "kind": "<room kind>", "areas": [{"name": "Bath surround", "lengthM": <m>, "heightM": <m>, "areaM2": <m², instead of length and height>, "lessM2": <m² window or niche>}], "fullHeight": true, "heightM": <room height>, "lengthM": <room length>, "widthM": <room width>, "doors": <nr>, "windows": <nr>, "tile": "<tile>", "layout": "${layouts}", "clientSupplies": true, "tilePriceM2": <£/m²>, "grout": "${grouts}", "niches": <nr>, "externalCornerLm": <m>, "sealed": true}]}. One entry per room with tiled WALLS. Give "areas" for the parts the scope tiles (a bath surround, shower walls, a splashback) with their sizes if stated; "fullHeight": true if the scope says all the walls are tiled floor to ceiling. If the scope gives no areas, leave "areas" out and the usual tiled areas for that kind of room are used. Tiles: ${tiles}. Use this line for wall tiling instead of the general wall tile task lines.
-  - "Tiling Preparation (by room)": "calc": {"situation": "empty", "tankSystem": "liquid"|"sheet", "rooms": [{"name": "Shower room", "kind": "<room kind>", "lengthM": <m>, "widthM": <m>, "areaM2": <floor m²>, "heightM": <m>, "floor": {"primer": true, "levelMm": <mm of self-levelling compound>, "cover": "${covers}", "board": "<floor board>", "tanked": true}, "walls": [{"name": "Shower walls", "lengthM": <m>, "heightM": <m>, "areaM2": <m²>, "board": "<board>"|"none", "base": "studs"|"masonry", "tanked": true}], "usualWetAreas": true, "cuffs": <floor waste nr>, "ceiling": "<ceiling>", "ceilingBoard": "<board>"}]}. One entry per room with preparation work (tile backer board, waterproofing or tanking, levelling, primer, decoupling mat, moisture-resistant or backer ceiling board). Boards: ${boards}. Ceilings: ${ceilings}. "usualWetAreas": true when the scope says to board and tank the wet areas of a bathroom or shower room without sizing them. "tanked" true only where the scope says to waterproof it. Use this line for tiling preparation instead of the general surface preparation task lines.
+  - "Tiling Preparation (by room)": "calc": {"situation": "empty", "tankSystem": "liquid"|"sheet", "rooms": [{"name": "Shower room", "kind": "<room kind>", "lengthM": <m>, "widthM": <m>, "areaM2": <floor m²>, "heightM": <m>, "floor": {"primer": true, "levelMm": <mm of self-levelling compound>, "cover": "${covers}", "board": "<floor board>", "tanked": true}, "walls": [{"name": "Shower walls", "lengthM": <m>, "heightM": <m>, "areaM2": <m²>, "board": "<board>"|"none", "base": "studs"|"masonry", "tanked": true}], "usualWetAreas": true, "cuffs": <floor waste nr>, "ceiling": "<ceiling>", "ceilingBoard": "<board>"}]}. One entry per room with preparation work (tile backer board, waterproofing or tanking, levelling, primer, decoupling mat, moisture-resistant or backer ceiling board). Boards: ${boards}. Ceilings: ${ceilings}. "usualWetAreas": true when the scope says to board and tank the wet areas of a bathroom or shower room without sizing them (if the Wall Tiling line has tiled areas for the same room, they are used for it). "tanked" true only where the scope says to waterproof it. Use this line for tiling preparation instead of the general surface preparation task lines.
   - "Electric Underfloor Heating": "calc": {"situation": "empty", "electricianByOthers": true, "rooms": [{"name": "Bathroom", "kind": "<room kind>", "lengthM": <m>, "widthM": <m>, "heatedAreaM2": <m²>, "fixedM2": <m² under a bath or units>, "kit": "<kit>", "thermostat": "digital"|"wifi", "insulation": "none"|"6mm"|"10mm"|"20mm", "coverMm": <mm of levelling over the mat>}]}. One entry per room with ELECTRIC underfloor heating (mats or cable under tiles). Kits: ${kits}. "electricianByOthers": true only if the scope says someone else (the client's electrician) connects it. WATER underfloor heating is NOT this line: it is the Underfloor Heating line under Plumbing & Heating.
   - Tiles themselves are priced at a sample allowance per m² in the floor and wall lines unless the scope gives a price or says the client supplies them.`
 }
