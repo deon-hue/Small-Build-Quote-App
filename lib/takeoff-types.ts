@@ -11,7 +11,7 @@ import type { CalcStateSnapshot } from './calc-snapshot'
 
 // ── Drawing tools ─────────────────────────────────────────────────────────────
 
-export type DrawingTool = 'select' | 'line' | 'rect' | 'polygon' | 'floor' | 'click' | 'electric' | 'opening' | 'room' | 'measure'
+export type DrawingTool = 'select' | 'line' | 'rect' | 'polygon' | 'floor' | 'click' | 'electric' | 'opening' | 'room' | 'join' | 'measure'
 
 // ── Measurement categories (match quote parentPhase names) ────────────────────
 

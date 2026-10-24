@@ -69,3 +69,27 @@ export function applyLink(l: DragLink, dx: number, dy: number): Pt {
   const t = ((A.x - F.x) * sy - (A.y - F.y) * sx) / det
   return { x: F.x + t * rx, y: F.y + t * ry }
 }
+
+// ── Joining two walls at a corner ───────────────────────────────────────────────────────────────────────────────────────
+
+export type JoinResult = { ok: true; point: Pt; aIdx: number; bIdx: number; aMoved: number; bMoved: number } | { ok: false; reason: 'parallel' | 'far' | 'same' }
+
+/**
+ * Where two walls meet if they are extended (or trimmed) to a corner: the crossing of the two sides that were picked (side `aSeg` of the first wall's points, side `bSeg` of the second's), and which end of each side
+ * moves there (the one nearer the crossing). `maxReach` is the farthest (plan pixels) an end may move: walls that would have to be dragged further than that do not belong to the same corner.
+ */
+export function joinCorner(a: Pt[], aSeg: number, b: Pt[], bSeg: number, maxReach: number): JoinResult {
+  const A0 = a[aSeg], A1 = a[aSeg + 1], B0 = b[bSeg], B1 = b[bSeg + 1]
+  if (!A0 || !A1 || !B0 || !B1) return { ok: false, reason: 'same' }
+  const rx = A1.x - A0.x, ry = A1.y - A0.y, sx = B1.x - B0.x, sy = B1.y - B0.y
+  const det = rx * sy - ry * sx
+  if (Math.abs(det) < 1e-9 * Math.max(1, Math.hypot(rx, ry) * Math.hypot(sx, sy))) return { ok: false, reason: 'parallel' }
+  const t = ((B0.x - A0.x) * sy - (B0.y - A0.y) * sx) / det
+  const P = { x: A0.x + t * rx, y: A0.y + t * ry }
+  const d = (p: Pt) => Math.hypot(p.x - P.x, p.y - P.y)
+  const aIdx = d(A0) <= d(A1) ? aSeg : aSeg + 1
+  const bIdx = d(B0) <= d(B1) ? bSeg : bSeg + 1
+  const aMoved = d(a[aIdx]), bMoved = d(b[bIdx])
+  if (aMoved > maxReach || bMoved > maxReach) return { ok: false, reason: 'far' }
+  return { ok: true, point: P, aIdx, bIdx, aMoved, bMoved }
+}

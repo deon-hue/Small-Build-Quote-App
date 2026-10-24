@@ -51,7 +51,7 @@ import { sidesOf, splitOpenings } from '@/lib/wall-split'
 import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
 import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, type PlacedOpening, type WallBand } from '@/lib/wall-openings'
 import { KIND_BY_ID as WD_KIND_BY_ID, planOpeningSig, type OpeningKind, type WdSwing, type PlanOpening } from '@/lib/wd-units'
-import { buildDragLinks, applyLink, type DragLink } from '@/lib/wall-links'
+import { buildDragLinks, applyLink, joinCorner, type DragLink } from '@/lib/wall-links'
 import { cornersOf, segmentsFor, snapPoint, anchorsFor, parseTyped, pointAtDistance, rectCornerAt, rotateShape, type SnapResult } from '@/lib/takeoff-snap'
 import { newHistory, observe as observeHistory, undoStep, redoStep, type History } from '@/lib/takeoff-history'
 import ConstructionLayerModal, { saveLayerCostToBackOffice } from './components/ConstructionLayerModal'
@@ -142,6 +142,7 @@ const TOOL_DISPLAY: Record<DrawingTool, string> = {
   electric: 'Place Electrical Point',
   opening: 'Place Window / Door',
   room: 'Rooms',
+  join: 'Join Corner',
   measure: 'Measure',
 }
 
@@ -884,6 +885,9 @@ export default function TakeoffPage() {
   const [roomDraw, setRoomDraw] = useState<false | 'room' | 'edge'>(false)
   useEffect(() => { if (tool !== 'rect' && tool !== 'polygon' && tool !== 'line') setRoomDraw(false) }, [tool])
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
+  // Join Corner: the first wall picked (its side), waiting for the second
+  const [joinFirst, setJoinFirst] = useState<{ id: string; idx: number } | null>(null)
+  useEffect(() => { if (tool !== 'join') setJoinFirst(null) }, [tool])
   const tagDragRef = useRef<{ id: string; sx: number; sy: number; dx0: number; dy0: number } | null>(null)
   useEffect(() => {
     try {
@@ -1457,6 +1461,10 @@ export default function TakeoffPage() {
     }
     if (tool === 'opening') {
       placeOpening(svgCoords(e))
+      return
+    }
+    if (tool === 'join') {
+      joinClick(svgCoords(e))
       return
     }
     if (tool === 'room') {
@@ -2932,6 +2940,79 @@ export default function TakeoffPage() {
     }
     if (!found || found.off * mpp > 1.5) return null
     return { mm: Math.round(((found.q.x - M.x) * N.x + (found.q.y - M.y) * N.y) * mpp * 1000), wallName: project.items.find(it => it.elementId === found!.w.id)?.name ?? found.w.label }
+  }
+
+  /** The wall side nearest a point (within a few pixels): which wall and which side of it. */
+  function nearestWallSide(pt: TakeoffPoint): { el: DrawnElement; idx: number } | null {
+    let best: { el: DrawnElement; idx: number; off: number } | null = null
+    for (const el of wallsOnSheet()) {
+      const pts = el.type === 'rect' ? cornersOf(el) : el.points
+      const n = pts.length
+      const count = el.type === 'line' ? n - 1 : n
+      for (let i = 0; i < count; i++) {
+        const a = pts[i], b = pts[(i + 1) % n]
+        const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy
+        const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((pt.x - a.x) * dx + (pt.y - a.y) * dy) / l2))
+        const off = Math.hypot(pt.x - (a.x + t * dx), pt.y - (a.y + t * dy))
+        if (!best || off < best.off) best = { el, idx: i, off }
+      }
+    }
+    return best && best.off <= 24 / zoom ? { el: best.el, idx: best.idx } : null
+  }
+
+  /** Join Corner: click one wall near the corner, then the other. Both are extended or trimmed so they meet exactly where their lines cross; the walls already joined to the ends that move come along. */
+  function joinClick(pt: TakeoffPoint) {
+    const mpp = project.calibration.mpp
+    const hit = nearestWallSide(pt)
+    if (!hit) { showToast('Click on a wall near the corner (the walls must be in External Walls or Internal Walls & Partitions)'); return }
+    if (hit.el.type !== 'line') { showToast('A rectangle or polygon wall cannot be joined as one: select it and press "Split into separate walls" first'); return }
+    if (!joinFirst) { setJoinFirst({ id: hit.el.id, idx: hit.idx }); showToast('Now click the other wall at the corner'); return }
+    const A = project.elements.find(e => e.id === joinFirst.id)
+    if (!A) { setJoinFirst(null); return }
+    if (A.id === hit.el.id) { showToast('Pick a different wall for the other side of the corner'); return }
+    const res = joinCorner(A.points, joinFirst.idx, hit.el.points, hit.idx, 3 / (mpp || DEFAULT_MPP))
+    if (!res.ok) {
+      showToast(res.reason === 'parallel' ? 'Those two walls run parallel, so they never meet' : 'Those walls are too far from meeting (the ends would move over 3 m): pick the two walls of one corner')
+      setJoinFirst(null)
+      return
+    }
+    if (res.aMoved < 0.5 && res.bMoved < 0.5) { showToast('Those walls already meet at the corner'); setJoinFirst(null); return }
+    const B = hit.el
+    const P = res.point
+    const aOrig = A.points[res.aIdx], bOrig = B.points[res.bIdx]
+    const others = wallsOnSheet().filter(w => w.id !== A.id && w.id !== B.id)
+    const aLinks = buildDragLinks(A, res.aIdx, others, 3), bLinks = buildDragLinks(B, res.bIdx, others, 3)
+    setProject(prev => {
+      const elements = prev.elements.map(e => {
+        if (e.id === A.id) return { ...e, points: e.points.map((p, i) => (i === res.aIdx ? { x: P.x, y: P.y } : p)) }
+        if (e.id === B.id) return { ...e, points: e.points.map((p, i) => (i === res.bIdx ? { x: P.x, y: P.y } : p)) }
+        const mine = [...aLinks.filter(l => l.elId === e.id).map(l => ({ l, dx: P.x - aOrig.x, dy: P.y - aOrig.y })), ...bLinks.filter(l => l.elId === e.id).map(l => ({ l, dx: P.x - bOrig.x, dy: P.y - bOrig.y }))]
+        if (mine.length === 0) return e
+        const pts = e.points.map(p => ({ ...p }))
+        for (const { l, dx, dy } of mine) if (pts[l.k]) pts[l.k] = applyLink(l, dx, dy)
+        return { ...e, points: pts }
+      })
+      return { ...prev, elements, items: recalcItemsForMpp(prev.items, elements, prev.calibration.mpp, activeSheetElementIds(prev)) }
+    })
+    setJoinFirst(null)
+    const m = (px: number) => (px * mpp).toFixed(2)
+    showToast(`Corner joined (one wall moved ${m(res.aMoved)} m, the other ${m(res.bMoved)} m). Click two more walls to join another, or choose Select.`)
+  }
+
+  /** the first wall picked for a Join Corner, picked out in orange */
+  function renderJoinPick() {
+    if (tool !== 'join' || !joinFirst) return null
+    const el = project.elements.find(e => e.id === joinFirst.id)
+    if (!el) return null
+    const a = el.points[joinFirst.idx], b = el.points[joinFirst.idx + 1]
+    if (!a || !b) return null
+    return (
+      <g style={{ pointerEvents: 'none' }}>
+        <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#f97316" strokeWidth={7 / zoom} strokeOpacity={0.55} strokeLinecap="round" />
+        <circle cx={a.x} cy={a.y} r={5 / zoom} fill="#fff" stroke="#f97316" strokeWidth={2 / zoom} />
+        <circle cx={b.x} cy={b.y} r={5 / zoom} fill="#fff" stroke="#f97316" strokeWidth={2 / zoom} />
+      </g>
+    )
   }
 
   /** the walls (lines, polygons, rectangles) on the showing sheet */
@@ -6336,10 +6417,11 @@ export default function TakeoffPage() {
             { t: 'electric', icon: '⚡', label: 'Place Electrical Point' },
             { t: 'opening', icon: '🪟', label: 'Place Window / Door' },
             { t: 'room', icon: '🏠', label: 'Rooms' },
-          ] as { t: DrawingTool; icon: string; label: string }[]).filter(({ t }) => (t !== 'electric' || activePhase === 'Electrics') && (t !== 'opening' || activePhase === 'Windows & Doors')).map(({ t, icon, label }) => (
+            { t: 'join', icon: '⌐', label: 'Join Corner' },
+          ] as { t: DrawingTool; icon: string; label: string }[]).filter(({ t }) => (t !== 'electric' || activePhase === 'Electrics') && (t !== 'opening' || activePhase === 'Windows & Doors') && (t !== 'join' || activePhase === 'External Walls' || activePhase === 'Internal Walls & Partitions')).map(({ t, icon, label }) => (
             <div
               key={t}
-              onClick={() => { if (tool === 'measure' || t === 'measure') { setDrawPoints([]); setIsDrawing(false) } if (tool === 'room' && (t === 'rect' || t === 'polygon')) startRoomDraw(t); else if (tool === 'room' && t === 'line') startRoomDraw('edge'); else setTool(t); if (t === 'select') { setDrawPoints([]); setIsDrawing(false) } if (t === 'electric') setPanelMode('properties'); if (t === 'opening' || t === 'room') { setPanelMode('properties'); setEditingItem(null); setEditingElement(null); setSelectedId(null) } }}
+              onClick={() => { if (tool === 'measure' || t === 'measure') { setDrawPoints([]); setIsDrawing(false) } if (tool === 'room' && (t === 'rect' || t === 'polygon')) startRoomDraw(t); else if (tool === 'room' && t === 'line') startRoomDraw('edge'); else setTool(t); if (t === 'select') { setDrawPoints([]); setIsDrawing(false) } if (t === 'electric') setPanelMode('properties'); if (t === 'opening' || t === 'room') { setPanelMode('properties'); setEditingItem(null); setEditingElement(null); setSelectedId(null) } if (t === 'join') { setJoinFirst(null); showToast('Join Corner: click one wall near the corner, then the other') } }}
               style={{
                 display: 'flex', alignItems: 'center', gap: 7,
                 padding: '7px 8px', marginBottom: 3, borderRadius: 5, cursor: 'pointer',
@@ -6625,6 +6707,7 @@ export default function TakeoffPage() {
               {renderWallVisuals(elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)))}
               {renderOpenings()}
               {renderRoomEditors()}
+              {renderJoinPick()}
               {viewTags && renderTags(elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)))}
 
               {/* Electrical points — a coloured dot with its letters; a star marks a special fitting. Drag one in Select mode to move it. */}
@@ -6790,6 +6873,7 @@ export default function TakeoffPage() {
               tool === 'electric' ? 'Place electrical points' :
               tool === 'opening' ? 'Place windows and doors (click a wall)' :
               tool === 'room' ? 'Rooms (click a room to name it)' :
+              tool === 'join' ? (joinFirst ? 'Join Corner: now click the other wall' : 'Join Corner: click one wall near the corner') :
               tool === 'floor' ? `⬛ Floor — ${FLOOR_MAKEUPS.find(m => m.id === activeFloorMakeup)?.name} (${floorDrawMode === 'rect' ? 'click two corners' : 'click points, dbl-click to close'})` :
               'Polygon (dbl-click to close)'
             }</strong></span>
