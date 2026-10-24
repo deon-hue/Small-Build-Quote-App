@@ -48,6 +48,7 @@ import ClientFilePicker from '@/components/ClientFilePicker'
 import { planResize, applyResize } from '@/lib/calc-size'
 import { wallDrawing, wallBand, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, specFromMakeupLayers, defaultWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
 import { sidesOf, splitOpenings } from '@/lib/wall-split'
+import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
 import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, type PlacedOpening, type WallBand } from '@/lib/wall-openings'
 import { KIND_BY_ID as WD_KIND_BY_ID, planOpeningSig, type OpeningKind, type WdSwing, type PlanOpening } from '@/lib/wd-units'
 import { buildDragLinks, applyLink, type DragLink } from '@/lib/wall-links'
@@ -438,6 +439,15 @@ function itemFromElement(el: DrawnElement, mpp: number): TakeoffItem {
     area,
   }
 }
+
+/** A saved calculator's state with one number changed (its width, say), so it opens showing the new value; the state is left alone if it has none for that calculator */
+function withCalcNumber(snap: CalcStateSnapshot | undefined, ns: string, key: string, value: number): CalcStateSnapshot | undefined {
+  if (!snap || !snap.values?.[ns]) return snap
+  return { ...snap, values: { ...snap.values, [ns]: { ...snap.values[ns], [key]: value } } }
+}
+
+/** The colours offered for a drawing on the plan */
+const PLAN_COLOURS = ['#e74c3c', '#e67e22', '#f1c40f', '#27ae60', '#16a085', '#2980b9', '#8e44ad', '#2c3e50', '#7f8c8d', '#6d4c41', '#ad1457', '#000000']
 
 // ── Openings a wall takes off: the ones typed in Properties and the doors and windows drawn on it ──────────
 const openingsAreaOf = (item: TakeoffItem) => [...(item.openings ?? []), ...(item.drawnOpenings ?? [])].reduce((s, o) => s + o.width * o.height, 0)
@@ -3208,6 +3218,27 @@ export default function TakeoffPage() {
       }
     }
 
+    // ── A FOUNDATION line is drawn as wide as the foundation is (its width in mm, to the plan's scale), in the colour of the drawing ──
+    if (el.phase === 'Foundations' && el.type === 'line' && project.calibration.mpp > 0) {
+      const mpp = project.calibration.mpp
+      const linked = project.items.find(it => it.elementId === el.id)
+      const widthMm = linked?.foundationWidth ?? 600
+      const wd = wallDrawing(el.points, { layers: [{ kind: 'solid', mm: widthMm }], label: '' }, mpp, { ref: 'centre', closed: false })
+      if (wd) {
+        const mid = centroid(el.points)
+        const hit = el.points.map(p => `${p.x},${p.y}`).join(' ')
+        const colour = sel ? SEL_COLOUR : el.color
+        return (
+          <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
+            <polyline points={hit} fill="none" stroke="transparent" strokeWidth={Math.max(14 / zoom, wd.totalPx)} />
+            {wd.strips.map((st, i) => <path key={i} d={st.d} fillRule="evenodd" fill={el.color} fillOpacity={0.28} stroke={colour} strokeWidth={Math.max(1.2, 1.6 / zoom)} strokeLinejoin="miter" />)}
+            <polyline points={hit} fill="none" stroke={colour} strokeWidth={Math.max(1, 1.2 / zoom)} strokeDasharray={`${6 / zoom} ${4 / zoom}`} />
+            <text className="to-lbl" x={mid.x} y={mid.y - 6 / zoom} textAnchor="middle" fontSize={11 / zoom} fill={colour} fontFamily="monospace" fontWeight={700}>{el.label} · {widthMm}mm wide</text>
+          </g>
+        )
+      }
+    }
+
     // ── External Walls LINE: two parallel lines = cavity wall cross-section ──
     if (isWall && el.type === 'line') {
       const linkedItem = project.items.find(it => it.elementId === el.id)
@@ -4101,11 +4132,14 @@ export default function TakeoffPage() {
           labourTrades,
           calcState: item.assemblyCalcState,
           wallOpenings: isExtWall && item.elementId ? planWallOpenings(livePlaced, item.elementId, project.calibration.mpp) : undefined,
+          basics: isFoundationLine ? { widthMm: item.foundationWidth ?? 600, depthMm: item.foundationDepth ?? 1000 } : undefined,
           planRooms: roomData ? roomInfos : undefined,
           onSave: result => {
             const { calcState, state: _state, size, ...res } = result
             saveItemEdit({
               ...item, ...savePatch, assemblyResult: res, assemblyCalcState: calcState, name: result.name, roomName: result.location || item.roomName,
+              // a foundation line is drawn as wide as the calculator says (and its depth follows too)
+              ...(isFoundationLine && size?.widthMm ? { foundationWidth: Math.round(size.widthMm) } : {}),
             })
             setAssemblyWindowItemId(null)
             // A size typed over inside the calculator carries back to the drawing: the drawn line, roof box or floor is scaled to match, and its quantity, label and area follow (the drawing is what Take-off measures from)
@@ -4150,7 +4184,17 @@ export default function TakeoffPage() {
     const foundVolume  = +(foundLength * foundWidthM * foundDepthM).toFixed(3) // m³ excavation/concrete
 
     function recalcFoundationAndSave(patch: Partial<TakeoffItem>) {
-      const m   = { ...item, ...patch }
+      let m   = { ...item, ...patch }
+      // the saved strip / trench fill calculator follows the width and depth set here, and its price (made at the old size) is cleared so it cannot be quoted at the wrong size
+      const wChanged = patch.foundationWidth !== undefined && patch.foundationWidth !== item.foundationWidth
+      const dChanged = patch.foundationDepth !== undefined && patch.foundationDepth !== item.foundationDepth
+      if ((wChanged || dChanged) && m.assemblyCalcState?.values?.AssemblyStripFoundationDemo) {
+        let snap: CalcStateSnapshot | undefined = m.assemblyCalcState
+        if (wChanged) snap = withCalcNumber(snap, 'AssemblyStripFoundationDemo', 'widthMm', patch.foundationWidth!)
+        if (dChanged) snap = withCalcNumber(snap, 'AssemblyStripFoundationDemo', 'depthMm', patch.foundationDepth!)
+        m = { ...m, assemblyCalcState: snap, assemblyResult: undefined }
+        showToast('Size changed: open the foundation calculator and Save & Price it again')
+      }
       const len = foundLength
       const wM  = (m.foundationWidth  ?? 600)  / 1000
       const dM  = (m.foundationDepth  ?? 1000) / 1000
@@ -5602,6 +5646,30 @@ export default function TakeoffPage() {
         </div>
         </>
         )}
+
+        {/* ════════════════ COLOUR ON THE PLAN ════════════════ */}
+        {(() => {
+          const _el = project.elements.find(e => e.id === item.elementId)
+          // a wall drawn at its real thickness is painted in the usual colours of its materials, so it has no colour to choose
+          if (!_el || wallSpecFor(_el)) return null
+          return (
+            <>
+              <div style={secHdr}><span>🎨</span><span>Colour on the plan</span></div>
+              <div style={secBody}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8 }}>
+                  {PLAN_COLOURS.map(c => (
+                    <button key={c} title={c} onClick={() => saveElementEdit({ ..._el, color: c })}
+                      style={{ width: 22, height: 22, borderRadius: 5, background: c, cursor: 'pointer', border: _el.color.toLowerCase() === c ? '3px solid var(--to-textb)' : '1px solid var(--to-border)', padding: 0 }} />
+                  ))}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input type="color" value={/^#[0-9a-f]{6}$/i.test(_el.color) ? _el.color : '#2980b9'} onChange={e => saveElementEdit({ ..._el, color: e.target.value })} style={{ width: 34, height: 26, padding: 0, border: '1px solid var(--to-border)', background: 'none', cursor: 'pointer' }} title="Pick any colour" />
+                  <button style={{ ...btnStyle, fontSize: 11, padding: '4px 8px' }} onClick={() => saveElementEdit({ ..._el, color: PHASE_COLORS[_el.phase] })}>Use the {_el.phase} colour</button>
+                </div>
+              </div>
+            </>
+          )
+        })()}
 
         {/* ════════════════ FOOTER ════════════════ */}
         <div style={{ padding: '8px 14px 18px', borderTop: '1px solid var(--to-border)', marginTop: 2 }}>
