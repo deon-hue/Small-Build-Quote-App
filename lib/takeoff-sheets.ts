@@ -51,13 +51,14 @@ export function makeSheet(id: string, name: string, calibration: ScaleCalibratio
 /** The names given to the rooms on the showing sheet. */
 export function roomLabelsOf(p: TakeoffProject): RoomLabel[] {
   const id = activeSheetIdOf(p)
-  return (id ? p.sheets?.find(s => s.id === id)?.roomLabels : undefined) ?? []
+  // (a take-off with no plan loaded yet keeps them on the project itself, and they move onto the first sheet when one is added)
+  return (id ? p.sheets?.find(s => s.id === id)?.roomLabels : p.roomLabels) ?? []
 }
 
 /** Sets the room names of the showing sheet. */
 export function setRoomLabels(p: TakeoffProject, labels: RoomLabel[]): TakeoffProject {
   const id = activeSheetIdOf(p)
-  if (!id) return p
+  if (!id) return { ...p, roomLabels: labels }
   return { ...p, sheets: p.sheets?.map(s => (s.id === id ? { ...s, roomLabels: labels } : s)) }
 }
 
@@ -103,12 +104,14 @@ export function addSheets(p: TakeoffProject, added: TakeoffSheet[]): TakeoffProj
   let items = p.items
   if (hadNone) {
     const first = { ...sheets[0], calibration: { ...p.calibration }, scaleSet: sheets[0].scaleSet || p.calibration.label !== DEFAULT_SHEET_CALIBRATION.label || p.elements.length > 0 }
+    if (p.roomLabels?.length) first.roomLabels = p.roomLabels
     sheets = [first, ...sheets.slice(1)]
     elements = p.elements.map(e => (e.sheetId ? e : { ...e, sheetId: first.id }))
     items = p.items.map(it => (it.electricPoints ? { ...it, electricPoints: stampPoints(it.electricPoints, first.id) } : it))
   }
   const active = added[added.length - 1]
-  return { ...p, sheets, elements, items, activeSheetId: active.id, calibration: { ...(sheets.find(s => s.id === active.id)!.calibration) } }
+  const { roomLabels: _moved, ...rest } = p
+  return { ...(hadNone ? rest : p), sheets, elements, items, activeSheetId: active.id, calibration: { ...(sheets.find(s => s.id === active.id)!.calibration) } }
 }
 
 /** Shows another sheet: the scale being used swaps to that sheet's. The scale of the sheet being left is kept on it first. */

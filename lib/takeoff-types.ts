@@ -401,6 +401,8 @@ export interface TakeoffProject {
   projectName?:  string
   takeoffRef?:   string
   siteAddress?:  string
+  /** room names for a take-off with no plan loaded yet (once there is a sheet they are kept on it) */
+  roomLabels?:   RoomLabel[]
 }
 
 // ── Export format ─────────────────────────────────────────────────────────────
