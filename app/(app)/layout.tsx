@@ -92,6 +92,7 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
           {can('quotes')  && navItem('/quote-requests','📬', 'Quote Requests')}
           {can('quotes')  && navItem('/new-quote',   '✎', 'New Quote')}
           {can('quotes')  && navItem('/quick-quote', '⚡', 'Quick Quote')}
+          {can('quotes')  && navItem('/takeoff',     '📐', 'Take-off & Draw', 'desktop-only')}
           {can('invoices')&& navItem('/invoices',  '◻', 'Invoices')}
           {can('invoices')&& navItem('/bills',           '📄', 'Bills')}
           {can('invoices')&& navItem('/subcontractors', '🔧', 'Subcontractors')}
@@ -168,7 +169,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/quotes':       'Saved Quotes',
   '/new-quote':    'New Quote',
   '/quick-quote':  'Quick Quote',
-  '/takeoff':      'Take-off',
+  '/takeoff':      'Take-off & Draw',
   '/invoices':     'Invoices',
   '/bills':            'Bills',
   '/subcontractors':   'Subcontractors',
