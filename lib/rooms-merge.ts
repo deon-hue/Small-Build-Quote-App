@@ -73,5 +73,14 @@ export function plumbingKindFor(kind?: string): string {
   }
 }
 
+/** The kind of room the electrics calculator calls a plan room's kind */
+export function electricsKindFor(kind?: string): string {
+  switch (kind) {
+    case 'kitchen': case 'bathroom': case 'ensuite': case 'utility': case 'living': case 'dining': case 'bedroom': case 'hall': case 'study': case 'garage': return kind
+    case 'wc': return 'cloakroom'
+    default: return 'other'
+  }
+}
+
 /** The wall area of a plan room: the length of wall round it by its height, less its doors and windows */
 export const planWallAreaM2 = (p: PlanRoomInfo): number => +Math.max(0, p.perimeterM * p.heightM - p.doorAreaM2 - p.windowAreaM2).toFixed(2)

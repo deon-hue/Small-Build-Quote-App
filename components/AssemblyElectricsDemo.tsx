@@ -22,6 +22,9 @@ import { electricsDescriptionInput } from '@/lib/electrics-wording'
 import { electricsFromScope } from '@/lib/electrics-ai'
 import { costFromBasics, type PricedFromBasics } from '@/components/assembly-basics-pricing'
 import { fmt } from '@/lib/utils'
+import PlanRoomsBar from '@/components/PlanRoomsBar'
+import { electricsKindFor } from '@/lib/rooms-merge'
+import type { PlanRoomInfo } from '@/lib/rooms-from-walls'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import {
   propInput, PropRow, BreakdownTable, CollapsibleSection,
@@ -36,6 +39,8 @@ interface Props {
   labourTrades?: BOLabourTrade[]
   /** Points placed on the Take-off plan, as room counts: they feed the rooms' counts, which follow the plan until typed over. */
   planRooms?: PlanRoom[]
+  /** The rooms found on the Take-off plan (the Rooms tool): they can be added with their names and the usual points for their kind. A point placed in a room counts in the room of that name. */
+  roomsOnPlan?: PlanRoomInfo[]
   /** What was saved with the Take-off item last time (rooms, fittings, situations, rates...), so reopening gives it back. */
   initialState?: ElectricsSavedState
 }
@@ -75,7 +80,7 @@ export function priceElectricsFromScope(o: { spec: unknown; labourTrades: BOLabo
   return { name: 'Electrical installation', qty: 1, location: '', description: describeElectricsShort(d), detail: describeElectrics(d), lines, state, usualRooms: ai.usualRooms, summary }
 }
 
-export default function AssemblyElectricsDemo({ onClose, onSave, labourTrades = [], planRooms, initialState }: Props) {
+export default function AssemblyElectricsDemo({ onClose, onSave, labourTrades = [], planRooms, roomsOnPlan, initialState }: Props) {
   const is = initialState
   const [name, setName]         = useState(is?.name ?? 'Electrical installation')
   const [location, setLocation] = useState(is?.location ?? '')
@@ -115,6 +120,17 @@ export default function AssemblyElectricsDemo({ onClose, onSave, labourTrades = 
       return { ...r, typed, points: n === null ? r.points : { ...r.points, [pointId]: n } }
     }))
   }
+  // A room from the Take-off plan: its name and the usual points for its kind. Points placed on the plan in a room of that name count in it (their counts replace the usual ones for those kinds of point).
+  const sameRoomName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
+  const planRoomAdded = (pr: PlanRoomInfo) => rooms.some(r => r.planRoomId === pr.id || (r.planName !== undefined && sameRoomName(r.planName, pr.name)))
+  function addPlanRooms(list: PlanRoomInfo[]) {
+    setRooms(p => {
+      const have = (pr: PlanRoomInfo) => p.some(r => r.planRoomId === pr.id || (r.planName !== undefined && sameRoomName(r.planName, pr.name)))
+      const made = list.filter(pr => !have(pr)).map(pr => ({ ...newRoom(electricsKindFor(pr.kind), 0), name: pr.name, planName: pr.name, planRoomId: pr.id }))
+      return [...p, ...made]
+    })
+  }
+
   function updateRoom(id: string, patch: Partial<ElectricsRoom>) { setRooms(p => p.map(r => r.id === id ? { ...r, ...patch } : r)) }
   function setCount(roomId: string, pointId: string, n: number) {
     setRooms(p => p.map(r => r.id === roomId ? { ...r, points: { ...r.points, [pointId]: Math.max(0, n) }, typed: (r.planKeys ?? []).includes(pointId) && !(r.typed ?? []).includes(pointId) ? [...(r.typed ?? []), pointId] : r.typed } : r))
@@ -243,6 +259,7 @@ export default function AssemblyElectricsDemo({ onClose, onSave, labourTrades = 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16 }}>
         <div>
           {/* Add a room */}
+          <PlanRoomsBar planRooms={roomsOnPlan} isAdded={id => { const pr = roomsOnPlan?.find(x => x.id === id); return !!pr && planRoomAdded(pr) }} onAdd={r => addPlanRooms([r])} onAddAll={addPlanRooms} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>Rooms</span>
             <select value={addType} onChange={e => setAddType(e.target.value)} style={{ ...small, minWidth: 190 }}>

@@ -2179,6 +2179,7 @@ export default function TakeoffPage() {
         calculator={built?.render({
           labourTrades,
           electrics: { planRooms, initialState: it?.electricsState as ElectricsSavedState | undefined },
+          planRooms: roomData ? roomInfos : undefined,
           onSave: result => {
             const { state, size: _size, ...res } = result
             const sub = boSubPhases.find(sp => sp.canonical_id === 'elec-install')

@@ -171,7 +171,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'plaster-render': { icon: 'render', render: opts => <AssemblyRenderDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'plaster-rooms': { icon: 'plaster-rooms', render: opts => <AssemblyPlasterRoomsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} planRooms={opts?.planRooms} /> },
   'deco-internal-walls': { icon: 'decoration', render: opts => <AssemblyDecorationDemo planRooms={opts?.planRooms} onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
-  'elec-install': { icon: 'electrics', render: opts => <AssemblyElectricsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} planRooms={opts?.electrics?.planRooms} initialState={opts?.electrics?.initialState} /> },
+  'elec-install': { icon: 'electrics', render: opts => <AssemblyElectricsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} roomsOnPlan={opts?.planRooms} planRooms={opts?.electrics?.planRooms} initialState={opts?.electrics?.initialState} /> },
   'ew-cav-full': { icon: 'cavity-wall', render: opts => <AssemblyCavityWallDemo insulationDefault="wool" planOpenings={opts?.wallOpenings} onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} initialHeightMm={opts?.initialHeightMm} noSampleOpenings={opts?.noSampleOpenings} /> },
 }
 

@@ -150,6 +150,8 @@ export interface ElectricsRoom {
   planKeys?: string[]
   /** the point types the estimator has typed over, which stop following the plan */
   typed?: string[]
+  /** the room on the Take-off plan (the Rooms tool) this one was added from */
+  planRoomId?: string
 }
 
 export interface ElectricsInput {
