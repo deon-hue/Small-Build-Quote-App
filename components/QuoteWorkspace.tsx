@@ -27,6 +27,8 @@ import PhaseReviewModal   from '@/components/PhaseReviewModal'
 import { BUILT_ASSEMBLY_CANON_IDS, AssemblyIconGlyph, type AssemblySaveResult } from '@/lib/built-assemblies'
 import type { ElectricsSavedState } from '@/lib/electrics-units'
 import { MaterialsListButtons } from '@/components/assembly-ui'
+import { SharedWallAreasProvider } from '@/components/TilingShareContext'
+import { sharedWallRoomsFrom } from '@/lib/tiling-share'
 import { assemblyLinesToItems, profitPctOf } from '@/lib/assembly-quote-items'
 
 // ── IDs ────────────────────────────────────────────────────────────────────────
@@ -2382,7 +2384,11 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
 
   const mainPhases = getMainPhases(visiblePhases)
 
+  // the Wall Tiling areas saved in this quote, for the Tiling Preparation calculator's copy button
+  const sharedWallRooms = sharedWallRoomsFrom(phases.map(p => p.calcState))
+
   return (
+    <SharedWallAreasProvider rooms={sharedWallRooms}>
     <div style={{ fontSize: 13 }}>
       {/* Toolbar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
@@ -2769,5 +2775,6 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
         </div>
       )}
     </div>
+    </SharedWallAreasProvider>
   )
 }

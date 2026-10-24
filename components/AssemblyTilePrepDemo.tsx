@@ -9,7 +9,7 @@
  * lib/tile-prep-units.ts; the body shared with the other three tiling calculators is components/TilingCalcFrame.tsx.
  */
 
-import React, { useEffect, useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useCalcState } from '@/components/calc-state'
 import type { CostedLine } from '@/lib/assembly-calc'
 import {
@@ -20,6 +20,7 @@ import { DEFAULT_TILING_SITUATIONS, TILING_ROOM_KINDS, TILING_ROOM_KIND_BY_ID, s
 import { describeTilePrep, describeTilePrepShort, type TilingDescriptionInput } from '@/lib/tiling-description'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import { propInput, PropRow, CollapsibleSection } from '@/components/assembly-ui'
+import { useSharedWallRooms } from '@/components/TilingShareContext'
 import TilingCalcFrame, { TilingNumInput, TilingAutoInput, TilingCheck, tilingSmall } from '@/components/TilingCalcFrame'
 
 interface Props {
@@ -52,6 +53,9 @@ export default function AssemblyTilePrepDemo({ onClose, onSave, labourTrades = [
       ? { ...r, lengthM: planSides.long, widthM: planSides.short, floorAreaOverrideM2: null, fromPlan: { areaM2: planArea, perimeterM: planPerimeter } } : r))))
   }, [planArea, planPerimeter])
   const [addKind, setAddKind] = useCalcState(ID, 'addKind', 'shower')
+  // The Wall Tiling areas saved elsewhere in this quote or take-off (undefined where there is none to look in, e.g. the Back Office preview)
+  const sharedWall = useSharedWallRooms()
+  const [copyMsg, setCopyMsg] = useState('')
   const [jobSituationId, setJobSituationId] = useCalcState(ID, 'jobSituationId', 'empty')
 
   function addRoom() {
@@ -63,6 +67,29 @@ export default function AssemblyTilePrepDemo({ onClose, onSave, labourTrades = [
       if (addKind === 'shower') room.floor = { ...room.floor, tanked: true }
       return [...p, room]
     })
+  }
+  /** Copies the tiled areas of each saved Wall Tiling room onto the preparation room of the same name (or adds the room): the wet ones (a shower, a bath surround) boarded and waterproofed, the rest not. */
+  function copyWallAreas() {
+    if (!sharedWall || sharedWall.length === 0) return
+    const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
+    const clash = rooms.filter(r => r.zones.length > 0 && sharedWall.some(w => same(w.name, r.name)))
+    if (clash.length > 0 && !window.confirm('This replaces the wall areas already set in ' + clash.map(r => r.name).join(', ') + ' with the ones from Wall Tiling. Carry on?')) return
+    setRooms(p => {
+      const next = [...p]
+      for (const w of sharedWall) {
+        const zones = w.areas.map(a => newPrepZone({ id: newZoneId(), label: a.label, lengthM: a.lengthM, heightM: a.heightM, deductM2: a.deductM2 }))
+        const i = next.findIndex(r => same(r.name, w.name))
+        if (i >= 0) next[i] = { ...next[i], zones }
+        else {
+          const kindId = TILING_ROOM_KIND_BY_ID[w.kindId] ? w.kindId : 'other'
+          const room = newTilePrepRoom('room-' + uid(), w.name, kindId, { ...TILING_ROOM_KIND_BY_ID[kindId], heightM: w.heightM }, zones)
+          if (kindId === 'shower') room.floor = { ...room.floor, tanked: true }
+          next.push(room)
+        }
+      }
+      return next
+    })
+    setCopyMsg(`Copied ${sharedWall.reduce((n, w) => n + w.areas.length, 0)} wall areas from Wall Tiling (${sharedWall.map(w => w.name).join(', ')}). Shower and bath areas are boarded and waterproofed: check each room below.`)
   }
   function updateRoom(id: string, patch: Partial<TilePrepRoom>) { setRooms(p => p.map(r => r.id === id ? { ...r, ...patch } : r)) }
   function updateFloor(id: string, patch: Partial<TilePrepRoom['floor']>) { setRooms(p => p.map(r => r.id === id ? { ...r, floor: { ...r.floor, ...patch } } : r)) }
@@ -118,7 +145,13 @@ export default function AssemblyTilePrepDemo({ onClose, onSave, labourTrades = [
               {planSides && !rooms.some(x => x.fromPlan) && (
                 <button type="button" onClick={() => setRooms(p => [...p, planRoom()])} title="Add the area drawn on the plan as a room" style={{ ...tilingSmall, cursor: 'pointer', background: '#f1f5f9' }}>+ The drawn area ({planArea.toFixed(1)}m²)</button>
               )}
+              {sharedWall !== undefined && (
+                <button type="button" onClick={copyWallAreas} disabled={sharedWall.length === 0}
+                  title={sharedWall.length === 0 ? 'There is no saved Wall Tiling calculator in this quote or take-off yet: save it first' : 'Copy the tiled wall areas from the Wall Tiling calculator into the rooms here'}
+                  style={{ ...tilingSmall, cursor: sharedWall.length === 0 ? 'default' : 'pointer', background: '#f1f5f9', opacity: sharedWall.length === 0 ? 0.55 : 1 }}>↧ Copy the wall areas from Wall Tiling</button>
+              )}
             </div>
+            {copyMsg && <div style={{ fontSize: 11, color: '#166534', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 4, padding: '4px 8px', marginBottom: 8 }}>{copyMsg}</div>}
             <div style={{ fontSize: 10.5, color: '#94a3b8', marginBottom: 10, lineHeight: 1.5 }}>
               A new room starts with a primed floor and the usual wall areas for that kind of room; shower and bath walls come with backer board and waterproofing, a wet room's floor is tanked too. Nothing else is switched on until you choose it.
             </div>

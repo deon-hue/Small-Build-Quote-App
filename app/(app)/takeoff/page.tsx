@@ -34,6 +34,8 @@ const FOUNDATION_SHAPE_CALCS = new Set(['fnd-raft', 'fnd-pad'])
 const MARKER_CALC_PHASES = new Set<string>(['Decoration', 'Plumbing & Heating', 'Drainage & Services', 'Plastering & Boarding', 'Tiling & Finishes'])
 const FLOOR_SHAPE_CALCS = new Set(['fs-screeded-floor', 'fs-floor-overlay', 'fs-concrete-slab', 'fs-block-beam', 'fs-suspended-timber', 'fs-insulated-concrete'])
 import LabourCostBuilder from './components/LabourCostBuilder'
+import { SharedWallAreasProvider } from '@/components/TilingShareContext'
+import { sharedWallRoomsFrom } from '@/lib/tiling-share'
 import ClientProjectModal from './components/ClientProjectModal'
 import ConstructionLayerModal, { saveLayerCostToBackOffice } from './components/ConstructionLayerModal'
 import {
@@ -3118,6 +3120,7 @@ export default function TakeoffPage() {
         onOpen={() => setAssemblyWindowItemId(item.id)}
         onClose={() => setAssemblyWindowItemId(null)}
       >
+        <SharedWallAreasProvider rooms={sharedWallRoomsFrom(project.items.map(i => i.assemblyCalcState))}>
         {builtAssembly.render({
           externalLengthMm: isBoxShape ? roofBox?.lengthMm : ((item.length ?? 0) > 0 ? Math.round((item.length ?? 0) * 1000) : undefined),
           externalWidthMm: isBoxShape ? roofBox?.widthMm : undefined,
@@ -3134,6 +3137,7 @@ export default function TakeoffPage() {
             setAssemblyWindowItemId(null)
           },
         })}
+        </SharedWallAreasProvider>
       </AssemblyItemPanel>
     )
 
