@@ -9,6 +9,7 @@ import { assignmentsFor, diffAssignments, type AssigneePick } from '@/lib/task-a
 import { uid, JOB_TEMPLATES } from '@/lib/utils'
 import { escapeLike } from '@/lib/email-match'
 import { QuoteGoneError } from '@/lib/quote-errors'
+import { removeAllClientFiles } from '@/lib/client-files'
 
 interface AppContextType {
   jobs: Job[]
@@ -725,6 +726,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const { data: row } = await supabase.from('clients').select('user_id, name, email, client_type, xero_contact_id').eq('id', id).maybeSingle()
       if (row) await supabase.from('deleted_contacts').insert({ user_id: row.user_id, name: row.name, email: row.email, client_type: row.client_type, xero_contact_id: row.xero_contact_id })
     } catch { /* not remembered this time */ }
+    // the files kept on the contact go too (their storage would otherwise be left behind, using space)
+    await removeAllClientFiles(supabase, id)
     await supabase.from('clients').delete().eq('id', id)
     setClients(prev => prev.filter(c => c.id !== id))
     setSuppliers(prev => prev.filter(s => s.id !== id))

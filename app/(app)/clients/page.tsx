@@ -14,6 +14,7 @@ import { useDraggableModal } from '@/components/useDraggableModal'
 import ModalResizeHandle from '@/components/ModalResizeHandle'
 import ModalMaximizeButton from '@/components/ModalMaximizeButton'
 import DeleteContactsDialog, { type DeleteTarget } from '@/components/DeleteContactsDialog'
+import ClientFilesSection from '@/components/ClientFilesSection'
 import TidyUpContactsDialog from '@/components/TidyUpContactsDialog'
 import { buildUsageIndex, usageOf, type UsageIndex } from '@/lib/contact-usage'
 import { escapeLike } from '@/lib/email-match'
@@ -841,6 +842,15 @@ function ClientsPageInner() {
                       )
                     })
                 }
+              </div>
+
+              {/* Files: the customer's own files, and the files on their quotes and jobs, with downloads */}
+              <div style={{ marginTop: 20 }}>
+                <ClientFilesSection
+                  client={{ id: selected.id, name: selected.name }}
+                  quotes={selQuotes.filter(q => q.status !== 'deleted').map(q => ({ id: q.id, ref: q.ref, title: quoteDisplayTitle(q) }))}
+                  jobs={selJobs.map(j => ({ id: j.id, title: jobDisplayTitle(j) + (j.address ? ' — ' + j.address : '') }))}
+                />
               </div>
 
               </>)}
