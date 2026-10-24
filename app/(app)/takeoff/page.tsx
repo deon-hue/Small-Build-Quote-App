@@ -840,6 +840,8 @@ export default function TakeoffPage() {
   const [pdfLoading, setPdfLoading] = useState(false)
   // Adding a plan: from this computer, or from a customer's files (the contact card's Files)
   const [planChooserOpen, setPlanChooserOpen] = useState(false)
+  // a blank sheet to draw on with no plan behind it: its paper, scale and name while it is being asked for
+  const [blankForm, setBlankForm] = useState<{ paper: string; denom: number; name: string } | null>(null)
   const [filePickerOpen, setFilePickerOpen] = useState(false)
   // Sheets (plans): the one showing, whether its picture is missing from this device, and a nudge to reload the picture after it is put back
   const activeSheetId = activeSheetIdOf(project)
@@ -1999,7 +2001,7 @@ export default function TakeoffPage() {
   }
 
   /** Adds loaded plans as new sheets, or, when the showing sheet's picture is missing from this device, puts the first one back into that sheet (keeping its drawings and scale) */
-  async function addPlansAsSheets(plans: { name: string; url: string; paper?: string; mmPerPx?: number }[]) {
+  async function addPlansAsSheets(plans: { name: string; url: string; paper?: string; mmPerPx?: number; /** the scale (1:denom) to start the sheet at: a blank sheet is made at one */ denom?: number }[]) {
     if (plans.length === 0) return
     const hadSheets = (project.sheets?.length ?? 0) > 0
     let savedOnDevice = true
@@ -2007,13 +2009,17 @@ export default function TakeoffPage() {
     if (sheetImageMissing && activeSheetId) {
       savedOnDevice = (await putSheetImage(project.id, activeSheetId, plans[0].url)) && savedOnDevice
       savePictureToAccount(project.id, activeSheetId, plans[0].url)
-      setProject(p => setSheetPaper(p, activeSheetId, plans[0].paper, plans[0].mmPerPx))   // a different picture may have a different paper size
+      setProject(p => {
+        const q = setSheetPaper(p, activeSheetId, plans[0].paper, plans[0].mmPerPx)   // a different picture may have a different paper size
+        return plans[0].denom && plans[0].mmPerPx ? setActiveSheetCalibration(q, { mpp: mppForScale(plans[0].mmPerPx, plans[0].denom), label: scaleLabel(plans[0].denom) }) : q
+      })
       rest = plans.slice(1)
       setImageNonce(n => n + 1)
     }
     const created: TakeoffSheet[] = []
     for (const pl of rest) {
-      const sheet: TakeoffSheet = { ...makeSheet(uid(), pl.name), ...(pl.mmPerPx ? { paperMmPerPx: pl.mmPerPx, ...(pl.paper ? { paper: pl.paper } : {}) } : {}) }
+      const startScale = pl.denom && pl.mmPerPx ? { mpp: mppForScale(pl.mmPerPx, pl.denom), label: scaleLabel(pl.denom) } : undefined
+      const sheet: TakeoffSheet = { ...(startScale ? makeSheet(uid(), pl.name, startScale, true) : makeSheet(uid(), pl.name)), ...(pl.mmPerPx ? { paperMmPerPx: pl.mmPerPx, ...(pl.paper ? { paper: pl.paper } : {}) } : {}) }
       savedOnDevice = (await putSheetImage(project.id, sheet.id, pl.url)) && savedOnDevice
       savePictureToAccount(project.id, sheet.id, pl.url)
       created.push(sheet)
@@ -2026,6 +2032,23 @@ export default function TakeoffPage() {
     if (!savedOnDevice) showToast('This browser cannot keep plans between visits (a private window?). They will be lost when you close the page.')
     else if (created.length > 1) showToast(created.length + ' sheets added. Set the scale of each before you draw on it.')
     else if (created.length === 1 && hadSheets) showToast('Sheet added. Set its scale before you draw on it.')
+  }
+
+  /** A blank white sheet of a paper size at a scale, to draw on with no plan behind it: it is made like a PDF page (so the scale presets, the paper chip, saving and the copy in the account all work as for any plan). */
+  async function createBlankSheet(f: { paper: string; denom: number; name: string }) {
+    const paper = PAPER_SIZES.find(x => x.name === f.paper)
+    if (!paper) return
+    const w = Math.round(paper.longMm / PDF_RENDER_MM_PER_PX), h = Math.round(paper.shortMm / PDF_RENDER_MM_PER_PX)
+    const canvas = document.createElement('canvas')
+    canvas.width = w; canvas.height = h
+    const ctx = canvas.getContext('2d')
+    if (!ctx) { alert('This browser could not make a blank sheet.'); return }
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h)
+    ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 6; ctx.strokeRect(3, 3, w - 6, h - 6)
+    const n = (project.sheets?.length ?? 0) + 1
+    setPlanChooserOpen(false); setBlankForm(null)
+    await addPlansAsSheets([{ name: f.name.trim() || (n > 1 ? 'Blank sheet ' + n : 'Blank sheet'), url: canvas.toDataURL('image/jpeg', 0.7), paper: paper.name, mmPerPx: PDF_RENDER_MM_PER_PX, denom: f.denom }])
+    showToast(`Blank ${paper.name} sheet at ${scaleLabel(f.denom)}: ${(paper.longMm * f.denom / 1000).toFixed(1)} × ${(paper.shortMm * f.denom / 1000).toFixed(1)} m. Draw the walls with the Line tool.`)
   }
 
   async function handleImageLoad(e: ChangeEvent<HTMLInputElement>) {
@@ -6554,7 +6577,7 @@ export default function TakeoffPage() {
 
       {/* ── Adding a plan: from this computer or from a customer's files ───── */}
       {planChooserOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={e => { if (e.target === e.currentTarget) setPlanChooserOpen(false) }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={e => { if (e.target === e.currentTarget) { setPlanChooserOpen(false); setBlankForm(null) } }}>
           <div style={{ background: 'var(--to-panel, #fff)', color: 'var(--to-text, #1e293b)', border: '1px solid var(--to-border, #e2e8f0)', borderRadius: 10, width: 'min(420px, 92vw)', padding: 18, boxShadow: '0 12px 48px rgba(0,0,0,0.4)' }}>
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
               <div style={{ fontWeight: 700, fontSize: 14, flex: 1 }}>{project.sheets?.length ? 'Add a plan' : 'Load a plan'}</div>
@@ -6566,6 +6589,24 @@ export default function TakeoffPage() {
             <button onClick={() => { setPlanChooserOpen(false); setFilePickerOpen(true) }} style={{ ...btnStyle, display: 'block', width: '100%', textAlign: 'left', padding: '12px 14px', fontSize: 13 }}>
               📁 From a customer's files<div style={{ fontSize: 11, opacity: 0.7, fontWeight: 400, marginTop: 2 }}>Files on their contact card, quotes and jobs</div>
             </button>
+            <button onClick={() => setBlankForm(f => f ?? { paper: 'A1', denom: 50, name: '' })} style={{ ...btnStyle, display: 'block', width: '100%', textAlign: 'left', padding: '12px 14px', marginTop: 8, fontSize: 13, ...(blankForm ? { borderColor: 'var(--to-active-bd)' } : {}) }}>
+              ⬜ A blank sheet<div style={{ fontSize: 11, opacity: 0.7, fontWeight: 400, marginTop: 2 }}>Draw a plan from scratch at a scale you choose, with no picture behind it</div>
+            </button>
+            {blankForm && (() => {
+              const paper = PAPER_SIZES.find(x => x.name === blankForm.paper)
+              const fieldStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', fontSize: 12, padding: '5px 7px', background: 'var(--to-bg, #fff)', color: 'inherit', border: '1px solid var(--to-border, #e2e8f0)', borderRadius: 5, fontFamily: 'inherit' }
+              return (
+                <div style={{ marginTop: 10, padding: 12, border: '1px solid var(--to-border, #e2e8f0)', borderRadius: 8 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <label style={{ fontSize: 11 }}>Paper<select value={blankForm.paper} onChange={e => setBlankForm({ ...blankForm, paper: e.target.value })} style={fieldStyle}>{PAPER_SIZES.map(x => <option key={x.name} value={x.name}>{x.name}</option>)}</select></label>
+                    <label style={{ fontSize: 11 }}>Scale<select value={blankForm.denom} onChange={e => setBlankForm({ ...blankForm, denom: +e.target.value })} style={fieldStyle}>{SCALE_DENOMS.map(d => <option key={d} value={d}>{scaleLabel(d)}</option>)}</select></label>
+                  </div>
+                  <label style={{ fontSize: 11, display: 'block', marginTop: 8 }}>Name (optional)<input value={blankForm.name} onChange={e => setBlankForm({ ...blankForm, name: e.target.value })} placeholder="e.g. Ground floor" style={fieldStyle} /></label>
+                  {paper && <div style={{ fontSize: 11, opacity: 0.75, marginTop: 8 }}>A {paper.name} sheet at {scaleLabel(blankForm.denom)} covers {(paper.longMm * blankForm.denom / 1000).toFixed(1)} × {(paper.shortMm * blankForm.denom / 1000).toFixed(1)} m of building. The scale is set for you, so what you draw measures right straight away.</div>}
+                  <button onClick={() => createBlankSheet(blankForm)} style={{ ...btnStyle, width: '100%', justifyContent: 'center', marginTop: 10, background: '#16a34a', borderColor: '#16a34a', color: '#fff', fontWeight: 700 }}>Make the blank sheet</button>
+                </div>
+              )
+            })()}
           </div>
         </div>
       )}
