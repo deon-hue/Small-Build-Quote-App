@@ -40,6 +40,7 @@ import { pricePlumbingCalcFromScope, PLUMBING_AI_IDS } from '@/components/ai-plu
 import { priceDrainageCalcFromScope, DRAINAGE_AI_IDS } from '@/components/ai-drainage-pricing'
 import { priceDemolitionCalcFromScope, DEMOLITION_AI_IDS } from '@/components/ai-demolition-pricing'
 import { pricePlasterCalcFromScope, PLASTER_AI_IDS } from '@/components/ai-plaster-pricing'
+import { priceTilingCalcFromScope, TILING_AI_IDS } from '@/components/ai-tiling-pricing'
 import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchQuoteDefaults, fetchAllQuoteDefaults, upsertTask, fetchLabourTrades, fetchProducts, fetchPlantItems, fetchPhases, fetchSubPhases, fetchTasks } from '@/lib/back-office-queries'
 import type { BOLabourTrade, BOProduct, BOPlantItem, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
 import type { FloorMakeup } from '@/lib/takeoff-types'
@@ -160,11 +161,11 @@ function buildPhasesFromScopeToQuote(
           : { reviewNote: 'Priced by its calculator, but no electrical rooms or points were found in the scope. Open the calculator and add the rooms.' }),
       }
     }
-    if (calcSub && calcSub.canonical_id && (PLUMBING_AI_IDS.has(calcSub.canonical_id) || DRAINAGE_AI_IDS.has(calcSub.canonical_id) || DEMOLITION_AI_IDS.has(calcSub.canonical_id) || PLASTER_AI_IDS.has(calcSub.canonical_id))) {
+    if (calcSub && calcSub.canonical_id && (PLUMBING_AI_IDS.has(calcSub.canonical_id) || DRAINAGE_AI_IDS.has(calcSub.canonical_id) || DEMOLITION_AI_IDS.has(calcSub.canonical_id) || PLASTER_AI_IDS.has(calcSub.canonical_id) || TILING_AI_IDS.has(calcSub.canonical_id))) {
       // The plumbing, drainage and demolition calculators are priced from what the scope says (rooms and fittings, the boiler, zones with an area, runs with a length, a wall with a length,
       // rooms to strip out, volumes of waste, buildings with a size...), with the calculator's standard settings. Nothing is invented: what was not stated is left out or said in the note,
       // for the estimator to check.
-      const pricer = PLUMBING_AI_IDS.has(calcSub.canonical_id) ? pricePlumbingCalcFromScope : DRAINAGE_AI_IDS.has(calcSub.canonical_id) ? priceDrainageCalcFromScope : PLASTER_AI_IDS.has(calcSub.canonical_id) ? pricePlasterCalcFromScope : priceDemolitionCalcFromScope
+      const pricer = PLUMBING_AI_IDS.has(calcSub.canonical_id) ? pricePlumbingCalcFromScope : DRAINAGE_AI_IDS.has(calcSub.canonical_id) ? priceDrainageCalcFromScope : PLASTER_AI_IDS.has(calcSub.canonical_id) ? pricePlasterCalcFromScope : TILING_AI_IDS.has(calcSub.canonical_id) ? priceTilingCalcFromScope : priceDemolitionCalcFromScope
       const pl = pricer({ canonicalId: calcSub.canonical_id, spec: sp.calc, labourTrades })
       const plPhase = makePhase(sp.phase, pl ? assemblyLinesToItems(pl.lines) : defaultTypedItems(), sp.parentPhase || undefined)
       return {
