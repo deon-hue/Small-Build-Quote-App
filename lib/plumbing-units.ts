@@ -132,6 +132,8 @@ export interface PlumbingRoom {
   /** who buys the sanitaryware, taps and radiators in this room: 'us' adds a provisional sum for each, 'client' leaves them out */
   supply: 'client' | 'us'
   specials: PlumbingSpecial[]
+  /** the room on the Take-off plan this one was made from (a room's fittings do not depend on its size, so it only remembers which) */
+  planRoomId?: string
 }
 
 export interface PlumbingInput {

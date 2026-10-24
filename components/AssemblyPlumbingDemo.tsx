@@ -20,6 +20,9 @@ import {
 import { describePlumbing, describePlumbingShort, type PlumbingDescriptionInput } from '@/lib/plumbing-description'
 import { plumbingDescriptionInput } from '@/lib/plumbing-wording'
 import { fmt } from '@/lib/utils'
+import PlanRoomsBar from '@/components/PlanRoomsBar'
+import { plumbingKindFor } from '@/lib/rooms-merge'
+import type { PlanRoomInfo } from '@/lib/rooms-from-walls'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import {
   propInput, PropRow, BreakdownTable, CollapsibleSection,
@@ -32,6 +35,8 @@ interface Props {
   onClose?: () => void
   onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }) => void
   labourTrades?: BOLabourTrade[]
+  /** the rooms found on the Take-off plan: they can be added with their names and sizes */
+  planRooms?: PlanRoomInfo[]
 }
 
 const GROUP_COLOUR: Record<FittingGroup, string> = { sanitaryware: '#0891b2', kitchen: '#7c3aed', heating: '#dc2626', outside: '#16a34a' }
@@ -47,7 +52,7 @@ function newRoom(typeId: string, existingOfType: number): PlumbingRoom {
   }
 }
 
-export default function AssemblyPlumbingDemo({ onClose, onSave, labourTrades = [] }: Props) {
+export default function AssemblyPlumbingDemo({ onClose, onSave, labourTrades = [], planRooms }: Props) {
   const ID = 'AssemblyPlumbingDemo'
   const [name, setName] = useCalcState(ID, 'name', 'Plumbing installation')
   const [location, setLocation] = useCalcState(ID, 'location', '')
@@ -67,6 +72,14 @@ export default function AssemblyPlumbingDemo({ onClose, onSave, labourTrades = [
   const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>(ID, 'disabledLayerIds', new Set())
   function toggleLayer(id: string) { setDisabledLayerIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
   const noSidesLayers = useMemo(() => new Set<string>(), [])
+
+  // a room from the Take-off plan: its name and kind, with the usual fittings for that kind (a room's fittings do not depend on its size, so there is nothing for it to follow)
+  function addPlanRooms(list: PlanRoomInfo[]) {
+    setRooms(p => {
+      const made = list.filter(pr => !p.some(r => r.planRoomId === pr.id)).map(pr => ({ ...newRoom(plumbingKindFor(pr.kind), 0), name: pr.name, planRoomId: pr.id }))
+      return [...p, ...made]
+    })
+  }
 
   function updateRoom(id: string, patch: Partial<PlumbingRoom>) { setRooms(p => p.map(r => r.id === id ? { ...r, ...patch } : r)) }
   function setCount(roomId: string, fid: string, n: number) { setRooms(p => p.map(r => r.id === roomId ? { ...r, fittings: { ...r.fittings, [fid]: Math.max(0, n) } } : r)) }
@@ -191,6 +204,7 @@ export default function AssemblyPlumbingDemo({ onClose, onSave, labourTrades = [
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16 }}>
         <div>
           {/* Add a room */}
+          <PlanRoomsBar planRooms={planRooms} isAdded={id => rooms.some(r => r.planRoomId === id)} onAdd={r => addPlanRooms([r])} onAddAll={addPlanRooms} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>Rooms</span>
             <select value={addType} onChange={e => setAddType(e.target.value)} style={{ ...small, minWidth: 190 }}>

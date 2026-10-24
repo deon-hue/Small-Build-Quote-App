@@ -102,6 +102,9 @@ export interface StripRoom {
   dust: boolean
   disconnectPlumber: boolean
   disconnectElectrician: boolean
+  /** the room on the Take-off plan this one was made from, and what the plan said when it was last fed (it follows the plan's size until the plan's room changes) */
+  planRoomId?: string
+  planRoomSig?: string
 }
 
 export interface StripInput { rooms: StripRoom[]; asbestosSurveys: number }

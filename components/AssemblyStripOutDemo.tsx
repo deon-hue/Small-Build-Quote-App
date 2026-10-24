@@ -7,7 +7,7 @@
  * from the items; services to disconnect and dust protection are optional per room, an asbestos survey optional for the job. The engine is lib/strip-out-units.ts.
  */
 
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import NumInput from '@/components/NumInput'
 import { useCalcState } from '@/components/calc-state'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
@@ -26,11 +26,16 @@ import {
   MaterialsListButtons,
 } from '@/components/assembly-ui'
 import { LabourSuggestionPanel } from '@/components/AssemblyFlatRoofDemo'
+import PlanRoomsBar from '@/components/PlanRoomsBar'
+import { followPlanRooms, planRoomSig, stripKindFor } from '@/lib/rooms-merge'
+import type { PlanRoomInfo } from '@/lib/rooms-from-walls'
 
 interface Props {
   onClose?: () => void
   onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }) => void
   labourTrades?: BOLabourTrade[]
+  /** the rooms found on the Take-off plan: they can be added with their names and sizes */
+  planRooms?: PlanRoomInfo[]
 }
 
 const GROUP_COLOUR: Record<StripGroup, string> = { floor: '#a16207', ceiling: '#64748b', walls: '#0891b2', joinery: '#7c3aed', kitchen: '#16a34a', sanitary: '#2563eb' }
@@ -48,7 +53,7 @@ function newRoom(kind: string, existing: number): StripRoom {
 
 export const unitWord = (it: { unit: string }, n: number) => (it.unit === 'nr' ? '' : it.unit === 'lm' ? 'lm' : 'm²')
 
-export default function AssemblyStripOutDemo({ onClose, onSave, labourTrades = [] }: Props) {
+export default function AssemblyStripOutDemo({ onClose, onSave, labourTrades = [], planRooms }: Props) {
   const ID = 'AssemblyStripOutDemo'
   const [name, setName] = useCalcState(ID, 'name', 'Strip-out')
   const [location, setLocation] = useCalcState(ID, 'location', '')
@@ -62,6 +67,29 @@ export default function AssemblyStripOutDemo({ onClose, onSave, labourTrades = [
   const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>(ID, 'disabledLayerIds', new Set())
   function toggleLayer(id: string) { setDisabledLayerIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
   const noSidesLayers = useMemo(() => new Set<string>(), [])
+
+  // a room from the Take-off plan: its floor area and height; what is taken out starts as the usual for that kind and size. When the plan's room changes, the items still at the usual for the old size move to the usual for the new; any count you typed stays.
+  const fitToPlan = (r: StripRoom, pr: PlanRoomInfo): StripRoom => {
+    const was = usualStripItems(r.kind, r.areaM2, r.heightM), now = usualStripItems(r.kind, pr.areaM2, pr.heightM)
+    const items = { ...r.items }
+    for (const k of Object.keys(now)) if (!(k in items) || items[k] === was[k]) items[k] = now[k]
+    return { ...r, areaM2: pr.areaM2, heightM: pr.heightM, items }
+  }
+  function addPlanRooms(list: PlanRoomInfo[]) {
+    setRooms(p => {
+      const made = list.filter(pr => !p.some(r => r.planRoomId === pr.id)).map(pr => {
+        const kind = stripKindFor(pr.kind)
+        const t = STRIP_ROOM_BY_ID[kind]
+        const room: StripRoom = { id: 'room-' + uid(), name: pr.name, kind, areaM2: pr.areaM2, heightM: pr.heightM, items: usualStripItems(kind, pr.areaM2, pr.heightM), dust: true, disconnectPlumber: t.wetRoom && kind !== 'utility', disconnectElectrician: kind === 'kitchen', planRoomId: pr.id, planRoomSig: planRoomSig(pr) }
+        return room
+      })
+      return [...p, ...made]
+    })
+  }
+  const planRoomsKey = planRooms ? planRooms.map(p => p.id + ':' + planRoomSig(p)).join(';') : null
+  useEffect(() => {
+    if (planRooms) setRooms(p => followPlanRooms(p, planRooms, fitToPlan))
+  }, [planRoomsKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function updateRoom(id: string, patch: Partial<StripRoom>) { setRooms(p => p.map(r => r.id === id ? { ...r, ...patch } : r)) }
   function setCount(roomId: string, itemId: string, n: number) { setRooms(p => p.map(r => r.id === roomId ? { ...r, items: { ...r.items, [itemId]: Math.max(0, n) } } : r)) }
@@ -197,6 +225,7 @@ export default function AssemblyStripOutDemo({ onClose, onSave, labourTrades = [
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16 }}>
         <div>
+          <PlanRoomsBar planRooms={planRooms} isAdded={id => rooms.some(r => r.planRoomId === id)} onAdd={r => addPlanRooms([r])} onAddAll={addPlanRooms} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>Rooms</span>
             <select value={addKind} onChange={e => setAddKind(e.target.value)} style={{ ...small, minWidth: 190 }}>
