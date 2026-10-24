@@ -21,7 +21,7 @@ import { describeTilePrep, describeTilePrepShort, type TilingDescriptionInput } 
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import { propInput, PropRow, CollapsibleSection } from '@/components/assembly-ui'
 import { useSharedWallRooms } from '@/components/TilingShareContext'
-import TilingCalcFrame, { TilingNumInput, TilingAutoInput, TilingCheck, tilingSmall } from '@/components/TilingCalcFrame'
+import TilingCalcFrame, { TilingNumInput, TilingAutoInput, RoomShapeFields, TilingCheck, tilingSmall } from '@/components/TilingCalcFrame'
 
 interface Props {
   onClose?: () => void
@@ -43,14 +43,14 @@ export default function AssemblyTilePrepDemo({ onClose, onSave, labourTrades = [
   const planSides = planArea > 0 ? sidesFromAreaPerimeter(planArea, planPerimeter) : null
   const planRoom = (): TilePrepRoom => {
     const k = TILING_ROOM_KIND_BY_ID.other
-    return { ...newTilePrepRoom('room-' + uid(), 'Room from the plan', 'other', { lengthM: planSides?.long ?? k.lengthM, widthM: planSides?.short ?? k.widthM, heightM: k.heightM, collars: 0 }, []), fromPlan: { areaM2: planArea, perimeterM: planPerimeter } }
+    return { ...newTilePrepRoom('room-' + uid(), 'Room from the plan', 'other', { lengthM: planSides?.long ?? k.lengthM, widthM: planSides?.short ?? k.widthM, heightM: k.heightM, collars: 0 }, []), shape: 'other' as const, otherAreaM2: planArea, otherPerimeterM: planPerimeter, fromPlan: { areaM2: planArea, perimeterM: planPerimeter } }
   }
   // The job starts with no rooms: you add the ones being prepared (or the drawn area is the first)
   const [rooms, setRooms] = useCalcState<TilePrepRoom[]>(ID, 'rooms', () => (planSides ? [planRoom()] : []))
   useEffect(() => {
     if (!planSides) return
     setRooms(p => (p.length === 0 ? [planRoom()] : p.map(r => (r.fromPlan && (r.fromPlan.areaM2 !== planArea || r.fromPlan.perimeterM !== planPerimeter)
-      ? { ...r, lengthM: planSides.long, widthM: planSides.short, floorAreaOverrideM2: null, fromPlan: { areaM2: planArea, perimeterM: planPerimeter } } : r))))
+      ? { ...r, lengthM: planSides.long, widthM: planSides.short, floorAreaOverrideM2: null, otherAreaM2: planArea, otherPerimeterM: planPerimeter, fromPlan: { areaM2: planArea, perimeterM: planPerimeter } } : r))))
   }, [planArea, planPerimeter])
   const [addKind, setAddKind] = useCalcState(ID, 'addKind', 'shower')
   // The Wall Tiling areas saved elsewhere in this quote or take-off (undefined where there is none to look in, e.g. the Back Office preview)
@@ -174,9 +174,8 @@ export default function AssemblyTilePrepDemo({ onClose, onSave, labourTrades = [
                     <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: '#475569', minWidth: 70, textAlign: 'right' }}>{roomCost(rm.id) > 0 ? `£${roomCost(rm.id).toFixed(2)}` : ''}</span>
                     <button type="button" onClick={() => setRooms(p => p.filter(x => x.id !== rm.id))} title="Remove this room" style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
                   </div>
+                  <RoomShapeFields room={rm} onChange={patch => updateRoom(rm.id, patch)} fromPlan={!!rm.fromPlan} />
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 8 }}>
-                    <PropRow label={rm.fromPlan ? 'Length (m) — from the plan' : 'Length (m)'}><TilingNumInput v={rm.lengthM} set={n => updateRoom(rm.id, { lengthM: n })} step={0.1} /></PropRow>
-                    <PropRow label="Width (m)"><TilingNumInput v={rm.widthM} set={n => updateRoom(rm.id, { widthM: n })} step={0.1} /></PropRow>
                     <PropRow label="Height (m)"><TilingNumInput v={rm.heightM} set={n => updateRoom(rm.id, { heightM: n })} step={0.1} /></PropRow>
                     <PropRow label="Floor area (m²) — blank = from the room"><TilingAutoInput v={rm.floorAreaOverrideM2} set={n => updateRoom(rm.id, { floorAreaOverrideM2: n })} auto={floorAreaM2(rm)} /></PropRow>
                   </div>

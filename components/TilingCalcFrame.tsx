@@ -14,7 +14,7 @@ import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembl
 import { suggestTilingLabour, toLabourLines, type LabourSuggestion } from '@/lib/flat-roof-labour'
 import { fmt } from '@/lib/utils'
 import type { BOLabourTrade } from '@/lib/back-office-types'
-import { TILE_SIZES, TILE_SIZE_BY_ID, TILE_LAYOUTS, GROUT_KINDS, type TilingLabourTask, type TilingLine, type TileSizeId, type TileLayoutId, type GroutId } from '@/lib/tiling-common'
+import { TILE_SIZES, TILE_SIZE_BY_ID, TILE_LAYOUTS, GROUT_KINDS, ROOM_SHAPE_LABEL, roomFootprint, type RoomShape, type RoomShapeExtras, type TilingLabourTask, type TilingLine, type TileSizeId, type TileLayoutId, type GroutId } from '@/lib/tiling-common'
 import {
   propInput, PropRow, BreakdownTable,
   LabourSection, type LabourLine, newLabourLineId, hourlyRate,
@@ -207,6 +207,56 @@ export function TilingCheck({ label, on, set }: { label: string; on: boolean; se
     <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: '#475569', cursor: 'pointer', marginRight: 12 }}>
       <input type="checkbox" checked={on} onChange={e => set(e.target.checked)} style={{ width: 'auto' }} />{label}
     </label>
+  )
+}
+
+const SHAPE_PATH: Record<RoomShape, string> = {
+  rectangle: 'M6 8H58V40H6Z', square: 'M14 6H50V42H14Z', l: 'M6 6H58V26H36V42H6Z', t: 'M6 6H58V22H46V42H18V22H6Z', u: 'M6 6H24V24H40V6H58V42H6Z', other: 'M8 12L30 5L58 14L52 40L20 43Z',
+}
+
+/** The room's floor shape and size, shared by the floor tiling, preparation and heating screens: a rectangle, a square, an L, T or U shape (the overall length and width less a cut-out) or any other shape from its area and the length of its walls. Shows the floor area and wall run it works out. */
+export function RoomShapeFields({ room, onChange, fromPlan = false }: {
+  room: { lengthM: number; widthM: number } & RoomShapeExtras
+  onChange: (patch: { lengthM?: number; widthM?: number } & RoomShapeExtras) => void
+  /** the room is sized from the drawing in Take-off */
+  fromPlan?: boolean
+}) {
+  const shape: RoomShape = room.shape ?? 'rectangle'
+  const fp = roomFootprint(room)
+  const cut = shape === 'l' || shape === 't' || shape === 'u'
+  const pick = (s: RoomShape) => {
+    const patch: { lengthM?: number; widthM?: number } & RoomShapeExtras = { shape: s }
+    if (s === 'square') patch.widthM = room.lengthM
+    if ((s === 'l' || s === 't' || s === 'u') && !(room.cutLengthM && room.cutLengthM > 0)) { patch.cutLengthM = +(room.lengthM / 3).toFixed(1); patch.cutWidthM = +(room.widthM / 2).toFixed(1) }
+    if (s === 'other' && !(room.otherAreaM2 && room.otherAreaM2 > 0)) { patch.otherAreaM2 = +fp.areaM2.toFixed(2); patch.otherPerimeterM = +fp.perimeterM.toFixed(2) }
+    onChange(patch)
+  }
+  const what = fromPlan ? ' — from the plan' : ''
+  return (
+    <div style={{ marginBottom: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+        <svg width="64" height="48" viewBox="0 0 64 48" aria-hidden="true" style={{ flex: 'none' }}><path d={SHAPE_PATH[shape]} fill="#e0f2fe" stroke="#0369a1" strokeWidth="1.6" strokeLinejoin="round" /></svg>
+        <div style={{ flex: 1, minWidth: 160 }}>
+          <PropRow label="Shape of the room">
+            <select value={shape} onChange={e => pick(e.target.value as RoomShape)} style={propInput}>
+              {(Object.keys(ROOM_SHAPE_LABEL) as RoomShape[]).map(s => <option key={s} value={s}>{ROOM_SHAPE_LABEL[s]}</option>)}
+            </select>
+          </PropRow>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
+        {shape === 'square' && <PropRow label={`Side (m)${what}`}><TilingNumInput v={room.lengthM} set={n => onChange({ lengthM: n, widthM: n })} step={0.1} /></PropRow>}
+        {(shape === 'rectangle' || cut) && <PropRow label={`${cut ? 'Overall length' : 'Length'} (m)${what}`}><TilingNumInput v={room.lengthM} set={n => onChange({ lengthM: n })} step={0.1} /></PropRow>}
+        {(shape === 'rectangle' || cut) && <PropRow label={`${cut ? 'Overall width' : 'Width'} (m)`}><TilingNumInput v={room.widthM} set={n => onChange({ widthM: n })} step={0.1} /></PropRow>}
+        {cut && <PropRow label={shape === 't' ? 'Each cut-out, along the length (m)' : shape === 'u' ? 'Notch width, along the length (m)' : 'Cut-out along the length (m)'}><TilingNumInput v={room.cutLengthM ?? 0} set={n => onChange({ cutLengthM: n })} step={0.1} /></PropRow>}
+        {cut && <PropRow label={shape === 'u' ? 'Notch depth, along the width (m)' : 'Cut-out along the width (m)'}><TilingNumInput v={room.cutWidthM ?? 0} set={n => onChange({ cutWidthM: n })} step={0.1} /></PropRow>}
+        {shape === 'other' && <PropRow label={`Floor area (m²)${what}`}><TilingNumInput v={room.otherAreaM2 ?? 0} set={n => onChange({ otherAreaM2: n })} step={0.1} /></PropRow>}
+        {shape === 'other' && <PropRow label="Length of the walls round it (m)"><TilingAutoInput v={room.otherPerimeterM ?? null} set={n => onChange({ otherPerimeterM: n ?? undefined })} auto={fp.perimeterM} step={0.1} /></PropRow>}
+      </div>
+      {fp.error
+        ? <div style={{ fontSize: 11, color: '#b91c1c', marginTop: 4 }}>⚠ {fp.error}</div>
+        : <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 4 }}>Floor area {fp.areaM2.toFixed(2)}m², {fp.perimeterM.toFixed(1)}m of wall round it.{shape === 'other' && !room.otherPerimeterM ? ' (Wall length left blank: worked out as if it were square.)' : ''}</div>}
+    </div>
   )
 }
 

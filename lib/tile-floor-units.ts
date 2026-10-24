@@ -7,14 +7,14 @@
 // the screen costs the lines it returns through the shared costLayer.
 
 import {
-  DEFAULT_TILING_SITUATIONS, TILE_SIZE_BY_ID, TILE_LAYOUT_BY_ID, GROUT_KIND_BY_ID, FLAT_BASE_TILES, SAMPLE_SPECIAL, groutKgM2, money, hoursOf, n1, nonNeg,
-  type TilingSituation, type TilingLabourTask, type TilingLine, type TilingRoomSummary, type TileSizeId, type TileLayoutId, type GroutId,
+  DEFAULT_TILING_SITUATIONS, TILE_SIZE_BY_ID, roomFootprint, TILE_LAYOUT_BY_ID, GROUT_KIND_BY_ID, FLAT_BASE_TILES, SAMPLE_SPECIAL, groutKgM2, money, hoursOf, n1, nonNeg,
+  type TilingSituation, type TilingLabourTask, type TilingLine, type TilingRoomSummary, type TileSizeId, type TileLayoutId, type GroutId, type RoomShapeExtras,
 } from './tiling-common'
 
 export type FloorAdhesive = 'flexible' | 'standard'
 export const FLOOR_ADHESIVE_LABEL: Record<FloorAdhesive, string> = { flexible: 'Flexible (S1) adhesive: timber floors, underfloor heating, large tiles', standard: 'Standard cement-based adhesive' }
 
-export interface TileFloorRoom {
+export interface TileFloorRoom extends RoomShapeExtras {
   id: string
   name: string
   kindId: string
@@ -90,7 +90,7 @@ export interface TileFloorInput {
 export interface TileFloorResult { lines: TilingLine[]; labour: TilingLabourTask[]; rooms: TilingRoomSummary[]; totalAreaM2: number; totalTileM2: number; totalTilerHours: number; warnings: string[] }
 
 export function floorAreaM2(r: TileFloorRoom): number {
-  return r.areaOverrideM2 ?? Math.max(0, r.lengthM * r.widthM - r.notTiledM2)
+  return r.areaOverrideM2 ?? Math.max(0, roomFootprint(r).areaM2 - r.notTiledM2)
 }
 
 export function calculateTileFloor(input: TileFloorInput): TileFloorResult {
@@ -117,9 +117,11 @@ export function calculateTileFloor(input: TileFloorInput): TileFloorResult {
     const tile = TILE_SIZE_BY_ID[room.tileId] ?? TILE_SIZE_BY_ID.small
     const layout = TILE_LAYOUT_BY_ID[room.layoutId] ?? TILE_LAYOUT_BY_ID.straight
     const grout = GROUT_KIND_BY_ID[room.groutId] ?? GROUT_KIND_BY_ID.cement
+    const fp = roomFootprint(room)
+    if (fp.error) throw new Error(`${rn}: ${fp.error}`)
     const area = floorAreaM2(room)
     if (!(area > 0)) { warnings.push(`${rn} has no floor area to tile.`); continue }
-    const perimeter = room.areaOverrideM2 === null ? 2 * (room.lengthM + room.widthM) : 4 * Math.sqrt(area)
+    const perimeter = room.areaOverrideM2 === null ? fp.perimeterM : 4 * Math.sqrt(area)
     const joint = room.jointMm ?? tile.jointMm
     const trimLm = room.trimLm ?? room.doors * THRESHOLD_LM
     const skirtM2 = room.skirtingLm * SAMPLE_SPECIAL.skirtingHeightM

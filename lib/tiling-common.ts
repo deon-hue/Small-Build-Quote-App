@@ -121,6 +121,38 @@ export function sidesFromAreaPerimeter(areaM2: number, perimeterM: number): { lo
   return { long: r2(side), short: r2(side) }
 }
 
+// ── The shape of a room's floor ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// A rectangle is length x width. The other shapes are the overall length and width (the box the room fits in) less a cut-out of cut length x cut width (a is along the length, b along the width):
+//   L-shape  one corner cut out          T-shape  two equal corner cut-outs, one at each end of a side          U-shape  one notch in the middle of a side (the walls run in and out: two more cut-out depths of wall)
+//   Square   one side                    Other    the area and the walls' total length typed (an angled or curved room, or one taken off a drawing)
+export type RoomShape = 'rectangle' | 'square' | 'l' | 't' | 'u' | 'other'
+export const ROOM_SHAPE_LABEL: Record<RoomShape, string> = {
+  rectangle: 'Rectangle', square: 'Square', l: 'L-shape', t: 'T-shape', u: 'U-shape (a notch in one side)', other: 'Other shape (type the area and perimeter)',
+}
+export interface RoomShapeExtras {
+  /** undefined = a rectangle (rooms saved before shapes existed) */
+  shape?: RoomShape
+  /** the cut-out of an L, T or U shape: along the length, and along the width, m */
+  cutLengthM?: number
+  cutWidthM?: number
+  /** for 'other': the floor area, m², and the walls' total length, m */
+  otherAreaM2?: number
+  otherPerimeterM?: number
+}
+export function roomFootprint(r: { lengthM: number; widthM: number } & RoomShapeExtras): { areaM2: number; perimeterM: number; error?: string } {
+  const L = Math.max(0, r.lengthM), W = Math.max(0, r.widthM)
+  const a = Math.max(0, r.cutLengthM ?? 0), b = Math.max(0, r.cutWidthM ?? 0)
+  const box = 2 * (L + W)
+  switch (r.shape) {
+    case 'square': return { areaM2: L * L, perimeterM: 4 * L }
+    case 'l': return { areaM2: Math.max(0, L * W - a * b), perimeterM: box, ...(a >= L || b >= W ? { error: 'the corner cut-out has to be smaller than the room.' } : {}) }
+    case 't': return { areaM2: Math.max(0, L * W - 2 * a * b), perimeterM: box, ...(2 * a >= L || b >= W ? { error: 'the two cut-outs have to be smaller than the room (together shorter than its length).' } : {}) }
+    case 'u': return { areaM2: Math.max(0, L * W - a * b), perimeterM: box + 2 * b, ...(a >= L || b >= W ? { error: 'the notch has to be smaller than the room.' } : {}) }
+    case 'other': { const area = Math.max(0, r.otherAreaM2 ?? 0); return { areaM2: area, perimeterM: Math.max(0, r.otherPerimeterM ?? (area > 0 ? 4 * Math.sqrt(area) : 0)) } }
+    default: return { areaM2: L * W, perimeterM: box }
+  }
+}
+
 export const money = (n: number) => +n.toFixed(2)
 export const hoursOf = (h: number) => (h <= 0 ? 0 : Math.max(0.5, Math.round(h * 2) / 2))
 export const n1 = (x: number) => (Math.round(x * 10) / 10).toString()

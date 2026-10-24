@@ -19,7 +19,7 @@ import { DEFAULT_TILING_SITUATIONS, TILING_ROOM_KINDS, TILING_ROOM_KIND_BY_ID, s
 import { describeTileUfh, describeTileUfhShort, type TilingDescriptionInput } from '@/lib/tiling-description'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import { propInput, PropRow, CollapsibleSection } from '@/components/assembly-ui'
-import TilingCalcFrame, { TilingNumInput, TilingAutoInput, TilingCheck, tilingSmall } from '@/components/TilingCalcFrame'
+import TilingCalcFrame, { TilingNumInput, TilingAutoInput, RoomShapeFields, TilingCheck, tilingSmall } from '@/components/TilingCalcFrame'
 
 interface Props {
   onClose?: () => void
@@ -42,14 +42,14 @@ export default function AssemblyTileUfhDemo({ onClose, onSave, labourTrades = []
   const planSides = planArea > 0 ? sidesFromAreaPerimeter(planArea, planPerimeter) : null
   const planRoom = (): TileUfhRoom => {
     const k = TILING_ROOM_KIND_BY_ID.other
-    return { ...newTileUfhRoom('room-' + uid(), 'Room from the plan', 'other', { lengthM: planSides?.long ?? k.lengthM, widthM: planSides?.short ?? k.widthM, fixedM2: 0 }, { kit: 'mat150', insulation: '6mm' }), fromPlan: { areaM2: planArea, perimeterM: planPerimeter } }
+    return { ...newTileUfhRoom('room-' + uid(), 'Room from the plan', 'other', { lengthM: planSides?.long ?? k.lengthM, widthM: planSides?.short ?? k.widthM, fixedM2: 0 }, { kit: 'mat150', insulation: '6mm' }), shape: 'other' as const, otherAreaM2: planArea, otherPerimeterM: planPerimeter, fromPlan: { areaM2: planArea, perimeterM: planPerimeter } }
   }
   // The job starts with no rooms: you add the ones being heated (or the drawn area is the first)
   const [rooms, setRooms] = useCalcState<TileUfhRoom[]>(ID, 'rooms', () => (planSides ? [planRoom()] : []))
   useEffect(() => {
     if (!planSides) return
     setRooms(p => (p.length === 0 ? [planRoom()] : p.map(r => (r.fromPlan && (r.fromPlan.areaM2 !== planArea || r.fromPlan.perimeterM !== planPerimeter)
-      ? { ...r, lengthM: planSides.long, widthM: planSides.short, heatedAreaOverrideM2: null, fromPlan: { areaM2: planArea, perimeterM: planPerimeter } } : r))))
+      ? { ...r, lengthM: planSides.long, widthM: planSides.short, heatedAreaOverrideM2: null, otherAreaM2: planArea, otherPerimeterM: planPerimeter, fromPlan: { areaM2: planArea, perimeterM: planPerimeter } } : r))))
   }, [planArea, planPerimeter])
   const [addKind, setAddKind] = useCalcState(ID, 'addKind', 'bathroom')
   const [startKit, setStartKit] = useCalcState<UfhKit>(ID, 'startKit', 'mat150')
@@ -125,9 +125,8 @@ export default function AssemblyTileUfhDemo({ onClose, onSave, labourTrades = []
                     <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: '#475569', minWidth: 70, textAlign: 'right' }}>{roomCost(rm.id) > 0 ? `£${roomCost(rm.id).toFixed(2)}` : ''}</span>
                     <button type="button" onClick={() => setRooms(p => p.filter(x => x.id !== rm.id))} title="Remove this room" style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
                   </div>
+                  <RoomShapeFields room={rm} onChange={patch => updateRoom(rm.id, patch)} fromPlan={!!rm.fromPlan} />
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
-                    <PropRow label={rm.fromPlan ? 'Length (m) — from the plan' : 'Length (m)'}><TilingNumInput v={rm.lengthM} set={n => updateRoom(rm.id, { lengthM: n })} step={0.1} /></PropRow>
-                    <PropRow label="Width (m)"><TilingNumInput v={rm.widthM} set={n => updateRoom(rm.id, { widthM: n })} step={0.1} /></PropRow>
                     <PropRow label="Under fixed things (m²)"><TilingNumInput v={rm.fixedM2} set={n => updateRoom(rm.id, { fixedM2: n })} step={0.1} /></PropRow>
                     <PropRow label="Heated area (m²) — blank = from the room"><TilingAutoInput v={rm.heatedAreaOverrideM2} set={n => updateRoom(rm.id, { heatedAreaOverrideM2: n })} auto={heatedAreaM2(rm)} /></PropRow>
                   </div>

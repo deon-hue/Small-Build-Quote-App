@@ -8,8 +8,8 @@
 // the screen costs the lines it returns through the shared costLayer.
 
 import {
-  zoneAreaM2, money, hoursOf, n1, nonNeg,
-  type TilingSituation, type TilingZone, type TilingLabourTask, type TilingLine, type TilingRoomSummary,
+  zoneAreaM2, roomFootprint, money, hoursOf, n1, nonNeg,
+  type RoomShapeExtras, type TilingSituation, type TilingZone, type TilingLabourTask, type TilingLine, type TilingRoomSummary,
 } from './tiling-common'
 
 export type BackerId = 'foam-6' | 'foam-10' | 'cement-12'
@@ -37,7 +37,7 @@ export interface PrepZone extends TilingZone {
   tanked: boolean
 }
 
-export interface TilePrepRoom {
+export interface TilePrepRoom extends RoomShapeExtras {
   id: string
   name: string
   kindId: string
@@ -127,12 +127,12 @@ export interface TilePrepInput {
 }
 export interface TilePrepResult { lines: TilingLine[]; labour: TilingLabourTask[]; rooms: TilingRoomSummary[]; totalFloorM2: number; totalWallM2: number; totalTankedM2: number; totalCeilingM2: number; totalTilerHours: number; warnings: string[] }
 
-export const floorAreaM2 = (r: TilePrepRoom) => r.floorAreaOverrideM2 ?? Math.max(0, r.lengthM * r.widthM)
+export const floorAreaM2 = (r: TilePrepRoom) => r.floorAreaOverrideM2 ?? roomFootprint(r).areaM2
 export const ceilingAreaM2 = (r: TilePrepRoom) => r.ceiling.areaOverrideM2 ?? floorAreaM2(r)
 /** The metres of waterproof tape: the corners up each tanked wall area, the joint where it meets the floor, and the floor's own perimeter when the floor is tanked */
 export function autoTapeLm(r: TilePrepRoom): number {
   const walls = r.zones.filter(z => z.tanked && zoneAreaM2(z) > 0).reduce((s, z) => s + z.lengthM + 2 * z.heightM, 0)
-  const floor = r.floor.tanked ? 2 * (r.lengthM + r.widthM) : 0
+  const floor = r.floor.tanked ? roomFootprint(r).perimeterM : 0
   return walls + floor
 }
 
@@ -158,8 +158,10 @@ export function calculateTilePrep(input: TilePrepInput): TilePrepResult {
     const sit = input.situations.find(s => s.id === (room.situationId ?? input.jobSituationId))
     if (!sit) throw new Error(`Choose a situation for ${rn}.`)
     const uplift = 1 + sit.upliftPct / 100
+    const fp = roomFootprint(room)
+    if (fp.error) throw new Error(`${rn}: ${fp.error}`)
     const floorM2 = floorAreaM2(room)
-    const perimeter = room.floorAreaOverrideM2 === null ? 2 * (room.lengthM + room.widthM) : 4 * Math.sqrt(floorM2)
+    const perimeter = room.floorAreaOverrideM2 === null ? fp.perimeterM : 4 * Math.sqrt(floorM2)
     const f = room.floor
     const levelling = f.levelMm > 0
     const primerOn = f.primer || levelling

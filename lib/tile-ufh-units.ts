@@ -8,8 +8,8 @@
 // the screen costs the lines it returns through the shared costLayer.
 
 import {
-  money, hoursOf, n1, nonNeg,
-  type TilingSituation, type TilingLabourTask, type TilingLine, type TilingRoomSummary,
+  money, hoursOf, n1, nonNeg, roomFootprint,
+  type RoomShapeExtras, type TilingSituation, type TilingLabourTask, type TilingLine, type TilingRoomSummary,
 } from './tiling-common'
 
 export type UfhKit = 'mat150' | 'mat200' | 'cable'
@@ -34,7 +34,7 @@ export const INSULATION_INFO: Record<UfhInsulation, { label: string; priceM2: nu
   '20mm': { label: 'Insulation board 20mm', priceM2: 29 },
 }
 
-export interface TileUfhRoom {
+export interface TileUfhRoom extends RoomShapeExtras {
   id: string
   name: string
   kindId: string
@@ -94,7 +94,10 @@ export interface TileUfhInput {
 export interface UfhRoomSummary extends TilingRoomSummary { heatedM2: number; coveredM2: number; watts: number; mats: number[] }
 export interface TileUfhResult { lines: TilingLine[]; labour: TilingLabourTask[]; rooms: UfhRoomSummary[]; totalHeatedM2: number; totalWatts: number; totalTilerHours: number; thermostats: number; warnings: string[] }
 
-export const heatedAreaM2 = (r: TileUfhRoom) => r.heatedAreaOverrideM2 ?? Math.max(0, r.lengthM * r.widthM - r.fixedM2 - 2 * (r.lengthM + r.widthM) * WALL_MARGIN_M)
+export const heatedAreaM2 = (r: TileUfhRoom) => {
+  const fp = roomFootprint(r)
+  return r.heatedAreaOverrideM2 ?? Math.max(0, fp.areaM2 - r.fixedM2 - fp.perimeterM * WALL_MARGIN_M)
+}
 
 /** The mats that cover an area: the biggest standard size that fits, again and again; the part left over is returned (a mat can be cut between its runs and turned, but not made smaller than its smallest size).
  * An area under the smallest size gets the smallest mat. */
@@ -135,10 +138,12 @@ export function calculateTileUfh(input: TileUfhInput): TileUfhResult {
     const sit = input.situations.find(s => s.id === (room.situationId ?? input.jobSituationId))
     if (!sit) throw new Error(`Choose a situation for ${rn}.`)
     const uplift = 1 + sit.upliftPct / 100
+    const fp = roomFootprint(room)
+    if (fp.error) throw new Error(`${rn}: ${fp.error}`)
     const heated = heatedAreaM2(room)
     if (!(heated > 0)) { warnings.push(`${rn} has no heated area.`); continue }
     const kit = UFH_KIT_BY_ID[room.kit] ?? UFH_KITS[0]
-    const floorNet = Math.max(0, room.lengthM * room.widthM - room.fixedM2)
+    const floorNet = Math.max(0, fp.areaM2 - room.fixedM2)
     const fit = kit.sizes ? fitMats(heated, kit.sizes) : { mats: [] as number[], coveredM2: Math.ceil(heated * 2) / 2, leftM2: 0 }
     const watts = Math.round(fit.coveredM2 * kit.wattsM2)
     if (fit.leftM2 >= 0.5) warnings.push(`${rn}: the mats cover ${n1(fit.coveredM2)}m² of the ${n1(heated)}m² to heat: about ${n1(fit.leftM2)}m² is left unheated. Use cable for the odd corner or accept it.`)
