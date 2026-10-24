@@ -20,7 +20,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { TakeoffProject, TakeoffSheet } from './takeoff-types'
 
 /** The customer and reference details of a take-off. They have no columns of their own, so they ride inside the `calibration` JSON like the sheets do. */
-export type TakeoffMeta = Pick<TakeoffProject, 'clientId' | 'client' | 'projectName' | 'takeoffRef' | 'siteAddress' | 'roomLabels' | 'roomShapes'>
+export type TakeoffMeta = Pick<TakeoffProject, 'clientId' | 'client' | 'projectName' | 'takeoffRef' | 'siteAddress' | 'roomLabels' | 'roomShapes' | 'roomEdges'>
 
 function metaOf(p: TakeoffProject): TakeoffMeta | undefined {
   const m: TakeoffMeta = {}
@@ -31,6 +31,7 @@ function metaOf(p: TakeoffProject): TakeoffMeta | undefined {
   if (p.siteAddress !== undefined) m.siteAddress = p.siteAddress
   if (p.roomLabels?.length) m.roomLabels = p.roomLabels
   if (p.roomShapes?.length) m.roomShapes = p.roomShapes
+  if (p.roomEdges?.length) m.roomEdges = p.roomEdges
   return Object.keys(m).length ? m : undefined
 }
 

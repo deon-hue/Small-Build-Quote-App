@@ -86,12 +86,15 @@ function simplifyClosed(pts: Pt[], tol: number): Pt[] {
  * The rooms the walls make. `solids` is every filled shape: each is a list of rings filled with the even-odd rule (an open wall is one ring; a closed outline such as a house ring is two, the outer and the inner face), and the
  * gaps of doors and windows go in as solids too. `mpp` is the plan's metres per pixel.
  */
-export function detectRooms(solids: Pt[][][], o: { mpp: number; cellMm?: number; minAreaM2?: number }): DetectResult {
+export function detectRooms(wallSolids: Pt[][][], o: { mpp: number; cellMm?: number; minAreaM2?: number; /** room edges: lines that close a room where there is no wall (each a list of points) */ edges?: Pt[][] }): DetectResult {
   const mpp = o.mpp
-  const empty: DetectResult = { rooms: [], cellMm: o.cellMm ?? 10, solids: solids.length }
-  if (!(mpp > 0) || solids.length === 0) return empty
+  const edges = (o.edges ?? []).filter(e => e.length >= 2)
+  const empty: DetectResult = { rooms: [], cellMm: o.cellMm ?? 10, solids: wallSolids.length + edges.length }
+  if (!(mpp > 0) || wallSolids.length === 0) return empty   // (edges alone make no room: they only close one that walls make)
+  const solids = wallSolids.slice()
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
   for (const s of solids) for (const r of s) for (const p of r) { if (p.x < minX) minX = p.x; if (p.y < minY) minY = p.y; if (p.x > maxX) maxX = p.x; if (p.y > maxY) maxY = p.y }
+  for (const e of edges) for (const p of e) { if (p.x < minX) minX = p.x; if (p.y < minY) minY = p.y; if (p.x > maxX) maxX = p.x; if (p.y > maxY) maxY = p.y }
   if (!Number.isFinite(minX)) return empty
   let cellMm = o.cellMm ?? 10
   // a huge drawing gets bigger cells rather than a huge grid
@@ -101,6 +104,17 @@ export function detectRooms(solids: Pt[][][], o: { mpp: number; cellMm?: number;
     cellMm *= 1.5
   }
   const c = cellMm / (mpp * 1000)       // a cell in plan pixels
+  // a room edge is filled in as a thin strip (one and a half cells wide, so it always closes the gap, even slanted)
+  const half = 0.75 * c
+  for (const e of edges) {
+    for (let i = 0; i + 1 < e.length; i++) {
+      const a = e[i], b = e[i + 1], len = Math.hypot(b.x - a.x, b.y - a.y)
+      if (len < 1e-9) continue
+      const dx = (b.x - a.x) / len, dy = (b.y - a.y) / len, nx = -dy, ny = dx
+      const p0 = { x: a.x - dx * half, y: a.y - dy * half }, p1 = { x: b.x + dx * half, y: b.y + dy * half }
+      solids.push([[{ x: p0.x + nx * half, y: p0.y + ny * half }, { x: p1.x + nx * half, y: p1.y + ny * half }, { x: p1.x - nx * half, y: p1.y - ny * half }, { x: p0.x - nx * half, y: p0.y - ny * half }]])
+    }
+  }
   const ox = minX - 2 * c, oy = minY - 2 * c
   const W = Math.ceil((maxX - minX) / c) + 5, H = Math.ceil((maxY - minY) / c) + 5
   const grid = new Uint8Array(W * H)
@@ -223,6 +237,8 @@ export function detectRooms(solids: Pt[][][], o: { mpp: number; cellMm?: number;
 
 // ── Rooms drawn as a shape ───────────────────────────────────────────────────────────────────────────────────────────
 /** A room drawn directly (the Rooms tool with Rectangle or Polygon) instead of being found from walls: just its outline, its name and kind are a RoomLabel like any other room's. */
+/** A line that closes a room where there is no wall (the open side of three walls) or splits an open space into rooms: not a wall, nothing is painted or priced for it. */
+export interface RoomEdge { id: string; points: Pt[] }
 export interface DrawnRoomShape { id: string; points: Pt[]; /** drawn as a rectangle: dragging a corner keeps it a rectangle */ rect?: boolean }
 
 const distToSegment = (p: Pt, a: Pt, b: Pt) => {

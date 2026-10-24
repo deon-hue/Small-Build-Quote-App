@@ -19,7 +19,12 @@ interface Props {
   onKind: (idx: number, kind: string) => void
   onRemoveName: (idx: number) => void
   /** draw a room as a rectangle or a polygon */
-  onDraw: (kind: 'rect' | 'polygon') => void
+  onDraw: (kind: 'rect' | 'polygon' | 'edge') => void
+  /** the room edges drawn on this sheet (lines that close a room where there is no wall) */
+  edges: { id: string; lengthM: number }[]
+  selectedEdgeId: string | null
+  onSelectEdge: (id: string | null) => void
+  onDeleteEdge: (id: string) => void
   /** this room was drawn as a shape (it can be deleted here) rather than found from walls */
   isDrawn: (idx: number) => boolean
   onDeleteDrawn: (idx: number) => void
@@ -67,6 +72,19 @@ export default function RoomsPanel(p: Props) {
           <button type="button" onClick={() => p.onDraw('rect')} style={{ flex: 1, padding: '7px', fontSize: 12, fontWeight: 600, borderRadius: 5, cursor: 'pointer', border: '1px solid var(--to-border)', background: 'var(--to-bg)', color: 'var(--to-text)', fontFamily: 'inherit' }}>▭ Rectangle</button>
           <button type="button" onClick={() => p.onDraw('polygon')} style={{ flex: 1, padding: '7px', fontSize: 12, fontWeight: 600, borderRadius: 5, cursor: 'pointer', border: '1px solid var(--to-border)', background: 'var(--to-bg)', color: 'var(--to-text)', fontFamily: 'inherit' }}>⬠ Any shape</button>
         </div>
+        <button type="button" onClick={() => p.onDraw('edge')} style={{ width: '100%', marginTop: 6, padding: '7px', fontSize: 12, fontWeight: 600, borderRadius: 5, cursor: 'pointer', border: '1px solid #7c3aed', background: 'var(--to-bg)', color: '#7c3aed', fontFamily: 'inherit' }}>┆ Room edge (closes a room)</button>
+        <div style={{ fontSize: 10.5, color: 'var(--to-muted)', marginTop: 5, lineHeight: 1.4 }}>A room edge is a line that closes a room where there is no wall: the open side of an extension, or the line between a kitchen and a dining space. It is not a wall, so nothing is painted or priced for it. Draw it from end to end of the open side.</div>
+        {p.edges.length > 0 && (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ ...label, marginBottom: 3 }}>Room edges ({p.edges.length})</div>
+            {p.edges.map((e, i) => (
+              <div key={e.id} onClick={() => p.onSelectEdge(e.id === p.selectedEdgeId ? null : e.id)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 4px', fontSize: 11.5, cursor: 'pointer', background: e.id === p.selectedEdgeId ? 'rgba(124,58,237,0.14)' : 'transparent', color: 'var(--to-textb)' }}>
+                <span style={{ flex: 1 }}>Edge {i + 1} · {e.lengthM.toFixed(2)} m</span>
+                <button type="button" onClick={ev => { ev.stopPropagation(); p.onDeleteEdge(e.id) }} style={{ padding: '1px 7px', fontSize: 11, borderRadius: 4, cursor: 'pointer', border: '1px solid #c0392b', background: 'transparent', color: '#c0392b', fontFamily: 'inherit' }}>Delete</button>
+              </div>
+            ))}
+          </div>
+        )}
         <div style={{ fontSize: 10.5, color: 'var(--to-muted)', marginTop: 5, lineHeight: 1.4 }}>For a room with no walls drawn round it: its outline is the floor. Or draw the walls and the room is found by itself.</div>
       </div>
 
@@ -75,7 +93,7 @@ export default function RoomsPanel(p: Props) {
           {!p.hasWalls
             ? 'No rooms yet. Draw one above, or draw the walls in External Walls and Internal Walls & Partitions and the rooms are found.'
             : p.wallsButNoRooms
-              ? 'No closed room found. Check the walls make a closed shape with no gaps: their ends should meet (snap them together) and a partition should reach the walls on both sides.'
+              ? 'No closed room found. Check the walls make a closed shape with no gaps: their ends should meet (snap them together) and a partition should reach the walls on both sides. If one side has no wall (the open side of an extension), draw a Room edge across it.'
               : 'No rooms found.'}
         </div>
       )}

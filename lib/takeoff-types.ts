@@ -6,7 +6,7 @@ import type { WallConstructionType, WallFinishType, CalculatedMaterial } from '.
 import type { CostedLine } from './assembly-calc'
 import type { ElectricPoint } from './electric-points'
 import type { PlacedOpening } from './wall-openings'
-import type { RoomLabel, DrawnRoomShape } from './rooms-from-walls'
+import type { RoomLabel, DrawnRoomShape, RoomEdge } from './rooms-from-walls'
 import type { CalcStateSnapshot } from './calc-snapshot'
 
 // ── Drawing tools ─────────────────────────────────────────────────────────────
@@ -357,6 +357,8 @@ export interface TakeoffSheet {
   roomLabels?: RoomLabel[]
   /** rooms drawn on this sheet as shapes (not found from walls) */
   roomShapes?: DrawnRoomShape[]
+  /** the room edges drawn on this sheet */
+  roomEdges?: RoomEdge[]
 }
 
 export const SCALE_PRESETS: { label: string; mpp: number }[] = [
@@ -406,6 +408,7 @@ export interface TakeoffProject {
   /** room names for a take-off with no plan loaded yet (once there is a sheet they are kept on it) */
   roomLabels?:   RoomLabel[]
   roomShapes?:   DrawnRoomShape[]
+  roomEdges?:    RoomEdge[]
 }
 
 // ── Export format ─────────────────────────────────────────────────────────────

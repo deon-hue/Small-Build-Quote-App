@@ -5,7 +5,7 @@ import NumInput from '@/components/NumInput'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { makeDebouncedSave, isEmptyTakeoff, isUuid, newProjectId, loadTakeoffFromSupabase, saveTakeoffToSupabase, listTakeoffSummaries, deleteTakeoffProject, type TakeoffSummary } from '@/lib/takeoff-sync'
-import { roomLabelsOf, setRoomLabels, roomShapesOf, setRoomShapes, activeSheetIdOf, onActiveSheet, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet, setSheetPaper } from '@/lib/takeoff-sheets'
+import { roomLabelsOf, setRoomLabels, roomShapesOf, setRoomShapes, roomEdgesOf, setRoomEdges, activeSheetIdOf, onActiveSheet, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet, setSheetPaper } from '@/lib/takeoff-sheets'
 import { layoutTags, polylineMidpoint, textColorFor, tagText, TAG_HEIGHT_PX } from '@/lib/takeoff-tags'
 import { PDF_RENDER_MM_PER_PX, PAPER_SIZES, SCALE_DENOMS, scaleLabel, denomFromLabel, mppForScale, paperFromMm, inferPdfPaper, mmPerPxForPaper } from '@/lib/takeoff-paper'
 import { putSheetImage, getSheetImage, deleteProjectImages } from '@/lib/takeoff-sheet-images'
@@ -862,8 +862,9 @@ export default function TakeoffPage() {
   const [viewRooms, setViewRooms] = useState(true)
   const [selectedRoomPt, setSelectedRoomPt] = useState<TakeoffPoint | null>(null)
   // the rectangle or polygon tool is drawing a ROOM (picked while the Rooms tool was active, or from the Rooms panel), not a priced drawing
-  const [roomDraw, setRoomDraw] = useState(false)
-  useEffect(() => { if (tool !== 'rect' && tool !== 'polygon') setRoomDraw(false) }, [tool])
+  const [roomDraw, setRoomDraw] = useState<false | 'room' | 'edge'>(false)
+  useEffect(() => { if (tool !== 'rect' && tool !== 'polygon' && tool !== 'line') setRoomDraw(false) }, [tool])
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const tagDragRef = useRef<{ id: string; sx: number; sy: number; dx0: number; dy0: number } | null>(null)
   useEffect(() => {
     try {
@@ -1419,6 +1420,7 @@ export default function TakeoffPage() {
       return
     }
     if (tool === 'room') {
+      setSelectedEdgeId(null)
       const at = svgCoords(e)
       const i = roomData ? roomIndexAt(roomData.rooms, at) : -1
       setSelectedRoomPt(i >= 0 && roomData ? roomData.rooms[i].labelAt : null)
@@ -1523,8 +1525,23 @@ export default function TakeoffPage() {
     showToast(`Room drawn: ${room.areaM2.toFixed(1)} m². Name it and say what kind of room it is in the panel.`)
   }
 
+  /** A room edge: a line that closes a room where there is no wall (or splits an open space). Not a wall: nothing is painted or priced for it. */
+  function addRoomEdge(pts: TakeoffPoint[]) {
+    setDrawPoints([]); setIsDrawing(false); setTyped('')
+    const mpp = project.calibration.mpp
+    let len = 0
+    for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y)
+    if (!(len * mpp > 0.05)) { showToast('That line is too short to be a room edge'); return }
+    const id = uid()
+    setProject(p => setRoomEdges(p, [...roomEdgesOf(p), { id, points: pts }]))
+    setRoomDraw(false); setTool('room'); setPanelMode('properties'); setEditingItem(null); setEditingElement(null); setSelectedId(null)
+    setSelectedEdgeId(id)
+    showToast(`Room edge added (${(len * mpp).toFixed(2)} m). Rooms are found again a moment after.`)
+  }
+
   function finishElement(type: 'line' | 'rect' | 'polygon', pts: TakeoffPoint[], isFloor = false) {
-    if (roomDraw && (type === 'rect' || type === 'polygon')) { addDrawnRoom(type, pts); return }
+    if (roomDraw === 'room' && (type === 'rect' || type === 'polygon')) { addDrawnRoom(type, pts); return }
+    if (roomDraw === 'edge' && type === 'line') { addRoomEdge(pts); return }
     const phase: TakeoffPhase = isFloor ? 'Floors & Screeds' : activePhase
     const color = PHASE_COLORS[phase]
     const shortId = Date.now().toString(36).slice(-4)
@@ -1712,7 +1729,7 @@ export default function TakeoffPage() {
   useEffect(() => {
     const t = setTimeout(() => setRoomTick(n => n + 1), 250)
     return () => clearTimeout(t)
-  }, [roomsOn, project.elements, project.items, project.calibration.mpp, project.activeSheetId])
+  }, [roomsOn, project.elements, project.items, project.calibration.mpp, project.activeSheetId, project.sheets, project.roomEdges])
   const roomCore = useMemo(() => {
     const mpp = project.calibration.mpp
     if (!roomsOn || !(mpp > 0)) return null
@@ -1725,7 +1742,7 @@ export default function TakeoffPage() {
       const shape = g ? openingShape(g.path, g.closed, o, mpp, g.band) : null
       if (shape && g) { solids.push([shape.gap]); gaps.push({ shape, band: g.band, kind: o.kind, w: o.widthMm / 1000, h: o.heightMm / 1000 }) }
     }
-    const det = detectRooms(solids, { mpp })
+    const det = detectRooms(solids, { mpp, edges: roomEdgesOf(project).map(e => e.points) })
     const counts: RoomWithOpenings[] = det.rooms.map(() => ({ doors: 0, windows: 0, doorWidthM: 0, doorAreaM2: 0, windowAreaM2: 0 }))
     const reach = 0.15 / mpp
     for (const gp of gaps) {
@@ -1870,6 +1887,10 @@ export default function TakeoffPage() {
     if (tool !== 'room' || !roomData || roomData.sheetId !== project.activeSheetId) return null
     return (
       <g>
+        {roomEdgesOf(project).map(e => (
+          <polyline key={'edge-hit-' + e.id} points={e.points.map(q => q.x + ',' + q.y).join(' ')} fill="none" stroke="rgba(0,0,0,0.001)" strokeWidth={12 / zoom} style={{ cursor: 'pointer' }}
+            onMouseDown={ev => { ev.stopPropagation(); setSelectedEdgeId(e.id); setSelectedRoomPt(null) }} onClick={ev => ev.stopPropagation()} />
+        ))}
         {roomData.rooms.map((r, i) => (r.drawnId ? (
           <g key={'re-' + r.drawnId}>
             <polygon points={r.polygon.map(q => q.x + ',' + q.y).join(' ')} fill="rgba(0,0,0,0.001)" style={{ cursor: 'move' }} onMouseDown={ev => startRoomShapeDrag(ev, r.drawnId!, { kind: 'move' })} />
@@ -1882,9 +1903,13 @@ export default function TakeoffPage() {
     )
   }
 
-  function startRoomDraw(kind: 'rect' | 'polygon') {
-    setRoomDraw(true); setTool(kind); setDrawPoints([]); setIsDrawing(false); setTyped('')
-    showToast(kind === 'rect' ? 'Click two opposite corners of the room (or type its size, like 4.5x3, and press Enter)' : 'Click each corner of the room, double-click to finish')
+  function deleteRoomEdge(id: string) {
+    setProject(p => setRoomEdges(p, roomEdgesOf(p).filter(e => e.id !== id)))
+    setSelectedEdgeId(null)
+  }
+  function startRoomDraw(kind: 'rect' | 'polygon' | 'edge') {
+    setRoomDraw(kind === 'edge' ? 'edge' : 'room'); setTool(kind === 'edge' ? 'line' : kind); setDrawPoints([]); setIsDrawing(false); setTyped('')
+    showToast(kind === 'edge' ? 'Click where the room edge starts and where it ends (it closes the room along that line); double-click to finish' : kind === 'rect' ? 'Click two opposite corners of the room (or type its size, like 4.5x3, and press Enter)' : 'Click each corner of the room, double-click to finish')
   }
   function roomRemoveName(idx: number) {
     const li = roomLabelIdx[idx]
@@ -1898,6 +1923,9 @@ export default function TakeoffPage() {
     const mpp = project.calibration.mpp
     return (
       <g style={{ pointerEvents: 'none' }}>
+        {roomEdgesOf(project).map(e => (
+          <polyline key={'edge-' + e.id} points={e.points.map(q => q.x + ',' + q.y).join(' ')} fill="none" stroke={e.id === selectedEdgeId ? '#1565c0' : '#7c3aed'} strokeWidth={(e.id === selectedEdgeId ? 3 : 2) / zoom} strokeDasharray={`${8 / zoom} ${4 / zoom}`} strokeLinecap="round" strokeLinejoin="round" />
+        ))}
         {roomData.rooms.map((r, i) => {
           const info = roomInfos[i]
           const kind = info.kind ? ROOM_KIND_BY_ID[info.kind] : undefined
@@ -1942,6 +1970,10 @@ export default function TakeoffPage() {
           return { widthM: +((Math.max(...xs) - Math.min(...xs)) * mpp).toFixed(3), depthM: +((Math.max(...ys) - Math.min(...ys)) * mpp).toFixed(3) }
         })()}
         onResizeDrawn={resizeDrawnRoom}
+        edges={roomEdgesOf(project).map(e => ({ id: e.id, lengthM: e.points.slice(1).reduce((s, q, i) => s + Math.hypot(q.x - e.points[i].x, q.y - e.points[i].y), 0) * project.calibration.mpp }))}
+        selectedEdgeId={selectedEdgeId}
+        onSelectEdge={setSelectedEdgeId}
+        onDeleteEdge={deleteRoomEdge}
         hasWalls={!!roomData?.hasWalls}
         wallsButNoRooms={!!roomData?.hasWalls && roomInfos.length === 0}
         cellMm={roomData?.cellMm ?? 10}
@@ -2939,6 +2971,7 @@ export default function TakeoffPage() {
       if (!inField && !e.ctrlKey && !e.metaKey && !isDrawing && selectedId && (e.key === 'r' || e.key === 'R')) { rotateSelected(90); return }
       if ((e.key === 'Delete' || e.key === 'Backspace') && !inField && !isDrawing) {
         if (selectedOpeningId) deleteOpening(selectedOpeningId)
+        else if (tool === 'room' && selectedEdgeId) deleteRoomEdge(selectedEdgeId)
         else if (tool === 'room' && selectedRoomIdx >= 0 && roomData?.rooms[selectedRoomIdx]?.drawnId) deleteDrawnRoom(selectedRoomIdx)
         else deleteSelected()
       }
@@ -6068,7 +6101,7 @@ export default function TakeoffPage() {
           ] as { t: DrawingTool; icon: string; label: string }[]).filter(({ t }) => (t !== 'electric' || activePhase === 'Electrics') && (t !== 'opening' || activePhase === 'Windows & Doors')).map(({ t, icon, label }) => (
             <div
               key={t}
-              onClick={() => { if (tool === 'measure' || t === 'measure') { setDrawPoints([]); setIsDrawing(false) } if (tool === 'room' && (t === 'rect' || t === 'polygon')) startRoomDraw(t); else setTool(t); if (t === 'select') { setDrawPoints([]); setIsDrawing(false) } if (t === 'electric') setPanelMode('properties'); if (t === 'opening' || t === 'room') { setPanelMode('properties'); setEditingItem(null); setEditingElement(null); setSelectedId(null) } }}
+              onClick={() => { if (tool === 'measure' || t === 'measure') { setDrawPoints([]); setIsDrawing(false) } if (tool === 'room' && (t === 'rect' || t === 'polygon')) startRoomDraw(t); else if (tool === 'room' && t === 'line') startRoomDraw('edge'); else setTool(t); if (t === 'select') { setDrawPoints([]); setIsDrawing(false) } if (t === 'electric') setPanelMode('properties'); if (t === 'opening' || t === 'room') { setPanelMode('properties'); setEditingItem(null); setEditingElement(null); setSelectedId(null) } }}
               style={{
                 display: 'flex', alignItems: 'center', gap: 7,
                 padding: '7px 8px', marginBottom: 3, borderRadius: 5, cursor: 'pointer',
@@ -6503,6 +6536,7 @@ export default function TakeoffPage() {
           }}>
             <span>Tool: <strong style={{ color: tool === 'floor' ? '#f39c12' : 'var(--to-text)' }}>{
               calibDrawing ? '📏 CALIBRATING' :
+              (roomDraw === 'edge' && tool === 'line') ? 'Drawing a ROOM EDGE: click its start and end (it closes a room, it is not a wall)' :
               (roomDraw && tool === 'rect') ? 'Drawing a ROOM: click two corners (or type the size)' :
               (roomDraw && tool === 'polygon') ? 'Drawing a ROOM: click each corner, double-click to finish' :
               tool === 'select' ? 'Select' :

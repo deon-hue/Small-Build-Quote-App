@@ -5,7 +5,7 @@
 // before there were sheets) belongs to the first sheet. When the first plan is added, anything already drawn is stamped with that sheet's id, so deleting a sheet later never adopts another's drawings.
 
 import type { TakeoffProject, TakeoffSheet, DrawnElement, TakeoffItem, ScaleCalibration } from './takeoff-types'
-import type { RoomLabel, DrawnRoomShape } from './rooms-from-walls'
+import type { RoomLabel, DrawnRoomShape, RoomEdge } from './rooms-from-walls'
 import type { ElectricPoint } from './electric-points'
 
 export const DEFAULT_SHEET_CALIBRATION: ScaleCalibration = { mpp: 0.0265, label: '1:100' }
@@ -74,6 +74,17 @@ export function setRoomShapes(p: TakeoffProject, shapes: DrawnRoomShape[]): Take
   return { ...p, sheets: p.sheets?.map(s => (s.id === id ? { ...s, roomShapes: shapes } : s)) }
 }
 
+export function roomEdgesOf(p: TakeoffProject): RoomEdge[] {
+  const id = activeSheetIdOf(p)
+  return (id ? p.sheets?.find(s => s.id === id)?.roomEdges : p.roomEdges) ?? []
+}
+
+export function setRoomEdges(p: TakeoffProject, edges: RoomEdge[]): TakeoffProject {
+  const id = activeSheetIdOf(p)
+  if (!id) return { ...p, roomEdges: edges }
+  return { ...p, sheets: p.sheets?.map(s => (s.id === id ? { ...s, roomEdges: edges } : s)) }
+}
+
 /** Records (or, with no value, forgets) how big a pixel of the sheet's picture is on paper. */
 export function setSheetPaper(p: TakeoffProject, sheetId: string, paper: string | undefined, mmPerPx: number | undefined): TakeoffProject {
   return { ...p, sheets: p.sheets?.map(s => {
@@ -118,12 +129,13 @@ export function addSheets(p: TakeoffProject, added: TakeoffSheet[]): TakeoffProj
     const first = { ...sheets[0], calibration: { ...p.calibration }, scaleSet: sheets[0].scaleSet || p.calibration.label !== DEFAULT_SHEET_CALIBRATION.label || p.elements.length > 0 }
     if (p.roomLabels?.length) first.roomLabels = p.roomLabels
     if (p.roomShapes?.length) first.roomShapes = p.roomShapes
+    if (p.roomEdges?.length) first.roomEdges = p.roomEdges
     sheets = [first, ...sheets.slice(1)]
     elements = p.elements.map(e => (e.sheetId ? e : { ...e, sheetId: first.id }))
     items = p.items.map(it => (it.electricPoints ? { ...it, electricPoints: stampPoints(it.electricPoints, first.id) } : it))
   }
   const active = added[added.length - 1]
-  const { roomLabels: _moved, roomShapes: _moved2, ...rest } = p
+  const { roomLabels: _moved, roomShapes: _moved2, roomEdges: _moved3, ...rest } = p
   return { ...(hadNone ? rest : p), sheets, elements, items, activeSheetId: active.id, calibration: { ...(sheets.find(s => s.id === active.id)!.calibration) } }
 }
 
