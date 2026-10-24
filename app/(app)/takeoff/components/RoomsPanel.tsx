@@ -23,6 +23,9 @@ interface Props {
   /** this room was drawn as a shape (it can be deleted here) rather than found from walls */
   isDrawn: (idx: number) => boolean
   onDeleteDrawn: (idx: number) => void
+  /** the selected drawn rectangle's width and depth, m (null for any other room) and a way to change them (its top-left corner stays) */
+  drawnSize: { widthM: number; depthM: number } | null
+  onResizeDrawn: (idx: number, widthM: number, depthM: number) => void
   /** the plan has walls but no closed room was found among them */
   wallsButNoRooms: boolean
   hasWalls: boolean
@@ -106,6 +109,13 @@ export default function RoomsPanel(p: Props) {
                 {ROOM_KINDS.map(k => <option key={k.id} value={k.id}>{k.label}</option>)}
               </select>
             </div>
+            {p.drawnSize && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                <div><div style={tiny}>Width (left to right)</div><Num value={p.drawnSize.widthM} onChange={n => p.onResizeDrawn(p.selectedIdx, n, p.drawnSize!.depthM)} suffix="m" /></div>
+                <div><div style={tiny}>Depth (up and down)</div><Num value={p.drawnSize.depthM} onChange={n => p.onResizeDrawn(p.selectedIdx, p.drawnSize!.widthM, n)} suffix="m" /></div>
+              </div>
+            )}
+            {p.isDrawn(p.selectedIdx) && <div style={{ fontSize: 10.5, color: 'var(--to-muted)', lineHeight: 1.4 }}>Drag the room on the plan to move it, or a white corner to reshape it. Delete removes it.</div>}
             <div><div style={tiny}>Ceiling height</div><Num value={lab?.heightM ?? DEFAULT_ROOM_HEIGHT_M} onChange={n => p.onUpdate(p.selectedIdx, { heightM: n })} suffix="m" /></div>
             <div style={{ fontSize: 11.5, color: 'var(--to-text)', lineHeight: 1.6 }}>
               Floor <strong>{sel.areaM2.toFixed(2)} m²</strong> · {sel.lengthM.toFixed(2)} × {sel.widthM.toFixed(2)} m<br />

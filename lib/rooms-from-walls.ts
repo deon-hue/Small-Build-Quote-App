@@ -223,12 +223,41 @@ export function detectRooms(solids: Pt[][][], o: { mpp: number; cellMm?: number;
 
 // ── Rooms drawn as a shape ───────────────────────────────────────────────────────────────────────────────────────────
 /** A room drawn directly (the Rooms tool with Rectangle or Polygon) instead of being found from walls: just its outline, its name and kind are a RoomLabel like any other room's. */
-export interface DrawnRoomShape { id: string; points: Pt[] }
+export interface DrawnRoomShape { id: string; points: Pt[]; /** drawn as a rectangle: dragging a corner keeps it a rectangle */ rect?: boolean }
 
 const distToSegment = (p: Pt, a: Pt, b: Pt) => {
   const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy
   const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2))
   return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy))
+}
+
+/** Four corners that are an upright rectangle (sides along the page), the one a rectangle tool makes */
+export function isAxisRect(p: Pt[]): boolean {
+  if (p.length !== 4) return false
+  const near = (a: number, b: number) => Math.abs(a - b) < 1e-6
+  return (near(p[0].y, p[1].y) && near(p[1].x, p[2].x) && near(p[2].y, p[3].y) && near(p[3].x, p[0].x)) || (near(p[0].x, p[1].x) && near(p[1].y, p[2].y) && near(p[2].x, p[3].x) && near(p[3].y, p[0].y))
+}
+
+/** An upright rectangle from two opposite corners, as its four corners clockwise from the top left */
+export const rectFromCorners = (a: Pt, b: Pt): Pt[] => {
+  const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y)
+  return [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }]
+}
+
+/** The outline moved by (dx, dy) */
+export const moveOutline = (p: Pt[], dx: number, dy: number): Pt[] => p.map(q => ({ x: q.x + dx, y: q.y + dy }))
+
+/** A rectangle given a new width and depth (plan pixels), keeping its top-left corner */
+export function resizeRectOutline(p: Pt[], widthPx: number, depthPx: number): Pt[] {
+  const x0 = Math.min(...p.map(q => q.x)), y0 = Math.min(...p.map(q => q.y))
+  return rectFromCorners({ x: x0, y: y0 }, { x: x0 + widthPx, y: y0 + depthPx })
+}
+
+/** Where a room's name point goes after its outline is edited: moved by the same amount if the room was moved, kept if it is still inside, else the roomiest point of the new outline */
+export function labelAfterEdit(label: Pt, newOutline: Pt[], mpp: number, delta?: { dx: number; dy: number }): Pt {
+  if (delta) { const m = { x: label.x + delta.dx, y: label.y + delta.dy }; if (pointInPolygon(m, newOutline)) return m }
+  else if (pointInPolygon(label, newOutline)) return label
+  return roomFromPolygon(newOutline, mpp)?.labelAt ?? label
 }
 
 /** A drawn outline as a room: its floor area, the length round it, the box it fits and the roomiest point inside it (where its name goes). Null if it has no area. */
