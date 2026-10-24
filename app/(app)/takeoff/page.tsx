@@ -5,7 +5,7 @@ import NumInput from '@/components/NumInput'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { makeDebouncedSave, isEmptyTakeoff, isUuid, newProjectId, loadTakeoffFromSupabase, saveTakeoffToSupabase, listTakeoffSummaries, deleteTakeoffProject, type TakeoffSummary } from '@/lib/takeoff-sync'
-import { activeSheetIdOf, onActiveSheet, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet, setSheetPaper } from '@/lib/takeoff-sheets'
+import { roomLabelsOf, setRoomLabels, activeSheetIdOf, onActiveSheet, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet, setSheetPaper } from '@/lib/takeoff-sheets'
 import { layoutTags, polylineMidpoint, textColorFor, tagText, TAG_HEIGHT_PX } from '@/lib/takeoff-tags'
 import { PDF_RENDER_MM_PER_PX, PAPER_SIZES, SCALE_DENOMS, scaleLabel, denomFromLabel, mppForScale, paperFromMm, inferPdfPaper, mmPerPxForPaper } from '@/lib/takeoff-paper'
 import { putSheetImage, getSheetImage, deleteProjectImages } from '@/lib/takeoff-sheet-images'
@@ -18,6 +18,8 @@ import { WALL_MAKEUP_TO_SUBPHASE_CANONICAL } from '@/lib/built-assembly-ids'
 import AssemblyItemPanel from './components/AssemblyWindow'
 import ElectricalPointsPanel, { POINT_GROUP_COLOUR } from './components/ElectricalPointsPanel'
 import OpeningsPanel from './components/OpeningsPanel'
+import RoomsPanel from './components/RoomsPanel'
+import { detectRooms, roomIndexAt, describeRooms, labelIndexForRooms, ROOM_KIND_BY_ID, type DetectedRoom, type PlanRoomInfo, type RoomLabel, type RoomWithOpenings } from '@/lib/rooms-from-walls'
 import { POINT_BY_ID, type ElectricsSavedState } from '@/lib/electrics-units'
 import { planRoomsFromPoints, roomAtPoint, rectToPolygon, POINT_SHORT, type ElectricPoint } from '@/lib/electric-points'
 
@@ -134,6 +136,7 @@ const TOOL_DISPLAY: Record<DrawingTool, string> = {
   click:   'Click to Place Item',
   electric: 'Place Electrical Point',
   opening: 'Place Window / Door',
+  room: 'Rooms',
   measure: 'Measure',
 }
 
@@ -856,6 +859,8 @@ export default function TakeoffPage() {
   const [viewHalo, setViewHalo] = useState(true)
   const [viewTags, setViewTags] = useState(true)
   const [viewFade, setViewFade] = useState(30)
+  const [viewRooms, setViewRooms] = useState(true)
+  const [selectedRoomPt, setSelectedRoomPt] = useState<TakeoffPoint | null>(null)
   const tagDragRef = useRef<{ id: string; sx: number; sy: number; dx0: number; dy0: number } | null>(null)
   useEffect(() => {
     try {
@@ -863,11 +868,12 @@ export default function TakeoffPage() {
       if (r && typeof r === 'object') {
         if (typeof r.halo === 'boolean') setViewHalo(r.halo)
         if (typeof r.tags === 'boolean') setViewTags(r.tags)
+        if (typeof r.rooms === 'boolean') setViewRooms(r.rooms)
         if (typeof r.fade === 'number' && r.fade >= 0 && r.fade <= 75) setViewFade(r.fade)
       }
     } catch {}
   }, [])
-  useEffect(() => { try { localStorage.setItem('sbc_takeoff_view', JSON.stringify({ halo: viewHalo, tags: viewTags, fade: viewFade })) } catch {} }, [viewHalo, viewTags, viewFade])
+  useEffect(() => { try { localStorage.setItem('sbc_takeoff_view', JSON.stringify({ halo: viewHalo, tags: viewTags, fade: viewFade, rooms: viewRooms })) } catch {} }, [viewHalo, viewTags, viewFade, viewRooms])
   const lastSaveError = useRef('')
   const idMigration = useRef<string | null>(null)
   const oldPictureFolders = useRef<string[]>([])
@@ -1409,6 +1415,12 @@ export default function TakeoffPage() {
       placeOpening(svgCoords(e))
       return
     }
+    if (tool === 'room') {
+      const at = svgCoords(e)
+      const i = roomData ? roomIndexAt(roomData.rooms, at) : -1
+      setSelectedRoomPt(i >= 0 && roomData ? roomData.rooms[i].labelAt : null)
+      return
+    }
     if (tool === 'measure') {
       setMeasureDone(null)
       const mp = drawingPoint(svgCoords(e)).pt
@@ -1637,9 +1649,10 @@ export default function TakeoffPage() {
 
   // Named rooms drawn in Floors, as shapes, so a point takes the room it falls in
   function electricRoomShapes() {
-    return elementsOnActiveSheet(project)
+    const named = roomData ? roomData.rooms.map((r, i) => ({ name: roomLabels[roomLabelIdx[i]]?.name?.trim() ?? '', points: r.polygon })).filter(r => r.name) : []
+    return named.concat(elementsOnActiveSheet(project)
       .filter(el => el.phase === 'Floors & Screeds' && el.points.length >= 2)
-      .map(el => ({ name: project.items.find(it => it.elementId === el.id)?.roomName ?? '', points: el.type === 'rect' ? rectToPolygon(el.points) : el.points }))
+      .map(el => ({ name: project.items.find(it => it.elementId === el.id)?.roomName ?? '', points: el.type === 'rect' ? rectToPolygon(el.points) : el.points })))
   }
 
   function placeElectricPoint(pt: TakeoffPoint) {
@@ -1673,6 +1686,143 @@ export default function TakeoffPage() {
   const allPlaced: PlacedOpening[] = wdItem?.placedOpenings ?? []
   // an opening whose wall has been deleted is not shown or counted (and comes back with the wall if the deletion is undone)
   const livePlaced = allPlaced.filter(o => project.elements.some(e => e.id === o.wallId))
+
+  // ── Rooms made from the walls ─────────────────────────────────────────────
+  // Every wall (joined where they meet, at real thickness) and the gap of every door and window is filled in on a fine grid; the enclosed empty space is a room (lib/rooms-from-walls.ts). Names are kept on the sheet.
+  const roomsOn = viewRooms || tool === 'room' || !!assemblyWindowItemId   // (a calculator being open needs them too)
+  const roomLabels = roomLabelsOf(project)
+  // the rooms are worked out a moment after the last change to the walls (not on every mouse move of a drag)
+  const [roomTick, setRoomTick] = useState(0)
+  useEffect(() => {
+    const t = setTimeout(() => setRoomTick(n => n + 1), 250)
+    return () => clearTimeout(t)
+  }, [roomsOn, project.elements, project.items, project.calibration.mpp, project.activeSheetId])
+  const roomData = useMemo(() => {
+    const mpp = project.calibration.mpp
+    if (!roomsOn || !(mpp > 0)) return null
+    const els = elementsOnActiveSheet(project)
+    const solids = wallSolids(els)
+    const gaps: { shape: NonNullable<ReturnType<typeof openingShape>>; band: WallBand; kind: string; w: number; h: number }[] = []
+    for (const o of allPlaced) {
+      const el = els.find(e => e.id === o.wallId)
+      const g = el && wallGeometry(el)
+      const shape = g ? openingShape(g.path, g.closed, o, mpp, g.band) : null
+      if (shape && g) { solids.push([shape.gap]); gaps.push({ shape, band: g.band, kind: o.kind, w: o.widthMm / 1000, h: o.heightMm / 1000 }) }
+    }
+    const det = detectRooms(solids, { mpp })
+    const counts: RoomWithOpenings[] = det.rooms.map(() => ({ doors: 0, windows: 0, doorWidthM: 0, doorAreaM2: 0, windowAreaM2: 0 }))
+    const reach = 0.15 / mpp
+    for (const gp of gaps) {
+      const N = { x: -gp.shape.tangent.y, y: gp.shape.tangent.x }, C = gp.shape.centre
+      const seen = new Set<number>()
+      for (const off of [gp.band.hi + reach, gp.band.lo - reach]) {
+        const i = roomIndexAt(det.rooms, { x: C.x + N.x * off, y: C.y + N.y * off })
+        if (i < 0 || seen.has(i)) continue
+        seen.add(i)
+        if (gp.kind.startsWith('win-')) { counts[i].windows++; counts[i].windowAreaM2 += gp.w * gp.h }
+        else { counts[i].doors++; counts[i].doorWidthM += gp.w; counts[i].doorAreaM2 += gp.w * gp.h }
+      }
+    }
+    return { rooms: det.rooms, counts, cellMm: det.cellMm, hasWalls: solids.length > 0, sheetId: project.activeSheetId }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomTick, boSubPhases, allWallMakeups.length])
+  const roomInfos: PlanRoomInfo[] = roomData ? describeRooms(roomData.rooms, roomLabels, roomData.counts) : []
+  const roomLabelIdx = roomData ? labelIndexForRooms(roomData.rooms, roomLabels) : []
+  const selectedRoomIdx = roomData && selectedRoomPt ? roomIndexAt(roomData.rooms, selectedRoomPt) : -1
+
+  /** every wall as the rings it fills (joined where walls meet, as they are painted) */
+  function wallSolids(els: DrawnElement[]): TakeoffPoint[][][] {
+    const mpp = project.calibration.mpp
+    const pieces: { id: string; points: TakeoffPoint[]; closed: boolean; flip: boolean; group: string }[] = []
+    const kinds = new Map<string, NonNullable<ReturnType<typeof wallSpecFor>>>()
+    for (const el of els) {
+      if (el.phase !== 'External Walls' && el.phase !== 'Internal Walls & Partitions') continue
+      let w = wallSpecFor(el)
+      if (!w) {
+        const half = project.items.find(it => it.elementId === el.id)?.wallBandPx ?? 9   // a wall not drawn at real thickness is a band centred on the line
+        w = { spec: { layers: [{ kind: 'solid', mm: 2 * half * mpp * 1000 }], label: '' }, ref: 'centre', flip: false }
+      }
+      const group = `${el.phase === 'External Walls' ? '2-ext' : '1-int'}|${w.ref}|${JSON.stringify(w.spec.layers)}`
+      pieces.push({ id: el.id, points: el.type === 'rect' ? cornersOf(el) : el.points, closed: el.type !== 'line', flip: w.flip, group })
+      kinds.set(group, w)
+    }
+    const out: TakeoffPoint[][][] = []
+    for (const ch of chainWalls(pieces, 3)) {
+      const w = kinds.get(ch.group)
+      const wd = w ? wallDrawing(ch.points, w.spec, mpp, { ref: w.ref, closed: ch.closed, flip: ch.flip }) : null
+      if (wd) out.push(wd.rings)
+    }
+    return out
+  }
+
+  function roomLabelPatch(idx: number, patch: Partial<RoomLabel>) {
+    if (!roomData) return
+    const room = roomData.rooms[idx]
+    if (!room) return
+    const labels = roomLabelsOf(project)
+    const li = roomLabelIdx[idx]
+    setProject(p => setRoomLabels(p, li >= 0 ? labels.map((l, k) => (k === li ? { ...l, ...patch } : l)) : [...labels, { id: uid(), x: room.labelAt.x, y: room.labelAt.y, name: '', ...patch }]))
+    setSelectedRoomPt(room.labelAt)
+  }
+  function roomKindPatch(idx: number, kindId: string) {
+    const kind = ROOM_KIND_BY_ID[kindId]
+    if (!kind) return
+    const cur = roomLabels[roomLabelIdx[idx]]
+    const sameKind = roomLabels.filter(l => l.kind === kindId && l !== cur).length
+    const oldAuto = cur?.kind ? ROOM_KIND_BY_ID[cur.kind]?.label : ''
+    const blank = !cur?.name?.trim() || (!!oldAuto && cur!.name.replace(/ \d+$/, '') === oldAuto)
+    roomLabelPatch(idx, { kind: kindId, ...(blank ? { name: sameKind > 0 ? `${kind.label} ${sameKind + 1}` : kind.label } : {}) })
+  }
+  function roomRemoveName(idx: number) {
+    const li = roomLabelIdx[idx]
+    if (li < 0) return
+    setProject(p => setRoomLabels(p, roomLabelsOf(p).filter((_, k) => k !== li)))
+  }
+
+  /** the rooms shaded on the plan, each with its name and floor area (clickable with the Rooms tool) */
+  function renderRooms() {
+    if (!roomData || !roomsOn || roomData.sheetId !== project.activeSheetId) return null
+    const mpp = project.calibration.mpp
+    return (
+      <g style={{ pointerEvents: 'none' }}>
+        {roomData.rooms.map((r, i) => {
+          const info = roomInfos[i]
+          const kind = info.kind ? ROOM_KIND_BY_ID[info.kind] : undefined
+          const colour = kind?.wet ? '#0ea5e9' : '#22c55e'
+          const picked = i === selectedRoomIdx
+          const screenW = (r.widthM / mpp) * zoom
+          return (
+            <g key={'rm-' + i}>
+              <polygon points={r.polygon.map(q => q.x + ',' + q.y).join(' ')} fill={colour} fillOpacity={picked ? 0.3 : 0.14} stroke={picked ? '#1565c0' : 'none'} strokeWidth={2.5 / zoom} strokeDasharray={picked ? `${6 / zoom} ${3 / zoom}` : undefined} />
+              {screenW > 50 && (
+                <text x={r.labelAt.x} y={r.labelAt.y} textAnchor="middle" fontSize={12 / zoom} fontWeight={700} fill="#14532d" stroke="#fff" strokeWidth={3 / zoom} paintOrder="stroke">
+                  <tspan x={r.labelAt.x} dy={-3 / zoom}>{info.name}</tspan>
+                  <tspan x={r.labelAt.x} dy={14 / zoom} fontSize={11 / zoom} fontWeight={600}>{info.areaM2.toFixed(1)} m²</tspan>
+                </text>
+              )}
+            </g>
+          )
+        })}
+      </g>
+    )
+  }
+
+  function renderRoomsPanel() {
+    return (
+      <RoomsPanel
+        rooms={roomInfos}
+        labels={roomLabelIdx.map(i => (i >= 0 ? roomLabels[i] : undefined))}
+        selectedIdx={selectedRoomIdx}
+        onSelect={i => setSelectedRoomPt(i >= 0 && roomData ? roomData.rooms[i].labelAt : null)}
+        onUpdate={roomLabelPatch}
+        onKind={roomKindPatch}
+        onRemoveName={roomRemoveName}
+        hasWalls={!!roomData?.hasWalls}
+        wallsButNoRooms={!!roomData?.hasWalls && roomInfos.length === 0}
+        cellMm={roomData?.cellMm ?? 10}
+      />
+    )
+  }
 
   function newWdItem(): TakeoffItem {
     const sub = boSubPhases.find(sp => sp.canonical_id === 'wd-schedule')
@@ -3689,6 +3839,7 @@ export default function TakeoffPage() {
           labourTrades,
           calcState: item.assemblyCalcState,
           wallOpenings: isExtWall && item.elementId ? planWallOpenings(livePlaced, item.elementId, project.calibration.mpp) : undefined,
+          planRooms: roomData ? roomInfos : undefined,
           onSave: result => {
             const { calcState, state: _state, size, ...res } = result
             saveItemEdit({
@@ -5194,6 +5345,7 @@ export default function TakeoffPage() {
     const item = editingItem ?? phaseDefaults
     if ((activePhase === 'Electrics' && tool === 'electric') || item?.electricsSummary) return renderElectricsPanel()
     if ((activePhase === 'Windows & Doors' && tool === 'opening') || item?.wdSummary) return renderOpeningsPanel()
+    if (tool === 'room') return renderRoomsPanel()
     if (!item) {
       return (
         <div style={{ padding: '16px', color: 'var(--to-muted)', fontSize: 13, textAlign: 'center', paddingTop: 40 }}>
@@ -5785,10 +5937,11 @@ export default function TakeoffPage() {
             { t: 'click',   icon: '💠', label: 'Click to Place Item' },
             { t: 'electric', icon: '⚡', label: 'Place Electrical Point' },
             { t: 'opening', icon: '🪟', label: 'Place Window / Door' },
+            { t: 'room', icon: '🏠', label: 'Rooms' },
           ] as { t: DrawingTool; icon: string; label: string }[]).filter(({ t }) => (t !== 'electric' || activePhase === 'Electrics') && (t !== 'opening' || activePhase === 'Windows & Doors')).map(({ t, icon, label }) => (
             <div
               key={t}
-              onClick={() => { if (tool === 'measure' || t === 'measure') { setDrawPoints([]); setIsDrawing(false) } setTool(t); if (t === 'select') { setDrawPoints([]); setIsDrawing(false) } if (t === 'electric') setPanelMode('properties'); if (t === 'opening') { setPanelMode('properties'); setEditingItem(null); setEditingElement(null); setSelectedId(null) } }}
+              onClick={() => { if (tool === 'measure' || t === 'measure') { setDrawPoints([]); setIsDrawing(false) } setTool(t); if (t === 'select') { setDrawPoints([]); setIsDrawing(false) } if (t === 'electric') setPanelMode('properties'); if (t === 'opening' || t === 'room') { setPanelMode('properties'); setEditingItem(null); setEditingElement(null); setSelectedId(null) } }}
               style={{
                 display: 'flex', alignItems: 'center', gap: 7,
                 padding: '7px 8px', marginBottom: 3, borderRadius: 5, cursor: 'pointer',
@@ -5975,6 +6128,9 @@ export default function TakeoffPage() {
             <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }} title="A name tag on each drawing. Drag a tag in Select mode to move it out of the way">
               <input type="checkbox" checked={viewTags} onChange={e => setViewTags(e.target.checked)} style={{ width: 'auto' }} /> Names
             </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }} title="Shade the rooms the walls make, with their name and floor area">
+              <input type="checkbox" checked={viewRooms} onChange={e => setViewRooms(e.target.checked)} style={{ width: 'auto' }} /> Rooms
+            </label>
             <label style={{ display: 'flex', alignItems: 'center', gap: 4 }} title="Wash out the plan picture so your drawings stand out">
               Fade plan
               <input type="range" min={0} max={75} step={5} value={viewFade} onChange={e => setViewFade(+e.target.value)} style={{ width: 80 }} />
@@ -6058,6 +6214,8 @@ export default function TakeoffPage() {
                   </g>
                 )
               })()}
+
+              {renderRooms()}
 
               {/* Drawn elements — skip phases toggled hidden */}
               {viewHalo && <g style={{ pointerEvents: 'none' }}>{elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)).map(renderHalo)}</g>}
@@ -6224,6 +6382,7 @@ export default function TakeoffPage() {
               tool === 'click' ? 'Click to place an item' :
               tool === 'electric' ? 'Place electrical points' :
               tool === 'opening' ? 'Place windows and doors (click a wall)' :
+              tool === 'room' ? 'Rooms (click a room to name it)' :
               tool === 'floor' ? `⬛ Floor — ${FLOOR_MAKEUPS.find(m => m.id === activeFloorMakeup)?.name} (${floorDrawMode === 'rect' ? 'click two corners' : 'click points, dbl-click to close'})` :
               'Polygon (dbl-click to close)'
             }</strong></span>

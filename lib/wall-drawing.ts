@@ -148,7 +148,7 @@ export function signedArea(points: Pt[]): number {
 
 /** d is an SVG path to paint with fill-rule evenodd: one outline for an open wall, two rings (outer and inner) for a closed one, so the middle stays empty. */
 export interface WallStrip { kind: LayerKind; mm: number; polygon: Pt[]; d: string }
-export interface WallDrawing { strips: WallStrip[]; /** the whole band, outside face to inside face */ body: Pt[]; bodyD: string; /** the line through the middle of the band, for the label */ centre: Pt[]; totalPx: number }
+export interface WallDrawing { strips: WallStrip[]; /** the whole band, outside face to inside face */ body: Pt[]; bodyD: string; /** the band as the rings to fill with the even-odd rule: one outline for an open wall, the outer and the inner ring for a closed one */ rings: Pt[][]; /** the line through the middle of the band, for the label */ centre: Pt[]; totalPx: number }
 
 const ring = (p: Pt[]) => (p.length ? `M${p.map(q => `${+q.x.toFixed(2)} ${+q.y.toFixed(2)}`).join("L")}Z` : "")
 
@@ -181,7 +181,7 @@ export function wallDrawing(points: Pt[], spec: WallSpec, mpp: number, o: { ref:
   const outerLine = offsetPolyline(pts, start * dir, o.closed)
   const innerLine = offsetPolyline(pts, (start + total) * dir, o.closed)
   const centre = offsetPolyline(pts, (start + total / 2) * dir, o.closed)
-  return { strips, body: [...outerLine, ...innerLine.slice().reverse()], bodyD: o.closed ? ring(outerLine) + ring(innerLine) : ring([...outerLine, ...innerLine.slice().reverse()]), centre, totalPx: total }
+  return { strips, body: [...outerLine, ...innerLine.slice().reverse()], rings: o.closed ? [outerLine, innerLine] : [[...outerLine, ...innerLine.slice().reverse()]], bodyD: o.closed ? ring(outerLine) + ring(innerLine) : ring([...outerLine, ...innerLine.slice().reverse()]), centre, totalPx: total }
 }
 
 /** The two faces of a wall as offsets across its drawn line (to the right of the way it runs), and which side the inside of the building is: where doors and windows are cut into it. Same rules as wallDrawing. */

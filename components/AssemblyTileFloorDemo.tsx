@@ -15,6 +15,9 @@ import {
   calculateTileFloor, newTileFloorRoom, floorAreaM2, FLOOR_ADHESIVE_LABEL, THRESHOLD_LM,
   type TileFloorRoom, type TileFloorResult, type FloorAdhesive,
 } from '@/lib/tile-floor-units'
+import PlanRoomsBar from '@/components/PlanRoomsBar'
+import { followPlanRooms, planRoomSig, tilingKindFor } from '@/lib/rooms-merge'
+import type { PlanRoomInfo } from '@/lib/rooms-from-walls'
 import { DEFAULT_TILING_SITUATIONS, TILING_ROOM_KINDS, TILING_ROOM_KIND_BY_ID, sidesFromAreaPerimeter, type TileSizeId, type TileLayoutId } from '@/lib/tiling-common'
 import { describeTileFloor, describeTileFloorShort, type TilingDescriptionInput } from '@/lib/tiling-description'
 import type { BOLabourTrade } from '@/lib/back-office-types'
@@ -28,12 +31,14 @@ interface Props {
   /** Take-off's drawn area (m²) and perimeter (m): the first room is sized from them and follows them */
   externalAreaM2?: number
   externalPerimeterM?: number
+  /** the rooms found on the Take-off plan: they can be added with their sizes, and follow the plan until typed over */
+  planRooms?: PlanRoomInfo[]
 }
 
 const uid = () => Math.random().toString(36).slice(2, 9)
 const ADHESIVES = Object.keys(FLOOR_ADHESIVE_LABEL) as FloorAdhesive[]
 
-export default function AssemblyTileFloorDemo({ onClose, onSave, labourTrades = [], externalAreaM2, externalPerimeterM }: Props) {
+export default function AssemblyTileFloorDemo({ onClose, onSave, labourTrades = [], externalAreaM2, externalPerimeterM, planRooms }: Props) {
   const ID = 'AssemblyTileFloorDemo'
   // The area drawn in Take-off (if any) sizes the first room, which follows it until the drawing changes
   const planArea = externalAreaM2 && externalAreaM2 > 0 ? externalAreaM2 : 0
@@ -64,6 +69,26 @@ export default function AssemblyTileFloorDemo({ onClose, onSave, labourTrades = 
   }
   function updateRoom(id: string, patch: Partial<TileFloorRoom>) { setRooms(p => p.map(r => r.id === id ? { ...r, ...patch } : r)) }
 
+  // a room from the Take-off plan: its true floor area and the length of wall round it (so an L-shaped room measures right), and its doors
+  const fitToPlan = (r: TileFloorRoom, pr: PlanRoomInfo): TileFloorRoom => {
+    const sides = sidesFromAreaPerimeter(pr.areaM2, pr.perimeterM)
+    return { ...r, lengthM: sides.long, widthM: sides.short, areaOverrideM2: null, doors: pr.doors, shape: 'other', otherAreaM2: pr.areaM2, otherPerimeterM: pr.perimeterM }
+  }
+  function addPlanRooms(list: PlanRoomInfo[]) {
+    setRooms(p => {
+      const made = list.filter(pr => !p.some(r => r.planRoomId === pr.id)).map(pr => {
+        const k = TILING_ROOM_KIND_BY_ID[tilingKindFor(pr.kind)] ?? TILING_ROOM_KIND_BY_ID.other
+        const room = fitToPlan(newTileFloorRoom('room-' + uid(), pr.name, k.id, { ...k, fixedM2: k.fixedM2 }, { tileId: startTile, layoutId: startLayout }), pr)
+        return { ...room, planRoomId: pr.id, planRoomSig: planRoomSig(pr) }
+      })
+      return [...p, ...made]
+    })
+  }
+  const planRoomsKey = planRooms ? planRooms.map(p => p.id + ':' + planRoomSig(p)).join(';') : null
+  useEffect(() => {
+    if (planRooms) setRooms(p => followPlanRooms(p, planRooms, fitToPlan))
+  }, [planRoomsKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const result = useMemo((): { ok: true; r: TileFloorResult } | { ok: false; error: string } => {
     try { return { ok: true, r: calculateTileFloor({ rooms, jobSituationId, situations: DEFAULT_TILING_SITUATIONS, rates: {} }) } }
     catch (e: any) { return { ok: false, error: e.message as string } }
@@ -86,6 +111,7 @@ export default function AssemblyTileFloorDemo({ onClose, onSave, labourTrades = 
       {({ roomCost }) => ({
         main: (
           <>
+            <PlanRoomsBar planRooms={planRooms} isAdded={id => rooms.some(r => r.planRoomId === id)} onAdd={r => addPlanRooms([r])} onAddAll={addPlanRooms} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>Rooms</span>
               <select value={addKind} onChange={e => setAddKind(e.target.value)} style={{ ...tilingSmall, minWidth: 150 }}>

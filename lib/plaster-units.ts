@@ -79,6 +79,9 @@ export interface PlasterRoom {
   covingLm: number
   /** access hatches framed and boarded into the ceiling, nr */
   hatches: number
+  /** the room on the Take-off plan this one was made from, and what the plan said when it was last fed (it follows the plan until the plan's room changes) */
+  planRoomId?: string
+  planRoomSig?: string
 }
 
 /** What a new room starts as: dot-and-dab and skim to the walls, board and skim to the ceiling (a new or opened-up room), no extras until they are wanted. */

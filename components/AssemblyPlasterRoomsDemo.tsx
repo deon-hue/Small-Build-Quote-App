@@ -8,7 +8,7 @@
  * Vaulted ceilings are not here: they have their own tasks in the Plastering & Boarding phase.
  */
 
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import NumInput from '@/components/NumInput'
 import { useCalcState } from '@/components/calc-state'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
@@ -27,11 +27,17 @@ import {
   MaterialsListButtons,
 } from '@/components/assembly-ui'
 import { LabourSuggestionPanel } from '@/components/AssemblyFlatRoofDemo'
+import PlanRoomsBar from '@/components/PlanRoomsBar'
+import { followPlanRooms, planRoomSig, plasterKindFor, planWallAreaM2 } from '@/lib/rooms-merge'
+import { sidesFromAreaPerimeter } from '@/lib/tiling-common'
+import type { PlanRoomInfo } from '@/lib/rooms-from-walls'
 
 interface Props {
   onClose?: () => void
   onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }) => void
   labourTrades?: BOLabourTrade[]
+  /** the rooms found on the Take-off plan: they can be added with their sizes, and follow the plan until typed over */
+  planRooms?: PlanRoomInfo[]
 }
 
 const WALL_SYSTEMS = Object.keys(WALL_SYSTEM_LABEL) as WallSystem[]
@@ -40,7 +46,7 @@ const BASES = Object.keys(BASE_LABEL) as SkimBase[]
 const uid = () => Math.random().toString(36).slice(2, 9)
 const baseFor = (system: string): SkimBase => (system === 'skim' ? 'existing' : 'new-board')
 
-export default function AssemblyPlasterRoomsDemo({ onClose, onSave, labourTrades = [] }: Props) {
+export default function AssemblyPlasterRoomsDemo({ onClose, onSave, labourTrades = [], planRooms }: Props) {
   const ID = 'AssemblyPlasterRoomsDemo'
   const [name, setName] = useCalcState(ID, 'name', 'Internal plastering and boarding')
   const [location, setLocation] = useCalcState(ID, 'location', '')
@@ -69,6 +75,27 @@ export default function AssemblyPlasterRoomsDemo({ onClose, onSave, labourTrades
     })
   }
   function updateRoom(id: string, patch: Partial<PlasterRoom>) { setRooms(p => p.map(r => r.id === id ? { ...r, ...patch } : r)) }
+
+  // a room from the Take-off plan: its floor and wall length from the drawing (the long and short sides that give both), its height, doors and windows, and the wall and ceiling areas as drawn
+  const fitToPlan = (r: PlasterRoom, p: PlanRoomInfo): PlasterRoom => {
+    const sides = sidesFromAreaPerimeter(p.areaM2, p.perimeterM)
+    return { ...r, lengthM: sides.long, widthM: sides.short, heightM: p.heightM, doors: p.doors, windows: p.windows, wallAreaOverrideM2: planWallAreaM2(p), ceilingAreaOverrideM2: p.areaM2 }
+  }
+  function addPlanRooms(list: PlanRoomInfo[]) {
+    setRooms(p => {
+      const made = list.filter(pr => !p.some(r => r.planRoomId === pr.id)).map(pr => {
+        const room = fitToPlan(newPlasterRoom('room-' + uid(), pr.name, plasterKindFor(pr.kind)), pr)
+        room.walls = { system: startWalls, base: baseFor(startWalls) }
+        room.ceiling = { system: startCeiling, base: baseFor(startCeiling) }
+        return { ...room, planRoomId: pr.id, planRoomSig: planRoomSig(pr) }
+      })
+      return [...p, ...made]
+    })
+  }
+  const planKey = planRooms ? planRooms.map(p => p.id + ':' + planRoomSig(p)).join(';') : null
+  useEffect(() => {
+    if (planRooms) setRooms(p => followPlanRooms(p, planRooms, fitToPlan))
+  }, [planKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const result = useMemo((): { ok: true; r: PlasterResult } | { ok: false; error: string } => {
     try { return { ok: true, r: calculatePlaster({ rooms, jobSituationId, situations: DEFAULT_PLASTER_SITUATIONS, rates: {}, towerWeeks }) } }
@@ -198,6 +225,7 @@ export default function AssemblyPlasterRoomsDemo({ onClose, onSave, labourTrades
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16 }}>
         <div>
+          <PlanRoomsBar planRooms={planRooms} isAdded={id => rooms.some(r => r.planRoomId === id)} onAdd={r => addPlanRooms([r])} onAddAll={addPlanRooms} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>Rooms</span>
             <select value={addKind} onChange={e => setAddKind(e.target.value)} style={{ ...small, minWidth: 150 }}>

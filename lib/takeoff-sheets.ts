@@ -5,6 +5,7 @@
 // before there were sheets) belongs to the first sheet. When the first plan is added, anything already drawn is stamped with that sheet's id, so deleting a sheet later never adopts another's drawings.
 
 import type { TakeoffProject, TakeoffSheet, DrawnElement, TakeoffItem, ScaleCalibration } from './takeoff-types'
+import type { RoomLabel } from './rooms-from-walls'
 import type { ElectricPoint } from './electric-points'
 
 export const DEFAULT_SHEET_CALIBRATION: ScaleCalibration = { mpp: 0.0265, label: '1:100' }
@@ -45,6 +46,19 @@ export const sheetName = (p: Pick<TakeoffProject, 'sheets'>, id: string | undefi
 
 export function makeSheet(id: string, name: string, calibration: ScaleCalibration = DEFAULT_SHEET_CALIBRATION, scaleSet = false): TakeoffSheet {
   return { id, name: name.trim() || 'Plan', calibration: { ...calibration }, scaleSet }
+}
+
+/** The names given to the rooms on the showing sheet. */
+export function roomLabelsOf(p: TakeoffProject): RoomLabel[] {
+  const id = activeSheetIdOf(p)
+  return (id ? p.sheets?.find(s => s.id === id)?.roomLabels : undefined) ?? []
+}
+
+/** Sets the room names of the showing sheet. */
+export function setRoomLabels(p: TakeoffProject, labels: RoomLabel[]): TakeoffProject {
+  const id = activeSheetIdOf(p)
+  if (!id) return p
+  return { ...p, sheets: p.sheets?.map(s => (s.id === id ? { ...s, roomLabels: labels } : s)) }
 }
 
 /** Records (or, with no value, forgets) how big a pixel of the sheet's picture is on paper. */

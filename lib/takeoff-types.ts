@@ -6,11 +6,12 @@ import type { WallConstructionType, WallFinishType, CalculatedMaterial } from '.
 import type { CostedLine } from './assembly-calc'
 import type { ElectricPoint } from './electric-points'
 import type { PlacedOpening } from './wall-openings'
+import type { RoomLabel } from './rooms-from-walls'
 import type { CalcStateSnapshot } from './calc-snapshot'
 
 // ── Drawing tools ─────────────────────────────────────────────────────────────
 
-export type DrawingTool = 'select' | 'line' | 'rect' | 'polygon' | 'floor' | 'click' | 'electric' | 'opening' | 'measure'
+export type DrawingTool = 'select' | 'line' | 'rect' | 'polygon' | 'floor' | 'click' | 'electric' | 'opening' | 'room' | 'measure'
 
 // ── Measurement categories (match quote parentPhase names) ────────────────────
 
@@ -352,6 +353,8 @@ export interface TakeoffSheet {
   paperMmPerPx?: number
   /** the paper size name (A1 ...) when known, for display */
   paper?:      string
+  /** the names given to the rooms the walls on this sheet make (each anchored to a point inside its room) */
+  roomLabels?: RoomLabel[]
 }
 
 export const SCALE_PRESETS: { label: string; mpp: number }[] = [
