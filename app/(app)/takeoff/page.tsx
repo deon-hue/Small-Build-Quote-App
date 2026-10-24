@@ -6846,6 +6846,14 @@ export default function TakeoffPage() {
             )
           })()}
 
+          {/* which level is showing, large, in the corner of the drawing (pencil = rename it) */}
+          {activeLevelId && (
+            <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 5, display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', background: 'var(--to-panel)', border: '1px solid #2563eb', borderRadius: 8, boxShadow: '0 2px 10px rgba(0,0,0,0.25)' }}>
+              <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--to-text)' }}>{levelName(project, activeLevelId)}</span>
+              <button onClick={() => renameLevelPrompt(activeLevelId)} title="Rename this level" style={{ background: 'none', border: 'none', color: 'var(--to-muted)', fontSize: 13, cursor: 'pointer', padding: '0 2px' }}>✎</button>
+            </div>
+          )}
+
           {/* Levels: Foundations, Ground floor, First floor, Loft... each drawing belongs to one and only the showing level is drawn on */}
           {(() => {
             const levels = project.levels ?? []
