@@ -45,6 +45,7 @@ import ClientProjectModal from './components/ClientProjectModal'
 import ClientFilePicker from '@/components/ClientFilePicker'
 import { planResize, applyResize } from '@/lib/calc-size'
 import { wallDrawing, wallBand, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, specFromMakeupLayers, defaultWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
+import { sidesOf, splitOpenings } from '@/lib/wall-split'
 import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, type PlacedOpening, type WallBand } from '@/lib/wall-openings'
 import { KIND_BY_ID as WD_KIND_BY_ID, planOpeningSig, type OpeningKind, type WdSwing, type PlanOpening } from '@/lib/wd-units'
 import { cornersOf, snapPoint, anchorsFor, parseTyped, pointAtDistance, rectCornerAt, rotateShape, type SnapResult } from '@/lib/takeoff-snap'
@@ -860,6 +861,8 @@ export default function TakeoffPage() {
   const [viewTags, setViewTags] = useState(true)
   const [viewFade, setViewFade] = useState(30)
   const [viewRooms, setViewRooms] = useState(true)
+  // a wall drawn as one run of several sides becomes one wall per side (so each can be clicked, edited and deleted on its own)
+  const [splitWalls, setSplitWalls] = useState(true)
   const [selectedRoomPt, setSelectedRoomPt] = useState<TakeoffPoint | null>(null)
   // the rectangle or polygon tool is drawing a ROOM (picked while the Rooms tool was active, or from the Rooms panel), not a priced drawing
   const [roomDraw, setRoomDraw] = useState<false | 'room' | 'edge'>(false)
@@ -873,11 +876,12 @@ export default function TakeoffPage() {
         if (typeof r.halo === 'boolean') setViewHalo(r.halo)
         if (typeof r.tags === 'boolean') setViewTags(r.tags)
         if (typeof r.rooms === 'boolean') setViewRooms(r.rooms)
+        if (typeof r.splitWalls === 'boolean') setSplitWalls(r.splitWalls)
         if (typeof r.fade === 'number' && r.fade >= 0 && r.fade <= 75) setViewFade(r.fade)
       }
     } catch {}
   }, [])
-  useEffect(() => { try { localStorage.setItem('sbc_takeoff_view', JSON.stringify({ halo: viewHalo, tags: viewTags, fade: viewFade, rooms: viewRooms })) } catch {} }, [viewHalo, viewTags, viewFade, viewRooms])
+  useEffect(() => { try { localStorage.setItem('sbc_takeoff_view', JSON.stringify({ halo: viewHalo, tags: viewTags, fade: viewFade, rooms: viewRooms, splitWalls })) } catch {} }, [viewHalo, viewTags, viewFade, viewRooms, splitWalls])
   const lastSaveError = useRef('')
   const idMigration = useRef<string | null>(null)
   const oldPictureFolders = useRef<string[]>([])
@@ -1228,15 +1232,21 @@ export default function TakeoffPage() {
       }
     }
 
+    // A wall drawn as one run of several sides (the three walls of an extension, say) becomes one wall for each side
+    const isWallRun = splitWalls && el.type === 'line' && el.points.length > 2 && (el.phase === 'External Walls' || el.phase === 'Internal Walls & Partitions')
+    const built = isWallRun ? buildWallSides(el, item) : null
+    const newEls = built && built.els.length > 1 ? built.els : [el]
+    const newItems = built && built.els.length > 1 ? built.items : [item]
     setProject(p => ({
       ...p,
-      elements: [...p.elements, el],
-      items: [...p.items, item],
+      elements: [...p.elements, ...newEls],
+      items: [...p.items, ...newItems],
     }))
-    setSelectedId(el.id)
+    if (newEls.length > 1) showToast(`Drawn as ${newEls.length} separate walls: click any side to edit or delete it. (Turn this off under the tools if you want one wall.)`)
+    setSelectedId(newEls[0].id)
     setPanelMode('properties')
-    setEditingElement(el)
-    setEditingItem(item)
+    setEditingElement(newEls[0])
+    setEditingItem(newItems[0])
     setPhaseDefaults(null)
     // Reset task selection after placing item
     setSelectedTaskSubphaseId(null)
@@ -1523,6 +1533,43 @@ export default function TakeoffPage() {
     setRoomDraw(false); setTool('room'); setPanelMode('properties'); setEditingItem(null); setEditingElement(null); setSelectedId(null)
     setSelectedRoomPt(room.labelAt)
     showToast(`Room drawn: ${room.areaM2.toFixed(1)} m². Name it and say what kind of room it is in the panel.`)
+  }
+
+  /** One wall for each side of a wall drawn as one run (a line of several sides, a rectangle or a polygon): each side keeps the wall's type, height and typed openings (on the first side), and starts with no priced calculator (its length has changed) */
+  function buildWallSides(el: DrawnElement, item: TakeoffItem) {
+    const sides = sidesOf(el)
+    const ext = el.phase === 'External Walls'
+    const els: DrawnElement[] = sides.map((pts, i) => ({ ...el, id: uid(), type: 'line' as const, points: pts, label: `${el.label} ${i + 1}/${sides.length}`, tagDx: undefined, tagDy: undefined }))
+    const made: TakeoffItem[] = els.map((e, i) => ({
+      ...item, id: uid(), elementId: e.id, name: sides.length > 1 ? `${item.name} (side ${i + 1} of ${sides.length})` : item.name,
+      assemblyResult: undefined, assemblyCalcState: undefined, openings: i === 0 ? item.openings : undefined, drawnOpenings: undefined,
+      area: undefined, perimeter: undefined, volume: undefined,
+      // a run of lines keeps the unit and height it had; a rectangle or polygon wall was measured as an area, so its sides become lines (an outside wall at its storey height)
+      ...(el.type === 'line' ? {} : ext ? { wallHeight: item.wallHeight ?? 2.7, unit: 'm²' } : { unit: 'm' }),
+    }))
+    return { sides, els, items: recalcItemsForMpp(made, els, project.calibration.mpp) }
+  }
+
+  /** Splits a wall that was drawn as one run into one wall per side, moving its doors and windows onto the side they were on */
+  function splitWallSides(elId: string) {
+    const el = project.elements.find(e => e.id === elId)
+    const item = project.items.find(it => it.elementId === elId)
+    if (!el || !item || (el.phase !== 'External Walls' && el.phase !== 'Internal Walls & Partitions')) return
+    const { sides, els, items } = buildWallSides(el, item)
+    if (sides.length < 2) { showToast('That wall has only one side'); return }
+    const newIds = els.map(e => e.id)
+    setProject(p => {
+      const rest = p.items.filter(it => it.elementId !== elId)
+      let all = [...rest, ...items]
+      const wd = p.items.find(it => it.wdSummary)
+      if (wd?.placedOpenings?.length) {
+        const placed = splitOpenings(wd.placedOpenings, elId, sides, newIds)
+        all = withDrawnOpenings(all.map(it => (it.wdSummary ? { ...it, placedOpenings: placed } : it)), placed)
+      }
+      return { ...p, elements: [...p.elements.filter(e => e.id !== elId), ...els], items: all }
+    })
+    setSelectedId(els[0].id); setEditingElement(els[0]); setEditingItem(items[0])
+    showToast(`Split into ${els.length} separate walls. Each starts from the wall type again, so open its calculator and Save & Price it.`)
   }
 
   /** A room edge: a line that closes a room where there is no wall (or splits an open space). Not a wall: nothing is painted or priced for it. */
@@ -4956,6 +5003,19 @@ export default function TakeoffPage() {
                 )
               })()}
 
+              {(() => {
+                const _el = project.elements.find(e => e.id === item.elementId)
+                if (!_el || (item.phase !== 'External Walls' && item.phase !== 'Internal Walls & Partitions')) return null
+                const _n = sidesOf(_el).length
+                if (_n < 2) return null
+                return (
+                  <div style={{ marginBottom: 10, padding: '8px 10px', borderRadius: 6, border: '1px dashed var(--to-border)' }}>
+                    <div style={{ fontSize: 11, color: 'var(--to-text)', lineHeight: 1.5, marginBottom: 6 }}>This wall was drawn as <strong>one run of {_n} sides</strong>, so it is edited and deleted all together. Split it to click, edit, price and delete each side on its own (the drawing looks the same).</div>
+                    <button style={{ ...btnStyle, fontSize: 11, padding: '4px 8px' }} onClick={() => splitWallSides(_el.id)}>✂ Split into {_n} separate walls</button>
+                  </div>
+                )
+              })()}
+
               {isExtWall && !wallSpecForItem(item) && (
                 <div style={{ marginBottom: 10 }}>
                   <label style={labelStyle}>Canvas Line Width (wall thickness on plan)</label>
@@ -6114,6 +6174,12 @@ export default function TakeoffPage() {
               <span>{label}</span>
             </div>
           ))}
+
+          {(activePhase === 'External Walls' || activePhase === 'Internal Walls & Partitions') && (
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11, color: 'var(--to-text)', margin: '2px 4px 8px', cursor: 'pointer', lineHeight: 1.4 }} title="A wall drawn with several clicks (a U of three sides) becomes one wall for each side, so each can be clicked, edited and deleted on its own">
+              <input type="checkbox" checked={splitWalls} onChange={e => setSplitWalls(e.target.checked)} style={{ width: 'auto', marginTop: 2 }} /> Each side of a wall is its own wall
+            </label>
+          )}
 
           {/* Cancel drawing — only shown while actively drawing */}
           {isDrawing && (
