@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { QuoteComment } from '@/lib/types'
 
 interface QuoteCommentsSectionProps {
@@ -10,9 +10,13 @@ interface QuoteCommentsSectionProps {
   phases?: string[]
   /** Client's display name — sent as the author name when posting from the portal */
   customerName?: string
+  /** A heading the client pressed Ask beside: it is chosen in "Ask about", the box scrolls into view and the question field is ready to type in */
+  askAbout?: { label: string; n: number }
 }
 
-export default function QuoteCommentsSection({ quoteId, isPortalView = false, phases = [], customerName }: QuoteCommentsSectionProps) {
+export default function QuoteCommentsSection({ quoteId, isPortalView = false, phases = [], customerName, askAbout }: QuoteCommentsSectionProps) {
+  const boxRef = useRef<HTMLDivElement>(null)
+  const textRef = useRef<HTMLTextAreaElement>(null)
   const [comments, setComments] = useState<QuoteComment[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [phaseTag, setPhaseTag] = useState('')
@@ -23,6 +27,17 @@ export default function QuoteCommentsSection({ quoteId, isPortalView = false, ph
   useEffect(() => {
     fetchComments()
   }, [quoteId])
+
+  // Ask pressed beside a heading: choose that heading, bring the box into view and put the cursor in the question field
+  useEffect(() => {
+    if (!askAbout) return
+    setPhaseTag(askAbout.label)
+    const t = setTimeout(() => {
+      boxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      textRef.current?.focus({ preventScroll: true })
+    }, 60)
+    return () => clearTimeout(t)
+  }, [askAbout?.n])
 
   const fetchComments = async () => {
     try {
@@ -89,7 +104,7 @@ export default function QuoteCommentsSection({ quoteId, isPortalView = false, ph
   }
 
   return (
-    <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '24px', marginTop: '24px' }}>
+    <div ref={boxRef} style={{ borderTop: '1px solid #e5e7eb', paddingTop: '24px', marginTop: '24px' }}>
       <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '16px' }}>
         💬 Questions & Replies
       </h3>
@@ -229,6 +244,7 @@ export default function QuoteCommentsSection({ quoteId, isPortalView = false, ph
             >
               <option value="">General question — not about one phase</option>
               {phases.map(p => <option key={p} value={p}>{p}</option>)}
+              {phaseTag && !phases.includes(phaseTag) && <option value={phaseTag}>{phaseTag}</option>}
             </select>
           </div>
         )}
@@ -243,6 +259,7 @@ export default function QuoteCommentsSection({ quoteId, isPortalView = false, ph
             {isPortalView ? 'Ask a question' : 'Reply to client'}
           </label>
           <textarea
+            ref={textRef}
             value={newMessage}
             onChange={e => setNewMessage(e.target.value)}
             placeholder={isPortalView ? 'Type your question here...' : 'Type your reply here...'}

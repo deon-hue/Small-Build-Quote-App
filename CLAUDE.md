@@ -284,6 +284,10 @@ separate, hand-built copy of the client portal, so a new portal tab or section d
 3. Fetch the preview's data with the builder's own session (they own the rows), shaped like what the client's portal receives.
 Existing tabs not yet shared this way: Quotes, Variations, Invoices, Build Plan (Quotes/Build Plan reuse their own components) — convert to shared components when next touched.
 
+## Client quote view: "Ask" beside each heading (questions already carry a phase)
+
+In the client's quote view (`components/PortalQuoteDetailsModal.tsx`, used by the client portal's Quotes page) a small "💬 Ask" button (`components/AskAboutButton.tsx`) sits beside every phase heading and beside every heading in the Scope of Works (a short line that is entirely bold, found by `headingOf` in `components/ScopeView.tsx`, which takes an optional `onAsk`). Pressing it sets the Questions & Replies box (`components/QuoteCommentsSection.tsx`, prop `askAbout`) to that heading as its "Ask about" choice, scrolls the box into view and puts the cursor in the question field; the question is saved in `quote_comments` with `phase_label` set to the heading, exactly like one tagged from the drop-down (no new table or route), and the builder sees it as "Re: <heading>". The buttons are not shown in the builder's Preview (`isPreview`: it has no Questions box either) or in the printed, PDF and emailed quote, which are static. Not built: a count of questions already asked beside each heading, and an email to the builder when a client asks (the builder-to-client reply email is also still parked).
+
 ## Tech Stack
 - Next.js 14 App Router, TypeScript strict
 - Supabase PostgreSQL + RLS

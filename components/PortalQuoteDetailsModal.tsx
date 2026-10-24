@@ -11,6 +11,7 @@ import { useDraggableModal } from './useDraggableModal'
 import ModalResizeHandle from './ModalResizeHandle'
 import ModalMaximizeButton from './ModalMaximizeButton'
 import ScopeView from './ScopeView'
+import AskAboutButton from './AskAboutButton'
 import { scopeToHtml } from '@/lib/scope-format'
 
 interface Props {
@@ -61,6 +62,9 @@ export default function PortalQuoteDetailsModal({
   const mainModal = useDraggableModal()
   const printOptionsModal = useDraggableModal()
   const [showPrintOptions, setShowPrintOptions] = useState(false)
+  // A question asked from a heading: the Questions & Replies box opens on that heading (n counts the clicks so asking about the same one again still scrolls to it)
+  const [askAbout, setAskAbout] = useState<{ label: string; n: number } | undefined>()
+  const ask = (label: string) => setAskAbout(a => ({ label, n: (a?.n ?? 0) + 1 }))
   const [downloadingPdf, setDownloadingPdf] = useState(false)
   const [printOptions, setPrintOptions] = useState({
     includeScope: clientCanSeeScope,
@@ -335,7 +339,7 @@ export default function PortalQuoteDetailsModal({
               <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.8, padding: '14px 16px', background: '#fafaf8', border: '1px solid var(--border)', borderRadius: 8 }}>
                 {/* A scope written as one unbroken block (older quotes) is still split into sentences; one with its own lines keeps them */}
                 {/\n/.test(quote.scope.trim())
-                  ? <ScopeView text={quote.scope} />
+                  ? <ScopeView text={quote.scope} onAsk={isPreview ? undefined : ask} />
                   : quote.scope.split(/\. (?=[A-Z])/g).map((para, idx) => (
                     <div key={idx} style={{ margin: '0 0 12px 0', wordSpacing: '0.05em', textAlign: 'justify' }}>
                       <ScopeView text={para.trim()} />
@@ -374,6 +378,7 @@ export default function PortalQuoteDetailsModal({
                   }}>
                     <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)' }}>
                       {pi + 1}. {phase.phase}
+                      {!isPreview && <AskAboutButton label={phase.phase} onAsk={ask} />}
                     </div>
                     {/* Phase total — shown for 'full' and 'phases' views */}
                     {(quoteView === 'full' || quoteView === 'phases') && (
@@ -476,6 +481,7 @@ export default function PortalQuoteDetailsModal({
               isPortalView={true}
               phases={quote.phases.map(p => p.phase)}
               customerName={quote.customer.name}
+              askAbout={askAbout}
             />
           )}
 
