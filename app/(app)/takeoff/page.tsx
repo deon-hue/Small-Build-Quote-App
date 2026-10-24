@@ -26,6 +26,8 @@ import { planRoomsFromPoints, roomAtPoint, rectToPolygon, POINT_SHORT, type Elec
 // The one Take-off item that holds every electrical point placed on the plan (and the electrics calculator's saved price).
 const ELECTRICS_ITEM_ID = 'electrics-summary'
 const WD_ITEM_ID = 'wd-summary'
+/** A selected drawing is shown in this blue (it used to be white, which cannot be seen on a white sheet) */
+const SEL_COLOUR = '#1565c0'
 const OPENING_COLOUR = { win: '#2b6cb0', ext: '#7c3aed', int: '#b45309' }
 
 // A drawn foundation line's Foundation Type -> its build-up id (see FOUNDATION_MAKEUPS). A type whose build-up has a calculator (WALL_MAKEUP_TO_SUBPHASE_CANONICAL) is priced by it.
@@ -3167,7 +3169,7 @@ export default function TakeoffPage() {
   function renderElement(el: DrawnElement) {
     const sel = selectedId === el.id
     const isWall = el.phase === 'External Walls'
-    const stroke = sel ? '#fff' : el.color
+    const stroke = sel ? SEL_COLOUR : el.color
     // with the halo on, a line never gets thinner than a few screen pixels, however far the plan is zoomed out
     const sw = Math.max(sel ? 3 : 2, viewHalo ? (sel ? 4.5 : 3.5) / zoom : 0)
     const faceSw = Math.max(sel ? 2.5 : 2, viewHalo ? 3 / zoom : 0)
@@ -3217,20 +3219,20 @@ export default function TakeoffPage() {
       const centrePts = el.points.map(p => `${p.x},${p.y}`).join(' ')
       const bodyPts   = [...outer, ...[...inner].reverse()].map(p => `${p.x},${p.y}`).join(' ')
       const mid = centroid(el.points)
-      const faceC  = sel ? '#ffffff' : WALL_LINE_COLOR
+      const faceC  = sel ? SEL_COLOUR : WALL_LINE_COLOR
       const fillC  = sel ? WALL_LINE_COLOR + '44' : WALL_FILL_COLOR + '28'
-      const caviC  = sel ? '#ffffff' : WALL_CAVI_COLOR
+      const caviC  = sel ? SEL_COLOUR : WALL_CAVI_COLOR
       return (
         <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
           <polygon points={bodyPts} fill={fillC} stroke="none" />
           <polyline points={outerPts} fill="none" stroke={faceC} strokeWidth={faceSw} strokeLinecap="square" strokeLinejoin="miter" />
           <polyline points={innerPts} fill="none" stroke={faceC} strokeWidth={faceSw} strokeLinecap="square" strokeLinejoin="miter" />
           <polyline points={centrePts} fill="none" stroke={caviC} strokeWidth={0.8} strokeDasharray="5 4" strokeOpacity={sel ? 0.7 : 0.4} />
-          {sel && <polygon points={bodyPts} fill="none" stroke="#fff" strokeWidth={1} strokeOpacity={0.5} strokeDasharray="5 3" />}
-          <text className="to-lbl" x={mid.x} y={mid.y - (halfW + 5)} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : WALL_LINE_COLOR} fontFamily="monospace" fontWeight={700}>
+          {sel && <polygon points={bodyPts} fill="none" stroke={SEL_COLOUR} strokeWidth={1.5} strokeOpacity={0.9} strokeDasharray="5 3" />}
+          <text className="to-lbl" x={mid.x} y={mid.y - (halfW + 5)} textAnchor="middle" fontSize={11} fill={sel ? SEL_COLOUR : WALL_LINE_COLOR} fontFamily="monospace" fontWeight={700}>
             {el.label}
           </text>
-          <text className="to-lbl" x={mid.x} y={mid.y + (halfW + 13)} textAnchor="middle" fontSize={10} fill={sel ? '#ccc' : '#999'} fontFamily="monospace">
+          <text className="to-lbl" x={mid.x} y={mid.y + (halfW + 13)} textAnchor="middle" fontSize={10} fill={sel ? '#334155' : '#999'} fontFamily="monospace">
             {fmtM(polylineLength(el.points, project.calibration.mpp))}
           </text>
         </g>
@@ -3243,15 +3245,15 @@ export default function TakeoffPage() {
       const linkedItem = project.items.find(it => it.elementId === el.id)
       const wallSw = (linkedItem?.wallBandPx ?? 9) * 2
       const mid = centroid(el.points)
-      const wallStroke = sel ? '#fff' : WALL_LINE_COLOR
+      const wallStroke = sel ? SEL_COLOUR : WALL_LINE_COLOR
       return (
         <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
           <rect x={x} y={y} width={w} height={h} fill={WALL_FILL_COLOR + '20'} stroke={wallStroke} strokeWidth={wallSw} />
-          {sel && <rect x={x} y={y} width={w} height={h} fill="none" stroke="#fff" strokeWidth={1} strokeOpacity={0.5} strokeDasharray="5 3" />}
-          <text className="to-lbl" x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : WALL_LINE_COLOR} fontFamily="monospace" fontWeight={700}>
+          {sel && <rect x={x} y={y} width={w} height={h} fill="none" stroke={SEL_COLOUR} strokeWidth={1.5} strokeOpacity={0.9} strokeDasharray="5 3" />}
+          <text className="to-lbl" x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? SEL_COLOUR : WALL_LINE_COLOR} fontFamily="monospace" fontWeight={700}>
             {el.label}
           </text>
-          <text className="to-lbl" x={mid.x} y={mid.y + 8} textAnchor="middle" fontSize={10} fill={sel ? '#ccc' : '#999'} fontFamily="monospace">
+          <text className="to-lbl" x={mid.x} y={mid.y + 8} textAnchor="middle" fontSize={10} fill={sel ? '#334155' : '#999'} fontFamily="monospace">
             {fmt2(rectArea(el.points, project.calibration.mpp))} m²
           </text>
         </g>
@@ -3264,15 +3266,15 @@ export default function TakeoffPage() {
       const mid = centroid(el.points)
       const linkedItem = project.items.find(it => it.elementId === el.id)
       const wallSw = (linkedItem?.wallBandPx ?? 9) * 2
-      const wallStroke = sel ? '#fff' : WALL_LINE_COLOR
+      const wallStroke = sel ? SEL_COLOUR : WALL_LINE_COLOR
       return (
         <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
           <polygon points={pts} fill={WALL_FILL_COLOR + '20'} stroke={wallStroke} strokeWidth={wallSw} strokeLinejoin="miter" />
-          {sel && <polygon points={pts} fill="none" stroke="#fff" strokeWidth={1} strokeOpacity={0.5} strokeDasharray="5 3" />}
-          <text className="to-lbl" x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : WALL_LINE_COLOR} fontFamily="monospace" fontWeight={700}>
+          {sel && <polygon points={pts} fill="none" stroke={SEL_COLOUR} strokeWidth={1.5} strokeOpacity={0.9} strokeDasharray="5 3" />}
+          <text className="to-lbl" x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? SEL_COLOUR : WALL_LINE_COLOR} fontFamily="monospace" fontWeight={700}>
             {el.label}
           </text>
-          <text className="to-lbl" x={mid.x} y={mid.y + 8} textAnchor="middle" fontSize={10} fill={sel ? '#ccc' : '#999'} fontFamily="monospace">
+          <text className="to-lbl" x={mid.x} y={mid.y + 8} textAnchor="middle" fontSize={10} fill={sel ? '#334155' : '#999'} fontFamily="monospace">
             {fmt2(polygonArea(el.points, project.calibration.mpp))} m²
           </text>
         </g>
@@ -3286,11 +3288,11 @@ export default function TakeoffPage() {
       return (
         <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
           <polyline points={pts} fill="none" stroke={stroke} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-          {sel && <polyline points={pts} fill="none" stroke="#fff" strokeWidth={1} strokeOpacity={0.4} strokeDasharray="4 3" />}
-          <text className="to-lbl" x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : el.color} fontFamily="monospace" fontWeight={600}>
+          {sel && <polyline points={pts} fill="none" stroke={SEL_COLOUR} strokeWidth={1.5} strokeOpacity={0.9} strokeDasharray="4 3" />}
+          <text className="to-lbl" x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? SEL_COLOUR : el.color} fontFamily="monospace" fontWeight={600}>
             {el.label}
           </text>
-          <text className="to-lbl" x={mid.x} y={mid.y + 8} textAnchor="middle" fontSize={10} fill={sel ? '#ccc' : '#999'} fontFamily="monospace">
+          <text className="to-lbl" x={mid.x} y={mid.y + 8} textAnchor="middle" fontSize={10} fill={sel ? '#334155' : '#999'} fontFamily="monospace">
             {fmtM(polylineLength(el.points, project.calibration.mpp))}
           </text>
         </g>
@@ -3302,10 +3304,10 @@ export default function TakeoffPage() {
       return (
         <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
           <rect x={x} y={y} width={w} height={h} fill={fill} stroke={stroke} strokeWidth={sw} />
-          <text className="to-lbl" x={x + w / 2} y={y + h / 2 - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : el.color} fontFamily="monospace" fontWeight={600}>
+          <text className="to-lbl" x={x + w / 2} y={y + h / 2 - 6} textAnchor="middle" fontSize={11} fill={sel ? SEL_COLOUR : el.color} fontFamily="monospace" fontWeight={600}>
             {el.label}
           </text>
-          <text className="to-lbl" x={x + w / 2} y={y + h / 2 + 8} textAnchor="middle" fontSize={10} fill={sel ? '#ccc' : '#999'} fontFamily="monospace">
+          <text className="to-lbl" x={x + w / 2} y={y + h / 2 + 8} textAnchor="middle" fontSize={10} fill={sel ? '#334155' : '#999'} fontFamily="monospace">
             {fmt2(rectArea(el.points, project.calibration.mpp))} m²
           </text>
         </g>
@@ -3318,10 +3320,10 @@ export default function TakeoffPage() {
       return (
         <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
           <polygon points={pts} fill={fill} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
-          <text className="to-lbl" x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? '#fff' : el.color} fontFamily="monospace" fontWeight={600}>
+          <text className="to-lbl" x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? SEL_COLOUR : el.color} fontFamily="monospace" fontWeight={600}>
             {el.label}
           </text>
-          <text className="to-lbl" x={mid.x} y={mid.y + 8} textAnchor="middle" fontSize={10} fill={sel ? '#ccc' : '#999'} fontFamily="monospace">
+          <text className="to-lbl" x={mid.x} y={mid.y + 8} textAnchor="middle" fontSize={10} fill={sel ? '#334155' : '#999'} fontFamily="monospace">
             {fmt2(polygonArea(el.points, project.calibration.mpp))} m²
           </text>
         </g>
