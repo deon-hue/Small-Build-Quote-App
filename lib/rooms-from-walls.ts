@@ -86,11 +86,11 @@ function simplifyClosed(pts: Pt[], tol: number): Pt[] {
  * The rooms the walls make. `solids` is every filled shape: each is a list of rings filled with the even-odd rule (an open wall is one ring; a closed outline such as a house ring is two, the outer and the inner face), and the
  * gaps of doors and windows go in as solids too. `mpp` is the plan's metres per pixel.
  */
-export function detectRooms(wallSolids: Pt[][][], o: { mpp: number; cellMm?: number; minAreaM2?: number; /** room edges: lines that close a room where there is no wall (each a list of points) */ edges?: Pt[][] }): DetectResult {
+export function detectRooms(wallSolids: Pt[][][], o: { mpp: number; cellMm?: number; minAreaM2?: number; /** room edges: lines that close a room where there is no wall (each a list of points) */ edges?: Pt[][]; /** the edges alone enclose the rooms (a drawn room split by an edge): no walls are needed, and the strip each edge takes is given back to the rooms */ edgesMakeRooms?: boolean }): DetectResult {
   const mpp = o.mpp
   const edges = (o.edges ?? []).filter(e => e.length >= 2)
   const empty: DetectResult = { rooms: [], cellMm: o.cellMm ?? 10, solids: wallSolids.length + edges.length }
-  if (!(mpp > 0) || wallSolids.length === 0) return empty   // (edges alone make no room: they only close one that walls make)
+  if (!(mpp > 0) || (wallSolids.length === 0 && !(o.edgesMakeRooms && edges.length > 0))) return empty   // (edges alone make no room: they only close one that walls make)
   const solids = wallSolids.slice()
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
   for (const s of solids) for (const r of s) for (const p of r) { if (p.x < minX) minX = p.x; if (p.y < minY) minY = p.y; if (p.x > maxX) maxX = p.x; if (p.y > maxY) maxY = p.y }
@@ -229,7 +229,10 @@ export function detectRooms(wallSolids: Pt[][][], o: { mpp: number; cellMm?: num
     const lx = bestI % bw, ly = Math.floor(bestI / bw)
     const labelAt = { x: ox + (bx0 + lx + 0.5) * c, y: oy + (by0 + ly + 0.5) * c }
     const w = (bx1 - bx0 + 1) * c * mpp, h = (by1 - by0 + 1) * c * mpp
-    rooms.push({ polygon: outline, areaM2, perimeterM: ringLength(outline) * mpp, labelAt, lengthM: Math.max(w, h), widthM: Math.min(w, h) })
+    // (when the edges are the only boundary, each takes half its strip off the room on either side of it: give that back)
+    const perimeterM = ringLength(outline) * mpp
+    const areaOut = o.edgesMakeRooms ? areaM2 + 0.5 * (1.5 * cellMm / 1000) * perimeterM : areaM2
+    rooms.push({ polygon: outline, areaM2: areaOut, perimeterM, labelAt, lengthM: Math.max(w, h), widthM: Math.min(w, h) })
   }
   rooms.sort((a, b) => (Math.abs(a.labelAt.y - b.labelAt.y) > 1 / mpp ? a.labelAt.y - b.labelAt.y : a.labelAt.x - b.labelAt.x))
   return { rooms, cellMm, solids: solids.length }
@@ -301,6 +304,34 @@ export function roomFromPolygon(points: Pt[], mpp: number, drawnId?: string): De
 /** Rooms in reading order (top to bottom, then left to right), the order Room 1, Room 2 ... are given in */
 export function sortRooms<T extends { labelAt: Pt }>(rooms: T[], mpp: number): T[] {
   return rooms.slice().sort((a, b) => (Math.abs(a.labelAt.y - b.labelAt.y) > 1 / mpp ? a.labelAt.y - b.labelAt.y : a.labelAt.x - b.labelAt.x))
+}
+
+/** Does any of these room edges cut across (or lie inside) this outline? */
+export function edgesTouch(outline: Pt[], edges: Pt[][]): boolean {
+  const cross = (a: Pt, b: Pt, c: Pt, d: Pt) => {
+    const o = (p: Pt, q: Pt, r: Pt) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x)
+    return o(a, b, c) * o(a, b, d) < 0 && o(c, d, a) * o(c, d, b) < 0
+  }
+  for (const e of edges) {
+    for (let i = 0; i + 1 < e.length; i++) {
+      if (pointInPolygon(e[i], outline) || pointInPolygon(e[i + 1], outline)) return true
+      // an edge that runs from corner to corner of the outline (the line between the two blocks of an L-shaped room) has its ends ON the outline: a point part-way along it is inside
+      for (const t of [0.25, 0.5, 0.75]) if (pointInPolygon({ x: e[i].x + (e[i + 1].x - e[i].x) * t, y: e[i].y + (e[i + 1].y - e[i].y) * t }, outline)) return true
+      for (let k = 0; k < outline.length; k++) if (cross(e[i], e[i + 1], outline[k], outline[(k + 1) % outline.length])) return true
+    }
+  }
+  return false
+}
+
+/** A drawn room cut by room edges becomes the pieces the edges make of it (two or more, each a room of its own); null when the edges do not split it. The outline and the edges are filled in as thin lines and the space they enclose is found, as for walls. */
+export function splitDrawnRoom(outline: Pt[], edges: Pt[][], mpp: number, drawnId?: string): DetectedRoom[] | null {
+  if (outline.length < 3 || !edgesTouch(outline, edges)) return null
+  // only the part of each edge that is inside the room matters, but the whole edge is fine: outside the outline it encloses nothing
+  const r = detectRooms([], { mpp, edges: [[...outline, outline[0]], ...edges], edgesMakeRooms: true })
+  // the room itself: only the pieces inside the outline (an edge running outside it could enclose something with the outline)
+  const pieces = r.rooms.filter(p => pointInPolygon(p.labelAt, outline))
+  if (pieces.length < 2) return null
+  return pieces.map(p => ({ ...p, ...(drawnId ? { drawnId } : {}) }))
 }
 
 // ── Naming and describing the rooms ──────────────────────────────────────────────────────────────────────────────────

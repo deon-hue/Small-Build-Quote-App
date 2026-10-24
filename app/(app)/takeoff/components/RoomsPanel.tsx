@@ -73,7 +73,7 @@ export default function RoomsPanel(p: Props) {
           <button type="button" onClick={() => p.onDraw('polygon')} style={{ flex: 1, padding: '7px', fontSize: 12, fontWeight: 600, borderRadius: 5, cursor: 'pointer', border: '1px solid var(--to-border)', background: 'var(--to-bg)', color: 'var(--to-text)', fontFamily: 'inherit' }}>⬠ Any shape</button>
         </div>
         <button type="button" onClick={() => p.onDraw('edge')} style={{ width: '100%', marginTop: 6, padding: '7px', fontSize: 12, fontWeight: 600, borderRadius: 5, cursor: 'pointer', border: '1px solid #7c3aed', background: 'var(--to-bg)', color: '#7c3aed', fontFamily: 'inherit' }}>┆ Room edge (closes a room)</button>
-        <div style={{ fontSize: 10.5, color: 'var(--to-muted)', marginTop: 5, lineHeight: 1.4 }}>A room edge is a line that closes a room where there is no wall: the open side of an extension, or the line between a kitchen and a dining space. It is not a wall, so nothing is painted or priced for it. Draw it from end to end of the open side.</div>
+        <div style={{ fontSize: 10.5, color: 'var(--to-muted)', marginTop: 5, lineHeight: 1.4 }}>A room edge is a line that closes a room where there is no wall (the open side of an extension), or cuts a room in two (a kitchen and a dining space): draw it right across a room you have drawn, side to side, and each half is a room you can name. It is not a wall, so nothing is painted or priced for it.</div>
         {p.edges.length > 0 && (
           <div style={{ marginTop: 8 }}>
             <div style={{ ...label, marginBottom: 3 }}>Room edges ({p.edges.length})</div>

@@ -19,7 +19,7 @@ import AssemblyItemPanel from './components/AssemblyWindow'
 import ElectricalPointsPanel, { POINT_GROUP_COLOUR } from './components/ElectricalPointsPanel'
 import OpeningsPanel from './components/OpeningsPanel'
 import RoomsPanel from './components/RoomsPanel'
-import { detectRooms, roomFromPolygon, sortRooms, roomIndexAt, pointInPolygon, isAxisRect, rectFromCorners, moveOutline, resizeRectOutline, labelAfterEdit, type DrawnRoomShape, describeRooms, labelIndexForRooms, ROOM_KIND_BY_ID, type DetectedRoom, type PlanRoomInfo, type RoomLabel, type RoomWithOpenings } from '@/lib/rooms-from-walls'
+import { detectRooms, roomFromPolygon, splitDrawnRoom, sortRooms, roomIndexAt, pointInPolygon, isAxisRect, rectFromCorners, moveOutline, resizeRectOutline, labelAfterEdit, type DrawnRoomShape, describeRooms, labelIndexForRooms, ROOM_KIND_BY_ID, type DetectedRoom, type PlanRoomInfo, type RoomLabel, type RoomWithOpenings } from '@/lib/rooms-from-walls'
 import { POINT_BY_ID, type ElectricsSavedState } from '@/lib/electrics-units'
 import { planRoomsFromPoints, roomAtPoint, rectToPolygon, POINT_SHORT, type ElectricPoint } from '@/lib/electric-points'
 
@@ -1859,12 +1859,26 @@ export default function TakeoffPage() {
     return { found: det.rooms, counts, cellMm: det.cellMm, hasWalls: solids.length > 0, sheetId: project.activeSheetId }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomTick, boSubPhases, allWallMakeups.length])
-  // the rooms found from walls (a moment behind the walls) and the rooms drawn as shapes (always as they are now, so dragging one is smooth), in reading order
+  // the rooms drawn as shapes, each cut into pieces where a room edge crosses it (always as they are now, so dragging one is smooth)
+  const drawnRooms = useMemo(() => {
+    const mpp = project.calibration.mpp
+    if (!roomsOn || !(mpp > 0)) return [] as DetectedRoom[]
+    const edges = roomEdgesOf(project).map(e => e.points)
+    const out: DetectedRoom[] = []
+    for (const sh of roomShapesOf(project)) {
+      const pieces = edges.length ? splitDrawnRoom(sh.points, edges, mpp, sh.id) : null
+      if (pieces) out.push(...pieces)
+      else { const r = roomFromPolygon(sh.points, mpp, sh.id); if (r) out.push(r) }
+    }
+    return out
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomsOn, project.sheets, project.roomShapes, project.roomEdges, project.activeSheetId, project.calibration.mpp])
+  // the rooms found from walls (a moment behind the walls) and the rooms drawn as shapes, in reading order
   const roomData = (() => {
     if (!roomCore) return null
     const mpp = project.calibration.mpp
     const none: RoomWithOpenings = { doors: 0, windows: 0, doorWidthM: 0, doorAreaM2: 0, windowAreaM2: 0 }
-    const drawnNow = roomShapesOf(project).map(sh => roomFromPolygon(sh.points, mpp, sh.id)).filter((r): r is DetectedRoom => !!r)
+    const drawnNow = drawnRooms
     const all = sortRooms([...roomCore.found.map((r, i) => ({ labelAt: r.labelAt, r, c: roomCore.counts[i] })), ...drawnNow.map(r => ({ labelAt: r.labelAt, r, c: none }))], mpp)
     return { rooms: all.map(x => x.r), counts: all.map(x => x.c), cellMm: roomCore.cellMm, hasWalls: roomCore.hasWalls || drawnNow.length > 0, sheetId: roomCore.sheetId }
   })()
@@ -1919,29 +1933,30 @@ export default function TakeoffPage() {
   function deleteDrawnRoom(idx: number) {
     const drawnId = roomData?.rooms[idx]?.drawnId
     if (!drawnId) return
-    const li = roomLabelIdx[idx]
+    // the drawn room goes, with the names of every piece of it (a room cut in two by an edge has two)
     setProject(p => {
+      const shape = roomShapesOf(p).find(s => s.id === drawnId)
       const q = setRoomShapes(p, roomShapesOf(p).filter(s => s.id !== drawnId))
-      return li >= 0 ? setRoomLabels(q, roomLabelsOf(q).filter((_, k) => k !== li)) : q
+      return shape ? setRoomLabels(q, roomLabelsOf(q).filter(l => !pointInPolygon(l, shape.points))) : q
     })
     setSelectedRoomPt(null)
   }
   /** edits a drawn room's outline (moved, a corner dragged, resized); the point its name is anchored at goes with it */
   function editDrawnShape(shapeId: string, points: TakeoffPoint[], delta?: { dx: number; dy: number }) {
     const mpp = project.calibration.mpp
-    const now = roomFromPolygon(points, mpp)
-    if (!now) return
-    setSelectedRoomPt(now.labelAt)   // the room stays selected while it moves
+    if (!roomFromPolygon(points, mpp)) return
     setProject(p => {
       const shapes = roomShapesOf(p)
       const old = shapes.find(s => s.id === shapeId)
       if (!old) return p
       const labels = roomLabelsOf(p)
-      const li = labels.findIndex(l => pointInPolygon(l, old.points))
       const q = setRoomShapes(p, shapes.map(s => (s.id === shapeId ? { ...s, points } : s)))
-      if (li < 0) return q
-      const at = labelAfterEdit(labels[li], points, mpp, delta)
-      return setRoomLabels(q, labels.map((l, k) => (k === li ? { ...l, x: at.x, y: at.y } : l)))
+      // every name inside the room goes with it (a room cut in two by an edge has two)
+      return setRoomLabels(q, labels.map(l => {
+        if (!pointInPolygon(l, old.points)) return l
+        const at = labelAfterEdit(l, points, mpp, delta)
+        return { ...l, x: at.x, y: at.y }
+      }))
     })
   }
   /** drag a drawn room by its middle to move it, or by a corner to reshape it (a rectangle stays a rectangle) */
@@ -1958,8 +1973,9 @@ export default function TakeoffPage() {
     const orig = shape.points.map(p => ({ ...p }))
     const isRect = shape.rect ?? isAxisRect(orig)
     const opposite = mode.kind === 'vertex' ? orig[(mode.index + 2) % orig.length] : null
-    const first = roomFromPolygon(orig, mpp)
-    if (first) setSelectedRoomPt(first.labelAt)
+    // the room (or piece of it) under the pointer is the selected one, and stays selected as the shape moves
+    const sel0 = selectedRoomPt && roomData && roomData.rooms[roomIndexAt(roomData.rooms, selectedRoomPt)]?.drawnId === shapeId ? selectedRoomPt : (roomData ? (roomData.rooms[roomIndexAt(roomData.rooms, start)] ?? roomData.rooms.find(r => r.drawnId === shapeId))?.labelAt : undefined) ?? roomFromPolygon(orig, mpp)?.labelAt
+    if (sel0) setSelectedRoomPt(sel0)
     const move = (ev: MouseEvent) => {
       const pt = toPlan(ev)
       let points: TakeoffPoint[], delta: { dx: number; dy: number } | undefined
@@ -1969,6 +1985,7 @@ export default function TakeoffPage() {
         points = isRect && opposite ? rectFromCorners(opposite, to) : orig.map((p, i) => (i === mode.index ? to : p))
       }
       editDrawnShape(shapeId, points, delta)
+      if (sel0) setSelectedRoomPt(delta ? { x: sel0.x + delta.dx, y: sel0.y + delta.dy } : sel0)
     }
     const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up) }
     window.addEventListener('mousemove', move)
@@ -1979,7 +1996,12 @@ export default function TakeoffPage() {
     const mpp = project.calibration.mpp
     if (!id || !(mpp > 0)) return
     const old = roomShapesOf(project).find(s => s.id === id)
-    if (old) editDrawnShape(id, resizeRectOutline(old.points, widthM / mpp, depthM / mpp))
+    if (old) {
+      const next = resizeRectOutline(old.points, widthM / mpp, depthM / mpp)
+      editDrawnShape(id, next)
+      const r = roomFromPolygon(next, mpp)
+      if (r) setSelectedRoomPt(r.labelAt)
+    }
   }
 
   /** the handles and grab areas of the drawn rooms, over the walls: only while the Rooms tool is on */
@@ -1991,14 +2013,14 @@ export default function TakeoffPage() {
           <polyline key={'edge-hit-' + e.id} points={e.points.map(q => q.x + ',' + q.y).join(' ')} fill="none" stroke="rgba(0,0,0,0.001)" strokeWidth={12 / zoom} style={{ cursor: 'pointer' }}
             onMouseDown={ev => { ev.stopPropagation(); setSelectedEdgeId(e.id); setSelectedRoomPt(null) }} onClick={ev => ev.stopPropagation()} />
         ))}
-        {roomData.rooms.map((r, i) => (r.drawnId ? (
-          <g key={'re-' + r.drawnId}>
-            <polygon points={r.polygon.map(q => q.x + ',' + q.y).join(' ')} fill="rgba(0,0,0,0.001)" style={{ cursor: 'move' }} onMouseDown={ev => startRoomShapeDrag(ev, r.drawnId!, { kind: 'move' })} />
-            {i === selectedRoomIdx && r.polygon.map((q, k) => (
-              <circle key={k} cx={q.x} cy={q.y} r={6 / zoom} fill="#fff" stroke="#1565c0" strokeWidth={2 / zoom} style={{ cursor: 'crosshair' }} onMouseDown={ev => startRoomShapeDrag(ev, r.drawnId!, { kind: 'vertex', index: k })} />
+        {roomShapesOf(project).map(sh => (
+          <g key={'re-' + sh.id}>
+            <polygon points={sh.points.map(q => q.x + ',' + q.y).join(' ')} fill="rgba(0,0,0,0.001)" style={{ cursor: 'move' }} onMouseDown={ev => startRoomShapeDrag(ev, sh.id, { kind: 'move' })} />
+            {roomData.rooms[selectedRoomIdx]?.drawnId === sh.id && sh.points.map((q, k) => (
+              <circle key={k} cx={q.x} cy={q.y} r={6 / zoom} fill="#fff" stroke="#1565c0" strokeWidth={2 / zoom} style={{ cursor: 'crosshair' }} onMouseDown={ev => startRoomShapeDrag(ev, sh.id, { kind: 'vertex', index: k })} />
             ))}
           </g>
-        ) : null))}
+        ))}
       </g>
     )
   }
