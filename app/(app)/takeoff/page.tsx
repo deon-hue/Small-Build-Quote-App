@@ -39,7 +39,8 @@ import { sharedWallRoomsFrom } from '@/lib/tiling-share'
 import ClientProjectModal from './components/ClientProjectModal'
 import ClientFilePicker from '@/components/ClientFilePicker'
 import { planResize, applyResize } from '@/lib/calc-size'
-import { snapPoint, anchorsFor, parseTyped, pointAtDistance, rectCornerAt, rotateShape, type SnapResult } from '@/lib/takeoff-snap'
+import { wallDrawing, cavityWallSpec, solidBlockSpec, specFromMakeupLayers, defaultWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
+import { cornersOf, snapPoint, anchorsFor, parseTyped, pointAtDistance, rectCornerAt, rotateShape, type SnapResult } from '@/lib/takeoff-snap'
 import { newHistory, observe as observeHistory, undoStep, redoStep, type History } from '@/lib/takeoff-history'
 import ConstructionLayerModal, { saveLayerCostToBackOffice } from './components/ConstructionLayerModal'
 import {
@@ -2419,6 +2420,30 @@ export default function TakeoffPage() {
     return el.points
   }
 
+  // What a drawn wall is made of, so it can be drawn at its real thickness: from its saved calculator (the cavity wall's leaves and cavity, a solid block's width), else the layers of its Build-Up Type (your Back Office wall type),
+  // else the standard for its kind of wall. External walls: the line you draw is the OUTSIDE face and the wall builds to the inside. Internal walls: the line is the middle. Nothing known: null (the plain band as before).
+  function wallSpecForItem(item: TakeoffItem) {
+    const external = item.phase === 'External Walls'
+    const internal = item.phase === 'Internal Walls & Partitions'
+    if ((!external && !internal) || !(project.calibration.mpp > 0)) return null
+    const snap = item.assemblyCalcState
+    const vals = (snap?.values ?? {}) as Record<string, Record<string, unknown>>
+    let spec = null as ReturnType<typeof defaultWallSpec>
+    if (snap?.id === 'ew-cav-full' || snap?.id === 'ew-cav-partial') { const v = vals.AssemblyCavityWallDemo; if (v) spec = cavityWallSpec(v, snap.id === 'ew-cav-full') }
+    else if (snap?.id === 'ew-blockwork-215') { const v = vals.AssemblySolidBlockWallDemo; if (v) spec = solidBlockSpec(v) }
+    const boSub = item.taskSubphaseId ? boSubPhases.find(sp => sp.id === item.taskSubphaseId) : undefined
+    const makeupId = item.floorMakeupId ?? (external && !item.taskSubphaseId ? allWallMakeups[0]?.id : undefined)   // an external wall with no type picked shows the first type, as the Properties panel does
+    const canonical = boSub?.canonical_id ?? (makeupId ? WALL_MAKEUP_TO_SUBPHASE_CANONICAL[makeupId] : undefined)
+    if (!spec && external && makeupId) { const mk = allWallMakeups.find(m => m.id === makeupId); if (mk) spec = specFromMakeupLayers(mk.layers) }
+    if (!spec) spec = defaultWallSpec(canonical)
+    return spec ? { spec, ref: (external ? 'outer' : 'centre') as 'outer' | 'centre', flip: !!item.wallFlip } : null
+  }
+  function wallSpecFor(el: DrawnElement) {
+    if (el.phase !== 'External Walls' && el.phase !== 'Internal Walls & Partitions') return null
+    const item = project.items.find(it => it.elementId === el.id)
+    return item ? wallSpecForItem(item) : null
+  }
+
   function renderElement(el: DrawnElement) {
     const sel = selectedId === el.id
     const isWall = el.phase === 'External Walls'
@@ -2440,6 +2465,37 @@ export default function TakeoffPage() {
       const pt = svgCoords(e)
       dragRef.current = { id: el.id, startSvgX: pt.x, startSvgY: pt.y, origPoints: [...el.points] }
       setIsDraggingEl(true)
+    }
+
+    // ── A wall with a known make-up: its real thickness, layer by layer (brick, cavity, insulation, block...) ──
+    const ws = wallSpecFor(el)
+    if (ws) {
+      const mpp = project.calibration.mpp
+      const closed = el.type !== 'line'
+      const wd = wallDrawing(el.type === 'rect' ? cornersOf(el) : el.points, ws.spec, mpp, { ref: ws.ref, closed, flip: ws.flip })
+      if (wd) {
+        const hit = wd.centre.map(p => `${p.x},${p.y}`).join(' ')
+        const hitW = Math.max(14 / zoom, wd.totalPx)
+        return (
+          <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
+            {closed
+              ? <polygon points={hit} fill="none" stroke="transparent" strokeWidth={hitW} />
+              : <polyline points={hit} fill="none" stroke="transparent" strokeWidth={hitW} />}
+            {wd.strips.map((st, i) => {
+              const style = LAYER_STYLE[st.kind]
+              const showHatch = style.hatch !== 'none' && (st.mm / (mpp * 1000)) * zoom >= 3   // only when the layer is wide enough on screen to show it
+              return (
+                <g key={i}>
+                  <path d={st.d} fillRule="evenodd" fill={style.fill} />
+                  {showHatch && <path d={st.d} fillRule="evenodd" fill={`url(#wl-${style.hatch})`} />}
+                  <path d={st.d} fillRule="evenodd" fill="none" stroke={style.line} strokeWidth={0.8 / zoom} strokeLinejoin="miter" />
+                </g>
+              )
+            })}
+            {sel && <path d={wd.bodyD} fillRule="evenodd" fill="none" stroke="#1565c0" strokeWidth={2.5 / zoom} strokeDasharray={`${6 / zoom} ${3 / zoom}`} />}
+          </g>
+        )
+      }
     }
 
     // ── External Walls LINE: two parallel lines = cavity wall cross-section ──
@@ -2574,6 +2630,11 @@ export default function TakeoffPage() {
     const common = { fill: 'none', stroke: '#ffffff', strokeOpacity: 0.92, strokeLinejoin: 'round' as const, strokeLinecap: 'round' as const }
     const linked = project.items.find(it => it.elementId === el.id)
     const pts = el.points.map(p => `${p.x},${p.y}`).join(' ')
+    const wsHalo = wallSpecFor(el)
+    if (wsHalo) {
+      const wdh = wallDrawing(el.type === 'rect' ? cornersOf(el) : el.points, wsHalo.spec, project.calibration.mpp, { ref: wsHalo.ref, closed: el.type !== 'line', flip: wsHalo.flip })
+      if (wdh) return <path key={'halo-' + el.id} d={wdh.bodyD} fillRule="evenodd" fill="#ffffff" fillOpacity={0.9} stroke="#ffffff" strokeOpacity={0.92} strokeWidth={Math.max(extra, 6 / zoom)} strokeLinejoin="round" />
+    }
     if (isWall && el.type === 'line') {
       const half = linked?.wallBandPx ?? 9
       const face = Math.max(sel ? 2.5 : 2, 3 / zoom)
@@ -2601,7 +2662,8 @@ export default function TakeoffPage() {
         : el.type === 'rect' ? fmt2(rectArea(el.points, mpp)) + ' m²'
         : fmt2(polygonArea(el.points, mpp)) + ' m²'
       const anchor = el.type === 'line' ? polylineMidpoint(el.points) : centroid(el.points)
-      return { id: el.id, text: tagText(el.label || linked?.name || '', measure), ax: anchor.x, ay: anchor.y, dx: el.tagDx, dy: el.tagDy }
+      const wsTag = wallSpecFor(el)
+      return { id: el.id, text: tagText(el.label || linked?.name || '', wsTag ? measure + ' · ' + wsTag.spec.label : measure), ax: anchor.x, ay: anchor.y, dx: el.tagDx, dy: el.tagDy }
     })
     const boxes = layoutTags(inputs, zoom)
     return boxes.map(t => {
@@ -4250,7 +4312,25 @@ export default function TakeoffPage() {
                 />
               </div>
 
-              {isExtWall && (
+              {(() => {
+                const _wsI = wallSpecForItem(item)
+                const _wsEl = project.elements.find(e => e.id === item.elementId)
+                if (!_wsI) return null
+                return (
+                  <div style={{ marginBottom: 10 }}>
+                    <label style={labelStyle}>Drawn on the plan as</label>
+                    <div style={{ fontSize: 12, color: 'var(--to-text)', lineHeight: 1.5 }}>
+                      <strong>{_wsI.spec.label}</strong>, to scale<br />
+                      <span style={{ color: 'var(--to-muted)', fontSize: 11 }}>{_wsI.spec.layers.map(l => `${l.kind} ${l.mm}`).join(' + ')} mm. {_wsI.ref === 'outer' ? 'The line you drew is the outside face; the wall builds to the inside.' : 'The line you drew is the middle of the wall.'} Taken from {item.assemblyCalcState ? 'the saved calculator' : 'the wall type'}.</span>
+                    </div>
+                    {isExtWall && _wsEl?.type === 'line' && (
+                      <button style={{ ...btnStyle, marginTop: 6, fontSize: 11, padding: '4px 8px' }} onClick={() => saveItemEdit({ ...item, wallFlip: !item.wallFlip })} title="Build the wall to the other side of the line you drew">⇄ Flip to the other side</button>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {isExtWall && !wallSpecForItem(item) && (
                 <div style={{ marginBottom: 10 }}>
                   <label style={labelStyle}>Canvas Line Width (wall thickness on plan)</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -5636,6 +5716,12 @@ export default function TakeoffPage() {
                 return (
                   <g>
                     <defs>
+                      {/* hatching for the layers of a wall drawn at its real thickness (kept the same density on screen at any zoom) */}
+                      <pattern id="wl-diag" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform={`scale(${1 / zoom})`}><path d="M-1 6 L6 -1" stroke="#8c3a1f" strokeWidth="0.9" /></pattern>
+                      <pattern id="wl-dots" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform={`scale(${1 / zoom})`}><circle cx="1.5" cy="1.5" r="0.7" fill="#555a63" /><circle cx="4" cy="4" r="0.7" fill="#555a63" /></pattern>
+                      <pattern id="wl-zig" width="8" height="6" patternUnits="userSpaceOnUse" patternTransform={`scale(${1 / zoom})`}><path d="M0 3 L2 0 L4 6 L6 0 L8 3" fill="none" stroke="#a38b00" strokeWidth="0.8" /></pattern>
+                      <pattern id="wl-wood" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform={`scale(${1 / zoom})`}><path d="M0 0 L6 6 M6 0 L0 6" stroke="#7a5420" strokeWidth="0.7" /></pattern>
+                      <pattern id="wl-cross" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform={`scale(${1 / zoom})`}><path d="M0 0 L5 5 M5 0 L0 5" stroke="#42525f" strokeWidth="0.8" /></pattern>
                       <pattern id="grid-minor" width={minor} height={minor} patternUnits="userSpaceOnUse">
                         <path d={`M ${minor} 0 L 0 0 0 ${minor}`} fill="none" stroke="#1e2e1e" strokeWidth={0.5} />
                       </pattern>
