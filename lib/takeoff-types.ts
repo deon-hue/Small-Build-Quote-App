@@ -225,6 +225,8 @@ export interface TakeoffItem {
 
   // Foundation line-specific (Foundations phase + line element)
   foundationWidth?: number    // mm — trench/footing width (default 600)
+  /** how far the foundation is drawn to the right of the line (mm, negative = to the left, of the way the line was drawn), so it can sit centred under a wall that was drawn from its outside face */
+  foundationOffsetMm?: number
   foundationDepth?: number    // mm — excavation/concrete depth (default 1000)
   foundationType?: string     // 'trench_fill' | 'strip' | 'pad_edge' | 'raft_edge' | 'other'
 

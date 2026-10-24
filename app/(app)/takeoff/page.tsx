@@ -46,7 +46,7 @@ import { sharedWallRoomsFrom } from '@/lib/tiling-share'
 import ClientProjectModal from './components/ClientProjectModal'
 import ClientFilePicker from '@/components/ClientFilePicker'
 import { planResize, applyResize } from '@/lib/calc-size'
-import { wallDrawing, wallBand, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, specFromMakeupLayers, defaultWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
+import { wallDrawing, wallBand, offsetPolyline, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, specFromMakeupLayers, defaultWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
 import { sidesOf, splitOpenings } from '@/lib/wall-split'
 import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
 import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, type PlacedOpening, type WallBand } from '@/lib/wall-openings'
@@ -2910,6 +2910,30 @@ export default function TakeoffPage() {
     return base * 100
   }
 
+  /** How far (mm, to the right of the way the line was drawn) a foundation line would have to sit to be centred under the nearest wall: the walls are drawn from their outside face, so a foundation drawn along that face is half a wall thickness off. Null if no wall is within 1.5m. */
+  function foundationOffsetToWall(el: DrawnElement): { mm: number; wallName: string } | null {
+    const mpp = project.calibration.mpp
+    if (!(mpp > 0) || el.type !== 'line' || el.points.length < 2) return null
+    // the middle of the foundation's longest side, and which way is right of it
+    let bi = 0, bl = -1
+    for (let i = 0; i + 1 < el.points.length; i++) { const l = Math.hypot(el.points[i + 1].x - el.points[i].x, el.points[i + 1].y - el.points[i].y); if (l > bl) { bl = l; bi = i } }
+    const a = el.points[bi], b = el.points[bi + 1]
+    if (!(bl > 0)) return null
+    const T = { x: (b.x - a.x) / bl, y: (b.y - a.y) / bl }, N = { x: -T.y, y: T.x }
+    const M = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+    let found: { off: number; q: TakeoffPoint; w: DrawnElement } | null = null
+    for (const w of wallsOnSheet()) {
+      const ws = wallSpecFor(w)
+      if (!ws) continue
+      const closed = w.type !== 'line'
+      const wd = wallDrawing(w.type === 'rect' ? cornersOf(w) : w.points, ws.spec, mpp, { ref: ws.ref, closed, flip: ws.flip })
+      const loc = wd ? locateOnPath(wd.centre, closed, M) : null
+      if (loc && (!found || loc.off < found.off)) found = { off: loc.off, q: { x: loc.x, y: loc.y }, w }
+    }
+    if (!found || found.off * mpp > 1.5) return null
+    return { mm: Math.round(((found.q.x - M.x) * N.x + (found.q.y - M.y) * N.y) * mpp * 1000), wallName: project.items.find(it => it.elementId === found!.w.id)?.name ?? found.w.label }
+  }
+
   /** the walls (lines, polygons, rectangles) on the showing sheet */
   function wallsOnSheet(): DrawnElement[] {
     return elementsOnActiveSheet(project).filter(el => (el.phase === 'External Walls' || el.phase === 'Internal Walls & Partitions') && !hiddenPhases.has(el.phase))
@@ -3223,10 +3247,13 @@ export default function TakeoffPage() {
       const mpp = project.calibration.mpp
       const linked = project.items.find(it => it.elementId === el.id)
       const widthMm = linked?.foundationWidth ?? 600
-      const wd = wallDrawing(el.points, { layers: [{ kind: 'solid', mm: widthMm }], label: '' }, mpp, { ref: 'centre', closed: false })
+      // the foundation can sit to one side of the line you drew (to be centred under a wall drawn from its outside face)
+      const offsetPx = (linked?.foundationOffsetMm ?? 0) / (mpp * 1000)
+      const fpts = offsetPx ? offsetPolyline(el.points, offsetPx) : el.points
+      const wd = wallDrawing(fpts, { layers: [{ kind: 'solid', mm: widthMm }], label: '' }, mpp, { ref: 'centre', closed: false })
       if (wd) {
-        const mid = centroid(el.points)
-        const hit = el.points.map(p => `${p.x},${p.y}`).join(' ')
+        const mid = centroid(fpts)
+        const hit = fpts.map(p => `${p.x},${p.y}`).join(' ')
         const colour = sel ? SEL_COLOUR : el.color
         return (
           <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
@@ -5646,6 +5673,30 @@ export default function TakeoffPage() {
         </div>
         </>
         )}
+
+        {/* ════════════════ FOUNDATION POSITION ════════════════ */}
+        {(() => {
+          const _el = project.elements.find(e => e.id === item.elementId)
+          if (!_el || _el.type !== 'line' || item.phase !== 'Foundations') return null
+          return (
+            <>
+              <div style={secHdr}><span>↔</span><span>Position under the wall</span></div>
+              <div style={secBody}>
+                <div style={{ fontSize: 11, color: 'var(--to-muted)', lineHeight: 1.5, marginBottom: 8 }}>The foundation is drawn centred on the line you drew. A wall is drawn from its outside face, so the two are not centred on each other. Sit the foundation under the middle of the wall, or type how far to move it.</div>
+                <button style={{ ...btnStyle, fontSize: 11, padding: '5px 9px', marginBottom: 8 }} onClick={() => {
+                  const r = foundationOffsetToWall(_el)
+                  if (!r) { showToast('No wall drawn within 1.5 m of this foundation: draw the wall first, or type the distance'); return }
+                  saveItemEdit({ ...item, foundationOffsetMm: r.mm })
+                  showToast(r.mm === 0 ? 'Already centred under the wall' : `Centred under the wall: moved ${Math.abs(r.mm)} mm to the ${r.mm > 0 ? 'right' : 'left'} of the line`)
+                }}>⊕ Centre under the nearest wall</button>
+                <label style={labelStyle}>Moved sideways (mm, + is to the right of the way you drew the line)</label>
+                <NumInput type="number" step={10} style={inputStyle} value={item.foundationOffsetMm ?? 0}
+                  onChange={e => saveItemEdit({ ...item, foundationOffsetMm: +e.target.value || 0 })} />
+                {(item.foundationOffsetMm ?? 0) !== 0 && <button style={{ ...btnStyle, fontSize: 11, padding: '4px 8px', marginTop: 6 }} onClick={() => saveItemEdit({ ...item, foundationOffsetMm: 0 })}>Back to the line</button>}
+              </div>
+            </>
+          )
+        })()}
 
         {/* ════════════════ COLOUR ON THE PLAN ════════════════ */}
         {(() => {
