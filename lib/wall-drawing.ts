@@ -48,7 +48,12 @@ export function cavityWallSpec(v: Record<string, unknown>, fullFill: boolean): W
   layers.push(outerBlock ? { kind: 'block', mm: 100 } : { kind: 'brick', mm: 102.5 })
   if (!insulated) layers.push({ kind: 'cavity', mm: cavity })
   else if (fullFill) layers.push({ kind: 'insulation', mm: cavity })
-  else { layers.push({ kind: 'insulation', mm: Math.max(0, cavity - 25) }); layers.push({ kind: 'cavity', mm: Math.min(25, cavity) }) }
+  else {
+    // partial fill: the insulation board the calculator was set to (75mm in a 125mm cavity to start), the rest an air gap; with no board size known, a 50mm gap in a cavity of 100mm or more
+    const board = Math.min(cavity, num(v.boardThicknessMm) ?? Math.max(0, cavity >= 100 ? cavity - 50 : cavity - 25))
+    layers.push({ kind: 'insulation', mm: board })
+    if (cavity - board > 0) layers.push({ kind: 'cavity', mm: cavity - board })
+  }
   layers.push({ kind: 'block', mm: inner })
   layers.push({ kind: 'board', mm: 12.5 })
   return make(layers)
@@ -90,8 +95,9 @@ export function specFromMakeupLayers(layers: { name: string; thickness: number }
 /** What a kind of wall is when nothing more specific is known (its sub-phase's standard). */
 export function defaultWallSpec(canonicalId: string | undefined): WallSpec | null {
   switch (canonicalId) {
-    case 'ew-cav-full': return cavityWallSpec({}, true)
-    case 'ew-cav-partial': return cavityWallSpec({}, false)
+    // (a cavity wall with nothing more known is drawn the way the calculators start: insulated, full fill with mineral wool, partial fill with PIR board)
+    case 'ew-cav-full': return cavityWallSpec({ insulation: 'wool' }, true)
+    case 'ew-cav-partial': return cavityWallSpec({ insulation: 'pir' }, false)
     case 'ew-blockwork-100': return make([{ kind: 'render', mm: 15 }, { kind: 'block', mm: 100 }])
     case 'ew-blockwork-215': return make([{ kind: 'render', mm: 15 }, { kind: 'block', mm: 215 }])
     case 'iw-stud-partition': return make([{ kind: 'board', mm: 12.5 }, { kind: 'timber', mm: 75 }, { kind: 'board', mm: 12.5 }])
