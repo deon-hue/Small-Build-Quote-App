@@ -3080,6 +3080,8 @@ export default function TakeoffPage() {
     const isDecoCalc       = MARKER_CALC_PHASES.has(item.phase) && !!resolveBuiltAssembly(item)
     // the external render and wall insulation calculators take their first wall's length from the drawn line, so the card shows the length, not a marker
     const _lengthFedCalc    = isDecoCalc && item.phase === 'Plastering & Boarding' && ['plaster-render', 'plaster-insul-wall'].includes(boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id ?? '')
+    // the tiling calculators are sized from what is drawn: an area gives the first room its size, a line gives wall tiling its first wall's length
+    const _tileCalc        = isDecoCalc && item.phase === 'Tiling & Finishes'
     const isTaskPhase      = _phaseHasTasks && !isBuildup && !isExtWall && !isPlaster && !isIntWall && !isDemo && !isDemoCalc && !isFoundationLine && !isDecoCalc
     const showWallLine     = isLineBased && (isExtWall || isIntWall || isPlaster)
     const hasOpenings      = (isExtWall || isIntWall || isPlaster) && isLineBased
@@ -3104,13 +3106,13 @@ export default function TakeoffPage() {
     // length; a roof by the box its drawn shape sits in.
     const isBoxShape = isRoof || isFoundationShape
     const roofBox = isBoxShape ? drawnBoxMm(item) : undefined
-    const floorDims = isFloorShape ? drawnAreaPerimeter(item) : undefined
+    const floorDims = (isFloorShape || _tileCalc) ? drawnAreaPerimeter(item) : undefined
     const renderAssemblyPanel = (savePatch: Partial<TakeoffItem>) => builtAssembly && (
       <AssemblyItemPanel
         name={item.name}
         lengthM={item.length ?? 0}
-        measureLabel={isBoxShape ? 'Size' : isFloorShape ? 'Area' : (isDecoCalc && !_lengthFedCalc) || _demoMarker ? 'Marker' : undefined}
-        measureText={isBoxShape ? (roofBox ? `${(roofBox.lengthMm / 1000).toFixed(2)} × ${(roofBox.widthMm / 1000).toFixed(2)} m` : 'Not drawn') : isFloorShape ? (floorDims ? `${floorDims.areaM2.toFixed(1)} m²` : 'Not drawn') : _demoMarker ? 'sizes are typed in the calculator' : isDecoCalc && !_lengthFedCalc ? 'rooms are set in the calculator' : undefined}
+        measureLabel={isBoxShape ? 'Size' : isFloorShape || (_tileCalc && floorDims) ? 'Area' : _tileCalc && (item.length ?? 0) > 0 ? 'Length' : (isDecoCalc && !_lengthFedCalc) || _demoMarker ? 'Marker' : undefined}
+        measureText={isBoxShape ? (roofBox ? `${(roofBox.lengthMm / 1000).toFixed(2)} × ${(roofBox.widthMm / 1000).toFixed(2)} m` : 'Not drawn') : isFloorShape || (_tileCalc && floorDims) ? (floorDims ? `${floorDims.areaM2.toFixed(1)} m²` : 'Not drawn') : _tileCalc && (item.length ?? 0) > 0 ? `${(item.length ?? 0).toFixed(2)} m` : _demoMarker ? 'sizes are typed in the calculator' : isDecoCalc && !_lengthFedCalc ? 'rooms are set in the calculator' : undefined}
         saved={item.assemblyResult}
         open={assemblyWindowItemId === item.id}
         onOpen={() => setAssemblyWindowItemId(item.id)}
@@ -3956,7 +3958,9 @@ export default function TakeoffPage() {
                   </select>
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--to-muted)', marginBottom: 8 }}>
-                  {_lengthFedCalc
+                  {_tileCalc
+                    ? 'Priced room by room with its own calculator. The area drawn here sizes the first room (a line drawn gives the first wall area its length for wall tiling): add the other rooms and the finishes in the calculator.'
+                    : _lengthFedCalc
                     ? "Priced wall by wall with its own calculator. The length of the line drawn here is the first wall's length: add the height, openings and the finish in the calculator."
                     : `Priced room by room with its own calculator. The ${_plasterLine ? 'line' : 'area'} drawn here is only a marker on the plan: add the rooms in the calculator.`}
                 </div>

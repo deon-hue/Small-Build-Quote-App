@@ -51,6 +51,8 @@ export interface TileUfhRoom {
   /** depth of levelling compound over the mat, mm; 0 = none (tile adhesive alone covers it) */
   coverMm: number
   situationId: string | null
+  /** the drawn area and perimeter (from Take-off) this room was last sized from: it follows them until they change */
+  fromPlan?: { areaM2: number; perimeterM: number }
 }
 
 export function newTileUfhRoom(id: string, name: string, kindId: string, k: { lengthM: number; widthM: number; fixedM2: number }, start: { kit: UfhKit; insulation: UfhInsulation }): TileUfhRoom {

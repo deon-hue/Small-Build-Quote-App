@@ -9,14 +9,14 @@
  * lib/tile-prep-units.ts; the body shared with the other three tiling calculators is components/TilingCalcFrame.tsx.
  */
 
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import { useCalcState } from '@/components/calc-state'
 import type { CostedLine } from '@/lib/assembly-calc'
 import {
   calculateTilePrep, newTilePrepRoom, newPrepZone, floorAreaM2, ceilingAreaM2, autoTapeLm, BACKER_BOARDS, WALL_BASE_LABEL, TANK_LABEL, FLOOR_COVER_LABEL, CEILING_LABEL,
   type TilePrepRoom, type TilePrepResult, type PrepZone, type WallBase, type TankSystem, type FloorCover, type CeilingKind, type BackerId,
 } from '@/lib/tile-prep-units'
-import { DEFAULT_TILING_SITUATIONS, TILING_ROOM_KINDS, TILING_ROOM_KIND_BY_ID, zonesFromKind, allWallsZone, zoneAreaM2, newZoneId } from '@/lib/tiling-common'
+import { DEFAULT_TILING_SITUATIONS, TILING_ROOM_KINDS, TILING_ROOM_KIND_BY_ID, sidesFromAreaPerimeter, zonesFromKind, allWallsZone, zoneAreaM2, newZoneId } from '@/lib/tiling-common'
 import { describeTilePrep, describeTilePrepShort, type TilingDescriptionInput } from '@/lib/tiling-description'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import { propInput, PropRow, CollapsibleSection } from '@/components/assembly-ui'
@@ -26,15 +26,31 @@ interface Props {
   onClose?: () => void
   onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }) => void
   labourTrades?: BOLabourTrade[]
+  /** Take-off's drawn area (m²) and perimeter (m): the first room is sized from them and follows them */
+  externalAreaM2?: number
+  externalPerimeterM?: number
 }
 
 const uid = () => Math.random().toString(36).slice(2, 9)
 const sub: React.CSSProperties = { fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4, margin: '8px 0 4px' }
 
-export default function AssemblyTilePrepDemo({ onClose, onSave, labourTrades = [] }: Props) {
+export default function AssemblyTilePrepDemo({ onClose, onSave, labourTrades = [], externalAreaM2, externalPerimeterM }: Props) {
   const ID = 'AssemblyTilePrepDemo'
-  // The job starts with no rooms: you add the ones being prepared
-  const [rooms, setRooms] = useCalcState<TilePrepRoom[]>(ID, 'rooms', [])
+  // The area drawn in Take-off (if any) sizes the first room, which follows it until the drawing changes
+  const planArea = externalAreaM2 && externalAreaM2 > 0 ? externalAreaM2 : 0
+  const planPerimeter = externalPerimeterM && externalPerimeterM > 0 ? externalPerimeterM : 0
+  const planSides = planArea > 0 ? sidesFromAreaPerimeter(planArea, planPerimeter) : null
+  const planRoom = (): TilePrepRoom => {
+    const k = TILING_ROOM_KIND_BY_ID.other
+    return { ...newTilePrepRoom('room-' + uid(), 'Room from the plan', 'other', { lengthM: planSides?.long ?? k.lengthM, widthM: planSides?.short ?? k.widthM, heightM: k.heightM, collars: 0 }, []), fromPlan: { areaM2: planArea, perimeterM: planPerimeter } }
+  }
+  // The job starts with no rooms: you add the ones being prepared (or the drawn area is the first)
+  const [rooms, setRooms] = useCalcState<TilePrepRoom[]>(ID, 'rooms', () => (planSides ? [planRoom()] : []))
+  useEffect(() => {
+    if (!planSides) return
+    setRooms(p => (p.length === 0 ? [planRoom()] : p.map(r => (r.fromPlan && (r.fromPlan.areaM2 !== planArea || r.fromPlan.perimeterM !== planPerimeter)
+      ? { ...r, lengthM: planSides.long, widthM: planSides.short, floorAreaOverrideM2: null, fromPlan: { areaM2: planArea, perimeterM: planPerimeter } } : r))))
+  }, [planArea, planPerimeter])
   const [addKind, setAddKind] = useCalcState(ID, 'addKind', 'shower')
   const [jobSituationId, setJobSituationId] = useCalcState(ID, 'jobSituationId', 'empty')
 
@@ -99,6 +115,9 @@ export default function AssemblyTilePrepDemo({ onClose, onSave, labourTrades = [
                 {TILING_ROOM_KINDS.map(k => <option key={k.id} value={k.id}>{k.label}</option>)}
               </select>
               <button type="button" onClick={addRoom} style={{ background: '#0369a1', color: '#fff', border: 'none', borderRadius: 5, fontSize: 12, fontWeight: 600, padding: '4px 12px', cursor: 'pointer' }}>+ Add room</button>
+              {planSides && !rooms.some(x => x.fromPlan) && (
+                <button type="button" onClick={() => setRooms(p => [...p, planRoom()])} title="Add the area drawn on the plan as a room" style={{ ...tilingSmall, cursor: 'pointer', background: '#f1f5f9' }}>+ The drawn area ({planArea.toFixed(1)}m²)</button>
+              )}
             </div>
             <div style={{ fontSize: 10.5, color: '#94a3b8', marginBottom: 10, lineHeight: 1.5 }}>
               A new room starts with a primed floor and the usual wall areas for that kind of room; shower and bath walls come with backer board and waterproofing, a wet room's floor is tanked too. Nothing else is switched on until you choose it.
@@ -123,7 +142,7 @@ export default function AssemblyTilePrepDemo({ onClose, onSave, labourTrades = [
                     <button type="button" onClick={() => setRooms(p => p.filter(x => x.id !== rm.id))} title="Remove this room" style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 8 }}>
-                    <PropRow label="Length (m)"><TilingNumInput v={rm.lengthM} set={n => updateRoom(rm.id, { lengthM: n })} step={0.1} /></PropRow>
+                    <PropRow label={rm.fromPlan ? 'Length (m) — from the plan' : 'Length (m)'}><TilingNumInput v={rm.lengthM} set={n => updateRoom(rm.id, { lengthM: n })} step={0.1} /></PropRow>
                     <PropRow label="Width (m)"><TilingNumInput v={rm.widthM} set={n => updateRoom(rm.id, { widthM: n })} step={0.1} /></PropRow>
                     <PropRow label="Height (m)"><TilingNumInput v={rm.heightM} set={n => updateRoom(rm.id, { heightM: n })} step={0.1} /></PropRow>
                     <PropRow label="Floor area (m²) — blank = from the room"><TilingAutoInput v={rm.floorAreaOverrideM2} set={n => updateRoom(rm.id, { floorAreaOverrideM2: n })} auto={floorAreaM2(rm)} /></PropRow>

@@ -8,7 +8,7 @@
  * waterproofing are Tiling Preparation. The engine is lib/tile-wall-units.ts; the body shared with the other three tiling calculators is components/TilingCalcFrame.tsx.
  */
 
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import { useCalcState } from '@/components/calc-state'
 import type { CostedLine } from '@/lib/assembly-calc'
 import { calculateTileWall, newTileWallRoom, autoTrimLm, autoSiliconeLm, type TileWallRoom, type TileWallResult } from '@/lib/tile-wall-units'
@@ -24,14 +24,32 @@ interface Props {
   onClose?: () => void
   onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }) => void
   labourTrades?: BOLabourTrade[]
+  /** Take-off's drawn outline (area m², perimeter m) or line (length mm): the first room's first wall area is that length and follows it */
+  externalAreaM2?: number
+  externalPerimeterM?: number
+  externalLengthMm?: number
 }
 
 const uid = () => Math.random().toString(36).slice(2, 9)
 
-export default function AssemblyTileWallDemo({ onClose, onSave, labourTrades = [] }: Props) {
+export default function AssemblyTileWallDemo({ onClose, onSave, labourTrades = [], externalAreaM2, externalPerimeterM, externalLengthMm }: Props) {
   const ID = 'AssemblyTileWallDemo'
-  // The job starts with no rooms: you add the ones being tiled
-  const [rooms, setRooms] = useCalcState<TileWallRoom[]>(ID, 'rooms', [])
+  // What is drawn in Take-off: an outline gives its perimeter (the walls round it), a line gives its length. It is the first wall area's length and follows the drawing.
+  const planLength = externalAreaM2 && externalAreaM2 > 0 && externalPerimeterM && externalPerimeterM > 0 ? externalPerimeterM
+    : externalLengthMm && externalLengthMm > 0 ? +(externalLengthMm / 1000).toFixed(2) : 0
+  const planIsOutline = !!(externalAreaM2 && externalAreaM2 > 0 && externalPerimeterM && externalPerimeterM > 0)
+  const planRoom = (): TileWallRoom => {
+    const room = newTileWallRoom('room-' + uid(), 'Walls from the plan', 'other', 2.4,
+      [{ id: newZoneId(), label: planIsOutline ? 'Walls round the drawn outline' : 'Wall from the drawn line', lengthM: planLength, heightM: 2.4, deductM2: 0 }], { tileId: 'medium', layoutId: 'straight' })
+    return { ...room, fromPlan: { lengthM: planLength } }
+  }
+  // The job starts with no rooms: you add the ones being tiled (or the drawn walls are the first)
+  const [rooms, setRooms] = useCalcState<TileWallRoom[]>(ID, 'rooms', () => (planLength > 0 ? [planRoom()] : []))
+  useEffect(() => {
+    if (!(planLength > 0)) return
+    setRooms(p => (p.length === 0 ? [planRoom()] : p.map(r => (r.fromPlan && r.fromPlan.lengthM !== planLength
+      ? { ...r, zones: r.zones.map((z, i) => (i === 0 ? { ...z, lengthM: planLength } : z)), fromPlan: { lengthM: planLength } } : r))))
+  }, [planLength])
   const [addKind, setAddKind] = useCalcState(ID, 'addKind', 'bathroom')
   const [startTile, setStartTile] = useCalcState<TileSizeId>(ID, 'startTile', 'medium')
   const [startLayout, setStartLayout] = useCalcState<TileLayoutId>(ID, 'startLayout', 'straight')
@@ -83,6 +101,9 @@ export default function AssemblyTileWallDemo({ onClose, onSave, labourTrades = [
                 {TILING_ROOM_KINDS.map(k => <option key={k.id} value={k.id}>{k.label}</option>)}
               </select>
               <button type="button" onClick={addRoom} style={{ background: '#0369a1', color: '#fff', border: 'none', borderRadius: 5, fontSize: 12, fontWeight: 600, padding: '4px 12px', cursor: 'pointer' }}>+ Add room</button>
+              {planLength > 0 && !rooms.some(x => x.fromPlan) && (
+                <button type="button" onClick={() => setRooms(p => [...p, planRoom()])} title="Add the walls drawn on the plan as a room" style={{ ...tilingSmall, cursor: 'pointer', background: '#f1f5f9' }}>+ The drawn walls ({planLength.toFixed(1)}m)</button>
+              )}
             </div>
             <div style={{ fontSize: 10.5, color: '#94a3b8', marginBottom: 10, lineHeight: 1.5 }}>
               A new room starts with
@@ -120,7 +141,7 @@ export default function AssemblyTileWallDemo({ onClose, onSave, labourTrades = [
                   {rm.zones.map(z => (
                     <div key={z.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(110px, 1.6fr) repeat(3, minmax(60px, 1fr)) 60px 22px', gap: 6, alignItems: 'end', marginBottom: 4 }}>
                       <PropRow label="Area"><input value={z.label} onChange={e => updateZone(rm.id, z.id, { label: e.target.value })} style={propInput} /></PropRow>
-                      <PropRow label="Length (m)"><TilingNumInput v={z.lengthM} set={n => updateZone(rm.id, z.id, { lengthM: n })} step={0.1} /></PropRow>
+                      <PropRow label={rm.fromPlan && rm.zones[0]?.id === z.id ? 'Length (m) — from the plan' : 'Length (m)'}><TilingNumInput v={z.lengthM} set={n => updateZone(rm.id, z.id, { lengthM: n })} step={0.1} /></PropRow>
                       <PropRow label="Height (m)"><TilingNumInput v={z.heightM} set={n => updateZone(rm.id, z.id, { heightM: n })} step={0.1} /></PropRow>
                       <PropRow label="Less (m²)"><TilingNumInput v={z.deductM2} set={n => updateZone(rm.id, z.id, { deductM2: n })} step={0.1} /></PropRow>
                       <div style={{ fontSize: 11, color: '#64748b', paddingBottom: 6, textAlign: 'right' }}>{zoneAreaM2(z).toFixed(1)}m²</div>

@@ -110,6 +110,17 @@ export const SAMPLE_SPECIAL = {
   skirtingHeightM: 0.1,
 } as const
 
+/** The two sides of a rectangle with this area and perimeter (a drawn room outline), long and short; a square when the perimeter is too short to hold the area or is missing */
+export function sidesFromAreaPerimeter(areaM2: number, perimeterM: number): { long: number; short: number } {
+  const A = Math.max(0, areaM2)
+  const s = Math.max(0, perimeterM) / 2
+  const disc = s * s - 4 * A
+  const r2 = (x: number) => +x.toFixed(2)
+  if (disc >= 0 && s > 0) { const r = Math.sqrt(disc); return { long: r2((s + r) / 2), short: r2((s - r) / 2) } }
+  const side = Math.sqrt(A)
+  return { long: r2(side), short: r2(side) }
+}
+
 export const money = (n: number) => +n.toFixed(2)
 export const hoursOf = (h: number) => (h <= 0 ? 0 : Math.max(0.5, Math.round(h * 2) / 2))
 export const n1 = (x: number) => (Math.round(x * 10) / 10).toString()

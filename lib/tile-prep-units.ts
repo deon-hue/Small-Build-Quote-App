@@ -65,6 +65,8 @@ export interface TilePrepRoom {
   ceiling: { kind: CeilingKind; areaOverrideM2: number | null; boardId: BackerId }
   situationId: string | null
   protect: boolean
+  /** the drawn area and perimeter (from Take-off) this room was last sized from: it follows them until they change */
+  fromPlan?: { areaM2: number; perimeterM: number }
 }
 
 export function newTilePrepRoom(id: string, name: string, kindId: string, k: { lengthM: number; widthM: number; heightM: number; collars: number }, zones: PrepZone[]): TilePrepRoom {

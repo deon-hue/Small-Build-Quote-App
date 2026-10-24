@@ -44,6 +44,8 @@ export interface TileFloorRoom {
   /** null = the job's situation */
   situationId: string | null
   protect: boolean
+  /** the drawn area and perimeter (from Take-off) this room was last sized from: it follows them until they change */
+  fromPlan?: { areaM2: number; perimeterM: number }
 }
 
 export function newTileFloorRoom(id: string, name: string, kindId: string, k: { lengthM: number; widthM: number; doors: number; fixedM2: number }, start: { tileId: TileSizeId; layoutId: TileLayoutId }): TileFloorRoom {

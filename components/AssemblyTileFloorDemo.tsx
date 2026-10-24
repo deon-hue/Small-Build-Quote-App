@@ -8,14 +8,14 @@
  * lib/tile-floor-units.ts; the body shared with the other three tiling calculators is components/TilingCalcFrame.tsx.
  */
 
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import { useCalcState } from '@/components/calc-state'
 import type { CostedLine } from '@/lib/assembly-calc'
 import {
   calculateTileFloor, newTileFloorRoom, floorAreaM2, FLOOR_ADHESIVE_LABEL, THRESHOLD_LM,
   type TileFloorRoom, type TileFloorResult, type FloorAdhesive,
 } from '@/lib/tile-floor-units'
-import { DEFAULT_TILING_SITUATIONS, TILING_ROOM_KINDS, TILING_ROOM_KIND_BY_ID, type TileSizeId, type TileLayoutId } from '@/lib/tiling-common'
+import { DEFAULT_TILING_SITUATIONS, TILING_ROOM_KINDS, TILING_ROOM_KIND_BY_ID, sidesFromAreaPerimeter, type TileSizeId, type TileLayoutId } from '@/lib/tiling-common'
 import { describeTileFloor, describeTileFloorShort, type TilingDescriptionInput } from '@/lib/tiling-description'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import { propInput, PropRow, CollapsibleSection } from '@/components/assembly-ui'
@@ -25,15 +25,31 @@ interface Props {
   onClose?: () => void
   onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }) => void
   labourTrades?: BOLabourTrade[]
+  /** Take-off's drawn area (m²) and perimeter (m): the first room is sized from them and follows them */
+  externalAreaM2?: number
+  externalPerimeterM?: number
 }
 
 const uid = () => Math.random().toString(36).slice(2, 9)
 const ADHESIVES = Object.keys(FLOOR_ADHESIVE_LABEL) as FloorAdhesive[]
 
-export default function AssemblyTileFloorDemo({ onClose, onSave, labourTrades = [] }: Props) {
+export default function AssemblyTileFloorDemo({ onClose, onSave, labourTrades = [], externalAreaM2, externalPerimeterM }: Props) {
   const ID = 'AssemblyTileFloorDemo'
-  // The job starts with no rooms: you add the ones being tiled
-  const [rooms, setRooms] = useCalcState<TileFloorRoom[]>(ID, 'rooms', [])
+  // The area drawn in Take-off (if any) sizes the first room, which follows it until the drawing changes
+  const planArea = externalAreaM2 && externalAreaM2 > 0 ? externalAreaM2 : 0
+  const planPerimeter = externalPerimeterM && externalPerimeterM > 0 ? externalPerimeterM : 0
+  const planSides = planArea > 0 ? sidesFromAreaPerimeter(planArea, planPerimeter) : null
+  const planRoom = (): TileFloorRoom => {
+    const k = TILING_ROOM_KIND_BY_ID.other
+    return { ...newTileFloorRoom('room-' + uid(), 'Room from the plan', 'other', { ...k, lengthM: planSides?.long ?? k.lengthM, widthM: planSides?.short ?? k.widthM, fixedM2: 0 }, { tileId: 'large', layoutId: 'straight' }), fromPlan: { areaM2: planArea, perimeterM: planPerimeter } }
+  }
+  // The job starts with no rooms: you add the ones being tiled (or the drawn area is the first)
+  const [rooms, setRooms] = useCalcState<TileFloorRoom[]>(ID, 'rooms', () => (planSides ? [planRoom()] : []))
+  useEffect(() => {
+    if (!planSides) return
+    setRooms(p => (p.length === 0 ? [planRoom()] : p.map(r => (r.fromPlan && (r.fromPlan.areaM2 !== planArea || r.fromPlan.perimeterM !== planPerimeter)
+      ? { ...r, lengthM: planSides.long, widthM: planSides.short, areaOverrideM2: null, fromPlan: { areaM2: planArea, perimeterM: planPerimeter } } : r))))
+  }, [planArea, planPerimeter])
   const [addKind, setAddKind] = useCalcState(ID, 'addKind', 'bathroom')
   const [startTile, setStartTile] = useCalcState<TileSizeId>(ID, 'startTile', 'large')
   const [startLayout, setStartLayout] = useCalcState<TileLayoutId>(ID, 'startLayout', 'straight')
@@ -76,6 +92,9 @@ export default function AssemblyTileFloorDemo({ onClose, onSave, labourTrades = 
                 {TILING_ROOM_KINDS.map(k => <option key={k.id} value={k.id}>{k.label}</option>)}
               </select>
               <button type="button" onClick={addRoom} style={{ background: '#0369a1', color: '#fff', border: 'none', borderRadius: 5, fontSize: 12, fontWeight: 600, padding: '4px 12px', cursor: 'pointer' }}>+ Add room</button>
+              {planSides && !rooms.some(x => x.fromPlan) && (
+                <button type="button" onClick={() => setRooms(p => [...p, planRoom()])} title="Add the area drawn on the plan as a room" style={{ ...tilingSmall, cursor: 'pointer', background: '#f1f5f9' }}>+ The drawn area ({planArea.toFixed(1)}m²)</button>
+              )}
             </div>
             <div style={{ fontSize: 10.5, color: '#94a3b8', marginBottom: 10, lineHeight: 1.5 }}>
               A new room starts with
@@ -107,7 +126,7 @@ export default function AssemblyTileFloorDemo({ onClose, onSave, labourTrades = 
                     <button type="button" onClick={() => setRooms(p => p.filter(x => x.id !== rm.id))} title="Remove this room" style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 8 }}>
-                    <PropRow label="Length (m)"><TilingNumInput v={rm.lengthM} set={n => updateRoom(rm.id, { lengthM: n })} step={0.1} /></PropRow>
+                    <PropRow label={rm.fromPlan ? 'Length (m) — from the plan' : 'Length (m)'}><TilingNumInput v={rm.lengthM} set={n => updateRoom(rm.id, { lengthM: n })} step={0.1} /></PropRow>
                     <PropRow label="Width (m)"><TilingNumInput v={rm.widthM} set={n => updateRoom(rm.id, { widthM: n })} step={0.1} /></PropRow>
                     <PropRow label="Not tiled (m²)"><TilingNumInput v={rm.notTiledM2} set={n => updateRoom(rm.id, { notTiledM2: n })} step={0.1} /></PropRow>
                     <PropRow label="Doors (nr)"><TilingNumInput v={rm.doors} set={n => updateRoom(rm.id, { doors: Math.round(n) })} /></PropRow>
