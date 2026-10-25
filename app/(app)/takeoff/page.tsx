@@ -5283,6 +5283,8 @@ export default function TakeoffPage() {
     const _lengthFedCalc    = isDecoCalc && ((item.phase === 'Plastering & Boarding' && ['plaster-render', 'plaster-insul-wall'].includes(boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id ?? '')) || (item.phase === 'Drainage & Services' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'drain-runs') || (item.phase === 'Plumbing & Heating' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'plumb-pipework'))
     // the tiling calculators are sized from what is drawn: an area gives the first room its size, a line gives wall tiling its first wall's length
     const _tileCalc        = isDecoCalc && item.phase === 'Tiling & Finishes'
+    // warm-water underfloor heating is sized from the area drawn: it becomes the first zone, named for the room it sits in
+    const _ufhCalc         = isDecoCalc && item.phase === 'Plumbing & Heating' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'plumb-ufh'
     const isTaskPhase      = _phaseHasTasks && !isBuildup && !isExtWall && !isPlaster && !isIntWall && !isDemo && !isDemoCalc && !isFoundationLine && !isDecoCalc
     const showWallLine     = isLineBased && (isExtWall || isIntWall || isPlaster)
     const hasOpenings      = (isExtWall || isIntWall || isPlaster) && isLineBased
@@ -5307,15 +5309,21 @@ export default function TakeoffPage() {
     // length; a roof by the box its drawn shape sits in.
     const isBoxShape = isRoof || isFoundationShape
     const roofBox = isBoxShape ? drawnBoxMm(item) : undefined
-    const floorDims = (isFloorShape || _tileCalc) ? drawnAreaPerimeter(item) : undefined
+    const floorDims = (isFloorShape || _tileCalc || _ufhCalc) ? drawnAreaPerimeter(item) : undefined
+    const _ufhEl = _ufhCalc && item.elementId ? project.elements.find(e => e.id === item.elementId) : undefined
+    const ufhRoomName = (() => {
+      if (!_ufhEl || !roomData) return undefined
+      const ri = roomIndexAt(roomData.rooms, centroid(_ufhEl.type === 'rect' ? cornersOf(_ufhEl) : _ufhEl.points))
+      return ri >= 0 ? (roomLabels[roomLabelIdx[ri]]?.name?.trim() || undefined) : undefined
+    })()
     const renderAssemblyPanel = (savePatch: Partial<TakeoffItem>) => builtAssembly && (
       // keyed by the wall and the kind of calculator: picking another wall (or another build-up type) must start a NEW calculator from THAT wall's own saved values, never carry on with the last wall's
       <AssemblyItemPanel
         key={item.id + '|' + (item.floorMakeupId ?? '') + '|' + (item.taskSubphaseId ?? '') + '|' + (item.demoSubphaseId ?? '')}
         name={item.name}
         lengthM={item.length ?? 0}
-        measureLabel={isBoxShape ? 'Size' : isFloorShape || (_tileCalc && floorDims) ? 'Area' : _tileCalc && (item.length ?? 0) > 0 ? 'Length' : (isDecoCalc && !_lengthFedCalc) || _demoMarker ? 'Marker' : undefined}
-        measureText={isBoxShape ? (roofBox ? `${(roofBox.lengthMm / 1000).toFixed(2)} × ${(roofBox.widthMm / 1000).toFixed(2)} m` : 'Not drawn') : isFloorShape || (_tileCalc && floorDims) ? (floorDims ? `${floorDims.areaM2.toFixed(1)} m²` : 'Not drawn') : _tileCalc && (item.length ?? 0) > 0 ? `${(item.length ?? 0).toFixed(2)} m` : _demoMarker ? 'sizes are typed in the calculator' : isDecoCalc && !_lengthFedCalc ? 'rooms are set in the calculator' : undefined}
+        measureLabel={isBoxShape ? 'Size' : isFloorShape || ((_tileCalc || _ufhCalc) && floorDims) ? 'Area' : _tileCalc && (item.length ?? 0) > 0 ? 'Length' : (isDecoCalc && !_lengthFedCalc) || _demoMarker ? 'Marker' : undefined}
+        measureText={isBoxShape ? (roofBox ? `${(roofBox.lengthMm / 1000).toFixed(2)} × ${(roofBox.widthMm / 1000).toFixed(2)} m` : 'Not drawn') : isFloorShape || ((_tileCalc || _ufhCalc) && floorDims) ? (floorDims ? `${floorDims.areaM2.toFixed(1)} m²` : 'Not drawn') : _tileCalc && (item.length ?? 0) > 0 ? `${(item.length ?? 0).toFixed(2)} m` : _demoMarker ? 'sizes are typed in the calculator' : isDecoCalc && !_lengthFedCalc ? 'rooms are set in the calculator' : undefined}
         saved={item.assemblyResult}
         open={assemblyWindowItemId === item.id}
         onOpen={() => setAssemblyWindowItemId(item.id)}
@@ -5327,6 +5335,7 @@ export default function TakeoffPage() {
           externalWidthMm: isBoxShape ? roofBox?.widthMm : undefined,
           externalAreaM2: floorDims?.areaM2,
           externalPerimeterM: floorDims?.perimeterM,
+          externalName: ufhRoomName,
           variant: item.floorMakeupId === 'cold_flat_roof' ? 'cold' : undefined,
           labourTrades,
           calcState: item.assemblyCalcState,

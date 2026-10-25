@@ -7,13 +7,15 @@
  * and the screed over the pipes are priced in the Screeded Floor calculator, not here, and the heat source in the Heating Plant calculator. The engine is lib/ufh-units.ts.
  */
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useEffect } from 'react'
 import NumInput from '@/components/NumInput'
 import { useCalcState } from '@/components/calc-state'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
 import { calculateUfh, UFH_FLOORS, SPACINGS_MM, MAX_LOOP_M, type UfhFloor, type UfhZone, type UfhResult } from '@/lib/ufh-units'
 import { describeUfh, describeUfhShort, type UfhDescriptionInput } from '@/lib/ufh-description'
 import { fmt } from '@/lib/utils'
+import PlanRoomsBar from '@/components/PlanRoomsBar'
+import type { PlanRoomInfo } from '@/lib/rooms-from-walls'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import {
   propInput, PropRow, BreakdownTable, CollapsibleSection,
@@ -26,6 +28,12 @@ interface Props {
   onClose?: () => void
   onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }) => void
   labourTrades?: BOLabourTrade[]
+  /** the area of the shape drawn on the Take-off plan for this calculator, m² */
+  externalAreaM2?: number
+  /** the name of the room that shape sits in, if it is in a named room */
+  externalName?: string
+  /** the rooms found on the Take-off plan: they can be added as zones with their areas */
+  planRooms?: PlanRoomInfo[]
 }
 
 export const LAID: Record<UfhFloor, string> = {
@@ -36,7 +44,7 @@ export const LAID: Record<UfhFloor, string> = {
 
 const uid = () => Math.random().toString(36).slice(2, 9)
 
-export default function AssemblyUfhDemo({ onClose, onSave, labourTrades = [] }: Props) {
+export default function AssemblyUfhDemo({ onClose, onSave, labourTrades = [], externalAreaM2, externalName, planRooms }: Props) {
   const ID = 'AssemblyUfhDemo'
   const [name, setName] = useCalcState(ID, 'name', 'Underfloor heating')
   const [location, setLocation] = useCalcState(ID, 'location', '')
@@ -51,6 +59,34 @@ export default function AssemblyUfhDemo({ onClose, onSave, labourTrades = [] }: 
   const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>(ID, 'disabledLayerIds', new Set())
   function toggleLayer(id: string) { setDisabledLayerIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
   const noSidesLayers = useMemo(() => new Set<string>(), [])
+
+  // The area drawn on the Take-off plan is the first zone (named for the room it sits in): made when there are no zones, and followed when the drawing changes; an area typed over is kept until the drawing changes
+  const planArea = externalAreaM2 && externalAreaM2 > 0 ? +externalAreaM2.toFixed(2) : 0
+  const planName = externalName?.trim() || 'Zone from the plan'
+  const drawnZone = (id: string): UfhZone => ({ id, name: planName, areaM2: planArea, floor: 'screed', spacingMm: 150, distanceM: 5, fromPlan: { areaM2: planArea, name: planName, drawing: true } })
+  useEffect(() => {
+    if (!(planArea > 0)) return
+    setZones(p => (p.length === 0
+      ? [drawnZone('zone-' + uid())]
+      : p.map(z => (z.fromPlan?.drawing && (z.fromPlan.areaM2 !== planArea || z.fromPlan.name !== planName)
+        ? { ...z, ...(z.fromPlan.areaM2 !== planArea ? { areaM2: planArea } : {}), ...(z.name === z.fromPlan.name ? { name: planName } : {}), fromPlan: { areaM2: planArea, name: planName, drawing: true } } : z))))
+  }, [planArea, planName]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // rooms from the plan can be added as zones too, and follow the room's area until typed over
+  function addPlanRooms(list: PlanRoomInfo[]) {
+    setZones(p => [...p, ...list.filter(pr => !p.some(z => z.planRoomId === pr.id) && !p.some(z => z.fromPlan?.drawing && z.name.trim().toLowerCase() === pr.name.trim().toLowerCase()))
+      .map(pr => ({ id: 'zone-' + uid(), name: pr.name, areaM2: +pr.areaM2.toFixed(2), floor: (p[p.length - 1]?.floor ?? 'screed') as UfhFloor, spacingMm: 150, distanceM: 5, planRoomId: pr.id, fromPlan: { areaM2: +pr.areaM2.toFixed(2), name: pr.name } }))])
+  }
+  const planRoomsKey = planRooms ? planRooms.map(r => r.id + ':' + r.name + ':' + r.areaM2.toFixed(2)).join(';') : null
+  useEffect(() => {
+    if (!planRooms) return
+    setZones(p => p.map(z => {
+      const pr = z.planRoomId ? planRooms.find(r => r.id === z.planRoomId) : undefined
+      const a = pr ? +pr.areaM2.toFixed(2) : 0
+      if (!pr || !z.fromPlan || (z.fromPlan.areaM2 === a && z.fromPlan.name === pr.name)) return z
+      return { ...z, ...(z.fromPlan.areaM2 !== a ? { areaM2: a } : {}), ...(z.name === z.fromPlan.name ? { name: pr.name } : {}), fromPlan: { areaM2: a, name: pr.name } }
+    }))
+  }, [planRoomsKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function addZone() {
     setZones(p => [...p, { id: 'zone-' + uid(), name: p.length === 0 ? 'Kitchen / diner' : `Zone ${p.length + 1}`, areaM2: 20, floor: p[p.length - 1]?.floor ?? 'screed', spacingMm: 150, distanceM: 5 }])
@@ -181,6 +217,14 @@ export default function AssemblyUfhDemo({ onClose, onSave, labourTrades = [] }: 
             <span style={{ fontSize: 10.5, color: '#94a3b8' }}>One for each room (or part of a room) with its own thermostat.</span>
           </div>
 
+          {planRooms && (
+            <PlanRoomsBar planRooms={planRooms}
+              isAdded={id => zones.some(z => z.planRoomId === id) || zones.some(z => z.fromPlan?.drawing && z.name.trim().toLowerCase() === (planRooms.find(r => r.id === id)?.name ?? '\u0000').trim().toLowerCase())}
+              onAdd={r => addPlanRooms([r])} onAddAll={addPlanRooms} />
+          )}
+          {planArea > 0 && !zones.some(z => z.fromPlan?.drawing) && (
+            <button type="button" onClick={() => setZones(p => [...p, drawnZone('zone-' + uid())])} style={{ marginBottom: 10, fontSize: 12, color: '#0369a1', background: '#fff', border: '1px solid #bae6fd', borderRadius: 5, padding: '4px 10px', cursor: 'pointer' }}>+ The drawn area ({planArea} m²)</button>
+          )}
           {zones.length === 0 && (
             <div style={{ fontSize: 12, color: '#64748b', background: '#fff', border: '1px dashed #bae6fd', borderRadius: 6, padding: '14px 12px', marginBottom: 10 }}>
               No zones yet. Press <strong>+ Add zone</strong> and give it an area.

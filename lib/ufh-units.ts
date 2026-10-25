@@ -37,6 +37,10 @@ export interface UfhZone {
   spacingMm: number
   /** how far the zone is from the manifold, m (the run each way) */
   distanceM: number
+  /** the room on the Take-off plan this zone was made from: its area follows the plan until typed over */
+  planRoomId?: string
+  /** the area (and name) last taken from the Take-off plan; `drawing` = it came from the area drawn for this calculator, not from a room */
+  fromPlan?: { areaM2: number; name: string; drawing?: boolean }
 }
 
 export interface UfhInput {

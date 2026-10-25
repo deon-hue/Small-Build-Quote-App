@@ -112,6 +112,8 @@ export interface AssemblyRenderOpts {
   /** Electrics only: the points placed on the Take-off plan (as room counts), and what the calculator was last saved as. */
   electrics?: { planRooms?: PlanRoom[]; initialState?: ElectricsSavedState }
   /** the plumbing fittings placed on the Take-off plan, room by room (the Plumbing Installation calculator follows them) */
+  /** the name of the room the drawn shape sits in on the Take-off plan, if it is in a named room */
+  externalName?: string
   plumbPlaced?: PlacedRoom[]
   /** the heating pipe runs drawn on the Take-off plan, sized with their fittings counted (the Plumbing Installation calculator prices them) */
   plumbPipes?: PipeSummary
@@ -159,7 +161,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'fs-insulated-concrete': { icon: 'insulated-concrete', render: opts => <AssemblyConcreteSlabFloorDemo variant="insulated" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} /> },
   'plumb-install': { icon: 'plumbing', render: opts => <AssemblyPlumbingDemo planRooms={opts?.planRooms} placed={opts?.plumbPlaced} pipes={opts?.plumbPipes} onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'plumb-heating-plant': { icon: 'heating', render: opts => <AssemblyHeatingDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
-  'plumb-ufh': { icon: 'ufh', render: opts => <AssemblyUfhDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
+  'plumb-ufh': { icon: 'ufh', render: opts => <AssemblyUfhDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalName={opts?.externalName} planRooms={opts?.planRooms} /> },
   'plumb-pipework': { icon: 'pipework', render: opts => <AssemblyPipeworkDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'drain-runs': { icon: 'drainage', render: opts => <AssemblyDrainageDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'drain-soakaway': { icon: 'soakaway', render: opts => <AssemblySoakawayDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
