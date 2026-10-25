@@ -1901,17 +1901,70 @@ export default function TakeoffPage() {
     if (!(mpp > 0)) return map
     const pieces: { id: string; points: TakeoffPoint[]; closed: boolean; flip: boolean; group: string; reachPx?: number }[] = []
     const flips = new Map<string, boolean>()
+    const outsideIds = new Set<string>()   // the outside walls (only they are given a side by the rules below)
+    const lineOf = new Map<string, DrawnElement>()
     for (const el of [...wallsOnSheet(), ...ghostWalls()]) {
       const w = wallSpecFor(el)
       if (!w) continue
+      if (el.phase === 'External Walls' && el.type === 'line') { outsideIds.add(el.id); lineOf.set(el.id, el) }
       pieces.push({ id: el.id, points: el.type === 'rect' ? cornersOf(el) : el.points, closed: el.type !== 'line', flip: false, group: `${levelOf(el, project) ?? ''}|${el.phase === 'External Walls' ? '2-ext' : '1-int'}`,   // (the make-up is left out on purpose, and so is a wall the user flipped: the run is found from how the walls were DRAWN, the flip then only turns the one wall over)
  reachPx: (1.5 * totalMm(w.spec.layers)) / (mpp * 1000) })
       flips.set(el.id, w.flip)
     }
-    for (const ch of chainWalls(pieces, 3)) {
+    const chains = chainWalls(pieces, 3)
+    for (const ch of chains) {
       if (!ch.closed || ch.ids.length < 2) continue
       const dirChain: 1 | -1 = signedArea(ch.points) < 0 ? -1 : 1
       for (const id of ch.ids) map.set(id, (flips.get(id) ? -dirChain : dirChain) as 1 | -1)
+    }
+    const inRing = new Set(map.keys())
+    // A run of outside walls that is NOT a closed ring (a wall taken out, as upstairs) still has an inside: a run that turns round (a U or an L) has its inside on the side it turns towards. Without this the walls of an open run were
+    // painted to the right of the way they were drawn, which is OUTWARD for a house drawn anticlockwise (so the first floor stuck out past the ground floor).
+    for (const ch of chains) {
+      if (ch.closed || ch.ids.length < 1) continue
+      let turn = 0
+      for (let i = 1; i < ch.points.length - 1; i++) {
+        const p = ch.points[i - 1], q = ch.points[i], r = ch.points[i + 1]
+        const d1x = q.x - p.x, d1y = q.y - p.y, d2x = r.x - q.x, d2y = r.y - q.y
+        turn += Math.atan2(d1x * d2y - d1y * d2x, d1x * d2x + d1y * d2y)
+      }
+      if (Math.abs(turn) < (70 * Math.PI) / 180) continue
+      const inwardRight = turn > 0   // turning clockwise on screen: the inside is on the right of travel
+      for (const id of ch.ids) if (outsideIds.has(id) && !map.has(id)) map.set(id, ((flips.get(id) ? !inwardRight : inwardRight) ? 1 : -1) as 1 | -1)
+    }
+    // An outside wall on an upper level that lies along an outside wall of the level BELOW is built to the same side of its line as that wall (the inside of the house is the same inside), so a first floor with a wall taken out
+    // still goes exactly over the ground floor.
+    const lowerIds = new Set(ghostWalls().map(g => g.id))
+    const tol = 0.8 / mpp
+    for (const [uid, u] of lineOf) {
+      if (lowerIds.has(uid) || inRing.has(uid) || u.points.length < 2) continue
+      // the longest piece of this wall
+      let bi = 0, bl = -1
+      for (let i = 0; i + 1 < u.points.length; i++) { const l = Math.hypot(u.points[i + 1].x - u.points[i].x, u.points[i + 1].y - u.points[i].y); if (l > bl) { bl = l; bi = i } }
+      if (!(bl > 0)) continue
+      const ua = u.points[bi], ub = u.points[bi + 1]
+      const ux = (ub.x - ua.x) / bl, uy = (ub.y - ua.y) / bl
+      const mx = (ua.x + ub.x) / 2, my = (ua.y + ub.y) / 2
+      let best: { d: number; ix: number; iy: number } | null = null
+      for (const lid of lowerIds) {
+        const o = map.get(lid), l = lineOf.get(lid)
+        if (o === undefined || !l) continue
+        for (let i = 0; i + 1 < l.points.length; i++) {
+          const a = l.points[i], b = l.points[i + 1]
+          const ll = Math.hypot(b.x - a.x, b.y - a.y)
+          if (!(ll > 0)) continue
+          const lx = (b.x - a.x) / ll, ly = (b.y - a.y) / ll
+          if (Math.abs(ux * ly - uy * lx) > 0.14) continue                       // not along it (more than about 8 degrees off)
+          const along = (mx - a.x) * lx + (my - a.y) * ly
+          if (along < -tol || along > ll + tol) continue
+          const dist = Math.abs(-(mx - a.x) * ly + (my - a.y) * lx)             // how far its middle is from the wall below
+          if (dist > tol) continue
+          if (!best || dist < best.d) best = { d: dist, ix: -ly * o, iy: lx * o }   // the inside of the house at that wall: the right-hand normal, turned round when that wall is built to its left
+        }
+      }
+      if (!best) continue
+      const needsFlip = best.ix * -uy + best.iy * ux < 0   // is that inside on the LEFT of this wall's own direction?
+      map.set(uid, ((needsFlip !== !!flips.get(uid)) ? -1 : 1) as 1 | -1)
     }
     return map
   // eslint-disable-next-line react-hooks/exhaustive-deps
