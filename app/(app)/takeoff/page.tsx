@@ -1845,6 +1845,8 @@ export default function TakeoffPage() {
     if (tool !== 'select') return
     e.stopPropagation()
     setSelectedElectricPointId(pt.id)
+    setSelectedId(null)   // one thing is picked at a time: the Delete key must not remove a wall that was picked before
+    setSelectedOpeningId(null)
     setPanelMode('properties')
     setEditingItem(electricsItem ?? null)
     const rect = svgRef.current!.getBoundingClientRect()
@@ -3443,6 +3445,9 @@ export default function TakeoffPage() {
     if (observeHistory(historyRef.current, cur, historyKey, Date.now(), (a, b) => a.elements === b.elements && a.items === b.items)) setHistoryTick(t => t + 1)
   }, [project.elements, project.items, historyKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // picking a drawing or a placed opening lets go of a picked electrical point (so Delete takes away only what is picked)
+  useEffect(() => { if (selectedId || selectedOpeningId) setSelectedElectricPointId(null) }, [selectedId, selectedOpeningId])
+
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -3473,7 +3478,14 @@ export default function TakeoffPage() {
       }
       if (!inField && !e.ctrlKey && !e.metaKey && !isDrawing && selectedId && (e.key === 'r' || e.key === 'R')) { rotateSelected(90); return }
       if ((e.key === 'Delete' || e.key === 'Backspace') && !inField && !isDrawing) {
-        if (selectedOpeningId) deleteOpening(selectedOpeningId)
+        if (selectedElectricPointId && electricPoints.some(q => q.id === selectedElectricPointId)) {
+          // a picked electrical point (it is not a drawing, so it has its own selection)
+          e.preventDefault()
+          const gone = selectedElectricPointId
+          changeElectricPoints(pts => pts.filter(q => q.id !== gone))
+          setSelectedElectricPointId(null)
+          showToast('Electrical point deleted')
+        } else if (selectedOpeningId) deleteOpening(selectedOpeningId)
         else if (tool === 'room' && selectedEdgeId) deleteRoomEdge(selectedEdgeId)
         else if (tool === 'room' && selectedRoomIdx >= 0 && roomData?.rooms[selectedRoomIdx]?.drawnId) deleteDrawnRoom(selectedRoomIdx)
         else deleteSelected()
