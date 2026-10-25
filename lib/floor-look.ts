@@ -52,6 +52,40 @@ export function ufhPipePath(poly: Pt[], spacingPx: number, marginPx: number, min
   return { d: d.trim(), rows, spacingPx: s }
 }
 
+/**
+ * Underfloor heating pipe laid in LOOPS: the same rows as ufhPipePath, shared out between `loops` loops, each its own run of consecutive rows (so each loop covers a band of the floor and has its own path, to be
+ * coloured differently). Fewer loops are made if the floor has fewer rows.
+ */
+export function ufhLoopPaths(poly: Pt[], spacingPx: number, marginPx: number, loops: number, minPx = 3, maxRows = 400): { paths: string[]; rows: number; spacingPx: number } {
+  const b = boxOf(poly)
+  if (!(b.w > 0 && b.h > 0)) return { paths: [], rows: 0, spacingPx }
+  const horizontal = b.w >= b.h
+  const along = horizontal ? b.w : b.h, across = horizontal ? b.h : b.w
+  let s = Math.max(spacingPx, minPx)
+  if (across / s > maxRows) s = across / maxRows
+  const m = Math.min(marginPx, Math.min(along, across) / 4)
+  const a0 = (horizontal ? b.minX : b.minY) + m, a1 = (horizontal ? b.maxX : b.maxY) - m
+  const c0 = (horizontal ? b.minY : b.minX) + m, c1 = (horizontal ? b.maxY : b.maxX) - m
+  if (!(a1 > a0) || !(c1 > c0)) return { paths: [], rows: 0, spacingPx: s }
+  const pt = (a: number, c: number) => (horizontal ? `${f(a)},${f(c)}` : `${f(c)},${f(a)}`)
+  const rowC: number[] = []
+  for (let c = c0; c <= c1 + 0.001; c += s) rowC.push(c)
+  const n = Math.max(1, Math.min(Math.round(loops) || 1, rowC.length))
+  const per = Math.ceil(rowC.length / n)
+  const paths: string[] = []
+  for (let g = 0; g < n; g++) {
+    const rows = rowC.slice(g * per, (g + 1) * per)
+    if (rows.length === 0) continue
+    let d = ''
+    rows.forEach((c, k) => {
+      const from = k % 2 === 0 ? a0 : a1, to = k % 2 === 0 ? a1 : a0
+      d += (k === 0 ? 'M' : 'L') + pt(from, c) + ' L' + pt(to, c) + ' '
+    })
+    paths.push(d.trim())
+  }
+  return { paths, rows: rowC.length, spacingPx: s }
+}
+
 export interface BeamLook {
   /** each beam as a line, from end to end of the floor (the screen clips them to the outline) */
   beams: [Pt, Pt][]
@@ -63,11 +97,11 @@ export interface BeamLook {
 }
 
 /** A block and beam floor: beams across the SHORTER side of the floor at `centresMm`, each `beamMm` wide, with the infill blocks (`blockMm` long) between them. Joints are left out when they would be too close to read. */
-export function blockBeamLook(poly: Pt[], mpp: number, o: { centresMm: number; beamMm?: number; blockMm?: number; minPx?: number; maxJoints?: number }): BeamLook {
+export function blockBeamLook(poly: Pt[], mpp: number, o: { centresMm: number; beamMm?: number; blockMm?: number; minPx?: number; maxJoints?: number; /** which way the beams run on the plan: 'vertical' = up and down, 'horizontal' = left to right; missing = across the shorter side */ dir?: 'vertical' | 'horizontal' }): BeamLook {
   const b = boxOf(poly)
   const px = (mm: number) => mm / (mpp * 1000)
   const minPx = o.minPx ?? 3
-  const vertical = b.h <= b.w ? true : false   // beams run along the shorter side: up and down when the floor is wider than it is deep
+  const vertical = o.dir ? o.dir === 'vertical' : b.h <= b.w   // beams run along the shorter side (up and down when the floor is wider than it is deep) unless a direction is chosen
   const span0 = vertical ? b.minY : b.minX, span1 = vertical ? b.maxY : b.maxX
   const across0 = vertical ? b.minX : b.minY, across1 = vertical ? b.maxX : b.maxY
   let step = Math.max(px(o.centresMm), minPx * 2)

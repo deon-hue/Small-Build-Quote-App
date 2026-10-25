@@ -38,6 +38,8 @@ interface Props {
   externalAreaM2?: number
   /** The perimeter of the drawn floor, m (the edge strip, and the span of the beams). */
   externalPerimeterM?: number
+  /** the span of the beams when a direction was chosen on the Take-off plan, mm */
+  externalSpanMm?: number
 }
 
 function buildBlockBeamLayers(g: BlockBeamGeometry, o: { wastePct: number; hardcoreMm: number; blindingMm: number; diggerDays: number | null }): AssemblyLayerDef[] {
@@ -64,7 +66,7 @@ function buildBlockBeamLayers(g: BlockBeamGeometry, o: { wastePct: number; hardc
   return L
 }
 
-export default function AssemblyBlockBeamFloorDemo({ onClose, onSave, labourTrades = [], externalAreaM2, externalPerimeterM }: Props) {
+export default function AssemblyBlockBeamFloorDemo({ onClose, onSave, labourTrades = [], externalAreaM2, externalPerimeterM, externalSpanMm }: Props) {
   const ID = 'AssemblyBlockBeamFloorDemo'
   const [name, setName] = useCalcState(ID, 'name', 'Block and beam floor')
   const [location, setLocation] = useCalcState(ID, 'location', '')
@@ -75,6 +77,7 @@ export default function AssemblyBlockBeamFloorDemo({ onClose, onSave, labourTrad
   useEffect(() => { if (externalPerimeterM != null && externalPerimeterM > 0) setPerimeterLm(+externalPerimeterM.toFixed(2)) }, [externalPerimeterM])
   // the beam span follows the shorter side of the drawn floor until it is typed over
   const [spanOverride, setSpanOverride] = useCalcState<number | null>(ID, 'spanOverride', null)
+  useEffect(() => { if (externalSpanMm != null && externalSpanMm > 0) setSpanOverride(Math.round(externalSpanMm)) }, [externalSpanMm]) // eslint-disable-line react-hooks/exhaustive-deps
   const sides = useMemo(() => sidesFromAreaPerimeter(areaM2, perimeterLm), [areaM2, perimeterLm])
   const spanMm = spanOverride ?? Math.round(sides.short * 1000)
   const [centresMm, setCentresMm] = useCalcState(ID, 'centresMm', 520)

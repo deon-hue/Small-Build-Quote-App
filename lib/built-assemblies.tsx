@@ -114,6 +114,8 @@ export interface AssemblyRenderOpts {
   /** the plumbing fittings placed on the Take-off plan, room by room (the Plumbing Installation calculator follows them) */
   /** the name of the room the drawn shape sits in on the Take-off plan, if it is in a named room */
   externalName?: string
+  /** a block and beam floor with a beam direction chosen on the plan: the span of its beams, mm (the drawn side the beams run along) */
+  externalSpanMm?: number
   plumbPlaced?: PlacedRoom[]
   /** the heating pipe runs drawn on the Take-off plan, sized with their fittings counted (the Plumbing Installation calculator prices them) */
   plumbPipes?: PipeSummary
@@ -156,7 +158,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'fs-screeded-floor': { icon: 'screed-floor', render: opts => <AssemblyScreedFloorDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} /> },
   'fs-floor-overlay': { icon: 'floor-overlay', render: opts => <AssemblyFloorOverlayDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} /> },
   'fs-concrete-slab': { icon: 'concrete-slab', render: opts => <AssemblyConcreteSlabFloorDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} /> },
-  'fs-block-beam': { icon: 'block-beam', render: opts => <AssemblyBlockBeamFloorDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} /> },
+  'fs-block-beam': { icon: 'block-beam', render: opts => <AssemblyBlockBeamFloorDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} externalSpanMm={opts?.externalSpanMm} /> },
   'fs-suspended-timber': { icon: 'timber-floor', render: opts => <AssemblySuspendedTimberFloorDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} /> },
   'fs-insulated-concrete': { icon: 'insulated-concrete', render: opts => <AssemblyConcreteSlabFloorDemo variant="insulated" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} /> },
   'plumb-install': { icon: 'plumbing', render: opts => <AssemblyPlumbingDemo planRooms={opts?.planRooms} placed={opts?.plumbPlaced} pipes={opts?.plumbPipes} onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },

@@ -75,6 +75,15 @@ export function outputGuide(spacingMm: number): number {
   return spacingMm <= 100 ? 100 : spacingMm <= 150 ? 85 : spacingMm <= 200 ? 70 : 55
 }
 
+/** How many loops a zone needs: each is kept to about 100m of pipe including its own flow and return to the manifold. The calculator and the picture on the Take-off plan both use this. */
+export function ufhLoopCount(areaM2: number, spacingMm: number, distanceM: number): number {
+  if (!(areaM2 > 0) || !(spacingMm > 0)) return 1
+  const pipeInZone = areaM2 * (1000 / spacingMm) * PIPE_WASTE
+  let loops = 1
+  while ((pipeInZone / loops) + 2 * Math.max(0, distanceM) > MAX_LOOP_M && loops < 40) loops++
+  return loops
+}
+
 export function calculateUfh(i: UfhInput): UfhResult {
   const warnings: string[] = []
   const lines: UfhLine[] = []
@@ -90,8 +99,7 @@ export function calculateUfh(i: UfhInput): UfhResult {
     const info = UFH_FLOORS[z.floor]
     const pipeInZone = z.areaM2 * (1000 / z.spacingMm) * PIPE_WASTE
     // each loop is kept to about 100m including its own flow and return to the manifold
-    let loops = 1
-    while ((pipeInZone / loops) + 2 * z.distanceM > MAX_LOOP_M && loops < 40) loops++
+    const loops = ufhLoopCount(z.areaM2, z.spacingMm, z.distanceM)
     const pipe = pipeInZone + 2 * z.distanceM * loops
     const loopM = pipe / loops
     if (2 * z.distanceM >= MAX_LOOP_M) warnings.push(`${zn} is ${z.distanceM}m from the manifold: the flow and return alone use the whole loop. Move the manifold nearer.`)

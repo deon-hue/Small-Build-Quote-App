@@ -280,6 +280,8 @@ export interface TakeoffItem {
   plumbPricedKey?: string
   /** the boiler / heating system: one item holding the Heating Plant calculator for the boiler marker, priced as its own line */
   boilerSummary?: boolean
+  /** a block and beam floor: which way its beams run on the plan ('vertical' = up and down, 'horizontal' = left to right); missing = across the shorter side */
+  beamDir?: 'vertical' | 'horizontal'
   /** the radiators and suggested boiler size when the heating system was last priced, to say when the plan has changed since */
   boilerPricedKey?: string
 

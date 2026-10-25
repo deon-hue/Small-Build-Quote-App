@@ -25,7 +25,8 @@ import { planRoomsFromPoints, roomAtPoint, rectToPolygon, POINT_SHORT, type Elec
 import PlumbingPointsPanel, { PLUMB_GROUP_COLOUR, HEAT_SOURCE_COLOUR } from './components/PlumbingPointsPanel'
 import { FITTING_BY_ID } from '@/lib/plumbing-units'
 import { PLUMB_SHORT, HEAT_SOURCE, TOWEL_RAIL_W, placedRoomsFromPoints, type PlumbPoint, type PlumbPipe, type PlacedRoom } from '@/lib/plumb-points'
-import { floorLookOf, ufhPipePath, blockBeamLook, type FloorLook } from '@/lib/floor-look'
+import { floorLookOf, ufhLoopPaths, blockBeamLook, boxOf, type FloorLook } from '@/lib/floor-look'
+import { ufhLoopCount, MAX_LOOP_M, PIPE_WASTE } from '@/lib/ufh-units'
 import { buildPipeNetwork, summariseNetworks, type NetResult, type PipeSummary } from '@/lib/pipe-network'
 import { suggestCombiKw, roomHeatLoss, externalEdgeLengthPx, sizeRadiators, radiatorOutputW, radiatorLabel, type BuildingAge, type RadSizing } from '@/lib/radiators'
 
@@ -4323,22 +4324,37 @@ export default function TakeoffPage() {
       const electric = look === 'ufh-electric'
       const zones = vals.AssemblyUfhDemo?.zones
       const spacing = !electric && Array.isArray(zones) && typeof (zones[0] as { spacingMm?: number } | undefined)?.spacingMm === 'number' ? (zones[0] as { spacingMm: number }).spacingMm : electric ? 100 : 150
-      const { d } = ufhPipePath(poly, px(spacing), px(150), 4 / zoom)
-      if (!d) return null
+      const zone0 = !electric && Array.isArray(zones) ? (zones[0] as { distanceM?: number } | undefined) : undefined
+      const distance = typeof zone0?.distanceM === 'number' ? zone0.distanceM : 5
+      let areaM2 = 0
+      for (let i = 0; i < poly.length; i++) { const p = poly[i], q = poly[(i + 1) % poly.length]; areaM2 += p.x * q.y - q.x * p.y }
+      areaM2 = Math.abs(areaM2) / 2 * mpp * mpp
+      // warm water: several loops, each kept to about 100m of pipe (as the calculator says); electric mats are one run
+      const loops = electric ? 1 : ufhLoopCount(areaM2, spacing, distance)
+      const { paths } = ufhLoopPaths(poly, px(spacing), px(150), loops, 4 / zoom)
+      if (paths.length === 0) return null
+      const palette = ['#dc2626', '#ea580c', '#d97706', '#b91c1c', '#be123c', '#c2410c']
+      const loopM = electric ? 0 : (areaM2 * (1000 / spacing) * PIPE_WASTE) / loops + 2 * distance
+      const b = boxOf(poly)
       const colour = electric ? '#f59e0b' : '#dc2626'
       return (
         <g style={{ pointerEvents: 'none' }}>
           <defs>{clip}</defs>
           <g clipPath={`url(#${clipId})`}>
-            <path d={d} fill="none" stroke="#fff" strokeOpacity={0.7} strokeWidth={Math.max(px(16), 2.6 / zoom)} strokeLinejoin="round" strokeLinecap="round" />
-            <path d={d} fill="none" stroke={colour} strokeWidth={Math.max(px(16) * 0.7, 1.5 / zoom)} strokeLinejoin="round" strokeLinecap="round" strokeDasharray={electric ? `${4 / zoom} ${2 / zoom}` : undefined} />
+            {paths.map((d, i) => (
+              <g key={i}>
+                <path d={d} fill="none" stroke="#fff" strokeOpacity={0.7} strokeWidth={Math.max(px(16), 2.6 / zoom)} strokeLinejoin="round" strokeLinecap="round" />
+                <path d={d} fill="none" stroke={electric ? colour : palette[i % palette.length]} strokeWidth={Math.max(px(16) * 0.7, 1.5 / zoom)} strokeLinejoin="round" strokeLinecap="round" strokeDasharray={electric ? `${4 / zoom} ${2 / zoom}` : undefined} />
+              </g>
+            ))}
           </g>
+          {!electric && <text x={b.minX + 4 / zoom} y={b.minY + 12 / zoom} fontSize={10 / zoom} fontWeight={700} fontFamily="monospace" fill="#7f1d1d" stroke="#fff" strokeWidth={2.5 / zoom} paintOrder="stroke">{paths.length} loop{paths.length === 1 ? '' : 's'} · about {Math.round(loopM)}m each (up to {MAX_LOOP_M}m)</text>}
         </g>
       )
     }
     if (look === 'block-beam') {
       const centres = typeof vals.AssemblyBlockBeamFloorDemo?.centresMm === 'number' ? (vals.AssemblyBlockBeamFloorDemo.centresMm as number) : 520
-      const bb = blockBeamLook(poly, mpp, { centresMm: centres, minPx: 3 / zoom })
+      const bb = blockBeamLook(poly, mpp, { centresMm: centres, minPx: 3 / zoom, dir: project.items.find(it => it.elementId === el.id)?.beamDir })
       return (
         <g style={{ pointerEvents: 'none' }}>
           <defs>{clip}</defs>
@@ -5313,6 +5329,10 @@ export default function TakeoffPage() {
     const isBoxShape = isRoof || isFoundationShape
     const roofBox = isBoxShape ? drawnBoxMm(item) : undefined
     const floorDims = (isFloorShape || _tileCalc || _ufhCalc) ? drawnAreaPerimeter(item) : undefined
+    // a block and beam floor with a beam direction chosen: the beams span the side they run along (the drawn box's height when they run up and down, its width when left to right)
+    const _isBlockBeam = isFloorShape && (boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'fs-block-beam' || item.floorMakeupId === 'block_beam')
+    const _bbEl = _isBlockBeam && item.beamDir && item.elementId ? project.elements.find(e => e.id === item.elementId) : undefined
+    const beamSpanMm = _bbEl ? (() => { const bx = boxOf(_bbEl.type === 'rect' ? cornersOf(_bbEl) : _bbEl.points); return Math.round((item.beamDir === 'vertical' ? bx.h : bx.w) * project.calibration.mpp * 1000) })() : undefined
     const _ufhEl = (_ufhCalc || _tileCalc) && item.elementId ? project.elements.find(e => e.id === item.elementId) : undefined
     const ufhRoomName = (() => {
       if (!_ufhEl || !roomData) return undefined
@@ -5339,6 +5359,7 @@ export default function TakeoffPage() {
           externalAreaM2: floorDims?.areaM2,
           externalPerimeterM: floorDims?.perimeterM,
           externalName: ufhRoomName,
+          externalSpanMm: beamSpanMm,
           variant: item.floorMakeupId === 'cold_flat_roof' ? 'cold' : undefined,
           labourTrades,
           calcState: item.assemblyCalcState,
@@ -6108,6 +6129,17 @@ export default function TakeoffPage() {
                     </optgroup>
                   )}
                 </select>
+                {isFloorShape && (item.floorMakeupId === 'block_beam' || boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'fs-block-beam') && (
+                  <div style={{ marginTop: 10 }}>
+                    <label style={labelStyle}>Beam direction</label>
+                    <select style={inputStyle} value={item.beamDir ?? ''} onChange={e => saveItemEdit({ ...item, beamDir: e.target.value === 'vertical' || e.target.value === 'horizontal' ? e.target.value : undefined, assemblyResult: undefined })}>
+                      <option value="">Across the shorter side (automatic)</option>
+                      <option value="vertical">Running up and down the plan</option>
+                      <option value="horizontal">Running left to right</option>
+                    </select>
+                    <div style={{ fontSize: 10, color: 'var(--to-muted)', marginTop: 3 }}>The beams on the plan turn, and the calculator's beam span follows the side they run along. Open the calculator and Save &amp; Price again after turning them.</div>
+                  </div>
+                )}
                 {(isRoof || isFoundationShape || isFloorShape) && builtAssembly && (
                   <div style={{ marginTop: 10 }}>
                     {renderAssemblyPanel((isFoundationShape || isFloorShape) ? (() => {
