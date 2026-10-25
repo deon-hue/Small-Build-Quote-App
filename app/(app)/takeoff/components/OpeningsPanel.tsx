@@ -153,6 +153,10 @@ export default function OpeningsPanel(p: Props) {
                 {SWINGS.map(s => <option key={s} value={s}>{SWING_LABEL[s]}</option>)}
               </select>
             )}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--to-text)', cursor: 'pointer' }} title="It stays in the wall as a drawing (the wall still has the hole), but it is not given to the Windows & Doors calculator, so it is not priced">
+              <input type="checkbox" checked={!!selected.notEstimated} onChange={e => p.onUpdate(selected.id, { notEstimated: e.target.checked || undefined })} />
+              Not estimated (a drawing only)
+            </label>
             <div style={{ display: 'flex', gap: 6 }}>
               <button type="button" onClick={() => p.onCentre(selected.id)} title="Put it in the middle of its side of the wall" style={{ flex: 1, padding: '6px', fontSize: 12, borderRadius: 5, cursor: 'pointer', border: '1px solid var(--to-border)', background: 'var(--to-bg)', color: 'var(--to-text)', fontFamily: 'inherit', fontWeight: 600 }}>↔ Centre on the wall</button>
               <button type="button" onClick={() => p.onFlip(selected.id)} title="Turn it over to face the other side of the wall (a door swings the other way, a bay projects the other way)" style={{ flex: 1, padding: '6px', fontSize: 12, borderRadius: 5, cursor: 'pointer', border: '1px solid var(--to-border)', background: 'var(--to-bg)', color: 'var(--to-text)', fontFamily: 'inherit', fontWeight: 600 }}>⇄ Flip to the other side</button>
@@ -181,7 +185,7 @@ export default function OpeningsPanel(p: Props) {
         name="Windows and doors"
         lengthM={0}
         measureLabel="Openings on the plan"
-        measureText={`${p.openings.length}`}
+        measureText={`${p.openings.filter(o => !o.notEstimated).length}${p.openings.some(o => o.notEstimated) ? ` (and ${p.openings.filter(o => o.notEstimated).length} drawing only)` : ""}`}
         saved={p.saved}
         open={p.calculatorOpen}
         onOpen={p.onOpenCalculator}

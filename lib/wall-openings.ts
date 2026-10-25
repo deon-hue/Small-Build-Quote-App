@@ -26,6 +26,8 @@ export interface PlacedOpening {
   sheetId?: string
   /** turned over to face the other side of the wall: a bay window projecting inside instead of outside, a bi-fold folding the other way (a door that swings is turned by changing its swing) */
   flipped?: boolean
+  /** a drawing only: shown in the wall (the hole stays in it) but not estimated: not given to the Windows & Doors calculator, so not priced */
+  notEstimated?: boolean
 }
 
 const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y)
