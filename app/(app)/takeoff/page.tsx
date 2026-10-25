@@ -63,7 +63,7 @@ import ClientFilePicker from '@/components/ClientFilePicker'
 import { planResize, applyResize } from '@/lib/calc-size'
 import { defaultToolbars, mergeToolbars, toolbarsOn, setToolbarDock, renameToolbar, setToolbarLabels, setToolbarVisible, moveToolbar, allowedDocks, isSideDock, DOCK_LABEL, DEFAULT_TOOLBARS, type TbId, type TbDock, type TbPref } from '@/lib/takeoff-toolbars'
 import { alignPointsToLower } from '@/lib/level-align'
-import { mitreCuts, mergeCollinearSides, wallDrawing, wallBand, offsetPolyline, totalMm, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, specFromMakeupLayers, defaultWallSpec, constructionWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
+import { mitreCuts, mergeCollinearSides, wallDrawing, wallBand, offsetPolyline, totalMm, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, studWallSpec, specFromMakeupLayers, defaultWallSpec, constructionWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
 import { sidesOf, splitOpenings } from '@/lib/wall-split'
 import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
 import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, segmentMiddle, flippedSwing, pointAtDist, type PlacedOpening, type WallBand } from '@/lib/wall-openings'
@@ -4471,6 +4471,8 @@ export default function TakeoffPage() {
     let spec = null as ReturnType<typeof defaultWallSpec>
     if (snap?.id === 'ew-cav-full' || snap?.id === 'ew-cav-partial') { const v = vals.AssemblyCavityWallDemo; if (v) spec = cavityWallSpec(v, snap.id === 'ew-cav-full') }
     else if (snap?.id === 'ew-blockwork-215') { const v = vals.AssemblySolidBlockWallDemo; if (v) spec = solidBlockSpec(v) }
+    // a stud partition: plasterboard on one side or both and the insulation between the studs, as set in its calculator
+    else if (snap?.id === 'iw-stud-partition' || snap?.id === 'iw-metal-stud') { const v = vals.AssemblyWallDemo; if (v) spec = studWallSpec(v, snap.id === 'iw-metal-stud' ? 'metal' : 'timber') }
     // a partition with no Sub-Phase picked is the first one in the list, as its Properties and calculator show it (it used to be drawn as a plain line until one was picked)
     const intSubs = internal ? getAllSubphasesForPhase('Internal Walls & Partitions') : []
     const intSel = internal ? (intSubs.find(s => s.id === item.taskSubphaseId) ?? intSubs[0]) : undefined

@@ -27,8 +27,9 @@ import {
   CATEGORY_LABEL, propInput, miniInput, PropRow, BreakdownTable, HDim, VDim,
   LabourSection, type LabourLine, newLabourLineId, hourlyRate,
   MiscMaterialsSection, type MiscMaterialLine, newMiscMaterialLineId,
-  OpeningsEditor, newOpeningId, MaterialsListButtons,
+  OpeningsEditor, newOpeningId, MaterialsListButtons, CollapsibleSection,
 } from '@/components/assembly-ui'
+import { STUD_INSULATION_TYPES, STUD_DEPTH_MM, type StudInsulationType } from '@/lib/wall-drawing'
 
 // ── Sample Back Office-style rates for materials (placeholders — real Products linking
 // comes later). Labour isn't derived from geometry at all — see LabourLine below, it's a
@@ -171,13 +172,18 @@ export default function AssemblyWallDemo({ system = 'timber', onClose, onSave, l
   // linked to real Products/Labour/Plant records, but editable here in the meantime.
   const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>('AssemblyWallDemo', 'rateOverrides', {})
 
-  // How many faces each sides-eligible layer (sheathing, lining) is applied to. Defaults to
-  // 1 (one side) — a stud wall boarded/lined on both faces sets it to 2, doubling that
-  // layer's raw quantity and cost.
+  // How many faces each sides-eligible layer (sheathing, lining) is applied to. The plasterboard lining starts on BOTH faces (a partition is boarded both sides: one side is chosen
+  // under 'Plasterboard and insulation'); any other layer starts on one. Two faces double that layer's raw quantity and cost.
   const [layerSides, setLayerSides] = useCalcState<Record<string, 1 | 2>>('AssemblyWallDemo', 'layerSides', {})
+  const sidesNow: Record<string, 1 | 2> = { ...layerSides, ...(cfg.sidesEligibleLayerIds.has('lining') && layerSides.lining == null ? { lining: 2 as const } : {}) }
   function setSides(layerId: string, sides: 1 | 2) {
     setLayerSides(prev => ({ ...prev, [layerId]: sides }))
   }
+
+  // The insulation between the studs: which kind and how thick (up to the depth of the studs). 'None' switches its line off (the same switch as the tick in the breakdown).
+  const studDepth = STUD_DEPTH_MM[system]
+  const [insulationType, setInsulationType] = useCalcState<StudInsulationType>('AssemblyWallDemo', 'insulationType', 'acoustic-wool')
+  const [insulationMm, setInsulationMm] = useCalcState('AssemblyWallDemo', 'insulationMm', 50)
 
   // A quote-facing description — sizing and openings, in plain language. Auto-generated,
   // but kept as its own editable state (not recomputed on every keystroke) so typing notes
@@ -189,7 +195,8 @@ export default function AssemblyWallDemo({ system = 'timber', onClose, onSave, l
     ]
     if (doubleTopPlate) parts.push(cfg.topPlateLabel.toLowerCase())
     if ((layerSides.sheathing ?? 1) === 2) parts.push('sheathed both faces')
-    if ((layerSides.lining ?? 1) === 2) parts.push('boarded both faces')
+    parts.push((layerSides.lining ?? 2) === 2 ? 'plasterboard both faces' : 'plasterboard one face')
+    parts.push(`${insulationMm}mm ${STUD_INSULATION_TYPES[insulationType].label.toLowerCase()} between the studs`)   // (a new calculator starts with the insulation on)
     let text = parts.join(', ') + '.'
     if (openings.length) {
       const list = openings.map(o => `${o.kind} (${o.widthMm}×${o.heightMm}mm)`).join(', ')
@@ -217,10 +224,12 @@ export default function AssemblyWallDemo({ system = 'timber', onClose, onSave, l
     return base.map(l => {
       let next = l
       if (rateOverrides[l.id] != null) next = { ...next, unitCost: rateOverrides[l.id] }
-      if (cfg.sidesEligibleLayerIds.has(l.id)) next = { ...next, sidesMultiplier: layerSides[l.id] ?? 1 }
+      if (cfg.sidesEligibleLayerIds.has(l.id)) next = { ...next, sidesMultiplier: sidesNow[l.id] ?? 1 }
+      // the insulation between the studs: named for the kind and thickness chosen, priced per m2 at that thickness (a rate typed over wins)
+      if (l.id === 'insulation') next = { ...next, name: `${STUD_INSULATION_TYPES[insulationType].label} ${Math.min(insulationMm, studDepth)}mm (between studs)`, ...(rateOverrides[l.id] == null ? { unitCost: +(STUD_INSULATION_TYPES[insulationType].per50 * Math.min(insulationMm, studDepth) / 50).toFixed(2) } : {}) }
       return next
     })
-  }, [cfg, wastePct, rateOverrides, layerSides])
+  }, [cfg, wastePct, rateOverrides, layerSides, insulationType, insulationMm, studDepth])
   function setRate(layerId: string, unitCost: number) {
     setRateOverrides(prev => ({ ...prev, [layerId]: Math.max(0, unitCost) }))
   }
@@ -397,6 +406,33 @@ export default function AssemblyWallDemo({ system = 'timber', onClose, onSave, l
               <input type="range" min={0} max={50} value={profitPct} onChange={e => setProfitPct(+e.target.value)} style={{ width: '100%' }} />
             </PropRow>
 
+            <CollapsibleSection title="Plasterboard and insulation" borderColor="#e9d5ff">
+              <PropRow label="Plasterboard">
+                <select value={sidesNow.lining ?? 2} onChange={e => setSides('lining', +e.target.value === 1 ? 1 : 2)} style={propInput}>
+                  <option value={2}>Both sides</option>
+                  <option value={1}>One side only</option>
+                </select>
+              </PropRow>
+              <PropRow label="Insulation between the studs">
+                <select value={disabledLayerIds.has('insulation') ? 'none' : insulationType} style={propInput}
+                  onChange={e => {
+                    if (e.target.value === 'none') setDisabledLayerIds(prev => new Set(prev).add('insulation'))
+                    else { setInsulationType(e.target.value as StudInsulationType); setDisabledLayerIds(prev => { const n = new Set(prev); n.delete('insulation'); return n }) }
+                  }}>
+                  <option value="none">None</option>
+                  {(Object.entries(STUD_INSULATION_TYPES) as [StudInsulationType, { label: string }][]).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                </select>
+              </PropRow>
+              {!disabledLayerIds.has('insulation') && (
+                <PropRow label={`Thickness (the studs are ${studDepth}mm deep)`}>
+                  <select value={Math.min(insulationMm, studDepth)} onChange={e => setInsulationMm(+e.target.value)} style={propInput}>
+                    {[25, 50, studDepth].filter((v, i, a) => a.indexOf(v) === i).map(v => <option key={v} value={v}>{v}mm{v === studDepth ? ' (fills the studs)' : ''}</option>)}
+                  </select>
+                </PropRow>
+              )}
+              <div style={{ fontSize: 10, color: '#94a3b8', lineHeight: 1.4 }}>The wall on the plan is drawn with the same boards and insulation once this is saved with Save &amp; Price. The type of board and the insulation are sample choices for the designer or manufacturer to confirm.</div>
+            </CollapsibleSection>
+
             <OpeningsEditor openings={openings} onAdd={addOpening} onUpdate={updateOpening} onRemove={removeOpening} />
           </div>
 
@@ -409,7 +445,7 @@ export default function AssemblyWallDemo({ system = 'timber', onClose, onSave, l
           {/* Breakdown — spans both columns */}
           <div style={{ gridColumn: '1 / -1', marginTop: 4 }}>
             <BreakdownTable lines={materialLines} onRateChange={handleBreakdownRateChange} disabledLayerIds={disabledLayerIds} onToggleLayer={toggleLayer}
-              layerSides={layerSides} onSidesChange={setSides} sidesEligibleLayerIds={cfg.sidesEligibleLayerIds} />
+              layerSides={sidesNow} onSidesChange={setSides} sidesEligibleLayerIds={cfg.sidesEligibleLayerIds} />
             {profitPct > 0 && (
               <div style={{ fontSize: 11, color: '#64748b', marginTop: 6, textAlign: 'right' }}>
                 Cost: £{costSubtotal.toFixed(2)} + {profitPct}% profit (£{profitAmount.toFixed(2)}) ={' '}

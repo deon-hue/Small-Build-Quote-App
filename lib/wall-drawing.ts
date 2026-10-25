@@ -36,6 +36,33 @@ const make = (layers: WallLayer[]): WallSpec | null => {
   return clean.length ? { layers: clean, label: wallLabel(clean) } : null
 }
 
+/** The kinds of insulation between the studs of a partition (the stud partition calculators): the name written on the quote and in the drawing, and the sample price per m2 at 50mm (it follows the thickness). */
+export const STUD_INSULATION_TYPES = {
+  'acoustic-wool': { label: 'Acoustic mineral wool', per50: 8.5 },
+  'glass-wool': { label: 'Glass mineral wool', per50: 5.2 },
+  'pir': { label: 'PIR insulation board', per50: 14 },
+} as const
+export type StudInsulationType = keyof typeof STUD_INSULATION_TYPES
+/** How deep the studs are (and so the most insulation that fits between them): a metal C-stud 70mm, a timber CLS stud 89mm. */
+export const STUD_DEPTH_MM = { metal: 70, timber: 89 } as const
+
+/** A stud partition from the saved stud partition calculator (or, with nothing saved, the way it starts): plasterboard on both faces or one, and between the studs the insulation chosen (drawn over the depth of the studs, with the rest of the depth left as air), or the studs themselves when there is none. */
+export function studWallSpec(v: Record<string, unknown>, system: 'timber' | 'metal'): WallSpec | null {
+  const depth = STUD_DEPTH_MM[system]
+  const sidesV = (v.layerSides as Record<string, unknown> | undefined)?.lining
+  const bothSides = sidesV !== 1
+  const dis = v.disabledLayerIds as { __set?: unknown[] } | undefined
+  const insulated = !(Array.isArray(dis?.__set) && dis!.__set.includes('insulation'))
+  const t = Math.min(depth, num(v.insulationMm) ?? 50)
+  const zone: WallLayer[] = insulated
+    ? [{ kind: 'insulation', mm: t }, ...(depth - t > 0.5 ? [{ kind: 'cavity' as const, mm: depth - t }] : [])]
+    : [{ kind: system === 'metal' ? 'metal' : 'timber', mm: depth }]
+  const layers: WallLayer[] = [{ kind: 'board', mm: 12.5 }, ...zone, ...(bothSides ? [{ kind: 'board' as const, mm: 12.5 }] : [])]
+  const total = totalMm(layers)
+  const rounded = Math.max(5, Math.round(total / 5 - 1e-9) * 5)
+  return { layers, label: `${rounded} ${system === 'metal' ? 'metal stud' : 'stud partition'}${insulated ? ', insulated' : ''}${bothSides ? '' : ', boarded one side'}` }
+}
+
 /** A cavity wall from the saved cavity wall calculator: facing brick (102.5) or block (100) outer leaf, the cavity (all insulation when it is full fill; insulation with a 25mm air gap when partial fill, plain cavity when no
  *  insulation), the inner block leaf, and a thin internal finish. */
 export function cavityWallSpec(v: Record<string, unknown>, fullFill: boolean): WallSpec | null {
@@ -100,8 +127,9 @@ export function defaultWallSpec(canonicalId: string | undefined): WallSpec | nul
     case 'ew-cav-partial': return cavityWallSpec({ insulation: 'pir' }, false)
     case 'ew-blockwork-100': return make([{ kind: 'render', mm: 15 }, { kind: 'block', mm: 100 }])
     case 'ew-blockwork-215': return make([{ kind: 'render', mm: 15 }, { kind: 'block', mm: 215 }])
-    case 'iw-stud-partition': return make([{ kind: 'board', mm: 12.5 }, { kind: 'timber', mm: 75 }, { kind: 'board', mm: 12.5 }])
-    case 'iw-metal-stud': return make([{ kind: 'board', mm: 12.5 }, { kind: 'metal', mm: 70 }, { kind: 'board', mm: 12.5 }])
+    // (a stud partition with nothing saved is drawn the way the calculator starts: boarded both sides, 50mm of acoustic mineral wool between the studs)
+    case 'iw-stud-partition': return studWallSpec({}, 'timber')
+    case 'iw-metal-stud': return studWallSpec({}, 'metal')
     case 'iw-block-masonry': return make([{ kind: 'board', mm: 13 }, { kind: 'block', mm: 100 }, { kind: 'board', mm: 13 }])
     case 'ew-garden-room-timber': return make([{ kind: 'timber', mm: 20 }, { kind: 'timber', mm: 11 }, { kind: 'timber', mm: 100 }, { kind: 'board', mm: 12.5 }])
     case 'ew-dwarf-wall': return make([{ kind: 'brick', mm: 102.5 }, { kind: 'cavity', mm: 75 }, { kind: 'block', mm: 100 }])
@@ -118,7 +146,7 @@ export function constructionWallSpec(type: string | undefined): WallSpec | null 
     case 'block_140': return make([board(13), { kind: 'block', mm: 140 }, board(13)])
     case 'brick_half': return make([board(13), { kind: 'brick', mm: 102.5 }, board(13)])
     case 'brick_full': return make([board(13), { kind: 'brick', mm: 215 }, board(13)])
-    case 'stud_metal_70': return defaultWallSpec('iw-metal-stud')
+    case 'stud_metal_70': return make([board(12.5), { kind: 'metal', mm: 70 }, board(12.5)])
     case 'stud_metal_100': return make([board(12.5), { kind: 'metal', mm: 100 }, board(12.5)])
     case 'stud_timber': return make([board(12.5), { kind: 'timber', mm: 89 }, board(12.5)])
     default: return null
