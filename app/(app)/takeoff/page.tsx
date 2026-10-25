@@ -4325,6 +4325,15 @@ export default function TakeoffPage() {
             </g>
           )
         })}
+        {/* a side of a wall that is not estimated is shaded grey on its own, even when it is painted as one run with sides that are estimated */}
+        {els.filter(e => dimIds.has(e.id)).map(e => {
+          const w = wallSpecFor(e)
+          if (!w) return null
+          const run = runs.find(r => r.ids.includes(e.id))
+          if (run && run.ids.every(id => dimIds.has(id))) return null   // (a run that is all not estimated is already grey)
+          const wd1 = wallDrawing(e.type === 'rect' ? cornersOf(e) : e.points, w.spec, mpp, wallPaintOpts(e, w))
+          return wd1 ? <path key={'ne-' + e.id} d={wd1.bodyD} fillRule="evenodd" fill={NOT_ESTIMATED_FILL} stroke={NOT_ESTIMATED_LINE} strokeWidth={0.8 / zoom} strokeLinejoin="miter" /> : null
+        })}
         {/* the selected wall's outline, over the paint */}
         {(() => {
           const picked = els.find(e => e.id === selectedId)
