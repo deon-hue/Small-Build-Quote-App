@@ -1432,9 +1432,11 @@ export default function TakeoffPage() {
           // (the walls that are joined to this corner come with it, so they are not snapped to)
           const joined = new Set((dragRef.current?.links ?? []).map(l => l.elId))
           // an internal wall's end snaps to the inside face of the outside walls
-          const inside = snapOn && dragged.phase === 'Internal Walls & Partitions' ? insideFaces() : null
-          const anchors2 = [...anchorsFor(elementsOnActiveSheet(project).filter(el => el.id !== id && !joined.has(el.id) && !hiddenPhases.has(el.phase) && !(inside && el.phase === 'External Walls'))), ...(inside ? inside.corners.map(c => ({ ...c, kind: 'end' as const })) : [])]
-          const segs2 = snapOn ? [...segmentsFor(wallsOnSheet().filter(el => el.id !== id && !joined.has(el.id) && !(inside && el.phase === 'External Walls'))), ...(inside ? inside.segments : [])] : undefined
+          const floorDrag = snapOn && floorFaceSnap(dragged.type === 'line' ? 'line' : dragged.type === 'rect' ? 'rect' : 'polygon', dragged.phase)
+          const inside = snapOn && (dragged.phase === 'Internal Walls & Partitions' || floorDrag) ? insideFaces() : null
+          const parts2 = floorDrag ? partitionFaces() : null
+          const anchors2 = [...anchorsFor(elementsOnActiveSheet(project).filter(el => el.id !== id && !joined.has(el.id) && !hiddenPhases.has(el.phase) && !(inside && el.phase === 'External Walls') && !(parts2 && el.phase === 'Internal Walls & Partitions'))), ...(inside ? inside.corners.map(c => ({ ...c, kind: 'end' as const })) : []), ...(parts2 ? parts2.corners.map(c => ({ ...c, kind: 'end' as const })) : [])]
+          const segs2 = snapOn ? [...segmentsFor(wallsOnSheet().filter(el => el.id !== id && !joined.has(el.id) && !(inside && el.phase === 'External Walls') && !(parts2 && el.phase === 'Internal Walls & Partitions'))), ...(inside ? inside.segments : []), ...(parts2 ? parts2.segments : [])] : undefined
           const below = snapOn && dragged.phase === 'External Walls' ? lowerOuterWalls() : []
           const r = snapPoint(want, { anchors: below.length ? [...anchors2, ...anchorsFor(below)] : anchors2, radius: 10 / zoom, snap: snapOn, ortho: false, grid: gridSnap ? { stepPx: gridMinorPx() } : undefined, segments: below.length ? [...(segs2 ?? []), ...segmentsFor(below)] : segs2 })
           dx += r.pt.x - want.x; dy += r.pt.y - want.y
@@ -3887,6 +3889,48 @@ export default function TakeoffPage() {
     return { segments, corners }
   }
 
+  /**
+   * Both faces of the internal walls (partitions), for a floor drawn in a room to snap to: a screed, a block and beam floor or an underfloor heating zone stops at the face of a partition, not on the line it was drawn along (its middle).
+   * Taken along each run of joined partitions, like insideFaces.
+   */
+  function partitionFaces(): { segments: [TakeoffPoint, TakeoffPoint][]; corners: TakeoffPoint[] } {
+    const mpp = project.calibration.mpp
+    const segments: [TakeoffPoint, TakeoffPoint][] = []
+    const corners: TakeoffPoint[] = []
+    if (!(mpp > 0)) return { segments, corners }
+    const pieces: { id: string; points: TakeoffPoint[]; closed: boolean; flip: boolean; group: string; reachPx?: number }[] = []
+    const kinds = new Map<string, NonNullable<ReturnType<typeof wallSpecFor>>>()
+    for (const el of wallsOnSheet()) {
+      if (el.phase !== 'Internal Walls & Partitions') continue
+      const w = wallSpecFor(el)
+      if (!w) continue
+      const group = `1-int|${w.ref}|${JSON.stringify(w.spec.layers)}`
+      pieces.push({ id: el.id, points: el.type === 'rect' ? cornersOf(el) : el.points, closed: el.type !== 'line', flip: paintFlip(el, w), group, reachPx: (1.5 * totalMm(w.spec.layers)) / (mpp * 1000) })
+      kinds.set(group, w)
+    }
+    for (const ch of chainWalls(pieces, 3)) {
+      const w = kinds.get(ch.group)
+      const band = w ? wallBand(ch.points, w.spec, mpp, { ref: w.ref, closed: ch.closed, flip: ch.flip }) : null
+      if (!w || !band) continue
+      for (const off of [band.lo, band.hi]) {
+        const line = offsetPolyline(ch.points, off, ch.closed)
+        const n = line.length
+        for (let i = 0; i < (ch.closed ? n : n - 1); i++) segments.push([line[i], line[(i + 1) % n]])
+        corners.push(...line)
+      }
+    }
+    return { segments, corners }
+  }
+
+  /** the floors that stop at the inside of the outside walls and at the faces of the partitions: a screed, block and beam floor or underfloor heating zone (a line, polygon, rectangle or floor area) */
+  function floorFaceSnap(t: DrawingTool, phase: string): boolean {
+    if (pipeDraw || roomDraw) return false
+    if (t === 'floor') return true
+    if (phase === 'Floors & Screeds' || phase === 'Tiling & Finishes') return t === 'line' || t === 'polygon' || t === 'rect'
+    if (phase === 'Plumbing & Heating') return t === 'polygon' || t === 'rect'   // (underfloor heating zones are areas; a line here is a pipe)
+    return false
+  }
+
   /** while a heating pipe is drawn the cursor snaps to radiators, the boiler and other pipes first, then to the usual things */
   function drawingPoint(raw: TakeoffPoint): SnapResult {
     const base = drawingPointBase(raw)
@@ -3904,11 +3948,14 @@ export default function TakeoffPage() {
       ? (calibPts.length === 1 ? calibPts[0] : undefined)
       : (isDrawing && polyMode && drawPoints.length > 0 ? drawPoints[drawPoints.length - 1] : undefined)
     // drawing an internal wall: it snaps to the INSIDE face of the outside walls (and to the corners of the room), not to the line the outside walls were drawn along
-    const inside = snapOn && activePhase === 'Internal Walls & Partitions' && (tool === 'line' || tool === 'polygon') ? insideFaces() : null
+    const floorSnap = snapOn && floorFaceSnap(tool, activePhase)
+    const inside = snapOn && ((activePhase === 'Internal Walls & Partitions' && (tool === 'line' || tool === 'polygon')) || floorSnap) ? insideFaces() : null
+    // a floor also snaps to both faces of the partitions (not the line they were drawn along)
+    const parts = floorSnap ? partitionFaces() : null
     const anchors = snapOn
-      ? [...anchorsFor(elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase) && !(inside && el.phase === 'External Walls')), drawPoints.slice(0, -1)), ...(inside ? inside.corners.map(c => ({ ...c, kind: 'end' as const })) : [])]
+      ? [...anchorsFor(elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase) && !(inside && el.phase === 'External Walls') && !(parts && el.phase === 'Internal Walls & Partitions')), drawPoints.slice(0, -1)), ...(inside ? inside.corners.map(c => ({ ...c, kind: 'end' as const })) : []), ...(parts ? parts.corners.map(c => ({ ...c, kind: 'end' as const })) : [])]
       : []
-    const segs = snapOn ? [...segmentsFor(wallsOnSheet().filter(w => !(inside && w.phase === 'External Walls'))), ...(inside ? inside.segments : [])] : undefined
+    const segs = snapOn ? [...segmentsFor(wallsOnSheet().filter(w => !(inside && w.phase === 'External Walls') && !(parts && w.phase === 'Internal Walls & Partitions'))), ...(inside ? inside.segments : []), ...(parts ? parts.segments : [])] : undefined
     // an outside wall drawn on an upper level also snaps to the corners and lines of the outside walls of the level below, so a first floor goes exactly over the ground floor
     const below = snapOn && activePhase === 'External Walls' && (tool === 'line' || tool === 'polygon' || tool === 'rect') ? lowerOuterWalls() : []
     return snapPoint(raw, { anchors: below.length ? [...anchors, ...anchorsFor(below)] : anchors, last, radius: 10 / zoom, snap: snapOn, ortho, grid: gridSnap ? { stepPx: gridMinorPx() } : undefined, segments: below.length ? [...(segs ?? []), ...segmentsFor(below)] : segs })
