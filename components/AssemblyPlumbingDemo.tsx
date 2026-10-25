@@ -133,6 +133,9 @@ export default function AssemblyPlumbingDemo({ onClose, onSave, labourTrades = [
           else if (n !== old && (fit[t] ?? 0) === old) { if (n > 0) fit[t] = n; else delete fit[t]; changed = true }
         }
         const radiators = pr.radiators.map(x => ({ id: x.pointId, label: x.label, watts: x.watts }))
+        const towelRails = pr.towelRails.map(x => ({ id: x.pointId, watts: x.watts }))
+        if (JSON.stringify(towelRails) !== JSON.stringify(r.towelRails ?? [])) changed = true
+        r.towelRails = towelRails
         if (JSON.stringify(radiators) !== JSON.stringify(r.radiators ?? []) || JSON.stringify(now) !== JSON.stringify(was) || r.planName !== key) changed = true
         r.fittings = fit; r.placedCounts = now; r.radiators = radiators; r.planName = key
       }
@@ -141,7 +144,7 @@ export default function AssemblyPlumbingDemo({ onClose, onSave, labourTrades = [
         if (!r.placedCounts || Object.keys(r.placedCounts).length === 0 || placed.some(pr => pr.name.trim().toLowerCase() === r.planName)) continue
         const fit = { ...r.fittings }
         for (const [t, old] of Object.entries(r.placedCounts)) if ((fit[t] ?? 0) === old) delete fit[t]
-        r.fittings = fit; r.placedCounts = {}; r.radiators = []; changed = true
+        r.fittings = fit; r.placedCounts = {}; r.radiators = []; r.towelRails = []; changed = true
       }
       return changed ? next : prev
     })

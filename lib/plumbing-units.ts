@@ -142,6 +142,8 @@ export interface PlumbingRoom {
   placedCounts?: Record<string, number>
   /** the radiators placed on the plan for this room with their sizes: the ones we supply are priced by size */
   radiators?: { id: string; label: string; watts: number }[]
+  /** the heated towel rails placed on the plan for this room */
+  towelRails?: { id: string; watts: number }[]
 }
 
 /** Heating pipework drawn on the Take-off plan, from the radiators and the boiler: pipe by size, elbows and tees, priced by the metre and each. Sample rates to check against your supplier and plumber. */
@@ -249,9 +251,10 @@ export function calculatePlumbing(input: PlumbingInput): PlumbingResult {
         const base = input.fittingRates[ft.id] ?? ft.rate
         if (base < 0) throw new Error(`The rate for ${ft.name} cannot be negative.`)
         // a radiator whose pipes are drawn on the plan is paid for without its pipework (that is priced by the metre and fitting below)
-        const piped = ft.id === 'radiator' && input.pipes ? (room.radiators ?? []).slice(0, n).filter(rad => connectedIds.has(rad.id)).length : 0
+        const pipedList = ft.id === 'radiator' ? room.radiators : ft.id === 'towel-rail' ? room.towelRails : undefined
+        const piped = pipedList && input.pipes ? pipedList.slice(0, n).filter(rad => connectedIds.has(rad.id)).length : 0
         if (n - piped > 0) lines.push({ id: `fit|${room.id}|${ft.id}`, name: `${rn} — ${ft.name}`, category: 'subcontractors', unit: 'nr', unitCost: money(base * uplift), qty: n - piped, roomId: room.id })
-        if (piped > 0) lines.push({ id: `fitpiped|${room.id}|${ft.id}`, name: `${rn} — radiator, fixing and connecting (pipework drawn on the plan)`, category: 'subcontractors', unit: 'nr', unitCost: money(Math.max(0, base - (input.pipes?.radiatorPipeworkIn ?? 0)) * uplift), qty: piped, roomId: room.id })
+        if (piped > 0) lines.push({ id: `fitpiped|${room.id}|${ft.id}`, name: `${rn} — ${ft.id === 'towel-rail' ? 'heated towel rail' : 'radiator'}, fixing and connecting (pipework drawn on the plan)`, category: 'subcontractors', unit: 'nr', unitCost: money(Math.max(0, base - (input.pipes?.radiatorPipeworkIn ?? 0)) * uplift), qty: piped, roomId: room.id })
         const pc = input.pcRates[ft.id] ?? ft.pcSum
         if (room.supply === 'us' && pc > 0) {
           // a radiator placed on the plan has a size, so one we supply is priced by its output; the rest of the room's radiators are the usual provisional sum each

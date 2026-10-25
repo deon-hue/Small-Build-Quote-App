@@ -24,7 +24,7 @@ import { POINT_BY_ID, type ElectricsSavedState } from '@/lib/electrics-units'
 import { planRoomsFromPoints, roomAtPoint, rectToPolygon, POINT_SHORT, type ElectricPoint } from '@/lib/electric-points'
 import PlumbingPointsPanel, { PLUMB_GROUP_COLOUR, HEAT_SOURCE_COLOUR } from './components/PlumbingPointsPanel'
 import { FITTING_BY_ID } from '@/lib/plumbing-units'
-import { PLUMB_SHORT, HEAT_SOURCE, placedRoomsFromPoints, type PlumbPoint, type PlumbPipe, type PlacedRoom } from '@/lib/plumb-points'
+import { PLUMB_SHORT, HEAT_SOURCE, TOWEL_RAIL_W, placedRoomsFromPoints, type PlumbPoint, type PlumbPipe, type PlacedRoom } from '@/lib/plumb-points'
 import { buildPipeNetwork, summariseNetworks, type NetResult, type PipeSummary } from '@/lib/pipe-network'
 import { roomHeatLoss, externalEdgeLengthPx, sizeRadiators, radiatorOutputW, radiatorLabel, type BuildingAge, type RadSizing } from '@/lib/radiators'
 
@@ -1960,7 +1960,7 @@ export default function TakeoffPage() {
   // A pipe's end snaps to a radiator or the boiler, then to another pipe's bend or end, then onto the side of another pipe (a tee): within 10 screen pixels
   function pipeSnapPoint(raw: TakeoffPoint): TakeoffPoint | null {
     const r = 10 / zoom
-    const heads = plumbPoints.filter(q => (q.typeId === 'radiator' || q.typeId === HEAT_SOURCE) && onActiveSheet(q, project) && onActiveLevel(q, project))
+    const heads = plumbPoints.filter(q => (q.typeId === 'radiator' || q.typeId === 'towel-rail' || q.typeId === HEAT_SOURCE) && onActiveSheet(q, project) && onActiveLevel(q, project))
     let best: TakeoffPoint | null = null, bd = r
     for (const q of heads) { const d = Math.hypot(q.x - raw.x, q.y - raw.y); if (d <= bd) { bd = d; best = { x: q.x, y: q.y } } }
     if (best) return best
@@ -2233,7 +2233,7 @@ export default function TakeoffPage() {
     const src = pts.find(q => q.typeId === HEAT_SOURCE)
     plumbNets.set(k, buildPipeNetwork({
       runs: plumbPipes.filter(q => plumbGroupKey(q) === k).map(q => ({ id: q.id, points: q.points })),
-      radiators: pts.filter(q => q.typeId === 'radiator').map(q => ({ id: q.id, x: q.x, y: q.y, watts: plumbSizes.get(q.id)?.outputW ?? 0 })),
+      radiators: pts.filter(q => q.typeId === 'radiator' || q.typeId === 'towel-rail').map(q => ({ id: q.id, x: q.x, y: q.y, watts: q.typeId === 'towel-rail' ? (q.watts ?? TOWEL_RAIL_W) : (plumbSizes.get(q.id)?.outputW ?? 0) })),
       source: src ? { x: src.x, y: src.y } : null, mpp,
     }))
   }

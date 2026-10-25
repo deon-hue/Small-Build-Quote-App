@@ -10,7 +10,7 @@
 import React from 'react'
 import AssemblyItemPanel from './AssemblyWindow'
 import { FITTING_TYPES, FITTING_BY_ID } from '@/lib/plumbing-units'
-import { PLUMB_SHORT, UNNAMED_ROOM, HEAT_SOURCE, type PlumbPoint, type PlumbPipe } from '@/lib/plumb-points'
+import { PLUMB_SHORT, UNNAMED_ROOM, HEAT_SOURCE, TOWEL_RAIL_W, type PlumbPoint, type PlumbPipe } from '@/lib/plumb-points'
 import { FITTING_LABEL, type PipeSummary } from '@/lib/pipe-network'
 import { RAD_TYPES, RAD_HEIGHTS, RAD_WIDTHS, AGE_LABEL, type BuildingAge, type RadSizing } from '@/lib/radiators'
 import type { CostedLine } from '@/lib/assembly-calc'
@@ -216,6 +216,13 @@ export default function PlumbingPointsPanel(p: Props) {
             </select>
             <div style={{ fontSize: 11, color: 'var(--to-muted)' }}>In: <b style={{ color: 'var(--to-text)' }}>{p.roomOf(selected) || UNNAMED_ROOM}</b></div>
             <input list="plumb-rooms" value={selected.roomName} onChange={e => p.onUpdatePoint(selected.id, { roomName: e.target.value })} placeholder="Room (used when it is not inside a room)" style={input} />
+            {selected.typeId === 'towel-rail' && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--to-text)' }}>
+                Output (watts)
+                <input type="number" min={0} step={50} value={selected.watts ?? TOWEL_RAIL_W} onChange={e => p.onUpdatePoint(selected.id, { watts: Math.max(0, +e.target.value || 0) })} style={{ ...input, width: 90 }} />
+                <span style={{ color: 'var(--to-muted)' }}>its pipes are sized for this</span>
+              </label>
+            )}
             {selected.typeId === 'radiator' && selected.rad && (
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>

@@ -12,6 +12,8 @@ export interface PlumbPoint {
   sheetId?: string
   levelId?: string
   /** a radiator: its type (K1, K2) and height; widthMm is its width when the size was chosen by hand, and missing when it is sized for the room automatically */
+  /** a heated towel rail: its output in watts (500 if not given), which is the heat its pipes carry to it */
+  watts?: number
   rad?: { typeId: string; heightMm: number; widthMm?: number; /** the width it was last sized to for its room (kept so a radiator on another level still has a size) */ autoW?: number }
 }
 
@@ -38,6 +40,8 @@ export const PLUMB_SHORT: Record<string, string> = {
 export const isHeating = (typeId: string) => typeId === 'radiator' || typeId === 'towel-rail'
 
 export const UNNAMED_ROOM = 'No room'
+/** the output of a heated towel rail when none is typed: a sample */
+export const TOWEL_RAIL_W = 500
 const roomKey = (name: string) => (name.trim() || UNNAMED_ROOM)
 
 export interface PlacedRadiator { pointId: string; label: string; watts: number; widthMm: number; heightMm: number; typeId: string }
@@ -46,6 +50,8 @@ export interface PlacedRoom {
   counts: Record<string, number>
   /** each radiator in the room with its size, for pricing the ones we supply by size */
   radiators: PlacedRadiator[]
+  /** each heated towel rail in the room, so one whose pipes are drawn is priced without its pipework */
+  towelRails: { pointId: string; watts: number }[]
 }
 
 /**
@@ -58,8 +64,9 @@ export function placedRoomsFromPoints(points: PlumbPoint[], size: (p: PlumbPoint
     if (p.typeId === HEAT_SOURCE) continue
     const name = roomKey(p.roomName)
     let r = rooms.find(x => x.name.toLowerCase() === name.toLowerCase())
-    if (!r) { r = { name, counts: {}, radiators: [] }; rooms.push(r) }
+    if (!r) { r = { name, counts: {}, radiators: [], towelRails: [] }; rooms.push(r) }
     r.counts[p.typeId] = (r.counts[p.typeId] ?? 0) + 1
+    if (p.typeId === 'towel-rail') r.towelRails.push({ pointId: p.id, watts: p.watts ?? TOWEL_RAIL_W })
     if (p.typeId === 'radiator') {
       const s = size(p)
       r.radiators.push({ pointId: p.id, label: s.label, watts: s.watts, widthMm: s.widthMm, heightMm: p.rad?.heightMm ?? 600, typeId: p.rad?.typeId ?? 'k2' })
