@@ -918,6 +918,8 @@ export default function TakeoffPage() {
   const oldPictureFolders = useRef<string[]>([])
   const cloudPictureIds = useRef<{ key: string; ids: Set<string> | null } | null>(null)
   const [scheduleSheetFilter, setScheduleSheetFilter] = useState<string>('all')
+  // with levels, the schedule lists the showing level's items only (an item with no drawing, like the electrics or doors-and-windows summary, is job-wide and always listed) unless this is ticked
+  const [scheduleAllLevels, setScheduleAllLevels] = useState(false)
   // My Take-offs: the list of take-offs saved to the account
   const [showTakeoffList, setShowTakeoffList] = useState(false)
   const [takeoffList, setTakeoffList] = useState<TakeoffSummary[] | null>(null)
@@ -3097,9 +3099,15 @@ export default function TakeoffPage() {
   }
 
   // ── Phase summary for schedule panel ──────────────────────────────────────
+  /** True when the schedule should list the item: no levels, or all levels asked for, or no drawing (job-wide), or drawn on the showing level */
+  function onScheduledLevel(it: TakeoffItem): boolean {
+    if (!activeLevelId || scheduleAllLevels) return true
+    const lid = itemLevelId(it, project)
+    return !it.elementId || !lid || lid === activeLevelId
+  }
   const phaseGroups = livePhaseNames.map(ph => ({
     phase: ph,
-    items: project.items.filter(it => it.phase === ph && (scheduleSheetFilter === 'all' || itemSheetId(it, project) === scheduleSheetFilter)),
+    items: project.items.filter(it => it.phase === ph && (scheduleSheetFilter === 'all' || itemSheetId(it, project) === scheduleSheetFilter) && onScheduledLevel(it)),
   })).filter(g => g.items.length > 0)
 
   // ── Export for quote import ────────────────────────────────────────────────
@@ -6281,9 +6289,22 @@ export default function TakeoffPage() {
             Quantities
           </span>
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--to-text)' }}>
-            {project.items.length} item{project.items.length !== 1 ? 's' : ''}
+            {activeLevelId && !scheduleAllLevels
+              ? `${project.items.filter(onScheduledLevel).length} of ${project.items.length} items`
+              : `${project.items.length} item${project.items.length !== 1 ? 's' : ''}`}
           </span>
         </div>
+
+        {/* With levels: the showing level's items, or every level's */}
+        {activeLevelId && (
+          <div style={{ padding: '6px 14px', borderBottom: '1px solid var(--to-border)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 11, color: 'var(--to-muted)' }}>Show</span>
+            <select style={{ ...inputStyle, height: 26, flex: 1 }} value={scheduleAllLevels ? 'all' : 'this'} onChange={e => setScheduleAllLevels(e.target.value === 'all')}>
+              <option value="this">{levelName(project, activeLevelId)} only</option>
+              <option value="all">All levels</option>
+            </select>
+          </div>
+        )}
 
         {/* With several plans: show the items from one sheet, or all of them */}
         {(project.sheets?.length ?? 0) > 1 && (
