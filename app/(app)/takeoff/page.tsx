@@ -943,8 +943,6 @@ export default function TakeoffPage() {
   const [viewDimUnit, setViewDimUnit] = useState<'mm' | 'cm' | 'm'>('m')   // the unit the measurements are written in
   // a wall drawn as one run of several sides becomes one wall per side (so each can be clicked, edited and deleted on its own)
   const [splitWalls, setSplitWalls] = useState(true)
-  // 'Drawing only': what is drawn or placed while it is on is a drawing, not estimated (not remembered between visits: it is easy to forget it is on)
-  const [drawOnly, setDrawOnly] = useState(false)
   // snap the cursor to the grid (its spacing in metres); the grid itself is the Grid tick
   const [gridSnap, setGridSnap] = useState(false)
   const [gridStep, setGridStep] = useState(1)
@@ -1235,7 +1233,6 @@ export default function TakeoffPage() {
     queuedTaskNameRef.current = null
 
     const item = itemFromElement(el, project.calibration.mpp)
-    if (drawOnly) item.notEstimated = true
     // With several plans, each priced item notes which sheet it was drawn on (editable, and it travels to the quote)
     if ((project.sheets?.length ?? 0) > 1) item.drawingRef = sheetName(project, el.sheetId) || item.drawingRef
 
@@ -2739,7 +2736,7 @@ export default function TakeoffPage() {
     const id = uid()
     const ref = nextOpeningRef(allPlaced, openingKind)
     const distPx = clampDist(hit.g.path, hit.g.closed, hit.dist, half)
-    changePlaced(list => [...list, { id, wallId: hit.el.id, distPx, kind: openingKind, widthMm: openingNext.widthMm, heightMm: openingNext.heightMm, swing: openingNext.swing, ref, ...(drawOnly ? { notEstimated: true } : {}), ...(activeSheetId ? { sheetId: activeSheetId } : {}) }])
+    changePlaced(list => [...list, { id, wallId: hit.el.id, distPx, kind: openingKind, widthMm: openingNext.widthMm, heightMm: openingNext.heightMm, swing: openingNext.swing, ref, ...(activeSheetId ? { sheetId: activeSheetId } : {}) }])
     setSelectedOpeningId(id)
   }
 
@@ -2819,8 +2816,8 @@ export default function TakeoffPage() {
       const shape = g ? openingShape(g.path, g.closed, o, mpp, g.band, sw(10)) : null
       if (!shape) return null
       return (
-        <g key={'op-' + o.id} opacity={o.notEstimated ? 0.5 : 1} onMouseDown={ev => startOpeningDrag(ev, o)} onClick={ev => { if (tool === 'select') ev.stopPropagation() }}
-          style={{ cursor: tool === 'select' ? 'move' : 'inherit', pointerEvents: tool === 'select' ? undefined : 'none' }}>
+        <g key={'op-' + o.id} opacity={o.notEstimated ? 0.55 : 1} onMouseDown={ev => startOpeningDrag(ev, o)} onClick={ev => { if (tool === 'select') ev.stopPropagation() }}
+          style={{ cursor: tool === 'select' ? 'move' : 'inherit', pointerEvents: tool === 'select' ? undefined : 'none', filter: o.notEstimated ? 'grayscale(1)' : undefined }}>
           {draw(shape, colourOf(o.kind), 'd', o.ref, o.id === selectedOpeningId)}
           <polygon points={shape.gap.map(q => q.x + ',' + q.y).join(' ')} fill="rgba(0,0,0,0.001)" stroke="none" />
         </g>
@@ -4308,7 +4305,7 @@ export default function TakeoffPage() {
           const wd = w ? wallDrawing(ch.points, w.spec, mpp, { ref: w.ref, closed: ch.closed, flip: ch.flip, cuts: cuts[ci] }) : null
           if (!wd) return null
           return (
-            <g key={'wv-' + ch.ids.join('-')} opacity={ch.ids.every(id => dimIds.has(id)) ? 0.45 : 1}>
+            <g key={'wv-' + ch.ids.join('-')} opacity={ch.ids.every(id => dimIds.has(id)) ? 0.55 : 1} style={ch.ids.every(id => dimIds.has(id)) ? { filter: 'grayscale(1)' } : undefined}>
               {wd.strips.map((st, i) => {
                 const style = LAYER_STYLE[st.kind]
                 const showHatch = style.hatch !== 'none' && (st.mm / (mpp * 1000)) * zoom >= 3   // only when the layer is wide enough on screen to show it
@@ -4419,7 +4416,7 @@ export default function TakeoffPage() {
   /** a drawing that is not estimated is shown lighter */
   function renderElement(el: DrawnElement) {
     const node = renderElementBase(el)
-    return node && project.items.some(it => it.notEstimated && it.elementId === el.id) ? <g key={el.id} opacity={0.45}>{node}</g> : node
+    return node && project.items.some(it => it.notEstimated && it.elementId === el.id) ? <g key={el.id} opacity={0.55} style={{ filter: 'grayscale(1)' }}>{node}</g> : node
   }
   function renderElementBase(el: DrawnElement) {
     const sel = selectedId === el.id
@@ -7287,11 +7284,18 @@ export default function TakeoffPage() {
                   openAssemblyFor(item)
                 }}
                 style={{
-                  padding: '7px 14px', borderBottom: '1px solid var(--to-blt)', opacity: item.notEstimated ? 0.6 : 1,
-                  cursor: 'pointer', background: editingItem?.id === item.id ? 'var(--to-hover)' : 'transparent',
+                  position: 'relative', padding: '7px 14px', borderBottom: '1px solid var(--to-blt)', borderLeft: item.notEstimated ? '4px solid #94a3b8' : '4px solid transparent',
+                  cursor: 'pointer', background: item.notEstimated ? 'rgba(148,163,184,0.22)' : editingItem?.id === item.id ? 'var(--to-hover)' : 'transparent',
                 }}
               >
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--to-textb)', whiteSpace: 'nowrap',
+                {item.elementId && !item.plumbSummary && !item.electricsSummary && !item.wdSummary && !item.boilerSummary && (
+                  <label title="Not estimated: it stays on the plan as a drawing (shaded grey) but has no calculator, is not priced and is not sent to the quote" onClick={e => e.stopPropagation()}
+                    style={{ position: 'absolute', right: 10, top: 7, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', fontSize: 10, color: item.notEstimated ? '#475569' : 'var(--to-muted)', cursor: 'pointer', fontWeight: item.notEstimated ? 700 : 400 }}>
+                    <input type="checkbox" checked={!!item.notEstimated} onChange={e => { setProject(p => ({ ...p, items: p.items.map(it => it.id === item.id ? { ...it, notEstimated: e.target.checked || undefined } : it) })); if (editingItem?.id === item.id) setEditingItem({ ...item, notEstimated: e.target.checked || undefined }); showToast(e.target.checked ? 'Not estimated: now a drawing only' : 'Estimated again') }} />
+                    not estimated
+                  </label>
+                )}
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--to-textb)', whiteSpace: 'nowrap', paddingRight: item.elementId ? 92 : 0,
                   overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}{item.notEstimated && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, color: 'var(--to-muted)', border: '1px solid var(--to-border)', borderRadius: 8, padding: '0 6px' }}>drawing only</span>}</div>
                 <div style={{ fontSize: 11, color: 'var(--to-muted)', marginTop: 2 }}>
                   <span style={{ color: 'var(--to-text)', fontFamily: 'monospace' }}>
@@ -7687,7 +7691,6 @@ export default function TakeoffPage() {
             {isDrawing && (
               <button className={cls} data-tip="Cancel the drawing you are making" aria-label="Cancel drawing" onClick={() => { setDrawPoints([]); setIsDrawing(false) }} style={ibx(tb, 'Cancel', false, false, true)}>✕{lab(tb, 'Cancel')}</button>
             )}
-            <button className={cls} data-tip={drawOnly ? 'Drawing only is ON: what you draw or place now is a drawing, not estimated (no calculator, no price, not sent to the quote). Press to turn it off.' : 'Drawing only: turn on to draw walls, floors, doors and windows that are just a drawing, not estimated'} aria-label="Drawing only (not estimated)" aria-pressed={drawOnly} onClick={() => setDrawOnly(v => !v)} style={ibx(tb, 'Drawing only', false, drawOnly)}>✎{lab(tb, drawOnly ? 'Drawing only: ON' : 'Drawing only')}</button>
             {(activePhase === 'External Walls' || activePhase === 'Internal Walls & Partitions') && (
               <button className={cls} data-tip={splitWalls ? 'Each side of a wall is its own wall: on' : 'Each side of a wall is its own wall: off'} aria-label="Each side of a wall is its own wall" aria-pressed={splitWalls} onClick={() => setSplitWalls(v => !v)} style={ibx(tb, 'Own wall per side', splitWalls)}>▥{lab(tb, 'Own wall per side')}</button>
             )}
@@ -8273,7 +8276,6 @@ export default function TakeoffPage() {
           }}>
             <span>Tool: <strong style={{ color: tool === 'floor' ? '#f39c12' : 'var(--to-text)' }}>{
               calibDrawing ? '📏 CALIBRATING' :
-              (drawOnly && (tool === 'line' || tool === 'rect' || tool === 'polygon' || tool === 'opening')) ? 'DRAWING ONLY is on: what you draw or place now is not estimated (no calculator, no price, not sent to the quote)' :
               (pipeDraw && tool === 'line') ? 'Drawing a HEATING PIPE: start on the boiler or a radiator, click each bend, double-click to finish (the ends snap to radiators and pipes)' :
               (roomDraw === 'edge' && tool === 'line') ? 'Drawing a ROOM EDGE: click its start and end (it closes a room, it is not a wall)' :
               (roomDraw && tool === 'rect') ? 'Drawing a ROOM: click two corners (or type the size)' :
