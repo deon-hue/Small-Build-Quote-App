@@ -15,7 +15,17 @@ const WHOLE_WORDS: Record<string, string> = {
 const lower = (s: string) => (/^[A-Z]{2,4}( |$)/.test(s) ? s : s.toLowerCase())
 const phrase = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
-export function plumbingDescriptionInput(rooms: PlumbingRoom[], wholeHouse: Record<string, number>, r: PlumbingResult): PlumbingDescriptionInput {
+/** `pipes` is given when heating pipework drawn on the plan is priced: its material and radiators, and the pipe and fittings are read from the priced lines */
+export function plumbingDescriptionInput(rooms: PlumbingRoom[], wholeHouse: Record<string, number>, r: PlumbingResult, pipes?: { material: 'copper' | 'plastic'; radiators: number; loadW: number }): PlumbingDescriptionInput {
+  const pipeLines = r.lines.filter(l => l.id.startsWith('pipe|'))
+  const pipework = pipes && pipeLines.length > 0 ? {
+    material: pipes.material,
+    sizesMm: pipeLines.map(l => +l.id.split('|')[1]).sort((a, b) => a - b),
+    pipeM: pipeLines.reduce((s, l) => s + l.qty, 0),
+    fittings: r.lines.filter(l => l.id.startsWith('pipefit|')).reduce((s, l) => s + l.qty, 0),
+    radiators: pipes.radiators,
+    kW: pipes.loadW / 1000,
+  } : undefined
   return {
     rooms: rooms.map(rm => {
       const byDays = rm.mode === 'days'
@@ -31,6 +41,7 @@ export function plumbingDescriptionInput(rooms: PlumbingRoom[], wholeHouse: Reco
     tested: (wholeHouse['pressure-test'] ?? 0) > 0,
     totalFittings: r.totalFittings,
     specialCount: r.specialCount,
+    ...(pipework ? { pipework } : {}),
   }
 }
 

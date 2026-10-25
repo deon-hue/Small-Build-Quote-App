@@ -210,7 +210,7 @@ export default function AssemblyPlumbingDemo({ onClose, onSave, labourTrades = [
   const totalCost = costSubtotal + profitAmount
 
   // The customer's description follows the rooms until it's edited by hand
-  const descInput: PlumbingDescriptionInput | null = r ? plumbingDescriptionInput(rooms, wholeHouse, r) : null
+  const descInput: PlumbingDescriptionInput | null = r ? plumbingDescriptionInput(rooms, wholeHouse, r, pipesOn && livePipes ? { material: pipeMaterial, radiators: livePipes.connectedRadiatorIds.length, loadW: livePipes.totalLoadW } : undefined) : null
   const [descriptionOverride, setDescriptionOverride] = useCalcState<string | null>(ID, 'descriptionOverride', null)
   const [detailOverride, setDetailOverride] = useCalcState<string | null>(ID, 'detailOverride', null)
   const description = descriptionOverride ?? (descInput ? describePlumbingShort(descInput) : '')

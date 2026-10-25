@@ -22,18 +22,33 @@ export interface PlumbingDescriptionInput {
   tested: boolean
   totalFittings: number
   specialCount: number
+  /** heating pipework drawn on the plan and priced, when there is some */
+  pipework?: {
+    /** 'copper' or 'plastic' */
+    material: string
+    /** the sizes in use, mm, smallest first */
+    sizesMm: number[]
+    /** metres of pipe laid, flow and return together */
+    pipeM: number
+    /** elbows, bends and tees counted (flow and return together) */
+    fittings: number
+    /** radiators and towel rails the pipes connect */
+    radiators: number
+    kW: number
+  }
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
 export function describePlumbingShort(i: PlumbingDescriptionInput): string {
   const rooms = i.rooms.filter(r => r.items.length > 0 || r.specials.length > 0 || r.days !== null)
-  if (rooms.length === 0 && i.wholeHouse.length === 0) return 'Plumbing installation.'
+  if (rooms.length === 0 && i.wholeHouse.length === 0 && !i.pipework) return 'Plumbing installation.'
   const parts: string[] = []
   if (rooms.length > 0) {
     parts.push(`${plural(rooms.length, 'room', 'rooms')}${i.totalFittings > 0 ? `, ${plural(i.totalFittings, 'fitting', 'fittings')}` : ''}`)
     if (i.specialCount > 0) parts.push(`${plural(i.specialCount, 'special fitting', 'special fittings')} installed`)
   }
+  if (i.pipework) parts.push(`heating pipework to ${plural(i.pipework.radiators, 'radiator', 'radiators')}`)
   if (i.wholeHouse.length > 0) parts.push(i.wholeHouse.join(', '))
   return `Plumbing installation: ${parts.join('; ')}${i.tested ? ', pressure tested' : ''}.`
 }
@@ -50,6 +65,11 @@ export function describePlumbing(i: PlumbingDescriptionInput): string {
     let line = `${r.name}: ${r.items.length > 0 ? r.items.join(', ') : 'no standard fittings'}${r.weSupply && r.items.length > 0 ? ' (supplied and fitted)' : ''}.`
     if (r.specials.length > 0) line += ` Install ${r.specials.join(', ')}.`
     lines.push(line)
+  }
+  if (i.pipework) {
+    const p = i.pipework
+    const sizes = p.sizesMm.map(s => `${s}mm`).join(' and ')
+    lines.push(`Heating pipework: supply and install about ${Math.round(p.pipeM)} m of ${sizes} ${p.material} heating pipe (flow and return, sized for the heat each section carries) with its elbows and tees, connecting ${plural(p.radiators, 'radiator or towel rail', 'radiators or towel rails')} (about ${p.kW.toFixed(1)} kW in all), clipped and tested.`)
   }
   if (i.wholeHouse.length > 0) lines.push(`Whole house: ${i.wholeHouse.join(', ')}.`)
   if (i.tested) lines.push('On completion the pipework is pressure tested and commissioned.')
