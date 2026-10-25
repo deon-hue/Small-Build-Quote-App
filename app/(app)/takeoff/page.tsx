@@ -1836,11 +1836,14 @@ export default function TakeoffPage() {
   // The area and the perimeter of a drawn floor, in m² and m (the shoelace formula on its corners). A floor calculator is sized from these.
   function drawnAreaPerimeter(it: TakeoffItem): { areaM2: number; perimeterM: number } | undefined {
     const el = it.elementId ? project.elements.find(e => e.id === it.elementId) : undefined
-    if (!el || el.points.length < 3) return undefined
+    if (!el || el.points.length < 2) return undefined
+    // (a rectangle is stored as its two opposite corners: its four corners are what is measured)
+    const pts = el.type === 'rect' ? cornersOf(el) : el.points
+    if (pts.length < 3) return undefined
     const mpp = project.calibration.mpp
     let a = 0, p = 0
-    for (let i = 0; i < el.points.length; i++) {
-      const q = el.points[i], r = el.points[(i + 1) % el.points.length]
+    for (let i = 0; i < pts.length; i++) {
+      const q = pts[i], r = pts[(i + 1) % pts.length]
       a += q.x * r.y - r.x * q.y
       p += Math.hypot(r.x - q.x, r.y - q.y)
     }
