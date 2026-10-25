@@ -28,6 +28,7 @@ import PlumbingPointsPanel, { PLUMB_GROUP_COLOUR, HEAT_SOURCE_COLOUR } from './c
 import { FITTING_BY_ID } from '@/lib/plumbing-units'
 import { plumbSymbol, facingAngle, type SymShape, type SymRole } from '@/lib/plumb-symbols'
 import { electricSymbol } from '@/lib/electric-symbols'
+import { roofLookFromState, type RoofLook } from '@/lib/roof-look'
 import { PLUMB_SHORT, HEAT_SOURCE, TOWEL_RAIL_W, placedRoomsFromPoints, type PlumbPoint, type PlumbPipe, type PlacedRoom } from '@/lib/plumb-points'
 import { floorLookOf, ufhLoopPaths, blockBeamLook, boxOf, type FloorLook } from '@/lib/floor-look'
 import { ufhLoopCount, MAX_LOOP_M, PIPE_WASTE } from '@/lib/ufh-units'
@@ -4591,6 +4592,56 @@ export default function TakeoffPage() {
     const sub = item.taskSubphaseId ? boSubPhases.find(sp => sp.id === item.taskSubphaseId) : undefined
     return floorLookOf(sub?.canonical_id ?? undefined, item.floorMakeupId)
   }
+  /** A roof's STRUCTURE as the roof calculator draws it (the members at their centres, the ridge, hips and jacks, the trimmers and rooflights, a gable or existing-wall end), for a roof drawn with a structure calculator or a flat roof Build-Up Type; null for the covering, gutters and the rest */
+  function roofLookOf2(el: DrawnElement): RoofLook | null {
+    if (el.phase !== 'Roof' || el.type === 'line') return null
+    const item = project.items.find(it => it.elementId === el.id)
+    const mpp = project.calibration.mpp
+    if (!item || item.notEstimated || !(mpp > 0)) return null
+    const b = boxOf(el.type === 'rect' ? cornersOf(el) : el.points)
+    if (!(b.w > 0 && b.h > 0)) return null
+    const sub = item.taskSubphaseId ? boSubPhases.find(sp => sp.id === item.taskSubphaseId) : undefined
+    return roofLookFromState(sub?.canonical_id ?? undefined, item.floorMakeupId, item.assemblyCalcState?.values as Record<string, Record<string, unknown>> | undefined, { lengthMm: Math.max(b.w, b.h) * mpp * 1000, spanMm: Math.min(b.w, b.h) * mpp * 1000 })
+  }
+  /** The roof look painted inside the roof's outline: the longer side is the roof's length (as the calculators size it), members run across the shorter, lines keep the same width at any zoom */
+  function roofLookLayer(el: DrawnElement, poly: TakeoffPoint[], look: RoofLook): React.ReactNode {
+    const b = boxOf(poly)
+    const horizontal = b.w >= b.h
+    const L = look.lengthMm, S = look.spanMm
+    const P = (x: number, y: number) => (horizontal ? { x: b.minX + (x / L) * b.w, y: b.minY + (y / S) * b.h } : { x: b.minX + (y / S) * b.w, y: b.minY + (x / L) * b.h })
+    const box = (r: { x: number; y: number; w: number; h: number }) => { const a = P(r.x, r.y), c = P(r.x + r.w, r.y + r.h); return { x: Math.min(a.x, c.x), y: Math.min(a.y, c.y), w: Math.abs(c.x - a.x), h: Math.abs(c.y - a.y) } }
+    const clipId = 'rf-clip-' + el.id
+    const stroke: Record<string, { c: string; w: number }> = { member: { c: '#78716c', w: 1.1 }, ridge: { c: '#0f766e', w: 2.6 }, hip: { c: '#b45309', w: 2.2 } }
+    const bar = 4 / zoom
+    return (
+      <g style={{ pointerEvents: 'none' }}>
+        <defs><clipPath id={clipId}><polygon points={poly.map(p => `${p.x},${p.y}`).join(' ')} /></clipPath></defs>
+        <g clipPath={`url(#${clipId})`}>
+          {look.lines.map((l, i) => { const a = P(l.x1, l.y1), c = P(l.x2, l.y2); const st = stroke[l.role]; return <line key={i} x1={a.x} y1={a.y} x2={c.x} y2={c.y} stroke={st.c} strokeWidth={st.w} vectorEffect="non-scaling-stroke" strokeLinecap="round" /> })}
+          {look.trimmers.map((t, i) => { const r = box(t); return <rect key={'t' + i} x={r.x} y={r.y} width={Math.max(r.w, 1 / zoom)} height={Math.max(r.h, 1 / zoom)} fill="#b45309" stroke="#fff" strokeWidth={0.4} vectorEffect="non-scaling-stroke" /> })}
+          {look.openings.map((o, i) => {
+            const r = box(o)
+            const dome = o.kind === 'dome'
+            const fill = o.kind === 'lantern' ? '#ccfbf1' : o.kind === 'roof-window' ? '#dbeafe' : o.kind === 'dome' ? '#fef3c7' : '#e5e7eb'
+            const line = o.kind === 'lantern' ? '#0f766e' : o.kind === 'roof-window' ? '#1d4ed8' : o.kind === 'dome' ? '#b45309' : '#4b5563'
+            return (
+              <g key={'o' + i}>
+                {dome ? <ellipse cx={r.x + r.w / 2} cy={r.y + r.h / 2} rx={r.w / 2} ry={r.h / 2} fill={fill} stroke={line} strokeWidth={1.4} vectorEffect="non-scaling-stroke" />
+                  : <rect x={r.x} y={r.y} width={r.w} height={r.h} fill={fill} stroke={line} strokeWidth={1.4} vectorEffect="non-scaling-stroke" />}
+                {o.kind === 'lantern' && <path d={`M${r.x} ${r.y}L${r.x + r.w} ${r.y + r.h}M${r.x + r.w} ${r.y}L${r.x} ${r.y + r.h}`} stroke={line} strokeWidth={0.8} fill="none" vectorEffect="non-scaling-stroke" />}
+                {o.kind === 'hatch' && <path d={`M${r.x} ${r.y}L${r.x + r.w} ${r.y + r.h}`} stroke={line} strokeWidth={0.8} fill="none" vectorEffect="non-scaling-stroke" />}
+              </g>
+            )
+          })}
+          {look.ends.map((e, i) => {
+            const start = e.at === 'start'
+            const x = horizontal ? (start ? b.minX : b.maxX - bar) : b.minX, y = horizontal ? b.minY : (start ? b.minY : b.maxY - bar)
+            return <rect key={'e' + i} x={x} y={y} width={horizontal ? bar : b.w} height={horizontal ? b.h : bar} fill={e.kind === 'gable' ? '#44403c' : '#a8a29e'} stroke={e.kind === 'gable' ? 'none' : '#57534e'} strokeWidth={0.8} vectorEffect="non-scaling-stroke" />
+          })}
+        </g>
+      </g>
+    )
+  }
   function floorLookLayer(el: DrawnElement, poly: TakeoffPoint[], look: FloorLook): React.ReactNode {
     const mpp = project.calibration.mpp
     if (!(mpp > 0) || poly.length < 3) return null
@@ -4830,10 +4881,12 @@ export default function TakeoffPage() {
     if (el.type === 'rect') {
       const { x, y, width: w, height: h } = rectAttrs(el.points)
       const look = floorLookOf2(el)
+      const rlook = roofLookOf2(el)
       return (
         <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
-          <rect x={x} y={y} width={w} height={h} fill={look ? el.color + '14' : fill} stroke={stroke} strokeWidth={sw} />
+          <rect x={x} y={y} width={w} height={h} fill={look || rlook ? el.color + '14' : fill} stroke={stroke} strokeWidth={sw} />
           {look && floorLookLayer(el, cornersOf(el), look)}
+          {rlook && roofLookLayer(el, cornersOf(el), rlook)}
           <text className="to-lbl" x={x + w / 2} y={y + h / 2 - 6} textAnchor="middle" fontSize={11} fill={sel ? SEL_COLOUR : el.color} fontFamily="monospace" fontWeight={600}>
             {el.label}
           </text>
@@ -4848,10 +4901,12 @@ export default function TakeoffPage() {
       const pts = el.points.map(p => `${p.x},${p.y}`).join(' ')
       const mid = centroid(el.points)
       const look = floorLookOf2(el)
+      const rlook = roofLookOf2(el)
       return (
         <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
-          <polygon points={pts} fill={look ? el.color + '14' : fill} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
+          <polygon points={pts} fill={look || rlook ? el.color + '14' : fill} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
           {look && floorLookLayer(el, el.points, look)}
+          {rlook && roofLookLayer(el, el.points, rlook)}
           <text className="to-lbl" x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? SEL_COLOUR : el.color} fontFamily="monospace" fontWeight={600}>
             {el.label}
           </text>
