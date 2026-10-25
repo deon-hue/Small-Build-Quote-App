@@ -916,6 +916,7 @@ export default function TakeoffPage() {
   const [viewDimOut, setViewDimOut] = useState(false)
   const [viewDimIn, setViewDimIn] = useState(false)
   const [viewRoomSize, setViewRoomSize] = useState(false)
+  const [viewDimUnit, setViewDimUnit] = useState<'mm' | 'cm' | 'm'>('m')   // the unit the measurements are written in
   // a wall drawn as one run of several sides becomes one wall per side (so each can be clicked, edited and deleted on its own)
   const [splitWalls, setSplitWalls] = useState(true)
   // snap the cursor to the grid (its spacing in metres); the grid itself is the Grid tick
@@ -930,6 +931,8 @@ export default function TakeoffPage() {
   const [joinFirst, setJoinFirst] = useState<{ id: string; idx: number } | null>(null)
   useEffect(() => { if (tool !== 'join') setJoinFirst(null) }, [tool])
   const tagDragRef = useRef<{ id: string; sx: number; sy: number; dx0: number; dy0: number } | null>(null)
+  // the View choices are read back before they are written (otherwise the first save would put the defaults over what was kept)
+  const [viewPrefsReady, setViewPrefsReady] = useState(false)
   useEffect(() => {
     try {
       const r = JSON.parse(localStorage.getItem('sbc_takeoff_view') ?? 'null')
@@ -941,6 +944,7 @@ export default function TakeoffPage() {
         if (typeof r.dimOut === 'boolean') setViewDimOut(r.dimOut)
         if (typeof r.dimIn === 'boolean') setViewDimIn(r.dimIn)
         if (typeof r.roomSize === 'boolean') setViewRoomSize(r.roomSize)
+        if (r.dimUnit === 'mm' || r.dimUnit === 'cm' || r.dimUnit === 'm') setViewDimUnit(r.dimUnit)
         if (typeof r.panel === 'boolean') setPanelOpen(r.panel)
         if (typeof r.splitWalls === 'boolean') setSplitWalls(r.splitWalls)
         if (typeof r.gridSnap === 'boolean') setGridSnap(r.gridSnap)
@@ -948,8 +952,9 @@ export default function TakeoffPage() {
         if (typeof r.fade === 'number' && r.fade >= 0 && r.fade <= 75) setViewFade(r.fade)
       }
     } catch {}
+    setViewPrefsReady(true)
   }, [])
-  useEffect(() => { try { localStorage.setItem('sbc_takeoff_view', JSON.stringify({ halo: viewHalo, tags: viewTags, fade: viewFade, rooms: viewRooms, ghost: viewGhost, panel: panelOpen, dimOut: viewDimOut, dimIn: viewDimIn, roomSize: viewRoomSize, splitWalls, gridSnap, gridStep })) } catch {} }, [viewHalo, viewTags, viewFade, viewRooms, viewGhost, panelOpen, viewDimOut, viewDimIn, viewRoomSize, splitWalls, gridSnap, gridStep])
+  useEffect(() => { if (!viewPrefsReady) return; try { localStorage.setItem('sbc_takeoff_view', JSON.stringify({ halo: viewHalo, tags: viewTags, fade: viewFade, rooms: viewRooms, ghost: viewGhost, panel: panelOpen, dimOut: viewDimOut, dimIn: viewDimIn, roomSize: viewRoomSize, dimUnit: viewDimUnit, splitWalls, gridSnap, gridStep })) } catch {} }, [viewHalo, viewTags, viewFade, viewRooms, viewGhost, panelOpen, viewDimOut, viewDimIn, viewRoomSize, viewDimUnit, splitWalls, gridSnap, gridStep, viewPrefsReady])
   const lastSaveError = useRef('')
   const idMigration = useRef<string | null>(null)
   const oldPictureFolders = useRef<string[]>([])
@@ -2180,26 +2185,71 @@ export default function TakeoffPage() {
     )
   }
 
-  /** Measurements written on the plan (View menu): each outside wall's outside length just outside the building, each side of each room between the wall faces inside it, and each room's length x width. Nothing is saved or priced. */
+  /** A measurement as text in the unit chosen in the View menu: 10600 mm, 1060 cm or 10.60 m. */
+  const fmtDim = (m: number): string => (viewDimUnit === 'mm' ? Math.round(m * 1000) + ' mm' : viewDimUnit === 'cm' ? Math.round(m * 1000) / 10 + ' cm' : m.toFixed(2) + ' m')
+  /** which measurement is which, to keep how it was pulled out or slid (the corners to about 10 cm, so a small nudge of a wall keeps it) */
+  const dimKey = (kind: 'o' | 'i', a: TakeoffPoint, b: TakeoffPoint): string => {
+    const r = (v: number) => Math.round(v / 4) * 4
+    return (activeLevelId ?? '') + '|' + kind + '|' + r(a.x) + ',' + r(a.y) + '>' + r(b.x) + ',' + r(b.y)
+  }
+  /** Drag a measurement: pulled in or out across its side (how far from the wall) and slid along it. Double-click puts it back. */
+  function startDimDrag(e: React.MouseEvent, key: string, n: TakeoffPoint, u: TakeoffPoint, o0: number, s0: number, half: number) {
+    if (tool !== 'select') return
+    e.stopPropagation()
+    e.preventDefault()
+    const rect = svgRef.current!.getBoundingClientRect()
+    const pan = panOffset, z = zoom
+    const at = (ev: { clientX: number; clientY: number }) => ({ x: (ev.clientX - rect.left - pan.x) / z, y: (ev.clientY - rect.top - pan.y) / z })
+    const p0 = at(e)
+    const move = (ev: MouseEvent) => {
+      const p = at(ev)
+      const dx = p.x - p0.x, dy = p.y - p0.y
+      const o = o0 + dx * n.x + dy * n.y
+      const s = Math.max(-half, Math.min(half, s0 + dx * u.x + dy * u.y))
+      setProject(pr => ({ ...pr, dimAdjust: { ...(pr.dimAdjust ?? {}), [key]: { o, s } } }))
+    }
+    const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); hasPannedRef.current = true }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+  }
+  function resetDim(key: string) {
+    setProject(pr => { if (!pr.dimAdjust?.[key]) return pr; const rest = { ...pr.dimAdjust }; delete rest[key]; return { ...pr, dimAdjust: Object.keys(rest).length ? rest : undefined } })
+  }
+
+  /** Measurements written on the plan (View menu): each outside straight side of the building from outer corner to outer corner, each side of each room between the wall faces inside it, and each room's length x width, in mm, cm or m.
+   *  Each can be dragged in Select mode (pulled in or out, slid along its side) and a double-click puts it back. Nothing is priced. */
   function renderDimensions() {
     const mpp = project.calibration.mpp
     if (!(mpp > 0) || !(viewDimOut || viewDimIn || viewRoomSize)) return null
     const parts: React.ReactNode[] = []
     const halo = { stroke: '#fff', strokeWidth: 3 / zoom, paintOrder: 'stroke' as const }
-    // a measurement: a thin line alongside a side, set off along the unit normal (nx, ny), with its length written on it
-    const dim = (key: string, a: TakeoffPoint, b: TakeoffPoint, nx: number, ny: number, off: number, colour: string) => {
-      const len = Math.hypot(b.x - a.x, b.y - a.y) * mpp
+    const live = tool === 'select'
+    // a measurement: a thin line alongside a side, set off along the unit normal (nx, ny) (16 or 11 screen pixels to start, or where it was pulled to), with its length written on it
+    const dim = (kind: 'o' | 'i', id: string, a: TakeoffPoint, b: TakeoffPoint, nx: number, ny: number, defOff: number, colour: string) => {
+      const l0 = Math.hypot(b.x - a.x, b.y - a.y)
+      const len = l0 * mpp
       if (len < 0.25) return
+      const key = dimKey(kind, a, b)
+      const adj = project.dimAdjust?.[key]
+      const off = adj?.o ?? defOff, shift = adj?.s ?? 0
+      const ux = (b.x - a.x) / l0, uy = (b.y - a.y) / l0
       const A = { x: a.x + nx * off, y: a.y + ny * off }, B = { x: b.x + nx * off, y: b.y + ny * off }
       let ang = (Math.atan2(B.y - A.y, B.x - A.x) * 180) / Math.PI
       if (ang > 90 || ang < -90) ang += 180   // the text always reads left to right
-      const l = Math.hypot(B.x - A.x, B.y - A.y) || 1, tx = (-(B.y - A.y) / l) * 4 / zoom, ty = ((B.x - A.x) / l) * 4 / zoom
+      const tx = nx * 4 / zoom, ty = ny * 4 / zoom
+      const mx = (A.x + B.x) / 2 + ux * shift, my = (A.y + B.y) / 2 + uy * shift
+      const pe = live ? 'stroke' as const : 'none' as const
       parts.push(
-        <g key={key}>
+        <g key={'dm-' + kind + '-' + id} style={{ cursor: live ? 'move' : undefined, pointerEvents: live ? undefined : 'none' }}
+          onMouseDown={ev => startDimDrag(ev, key, { x: nx, y: ny }, { x: ux, y: uy }, off, shift, l0 / 2)}
+          onDoubleClick={ev => { if (live) { ev.stopPropagation(); resetDim(key) } }}
+          onClick={ev => { if (live) ev.stopPropagation() }}>
+          <line x1={A.x} y1={A.y} x2={B.x} y2={B.y} stroke="transparent" strokeWidth={14 / zoom} style={{ pointerEvents: pe }} />
+          <line x1={a.x} y1={a.y} x2={A.x} y2={A.y} stroke={colour} strokeWidth={0.6 / zoom} strokeDasharray={`${3 / zoom} ${3 / zoom}`} opacity={Math.abs(off) > 20 / zoom ? 0.7 : 0} />
           <line x1={A.x} y1={A.y} x2={B.x} y2={B.y} stroke={colour} strokeWidth={1 / zoom} />
           <line x1={A.x - tx} y1={A.y - ty} x2={A.x + tx} y2={A.y + ty} stroke={colour} strokeWidth={1 / zoom} />
           <line x1={B.x - tx} y1={B.y - ty} x2={B.x + tx} y2={B.y + ty} stroke={colour} strokeWidth={1 / zoom} />
-          <text transform={`translate(${(A.x + B.x) / 2},${(A.y + B.y) / 2}) rotate(${ang})`} y={-3 / zoom} textAnchor="middle" fontSize={11 / zoom} fontFamily="monospace" fontWeight={700} fill={colour} {...halo}>{len.toFixed(2)}</text>
+          <text transform={`translate(${mx},${my}) rotate(${ang})`} y={-3 / zoom} textAnchor="middle" fontSize={11 / zoom} fontFamily="monospace" fontWeight={700} fill={colour} {...halo} style={{ pointerEvents: live ? 'auto' : 'none' }}>{fmtDim(len)}</text>
         </g>,
       )
     }
@@ -2228,7 +2278,7 @@ export default function TakeoffPage() {
           const l = Math.hypot(b.x - a.x, b.y - a.y)
           if (!(l > 0)) return
           const rx = -(b.y - a.y) / l, ry = (b.x - a.x) / l   // the right-hand normal; the inside of the building is on this side when band.inside is 1
-          dim('do-' + ci + '-' + k, a, b, -rx * band.inside, -ry * band.inside, 16 / zoom, '#1565c0')
+          dim('o', ci + '-' + k, a, b, -rx * band.inside, -ry * band.inside, 16 / zoom, '#1565c0')
         })
       })
     }
@@ -2241,20 +2291,20 @@ export default function TakeoffPage() {
             const a = poly[k], b = poly[(k + 1) % n]
             const l = Math.hypot(b.x - a.x, b.y - a.y)
             if (!(l > 0)) continue
-            dim('di-' + i + '-' + k, a, b, (-(b.y - a.y) / l) * sgn, ((b.x - a.x) / l) * sgn, 11 / zoom, '#15803d')
+            dim('i', i + '-' + k, a, b, (-(b.y - a.y) / l) * sgn, ((b.x - a.x) / l) * sgn, 11 / zoom, '#15803d')
           }
         }
         if (viewRoomSize && (r.widthM / mpp) * zoom > 50) {
           const overall = r.areaM2 < 0.97 * r.lengthM * r.widthM
           parts.push(
-            <text key={'rs-' + i} x={r.labelAt.x} y={r.labelAt.y + 28 / zoom} textAnchor="middle" fontSize={11 / zoom} fontFamily="monospace" fontWeight={700} fill="#14532d" {...halo}>
-              {r.lengthM.toFixed(2)} × {r.widthM.toFixed(2)} m{overall ? ' overall' : ''}
+            <text key={'rs-' + i} x={r.labelAt.x} y={r.labelAt.y + 28 / zoom} textAnchor="middle" fontSize={11 / zoom} fontFamily="monospace" fontWeight={700} fill="#14532d" {...halo} style={{ pointerEvents: 'none' }}>
+              {fmtDim(r.lengthM).replace(/ (mm|cm|m)$/, '')} × {fmtDim(r.widthM)}{overall ? ' overall' : ''}
             </text>,
           )
         }
       })
     }
-    return <g style={{ pointerEvents: 'none' }}>{parts}</g>
+    return <g>{parts}</g>
   }
 
   function renderRoomsPanel() {
@@ -7016,6 +7066,12 @@ export default function TakeoffPage() {
                     <input type="checkbox" checked={viewRooms} onChange={e => setViewRooms(e.target.checked)} style={{ width: 'auto' }} /> Rooms
                   </label>
                   <div style={{ borderTop: '1px solid var(--to-border)', paddingTop: 8, fontSize: 11, color: 'var(--to-muted)' }}>Measurements on the plan</div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6 }} title="The unit the measurements are written in">
+                    Show in
+                    <select value={viewDimUnit} onChange={e => setViewDimUnit(e.target.value as 'mm' | 'cm' | 'm')} style={{ flex: 1, height: 26, fontSize: 12 }}>
+                      <option value="mm">Millimetres (mm)</option><option value="cm">Centimetres (cm)</option><option value="m">Metres (m)</option>
+                    </select>
+                  </label>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} title="The length of the outside face of each outside wall, written just outside the building">
                     <input type="checkbox" checked={viewDimOut} onChange={e => setViewDimOut(e.target.checked)} style={{ width: 'auto' }} /> Outside wall lengths
                   </label>
