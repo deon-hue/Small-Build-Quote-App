@@ -144,6 +144,8 @@ export interface PlumbingRoom {
   radiators?: { id: string; label: string; watts: number }[]
   /** the heated towel rails placed on the plan for this room */
   towelRails?: { id: string; watts: number }[]
+  /** every fitting placed on the plan in this room, one by one: who supplies it and which product, when those were chosen (a fitting with neither follows the room) */
+  placedItems?: { id: string; typeId: string; supply?: 'us' | 'client'; name?: string; cost?: number }[]
 }
 
 /** Heating pipework drawn on the Take-off plan, from the radiators and the boiler: pipe by size, elbows and tees, priced by the metre and each. Sample rates to check against your supplier and plumber. */
@@ -256,7 +258,19 @@ export function calculatePlumbing(input: PlumbingInput): PlumbingResult {
         if (n - piped > 0) lines.push({ id: `fit|${room.id}|${ft.id}`, name: `${rn} — ${ft.name}`, category: 'subcontractors', unit: 'nr', unitCost: money(base * uplift), qty: n - piped, roomId: room.id })
         if (piped > 0) lines.push({ id: `fitpiped|${room.id}|${ft.id}`, name: `${rn} — ${ft.id === 'towel-rail' ? 'heated towel rail' : 'radiator'}, fixing and connecting (pipework drawn on the plan)`, category: 'subcontractors', unit: 'nr', unitCost: money(Math.max(0, base - (input.pipes?.radiatorPipeworkIn ?? 0)) * uplift), qty: piped, roomId: room.id })
         const pc = input.pcRates[ft.id] ?? ft.pcSum
-        if (room.supply === 'us' && pc > 0) {
+        const placed = (room.placedItems ?? []).filter(x => x.typeId === ft.id).slice(0, n)
+        if (placed.length > 0) {
+          // fittings placed on the plan one by one: each says who supplies it (else the room does) and, if we do, its product and cost; with no product it is the usual sum (a radiator by its size)
+          for (const it of placed) {
+            if ((it.supply ?? room.supply) !== 'us') continue
+            const rad = ft.id === 'radiator' ? (room.radiators ?? []).find(r => r.id === it.id) : undefined
+            const price = it.cost !== undefined && it.cost > 0 ? it.cost : rad && rad.watts > 0 ? (input.radiatorPcPerKw ?? 55) * rad.watts / 1000 : pc
+            if (!(price > 0)) continue
+            const what = it.name ? it.name : rad && rad.watts > 0 ? `radiator ${rad.label}` : ft.name.replace(/ \(.*\)$/, '')
+            lines.push({ id: `pci|${room.id}|${it.id}`, name: `${rn} — ${what} (supplied by us${it.name ? '' : rad && rad.watts > 0 ? ' — PC sum by size' : ' — PC sum'})`, category: 'materials', unit: 'nr', unitCost: money(price), qty: 1, roomId: room.id })
+          }
+          if (n - placed.length > 0 && room.supply === 'us' && pc > 0) lines.push({ id: `pc|${room.id}|${ft.id}`, name: `${rn} — ${ft.name.replace(/ \(.*\)$/, '')} (supplied by us — PC sum)`, category: 'materials', unit: 'nr', unitCost: money(pc), qty: n - placed.length, roomId: room.id })
+        } else if (room.supply === 'us' && pc > 0) {
           // a radiator placed on the plan has a size, so one we supply is priced by its output; the rest of the room's radiators are the usual provisional sum each
           const sized = ft.id === 'radiator' ? (room.radiators ?? []).slice(0, n).filter(rad => rad.watts > 0) : []   // (one with no size, as the AI quote makes, is just a radiator at the usual sum)
           if (n - sized.length > 0) lines.push({ id: `pc|${room.id}|${ft.id}`, name: `${rn} — ${ft.name.replace(/ \(.*\)$/, '')} (supplied by us — PC sum)`, category: 'materials', unit: 'nr', unitCost: money(pc), qty: n - sized.length, roomId: room.id })

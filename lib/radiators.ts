@@ -115,6 +115,14 @@ export function externalEdgeLengthPx(polygon: Pt[], outside: [Pt, Pt][], tol: nu
   return total
 }
 
+/** A combi boiler size (kW) to suggest from the heat of all the radiators and towel rails: a GUIDE only, the heating engineer sizes the boiler (hot water demand counts for a combi as much as the radiators). */
+export function suggestCombiKw(totalW: number): number {
+  if (totalW <= 12000) return 24
+  if (totalW <= 16000) return 28
+  if (totalW <= 20000) return 30
+  return 35
+}
+
 // ── Sizing every radiator on a plan ─────────────────────────────────────────────────────────────
 
 export interface RadReq {

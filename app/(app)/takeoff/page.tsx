@@ -26,12 +26,14 @@ import PlumbingPointsPanel, { PLUMB_GROUP_COLOUR, HEAT_SOURCE_COLOUR } from './c
 import { FITTING_BY_ID } from '@/lib/plumbing-units'
 import { PLUMB_SHORT, HEAT_SOURCE, TOWEL_RAIL_W, placedRoomsFromPoints, type PlumbPoint, type PlumbPipe, type PlacedRoom } from '@/lib/plumb-points'
 import { buildPipeNetwork, summariseNetworks, type NetResult, type PipeSummary } from '@/lib/pipe-network'
-import { roomHeatLoss, externalEdgeLengthPx, sizeRadiators, radiatorOutputW, radiatorLabel, type BuildingAge, type RadSizing } from '@/lib/radiators'
+import { suggestCombiKw, roomHeatLoss, externalEdgeLengthPx, sizeRadiators, radiatorOutputW, radiatorLabel, type BuildingAge, type RadSizing } from '@/lib/radiators'
 
 // The one Take-off item that holds every electrical point placed on the plan (and the electrics calculator's saved price).
 const ELECTRICS_ITEM_ID = 'electrics-summary'
 // The one Take-off item that holds every plumbing fitting and radiator placed on the plan (and the plumbing calculator's saved price).
 const PLUMB_ITEM_ID = 'plumb-summary'
+// The one Take-off item that holds the boiler / heating system (the Heating Plant calculator for the boiler marker and the radiators on the plan).
+const BOILER_ITEM_ID = 'plumb-boiler'
 const WD_ITEM_ID = 'wd-summary'
 /** A selected drawing is shown in this blue (it used to be white, which cannot be seen on a white sheet) */
 const SEL_COLOUR = '#1565c0'
@@ -1767,6 +1769,7 @@ export default function TakeoffPage() {
   function resolveBuiltAssembly(it: TakeoffItem) {
     if (it.electricsSummary) return BUILT_ASSEMBLY_CANON_IDS['elec-install']
     if (it.plumbSummary) return BUILT_ASSEMBLY_CANON_IDS['plumb-install']
+    if (it.boilerSummary) return BUILT_ASSEMBLY_CANON_IDS['plumb-heating-plant']
     if (it.wdSummary) return BUILT_ASSEMBLY_CANON_IDS['wd-schedule']
     const demoCalc = demoCalcSub(it)
     if (demoCalc?.calculatorId) return BUILT_ASSEMBLY_CANON_IDS[demoCalc.calculatorId]
@@ -1851,6 +1854,7 @@ export default function TakeoffPage() {
   const plumbPoints: PlumbPoint[] = plumbItem?.plumbPoints ?? []
   const plumbAge: BuildingAge = plumbItem?.plumbAge ?? 'mid'
   const plumbPipes: PlumbPipe[] = plumbItem?.plumbPipes ?? []
+  const boilerItem = project.items.find(it => it.boilerSummary)
 
   function newElectricsItem(): TakeoffItem {
     const sub = boSubPhases.find(sp => sp.canonical_id === 'elec-install')
@@ -1908,6 +1912,17 @@ export default function TakeoffPage() {
   function newPlumbItem(): TakeoffItem {
     const sub = boSubPhases.find(sp => sp.canonical_id === 'plumb-install')
     return { id: PLUMB_ITEM_ID, name: 'Plumbing installation', phase: 'Plumbing & Heating', qty: 1, unit: 'item', plumbSummary: true, plumbPoints: [], ...(sub && { taskSubphaseId: sub.id, subPhase: sub.name }) }
+  }
+
+  function newBoilerItem(): TakeoffItem {
+    const sub = boSubPhases.find(sp => sp.canonical_id === 'plumb-heating-plant')
+    return { id: BOILER_ITEM_ID, name: 'Heating system', phase: 'Plumbing & Heating', qty: 1, unit: 'item', boilerSummary: true, ...(sub && { taskSubphaseId: sub.id, subPhase: sub.name }) }
+  }
+  function changeBoilerItem(fn: (it: TakeoffItem) => TakeoffItem) {
+    setProject(p => {
+      const items = p.items.some(it => it.boilerSummary) ? p.items : [...p.items, newBoilerItem()]
+      return { ...p, items: items.map(it => it.boilerSummary ? fn(it) : it) }
+    })
   }
 
   function changePlumbItem(fn: (it: TakeoffItem) => TakeoffItem) {
@@ -2241,6 +2256,11 @@ export default function TakeoffPage() {
   const plumbNetShowing = plumbNets.get(plumbGroupKey({ sheetId: activeSheetId, levelId: activeLevelId }))
   // what the plumbing on the plan comes to as the calculator is fed it: compared with what was priced, it says when the plan has changed since
   const plumbKeyNow = JSON.stringify([plumbPlaced, plumbPipeSummary ?? null])
+  // the heat of every radiator and towel rail on the plan decides the boiler size suggested
+  const plumbHeatW = plumbPoints.reduce((s, q) => s + (q.typeId === 'radiator' ? (plumbSizes.get(q.id)?.outputW ?? 0) : q.typeId === 'towel-rail' ? (q.watts ?? TOWEL_RAIL_W) : 0), 0)
+  const plumbHeatCount = plumbPoints.filter(q => q.typeId === 'radiator' || q.typeId === 'towel-rail').length
+  const boilerSuggestedKw = suggestCombiKw(plumbHeatW)
+  const boilerKeyNow = plumbHeatCount + '|' + boilerSuggestedKw
   const plumbPipesShowing = plumbPipes.filter(q => onActiveSheet(q, project) && onActiveLevel(q, project))
   const plumbPipeLengthM = (q: PlumbPipe) => { let l = 0; for (let i = 1; i < q.points.length; i++) l += Math.hypot(q.points[i].x - q.points[i - 1].x, q.points[i].y - q.points[i - 1].y); return l * project.calibration.mpp }
   useEffect(() => { if (tool !== 'line' || activePhase !== 'Plumbing & Heating') setPipeDraw(false) }, [tool, activePhase])
@@ -2913,6 +2933,23 @@ export default function TakeoffPage() {
         selectedPipeId={selectedPlumbPipeId} onSelectPipe={id => (id ? selectPlumbPipe(id) : setSelectedPlumbPipeId(null))}
         onDeletePipe={id => { changePlumbItem(x => ({ ...x, plumbPipes: (x.plumbPipes ?? []).filter(q => q.id !== id) })); if (selectedPlumbPipeId === id) setSelectedPlumbPipeId(null) }}
         pipeSummary={plumbPipeSummary}
+        boiler={{
+          count: plumbHeatCount, totalKw: plumbHeatW / 1000, suggestedKw: boilerSuggestedKw, hasSource: plumbPoints.some(q => q.typeId === HEAT_SOURCE),
+          saved: boilerItem?.assemblyResult, stale: !!boilerItem?.assemblyResult && boilerItem.boilerPricedKey !== undefined && boilerItem.boilerPricedKey !== boilerKeyNow,
+          open: assemblyWindowItemId === BOILER_ITEM_ID,
+          onOpen: () => { changeBoilerItem(x => x); setAssemblyWindowItemId(BOILER_ITEM_ID) },
+          onClose: () => setAssemblyWindowItemId(null),
+          calculator: BUILT_ASSEMBLY_CANON_IDS['plumb-heating-plant']?.render({
+            labourTrades,
+            calcState: boilerItem?.assemblyCalcState ?? { id: 'plumb-heating-plant', values: { AssemblyHeatingDemo: { boilerKw: boilerSuggestedKw, radiators: plumbHeatCount } } },
+            onSave: result => {
+              const { calcState, state: _state, size: _size, ...res } = result
+              const sub = boSubPhases.find(sp => sp.canonical_id === 'plumb-heating-plant')
+              changeBoilerItem(x => ({ ...x, assemblyResult: res, assemblyCalcState: calcState, boilerPricedKey: boilerKeyNow, name: result.name, ...(sub && { taskSubphaseId: sub.id, subPhase: sub.name }) }))
+              setAssemblyWindowItemId(null)
+            },
+          }),
+        }}
         saved={it?.assemblyResult}
         stale={stale}
         calculatorOpen={assemblyWindowItemId === PLUMB_ITEM_ID}
@@ -3425,7 +3462,7 @@ export default function TakeoffPage() {
     setResetInProgress(true)
     createRecoverySnapshot('clear')
     // Keep items that are NOT linked to any element (manually-added, pricing-only rows)
-    const unlinkedItems = project.items.filter(it => !it.elementId).map(it => it.electricsSummary ? { ...it, electricPoints: [] } : it.plumbSummary ? { ...it, plumbPoints: [] } : it.wdSummary ? { ...it, placedOpenings: [] } : it)
+    const unlinkedItems = project.items.filter(it => !it.elementId && !it.boilerSummary).map(it => it.electricsSummary ? { ...it, electricPoints: [] } : it.plumbSummary ? { ...it, plumbPoints: [], plumbPipes: [] } : it.wdSummary ? { ...it, placedOpenings: [] } : it)
     setProject(p => ({
       ...p,
       elements: [],
@@ -3675,7 +3712,7 @@ export default function TakeoffPage() {
     // A wall with a calculator that hasn't been priced would go to the quote as a plain build-up
     // (e.g. the default cavity wall layers) rather than what it's labelled as — say so first.
     // the electrics and plumbing items hold what was placed on the plan: with nothing placed and nothing priced there is nothing to send
-    const sendItems = project.items.filter(it => !((it.plumbSummary && !it.assemblyResult && !it.plumbPoints?.length && !it.plumbPipes?.length) || (it.electricsSummary && !it.assemblyResult && !it.electricPoints?.length)))
+    const sendItems = project.items.filter(it => !((it.plumbSummary && !it.assemblyResult && !it.plumbPoints?.length && !it.plumbPipes?.length) || (it.electricsSummary && !it.assemblyResult && !it.electricPoints?.length) || (it.boilerSummary && !it.assemblyResult)))
     const unpriced = sendItems.filter(it => resolveBuiltAssembly(it) && !it.assemblyResult)
     if (unpriced.length > 0 && !window.confirm(
       `${unpriced.length} item${unpriced.length !== 1 ? 's have' : ' has'} a calculator that hasn't been priced yet:\n\n` +
@@ -3687,6 +3724,8 @@ export default function TakeoffPage() {
     const plumbNotes: string[] = []
     if (pl?.assemblyResult && pl.plumbPricedKey !== undefined && pl.plumbPricedKey !== plumbKeyNow) plumbNotes.push('The fittings or pipes on the plan have changed since the plumbing was priced, so the quote would carry the old price. Open the plumbing calculator and Save & Price it again.')
     for (const w of plumbPipeSummary?.warnings ?? []) plumbNotes.push('Heating pipes: ' + w)
+    const bo = sendItems.find(it => it.boilerSummary)
+    if (bo?.assemblyResult && bo.boilerPricedKey !== undefined && bo.boilerPricedKey !== boilerKeyNow) plumbNotes.push('The radiators on the plan have changed since the boiler was priced: open the heating system and check the boiler size and the number of radiators.')
     if (plumbNotes.length > 0 && !window.confirm('Check the plumbing before it goes to the quote:\n\n' + plumbNotes.map(n => '- ' + n).join('\n') + '\n\nSend anyway?')) return
     const { planImageUrl: _, ...rest } = project
     const data = { version: 1, ...rest, items: sendItems }
@@ -6753,7 +6792,7 @@ export default function TakeoffPage() {
   function renderProperties() {
     const item = editingItem ?? phaseDefaults
     if ((activePhase === 'Electrics' && tool === 'electric') || item?.electricsSummary) return renderElectricsPanel()
-    if ((activePhase === 'Plumbing & Heating' && (tool === 'plumb' || pipeDraw)) || item?.plumbSummary) return renderPlumbingPanel()
+    if ((activePhase === 'Plumbing & Heating' && (tool === 'plumb' || pipeDraw)) || item?.plumbSummary || item?.boilerSummary) return renderPlumbingPanel()
     if ((activePhase === 'Windows & Doors' && tool === 'opening') || item?.wdSummary) return renderOpeningsPanel()
     if (tool === 'room') return renderRoomsPanel()
     if (!item) {

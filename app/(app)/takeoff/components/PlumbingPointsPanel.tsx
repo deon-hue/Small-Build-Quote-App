@@ -7,10 +7,11 @@
  * The fittings live on the "Plumbing installation" Take-off item (so they save with the project); this component only shows and edits them.
  */
 
-import React from 'react'
+import React, { useState } from 'react'
 import AssemblyItemPanel from './AssemblyWindow'
+import PlumbProductPicker from '@/components/PlumbProductPicker'
 import { FITTING_TYPES, FITTING_BY_ID } from '@/lib/plumbing-units'
-import { PLUMB_SHORT, UNNAMED_ROOM, HEAT_SOURCE, TOWEL_RAIL_W, type PlumbPoint, type PlumbPipe } from '@/lib/plumb-points'
+import { PLUMB_SHORT, UNNAMED_ROOM, HEAT_SOURCE, TOWEL_RAIL_W, productCategoryFor, type PlumbPoint, type PlumbPipe } from '@/lib/plumb-points'
 import { FITTING_LABEL, type PipeSummary } from '@/lib/pipe-network'
 import { RAD_TYPES, RAD_HEIGHTS, RAD_WIDTHS, AGE_LABEL, type BuildingAge, type RadSizing } from '@/lib/radiators'
 import type { CostedLine } from '@/lib/assembly-calc'
@@ -57,6 +58,8 @@ interface Props {
   onSelectPipe: (id: string | null) => void
   onDeletePipe: (id: string) => void
   pipeSummary?: PipeSummary
+  /** the boiler: the heat on the plan, the size suggested, and the Heating Plant calculator to choose the actual boiler in */
+  boiler: { count: number; totalKw: number; suggestedKw: number; hasSource: boolean; saved?: { lines: CostedLine[]; location?: string }; stale: boolean; open: boolean; onOpen: () => void; onClose: () => void; calculator: React.ReactNode }
   saved?: { lines: CostedLine[]; location?: string }
   stale?: boolean
   calculatorOpen: boolean
@@ -70,6 +73,7 @@ const label: React.CSSProperties = { fontSize: 10, color: 'var(--to-dim, #8aa08a
 const input: React.CSSProperties = { width: '100%', boxSizing: 'border-box', fontSize: 12, padding: '5px 7px', background: 'var(--to-bg)', color: 'var(--to-text)', border: '1px solid var(--to-border)', borderRadius: 5, fontFamily: 'inherit' }
 
 export default function PlumbingPointsPanel(p: Props) {
+  const [pickFor, setPickFor] = useState<string | null>(null)   // the id of the fitting a product is being chosen for
   const selected = p.points.find(x => x.id === p.selectedPointId) ?? null
   const fittingPoints = p.points.filter(x => x.typeId !== HEAT_SOURCE)
   const hasSource = p.points.some(x => x.typeId === HEAT_SOURCE)
@@ -168,6 +172,7 @@ export default function PlumbingPointsPanel(p: Props) {
               <div style={{ fontSize: 10.5, color: 'var(--to-muted)', lineHeight: 1.5 }}>
                 {Array.from(counts).map(([tid, n]) => `${n} × ${FITTING_BY_ID[tid]?.name.replace(/ \(.*\)$/, '') ?? tid}`).join(', ')}
               </div>
+              {pts.filter(pt => pt.product).map(pt => <div key={'pp' + pt.id} style={{ fontSize: 10.5, color: 'var(--to-muted)', lineHeight: 1.5 }}>📦 {pt.product!.name} — £{pt.product!.cost.toFixed(2)}{pt.supply === 'client' ? ' (client supplies)' : pt.supply === 'us' ? ' (we supply)' : ''}</div>)}
               {rads.map(r => {
                 const s = p.sizes.get(r.id)
                 return s ? <div key={r.id} style={{ fontSize: 10.5, color: s.short ? '#d97706' : '#0369a1', lineHeight: 1.5 }}>🔥 {s.label}{s.auto ? '' : ' — chosen'}{s.short ? ' — too small for the room' : ''}</div> : null
@@ -206,6 +211,33 @@ export default function PlumbingPointsPanel(p: Props) {
         )}
       </div>
 
+      {(p.boiler.count > 0 || p.boiler.hasSource) && (
+        <div style={box}>
+          <div style={label}>Boiler</div>
+          <div style={{ fontSize: 11.5, color: 'var(--to-text)', lineHeight: 1.5, marginBottom: 6 }}>
+            {p.boiler.count} radiator{p.boiler.count === 1 ? '' : 's'} and towel rail{p.boiler.count === 1 ? '' : 's'} on the plan, about <b>{p.boiler.totalKw.toFixed(1)} kW</b> in all. A combi of about <b>{p.boiler.suggestedKw} kW</b> is a starting point: the heating engineer confirms the size, and hot water demand counts too.
+          </div>
+          {!p.boiler.hasSource && <div style={{ fontSize: 10.5, color: 'var(--to-muted)', marginBottom: 6 }}>Place a Boiler / heat source (under Heating, above) where it goes, so the pipes start there.</div>}
+          {p.boiler.saved && p.boiler.stale && (
+            <div style={{ fontSize: 11.5, color: '#d97706', background: 'rgba(217,119,6,0.12)', border: '1px solid #d97706', borderRadius: 6, padding: '6px 9px', marginBottom: 8, lineHeight: 1.4 }}>
+              ⚠ The radiators on the plan have changed since the boiler was priced. Open it and check the size and the number of radiators.
+            </div>
+          )}
+          <AssemblyItemPanel
+            name="Heating system (boiler)"
+            lengthM={0}
+            measureLabel="On the plan"
+            measureText={`${p.boiler.count} radiators · ${p.boiler.totalKw.toFixed(1)} kW`}
+            saved={p.boiler.saved}
+            open={p.boiler.open}
+            onOpen={p.boiler.onOpen}
+            onClose={p.boiler.onClose}
+          >
+            {p.boiler.calculator}
+          </AssemblyItemPanel>
+        </div>
+      )}
+
       {selected && (
         <div style={{ ...box, borderColor: '#0284c7' }}>
           <div style={label}>Selected fitting</div>
@@ -216,6 +248,30 @@ export default function PlumbingPointsPanel(p: Props) {
             </select>
             <div style={{ fontSize: 11, color: 'var(--to-muted)' }}>In: <b style={{ color: 'var(--to-text)' }}>{p.roomOf(selected) || UNNAMED_ROOM}</b></div>
             <input list="plumb-rooms" value={selected.roomName} onChange={e => p.onUpdatePoint(selected.id, { roomName: e.target.value })} placeholder="Room (used when it is not inside a room)" style={input} />
+            {selected.typeId !== HEAT_SOURCE && (
+              <>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--to-text)' }}>
+                  Supplied by
+                  <select value={selected.supply ?? ''} onChange={e => p.onUpdatePoint(selected.id, { supply: e.target.value === 'us' || e.target.value === 'client' ? e.target.value : undefined })} style={{ ...input, flex: 1 }}>
+                    <option value="">As the room is set (in the calculator)</option>
+                    <option value="us">We supply it</option>
+                    <option value="client">The client supplies it</option>
+                  </select>
+                </label>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button type="button" onClick={() => setPickFor(selected.id)} style={{ padding: '5px 8px', fontSize: 11.5, borderRadius: 5, cursor: 'pointer', border: '1px solid var(--to-border)', background: 'var(--to-bg)', color: 'var(--to-text)', fontFamily: 'inherit' }}>📦 {selected.product ? 'Change product' : 'Choose product'}</button>
+                  {selected.product && (
+                    <>
+                      <span style={{ fontSize: 11.5, color: 'var(--to-text)', flex: 1, minWidth: 90 }}>{selected.product.name}</span>
+                      <span style={{ fontSize: 11, color: 'var(--to-muted)' }}>£</span>
+                      <input type="number" min={0} step={1} value={selected.product.cost} onChange={e => p.onUpdatePoint(selected.id, { product: { ...selected.product!, cost: Math.max(0, +e.target.value || 0) } })} style={{ ...input, width: 70 }} />
+                      <button type="button" onClick={() => p.onUpdatePoint(selected.id, { product: undefined })} title="Take the product off" style={{ border: 'none', background: 'transparent', color: '#c0392b', cursor: 'pointer', fontSize: 13 }}>✕</button>
+                    </>
+                  )}
+                </div>
+                <div style={{ fontSize: 10.5, color: 'var(--to-muted)', lineHeight: 1.4 }}>The product and its price are used when we supply it; if the client supplies it, only the fitting is priced.</div>
+              </>
+            )}
             {selected.typeId === 'towel-rail' && (
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--to-text)' }}>
                 Output (watts)
@@ -255,6 +311,10 @@ export default function PlumbingPointsPanel(p: Props) {
         </div>
       )}
 
+      {pickFor && (() => { const q = p.points.find(x => x.id === pickFor); return q ? (
+        <PlumbProductPicker category={productCategoryFor(q.typeId)} what={(FITTING_BY_ID[q.typeId]?.name ?? 'item').replace(/ (.*)$/, '').toLowerCase()}
+          onClose={() => setPickFor(null)} onPick={pr => { p.onUpdatePoint(q.id, { product: { id: pr.id, name: pr.name, cost: pr.cost }, supply: q.supply ?? 'us' }); setPickFor(null) }} />
+      ) : null })()}
       {p.saved && p.stale && (
         <div style={{ fontSize: 11.5, color: '#d97706', background: 'rgba(217,119,6,0.12)', border: '1px solid #d97706', borderRadius: 6, padding: '6px 9px', marginBottom: 8, lineHeight: 1.4 }}>
           ⚠ The fittings on the plan have changed since this was priced. Open the calculator and press Save &amp; Price again.

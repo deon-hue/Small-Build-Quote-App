@@ -14,6 +14,10 @@ export interface PlumbPoint {
   /** a radiator: its type (K1, K2) and height; widthMm is its width when the size was chosen by hand, and missing when it is sized for the room automatically */
   /** a heated towel rail: its output in watts (500 if not given), which is the heat its pipes carry to it */
   watts?: number
+  /** who supplies it: missing = as the room is set in the calculator */
+  supply?: 'us' | 'client'
+  /** the product chosen from the Back Office product list, and our cost for it (used when we supply it) */
+  product?: { id?: string; name: string; cost: number }
   rad?: { typeId: string; heightMm: number; widthMm?: number; /** the width it was last sized to for its room (kept so a radiator on another level still has a size) */ autoW?: number }
 }
 
@@ -39,14 +43,26 @@ export const PLUMB_SHORT: Record<string, string> = {
 /** The kinds of fitting that are heating (shown in blue-red on the plan): the radiators and towel rails. */
 export const isHeating = (typeId: string) => typeId === 'radiator' || typeId === 'towel-rail'
 
+/** The Back Office product category each kind of fitting is usually filed under (the picker shows these first). */
+export function productCategoryFor(typeId: string): string {
+  if (typeId === 'heat-source') return 'Boilers & Heating'
+  if (typeId === 'radiator' || typeId === 'towel-rail') return 'Radiators & Towel Rails'
+  if (['kitchen-sink', 'utility-sink', 'washing-machine', 'dishwasher', 'fridge-supply', 'softener'].includes(typeId)) return 'Kitchen Sinks & Appliances'
+  return 'Bathroom Suites & Sanitaryware'
+}
+
 export const UNNAMED_ROOM = 'No room'
 /** the output of a heated towel rail when none is typed: a sample */
 export const TOWEL_RAIL_W = 500
 const roomKey = (name: string) => (name.trim() || UNNAMED_ROOM)
 
 export interface PlacedRadiator { pointId: string; label: string; watts: number; widthMm: number; heightMm: number; typeId: string }
+/** One fitting placed on the plan, as the calculator prices it: who supplies it and which product, when those were chosen */
+export interface PlacedItem { id: string; typeId: string; supply?: 'us' | 'client'; name?: string; cost?: number }
 export interface PlacedRoom {
   name: string
+  /** every fitting placed in the room, one by one */
+  items: PlacedItem[]
   counts: Record<string, number>
   /** each radiator in the room with its size, for pricing the ones we supply by size */
   radiators: PlacedRadiator[]
@@ -64,8 +80,9 @@ export function placedRoomsFromPoints(points: PlumbPoint[], size: (p: PlumbPoint
     if (p.typeId === HEAT_SOURCE) continue
     const name = roomKey(p.roomName)
     let r = rooms.find(x => x.name.toLowerCase() === name.toLowerCase())
-    if (!r) { r = { name, counts: {}, radiators: [], towelRails: [] }; rooms.push(r) }
+    if (!r) { r = { name, items: [], counts: {}, radiators: [], towelRails: [] }; rooms.push(r) }
     r.counts[p.typeId] = (r.counts[p.typeId] ?? 0) + 1
+    r.items.push({ id: p.id, typeId: p.typeId, ...(p.supply ? { supply: p.supply } : {}), ...(p.product ? { name: p.product.name, cost: p.product.cost } : {}) })
     if (p.typeId === 'towel-rail') r.towelRails.push({ pointId: p.id, watts: p.watts ?? TOWEL_RAIL_W })
     if (p.typeId === 'radiator') {
       const s = size(p)

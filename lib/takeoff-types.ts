@@ -278,6 +278,10 @@ export interface TakeoffItem {
   plumbAge?: BuildingAge
   /** the plan's fittings (as room counts and radiator sizes) when the calculator was last saved, to say when the plan has changed since */
   plumbPricedKey?: string
+  /** the boiler / heating system: one item holding the Heating Plant calculator for the boiler marker, priced as its own line */
+  boilerSummary?: boolean
+  /** the radiators and suggested boiler size when the heating system was last priced, to say when the plan has changed since */
+  boilerPricedKey?: string
 
   // Windows & Doors: the one "Windows and doors" item holds every door and window placed on a drawn wall (so they save with the project) and what the Windows & Doors calculator was last saved as.
   wdSummary?: boolean

@@ -7,8 +7,9 @@
  * not here. Counts and prices only: the boiler size is the heating engineer's to confirm. The engine is lib/heating-units.ts.
  */
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import NumInput from '@/components/NumInput'
+import PlumbProductPicker from '@/components/PlumbProductPicker'
 import { useCalcState } from '@/components/calc-state'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
 import {
@@ -36,6 +37,9 @@ export default function AssemblyHeatingDemo({ onClose, onSave, labourTrades = []
   const [location, setLocation] = useCalcState(ID, 'location', '')
   const [qty, setQty] = useCalcState(ID, 'qty', 1)
   const [boilerKw, setBoilerKw] = useCalcState(ID, 'boilerKw', 28)
+  const [boilerSupply, setBoilerSupply] = useCalcState<'us' | 'client'>(ID, 'boilerSupply', 'us')
+  const [boilerProduct, setBoilerProduct] = useCalcState<{ id?: string; name: string; cost: number } | null>(ID, 'boilerProduct', null)
+  const [pickBoiler, setPickBoiler] = useState(false)
   const [fit, setFit] = useCalcState<FitMode>(ID, 'fit', 'replace')
   const [flue, setFlue] = useCalcState<FlueKind>(ID, 'flue', 'existing')
   const [coreDrill, setCoreDrill] = useCalcState(ID, 'coreDrill', false)
@@ -57,9 +61,9 @@ export default function AssemblyHeatingDemo({ onClose, onSave, labourTrades = []
   const noSidesLayers = useMemo(() => new Set<string>(), [])
 
   const result = useMemo((): { ok: true; r: HeatingResult } | { ok: false; error: string } => {
-    try { return { ok: true, r: calculateHeating({ source: 'combi', boilerKw, fit, flue, coreDrill, plumeKit, controls, magneticFilter, flush, radiators, removeOld, commission, condensatePump, gasPipeLm, heatingPipeLm, condensateLm }) } }
+    try { return { ok: true, r: calculateHeating({ source: 'combi', boilerKw, fit, flue, coreDrill, plumeKit, controls, magneticFilter, flush, radiators, removeOld, commission, condensatePump, gasPipeLm, heatingPipeLm, condensateLm, boilerSupply, ...(boilerProduct ? { boilerProduct: { name: boilerProduct.name, cost: boilerProduct.cost } } : {}) }) } }
     catch (e: any) { return { ok: false, error: e.message as string } }
-  }, [boilerKw, fit, flue, coreDrill, plumeKit, controls, magneticFilter, flush, radiators, removeOld, commission, condensatePump, gasPipeLm, heatingPipeLm, condensateLm])
+  }, [boilerKw, fit, flue, coreDrill, plumeKit, controls, magneticFilter, flush, radiators, removeOld, commission, condensatePump, gasPipeLm, heatingPipeLm, condensateLm, boilerSupply, boilerProduct])
   const r = result.ok ? result.r : null
 
   const layers: AssemblyLayerDef[] = useMemo(() => (r?.lines ?? []).map(l => ({
@@ -103,7 +107,7 @@ export default function AssemblyHeatingDemo({ onClose, onSave, labourTrades = []
   const totalCost = costSubtotal + profitAmount
 
   // The customer's description follows the settings until it's edited by hand
-  const descInput: HeatingDescriptionInput | null = r ? { boilerLabel: r.boilerLabel, fit, flue, coreDrill, plumeKit, controls, magneticFilter, flush, removeOld, commission, condensatePump, gasPipeLm, heatingPipeLm, condensateLm } : null
+  const descInput: HeatingDescriptionInput | null = r ? { boilerLabel: r.boilerLabel, boilerIsProduct: !!boilerProduct, clientSupplied: boilerSupply === 'client', fit, flue, coreDrill, plumeKit, controls, magneticFilter, flush, removeOld, commission, condensatePump, gasPipeLm, heatingPipeLm, condensateLm } : null
   const [descriptionOverride, setDescriptionOverride] = useCalcState<string | null>(ID, 'descriptionOverride', null)
   const [detailOverride, setDetailOverride] = useCalcState<string | null>(ID, 'detailOverride', null)
   const description = descriptionOverride ?? (descInput ? describeHeatingShort(descInput) : '')
@@ -192,6 +196,26 @@ export default function AssemblyHeatingDemo({ onClose, onSave, labourTrades = []
               <select value={boilerKw} onChange={e => setBoilerKw(+e.target.value)} style={propInput}>
                 {BOILER_SIZES.map(b => <option key={b.kw} value={b.kw}>{b.label} — £{b.price}</option>)}
               </select>
+            </PropRow>
+            <PropRow label="Supplied by">
+              <select value={boilerSupply} onChange={e => setBoilerSupply(e.target.value as 'us' | 'client')} style={propInput}>
+                <option value="us">We supply the boiler</option>
+                <option value="client">The client supplies it (we fit it)</option>
+              </select>
+            </PropRow>
+            <PropRow label="The actual boiler">
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                <button type="button" onClick={() => setPickBoiler(true)} style={{ fontSize: 12, padding: '4px 9px', borderRadius: 5, cursor: 'pointer', border: '1px solid #bae6fd', background: '#fff', color: '#0369a1' }}>📦 {boilerProduct ? 'Change boiler' : 'Choose from my product list'}</button>
+                {boilerProduct && (
+                  <>
+                    <span style={{ fontSize: 12, color: '#334155' }}>{boilerProduct.name}</span>
+                    <span style={{ fontSize: 11, color: '#94a3b8' }}>£</span>
+                    <NumInput type="number" min={0} step={10} value={boilerProduct.cost} onChange={e => setBoilerProduct({ ...boilerProduct, cost: Math.max(0, +e.target.value || 0) })} style={{ fontSize: 12, padding: '3px 5px', border: '1px solid #e2e8f0', borderRadius: 4, width: 78, textAlign: 'right' }} />
+                    <button type="button" onClick={() => setBoilerProduct(null)} title="Go back to the sample price for the size" style={{ border: 'none', background: 'none', color: '#c0392b', cursor: 'pointer' }}>✕</button>
+                  </>
+                )}
+              </div>
+              {pickBoiler && <PlumbProductPicker category="Boilers & Heating" what="boiler" onClose={() => setPickBoiler(false)} onPick={pr => { setBoilerProduct({ id: pr.id, name: pr.name, cost: pr.cost }); setPickBoiler(false) }} />}
             </PropRow>
             <PropRow label="Where it goes">
               <select value={fit} onChange={e => setFit(e.target.value as FitMode)} style={propInput}>

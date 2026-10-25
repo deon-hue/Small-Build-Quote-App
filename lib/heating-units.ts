@@ -65,6 +65,10 @@ export interface HeatingInput {
   gasPipeLm: number
   heatingPipeLm: number
   condensateLm: number
+  /** who buys the boiler: 'us' (the default) prices it, 'client' leaves it out and prices only the fitting */
+  boilerSupply?: 'us' | 'client'
+  /** the boiler chosen from the product list: its name and our cost replace the sample price for the size */
+  boilerProduct?: { name: string; cost: number }
 }
 
 export interface HeatingLine { id: string; name: string; category: 'subcontractors' | 'materials'; unit: string; unitCost: number; qty: number }
@@ -84,7 +88,10 @@ export function calculateHeating(i: HeatingInput, rates: Record<string, number> 
   const add = (id: string, name: string, category: HeatingLine['category'], unit: string, base: number, qty: number) => { if (qty > 0) L.push({ id, name, category, unit, unitCost: money(rate(id, base)), qty }) }
   const warnings: string[] = ['The work must be done, tested and commissioned by a Gas Safe registered engineer. The boiler size comes from a heat loss calculation: the engineer confirms it.']
 
-  add('boiler', `${size.label} gas boiler (supplied)`, 'materials', 'nr', size.price, 1)
+  if ((i.boilerSupply ?? 'us') === 'us') {
+    if (i.boilerProduct && i.boilerProduct.cost > 0) add('boiler', `${i.boilerProduct.name} (supplied)`, 'materials', 'nr', i.boilerProduct.cost, 1)
+    else add('boiler', `${size.label} gas boiler (supplied)`, 'materials', 'nr', size.price, 1)
+  }
   add('fit', `Fit the boiler: ${i.fit === 'replace' ? 'replace the existing boiler' : 'new position'} (Gas Safe engineer, connect, test, fill)`, 'subcontractors', 'item', FIT_RATE[i.fit], 1)
   if (i.flue !== 'existing') add('flue', `${FLUE_LABEL[i.flue]}: flue kit`, 'materials', 'nr', FLUE_KIT[i.flue], 1)
   if (i.coreDrill) add('core', 'Core drill the wall and make good', 'subcontractors', 'item', CORE_DRILL, 1)
@@ -106,7 +113,7 @@ export function calculateHeating(i: HeatingInput, rates: Record<string, number> 
   if (i.fit === 'relocate' && i.flue === 'existing') warnings.push('A boiler in a new position needs its own flue: choose horizontal or vertical.')
   if (i.flue === 'horizontal' && !i.coreDrill && i.fit === 'relocate') warnings.push('A new horizontal flue needs a hole through the wall: tick core drilling.')
   warnings.push('The electrical connection (a fused spur), the radiators and towel rails (priced in the Plumbing Installation rooms) and any new cylinder or heat pump are not in this price.')
-  return { lines: L, warnings, boilerLabel: size.label }
+  return { lines: L, warnings, boilerLabel: i.boilerProduct?.name.trim() || size.label }
 }
 
 export function heatingSubtotal(lines: HeatingLine[]): number {

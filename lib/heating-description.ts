@@ -17,6 +17,10 @@ export interface HeatingDescriptionInput {
   gasPipeLm: number
   heatingPipeLm: number
   condensateLm: number
+  /** the boiler label is a product name from the product list (it already says what it is), not a size */
+  boilerIsProduct?: boolean
+  /** the client buys the boiler: we fit it */
+  clientSupplied?: boolean
 }
 
 export function describeHeatingShort(i: HeatingDescriptionInput): string {
@@ -25,13 +29,13 @@ export function describeHeatingShort(i: HeatingDescriptionInput): string {
   if (i.flush) parts.push('system cleaned')
   if (i.commission) parts.push('commissioned')
   const tail = parts.length === 0 ? '' : parts.length === 1 ? `, ${parts[0]}` : `, ${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`
-  return `${i.fit === 'replace' ? 'Replace the boiler with a' : 'Install a'} ${i.boilerLabel} gas boiler${i.fit === 'relocate' ? ' in a new position' : ''}${tail}.`
+  return `${i.fit === 'replace' ? 'Replace the boiler with a' : 'Install a'} ${i.boilerLabel}${i.boilerIsProduct ? '' : ' gas boiler'}${i.clientSupplied ? ' (supplied by the client)' : ''}${i.fit === 'relocate' ? ' in a new position' : ''}${tail}.`
 }
 
 export function describeHeating(i: HeatingDescriptionInput): string {
   const lines: string[] = []
   if (i.removeOld) lines.push('Drain down the system and remove the old boiler, taking it away from site.')
-  lines.push(`Supply and fit a ${i.boilerLabel} gas boiler${i.fit === 'relocate' ? ' in its new position' : ' in place of the old one'}, connected to the gas, water and heating pipework.`)
+  lines.push(`${i.clientSupplied ? 'Fit the client-supplied' : 'Supply and fit a'} ${i.boilerLabel}${i.boilerIsProduct ? '' : ' gas boiler'}${i.fit === 'relocate' ? ' in its new position' : ' in place of the old one'}, connected to the gas, water and heating pipework.`)
   if (i.fit === 'relocate' || i.gasPipeLm > 0 || i.heatingPipeLm > 0) {
     const parts: string[] = []
     if (i.gasPipeLm > 0) parts.push(`${i.gasPipeLm}m of gas pipework`)
