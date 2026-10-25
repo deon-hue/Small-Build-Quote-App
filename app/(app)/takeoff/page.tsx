@@ -5840,6 +5840,9 @@ export default function TakeoffPage() {
     return (
       <div style={{ fontSize: 13, overflowY: 'auto', height: '100%' }}>
 
+        {/* ── Not estimated: a drawing only (also on each schedule row) ── */}
+        {item.elementId && <div style={{ padding: '10px 14px 0' }}>{renderEstimateField(item)}</div>}
+
         {/* ── Top metrics card (foundation line) ── */}
         {isFoundationLine && (
           <div style={{ padding: '10px 14px 0' }}>
