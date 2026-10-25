@@ -63,7 +63,7 @@ import ClientFilePicker from '@/components/ClientFilePicker'
 import { planResize, applyResize } from '@/lib/calc-size'
 import { defaultToolbars, mergeToolbars, toolbarsOn, setToolbarDock, renameToolbar, setToolbarLabels, setToolbarVisible, moveToolbar, allowedDocks, isSideDock, DOCK_LABEL, DEFAULT_TOOLBARS, type TbId, type TbDock, type TbPref } from '@/lib/takeoff-toolbars'
 import { alignPointsToLower } from '@/lib/level-align'
-import { mitreCuts, mergeCollinearSides, wallDrawing, wallBand, offsetPolyline, totalMm, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, specFromMakeupLayers, defaultWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
+import { mitreCuts, mergeCollinearSides, wallDrawing, wallBand, offsetPolyline, totalMm, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, specFromMakeupLayers, defaultWallSpec, constructionWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
 import { sidesOf, splitOpenings } from '@/lib/wall-split'
 import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
 import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, segmentMiddle, flippedSwing, pointAtDist, type PlacedOpening, type WallBand } from '@/lib/wall-openings'
@@ -4471,11 +4471,16 @@ export default function TakeoffPage() {
     let spec = null as ReturnType<typeof defaultWallSpec>
     if (snap?.id === 'ew-cav-full' || snap?.id === 'ew-cav-partial') { const v = vals.AssemblyCavityWallDemo; if (v) spec = cavityWallSpec(v, snap.id === 'ew-cav-full') }
     else if (snap?.id === 'ew-blockwork-215') { const v = vals.AssemblySolidBlockWallDemo; if (v) spec = solidBlockSpec(v) }
-    const boSub = item.taskSubphaseId ? boSubPhases.find(sp => sp.id === item.taskSubphaseId) : undefined
+    // a partition with no Sub-Phase picked is the first one in the list, as its Properties and calculator show it (it used to be drawn as a plain line until one was picked)
+    const intSubs = internal ? getAllSubphasesForPhase('Internal Walls & Partitions') : []
+    const intSel = internal ? (intSubs.find(s => s.id === item.taskSubphaseId) ?? intSubs[0]) : undefined
+    const boSub = internal ? (intSel ? boSubPhases.find(sp => sp.id === intSel.id) : undefined) : (item.taskSubphaseId ? boSubPhases.find(sp => sp.id === item.taskSubphaseId) : undefined)
     const makeupId = item.floorMakeupId ?? (external && !item.taskSubphaseId ? allWallMakeups[0]?.id : undefined)   // an external wall with no type picked shows the first type, as the Properties panel does
     const canonical = boSub?.canonical_id ?? (makeupId ? WALL_MAKEUP_TO_SUBPHASE_CANONICAL[makeupId] : undefined)
     if (!spec && external && makeupId) { const mk = allWallMakeups.find(m => m.id === makeupId); if (mk) spec = specFromMakeupLayers(mk.layers) }
     if (!spec) spec = defaultWallSpec(canonical)
+    // a partition with no calculator behind its sub-phase is drawn from its Construction type (metal stud 70mm to start, as its Properties show)
+    if (!spec && internal) spec = constructionWallSpec(item.wallConstructionType)
     // which part of the wall the line you drew is (an outside wall: its outside face unless said otherwise; a partition: its middle; 'Left'/'Right' of the way it was drawn for a partition)
     const al = item.lineAlign
     const ref: WallRef = external ? (al === 'centre' ? 'centre' : al === 'inside' ? 'inner' : 'outer') : (al === 'outside' ? 'outer' : al === 'inside' ? 'inner' : 'centre')

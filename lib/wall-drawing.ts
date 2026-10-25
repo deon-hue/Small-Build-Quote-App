@@ -110,6 +110,21 @@ export function defaultWallSpec(canonicalId: string | undefined): WallSpec | nul
   }
 }
 
+/** What a partition of the older "Construction type" list (block, brick, stud) is drawn as: the same make-ups as the partition calculators, with the board on each face. Null for an existing wall or drylining: there is no new wall to draw. */
+export function constructionWallSpec(type: string | undefined): WallSpec | null {
+  const board = (mm: number): WallLayer => ({ kind: 'board', mm })
+  switch (type ?? 'stud_metal_70') {
+    case 'block_100': return defaultWallSpec('iw-block-masonry')
+    case 'block_140': return make([board(13), { kind: 'block', mm: 140 }, board(13)])
+    case 'brick_half': return make([board(13), { kind: 'brick', mm: 102.5 }, board(13)])
+    case 'brick_full': return make([board(13), { kind: 'brick', mm: 215 }, board(13)])
+    case 'stud_metal_70': return defaultWallSpec('iw-metal-stud')
+    case 'stud_metal_100': return make([board(12.5), { kind: 'metal', mm: 100 }, board(12.5)])
+    case 'stud_timber': return make([board(12.5), { kind: 'timber', mm: 89 }, board(12.5)])
+    default: return null
+  }
+}
+
 // ── Geometry ─────────────────────────────────────────────────────────────────────────────────────────────────────
 // A positive offset is to the VISUAL RIGHT of the direction of travel on screen (y runs down): for a house outline drawn clockwise the inside is on the right, which is where an external wall builds to.
 
