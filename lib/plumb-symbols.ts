@@ -1,8 +1,8 @@
 // Plan symbols for the plumbing fittings placed on a Take-off drawing: a wash basin looks like a wash basin, a bath like a bath. Each is a few simple shapes in plan view, drawn at the size of the real fitting (1 unit = 10mm,
 // the middle of the fitting at 0,0, its BACK (the side against the wall) at the top, -y) so the screen only has to scale them to the plan. Pure (no runtime imports), so it can be tested with plain Node.
 
-/** How a shape is painted: the fitting itself, its inside (bowl, tub), the water points (taps, wastes), the heating parts, and thin lines. */
-export type SymRole = 'body' | 'inner' | 'water' | 'waterDot' | 'heat' | 'heatDot' | 'line' | 'faint'
+/** How a shape is painted: the fitting itself, its inside (bowl, tub), the water points (taps, wastes), the heating parts, thin lines, and the two that take a colour chosen by the screen (a filled part and a line) for the electrical symbols. */
+export type SymRole = 'body' | 'inner' | 'water' | 'waterDot' | 'heat' | 'heatDot' | 'line' | 'faint' | 'accent' | 'accentLine'
 
 export type SymShape =
   | { k: 'rect'; x: number; y: number; w: number; h: number; r?: number; role: SymRole }
