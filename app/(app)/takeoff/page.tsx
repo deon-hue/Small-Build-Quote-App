@@ -3479,12 +3479,15 @@ export default function TakeoffPage() {
         else deleteSelected()
       }
       if (e.key === 'Escape') {
+        // a menu that is open just closes (it handles its own Esc); otherwise Esc cancels what is being drawn AND puts the cursor back on Select, so a finished line never starts the next one
+        const menuOpen = !!openMenu || !!tbMenu || levelMenuOpen || copyOpen
         setSelectedOpeningId(null)
         setDrawPoints([])
         setIsDrawing(false)
         setMeasureDone(null)
         setTyped('')
         if (calibDrawing) { setCalibDrawing(false); setCalibPts([]) }
+        if (!menuOpen && !inField && tool !== 'select') { setTool('select'); showToast('Back to Select') }
       }
     }
     function onKeyUp(e: KeyboardEvent) {
