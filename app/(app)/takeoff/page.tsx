@@ -1306,6 +1306,21 @@ export default function TakeoffPage() {
       }
     }
 
+    // A floor takes the Sub-Phase shown in the panel before it is drawn (the one picked, or the first in the list, which is what the dropdown shows): its Build-Up Type, and its calculator when it has one.
+    // (It used to arrive as a concrete slab whatever the panel showed, so a block and beam floor had to be changed again after drawing.)
+    if (item.phase === 'Floors & Screeds' && el.type !== 'line' && !floorMakeupId) {
+      const subs = getAllSubphasesForPhase('Floors & Screeds')
+      const pick = subs.find(sp => sp.id === selectedTaskSubphaseId) ?? subs[0]
+      if (pick) {
+        const bo = boSubPhases.find(b => b.id === pick.id)
+        const canonical = bo?.canonical_id ?? undefined
+        const pairedId = canonical ? Object.keys(WALL_MAKEUP_TO_SUBPHASE_CANONICAL).find(k => WALL_MAKEUP_TO_SUBPHASE_CANONICAL[k] === canonical) : undefined
+        const makeup = (pairedId ? FLOOR_MAKEUPS.find(m => m.id === pairedId) : undefined) ?? FLOOR_MAKEUPS.find(m => m.name.trim().toLowerCase() === pick.name.trim().toLowerCase())
+        if (makeup) { item.floorMakeupId = makeup.id; item.spec = makeup.clientDescription }
+        if (bo && canonical && FLOOR_SHAPE_CALCS.has(canonical)) { item.taskSubphaseId = bo.id; item.subPhase = bo.name }
+      }
+    }
+
     // A line drawn in Drainage & Services is a drain run: it starts as the Underground Drainage (by run) calculator (its length is the first run), unless another sub-phase was picked first
     if (item.phase === 'Drainage & Services' && el.type === 'line' && !item.taskSubphaseId && !taskSubphaseId) {
       const drainPhase = boPhases.find(p => p.name === 'Drainage & Services')
