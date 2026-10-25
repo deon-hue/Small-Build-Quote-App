@@ -46,6 +46,7 @@ import { sharedWallRoomsFrom } from '@/lib/tiling-share'
 import ClientProjectModal from './components/ClientProjectModal'
 import ClientFilePicker from '@/components/ClientFilePicker'
 import { planResize, applyResize } from '@/lib/calc-size'
+import { defaultToolbars, mergeToolbars, toolbarsOn, setToolbarDock, renameToolbar, setToolbarLabels, setToolbarVisible, moveToolbar, allowedDocks, isSideDock, DOCK_LABEL, DEFAULT_TOOLBARS, type TbId, type TbDock, type TbPref } from '@/lib/takeoff-toolbars'
 import { wallDrawing, wallBand, offsetPolyline, totalMm, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, specFromMakeupLayers, defaultWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
 import { sidesOf, splitOpenings } from '@/lib/wall-split'
 import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
@@ -870,6 +871,23 @@ export default function TakeoffPage() {
   // the toolbar's drop-down menus (one open at a time; a click anywhere else closes it) and whether the side panel (schedule / properties) is shown
   const [openMenu, setOpenMenu] = useState<null | 'phase' | 'more' | 'file' | 'view' | 'clear'>(null)
   const [panelOpen, setPanelOpen] = useState(true)
+  // the toolbars: where each is docked, its name, text or icons, order and whether it shows (kept per browser, see lib/takeoff-toolbars.ts), and the open right-click menu
+  const [toolbars, setToolbars] = useState<TbPref[]>(() => defaultToolbars())
+  const [tbMenu, setTbMenu] = useState<{ id: TbId | null; x: number; y: number } | null>(null)
+  const tbLoaded = useRef(false)
+  useEffect(() => { try { const r = JSON.parse(localStorage.getItem('sbc_takeoff_toolbars') ?? 'null'); if (r) setToolbars(mergeToolbars(r)) } catch {} }, [])
+  useEffect(() => {
+    if (!tbLoaded.current) { tbLoaded.current = true; return }
+    try { localStorage.setItem('sbc_takeoff_toolbars', JSON.stringify(toolbars)) } catch {}
+  }, [toolbars])
+  useEffect(() => {
+    if (!tbMenu) return
+    const close = (e: MouseEvent) => { if (!(e.target as Element | null)?.closest?.('[data-tbmenu]')) setTbMenu(null) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setTbMenu(null) }
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', esc) }
+  }, [tbMenu])
   useEffect(() => {
     if (!openMenu) return
     const close = (e: MouseEvent) => { if (!(e.target as Element | null)?.closest?.('[data-menu]')) setOpenMenu(null) }
@@ -6467,335 +6485,17 @@ export default function TakeoffPage() {
     if (t === 'join') { setJoinFirst(null); showToast('Join Corner: click one wall near the corner, then the other') }
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
-  return (
-    <div style={{
-      ...TV as React.CSSProperties,
-      margin: '-26px -32px',
-      height: 'calc(100dvh - 56px)',
-      display: 'flex',
-      flexDirection: 'column',
-      background: 'var(--to-bg)',
-      color: 'var(--to-text)',
-      fontFamily: 'system-ui, sans-serif',
-      overflow: 'hidden',
-    }}>
-
-      {/* ── Top bar, three thin rows: the job and the plan; the phase and the tools (icons, name on hover); the drawing aids ───────── */}
-      <style>{`
-        .to-ib { position: relative; }
-        .to-ib:hover { border-color: var(--to-btn-bd) !important; }
-        .to-ib[data-tip]:hover::after { content: attr(data-tip); position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); white-space: nowrap; background: #1b1f23; color: #fff; font-size: 11px; font-weight: 500; padding: 3px 8px; border-radius: 5px; z-index: 60; pointer-events: none; font-family: system-ui, sans-serif; }
-        .to-ib.tip-r[data-tip]:hover::after { left: auto; right: 0; transform: none; }
-        .to-ib.tip-l[data-tip]:hover::after { left: 0; transform: none; }
-      `}</style>
-      <div style={{ background: 'var(--to-panel)', borderBottom: '1px solid var(--to-border)', flexShrink: 0 }}>
-        {/* Row 1: the job, the plan, files */}
-        <div style={{ minHeight: 40, display: 'flex', alignItems: 'center', flexWrap: 'wrap', padding: '3px 10px', gap: 6 }}>
-          {editingName ? (
-            <input
-              autoFocus
-              style={{ ...inputStyle, width: 180, height: 28, fontSize: 13, fontWeight: 700 }}
-              value={project.name}
-              onChange={e => setProject(p => ({ ...p, name: e.target.value }))}
-              onBlur={() => setEditingName(false)}
-              onKeyDown={e => e.key === 'Enter' && setEditingName(false)}
-            />
-          ) : (
-            <div
-              onClick={() => setEditingName(true)}
-              style={{ fontWeight: 700, fontSize: 14, color: 'var(--to-text)', cursor: 'text', minWidth: 100,
-                padding: '3px 6px', borderRadius: 4, border: '1px solid transparent' }}
-              title="Click to edit project name"
-            >
-              📐 {project.name || <span style={{ color: 'var(--to-muted)', fontWeight: 500 }}>Name this take-off…</span>}
-            </div>
-          )}
-
-          <button style={btnStyle} onClick={openTakeoffList} title="Your saved take-offs: open one to carry on, or start a new one">
-            📁 My Take-offs
-          </button>
-          <button style={{ ...btnStyle, background: '#c0392b33', borderColor: '#c0392b', color: '#e57373', whiteSpace: 'nowrap' }}
-            onClick={handleClose} title="Save this take-off under its name in My Take-offs and clear the screen for a fresh one">
-            ✕ Close
-          </button>
-
-          <div style={{ width: 1, height: 24, background: 'var(--to-border)', margin: '0 2px' }} />
-
-          <input
-            style={{ ...inputStyle, width: 170, height: 28, fontSize: 12 }}
-            placeholder="Address / project ref"
-            value={project.address}
-            onChange={e => setProject(p => ({ ...p, address: e.target.value }))}
-          />
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 2px' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--to-text)', whiteSpace: 'nowrap', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}
-              title={[project.client?.name, project.siteAddress ?? project.client?.address, project.projectName].filter(Boolean).join(' · ')}>
-              {project.client?.name ?? 'No client assigned'}
-            </span>
-            <button
-              style={{ ...btnStyle, fontSize: 11, padding: '4px 8px', whiteSpace: 'nowrap' }}
-              onClick={() => setShowClientModal(true)}
-              title="Edit client and project details"
-            >
-              Edit Client
-            </button>
-          </div>
-
-          <div style={{ flex: 1 }} />
-
-          {/* Plan: the picture and its scale */}
-          <input type="file" accept="image/*,application/pdf,.pdf" ref={fileInputRef} style={{ display: 'none' }} onChange={handleImageLoad} />
-          <button style={btnStyle} onClick={() => setPlanChooserOpen(true)} disabled={pdfLoading} title="Add a plan from this computer or from a customer's files">
-            {pdfLoading ? '⏳ Loading…' : (project.sheets?.length ? '🖼 Add Plan' : '🖼 Load Plan')}
-          </button>
-          <select
-            style={{ ...inputStyle, width: 112, height: 28 }}
-            value={project.calibration.label ?? ''}
-            onChange={e => {
-              if (e.target.value === 'custom') { setShowCalib(true); return }
-              { const d = denomFromLabel(e.target.value); if (d) applyScaleDenom(d) }
-            }}
-            title="Scale the plan was printed at. The paper size is used to work out real distances: check it with the paper button next to this, or use Calibrate with a known length."
-          >
-            {SCALE_DENOMS.map(d => <option key={d} value={scaleLabel(d)}>{scaleLabel(d)}</option>)}
-            {project.calibration.label && !SCALE_DENOMS.some(d => scaleLabel(d) === project.calibration.label) && (
-              <option value={project.calibration.label}>{project.calibration.label}</option>
-            )}
-            <option value="custom">Custom…</option>
-          </select>
-          <button style={{ ...btnStyle, padding: '4px 8px', fontSize: 11 }} disabled={!canvasImgSize}
-            onClick={() => { setPendingDenom(null); setShowPaperModal(true) }}
-            title="The paper size this plan is printed on. The scale presets need it to measure correctly.">
-            📄 {paperInfoForActiveSheet()?.paper || 'Paper?'}
-          </button>
-          <button style={{ ...btnStyle, padding: '4px 8px', fontSize: 11 }} onClick={() => setShowCalib(true)} title="Calibrate the scale from a length you know on the drawing">
-            Calibrate
-          </button>
-
-          <div style={{ width: 1, height: 24, background: 'var(--to-border)', margin: '0 2px' }} />
-
-          {/* File menu */}
-          <input type="file" accept=".json" ref={importJsonRef} style={{ display: 'none' }} onChange={handleImportJson} />
-          <div data-menu style={{ position: 'relative' }}>
-            <button style={btnStyle} onClick={() => setOpenMenu(m => (m === 'file' ? null : 'file'))} title="Open a backup, or download this take-off">File ▾</button>
-            {openMenu === 'file' && (
-              <div style={{ ...menuBox, right: 0, left: 'auto', width: 250 }}>
-                <button style={menuItem} onClick={() => { setOpenMenu(null); importJsonRef.current?.click() }}>📂 Open a backup file (JSON)</button>
-                <button style={menuItem} onClick={() => { setOpenMenu(null); exportJSON(project) }}>💾 Download a backup (JSON)</button>
-                <button style={menuItem} onClick={() => { setOpenMenu(null); exportCSV(project) }}>📊 Download the schedule (CSV)</button>
-              </div>
-            )}
-          </div>
-
-          <button className="to-ib tip-r" data-tip={darkMode ? 'Switch to the light theme' : 'Switch to the dark theme'} aria-label="Switch theme" onClick={toggleTheme}
-            style={{ ...ibStyle(false), color: 'var(--to-accent)' }}>
-            {darkMode ? '☀' : '◑'}
-          </button>
-        </div>
-
-        {/* Row 2: the phase, then the drawing tools (icons: hover for the name) */}
-        <div style={{ minHeight: 42, display: 'flex', alignItems: 'center', flexWrap: 'wrap', padding: '4px 10px', gap: 4, borderTop: '1px solid var(--to-border)' }}>
-          <div data-menu style={{ position: 'relative' }}>
-            <button style={{ ...btnStyle, height: 30, minWidth: 150, gap: 7, justifyContent: 'space-between' }} onClick={() => setOpenMenu(m => (m === 'phase' ? null : 'phase'))} title="The phase you are drawing in: pick another from the list">
-              <span style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
-                <span style={{ width: 10, height: 10, borderRadius: 2, background: PHASE_COLORS[activePhase], flexShrink: 0 }} />
-                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 150 }}>{shortPhase(activePhase)}</span>
-              </span>
-              <span style={{ fontSize: 10 }}>▾</span>
-            </button>
-            {openMenu === 'phase' && (
-              <div style={{ ...menuBox, width: 250, maxHeight: 'min(80vh, 560px)', overflowY: 'auto' }}>
-                {livePhaseNames.map(ph => (
-                  <button key={ph} style={{ ...menuItem, background: activePhase === ph ? 'var(--to-hover)' : 'none', fontWeight: activePhase === ph ? 700 : 400 }}
-                    onClick={() => { selectPhase(ph); setOpenMenu(null) }}>
-                    <span style={{ width: 10, height: 10, borderRadius: 2, background: PHASE_COLORS[ph], flexShrink: 0 }} />
-                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ph}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div style={{ width: 1, height: 24, background: 'var(--to-border)', margin: '0 4px' }} />
-
-          {toolDefs.filter(d => d.show && d.pinned).map(d => (
-            <button key={d.t} className="to-ib" data-tip={d.label} aria-label={d.label} aria-pressed={tool === d.t} onClick={() => chooseTool(d.t)} style={ibStyle(tool === d.t)}>{d.icon}</button>
-          ))}
-
-          {toolDefs.some(d => d.show && !d.pinned) && (
-            <div data-menu style={{ position: 'relative' }}>
-              <button className="to-ib" data-tip="More tools" aria-label="More tools" onClick={() => setOpenMenu(m => (m === 'more' ? null : 'more'))} style={ibStyle(openMenu === 'more' || toolDefs.some(d => d.show && !d.pinned && tool === d.t))}>⋯</button>
-              {openMenu === 'more' && (
-                <div style={{ ...menuBox, width: 220 }}>
-                  {toolDefs.filter(d => d.show && !d.pinned).map(d => (
-                    <button key={d.t} style={{ ...menuItem, background: tool === d.t ? 'var(--to-hover)' : 'none' }} onClick={() => { setOpenMenu(null); chooseTool(d.t) }}>
-                      <span style={{ width: 18, textAlign: 'center' }}>{d.icon}</span>{d.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          <div style={{ width: 1, height: 24, background: 'var(--to-border)', margin: '0 4px' }} />
-
-          <button className="to-ib" data-tip="Add item: a take-off line you type in by hand" aria-label="Add item" onClick={addManualItem} style={ibStyle(false)}>＋</button>
-          <button className="to-ib" data-tip="Reset mode: back to Select (keeps the phase)" aria-label="Reset mode" onClick={resetDrawMode} style={ibStyle(false, tool === 'select' && !isDrawing)}>↩</button>
-          {isDrawing && (
-            <button className="to-ib" data-tip="Cancel the drawing you are making" aria-label="Cancel drawing" onClick={() => { setDrawPoints([]); setIsDrawing(false) }} style={ibStyle(false, false, true)}>✕</button>
-          )}
-        </div>
-
-        {/* Row 3: undo, the aids that help place a point, copy and rotate, zoom, view and clear */}
-        <div style={{ minHeight: 36, display: 'flex', alignItems: 'center', flexWrap: 'wrap', padding: '3px 10px', gap: 4, borderTop: '1px solid var(--to-border)', background: 'var(--to-alt)' }}>
-          <button className="to-ib tip-l" data-tip="Undo (Ctrl+Z). While you are drawing it takes back the last point" aria-label="Undo" onClick={undoDrawing}
-            style={ibStyle(false, !((historyRef.current?.undo.length ?? 0) > 0 || (isDrawing && drawPoints.length > 0)))}>↶</button>
-          <button className="to-ib" data-tip="Redo (Ctrl+Y)" aria-label="Redo" onClick={redoDrawing} style={ibStyle(false, !((historyRef.current?.redo.length ?? 0) > 0))}>↷</button>
-          <div style={{ width: 1, height: 20, background: 'var(--to-border)', margin: '0 4px' }} />
-          <button className="to-ib" data-tip={snapOn ? 'Snap is on: to corners, ends and mid-points' : 'Snap is off'} aria-label="Snap" aria-pressed={snapOn} onClick={() => setSnapOn(v => !v)} style={ibStyle(snapOn)}>🧲</button>
-          <button className="to-ib" data-tip={orthoOn ? 'Ortho is on: straight lines (hold Shift for one line)' : 'Ortho: keep lines horizontal or vertical (hold Shift for one line)'} aria-label="Ortho" aria-pressed={orthoOn} onClick={() => setOrthoOn(v => !v)} style={ibStyle(orthoOn)}>⊾</button>
-          <button className="to-ib" data-tip={showGrid ? 'Grid is on' : 'Show the grid'} aria-label="Grid" aria-pressed={showGrid} onClick={() => setShowGrid(v => !v)} style={ibStyle(showGrid)}>⊞</button>
-          <button className="to-ib" data-tip={gridSnap ? 'Snap to grid is on' : 'Snap each point to the nearest grid crossing'} aria-label="Snap to grid" aria-pressed={gridSnap} onClick={() => { setGridSnap(v => !v); if (!gridSnap) setShowGrid(true) }} style={ibStyle(gridSnap)}>▦</button>
-          <select value={gridStep} onChange={e => setGridStep(+e.target.value)} title="How far apart the grid lines are" style={{ background: 'var(--to-alt)', color: 'var(--to-text)', border: '1px solid var(--to-border)', borderRadius: 5, fontSize: 11, padding: '4px 4px', fontFamily: 'inherit', height: 28, width: 82, flexShrink: 0 }}>
-            <option value={0.1}>100 mm</option><option value={0.25}>250 mm</option><option value={0.5}>500 mm</option><option value={1}>1 m</option>
-          </select>
-          <div style={{ width: 1, height: 20, background: 'var(--to-border)', margin: '0 4px' }} />
-          <button className="to-ib" data-tip="Copy the selected drawing and its item (Ctrl+D)" aria-label="Copy" onClick={duplicateSelected} style={ibStyle(false, !selectedId)}>⧉</button>
-          <button className="to-ib" data-tip="Rotate the selected drawing (R turns it a quarter turn)" aria-label="Rotate" onClick={() => rotateSelected(null)} style={ibStyle(false, !selectedId)}>⟳</button>
-          <div style={{ width: 1, height: 20, background: 'var(--to-border)', margin: '0 4px' }} />
-          <button className="to-ib" data-tip="Zoom out" aria-label="Zoom out" style={ibStyle(false)} onClick={() => {
-            const rect = svgRef.current!.getBoundingClientRect()
-            const cx = rect.width / 2, cy = rect.height / 2
-            const nz = Math.max(zoom / 1.25, 0.05)
-            setPanOffset({ x: cx - (cx - panOffset.x) * (nz / zoom), y: cy - (cy - panOffset.y) * (nz / zoom) })
-            setZoom(nz)
-          }}>−</button>
-          <span style={{ fontSize: 11, color: 'var(--to-text)', minWidth: 38, textAlign: 'center', fontFamily: 'monospace' }}>{Math.round(zoom * 100)}%</span>
-          <button className="to-ib" data-tip="Zoom in (scroll wheel)" aria-label="Zoom in" style={ibStyle(false)} onClick={() => {
-            const rect = svgRef.current!.getBoundingClientRect()
-            const cx = rect.width / 2, cy = rect.height / 2
-            const nz = Math.min(zoom * 1.25, 20)
-            setPanOffset({ x: cx - (cx - panOffset.x) * (nz / zoom), y: cy - (cy - panOffset.y) * (nz / zoom) })
-            setZoom(nz)
-          }}>+</button>
-          <button className="to-ib" data-tip="Fit the plan to the screen" aria-label="Fit to screen" onClick={() => fitToScreen()} style={ibStyle(false)}>⊡</button>
-          <button className="to-ib" data-tip="Reset zoom and pan only: drawings are kept" aria-label="Reset view" onClick={resetView} style={{ ...ibStyle(false), color: '#7ab533' }}>⟲</button>
-
-          <div style={{ width: 1, height: 20, background: 'var(--to-border)', margin: '0 4px' }} />
-
-          {/* View: how the drawings show on the plan (kept on this computer) */}
-          <div data-menu style={{ position: 'relative' }}>
-            <button style={{ ...btnStyle, padding: '4px 10px', fontSize: 11 }} onClick={() => setOpenMenu(m => (m === 'view' ? null : 'view'))} title="How your drawings show on the plan (kept on this computer)">View ▾</button>
-            {openMenu === 'view' && (
-              <div style={{ ...menuBox, width: 250, padding: 10, display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12, color: 'var(--to-text)' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} title="A white outline under each drawing so its colour stands out on a busy plan">
-                  <input type="checkbox" checked={viewHalo} onChange={e => setViewHalo(e.target.checked)} style={{ width: 'auto' }} /> Halo
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} title="A name tag on each drawing. Drag a tag in Select mode to move it out of the way">
-                  <input type="checkbox" checked={viewTags} onChange={e => setViewTags(e.target.checked)} style={{ width: 'auto' }} /> Names
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} title="Shade the rooms the walls make, with their name and floor area">
-                  <input type="checkbox" checked={viewRooms} onChange={e => setViewRooms(e.target.checked)} style={{ width: 'auto' }} /> Rooms
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6 }} title="Wash out the plan picture so your drawings stand out">
-                  Fade plan
-                  <input type="range" min={0} max={75} step={5} value={viewFade} onChange={e => setViewFade(+e.target.value)} style={{ flex: 1 }} />
-                  <span style={{ minWidth: 30, fontFamily: 'monospace' }}>{viewFade}%</span>
-                </label>
-              </div>
-            )}
-          </div>
-
-          {/* Clearing: kept apart and in warning colours so they are not pressed by mistake */}
-          <div data-menu style={{ position: 'relative' }}>
-            <button style={{ ...btnStyle, padding: '4px 10px', fontSize: 11, color: '#e57373', borderColor: 'rgba(192,57,43,0.5)' }} onClick={() => setOpenMenu(m => (m === 'clear' ? null : 'clear'))} title="Clear drawings, or reset the whole take-off">Clear ▾</button>
-            {openMenu === 'clear' && (
-              <div style={{ ...menuBox, width: 260 }}>
-                <button style={{ ...menuItem, color: '#f39c12', opacity: resetInProgress ? 0.5 : 1 }} disabled={resetInProgress}
-                  onClick={() => { setOpenMenu(null); setShowClearModal(true) }}>🗑 Drawings: remove them, keep phases, tasks and pricing</button>
-                <button style={{ ...menuItem, color: '#e74c3c', opacity: resetInProgress ? 0.5 : 1 }} disabled={resetInProgress}
-                  onClick={() => { setOpenMenu(null); setShowResetModal(true) }}>↺ Reset: wipe everything, back to a blank take-off</button>
-              </div>
-            )}
-          </div>
-
-          <div style={{ flex: 1 }} />
-
-          {(activePhase === 'External Walls' || activePhase === 'Internal Walls & Partitions') && (
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--to-text)', cursor: 'pointer' }} title="A wall drawn with several clicks (a U of three sides) becomes one wall for each side, so each can be clicked, edited and deleted on its own">
-              <input type="checkbox" checked={splitWalls} onChange={e => setSplitWalls(e.target.checked)} style={{ width: 'auto' }} /> Each side of a wall is its own wall
-            </label>
-          )}
-        </div>
-      </div>
-
-      {/* ── Main 3-column layout ─────────────────────────────────────────── */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-
-        {/* Centre: SVG canvas */}
-        <div
-          ref={containerRef}
-          style={{ flex: 1, overflow: 'hidden', position: 'relative', background: 'var(--to-bg)' }}
-        >
-          {/* Drawing aids: what to type while drawing, and what has been typed */}
-          {typedAllowed() && (
-            <div style={{ position: 'absolute', bottom: 74, left: '50%', transform: 'translateX(-50%)', zIndex: 6, background: 'var(--to-panel)', border: '1px solid var(--to-border)', color: 'var(--to-text)', borderRadius: 8, padding: '6px 12px', fontSize: 12, display: 'flex', gap: 10, alignItems: 'center', pointerEvents: 'none' }}>
-              <strong style={{ fontFamily: 'monospace', minWidth: 60, color: typed ? '#7fdc3c' : 'var(--to-sub)' }}>{typed ? typed + ' m' : (tool === 'rect' || (tool === 'floor' && floorDrawMode === 'rect')) ? 'type 4.5x3' : 'type a length'}</strong>
-              <span style={{ color: 'var(--to-sub)' }}>
-                {tool === 'rect' || (tool === 'floor' && floorDrawMode === 'rect')
-                  ? 'width x height in metres, then Enter · Backspace takes back the first corner'
-                  : 'metres, then Enter places the point · Enter alone finishes · Backspace takes back a point'}
-                {(orthoOn || shiftHeld) ? ' · straight (ortho)' : ''}
-              </span>
-            </div>
-          )}
-
-          {/* Measure tool: what is being measured, with a reminder that nothing is saved or priced */}
-          {(tool === 'measure' || measureDone) && (() => {
-            const live = tool === 'measure' && isDrawing && drawPoints.length > 0
-            const pts = live ? [...drawPoints, mousePos] : (measureDone?.points ?? [])
-            const mpp = project.calibration.mpp
-            const total = polylineLength(pts, mpp)
-            const last = pts.length >= 2 ? polylineLength(pts.slice(-2), mpp) : 0
-            const closed = pts.length >= 3 ? { area: polygonArea(pts, mpp), perimeter: total + polylineLength([pts[pts.length - 1], pts[0]], mpp) } : null
-            const activeSheet = project.sheets?.find(s => s.id === activeSheetId)
-            return (
-              <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 6, background: 'var(--to-panel)', border: '1px solid #00d4ff', color: 'var(--to-text)', borderRadius: 8, padding: '7px 12px', fontSize: 12, boxShadow: '0 2px 12px rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', justifyContent: 'center', maxWidth: '70%' }}>
-                <strong style={{ color: '#00d4ff' }}>📏 Measure</strong>
-                {pts.length < 2 ? (
-                  <span style={{ color: 'var(--to-sub)' }}>Click the start, click along the route, double-click to finish. Esc clears it. Nothing is saved or priced.</span>
-                ) : (
-                  <>
-                    <span>Total <strong style={{ fontFamily: 'monospace' }}>{fmtM(total)}</strong></span>
-                    {pts.length > 2 && <span style={{ color: 'var(--to-sub)' }}>last <span style={{ fontFamily: 'monospace' }}>{fmtM(last)}</span></span>}
-                    {closed && <span style={{ color: 'var(--to-sub)' }}>if closed: <span style={{ fontFamily: 'monospace' }}>{fmt2(closed.area)} m²</span>, perimeter <span style={{ fontFamily: 'monospace' }}>{fmtM(closed.perimeter)}</span></span>}
-                    {!live && <button onClick={() => setMeasureDone(null)} style={{ ...btnStyle, padding: '2px 8px', fontSize: 11 }}>Clear</button>}
-                  </>
-                )}
-                <span style={{ color: 'var(--to-muted)', fontSize: 11 }}>scale {project.calibration.label || '1:100'}</span>
-                {activeSheet && !activeSheet.scaleSet && <span style={{ color: '#f39c12', fontSize: 11 }}>⚠ this sheet's scale is not set yet: set it first or the length will be wrong</span>}
-              </div>
-            )
-          })()}
-
-          {/* which level is showing, large, in the corner of the drawing (pencil = rename it) */}
-          {activeLevelId && (
-            <div style={{ position: 'absolute', top: 8, left: 200, zIndex: 5, display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', background: 'var(--to-panel)', border: '1px solid #2563eb', borderRadius: 8, boxShadow: '0 2px 10px rgba(0,0,0,0.25)' }}>
-              <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--to-text)' }}>{levelName(project, activeLevelId)}</span>
-              <button onClick={() => renameLevelPrompt(activeLevelId)} title="Rename this level" style={{ background: 'none', border: 'none', color: 'var(--to-muted)', fontSize: 13, cursor: 'pointer', padding: '0 2px' }}>✎</button>
-            </div>
-          )}
-
-          {/* One bar along the bottom of the drawing: the levels, then the sheets */}
-          <div style={{ position: 'absolute', left: 0, right: 0, bottom: 22, zIndex: 5, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, padding: '4px 8px', background: 'var(--to-panel)', borderTop: '1px solid var(--to-border)' }}>
+  /** the levels and the sheets of the Levels and sheets toolbar; `up` = its menus open upwards (docked to the bottom) */
+  function renderLevelsAndSheets(up: boolean) {
+    const upPos: React.CSSProperties = up ? { bottom: '100%', marginBottom: 4 } : { top: '100%', marginTop: 4 }
+    return (
+      <>
           {/* Levels: Foundations, Ground floor, First floor, Loft... each drawing belongs to one and only the showing level is drawn on */}
           {(() => {
             const levels = project.levels ?? []
             const have = new Set(levels.map(l => l.name.trim().toLowerCase()))
             const menu = (
-              <div style={{ position: 'absolute', left: 0, bottom: '100%', marginBottom: 4, minWidth: 180, background: 'var(--to-panel)', border: '1px solid var(--to-border)', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.35)', padding: 4, zIndex: 8 }}>
+              <div style={{ position: 'absolute', left: 0, ...upPos, minWidth: 180, background: 'var(--to-panel)', border: '1px solid var(--to-border)', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.35)', padding: 4, zIndex: 8 }}>
                 {LEVEL_PRESETS.filter(x => !have.has(x.name.toLowerCase())).map(x => (
                   <button key={x.name} onClick={() => addLevelNamed(x.name)} style={{ display: 'block', width: '100%', textAlign: 'left', background: 'none', border: 'none', color: 'var(--to-text)', fontSize: 12, padding: '6px 10px', cursor: 'pointer', borderRadius: 5 }}>{x.name}</button>
                 ))}
@@ -6830,7 +6530,7 @@ export default function TakeoffPage() {
                     {copyOpen && (() => {
                       const phases = Array.from(new Set(elementsOnActiveSheet(project).map(e => e.phase)))
                       return (
-                        <div style={{ position: 'absolute', left: 0, bottom: '100%', marginBottom: 4, width: 270, background: 'var(--to-panel)', border: '1px solid var(--to-border)', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.35)', padding: 10, zIndex: 8, color: 'var(--to-text)', fontSize: 12 }}>
+                        <div style={{ position: 'absolute', left: 0, ...upPos, width: 270, background: 'var(--to-panel)', border: '1px solid var(--to-border)', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.35)', padding: 10, zIndex: 8, color: 'var(--to-text)', fontSize: 12 }}>
                           <div style={{ fontWeight: 700, marginBottom: 6 }}>Copy "{active?.name}" onto</div>
                           <select value={copyTo} onChange={e => setCopyTo(e.target.value)} style={{ width: '100%', fontSize: 12, padding: '4px', marginBottom: 8 }}>
                             {levels.filter(l => l.id !== activeLevelId).map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
@@ -6907,7 +6607,430 @@ export default function TakeoffPage() {
                 style={{ ...btnStyle, padding: '4px 10px', fontSize: 11, flexShrink: 0 }}>+ Plan</button>
             </div>
           )}
+      </>
+    )
+  }
+
+  // ── Toolbars: each is a named strip that can be docked to any edge, renamed, shown with text, reordered or hidden (lib/takeoff-toolbars.ts) ──────────
+  const toolbarOf = (id: TbId): TbPref => toolbars.find(t => t.id === id) ?? DEFAULT_TOOLBARS.find(t => t.id === id)!
+  /** where a drop-down menu opens, from the edge its toolbar is docked to */
+  const menuAt = (dock: TbDock): React.CSSProperties =>
+    dock === 'bottom' ? { ...menuBox, top: 'auto', bottom: '100%', marginTop: 0, marginBottom: 4 }
+    : dock === 'left' ? { ...menuBox, top: 0, marginTop: 0, left: '100%', marginLeft: 4 }
+    : dock === 'right' ? { ...menuBox, top: 0, marginTop: 0, left: 'auto', right: '100%', marginRight: 4 }
+    : menuBox
+  /** the hover name appears on the side that has room */
+  const ibCls = (dock: TbDock) => 'to-ib' + (dock === 'left' ? ' tip-sr' : dock === 'right' ? ' tip-sl' : dock === 'bottom' ? ' tip-up' : '')
+  const TB_DIV = (vertical: boolean, k: string) => <div key={k} style={vertical ? { height: 1, width: 22, background: 'var(--to-border)', margin: '3px 0' } : { width: 1, height: 22, background: 'var(--to-border)', margin: '0 3px' }} />
+  /** an icon button with the toolbar's own look: icon only, or icon and text when the toolbar shows text */
+  const ibx = (tb: TbPref, text: string, on = false, dim = false, danger = false): React.CSSProperties =>
+    (tb.labels && !isSideDock(tb.dock) && text) ? { ...ibStyle(on, dim, danger), width: 'auto', padding: '0 8px', gap: 5 } : ibStyle(on, dim, danger)
+  const lab = (tb: TbPref, text: string) => (tb.labels && !isSideDock(tb.dock) ? <span style={{ fontSize: 11, whiteSpace: 'nowrap' }}>{text}</span> : null)
+  const GRID_STEPS = [0.1, 0.25, 0.5, 1]
+  const gridStepText = (v: number) => (v < 1 ? Math.round(v * 1000) + 'mm' : v + 'm')
+
+  function renderToolbarBody(tb: TbPref) {
+    const dock = tb.dock
+    const vertical = isSideDock(dock)
+    const cls = ibCls(dock)
+    switch (tb.id) {
+      case 'job':
+        return (
+          <>
+            {editingName ? (
+              <input
+                autoFocus
+                style={{ ...inputStyle, width: 180, height: 28, fontSize: 13, fontWeight: 700 }}
+                value={project.name}
+                onChange={e => setProject(p => ({ ...p, name: e.target.value }))}
+                onBlur={() => setEditingName(false)}
+                onKeyDown={e => e.key === 'Enter' && setEditingName(false)}
+              />
+            ) : (
+              <div
+                onClick={() => setEditingName(true)}
+                style={{ fontWeight: 700, fontSize: 14, color: 'var(--to-text)', cursor: 'text', minWidth: 100, padding: '3px 6px', borderRadius: 4, border: '1px solid transparent' }}
+                title="Click to edit project name"
+              >
+                📐 {project.name || <span style={{ color: 'var(--to-muted)', fontWeight: 500 }}>Name this take-off…</span>}
+              </div>
+            )}
+            <button style={btnStyle} onClick={openTakeoffList} title="Your saved take-offs: open one to carry on, or start a new one">📁 My Take-offs</button>
+            <button style={{ ...btnStyle, background: '#c0392b33', borderColor: '#c0392b', color: '#e57373', whiteSpace: 'nowrap' }}
+              onClick={handleClose} title="Save this take-off under its name in My Take-offs and clear the screen for a fresh one">✕ Close</button>
+            {TB_DIV(false, 'd1')}
+            <input
+              style={{ ...inputStyle, width: 170, height: 28, fontSize: 12 }}
+              placeholder="Address / project ref"
+              value={project.address}
+              onChange={e => setProject(p => ({ ...p, address: e.target.value }))}
+            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 2px' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--to-text)', whiteSpace: 'nowrap', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}
+                title={[project.client?.name, project.siteAddress ?? project.client?.address, project.projectName].filter(Boolean).join(' · ')}>
+                {project.client?.name ?? 'No client assigned'}
+              </span>
+              <button style={{ ...btnStyle, fontSize: 11, padding: '4px 8px', whiteSpace: 'nowrap' }} onClick={() => setShowClientModal(true)} title="Edit client and project details">Edit Client</button>
+            </div>
+            <div style={{ flex: 1 }} />
+            <input type="file" accept="image/*,application/pdf,.pdf" ref={fileInputRef} style={{ display: 'none' }} onChange={handleImageLoad} />
+            <button style={btnStyle} onClick={() => setPlanChooserOpen(true)} disabled={pdfLoading} title="Add a plan from this computer or from a customer's files">
+              {pdfLoading ? '⏳ Loading…' : (project.sheets?.length ? '🖼 Add Plan' : '🖼 Load Plan')}
+            </button>
+            <select
+              style={{ ...inputStyle, width: 112, height: 28 }}
+              value={project.calibration.label ?? ''}
+              onChange={e => {
+                if (e.target.value === 'custom') { setShowCalib(true); return }
+                { const d = denomFromLabel(e.target.value); if (d) applyScaleDenom(d) }
+              }}
+              title="Scale the plan was printed at. The paper size is used to work out real distances: check it with the paper button next to this, or use Calibrate with a known length."
+            >
+              {SCALE_DENOMS.map(d => <option key={d} value={scaleLabel(d)}>{scaleLabel(d)}</option>)}
+              {project.calibration.label && !SCALE_DENOMS.some(d => scaleLabel(d) === project.calibration.label) && (
+                <option value={project.calibration.label}>{project.calibration.label}</option>
+              )}
+              <option value="custom">Custom…</option>
+            </select>
+            <button style={{ ...btnStyle, padding: '4px 8px', fontSize: 11 }} disabled={!canvasImgSize}
+              onClick={() => { setPendingDenom(null); setShowPaperModal(true) }}
+              title="The paper size this plan is printed on. The scale presets need it to measure correctly.">
+              📄 {paperInfoForActiveSheet()?.paper || 'Paper?'}
+            </button>
+            <button style={{ ...btnStyle, padding: '4px 8px', fontSize: 11 }} onClick={() => setShowCalib(true)} title="Calibrate the scale from a length you know on the drawing">Calibrate</button>
+            {TB_DIV(false, 'd2')}
+            <input type="file" accept=".json" ref={importJsonRef} style={{ display: 'none' }} onChange={handleImportJson} />
+            <div data-menu style={{ position: 'relative' }}>
+              <button style={btnStyle} onClick={() => setOpenMenu(m => (m === 'file' ? null : 'file'))} title="Open a backup, or download this take-off">File ▾</button>
+              {openMenu === 'file' && (
+                <div style={{ ...menuAt(dock), left: 'auto', right: 0, width: 250 }}>
+                  <button style={menuItem} onClick={() => { setOpenMenu(null); importJsonRef.current?.click() }}>📂 Open a backup file (JSON)</button>
+                  <button style={menuItem} onClick={() => { setOpenMenu(null); exportJSON(project) }}>💾 Download a backup (JSON)</button>
+                  <button style={menuItem} onClick={() => { setOpenMenu(null); exportCSV(project) }}>📊 Download the schedule (CSV)</button>
+                </div>
+              )}
+            </div>
+            <button className={cls} data-tip={darkMode ? 'Switch to the light theme' : 'Switch to the dark theme'} aria-label="Switch theme" onClick={toggleTheme}
+              style={{ ...ibStyle(false), color: 'var(--to-accent)' }}>{darkMode ? '☀' : '◑'}</button>
+          </>
+        )
+
+      case 'phase':
+        return (
+          <div data-menu style={{ position: 'relative' }}>
+            {vertical ? (
+              <button className={cls} data-tip={'Phase: ' + activePhase} aria-label="Choose the phase" onClick={() => setOpenMenu(m => (m === 'phase' ? null : 'phase'))} style={ibStyle(openMenu === 'phase')}>
+                <span style={{ width: 14, height: 14, borderRadius: 3, background: PHASE_COLORS[activePhase] }} />
+              </button>
+            ) : (
+              <button style={{ ...btnStyle, height: 30, minWidth: tb.labels ? 150 : 0, gap: 7, justifyContent: 'space-between' }} onClick={() => setOpenMenu(m => (m === 'phase' ? null : 'phase'))} title={'The phase you are drawing in: ' + activePhase + '. Pick another from the list'}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: 2, background: PHASE_COLORS[activePhase], flexShrink: 0 }} />
+                  {tb.labels && <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 150 }}>{shortPhase(activePhase)}</span>}
+                </span>
+                <span style={{ fontSize: 10 }}>▾</span>
+              </button>
+            )}
+            {openMenu === 'phase' && (
+              <div style={{ ...menuAt(dock), width: 250, maxHeight: 'min(80vh, 560px)', overflowY: 'auto' }}>
+                {livePhaseNames.map(ph => (
+                  <button key={ph} style={{ ...menuItem, background: activePhase === ph ? 'var(--to-hover)' : 'none', fontWeight: activePhase === ph ? 700 : 400 }}
+                    onClick={() => { selectPhase(ph); setOpenMenu(null) }}>
+                    <span style={{ width: 10, height: 10, borderRadius: 2, background: PHASE_COLORS[ph], flexShrink: 0 }} />
+                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ph}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
+        )
+
+      case 'tools':
+        return (
+          <>
+            {toolDefs.filter(d => d.show && d.pinned).map(d => (
+              <button key={d.t} className={cls} data-tip={d.label} aria-label={d.label} aria-pressed={tool === d.t} onClick={() => chooseTool(d.t)} style={ibx(tb, d.label, tool === d.t)}>{d.icon}{lab(tb, d.label)}</button>
+            ))}
+            {toolDefs.some(d => d.show && !d.pinned) && (
+              <div data-menu style={{ position: 'relative' }}>
+                <button className={cls} data-tip="More tools" aria-label="More tools" onClick={() => setOpenMenu(m => (m === 'more' ? null : 'more'))} style={ibStyle(openMenu === 'more' || toolDefs.some(d => d.show && !d.pinned && tool === d.t))}>⋯</button>
+                {openMenu === 'more' && (
+                  <div style={{ ...menuAt(dock), width: 220 }}>
+                    {toolDefs.filter(d => d.show && !d.pinned).map(d => (
+                      <button key={d.t} style={{ ...menuItem, background: tool === d.t ? 'var(--to-hover)' : 'none' }} onClick={() => { setOpenMenu(null); chooseTool(d.t) }}>
+                        <span style={{ width: 18, textAlign: 'center' }}>{d.icon}</span>{d.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {TB_DIV(vertical, 'd1')}
+            <button className={cls} data-tip="Add item: a take-off line you type in by hand" aria-label="Add item" onClick={addManualItem} style={ibx(tb, 'Add item')}>＋{lab(tb, 'Add item')}</button>
+            <button className={cls} data-tip="Reset mode: back to Select (keeps the phase)" aria-label="Reset mode" onClick={resetDrawMode} style={ibx(tb, 'Reset mode', false, tool === 'select' && !isDrawing)}>↩{lab(tb, 'Reset mode')}</button>
+            {isDrawing && (
+              <button className={cls} data-tip="Cancel the drawing you are making" aria-label="Cancel drawing" onClick={() => { setDrawPoints([]); setIsDrawing(false) }} style={ibx(tb, 'Cancel', false, false, true)}>✕{lab(tb, 'Cancel')}</button>
+            )}
+            {(activePhase === 'External Walls' || activePhase === 'Internal Walls & Partitions') && (
+              <button className={cls} data-tip={splitWalls ? 'Each side of a wall is its own wall: on' : 'Each side of a wall is its own wall: off'} aria-label="Each side of a wall is its own wall" aria-pressed={splitWalls} onClick={() => setSplitWalls(v => !v)} style={ibx(tb, 'Own wall per side', splitWalls)}>▥{lab(tb, 'Own wall per side')}</button>
+            )}
+          </>
+        )
+
+      case 'aids':
+        return (
+          <>
+            <button className={cls} data-tip="Undo (Ctrl+Z). While you are drawing it takes back the last point" aria-label="Undo" onClick={undoDrawing}
+              style={ibx(tb, 'Undo', false, !((historyRef.current?.undo.length ?? 0) > 0 || (isDrawing && drawPoints.length > 0)))}>↶{lab(tb, 'Undo')}</button>
+            <button className={cls} data-tip="Redo (Ctrl+Y)" aria-label="Redo" onClick={redoDrawing} style={ibx(tb, 'Redo', false, !((historyRef.current?.redo.length ?? 0) > 0))}>↷{lab(tb, 'Redo')}</button>
+            {TB_DIV(vertical, 'd1')}
+            <button className={cls} data-tip={snapOn ? 'Snap is on: to corners, ends and mid-points' : 'Snap is off'} aria-label="Snap" aria-pressed={snapOn} onClick={() => setSnapOn(v => !v)} style={ibx(tb, 'Snap', snapOn)}>🧲{lab(tb, 'Snap')}</button>
+            <button className={cls} data-tip={orthoOn ? 'Ortho is on: straight lines (hold Shift for one line)' : 'Ortho: keep lines horizontal or vertical (hold Shift for one line)'} aria-label="Ortho" aria-pressed={orthoOn} onClick={() => setOrthoOn(v => !v)} style={ibx(tb, 'Ortho', orthoOn)}>⊾{lab(tb, 'Ortho')}</button>
+            <button className={cls} data-tip={showGrid ? 'Grid is on' : 'Show the grid'} aria-label="Grid" aria-pressed={showGrid} onClick={() => setShowGrid(v => !v)} style={ibx(tb, 'Grid', showGrid)}>⊞{lab(tb, 'Grid')}</button>
+            <button className={cls} data-tip={gridSnap ? 'Snap to grid is on' : 'Snap each point to the nearest grid crossing'} aria-label="Snap to grid" aria-pressed={gridSnap} onClick={() => { setGridSnap(v => !v); if (!gridSnap) setShowGrid(true) }} style={ibx(tb, 'Snap to grid', gridSnap)}>▦{lab(tb, 'Snap to grid')}</button>
+            {vertical ? (
+              <button className={cls} data-tip={'Grid size: ' + gridStepText(gridStep) + ' (click for the next)'} aria-label="Grid size" onClick={() => setGridStep(GRID_STEPS[(Math.max(0, GRID_STEPS.indexOf(gridStep)) + 1) % GRID_STEPS.length])} style={{ ...ibStyle(false), fontSize: 9 }}>{gridStepText(gridStep)}</button>
+            ) : (
+              <select value={gridStep} onChange={e => setGridStep(+e.target.value)} title="How far apart the grid lines are" style={{ background: 'var(--to-alt)', color: 'var(--to-text)', border: '1px solid var(--to-border)', borderRadius: 5, fontSize: 11, padding: '4px 4px', fontFamily: 'inherit', height: 28, width: 82, flexShrink: 0 }}>
+                <option value={0.1}>100 mm</option><option value={0.25}>250 mm</option><option value={0.5}>500 mm</option><option value={1}>1 m</option>
+              </select>
+            )}
+            {TB_DIV(vertical, 'd2')}
+            <button className={cls} data-tip="Copy the selected drawing and its item (Ctrl+D)" aria-label="Copy" onClick={duplicateSelected} style={ibx(tb, 'Copy', false, !selectedId)}>⧉{lab(tb, 'Copy')}</button>
+            <button className={cls} data-tip="Rotate the selected drawing (R turns it a quarter turn)" aria-label="Rotate" onClick={() => rotateSelected(null)} style={ibx(tb, 'Rotate', false, !selectedId)}>⟳{lab(tb, 'Rotate')}</button>
+          </>
+        )
+
+      case 'zoom':
+        return (
+          <>
+            <button className={cls} data-tip="Zoom out" aria-label="Zoom out" style={ibStyle(false)} onClick={() => {
+              const rect = svgRef.current!.getBoundingClientRect()
+              const cx = rect.width / 2, cy = rect.height / 2
+              const nz = Math.max(zoom / 1.25, 0.05)
+              setPanOffset({ x: cx - (cx - panOffset.x) * (nz / zoom), y: cy - (cy - panOffset.y) * (nz / zoom) })
+              setZoom(nz)
+            }}>−</button>
+            <span style={{ fontSize: vertical ? 9 : 11, color: 'var(--to-text)', minWidth: vertical ? 0 : 38, textAlign: 'center', fontFamily: 'monospace' }}>{Math.round(zoom * 100)}%</span>
+            <button className={cls} data-tip="Zoom in (scroll wheel)" aria-label="Zoom in" style={ibStyle(false)} onClick={() => {
+              const rect = svgRef.current!.getBoundingClientRect()
+              const cx = rect.width / 2, cy = rect.height / 2
+              const nz = Math.min(zoom * 1.25, 20)
+              setPanOffset({ x: cx - (cx - panOffset.x) * (nz / zoom), y: cy - (cy - panOffset.y) * (nz / zoom) })
+              setZoom(nz)
+            }}>+</button>
+            <button className={cls} data-tip="Fit the plan to the screen" aria-label="Fit to screen" onClick={() => fitToScreen()} style={ibStyle(false)}>⊡</button>
+            <button className={cls} data-tip="Reset zoom and pan only: drawings are kept" aria-label="Reset view" onClick={resetView} style={{ ...ibStyle(false), color: '#7ab533' }}>⟲</button>
+          </>
+        )
+
+      case 'view':
+        return (
+          <>
+            <div data-menu style={{ position: 'relative' }}>
+              {vertical
+                ? <button className={cls} data-tip="View: halo, names, rooms, fade" aria-label="View" onClick={() => setOpenMenu(m => (m === 'view' ? null : 'view'))} style={ibStyle(openMenu === 'view')}>👁</button>
+                : <button style={{ ...btnStyle, padding: '4px 10px', fontSize: 11 }} onClick={() => setOpenMenu(m => (m === 'view' ? null : 'view'))} title="How your drawings show on the plan (kept on this computer)">{tb.labels ? 'View ▾' : '👁 ▾'}</button>}
+              {openMenu === 'view' && (
+                <div style={{ ...menuAt(dock), width: 250, padding: 10, display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12, color: 'var(--to-text)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} title="A white outline under each drawing so its colour stands out on a busy plan">
+                    <input type="checkbox" checked={viewHalo} onChange={e => setViewHalo(e.target.checked)} style={{ width: 'auto' }} /> Halo
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} title="A name tag on each drawing. Drag a tag in Select mode to move it out of the way">
+                    <input type="checkbox" checked={viewTags} onChange={e => setViewTags(e.target.checked)} style={{ width: 'auto' }} /> Names
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} title="Shade the rooms the walls make, with their name and floor area">
+                    <input type="checkbox" checked={viewRooms} onChange={e => setViewRooms(e.target.checked)} style={{ width: 'auto' }} /> Rooms
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6 }} title="Wash out the plan picture so your drawings stand out">
+                    Fade plan
+                    <input type="range" min={0} max={75} step={5} value={viewFade} onChange={e => setViewFade(+e.target.value)} style={{ flex: 1 }} />
+                    <span style={{ minWidth: 30, fontFamily: 'monospace' }}>{viewFade}%</span>
+                  </label>
+                </div>
+              )}
+            </div>
+            <div data-menu style={{ position: 'relative' }}>
+              {vertical
+                ? <button className={cls} data-tip="Clear drawings, or reset the take-off" aria-label="Clear" onClick={() => setOpenMenu(m => (m === 'clear' ? null : 'clear'))} style={{ ...ibStyle(openMenu === 'clear'), color: '#e57373' }}>🗑</button>
+                : <button style={{ ...btnStyle, padding: '4px 10px', fontSize: 11, color: '#e57373', borderColor: 'rgba(192,57,43,0.5)' }} onClick={() => setOpenMenu(m => (m === 'clear' ? null : 'clear'))} title="Clear drawings, or reset the whole take-off">{tb.labels ? 'Clear ▾' : '🗑 ▾'}</button>}
+              {openMenu === 'clear' && (
+                <div style={{ ...menuAt(dock), width: 260 }}>
+                  <button style={{ ...menuItem, color: '#f39c12', opacity: resetInProgress ? 0.5 : 1 }} disabled={resetInProgress}
+                    onClick={() => { setOpenMenu(null); setShowClearModal(true) }}>🗑 Drawings: remove them, keep phases, tasks and pricing</button>
+                  <button style={{ ...menuItem, color: '#e74c3c', opacity: resetInProgress ? 0.5 : 1 }} disabled={resetInProgress}
+                    onClick={() => { setOpenMenu(null); setShowResetModal(true) }}>↺ Reset: wipe everything, back to a blank take-off</button>
+                </div>
+              )}
+            </div>
+          </>
+        )
+
+      case 'levels':
+        return renderLevelsAndSheets(dock !== 'top')
+    }
+  }
+
+  /** a toolbar: its name (click or right-click for the options) and its controls, laid out along the edge it is docked to */
+  function renderToolbarFrame(tb: TbPref) {
+    const vertical = isSideDock(tb.dock)
+    const wide = tb.id === 'job' || tb.id === 'levels'
+    return (
+      <div key={tb.id} data-tb={tb.id}
+        onContextMenu={e => { if (e.target === e.currentTarget || (e.target as Element).closest('.to-tbname')) { e.preventDefault(); e.stopPropagation(); setTbMenu({ id: tb.id, x: e.clientX, y: e.clientY }) } }}
+        style={{ display: 'flex', flexDirection: vertical ? 'column' : 'row', alignItems: 'center', flexWrap: vertical ? 'nowrap' : 'wrap', gap: 3, padding: vertical ? '4px 3px' : '2px 6px', background: 'var(--to-alt)', border: '1px solid var(--to-border)', borderRadius: 8, minWidth: 0, flex: wide ? '1 1 100%' : undefined }}>
+        <div className="to-tbname" onClick={e => setTbMenu({ id: tb.id, x: e.clientX, y: e.clientY })} title={tb.name + ' toolbar: click or right-click for options (rename, move to another edge, hide)'}
+          style={{ fontSize: 10, color: 'var(--to-muted)', cursor: 'context-menu', userSelect: 'none', whiteSpace: 'nowrap', padding: vertical ? '2px 0 4px' : '0 7px 0 0', borderRight: vertical ? 'none' : '1px solid var(--to-border)', borderBottom: vertical ? '1px solid var(--to-border)' : 'none', marginRight: vertical ? 0 : 2 }}>
+          {vertical ? '⋮⋮' : '⋮⋮ ' + tb.name}
+        </div>
+        {renderToolbarBody(tb)}
+      </div>
+    )
+  }
+
+  /** every visible toolbar docked to an edge */
+  const tbZone = (dock: TbDock) => toolbarsOn(toolbars, dock).filter(t => !(t.id === 'levels' && dock === 'bottom')).map(renderToolbarFrame)
+  const openTbMenuHere = (e: React.MouseEvent) => { if (e.target === e.currentTarget) { e.preventDefault(); setTbMenu({ id: null, x: e.clientX, y: e.clientY }) } }
+
+  /** the right-click menu of a toolbar (or, on empty toolbar space, just the list of toolbars to show) */
+  function renderTbMenu() {
+    if (!tbMenu) return null
+    const tb = tbMenu.id ? toolbars.find(t => t.id === tbMenu.id) : undefined
+    const item: React.CSSProperties = { ...menuItem, fontSize: 12 }
+    const sep = <div style={{ height: 1, background: 'var(--to-border)', margin: '4px 0' }} />
+    const left = Math.max(4, Math.min(tbMenu.x, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 236))
+    const top = Math.max(4, Math.min(tbMenu.y, (typeof window !== 'undefined' ? window.innerHeight : 800) - 440))
+    return (
+      <div data-tbmenu style={{ position: 'fixed', left, top, width: 230, zIndex: 80, background: 'var(--to-panel)', border: '1px solid var(--to-border)', borderRadius: 10, boxShadow: '0 8px 28px rgba(0,0,0,0.4)', padding: 5, color: 'var(--to-text)' }}>
+        {tb && (
+          <>
+            <div style={{ fontSize: 11, color: 'var(--to-muted)', padding: '4px 10px' }}>{tb.name}</div>
+            <button style={item} onClick={() => { const n = window.prompt('Name this toolbar', tb.name); setTbMenu(null); if (n !== null && n.trim()) setToolbars(l => renameToolbar(l, tb.id, n)) }}>✎ Rename…</button>
+            {sep}
+            {allowedDocks(tb.id).map(d => (
+              <button key={d} style={{ ...item, background: tb.dock === d ? 'var(--to-hover)' : 'none', fontWeight: tb.dock === d ? 700 : 400 }} onClick={() => { setToolbars(l => setToolbarDock(l, tb.id, d)); setTbMenu(null) }}>
+                {tb.dock === d ? '✓ ' : ' '}Dock to {DOCK_LABEL[d]}
+              </button>
+            ))}
+            {allowedDocks(tb.id).length < 4 && <div style={{ fontSize: 10, color: 'var(--to-muted)', padding: '2px 10px 4px' }}>This one has text boxes, so it goes along the top or bottom only.</div>}
+            {sep}
+            <button style={item} onClick={() => { setToolbars(l => setToolbarLabels(l, tb.id, !tb.labels)); setTbMenu(null) }}>{tb.labels ? 'Aa Show icons only' : 'Aa Show text beside icons'}</button>
+            <button style={item} onClick={() => { setToolbars(l => moveToolbar(l, tb.id, -1)); setTbMenu(null) }}>↑ Move earlier</button>
+            <button style={item} onClick={() => { setToolbars(l => moveToolbar(l, tb.id, 1)); setTbMenu(null) }}>↓ Move later</button>
+            <button style={item} onClick={() => { setToolbars(l => setToolbarVisible(l, tb.id, false)); setTbMenu(null) }}>🙈 Hide this toolbar</button>
+            {sep}
+          </>
+        )}
+        <div style={{ fontSize: 11, color: 'var(--to-muted)', padding: '4px 10px' }}>Show these toolbars</div>
+        {toolbars.map(t => (
+          <label key={t.id} style={{ ...item, cursor: 'pointer' }}>
+            <input type="checkbox" style={{ width: 'auto' }} checked={t.vis} onChange={e => setToolbars(l => setToolbarVisible(l, t.id, e.target.checked))} />
+            <span style={{ flex: 1 }}>{t.name}</span>
+            <span style={{ color: 'var(--to-muted)', fontSize: 10 }}>{t.dock}</span>
+          </label>
+        ))}
+        {sep}
+        <button style={item} onClick={() => { setToolbars(defaultToolbars()); setTbMenu(null) }}>⟲ Reset all toolbars</button>
+      </div>
+    )
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+  return (
+    <div style={{
+      ...TV as React.CSSProperties,
+      margin: '-26px -32px',
+      height: 'calc(100dvh - 56px)',
+      display: 'flex',
+      flexDirection: 'column',
+      background: 'var(--to-bg)',
+      color: 'var(--to-text)',
+      fontFamily: 'system-ui, sans-serif',
+      overflow: 'hidden',
+    }}>
+
+      {/* ── Toolbars: named strips, each docked to an edge (the top ones are here; the others sit beside and below the drawing) ───────── */}
+      <style>{`
+        .to-ib { position: relative; }
+        .to-ib:hover { border-color: var(--to-btn-bd) !important; }
+        .to-ib[data-tip]:hover::after { content: attr(data-tip); position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); white-space: nowrap; background: #1b1f23; color: #fff; font-size: 11px; font-weight: 500; padding: 3px 8px; border-radius: 5px; z-index: 60; pointer-events: none; font-family: system-ui, sans-serif; }
+        .to-ib.tip-sr[data-tip]:hover::after { top: 50%; left: calc(100% + 6px); transform: translateY(-50%); }
+        .to-ib.tip-sl[data-tip]:hover::after { top: 50%; left: auto; right: calc(100% + 6px); transform: translateY(-50%); }
+        .to-ib.tip-up[data-tip]:hover::after { top: auto; bottom: calc(100% + 6px); }
+        .to-tbname:hover { color: var(--to-text) !important; }
+      `}</style>
+      <div onContextMenu={openTbMenuHere}
+        style={{ background: 'var(--to-panel)', borderBottom: '1px solid var(--to-border)', flexShrink: 0, padding: '4px 8px', display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', minHeight: 30 }}>
+        {tbZone('top')}
+        {toolbarsOn(toolbars, 'top').length === 0 && <span style={{ fontSize: 11, color: 'var(--to-muted)' }}>No toolbars along the top: right-click here to show them</span>}
+      </div>
+
+      {/* ── Main 3-column layout ─────────────────────────────────────────── */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+
+        {/* Toolbars docked to the left */}
+        {toolbarsOn(toolbars, 'left').length > 0 && (
+          <div onContextMenu={openTbMenuHere} style={{ display: 'flex', flexDirection: 'column', flexWrap: 'wrap', alignContent: 'flex-start', gap: 6, padding: 6, background: 'var(--to-panel)', borderRight: '1px solid var(--to-border)', flexShrink: 0, maxHeight: '100%' }}>{tbZone('left')}</div>
+        )}
+
+        {/* Centre: SVG canvas */}
+        <div
+          ref={containerRef}
+          style={{ flex: 1, overflow: 'hidden', position: 'relative', background: 'var(--to-bg)' }}
+        >
+          {/* Drawing aids: what to type while drawing, and what has been typed */}
+          {typedAllowed() && (
+            <div style={{ position: 'absolute', bottom: 74, left: '50%', transform: 'translateX(-50%)', zIndex: 6, background: 'var(--to-panel)', border: '1px solid var(--to-border)', color: 'var(--to-text)', borderRadius: 8, padding: '6px 12px', fontSize: 12, display: 'flex', gap: 10, alignItems: 'center', pointerEvents: 'none' }}>
+              <strong style={{ fontFamily: 'monospace', minWidth: 60, color: typed ? '#7fdc3c' : 'var(--to-sub)' }}>{typed ? typed + ' m' : (tool === 'rect' || (tool === 'floor' && floorDrawMode === 'rect')) ? 'type 4.5x3' : 'type a length'}</strong>
+              <span style={{ color: 'var(--to-sub)' }}>
+                {tool === 'rect' || (tool === 'floor' && floorDrawMode === 'rect')
+                  ? 'width x height in metres, then Enter · Backspace takes back the first corner'
+                  : 'metres, then Enter places the point · Enter alone finishes · Backspace takes back a point'}
+                {(orthoOn || shiftHeld) ? ' · straight (ortho)' : ''}
+              </span>
+            </div>
+          )}
+
+          {/* Measure tool: what is being measured, with a reminder that nothing is saved or priced */}
+          {(tool === 'measure' || measureDone) && (() => {
+            const live = tool === 'measure' && isDrawing && drawPoints.length > 0
+            const pts = live ? [...drawPoints, mousePos] : (measureDone?.points ?? [])
+            const mpp = project.calibration.mpp
+            const total = polylineLength(pts, mpp)
+            const last = pts.length >= 2 ? polylineLength(pts.slice(-2), mpp) : 0
+            const closed = pts.length >= 3 ? { area: polygonArea(pts, mpp), perimeter: total + polylineLength([pts[pts.length - 1], pts[0]], mpp) } : null
+            const activeSheet = project.sheets?.find(s => s.id === activeSheetId)
+            return (
+              <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 6, background: 'var(--to-panel)', border: '1px solid #00d4ff', color: 'var(--to-text)', borderRadius: 8, padding: '7px 12px', fontSize: 12, boxShadow: '0 2px 12px rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', justifyContent: 'center', maxWidth: '70%' }}>
+                <strong style={{ color: '#00d4ff' }}>📏 Measure</strong>
+                {pts.length < 2 ? (
+                  <span style={{ color: 'var(--to-sub)' }}>Click the start, click along the route, double-click to finish. Esc clears it. Nothing is saved or priced.</span>
+                ) : (
+                  <>
+                    <span>Total <strong style={{ fontFamily: 'monospace' }}>{fmtM(total)}</strong></span>
+                    {pts.length > 2 && <span style={{ color: 'var(--to-sub)' }}>last <span style={{ fontFamily: 'monospace' }}>{fmtM(last)}</span></span>}
+                    {closed && <span style={{ color: 'var(--to-sub)' }}>if closed: <span style={{ fontFamily: 'monospace' }}>{fmt2(closed.area)} m²</span>, perimeter <span style={{ fontFamily: 'monospace' }}>{fmtM(closed.perimeter)}</span></span>}
+                    {!live && <button onClick={() => setMeasureDone(null)} style={{ ...btnStyle, padding: '2px 8px', fontSize: 11 }}>Clear</button>}
+                  </>
+                )}
+                <span style={{ color: 'var(--to-muted)', fontSize: 11 }}>scale {project.calibration.label || '1:100'}</span>
+                {activeSheet && !activeSheet.scaleSet && <span style={{ color: '#f39c12', fontSize: 11 }}>⚠ this sheet's scale is not set yet: set it first or the length will be wrong</span>}
+              </div>
+            )
+          })()}
+
+          {/* which level is showing, large, in the corner of the drawing (pencil = rename it) */}
+          {activeLevelId && (
+            <div style={{ position: 'absolute', top: 8, left: 200, zIndex: 5, display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', background: 'var(--to-panel)', border: '1px solid #2563eb', borderRadius: 8, boxShadow: '0 2px 10px rgba(0,0,0,0.25)' }}>
+              <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--to-text)' }}>{levelName(project, activeLevelId)}</span>
+              <button onClick={() => renameLevelPrompt(activeLevelId)} title="Rename this level" style={{ background: 'none', border: 'none', color: 'var(--to-muted)', fontSize: 13, cursor: 'pointer', padding: '0 2px' }}>✎</button>
+            </div>
+          )}
+
+          {/* The Levels and sheets toolbar when it is docked to the bottom: along the bottom of the drawing, above the status line */}
+          {toolbarOf('levels').vis && toolbarOf('levels').dock === 'bottom' && (
+            <div style={{ position: 'absolute', left: 0, right: 0, bottom: 22, zIndex: 5, background: 'var(--to-panel)' }}>{renderToolbarFrame(toolbarOf('levels'))}</div>
+          )}
           {/* Hide or show the side panel (schedule and properties) to give the drawing the full width */}
           <button className="to-ib tip-r" data-tip={panelOpen ? 'Hide the side panel' : 'Show the schedule and properties'} aria-label={panelOpen ? 'Hide the side panel' : 'Show the side panel'}
             onClick={() => setPanelOpen(v => !v)}
@@ -7188,6 +7311,11 @@ export default function TakeoffPage() {
           </div>
         </div>
 
+        {/* Toolbars docked to the right */}
+        {toolbarsOn(toolbars, 'right').length > 0 && (
+          <div onContextMenu={openTbMenuHere} style={{ display: 'flex', flexDirection: 'column', flexWrap: 'wrap', alignContent: 'flex-start', gap: 6, padding: 6, background: 'var(--to-panel)', borderLeft: '1px solid var(--to-border)', flexShrink: 0, maxHeight: '100%' }}>{tbZone('right')}</div>
+        )}
+
         {/* Right panel */}
         <div style={{
           width: 300, background: 'var(--to-panel)', borderLeft: '1px solid var(--to-border)',
@@ -7379,6 +7507,14 @@ export default function TakeoffPage() {
           </div>
         </div>
       )}
+
+      {/* Toolbars docked to the bottom (the Levels and sheets toolbar sits over the bottom of the drawing instead) */}
+      {tbZone('bottom').length > 0 && (
+        <div onContextMenu={openTbMenuHere} style={{ background: 'var(--to-panel)', borderTop: '1px solid var(--to-border)', flexShrink: 0, padding: '4px 8px', display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+          {tbZone('bottom')}
+        </div>
+      )}
+      {renderTbMenu()}
 
       {/* ── My Take-offs: open a saved take-off, or start a new one ─────────────────────────────────────── */}
       {showTakeoffList && (
