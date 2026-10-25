@@ -119,9 +119,11 @@ interface Props {
    * changes (the user redraws or adjusts the shape), it overwrites the length field below,
    * same as any other seeded default in Take-off; still freely editable by hand in between. */
   externalLengthMm?: number
+  /** Start with no sample window or door (a wall drawn in Take-off has the openings that are drawn on it, none to start). */
+  noSampleOpenings?: boolean
 }
 
-export default function AssemblyWallDemo({ system = 'timber', onClose, onSave, labourTrades = [], externalLengthMm }: Props) {
+export default function AssemblyWallDemo({ system = 'timber', onClose, onSave, labourTrades = [], externalLengthMm, noSampleOpenings }: Props) {
   const cfg = WALL_SYSTEM_CONFIG[system]
   const [name, setName] = useCalcState('AssemblyWallDemo', 'name', cfg.label)
   const [qty, setQty] = useCalcState('AssemblyWallDemo', 'qty', 1)
@@ -133,7 +135,7 @@ export default function AssemblyWallDemo({ system = 'timber', onClose, onSave, l
   const [centresMm, setCentresMm] = useCalcState('AssemblyWallDemo', 'centresMm', 400)
   const [doubleTopPlate, setDoubleTopPlate] = useCalcState('AssemblyWallDemo', 'doubleTopPlate', false)
   const [wastePct, setWastePct] = useCalcState('AssemblyWallDemo', 'wastePct', 10)
-  const [openings, setOpenings] = useCalcState<AssemblyOpening[]>('AssemblyWallDemo', 'openings', sampleOpenings)
+  const [openings, setOpenings] = useCalcState<AssemblyOpening[]>('AssemblyWallDemo', 'openings', () => (noSampleOpenings ? [] : sampleOpenings()))
   const [location, setLocation] = useCalcState('AssemblyWallDemo', 'location', '')
   const [labourLines, setLabourLines] = useCalcState<LabourLine[]>('AssemblyWallDemo', 'labourLines', [
     { id: newLabourLineId(), tradeId: '', task: 'Build stud wall', hours: 4 },

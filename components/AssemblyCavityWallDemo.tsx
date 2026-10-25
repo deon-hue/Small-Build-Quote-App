@@ -198,6 +198,11 @@ function sampleOpenings(): CavityOpening[] {
   return [{ id: newOpeningId(), kind: 'window', widthMm: 1200, heightMm: 1200, offsetMm: 2000, sillHeightMm: 900, lintelType: 'steel-cavity' }]
 }
 
+/** the calculator's own sample window, exactly as it starts (no drawing behind it, nothing changed) */
+function isUntouchedSampleOpening(o: CavityOpening): boolean {
+  return !o.planId && o.kind === 'window' && o.widthMm === 1200 && o.heightMm === 1200 && o.offsetMm === 2000 && o.sillHeightMm === 900 && o.lintelType === 'steel-cavity'
+}
+
 interface DescribeOpts {
   lengthMm: number; heightMm: number; outerLeaf: CavityLeafType; externalFinish: ExternalFinishType
   insulation: CavityInsulationType; boardThicknessMm: number; cavityWidthMm: number
@@ -308,7 +313,7 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
   const [boardThicknessMm, setBoardThicknessMm] = useCalcState('AssemblyCavityWallDemo', 'boardThicknessMm', 75)
   const [finishType, setFinishType] = useCalcState<FinishType>('AssemblyCavityWallDemo', 'finishType', 'dot-dab')
   const [wastePct, setWastePct] = useCalcState('AssemblyCavityWallDemo', 'wastePct', 10)
-  const [openings, setOpenings] = useCalcState<CavityOpening[]>('AssemblyCavityWallDemo', 'openings', noSampleOpenings || (planOpenings && planOpenings.length > 0) ? [] : sampleOpenings)
+  const [openings, setOpenings] = useCalcState<CavityOpening[]>('AssemblyCavityWallDemo', 'openings', noSampleOpenings || planOpenings !== undefined ? [] : sampleOpenings)
   // the doors and windows drawn on this wall: added with their kind's usual lintel, and they follow the drawing (position, size, kind) until typed over
   const planKey = planOpenings ? planOpenings.map(planWallSig).join(';') + '#' + planOpenings.map(p => p.id).join(',') : null
   useEffect(() => {
@@ -316,7 +321,8 @@ export default function AssemblyCavityWallDemo({ insulationDefault = 'pir', onCl
     const make = (p: PlanWallOpening): CavityOpening => (p.kind === 'bifold'
       ? { id: newOpeningId(), kind: 'bifold', widthMm: p.widthMm, heightMm: p.heightMm, offsetMm: p.offsetMm, sillHeightMm: 0, lintelType: 'steel-beam', steelSize: DEFAULT_STEEL_BEAM }
       : { id: newOpeningId(), kind: p.kind, widthMm: p.widthMm, heightMm: p.heightMm, offsetMm: p.offsetMm, sillHeightMm: p.kind === 'window' ? 900 : 0, lintelType: 'steel-cavity' })
-    setOpenings(prev => mergePlanWallOpenings(prev, planOpenings, make))
+    // a wall from Take-off has the openings that are DRAWN on it, so the calculator's own sample window (put there by a calculator opened before this) is taken off: no windows or doors drawn means none
+    setOpenings(prev => mergePlanWallOpenings(prev.filter(o => !isUntouchedSampleOpening(o)), planOpenings, make))
   }, [planKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const [location, setLocation] = useCalcState('AssemblyCavityWallDemo', 'location', '')
   // The inside reveals of the openings (board or plaster returns and beads): on by default, how deep they are is typed

@@ -162,9 +162,11 @@ interface Props {
   onSave?: (result: { name: string; qty: number; location: string; description: string; lines: CostedLine[] }) => void
   labourTrades?: BOLabourTrade[]
   externalLengthMm?: number
+  /** Start with no sample window or door (a wall drawn in Take-off has the openings that are drawn on it, none to start). */
+  noSampleOpenings?: boolean
 }
 
-export default function AssemblyTimberFrameWallDemo({ onClose, onSave, labourTrades = [], externalLengthMm }: Props) {
+export default function AssemblyTimberFrameWallDemo({ onClose, onSave, labourTrades = [], externalLengthMm, noSampleOpenings }: Props) {
   const [name, setName] = useCalcState('AssemblyTimberFrameWallDemo', 'name', 'Timber Garden Room Wall')
   const [qty, setQty] = useCalcState('AssemblyTimberFrameWallDemo', 'qty', 1)
   const [lengthMm, setLengthMm] = useCalcState('AssemblyTimberFrameWallDemo', 'lengthMm', externalLengthMm ?? 4000)
@@ -186,7 +188,7 @@ export default function AssemblyTimberFrameWallDemo({ onClose, onSave, labourTra
   const [vcl, setVcl] = useCalcState('AssemblyTimberFrameWallDemo', 'vcl', true)
   const [lining, setLining] = useCalcState<LiningType>('AssemblyTimberFrameWallDemo', 'lining', 'plasterboard')
   const [wastePct, setWastePct] = useCalcState('AssemblyTimberFrameWallDemo', 'wastePct', 10)
-  const [openings, setOpenings] = useCalcState<AssemblyOpening[]>('AssemblyTimberFrameWallDemo', 'openings', sampleOpenings)
+  const [openings, setOpenings] = useCalcState<AssemblyOpening[]>('AssemblyTimberFrameWallDemo', 'openings', () => (noSampleOpenings ? [] : sampleOpenings()))
   const [location, setLocation] = useCalcState('AssemblyTimberFrameWallDemo', 'location', '')
 
   const section = STUD_SECTIONS[sectionKey]

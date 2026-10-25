@@ -5632,6 +5632,8 @@ export default function TakeoffPage() {
           labourTrades,
           calcState: item.assemblyCalcState,
           wallOpenings: isExtWall && item.elementId ? planWallOpenings(livePlaced, item.elementId, project.calibration.mpp) : undefined,
+          // a wall drawn here starts with no window or door: the calculator shows what is drawn on it (cavity walls are fed them), not its own sample
+          noSampleOpenings: item.elementId ? true : undefined,
           basics: isFoundationLine ? { widthMm: item.foundationWidth ?? 600, depthMm: item.foundationDepth ?? 1000 } : undefined,
           planRooms: roomData ? roomInfos : undefined,
           onSave: result => {
