@@ -3700,8 +3700,10 @@ export default function TakeoffPage() {
 
   // ── Calibration ────────────────────────────────────────────────────────────
   function applyCalibration() {
-    const realM = parseFloat(calibReal)
-    if (isNaN(realM) || realM <= 0 || calibPts.length < 2) {
+    // the real length is typed in millimetres
+    const realMm = parseFloat(calibReal)
+    const realM = realMm / 1000
+    if (isNaN(realMm) || realMm <= 0 || calibPts.length < 2) {
       alert('Draw a line over a known dimension first, then enter its real length.')
       return
     }
@@ -3709,7 +3711,7 @@ export default function TakeoffPage() {
     const dy = calibPts[1].y - calibPts[0].y
     const pixLen = Math.sqrt(dx * dx + dy * dy)
     const mpp = realM / pixLen
-    const lbl = calibLabel || `${realM}m ref`
+    const lbl = calibLabel || `${realMm}mm ref`
     const n = rescaleActiveSheet(mpp, lbl)
     showToast(`Calibration applied (${lbl}) — ${n} item${n !== 1 ? 's' : ''} recalculated ✓`)
     setShowCalib(false)
@@ -8423,8 +8425,8 @@ export default function TakeoffPage() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
                 <div>
-                  <label style={labelStyle}>Real length (metres)</label>
-                  <NumInput type="number" style={inputStyle} placeholder="e.g. 5.0"
+                  <label style={labelStyle}>Real length (millimetres)</label>
+                  <NumInput type="number" style={inputStyle} placeholder="e.g. 5000"
                     value={calibReal} onChange={e => setCalibReal(e.target.value)} />
                 </div>
                 <div>
