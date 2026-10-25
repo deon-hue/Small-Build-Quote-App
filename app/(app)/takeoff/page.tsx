@@ -464,6 +464,9 @@ function withCalcNumber(snap: CalcStateSnapshot | undefined, ns: string, key: st
 }
 
 /** The colours offered for a drawing on the plan */
+/** a drawing that is not estimated is a flat shaded grey */
+const NOT_ESTIMATED_FILL = '#b6bec9'
+const NOT_ESTIMATED_LINE = '#6b7686'
 const PLAN_COLOURS = ['#e74c3c', '#e67e22', '#f1c40f', '#27ae60', '#16a085', '#2980b9', '#8e44ad', '#2c3e50', '#7f8c8d', '#6d4c41', '#ad1457', '#000000']
 
 // ── Openings a wall takes off: the ones typed in Properties and the doors and windows drawn on it ──────────
@@ -4305,15 +4308,17 @@ export default function TakeoffPage() {
           const wd = w ? wallDrawing(ch.points, w.spec, mpp, { ref: w.ref, closed: ch.closed, flip: ch.flip, cuts: cuts[ci] }) : null
           if (!wd) return null
           return (
-            <g key={'wv-' + ch.ids.join('-')} opacity={ch.ids.every(id => dimIds.has(id)) ? 0.55 : 1} style={ch.ids.every(id => dimIds.has(id)) ? { filter: 'grayscale(1)' } : undefined}>
+            <g key={'wv-' + ch.ids.join('-')} opacity={ch.ids.every(id => dimIds.has(id)) ? 0.8 : 1}>
               {wd.strips.map((st, i) => {
                 const style = LAYER_STYLE[st.kind]
                 const showHatch = style.hatch !== 'none' && (st.mm / (mpp * 1000)) * zoom >= 3   // only when the layer is wide enough on screen to show it
+                // a wall that is not estimated is one flat shaded grey (every layer), with no hatching
+                const grey = ch.ids.every(id => dimIds.has(id))
                 return (
                   <g key={i}>
-                    <path d={st.d} fillRule="evenodd" fill={style.fill} />
-                    {showHatch && <path d={st.d} fillRule="evenodd" fill={`url(#wl-${style.hatch})`} />}
-                    <path d={st.d} fillRule="evenodd" fill="none" stroke={style.line} strokeWidth={0.8 / zoom} strokeLinejoin="miter" />
+                    <path d={st.d} fillRule="evenodd" fill={grey ? NOT_ESTIMATED_FILL : style.fill} />
+                    {showHatch && !grey && <path d={st.d} fillRule="evenodd" fill={`url(#wl-${style.hatch})`} />}
+                    <path d={st.d} fillRule="evenodd" fill="none" stroke={grey ? NOT_ESTIMATED_LINE : style.line} strokeWidth={0.8 / zoom} strokeLinejoin="miter" />
                   </g>
                 )
               })}
@@ -4415,8 +4420,9 @@ export default function TakeoffPage() {
 
   /** a drawing that is not estimated is shown lighter */
   function renderElement(el: DrawnElement) {
-    const node = renderElementBase(el)
-    return node && project.items.some(it => it.notEstimated && it.elementId === el.id) ? <g key={el.id} opacity={0.55} style={{ filter: 'grayscale(1)' }}>{node}</g> : node
+    const off = project.items.some(it => it.notEstimated && it.elementId === el.id)
+    const node = renderElementBase(off ? { ...el, color: NOT_ESTIMATED_LINE } : el)
+    return node && off ? <g key={el.id} opacity={0.75} style={{ filter: 'grayscale(1)' }}>{node}</g> : node
   }
   function renderElementBase(el: DrawnElement) {
     const sel = selectedId === el.id
@@ -4653,13 +4659,14 @@ export default function TakeoffPage() {
         : fmt2(polygonArea(el.points, mpp)) + ' m²'
       const anchor = el.type === 'line' ? polylineMidpoint(el.points) : centroid(el.points)
       const wsTag = wallSpecFor(el)
-      return { id: el.id, text: tagText(el.label || linked?.name || '', wsTag ? measure + ' · ' + wsTag.spec.label : measure), ax: anchor.x, ay: anchor.y, dx: el.tagDx, dy: el.tagDy }
+      return { id: el.id, text: tagText(el.label || linked?.name || '', (wsTag ? measure + ' · ' + wsTag.spec.label : measure) + (linked?.notEstimated ? ' · drawing only' : '')), ax: anchor.x, ay: anchor.y, dx: el.tagDx, dy: el.tagDy }
     })
     const boxes = layoutTags(inputs, zoom)
     return boxes.map(t => {
       const el = els.find(e => e.id === t.id)!
       const sel = selectedId === el.id
-      const fillC = el.phase === 'External Walls' ? WALL_LINE_COLOR : el.color
+      const off = project.items.some(it => it.notEstimated && it.elementId === el.id)
+      const fillC = off ? NOT_ESTIMATED_FILL : el.phase === 'External Walls' ? WALL_LINE_COLOR : el.color
       const textC = textColorFor(fillC)
       const fs = 12 / zoom
       const interactive = tool === 'select'
