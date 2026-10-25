@@ -16,7 +16,9 @@ import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembl
 import {
   calculatePlumbing, FITTING_TYPES, GROUP_LABEL, ROOM_TYPES, ROOM_TYPE_BY_ID, DEFAULT_SITUATIONS, SPECIAL_TYPES, WHOLE_HOUSE_ITEMS,
   type PlumbingRoom, type PlumbingSpecial, type Situation, type FittingGroup, type PlumbingResult,
+  PIPE_MATERIAL_LABEL, PIPE_SIZE_LIST, DEFAULT_PIPE_RATES, DEFAULT_PIPE_LABOUR_PER_M, DEFAULT_JOINT_LABOUR, type PipeMaterial,
 } from '@/lib/plumbing-units'
+import { FITTING_LABEL, type PipeSummary } from '@/lib/pipe-network'
 import { describePlumbing, describePlumbingShort, type PlumbingDescriptionInput } from '@/lib/plumbing-description'
 import { plumbingDescriptionInput } from '@/lib/plumbing-wording'
 import { fmt } from '@/lib/utils'
@@ -40,6 +42,8 @@ interface Props {
   planRooms?: PlanRoomInfo[]
   /** the fittings placed on the Take-off plan, room by room: their counts follow the plan until typed over, and radiators carry their sizes */
   placed?: PlacedRoom[]
+  /** the heating pipe runs drawn on the Take-off plan (sized, with their fittings counted) */
+  pipes?: PipeSummary
 }
 
 const GROUP_COLOUR: Record<FittingGroup, string> = { sanitaryware: '#0891b2', kitchen: '#7c3aed', heating: '#dc2626', outside: '#16a34a' }
@@ -55,7 +59,7 @@ function newRoom(typeId: string, existingOfType: number): PlumbingRoom {
   }
 }
 
-export default function AssemblyPlumbingDemo({ onClose, onSave, labourTrades = [], planRooms, placed }: Props) {
+export default function AssemblyPlumbingDemo({ onClose, onSave, labourTrades = [], planRooms, placed, pipes }: Props) {
   const ID = 'AssemblyPlumbingDemo'
   const [name, setName] = useCalcState(ID, 'name', 'Plumbing installation')
   const [location, setLocation] = useCalcState(ID, 'location', '')
@@ -71,6 +75,16 @@ export default function AssemblyPlumbingDemo({ onClose, onSave, labourTrades = [
   const [wholeHouseRates, setWholeHouseRates] = useCalcState<Record<string, number>>(ID, 'wholeHouseRates', {})
   const [addType, setAddType] = useCalcState(ID, 'addType', 'bathroom')
   const [radiatorPcPerKw, setRadiatorPcPerKw] = useCalcState(ID, 'radiatorPcPerKw', 55)   // £ per kW for a radiator we supply that was placed on the plan with a size
+  // Heating pipework drawn on the plan: what was last handed in is kept, so the quote opens the calculator with the same pipes
+  const [savedPipes, setSavedPipes] = useCalcState<PipeSummary | null>(ID, 'pipeSummary', null)
+  const [pipeMaterial, setPipeMaterial] = useCalcState<PipeMaterial>(ID, 'pipeMaterial', 'copper')
+  const [pipeAllowPct, setPipeAllowPct] = useCalcState(ID, 'pipeAllowPct', 10)
+  const [pipeRiseM, setPipeRiseM] = useCalcState(ID, 'pipeRiseM', 0.5)
+  const [pipeExtraM, setPipeExtraM] = useCalcState(ID, 'pipeExtraM', 0)
+  const [pipeExtraSize, setPipeExtraSize] = useCalcState(ID, 'pipeExtraSize', 22)
+  const [pipeworkIn, setPipeworkIn] = useCalcState(ID, 'pipeworkIn', 40)
+  const [pipeSundries, setPipeSundries] = useCalcState(ID, 'pipeSundries', 10)
+  const [pipeRates, setPipeRates] = useCalcState<Record<string, number>>(ID, 'pipeRates', {})
   const [profitPct, setProfitPct] = useCalcState(ID, 'profitPct', 20)   // default profit margin
   const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>(ID, 'rateOverrides', {})
   const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>(ID, 'disabledLayerIds', new Set())
@@ -92,6 +106,10 @@ export default function AssemblyPlumbingDemo({ onClose, onSave, labourTrades = [
   // The fittings placed on the plan (the Take-off Plumbing tool) are counted room by room, matched to a room here by its name. A count that was typed over is left alone until the plan's count changes; a room
   // that is not here yet is made from them. Nothing placed in a room means its usual fittings are not touched.
   const placedKey = JSON.stringify(placed ?? [])
+  const pipesKey = JSON.stringify(pipes ?? null)
+  useEffect(() => { if (pipes && JSON.stringify(savedPipes) !== pipesKey) setSavedPipes(pipes) }, [pipesKey])   // eslint-disable-line react-hooks/exhaustive-deps
+  const livePipes = pipes ?? savedPipes
+  const pipesOn = !!livePipes && (livePipes.runCount > 0 || pipeExtraM > 0)
   const roomsKey = rooms.map(r => r.id + '|' + (r.planName ?? r.name)).join(',')
   useEffect(() => {
     if (!placed) return
@@ -143,9 +161,9 @@ export default function AssemblyPlumbingDemo({ onClose, onSave, labourTrades = [
   function removeSpecial(roomId: string, sid: string) { setRooms(p => p.map(r => r.id === roomId ? { ...r, specials: r.specials.filter(s => s.id !== sid) } : r)) }
 
   const result = useMemo((): { ok: true; r: PlumbingResult } | { ok: false; error: string } => {
-    try { return { ok: true, r: calculatePlumbing({ rooms, wholeHouse, jobSituationId, situations, fittingRates, specialRates, wholeHouseRates, pcRates, radiatorPcPerKw }) } }
+    try { return { ok: true, r: calculatePlumbing({ rooms, wholeHouse, jobSituationId, situations, fittingRates, specialRates, wholeHouseRates, pcRates, radiatorPcPerKw, ...(pipesOn && livePipes ? { pipes: { summary: livePipes, material: pipeMaterial, allowancePct: pipeAllowPct, risePerRadiatorM: pipeRiseM, extraM: pipeExtraM, extraSizeMm: pipeExtraSize, radiatorPipeworkIn: pipeworkIn, sundriesPct: pipeSundries, rates: pipeRates } } : {}) }) } }
     catch (e: any) { return { ok: false, error: e.message as string } }
-  }, [rooms, wholeHouse, jobSituationId, situations, fittingRates, specialRates, wholeHouseRates, pcRates, radiatorPcPerKw])
+  }, [rooms, wholeHouse, jobSituationId, situations, fittingRates, specialRates, wholeHouseRates, pcRates, radiatorPcPerKw, livePipes, pipesOn, pipeMaterial, pipeAllowPct, pipeRiseM, pipeExtraM, pipeExtraSize, pipeworkIn, pipeSundries, pipeRates])
   const r = result.ok ? result.r : null
 
   const layers: AssemblyLayerDef[] = useMemo(() => (r?.lines ?? []).map(l => ({
@@ -399,6 +417,56 @@ export default function AssemblyPlumbingDemo({ onClose, onSave, labourTrades = [
                 <NumInput type="number" min={0} value={wholeHouseRates[w.id] ?? w.rate} onChange={e => setWholeHouseRates(p => ({ ...p, [w.id]: Math.max(0, +e.target.value || 0) }))} style={{ ...small, width: 58, textAlign: 'right' }} title="Price each" />
               </div>
             ))}
+          </CollapsibleSection>
+
+          <CollapsibleSection title={`Heating pipework from the plan${livePipes && livePipes.runCount > 0 ? ` (${livePipes.totalLengthM.toFixed(1)} m drawn)` : ''}`} borderColor="#bae6fd">
+            {!livePipes || livePipes.runCount === 0 ? (
+              <div style={{ fontSize: 11.5, color: '#64748b', lineHeight: 1.45, marginBottom: 6 }}>
+                Draw the heating pipes from the boiler to the radiators on the plan (Take-off, Plumbing &amp; Heating, the pipe tool). The pipe sizes, elbows and tees are worked out from what they carry and priced here. Nothing is drawn yet.
+              </div>
+            ) : (
+              <div style={{ fontSize: 11.5, color: '#334155', lineHeight: 1.5, marginBottom: 8, background: '#fff', border: '1px solid #bae6fd', borderRadius: 5, padding: '6px 9px' }}>
+                <div><b>{livePipes.runCount}</b> run{livePipes.runCount === 1 ? '' : 's'}, <b>{livePipes.totalLengthM.toFixed(1)} m</b> of drawn pipe (flow and return are both priced), carrying {(livePipes.totalLoadW / 1000).toFixed(1)} kW to {livePipes.connectedRadiatorIds.length} radiator{livePipes.connectedRadiatorIds.length === 1 ? '' : 's'}.</div>
+                <div>{PIPE_SIZE_LIST.filter(s => (livePipes.lengthBySize[String(s)] ?? 0) > 0).map(s => `${s}mm: ${livePipes.lengthBySize[String(s)].toFixed(1)} m`).join(' · ') || 'No pipe'}</div>
+                <div>{livePipes.fittings.length === 0 ? 'No elbows or tees.' : livePipes.fittings.map(f => `${f.count} × ${f.kind === 'reducing-tee' && f.branchMm ? `${f.sizeMm}x${f.branchMm}mm` : `${f.sizeMm}mm`} ${FITTING_LABEL[f.kind].toLowerCase()}`).join(', ')}.</div>
+                {livePipes.warnings.map((w, i) => <div key={i} style={{ color: '#b45309' }}>⚠ {w}</div>)}
+              </div>
+            )}
+            <PropRow label="Pipe material">
+              <select value={pipeMaterial} onChange={e => setPipeMaterial(e.target.value as PipeMaterial)} style={propInput}>
+                {(Object.keys(PIPE_MATERIAL_LABEL) as PipeMaterial[]).map(m => <option key={m} value={m}>{PIPE_MATERIAL_LABEL[m]}</option>)}
+              </select>
+            </PropRow>
+            <PropRow label="Allowance over the drawn length (%)">{numInput(pipeAllowPct, setPipeAllowPct, 0, 1)}</PropRow>
+            <PropRow label="Rise to each radiator (m of flow, and of return)">{numInput(pipeRiseM, setPipeRiseM, 0, 0.1)}</PropRow>
+            <PropRow label="Pipe not on the plan: risers, boiler to the first run (m of run)">{numInput(pipeExtraM, setPipeExtraM, 0, 1)}</PropRow>
+            {pipeExtraM > 0 && (
+              <PropRow label="Size of that pipe">
+                <select value={pipeExtraSize} onChange={e => setPipeExtraSize(+e.target.value)} style={propInput}>{PIPE_SIZE_LIST.map(s => <option key={s} value={s}>{s}mm</option>)}</select>
+              </PropRow>
+            )}
+            <PropRow label="Pipework in a radiator's all-in price (£, taken off when its pipes are drawn)">{numInput(pipeworkIn, setPipeworkIn, 0, 5)}</PropRow>
+            <PropRow label="Clips, flux or solder and sundries (%)">{numInput(pipeSundries, setPipeSundries, 0, 1)}</PropRow>
+            <div style={{ fontSize: 10.5, color: '#64748b', margin: '6px 0 3px' }}>Rates for {PIPE_MATERIAL_LABEL[pipeMaterial].toLowerCase()} (samples: check them with your supplier and plumber)</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '38px repeat(4, 1fr)', gap: 4, fontSize: 10.5, color: '#94a3b8', marginBottom: 2 }}>
+              <span /><span>Pipe £/m</span><span>Elbow £</span><span>Tee £</span><span>Plumber £/m</span>
+            </div>
+            {PIPE_SIZE_LIST.map(s => {
+              const d = DEFAULT_PIPE_RATES[pipeMaterial][String(s)]
+              const set = (key: string) => (v: number) => setPipeRates(p => ({ ...p, [key]: Math.max(0, v) }))
+              return (
+                <div key={s} style={{ display: 'grid', gridTemplateColumns: '38px repeat(4, 1fr)', gap: 4, marginBottom: 3, alignItems: 'center' }}>
+                  <span style={{ fontSize: 11.5, color: '#334155' }}>{s}mm</span>
+                  <NumInput type="number" min={0} step={0.1} value={pipeRates[`pipe|${pipeMaterial}|${s}`] ?? d.pipe} onChange={e => set(`pipe|${pipeMaterial}|${s}`)(+e.target.value || 0)} style={{ ...small, width: '100%', textAlign: 'right' }} />
+                  <NumInput type="number" min={0} step={0.1} value={pipeRates[`elbow|${pipeMaterial}|${s}`] ?? d.elbow} onChange={e => set(`elbow|${pipeMaterial}|${s}`)(+e.target.value || 0)} style={{ ...small, width: '100%', textAlign: 'right' }} />
+                  <NumInput type="number" min={0} step={0.1} value={pipeRates[`tee|${pipeMaterial}|${s}`] ?? d.tee} onChange={e => set(`tee|${pipeMaterial}|${s}`)(+e.target.value || 0)} style={{ ...small, width: '100%', textAlign: 'right' }} />
+                  <NumInput type="number" min={0} step={0.5} value={pipeRates[`labm|${s}`] ?? DEFAULT_PIPE_LABOUR_PER_M[String(s)]} onChange={e => set(`labm|${s}`)(+e.target.value || 0)} style={{ ...small, width: '100%', textAlign: 'right' }} />
+                </div>
+              )
+            })}
+            <PropRow label="Plumber £ for each joint made">
+              <NumInput type="number" min={0} step={0.5} value={pipeRates[`joint|${pipeMaterial}`] ?? DEFAULT_JOINT_LABOUR[pipeMaterial]} onChange={e => setPipeRates(p => ({ ...p, [`joint|${pipeMaterial}`]: Math.max(0, +e.target.value || 0) }))} style={propInput} />
+            </PropRow>
           </CollapsibleSection>
 
           <CollapsibleSection title="Situations (the % added to fittings)" borderColor="#bae6fd">

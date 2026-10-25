@@ -5,7 +5,7 @@
 import type { WallConstructionType, WallFinishType, CalculatedMaterial } from './material-recipes'
 import type { CostedLine } from './assembly-calc'
 import type { ElectricPoint } from './electric-points'
-import type { PlumbPoint } from './plumb-points'
+import type { PlumbPoint, PlumbPipe } from './plumb-points'
 import type { BuildingAge } from './radiators'
 import type { PlacedOpening } from './wall-openings'
 import type { RoomLabel, DrawnRoomShape, RoomEdge } from './rooms-from-walls'
@@ -272,6 +272,8 @@ export interface TakeoffItem {
   // Plumbing & Heating: the one "Plumbing installation" item holds every fitting and radiator placed on the plan (so they save with the project) and what the Plumbing Installation calculator was last saved as.
   plumbSummary?: boolean
   plumbPoints?: PlumbPoint[]
+  /** heating pipe runs drawn from the radiators and the boiler: sized, and their elbows and tees counted, from what they carry */
+  plumbPipes?: PlumbPipe[]
   /** the age of the building, which sets the heat loss radiators are sized from */
   plumbAge?: BuildingAge
   /** the plan's fittings (as room counts and radiator sizes) when the calculator was last saved, to say when the plan has changed since */

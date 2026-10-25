@@ -5,7 +5,7 @@ import NumInput from '@/components/NumInput'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { makeDebouncedSave, isEmptyTakeoff, isUuid, newProjectId, loadTakeoffFromSupabase, saveTakeoffToSupabase, listTakeoffSummaries, deleteTakeoffProject, type TakeoffSummary } from '@/lib/takeoff-sync'
-import { roomLabelsOf, setRoomLabels, roomShapesOf, setRoomShapes, roomEdgesOf, setRoomEdges, activeSheetIdOf, onActiveSheet, onActiveLevel, activeLevelIdOf, levelOf, levelName, levelBelow, ghostLevel, elementsOnGhostLevel, viewKey, itemLevelId, addLevel, switchActiveLevel, renameLevel, setLevelHeight, removeLevel, moveElementToLevel, copyLevelContents, levelInsertIndex, LEVEL_PRESETS, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet, setSheetPaper } from '@/lib/takeoff-sheets'
+import { sheetOf, roomLabelsOf, setRoomLabels, roomShapesOf, setRoomShapes, roomEdgesOf, setRoomEdges, activeSheetIdOf, onActiveSheet, onActiveLevel, activeLevelIdOf, levelOf, levelName, levelBelow, ghostLevel, elementsOnGhostLevel, viewKey, itemLevelId, addLevel, switchActiveLevel, renameLevel, setLevelHeight, removeLevel, moveElementToLevel, copyLevelContents, levelInsertIndex, LEVEL_PRESETS, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet, setSheetPaper } from '@/lib/takeoff-sheets'
 import { layoutTags, polylineMidpoint, textColorFor, tagText, TAG_HEIGHT_PX } from '@/lib/takeoff-tags'
 import { PDF_RENDER_MM_PER_PX, PAPER_SIZES, SCALE_DENOMS, scaleLabel, denomFromLabel, mppForScale, paperFromMm, inferPdfPaper, mmPerPxForPaper } from '@/lib/takeoff-paper'
 import { putSheetImage, getSheetImage, deleteProjectImages } from '@/lib/takeoff-sheet-images'
@@ -22,9 +22,10 @@ import RoomsPanel from './components/RoomsPanel'
 import { detectRooms, roomFromPolygon, splitDrawnRoom, sortRooms, roomIndexAt, pointInPolygon, isAxisRect, rectFromCorners, moveOutline, resizeRectOutline, labelAfterEdit, type DrawnRoomShape, describeRooms, labelIndexForRooms, ROOM_KIND_BY_ID, type DetectedRoom, type PlanRoomInfo, type RoomLabel, type RoomWithOpenings } from '@/lib/rooms-from-walls'
 import { POINT_BY_ID, type ElectricsSavedState } from '@/lib/electrics-units'
 import { planRoomsFromPoints, roomAtPoint, rectToPolygon, POINT_SHORT, type ElectricPoint } from '@/lib/electric-points'
-import PlumbingPointsPanel, { PLUMB_GROUP_COLOUR } from './components/PlumbingPointsPanel'
+import PlumbingPointsPanel, { PLUMB_GROUP_COLOUR, HEAT_SOURCE_COLOUR } from './components/PlumbingPointsPanel'
 import { FITTING_BY_ID } from '@/lib/plumbing-units'
-import { PLUMB_SHORT, placedRoomsFromPoints, type PlumbPoint, type PlacedRoom } from '@/lib/plumb-points'
+import { PLUMB_SHORT, HEAT_SOURCE, placedRoomsFromPoints, type PlumbPoint, type PlumbPipe, type PlacedRoom } from '@/lib/plumb-points'
+import { buildPipeNetwork, summariseNetworks, type NetResult, type PipeSummary } from '@/lib/pipe-network'
 import { roomHeatLoss, externalEdgeLengthPx, sizeRadiators, radiatorOutputW, radiatorLabel, type BuildingAge, type RadSizing } from '@/lib/radiators'
 
 // The one Take-off item that holds every electrical point placed on the plan (and the electrics calculator's saved price).
@@ -711,6 +712,9 @@ export default function TakeoffPage() {
   const [plumbRadHeight, setPlumbRadHeight] = useState(600)
   const [plumbRoom, setPlumbRoom] = useState('')
   const [selectedPlumbPointId, setSelectedPlumbPointId] = useState<string | null>(null)
+  // heating pipe runs: the Line tool in 'draw a pipe run' mode, and the run that is selected
+  const [pipeDraw, setPipeDraw] = useState(false)
+  const [selectedPlumbPipeId, setSelectedPlumbPipeId] = useState<string | null>(null)
   // Windows & Doors: the kind, size and swing of the next opening, the placed opening that is selected, and where the pointer is (unsnapped) for the ghost
   const [openingKind, setOpeningKind] = useState<OpeningKind>('win-casement')
   const [openingNext, setOpeningNext] = useState<{ widthMm: number; heightMm: number; swing: WdSwing }>({ widthMm: 1200, heightMm: 1200, swing: 'in-left' })
@@ -1720,6 +1724,7 @@ export default function TakeoffPage() {
   function finishElement(type: 'line' | 'rect' | 'polygon', pts: TakeoffPoint[], isFloor = false) {
     if (roomDraw === 'room' && (type === 'rect' || type === 'polygon')) { addDrawnRoom(type, pts); return }
     if (roomDraw === 'edge' && type === 'line') { addRoomEdge(pts); return }
+    if (pipeDraw && type === 'line') { addPlumbPipe(pts); return }
     const phase: TakeoffPhase = isFloor ? 'Floors & Screeds' : activePhase
     const color = PHASE_COLORS[phase]
     const shortId = Date.now().toString(36).slice(-4)
@@ -1845,6 +1850,7 @@ export default function TakeoffPage() {
   const plumbItem = project.items.find(it => it.plumbSummary)
   const plumbPoints: PlumbPoint[] = plumbItem?.plumbPoints ?? []
   const plumbAge: BuildingAge = plumbItem?.plumbAge ?? 'mid'
+  const plumbPipes: PlumbPipe[] = plumbItem?.plumbPipes ?? []
 
   function newElectricsItem(): TakeoffItem {
     const sub = boSubPhases.find(sp => sp.canonical_id === 'elec-install')
@@ -1881,7 +1887,7 @@ export default function TakeoffPage() {
     if (tool !== 'select') return
     e.stopPropagation()
     setSelectedElectricPointId(pt.id)
-    setSelectedPlumbPointId(null)
+    setSelectedPlumbPointId(null); setSelectedPlumbPipeId(null)
     setSelectedId(null)   // one thing is picked at a time: the Delete key must not remove a wall that was picked before
     setSelectedOpeningId(null)
     setPanelMode('properties')
@@ -1920,6 +1926,9 @@ export default function TakeoffPage() {
     const ri = roomData && roomData.sheetId === viewKey(project) ? roomIndexAt(roomData.rooms, pt) : -1
     const room = ri >= 0 && roomInfos[ri] ? roomInfos[ri].name : plumbRoom
     const id = uid()
+    // one boiler / heat source on a level: placing another moves it
+    const sameView = (q: PlumbPoint) => (sheetOf(q, project) ?? '') === (sheetOf({ sheetId: activeSheetId }, project) ?? '') && (levelOf(q, project) ?? '') === (activeLevelId ?? '')
+    if (plumbTypeId === HEAT_SOURCE) changePlumbPoints(pts => pts.filter(q => !(q.typeId === HEAT_SOURCE && sameView(q))))
     changePlumbPoints(pts => [...pts, {
       id, typeId: plumbTypeId, roomName: room, x: pt.x, y: pt.y, ...(activeSheetId ? { sheetId: activeSheetId } : {}), ...(activeLevelId ? { levelId: activeLevelId } : {}),
       ...(plumbTypeId === 'radiator' ? { rad: { typeId: plumbRadType, heightMm: plumbRadHeight } } : {}),
@@ -1931,6 +1940,7 @@ export default function TakeoffPage() {
     if (tool !== 'select') return
     e.stopPropagation()
     setSelectedPlumbPointId(pt.id)
+    setSelectedPlumbPipeId(null)
     setSelectedElectricPointId(null)
     setSelectedId(null)
     setSelectedOpeningId(null)
@@ -1941,6 +1951,58 @@ export default function TakeoffPage() {
     const move = (ev: MouseEvent) => {
       const x = (ev.clientX - rect.left - pan.x) / z, y = (ev.clientY - rect.top - pan.y) / z
       changePlumbPoints(pts => pts.map(q => q.id === pt.id ? { ...q, x, y } : q))
+    }
+    const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up) }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+  }
+
+  // A pipe's end snaps to a radiator or the boiler, then to another pipe's bend or end, then onto the side of another pipe (a tee): within 10 screen pixels
+  function pipeSnapPoint(raw: TakeoffPoint): TakeoffPoint | null {
+    const r = 10 / zoom
+    const heads = plumbPoints.filter(q => (q.typeId === 'radiator' || q.typeId === HEAT_SOURCE) && onActiveSheet(q, project) && onActiveLevel(q, project))
+    let best: TakeoffPoint | null = null, bd = r
+    for (const q of heads) { const d = Math.hypot(q.x - raw.x, q.y - raw.y); if (d <= bd) { bd = d; best = { x: q.x, y: q.y } } }
+    if (best) return best
+    const mine = plumbPipes.filter(q => onActiveSheet(q, project) && onActiveLevel(q, project))
+    for (const q of mine) for (const p of q.points) { const d = Math.hypot(p.x - raw.x, p.y - raw.y); if (d <= bd) { bd = d; best = { x: p.x, y: p.y } } }
+    if (best) return best
+    for (const q of mine) for (let i = 1; i < q.points.length; i++) {
+      const a = q.points[i - 1], b = q.points[i], dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy
+      if (!(l2 > 0)) continue
+      const t = Math.max(0, Math.min(1, ((raw.x - a.x) * dx + (raw.y - a.y) * dy) / l2))
+      const px = a.x + t * dx, py = a.y + t * dy, d = Math.hypot(px - raw.x, py - raw.y)
+      if (d <= bd) { bd = d; best = { x: px, y: py } }
+    }
+    return best
+  }
+
+  function addPlumbPipe(pts: TakeoffPoint[]) {
+    setDrawPoints([]); setIsDrawing(false); setTyped('')
+    const mpp = project.calibration.mpp
+    let len = 0
+    for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y)
+    if (!(len * mpp > 0.05)) { showToast('That pipe run is too short'); return }
+    const id = uid()
+    changePlumbItem(it => ({ ...it, plumbPipes: [...(it.plumbPipes ?? []), { id, points: pts.map(p => ({ x: p.x, y: p.y })), ...(activeSheetId ? { sheetId: activeSheetId } : {}), ...(activeLevelId ? { levelId: activeLevelId } : {}) }] }))
+    setSelectedPlumbPipeId(id); setSelectedPlumbPointId(null)
+    showToast(`Pipe run added (${(len * mpp).toFixed(2)} m). Draw the next run, or press Esc to stop.`)
+  }
+
+  function selectPlumbPipe(id: string) {
+    setSelectedPlumbPipeId(id); setSelectedPlumbPointId(null); setSelectedElectricPointId(null)
+    setSelectedId(null); setSelectedOpeningId(null); setPanelMode('properties'); setEditingItem(plumbItem ?? null)
+  }
+
+  function startPipeVertexDrag(e: React.MouseEvent, pipeId: string, vi: number) {
+    if (tool !== 'select') return
+    e.stopPropagation()
+    const rect = svgRef.current!.getBoundingClientRect()
+    const pan = panOffset, z = zoom
+    const move = (ev: MouseEvent) => {
+      const raw = { x: (ev.clientX - rect.left - pan.x) / z, y: (ev.clientY - rect.top - pan.y) / z }
+      const p = pipeSnapPoint(raw) ?? raw
+      changePlumbItem(it => ({ ...it, plumbPipes: (it.plumbPipes ?? []).map(q => (q.id === pipeId ? { ...q, points: q.points.map((pt, i) => (i === vi ? { x: p.x, y: p.y } : pt)) } : q)) }))
     }
     const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up) }
     window.addEventListener('mousemove', move)
@@ -2161,6 +2223,26 @@ export default function TakeoffPage() {
   }
   const plumbSizes = new Map(plumbPoints.filter(q => q.typeId === 'radiator').map(q => [q.id, plumbSizeOf(q)] as const))
   const plumbPlaced: PlacedRoom[] = placedRoomsFromPoints(plumbPoints, q => { const s = plumbSizeOf(q); return { widthMm: s.widthMm, watts: s.outputW, label: s.label } })
+  // Heating pipes: each floor's runs, with the radiators and boiler on it, are worked out together (every sheet has its own scale); the pipe sizes, lengths and fittings of all of them go to the calculator
+  const plumbGroupKey = (x: { sheetId?: string; levelId?: string }) => (sheetOf(x, project) ?? '') + '|' + (levelOf(x, project) ?? '')
+  const plumbNets = new Map<string, NetResult>()
+  for (const k of new Set(plumbPipes.map(plumbGroupKey))) {
+    const sheetId = k.split('|')[0]
+    const mpp = (sheetId && sheetId !== (sheetOf({ sheetId: activeSheetId }, project) ?? '') ? project.sheets?.find(s => s.id === sheetId)?.calibration.mpp : undefined) ?? project.calibration.mpp
+    const pts = plumbPoints.filter(q => plumbGroupKey(q) === k)
+    const src = pts.find(q => q.typeId === HEAT_SOURCE)
+    plumbNets.set(k, buildPipeNetwork({
+      runs: plumbPipes.filter(q => plumbGroupKey(q) === k).map(q => ({ id: q.id, points: q.points })),
+      radiators: pts.filter(q => q.typeId === 'radiator').map(q => ({ id: q.id, x: q.x, y: q.y, watts: plumbSizes.get(q.id)?.outputW ?? 0 })),
+      source: src ? { x: src.x, y: src.y } : null, mpp,
+    }))
+  }
+  const plumbPipeSummary: PipeSummary | undefined = plumbPipes.length ? summariseNetworks(Array.from(plumbNets.values()), plumbPipes.length) : undefined
+  const plumbNetShowing = plumbNets.get(plumbGroupKey({ sheetId: activeSheetId, levelId: activeLevelId }))
+  const plumbPipesShowing = plumbPipes.filter(q => onActiveSheet(q, project) && onActiveLevel(q, project))
+  const plumbPipeLengthM = (q: PlumbPipe) => { let l = 0; for (let i = 1; i < q.points.length; i++) l += Math.hypot(q.points[i].x - q.points[i - 1].x, q.points[i].y - q.points[i - 1].y); return l * project.calibration.mpp }
+  useEffect(() => { if (tool !== 'line' || activePhase !== 'Plumbing & Heating') setPipeDraw(false) }, [tool, activePhase])
+
   // the room name follows the plan (a room named or renamed later), and a radiator remembers the width it was sized to; applied once, after which there is nothing left to change
   const plumbFix: { id: string; patch: Partial<PlumbPoint> }[] = []
   if (plumbItem && plumbViewRooms) {
@@ -2767,7 +2849,7 @@ export default function TakeoffPage() {
         roomSuggestions={roomNames}
         selectedPointId={selectedElectricPointId} onSelectPoint={setSelectedElectricPointId}
         onUpdatePoint={(id, patch) => changeElectricPoints(pts => pts.map(q => q.id === id ? { ...q, ...patch } : q))}
-        onDeletePoint={id => { changeElectricPoints(pts => pts.filter(q => q.id !== id)); setSelectedElectricPointId(null); setSelectedPlumbPointId(null) }}
+        onDeletePoint={id => { changeElectricPoints(pts => pts.filter(q => q.id !== id)); setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedPlumbPipeId(null) }}
         saved={it?.assemblyResult}
         stale={stale}
         calculatorOpen={assemblyWindowItemId === ELECTRICS_ITEM_ID}
@@ -2798,7 +2880,7 @@ export default function TakeoffPage() {
       ...electricRoomShapes().map(r => r.name).filter(Boolean),
       ...plumbPoints.map(q => q.roomName).filter(Boolean),
     ]))
-    const placedKey = JSON.stringify(plumbPlaced)
+    const placedKey = JSON.stringify([plumbPlaced, plumbPipeSummary ?? null])
     const stale = !!it?.assemblyResult && it.plumbPricedKey !== undefined && it.plumbPricedKey !== placedKey
     return (
       <PlumbingPointsPanel
@@ -2813,7 +2895,7 @@ export default function TakeoffPage() {
         roomSuggestions={roomNames}
         selectedPointId={selectedPlumbPointId} onSelectPoint={setSelectedPlumbPointId}
         onUpdatePoint={(id, patch) => changePlumbPoints(pts => pts.map(q => q.id === id ? { ...q, ...patch } : q))}
-        onDeletePoint={id => { changePlumbPoints(pts => pts.filter(q => q.id !== id)); setSelectedPlumbPointId(null) }}
+        onDeletePoint={id => { changePlumbPoints(pts => pts.filter(q => q.id !== id)); setSelectedPlumbPointId(null); setSelectedPlumbPipeId(null) }}
         roomOf={q => q.roomName}
         sizes={plumbSizes}
         heatOf={q => {
@@ -2822,6 +2904,13 @@ export default function TakeoffPage() {
           const h = i >= 0 ? plumbHeatOf(i) : null
           return h ? { watts: h.watts, notes: h.notes, designC: h.designC, externalWallLengthM: h.externalWallLengthM, windowAreaM2: h.windowAreaM2, floorLoss: h.floorLoss, roofLoss: h.roofLoss } : null
         }}
+        pipeDrawing={pipeDraw}
+        onPipeDrawing={on => { setPipeDraw(on); setTool(on ? 'line' : 'select'); setDrawPoints([]); setIsDrawing(false); setTyped('') }}
+        pipes={plumbPipesShowing}
+        pipeLengthM={plumbPipeLengthM}
+        selectedPipeId={selectedPlumbPipeId} onSelectPipe={id => (id ? selectPlumbPipe(id) : setSelectedPlumbPipeId(null))}
+        onDeletePipe={id => { changePlumbItem(x => ({ ...x, plumbPipes: (x.plumbPipes ?? []).filter(q => q.id !== id) })); if (selectedPlumbPipeId === id) setSelectedPlumbPipeId(null) }}
+        pipeSummary={plumbPipeSummary}
         saved={it?.assemblyResult}
         stale={stale}
         calculatorOpen={assemblyWindowItemId === PLUMB_ITEM_ID}
@@ -2832,6 +2921,7 @@ export default function TakeoffPage() {
           calcState: it?.assemblyCalcState,
           planRooms: roomData ? roomInfos : undefined,
           plumbPlaced,
+          plumbPipes: plumbPipeSummary,
           onSave: result => {
             const { calcState, state: _state, size: _size, ...res } = result
             const sub = boSubPhases.find(sp => sp.canonical_id === 'plumb-install')
@@ -2955,7 +3045,7 @@ export default function TakeoffPage() {
     if (created.length > 0) {
       setProject(p => switchActiveSheet(addSheets(p, created), created[0].id))
       // the new sheet starts clean: nothing selected from the sheet we were on
-      setSelectedId(null); setEditingElement(null); setEditingItem(null); setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setDrawPoints([]); setIsDrawing(false); setAssemblyWindowItemId(null)
+      setSelectedId(null); setEditingElement(null); setEditingItem(null); setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedPlumbPipeId(null); setDrawPoints([]); setIsDrawing(false); setAssemblyWindowItemId(null)
     }
     if (!savedOnDevice) showToast('This browser cannot keep plans between visits (a private window?). They will be lost when you close the page.')
     else if (created.length > 1) showToast(created.length + ' sheets added. Set the scale of each before you draw on it.')
@@ -3032,7 +3122,7 @@ export default function TakeoffPage() {
     const target = project.sheets?.find(s => s.id === id)
     setProject(p => switchActiveSheet(p, id))
     if (!keepSelection) { setSelectedId(null); setEditingElement(null); setEditingItem(null) }
-    setSelectedElectricPointId(null); setSelectedPlumbPointId(null)
+    setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedPlumbPipeId(null)
     setDrawPoints([])
     setIsDrawing(false)
     setMeasureDone(null)
@@ -3078,7 +3168,7 @@ export default function TakeoffPage() {
   /** Clears what belonged to the view being left (the selection, a half-drawn shape, an open calculator) when another level shows. */
   function clearViewState(keepSelection = false) {
     if (!keepSelection) { setSelectedId(null); setEditingElement(null); setEditingItem(null) }
-    setSelectedElectricPointId(null); setSelectedPlumbPointId(null)
+    setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedPlumbPipeId(null)
     setSelectedOpeningId(null)
     setSelectedEdgeId(null)
     setSelectedRoomPt(null)
@@ -3201,7 +3291,7 @@ export default function TakeoffPage() {
     setEditingItem(null)
     setDrawPoints([])
     setIsDrawing(false)
-    setSelectedElectricPointId(null); setSelectedPlumbPointId(null)
+    setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedPlumbPipeId(null)
     showToast('Sheet removed. Recovery copy saved.')
   }
 
@@ -3451,7 +3541,7 @@ export default function TakeoffPage() {
     setEditingElement(null)
     setEditingItem(null)
     setPhaseDefaults(null)
-    setSelectedElectricPointId(null); setSelectedPlumbPointId(null)
+    setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedPlumbPipeId(null)
     setAssemblyWindowItemId(null)
     setMeasureDone(null)
     setCalibDrawing(false)
@@ -3748,7 +3838,15 @@ export default function TakeoffPage() {
     return { segments, corners }
   }
 
+  /** while a heating pipe is drawn the cursor snaps to radiators, the boiler and other pipes first, then to the usual things */
   function drawingPoint(raw: TakeoffPoint): SnapResult {
+    const base = drawingPointBase(raw)
+    if (!(pipeDraw && tool === 'line' && snapOn)) return base
+    const s = pipeSnapPoint(base.pt) ?? pipeSnapPoint(raw)
+    return s ? { pt: s, kind: 'end', target: s } : base
+  }
+
+  function drawingPointBase(raw: TakeoffPoint): SnapResult {
     const drawingTool = tool === 'line' || tool === 'polygon' || tool === 'rect' || tool === 'floor' || tool === 'measure' || tool === 'click' || calibDrawing
     const ortho = orthoOn || shiftHeld
     if (!drawingTool || (!snapOn && !ortho && !gridSnap)) return { pt: raw, kind: 'none' }
@@ -3828,7 +3926,7 @@ export default function TakeoffPage() {
   }
   function restoreDrawings(snap: { elements: DrawnElement[]; items: TakeoffItem[] }) {
     setProject(p => ({ ...p, elements: snap.elements, items: snap.items }))
-    setSelectedId(null); setEditingElement(null); setEditingItem(null); setSelectedElectricPointId(null); setSelectedPlumbPointId(null)
+    setSelectedId(null); setEditingElement(null); setEditingItem(null); setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedPlumbPipeId(null)
     setHistoryTick(t => t + 1)
   }
 
@@ -3854,6 +3952,11 @@ export default function TakeoffPage() {
     if (selectedElectricPointId && electricPoints.some(q => q.id === selectedElectricPointId)) {
       const id = selectedElectricPointId
       changeElectricPoints(pts => pts.map(q => (q.id === id ? { ...q, x: q.x + ux * d, y: q.y + uy * d } : q)))
+      return true
+    }
+    if (selectedPlumbPipeId && plumbPipes.some(q => q.id === selectedPlumbPipeId)) {
+      const id = selectedPlumbPipeId
+      changePlumbItem(it => ({ ...it, plumbPipes: (it.plumbPipes ?? []).map(q => (q.id === id ? { ...q, points: q.points.map(p => ({ x: p.x + ux * d, y: p.y + uy * d })) } : q)) }))
       return true
     }
     if (selectedPlumbPointId && plumbPoints.some(q => q.id === selectedPlumbPointId)) {
@@ -3926,7 +4029,7 @@ export default function TakeoffPage() {
   }, [project.elements, project.items, historyKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // picking a drawing or a placed opening lets go of a picked electrical point (so Delete takes away only what is picked)
-  useEffect(() => { if (selectedId || selectedOpeningId) { setSelectedElectricPointId(null); setSelectedPlumbPointId(null) } }, [selectedId, selectedOpeningId])
+  useEffect(() => { if (selectedId || selectedOpeningId) { setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedPlumbPipeId(null) } }, [selectedId, selectedOpeningId])
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -3969,13 +4072,19 @@ export default function TakeoffPage() {
           e.preventDefault()
           const gone = selectedElectricPointId
           changeElectricPoints(pts => pts.filter(q => q.id !== gone))
-          setSelectedElectricPointId(null); setSelectedPlumbPointId(null)
+          setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedPlumbPipeId(null)
           showToast('Electrical point deleted')
+        } else if (selectedPlumbPipeId && plumbPipes.some(q => q.id === selectedPlumbPipeId)) {
+          e.preventDefault()
+          const gone = selectedPlumbPipeId
+          changePlumbItem(x => ({ ...x, plumbPipes: (x.plumbPipes ?? []).filter(q => q.id !== gone) }))
+          setSelectedPlumbPipeId(null)
+          showToast('Pipe run deleted')
         } else if (selectedPlumbPointId && plumbPoints.some(q => q.id === selectedPlumbPointId)) {
           e.preventDefault()
           const gone = selectedPlumbPointId
           changePlumbPoints(pts => pts.filter(q => q.id !== gone))
-          setSelectedPlumbPointId(null)
+          setSelectedPlumbPointId(null); setSelectedPlumbPipeId(null)
           showToast('Plumbing fitting deleted')
         } else if (selectedOpeningId) deleteOpening(selectedOpeningId)
         else if (tool === 'room' && selectedEdgeId) deleteRoomEdge(selectedEdgeId)
@@ -6634,7 +6743,7 @@ export default function TakeoffPage() {
   function renderProperties() {
     const item = editingItem ?? phaseDefaults
     if ((activePhase === 'Electrics' && tool === 'electric') || item?.electricsSummary) return renderElectricsPanel()
-    if ((activePhase === 'Plumbing & Heating' && tool === 'plumb') || item?.plumbSummary) return renderPlumbingPanel()
+    if ((activePhase === 'Plumbing & Heating' && (tool === 'plumb' || pipeDraw)) || item?.plumbSummary) return renderPlumbingPanel()
     if ((activePhase === 'Windows & Doors' && tool === 'opening') || item?.wdSummary) return renderOpeningsPanel()
     if (tool === 'room') return renderRoomsPanel()
     if (!item) {
@@ -7681,6 +7790,40 @@ export default function TakeoffPage() {
                 )
               })}
 
+              {/* Heating pipes — each stretch coloured by its size with the size on it, a ring at each elbow and a square at each tee; click a run in Select mode to pick it, drag its white corners to reshape it */}
+              {!hiddenPhases.has('Plumbing & Heating') && plumbPipesShowing.length > 0 && (() => {
+                const colourOf = (mm: number) => (mm >= 35 ? '#7c3aed' : mm >= 28 ? '#2563eb' : mm >= 22 ? '#ea580c' : '#dc2626')
+                const net = plumbNetShowing
+                return (
+                  <g>
+                    {plumbPipesShowing.map(q => {
+                      const d = 'M' + q.points.map(p => p.x + ' ' + p.y).join(' L')
+                      const chosen = q.id === selectedPlumbPipeId
+                      return (
+                        <g key={q.id}>
+                          {chosen && <path d={d} fill="none" stroke={SEL_COLOUR} strokeWidth={8 / zoom} strokeLinejoin="round" strokeLinecap="round" opacity={0.35} style={{ pointerEvents: 'none' }} />}
+                          <path d={d} fill="none" stroke="rgba(0,0,0,0)" strokeWidth={14 / zoom} strokeLinejoin="round" style={{ cursor: tool === 'select' ? 'pointer' : 'inherit', pointerEvents: tool === 'select' ? 'stroke' : 'none' }}
+                            onMouseDown={ev => { if (tool !== 'select') return; ev.stopPropagation(); selectPlumbPipe(q.id) }}
+                            onClick={ev => { if (tool === 'select') ev.stopPropagation() }} />
+                        </g>
+                      )
+                    })}
+                    {net ? net.edges.map((e, i) => (
+                      <g key={'pe' + i} style={{ pointerEvents: 'none' }}>
+                        <line x1={e.a.x} y1={e.a.y} x2={e.b.x} y2={e.b.y} stroke={colourOf(e.sizeMm)} strokeWidth={2.5 / zoom} strokeLinecap="round" />
+                        {e.lengthM >= 0.6 && <text x={(e.a.x + e.b.x) / 2} y={(e.a.y + e.b.y) / 2 - 5 / zoom} textAnchor="middle" fontSize={9 / zoom} fontWeight={700} fill={colourOf(e.sizeMm)} stroke="#fff" strokeWidth={2.5 / zoom} paintOrder="stroke">{e.sizeMm}</text>}
+                      </g>
+                    )) : null}
+                    {net ? net.fittings.map((f, i) => (f.kind === 'elbow' || f.kind === 'bend45'
+                      ? <circle key={'pf' + i} cx={f.x} cy={f.y} r={4 / zoom} fill="#fff" stroke="#111" strokeWidth={1.5 / zoom} style={{ pointerEvents: 'none' }} />
+                      : <rect key={'pf' + i} x={f.x - 4 / zoom} y={f.y - 4 / zoom} width={8 / zoom} height={8 / zoom} fill="#111" stroke="#fff" strokeWidth={1 / zoom} style={{ pointerEvents: 'none' }} />)) : null}
+                    {tool === 'select' && plumbPipesShowing.filter(q => q.id === selectedPlumbPipeId).map(q => q.points.map((p, vi) => (
+                      <circle key={q.id + vi} cx={p.x} cy={p.y} r={5 / zoom} fill="#fff" stroke={SEL_COLOUR} strokeWidth={1.5 / zoom} style={{ cursor: 'move' }} onMouseDown={ev => startPipeVertexDrag(ev, q.id, vi)} />
+                    )))}
+                  </g>
+                )
+              })()}
+
               {/* Plumbing fittings — a coloured dot with its letters; a radiator is a small panel showing its width. Drag one in Select mode to move it. */}
               {!hiddenPhases.has('Plumbing & Heating') && plumbShowing.map(pt => {
                 const g = FITTING_BY_ID[pt.typeId]?.group
@@ -7688,13 +7831,14 @@ export default function TakeoffPage() {
                 const size = rad ? plumbSizes.get(pt.id) : undefined
                 const r = 10 / zoom
                 const chosen = pt.id === selectedPlumbPointId
-                const fill = size?.short ? '#d97706' : g ? PLUMB_GROUP_COLOUR[g] : '#888'
+                const source = pt.typeId === HEAT_SOURCE
+                const fill = source ? HEAT_SOURCE_COLOUR : size?.short ? '#d97706' : g ? PLUMB_GROUP_COLOUR[g] : '#888'
                 return (
                   <g key={pt.id} transform={`translate(${pt.x}, ${pt.y})`}
                     onMouseDown={ev => startPlumbPointDrag(ev, pt)}
                     onClick={ev => { if (tool === 'select') ev.stopPropagation() }}
                     style={{ cursor: tool === 'select' ? 'move' : 'inherit' }}>
-                    {rad
+                    {rad || source
                       ? <rect x={-r * 1.5} y={-r * 0.8} width={r * 3} height={r * 1.6} rx={r * 0.35} fill={fill} stroke={chosen ? '#fff' : '#111'} strokeWidth={(chosen ? 2.5 : 1) / zoom} opacity={0.95} />
                       : <circle r={r} fill={fill} stroke={chosen ? '#fff' : '#111'} strokeWidth={(chosen ? 2.5 : 1) / zoom} opacity={0.95} />}
                     <text textAnchor="middle" dominantBaseline="central" fontSize={8.5 / zoom} fontWeight={800} fill="#fff" style={{ pointerEvents: 'none' }}>{PLUMB_SHORT[pt.typeId] ?? '?'}</text>
@@ -7838,6 +7982,7 @@ export default function TakeoffPage() {
           }}>
             <span>Tool: <strong style={{ color: tool === 'floor' ? '#f39c12' : 'var(--to-text)' }}>{
               calibDrawing ? '📏 CALIBRATING' :
+              (pipeDraw && tool === 'line') ? 'Drawing a HEATING PIPE: start on the boiler or a radiator, click each bend, double-click to finish (the ends snap to radiators and pipes)' :
               (roomDraw === 'edge' && tool === 'line') ? 'Drawing a ROOM EDGE: click its start and end (it closes a room, it is not a wall)' :
               (roomDraw && tool === 'rect') ? 'Drawing a ROOM: click two corners (or type the size)' :
               (roomDraw && tool === 'polygon') ? 'Drawing a ROOM: click each corner, double-click to finish' :

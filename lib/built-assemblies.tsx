@@ -62,6 +62,7 @@ import type { CostedLine } from '@/lib/assembly-calc'
 import type { AssemblyBasics } from '@/lib/assembly-basics'
 import type { PlanRoom, ElectricsSavedState } from '@/lib/electrics-units'
 import type { PlacedRoom } from '@/lib/plumb-points'
+import type { PipeSummary } from '@/lib/pipe-network'
 import type { PlanOpening } from '@/lib/wd-units'
 import type { PlanWallOpening } from '@/lib/wall-openings'
 import type { PlanRoomInfo } from '@/lib/rooms-from-walls'
@@ -112,6 +113,8 @@ export interface AssemblyRenderOpts {
   electrics?: { planRooms?: PlanRoom[]; initialState?: ElectricsSavedState }
   /** the plumbing fittings placed on the Take-off plan, room by room (the Plumbing Installation calculator follows them) */
   plumbPlaced?: PlacedRoom[]
+  /** the heating pipe runs drawn on the Take-off plan, sized with their fittings counted (the Plumbing Installation calculator prices them) */
+  plumbPipes?: PipeSummary
   /** Windows & Doors only: the doors and windows placed on the Take-off plan, which the calculator adds and follows. */
   planOpenings?: PlanOpening[]
   /** A wall calculator with openings of its own (the cavity wall): the doors and windows drawn on this wall, which it adds and follows. */
@@ -154,7 +157,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'fs-block-beam': { icon: 'block-beam', render: opts => <AssemblyBlockBeamFloorDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} /> },
   'fs-suspended-timber': { icon: 'timber-floor', render: opts => <AssemblySuspendedTimberFloorDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} /> },
   'fs-insulated-concrete': { icon: 'insulated-concrete', render: opts => <AssemblyConcreteSlabFloorDemo variant="insulated" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} /> },
-  'plumb-install': { icon: 'plumbing', render: opts => <AssemblyPlumbingDemo planRooms={opts?.planRooms} placed={opts?.plumbPlaced} onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
+  'plumb-install': { icon: 'plumbing', render: opts => <AssemblyPlumbingDemo planRooms={opts?.planRooms} placed={opts?.plumbPlaced} pipes={opts?.plumbPipes} onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'plumb-heating-plant': { icon: 'heating', render: opts => <AssemblyHeatingDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'plumb-ufh': { icon: 'ufh', render: opts => <AssemblyUfhDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'plumb-pipework': { icon: 'pipework', render: opts => <AssemblyPipeworkDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },

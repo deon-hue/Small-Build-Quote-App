@@ -5,6 +5,8 @@
 // and Gas Safe work are not here. Self-contained (no cross-file runtime imports), so it can be hand-tested with plain Node; the screen costs the lines it returns through the shared costLayer with each
 // layer's fixedQty set from the quantity.
 
+import type { PipeSummary } from './pipe-network'
+
 export type FittingGroup = 'sanitaryware' | 'kitchen' | 'heating' | 'outside'
 
 export interface FittingType {
@@ -142,7 +144,42 @@ export interface PlumbingRoom {
   radiators?: { id: string; label: string; watts: number }[]
 }
 
+/** Heating pipework drawn on the Take-off plan, from the radiators and the boiler: pipe by size, elbows and tees, priced by the metre and each. Sample rates to check against your supplier and plumber. */
+export type PipeMaterial = 'copper' | 'plastic'
+export const PIPE_MATERIAL_LABEL: Record<PipeMaterial, string> = { copper: 'Copper', plastic: 'Plastic (multilayer, push-fit)' }
+export const PIPE_SIZE_LIST = [15, 22, 28, 35]
+/** materials: £ per metre of pipe, £ each for an elbow and for an equal tee, by material and size; a bend is priced as an elbow and a reducing tee at 25% more than the equal tee of its larger size */
+export const DEFAULT_PIPE_RATES: Record<PipeMaterial, Record<string, { pipe: number; elbow: number; tee: number }>> = {
+  copper: { '15': { pipe: 4.2, elbow: 0.9, tee: 1.6 }, '22': { pipe: 9.5, elbow: 2.6, tee: 4.2 }, '28': { pipe: 16, elbow: 6.5, tee: 10 }, '35': { pipe: 26, elbow: 14, tee: 22 } },
+  plastic: { '15': { pipe: 2.4, elbow: 2.2, tee: 3.4 }, '22': { pipe: 5.2, elbow: 4.5, tee: 7 }, '28': { pipe: 9, elbow: 9, tee: 14 }, '35': { pipe: 14, elbow: 20, tee: 30 } },
+}
+/** the plumber: £ per metre of pipe laid and clipped, by size, and £ for each joint made (a copper joint is slower than a push-fit one) */
+export const DEFAULT_PIPE_LABOUR_PER_M: Record<string, number> = { '15': 14, '22': 17, '28': 20, '35': 24 }
+export const DEFAULT_JOINT_LABOUR: Record<PipeMaterial, number> = { copper: 6, plastic: 3.5 }
+const JOINTS_PER: Record<string, number> = { elbow: 2, bend45: 2, tee: 3, 'reducing-tee': 3 }
+const FITTING_NAME: Record<string, string> = { elbow: 'elbow', bend45: '45° bend', tee: 'equal tee', 'reducing-tee': 'reducing tee' }
+
+export interface PipeCostInput {
+  summary: PipeSummary
+  material: PipeMaterial
+  /** extra pipe over the straight lengths drawn (the real route, offcuts), % */
+  allowancePct: number
+  /** pipe up to or down to each radiator from the floor or ceiling: metres of EACH of flow and return, per radiator */
+  risePerRadiatorM: number
+  /** pipe that is not on the plan (risers between floors, boiler to the first run): metres of run, flow and return both laid, and its size */
+  extraM: number
+  extraSizeMm: number
+  /** the part of a radiator's all-in price that is its pipework: taken off a radiator that is connected by pipes drawn on the plan, so it is not paid twice */
+  radiatorPipeworkIn: number
+  /** clips, solder or flux, insulation sleeves: % on the pipe and fittings */
+  sundriesPct: number
+  /** rates typed over the defaults: 'pipe|copper|22', 'elbow|copper|22', 'tee|copper|22', 'labm|22', 'joint|copper' */
+  rates: Record<string, number>
+}
+
 export interface PlumbingInput {
+  /** heating pipe runs drawn on the plan: priced in addition to the rooms (leave out for none) */
+  pipes?: PipeCostInput
   rooms: PlumbingRoom[]
   wholeHouse: Record<string, number>
   jobSituationId: string
@@ -189,6 +226,7 @@ export function calculatePlumbing(input: PlumbingInput): PlumbingResult {
   const roomSummaries: PlumbingResult['roomSummaries'] = []
   const warnings: string[] = []
   let totalFittings = 0, specialCount = 0
+  const connectedIds = new Set(input.pipes?.summary.connectedRadiatorIds ?? [])
 
   for (const room of input.rooms) {
     const rs = input.situations.find(s => s.id === (room.situationId ?? input.jobSituationId))
@@ -210,7 +248,10 @@ export function calculatePlumbing(input: PlumbingInput): PlumbingResult {
         if (n === 0) continue
         const base = input.fittingRates[ft.id] ?? ft.rate
         if (base < 0) throw new Error(`The rate for ${ft.name} cannot be negative.`)
-        lines.push({ id: `fit|${room.id}|${ft.id}`, name: `${rn} — ${ft.name}`, category: 'subcontractors', unit: 'nr', unitCost: money(base * uplift), qty: n, roomId: room.id })
+        // a radiator whose pipes are drawn on the plan is paid for without its pipework (that is priced by the metre and fitting below)
+        const piped = ft.id === 'radiator' && input.pipes ? (room.radiators ?? []).slice(0, n).filter(rad => connectedIds.has(rad.id)).length : 0
+        if (n - piped > 0) lines.push({ id: `fit|${room.id}|${ft.id}`, name: `${rn} — ${ft.name}`, category: 'subcontractors', unit: 'nr', unitCost: money(base * uplift), qty: n - piped, roomId: room.id })
+        if (piped > 0) lines.push({ id: `fitpiped|${room.id}|${ft.id}`, name: `${rn} — radiator, fixing and connecting (pipework drawn on the plan)`, category: 'subcontractors', unit: 'nr', unitCost: money(Math.max(0, base - (input.pipes?.radiatorPipeworkIn ?? 0)) * uplift), qty: piped, roomId: room.id })
         const pc = input.pcRates[ft.id] ?? ft.pcSum
         if (room.supply === 'us' && pc > 0) {
           // a radiator placed on the plan has a size, so one we supply is priced by its output; the rest of the room's radiators are the usual provisional sum each
@@ -243,6 +284,8 @@ export function calculatePlumbing(input: PlumbingInput): PlumbingResult {
     roomSummaries.push({ roomId: room.id, name: rn, fittings: roomFittings, byGroup, specials: roomSpecials, uplift: rs.upliftPct, mode: room.mode, supply: room.supply })
   }
 
+  if (input.pipes && (input.pipes.summary.runCount > 0 || input.pipes.extraM > 0)) priceHeatingPipework(input.pipes, 1 + sit.upliftPct / 100, lines, warnings)
+
   for (const w of WHOLE_HOUSE_ITEMS) {
     const n = input.wholeHouse[w.id] ?? 0
     if (!(n >= 0)) throw new Error(`The number of "${w.name}" cannot be negative.`)
@@ -257,6 +300,43 @@ export function calculatePlumbing(input: PlumbingInput): PlumbingResult {
   }
 
   return { lines, roomCount: input.rooms.length, totalFittings, specialCount, roomSummaries, warnings }
+}
+
+/** The heating pipework drawn on the plan: pipe by size (flow and return), each elbow and tee, the plumber's time, and sundries. */
+function priceHeatingPipework(p: PipeCostInput, uplift: number, lines: PlumbingLine[], warnings: string[]) {
+  if (!(p.allowancePct >= 0) || !(p.risePerRadiatorM >= 0) || !(p.extraM >= 0) || !(p.sundriesPct >= 0)) throw new Error('The pipework allowance, rises, extra pipe and sundries cannot be negative.')
+  const mat = p.material
+  const rate = (kind: 'pipe' | 'elbow' | 'tee', size: number) => p.rates[`${kind}|${mat}|${size}`] ?? DEFAULT_PIPE_RATES[mat][String(size)]?.[kind] ?? 0
+  const labm = (size: number) => p.rates[`labm|${size}`] ?? DEFAULT_PIPE_LABOUR_PER_M[String(size)] ?? 0
+  const joint = p.rates[`joint|${mat}`] ?? DEFAULT_JOINT_LABOUR[mat]
+  const label = PIPE_MATERIAL_LABEL[mat].replace(/ \(.*\)$/, '').toLowerCase()
+  // metres of pipe laid, flow AND return, by size: the drawn length with its allowance, the rise to each radiator (15mm), and any pipe that is not on the plan
+  const metres: Record<string, number> = {}
+  for (const [k, v] of Object.entries(p.summary.lengthBySize)) metres[k] = (metres[k] ?? 0) + v * 2 * (1 + p.allowancePct / 100)
+  metres['15'] = (metres['15'] ?? 0) + p.summary.connectedRadiatorIds.length * 2 * p.risePerRadiatorM
+  if (p.extraM > 0) metres[String(p.extraSizeMm)] = (metres[String(p.extraSizeMm)] ?? 0) + p.extraM * 2
+  let materials = 0
+  for (const size of PIPE_SIZE_LIST) {
+    const m = metres[String(size)] ?? 0
+    if (!(m > 0)) continue
+    const q = +m.toFixed(1)
+    lines.push({ id: `pipe|${size}`, name: `Heating pipe ${size}mm ${label}, flow and return (from the plan)`, category: 'materials', unit: 'm', unitCost: money(rate('pipe', size)), qty: q })
+    lines.push({ id: `pipelab|${size}`, name: `Plumber: lay and clip ${size}mm heating pipe`, category: 'subcontractors', unit: 'm', unitCost: money(labm(size) * uplift), qty: q })
+    materials += q * rate('pipe', size)
+  }
+  let joints = 0
+  for (const f of p.summary.fittings) {
+    const each = f.kind === 'reducing-tee' ? rate('tee', f.sizeMm) * 1.25 : f.kind === 'tee' ? rate('tee', f.sizeMm) : rate('elbow', f.sizeMm)
+    const qty = f.count * 2   // one in the flow, one in the return
+    const size = f.kind === 'reducing-tee' && f.branchMm ? `${f.sizeMm}x${f.branchMm}mm` : `${f.sizeMm}mm`
+    lines.push({ id: `pipefit|${f.kind}|${f.sizeMm}|${f.branchMm ?? 0}`, name: `${size} ${label} ${FITTING_NAME[f.kind]} (heating pipework)`, category: 'materials', unit: 'nr', unitCost: money(each), qty })
+    materials += qty * each
+    joints += qty * (JOINTS_PER[f.kind] ?? 2)
+  }
+  if (joints > 0) lines.push({ id: 'pipejoints', name: `Plumber: make ${joints} ${label} joints`, category: 'subcontractors', unit: 'nr', unitCost: money(joint * uplift), qty: joints })
+  if (materials > 0 && p.sundriesPct > 0) lines.push({ id: 'pipesundries', name: 'Pipe clips, flux or solder, sleeves and sundries', category: 'materials', unit: 'item', unitCost: money(materials * p.sundriesPct / 100), qty: 1 })
+  for (const w of p.summary.warnings) warnings.push('Heating pipework: ' + w)
+  if (!(p.summary.totalLengthM > 0) && p.extraM <= 0) warnings.push('Heating pipework: no pipe is drawn on the plan yet.')
 }
 
 /** The £ for the lines (quantity x unit cost, no profit) — used by the hand tests and to show a subtotal. */

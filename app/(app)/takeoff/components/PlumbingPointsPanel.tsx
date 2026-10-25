@@ -10,11 +10,13 @@
 import React from 'react'
 import AssemblyItemPanel from './AssemblyWindow'
 import { FITTING_TYPES, FITTING_BY_ID } from '@/lib/plumbing-units'
-import { PLUMB_SHORT, UNNAMED_ROOM, type PlumbPoint } from '@/lib/plumb-points'
+import { PLUMB_SHORT, UNNAMED_ROOM, HEAT_SOURCE, type PlumbPoint, type PlumbPipe } from '@/lib/plumb-points'
+import { FITTING_LABEL, type PipeSummary } from '@/lib/pipe-network'
 import { RAD_TYPES, RAD_HEIGHTS, RAD_WIDTHS, AGE_LABEL, type BuildingAge, type RadSizing } from '@/lib/radiators'
 import type { CostedLine } from '@/lib/assembly-calc'
 
 export const PLUMB_GROUP_COLOUR: Record<string, string> = { sanitaryware: '#0ea5e9', kitchen: '#14b8a6', heating: '#ef4444', outside: '#84cc16' }
+export const HEAT_SOURCE_COLOUR = '#111827'
 const GROUP_LABEL: Record<string, string> = { sanitaryware: 'Bathroom', kitchen: 'Kitchen and utility', heating: 'Heating', outside: 'Outside' }
 const GROUPS = ['sanitaryware', 'kitchen', 'heating', 'outside']
 
@@ -46,6 +48,15 @@ interface Props {
   sizes: Map<string, RadSizing>
   /** the heat loss behind a point's room, when it is inside a room */
   heatOf: (p: PlumbPoint) => RoomHeatSummary | null
+  /** heating pipe runs: drawing one (the line tool, with its ends snapping to radiators and the boiler), the runs on this level, and what they come to */
+  pipeDrawing: boolean
+  onPipeDrawing: (on: boolean) => void
+  pipes: PlumbPipe[]
+  pipeLengthM: (q: PlumbPipe) => number
+  selectedPipeId: string | null
+  onSelectPipe: (id: string | null) => void
+  onDeletePipe: (id: string) => void
+  pipeSummary?: PipeSummary
   saved?: { lines: CostedLine[]; location?: string }
   stale?: boolean
   calculatorOpen: boolean
@@ -60,8 +71,10 @@ const input: React.CSSProperties = { width: '100%', boxSizing: 'border-box', fon
 
 export default function PlumbingPointsPanel(p: Props) {
   const selected = p.points.find(x => x.id === p.selectedPointId) ?? null
+  const fittingPoints = p.points.filter(x => x.typeId !== HEAT_SOURCE)
+  const hasSource = p.points.some(x => x.typeId === HEAT_SOURCE)
   const rooms = Array.from(
-    p.points.reduce((m, pt) => { const k = p.roomOf(pt).trim() || UNNAMED_ROOM; m.set(k, [...(m.get(k) ?? []), pt]); return m }, new Map<string, PlumbPoint[]>()),
+    fittingPoints.reduce((m, pt) => { const k = p.roomOf(pt).trim() || UNNAMED_ROOM; m.set(k, [...(m.get(k) ?? []), pt]); return m }, new Map<string, PlumbPoint[]>()),
   )
   const selSize = selected ? p.sizes.get(selected.id) : undefined
   const selHeat = selected && selected.typeId === 'radiator' ? p.heatOf(selected) : null
@@ -84,7 +97,7 @@ export default function PlumbingPointsPanel(p: Props) {
       <div style={box}>
         <div style={label}>Kind of fitting</div>
         {GROUPS.map(g => {
-          const types = FITTING_TYPES.filter(t => t.group === g)
+          const types: { id: string; name: string }[] = [...FITTING_TYPES.filter(t => t.group === g), ...(g === 'heating' ? [{ id: HEAT_SOURCE, name: 'Boiler / heat source' }] : [])]
           if (types.length === 0) return null
           return (
             <div key={g} style={{ marginBottom: 6 }}>
@@ -141,7 +154,7 @@ export default function PlumbingPointsPanel(p: Props) {
       </div>
 
       <div style={box}>
-        <div style={label}>Placed so far — {p.points.length} fitting{p.points.length === 1 ? '' : 's'} in {rooms.length} room{rooms.length === 1 ? '' : 's'}</div>
+        <div style={label}>Placed so far — {fittingPoints.length} fitting{fittingPoints.length === 1 ? '' : 's'} in {rooms.length} room{rooms.length === 1 ? '' : 's'}</div>
         {rooms.length === 0 && <div style={{ fontSize: 11.5, color: 'var(--to-muted)' }}>None yet.</div>}
         {rooms.map(([name, pts]) => {
           const counts = pts.reduce((m, pt) => m.set(pt.typeId, (m.get(pt.typeId) ?? 0) + 1), new Map<string, number>())
@@ -165,12 +178,41 @@ export default function PlumbingPointsPanel(p: Props) {
         {radCount > 0 && <div style={{ fontSize: 11, color: 'var(--to-muted)', marginTop: 6 }}>{radCount} radiator{radCount === 1 ? '' : 's'}: {(radW / 1000).toFixed(1)} kW in all</div>}
       </div>
 
+      <div style={box}>
+        <div style={label}>Heating pipes</div>
+        <button type="button" onClick={() => p.onPipeDrawing(!p.pipeDrawing)}
+          style={{ width: '100%', padding: '7px 10px', marginBottom: 6, borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit',
+            border: `1px solid ${p.pipeDrawing ? '#dc2626' : 'var(--to-border)'}`, background: p.pipeDrawing ? '#dc2626' : 'var(--to-bg)', color: p.pipeDrawing ? '#fff' : 'var(--to-text)' }}>
+          {p.pipeDrawing ? '● Drawing a pipe run — click each bend, double-click to finish (press again to stop)' : '〰 Draw a pipe run'}
+        </button>
+        <div style={{ fontSize: 10.5, color: 'var(--to-muted)', lineHeight: 1.45, marginBottom: 6 }}>
+          Draw each run from the boiler out to a radiator: a bend is an elbow, a run that starts on another run is a tee, and a radiator on a run is teed off it. The ends snap to radiators and to other pipes. Pipe sizes are worked out from the heat each stretch carries.
+          {!hasSource && ' Place a Boiler / heat source (under Heating, above) at the start of the main run so the sizes count from there.'}
+        </div>
+        {p.pipes.length === 0 && <div style={{ fontSize: 11.5, color: 'var(--to-muted)' }}>No pipe drawn on this level yet.</div>}
+        {p.pipes.map((q, i) => (
+          <div key={q.id} onClick={() => p.onSelectPipe(q.id)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11.5, padding: '3px 4px', borderRadius: 4, cursor: 'pointer', background: q.id === p.selectedPipeId ? 'rgba(220,38,38,0.15)' : 'transparent', color: 'var(--to-text)' }}>
+            <span>Run {i + 1} — {p.pipeLengthM(q).toFixed(2)} m</span>
+            <button type="button" onClick={e => { e.stopPropagation(); p.onDeletePipe(q.id) }} title="Delete this run" style={{ border: 'none', background: 'transparent', color: '#c0392b', cursor: 'pointer', fontSize: 13 }}>✕</button>
+          </div>
+        ))}
+        {p.pipeSummary && p.pipeSummary.runCount > 0 && (
+          <div style={{ fontSize: 11, color: 'var(--to-text)', lineHeight: 1.5, marginTop: 6, borderTop: '1px solid var(--to-border)', paddingTop: 5 }}>
+            <div><b>{p.pipeSummary.totalLengthM.toFixed(1)} m</b> in all, carrying {(p.pipeSummary.totalLoadW / 1000).toFixed(1)} kW to {p.pipeSummary.connectedRadiatorIds.length} radiator{p.pipeSummary.connectedRadiatorIds.length === 1 ? '' : 's'}</div>
+            <div style={{ color: 'var(--to-muted)' }}>{Object.entries(p.pipeSummary.lengthBySize).filter(([, v]) => v > 0).sort((a, b) => +a[0] - +b[0]).map(([k, v]) => `${k}mm ${v.toFixed(1)} m`).join(' · ')}</div>
+            <div style={{ color: 'var(--to-muted)' }}>{p.pipeSummary.fittings.length === 0 ? 'No elbows or tees' : p.pipeSummary.fittings.map(f => `${f.count} × ${f.kind === 'reducing-tee' && f.branchMm ? `${f.sizeMm}x${f.branchMm}` : f.sizeMm}mm ${FITTING_LABEL[f.kind].toLowerCase()}`).join(', ')}</div>
+            {p.pipeSummary.warnings.map((w, i) => <div key={i} style={{ color: '#d97706' }}>⚠ {w}</div>)}
+          </div>
+        )}
+      </div>
+
       {selected && (
         <div style={{ ...box, borderColor: '#0284c7' }}>
           <div style={label}>Selected fitting</div>
           <div style={{ display: 'grid', gap: 6 }}>
             <select value={selected.typeId} onChange={e => p.onUpdatePoint(selected.id, { typeId: e.target.value, rad: e.target.value === 'radiator' ? (selected.rad ?? { typeId: p.radType, heightMm: p.radHeight }) : undefined })} style={input}>
               {FITTING_TYPES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              <option value={HEAT_SOURCE}>Boiler / heat source</option>
             </select>
             <div style={{ fontSize: 11, color: 'var(--to-muted)' }}>In: <b style={{ color: 'var(--to-text)' }}>{p.roomOf(selected) || UNNAMED_ROOM}</b></div>
             <input list="plumb-rooms" value={selected.roomName} onChange={e => p.onUpdatePoint(selected.id, { roomName: e.target.value })} placeholder="Room (used when it is not inside a room)" style={input} />
@@ -215,7 +257,7 @@ export default function PlumbingPointsPanel(p: Props) {
         name="Plumbing installation"
         lengthM={0}
         measureLabel="Fittings on the plan"
-        measureText={`${p.points.length} in ${rooms.length} room${rooms.length === 1 ? '' : 's'}`}
+        measureText={`${fittingPoints.length} in ${rooms.length} room${rooms.length === 1 ? '' : 's'}${p.pipeSummary && p.pipeSummary.runCount > 0 ? ` + ${p.pipeSummary.totalLengthM.toFixed(1)} m of pipe` : ''}`}
         saved={p.saved}
         open={p.calculatorOpen}
         onOpen={p.onOpenCalculator}

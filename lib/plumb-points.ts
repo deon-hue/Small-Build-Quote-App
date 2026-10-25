@@ -15,8 +15,20 @@ export interface PlumbPoint {
   rad?: { typeId: string; heightMm: number; widthMm?: number; /** the width it was last sized to for its room (kept so a radiator on another level still has a size) */ autoW?: number }
 }
 
+/** The boiler or manifold the heating pipes start from: placed on the plan like a fitting but not a fitting (it is priced in the Heating plant calculator). */
+export const HEAT_SOURCE = 'heat-source'
+
+/** A run of heating pipe drawn on the plan: its points in the plan's own pixels. */
+export interface PlumbPipe {
+  id: string
+  points: { x: number; y: number }[]
+  sheetId?: string
+  levelId?: string
+}
+
 /** The letters drawn on a fitting's marker. */
 export const PLUMB_SHORT: Record<string, string> = {
+  'heat-source': 'BO',
   bath: 'BA', 'shower-valve': 'SV', 'shower-tray': 'ST', basin: 'WB', wc: 'WC', bidet: 'BD', 'floor-drain': 'FD',
   'kitchen-sink': 'KS', 'utility-sink': 'US', 'washing-machine': 'WM', dishwasher: 'DW', 'fridge-supply': 'FR', softener: 'SF',
   radiator: 'R', 'towel-rail': 'TR', 'outside-tap': 'OT',
@@ -43,6 +55,7 @@ export interface PlacedRoom {
 export function placedRoomsFromPoints(points: PlumbPoint[], size: (p: PlumbPoint) => { widthMm: number; watts: number; label: string }): PlacedRoom[] {
   const rooms: PlacedRoom[] = []
   for (const p of points) {
+    if (p.typeId === HEAT_SOURCE) continue
     const name = roomKey(p.roomName)
     let r = rooms.find(x => x.name.toLowerCase() === name.toLowerCase())
     if (!r) { r = { name, counts: {}, radiators: [] }; rooms.push(r) }
