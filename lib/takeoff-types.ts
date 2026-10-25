@@ -9,11 +9,12 @@ import type { PlumbPoint, PlumbPipe } from './plumb-points'
 import type { BuildingAge } from './radiators'
 import type { PlacedOpening } from './wall-openings'
 import type { RoomLabel, DrawnRoomShape, RoomEdge } from './rooms-from-walls'
+import type { Guide } from './guides'
 import type { CalcStateSnapshot } from './calc-snapshot'
 
 // ── Drawing tools ─────────────────────────────────────────────────────────────
 
-export type DrawingTool = 'select' | 'line' | 'rect' | 'polygon' | 'floor' | 'click' | 'electric' | 'plumb' | 'opening' | 'room' | 'join' | 'measure'
+export type DrawingTool = 'select' | 'line' | 'rect' | 'polygon' | 'floor' | 'click' | 'electric' | 'plumb' | 'opening' | 'room' | 'join' | 'measure' | 'guide'
 
 // ── Measurement categories (match quote parentPhase names) ────────────────────
 
@@ -383,6 +384,8 @@ export interface TakeoffSheet {
   roomShapes?: DrawnRoomShape[]
   /** the room edges drawn on this sheet */
   roomEdges?: RoomEdge[]
+  /** construction guides on this sheet (endless lines the drawing points snap to; on every level, never priced) */
+  guides?: Guide[]
 }
 
 export const SCALE_PRESETS: { label: string; mpp: number }[] = [
@@ -446,6 +449,8 @@ export interface TakeoffProject {
   roomLabels?:   RoomLabel[]
   roomShapes?:   DrawnRoomShape[]
   roomEdges?:    RoomEdge[]
+  /** construction guides for a take-off with no plan loaded yet (once there is a sheet they are kept on it) */
+  guides?:       Guide[]
 }
 
 // ── Export format ─────────────────────────────────────────────────────────────

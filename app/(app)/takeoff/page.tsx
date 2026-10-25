@@ -5,7 +5,8 @@ import NumInput from '@/components/NumInput'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { makeDebouncedSave, isEmptyTakeoff, isUuid, newProjectId, loadTakeoffFromSupabase, saveTakeoffToSupabase, listTakeoffSummaries, deleteTakeoffProject, type TakeoffSummary } from '@/lib/takeoff-sync'
-import { sheetOf, roomLabelsOf, setRoomLabels, roomShapesOf, setRoomShapes, roomEdgesOf, setRoomEdges, activeSheetIdOf, onActiveSheet, onActiveLevel, activeLevelIdOf, levelOf, levelName, levelBelow, ghostLevel, elementsOnGhostLevel, viewKey, itemLevelId, addLevel, switchActiveLevel, renameLevel, setLevelHeight, removeLevel, moveElementToLevel, copyLevelContents, levelInsertIndex, LEVEL_PRESETS, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet, setSheetPaper } from '@/lib/takeoff-sheets'
+import { sheetOf, roomLabelsOf, setRoomLabels, roomShapesOf, setRoomShapes, roomEdgesOf, setRoomEdges, activeSheetIdOf, onActiveSheet, onActiveLevel, activeLevelIdOf, levelOf, levelName, levelBelow, ghostLevel, elementsOnGhostLevel, viewKey, itemLevelId, addLevel, switchActiveLevel, renameLevel, setLevelHeight, removeLevel, moveElementToLevel, copyLevelContents, levelInsertIndex, LEVEL_PRESETS, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet, setSheetPaper, guidesOf, setGuides } from '@/lib/takeoff-sheets'
+import { guideFromPoints, horizontalGuide, verticalGuide, clipToBox, guideSegments, guideCrossings, signedOffset, nearestGuide, moveGuideThrough, offsetLine, nearestLine, guideName, type Guide, type Box as GuideBox, type PickLine } from '@/lib/guides'
 import { layoutTags, polylineMidpoint, textColorFor, tagText, TAG_HEIGHT_PX } from '@/lib/takeoff-tags'
 import { PDF_RENDER_MM_PER_PX, PAPER_SIZES, SCALE_DENOMS, scaleLabel, denomFromLabel, mppForScale, paperFromMm, inferPdfPaper, mmPerPxForPaper } from '@/lib/takeoff-paper'
 import { putSheetImage, getSheetImage, deleteProjectImages } from '@/lib/takeoff-sheet-images'
@@ -67,7 +68,7 @@ import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
 import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, segmentMiddle, flippedSwing, pointAtDist, type PlacedOpening, type WallBand } from '@/lib/wall-openings'
 import { KIND_BY_ID as WD_KIND_BY_ID, planOpeningSig, type OpeningKind, type WdSwing, type PlanOpening } from '@/lib/wd-units'
 import { buildDragLinks, applyLink, joinCorner, type DragLink } from '@/lib/wall-links'
-import { cornersOf, segmentsFor, snapPoint, anchorsFor, parseTyped, pointAtDistance, rectCornerAt, rotateShape, type SnapResult } from '@/lib/takeoff-snap'
+import { cornersOf, segmentsFor, snapPoint, anchorsFor, parseTyped, pointAtDistance, rectCornerAt, rotateShape, type SnapResult, type SnapAnchor } from '@/lib/takeoff-snap'
 import { newHistory, observe as observeHistory, undoStep, redoStep, type History } from '@/lib/takeoff-history'
 import ConstructionLayerModal, { saveLayerCostToBackOffice } from './components/ConstructionLayerModal'
 import {
@@ -160,6 +161,7 @@ const TOOL_DISPLAY: Record<DrawingTool, string> = {
   room: 'Rooms',
   join: 'Join Corner',
   measure: 'Measure',
+  guide: 'Guides',
 }
 
 // ── ID helpers ────────────────────────────────────────────────────────────────
@@ -696,6 +698,7 @@ export default function TakeoffPage() {
   // The measure tool's finished line stays on the plan until it is cleared. It is never saved and never priced.
   const [measureDone, setMeasureDone] = useState<{ points: TakeoffPoint[] } | null>(null)
   useEffect(() => { if (tool !== 'measure') setMeasureDone(null) }, [tool])
+  useEffect(() => { if (tool !== 'guide') { setGuideBase(null); setGuideTyped(''); setSelectedGuideId(null) } }, [tool])
   const [mousePos, setMousePos] = useState<TakeoffPoint>({ x: 0, y: 0 })
   const [isDrawing, setIsDrawing] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -954,6 +957,14 @@ export default function TakeoffPage() {
   const [roomDraw, setRoomDraw] = useState<false | 'room' | 'edge'>(false)
   useEffect(() => { if (tool !== 'rect' && tool !== 'polygon' && tool !== 'line') setRoomDraw(false) }, [tool])
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
+  // construction guides (endless lines the drawing points snap to): the Guides tool's way of working, the one picked, the line an offset is measured from and the distance typed for it (mm)
+  const [guideMode, setGuideMode] = useState<'move' | 'h' | 'v' | 'angle' | 'offset'>('move')
+  const [selectedGuideId, setSelectedGuideId] = useState<string | null>(null)
+  const [guideBase, setGuideBase] = useState<PickLine | null>(null)
+  const [guideTyped, setGuideTyped] = useState('')
+  const [viewGuides, setViewGuides] = useState(true)
+  const [guideSnapOn, setGuideSnapOn] = useState(true)
+  const guideDragRef = useRef<{ id: string } | null>(null)
   // Join Corner: the first wall picked (its side), waiting for the second
   const [joinFirst, setJoinFirst] = useState<{ id: string; idx: number } | null>(null)
   useEffect(() => { if (tool !== 'join') setJoinFirst(null) }, [tool])
@@ -976,12 +987,14 @@ export default function TakeoffPage() {
         if (typeof r.splitWalls === 'boolean') setSplitWalls(r.splitWalls)
         if (typeof r.gridSnap === 'boolean') setGridSnap(r.gridSnap)
         if (typeof r.gridStep === 'number' && r.gridStep > 0) setGridStep(r.gridStep)
+        if (typeof r.guides === 'boolean') setViewGuides(r.guides)
+        if (typeof r.guideSnap === 'boolean') setGuideSnapOn(r.guideSnap)
         if (typeof r.fade === 'number' && r.fade >= 0 && r.fade <= 75) setViewFade(r.fade)
       }
     } catch {}
     setViewPrefsReady(true)
   }, [])
-  useEffect(() => { if (!viewPrefsReady) return; try { localStorage.setItem('sbc_takeoff_view', JSON.stringify({ halo: viewHalo, tags: viewTags, fade: viewFade, rooms: viewRooms, ghost: viewGhost, panel: panelOpen, dimOut: viewDimOut, dimIn: viewDimIn, roomSize: viewRoomSize, dimUnit: viewDimUnit, splitWalls, gridSnap, gridStep })) } catch {} }, [viewHalo, viewTags, viewFade, viewRooms, viewGhost, panelOpen, viewDimOut, viewDimIn, viewRoomSize, viewDimUnit, splitWalls, gridSnap, gridStep, viewPrefsReady])
+  useEffect(() => { if (!viewPrefsReady) return; try { localStorage.setItem('sbc_takeoff_view', JSON.stringify({ halo: viewHalo, tags: viewTags, fade: viewFade, rooms: viewRooms, ghost: viewGhost, panel: panelOpen, dimOut: viewDimOut, dimIn: viewDimIn, roomSize: viewRoomSize, dimUnit: viewDimUnit, splitWalls, gridSnap, gridStep, guides: viewGuides, guideSnap: guideSnapOn })) } catch {} }, [viewHalo, viewTags, viewFade, viewRooms, viewGhost, panelOpen, viewDimOut, viewDimIn, viewRoomSize, viewDimUnit, splitWalls, gridSnap, gridStep, viewGuides, guideSnapOn, viewPrefsReady])
   const lastSaveError = useRef('')
   const idMigration = useRef<string | null>(null)
   const oldPictureFolders = useRef<string[]>([])
@@ -1434,6 +1447,147 @@ export default function TakeoffPage() {
     return { x: (rawX - panOffset.x) / zoom, y: (rawY - panOffset.y) / zoom }
   }
 
+  // ── Construction guides ────────────────────────────────────────────────────
+  // Endless lines (kept with the sheet, on every level) that drawing points snap to: horizontal, vertical, angled, or a set distance off a wall, a drawing side or another guide. Never priced or scheduled.
+  const guides = guidesOf(project)
+  function guideBox(): GuideBox {
+    const w = canvasImgSize?.w ?? svgSize.w / zoom, h = canvasImgSize?.h ?? svgSize.h / zoom
+    return { x0: -300, y0: -300, x1: w + 300, y1: h + 300 }
+  }
+  /** what a point snaps to on the guides: the guides themselves, anywhere along them, and the places they cross (hidden guides, or snapping to them turned off, give nothing) */
+  function guideSnapParts(excludeId?: string): { anchors: SnapAnchor[]; segments: [TakeoffPoint, TakeoffPoint][] } | null {
+    if (!guideSnapOn || (!viewGuides && tool !== 'guide')) return null
+    const gs = guides.filter(g => g.id !== excludeId)
+    if (!gs.length) return null
+    const box = guideBox()
+    return { anchors: guideCrossings(gs, box).map(p => ({ ...p, kind: 'end' as const })), segments: guideSegments(gs, box) }
+  }
+  function addGuide(g: Guide | null) {
+    if (!g) { showToast('Those two points are the same place: a guide needs a direction'); return }
+    setProject(p => setGuides(p, [...guidesOf(p), g]))
+    setSelectedGuideId(g.id)
+  }
+  function deleteGuide(id: string) {
+    setProject(p => setGuides(p, guidesOf(p).filter(g => g.id !== id)))
+    setSelectedGuideId(null)
+    showToast('Guide deleted')
+  }
+  /** every line an offset guide can be measured from: the guides, the faces of the walls (the inside of the outside walls, both sides of the partitions) and the sides of every drawing */
+  function guideBaseLines(): PickLine[] {
+    const faces = [...insideFaces().segments, ...partitionFaces().segments]
+    const sides = segmentsFor(elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)))
+    return [
+      ...guides.map(g => ({ a: g.a, b: g.b, endless: true })),
+      ...faces.map(([a, b]) => ({ a, b, endless: false })),
+      ...sides.map(([a, b]) => ({ a, b, endless: false })),
+    ]
+  }
+  /** an offset guide, `distPx` plan pixels from the line being measured from, on the side the cursor is on */
+  function placeOffsetGuide(distPx: number) {
+    if (!guideBase) return
+    if (!(distPx > 0)) { showToast('That is on the line itself: move the cursor off it, or type a distance'); return }
+    const o = offsetLine(guideBase.a, guideBase.b, mousePos, distPx)
+    addGuide(guideFromPoints(uid(), o.a, o.b))
+    setGuideTyped('')
+  }
+  function commitGuideOffset() {
+    const mm = parseFloat(guideTyped)
+    if (!(mm > 0)) { showToast('Type a distance in millimetres, like 600'); return }
+    if (project.sheets?.find(s => s.id === activeSheetId)?.scaleSet === false) { showToast('Set the scale for this sheet first: a distance needs it'); return }
+    placeOffsetGuide(mm / 1000 / project.calibration.mpp)
+  }
+  /** a click with the Guides tool, by what it is doing */
+  function guideClick(e: React.MouseEvent) {
+    const raw = svgCoords(e)
+    if (guideMode === 'move') { setSelectedGuideId(nearestGuide(guides, raw, 8 / zoom)?.id ?? null); return }
+    if (guideMode === 'h' || guideMode === 'v') {
+      const pt = drawingPoint(raw).pt
+      addGuide(guideMode === 'h' ? horizontalGuide(uid(), pt.y, pt.x) : verticalGuide(uid(), pt.x, pt.y))
+      return
+    }
+    if (guideMode === 'angle') {
+      const pt = drawingPoint(raw).pt
+      if (!isDrawing || drawPoints.length === 0) { setDrawPoints([pt]); setIsDrawing(true); return }
+      addGuide(guideFromPoints(uid(), drawPoints[0], pt))
+      setDrawPoints([]); setIsDrawing(false)
+      return
+    }
+    // offset: first the line to measure from, then where the new guide goes (a click, or a distance typed in mm)
+    if (!guideBase) {
+      const lines = guideBaseLines()
+      const r = nearestLine(raw, lines, 10 / zoom)
+      if (r.index < 0) { showToast('Click a wall, the side of a drawing or a guide to measure from'); return }
+      setGuideBase(lines[r.index]); setGuideTyped('')
+      return
+    }
+    const pt = drawingPoint(raw).pt
+    placeOffsetGuide(Math.abs(signedOffset(guideBase.a, guideBase.b, pt)))
+  }
+  /** pressing on a guide with the Guides tool (before whatever drawing is under it gets the click): it is picked and, dragged, moves sideways */
+  function handleGuideMouseDown(e: React.MouseEvent<SVGSVGElement>) {
+    if (tool !== 'guide' || guideMode !== 'move' || e.button !== 0 || spaceHeld) return
+    const g = nearestGuide(guides, svgCoords(e), 8 / zoom)
+    if (!g) return
+    e.preventDefault(); e.stopPropagation()
+    guideDragRef.current = { id: g.id }
+    setSelectedGuideId(g.id)
+  }
+  /** the guides on the plan: dashed teal lines running right across it (above the drawings, so one along a wall can still be seen) */
+  function renderGuides() {
+    if (!(viewGuides || tool === 'guide') || guides.length === 0) return null
+    const box = guideBox()
+    return (
+      <g style={{ pointerEvents: 'none' }}>
+        {guides.map(g => {
+          const seg = clipToBox(g, box)
+          if (!seg) return null
+          const sel = tool === 'guide' && g.id === selectedGuideId
+          return (
+            <g key={'guide-' + g.id}>
+              <line x1={seg[0].x} y1={seg[0].y} x2={seg[1].x} y2={seg[1].y} stroke="#ffffff" strokeOpacity={0.75} strokeWidth={3.5 / zoom} />
+              <line x1={seg[0].x} y1={seg[0].y} x2={seg[1].x} y2={seg[1].y} stroke={sel ? SEL_COLOUR : '#0891b2'} strokeWidth={(sel ? 2 : 1.2) / zoom} strokeDasharray={`${10 / zoom} ${5 / zoom}`}><title>{guideName(g)}</title></line>
+            </g>
+          )
+        })}
+      </g>
+    )
+  }
+  /** what the Guides tool is about to place: the guide following the cursor, the line an offset is measured from and the distance */
+  function renderGuideGhost() {
+    if (tool !== 'guide' || guideDragRef.current) return null
+    const box = guideBox()
+    const mpp = project.calibration.mpp
+    const ghost = (l: { a: TakeoffPoint; b: TakeoffPoint }, key: string) => {
+      const sg = clipToBox(l, box)
+      return sg ? <line key={key} x1={sg[0].x} y1={sg[0].y} x2={sg[1].x} y2={sg[1].y} stroke="#0891b2" strokeWidth={1.3 / zoom} strokeDasharray={`${4 / zoom} ${4 / zoom}`} opacity={0.85} /> : null
+    }
+    const pick = (l: PickLine, key: string) => {
+      const sg = l.endless ? clipToBox(l, box) : [l.a, l.b]
+      return sg ? <line key={key} x1={sg[0].x} y1={sg[0].y} x2={sg[1].x} y2={sg[1].y} stroke="#f97316" strokeWidth={3.5 / zoom} opacity={0.8} /> : null
+    }
+    if (guideMode === 'h') return <g style={{ pointerEvents: 'none' }}>{ghost({ a: { x: 0, y: mousePos.y }, b: { x: 100, y: mousePos.y } }, 'gh')}</g>
+    if (guideMode === 'v') return <g style={{ pointerEvents: 'none' }}>{ghost({ a: { x: mousePos.x, y: 0 }, b: { x: mousePos.x, y: 100 } }, 'gv')}</g>
+    if (guideMode === 'angle') return isDrawing && drawPoints.length > 0 ? <g style={{ pointerEvents: 'none' }}>{ghost({ a: drawPoints[0], b: mousePos }, 'ga')}</g> : null
+    if (guideMode !== 'offset') return null
+    if (!guideBase) {
+      const lines = guideBaseLines()
+      const r = nearestLine(mousePos, lines, 10 / zoom)
+      return r.index >= 0 ? <g style={{ pointerEvents: 'none' }}>{pick(lines[r.index], 'gp')}</g> : null
+    }
+    const typedMm = parseFloat(guideTyped)
+    const dPx = typedMm > 0 ? typedMm / 1000 / mpp : Math.abs(signedOffset(guideBase.a, guideBase.b, mousePos))
+    const o = offsetLine(guideBase.a, guideBase.b, mousePos, dPx)
+    const sg = clipToBox(o, box)
+    const mid = sg ? { x: (sg[0].x + sg[1].x) / 2, y: (sg[0].y + sg[1].y) / 2 } : null
+    return (
+      <g style={{ pointerEvents: 'none' }}>
+        {pick(guideBase, 'gb')}
+        {dPx > 0 && ghost(o, 'go')}
+        {mid && dPx > 0 && <text x={mid.x + 6 / zoom} y={mid.y - 6 / zoom} fontSize={12 / zoom} fontWeight={700} fill="#0e7490" stroke="#ffffff" strokeWidth={3 / zoom} paintOrder="stroke">{Math.round(dPx * mpp * 1000)} mm</text>}
+      </g>
+    )
+  }
+
   // ── Mouse handlers ─────────────────────────────────────────────────────────
   function handleMouseMove(e: React.MouseEvent<SVGSVGElement>) {
     // a name tag being dragged out of the way (the offset is kept on its drawing)
@@ -1442,6 +1596,13 @@ export default function TakeoffPage() {
       const d = tagDragRef.current
       const dx = d.dx0 + (pt.x - d.sx), dy = d.dy0 + (pt.y - d.sy)
       setProject(p => ({ ...p, elements: p.elements.map(el => (el.id === d.id ? { ...el, tagDx: dx, tagDy: dy } : el)) }))
+      return
+    }
+    // a guide being dragged sideways (it snaps to corners and other guides, not to itself)
+    if (guideDragRef.current) {
+      const id = guideDragRef.current.id
+      const pt = drawingPoint(svgCoords(e)).pt
+      setProject(p => setGuides(p, guidesOf(p).map(g => (g.id === id ? moveGuideThrough(g, pt) : g))))
       return
     }
     // Element / vertex drag takes priority over everything
@@ -1467,7 +1628,8 @@ export default function TakeoffPage() {
           const anchors2 = [...anchorsFor(elementsOnActiveSheet(project).filter(el => el.id !== id && !joined.has(el.id) && !hiddenPhases.has(el.phase) && !(inside && el.phase === 'External Walls') && !(parts2 && el.phase === 'Internal Walls & Partitions'))), ...(inside ? inside.corners.map(c => ({ ...c, kind: 'end' as const })) : []), ...(parts2 ? parts2.corners.map(c => ({ ...c, kind: 'end' as const })) : [])]
           const segs2 = snapOn ? [...segmentsFor(wallsOnSheet().filter(el => el.id !== id && !joined.has(el.id) && !(inside && el.phase === 'External Walls') && !(parts2 && el.phase === 'Internal Walls & Partitions'))), ...(inside ? inside.segments : []), ...(parts2 ? parts2.segments : [])] : undefined
           const below = snapOn && dragged.phase === 'External Walls' ? lowerOuterWalls() : []
-          const r = snapPoint(want, { anchors: below.length ? [...anchors2, ...anchorsFor(below)] : anchors2, radius: 10 / zoom, snap: snapOn, ortho: false, grid: gridSnap ? { stepPx: gridMinorPx() } : undefined, segments: below.length ? [...(segs2 ?? []), ...segmentsFor(below)] : segs2 })
+          const gp = snapOn ? guideSnapParts() : null
+          const r = snapPoint(want, { anchors: [...(below.length ? [...anchors2, ...anchorsFor(below)] : anchors2), ...(gp ? gp.anchors : [])], radius: 10 / zoom, snap: snapOn, ortho: false, grid: gridSnap ? { stepPx: gridMinorPx() } : undefined, segments: [...(below.length ? [...(segs2 ?? []), ...segmentsFor(below)] : (segs2 ?? [])), ...(gp ? gp.segments : [])] })
           dx += r.pt.x - want.x; dy += r.pt.y - want.y
           setSnapInfo(r.kind === 'none' ? null : r)
         }
@@ -1523,7 +1685,7 @@ export default function TakeoffPage() {
   function handleMouseDown(e: React.MouseEvent<SVGSVGElement>) {
     // Middle mouse, Space+left, or left button in select mode on canvas background = pan
     // (element onMouseDown calls stopPropagation so this won't fire for element clicks)
-    if (!calibDrawing && (e.button === 1 || (e.button === 0 && spaceHeld) || (e.button === 0 && tool === 'select'))) {
+    if (!calibDrawing && (e.button === 1 || (e.button === 0 && spaceHeld) || (e.button === 0 && (tool === 'select' || (tool === 'guide' && guideMode === 'move'))))) {
       e.preventDefault()
       hasPannedRef.current = false
       setIsPanning(true)
@@ -1532,6 +1694,7 @@ export default function TakeoffPage() {
   }
 
   function handleMouseUp() {
+    if (guideDragRef.current) { guideDragRef.current = null; hasPannedRef.current = true; setSnapInfo(null); return }
     if (tagDragRef.current) { tagDragRef.current = null; hasPannedRef.current = true; return }
     if (dragRef.current) {
       // Mark as "panned" so handleSvgClick ignores the synthetic click that fires
@@ -1603,6 +1766,7 @@ export default function TakeoffPage() {
       setSelectedRoomPt(i >= 0 && roomData ? roomData.rooms[i].labelAt : null)
       return
     }
+    if (tool === 'guide') { guideClick(e); return }
     if (tool === 'measure') {
       setMeasureDone(null)
       const mp = drawingPoint(svgCoords(e)).pt
@@ -3978,10 +4142,10 @@ export default function TakeoffPage() {
   }
 
   function drawingPointBase(raw: TakeoffPoint): SnapResult {
-    const drawingTool = tool === 'line' || tool === 'polygon' || tool === 'rect' || tool === 'floor' || tool === 'measure' || tool === 'click' || calibDrawing
+    const drawingTool = tool === 'line' || tool === 'polygon' || tool === 'rect' || tool === 'floor' || tool === 'measure' || tool === 'click' || tool === 'guide' || calibDrawing
     const ortho = orthoOn || shiftHeld
     if (!drawingTool || (!snapOn && !ortho && !gridSnap)) return { pt: raw, kind: 'none' }
-    const polyMode = tool === 'line' || tool === 'polygon' || tool === 'measure' || (tool === 'floor' && floorDrawMode === 'polygon')
+    const polyMode = tool === 'line' || tool === 'polygon' || tool === 'measure' || (tool === 'guide' && guideMode === 'angle') || (tool === 'floor' && floorDrawMode === 'polygon')
     const last = calibDrawing
       ? (calibPts.length === 1 ? calibPts[0] : undefined)
       : (isDrawing && polyMode && drawPoints.length > 0 ? drawPoints[drawPoints.length - 1] : undefined)
@@ -3996,7 +4160,9 @@ export default function TakeoffPage() {
     const segs = snapOn ? [...segmentsFor(wallsOnSheet().filter(w => !(inside && w.phase === 'External Walls') && !(parts && w.phase === 'Internal Walls & Partitions'))), ...(inside ? inside.segments : []), ...(parts ? parts.segments : [])] : undefined
     // an outside wall drawn on an upper level also snaps to the corners and lines of the outside walls of the level below, so a first floor goes exactly over the ground floor
     const below = snapOn && activePhase === 'External Walls' && (tool === 'line' || tool === 'polygon' || tool === 'rect') ? lowerOuterWalls() : []
-    return snapPoint(raw, { anchors: below.length ? [...anchors, ...anchorsFor(below)] : anchors, last, radius: 10 / zoom, snap: snapOn, ortho, grid: gridSnap ? { stepPx: gridMinorPx() } : undefined, segments: below.length ? [...(segs ?? []), ...segmentsFor(below)] : segs })
+    // construction guides: the lines themselves (anywhere along them) and where they cross (a guide being dragged is not snapped to)
+    const gp = snapOn ? guideSnapParts(guideDragRef.current?.id) : null
+    return snapPoint(raw, { anchors: [...(below.length ? [...anchors, ...anchorsFor(below)] : anchors), ...(gp ? gp.anchors : [])], last, radius: 10 / zoom, snap: snapOn, ortho, grid: gridSnap ? { stepPx: gridMinorPx() } : undefined, segments: gp || below.length ? [...(below.length ? [...(segs ?? []), ...segmentsFor(below)] : (segs ?? [])), ...(gp ? gp.segments : [])] : segs })
   }
 
   /** Typing a length is on while a line, polygon, rectangle or floor is being drawn (not the measure tool or calibration). */
@@ -4187,6 +4353,12 @@ export default function TakeoffPage() {
         if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redoDrawing(); return }
         if (k === 'd') { e.preventDefault(); duplicateSelected(); return }
       }
+      // Guides tool, offset: type the distance in millimetres, Enter places the guide on the side of the cursor, Backspace takes back a digit and then the line picked
+      if (!inField && !e.ctrlKey && !e.metaKey && !e.altKey && tool === 'guide' && guideMode === 'offset' && guideBase) {
+        if (/^[0-9.]$/.test(e.key)) { e.preventDefault(); setGuideTyped(t => t + e.key); return }
+        if (e.key === 'Backspace') { e.preventDefault(); if (guideTyped) setGuideTyped(t => t.slice(0, -1)); else setGuideBase(null); return }
+        if (e.key === 'Enter') { e.preventDefault(); commitGuideOffset(); return }
+      }
       // while drawing: type a length (or width x height for a rectangle), Enter places it, Backspace takes back a typed digit and then the last point, Enter on its own finishes
       if (!inField && !e.ctrlKey && !e.metaKey && !e.altKey && typedAllowed()) {
         if (/^[0-9.,x*]$/i.test(e.key)) { e.preventDefault(); setTyped(t => t + e.key.toLowerCase()); return }
@@ -4221,6 +4393,7 @@ export default function TakeoffPage() {
           setSelectedPlumbPointId(null); setSelectedPlumbPipeId(null)
           showToast('Plumbing fitting deleted')
         } else if (selectedOpeningId) deleteOpening(selectedOpeningId)
+        else if (tool === 'guide' && selectedGuideId) { e.preventDefault(); deleteGuide(selectedGuideId) }
         else if (tool === 'room' && selectedEdgeId) deleteRoomEdge(selectedEdgeId)
         else if (tool === 'room' && selectedRoomIdx >= 0 && roomData?.rooms[selectedRoomIdx]?.drawnId) deleteDrawnRoom(selectedRoomIdx)
         else deleteSelected()
@@ -4228,6 +4401,8 @@ export default function TakeoffPage() {
       if (e.key === 'Escape') {
         // a menu that is open just closes (it handles its own Esc); otherwise Esc cancels what is being drawn AND puts the cursor back on Select, so a finished line never starts the next one
         const menuOpen = !!openMenu || !!tbMenu || levelMenuOpen || copyOpen
+        // with the Guides tool Esc first lets go of the line picked, the half-placed guide or the distance typed, and only then goes back to Select
+        if (!menuOpen && !inField && tool === 'guide' && (guideBase || guideTyped || isDrawing || selectedGuideId)) { setGuideBase(null); setGuideTyped(''); setSelectedGuideId(null); setDrawPoints([]); setIsDrawing(false); return }
         setSelectedOpeningId(null)
         setDrawPoints([])
         setIsDrawing(false)
@@ -7407,6 +7582,7 @@ export default function TakeoffPage() {
     { t: 'polygon',  icon: '⬠',  label: 'Polygon',                 pinned: true,  show: true },
     { t: 'measure',  icon: '📏', label: 'Measure',                 pinned: true,  show: true },
     { t: 'room',     icon: '🏠', label: 'Rooms',                   pinned: true,  show: true },
+    { t: 'guide',    icon: '┼',  label: 'Guides (lines to snap to)', pinned: true,  show: true },
     { t: 'join',     icon: '⌐',  label: 'Join Corner',             pinned: true,  show: activePhase === 'External Walls' || activePhase === 'Internal Walls & Partitions' },
     { t: 'opening',  icon: '🪟', label: 'Place Window / Door',     pinned: true,  show: activePhase === 'Windows & Doors' },
     { t: 'electric', icon: '⚡', label: 'Place Electrical Point',  pinned: true,  show: activePhase === 'Electrics' },
@@ -7414,7 +7590,7 @@ export default function TakeoffPage() {
     { t: 'click',    icon: '💠', label: 'Click to Place Item',     pinned: false, show: true },
   ]
   function chooseTool(t: DrawingTool) {
-    if (tool === 'measure' || t === 'measure') { setDrawPoints([]); setIsDrawing(false) }
+    if (tool === 'measure' || t === 'measure' || tool === 'guide' || t === 'guide') { setDrawPoints([]); setIsDrawing(false) }
     if (tool === 'room' && (t === 'rect' || t === 'polygon')) startRoomDraw(t); else if (tool === 'room' && t === 'line') startRoomDraw('edge'); else setTool(t)
     if (t === 'select') { setDrawPoints([]); setIsDrawing(false) }
     if (t === 'electric' || t === 'plumb') { setPanelMode('properties'); setPanelOpen(true) }
@@ -7949,6 +8125,34 @@ export default function TakeoffPage() {
             </div>
           )}
 
+          {/* Guides tool: how it is working, what to do next, and the show / snap choices */}
+          {tool === 'guide' && (() => {
+            const modes: [typeof guideMode, string, string][] = [['move', '✥ Move', 'Pick a guide and drag it sideways'], ['h', '─ Horizontal', 'A level guide'], ['v', '│ Vertical', 'An upright guide'], ['angle', '╱ Angled', 'A guide through two points'], ['offset', '⇉ Offset', 'A guide a set distance off a wall, a drawing side or another guide']]
+            const hint = guideMode === 'move' ? 'Click a guide to pick it, drag it sideways to move it, Delete removes it'
+              : guideMode === 'h' || guideMode === 'v' ? 'Click where the guide goes: it snaps to corners and ends, and you can keep clicking to add more'
+              : guideMode === 'angle' ? (isDrawing ? 'Click the second point: the guide runs on through both (hold Shift for straight)' : 'Click two points: the guide runs on through both')
+              : !guideBase ? 'Click a wall, the side of a drawing or a guide to measure from'
+              : guideTyped ? 'Offset ' + guideTyped + ' mm: press Enter to place it on the side the cursor is on'
+              : 'Type the distance in mm and press Enter, or click where the guide goes · Esc picks a different line'
+            const pill = (on: boolean): React.CSSProperties => ({ background: on ? 'var(--to-accent, #7fdc3c)' : 'var(--to-alt)', color: on ? '#10210a' : 'var(--to-text)', border: '1px solid var(--to-border)', borderRadius: 6, fontSize: 12, padding: '4px 9px', cursor: 'pointer', fontFamily: 'inherit', fontWeight: on ? 700 : 400 })
+            return (
+              <div style={{ position: 'absolute', bottom: 74, left: '50%', transform: 'translateX(-50%)', zIndex: 6, background: 'var(--to-panel)', border: '1px solid var(--to-border)', color: 'var(--to-text)', borderRadius: 8, padding: '8px 12px', fontSize: 12, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center', maxWidth: '94%' }}>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'center' }}>
+                  {modes.map(([m, label, tip]) => (
+                    <button key={m} title={tip} style={pill(guideMode === m)} onClick={() => { setGuideMode(m); setGuideBase(null); setGuideTyped(''); setDrawPoints([]); setIsDrawing(false) }}>{label}</button>
+                  ))}
+                </div>
+                <div style={{ color: guideTyped ? '#7fdc3c' : 'var(--to-sub)', textAlign: 'center' }}>{hint}</div>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', whiteSpace: 'nowrap' }}><input type="checkbox" checked={viewGuides} onChange={e => { setViewGuides(e.target.checked); e.currentTarget.blur() }} />Show guides</label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', whiteSpace: 'nowrap' }} title="Points drawn near a guide snap onto it, and to where guides cross"><input type="checkbox" checked={guideSnapOn} onChange={e => { setGuideSnapOn(e.target.checked); e.currentTarget.blur() }} />Snap to guides{!snapOn ? ' (Snap is off)' : ''}</label>
+                  <button style={{ ...pill(false), opacity: selectedGuideId ? 1 : 0.45 }} disabled={!selectedGuideId} onClick={() => selectedGuideId && deleteGuide(selectedGuideId)}>Delete guide</button>
+                  <button style={{ ...pill(false), opacity: guides.length ? 1 : 0.45 }} disabled={guides.length === 0} onClick={() => { if (window.confirm('Remove all ' + guides.length + ' guides from this plan?')) { setProject(p => setGuides(p, [])); setSelectedGuideId(null) } }}>Clear all ({guides.length})</button>
+                </div>
+              </div>
+            )
+          })()}
+
           {/* Measure tool: what is being measured, with a reminder that nothing is saved or priced */}
           {(tool === 'measure' || measureDone) && (() => {
             const live = tool === 'measure' && isDrawing && drawPoints.length > 0
@@ -8019,6 +8223,7 @@ export default function TakeoffPage() {
             onClick={handleSvgClick}
             onDoubleClick={handleSvgDblClick}
             onMouseMove={handleMouseMove}
+            onMouseDownCapture={handleGuideMouseDown}
             onMouseDown={handleMouseDown}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
@@ -8205,6 +8410,10 @@ export default function TakeoffPage() {
                 ))
               })()}
 
+              {/* Construction guides, and the one about to be placed */}
+              {renderGuides()}
+              {renderGuideGhost()}
+
               {/* In-progress ghost */}
               {renderGhost()}
 
@@ -8305,6 +8514,7 @@ export default function TakeoffPage() {
               tool === 'line' ? 'Line / Polyline (dbl-click to finish)' :
               tool === 'rect' ? 'Rectangle (click start, click finish)' :
               tool === 'measure' ? 'Measure (click along the route, dbl-click to finish: nothing is saved)' :
+              tool === 'guide' ? 'Guides: lines your drawing snaps to (nothing here is priced)' :
               tool === 'click' ? 'Click to place an item' :
               tool === 'electric' ? 'Place electrical points' :
               tool === 'plumb' ? 'Place plumbing fittings and radiators' :

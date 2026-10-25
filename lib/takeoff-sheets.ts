@@ -6,6 +6,7 @@
 
 import type { TakeoffProject, TakeoffSheet, TakeoffLevel, DrawnElement, TakeoffItem, ScaleCalibration } from './takeoff-types'
 import type { RoomLabel, DrawnRoomShape, RoomEdge } from './rooms-from-walls'
+import type { Guide } from './guides'
 import type { ElectricPoint } from './electric-points'
 import type { PlumbPoint, PlumbPipe } from './plumb-points'
 
@@ -162,6 +163,18 @@ export function setRoomEdges(p: TakeoffProject, edges: RoomEdge[]): TakeoffProje
   return { ...p, sheets: p.sheets?.map(s => (s.id === id ? { ...s, roomEdges: replaceOnLevel(s.roomEdges, edges, p) } : s)) }
 }
 
+/** The construction guides of the showing sheet. They are on EVERY level of it (the grid lines of a building are the same on the foundations and the floors above). */
+export function guidesOf(p: TakeoffProject): Guide[] {
+  const id = activeSheetIdOf(p)
+  return (id ? p.sheets?.find(s => s.id === id)?.guides : p.guides) ?? []
+}
+
+export function setGuides(p: TakeoffProject, guides: Guide[]): TakeoffProject {
+  const id = activeSheetIdOf(p)
+  if (!id) return { ...p, guides }
+  return { ...p, sheets: p.sheets?.map(s => (s.id === id ? { ...s, guides } : s)) }
+}
+
 /** Records (or, with no value, forgets) how big a pixel of the sheet's picture is on paper. */
 export function setSheetPaper(p: TakeoffProject, sheetId: string, paper: string | undefined, mmPerPx: number | undefined): TakeoffProject {
   return { ...p, sheets: p.sheets?.map(s => {
@@ -210,12 +223,13 @@ export function addSheets(p: TakeoffProject, added: TakeoffSheet[]): TakeoffProj
     if (p.roomLabels?.length) first.roomLabels = p.roomLabels
     if (p.roomShapes?.length) first.roomShapes = p.roomShapes
     if (p.roomEdges?.length) first.roomEdges = p.roomEdges
+    if (p.guides?.length) first.guides = p.guides
     sheets = [first, ...sheets.slice(1)]
     elements = p.elements.map(e => (e.sheetId ? e : { ...e, sheetId: first.id }))
     items = p.items.map(it => (it.electricPoints ? { ...it, electricPoints: stampPoints(it.electricPoints, first.id) } : it.plumbPoints || it.plumbPipes ? mapPlumb(it, l => stampPlumb(l, first.id)!) : it))
   }
   const active = added[added.length - 1]
-  const { roomLabels: _moved, roomShapes: _moved2, roomEdges: _moved3, ...rest } = p
+  const { roomLabels: _moved, roomShapes: _moved2, roomEdges: _moved3, guides: _moved4, ...rest } = p
   return { ...(hadNone ? rest : p), sheets, elements, items, activeSheetId: active.id, calibration: { ...(sheets.find(s => s.id === active.id)!.calibration) } }
 }
 
