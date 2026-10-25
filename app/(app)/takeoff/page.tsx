@@ -5,7 +5,7 @@ import NumInput from '@/components/NumInput'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { makeDebouncedSave, isEmptyTakeoff, isUuid, newProjectId, loadTakeoffFromSupabase, saveTakeoffToSupabase, listTakeoffSummaries, deleteTakeoffProject, type TakeoffSummary } from '@/lib/takeoff-sync'
-import { roomLabelsOf, setRoomLabels, roomShapesOf, setRoomShapes, roomEdgesOf, setRoomEdges, activeSheetIdOf, onActiveSheet, onActiveLevel, activeLevelIdOf, levelOf, levelName, ghostLevel, elementsOnGhostLevel, viewKey, itemLevelId, addLevel, switchActiveLevel, renameLevel, setLevelHeight, removeLevel, moveElementToLevel, copyLevelContents, levelInsertIndex, LEVEL_PRESETS, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet, setSheetPaper } from '@/lib/takeoff-sheets'
+import { roomLabelsOf, setRoomLabels, roomShapesOf, setRoomShapes, roomEdgesOf, setRoomEdges, activeSheetIdOf, onActiveSheet, onActiveLevel, activeLevelIdOf, levelOf, levelName, levelBelow, ghostLevel, elementsOnGhostLevel, viewKey, itemLevelId, addLevel, switchActiveLevel, renameLevel, setLevelHeight, removeLevel, moveElementToLevel, copyLevelContents, levelInsertIndex, LEVEL_PRESETS, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet, setSheetPaper } from '@/lib/takeoff-sheets'
 import { layoutTags, polylineMidpoint, textColorFor, tagText, TAG_HEIGHT_PX } from '@/lib/takeoff-tags'
 import { PDF_RENDER_MM_PER_PX, PAPER_SIZES, SCALE_DENOMS, scaleLabel, denomFromLabel, mppForScale, paperFromMm, inferPdfPaper, mmPerPxForPaper } from '@/lib/takeoff-paper'
 import { putSheetImage, getSheetImage, deleteProjectImages } from '@/lib/takeoff-sheet-images'
@@ -47,6 +47,7 @@ import ClientProjectModal from './components/ClientProjectModal'
 import ClientFilePicker from '@/components/ClientFilePicker'
 import { planResize, applyResize } from '@/lib/calc-size'
 import { defaultToolbars, mergeToolbars, toolbarsOn, setToolbarDock, renameToolbar, setToolbarLabels, setToolbarVisible, moveToolbar, allowedDocks, isSideDock, DOCK_LABEL, DEFAULT_TOOLBARS, type TbId, type TbDock, type TbPref } from '@/lib/takeoff-toolbars'
+import { alignPointsToLower } from '@/lib/level-align'
 import { mitreCuts, mergeCollinearSides, wallDrawing, wallBand, offsetPolyline, totalMm, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, specFromMakeupLayers, defaultWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
 import { sidesOf, splitOpenings } from '@/lib/wall-split'
 import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
@@ -1415,7 +1416,8 @@ export default function TakeoffPage() {
           const inside = snapOn && dragged.phase === 'Internal Walls & Partitions' ? insideFaces() : null
           const anchors2 = [...anchorsFor(elementsOnActiveSheet(project).filter(el => el.id !== id && !joined.has(el.id) && !hiddenPhases.has(el.phase) && !(inside && el.phase === 'External Walls'))), ...(inside ? inside.corners.map(c => ({ ...c, kind: 'end' as const })) : [])]
           const segs2 = snapOn ? [...segmentsFor(wallsOnSheet().filter(el => el.id !== id && !joined.has(el.id) && !(inside && el.phase === 'External Walls'))), ...(inside ? inside.segments : [])] : undefined
-          const r = snapPoint(want, { anchors: anchors2, radius: 10 / zoom, snap: snapOn, ortho: false, grid: gridSnap ? { stepPx: gridMinorPx() } : undefined, segments: segs2 })
+          const below = snapOn && dragged.phase === 'External Walls' ? lowerOuterWalls() : []
+          const r = snapPoint(want, { anchors: below.length ? [...anchors2, ...anchorsFor(below)] : anchors2, radius: 10 / zoom, snap: snapOn, ortho: false, grid: gridSnap ? { stepPx: gridMinorPx() } : undefined, segments: below.length ? [...(segs2 ?? []), ...segmentsFor(below)] : segs2 })
           dx += r.pt.x - want.x; dy += r.pt.y - want.y
           setSnapInfo(r.kind === 'none' ? null : r)
         }
@@ -2799,6 +2801,39 @@ export default function TakeoffPage() {
     if (target && !target.scaleSet) showToast('Set the scale for ' + target.name + ' before you draw on it.')
   }
 
+  /** The outside walls of the level BELOW the showing one (when there is one), the ones an upper floor lines up with. */
+  function lowerOuterWalls(): DrawnElement[] {
+    const g = ghostLevel(project)
+    if (!g || g.side !== 'below') return []
+    return elementsOnGhostLevel(project).filter(el => el.phase === 'External Walls' && !hiddenPhases.has(el.phase))
+  }
+
+  /** Lines this level's outside walls up with the outside walls of the level below: each point goes to the nearest corner of the walls underneath (or onto the nearest wall), within about 0.8 m; inside walls are left alone. */
+  function alignWallsToLevelBelow() {
+    const mpp = project.calibration.mpp
+    if (!(mpp > 0)) return
+    const lower = lowerOuterWalls()
+    if (lower.length === 0) { showToast(levelBelow(project) ? 'The level below has no outside walls to line up with' : 'There is no level below this one'); return }
+    const lowerWalls = lower.map(el => ({ points: el.type === 'rect' ? cornersOf(el) : el.points, closed: el.type !== 'line' }))
+    const tol = 0.8 / mpp
+    const moved = new Map<string, TakeoffPoint[]>()
+    let corners = 0, onWall = 0, none = 0, walls = 0
+    for (const el of wallsOnSheet()) {
+      if (el.phase !== 'External Walls') continue
+      walls++
+      const r = alignPointsToLower(el.points, lowerWalls, tol)
+      corners += r.corners; onWall += r.onWall; none += r.none
+      if (r.changed) moved.set(el.id, r.points)
+    }
+    if (walls === 0) { showToast('This level has no outside walls to line up'); return }
+    if (moved.size === 0) { showToast(none === 0 ? 'The outside walls already line up with the level below' : 'Nothing was close enough to line up (within about 0.8 m of a wall below)'); return }
+    setProject(p => {
+      const elements = p.elements.map(e => (moved.has(e.id) ? { ...e, points: moved.get(e.id)! } : e))
+      return { ...p, elements, items: recalcItemsForMpp(p.items, elements, p.calibration.mpp, new Set(moved.keys())) }
+    })
+    showToast('Lined up ' + moved.size + ' of ' + walls + ' outside wall(s) with the level below' + (none > 0 ? ' (' + none + ' point(s) had nothing near and stayed)' : '') + '. Ctrl+Z undoes it.')
+  }
+
   /** Clears what belonged to the view being left (the selection, a half-drawn shape, an open calculator) when another level shows. */
   function clearViewState(keepSelection = false) {
     if (!keepSelection) { setSelectedId(null); setEditingElement(null); setEditingItem(null) }
@@ -3486,7 +3521,9 @@ export default function TakeoffPage() {
       ? [...anchorsFor(elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase) && !(inside && el.phase === 'External Walls')), drawPoints.slice(0, -1)), ...(inside ? inside.corners.map(c => ({ ...c, kind: 'end' as const })) : [])]
       : []
     const segs = snapOn ? [...segmentsFor(wallsOnSheet().filter(w => !(inside && w.phase === 'External Walls'))), ...(inside ? inside.segments : [])] : undefined
-    return snapPoint(raw, { anchors, last, radius: 10 / zoom, snap: snapOn, ortho, grid: gridSnap ? { stepPx: gridMinorPx() } : undefined, segments: segs })
+    // an outside wall drawn on an upper level also snaps to the corners and lines of the outside walls of the level below, so a first floor goes exactly over the ground floor
+    const below = snapOn && activePhase === 'External Walls' && (tool === 'line' || tool === 'polygon' || tool === 'rect') ? lowerOuterWalls() : []
+    return snapPoint(raw, { anchors: below.length ? [...anchors, ...anchorsFor(below)] : anchors, last, radius: 10 / zoom, snap: snapOn, ortho, grid: gridSnap ? { stepPx: gridMinorPx() } : undefined, segments: below.length ? [...(segs ?? []), ...segmentsFor(below)] : segs })
   }
 
   /** Typing a length is on while a line, polygon, rectangle or floor is being drawn (not the measure tool or calibration). */
@@ -6777,6 +6814,10 @@ export default function TakeoffPage() {
                       )
                     })()}
                   </div>
+                )}
+                {levels.length > 0 && levelBelow(project) && (
+                  <button onClick={alignWallsToLevelBelow} title="Line this level's OUTSIDE walls up with the outside walls of the level below (each corner goes to the corner underneath). Inside walls are left alone. Ctrl+Z undoes it."
+                    style={{ ...btnStyle, padding: '4px 10px', fontSize: 11, flexShrink: 0 }}>⇊ Align walls</button>
                 )}
                 {levels.length > 0 && (
                   <>
