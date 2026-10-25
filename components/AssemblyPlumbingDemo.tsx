@@ -267,7 +267,7 @@ export default function AssemblyPlumbingDemo({ onClose, onSave, labourTrades = [
 
       {/* An engine error is a banner above the controls, never instead of them: typing a value digit by digit passes through invalid ones. */}
       {!result.ok && <div style={{ color: '#c0392b', fontSize: 12, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, padding: '6px 10px', marginBottom: 10 }}>⚠ {result.error}</div>}
-      {rooms.some(x => (x.radiators?.length ?? 0) > 0) && (
+      {rooms.some(x => (x.radiators ?? []).some(rad => rad.watts > 0)) && (
         <div style={{ fontSize: 11.5, color: '#475569', background: '#fff', border: '1px solid #bae6fd', borderRadius: 5, padding: '5px 9px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <span>Radiators placed on the plan and supplied by us are priced by size at £</span>
           <NumInput type="number" min={0} step={5} value={radiatorPcPerKw} onChange={e => setRadiatorPcPerKw(Math.max(0, +e.target.value || 0))} style={{ ...small, width: 64, textAlign: 'right' }} />

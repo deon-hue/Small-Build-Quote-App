@@ -17,7 +17,7 @@ import { LAID } from '@/components/AssemblyUfhDemo'
 import { calculatePipework, RUN_TYPES, DEFAULT_SITUATIONS as PIPE_SITUATIONS } from '@/lib/pipework-units'
 import { describePipework, describePipeworkShort } from '@/lib/pipework-description'
 import { ROUTED_WORDS } from '@/components/AssemblyPipeworkDemo'
-import { plumbingFromScope, heatingFromScope, ufhFromScope, pipeworkFromScope } from '@/lib/plumbing-ai'
+import { AI_PIPE_M_PER_RADIATOR, plumbingFromScope, heatingFromScope, ufhFromScope, pipeworkFromScope } from '@/lib/plumbing-ai'
 
 export const PLUMBING_AI_IDS = new Set(['plumb-install', 'plumb-heating-plant', 'plumb-ufh', 'plumb-pipework'])
 
@@ -39,13 +39,13 @@ export function pricePlumbingCalcFromScope(o: { canonicalId: string; spec: unkno
       case 'plumb-install': {
         const ai = plumbingFromScope(o.spec)
         if (!ai) return null
-        const r = calculatePlumbing({ rooms: ai.rooms, wholeHouse: ai.wholeHouse, jobSituationId: ai.jobSituationId, situations: PLUMB_SITUATIONS, fittingRates: {}, specialRates: {}, wholeHouseRates: {}, pcRates: {} })
+        const r = calculatePlumbing({ rooms: ai.rooms, wholeHouse: ai.wholeHouse, jobSituationId: ai.jobSituationId, situations: PLUMB_SITUATIONS, fittingRates: {}, specialRates: {}, wholeHouseRates: {}, pcRates: {}, ...(ai.pipework ? { pipes: { summary: ai.pipework.summary, material: ai.pipework.material, allowancePct: 10, risePerRadiatorM: 0.5, extraM: 0, extraSizeMm: 22, radiatorPipeworkIn: 40, sundriesPct: 10, rates: {} } } : {}) })
         const lines = costFromBasics({ layers: asLayers(r.lines), suggestions: [], labourTrades: o.labourTrades })
-        const d = plumbingDescriptionInput(ai.rooms, ai.wholeHouse, r)
+        const d = plumbingDescriptionInput(ai.rooms, ai.wholeHouse, r, ai.pipework ? { material: ai.pipework.material, radiators: ai.pipework.radiators, loadW: 0 } : undefined)
         return {
           name: 'Plumbing installation', qty: 1, location: '', description: describePlumbingShort(d), detail: describePlumbing(d), lines,
-          calcState: { id: 'plumb-install', values: { AssemblyPlumbingDemo: { rooms: ai.rooms, wholeHouse: ai.wholeHouse, jobSituationId: ai.jobSituationId } } },
-          note: `Priced by the plumbing calculator from the rooms in your scope (${plural(r.roomCount, 'room', 'rooms')}, ${plural(r.totalFittings, 'fitting', 'fittings')}${r.specialCount > 0 ? `, ${plural(r.specialCount, 'special fitting', 'special fittings')}` : ''}) with the calculator's standard rates, an all-in price per fitting.${ai.usualRooms.length > 0 ? ` No fittings were stated for ${ai.usualRooms.join(', ')}, so those use the usual fittings for that kind of room.` : ''}${ai.rooms.some(x => x.supply === 'client') ? ' Sanitaryware, taps and radiators are left to the client unless the scope said we supply them.' : ''} Open the calculator to check the rooms and change anything.`,
+          calcState: { id: 'plumb-install', values: { AssemblyPlumbingDemo: { rooms: ai.rooms, wholeHouse: ai.wholeHouse, jobSituationId: ai.jobSituationId, ...(ai.pipework ? { pipeSummary: ai.pipework.summary, pipeMaterial: ai.pipework.material } : {}) } } },
+          note: `Priced by the plumbing calculator from the rooms in your scope (${plural(r.roomCount, 'room', 'rooms')}, ${plural(r.totalFittings, 'fitting', 'fittings')}${r.specialCount > 0 ? `, ${plural(r.specialCount, 'special fitting', 'special fittings')}` : ''}) with the calculator's standard rates, an all-in price per fitting.${ai.usualRooms.length > 0 ? ` No fittings were stated for ${ai.usualRooms.join(', ')}, so those use the usual fittings for that kind of room.` : ''}${ai.rooms.some(x => x.supply === 'client') ? ' Sanitaryware, taps and radiators are left to the client unless the scope said we supply them.' : ''}${ai.pipework ? ` The heating pipework is an ALLOWANCE, not a measured price (there is no plan): ${AI_PIPE_M_PER_RADIATOR} m of 15mm ${ai.pipework.material} pipe, flow and return, with an elbow and a tee for each of the ${plural(ai.pipework.radiators, 'radiator or towel rail', 'radiators and towel rails')}, and each of those is priced without the pipework in its all-in price. Draw the pipes in Take-off for a real figure.` : ''} Open the calculator to check the rooms and change anything.`,
         }
       }
       case 'plumb-heating-plant': {

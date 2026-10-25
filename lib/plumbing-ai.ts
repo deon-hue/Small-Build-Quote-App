@@ -9,6 +9,7 @@ import {
 } from './plumbing-units'
 import { BOILER_SIZES, type FitMode, type FlueKind, type ControlsKind } from './heating-units'
 import { UFH_FLOORS, SPACINGS_MM, type UfhZone, type UfhFloor } from './ufh-units'
+import type { PipeSummary } from './pipe-network'
 import { RUN_TYPES, ROUTE_LABEL, type PipeRun, type RunType, type PipeMaterial, type Route } from './pipework-units'
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -48,7 +49,12 @@ export interface AiPlumbing {
   jobSituationId: string
   /** rooms that had no fittings stated, so got the usual set for their kind */
   usualRooms: string[]
+  /** an ALLOWANCE of heating pipework for the radiators and towel rails (there is no plan to draw it on): null when there are none or the scope says the pipework is priced elsewhere */
+  pipework: { summary: PipeSummary; material: 'copper' | 'plastic'; radiators: number } | null
 }
+
+/** metres of drawn pipe (one pipe: flow and return are both priced) the AI quote allows for each radiator or towel rail: a sample, said in the review note */
+export const AI_PIPE_M_PER_RADIATOR = 3
 
 export function plumbingFromScope(spec: unknown): AiPlumbing | null {
   if (!isObj(spec)) return null
@@ -116,7 +122,26 @@ export function plumbingFromScope(spec: unknown): AiPlumbing | null {
     }
   }
   if (rooms.length === 0 && !anyWhole) return null
-  return { rooms, wholeHouse, jobSituationId: situationOf(spec.situation), usualRooms }
+
+  // heating pipework: with no plan to draw on, an allowance per radiator or towel rail (15mm, one elbow and one tee each), unless the scope says it is priced elsewhere
+  const ids: string[] = []
+  for (const r of rooms) {
+    const nr = r.fittings['radiator'] ?? 0, nt = r.fittings['towel-rail'] ?? 0
+    r.radiators = Array.from({ length: nr }, (_, i) => ({ id: `${r.id}-rad-${i}`, label: 'radiator', watts: 0 }))
+    r.towelRails = Array.from({ length: nt }, (_, i) => ({ id: `${r.id}-tr-${i}`, watts: 0 }))
+    ids.push(...r.radiators.map(x => x.id), ...r.towelRails.map(x => x.id))
+  }
+  const n = ids.length
+  const pipework = n > 0 && spec.pipework !== false ? {
+    summary: {
+      lengthBySize: { '15': +(n * AI_PIPE_M_PER_RADIATOR).toFixed(1) }, totalLengthM: +(n * AI_PIPE_M_PER_RADIATOR).toFixed(1),
+      fittings: [{ kind: 'elbow' as const, sizeMm: 15, count: n }, { kind: 'tee' as const, sizeMm: 15, count: n }],
+      connectedRadiatorIds: ids, unconnectedRadiatorIds: [], totalLoadW: 0, runCount: 1, warnings: [],
+    },
+    material: spec.pipeMaterial === 'plastic' ? 'plastic' as const : 'copper' as const,
+    radiators: n,
+  } : null
+  return { rooms, wholeHouse, jobSituationId: situationOf(spec.situation), usualRooms, pipework }
 }
 
 // ── Heating plant (gas combi boiler) ───────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -204,9 +229,10 @@ export function plumbingPromptGuide(): string {
   const runTypes = (Object.keys(RUN_TYPES) as RunType[]).map(t => `${t} = ${RUN_TYPES[t].label} (sizes ${RUN_TYPES[t].sizes.join('/')}mm, ${RUN_TYPES[t].materials.join(' or ')})`).join('; ')
   const routes = (Object.keys(ROUTE_LABEL) as Route[]).map(r => `${r} = ${ROUTE_LABEL[r].toLowerCase()}`).join('; ')
   return `For a plumbing calculator line, add "calc": {…} with the shape for THAT line only, describing ONLY the work the scope mentions (never invent a room, count, size, area or length; if the scope has none for that line, leave "calc" out):
-  - "Plumbing Installation (by room)": "calc": {"situation": "<id>", "rooms": [{"name": "Family bathroom", "kind": "<room kind>", "supply": "client", "fittings": {"<fitting id>": <count>}, "specials": [{"type": "<special id>", "name": "", "count": 1, "supply": "client"}]}], "wholeHouse": {"<item id>": <count>}}. One entry per room the scope names or clearly means to plumb, using its own name. "kind" is one of: ${kinds}. "fittings": only the counts the scope states, using exactly these ids: ${fittings}. If the scope names a room but not its fittings, LEAVE "fittings" OUT and the calculator uses the usual set for that kind of room. "supply" is "us" only if the scope says we supply the sanitaryware, taps or radiators, otherwise "client". A special fitting (freestanding bath, wet room, boiling water tap...) goes in "specials" with one of: ${specials}. "wholeHouse" only for items the scope mentions, using: ${whole}. "situation" only if the scope says: ${sits}.
+  - "Plumbing Installation (by room)": "calc": {"situation": "<id>", "rooms": [{"name": "Family bathroom", "kind": "<room kind>", "supply": "client", "fittings": {"<fitting id>": <count>}, "specials": [{"type": "<special id>", "name": "", "count": 1, "supply": "client"}]}], "wholeHouse": {"<item id>": <count>}, "pipework": false, "pipeMaterial": "copper"|"plastic"}. One entry per room the scope names or clearly means to plumb, using its own name. "kind" is one of: ${kinds}. "fittings": only the counts the scope states, using exactly these ids: ${fittings}. If the scope names a room but not its fittings, LEAVE "fittings" OUT and the calculator uses the usual set for that kind of room. "supply" is "us" only if the scope says we supply the sanitaryware, taps or radiators, otherwise "client". A special fitting (freestanding bath, wet room, boiling water tap...) goes in "specials" with one of: ${specials}. "wholeHouse" only for items the scope mentions, using: ${whole}. "situation" only if the scope says: ${sits}.
   - "Heating Plant (by system)" (a gas combi boiler): "calc": {"boilerKw": 24|28|30|35, "fit": "replace"|"relocate", "flue": "horizontal"|"vertical"|"existing", "controls": "none"|"programmer"|"smart", "radiators": <number on the system>}. Include only what the scope states; leave out "boilerKw" if no size is given.
   - "Underfloor Heating" (warm water): "calc": {"zones": [{"name": "Kitchen / diner", "areaM2": <m²>, "floor": "screed"|"overlay"|"joisted", "spacingMm": 100|150|200|300, "distanceM": <m to the manifold>}]}. A zone ONLY where the scope states its area; leave out "floor", "spacingMm" and "distanceM" unless stated.
   - "Pipework Runs": "calc": {"situation": "<id>", "runs": [{"name": "", "type": "<run type>", "size": <mm>, "material": "copper"|"plastic", "lengthM": <m>, "route": "<route>", "lagged": false}]}. A run ONLY where the scope states its length. Run types: ${runTypes}. Routes: ${routes}.
+  - Heating pipework: the calculator adds an allowance of heating pipe, elbows and tees for every radiator and towel rail in the rooms (the scope has no plan, so it is an estimate for the estimator to check). Add "pipework": false only if the scope says the heating pipework is priced elsewhere or by someone else, and "pipeMaterial": "plastic" only if the scope says plastic or multilayer pipe.
   - Plumbing fittings for a room belong in "Plumbing Installation (by room)"; use "Pipework Runs" only for pipe lengths the scope states separately.`
 }

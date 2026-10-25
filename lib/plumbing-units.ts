@@ -258,7 +258,7 @@ export function calculatePlumbing(input: PlumbingInput): PlumbingResult {
         const pc = input.pcRates[ft.id] ?? ft.pcSum
         if (room.supply === 'us' && pc > 0) {
           // a radiator placed on the plan has a size, so one we supply is priced by its output; the rest of the room's radiators are the usual provisional sum each
-          const sized = ft.id === 'radiator' ? (room.radiators ?? []).slice(0, n) : []
+          const sized = ft.id === 'radiator' ? (room.radiators ?? []).slice(0, n).filter(rad => rad.watts > 0) : []   // (one with no size, as the AI quote makes, is just a radiator at the usual sum)
           if (n - sized.length > 0) lines.push({ id: `pc|${room.id}|${ft.id}`, name: `${rn} — ${ft.name.replace(/ \(.*\)$/, '')} (supplied by us — PC sum)`, category: 'materials', unit: 'nr', unitCost: money(pc), qty: n - sized.length, roomId: room.id })
           for (const rad of sized) lines.push({ id: `pcr|${room.id}|${rad.id}`, name: `${rn} — radiator ${rad.label} (supplied by us — PC sum by size)`, category: 'materials', unit: 'nr', unitCost: money((input.radiatorPcPerKw ?? 55) * Math.max(0, rad.watts) / 1000), qty: 1, roomId: room.id })
         }
