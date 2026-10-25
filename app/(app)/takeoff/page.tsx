@@ -50,7 +50,7 @@ import { defaultToolbars, mergeToolbars, toolbarsOn, setToolbarDock, renameToolb
 import { mitreCuts, wallDrawing, wallBand, offsetPolyline, totalMm, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, specFromMakeupLayers, defaultWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
 import { sidesOf, splitOpenings } from '@/lib/wall-split'
 import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
-import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, segmentMiddle, flippedSwing, type PlacedOpening, type WallBand } from '@/lib/wall-openings'
+import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, segmentMiddle, flippedSwing, pointAtDist, type PlacedOpening, type WallBand } from '@/lib/wall-openings'
 import { KIND_BY_ID as WD_KIND_BY_ID, planOpeningSig, type OpeningKind, type WdSwing, type PlanOpening } from '@/lib/wd-units'
 import { buildDragLinks, applyLink, joinCorner, type DragLink } from '@/lib/wall-links'
 import { cornersOf, segmentsFor, snapPoint, anchorsFor, parseTyped, pointAtDistance, rectCornerAt, rotateShape, type SnapResult } from '@/lib/takeoff-snap'
@@ -912,6 +912,10 @@ export default function TakeoffPage() {
   const [viewTags, setViewTags] = useState(true)
   const [viewFade, setViewFade] = useState(30)
   const [viewRooms, setViewRooms] = useState(true)
+  // measurements written on the plan: the outside length of each outside wall, the inside length of each side of a room, and the size of each room (kept per browser with the other View choices)
+  const [viewDimOut, setViewDimOut] = useState(false)
+  const [viewDimIn, setViewDimIn] = useState(false)
+  const [viewRoomSize, setViewRoomSize] = useState(false)
   // a wall drawn as one run of several sides becomes one wall per side (so each can be clicked, edited and deleted on its own)
   const [splitWalls, setSplitWalls] = useState(true)
   // snap the cursor to the grid (its spacing in metres); the grid itself is the Grid tick
@@ -934,6 +938,9 @@ export default function TakeoffPage() {
         if (typeof r.tags === 'boolean') setViewTags(r.tags)
         if (typeof r.rooms === 'boolean') setViewRooms(r.rooms)
         if (typeof r.ghost === 'boolean') setViewGhost(r.ghost)
+        if (typeof r.dimOut === 'boolean') setViewDimOut(r.dimOut)
+        if (typeof r.dimIn === 'boolean') setViewDimIn(r.dimIn)
+        if (typeof r.roomSize === 'boolean') setViewRoomSize(r.roomSize)
         if (typeof r.panel === 'boolean') setPanelOpen(r.panel)
         if (typeof r.splitWalls === 'boolean') setSplitWalls(r.splitWalls)
         if (typeof r.gridSnap === 'boolean') setGridSnap(r.gridSnap)
@@ -942,7 +949,7 @@ export default function TakeoffPage() {
       }
     } catch {}
   }, [])
-  useEffect(() => { try { localStorage.setItem('sbc_takeoff_view', JSON.stringify({ halo: viewHalo, tags: viewTags, fade: viewFade, rooms: viewRooms, ghost: viewGhost, panel: panelOpen, splitWalls, gridSnap, gridStep })) } catch {} }, [viewHalo, viewTags, viewFade, viewRooms, viewGhost, panelOpen, splitWalls, gridSnap, gridStep])
+  useEffect(() => { try { localStorage.setItem('sbc_takeoff_view', JSON.stringify({ halo: viewHalo, tags: viewTags, fade: viewFade, rooms: viewRooms, ghost: viewGhost, panel: panelOpen, dimOut: viewDimOut, dimIn: viewDimIn, roomSize: viewRoomSize, splitWalls, gridSnap, gridStep })) } catch {} }, [viewHalo, viewTags, viewFade, viewRooms, viewGhost, panelOpen, viewDimOut, viewDimIn, viewRoomSize, splitWalls, gridSnap, gridStep])
   const lastSaveError = useRef('')
   const idMigration = useRef<string | null>(null)
   const oldPictureFolders = useRef<string[]>([])
@@ -1870,7 +1877,8 @@ export default function TakeoffPage() {
 
   // ── Rooms made from the walls ─────────────────────────────────────────────
   // Every wall (joined where they meet, at real thickness) and the gap of every door and window is filled in on a fine grid; the enclosed empty space is a room (lib/rooms-from-walls.ts). Names are kept on the sheet.
-  const roomsOn = viewRooms || tool === 'room' || !!assemblyWindowItemId   // (a calculator being open needs them too)
+  const shadeRooms = viewRooms || tool === 'room' || !!assemblyWindowItemId   // (a calculator being open needs them too)
+  const roomsOn = shadeRooms || viewDimIn || viewRoomSize                          // the rooms are also needed to write the inside lengths and room sizes
   const roomLabels = roomLabelsOf(project)
   // the rooms are worked out a moment after the last change to the walls (not on every mouse move of a drag)
   const [roomTick, setRoomTick] = useState(0)
@@ -2143,7 +2151,7 @@ export default function TakeoffPage() {
 
   /** the rooms shaded on the plan, each with its name and floor area (clickable with the Rooms tool) */
   function renderRooms() {
-    if (!roomData || !roomsOn || roomData.sheetId !== viewKey(project)) return null
+    if (!roomData || !shadeRooms || roomData.sheetId !== viewKey(project)) return null
     const mpp = project.calibration.mpp
     return (
       <g style={{ pointerEvents: 'none' }}>
@@ -2170,6 +2178,72 @@ export default function TakeoffPage() {
         })}
       </g>
     )
+  }
+
+  /** Measurements written on the plan (View menu): each outside wall's outside length just outside the building, each side of each room between the wall faces inside it, and each room's length x width. Nothing is saved or priced. */
+  function renderDimensions() {
+    const mpp = project.calibration.mpp
+    if (!(mpp > 0) || !(viewDimOut || viewDimIn || viewRoomSize)) return null
+    const parts: React.ReactNode[] = []
+    const halo = { stroke: '#fff', strokeWidth: 3 / zoom, paintOrder: 'stroke' as const }
+    // a measurement: a thin line alongside a side, set off along the unit normal (nx, ny), with its length written on it
+    const dim = (key: string, a: TakeoffPoint, b: TakeoffPoint, nx: number, ny: number, off: number, colour: string) => {
+      const len = Math.hypot(b.x - a.x, b.y - a.y) * mpp
+      if (len < 0.25) return
+      const A = { x: a.x + nx * off, y: a.y + ny * off }, B = { x: b.x + nx * off, y: b.y + ny * off }
+      let ang = (Math.atan2(B.y - A.y, B.x - A.x) * 180) / Math.PI
+      if (ang > 90 || ang < -90) ang += 180   // the text always reads left to right
+      const l = Math.hypot(B.x - A.x, B.y - A.y) || 1, tx = (-(B.y - A.y) / l) * 4 / zoom, ty = ((B.x - A.x) / l) * 4 / zoom
+      parts.push(
+        <g key={key}>
+          <line x1={A.x} y1={A.y} x2={B.x} y2={B.y} stroke={colour} strokeWidth={1 / zoom} />
+          <line x1={A.x - tx} y1={A.y - ty} x2={A.x + tx} y2={A.y + ty} stroke={colour} strokeWidth={1 / zoom} />
+          <line x1={B.x - tx} y1={B.y - ty} x2={B.x + tx} y2={B.y + ty} stroke={colour} strokeWidth={1 / zoom} />
+          <text transform={`translate(${(A.x + B.x) / 2},${(A.y + B.y) / 2}) rotate(${ang})`} y={-3 / zoom} textAnchor="middle" fontSize={11 / zoom} fontFamily="monospace" fontWeight={700} fill={colour} {...halo}>{len.toFixed(2)}</text>
+        </g>,
+      )
+    }
+    if (viewDimOut) {
+      for (const el of wallsOnSheet()) {
+        if (el.phase !== 'External Walls') continue
+        const ws = wallSpecFor(el)
+        if (!ws) continue
+        const pts = el.type === 'rect' ? cornersOf(el) : el.points
+        const band = wallBand(pts, ws.spec, mpp, wallPaintOpts(el, ws))
+        if (!band) continue
+        const n = pts.length, count = el.type === 'line' ? n - 1 : n
+        for (let i = 0; i < count; i++) {
+          const a = pts[i], b = pts[(i + 1) % n]
+          const l = Math.hypot(b.x - a.x, b.y - a.y)
+          if (!(l > 0)) continue
+          const rx = -(b.y - a.y) / l, ry = (b.x - a.x) / l   // the right-hand normal; the inside of the building is on this side when band.inside is 1
+          dim('do-' + el.id + '-' + i, a, b, -rx * band.inside, -ry * band.inside, 16 / zoom, '#1565c0')
+        }
+      }
+    }
+    if (roomData && roomData.sheetId === viewKey(project)) {
+      roomData.rooms.forEach((r, i) => {
+        const poly = r.polygon, n = poly.length
+        if (viewDimIn) {
+          const sgn = signedArea(poly) > 0 ? 1 : -1   // drawn clockwise on screen: the inside is on the right of travel
+          for (let k = 0; k < n; k++) {
+            const a = poly[k], b = poly[(k + 1) % n]
+            const l = Math.hypot(b.x - a.x, b.y - a.y)
+            if (!(l > 0)) continue
+            dim('di-' + i + '-' + k, a, b, (-(b.y - a.y) / l) * sgn, ((b.x - a.x) / l) * sgn, 11 / zoom, '#15803d')
+          }
+        }
+        if (viewRoomSize && (r.widthM / mpp) * zoom > 50) {
+          const overall = r.areaM2 < 0.97 * r.lengthM * r.widthM
+          parts.push(
+            <text key={'rs-' + i} x={r.labelAt.x} y={r.labelAt.y + 28 / zoom} textAnchor="middle" fontSize={11 / zoom} fontFamily="monospace" fontWeight={700} fill="#14532d" {...halo}>
+              {r.lengthM.toFixed(2)} × {r.widthM.toFixed(2)} m{overall ? ' overall' : ''}
+            </text>,
+          )
+        }
+      })
+    }
+    return <g style={{ pointerEvents: 'none' }}>{parts}</g>
   }
 
   function renderRoomsPanel() {
@@ -3432,6 +3506,45 @@ export default function TakeoffPage() {
     showToast('Copied. The copy is selected: drag it into place.')
   }
 
+  /** Moves what is picked by a small exact step with the arrow keys: a picked drawing (the walls joined to it come along, as when it is dragged), an electrical point, or a door or window along its wall. mm is the step. */
+  function nudgeSelected(key: string, mm: number): boolean {
+    const mpp = project.calibration.mpp
+    if (!(mpp > 0)) return false
+    const d = mm / (mpp * 1000)
+    const ux = key === 'ArrowLeft' ? -1 : key === 'ArrowRight' ? 1 : 0, uy = key === 'ArrowUp' ? -1 : key === 'ArrowDown' ? 1 : 0
+    if (selectedElectricPointId && electricPoints.some(q => q.id === selectedElectricPointId)) {
+      const id = selectedElectricPointId
+      changeElectricPoints(pts => pts.map(q => (q.id === id ? { ...q, x: q.x + ux * d, y: q.y + uy * d } : q)))
+      return true
+    }
+    if (selectedOpeningId) {
+      const o = allPlaced.find(q => q.id === selectedOpeningId)
+      const wall = o && project.elements.find(e => e.id === o.wallId)
+      const g = wall && wallGeometry(wall)
+      const here = o && g ? pointAtDist(g.path, g.closed, o.distPx) : null
+      if (!o || !g || !here) return false
+      const along = ux * here.tx + uy * here.ty   // which way along the wall this arrow points
+      if (Math.abs(along) < 0.3) return false
+      moveOpeningAlong(o.id, o.distPx * mpp * 1000 + (along > 0 ? mm : -mm))
+      return true
+    }
+    const el = selectedId ? project.elements.find(e => e.id === selectedId) : undefined
+    if (!el || !onActiveSheet(el, project) || !onActiveLevel(el, project) || hiddenPhases.has(el.phase)) return false
+    const links = linksForDrag(el, undefined, false)
+    setProject(prev => {
+      const elements = prev.elements.map(e => {
+        if (e.id === el.id) return { ...e, points: e.points.map(p => ({ x: p.x + ux * d, y: p.y + uy * d })) }
+        const mine = links.filter(l => l.elId === e.id)
+        if (mine.length === 0) return e
+        const pts = e.points.map(p => ({ ...p }))
+        for (const l of mine) if (pts[l.k]) pts[l.k] = applyLink(l, ux * d, uy * d)
+        return { ...e, points: pts }
+      })
+      return { ...prev, elements, items: recalcItemsForMpp(prev.items, elements, prev.calibration.mpp, new Set([el.id, ...links.map(l => l.elId)])) }
+    })
+    return true
+  }
+
   /** Turns the picked outside wall over: the wall builds to the other side of the line (so the brick face and the rendered face swap sides). */
   function flipSelectedWall() {
     const el = selectedId ? project.elements.find(e => e.id === selectedId) : undefined
@@ -3501,6 +3614,11 @@ export default function TakeoffPage() {
       }
       if (!inField && !e.ctrlKey && !e.metaKey && !isDrawing && selectedId && (e.key === 'r' || e.key === 'R')) { rotateSelected(90); return }
       if (!inField && !e.ctrlKey && !e.metaKey && !isDrawing && selectedId && (e.key === 'f' || e.key === 'F')) { flipSelectedWall(); return }
+      // the arrow keys move what is picked: 10 mm a press, Shift 100 mm, Ctrl 1 mm
+      if (!inField && !isDrawing && !e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        if (nudgeSelected(e.key, e.ctrlKey || e.metaKey ? 1 : e.shiftKey ? 100 : 10)) e.preventDefault()
+        return
+      }
       if ((e.key === 'Delete' || e.key === 'Backspace') && !inField && !isDrawing) {
         if (selectedElectricPointId && electricPoints.some(q => q.id === selectedElectricPointId)) {
           // a picked electrical point (it is not a drawing, so it has its own selection)
@@ -6886,6 +7004,16 @@ export default function TakeoffPage() {
                   <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} title="Shade the rooms the walls make, with their name and floor area">
                     <input type="checkbox" checked={viewRooms} onChange={e => setViewRooms(e.target.checked)} style={{ width: 'auto' }} /> Rooms
                   </label>
+                  <div style={{ borderTop: '1px solid var(--to-border)', paddingTop: 8, fontSize: 11, color: 'var(--to-muted)' }}>Measurements on the plan</div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} title="The length of the outside face of each outside wall, written just outside the building">
+                    <input type="checkbox" checked={viewDimOut} onChange={e => setViewDimOut(e.target.checked)} style={{ width: 'auto' }} /> Outside wall lengths
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} title="The length of each side of each room, between the wall faces, written inside the room">
+                    <input type="checkbox" checked={viewDimIn} onChange={e => setViewDimIn(e.target.checked)} style={{ width: 'auto' }} /> Inside lengths (room sides)
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} title="The length and width of each room, between the wall faces, under its name and area">
+                    <input type="checkbox" checked={viewRoomSize} onChange={e => setViewRoomSize(e.target.checked)} style={{ width: 'auto' }} /> Room sizes (length × width)
+                  </label>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 6 }} title="Wash out the plan picture so your drawings stand out">
                     Fade plan
                     <input type="range" min={0} max={75} step={5} value={viewFade} onChange={e => setViewFade(+e.target.value)} style={{ flex: 1 }} />
@@ -7169,6 +7297,7 @@ export default function TakeoffPage() {
               {elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)).map(renderElement)}
               {renderWallVisuals(elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)))}
               {renderOpenings()}
+              {renderDimensions()}
               {renderRoomEditors()}
               {renderJoinPick()}
               {viewTags && renderTags(elementsOnActiveSheet(project).filter(el => !hiddenPhases.has(el.phase)))}
@@ -7345,7 +7474,7 @@ export default function TakeoffPage() {
             <span>Zoom: <strong style={{ color: 'var(--to-text)' }}>{Math.round(zoom * 100)}%</strong></span>
             <span style={{ color: 'var(--to-dim)' }}>Scroll to zoom · Space+drag or middle-mouse to pan</span>
             <span>x: {Math.round(mousePos.x)}, y: {Math.round(mousePos.y)}</span>
-            {selectedId && <span style={{ color: '#f1c40f' }}>Selected — press Delete to remove</span>}
+            {selectedId && <span style={{ color: '#f1c40f' }}>Selected — press Delete to remove · arrow keys move it 10 mm (Shift 100, Ctrl 1)</span>}
             {isDrawing && drawPoints.length > 0 && (
               <span style={{ color: 'var(--to-text)' }}>
                 {drawPoints.length} point{drawPoints.length !== 1 ? 's' : ''}
