@@ -410,3 +410,36 @@ export function chainWalls(pieces: WallPiece[], tol = 3): WallChain[] {
   // external and internal kinds separately, shortest first, so a long wall covers the end of a short one that butts into it
   return out.sort((a, b) => (a.group < b.group ? -1 : a.group > b.group ? 1 : lengthOf(a.points) - lengthOf(b.points)))
 }
+
+/**
+ * The straight sides of a run of walls, corner to corner: consecutive pieces that point the same way (within `tolDeg`) are ONE side, so a straight stretch built from two or three walls is measured once, from one
+ * corner to the next. For a closed run the side that crosses the start is joined up too. Each side is [from, to].
+ */
+export function mergeCollinearSides(points: Pt[], closed: boolean, tolDeg = 1): [Pt, Pt][] {
+  const pts = dedupe(points, closed)
+  const n = pts.length
+  if (n < 2) return []
+  const segCount = closed ? n : n - 1
+  const dirs: Pt[] = []
+  for (let i = 0; i < segCount; i++) { const a = pts[i], b = pts[(i + 1) % n]; const l = Math.hypot(b.x - a.x, b.y - a.y) || 1; dirs.push({ x: (b.x - a.x) / l, y: (b.y - a.y) / l }) }
+  const sin = Math.sin((tolDeg * Math.PI) / 180)
+  const same = (i: number, j: number) => Math.abs(dirs[i].x * dirs[j].y - dirs[i].y * dirs[j].x) <= sin && dirs[i].x * dirs[j].x + dirs[i].y * dirs[j].y > 0
+  // where a side begins: a segment that does not continue the one before it (for a closed run, turn the list so it starts at a corner)
+  let first = 0
+  if (closed) {
+    first = -1
+    for (let i = 0; i < segCount; i++) if (!same((i - 1 + segCount) % segCount, i)) { first = i; break }
+    if (first < 0) return []   // a closed run with no corner at all
+  }
+  const out: [Pt, Pt][] = []
+  let startSeg = first, count = 1
+  for (let k = 1; k <= segCount; k++) {
+    const i = (first + k) % segCount
+    const continues = k < segCount && same((first + k - 1) % segCount, i)
+    if (continues) { count++; continue }
+    out.push([pts[startSeg % n], pts[(startSeg + count) % n]])
+    startSeg = (first + k) % segCount
+    count = 1
+  }
+  return out
+}

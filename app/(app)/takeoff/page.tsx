@@ -47,7 +47,7 @@ import ClientProjectModal from './components/ClientProjectModal'
 import ClientFilePicker from '@/components/ClientFilePicker'
 import { planResize, applyResize } from '@/lib/calc-size'
 import { defaultToolbars, mergeToolbars, toolbarsOn, setToolbarDock, renameToolbar, setToolbarLabels, setToolbarVisible, moveToolbar, allowedDocks, isSideDock, DOCK_LABEL, DEFAULT_TOOLBARS, type TbId, type TbDock, type TbPref } from '@/lib/takeoff-toolbars'
-import { mitreCuts, wallDrawing, wallBand, offsetPolyline, totalMm, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, specFromMakeupLayers, defaultWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
+import { mitreCuts, mergeCollinearSides, wallDrawing, wallBand, offsetPolyline, totalMm, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, specFromMakeupLayers, defaultWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
 import { sidesOf, splitOpenings } from '@/lib/wall-split'
 import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
 import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, segmentMiddle, flippedSwing, pointAtDist, type PlacedOpening, type WallBand } from '@/lib/wall-openings'
@@ -2204,22 +2204,33 @@ export default function TakeoffPage() {
       )
     }
     if (viewDimOut) {
+      // measured on the OUTSIDE face, from outer corner to outer corner: the walls are joined up as they are painted (so a wall that stops short of, or runs past, its neighbour is still measured to the corner), and a straight
+      // stretch built from several walls is one measurement
+      const pieces: { id: string; points: TakeoffPoint[]; closed: boolean; flip: boolean; group: string; reachPx?: number }[] = []
+      const kinds = new Map<string, NonNullable<ReturnType<typeof wallSpecFor>>>()
       for (const el of wallsOnSheet()) {
         if (el.phase !== 'External Walls') continue
-        const ws = wallSpecFor(el)
-        if (!ws) continue
-        const pts = el.type === 'rect' ? cornersOf(el) : el.points
-        const band = wallBand(pts, ws.spec, mpp, wallPaintOpts(el, ws))
-        if (!band) continue
-        const n = pts.length, count = el.type === 'line' ? n - 1 : n
-        for (let i = 0; i < count; i++) {
-          const a = pts[i], b = pts[(i + 1) % n]
-          const l = Math.hypot(b.x - a.x, b.y - a.y)
-          if (!(l > 0)) continue
-          const rx = -(b.y - a.y) / l, ry = (b.x - a.x) / l   // the right-hand normal; the inside of the building is on this side when band.inside is 1
-          dim('do-' + el.id + '-' + i, a, b, -rx * band.inside, -ry * band.inside, 16 / zoom, '#1565c0')
-        }
+        const w = wallSpecFor(el)
+        if (!w) continue
+        const group = `2-ext|${w.ref}|${JSON.stringify(w.spec.layers)}`
+        pieces.push({ id: el.id, points: el.type === 'rect' ? cornersOf(el) : el.points, closed: el.type !== 'line', flip: paintFlip(el, w), group, reachPx: (1.5 * totalMm(w.spec.layers)) / (mpp * 1000) })
+        kinds.set(group, w)
       }
+      const runs = chainWalls(pieces, 3)
+      const cuts = cornerCuts(runs, kinds, mpp)
+      runs.forEach((ch, ci) => {
+        const w = kinds.get(ch.group)
+        const band = w ? wallBand(ch.points, w.spec, mpp, { ref: w.ref, closed: ch.closed, flip: ch.flip }) : null
+        if (!w || !band) return
+        let pts = ch.points
+        if (!ch.closed) { pts = pts.slice(); const c = cuts[ci]; if (c?.start) pts[0] = c.start.P; if (c?.end) pts[pts.length - 1] = c.end.P }
+        mergeCollinearSides(pts, ch.closed).forEach(([a, b], k) => {
+          const l = Math.hypot(b.x - a.x, b.y - a.y)
+          if (!(l > 0)) return
+          const rx = -(b.y - a.y) / l, ry = (b.x - a.x) / l   // the right-hand normal; the inside of the building is on this side when band.inside is 1
+          dim('do-' + ci + '-' + k, a, b, -rx * band.inside, -ry * band.inside, 16 / zoom, '#1565c0')
+        })
+      })
     }
     if (roomData && roomData.sheetId === viewKey(project)) {
       roomData.rooms.forEach((r, i) => {
