@@ -134,6 +134,12 @@ export interface PlumbingRoom {
   specials: PlumbingSpecial[]
   /** the room on the Take-off plan this one was made from (a room's fittings do not depend on its size, so it only remembers which) */
   planRoomId?: string
+  /** the name the fittings placed on the plan are matched to this room by (lower case) */
+  planName?: string
+  /** the fittings placed on the plan for this room, by fitting type id, as they were last fed in: a count follows the plan until it is typed over */
+  placedCounts?: Record<string, number>
+  /** the radiators placed on the plan for this room with their sizes: the ones we supply are priced by size */
+  radiators?: { id: string; label: string; watts: number }[]
 }
 
 export interface PlumbingInput {
@@ -147,6 +153,8 @@ export interface PlumbingInput {
   wholeHouseRates: Record<string, number>
   /** the provisional sums in use for items we supply (fitting type id -> £ each) */
   pcRates: Record<string, number>
+  /** £ per kW of output for a radiator we supply that was placed on the plan with a size (55 if not given) */
+  radiatorPcPerKw?: number
 }
 
 export interface PlumbingLine {
@@ -205,7 +213,10 @@ export function calculatePlumbing(input: PlumbingInput): PlumbingResult {
         lines.push({ id: `fit|${room.id}|${ft.id}`, name: `${rn} — ${ft.name}`, category: 'subcontractors', unit: 'nr', unitCost: money(base * uplift), qty: n, roomId: room.id })
         const pc = input.pcRates[ft.id] ?? ft.pcSum
         if (room.supply === 'us' && pc > 0) {
-          lines.push({ id: `pc|${room.id}|${ft.id}`, name: `${rn} — ${ft.name.replace(/ \(.*\)$/, '')} (supplied by us — PC sum)`, category: 'materials', unit: 'nr', unitCost: money(pc), qty: n, roomId: room.id })
+          // a radiator placed on the plan has a size, so one we supply is priced by its output; the rest of the room's radiators are the usual provisional sum each
+          const sized = ft.id === 'radiator' ? (room.radiators ?? []).slice(0, n) : []
+          if (n - sized.length > 0) lines.push({ id: `pc|${room.id}|${ft.id}`, name: `${rn} — ${ft.name.replace(/ \(.*\)$/, '')} (supplied by us — PC sum)`, category: 'materials', unit: 'nr', unitCost: money(pc), qty: n - sized.length, roomId: room.id })
+          for (const rad of sized) lines.push({ id: `pcr|${room.id}|${rad.id}`, name: `${rn} — radiator ${rad.label} (supplied by us — PC sum by size)`, category: 'materials', unit: 'nr', unitCost: money((input.radiatorPcPerKw ?? 55) * Math.max(0, rad.watts) / 1000), qty: 1, roomId: room.id })
         }
         byGroup[ft.group] += n
         roomFittings += n

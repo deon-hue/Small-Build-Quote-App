@@ -9,7 +9,7 @@
  * Counts and prices only: pipe sizes, the system design, and the boiler, cylinder or heat pump (a Heating System calculator, to come) are not here. The engine is lib/plumbing-units.ts.
  */
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useEffect } from 'react'
 import NumInput from '@/components/NumInput'
 import { useCalcState } from '@/components/calc-state'
 import { costLayer, type AssemblyLayerDef, type CostedLine } from '@/lib/assembly-calc'
@@ -23,6 +23,7 @@ import { fmt } from '@/lib/utils'
 import PlanRoomsBar from '@/components/PlanRoomsBar'
 import { plumbingKindFor } from '@/lib/rooms-merge'
 import type { PlanRoomInfo } from '@/lib/rooms-from-walls'
+import type { PlacedRoom } from '@/lib/plumb-points'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import {
   propInput, PropRow, BreakdownTable, CollapsibleSection,
@@ -37,6 +38,8 @@ interface Props {
   labourTrades?: BOLabourTrade[]
   /** the rooms found on the Take-off plan: they can be added with their names and sizes */
   planRooms?: PlanRoomInfo[]
+  /** the fittings placed on the Take-off plan, room by room: their counts follow the plan until typed over, and radiators carry their sizes */
+  placed?: PlacedRoom[]
 }
 
 const GROUP_COLOUR: Record<FittingGroup, string> = { sanitaryware: '#0891b2', kitchen: '#7c3aed', heating: '#dc2626', outside: '#16a34a' }
@@ -52,7 +55,7 @@ function newRoom(typeId: string, existingOfType: number): PlumbingRoom {
   }
 }
 
-export default function AssemblyPlumbingDemo({ onClose, onSave, labourTrades = [], planRooms }: Props) {
+export default function AssemblyPlumbingDemo({ onClose, onSave, labourTrades = [], planRooms, placed }: Props) {
   const ID = 'AssemblyPlumbingDemo'
   const [name, setName] = useCalcState(ID, 'name', 'Plumbing installation')
   const [location, setLocation] = useCalcState(ID, 'location', '')
@@ -67,6 +70,7 @@ export default function AssemblyPlumbingDemo({ onClose, onSave, labourTrades = [
   const [specialRates, setSpecialRates] = useCalcState<Record<string, number>>(ID, 'specialRates', {})
   const [wholeHouseRates, setWholeHouseRates] = useCalcState<Record<string, number>>(ID, 'wholeHouseRates', {})
   const [addType, setAddType] = useCalcState(ID, 'addType', 'bathroom')
+  const [radiatorPcPerKw, setRadiatorPcPerKw] = useCalcState(ID, 'radiatorPcPerKw', 55)   // £ per kW for a radiator we supply that was placed on the plan with a size
   const [profitPct, setProfitPct] = useCalcState(ID, 'profitPct', 20)   // default profit margin
   const [rateOverrides, setRateOverrides] = useCalcState<Record<string, number>>(ID, 'rateOverrides', {})
   const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>(ID, 'disabledLayerIds', new Set())
@@ -76,10 +80,55 @@ export default function AssemblyPlumbingDemo({ onClose, onSave, labourTrades = [
   // a room from the Take-off plan: its name and kind, with the usual fittings for that kind (a room's fittings do not depend on its size, so there is nothing for it to follow)
   function addPlanRooms(list: PlanRoomInfo[]) {
     setRooms(p => {
-      const made = list.filter(pr => !p.some(r => r.planRoomId === pr.id)).map(pr => ({ ...newRoom(plumbingKindFor(pr.kind), 0), name: pr.name, planRoomId: pr.id }))
-      return [...p, ...made]
+      // a room that already has this name (made from fittings placed on the plan) is tied to the plan room instead of being added twice
+      const byName = (pr: PlanRoomInfo) => p.find(r => !r.planRoomId && (r.planName ?? r.name.trim().toLowerCase()) === pr.name.trim().toLowerCase())
+      const linked = new Map<string, string>()
+      for (const pr of list) { const ex = byName(pr); if (ex && !p.some(r => r.planRoomId === pr.id)) linked.set(ex.id, pr.id) }
+      const made = list.filter(pr => !p.some(r => r.planRoomId === pr.id) && !Array.from(linked.values()).includes(pr.id)).map(pr => ({ ...newRoom(plumbingKindFor(pr.kind), 0), name: pr.name, planRoomId: pr.id, planName: pr.name.trim().toLowerCase() }))
+      return [...p.map(r => (linked.has(r.id) ? { ...r, planRoomId: linked.get(r.id) } : r)), ...made]
     })
   }
+
+  // The fittings placed on the plan (the Take-off Plumbing tool) are counted room by room, matched to a room here by its name. A count that was typed over is left alone until the plan's count changes; a room
+  // that is not here yet is made from them. Nothing placed in a room means its usual fittings are not touched.
+  const placedKey = JSON.stringify(placed ?? [])
+  const roomsKey = rooms.map(r => r.id + '|' + (r.planName ?? r.name)).join(',')
+  useEffect(() => {
+    if (!placed) return
+    setRooms(prev => {
+      let changed = false
+      const next = prev.map(r => ({ ...r }))
+      for (const pr of placed) {
+        const key = pr.name.trim().toLowerCase()
+        let r = next.find(x => (x.planName ?? x.name.trim().toLowerCase()) === key)
+        if (!r) {
+          r = { ...newRoom('other', 0), name: pr.name === 'No room' ? 'Fittings not in a named room' : pr.name, planName: key, fittings: {} }
+          next.push(r); changed = true
+        }
+        const was = r.placedCounts ?? {}
+        const now: Record<string, number> = {}
+        const fit = { ...r.fittings }
+        for (const t of new Set([...Object.keys(was), ...Object.keys(pr.counts)])) {
+          const n = pr.counts[t] ?? 0, old = was[t]
+          if (n > 0) now[t] = n
+          if (old === undefined) { if (n > 0 && fit[t] !== n) { fit[t] = n; changed = true } }
+          else if (n !== old && (fit[t] ?? 0) === old) { if (n > 0) fit[t] = n; else delete fit[t]; changed = true }
+        }
+        const radiators = pr.radiators.map(x => ({ id: x.pointId, label: x.label, watts: x.watts }))
+        if (JSON.stringify(radiators) !== JSON.stringify(r.radiators ?? []) || JSON.stringify(now) !== JSON.stringify(was) || r.planName !== key) changed = true
+        r.fittings = fit; r.placedCounts = now; r.radiators = radiators; r.planName = key
+      }
+      // a room whose fittings were all taken off the plan: their counts follow down to nothing
+      for (const r of next) {
+        if (!r.placedCounts || Object.keys(r.placedCounts).length === 0 || placed.some(pr => pr.name.trim().toLowerCase() === r.planName)) continue
+        const fit = { ...r.fittings }
+        for (const [t, old] of Object.entries(r.placedCounts)) if ((fit[t] ?? 0) === old) delete fit[t]
+        r.fittings = fit; r.placedCounts = {}; r.radiators = []; changed = true
+      }
+      return changed ? next : prev
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placedKey, roomsKey])
 
   function updateRoom(id: string, patch: Partial<PlumbingRoom>) { setRooms(p => p.map(r => r.id === id ? { ...r, ...patch } : r)) }
   function setCount(roomId: string, fid: string, n: number) { setRooms(p => p.map(r => r.id === roomId ? { ...r, fittings: { ...r.fittings, [fid]: Math.max(0, n) } } : r)) }
@@ -94,9 +143,9 @@ export default function AssemblyPlumbingDemo({ onClose, onSave, labourTrades = [
   function removeSpecial(roomId: string, sid: string) { setRooms(p => p.map(r => r.id === roomId ? { ...r, specials: r.specials.filter(s => s.id !== sid) } : r)) }
 
   const result = useMemo((): { ok: true; r: PlumbingResult } | { ok: false; error: string } => {
-    try { return { ok: true, r: calculatePlumbing({ rooms, wholeHouse, jobSituationId, situations, fittingRates, specialRates, wholeHouseRates, pcRates }) } }
+    try { return { ok: true, r: calculatePlumbing({ rooms, wholeHouse, jobSituationId, situations, fittingRates, specialRates, wholeHouseRates, pcRates, radiatorPcPerKw }) } }
     catch (e: any) { return { ok: false, error: e.message as string } }
-  }, [rooms, wholeHouse, jobSituationId, situations, fittingRates, specialRates, wholeHouseRates, pcRates])
+  }, [rooms, wholeHouse, jobSituationId, situations, fittingRates, specialRates, wholeHouseRates, pcRates, radiatorPcPerKw])
   const r = result.ok ? result.r : null
 
   const layers: AssemblyLayerDef[] = useMemo(() => (r?.lines ?? []).map(l => ({
@@ -197,6 +246,13 @@ export default function AssemblyPlumbingDemo({ onClose, onSave, labourTrades = [
 
       {/* An engine error is a banner above the controls, never instead of them: typing a value digit by digit passes through invalid ones. */}
       {!result.ok && <div style={{ color: '#c0392b', fontSize: 12, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, padding: '6px 10px', marginBottom: 10 }}>⚠ {result.error}</div>}
+      {rooms.some(x => (x.radiators?.length ?? 0) > 0) && (
+        <div style={{ fontSize: 11.5, color: '#475569', background: '#fff', border: '1px solid #bae6fd', borderRadius: 5, padding: '5px 9px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span>Radiators placed on the plan and supplied by us are priced by size at £</span>
+          <NumInput type="number" min={0} step={5} value={radiatorPcPerKw} onChange={e => setRadiatorPcPerKw(Math.max(0, +e.target.value || 0))} style={{ ...small, width: 64, textAlign: 'right' }} />
+          <span>per kW of output (a sample rate: check it against your supplier).</span>
+        </div>
+      )}
       {r && r.warnings.map((w, i) => (
         <div key={i} style={{ fontSize: 11, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 4, padding: '4px 8px', marginBottom: 6 }}>⚠ {w}</div>
       ))}
@@ -204,7 +260,7 @@ export default function AssemblyPlumbingDemo({ onClose, onSave, labourTrades = [
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16 }}>
         <div>
           {/* Add a room */}
-          <PlanRoomsBar planRooms={planRooms} isAdded={id => rooms.some(r => r.planRoomId === id)} onAdd={r => addPlanRooms([r])} onAddAll={addPlanRooms} />
+          <PlanRoomsBar planRooms={planRooms} isAdded={id => rooms.some(r => r.planRoomId === id) || !!planRooms?.some(pr => pr.id === id && rooms.some(r => (r.planName ?? r.name.trim().toLowerCase()) === pr.name.trim().toLowerCase()))} onAdd={r => addPlanRooms([r])} onAddAll={addPlanRooms} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>Rooms</span>
             <select value={addType} onChange={e => setAddType(e.target.value)} style={{ ...small, minWidth: 190 }}>
@@ -229,6 +285,7 @@ export default function AssemblyPlumbingDemo({ onClose, onSave, labourTrades = [
               <div key={rm.id} style={{ background: '#fff', border: '1px solid #bae6fd', borderRadius: 8, padding: 10, marginBottom: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
                   <input value={rm.name} onChange={e => updateRoom(rm.id, { name: e.target.value })} style={{ fontWeight: 700, fontSize: 13, border: '1px solid transparent', borderBottom: '1px solid #e2e8f0', outline: 'none', background: 'transparent', minWidth: 120, flex: 1 }} />
+                  {rm.placedCounts && Object.keys(rm.placedCounts).length > 0 && <span title="These counts come from the fittings placed on the Take-off plan. Type a different number to override it until the plan changes." style={{ fontSize: 10.5, color: '#0369a1', background: '#e0f2fe', borderRadius: 4, padding: '2px 6px' }}>📍 {Object.values(rm.placedCounts).reduce((a, b) => a + b, 0)} placed on the plan</span>}
                   <select value={rm.situationId ?? ''} onChange={e => updateRoom(rm.id, { situationId: e.target.value || null })} style={small}
                     title="The situation for this room: the percentage added to its fittings. 'Job standard' follows the situation set for the whole job.">
                     <option value="">Job standard{jobSit ? ` (${jobSit.upliftPct >= 0 ? '+' : ''}${jobSit.upliftPct}%)` : ''}</option>

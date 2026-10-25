@@ -5,13 +5,15 @@
 import type { WallConstructionType, WallFinishType, CalculatedMaterial } from './material-recipes'
 import type { CostedLine } from './assembly-calc'
 import type { ElectricPoint } from './electric-points'
+import type { PlumbPoint } from './plumb-points'
+import type { BuildingAge } from './radiators'
 import type { PlacedOpening } from './wall-openings'
 import type { RoomLabel, DrawnRoomShape, RoomEdge } from './rooms-from-walls'
 import type { CalcStateSnapshot } from './calc-snapshot'
 
 // ── Drawing tools ─────────────────────────────────────────────────────────────
 
-export type DrawingTool = 'select' | 'line' | 'rect' | 'polygon' | 'floor' | 'click' | 'electric' | 'opening' | 'room' | 'join' | 'measure'
+export type DrawingTool = 'select' | 'line' | 'rect' | 'polygon' | 'floor' | 'click' | 'electric' | 'plumb' | 'opening' | 'room' | 'join' | 'measure'
 
 // ── Measurement categories (match quote parentPhase names) ────────────────────
 
@@ -266,6 +268,14 @@ export interface TakeoffItem {
   electricsState?: unknown
   /** the plan's points (as room counts) when the calculator was last saved, to say when the plan has changed since */
   electricsPricedKey?: string
+
+  // Plumbing & Heating: the one "Plumbing installation" item holds every fitting and radiator placed on the plan (so they save with the project) and what the Plumbing Installation calculator was last saved as.
+  plumbSummary?: boolean
+  plumbPoints?: PlumbPoint[]
+  /** the age of the building, which sets the heat loss radiators are sized from */
+  plumbAge?: BuildingAge
+  /** the plan's fittings (as room counts and radiator sizes) when the calculator was last saved, to say when the plan has changed since */
+  plumbPricedKey?: string
 
   // Windows & Doors: the one "Windows and doors" item holds every door and window placed on a drawn wall (so they save with the project) and what the Windows & Doors calculator was last saved as.
   wdSummary?: boolean
