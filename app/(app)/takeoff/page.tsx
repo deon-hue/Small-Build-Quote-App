@@ -26,6 +26,7 @@ import { POINT_BY_ID, type ElectricsSavedState } from '@/lib/electrics-units'
 import { planRoomsFromPoints, roomAtPoint, rectToPolygon, POINT_SHORT, type ElectricPoint } from '@/lib/electric-points'
 import PlumbingPointsPanel, { PLUMB_GROUP_COLOUR, HEAT_SOURCE_COLOUR } from './components/PlumbingPointsPanel'
 import { FITTING_BY_ID } from '@/lib/plumbing-units'
+import { plumbSymbol, facingAngle, type SymShape, type SymRole } from '@/lib/plumb-symbols'
 import { PLUMB_SHORT, HEAT_SOURCE, TOWEL_RAIL_W, placedRoomsFromPoints, type PlumbPoint, type PlumbPipe, type PlacedRoom } from '@/lib/plumb-points'
 import { floorLookOf, ufhLoopPaths, blockBeamLook, boxOf, type FloorLook } from '@/lib/floor-look'
 import { ufhLoopCount, MAX_LOOP_M, PIPE_WASTE } from '@/lib/ufh-units'
@@ -169,6 +170,28 @@ const TOOL_DISPLAY: Record<DrawingTool, string> = {
 function uid() { return Math.random().toString(36).slice(2, 10) }
 
 type LineAlign = 'outside' | 'centre' | 'inside'
+
+/** How the parts of a plumbing symbol on the plan are painted (the fitting, its bowl, water points, heating parts, thin lines) */
+const SYM_PAINT: Record<SymRole, { fill: string; stroke: string; opacity?: number; sw?: number }> = {
+  body: { fill: '#ffffff', stroke: '#1f2937' },
+  inner: { fill: '#e8f1fb', stroke: '#1f2937' },
+  water: { fill: 'none', stroke: '#2563eb' },
+  waterDot: { fill: '#2563eb', stroke: 'none' },
+  heat: { fill: '#ffffff', stroke: '#dc2626' },
+  heatDot: { fill: '#dc2626', stroke: 'none' },
+  line: { fill: 'none', stroke: '#1f2937' },
+  faint: { fill: 'none', stroke: '#1f2937', opacity: 0.45, sw: 0.7 },
+}
+/** One shape of a plumbing symbol, drawn with a line the same width on screen at any zoom; `pick` colours the outline of the fitting itself when it is selected (or short of heat) */
+function symShape(sh: SymShape, key: number, pick?: string): React.ReactElement {
+  const p = SYM_PAINT[sh.role]
+  const own = pick && (sh.role === 'body' || sh.role === 'heat')
+  const common = { fill: p.fill, stroke: own ? pick : p.stroke, strokeWidth: own ? 2.2 : (p.sw ?? 1.3), opacity: p.opacity, vectorEffect: 'non-scaling-stroke' as const, strokeLinejoin: 'round' as const }
+  if (sh.k === 'rect') return <rect key={key} x={sh.x} y={sh.y} width={sh.w} height={sh.h} rx={sh.r} {...common} />
+  if (sh.k === 'circle') return <circle key={key} cx={sh.cx} cy={sh.cy} r={sh.r} {...common} />
+  if (sh.k === 'ellipse') return <ellipse key={key} cx={sh.cx} cy={sh.cy} rx={sh.rx} ry={sh.ry} {...common} />
+  return <path key={key} d={sh.d} {...common} />
+}
 /** the walls and foundations that can say which part of them the drawn line is */
 const isAlignPhase = (phase: string) => phase === 'External Walls' || phase === 'Internal Walls & Partitions' || phase === 'Foundations'
 /** an outside wall's line is its outside face; a partition's and a foundation's is its middle */
@@ -8164,6 +8187,12 @@ export default function TakeoffPage() {
     )
   }
 
+  // The wall faces and lines the plumbing symbols turn their backs to (worked out only while there are fittings on the plan)
+  const plumbWallSides = useMemo(() => {
+    if (plumbPoints.length === 0) return [] as [TakeoffPoint, TakeoffPoint][]
+    try { return [...insideFaces().segments, ...partitionFaces().segments, ...segmentsFor(wallsOnSheet())] as [TakeoffPoint, TakeoffPoint][] } catch { return [] as [TakeoffPoint, TakeoffPoint][] }
+  }, [plumbPoints.length, project.elements, project.items, project.calibration.mpp, project.activeSheetId, project.activeLevelId, hiddenPhases, boSubPhases, allWallMakeups]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div style={{
@@ -8448,6 +8477,29 @@ export default function TakeoffPage() {
                 const chosen = pt.id === selectedPlumbPointId
                 const source = pt.typeId === HEAT_SOURCE
                 const fill = source ? HEAT_SOURCE_COLOUR : size?.short ? '#d97706' : g ? PLUMB_GROUP_COLOUR[g] : '#888'
+                // a picture of the fitting itself, at the size of the real one (never under about 16 screen pixels across), its back turned to the nearest wall; a kind with no symbol keeps its dot
+                const sym = plumbSymbol(pt.typeId, size?.widthMm)
+                if (sym) {
+                  const mpp = project.calibration.mpp
+                  const unit = Math.max(0.01 / mpp, 16 / (zoom * Math.max(sym.w, sym.h)))   // 10mm a unit
+                  const turn = facingAngle(pt, plumbWallSides, 0.8 / mpp)
+                  const name = (source ? 'Boiler / heat source' : FITTING_BY_ID[pt.typeId]?.name ?? pt.typeId) + (pt.roomName ? ' · ' + pt.roomName : '')
+                  const pick = chosen ? SEL_COLOUR : size?.short ? '#d97706' : undefined
+                  return (
+                    <g key={pt.id} transform={`translate(${pt.x}, ${pt.y})`}
+                      onMouseDown={ev => startPlumbPointDrag(ev, pt)}
+                      onClick={ev => { if (tool === 'select') ev.stopPropagation() }}
+                      style={{ cursor: tool === 'select' ? 'move' : 'inherit' }}>
+                      <title>{name}</title>
+                      <g transform={`rotate(${turn.toFixed(1)}) scale(${unit})`}>
+                        <rect x={-sym.w / 2 - 2} y={-sym.h / 2 - 2} width={sym.w + 4} height={sym.h + 4} fill="transparent" stroke="none" />
+                        {chosen && <rect x={-sym.w / 2 - 2.5} y={-sym.h / 2 - 2.5} width={sym.w + 5} height={sym.h + 5} rx={3} fill="none" stroke={SEL_COLOUR} strokeWidth={1.2} strokeDasharray="4 3" vectorEffect="non-scaling-stroke" />}
+                        {sym.shapes.map((sh, i) => symShape(sh, i, pick))}
+                      </g>
+                      {size && <text y={(Math.max(sym.w, sym.h) * unit) / 2 + 12 / zoom} textAnchor="middle" fontSize={9 / zoom} fontWeight={700} fill="#111" stroke="#fff" strokeWidth={2.5 / zoom} paintOrder="stroke" style={{ pointerEvents: 'none' }}>{size.widthMm}</text>}
+                    </g>
+                  )
+                }
                 return (
                   <g key={pt.id} transform={`translate(${pt.x}, ${pt.y})`}
                     onMouseDown={ev => startPlumbPointDrag(ev, pt)}
