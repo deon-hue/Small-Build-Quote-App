@@ -33,29 +33,32 @@ interface Props {
   /** Take-off's drawn area (m²) and perimeter (m): the first room is sized from them and follows them */
   externalAreaM2?: number
   externalPerimeterM?: number
+  /** the name of the room the drawn shape sits in, when that room is named */
+  externalName?: string
 }
 
 const uid = () => Math.random().toString(36).slice(2, 9)
 const THERMOSTATS = Object.keys(THERMOSTAT_INFO) as UfhThermostat[]
 const INSULATIONS = Object.keys(INSULATION_INFO) as UfhInsulation[]
 
-export default function AssemblyTileUfhDemo({ onClose, onSave, labourTrades = [], externalAreaM2, externalPerimeterM, planRooms }: Props) {
+export default function AssemblyTileUfhDemo({ onClose, onSave, labourTrades = [], externalAreaM2, externalPerimeterM, externalName, planRooms }: Props) {
   const ID = 'AssemblyTileUfhDemo'
   // The area drawn in Take-off (if any) sizes the first room, which follows it until the drawing changes
   const planArea = externalAreaM2 && externalAreaM2 > 0 ? externalAreaM2 : 0
   const planPerimeter = externalPerimeterM && externalPerimeterM > 0 ? externalPerimeterM : 0
   const planSides = planArea > 0 ? sidesFromAreaPerimeter(planArea, planPerimeter) : null
+  const planName = externalName?.trim() || 'Room from the plan'
   const planRoom = (): TileUfhRoom => {
     const k = TILING_ROOM_KIND_BY_ID.other
-    return { ...newTileUfhRoom('room-' + uid(), 'Room from the plan', 'other', { lengthM: planSides?.long ?? k.lengthM, widthM: planSides?.short ?? k.widthM, fixedM2: 0 }, { kit: 'mat150', insulation: '6mm' }), shape: 'other' as const, otherAreaM2: planArea, otherPerimeterM: planPerimeter, fromPlan: { areaM2: planArea, perimeterM: planPerimeter } }
+    return { ...newTileUfhRoom('room-' + uid(), planName, 'other', { lengthM: planSides?.long ?? k.lengthM, widthM: planSides?.short ?? k.widthM, fixedM2: 0 }, { kit: 'mat150', insulation: '6mm' }), shape: 'other' as const, otherAreaM2: planArea, otherPerimeterM: planPerimeter, fromPlan: { areaM2: planArea, perimeterM: planPerimeter, name: planName } }
   }
   // The job starts with no rooms: you add the ones being heated (or the drawn area is the first)
   const [rooms, setRooms] = useCalcState<TileUfhRoom[]>(ID, 'rooms', () => (planSides ? [planRoom()] : []))
   useEffect(() => {
     if (!planSides) return
-    setRooms(p => (p.length === 0 ? [planRoom()] : p.map(r => (r.fromPlan && (r.fromPlan.areaM2 !== planArea || r.fromPlan.perimeterM !== planPerimeter)
-      ? { ...r, lengthM: planSides.long, widthM: planSides.short, heatedAreaOverrideM2: null, otherAreaM2: planArea, otherPerimeterM: planPerimeter, fromPlan: { areaM2: planArea, perimeterM: planPerimeter } } : r))))
-  }, [planArea, planPerimeter])
+    setRooms(p => (p.length === 0 ? [planRoom()] : p.map(r => (r.fromPlan && (r.fromPlan.areaM2 !== planArea || r.fromPlan.perimeterM !== planPerimeter || (r.fromPlan.name ?? 'Room from the plan') !== planName)
+      ? { ...r, name: r.name === (r.fromPlan.name ?? 'Room from the plan') ? planName : r.name, ...(r.fromPlan.areaM2 !== planArea || r.fromPlan.perimeterM !== planPerimeter ? { lengthM: planSides.long, widthM: planSides.short, heatedAreaOverrideM2: null, otherAreaM2: planArea, otherPerimeterM: planPerimeter } : {}), fromPlan: { areaM2: planArea, perimeterM: planPerimeter, name: planName } } : r))))
+  }, [planArea, planPerimeter, planName])
   const [addKind, setAddKind] = useCalcState(ID, 'addKind', 'bathroom')
   const [startKit, setStartKit] = useCalcState<UfhKit>(ID, 'startKit', 'mat150')
   const [startInsulation, setStartInsulation] = useCalcState<UfhInsulation>(ID, 'startInsulation', '6mm')

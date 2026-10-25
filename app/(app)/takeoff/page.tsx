@@ -5313,7 +5313,7 @@ export default function TakeoffPage() {
     const isBoxShape = isRoof || isFoundationShape
     const roofBox = isBoxShape ? drawnBoxMm(item) : undefined
     const floorDims = (isFloorShape || _tileCalc || _ufhCalc) ? drawnAreaPerimeter(item) : undefined
-    const _ufhEl = _ufhCalc && item.elementId ? project.elements.find(e => e.id === item.elementId) : undefined
+    const _ufhEl = (_ufhCalc || _tileCalc) && item.elementId ? project.elements.find(e => e.id === item.elementId) : undefined
     const ufhRoomName = (() => {
       if (!_ufhEl || !roomData) return undefined
       const ri = roomIndexAt(roomData.rooms, centroid(_ufhEl.type === 'rect' ? cornersOf(_ufhEl) : _ufhEl.points))

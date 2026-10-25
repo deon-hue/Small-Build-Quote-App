@@ -33,28 +33,31 @@ interface Props {
   externalAreaM2?: number
   externalPerimeterM?: number
   externalLengthMm?: number
+  /** the name of the room the drawn shape sits in, when that room is named */
+  externalName?: string
 }
 
 const uid = () => Math.random().toString(36).slice(2, 9)
 
-export default function AssemblyTileWallDemo({ onClose, onSave, labourTrades = [], externalAreaM2, externalPerimeterM, externalLengthMm, planRooms }: Props) {
+export default function AssemblyTileWallDemo({ onClose, onSave, labourTrades = [], externalAreaM2, externalPerimeterM, externalLengthMm, externalName, planRooms }: Props) {
   const ID = 'AssemblyTileWallDemo'
   // What is drawn in Take-off: an outline gives its perimeter (the walls round it), a line gives its length. It is the first wall area's length and follows the drawing.
   const planLength = externalAreaM2 && externalAreaM2 > 0 && externalPerimeterM && externalPerimeterM > 0 ? externalPerimeterM
     : externalLengthMm && externalLengthMm > 0 ? +(externalLengthMm / 1000).toFixed(2) : 0
+  const planName = externalName?.trim() || 'Walls from the plan'
   const planIsOutline = !!(externalAreaM2 && externalAreaM2 > 0 && externalPerimeterM && externalPerimeterM > 0)
   const planRoom = (): TileWallRoom => {
-    const room = newTileWallRoom('room-' + uid(), 'Walls from the plan', 'other', 2.4,
+    const room = newTileWallRoom('room-' + uid(), planName, 'other', 2.4,
       [{ id: newZoneId(), label: planIsOutline ? 'Walls round the drawn outline' : 'Wall from the drawn line', lengthM: planLength, heightM: 2.4, deductM2: 0 }], { tileId: 'medium', layoutId: 'straight' })
-    return { ...room, fromPlan: { lengthM: planLength } }
+    return { ...room, fromPlan: { lengthM: planLength, name: planName } }
   }
   // The job starts with no rooms: you add the ones being tiled (or the drawn walls are the first)
   const [rooms, setRooms] = useCalcState<TileWallRoom[]>(ID, 'rooms', () => (planLength > 0 ? [planRoom()] : []))
   useEffect(() => {
     if (!(planLength > 0)) return
-    setRooms(p => (p.length === 0 ? [planRoom()] : p.map(r => (r.fromPlan && r.fromPlan.lengthM !== planLength
-      ? { ...r, zones: r.zones.map((z, i) => (i === 0 ? { ...z, lengthM: planLength } : z)), fromPlan: { lengthM: planLength } } : r))))
-  }, [planLength])
+    setRooms(p => (p.length === 0 ? [planRoom()] : p.map(r => (r.fromPlan && (r.fromPlan.lengthM !== planLength || (r.fromPlan.name ?? 'Walls from the plan') !== planName)
+      ? { ...r, name: r.name === (r.fromPlan.name ?? 'Walls from the plan') ? planName : r.name, zones: r.fromPlan.lengthM !== planLength ? r.zones.map((z, i) => (i === 0 ? { ...z, lengthM: planLength } : z)) : r.zones, fromPlan: { lengthM: planLength, name: planName } } : r))))
+  }, [planLength, planName])
   const [addKind, setAddKind] = useCalcState(ID, 'addKind', 'bathroom')
   const [startTile, setStartTile] = useCalcState<TileSizeId>(ID, 'startTile', 'medium')
   const [startLayout, setStartLayout] = useCalcState<TileLayoutId>(ID, 'startLayout', 'straight')

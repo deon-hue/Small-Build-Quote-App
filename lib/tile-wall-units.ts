@@ -40,7 +40,7 @@ export interface TileWallRoom {
   situationId: string | null
   protect: boolean
   /** the drawn length (from Take-off) this room's first wall area was last sized from: it follows it until it changes */
-  fromPlan?: { lengthM: number }
+  fromPlan?: { lengthM: number; name?: string }
 }
 
 export function newTileWallRoom(id: string, name: string, kindId: string, heightM: number, zones: TilingZone[], start: { tileId: TileSizeId; layoutId: TileLayoutId }): TileWallRoom {

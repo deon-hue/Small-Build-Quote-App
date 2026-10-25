@@ -31,6 +31,8 @@ interface Props {
   /** Take-off's drawn area (m²) and perimeter (m): the first room is sized from them and follows them */
   externalAreaM2?: number
   externalPerimeterM?: number
+  /** the name of the room the drawn shape sits in, when that room is named */
+  externalName?: string
   /** the rooms found on the Take-off plan: they can be added with their sizes, and follow the plan until typed over */
   planRooms?: PlanRoomInfo[]
 }
@@ -38,23 +40,24 @@ interface Props {
 const uid = () => Math.random().toString(36).slice(2, 9)
 const ADHESIVES = Object.keys(FLOOR_ADHESIVE_LABEL) as FloorAdhesive[]
 
-export default function AssemblyTileFloorDemo({ onClose, onSave, labourTrades = [], externalAreaM2, externalPerimeterM, planRooms }: Props) {
+export default function AssemblyTileFloorDemo({ onClose, onSave, labourTrades = [], externalAreaM2, externalPerimeterM, externalName, planRooms }: Props) {
   const ID = 'AssemblyTileFloorDemo'
   // The area drawn in Take-off (if any) sizes the first room, which follows it until the drawing changes
   const planArea = externalAreaM2 && externalAreaM2 > 0 ? externalAreaM2 : 0
   const planPerimeter = externalPerimeterM && externalPerimeterM > 0 ? externalPerimeterM : 0
   const planSides = planArea > 0 ? sidesFromAreaPerimeter(planArea, planPerimeter) : null
+  const planName = externalName?.trim() || 'Room from the plan'
   const planRoom = (): TileFloorRoom => {
     const k = TILING_ROOM_KIND_BY_ID.other
-    return { ...newTileFloorRoom('room-' + uid(), 'Room from the plan', 'other', { ...k, lengthM: planSides?.long ?? k.lengthM, widthM: planSides?.short ?? k.widthM, fixedM2: 0 }, { tileId: 'large', layoutId: 'straight' }), shape: 'other' as const, otherAreaM2: planArea, otherPerimeterM: planPerimeter, fromPlan: { areaM2: planArea, perimeterM: planPerimeter } }
+    return { ...newTileFloorRoom('room-' + uid(), planName, 'other', { ...k, lengthM: planSides?.long ?? k.lengthM, widthM: planSides?.short ?? k.widthM, fixedM2: 0 }, { tileId: 'large', layoutId: 'straight' }), shape: 'other' as const, otherAreaM2: planArea, otherPerimeterM: planPerimeter, fromPlan: { areaM2: planArea, perimeterM: planPerimeter, name: planName } }
   }
   // The job starts with no rooms: you add the ones being tiled (or the drawn area is the first)
   const [rooms, setRooms] = useCalcState<TileFloorRoom[]>(ID, 'rooms', () => (planSides ? [planRoom()] : []))
   useEffect(() => {
     if (!planSides) return
-    setRooms(p => (p.length === 0 ? [planRoom()] : p.map(r => (r.fromPlan && (r.fromPlan.areaM2 !== planArea || r.fromPlan.perimeterM !== planPerimeter)
-      ? { ...r, lengthM: planSides.long, widthM: planSides.short, areaOverrideM2: null, otherAreaM2: planArea, otherPerimeterM: planPerimeter, fromPlan: { areaM2: planArea, perimeterM: planPerimeter } } : r))))
-  }, [planArea, planPerimeter])
+    setRooms(p => (p.length === 0 ? [planRoom()] : p.map(r => (r.fromPlan && (r.fromPlan.areaM2 !== planArea || r.fromPlan.perimeterM !== planPerimeter || (r.fromPlan.name ?? 'Room from the plan') !== planName)
+      ? { ...r, name: r.name === (r.fromPlan.name ?? 'Room from the plan') ? planName : r.name, ...(r.fromPlan.areaM2 !== planArea || r.fromPlan.perimeterM !== planPerimeter ? { lengthM: planSides.long, widthM: planSides.short, areaOverrideM2: null, otherAreaM2: planArea, otherPerimeterM: planPerimeter } : {}), fromPlan: { areaM2: planArea, perimeterM: planPerimeter, name: planName } } : r))))
+  }, [planArea, planPerimeter, planName])
   const [addKind, setAddKind] = useCalcState(ID, 'addKind', 'bathroom')
   const [startTile, setStartTile] = useCalcState<TileSizeId>(ID, 'startTile', 'large')
   const [startLayout, setStartLayout] = useCalcState<TileLayoutId>(ID, 'startLayout', 'straight')

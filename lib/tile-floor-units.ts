@@ -45,7 +45,7 @@ export interface TileFloorRoom extends RoomShapeExtras {
   situationId: string | null
   protect: boolean
   /** the drawn area and perimeter (from Take-off) this room was last sized from: it follows them until they change */
-  fromPlan?: { areaM2: number; perimeterM: number }
+  fromPlan?: { areaM2: number; perimeterM: number; /** the name the room was given from the plan: it follows the plan's room name while still that */ name?: string }
   /** the room on the Take-off plan this one was made from, and what the plan said when it was last fed (it follows the plan until the plan's room changes) */
   planRoomId?: string
   planRoomSig?: string
