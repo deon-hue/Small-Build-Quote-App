@@ -25,6 +25,7 @@ import { planRoomsFromPoints, roomAtPoint, rectToPolygon, POINT_SHORT, type Elec
 import PlumbingPointsPanel, { PLUMB_GROUP_COLOUR, HEAT_SOURCE_COLOUR } from './components/PlumbingPointsPanel'
 import { FITTING_BY_ID } from '@/lib/plumbing-units'
 import { PLUMB_SHORT, HEAT_SOURCE, TOWEL_RAIL_W, placedRoomsFromPoints, type PlumbPoint, type PlumbPipe, type PlacedRoom } from '@/lib/plumb-points'
+import { floorLookOf, ufhPipePath, blockBeamLook, type FloorLook } from '@/lib/floor-look'
 import { buildPipeNetwork, summariseNetworks, type NetResult, type PipeSummary } from '@/lib/pipe-network'
 import { suggestCombiKw, roomHeatLoss, externalEdgeLengthPx, sizeRadiators, radiatorOutputW, radiatorLabel, type BuildingAge, type RadSizing } from '@/lib/radiators'
 
@@ -4297,6 +4298,73 @@ export default function TakeoffPage() {
     )
   }
 
+  /**
+   * What a floor looks like on the plan instead of a flat infill: underfloor heating shows its pipe in rows, a block and beam floor its beams with the infill blocks between them, a concrete slab its hatching (lib/floor-look.ts).
+   * Returns the picture to paint inside the floor's outline, and the look it has (null: the plain infill stays).
+   */
+  function floorLookOf2(el: DrawnElement): FloorLook | null {
+    if (el.type === 'line' || el.phase === 'External Walls' || el.phase === 'Internal Walls & Partitions') return null
+    const item = project.items.find(it => it.elementId === el.id)
+    if (!item) return null
+    const sub = item.taskSubphaseId ? boSubPhases.find(sp => sp.id === item.taskSubphaseId) : undefined
+    return floorLookOf(sub?.canonical_id ?? undefined, item.floorMakeupId)
+  }
+  function floorLookLayer(el: DrawnElement, poly: TakeoffPoint[], look: FloorLook): React.ReactNode {
+    const mpp = project.calibration.mpp
+    if (!(mpp > 0) || poly.length < 3) return null
+    const vals = (project.items.find(it => it.elementId === el.id)?.assemblyCalcState?.values ?? {}) as Record<string, Record<string, unknown>>
+    const clipId = 'fl-clip-' + el.id
+    const clip = <clipPath id={clipId}><polygon points={poly.map(p => `${p.x},${p.y}`).join(' ')} /></clipPath>
+    const px = (mm: number) => mm / (mpp * 1000)
+    if (look === 'ufh' || look === 'ufh-electric') {
+      const electric = look === 'ufh-electric'
+      const zones = vals.AssemblyUfhDemo?.zones
+      const spacing = !electric && Array.isArray(zones) && typeof (zones[0] as { spacingMm?: number } | undefined)?.spacingMm === 'number' ? (zones[0] as { spacingMm: number }).spacingMm : electric ? 100 : 150
+      const { d } = ufhPipePath(poly, px(spacing), px(150), 4 / zoom)
+      if (!d) return null
+      const colour = electric ? '#f59e0b' : '#dc2626'
+      return (
+        <g style={{ pointerEvents: 'none' }}>
+          <defs>{clip}</defs>
+          <g clipPath={`url(#${clipId})`}>
+            <path d={d} fill="none" stroke="#fff" strokeOpacity={0.7} strokeWidth={Math.max(px(16), 2.6 / zoom)} strokeLinejoin="round" strokeLinecap="round" />
+            <path d={d} fill="none" stroke={colour} strokeWidth={Math.max(px(16) * 0.7, 1.5 / zoom)} strokeLinejoin="round" strokeLinecap="round" strokeDasharray={electric ? `${4 / zoom} ${2 / zoom}` : undefined} />
+          </g>
+        </g>
+      )
+    }
+    if (look === 'block-beam') {
+      const centres = typeof vals.AssemblyBlockBeamFloorDemo?.centresMm === 'number' ? (vals.AssemblyBlockBeamFloorDemo.centresMm as number) : 520
+      const bb = blockBeamLook(poly, mpp, { centresMm: centres, minPx: 3 / zoom })
+      return (
+        <g style={{ pointerEvents: 'none' }}>
+          <defs>{clip}</defs>
+          <g clipPath={`url(#${clipId})`}>
+            {bb.joints && <path d={bb.joints} fill="none" stroke="#94a3b8" strokeWidth={0.8 / zoom} />}
+            {bb.beams.map((b, i) => <line key={i} x1={b[0].x} y1={b[0].y} x2={b[1].x} y2={b[1].y} stroke="#334155" strokeWidth={Math.max(bb.beamPx, 2.2 / zoom)} />)}
+          </g>
+        </g>
+      )
+    }
+    // a concrete slab: the usual hatch of dots and small triangles
+    const pid = 'fl-slab-' + el.id
+    const u = 1 / zoom
+    return (
+      <g style={{ pointerEvents: 'none' }}>
+        <defs>
+          <pattern id={pid} width={18 * u} height={18 * u} patternUnits="userSpaceOnUse">
+            <circle cx={3 * u} cy={4 * u} r={0.9 * u} fill="#64748b" />
+            <circle cx={12 * u} cy={11 * u} r={0.9 * u} fill="#64748b" />
+            <circle cx={15 * u} cy={3 * u} r={0.7 * u} fill="#94a3b8" />
+            <path d={`M${7 * u},${15 * u} l${2.2 * u},${-3.8 * u} l${2.2 * u},${3.8 * u} z`} fill="none" stroke="#64748b" strokeWidth={0.7 * u} />
+            <path d={`M${2 * u},${11 * u} l${1.6 * u},${-2.8 * u} l${1.6 * u},${2.8 * u} z`} fill="none" stroke="#94a3b8" strokeWidth={0.6 * u} />
+          </pattern>
+        </defs>
+        <polygon points={poly.map(p => `${p.x},${p.y}`).join(' ')} fill={`url(#${pid})`} />
+      </g>
+    )
+  }
+
   function renderElement(el: DrawnElement) {
     const sel = selectedId === el.id
     const isWall = el.phase === 'External Walls'
@@ -4456,9 +4524,11 @@ export default function TakeoffPage() {
 
     if (el.type === 'rect') {
       const { x, y, width: w, height: h } = rectAttrs(el.points)
+      const look = floorLookOf2(el)
       return (
         <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
-          <rect x={x} y={y} width={w} height={h} fill={fill} stroke={stroke} strokeWidth={sw} />
+          <rect x={x} y={y} width={w} height={h} fill={look ? el.color + '14' : fill} stroke={stroke} strokeWidth={sw} />
+          {look && floorLookLayer(el, cornersOf(el), look)}
           <text className="to-lbl" x={x + w / 2} y={y + h / 2 - 6} textAnchor="middle" fontSize={11} fill={sel ? SEL_COLOUR : el.color} fontFamily="monospace" fontWeight={600}>
             {el.label}
           </text>
@@ -4472,9 +4542,11 @@ export default function TakeoffPage() {
     if (el.type === 'polygon') {
       const pts = el.points.map(p => `${p.x},${p.y}`).join(' ')
       const mid = centroid(el.points)
+      const look = floorLookOf2(el)
       return (
         <g key={el.id} onClick={() => selectElement(el)} onDoubleClick={() => openAssemblyFromElement(el)} onMouseDown={onElMouseDown} style={{ cursor: elCursor, pointerEvents: elPointerEvents }}>
-          <polygon points={pts} fill={fill} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
+          <polygon points={pts} fill={look ? el.color + '14' : fill} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
+          {look && floorLookLayer(el, el.points, look)}
           <text className="to-lbl" x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? SEL_COLOUR : el.color} fontFamily="monospace" fontWeight={600}>
             {el.label}
           </text>
