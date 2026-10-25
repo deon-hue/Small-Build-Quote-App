@@ -150,7 +150,7 @@ go through `lib/client-items.ts` (folds any old "Profit" rows into the other row
    registered; a new one gets an entry in the right sub-phase array).
 
 **How Take-off uses it (already wired — registering is enough for walls)**
-- The calculator NEVER renders inline in Take-off's ~300px properties panel. The panel shows a summary card
+- The calculator NEVER renders inline in Take-off's ~300px properties panel. **The panel is KEYED by the wall (and its kind of calculator)** in `renderAssemblyPanel`: selecting another wall must mount a NEW calculator that starts from that wall's own `assemblyCalcState`, never carry on with the last wall's typed values (it used to, so a wall changed to a block outer leaf made every other wall's calculator open as block and render, while the sheet drew them as brick). Keep the key if you touch it. The panel shows a summary card
   (name, length, price, "Open calculator"); the calculator opens full size in a window over the drawing
   (`AssemblyItemPanel` in `app/(app)/takeoff/components/AssemblyWindow.tsx`, called via `renderAssemblyPanel`).
   It opens from the button, a Schedule row click, or double-clicking the wall. Save & Price closes it.

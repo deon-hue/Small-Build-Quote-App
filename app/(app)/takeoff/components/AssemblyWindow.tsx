@@ -9,8 +9,9 @@
  *
  * The calculator stays mounted while the window is closed (just hidden), so whatever has been typed
  * into it survives closing and reopening while the Properties tab keeps showing that wall. Its inputs
- * aren't stored anywhere except as the priced result it saves, so — as before — switching to the
- * Schedule tab or selecting another wall unmounts it and it starts from its defaults again.
+ * aren't stored anywhere except as the priced result it saves (and the values kept with it), so switching to the
+ * Schedule tab unmounts it. The caller keys this panel by the wall and its kind of calculator (renderAssemblyPanel in Take-off), so selecting
+ * ANOTHER wall mounts a new calculator from THAT wall's own saved values: without the key React kept the same calculator and the last wall's inputs showed on the next one.
  */
 
 import React from 'react'

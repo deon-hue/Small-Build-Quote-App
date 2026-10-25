@@ -4564,7 +4564,9 @@ export default function TakeoffPage() {
     const roofBox = isBoxShape ? drawnBoxMm(item) : undefined
     const floorDims = (isFloorShape || _tileCalc) ? drawnAreaPerimeter(item) : undefined
     const renderAssemblyPanel = (savePatch: Partial<TakeoffItem>) => builtAssembly && (
+      // keyed by the wall and the kind of calculator: picking another wall (or another build-up type) must start a NEW calculator from THAT wall's own saved values, never carry on with the last wall's
       <AssemblyItemPanel
+        key={item.id + '|' + (item.floorMakeupId ?? '') + '|' + (item.taskSubphaseId ?? '') + '|' + (item.demoSubphaseId ?? '')}
         name={item.name}
         lengthM={item.length ?? 0}
         measureLabel={isBoxShape ? 'Size' : isFloorShape || (_tileCalc && floorDims) ? 'Area' : _tileCalc && (item.length ?? 0) > 0 ? 'Length' : (isDecoCalc && !_lengthFedCalc) || _demoMarker ? 'Marker' : undefined}
