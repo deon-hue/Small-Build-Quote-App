@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { makeDebouncedSave, isEmptyTakeoff, isUuid, newProjectId, loadTakeoffFromSupabase, saveTakeoffToSupabase, listTakeoffSummaries, deleteTakeoffProject, type TakeoffSummary } from '@/lib/takeoff-sync'
 import { sheetOf, roomLabelsOf, setRoomLabels, roomShapesOf, setRoomShapes, roomEdgesOf, setRoomEdges, activeSheetIdOf, onActiveSheet, onActiveLevel, activeLevelIdOf, levelOf, levelName, levelBelow, ghostLevel, elementsOnGhostLevel, viewKey, itemLevelId, addLevel, switchActiveLevel, renameLevel, setLevelHeight, removeLevel, moveElementToLevel, copyLevelContents, levelInsertIndex, LEVEL_PRESETS, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet, setSheetPaper, guidesOf, setGuides } from '@/lib/takeoff-sheets'
+import type { WallRef } from '@/lib/wall-drawing'
 import { guideFromPoints, horizontalGuide, verticalGuide, clipToBox, guideSegments, guideCrossings, signedOffset, nearestGuide, moveGuideThrough, offsetLine, nearestLine, guideName, type Guide, type Box as GuideBox, type PickLine } from '@/lib/guides'
 import { layoutTags, polylineMidpoint, textColorFor, tagText, TAG_HEIGHT_PX } from '@/lib/takeoff-tags'
 import { PDF_RENDER_MM_PER_PX, PAPER_SIZES, SCALE_DENOMS, scaleLabel, denomFromLabel, mppForScale, paperFromMm, inferPdfPaper, mmPerPxForPaper } from '@/lib/takeoff-paper'
@@ -2318,7 +2319,7 @@ export default function TakeoffPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.elements, project.items, project.calibration.mpp, project.activeSheetId, project.levels, project.activeLevelId, boSubPhases, allWallMakeups.length, hiddenPhases])
   /** where two runs of walls of DIFFERENT make-up meet at a corner, the cut each is given so their layers meet along one mitre line (lib/wall-drawing.ts mitreCuts); one entry per run */
-  function cornerCuts(chains: ReturnType<typeof chainWalls>, kinds: Map<string, { spec: { layers: { kind: string; mm: number }[] }; ref: 'outer' | 'centre'; flip: boolean }>, mpp: number) {
+  function cornerCuts(chains: ReturnType<typeof chainWalls>, kinds: Map<string, { spec: { layers: { kind: string; mm: number }[] }; ref: WallRef; flip: boolean }>, mpp: number) {
     return mitreCuts(chains.map(ch => {
       const w = kinds.get(ch.group)
       const band = w ? wallBand(ch.points, w.spec as Parameters<typeof wallBand>[1], mpp, { ref: w.ref, closed: ch.closed, flip: ch.flip }) : null
@@ -2328,7 +2329,7 @@ export default function TakeoffPage() {
   /** whether a wall is painted building to the left of its own line: a side of a closed run is painted INWARD (the run decides, whatever the make-up of each side), any other wall as it was drawn or flipped */
   const paintFlip = (el: DrawnElement, w: { flip: boolean }): boolean => { const o = wallDirOverride.get(el.id); return o !== undefined && el.type === 'line' ? o === -1 : w.flip }
   /** how a wall's own band is worked out so it matches how it is painted (see wallDirOverride) */
-  function wallPaintOpts(el: DrawnElement, ws: { ref: 'outer' | 'centre'; flip: boolean }) {
+  function wallPaintOpts(el: DrawnElement, ws: { ref: WallRef; flip: boolean }) {
     const o = wallDirOverride.get(el.id)
     return o !== undefined && el.type === 'line' ? { ref: ws.ref, closed: false, flip: o === -1 } : { ref: ws.ref, closed: el.type !== 'line', flip: ws.flip }
   }
@@ -4453,7 +4454,10 @@ export default function TakeoffPage() {
     const canonical = boSub?.canonical_id ?? (makeupId ? WALL_MAKEUP_TO_SUBPHASE_CANONICAL[makeupId] : undefined)
     if (!spec && external && makeupId) { const mk = allWallMakeups.find(m => m.id === makeupId); if (mk) spec = specFromMakeupLayers(mk.layers) }
     if (!spec) spec = defaultWallSpec(canonical)
-    return spec ? { spec, ref: (external ? 'outer' : 'centre') as 'outer' | 'centre', flip: !!item.wallFlip } : null
+    // which part of the wall the line you drew is (an outside wall: its outside face unless said otherwise; a partition: its middle; 'Left'/'Right' of the way it was drawn for a partition)
+    const al = item.lineAlign
+    const ref: WallRef = external ? (al === 'centre' ? 'centre' : al === 'inside' ? 'inner' : 'outer') : (al === 'outside' ? 'outer' : al === 'inside' ? 'inner' : 'centre')
+    return spec ? { spec, ref, flip: !!item.wallFlip } : null
   }
   function wallSpecFor(el: DrawnElement) {
     if (el.phase !== 'External Walls' && el.phase !== 'Internal Walls & Partitions') return null
@@ -4658,7 +4662,9 @@ export default function TakeoffPage() {
       const linked = project.items.find(it => it.elementId === el.id)
       const widthMm = linked?.foundationWidth ?? 600
       // the foundation can sit to one side of the line you drew (to be centred under a wall drawn from its outside face)
-      const offsetPx = (linked?.foundationOffsetMm ?? 0) / (mpp * 1000)
+      // ...and by which part of the foundation the line is (its outside edge: it is laid inwards from the line; its inside edge: laid outwards)
+      const alignMm = (linked?.lineAlign === 'outside' ? 1 : linked?.lineAlign === 'inside' ? -1 : 0) * foundationInsideSign(el) * (widthMm / 2)
+      const offsetPx = ((linked?.foundationOffsetMm ?? 0) + alignMm) / (mpp * 1000)
       const fpts = offsetPx ? offsetPolyline(el.points, offsetPx) : el.points
       const wd = wallDrawing(fpts, { layers: [{ kind: 'solid', mm: widthMm }], label: '' }, mpp, { ref: 'centre', closed: false })
       if (wd) {
@@ -5335,6 +5341,7 @@ export default function TakeoffPage() {
           <input style={inputStyle} value={item.drawingRef ?? ''} onChange={e => saveItemEdit({ ...item, drawingRef: e.target.value })} />
         </div>
         {renderLevelField(item)}
+        {renderLineAlignField(item)}
         {renderEstimateField(item)}
 
         <div style={{ marginBottom: 12 }}>
@@ -5364,6 +5371,46 @@ export default function TakeoffPage() {
   }
 
   // ── Unified Properties Panel ────────────────────────────────────────────────
+  /** Which side of a foundation line is the INSIDE of the building: toward the middle of the foundation lines on the sheet (+1 = the right of the way the line was drawn, as offsetPolyline counts). With one line alone it is the right. */
+  function foundationInsideSign(el: DrawnElement): 1 | -1 {
+    const all = elementsOnActiveSheet(project).filter(e => e.phase === 'Foundations' && e.type === 'line').flatMap(e => e.points)
+    if (all.length < 3 || el.points.length < 2) return 1
+    const c = { x: all.reduce((t, p) => t + p.x, 0) / all.length, y: all.reduce((t, p) => t + p.y, 0) / all.length }
+    let a = el.points[0], b = el.points[1], best = 0
+    for (let i = 0; i + 1 < el.points.length; i++) { const d = Math.hypot(el.points[i + 1].x - el.points[i].x, el.points[i + 1].y - el.points[i].y); if (d > best) { best = d; a = el.points[i]; b = el.points[i + 1] } }
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1
+    const dot = (c.x - (a.x + b.x) / 2) * (-dy / len) + (c.y - (a.y + b.y) / 2) * (dx / len)
+    return dot >= 0 ? 1 : -1
+  }
+  /** Which part of the wall or foundation the line you drew is: its outside face, its middle or its inside face. On each schedule row (compact) and in Properties. */
+  function renderLineAlignField(item: TakeoffItem, compact = false) {
+    if (!item.elementId || !(item.phase === 'External Walls' || item.phase === 'Internal Walls & Partitions' || item.phase === 'Foundations')) return null
+    const internal = item.phase === 'Internal Walls & Partitions'
+    const foundation = item.phase === 'Foundations'
+    const what = foundation ? 'foundation' : 'wall'
+    const def: 'outside' | 'centre' | 'inside' = item.phase === 'External Walls' ? 'outside' : 'centre'
+    const cur = item.lineAlign ?? def
+    const opts: ['outside' | 'centre' | 'inside', string, string][] = internal
+      ? [['outside', 'Left', 'The line is the LEFT face of the partition (the way it was drawn): it is built to the right of the line'], ['centre', 'Centre', 'The line is the middle of the partition'], ['inside', 'Right', 'The line is the RIGHT face of the partition: it is built to the left of the line']]
+      : [['outside', 'Outside', 'The line is the OUTSIDE ' + (foundation ? 'edge of the foundation: it is laid inwards from the line' : 'face of the wall: it is built inwards from the line')], ['centre', 'Centre', 'The line is the MIDDLE of the ' + what + ': half each side of it'], ['inside', 'Inside', 'The line is the INSIDE ' + (foundation ? 'edge of the foundation: it is laid outwards from the line' : 'face of the wall: it is built outwards from the line')]]
+    const set = (v: 'outside' | 'centre' | 'inside') => {
+      const next = v === def ? undefined : v
+      setProject(p => ({ ...p, items: p.items.map(it => (it.id === item.id ? { ...it, lineAlign: next } : it)) }))
+      if (editingItem?.id === item.id) setEditingItem({ ...item, lineAlign: next })
+      const label = opts.find(o => o[0] === v)![1].toLowerCase()
+      showToast(v === 'centre' ? 'The line you drew is now the middle of the ' + what : 'The line you drew is now the ' + label + (foundation ? ' edge' : ' face') + ' of the ' + what)
+    }
+    return (
+      <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', marginTop: compact ? 4 : 0, marginBottom: compact ? 0 : 10 }}>
+        <span style={{ fontSize: compact ? 10 : 11.5, color: 'var(--to-muted)', marginRight: 2 }}>{compact ? 'Line is' : 'The line you drew is the'}</span>
+        {opts.map(([v, label, tip]) => (
+          <button key={v} title={tip} onClick={() => set(v)} style={{ fontSize: compact ? 10 : 11.5, padding: compact ? '1px 7px' : '3px 10px', borderRadius: 10, border: '1px solid var(--to-border)', cursor: 'pointer', fontFamily: 'inherit', background: cur === v ? 'var(--to-accent, #7fdc3c)' : 'var(--to-alt)', color: cur === v ? '#10210a' : 'var(--to-text)', fontWeight: cur === v ? 700 : 400 }}>{label}</button>
+        ))}
+        {!compact && <span style={{ flexBasis: '100%', fontSize: 10.5, color: 'var(--to-muted)' }}>Where it sits on the plan: use it when you snapped the line to a construction line. Lengths still come from the drawn line.</span>}
+      </div>
+    )
+  }
+
   /** the tick that makes an item a drawing only (or an estimate again) */
   function renderEstimateField(item: TakeoffItem) {
     if (!item.elementId) return null
@@ -6036,7 +6083,7 @@ export default function TakeoffPage() {
       <div style={{ fontSize: 13, overflowY: 'auto', height: '100%' }}>
 
         {/* ── Not estimated: a drawing only (also on each schedule row) ── */}
-        {item.elementId && <div style={{ padding: '10px 14px 0' }}>{renderEstimateField(item)}</div>}
+        {item.elementId && <div style={{ padding: '10px 14px 0' }}>{renderLineAlignField(item)}{renderEstimateField(item)}</div>}
 
         {/* ── Top metrics card (foundation line) ── */}
         {isFoundationLine && (
@@ -7495,6 +7542,7 @@ export default function TakeoffPage() {
                 )}
                 <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--to-textb)', whiteSpace: 'nowrap', paddingRight: item.elementId ? 92 : 0,
                   overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}{item.notEstimated && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, color: 'var(--to-muted)', border: '1px solid var(--to-border)', borderRadius: 8, padding: '0 6px' }}>drawing only</span>}</div>
+                {renderLineAlignField(item, true)}
                 <div style={{ fontSize: 11, color: 'var(--to-muted)', marginTop: 2 }}>
                   <span style={{ color: 'var(--to-text)', fontFamily: 'monospace' }}>
                     {item.qty} {item.unit}

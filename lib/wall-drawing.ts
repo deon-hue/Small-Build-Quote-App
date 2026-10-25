@@ -251,7 +251,10 @@ export function mitreCuts(chains: { points: Pt[]; closed: boolean; group: string
  *   ref      'outer': the drawn line is the outside face and the wall builds to the inside (the right of travel; for a closed outline, towards the middle of the shape). 'centre': the line is the middle of the wall.
  *   flip     build to the other side (an open wall drawn the "wrong" way round)
  */
-export function wallDrawing(points: Pt[], spec: WallSpec, mpp: number, o: { ref: 'outer' | 'centre'; closed: boolean; flip?: boolean; /** where an end meets a wall of ANOTHER make-up: see mitreCuts */ cuts?: ChainEnds }): WallDrawing | null {
+/** Which part of the wall the drawn line is: 'outer' = its outside face (the wall builds to the inside), 'centre' = its middle, 'inner' = its inside face (the wall builds to the outside). */
+export type WallRef = 'outer' | 'centre' | 'inner'
+
+export function wallDrawing(points: Pt[], spec: WallSpec, mpp: number, o: { ref: WallRef; closed: boolean; flip?: boolean; /** where an end meets a wall of ANOTHER make-up: see mitreCuts */ cuts?: ChainEnds }): WallDrawing | null {
   if (!(mpp > 0) || points.length < 2) return null
   const pts0 = dedupe(points, o.closed)
   if (pts0.length < 2 || (o.closed && pts0.length < 3)) return null
@@ -277,7 +280,7 @@ export function wallDrawing(points: Pt[], spec: WallSpec, mpp: number, o: { ref:
   let dir = 1
   if (o.closed && signedArea(pts) < 0) dir = -1
   if (o.flip) dir = -dir
-  const start = o.ref === 'outer' ? 0 : -total / 2
+  const start = o.ref === 'outer' ? 0 : o.ref === 'inner' ? -total : -total / 2
   const strips: WallStrip[] = []
   let at = start
   for (const l of spec.layers) {
@@ -296,7 +299,7 @@ export function wallDrawing(points: Pt[], spec: WallSpec, mpp: number, o: { ref:
 }
 
 /** The two faces of a wall as offsets across its drawn line (to the right of the way it runs), and which side the inside of the building is: where doors and windows are cut into it. Same rules as wallDrawing. */
-export function wallBand(points: Pt[], spec: WallSpec, mpp: number, o: { ref: 'outer' | 'centre'; closed: boolean; flip?: boolean }): { lo: number; hi: number; inside: 1 | -1 } | null {
+export function wallBand(points: Pt[], spec: WallSpec, mpp: number, o: { ref: WallRef; closed: boolean; flip?: boolean }): { lo: number; hi: number; inside: 1 | -1 } | null {
   if (!(mpp > 0) || points.length < 2) return null
   const pts = dedupe(points, o.closed)
   if (pts.length < 2 || (o.closed && pts.length < 3)) return null
@@ -304,7 +307,7 @@ export function wallBand(points: Pt[], spec: WallSpec, mpp: number, o: { ref: 'o
   let dir = 1
   if (o.closed && signedArea(pts) < 0) dir = -1
   if (o.flip) dir = -dir
-  const start = o.ref === 'outer' ? 0 : -total / 2
+  const start = o.ref === 'outer' ? 0 : o.ref === 'inner' ? -total : -total / 2
   const a = start * dir, b = (start + total) * dir
   return { lo: Math.min(a, b), hi: Math.max(a, b), inside: dir as 1 | -1 }
 }
