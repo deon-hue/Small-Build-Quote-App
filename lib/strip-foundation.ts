@@ -5,7 +5,7 @@
 // Self-contained (no cross-file runtime imports), so it can be hand-tested with plain Node; the screen costs these quantities through the
 // shared costLayer with each layer's fixedQty set from the geometry below.
 
-export type StripWallBuild = 'solid-flat' | 'cavity-filled'
+export type StripWallBuild = 'solid-flat' | 'cavity-filled' | 'single-skin'
 
 /** A cavity-filled wall built in courses: facing brick (splash courses) at the top of the outer leaf, block below it, the inner leaf in block to the DPC. */
 export interface StripCoursing {
@@ -37,6 +37,8 @@ export interface StripFoundationInput {
   dpcAboveGroundMm: number
   /** The wall from the concrete to the DPC: solid 215mm blocks laid flat, or two 100mm leaves with the 100mm cavity filled with concrete. */
   wall: StripWallBuild
+  /** A single skin wall: how thick the block is, mm (100, 140 or 215 on edge). Default 215. */
+  skinThicknessMm?: number
   /** Build a cavity-filled wall in courses (brick splash courses on a block base), so the courses decide the wall height. Leave out for the older all-block wall worked out from the height alone. */
   coursing?: StripCoursing
   /** Take all the dug soil away, instead of only the surplus the concrete and wall displace. Default false. */
@@ -117,7 +119,11 @@ export function calculateStripFoundationGeometry(input: StripFoundationInput): S
   if (dpcAboveGroundMm < 0) throw new Error('The DPC cannot be below ground level.')
 
   const cavity = input.wall === 'cavity-filled'
-  const wallThicknessMm = cavity ? 300 : 215
+  // a single skin: ONE leaf of block laid on edge, in 225mm courses (no brick facing and no cavity: the facing brick of a house starts above the DPC)
+  const single = input.wall === 'single-skin'
+  const skinMm = single ? Math.max(50, input.skinThicknessMm ?? 215) : 0
+  const wallThicknessMm = single ? skinMm : cavity ? 300 : 215
+  const coursing = single ? { brickCourses: 0, blockCourses: input.coursing?.blockCourses ?? null } : cavity ? input.coursing : undefined
   const requiredHeightMm = depthMm - concreteThicknessMm + dpcAboveGroundMm
   // Built in courses (cavity wall only): the courses decide the wall height. A shortfall to the DPC is made up in the concrete, so the DPC never ends up lower than asked; courses that stand
   // taller than the space put the DPC higher.
@@ -125,10 +131,10 @@ export function calculateStripFoundationGeometry(input: StripFoundationInput): S
   let effConcreteMm = concreteThicknessMm
   let effDpcMm = dpcAboveGroundMm
   let wallHeightMm = requiredHeightMm
-  if (cavity && input.coursing) {
-    const brick = Math.max(0, Math.round(input.coursing.brickCourses))
+  if (coursing) {
+    const brick = Math.max(0, Math.round(coursing.brickCourses))
     const brickMm = brick * BRICK_COURSE_MM
-    const asked = input.coursing.blockCourses
+    const asked = coursing.blockCourses
     const block = asked == null ? Math.max(0, Math.floor((requiredHeightMm - brickMm + 1) / BLOCK_COURSE_MM)) : Math.max(0, Math.round(asked))
     const blockMm = block * BLOCK_COURSE_MM
     const builtHeightMm = blockMm + brickMm
@@ -155,7 +161,12 @@ export function calculateStripFoundationGeometry(input: StripFoundationInput): S
   let blockCount = cavity ? 2 * masonryAreaM2 / LEAF_BLOCK_FACE_M2 : masonryAreaM2 / FLAT_BLOCK_FACE_M2
   let mortarM3 = cavity ? 2 * masonryAreaM2 * MORTAR_M3_PER_M2_LEAF : masonryAreaM2 * MORTAR_M3_PER_M2_FLAT
   let brickCount = 0
-  if (courses) {
+  if (courses && single) {
+    // one leaf of block on edge: 450mm blocks, 225mm courses; the mortar follows the block's thickness (a 100mm leaf is the base figure)
+    courses.outerBlockCount = courses.blockCourses * L / BLOCK_LENGTH_M
+    blockCount = courses.outerBlockCount
+    mortarM3 = L * toM(courses.blockMm) * MORTAR_M3_PER_M2_LEAF * (skinMm / 100)
+  } else if (courses) {
     // outer leaf: brick on top, block below; inner leaf: block all the way up to the DPC
     courses.brickCount = courses.brickCourses * L / BRICK_LENGTH_M
     courses.outerBlockCount = courses.blockCourses * L / BLOCK_LENGTH_M
@@ -180,6 +191,7 @@ export function calculateStripFoundationGeometry(input: StripFoundationInput): S
   if (effDpcMm < 150) warnings.push(`The DPC is only ${Math.round(effDpcMm)}mm above ground level: it is normally at least 150mm above, so splashing rain does not bridge it.`)
   if (courses && courses.gapMm < 0) warnings.push(`These courses build ${-courses.gapMm}mm higher than the DPC level asked for, so the DPC would sit ${Math.round(effDpcMm)}mm above ground. Take a course off, or make the trench deeper.`)
   if (courses && courses.gapMm > 0) warnings.push(`The courses stop ${courses.gapMm}mm short of the DPC level, so the concrete is made ${courses.gapMm}mm thicker (${Math.round(effConcreteMm)}mm) to bring the wall up to it.`)
+  if (single && skinMm < 215) warnings.push(`A single skin of ${skinMm}mm block is thin for a foundation wall: it suits light loads (a garden wall, say). Check the thickness with the designer or building control.`)
   if (depthMm < 750) warnings.push('A foundation less than about 750mm deep is only suitable where the ground and frost depth allow — confirm the depth with building control or the engineer.')
   if (depthMm > 1200) warnings.push('A trench deeper than 1.2m normally needs its sides supported while people work in it. Support is not priced here.')
 

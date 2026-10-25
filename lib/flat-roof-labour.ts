@@ -245,7 +245,7 @@ export function suggestParapetLabour(p: {
  * it, the bricklayer for the blockwork up to DPC (with the DPC), and a labourer serving the bricklayer. The digging itself is the machine and its
  * operator, priced as plant in the calculator, so it is not in these hours. */
 export function suggestStripFoundationLabour(g: {
-  lm: number; concreteM3: number; backfillM3: number; masonryAreaM2: number; wall: 'solid-flat' | 'cavity-filled'; cavityFillM3: number
+  lm: number; concreteM3: number; backfillM3: number; masonryAreaM2: number; wall: 'solid-flat' | 'cavity-filled' | 'single-skin'; cavityFillM3: number
 }): LabourSuggestion[] {
   const w = LABOUR_RATES.groundworker
   const b = LABOUR_RATES.bricklayer
@@ -256,7 +256,7 @@ export function suggestStripFoundationLabour(g: {
     { qty: g.backfillM3, unit: 'm³', what: 'backfill compacted', rate: w.backfillM3 },
   ])
   const brick = line('found-brick', 'bricklayer', 'Build the foundation blockwork up to DPC and lay the DPC', [
-    { qty: g.masonryAreaM2, unit: 'm²', what: g.wall === 'solid-flat' ? 'solid blockwork' : 'cavity blockwork', rate: g.wall === 'solid-flat' ? b.solidM2 : b.cavityM2 },
+    { qty: g.masonryAreaM2, unit: 'm²', what: g.wall === 'solid-flat' ? 'solid blockwork' : g.wall === 'single-skin' ? 'single skin blockwork' : 'cavity blockwork', rate: g.wall === 'cavity-filled' ? b.cavityM2 : b.solidM2 },
     { qty: g.lm, unit: 'lm', what: 'DPC', rate: b.dpcLm },
   ])
   const out: (LabourSuggestion | null)[] = [ground, brick]

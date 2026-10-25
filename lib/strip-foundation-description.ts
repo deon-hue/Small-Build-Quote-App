@@ -11,6 +11,8 @@ export interface StripFoundationDescriptionInput {
   concreteThicknessMm: number
   dpcAboveGroundMm: number
   wall: StripWallBuild
+  /** A single skin wall: the block's thickness, mm (default 215). */
+  skinThicknessMm?: number
   /** e.g. "C25" */
   concreteMix: string
   takeAllSpoilAway: boolean
@@ -25,7 +27,7 @@ export interface StripFoundationDescriptionInput {
 const mm = (n: number) => n.toLocaleString('en-GB')
 
 export function describeStripFoundationShort(i: StripFoundationDescriptionInput): string {
-  const wall = i.wall === 'solid-flat' ? '215mm solid blockwork' : '300mm cavity blockwork filled with concrete'
+  const wall = i.wall === 'solid-flat' ? '215mm solid blockwork' : i.wall === 'single-skin' ? `${i.skinThicknessMm ?? 215}mm single skin blockwork` : '300mm cavity blockwork filled with concrete'
   if (i.variant === 'trench-fill') {
     return `Trench fill foundation, ${i.lengthM.toFixed(1)}m long: ${mm(i.widthMm)}mm wide trench, ${mm(i.depthMm)}mm deep, filled with ${i.concreteMix} concrete to ${mm(i.depthMm - i.concreteThicknessMm)}mm below ground, with ${wall} up to DPC.`
   }
@@ -39,6 +41,10 @@ export function describeStripFoundation(i: StripFoundationDescriptionInput): str
   else lines.push(`Pour ${i.concreteThicknessMm}mm of ${i.concreteMix} ready-mixed concrete in the bottom of the trench, levelled to depth pegs.`)
   if (i.wall === 'solid-flat') {
     lines.push(`Build the wall up from the concrete in 215mm dense concrete blocks laid flat, to a DPC ${i.dpcAboveGroundMm}mm above finished ground level, with the DPC laid on the top course.`)
+  } else if (i.wall === 'single-skin') {
+    const t = i.skinThicknessMm ?? 215
+    const n = i.courses ? ` in ${i.courses.blockCourses} course${i.courses.blockCourses === 1 ? '' : 's'}` : ''
+    lines.push(`Build the wall up from the concrete as a single skin of ${t}mm dense concrete blocks laid on edge${n}, to a DPC ${i.dpcAboveGroundMm}mm above finished ground level, with the DPC laid on the top course.`)
   } else {
     const facing = i.courses && i.courses.brickCourses > 0
       ? ` The outer leaf is finished in ${i.courses.brickCourses} course${i.courses.brickCourses === 1 ? '' : 's'} of facing brick (splash courses) on ${i.courses.blockCourses} course${i.courses.blockCourses === 1 ? '' : 's'} of block; the inner leaf is block to the DPC.`

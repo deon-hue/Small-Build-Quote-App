@@ -46,6 +46,7 @@ type Mix = keyof typeof CONCRETE_MIXES
 const WALL_LABEL: Record<StripWallBuild, string> = {
   'solid-flat': 'Solid 215mm blocks laid flat',
   'cavity-filled': 'Two 100mm block leaves, cavity filled with concrete',
+  'single-skin': 'Single skin of block (100, 140 or 215mm on edge)',
 }
 const MUCKAWAY_PER_M3 = 28      // grab lorry and tip, per m³ of bulked soil
 const WACKER_PER_DAY = 40
@@ -74,6 +75,10 @@ function buildStripFoundationLayers(g: StripFoundationGeometry, o: { wall: Strip
 
   if (o.wall === 'solid-flat') {
     L.push(fixed({ id: 'blocks', name: 'Dense concrete blocks 215mm laid flat (foundation blockwork)', category: 'materials', unit: 'nr', unitCost: 1.55, roundToWhole: true, wastePct: w, qty: g.blockCount }))
+  } else if (o.wall === 'single-skin') {
+    // one leaf of block on edge: the sample price follows the thickness of the block
+    const t = g.wallThicknessMm
+    L.push(fixed({ id: 'blocks', name: `Dense concrete blocks ${t}mm on edge (single skin, foundation blockwork)`, category: 'materials', unit: 'nr', unitCost: t <= 100 ? 1.35 : t <= 140 ? 1.90 : 2.90, roundToWhole: true, wastePct: w, qty: g.blockCount }))
   } else {
     if (g.courses && g.brickCount > 0) L.push(fixed({ id: 'bricks', name: `Facing bricks, ${g.courses.brickCourses} splash course${g.courses.brickCourses === 1 ? '' : 's'} on the outer leaf`, category: 'materials', unit: 'nr', unitCost: 0.65, roundToWhole: true, wastePct: w, qty: g.brickCount }))
     L.push(fixed({ id: 'blocks', name: g.courses ? 'Dense concrete blocks 100mm (outer leaf below the brick, and the inner leaf)' : 'Dense concrete blocks 100mm, two leaves (foundation blockwork)', category: 'materials', unit: 'nr', unitCost: 1.35, roundToWhole: true, wastePct: w, qty: g.blockCount }))
@@ -131,6 +136,8 @@ export default function AssemblyStripFoundationDemo({ onClose, onSave, labourTra
   // The wall in courses (a cavity wall): facing brick splash courses at the top of the outer leaf, block below, the inner leaf block to the DPC
   const [brickCourses, setBrickCourses] = useCalcState('AssemblyStripFoundationDemo', 'brickCourses', 3)
   const [blockAuto, setBlockAuto] = useCalcState('AssemblyStripFoundationDemo', 'blockAuto', true)
+  // a single skin wall: how thick the block is (the courses above are its courses of block)
+  const [skinMm, setSkinMm] = useCalcState('AssemblyStripFoundationDemo', 'skinMm', 215)
   const [blockCoursesManual, setBlockCoursesManual] = useCalcState('AssemblyStripFoundationDemo', 'blockCoursesManual', 3)
   const [mix, setMix] = useCalcState<Mix>('AssemblyStripFoundationDemo', 'mix', 'C25')
   const [allSpoil, setAllSpoil] = useCalcState('AssemblyStripFoundationDemo', 'allSpoil', false)
@@ -145,12 +152,12 @@ export default function AssemblyStripFoundationDemo({ onClose, onSave, labourTra
   function toggleLayer(id: string) { setDisabledLayerIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
   const noSidesLayers = useMemo(() => new Set<string>(), [])
 
-  const input: StripFoundationInput = { lengthMm, widthMm, depthMm, concreteThicknessMm: concreteMm, dpcAboveGroundMm: dpcAbove, wall, takeAllSpoilAway: allSpoil, ...(wall === 'cavity-filled' ? { coursing: { brickCourses, blockCourses: blockAuto ? null : blockCoursesManual } } : {}) }
+  const input: StripFoundationInput = { lengthMm, widthMm, depthMm, concreteThicknessMm: concreteMm, dpcAboveGroundMm: dpcAbove, wall, takeAllSpoilAway: allSpoil, ...(wall === 'cavity-filled' ? { coursing: { brickCourses, blockCourses: blockAuto ? null : blockCoursesManual } } : wall === 'single-skin' ? { skinThicknessMm: skinMm, coursing: { brickCourses: 0, blockCourses: blockAuto ? null : blockCoursesManual } } : {}) }
   const geometryResult = useMemo(() => {
     try { return { ok: true as const, geometry: calculateStripFoundationGeometry(input) } }
     catch (e: any) { return { ok: false as const, error: e.message as string } }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lengthMm, widthMm, depthMm, concreteMm, dpcAbove, wall, allSpoil, brickCourses, blockAuto, blockCoursesManual])
+  }, [lengthMm, widthMm, depthMm, concreteMm, dpcAbove, wall, skinMm, allSpoil, brickCourses, blockAuto, blockCoursesManual])
   const g = geometryResult.ok ? geometryResult.geometry : null
 
   // all the concrete poured: the trench, and the cavity fill when the wall is built that way
@@ -206,7 +213,7 @@ export default function AssemblyStripFoundationDemo({ onClose, onSave, labourTra
   const totalCost = costSubtotal + profitAmount
 
   // The customer's description follows the foundation until it's edited by hand
-  const descInput = g ? { lengthM: g.lengthM, widthMm, depthMm, concreteThicknessMm: g.concreteThicknessMm, dpcAboveGroundMm: g.dpcAboveGroundMm, wall, concreteMix: mix, takeAllSpoilAway: allSpoil, variant, placing: placingMethod, ...(g.courses ? { courses: { brickCourses: g.courses.brickCourses, blockCourses: g.courses.blockCourses } } : {}) } : null
+  const descInput = g ? { lengthM: g.lengthM, widthMm, depthMm, concreteThicknessMm: g.concreteThicknessMm, dpcAboveGroundMm: g.dpcAboveGroundMm, wall, concreteMix: mix, takeAllSpoilAway: allSpoil, variant, placing: placingMethod, ...(wall === 'single-skin' ? { skinThicknessMm: skinMm } : {}), ...(g.courses ? { courses: { brickCourses: g.courses.brickCourses, blockCourses: g.courses.blockCourses } } : {}) } : null
   const [descriptionOverride, setDescriptionOverride] = useCalcState<string | null>('AssemblyStripFoundationDemo', 'descriptionOverride', null)
   const [detailOverride, setDetailOverride] = useCalcState<string | null>('AssemblyStripFoundationDemo', 'detailOverride', null)
   const description = descriptionOverride ?? (descInput ? describeStripFoundationShort(descInput) : '')
@@ -305,6 +312,26 @@ export default function AssemblyStripFoundationDemo({ onClose, onSave, labourTra
               </select>
             </PropRow>
             <PropRow label="DPC above ground level (mm)">{numInput(dpcAbove, setDpcAbove, 0)}</PropRow>
+            {wall === 'single-skin' && (<>
+              <PropRow label="Block thickness (mm)">
+                <select value={skinMm} onChange={e => setSkinMm(+e.target.value)} style={propInput}>
+                  <option value={100}>100mm</option><option value={140}>140mm</option><option value={215}>215mm</option>
+                </select>
+              </PropRow>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#334155', margin: '8px 0 4px' }}>Courses of block</div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#334155', cursor: 'pointer', margin: '4px 0' }}>
+                <input type="checkbox" checked={blockAuto} onChange={e => { if (!e.target.checked && g?.courses) setBlockCoursesManual(g.courses.blockCourses); setBlockAuto(e.target.checked) }} style={{ width: 'auto' }} />
+                Work out the courses from the trench
+              </label>
+              {!blockAuto && <PropRow label="Courses of block">{numInput(blockCoursesManual, setBlockCoursesManual, 0)}</PropRow>}
+              {g?.courses && (
+                <div style={{ fontSize: 11, color: '#334155', background: '#f1f5f9', borderRadius: 5, padding: '6px 8px', lineHeight: 1.5 }}>
+                  {g.courses.blockCourses} block × {BLOCK_COURSE_MM} = {g.courses.blockMm}mm<br />
+                  <strong>Wall {g.courses.builtHeightMm}mm</strong> from the concrete to the DPC · DPC {Math.round(g.dpcAboveGroundMm)}mm above ground · concrete {Math.round(g.concreteThicknessMm)}mm
+                </div>
+              )}
+              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4, lineHeight: 1.4 }}>One skin of block, laid on edge in {BLOCK_COURSE_MM}mm courses, no cavity and no brick. If the courses fall short of the DPC level the concrete is made thicker to bring the wall up to it. The size of block and the wall thickness are the designer's to confirm.</div>
+            </>)}
             {wall === 'cavity-filled' && (<>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#334155', margin: '8px 0 4px' }}>Courses (outer leaf)</div>
               <PropRow label="Courses of facing brick at the top (splash courses)">{numInput(brickCourses, setBrickCourses, 0)}</PropRow>
@@ -393,7 +420,16 @@ function FoundationSectionSvg({ widthMm, depthMm, concreteMm, dpcAboveMm, wallTh
       <rect x={cx - trenchW / 2} y={trenchBottom - concH} width={trenchW} height={concH} fill="#a8a29e" stroke="#57534e" />
       <text x={cx} y={trenchBottom - concH / 2 + 3} fontSize={9} fill="#292524" textAnchor="middle">Concrete {Math.round(concreteMm)}</text>
       {/* the wall up to the DPC */}
-      {courses && wall === 'cavity-filled' ? (<>
+      {courses && wall === 'single-skin' ? (<>
+        {/* one leaf of block, in its courses counted from the concrete */}
+        <rect x={cx - wallW / 2} y={dpcY} width={wallW} height={wallBottom - dpcY} fill="#d6d3d1" stroke="#57534e" strokeWidth={1.2} />
+        {Array.from({ length: Math.floor(courses.builtHeightMm / BLOCK_COURSE_MM) }, (_, n) => <line key={'s' + n} x1={cx - wallW / 2} x2={cx + wallW / 2} y1={wallBottom - (n + 1) * BLOCK_COURSE_MM * k} y2={wallBottom - (n + 1) * BLOCK_COURSE_MM * k} stroke="#57534e" strokeWidth={0.8} />)}
+        <line x1={dimX} x2={dimX} y1={dpcY} y2={wallBottom} stroke="#9a3412" />
+        <line x1={dimX - 4} x2={dimX + 4} y1={dpcY} y2={dpcY} stroke="#9a3412" />
+        <line x1={dimX - 4} x2={dimX + 4} y1={wallBottom} y2={wallBottom} stroke="#9a3412" />
+        {courses.blockCourses > 0 && <text x={dimX + 8} y={dpcY + (courses.blockMm * k) / 2 + 3} fontSize={9} fill="#57534e">{courses.blockCourses} block × {BLOCK_COURSE_MM} = {courses.blockMm}</text>}
+        <text x={dimX + 8} y={wallBottom + 11} fontSize={9} fontWeight={700} fill="#292524">Wall {courses.builtHeightMm}</text>
+      </>) : courses && wall === 'cavity-filled' ? (<>
         {/* cavity, filled */}
         <rect x={outerX + leafW} y={dpcY} width={leafW} height={wallBottom - dpcY} fill="#a8a29e" />
         {/* outer leaf: brick on top, block below */}
@@ -427,7 +463,7 @@ function FoundationSectionSvg({ widthMm, depthMm, concreteMm, dpcAboveMm, wallTh
       <text x={cx} y={trenchBottom + 30} fontSize={10} fill="#2563eb" textAnchor="middle">{widthMm}</text>
       <line x1={cx + trenchW / 2 + 24} x2={cx + trenchW / 2 + 24} y1={dpcY} y2={groundY} stroke="#0f766e" />
       <text x={cx + trenchW / 2 + 28} y={(dpcY + groundY) / 2 + 3} fontSize={10} fill="#0f766e">{Math.round(dpcAboveMm)}</text>
-      <text x={cx} y={dpcY - 22} fontSize={9} fill="#57534e" textAnchor="middle">{wallThicknessMm}mm {wall === 'solid-flat' ? 'solid blockwork' : 'cavity, filled'}</text>
+      <text x={cx} y={dpcY - 22} fontSize={9} fill="#57534e" textAnchor="middle">{wallThicknessMm}mm {wall === 'solid-flat' ? 'solid blockwork' : wall === 'single-skin' ? 'single skin block' : 'cavity, filled'}</text>
     </svg>
   )
 }
