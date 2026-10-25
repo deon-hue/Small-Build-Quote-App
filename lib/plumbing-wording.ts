@@ -30,7 +30,14 @@ export function plumbingDescriptionInput(rooms: PlumbingRoom[], wholeHouse: Reco
   return {
     rooms: rooms.map(rm => {
       const byDays = rm.mode === 'days'
-      const items = byDays ? [] : FITTING_TYPES.filter(f => (rm.fittings[f.id] ?? 0) > 0).map(f => phrase(rm.fittings[f.id], lower(f.name.replace(/ \(.*\)$/, '')), f.plural))
+      // a fitting we supply and have chosen a product for (from the product list) is named: "1 bath (Roca Gap 1700 bath)", "2 radiators (Stelrad K2 600x900, Stelrad K2 600x1000)"
+      const named = (typeId: string, count: number) => {
+        const counts = new Map<string, number>()
+        for (const it of (rm.placedItems ?? []).filter(x => x.typeId === typeId).slice(0, count)) if (it.name && (it.supply ?? rm.supply) === 'us') counts.set(it.name, (counts.get(it.name) ?? 0) + 1)
+        const list = Array.from(counts).map(([n, c]) => (c > 1 ? `${c} × ${n}` : n))
+        return list.length > 0 ? ` (${list.join(', ')})` : ''
+      }
+      const items = byDays ? [] : FITTING_TYPES.filter(f => (rm.fittings[f.id] ?? 0) > 0).map(f => phrase(rm.fittings[f.id], lower(f.name.replace(/ \(.*\)$/, '')), f.plural) + named(f.id, rm.fittings[f.id]))
       const specials = rm.specials.filter(s => s.count > 0).map(s => {
         const st = SPECIAL_BY_ID[s.typeId]
         const label = s.name.trim() || lower((s.count === 1 ? st?.name.replace(/ \(.*\)$/, '') : st?.plural) || 'special fitting')
