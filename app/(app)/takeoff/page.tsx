@@ -1889,7 +1889,8 @@ export default function TakeoffPage() {
     for (const el of [...wallsOnSheet(), ...ghostWalls()]) {
       const w = wallSpecFor(el)
       if (!w) continue
-      pieces.push({ id: el.id, points: el.type === 'rect' ? cornersOf(el) : el.points, closed: el.type !== 'line', flip: w.flip, group: `${levelOf(el, project) ?? ''}|${el.phase === 'External Walls' ? '2-ext' : '1-int'}|${w.ref}|${JSON.stringify(w.spec.layers)}`, reachPx: (1.5 * totalMm(w.spec.layers)) / (mpp * 1000) })
+      pieces.push({ id: el.id, points: el.type === 'rect' ? cornersOf(el) : el.points, closed: el.type !== 'line', flip: false, group: `${levelOf(el, project) ?? ''}|${el.phase === 'External Walls' ? '2-ext' : '1-int'}`,   // (the make-up is left out on purpose, and so is a wall the user flipped: the run is found from how the walls were DRAWN, the flip then only turns the one wall over)
+ reachPx: (1.5 * totalMm(w.spec.layers)) / (mpp * 1000) })
       flips.set(el.id, w.flip)
     }
     for (const ch of chainWalls(pieces, 3)) {
@@ -1900,6 +1901,8 @@ export default function TakeoffPage() {
     return map
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.elements, project.items, project.calibration.mpp, project.activeSheetId, project.levels, project.activeLevelId, boSubPhases, allWallMakeups.length, hiddenPhases])
+  /** whether a wall is painted building to the left of its own line: a side of a closed run is painted INWARD (the run decides, whatever the make-up of each side), any other wall as it was drawn or flipped */
+  const paintFlip = (el: DrawnElement, w: { flip: boolean }): boolean => { const o = wallDirOverride.get(el.id); return o !== undefined && el.type === 'line' ? o === -1 : w.flip }
   /** how a wall's own band is worked out so it matches how it is painted (see wallDirOverride) */
   function wallPaintOpts(el: DrawnElement, ws: { ref: 'outer' | 'centre'; flip: boolean }) {
     const o = wallDirOverride.get(el.id)
@@ -1981,7 +1984,7 @@ export default function TakeoffPage() {
         w = { spec: { layers: [{ kind: 'solid', mm: 2 * half * mpp * 1000 }], label: '' }, ref: 'centre', flip: false }
       }
       const group = `${el.phase === 'External Walls' ? '2-ext' : '1-int'}|${w.ref}|${JSON.stringify(w.spec.layers)}`
-      pieces.push({ id: el.id, points: el.type === 'rect' ? cornersOf(el) : el.points, closed: el.type !== 'line', flip: w.flip, group, reachPx: (1.5 * totalMm(w.spec.layers)) / (mpp * 1000) })
+      pieces.push({ id: el.id, points: el.type === 'rect' ? cornersOf(el) : el.points, closed: el.type !== 'line', flip: paintFlip(el, w), group, reachPx: (1.5 * totalMm(w.spec.layers)) / (mpp * 1000) })
       kinds.set(group, w)
     }
     const out: TakeoffPoint[][][] = []
@@ -3309,7 +3312,7 @@ export default function TakeoffPage() {
       const w = wallSpecFor(el)
       if (!w) continue
       const group = `2-ext|${w.ref}|${JSON.stringify(w.spec.layers)}`
-      pieces.push({ id: el.id, points: el.type === 'rect' ? cornersOf(el) : el.points, closed: el.type !== 'line', flip: w.flip, group, reachPx: (1.5 * totalMm(w.spec.layers)) / (mpp * 1000) })
+      pieces.push({ id: el.id, points: el.type === 'rect' ? cornersOf(el) : el.points, closed: el.type !== 'line', flip: paintFlip(el, w), group, reachPx: (1.5 * totalMm(w.spec.layers)) / (mpp * 1000) })
       kinds.set(group, w)
     }
     for (const ch of chainWalls(pieces, 3)) {
@@ -3419,6 +3422,16 @@ export default function TakeoffPage() {
     showToast('Copied. The copy is selected: drag it into place.')
   }
 
+  /** Turns the picked outside wall over: the wall builds to the other side of the line (so the brick face and the rendered face swap sides). */
+  function flipSelectedWall() {
+    const el = selectedId ? project.elements.find(e => e.id === selectedId) : undefined
+    const item = el ? project.items.find(it => it.elementId === el.id) : undefined
+    if (!el || !item) { showToast('Pick a wall first, then flip it'); return }
+    if (el.phase !== 'External Walls' || el.type !== 'line') { showToast(el.phase === 'Internal Walls & Partitions' ? 'A partition is drawn centred on its line, so there is nothing to flip' : 'Only an outside wall drawn as a line can be flipped'); return }
+    setProject(p => ({ ...p, items: p.items.map(it => (it.elementId === el.id ? { ...it, wallFlip: !it.wallFlip } : it)) }))
+    showToast('Wall flipped to the other side of its line')
+  }
+
   /** Turn the selected drawing about its middle (clockwise is positive). With no angle it asks. */
   function rotateSelected(deg: number | null) {
     const el = selectedId ? project.elements.find(e => e.id === selectedId) : undefined
@@ -3477,6 +3490,7 @@ export default function TakeoffPage() {
         if (e.key === 'Enter') { e.preventDefault(); if (typed) commitTyped(); else finishFromKeys(); return }
       }
       if (!inField && !e.ctrlKey && !e.metaKey && !isDrawing && selectedId && (e.key === 'r' || e.key === 'R')) { rotateSelected(90); return }
+      if (!inField && !e.ctrlKey && !e.metaKey && !isDrawing && selectedId && (e.key === 'f' || e.key === 'F')) { flipSelectedWall(); return }
       if ((e.key === 'Delete' || e.key === 'Backspace') && !inField && !isDrawing) {
         if (selectedElectricPointId && electricPoints.some(q => q.id === selectedElectricPointId)) {
           // a picked electrical point (it is not a drawing, so it has its own selection)
@@ -3561,7 +3575,7 @@ export default function TakeoffPage() {
       const w = wallSpecFor(el)
       if (!w) continue
       const group = `${el.phase === 'External Walls' ? '2-ext' : '1-int'}|${w.ref}|${JSON.stringify(w.spec.layers)}`
-      pieces.push({ id: el.id, points: el.type === 'rect' ? cornersOf(el) : el.points, closed: el.type !== 'line', flip: w.flip, group, reachPx: (1.5 * totalMm(w.spec.layers)) / (mpp * 1000) })
+      pieces.push({ id: el.id, points: el.type === 'rect' ? cornersOf(el) : el.points, closed: el.type !== 'line', flip: paintFlip(el, w), group, reachPx: (1.5 * totalMm(w.spec.layers)) / (mpp * 1000) })
       kinds.set(group, w)
     }
     if (pieces.length === 0) return null
@@ -6813,6 +6827,7 @@ export default function TakeoffPage() {
             {TB_DIV(vertical, 'd2')}
             <button className={cls} data-tip="Copy the selected drawing and its item (Ctrl+D)" aria-label="Copy" onClick={duplicateSelected} style={ibx(tb, 'Copy', false, !selectedId)}>⧉{lab(tb, 'Copy')}</button>
             <button className={cls} data-tip="Rotate the selected drawing (R turns it a quarter turn)" aria-label="Rotate" onClick={() => rotateSelected(null)} style={ibx(tb, 'Rotate', false, !selectedId)}>⟳{lab(tb, 'Rotate')}</button>
+            <button className={cls} data-tip="Flip the selected outside wall to the other side of its line (F)" aria-label="Flip wall" onClick={flipSelectedWall} style={ibx(tb, 'Flip wall', false, !selectedId)}>⇄{lab(tb, 'Flip wall')}</button>
           </>
         )
 
