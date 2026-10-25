@@ -168,6 +168,22 @@ const TOOL_DISPLAY: Record<DrawingTool, string> = {
 // ── ID helpers ────────────────────────────────────────────────────────────────
 function uid() { return Math.random().toString(36).slice(2, 10) }
 
+type LineAlign = 'outside' | 'centre' | 'inside'
+/** the walls and foundations that can say which part of them the drawn line is */
+const isAlignPhase = (phase: string) => phase === 'External Walls' || phase === 'Internal Walls & Partitions' || phase === 'Foundations'
+/** an outside wall's line is its outside face; a partition's and a foundation's is its middle */
+const defaultLineAlign = (phase: string): LineAlign => (phase === 'External Walls' ? 'outside' : 'centre')
+/** the three choices, worded for what is being drawn (a partition has no inside or outside: its sides are Left and Right of the way it was drawn) */
+function lineAlignOptions(phase: string): [LineAlign, string, string][] {
+  const foundation = phase === 'Foundations'
+  if (phase === 'Internal Walls & Partitions') return [['outside', 'Left', 'The line is the LEFT face of the partition (the way it was drawn): it is built to the right of the line'], ['centre', 'Centre', 'The line is the middle of the partition'], ['inside', 'Right', 'The line is the RIGHT face of the partition: it is built to the left of the line']]
+  return [
+    ['outside', 'Outside', 'The line is the OUTSIDE ' + (foundation ? 'edge of the foundation: it is laid inwards from the line' : 'face of the wall: it is built inwards from the line')],
+    ['centre', 'Centre', 'The line is the MIDDLE of the ' + (foundation ? 'foundation' : 'wall') + ': half each side of it'],
+    ['inside', 'Inside', 'The line is the INSIDE ' + (foundation ? 'edge of the foundation: it is laid outwards from the line' : 'face of the wall: it is built outwards from the line')],
+  ]
+}
+
 // ── Measurement helpers ───────────────────────────────────────────────────────
 function polylineLength(pts: TakeoffPoint[], mpp: number): number {
   let total = 0
@@ -950,6 +966,8 @@ export default function TakeoffPage() {
   const [viewDimUnit, setViewDimUnit] = useState<'mm' | 'cm' | 'm'>('m')   // the unit the measurements are written in
   // a wall drawn as one run of several sides becomes one wall per side (so each can be clicked, edited and deleted on its own)
   const [splitWalls, setSplitWalls] = useState(true)
+  // which part of a wall or foundation the line is, for the next one drawn in each phase (chosen in the panel before drawing; kept per browser)
+  const [drawAlign, setDrawAlign] = useState<Record<string, LineAlign>>({})
   // snap the cursor to the grid (its spacing in metres); the grid itself is the Grid tick
   const [gridSnap, setGridSnap] = useState(false)
   const [gridStep, setGridStep] = useState(1)
@@ -986,6 +1004,7 @@ export default function TakeoffPage() {
         if (r.dimUnit === 'mm' || r.dimUnit === 'cm' || r.dimUnit === 'm') setViewDimUnit(r.dimUnit)
         if (typeof r.panel === 'boolean') setPanelOpen(r.panel)
         if (typeof r.splitWalls === 'boolean') setSplitWalls(r.splitWalls)
+        if (r.drawAlign && typeof r.drawAlign === 'object') setDrawAlign(Object.fromEntries(Object.entries(r.drawAlign as Record<string, unknown>).filter(([k, v]) => isAlignPhase(k) && (v === 'outside' || v === 'centre' || v === 'inside'))) as Record<string, LineAlign>)
         if (typeof r.gridSnap === 'boolean') setGridSnap(r.gridSnap)
         if (typeof r.gridStep === 'number' && r.gridStep > 0) setGridStep(r.gridStep)
         if (typeof r.guides === 'boolean') setViewGuides(r.guides)
@@ -995,7 +1014,7 @@ export default function TakeoffPage() {
     } catch {}
     setViewPrefsReady(true)
   }, [])
-  useEffect(() => { if (!viewPrefsReady) return; try { localStorage.setItem('sbc_takeoff_view', JSON.stringify({ halo: viewHalo, tags: viewTags, fade: viewFade, rooms: viewRooms, ghost: viewGhost, panel: panelOpen, dimOut: viewDimOut, dimIn: viewDimIn, roomSize: viewRoomSize, dimUnit: viewDimUnit, splitWalls, gridSnap, gridStep, guides: viewGuides, guideSnap: guideSnapOn })) } catch {} }, [viewHalo, viewTags, viewFade, viewRooms, viewGhost, panelOpen, viewDimOut, viewDimIn, viewRoomSize, viewDimUnit, splitWalls, gridSnap, gridStep, viewGuides, guideSnapOn, viewPrefsReady])
+  useEffect(() => { if (!viewPrefsReady) return; try { localStorage.setItem('sbc_takeoff_view', JSON.stringify({ halo: viewHalo, tags: viewTags, fade: viewFade, rooms: viewRooms, ghost: viewGhost, panel: panelOpen, dimOut: viewDimOut, dimIn: viewDimIn, roomSize: viewRoomSize, dimUnit: viewDimUnit, splitWalls, gridSnap, gridStep, guides: viewGuides, guideSnap: guideSnapOn, drawAlign })) } catch {} }, [viewHalo, viewTags, viewFade, viewRooms, viewGhost, panelOpen, viewDimOut, viewDimIn, viewRoomSize, viewDimUnit, splitWalls, gridSnap, gridStep, viewGuides, guideSnapOn, drawAlign, viewPrefsReady])
   const lastSaveError = useRef('')
   const idMigration = useRef<string | null>(null)
   const oldPictureFolders = useRef<string[]>([])
@@ -1252,6 +1271,9 @@ export default function TakeoffPage() {
     const item = itemFromElement(el, project.calibration.mpp)
     // With several plans, each priced item notes which sheet it was drawn on (editable, and it travels to the quote)
     if ((project.sheets?.length ?? 0) > 1) item.drawingRef = sheetName(project, el.sheetId) || item.drawingRef
+    // which part of the wall or foundation the line is, as chosen in the panel before drawing (only when it is not the usual)
+    const pickedAlign = drawAlign[item.phase]
+    if (pickedAlign && isAlignPhase(item.phase) && pickedAlign !== defaultLineAlign(item.phase)) item.lineAlign = pickedAlign
 
     // Apply task info if this was a click-placed item
     if (taskSubphaseId && taskId) {
@@ -5382,31 +5404,45 @@ export default function TakeoffPage() {
     const dot = (c.x - (a.x + b.x) / 2) * (-dy / len) + (c.y - (a.y + b.y) / 2) * (dx / len)
     return dot >= 0 ? 1 : -1
   }
+  /** the Outside / Centre / Inside buttons for a wall or foundation of this phase (compact = the small row on a schedule line) */
+  function renderLineAlignButtons(phase: string, cur: LineAlign, onPick: (v: LineAlign) => void, compact: boolean, lead: string, note?: string) {
+    const opts = lineAlignOptions(phase)
+    return (
+      <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', marginTop: compact ? 4 : 0, marginBottom: compact ? 0 : 10 }}>
+        <span style={{ fontSize: compact ? 10 : 11.5, color: 'var(--to-muted)', marginRight: 2 }}>{lead}</span>
+        {opts.map(([v, label, tip]) => (
+          <button key={v} title={tip} onClick={() => onPick(v)} style={{ fontSize: compact ? 10 : 11.5, padding: compact ? '1px 7px' : '3px 10px', borderRadius: 10, border: '1px solid var(--to-border)', cursor: 'pointer', fontFamily: 'inherit', background: cur === v ? 'var(--to-accent, #7fdc3c)' : 'var(--to-alt)', color: cur === v ? '#10210a' : 'var(--to-text)', fontWeight: cur === v ? 700 : 400 }}>{label}</button>
+        ))}
+        {note && <span style={{ flexBasis: '100%', fontSize: 10.5, color: 'var(--to-muted)' }}>{note}</span>}
+      </div>
+    )
+  }
+  /** what a pick is called in a message: 'the outside face of the wall', 'the middle of the foundation' */
+  function lineAlignWords(phase: string, v: LineAlign): string {
+    const what = phase === 'Foundations' ? 'foundation' : 'wall'
+    if (v === 'centre') return 'the middle of the ' + what
+    return 'the ' + lineAlignOptions(phase).find(o => o[0] === v)![1].toLowerCase() + (phase === 'Foundations' ? ' edge' : ' face') + ' of the ' + what
+  }
   /** Which part of the wall or foundation the line you drew is: its outside face, its middle or its inside face. On each schedule row (compact) and in Properties. */
   function renderLineAlignField(item: TakeoffItem, compact = false) {
-    if (!item.elementId || !(item.phase === 'External Walls' || item.phase === 'Internal Walls & Partitions' || item.phase === 'Foundations')) return null
-    const internal = item.phase === 'Internal Walls & Partitions'
-    const foundation = item.phase === 'Foundations'
-    const what = foundation ? 'foundation' : 'wall'
-    const def: 'outside' | 'centre' | 'inside' = item.phase === 'External Walls' ? 'outside' : 'centre'
-    const cur = item.lineAlign ?? def
-    const opts: ['outside' | 'centre' | 'inside', string, string][] = internal
-      ? [['outside', 'Left', 'The line is the LEFT face of the partition (the way it was drawn): it is built to the right of the line'], ['centre', 'Centre', 'The line is the middle of the partition'], ['inside', 'Right', 'The line is the RIGHT face of the partition: it is built to the left of the line']]
-      : [['outside', 'Outside', 'The line is the OUTSIDE ' + (foundation ? 'edge of the foundation: it is laid inwards from the line' : 'face of the wall: it is built inwards from the line')], ['centre', 'Centre', 'The line is the MIDDLE of the ' + what + ': half each side of it'], ['inside', 'Inside', 'The line is the INSIDE ' + (foundation ? 'edge of the foundation: it is laid outwards from the line' : 'face of the wall: it is built outwards from the line')]]
-    const set = (v: 'outside' | 'centre' | 'inside') => {
+    if (!item.elementId || !isAlignPhase(item.phase)) return null
+    const def = defaultLineAlign(item.phase)
+    const set = (v: LineAlign) => {
       const next = v === def ? undefined : v
       setProject(p => ({ ...p, items: p.items.map(it => (it.id === item.id ? { ...it, lineAlign: next } : it)) }))
       if (editingItem?.id === item.id) setEditingItem({ ...item, lineAlign: next })
-      const label = opts.find(o => o[0] === v)![1].toLowerCase()
-      showToast(v === 'centre' ? 'The line you drew is now the middle of the ' + what : 'The line you drew is now the ' + label + (foundation ? ' edge' : ' face') + ' of the ' + what)
+      showToast('The line you drew is now ' + lineAlignWords(item.phase, v))
     }
+    return renderLineAlignButtons(item.phase, item.lineAlign ?? def, set, compact, compact ? 'Line is' : 'The line you drew is the', compact ? undefined : 'Where it sits on the plan: use it when you snapped the line to a construction line. Lengths still come from the drawn line.')
+  }
+  /** the same choice before drawing, in the panel with the phase's defaults: it goes onto the next walls or foundations drawn (and stays chosen until changed) */
+  function renderDrawAlignField(phase: string) {
+    if (!isAlignPhase(phase)) return null
+    const def = defaultLineAlign(phase)
     return (
-      <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', marginTop: compact ? 4 : 0, marginBottom: compact ? 0 : 10 }}>
-        <span style={{ fontSize: compact ? 10 : 11.5, color: 'var(--to-muted)', marginRight: 2 }}>{compact ? 'Line is' : 'The line you drew is the'}</span>
-        {opts.map(([v, label, tip]) => (
-          <button key={v} title={tip} onClick={() => set(v)} style={{ fontSize: compact ? 10 : 11.5, padding: compact ? '1px 7px' : '3px 10px', borderRadius: 10, border: '1px solid var(--to-border)', cursor: 'pointer', fontFamily: 'inherit', background: cur === v ? 'var(--to-accent, #7fdc3c)' : 'var(--to-alt)', color: cur === v ? '#10210a' : 'var(--to-text)', fontWeight: cur === v ? 700 : 400 }}>{label}</button>
-        ))}
-        {!compact && <span style={{ flexBasis: '100%', fontSize: 10.5, color: 'var(--to-muted)' }}>Where it sits on the plan: use it when you snapped the line to a construction line. Lengths still come from the drawn line.</span>}
+      <div style={{ marginBottom: 12 }}>
+        <label style={labelStyle}>Where the line you draw sits</label>
+        {renderLineAlignButtons(phase, drawAlign[phase] ?? def, v => { setDrawAlign(a => ({ ...a, [phase]: v })); showToast('The next ' + (phase === 'Foundations' ? 'foundations' : 'walls') + ' you draw: the line is ' + lineAlignWords(phase, v)) }, false, 'The line is the', 'For the next ones you draw: choose it before drawing, when you are going to snap to a construction line. You can still change each one in the schedule afterwards.')}
       </div>
     )
   }
@@ -7305,6 +7341,8 @@ export default function TakeoffPage() {
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--to-text)', marginBottom: 12 }}>
             {activePhase}
           </div>
+
+          {renderDrawAlignField(activePhase)}
 
           {taskSubs.length > 0 && (
             <>
