@@ -50,6 +50,8 @@ const FOUNDATION_SHAPE_CALCS = new Set(['fnd-raft', 'fnd-pad'])
 // A floor is a shape (its footprint) priced by its calculator from the area and perimeter drawn: the sub-phases of Floors & Screeds that have one
 /** Phases where picking a calculator sub-phase makes the item a marker on the plan and the calculator card opens (Decoration, Plumbing & Heating, Drainage & Services): the sizes are typed in the calculator. */
 const MARKER_CALC_PHASES = new Set<string>(['Decoration', 'Plumbing & Heating', 'Drainage & Services', 'Plastering & Boarding', 'Tiling & Finishes', 'Windows & Doors'])
+/** calculators sized from an AREA drawn on the plan: picking one before drawing starts the Rectangle tool, not the Line tool a phase such as Plumbing & Heating starts with (its Line is a pipe) */
+const AREA_DRAWN_CALCS = new Set(['plumb-ufh', 'tile-ufh-electric', 'tile-floor-rooms', 'tile-prep-rooms'])
 const FLOOR_SHAPE_CALCS = new Set(['fs-screeded-floor', 'fs-floor-overlay', 'fs-concrete-slab', 'fs-block-beam', 'fs-suspended-timber', 'fs-insulated-concrete'])
 import LabourCostBuilder from './components/LabourCostBuilder'
 import { SharedWallAreasProvider } from '@/components/TilingShareContext'
@@ -1328,6 +1330,13 @@ export default function TakeoffPage() {
       if (bo) { item.taskSubphaseId = bo.id; item.subPhase = bo.name }
     }
 
+    // An outline drawn with the Line tool for the Underfloor Heating calculator is an AREA (a polygon): it is measured, shown and snapped as a floor, not as a pipe
+    if (item.phase === 'Plumbing & Heating' && el.type === 'line' && el.points.length >= 3 && item.taskSubphaseId && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'plumb-ufh') {
+      el.type = 'polygon'
+      const a = polygonArea(el.points, project.calibration.mpp)
+      item.length = undefined; item.area = a; item.unit = 'm²'; item.qty = +a.toFixed(3)
+    }
+
     // A line drawn in Plumbing & Heating is a pipe run: it starts as the Pipework Runs calculator (its length is the first run), unless another sub-phase was picked first
     if (item.phase === 'Plumbing & Heating' && el.type === 'line' && !item.taskSubphaseId && !taskSubphaseId) {
       const plumbPhase = boPhases.find(p => p.name === 'Plumbing & Heating')
@@ -1449,7 +1458,7 @@ export default function TakeoffPage() {
           // (the walls that are joined to this corner come with it, so they are not snapped to)
           const joined = new Set((dragRef.current?.links ?? []).map(l => l.elId))
           // an internal wall's end snaps to the inside face of the outside walls
-          const floorDrag = snapOn && floorFaceSnap(dragged.type === 'line' ? 'line' : dragged.type === 'rect' ? 'rect' : 'polygon', dragged.phase)
+          const floorDrag = snapOn && floorFaceSnap(dragged.type === 'line' ? 'line' : dragged.type === 'rect' ? 'rect' : 'polygon', dragged.phase, dragged.id)
           const inside = snapOn && (dragged.phase === 'Internal Walls & Partitions' || floorDrag) ? insideFaces() : null
           const parts2 = floorDrag ? partitionFaces() : null
           const anchors2 = [...anchorsFor(elementsOnActiveSheet(project).filter(el => el.id !== id && !joined.has(el.id) && !hiddenPhases.has(el.phase) && !(inside && el.phase === 'External Walls') && !(parts2 && el.phase === 'Internal Walls & Partitions'))), ...(inside ? inside.corners.map(c => ({ ...c, kind: 'end' as const })) : []), ...(parts2 ? parts2.corners.map(c => ({ ...c, kind: 'end' as const })) : [])]
@@ -3943,11 +3952,15 @@ export default function TakeoffPage() {
   }
 
   /** the floors that stop at the inside of the outside walls and at the faces of the partitions: a screed, block and beam floor or underfloor heating zone (a line, polygon, rectangle or floor area) */
-  function floorFaceSnap(t: DrawingTool, phase: string): boolean {
+  function floorFaceSnap(t: DrawingTool, phase: string, elId?: string): boolean {
     if (pipeDraw || roomDraw) return false
     if (t === 'floor') return true
     if (phase === 'Floors & Screeds' || phase === 'Tiling & Finishes') return t === 'line' || t === 'polygon' || t === 'rect'
-    if (phase === 'Plumbing & Heating') return t === 'polygon' || t === 'rect'   // (underfloor heating zones are areas; a line here is a pipe)
+    if (phase === 'Plumbing & Heating') {
+      // underfloor heating zones are areas; a line here is a pipe, unless it is being drawn (or is) an outline for the Underfloor Heating calculator
+      const subId = elId ? project.items.find(it => it.elementId === elId)?.taskSubphaseId : selectedTaskSubphaseId
+      return t === 'polygon' || t === 'rect' || (t === 'line' && !!subId && boSubPhases.find(b => b.id === subId)?.canonical_id === 'plumb-ufh')
+    }
     return false
   }
 
@@ -7015,7 +7028,7 @@ export default function TakeoffPage() {
                     else setSelectedTaskId(null)
                     // A calculator sub-phase is drawn as a line, whatever the last task's tool was.
                     const canon = boSubPhases.find(b => b.id === e.target.value)?.canonical_id
-                    if (canon && BUILT_ASSEMBLY_CANON_IDS[canon]) setTool(FOUNDATION_SHAPE_CALCS.has(canon) ? 'rect' : (PHASE_DEFAULT_TOOL[activePhase] ?? 'line'))
+                    if (canon && BUILT_ASSEMBLY_CANON_IDS[canon]) setTool(FOUNDATION_SHAPE_CALCS.has(canon) || AREA_DRAWN_CALCS.has(canon) ? 'rect' : (PHASE_DEFAULT_TOOL[activePhase] ?? 'line'))
                   }}>
                   {taskSubs.map(sp => <option key={sp.id} value={sp.id}>{sp.name}</option>)}
                 </select>
