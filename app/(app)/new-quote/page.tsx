@@ -1174,6 +1174,9 @@ export default function NewQuotePage() {
               taskName: asmResult.description,
               ...(asmResult.detail?.trim() && { scopeDetail: asmResult.detail }),
               assemblyLines: asmResult.lines,
+              // what was typed into the calculator comes too, so the quote opens it as it was left (rooms, fittings, pipes, rates)
+              ...(item.assemblyCalcState && { calcState: item.assemblyCalcState }),
+              ...(item.electricsState ? { electricsState: item.electricsState as QuotePhase['electricsState'] } : {}),
               ...(item.taskSubphaseId && { boSubPhaseId: item.taskSubphaseId }),
               ...(asmResult.location.trim() && { roomLabel: asmResult.location.trim() }),
             })

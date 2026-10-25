@@ -2239,6 +2239,8 @@ export default function TakeoffPage() {
   }
   const plumbPipeSummary: PipeSummary | undefined = plumbPipes.length ? summariseNetworks(Array.from(plumbNets.values()), plumbPipes.length) : undefined
   const plumbNetShowing = plumbNets.get(plumbGroupKey({ sheetId: activeSheetId, levelId: activeLevelId }))
+  // what the plumbing on the plan comes to as the calculator is fed it: compared with what was priced, it says when the plan has changed since
+  const plumbKeyNow = JSON.stringify([plumbPlaced, plumbPipeSummary ?? null])
   const plumbPipesShowing = plumbPipes.filter(q => onActiveSheet(q, project) && onActiveLevel(q, project))
   const plumbPipeLengthM = (q: PlumbPipe) => { let l = 0; for (let i = 1; i < q.points.length; i++) l += Math.hypot(q.points[i].x - q.points[i - 1].x, q.points[i].y - q.points[i - 1].y); return l * project.calibration.mpp }
   useEffect(() => { if (tool !== 'line' || activePhase !== 'Plumbing & Heating') setPipeDraw(false) }, [tool, activePhase])
@@ -2880,7 +2882,7 @@ export default function TakeoffPage() {
       ...electricRoomShapes().map(r => r.name).filter(Boolean),
       ...plumbPoints.map(q => q.roomName).filter(Boolean),
     ]))
-    const placedKey = JSON.stringify([plumbPlaced, plumbPipeSummary ?? null])
+    const placedKey = plumbKeyNow
     const stale = !!it?.assemblyResult && it.plumbPricedKey !== undefined && it.plumbPricedKey !== placedKey
     return (
       <PlumbingPointsPanel
@@ -3672,14 +3674,22 @@ export default function TakeoffPage() {
   function sendToQuote() {
     // A wall with a calculator that hasn't been priced would go to the quote as a plain build-up
     // (e.g. the default cavity wall layers) rather than what it's labelled as — say so first.
-    const unpriced = project.items.filter(it => resolveBuiltAssembly(it) && !it.assemblyResult)
+    // the electrics and plumbing items hold what was placed on the plan: with nothing placed and nothing priced there is nothing to send
+    const sendItems = project.items.filter(it => !((it.plumbSummary && !it.assemblyResult && !it.plumbPoints?.length && !it.plumbPipes?.length) || (it.electricsSummary && !it.assemblyResult && !it.electricPoints?.length)))
+    const unpriced = sendItems.filter(it => resolveBuiltAssembly(it) && !it.assemblyResult)
     if (unpriced.length > 0 && !window.confirm(
       `${unpriced.length} item${unpriced.length !== 1 ? 's have' : ' has'} a calculator that hasn't been priced yet:\n\n` +
       unpriced.map(it => `• ${it.name}${it.subPhase ? ` (${it.subPhase})` : ''}`).join('\n') +
       `\n\nUnpriced items are sent to the quote as a plain build-up, not from their calculator. Send anyway?`
     )) return
+    // the plumbing was priced, but the fittings or pipes on the plan have changed since, or the pipework has something the estimator should look at
+    const pl = sendItems.find(it => it.plumbSummary)
+    const plumbNotes: string[] = []
+    if (pl?.assemblyResult && pl.plumbPricedKey !== undefined && pl.plumbPricedKey !== plumbKeyNow) plumbNotes.push('The fittings or pipes on the plan have changed since the plumbing was priced, so the quote would carry the old price. Open the plumbing calculator and Save & Price it again.')
+    for (const w of plumbPipeSummary?.warnings ?? []) plumbNotes.push('Heating pipes: ' + w)
+    if (plumbNotes.length > 0 && !window.confirm('Check the plumbing before it goes to the quote:\n\n' + plumbNotes.map(n => '- ' + n).join('\n') + '\n\nSend anyway?')) return
     const { planImageUrl: _, ...rest } = project
-    const data = { version: 1, ...rest }
+    const data = { version: 1, ...rest, items: sendItems }
     sessionStorage.setItem('sbc_takeoff_for_quote', JSON.stringify(data))
     router.push('/new-quote')
   }
