@@ -158,16 +158,119 @@ export interface WallDrawing { strips: WallStrip[]; /** the whole band, outside 
 
 const ring = (p: Pt[]) => (p.length ? `M${p.map(q => `${+q.x.toFixed(2)} ${+q.y.toFixed(2)}`).join("L")}Z` : "")
 
+// ── Corners between walls of DIFFERENT make-up ──────────────────────────────────────────────────────────────────
+// Walls of the same make-up whose ends meet are one run with a mitred corner (chainWalls). Two walls of different make-up (a brick-faced wall and a rendered one, a cavity of another width) cannot be one run, so they used to be
+// painted one over the other at the corner. Here each wall is moved to the corner and every layer line of it ends on ONE line through the outer corner and the inner corner (where the two inner faces meet), so one
+// wall's layers stop exactly where the other's begin: no overlap and no gap, whatever the thicknesses.
+
+/** One end of a wall that meets a wall of another make-up. */
+export interface EndCut {
+  /** where the walls' lines meet: the end of the wall is moved here (trimmed back or carried on along its own line) */
+  P: Pt
+  /** the mitre line: through p, in direction m (the same line for both walls) */
+  line: { p: Pt; m: Pt }
+}
+export interface ChainEnds { start?: EndCut; end?: EndCut }
+
+const unitOf = (a: Pt, b: Pt): Pt | null => { const dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy); return l > 1e-9 ? { x: dx / l, y: dy / l } : null }
+function lineHit(p: Pt, d: Pt, q: Pt, e: Pt): Pt | null {
+  const det = d.x * e.y - d.y * e.x
+  if (Math.abs(det) < 1e-9) return null
+  const t = ((q.x - p.x) * e.y - (q.y - p.y) * e.x) / det
+  return { x: p.x + t * d.x, y: p.y + t * d.y }
+}
+
+/**
+ * The cuts for every open run of walls, one entry per run (same order). `lo` and `hi` are the run's two faces as offsets across its line (wallBand), `reach` how far an end may be from the corner and still be taken as meeting
+ * there (as in chainWalls: a gap up to the reach, an overshoot up to half of it). Only the ends of runs of the SAME kind (outside / inside, the part of the group before the first bar) but a different make-up are cut; a wall that
+ * ends on the side of another (a tee) is left alone.
+ */
+export function mitreCuts(chains: { points: Pt[]; closed: boolean; group: string; reach: number; lo: number; hi: number }[], tol = 3): ChainEnds[] {
+  const out: ChainEnds[] = chains.map(() => ({}))
+  const kindOf = (g: string) => g.split('|')[0]
+  type End = { ci: number; atStart: boolean; end: Pt; next: Pt }
+  const ends: End[] = []
+  chains.forEach((c, ci) => {
+    if (c.closed || c.points.length < 2) return
+    ends.push({ ci, atStart: true, end: c.points[0], next: c.points[1] })
+    ends.push({ ci, atStart: false, end: c.points[c.points.length - 1], next: c.points[c.points.length - 2] })
+  })
+  const taken = new Set<string>()
+  const key = (e: End) => e.ci + (e.atStart ? 's' : 'e')
+  for (let i = 0; i < ends.length; i++) {
+    for (let j = i + 1; j < ends.length; j++) {
+      const A = ends[i], B = ends[j]
+      if (A.ci === B.ci || taken.has(key(A)) || taken.has(key(B))) continue
+      const ca = chains[A.ci], cb = chains[B.ci]
+      if (ca.group === cb.group || kindOf(ca.group) !== kindOf(cb.group)) continue
+      const dA = unitOf(A.next, A.end), dB = unitOf(B.next, B.end)   // each wall's direction INTO the corner
+      if (!dA || !dB) continue
+      // the corner: the ends themselves when they meet, else where the two lines cross (a gap or an overshoot, as chainWalls allows)
+      let P: Pt | null = null
+      if (Math.hypot(A.end.x - B.end.x, A.end.y - B.end.y) <= tol) P = { x: (A.end.x + B.end.x) / 2, y: (A.end.y + B.end.y) / 2 }
+      else {
+        const hit = lineHit(A.end, dA, B.end, dB)
+        const r = Math.min(ca.reach, cb.reach)
+        if (hit && r > 0) {
+          const tA = (hit.x - A.end.x) * dA.x + (hit.y - A.end.y) * dA.y, tB = (hit.x - B.end.x) * dB.x + (hit.y - B.end.y) * dB.y
+          const okA = tA >= 0 ? tA <= r : -tA <= r / 2, okB = tB >= 0 ? tB <= r : -tB <= r / 2
+          if (okA && okB && (hit.x - A.next.x) * dA.x + (hit.y - A.next.y) * dA.y > 0 && (hit.x - B.next.x) * dB.x + (hit.y - B.next.y) * dB.y > 0) P = hit
+        }
+      }
+      if (!P) continue
+      const uA = { x: -dA.x, y: -dA.y }, uB = { x: -dB.x, y: -dB.y }   // away from the corner, along each wall
+      if (uA.x * uB.x + uA.y * uB.y > 0.97) continue                  // the two walls fold back on each other: no sensible corner
+      // each wall's own right-hand normal in the way its run travels
+      const tvA = A.atStart ? uA : dA, tvB = B.atStart ? uB : dB
+      const nA = { x: -tvA.y, y: tvA.x }, nB = { x: -tvB.y, y: tvB.x }
+      const at = (n: Pt, o: number): Pt => ({ x: P!.x + n.x * o, y: P!.y + n.y * o })
+      const bis = unitOf({ x: 0, y: 0 }, { x: uA.x + uB.x, y: uA.y + uB.y }) ?? { x: 0, y: 0 }
+      // the faces of the two walls meet in two points; the right pair is the one whose line runs along the bisector of the corner (outer corner to inner corner)
+      const pair = (oa1: number, ob1: number, oa2: number, ob2: number): { p: Pt; m: Pt; score: number } | null => {
+        const X1 = lineHit(at(nA, oa1), dA, at(nB, ob1), dB), X2 = lineHit(at(nA, oa2), dA, at(nB, ob2), dB)
+        if (!X1 || !X2) return null
+        const m = unitOf(X1, X2)
+        return m ? { p: X1, m, score: Math.abs(m.x * bis.x + m.y * bis.y) } : null
+      }
+      const p1 = pair(ca.lo, cb.lo, ca.hi, cb.hi), p2 = pair(ca.lo, cb.hi, ca.hi, cb.lo)
+      const best = p1 && p2 ? (p1.score >= p2.score ? p1 : p2) : (p1 ?? p2)
+      const line = best ? { p: best.p, m: best.m } : { p: P, m: (bis.x !== 0 || bis.y !== 0) ? bis : nA }
+      const cutA: EndCut = { P, line }
+      const cutB: EndCut = { P, line }
+      out[A.ci][A.atStart ? 'start' : 'end'] = cutA
+      out[B.ci][B.atStart ? 'start' : 'end'] = cutB
+      taken.add(key(A)); taken.add(key(B))
+    }
+  }
+  return out
+}
+
 /**
  * The layers of a wall as polygons.
  *   points   the drawn line (open) or outline (closed: a rectangle or polygon wall element)
  *   ref      'outer': the drawn line is the outside face and the wall builds to the inside (the right of travel; for a closed outline, towards the middle of the shape). 'centre': the line is the middle of the wall.
  *   flip     build to the other side (an open wall drawn the "wrong" way round)
  */
-export function wallDrawing(points: Pt[], spec: WallSpec, mpp: number, o: { ref: 'outer' | 'centre'; closed: boolean; flip?: boolean }): WallDrawing | null {
+export function wallDrawing(points: Pt[], spec: WallSpec, mpp: number, o: { ref: 'outer' | 'centre'; closed: boolean; flip?: boolean; /** where an end meets a wall of ANOTHER make-up: see mitreCuts */ cuts?: ChainEnds }): WallDrawing | null {
   if (!(mpp > 0) || points.length < 2) return null
-  const pts = dedupe(points, o.closed)
-  if (pts.length < 2 || (o.closed && pts.length < 3)) return null
+  const pts0 = dedupe(points, o.closed)
+  if (pts0.length < 2 || (o.closed && pts0.length < 3)) return null
+  // an end that meets a wall of another make-up is moved to the corner and every layer line of it ends where it meets the mitre line (instead of square across the wall)
+  const cs = !o.closed ? o.cuts?.start : undefined, ce = !o.closed ? o.cuts?.end : undefined
+  let pts = pts0
+  if (cs) pts = [cs.P, ...pts.slice(1)]
+  if (ce) pts = [...pts.slice(0, -1), ce.P]
+  const firstDir = pts.length >= 2 ? unitOf(pts[0], pts[1]) : null
+  const lastDir = pts.length >= 2 ? unitOf(pts[pts.length - 2], pts[pts.length - 1]) : null
+  /** one offset line of the wall, its two ends carried along the wall to the mitre line */
+  const trimmed = (line: Pt[]): Pt[] => {
+    if (!cs && !ce) return line
+    const r = line.slice()
+    const reach = 6 * (Math.hypot(r[0].x - pts[0].x, r[0].y - pts[0].y) + total + 10)
+    if (cs && firstDir) { const h = lineHit(r[0], firstDir, cs.line.p, cs.line.m); if (h && Math.hypot(h.x - r[0].x, h.y - r[0].y) <= reach) r[0] = h }
+    if (ce && lastDir) { const k = r.length - 1; const h = lineHit(r[k], lastDir, ce.line.p, ce.line.m); if (h && Math.hypot(h.x - r[k].x, h.y - r[k].y) <= reach) r[k] = h }
+    return r
+  }
   const mmPx = 1 / (mpp * 1000)
   const total = totalMm(spec.layers) * mmPx
   // which way is "inside" in the offset convention
@@ -179,15 +282,17 @@ export function wallDrawing(points: Pt[], spec: WallSpec, mpp: number, o: { ref:
   let at = start
   for (const l of spec.layers) {
     const d0 = at, d1 = at + l.mm * mmPx
-    const a = offsetPolyline(pts, d0 * dir, o.closed)
-    const b = offsetPolyline(pts, d1 * dir, o.closed)
-    strips.push({ kind: l.kind, mm: l.mm, polygon: [...a, ...b.slice().reverse()], d: o.closed ? ring(a) + ring(b) : ring([...a, ...b.slice().reverse()]) })
+    const a = trimmed(offsetPolyline(pts, d0 * dir, o.closed))
+    const b = trimmed(offsetPolyline(pts, d1 * dir, o.closed))
+    const poly = [...a, ...b.slice().reverse()]
+    strips.push({ kind: l.kind, mm: l.mm, polygon: poly, d: o.closed ? ring(a) + ring(b) : ring(poly) })
     at = d1
   }
-  const outerLine = offsetPolyline(pts, start * dir, o.closed)
-  const innerLine = offsetPolyline(pts, (start + total) * dir, o.closed)
-  const centre = offsetPolyline(pts, (start + total / 2) * dir, o.closed)
-  return { strips, body: [...outerLine, ...innerLine.slice().reverse()], rings: o.closed ? [outerLine, innerLine] : [[...outerLine, ...innerLine.slice().reverse()]], bodyD: o.closed ? ring(outerLine) + ring(innerLine) : ring([...outerLine, ...innerLine.slice().reverse()]), centre, totalPx: total }
+  const outerLine = trimmed(offsetPolyline(pts, start * dir, o.closed))
+  const innerLine = trimmed(offsetPolyline(pts, (start + total) * dir, o.closed))
+  const centre = offsetPolyline(pts0, (start + total / 2) * dir, o.closed)
+  const bodyPoly = [...outerLine, ...innerLine.slice().reverse()]
+  return { strips, body: bodyPoly, rings: o.closed ? [outerLine, innerLine] : [bodyPoly], bodyD: o.closed ? ring(outerLine) + ring(innerLine) : ring(bodyPoly), centre, totalPx: total }
 }
 
 /** The two faces of a wall as offsets across its drawn line (to the right of the way it runs), and which side the inside of the building is: where doors and windows are cut into it. Same rules as wallDrawing. */

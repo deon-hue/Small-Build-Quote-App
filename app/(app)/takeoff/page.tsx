@@ -47,7 +47,7 @@ import ClientProjectModal from './components/ClientProjectModal'
 import ClientFilePicker from '@/components/ClientFilePicker'
 import { planResize, applyResize } from '@/lib/calc-size'
 import { defaultToolbars, mergeToolbars, toolbarsOn, setToolbarDock, renameToolbar, setToolbarLabels, setToolbarVisible, moveToolbar, allowedDocks, isSideDock, DOCK_LABEL, DEFAULT_TOOLBARS, type TbId, type TbDock, type TbPref } from '@/lib/takeoff-toolbars'
-import { wallDrawing, wallBand, offsetPolyline, totalMm, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, specFromMakeupLayers, defaultWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
+import { mitreCuts, wallDrawing, wallBand, offsetPolyline, totalMm, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, specFromMakeupLayers, defaultWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
 import { sidesOf, splitOpenings } from '@/lib/wall-split'
 import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
 import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, segmentMiddle, flippedSwing, type PlacedOpening, type WallBand } from '@/lib/wall-openings'
@@ -1901,6 +1901,14 @@ export default function TakeoffPage() {
     return map
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.elements, project.items, project.calibration.mpp, project.activeSheetId, project.levels, project.activeLevelId, boSubPhases, allWallMakeups.length, hiddenPhases])
+  /** where two runs of walls of DIFFERENT make-up meet at a corner, the cut each is given so their layers meet along one mitre line (lib/wall-drawing.ts mitreCuts); one entry per run */
+  function cornerCuts(chains: ReturnType<typeof chainWalls>, kinds: Map<string, { spec: { layers: { kind: string; mm: number }[] }; ref: 'outer' | 'centre'; flip: boolean }>, mpp: number) {
+    return mitreCuts(chains.map(ch => {
+      const w = kinds.get(ch.group)
+      const band = w ? wallBand(ch.points, w.spec as Parameters<typeof wallBand>[1], mpp, { ref: w.ref, closed: ch.closed, flip: ch.flip }) : null
+      return { points: ch.points, closed: ch.closed, group: ch.group, reach: w ? (1.5 * totalMm(w.spec.layers as Parameters<typeof totalMm>[0])) / (mpp * 1000) : 0, lo: band?.lo ?? 0, hi: band?.hi ?? 0 }
+    }), 3)
+  }
   /** whether a wall is painted building to the left of its own line: a side of a closed run is painted INWARD (the run decides, whatever the make-up of each side), any other wall as it was drawn or flipped */
   const paintFlip = (el: DrawnElement, w: { flip: boolean }): boolean => { const o = wallDirOverride.get(el.id); return o !== undefined && el.type === 'line' ? o === -1 : w.flip }
   /** how a wall's own band is worked out so it matches how it is painted (see wallDirOverride) */
@@ -1988,11 +1996,13 @@ export default function TakeoffPage() {
       kinds.set(group, w)
     }
     const out: TakeoffPoint[][][] = []
-    for (const ch of chainWalls(pieces, 3)) {
+    const runs = chainWalls(pieces, 3)
+    const cuts = cornerCuts(runs, kinds, mpp)
+    runs.forEach((ch, ci) => {
       const w = kinds.get(ch.group)
-      const wd = w ? wallDrawing(ch.points, w.spec, mpp, { ref: w.ref, closed: ch.closed, flip: ch.flip }) : null
+      const wd = w ? wallDrawing(ch.points, w.spec, mpp, { ref: w.ref, closed: ch.closed, flip: ch.flip, cuts: cuts[ci] }) : null
       if (wd) out.push(wd.rings)
-    }
+    })
     return out
   }
 
@@ -3579,11 +3589,13 @@ export default function TakeoffPage() {
       kinds.set(group, w)
     }
     if (pieces.length === 0) return null
+    const runs = chainWalls(pieces, 3)
+    const cuts = cornerCuts(runs, kinds, mpp)
     return (
       <g style={{ pointerEvents: 'none' }}>
-        {chainWalls(pieces, 3).map(ch => {
+        {runs.map((ch, ci) => {
           const w = kinds.get(ch.group)
-          const wd = w ? wallDrawing(ch.points, w.spec, mpp, { ref: w.ref, closed: ch.closed, flip: ch.flip }) : null
+          const wd = w ? wallDrawing(ch.points, w.spec, mpp, { ref: w.ref, closed: ch.closed, flip: ch.flip, cuts: cuts[ci] }) : null
           if (!wd) return null
           return (
             <g key={'wv-' + ch.ids.join('-')}>
