@@ -28,6 +28,8 @@ export interface PlumbingDescriptionInput {
     material: string
     /** the sizes in use, mm, smallest first */
     sizesMm: number[]
+    /** metres of pipe laid (flow and return together) in each size, smallest first: the quote lists them */
+    bySize?: { sizeMm: number; pipeM: number }[]
     /** metres of pipe laid, flow and return together */
     pipeM: number
     /** elbows, bends and tees counted (flow and return together) */
@@ -48,7 +50,7 @@ export function describePlumbingShort(i: PlumbingDescriptionInput): string {
     parts.push(`${plural(rooms.length, 'room', 'rooms')}${i.totalFittings > 0 ? `, ${plural(i.totalFittings, 'fitting', 'fittings')}` : ''}`)
     if (i.specialCount > 0) parts.push(`${plural(i.specialCount, 'special fitting', 'special fittings')} installed`)
   }
-  if (i.pipework) parts.push(`heating pipework to ${plural(i.pipework.radiators, 'radiator', 'radiators')}`)
+  if (i.pipework) parts.push(`heating pipework to ${plural(i.pipework.radiators, 'radiator', 'radiators')} (${i.pipework.sizesMm.map(s => `${s}mm`).join(' and ')} ${i.pipework.material})`)
   if (i.wholeHouse.length > 0) parts.push(i.wholeHouse.join(', '))
   return `Plumbing installation: ${parts.join('; ')}${i.tested ? ', pressure tested' : ''}.`
 }
@@ -69,9 +71,12 @@ export function describePlumbing(i: PlumbingDescriptionInput): string {
   if (i.pipework) {
     const p = i.pipework
     const sizes = p.sizesMm.map(s => `${s}mm`).join(' and ')
+    // the pipe by size: '27 m of 15mm and 8 m of 22mm' (or the total when the sizes are not given)
+    const per = (p.bySize ?? []).filter(x => x.pipeM > 0).map(x => `${Math.max(1, Math.round(x.pipeM))} m of ${x.sizeMm}mm`)
+    const list = per.length > 0 ? per.length > 1 ? `${per.slice(0, -1).join(', ')} and ${per[per.length - 1]}` : per[0] : `about ${Math.round(p.pipeM)} m of ${sizes}`
+    const who = `connecting ${plural(p.radiators, 'radiator or towel rail', 'radiators or towel rails')}${p.kW > 0 ? ` (about ${p.kW.toFixed(1)} kW in all)` : ''}`
     // (with no kW there is no plan behind it, so the pipe is not claimed to be sized section by section)
-    if (!(p.kW > 0)) lines.push(`Heating pipework: supply and install about ${Math.round(p.pipeM)} m of ${sizes} ${p.material} heating pipe (flow and return) with its elbows and tees, connecting ${plural(p.radiators, 'radiator or towel rail', 'radiators or towel rails')}, clipped and tested.`)
-    else lines.push(`Heating pipework: supply and install about ${Math.round(p.pipeM)} m of ${sizes} ${p.material} heating pipe (flow and return, sized for the heat each section carries) with its elbows and tees, connecting ${plural(p.radiators, 'radiator or towel rail', 'radiators or towel rails')}${p.kW > 0 ? ` (about ${p.kW.toFixed(1)} kW in all)` : ''}, clipped and tested.`)
+    lines.push(`Heating pipework: supply and install ${p.material} heating pipe, flow and return${p.kW > 0 ? ', sized for the heat each section carries' : ''}: ${list}, with its elbows and tees, ${who}, clipped and tested.`)
   }
   if (i.wholeHouse.length > 0) lines.push(`Whole house: ${i.wholeHouse.join(', ')}.`)
   if (i.tested) lines.push('On completion the pipework is pressure tested and commissioned.')

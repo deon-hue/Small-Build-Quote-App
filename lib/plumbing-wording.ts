@@ -21,6 +21,7 @@ export function plumbingDescriptionInput(rooms: PlumbingRoom[], wholeHouse: Reco
   const pipework = pipes && pipeLines.length > 0 ? {
     material: pipes.material,
     sizesMm: pipeLines.map(l => +l.id.split('|')[1]).sort((a, b) => a - b),
+    bySize: pipeLines.map(l => ({ sizeMm: +l.id.split('|')[1], pipeM: l.qty })).sort((a, b) => a.sizeMm - b.sizeMm),
     pipeM: pipeLines.reduce((s, l) => s + l.qty, 0),
     fittings: r.lines.filter(l => l.id.startsWith('pipefit|')).reduce((s, l) => s + l.qty, 0),
     radiators: pipes.radiators,
