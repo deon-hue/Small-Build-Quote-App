@@ -42,6 +42,8 @@ import { priceDemolitionCalcFromScope, DEMOLITION_AI_IDS } from '@/components/ai
 import { pricePlasterCalcFromScope, PLASTER_AI_IDS } from '@/components/ai-plaster-pricing'
 import { priceTilingCalcFromScope, TILING_AI_IDS } from '@/components/ai-tiling-pricing'
 import { priceSolidBrickCalcFromScope, SOLID_BRICK_AI_IDS } from '@/components/ai-solid-brick-pricing'
+import { priceFloorRoofPhases, FLOOR_ROOF_AI_IDS } from '@/components/ai-floor-roof-pricing'
+import type { PricedCalc } from '@/components/ai-drainage-pricing'
 import { prepSpecWithWallTilingAreas, ufhSpecWithPrepMembrane } from '@/lib/tiling-ai'
 import { planTakeoffMerge, applyTakeoffMerge, type MergeChoice } from '@/lib/takeoff-merge'
 import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchQuoteDefaults, fetchAllQuoteDefaults, upsertTask, fetchLabourTrades, fetchProducts, fetchPlantItems, fetchPhases, fetchSubPhases, fetchTasks } from '@/lib/back-office-queries'
@@ -136,6 +138,8 @@ function buildPhasesFromScopeToQuote(
   taskRates: Record<string, TaskRateEntry>,
   boSubPhases: BOSubPhase[] = [],
   labourTrades: BOLabourTrade[] = [],
+  /** the floor and roof calculator lines, already priced by their calculators (a calculator is mounted for a moment each, which is async: see components/ai-floor-roof-pricing.ts), by the scope's own phase object */
+  headless?: Map<object, PricedCalc | null>,
 ): QuotePhase[] {
   const VALID_TYPES: MeasurementType[] = ['area', 'volume', 'linear', 'quantity']
   // the Wall Tiling line's tiled areas, shared with the Tiling Preparation line so the same bath surround or shower walls are not typed (or guessed) twice
@@ -167,12 +171,12 @@ function buildPhasesFromScopeToQuote(
           : { reviewNote: 'Priced by its calculator, but no electrical rooms or points were found in the scope. Open the calculator and add the rooms.' }),
       }
     }
-    if (calcSub && calcSub.canonical_id && (PLUMBING_AI_IDS.has(calcSub.canonical_id) || DRAINAGE_AI_IDS.has(calcSub.canonical_id) || DEMOLITION_AI_IDS.has(calcSub.canonical_id) || PLASTER_AI_IDS.has(calcSub.canonical_id) || TILING_AI_IDS.has(calcSub.canonical_id) || SOLID_BRICK_AI_IDS.has(calcSub.canonical_id))) {
+    if (calcSub && calcSub.canonical_id && (PLUMBING_AI_IDS.has(calcSub.canonical_id) || DRAINAGE_AI_IDS.has(calcSub.canonical_id) || DEMOLITION_AI_IDS.has(calcSub.canonical_id) || PLASTER_AI_IDS.has(calcSub.canonical_id) || TILING_AI_IDS.has(calcSub.canonical_id) || SOLID_BRICK_AI_IDS.has(calcSub.canonical_id) || FLOOR_ROOF_AI_IDS.has(calcSub.canonical_id))) {
       // The plumbing, drainage and demolition calculators are priced from what the scope says (rooms and fittings, the boiler, zones with an area, runs with a length, a wall with a length,
       // rooms to strip out, volumes of waste, buildings with a size...), with the calculator's standard settings. Nothing is invented: what was not stated is left out or said in the note,
       // for the estimator to check.
       const pricer = PLUMBING_AI_IDS.has(calcSub.canonical_id) ? pricePlumbingCalcFromScope : DRAINAGE_AI_IDS.has(calcSub.canonical_id) ? priceDrainageCalcFromScope : PLASTER_AI_IDS.has(calcSub.canonical_id) ? pricePlasterCalcFromScope : TILING_AI_IDS.has(calcSub.canonical_id) ? priceTilingCalcFromScope : SOLID_BRICK_AI_IDS.has(calcSub.canonical_id) ? priceSolidBrickCalcFromScope : priceDemolitionCalcFromScope
-      const pl = pricer({ canonicalId: calcSub.canonical_id, spec: calcSub.canonical_id === 'tile-prep-rooms' ? prepSpecWithWallTilingAreas(sp.calc, wallTilingCalc) : calcSub.canonical_id === 'tile-ufh-electric' ? ufhSpecWithPrepMembrane(sp.calc, prepTilingCalc) : sp.calc, labourTrades })
+      const pl = FLOOR_ROOF_AI_IDS.has(calcSub.canonical_id) ? (headless?.get(sp) ?? null) : pricer({ canonicalId: calcSub.canonical_id, spec: calcSub.canonical_id === 'tile-prep-rooms' ? prepSpecWithWallTilingAreas(sp.calc, wallTilingCalc) : calcSub.canonical_id === 'tile-ufh-electric' ? ufhSpecWithPrepMembrane(sp.calc, prepTilingCalc) : sp.calc, labourTrades })
       const plPhase = makePhase(sp.phase, pl ? assemblyLinesToItems(pl.lines) : defaultTypedItems(), sp.parentPhase || undefined)
       return {
         ...plPhase,
@@ -994,7 +998,8 @@ export default function NewQuotePage() {
       if (data.error) { alert('Could not generate phases: ' + data.error); return false }
       if (!Array.isArray(data.phases)) { alert('Unexpected response from AI.'); return false }
 
-      const built = buildPhasesFromScopeToQuote(data.phases as ScopeToQuotePhase[], data.taskRates ?? {}, boSubPhases, labourTrades)
+      const headless = await priceFloorRoofPhases(data.phases as ScopeToQuotePhase[], boSubPhases, labourTrades)
+      const built = buildPhasesFromScopeToQuote(data.phases as ScopeToQuotePhase[], data.taskRates ?? {}, boSubPhases, labourTrades, headless)
       setPhases(built)
       setEstimateUsedDB(!!data.usingDB)
       return true   // phases were set — safe to transition
@@ -1565,7 +1570,8 @@ export default function NewQuotePage() {
       if (data.error) { alert('Could not build estimate: ' + data.error); return }
       if (!Array.isArray(data.phases)) { alert('Unexpected response from AI.'); return }
 
-      const built = buildPhasesFromScopeToQuote(data.phases as ScopeToQuotePhase[], data.taskRates ?? {}, boSubPhases, labourTrades)
+      const headless = await priceFloorRoofPhases(data.phases as ScopeToQuotePhase[], boSubPhases, labourTrades)
+      const built = buildPhasesFromScopeToQuote(data.phases as ScopeToQuotePhase[], data.taskRates ?? {}, boSubPhases, labourTrades, headless)
       setPhases(built)
       setScope(scopeText)
       setEstimateUsedDB(!!data.usingDB)
