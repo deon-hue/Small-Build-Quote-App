@@ -1027,6 +1027,8 @@ export default function TakeoffPage() {
   const guideDragRef = useRef<{ id: string } | null>(null)
   // Join Corner: the first wall picked (its side), waiting for the second
   const [joinFirst, setJoinFirst] = useState<{ id: string; idx: number } | null>(null)
+  // Select a wall, then Shift-click a second one: the two walls (and the sides nearest each other) wait here for the Join button
+  const [joinPair, setJoinPair] = useState<{ aId: string; aIdx: number; bId: string; bIdx: number } | null>(null)
   useEffect(() => { if (tool !== 'join') setJoinFirst(null) }, [tool])
   const tagDragRef = useRef<{ id: string; sx: number; sy: number; dx0: number; dy0: number } | null>(null)
   // the View choices are read back before they are written (otherwise the first save would put the defaults over what was kept)
@@ -3392,6 +3394,24 @@ export default function TakeoffPage() {
   // ── Select element ─────────────────────────────────────────────────────────
   function selectElement(el: DrawnElement) {
     if (tool !== 'select') return
+    // Shift-click a second wall while one is selected: offer to join them (the selection stays on the first)
+    if (shiftHeld && selectedId && selectedId !== el.id) {
+      const A = project.elements.find(e => e.id === selectedId)
+      const isWall = (x?: DrawnElement) => !!x && (x.phase === 'External Walls' || x.phase === 'Internal Walls & Partitions')
+      if (isWall(A) && isWall(el)) {
+        if (A!.type !== 'line' || el.type !== 'line') { showToast('A rectangle or polygon wall cannot be joined as one: select it and press "Split into separate walls" first'); return }
+        // the two sides, one on each wall, whose ends are nearest each other
+        let best: { aIdx: number; bIdx: number; d: number } | null = null
+        for (let i = 0; i < A!.points.length - 1; i++) for (let j = 0; j < el.points.length - 1; j++) {
+          for (const pa of [A!.points[i], A!.points[i + 1]]) for (const pb of [el.points[j], el.points[j + 1]]) {
+            const d = Math.hypot(pa.x - pb.x, pa.y - pb.y)
+            if (!best || d < best.d) best = { aIdx: i, bIdx: j, d }
+          }
+        }
+        if (best) { setJoinPair({ aId: A!.id, aIdx: best.aIdx, bId: el.id, bIdx: best.bIdx }); showToast('Two walls picked: press Join to meet them at the corner'); return }
+      }
+    }
+    setJoinPair(null)
     setSelectedOpeningId(null)
     setSelectedId(el.id)
     setEditingElement(el)
@@ -4218,14 +4238,19 @@ export default function TakeoffPage() {
     const A = project.elements.find(e => e.id === joinFirst.id)
     if (!A) { setJoinFirst(null); return }
     if (A.id === hit.el.id) { showToast('Pick a different wall for the other side of the corner'); return }
-    const res = joinCorner(A.points, joinFirst.idx, hit.el.points, hit.idx, 3 / (mpp || DEFAULT_MPP))
+    joinWalls(A, joinFirst.idx, hit.el, hit.idx)
+  }
+
+  /** Join two walls at the corner where their lines cross (the two sides given): shared by the Join Corner tool and the Shift-select Join button */
+  function joinWalls(A: DrawnElement, aIdx: number, B: DrawnElement, bIdx: number) {
+    const mpp = project.calibration.mpp
+    const res = joinCorner(A.points, aIdx, B.points, bIdx, 3 / (mpp || DEFAULT_MPP))
     if (!res.ok) {
       showToast(res.reason === 'parallel' ? 'Those two walls run parallel, so they never meet' : 'Those walls are too far from meeting (the ends would move over 3 m): pick the two walls of one corner')
-      setJoinFirst(null)
+      setJoinFirst(null); setJoinPair(null)
       return
     }
-    if (res.aMoved < 0.5 && res.bMoved < 0.5) { showToast('Those walls already meet at the corner'); setJoinFirst(null); return }
-    const B = hit.el
+    if (res.aMoved < 0.5 && res.bMoved < 0.5) { showToast('Those walls already meet at the corner'); setJoinFirst(null); setJoinPair(null); return }
     const P = res.point
     const aOrig = A.points[res.aIdx], bOrig = B.points[res.bIdx]
     const others = wallsOnSheet().filter(w => w.id !== A.id && w.id !== B.id)
@@ -4242,13 +4267,24 @@ export default function TakeoffPage() {
       })
       return { ...prev, elements, items: recalcItemsForMpp(prev.items, elements, prev.calibration.mpp, activeSheetElementIds(prev)) }
     })
-    setJoinFirst(null)
+    setJoinFirst(null); setJoinPair(null)
     const m = (px: number) => (px * mpp).toFixed(2)
-    showToast(`Corner joined (one wall moved ${m(res.aMoved)} m, the other ${m(res.bMoved)} m). Click two more walls to join another, or choose Select.`)
+    showToast(`Corner joined (one wall moved ${m(res.aMoved)} m, the other ${m(res.bMoved)} m). Ctrl+Z undoes it.`)
   }
 
   /** the first wall picked for a Join Corner, picked out in orange */
   function renderJoinPick() {
+    if (joinPair) {
+      const A = project.elements.find(e => e.id === joinPair.aId), B = project.elements.find(e => e.id === joinPair.bId)
+      if (!A || !B) return null
+      const seg = (el: DrawnElement, i: number) => { const a = el.points[i], b = el.points[i + 1]; return a && b ? (
+        <g key={el.id}>
+          <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#f97316" strokeWidth={7 / zoom} strokeOpacity={0.55} strokeLinecap="round" />
+          <circle cx={a.x} cy={a.y} r={5 / zoom} fill="#fff" stroke="#f97316" strokeWidth={2 / zoom} />
+          <circle cx={b.x} cy={b.y} r={5 / zoom} fill="#fff" stroke="#f97316" strokeWidth={2 / zoom} />
+        </g>) : null }
+      return <g style={{ pointerEvents: 'none' }}>{seg(A, joinPair.aIdx)}{seg(B, joinPair.bIdx)}</g>
+    }
     if (tool !== 'join' || !joinFirst) return null
     const el = project.elements.find(e => e.id === joinFirst.id)
     if (!el) return null
@@ -4914,6 +4950,7 @@ export default function TakeoffPage() {
       if (tool !== 'select') return
       e.stopPropagation()   // prevent canvas pan from starting
       selectElement(el)
+      if (shiftHeld && selectedId && selectedId !== el.id) return   // Shift-click on a second wall picks it for Join: it is not dragged
       const pt = svgCoords(e)
       dragRef.current = { id: el.id, startSvgX: pt.x, startSvgY: pt.y, origPoints: [...el.points], links: linksForDrag(el, undefined, e.altKey) }
       setIsDraggingEl(true)
@@ -8018,7 +8055,7 @@ export default function TakeoffPage() {
     { t: 'measure',  icon: '📏', label: 'Measure',                 pinned: true,  show: true },
     { t: 'room',     icon: '🏠', label: 'Rooms',                   pinned: true,  show: true },
     { t: 'guide',    icon: '┼',  label: 'Guides (lines to snap to)', pinned: true,  show: true },
-    { t: 'join',     icon: '⌐',  label: 'Join Corner',             pinned: true,  show: activePhase === 'External Walls' || activePhase === 'Internal Walls & Partitions' },
+    { t: 'join',     icon: '⌐',  label: 'Join Corner (or select a wall, Shift-click another and press Join)', pinned: true, show: true },
     { t: 'opening',  icon: '🪟', label: 'Place Window / Door',     pinned: true,  show: activePhase === 'Windows & Doors' },
     { t: 'electric', icon: '⚡', label: 'Place Electrical Point',  pinned: true,  show: activePhase === 'Electrics' },
     { t: 'plumb',    icon: '🚿', label: 'Place Plumbing Fitting',  pinned: true,  show: activePhase === 'Plumbing & Heating' },
@@ -8561,6 +8598,14 @@ export default function TakeoffPage() {
           ref={containerRef}
           style={{ flex: 1, overflow: 'hidden', position: 'relative', background: 'var(--to-bg)' }}
         >
+          {/* Two walls picked with Shift-click: join them at the corner */}
+          {joinPair && tool === 'select' && (
+            <div style={{ position: 'absolute', bottom: 74, left: '50%', transform: 'translateX(-50%)', zIndex: 7, background: 'var(--to-panel)', border: '1px solid #f97316', color: 'var(--to-text)', borderRadius: 8, padding: '7px 12px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 2px 10px rgba(0,0,0,0.3)' }}>
+              <span>Two walls picked (shown in orange): meet them at the corner?</span>
+              <button type="button" onClick={() => { const A = project.elements.find(e => e.id === joinPair.aId), B = project.elements.find(e => e.id === joinPair.bId); if (A && B) joinWalls(A, joinPair.aIdx, B, joinPair.bIdx); else setJoinPair(null) }} style={{ background: '#f97316', color: '#fff', border: 'none', borderRadius: 5, fontWeight: 700, fontSize: 12, padding: '4px 14px', cursor: 'pointer' }}>Join</button>
+              <button type="button" onClick={() => setJoinPair(null)} style={{ background: 'transparent', color: 'var(--to-sub)', border: '1px solid var(--to-border)', borderRadius: 5, fontSize: 12, padding: '4px 10px', cursor: 'pointer' }}>Cancel</button>
+            </div>
+          )}
           {/* Drawing aids: what to type while drawing, and what has been typed */}
           {typedAllowed() && (
             <div style={{ position: 'absolute', bottom: 74, left: '50%', transform: 'translateX(-50%)', zIndex: 6, background: 'var(--to-panel)', border: '1px solid var(--to-border)', color: 'var(--to-text)', borderRadius: 8, padding: '6px 12px', fontSize: 12, display: 'flex', gap: 10, alignItems: 'center', pointerEvents: 'none' }}>
