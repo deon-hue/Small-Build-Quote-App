@@ -4253,27 +4253,36 @@ export default function TakeoffPage() {
       setJoinFirst(null); setJoinPair(null)
       return
     }
-    // a partition that stops against an OUTSIDE wall ends at that wall's INSIDE face (as it does when it is drawn there with Snap on), not on the line the outside wall was drawn along, which is its outside face
+    // A T: the wall that stops ends at the NEAR FACE of the wall it stops against (the face on the side it comes from), not on the line that wall was drawn along. That line may be its centre, or its outside face, or
+    // whichever edge it was drawn on a construction line, so ending there runs the partition on through half or all of the other wall's thickness (it showed as one wall overshooting the other). The face comes from the
+    // held wall's real thickness and where its drawn line sits (as it is painted), so an outside wall's near face for a partition inside is its inside face, as when the partition is drawn there with Snap on.
     let P = res.point
     let aMoved = res.aMoved, bMoved = res.bMoved
     if (res.aHold !== res.bHold) {
-      const held = res.aHold ? A : B, mover = res.aHold ? B : A, mSeg = res.aHold ? bIdx : aIdx
-      if (held.phase === 'External Walls' && mover.phase === 'Internal Walls & Partitions') {
+      const held = res.aHold ? A : B, mover = res.aHold ? B : A, hSeg = res.aHold ? aIdx : bIdx, mSeg = res.aHold ? bIdx : aIdx
+      const moveIdx = res.aHold ? res.bIdx : res.aIdx
+      const w = wallSpecFor(held)
+      const h0 = held.points[hSeg], h1 = held.points[hSeg + 1]
+      const band = w && h0 && h1 ? wallBand([h0, h1], w.spec, mpp, { ref: w.ref, closed: false, flip: paintFlip(held, w) }) : null
+      if (band) {
         const m0 = mover.points[mSeg], m1 = mover.points[mSeg + 1]
-        let bestFace: { f0: TakeoffPoint; f1: TakeoffPoint; d: number } | null = null
-        for (const [f0, f1] of insideFaces().segments) {
+        const farEnd = mover.points[moveIdx === mSeg ? mSeg + 1 : mSeg]
+        // the two faces of the held wall along this side, and the one nearer the end of the partition that stays put (the side it comes from)
+        const faces = [band.lo, band.hi].map(off => offsetPolyline([h0, h1], off, false))
+        const dist = (face: TakeoffPoint[]) => {
+          const [f0, f1] = face
           const dx = f1.x - f0.x, dy = f1.y - f0.y, l2 = dx * dx + dy * dy
-          const tt = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((P.x - f0.x) * dx + (P.y - f0.y) * dy) / l2))
-          const d = Math.hypot(P.x - (f0.x + tt * dx), P.y - (f0.y + tt * dy))
-          if (!bestFace || d < bestFace.d) bestFace = { f0, f1, d }
+          const tt = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((farEnd.x - f0.x) * dx + (farEnd.y - f0.y) * dy) / l2))
+          return Math.hypot(farEnd.x - (f0.x + tt * dx), farEnd.y - (f0.y + tt * dy))
         }
-        if (bestFace && bestFace.d <= 1 / (mpp || DEFAULT_MPP)) {
-          const rx = m1.x - m0.x, ry = m1.y - m0.y, sx = bestFace.f1.x - bestFace.f0.x, sy = bestFace.f1.y - bestFace.f0.y
+        const face = faces.filter(fc => fc.length >= 2).sort((a, b) => dist(a) - dist(b))[0]
+        if (face) {
+          const rx = m1.x - m0.x, ry = m1.y - m0.y, sx = face[1].x - face[0].x, sy = face[1].y - face[0].y
           const det = rx * sy - ry * sx
           if (Math.abs(det) > 1e-9) {
-            const tt = ((bestFace.f0.x - m0.x) * sy - (bestFace.f0.y - m0.y) * sx) / det
+            const tt = ((face[0].x - m0.x) * sy - (face[0].y - m0.y) * sx) / det
             P = { x: m0.x + tt * rx, y: m0.y + tt * ry }
-            const end = mover.points[res.aHold ? res.bIdx : res.aIdx]
+            const end = mover.points[moveIdx]
             if (res.aHold) bMoved = Math.hypot(P.x - end.x, P.y - end.y); else aMoved = Math.hypot(P.x - end.x, P.y - end.y)
           }
         }

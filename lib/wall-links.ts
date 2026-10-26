@@ -79,7 +79,7 @@ export type JoinResult =
 /**
  * Where two walls meet if they are extended (or trimmed) to a corner: the crossing of the two sides that were picked (side `aSeg` of the first wall's points, side `bSeg` of the second's), and which end of each side
  * moves there (the one nearer the crossing). `maxReach` is the farthest (plan pixels) an end may move: walls that would have to be dragged further than that do not belong to the same corner.
- * A T JUNCTION is a wall that stops against the side of another: when the crossing is well inside one of the two sides (at least a sixth of `maxReach`, half a metre for 3m, from both its ends) that wall is the one that
+ * A T JUNCTION is a wall that stops against the side of another: when the crossing is well inside one of the two sides (at least a tenth of `maxReach`, 0.3 m for 3 m, from both its ends: a wall that runs on only a little way past is a corner that overshoots) that wall is the one that
  * runs through, so it is held and only the other wall's nearer end is moved to meet it. If the crossing is well inside BOTH sides they cross each other and there is nothing to join.
  */
 export function joinCorner(a: Pt[], aSeg: number, b: Pt[], bSeg: number, maxReach: number): JoinResult {
@@ -95,7 +95,7 @@ export function joinCorner(a: Pt[], aSeg: number, b: Pt[], bSeg: number, maxReac
   const bIdx = d(B0) <= d(B1) ? bSeg : bSeg + 1
   // where along each side the crossing is (0 to 1 is between its two ends)
   const u = ((B0.x - A0.x) * ry - (B0.y - A0.y) * rx) / det
-  const edge = Math.max(maxReach / 6, 1)
+  const edge = Math.max(maxReach / 10, 1)
   const inside = (frac: number, p0: Pt, p1: Pt) => frac > 0 && frac < 1 && d(p0) > edge && d(p1) > edge
   const aHold = inside(t, A0, A1), bHold = inside(u, B0, B1)
   if (aHold && bHold) return { ok: false, reason: 'cross' }
