@@ -22,6 +22,7 @@ import { DEFAULT_TILING_SITUATIONS, TILING_ROOM_KINDS, TILING_ROOM_KIND_BY_ID, s
 import { describeTileUfh, describeTileUfhShort, type TilingDescriptionInput } from '@/lib/tiling-description'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import { propInput, PropRow, CollapsibleSection } from '@/components/assembly-ui'
+import { useSharedPrepFloors } from '@/components/TilingShareContext'
 import TilingCalcFrame, { TilingNumInput, TilingAutoInput, RoomShapeFields, TilingCheck, tilingSmall } from '@/components/TilingCalcFrame'
 
 interface Props {
@@ -54,6 +55,8 @@ export default function AssemblyTileUfhDemo({ onClose, onSave, labourTrades = []
   }
   // The job starts with no rooms: you add the ones being heated (or the drawn area is the first)
   const [rooms, setRooms] = useCalcState<TileUfhRoom[]>(ID, 'rooms', () => (planSides ? [planRoom()] : []))
+  // what Tiling Preparation saved for each floor (a decoupling membrane, and which kind), to offer the cable in its heating membrane
+  const prepFloors = useSharedPrepFloors()
   useEffect(() => {
     if (!planSides) return
     setRooms(p => (p.length === 0 ? [planRoom()] : p.map(r => (r.fromPlan && (r.fromPlan.areaM2 !== planArea || r.fromPlan.perimeterM !== planPerimeter || (r.fromPlan.name ?? 'Room from the plan') !== planName)
@@ -163,7 +166,7 @@ export default function AssemblyTileUfhDemo({ onClose, onSave, labourTrades = []
                   <div style={{ fontSize: 10, color: '#94a3b8', margin: '2px 0 6px' }}>Heated area is the floor less what is under a bath, units or anything fixed, and 5cm clear of the walls. Heat must never run under fixed furniture or a bath.</div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 8 }}>
                     <PropRow label="Kit">
-                      <select value={rm.kit} onChange={e => updateRoom(rm.id, { kit: e.target.value as UfhKit })} style={propInput}>
+                      <select value={rm.membrane ? 'cable' : rm.kit} disabled={!!rm.membrane} onChange={e => updateRoom(rm.id, { kit: e.target.value as UfhKit })} style={propInput}>
                         {UFH_KITS.map(k => <option key={k.id} value={k.id}>{k.label}</option>)}
                       </select>
                     </PropRow>
@@ -173,7 +176,7 @@ export default function AssemblyTileUfhDemo({ onClose, onSave, labourTrades = []
                       </select>
                     </PropRow>
                     <PropRow label="Insulation under the mat">
-                      <select value={rm.insulation} onChange={e => updateRoom(rm.id, { insulation: e.target.value as UfhInsulation })} style={propInput}>
+                      <select value={rm.membrane ? 'none' : rm.insulation} disabled={!!rm.membrane} onChange={e => updateRoom(rm.id, { insulation: e.target.value as UfhInsulation })} style={propInput}>
                         {INSULATIONS.map(i => <option key={i} value={i}>{INSULATION_INFO[i].label}</option>)}
                       </select>
                     </PropRow>
@@ -186,7 +189,20 @@ export default function AssemblyTileUfhDemo({ onClose, onSave, labourTrades = []
                     </PropRow>
                   </div>
                   <div style={{ marginTop: 6, borderTop: '1px dashed #e2e8f0', paddingTop: 6 }}>
-                    <TilingCheck label="Primer to the floor" on={rm.primer} set={b => updateRoom(rm.id, { primer: b })} />
+                    <TilingCheck label="The cable is laid in an electric-heating membrane (priced in Tiling Preparation): loose cable, no insulation board, no primer" on={!!rm.membrane} set={b => updateRoom(rm.id, b ? { membrane: true, kit: 'cable' } : { membrane: false })} />
+                    {(() => {
+                      const pf = prepFloors?.find(f => f.name.trim().toLowerCase() === rm.name.trim().toLowerCase())
+                      if (prepFloors === undefined) return null
+                      if (pf?.membrane === 'heating' && !rm.membrane) return (
+                        <div style={{ fontSize: 11, color: '#0369a1', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 5, padding: '4px 8px', margin: '4px 0', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          Tiling Preparation has an electric-heating membrane for this room.
+                          <button type="button" onClick={() => updateRoom(rm.id, { membrane: true, kit: 'cable' })} style={{ ...tilingSmall, cursor: 'pointer', background: '#fff' }}>Lay the cable in it</button>
+                        </div>
+                      )
+                      if (rm.membrane && pf?.membrane !== 'heating') return <div style={{ fontSize: 11, color: '#b45309', margin: '4px 0' }}>Tiling Preparation has no electric-heating membrane saved for this room: add one there (Floor, decoupling membrane, electric-heating) or untick this.</div>
+                      return null
+                    })()}
+                    {!rm.membrane && <TilingCheck label="Primer to the floor" on={rm.primer} set={b => updateRoom(rm.id, { primer: b })} />}
                   </div>
                 </div>
               )

@@ -50,6 +50,8 @@ export interface TileUfhRoom extends RoomShapeExtras {
   primer: boolean
   /** depth of levelling compound over the mat, mm; 0 = none (tile adhesive alone covers it) */
   coverMm: number
+  /** the cable is laid in an electric-heating (cable-channel) membrane that is priced in Tiling Preparation: loose cable is priced here (a mat does not fit the channels), with no insulation board and no primer (the membrane and the preparation have them) */
+  membrane?: boolean
   situationId: string | null
   /** the drawn area and perimeter (from Take-off) this room was last sized from: it follows them until they change */
   fromPlan?: { areaM2: number; perimeterM: number; /** the name the room was given from the plan: it follows the plan's room name while still that */ name?: string }
@@ -145,13 +147,17 @@ export function calculateTileUfh(input: TileUfhInput): TileUfhResult {
     if (fp.error) throw new Error(`${rn}: ${fp.error}`)
     const heated = heatedAreaM2(room)
     if (!(heated > 0)) { warnings.push(`${rn} has no heated area.`); continue }
-    const kit = UFH_KIT_BY_ID[room.kit] ?? UFH_KITS[0]
+    const inMembrane = room.membrane === true
+    const kit = inMembrane ? UFH_KIT_BY_ID.cable : (UFH_KIT_BY_ID[room.kit] ?? UFH_KITS[0])
+    const insulationKind: UfhInsulation = inMembrane ? 'none' : room.insulation
+    const primerOn = inMembrane ? false : room.primer
+    if (inMembrane && room.kit !== 'cable') warnings.push(`${rn}: a cable-channel membrane takes loose cable, so cable is priced here instead of the ${(UFH_KIT_BY_ID[room.kit] ?? UFH_KITS[0]).short}.`)
     const floorNet = Math.max(0, fp.areaM2 - room.fixedM2)
     const fit = kit.sizes ? fitMats(heated, kit.sizes) : { mats: [] as number[], coveredM2: Math.ceil(heated * 2) / 2, leftM2: 0 }
     const watts = Math.round(fit.coveredM2 * kit.wattsM2)
     if (fit.leftM2 >= 0.5) warnings.push(`${rn}: the mats cover ${n1(fit.coveredM2)}m² of the ${n1(heated)}m² to heat: about ${n1(fit.leftM2)}m² is left unheated. Use cable for the odd corner or accept it.`)
     if (watts > CIRCUIT_WARN_W) warnings.push(`${rn} is ${(watts / 1000).toFixed(1)}kW: it needs its own circuit and the supply checking; over about 3.6kW it needs two circuits.`)
-    if (room.insulation === 'none') warnings.push(`${rn} has no insulation under the mat: on a concrete or screed floor much of the heat goes down and it is slow to warm.`)
+    if (insulationKind === 'none' && !inMembrane) warnings.push(`${rn} has no insulation under the mat: on a concrete or screed floor much of the heat goes down and it is slow to warm.`)
 
     const parts: string[] = []
     const add = (key: string, name: string, category: 'materials' | 'subcontractors', unit: string, unitCost: number, qty: number) => {
@@ -172,12 +178,12 @@ export function calculateTileUfh(input: TileUfhInput): TileUfhResult {
     add('kit', matLabel, 'materials', 'm²', kit.priceM2, fit.coveredM2)
     add('thermostat', THERMOSTAT_INFO[room.thermostat].label.toLowerCase(), 'materials', 'nr', THERMOSTAT_INFO[room.thermostat].price, 1)
     add('sensor', 'conduit, back box and sensor tube', 'materials', 'nr', rate('sensorKit'), 1)
-    if (room.insulation !== 'none') {
-      const ins = INSULATION_INFO[room.insulation]
+    if (insulationKind !== 'none') {
+      const ins = INSULATION_INFO[insulationKind]
       add('insulation', ins.label.toLowerCase(), 'materials', 'm²', ins.priceM2, floorNet * 1.05)
       add('insulation-adh', 'flexible adhesive to bed the insulation board', 'materials', 'bag', rate('insulationAdhesiveBag'), (floorNet * COVERAGE.insulationAdhesiveKgM2 * 1.05) / COVERAGE.bagKg)
     }
-    if (room.primer) add('primer', 'primer to the floor', 'materials', 'L', rate('primerL'), floorNet / COVERAGE.primerM2L)
+    if (primerOn) add('primer', 'primer to the floor', 'materials', 'L', rate('primerL'), floorNet / COVERAGE.primerM2L)
     if (room.coverMm > 0) add('cover', `self-levelling compound over the mat at ${room.coverMm}mm`, 'materials', 'bag', rate('levelBag'), (heated * room.coverMm * COVERAGE.levelKgM2PerMm * 1.05) / COVERAGE.bagKg)
     add('protect', 'floor protection', 'materials', 'item', rate('protectBase'), 1)
     thermostats += 1
@@ -185,17 +191,17 @@ export function calculateTileUfh(input: TileUfhInput): TileUfhResult {
 
     // ── Labour ───────────────────────────────────────────────────────────────────
     task('prep', 'insulation board and primer', [
-      { qty: room.insulation !== 'none' ? floorNet : 0, unit: 'm²', what: 'insulation board', rate: HOURS.insulationM2 }, { qty: room.primer ? floorNet : 0, unit: 'm²', what: 'primer', rate: HOURS.primerM2 },
+      { qty: insulationKind !== 'none' ? floorNet : 0, unit: 'm²', what: 'insulation board', rate: HOURS.insulationM2 }, { qty: primerOn ? floorNet : 0, unit: 'm²', what: 'primer', rate: HOURS.primerM2 },
     ])
     task('chase', 'chase the wall, fix the back box and sensor', [{ qty: 1, unit: 'room', what: '', rate: HOURS.chaseRoom }])
-    task('lay', 'lay the heating mat and test it', [
+    task('lay', inMembrane ? 'lay the heating cable in the membrane and test it' : 'lay the heating mat and test it', [
       { qty: fit.coveredM2, unit: 'm²', what: kit.sizes ? 'mat' : 'cable', rate: kit.sizes ? HOURS.matM2 : HOURS.cableM2 }, { qty: 2, unit: 'test', what: 'resistance (before and after tiling)', rate: HOURS.testRoom },
     ])
     task('cover', 'cover the mat with levelling compound', [{ qty: room.coverMm > 0 ? heated : 0, unit: 'm²', what: 'levelling', rate: HOURS.levelM2 + room.coverMm * HOURS.levelPerMmM2 }])
 
-    parts.push(`${n1(fit.coveredM2)}m² of ${kit.short}${fit.mats.length > 1 ? ` in ${fit.mats.length} mats` : ''} to ${n1(heated)}m² of floor, ${(watts / 1000).toFixed(2)}kW`)
+    parts.push(`${n1(fit.coveredM2)}m² of ${kit.short}${fit.mats.length > 1 ? ` in ${fit.mats.length} mats` : ''}${inMembrane ? ' laid in the electric-heating membrane' : ''} to ${n1(heated)}m² of floor, ${(watts / 1000).toFixed(2)}kW`)
     parts.push(THERMOSTAT_INFO[room.thermostat].label.toLowerCase())
-    if (room.insulation !== 'none') parts.push(`${room.insulation} insulation board under the mat`)
+    if (insulationKind !== 'none') parts.push(`${insulationKind} insulation board under the mat`)
     if (room.coverMm > 0) parts.push(`${room.coverMm}mm of levelling compound over the mat`)
     parts.push(input.electricianIncluded ? 'the electrical connection, test and certificate' : 'the electrical connection by others')
     totalHeatedM2 += fit.coveredM2; totalWatts += watts

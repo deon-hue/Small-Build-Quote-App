@@ -28,7 +28,7 @@ import { BUILT_ASSEMBLY_CANON_IDS, AssemblyIconGlyph, type AssemblySaveResult } 
 import type { ElectricsSavedState } from '@/lib/electrics-units'
 import { MaterialsListButtons } from '@/components/assembly-ui'
 import { SharedWallAreasProvider } from '@/components/TilingShareContext'
-import { sharedWallRoomsFrom } from '@/lib/tiling-share'
+import { sharedWallRoomsFrom, sharedPrepFloorsFrom } from '@/lib/tiling-share'
 import { assemblyLinesToItems, profitPctOf } from '@/lib/assembly-quote-items'
 
 // ── IDs ────────────────────────────────────────────────────────────────────────
@@ -2388,7 +2388,7 @@ export default function QuoteWorkspace({ phases, markup, vatOn = true, isLocked 
   const sharedWallRooms = sharedWallRoomsFrom(phases.map(p => p.calcState))
 
   return (
-    <SharedWallAreasProvider rooms={sharedWallRooms}>
+    <SharedWallAreasProvider rooms={sharedWallRooms} prepFloors={sharedPrepFloorsFrom(phases.map(p => p.calcState))}>
     <div style={{ fontSize: 13 }}>
       {/* Toolbar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>

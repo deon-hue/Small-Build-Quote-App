@@ -29,6 +29,31 @@ export function wallRoomsFromCalcState(snapshot: unknown): SharedWallRoom[] {
   return rooms
 }
 
+/** A room whose floor is covered with a decoupling membrane in Tiling Preparation, and which kind: the Electric Underfloor Heating calculator offers to lay its cable in a 'heating' one. */
+export interface SharedPrepFloor { name: string; membrane: 'plain' | 'heating' }
+
+/** The floors with a decoupling membrane from a saved Tiling Preparation state (a CalcStateSnapshot), or nothing when it is some other calculator's state. */
+export function prepFloorsFromCalcState(snapshot: unknown): SharedPrepFloor[] {
+  if (!isObj(snapshot) || snapshot.id !== 'tile-prep-rooms' || !isObj(snapshot.values)) return []
+  const ns = snapshot.values.AssemblyTilePrepDemo
+  if (!isObj(ns) || !Array.isArray(ns.rooms)) return []
+  const out: SharedPrepFloor[] = []
+  for (const r of ns.rooms) {
+    if (!isObj(r) || !isObj(r.floor)) continue
+    const name = str(r.name, 60)
+    if (!name || r.floor.cover !== 'decoupling') continue
+    out.push({ name, membrane: r.floor.membrane === 'heating' ? 'heating' : 'plain' })
+  }
+  return out
+}
+
+/** Every saved decoupling-membrane floor across a quote's phases or a take-off's items (a room named twice keeps the last). */
+export function sharedPrepFloorsFrom(snapshots: unknown[]): SharedPrepFloor[] {
+  const byName = new Map<string, SharedPrepFloor>()
+  for (const s of snapshots) for (const f of prepFloorsFromCalcState(s)) byName.set(f.name.toLowerCase(), f)
+  return Array.from(byName.values())
+}
+
 /** Every saved Wall Tiling room across a quote's phases or a take-off's items (a room named twice keeps the last). */
 export function sharedWallRoomsFrom(snapshots: unknown[]): SharedWallRoom[] {
   const byName = new Map<string, SharedWallRoom>()

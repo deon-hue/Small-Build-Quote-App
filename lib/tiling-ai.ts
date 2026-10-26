@@ -270,6 +270,21 @@ export function prepSpecWithWallTilingAreas(prepSpec: unknown, wallSpec: unknown
   return { ...prepSpec, rooms }
 }
 
+/**
+ * An Electric Underfloor Heating line whose room has an electric-heating membrane in the Tiling Preparation line of the same scope (same room name, floor "cover": "decoupling" with "membrane": "heating") lays its cable in that
+ * membrane: the room gets "membrane": true (loose cable, no insulation board, no primer). Anything else is left as it was.
+ */
+export function ufhSpecWithPrepMembrane(ufhSpec: unknown, prepSpec: unknown): unknown {
+  if (!isObj(ufhSpec) || !isObj(prepSpec) || !Array.isArray(ufhSpec.rooms) || !Array.isArray(prepSpec.rooms)) return ufhSpec
+  const heating = new Set<string>()
+  for (const p of prepSpec.rooms) {
+    if (!isObj(p) || !isObj(p.floor)) continue
+    if (p.floor.cover === 'decoupling' && p.floor.membrane === 'heating') heating.add(str(p.name, 60).toLowerCase())
+  }
+  if (heating.size === 0) return ufhSpec
+  return { ...ufhSpec, rooms: ufhSpec.rooms.map(raw => (isObj(raw) && heating.has(str(raw.name, 60).toLowerCase()) ? { ...raw, membrane: true } : raw)) }
+}
+
 // ── Electric underfloor heating, by room ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
 export interface AiTileUfh { rooms: TileUfhRoom[]; jobSituationId: string; electricianIncluded: boolean; typicalRooms: string[]; assumed: string[] }
@@ -299,6 +314,8 @@ export function tileUfhFromScope(spec: unknown): AiTileUfh | null {
     if (applyRoomShape(room, raw, name, shapeNotes)) dropTypical(typicalRooms, name)
     room.thermostat = oneOf(raw.thermostat, Object.keys(THERMOSTAT_INFO) as UfhThermostat[]) ?? 'digital'
     room.coverMm = whole(raw.coverMm, 0, 20) ?? 0
+    // the cable laid in an electric-heating membrane (priced in Tiling Preparation): loose cable, no insulation board and no primer
+    if (raw.membrane === true) { room.membrane = true; room.kit = 'cable'; shapeNotes.push(`${name}: loose cable priced, laid in the electric-heating membrane (the membrane itself is in the Tiling Preparation line)`) }
     rooms.push(room)
   }
   if (rooms.length === 0) return null
@@ -321,6 +338,6 @@ export function tilingPromptGuide(): string {
   - "Floor Tiling (by room)": "calc": {"situation": "empty", "rooms": [{"name": "Kitchen", "kind": "<room kind>", "lengthM": <m>, "widthM": <m>, "areaM2": <m², instead of length and width>, "notTiledM2": <m² under units>, "tile": "<tile>", "layout": "${layouts}", "clientSupplies": true, "tilePriceM2": <£/m²>, "grout": "${grouts}", "sealed": true, "skirtingLm": <m>, "movementJointLm": <m>}]}. One entry per room whose FLOOR is tiled. Tiles: ${tiles}. "clientSupplies" true only if the scope says the client supplies the tiles. "tilePriceM2" only if the scope gives a tile price or allowance. "sealed" for natural stone or unglazed tile. Use this line for floor tiling instead of the general floor tile task lines.
   - "Wall Tiling (by room)": "calc": {"situation": "empty", "rooms": [{"name": "Bathroom", "kind": "<room kind>", "areas": [{"name": "Bath surround", "lengthM": <m>, "heightM": <m>, "areaM2": <m², instead of length and height>, "lessM2": <m² window or niche>}], "fullHeight": true, "heightM": <room height>, "lengthM": <room length>, "widthM": <room width>, "doors": <nr>, "windows": <nr>, "tile": "<tile>", "layout": "${layouts}", "clientSupplies": true, "tilePriceM2": <£/m²>, "grout": "${grouts}", "niches": <nr>, "externalCornerLm": <m>, "sealed": true}]}. One entry per room with tiled WALLS. Give "areas" for the parts the scope tiles (a bath surround, shower walls, a splashback) with their sizes if stated; "fullHeight": true if the scope says all the walls are tiled floor to ceiling. If the scope gives no areas, leave "areas" out and the usual tiled areas for that kind of room are used. Tiles: ${tiles}. Use this line for wall tiling instead of the general wall tile task lines.
   - "Tiling Preparation (by room)": "calc": {"situation": "empty", "tankSystem": "liquid"|"sheet", "rooms": [{"name": "Shower room", "kind": "<room kind>", "lengthM": <m>, "widthM": <m>, "areaM2": <floor m²>, "heightM": <m>, "floor": {"primer": true, "levelMm": <mm of self-levelling compound>, "cover": "${covers}", "board": "<floor board>", "base": "screed"|"timber"|"chipboard", "membrane": "plain"|"heating", "tanked": true}, "walls": [{"name": "Shower walls", "lengthM": <m>, "heightM": <m>, "areaM2": <m²>, "board": "<board>"|"none", "base": "studs"|"masonry", "tanked": true}], "usualWetAreas": true, "cuffs": <floor waste nr>, "ceiling": "<ceiling>", "ceilingBoard": "<board>"}]}. One entry per room with preparation work (tile backer board, waterproofing or tanking, levelling, primer, decoupling mat, moisture-resistant or backer ceiling board). Boards: ${boards}. For "cover": "decoupling" give "base" (what the floor is: "screed" for a screed or concrete floor, "timber" for plywood, OSB or boarded timber, "chipboard" for chipboard flooring) and "membrane": "heating" ONLY when the scope says the membrane is for electric heating cable (a studded or cable-channel membrane, such as Ditra-Heat); otherwise leave "membrane" out (a plain membrane, also right under warm-water underfloor heating). Ceilings: ${ceilings}. "usualWetAreas": true when the scope says to board and tank the wet areas of a bathroom or shower room without sizing them (if the Wall Tiling line has tiled areas for the same room, they are used for it). "tanked" true only where the scope says to waterproof it. Use this line for tiling preparation instead of the general surface preparation task lines.
-  - "Electric Underfloor Heating": "calc": {"situation": "empty", "electricianByOthers": true, "rooms": [{"name": "Bathroom", "kind": "<room kind>", "lengthM": <m>, "widthM": <m>, "heatedAreaM2": <m²>, "fixedM2": <m² under a bath or units>, "kit": "<kit>", "thermostat": "digital"|"wifi", "insulation": "none"|"6mm"|"10mm"|"20mm", "coverMm": <mm of levelling over the mat>}]}. One entry per room with ELECTRIC underfloor heating (mats or cable under tiles). If the scope uses a heating (cable-channel) membrane for it, that membrane belongs in the Tiling Preparation line (floor "cover": "decoupling", "membrane": "heating"); this line is then the cable. Kits: ${kits}. "electricianByOthers": true only if the scope says someone else (the client's electrician) connects it. WATER underfloor heating is NOT this line: it is the Underfloor Heating line under Plumbing & Heating.
+  - "Electric Underfloor Heating": "calc": {"situation": "empty", "electricianByOthers": true, "rooms": [{"name": "Bathroom", "kind": "<room kind>", "lengthM": <m>, "widthM": <m>, "heatedAreaM2": <m²>, "fixedM2": <m² under a bath or units>, "kit": "<kit>", "thermostat": "digital"|"wifi", "insulation": "none"|"6mm"|"10mm"|"20mm", "coverMm": <mm of levelling over the mat>, "membrane": true}]}. One entry per room with ELECTRIC underfloor heating (mats or cable under tiles). If the scope uses a heating (cable-channel) membrane for it, that membrane belongs in the Tiling Preparation line (floor "cover": "decoupling", "membrane": "heating"); this line is then the cable: give "membrane": true on that room here too (loose cable, no insulation board). Kits: ${kits}. "electricianByOthers": true only if the scope says someone else (the client's electrician) connects it. WATER underfloor heating is NOT this line: it is the Underfloor Heating line under Plumbing & Heating.
   - Tiles themselves are priced at a sample allowance per m² in the floor and wall lines unless the scope gives a price or says the client supplies them.`
 }
