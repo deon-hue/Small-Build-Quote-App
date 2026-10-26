@@ -54,7 +54,7 @@ export interface TileFloorRoom extends RoomShapeExtras {
 export function newTileFloorRoom(id: string, name: string, kindId: string, k: { lengthM: number; widthM: number; doors: number; fixedM2: number }, start: { tileId: TileSizeId; layoutId: TileLayoutId }): TileFloorRoom {
   return {
     id, name, kindId, lengthM: k.lengthM, widthM: k.widthM, notTiledM2: k.fixedM2, areaOverrideM2: null, doors: k.doors,
-    tileId: start.tileId, layoutId: start.layoutId, clientSupplies: false, tilePriceM2: null, jointMm: null,
+    tileId: start.tileId, layoutId: start.layoutId, clientSupplies: true, tilePriceM2: null, jointMm: null,
     adhesive: 'flexible', groutId: 'cement', trimLm: null, skirtingLm: 0, movementJointLm: 0, sealed: false, situationId: null, protect: true,
   }
 }

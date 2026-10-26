@@ -45,7 +45,7 @@ export interface TileWallRoom {
 
 export function newTileWallRoom(id: string, name: string, kindId: string, heightM: number, zones: TilingZone[], start: { tileId: TileSizeId; layoutId: TileLayoutId }): TileWallRoom {
   return {
-    id, name, kindId, heightM, zones, tileId: start.tileId, layoutId: start.layoutId, clientSupplies: false, tilePriceM2: null, jointMm: null,
+    id, name, kindId, heightM, zones, tileId: start.tileId, layoutId: start.layoutId, clientSupplies: true, tilePriceM2: null, jointMm: null,
     groutId: 'cement', trimLm: null, externalCornerLm: 0, niches: 0, siliconeLm: null, sealed: false, situationId: null, protect: true,
   }
 }
