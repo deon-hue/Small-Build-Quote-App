@@ -1466,6 +1466,18 @@ export default function TakeoffPage() {
       item.length = undefined; item.area = a; item.unit = 'm²'; item.qty = +a.toFixed(3)
     }
 
+    // The same for the tiling calculators that are priced from a FLOOR: an outline of three or more points drawn with the Line tool for Floor Tiling (by room), Electric Underfloor Heating, or Tiling Preparation chosen as the floor or the
+    // whole room is an AREA (a polygon), so the tag shows its m² and the calculator is sized from it, instead of showing the line's length while the calculator measures a closed shape. (Wall Tiling and Tiling Preparation for the walls keep a line: it is a wall's length.)
+    if (item.phase === 'Tiling & Finishes' && el.type === 'line' && el.points.length >= 3 && item.taskSubphaseId) {
+      const canon = boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id
+      if (canon === 'tile-floor-rooms' || canon === 'tile-ufh-electric' || (canon === 'tile-prep-rooms' && drawPrepScope !== 'walls')) {
+        el.type = 'polygon'
+        const a = polygonArea(el.points, project.calibration.mpp)
+        item.length = undefined; item.area = a; item.unit = 'm²'; item.qty = +a.toFixed(3)
+        if (canon === 'tile-prep-rooms') item.prepScope = drawPrepScope
+      }
+    }
+
     // A line drawn in Plumbing & Heating is a pipe run: it starts as the Pipework Runs calculator (its length is the first run), unless another sub-phase was picked first
     if (item.phase === 'Plumbing & Heating' && el.type === 'line' && !item.taskSubphaseId && !taskSubphaseId) {
       const plumbPhase = boPhases.find(p => p.name === 'Plumbing & Heating')
