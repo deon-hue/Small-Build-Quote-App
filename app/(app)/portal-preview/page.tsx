@@ -100,7 +100,7 @@ function PortalPreviewInner() {
   const [variations, setVariations] = useState<PreviewVariation[]>([])
   const [payments, setPayments] = useState<PreviewPayment[]>([])
   const [settings, setSettings] = useState<PreviewSettings | null>(null)
-  const [clientSettings, setClientSettings] = useState<{ quoteView?: 'full' | 'phases' | 'total_only'; showScope?: boolean; showDashboardProgress?: boolean; showQuotesTab?: boolean; showVariationsTab?: boolean; showInvoicesTab?: boolean; showSelectionsTab?: boolean }>({})
+  const [clientSettings, setClientSettings] = useState<{ quoteView?: 'full' | 'phase_totals' | 'phases' | 'total_only'; showScope?: boolean; showDashboardProgress?: boolean; showQuotesTab?: boolean; showVariationsTab?: boolean; showInvoicesTab?: boolean; showSelectionsTab?: boolean }>({})
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null)
 

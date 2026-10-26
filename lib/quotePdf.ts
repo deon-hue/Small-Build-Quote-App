@@ -113,7 +113,7 @@ export async function buildQuotePdf(
   quote: Quote,
   settings: Settings,
   opts: {
-    quoteView?: 'full' | 'phases' | 'total_only'
+    quoteView?: 'full' | 'phase_totals' | 'phases' | 'total_only'
     showScope?: boolean
     showPaymentTerms?: boolean
   } = {},
@@ -126,6 +126,7 @@ export async function buildQuotePdf(
   // 'total_only' skips the phase/item table entirely, matching the same three levels used by the portal
   // and HTML-email views.
   const showItemPrices   = quoteView === 'full'
+  const showPhasePrices  = quoteView === 'full' || quoteView === 'phase_totals'   // 'phase_totals': each phase with its total, no line prices
   const showPhaseSection = quoteView !== 'total_only'
   const co = settings
   const qMkp = quote.markup || 0
@@ -329,7 +330,7 @@ export async function buildQuotePdf(
     drawText(page, 'Description', COL.desc + 4,  y - 10, 7.5, fontBold, C.white)
     drawText(page, 'Qty',         COL.qty + 4,   y - 10, 7.5, fontBold, C.white)
     drawText(page, 'Unit',        COL.unit + 2,  y - 10, 7.5, fontBold, C.white)
-    if (showItemPrices) {
+    if (showPhasePrices) {
       drawText(page, 'Sell (ex-VAT)', COL.amt + 2, y - 10, 7.5, fontBold, C.white)
       if (qVat) drawText(page, 'VAT 20%', COL.vat + 2, y - 10, 7.5, fontBold, C.white)
     }
@@ -344,8 +345,8 @@ export async function buildQuotePdf(
 
       ensureSpace(TABLE_ROW_H + 2)
       drawRect(page, MARGIN, y - TABLE_ROW_H, CONTENT_W, TABLE_ROW_H, C.lightBlue)
-      drawText(page, safe(phaseLabel), COL.desc + 4, y - 10, 7.5, fontBold, C.charcoal, showItemPrices ? COL.descW - 120 : COL.descW - 8)
-      if (showItemPrices) {
+      drawText(page, safe(phaseLabel), COL.desc + 4, y - 10, 7.5, fontBold, C.charcoal, showPhasePrices ? COL.descW - 120 : COL.descW - 8)
+      if (showPhasePrices) {
         const ptLabel = 'Phase total'
         const ptLabelW = fontBold.widthOfTextAtSize(ptLabel, 6.5)
         drawText(page, ptLabel, COL.amt - ptLabelW - 6, y - 10, 6.5, fontBold, C.charcoal)

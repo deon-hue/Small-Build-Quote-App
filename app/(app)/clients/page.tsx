@@ -1248,6 +1248,7 @@ function ClientsPageInner() {
                     onChange={e => setFormPortalSettings(s => ({ ...s, quoteView: e.target.value as ClientPortalSettings['quoteView'] }))}
                   >
                     <option value="full">Full — all phases with costs</option>
+                    <option value="phase_totals">Phase totals — each phase with its total, no line prices</option>
                     <option value="phases">Phases only — list of phases, no amounts</option>
                     <option value="total_only">Total only — grand total, no breakdown</option>
                   </select>

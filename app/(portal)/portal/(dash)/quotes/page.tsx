@@ -23,7 +23,7 @@ const STATUS_COLOR: Record<string, string> = {
 export default function PortalQuotesPage() {
   const supabase = createClient()
   const { quotes, settings, clientSettings, reload, loading, error } = usePortal()
-  const qv = clientSettings.quoteView  // 'full' | 'phases' | 'total_only'
+  const qv = clientSettings.quoteView  // 'full' | 'phase_totals' | 'phases' | 'total_only'
 
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null)
   const [approvingQuote, setApprovingQuote] = useState<Quote | null>(null)

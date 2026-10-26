@@ -397,8 +397,8 @@ export type PortalStatus = 'no_email' | 'not_invited' | 'invited' | 'active'
  * in emailed PDFs, and in HTML quote views.
  */
 export interface ClientPortalSettings {
-  /** How much quote detail the client sees — in the portal, HTML email, and PDF alike */
-  quoteView: 'full' | 'phases' | 'total_only'
+  /** How much quote detail the client sees — in the portal, HTML email, and PDF alike: full (every price), phase_totals (each phase with its total, no line prices), phases (the phases and items with no phase or line prices) or total_only */
+  quoteView: 'full' | 'phase_totals' | 'phases' | 'total_only'
   /** Show the Scope of Works section in PDFs and HTML quotes */
   showScope: boolean
   /** Show the Payment Terms & Conditions section in PDFs and HTML quotes */

@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json() as {
       quote: Quote
       settings: Settings
-      quoteView?: 'full' | 'phases' | 'total_only'
+      quoteView?: 'full' | 'phase_totals' | 'phases' | 'total_only'
       showScope?: boolean
       showPaymentTerms?: boolean
     }

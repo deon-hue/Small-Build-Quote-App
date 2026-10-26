@@ -21,8 +21,8 @@ interface Props {
   onApproveClick?: () => void
   canApprove?: boolean
   isPreview?: boolean
-  quoteView?: 'full' | 'phases' | 'total_only'
-  clientSettings?: { quoteView?: 'full' | 'phases' | 'total_only'; showScope?: boolean }
+  quoteView?: 'full' | 'phase_totals' | 'phases' | 'total_only'
+  clientSettings?: { quoteView?: 'full' | 'phase_totals' | 'phases' | 'total_only'; showScope?: boolean }
 }
 
 const escHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -57,7 +57,7 @@ export default function PortalQuoteDetailsModal({
   const clientQuoteView = clientSettings?.quoteView || 'full'
   const clientCanSeeScope = clientSettings?.showScope !== false
   const clientCanSeeCosts = clientQuoteView === 'full'
-  const clientCanSeePhases = clientQuoteView === 'full' || clientQuoteView === 'phases'
+  const clientCanSeePhases = clientQuoteView !== 'total_only'
 
   const mainModal = useDraggableModal()
   const printOptionsModal = useDraggableModal()
@@ -380,8 +380,8 @@ export default function PortalQuoteDetailsModal({
                       {pi + 1}. {phase.phase}
                       {!isPreview && <AskAboutButton label={phase.phase} onAsk={ask} />}
                     </div>
-                    {/* Phase total — 'full' only: 'phases' is "list of phases, no amounts" (the totals at the foot are shown) */}
-                    {quoteView === 'full' && (
+                    {/* Phase total — 'full' and 'phase_totals' (each phase with its total); 'phases' is "list of phases, no amounts" (the totals at the foot are shown) */}
+                    {(quoteView === 'full' || quoteView === 'phase_totals') && (
                       <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 13, fontWeight: 700, color: 'var(--moss)' }}>
                         {fmt(calcPhaseSell(phase, quote.markup))}
                       </div>
@@ -405,8 +405,8 @@ export default function PortalQuoteDetailsModal({
                     </div>
                   )}
 
-                  {/* Line items — shown for 'full' and 'phases' quoteView; 'phases' hides the price */}
-                  {(quoteView === 'full' || quoteView === 'phases') && clientRows(phase.items.filter(item => calcItemSell(item, phaseMarkup(phase, quote.markup)) > 0), item => calcItemSell(item, phaseMarkup(phase, quote.markup))).map(({ item, sell, notes }, ii) => {
+                  {/* Line items — shown for every view but 'total_only'; only 'full' shows their prices */}
+                  {(quoteView as string) !== 'total_only' && clientRows(phase.items.filter(item => calcItemSell(item, phaseMarkup(phase, quote.markup)) > 0), item => calcItemSell(item, phaseMarkup(phase, quote.markup))).map(({ item, sell, notes }, ii) => {
                     // Backfill description if missing
                     const itemTypeLabels: Record<string, string> = {
                       labour: 'Labour', materials: 'Materials', plant: 'Plant Work',

@@ -28,7 +28,7 @@ function companyHeaderLines(co: Settings): string {
 export interface HtmlOpts {
   showScope?: boolean
   showPaymentTerms?: boolean
-  quoteView?: 'full' | 'phases' | 'total_only'
+  quoteView?: 'full' | 'phase_totals' | 'phases' | 'total_only'
   /** Open every phase's "What's included" text so it prints in full. Off by default: a printed page can't be
    * clicked open, so the toggle stays closed and the phase shows only its short description. */
   expandDescriptions?: boolean
@@ -262,9 +262,9 @@ export function buildHtmlClientView(q: Quote, settings: Settings, opts: HtmlOpts
          </div>`
       : `<div style="width:52px;height:52px;border-radius:6px;background:${color}18;border:1px solid ${color}44;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;margin-right:14px">${emoji}</div>`
 
-    // 'phases' view ("Phases only — list of phases, no amounts"): the phase names, their descriptions and the item list, with NO phase price and no item prices; only the totals at the foot of the quote
+    // 'phase_totals': each phase with its total and its items, no line prices. 'phases' view ("Phases only — list of phases, no amounts"): the phase names, their descriptions and the item list, with NO phase price and no item prices; only the totals at the foot of the quote
     // are shown. 'full' shows every price. (It used to print each phase's price in 'phases' view, against what the setting says.)
-    const priceHtml = quoteView === 'full'
+    const priceHtml = (quoteView === 'full' || quoteView === 'phase_totals')
       ? `<div style="text-align:right;flex-shrink:0">
            <div style="font-weight:700;font-size:14px;color:#2b2f33;font-family:'DM Mono',monospace">£${sell.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>
            ${qVat ? `<div style="font-size:11px;color:#4a90a4;font-family:'DM Mono',monospace">+£${vatAmt.toLocaleString('en-GB', { minimumFractionDigits: 2 })} VAT</div>` : ''}
@@ -287,7 +287,7 @@ export function buildHtmlClientView(q: Quote, settings: Settings, opts: HtmlOpts
     // feed calcPhaseSell(), so all three need a visible row or the list
     // undercounts the phase total shown above it.
     type LineEntry = { desc: string; qty?: number; unit?: string; sell: number }
-    const visibleItems: LineEntry[] = (quoteView === 'full' || quoteView === 'phases')
+    const visibleItems: LineEntry[] = (quoteView as string) !== 'total_only'
       ? [
           ...clientRows(p.items.filter(i => calcItemSell(i, phaseMarkup(p, qMkp)) > 0), i => calcItemSell(i, phaseMarkup(p, qMkp)))
             .map(c => ({ desc: getItemDesc(c.item), qty: c.item.qty, unit: c.item.unit, sell: c.sell })),

@@ -40,7 +40,7 @@ export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
   // Defaults to this client's own "Quote Display" setting (Portal & Quote
   // Settings) — the same one that already governs the portal and HTML email —
   // but can be overridden per-send.
-  const [pdfView, setPdfView]     = useState<'full' | 'phases' | 'total_only'>(clientSettings.quoteView)
+  const [pdfView, setPdfView]     = useState<'full' | 'phase_totals' | 'phases' | 'total_only'>(clientSettings.quoteView)
   const [busy, setBusy]           = useState<'pdf' | 'sending' | null>(null)
   const [sent, setSent]           = useState(false)
   const [error, setError]         = useState('')
@@ -203,7 +203,7 @@ export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
                   PDF Detail Level
                 </label>
                 <div style={{ display: 'flex', gap: 0, borderRadius: 6, overflow: 'hidden', border: '1.5px solid var(--border)' }}>
-                  {(['full', 'phases', 'total_only'] as const).map(v => (
+                  {(['full', 'phase_totals', 'phases', 'total_only'] as const).map(v => (
                     <button
                       key={v}
                       onClick={() => setPdfView(v)}
@@ -215,13 +215,15 @@ export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
                         fontFamily: 'inherit', transition: 'all 0.15s',
                       }}
                     >
-                      {v === 'full' ? '📊 Full' : v === 'phases' ? '📋 Phases only' : '💷 Total only'}
+                      {v === 'full' ? '📊 Full' : v === 'phase_totals' ? '🧮 Phase totals' : v === 'phases' ? '📋 Phases only' : '💷 Total only'}
                     </button>
                   ))}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6, lineHeight: 1.4 }}>
                   {pdfView === 'full'
                     ? '✓ Shows every phase total and individual line item cost.'
+                    : pdfView === 'phase_totals'
+                    ? '✓ Shows each phase with its total and its items — no line prices.'
                     : pdfView === 'phases'
                     ? '✓ Shows the phases and their items — no phase or item prices (the total is at the foot).'
                     : '✓ Shows the grand total only — no phase or item breakdown.'}
