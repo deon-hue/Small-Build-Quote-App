@@ -26,11 +26,12 @@ export const BRICK_THICKNESS: Record<BrickThickness, { label: string; mm: number
   'two':      { label: 'Two bricks (440mm, 18 inch)', mm: 440, skins: 4 },
 }
 
-export type BrickBond = 'english' | 'flemish' | 'english-garden'
+export type BrickBond = 'english' | 'flemish' | 'english-garden' | 'unstated'
 export const BRICK_BOND_LABEL: Record<BrickBond, string> = {
   'english': 'English bond',
   'flemish': 'Flemish bond',
   'english-garden': 'English garden wall bond',
+  'unstated': 'Not stated (left out of the wording)',
 }
 
 export type FacingBrick = 'stock-new' | 'stock-reclaimed' | 'machine' | 'engineering'

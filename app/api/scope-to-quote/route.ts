@@ -16,6 +16,7 @@ import { drainagePromptGuide } from '@/lib/drainage-ai'
 import { demolitionPromptGuide } from '@/lib/demolition-ai'
 import { plasterPromptGuide } from '@/lib/plaster-ai'
 import { tilingPromptGuide } from '@/lib/tiling-ai'
+import { solidBrickPromptGuide } from '@/lib/solid-brick-ai'
 
 export const maxDuration = 300
 
@@ -26,6 +27,7 @@ const CALC_OBJECT_ASK_IDS = new Set([
   'demo-wall-removal-calc', 'demo-strip-out-calc', 'demo-waste-skips-calc', 'demo-external-calc',
   'plaster-rooms', 'plaster-render', 'plaster-insul-wall',
   'tile-floor-rooms', 'tile-wall-rooms', 'tile-prep-rooms', 'tile-ufh-electric',
+  'ew-solid-brick-victorian',
 ])
 import { ESTIMATOR_PHASE_DEFAULTS } from '@/lib/estimatorDefaults'
 
@@ -318,6 +320,7 @@ Rules:
   - ${demolitionPromptGuide()}
   - ${plasterPromptGuide()}
   - ${tilingPromptGuide()}
+  - ${solidBrickPromptGuide()}
 - "extraTasks" should ONLY be used for work genuinely outside the standard library; include all fields:
   { "name": "...", "description": "...", "measurementType": "quantity|area|linear|volume", "unit": "...", "labourRate": 0, "materialsRate": 0, "plantRate": 0, "subRate": 0, "otherRate": 0, "wastePercent": 0 }
 - Select enough tasks to fully represent each phase — don't under-select

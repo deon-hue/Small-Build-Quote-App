@@ -8,7 +8,7 @@ const THICKNESS_PHRASE: Record<BrickThickness, string> = {
   'one-half': 'one and a half bricks (about 330mm, 13 inch)',
   'two': 'two bricks (440mm, 18 inch)',
 }
-const BOND_PHRASE: Record<BrickBond, string> = { 'english': 'English bond', 'flemish': 'Flemish bond', 'english-garden': 'English garden wall bond' }
+const BOND_PHRASE: Record<BrickBond, string> = { 'english': 'English bond', 'flemish': 'Flemish bond', 'english-garden': 'English garden wall bond', 'unstated': '' }
 const FACING_PHRASE: Record<FacingBrick, string> = {
   'stock-new': 'new London stock style facing bricks',
   'stock-reclaimed': 'cleaned reclaimed stock bricks',
@@ -43,13 +43,13 @@ const m = (mm: number) => (mm / 1000).toFixed(2)
 /** One line for the quote. */
 export function describeSolidBrickShort(i: SolidBrickDescriptionInput): string {
   const bricks = i.backing === 'all-facing' ? FACING_PHRASE[i.facing] : `${FACING_PHRASE[i.facing]} with common bricks behind`
-  return `${m(i.lengthMm)}m long × ${m(i.heightMm)}m high solid brick wall, ${THICKNESS_PHRASE[i.thickness]} thick, ${BOND_PHRASE[i.bond]}, ${bricks}, in ${MORTAR_PHRASE[i.mortar]}.`
+  return `${m(i.lengthMm)}m long × ${m(i.heightMm)}m high solid brick wall, ${THICKNESS_PHRASE[i.thickness]} thick, ${i.bond === 'unstated' ? '' : BOND_PHRASE[i.bond] + ', '}${bricks}, in ${MORTAR_PHRASE[i.mortar]}.`
 }
 
 /** The full text, a paragraph a part, for the "What's included" toggle. */
 export function describeSolidBrick(i: SolidBrickDescriptionInput): string {
   const parts: string[] = []
-  parts.push(`Solid brick wall, ${m(i.lengthMm)}m long × ${m(i.heightMm)}m high, ${THICKNESS_PHRASE[i.thickness]} thick with no cavity, built in ${BOND_PHRASE[i.bond]}.`)
+  parts.push(`Solid brick wall, ${m(i.lengthMm)}m long × ${m(i.heightMm)}m high, ${THICKNESS_PHRASE[i.thickness]} thick with no cavity${i.bond === 'unstated' ? '' : ', built in ' + BOND_PHRASE[i.bond]}.`)
   parts.push(i.backing === 'all-facing'
     ? `Bricks: ${FACING_PHRASE[i.facing]} throughout the thickness of the wall.`
     : `Bricks: ${FACING_PHRASE[i.facing]} to the outer face with common bricks built into the thickness behind.`)

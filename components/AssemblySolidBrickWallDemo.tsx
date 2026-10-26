@@ -370,7 +370,7 @@ function BrickSectionSvg({ thicknessMm, skins, backing, bond }: { thicknessMm: n
     <div style={{ marginTop: 8 }}>
       <svg viewBox={`0 0 ${vbW} ${vbH}`} style={{ width: '100%', height: 96, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6 }}>
         <text x={x0} y={14} fontSize={9} fill="#94a3b8">Inside</text>
-        <text x={x0} y={vbH - 8} fontSize={9} fill="#94a3b8">Outside — {BRICK_BOND_LABEL[bond].toLowerCase()}, seen from above</text>
+        <text x={x0} y={vbH - 8} fontSize={9} fill="#94a3b8">Outside{bond === 'unstated' ? '' : ' — ' + BRICK_BOND_LABEL[bond].toLowerCase()}, seen from above</text>
         {Array.from({ length: skins }).map((_, i) => {
           const outer = i === skins - 1
           const facingSkin = outer || backing === 'all-facing'
