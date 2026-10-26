@@ -1088,6 +1088,27 @@ export default function TakeoffPage() {
   const [canvasImgSize, setCanvasImgSize] = useState<{ w: number; h: number } | null>(null)
   const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 })
   const hasPannedRef = useRef(false)
+  // ── Touch (a tablet): a finger works as the mouse does, two fingers pan and pinch to zoom ────────────────────────────────────
+  // 'coarse' is the hardware signal for a touchscreen as the main pointer (never the window size), so a mouse or a trackpad is unchanged. A single finger is turned into the same mouse events the drawing code
+  // already handles (so drawing, picking, dragging a wall or a corner and panning all behave as with a mouse); a second finger cancels that and pans and zooms instead; a double tap is a double click.
+  const [coarse, setCoarse] = useState(false)
+  const [topOffset, setTopOffset] = useState(0)
+  useEffect(() => {
+    const mq = window.matchMedia('(pointer: coarse)')
+    const measure = () => { setCoarse(mq.matches); const tb = document.querySelector('.topbar'); setTopOffset(tb ? Math.round(tb.getBoundingClientRect().bottom) : 0) }
+    measure()
+    mq.addEventListener('change', measure)
+    window.addEventListener('resize', measure)
+    window.addEventListener('orientationchange', measure)
+    return () => { mq.removeEventListener('change', measure); window.removeEventListener('resize', measure); window.removeEventListener('orientationchange', measure) }
+  }, [])
+  const touchPtrs = useRef(new Map<number, { x: number; y: number }>())
+  const touchGesture = useRef<{ cx: number; cy: number; dist: number } | null>(null)
+  const touchTap = useRef<{ id: number; target: EventTarget; sx: number; sy: number; x: number; y: number; t: number; moved: boolean } | null>(null)
+  const lastTap = useRef<{ t: number; x: number; y: number } | null>(null)
+  const viewRef = useRef({ zoom: 1, pan: { x: 0, y: 0 } })
+  viewRef.current = { zoom, pan: panOffset }
+  const snapPx = coarse ? 22 : 10   // how close a point has to be to snap: a fingertip is wider than a mouse pointer
 
   // A take-off from before sheets keeps its one plan inside the project: move it into Sheet 1. The picture goes to the device's own database (off the 5MB localStorage, where one big plan could stop
   // the whole take-off from saving), and the project keeps only the sheet's name and scale.
@@ -1759,7 +1780,7 @@ export default function TakeoffPage() {
           const segs2 = snapOn ? [...segmentsFor(wallsOnSheet().filter(el => el.id !== id && !joined.has(el.id) && !(inside && el.phase === 'External Walls') && !(parts2 && el.phase === 'Internal Walls & Partitions'))), ...(inside ? inside.segments : []), ...(parts2 ? parts2.segments : [])] : undefined
           const below = snapOn && dragged.phase === 'External Walls' ? lowerOuterWalls() : []
           const gp = snapOn ? guideSnapParts() : null
-          const r = snapPoint(want, { anchors: [...(below.length ? [...anchors2, ...anchorsFor(below)] : anchors2), ...(gp ? gp.anchors : [])], radius: 10 / zoom, snap: snapOn, ortho: false, grid: gridSnap ? { stepPx: gridMinorPx() } : undefined, segments: [...(below.length ? [...(segs2 ?? []), ...segmentsFor(below)] : (segs2 ?? [])), ...(gp ? gp.segments : [])] })
+          const r = snapPoint(want, { anchors: [...(below.length ? [...anchors2, ...anchorsFor(below)] : anchors2), ...(gp ? gp.anchors : [])], radius: snapPx / zoom, snap: snapOn, ortho: false, grid: gridSnap ? { stepPx: gridMinorPx() } : undefined, segments: [...(below.length ? [...(segs2 ?? []), ...segmentsFor(below)] : (segs2 ?? [])), ...(gp ? gp.segments : [])] })
           dx += r.pt.x - want.x; dy += r.pt.y - want.y
           setSnapInfo(r.kind === 'none' ? null : r)
         }
@@ -1842,6 +1863,71 @@ export default function TakeoffPage() {
     }
     if (isPanning) setIsPanning(false)
   }
+
+  /** A native mouse event sent to the drawing code at a screen point (React picks it up from the root, so every existing mouse handler runs as it does for a real mouse). */
+  function fireMouse(type: 'mousemove' | 'mousedown' | 'mouseup' | 'click' | 'dblclick', target: EventTarget | null, x: number, y: number) {
+    target?.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, button: 0, buttons: type === 'mousedown' || type === 'mousemove' ? 1 : 0, shiftKey: shiftHeld }))
+  }
+  function touchDown(e: React.PointerEvent<SVGSVGElement>) {
+    if (e.pointerType !== 'touch') return
+    e.preventDefault()   // no scrolling, no browser zoom, and no second set of emulated mouse events
+    try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* not capturable */ }
+    touchPtrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (touchPtrs.current.size === 1) {
+      touchTap.current = { id: e.pointerId, target: e.target, sx: e.clientX, sy: e.clientY, x: e.clientX, y: e.clientY, t: Date.now(), moved: false }
+      fireMouse('mousemove', svgRef.current, e.clientX, e.clientY)
+      fireMouse('mousedown', e.target, e.clientX, e.clientY)
+      return
+    }
+    // a second finger: let go of the first finger's press without clicking, and start a pan and pinch from the two
+    const tap = touchTap.current
+    if (tap) { hasPannedRef.current = true; fireMouse('mouseup', svgRef.current, tap.x, tap.y); touchTap.current = null }
+    const [a, b] = Array.from(touchPtrs.current.values())
+    touchGesture.current = { cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, dist: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)) }
+  }
+  function touchMove(e: React.PointerEvent<SVGSVGElement>) {
+    if (e.pointerType !== 'touch' || !touchPtrs.current.has(e.pointerId)) return
+    e.preventDefault()
+    touchPtrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    const g = touchGesture.current
+    if (g && touchPtrs.current.size >= 2 && svgRef.current) {
+      const [a, b] = Array.from(touchPtrs.current.values())
+      const c = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, d = Math.max(1, Math.hypot(a.x - b.x, a.y - b.y))
+      const rect = svgRef.current.getBoundingClientRect()
+      const v = viewRef.current
+      const nz = Math.max(0.05, Math.min(20, v.zoom * (d / g.dist)))
+      // the plan point that was under the middle of the two fingers stays under it
+      const wx = (g.cx - rect.left - v.pan.x) / v.zoom, wy = (g.cy - rect.top - v.pan.y) / v.zoom
+      const pan = { x: c.x - rect.left - wx * nz, y: c.y - rect.top - wy * nz }
+      viewRef.current = { zoom: nz, pan }
+      setZoom(nz); setPanOffset(pan)
+      touchGesture.current = { cx: c.x, cy: c.y, dist: d }
+      hasPannedRef.current = true
+      return
+    }
+    const tap = touchTap.current
+    if (!tap || tap.id !== e.pointerId) return
+    tap.x = e.clientX; tap.y = e.clientY
+    if (!tap.moved && Math.hypot(e.clientX - tap.sx, e.clientY - tap.sy) > 8) tap.moved = true
+    fireMouse('mousemove', svgRef.current, e.clientX, e.clientY)
+  }
+  function touchUp(e: React.PointerEvent<SVGSVGElement>) {
+    if (e.pointerType !== 'touch') return
+    touchPtrs.current.delete(e.pointerId)
+    if (touchPtrs.current.size < 2) touchGesture.current = null
+    const tap = touchTap.current
+    if (!tap || tap.id !== e.pointerId) return
+    touchTap.current = null
+    fireMouse('mouseup', svgRef.current, e.clientX, e.clientY)
+    if (e.type === 'pointercancel' || tap.moved || Date.now() - tap.t > 800) return
+    // a tap: a click where the finger went down, and a second tap close to it and soon after is a double click (it finishes a line, opens a calculator)
+    fireMouse('click', tap.target, tap.sx, tap.sy)
+    const now = Date.now(), prev = lastTap.current
+    if (prev && now - prev.t < 350 && Math.hypot(tap.sx - prev.x, tap.sy - prev.y) < 30) { lastTap.current = null; fireMouse('dblclick', tap.target, tap.sx, tap.sy) }
+    else lastTap.current = { t: now, x: tap.sx, y: tap.sy }
+  }
+  /** a key press for the on-screen buttons: the same handler as the keyboard, so a tablet with no keyboard does exactly what the keys do */
+  function sendKey(key: string, o: KeyboardEventInit = {}) { window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...o })) }
 
   function handleWheel(e: React.WheelEvent<SVGSVGElement>) {
     e.preventDefault()
@@ -4459,7 +4545,7 @@ export default function TakeoffPage() {
     const below = snapOn && activePhase === 'External Walls' && (tool === 'line' || tool === 'polygon' || tool === 'rect') ? lowerOuterWalls() : []
     // construction guides: the lines themselves (anywhere along them) and where they cross (a guide being dragged is not snapped to)
     const gp = snapOn ? guideSnapParts(guideDragRef.current?.id) : null
-    return snapPoint(raw, { anchors: [...(below.length ? [...anchors, ...anchorsFor(below)] : anchors), ...(gp ? gp.anchors : [])], last, radius: 10 / zoom, snap: snapOn, ortho, grid: gridSnap ? { stepPx: gridMinorPx() } : undefined, segments: gp || below.length ? [...(below.length ? [...(segs ?? []), ...segmentsFor(below)] : (segs ?? [])), ...(gp ? gp.segments : [])] : segs })
+    return snapPoint(raw, { anchors: [...(below.length ? [...anchors, ...anchorsFor(below)] : anchors), ...(gp ? gp.anchors : [])], last, radius: snapPx / zoom, snap: snapOn, ortho, grid: gridSnap ? { stepPx: gridMinorPx() } : undefined, segments: gp || below.length ? [...(below.length ? [...(segs ?? []), ...segmentsFor(below)] : (segs ?? [])), ...(gp ? gp.segments : [])] : segs })
   }
 
   /** Typing a length is on while a line, polygon, rectangle or floor is being drawn (not the measure tool or calibration). */
@@ -8597,8 +8683,9 @@ export default function TakeoffPage() {
   return (
     <div style={{
       ...TV as React.CSSProperties,
-      margin: '-26px -32px',
-      height: 'calc(100dvh - 56px)',
+      margin: coarse ? 0 : '-26px -32px',
+      height: coarse ? 'auto' : 'calc(100dvh - 56px)',
+      ...(coarse ? { position: 'fixed' as const, left: 0, right: 0, bottom: 0, top: topOffset, zIndex: 40 } : {}),
       display: 'flex',
       flexDirection: 'column',
       background: 'var(--to-bg)',
@@ -8610,6 +8697,10 @@ export default function TakeoffPage() {
       {/* ── Toolbars: named strips, each docked to an edge (the top ones are here; the others sit beside and below the drawing) ───────── */}
       <style>{`
         .to-ib { position: relative; }
+        @media (pointer: coarse) {
+          [data-tb] button, [data-tb] select { min-height: 42px; min-width: 42px; }
+          .to-touchbar button { min-height: 46px; min-width: 46px; padding: 0 14px; font-size: 14px; font-weight: 600; border-radius: 9px; border: 1px solid var(--to-border); background: var(--to-btn, var(--to-alt)); color: var(--to-text); cursor: pointer; }
+        }
         .to-ib:hover { border-color: var(--to-btn-bd) !important; }
         .to-ib[data-tip]:hover::after { content: attr(data-tip); position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); white-space: nowrap; background: #1b1f23; color: #fff; font-size: 11px; font-weight: 500; padding: 3px 8px; border-radius: 5px; z-index: 60; pointer-events: none; font-family: system-ui, sans-serif; }
         .to-ib.tip-sr[data-tip]:hover::after { top: 50%; left: calc(100% + 6px); transform: translateY(-50%); }
@@ -8636,6 +8727,35 @@ export default function TakeoffPage() {
           ref={containerRef}
           style={{ flex: 1, overflow: 'hidden', position: 'relative', background: 'var(--to-bg)' }}
         >
+          {/* A tablet: the keys the page uses, as buttons (the same handler runs: Enter, Backspace, Escape, Delete, R, Ctrl+Z), and a box to type a length */}
+          {coarse && (
+            <div className="to-touchbar" style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '82%', background: 'var(--to-panel)', border: '1px solid var(--to-border)', borderRadius: 12, padding: 6, boxShadow: '0 2px 10px rgba(0,0,0,0.3)' }}>
+              {typedAllowed() && (
+                <>
+                  <input inputMode="decimal" value={typed} onChange={e => setTyped(e.target.value.toLowerCase().replace(/[^0-9.,x*]/g, ''))} placeholder={tool === 'rect' || (tool === 'floor' && floorDrawMode === 'rect') ? 'type 4.5x3' : 'type a length (m)'}
+                    style={{ width: 150, fontSize: 16, padding: '6px 10px', borderRadius: 8, border: '1px solid var(--to-border)', background: 'var(--to-bg)', color: 'var(--to-text)' }} />
+                  <button type="button" onClick={() => { if (typed) sendKey('Enter') }} disabled={!typed} style={{ opacity: typed ? 1 : 0.5 }}>Place</button>
+                </>
+              )}
+              {isDrawing && drawPoints.length > 0 && (
+                <>
+                  <button type="button" onClick={() => sendKey('Enter')} style={{ background: '#16a34a', color: '#fff', borderColor: '#16a34a' }}>✓ Done</button>
+                  <button type="button" onClick={() => sendKey('Backspace')}>↶ Back a point</button>
+                  <button type="button" onClick={() => sendKey('Escape')}>✕ Cancel</button>
+                </>
+              )}
+              {!isDrawing && (selectedId || selectedOpeningId || selectedElectricPointId || selectedPlumbPointId || selectedPlumbPipeId) && (
+                <>
+                  <button type="button" onClick={() => sendKey('Delete')} style={{ background: '#dc2626', color: '#fff', borderColor: '#dc2626' }}>🗑 Delete</button>
+                  {selectedId && <button type="button" onClick={() => sendKey('r')}>⟳ Turn</button>}
+                  {selectedId && <button type="button" onClick={() => sendKey('d', { ctrlKey: true })}>⧉ Copy</button>}
+                </>
+              )}
+              <button type="button" onClick={() => sendKey('z', { ctrlKey: true })}>↶ Undo</button>
+              <button type="button" onClick={() => sendKey('y', { ctrlKey: true })}>↷ Redo</button>
+              <button type="button" onClick={() => setShiftHeld(v => !v)} title="Like holding Shift: a straight line while drawing, or pick a second wall to join" style={shiftHeld ? { background: '#f97316', color: '#fff', borderColor: '#f97316' } : undefined}>⇧ Shift{shiftHeld ? ' on' : ''}</button>
+            </div>
+          )}
           {/* Two walls picked with Shift-click: join them at the corner */}
           {joinPair && tool === 'select' && (
             <div style={{ position: 'absolute', bottom: 74, left: '50%', transform: 'translateX(-50%)', zIndex: 7, background: 'var(--to-panel)', border: '1px solid #f97316', color: 'var(--to-text)', borderRadius: 8, padding: '7px 12px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 2px 10px rgba(0,0,0,0.3)' }}>
@@ -8645,7 +8765,7 @@ export default function TakeoffPage() {
             </div>
           )}
           {/* Drawing aids: what to type while drawing, and what has been typed */}
-          {typedAllowed() && (
+          {typedAllowed() && !coarse && (
             <div style={{ position: 'absolute', bottom: 74, left: '50%', transform: 'translateX(-50%)', zIndex: 6, background: 'var(--to-panel)', border: '1px solid var(--to-border)', color: 'var(--to-text)', borderRadius: 8, padding: '6px 12px', fontSize: 12, display: 'flex', gap: 10, alignItems: 'center', pointerEvents: 'none' }}>
               <strong style={{ fontFamily: 'monospace', minWidth: 60, color: typed ? '#7fdc3c' : 'var(--to-sub)' }}>{typed ? typed + ' m' : (tool === 'rect' || (tool === 'floor' && floorDrawMode === 'rect')) ? 'type 4.5x3' : 'type a length'}</strong>
               <span style={{ color: 'var(--to-sub)' }}>
@@ -8751,7 +8871,12 @@ export default function TakeoffPage() {
               position: 'absolute', top: 0, left: 0,
               cursor: isPanning ? 'grabbing' : spaceHeld ? 'grab' : tool === 'select' ? 'default' : tool === 'click' ? 'pointer' : 'crosshair',
               userSelect: 'none',
+              touchAction: 'none',
             }}
+            onPointerDown={touchDown}
+            onPointerMove={touchMove}
+            onPointerUp={touchUp}
+            onPointerCancel={touchUp}
             onClick={handleSvgClick}
             onDoubleClick={handleSvgDblClick}
             onMouseMove={handleMouseMove}
@@ -8955,7 +9080,7 @@ export default function TakeoffPage() {
                 if (!el || !onActiveSheet(el, project) || !onActiveLevel(el, project)) return null
                 if (hiddenPhases.has(el.phase)) return null   // hide handles when phase is toggled off
                 const handles = getElVertexHandles(el)
-                const hr  = 5 / zoom    // handle radius — stays constant screen size
+                const hr  = (coarse ? 11 : 5) / zoom    // handle radius — stays constant screen size (a fingertip is wider than a mouse pointer)
                 const hsw = 1.5 / zoom  // stroke width
                 return handles.map((h, i) => (
                   <circle

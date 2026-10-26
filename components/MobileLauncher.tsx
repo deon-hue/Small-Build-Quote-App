@@ -4,14 +4,15 @@
  * MobileLauncher — the phone/tablet Home screen. Works out the headline numbers, recent work and "needs
  * attention" lists from the app's data and hands them to HomeOverview to draw. Only ever visible on touch
  * devices (globals.css hides it everywhere else), and only rendered on /dashboard. Permissions mirror the
- * desktop sidebar exactly; anything the user can't open is left out. Take-off and Back Office are
- * deliberately absent — they're desktop-only.
+ * desktop sidebar exactly; anything the user can't open is left out. Back Office is deliberately absent: it is
+ * desktop-only. Take-off & Draw is there only on a tablet held wide (900px or more), where it opens with touch.
  */
 
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Briefcase, FileText, FilePlus, Camera, StickyNote, Zap, Mail, Receipt, CalendarDays,
-  Contact, Inbox, Wallet, Wrench, Settings, Users, AlertTriangle, Send, PauseCircle, HelpCircle, MessageSquare,
+  Ruler, Contact, Inbox, Wallet, Wrench, Settings, Users, AlertTriangle, Send, PauseCircle, HelpCircle, MessageSquare,
   type LucideIcon,
 } from 'lucide-react'
 import { useApp } from '@/contexts/AppContext'
@@ -84,7 +85,10 @@ export default function MobileLauncher({ onOpenNotes }: { onOpenNotes: () => voi
   }
 
   const toLink = ({ label, href, Icon }: NavItem): HomeLink => ({ label, href, Icon })
-  const nav = NAV.filter(i => can(i.perm)).map(toLink)
+  // Take-off & Draw opens with touch on a tablet at least 900px wide (the same rule as the page itself): a phone, or a tablet held upright, does not list it
+  const [wide, setWide] = useState(false)
+  useEffect(() => { const mq = window.matchMedia('(min-width: 900px)'); const f = () => setWide(mq.matches); f(); mq.addEventListener('change', f); return () => mq.removeEventListener('change', f) }, [])
+  const nav = [...NAV, ...(wide ? [{ label: 'Take-off & Draw', Icon: Ruler, perm: 'quotes' as keyof UserPermissions, href: '/takeoff' }] : [])].filter(i => can(i.perm)).map(toLink)
   const footerNav = [...FOOTER_NAV.filter(i => can(i.perm)).map(toLink), { label: 'Help & guides', href: '/help', Icon: HelpCircle } as HomeLink]
 
   // Headline numbers — archived jobs are excluded everywhere here, same as the Jobs list itself.
