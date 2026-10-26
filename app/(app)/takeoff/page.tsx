@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useApp } from '@/contexts/AppContext'
 import { linkProject, parseOpenForQuote, type OpenForQuote } from '@/lib/takeoff-link'
+import { labelFor, isAutoName, numberSame, sideSuffix, type LabelInput } from '@/lib/takeoff-labels'
 import { PREP_DRAWN_FOR_LABEL, type PrepDrawnFor } from '@/lib/tile-prep-units'
 import { makeDebouncedSave, isEmptyTakeoff, isUuid, newProjectId, loadTakeoffFromSupabase, saveTakeoffToSupabase, listTakeoffSummaries, deleteTakeoffProject, type TakeoffSummary } from '@/lib/takeoff-sync'
 import { sheetOf, roomLabelsOf, setRoomLabels, roomShapesOf, setRoomShapes, roomEdgesOf, setRoomEdges, activeSheetIdOf, onActiveSheet, onActiveLevel, activeLevelIdOf, levelOf, levelName, levelBelow, ghostLevel, elementsOnGhostLevel, viewKey, itemLevelId, addLevel, switchActiveLevel, renameLevel, setLevelHeight, removeLevel, moveElementToLevel, copyLevelContents, levelInsertIndex, LEVEL_PRESETS, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet, setSheetPaper, guidesOf, setGuides } from '@/lib/takeoff-sheets'
@@ -1983,7 +1984,7 @@ export default function TakeoffPage() {
   function buildWallSides(el: DrawnElement, item: TakeoffItem) {
     const sides = sidesOf(el, 0.05 / (project.calibration.mpp || DEFAULT_MPP))   // (a side under 5cm is a stub from a double-click, not a wall)
     const ext = el.phase === 'External Walls'
-    const els: DrawnElement[] = sides.map((pts, i) => ({ ...el, id: uid(), type: 'line' as const, points: pts, label: `${el.label} ${i + 1}/${sides.length}`, tagDx: undefined, tagDy: undefined }))
+    const els: DrawnElement[] = sides.map((pts, i) => ({ ...el, id: uid(), type: 'line' as const, points: pts, label: `${labelOf(el)} ${i + 1}/${sides.length}`, tagDx: undefined, tagDy: undefined }))
     const made: TakeoffItem[] = els.map((e, i) => ({
       ...item, id: uid(), elementId: e.id, name: sides.length > 1 ? `${item.name} (side ${i + 1} of ${sides.length})` : item.name,
       assemblyResult: undefined, assemblyCalcState: undefined, openings: i === 0 ? item.openings : undefined, drawnOpenings: undefined,
@@ -2353,6 +2354,39 @@ export default function TakeoffPage() {
     const t = setTimeout(() => setRoomTick(n => n + 1), 250)
     return () => clearTimeout(t)
   }, [roomsOn, project.elements, project.items, project.calibration.mpp, project.activeSheetId, project.sheets, project.roomEdges, project.levels, project.activeLevelId])
+  // What each drawing is called on the plan and in the schedule: worked out from what it IS (the wall type, the foundation, the floor, the calculator, the task, and for Tiling Preparation the floor, the walls or both), with the room
+  // first when it has one, and the same kind numbered when there are several. A label that was typed (or any that does not look automatic) is kept exactly as typed and is not in this map.
+  const autoLabels = useMemo(() => {
+    const phases = [...(TAKEOFF_PHASES as readonly string[]), 'Site Setup & Demolition', ...boPhases.map(p => p.name)]
+    const makeups = [...allWallMakeups, ...Object.values(PHASE_MAKEUPS).flat(), ...FLOOR_MAKEUPS]
+    const itemOf = new Map<string, TakeoffItem>()
+    for (const it of project.items) if (it.elementId) itemOf.set(it.elementId, it)
+    const entries: { id: string; label: string }[] = []
+    for (const el of project.elements) {
+      const it = itemOf.get(el.id)
+      if (!it || !isAutoName(el.label, phases, el.labelCustom)) continue
+      const canonical = it.taskSubphaseId ? boSubPhases.find(b => b.id === it.taskSubphaseId)?.canonical_id ?? undefined : undefined
+      const input: LabelInput = {
+        phase: el.phase, taskName: it.taskId ? it.name : undefined, subPhase: it.subPhase, canonicalId: canonical,
+        prepScope: it.prepScope ?? (el.type === 'line' ? 'walls' : 'floor'),
+        makeupName: it.floorMakeupId ? makeups.find(m => m.id === it.floorMakeupId)?.name : undefined,
+        foundationType: it.phase === 'Foundations' ? it.foundationType : undefined, roomName: it.roomName,
+      }
+      entries.push({ id: el.id, label: labelFor(input) + sideSuffix(el.label) })
+    }
+    return numberSame(entries)
+  }, [project.elements, project.items, boSubPhases, boPhases, allWallMakeups])
+  /** the label a drawing shows: what it is, unless a label was typed for it */
+  const labelOf = (el: DrawnElement) => autoLabels.get(el.id) ?? el.label
+  /** the name an item shows in the schedule: its drawing's automatic label while the name is still the automatic one */
+  const scheduleName = (it: TakeoffItem) => {
+    if (!it.elementId) return it.name
+    const m = / \(side \d+ of \d+\)$/.exec(it.name)
+    const base = m ? it.name.slice(0, -m[0].length) : it.name
+    const phases = [...(TAKEOFF_PHASES as readonly string[]), 'Site Setup & Demolition', ...boPhases.map(p => p.name)]
+    return isAutoName(base, phases) ? (autoLabels.get(it.elementId) ?? it.name) : it.name
+  }
+
   // Walls drawn as separate sides that make a CLOSED run are painted building INWARD whichever way round each side was drawn (the run's direction decides). A side on its own builds to the right of its own travel, which for a side
   // drawn the other way round is OUTWARD, so everything measured on a side (its doors and windows, the foundation under it, its selection outline) uses the direction the run actually paints it: this map, by wall id.
   const wallDirOverride = useMemo(() => {
@@ -4866,7 +4900,7 @@ export default function TakeoffPage() {
             <polyline points={hit} fill="none" stroke="transparent" strokeWidth={Math.max(14 / zoom, wd.totalPx)} />
             {wd.strips.map((st, i) => <path key={i} d={st.d} fillRule="evenodd" fill={el.color} fillOpacity={0.28} stroke={colour} strokeWidth={Math.max(1.2, 1.6 / zoom)} strokeLinejoin="miter" />)}
             <polyline points={hit} fill="none" stroke={colour} strokeWidth={Math.max(1, 1.2 / zoom)} strokeDasharray={`${6 / zoom} ${4 / zoom}`} />
-            <text className="to-lbl" x={mid.x} y={mid.y - 6 / zoom} textAnchor="middle" fontSize={11 / zoom} fill={colour} fontFamily="monospace" fontWeight={700}>{el.label} · {widthMm}mm wide</text>
+            <text className="to-lbl" x={mid.x} y={mid.y - 6 / zoom} textAnchor="middle" fontSize={11 / zoom} fill={colour} fontFamily="monospace" fontWeight={700}>{labelOf(el)} · {widthMm}mm wide</text>
           </g>
         )
       }
@@ -4894,7 +4928,7 @@ export default function TakeoffPage() {
           <polyline points={centrePts} fill="none" stroke={caviC} strokeWidth={0.8} strokeDasharray="5 4" strokeOpacity={sel ? 0.7 : 0.4} />
           {sel && <polygon points={bodyPts} fill="none" stroke={SEL_COLOUR} strokeWidth={1.5} strokeOpacity={0.9} strokeDasharray="5 3" />}
           <text className="to-lbl" x={mid.x} y={mid.y - (halfW + 5)} textAnchor="middle" fontSize={11} fill={sel ? SEL_COLOUR : WALL_LINE_COLOR} fontFamily="monospace" fontWeight={700}>
-            {el.label}
+            {labelOf(el)}
           </text>
           <text className="to-lbl" x={mid.x} y={mid.y + (halfW + 13)} textAnchor="middle" fontSize={10} fill={sel ? '#334155' : '#999'} fontFamily="monospace">
             {fmtM(polylineLength(el.points, project.calibration.mpp))}
@@ -4915,7 +4949,7 @@ export default function TakeoffPage() {
           <rect x={x} y={y} width={w} height={h} fill={WALL_FILL_COLOR + '20'} stroke={wallStroke} strokeWidth={wallSw} />
           {sel && <rect x={x} y={y} width={w} height={h} fill="none" stroke={SEL_COLOUR} strokeWidth={1.5} strokeOpacity={0.9} strokeDasharray="5 3" />}
           <text className="to-lbl" x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? SEL_COLOUR : WALL_LINE_COLOR} fontFamily="monospace" fontWeight={700}>
-            {el.label}
+            {labelOf(el)}
           </text>
           <text className="to-lbl" x={mid.x} y={mid.y + 8} textAnchor="middle" fontSize={10} fill={sel ? '#334155' : '#999'} fontFamily="monospace">
             {fmt2(rectArea(el.points, project.calibration.mpp))} m²
@@ -4936,7 +4970,7 @@ export default function TakeoffPage() {
           <polygon points={pts} fill={WALL_FILL_COLOR + '20'} stroke={wallStroke} strokeWidth={wallSw} strokeLinejoin="miter" />
           {sel && <polygon points={pts} fill="none" stroke={SEL_COLOUR} strokeWidth={1.5} strokeOpacity={0.9} strokeDasharray="5 3" />}
           <text className="to-lbl" x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? SEL_COLOUR : WALL_LINE_COLOR} fontFamily="monospace" fontWeight={700}>
-            {el.label}
+            {labelOf(el)}
           </text>
           <text className="to-lbl" x={mid.x} y={mid.y + 8} textAnchor="middle" fontSize={10} fill={sel ? '#334155' : '#999'} fontFamily="monospace">
             {fmt2(polygonArea(el.points, project.calibration.mpp))} m²
@@ -4954,7 +4988,7 @@ export default function TakeoffPage() {
           <polyline points={pts} fill="none" stroke={stroke} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
           {sel && <polyline points={pts} fill="none" stroke={SEL_COLOUR} strokeWidth={1.5} strokeOpacity={0.9} strokeDasharray="4 3" />}
           <text className="to-lbl" x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? SEL_COLOUR : el.color} fontFamily="monospace" fontWeight={600}>
-            {el.label}
+            {labelOf(el)}
           </text>
           <text className="to-lbl" x={mid.x} y={mid.y + 8} textAnchor="middle" fontSize={10} fill={sel ? '#334155' : '#999'} fontFamily="monospace">
             {fmtM(polylineLength(el.points, project.calibration.mpp))}
@@ -4973,7 +5007,7 @@ export default function TakeoffPage() {
           {look && floorLookLayer(el, cornersOf(el), look)}
           {rlook && roofLookLayer(el, cornersOf(el), rlook)}
           <text className="to-lbl" x={x + w / 2} y={y + h / 2 - 6} textAnchor="middle" fontSize={11} fill={sel ? SEL_COLOUR : el.color} fontFamily="monospace" fontWeight={600}>
-            {el.label}
+            {labelOf(el)}
           </text>
           <text className="to-lbl" x={x + w / 2} y={y + h / 2 + 8} textAnchor="middle" fontSize={10} fill={sel ? '#334155' : '#999'} fontFamily="monospace">
             {fmt2(rectArea(el.points, project.calibration.mpp))} m²
@@ -4993,7 +5027,7 @@ export default function TakeoffPage() {
           {look && floorLookLayer(el, el.points, look)}
           {rlook && roofLookLayer(el, el.points, rlook)}
           <text className="to-lbl" x={mid.x} y={mid.y - 6} textAnchor="middle" fontSize={11} fill={sel ? SEL_COLOUR : el.color} fontFamily="monospace" fontWeight={600}>
-            {el.label}
+            {labelOf(el)}
           </text>
           <text className="to-lbl" x={mid.x} y={mid.y + 8} textAnchor="middle" fontSize={10} fill={sel ? '#334155' : '#999'} fontFamily="monospace">
             {fmt2(polygonArea(el.points, project.calibration.mpp))} m²
@@ -5045,7 +5079,7 @@ export default function TakeoffPage() {
         : fmt2(polygonArea(el.points, mpp)) + ' m²'
       const anchor = el.type === 'line' ? polylineMidpoint(el.points) : centroid(el.points)
       const wsTag = wallSpecFor(el)
-      return { id: el.id, text: tagText(el.label || linked?.name || '', (wsTag ? measure + ' · ' + wsTag.spec.label : measure) + (linked?.notEstimated ? ' · drawing only' : '')), ax: anchor.x, ay: anchor.y, dx: el.tagDx, dy: el.tagDy }
+      return { id: el.id, text: tagText(labelOf(el) || linked?.name || '', (wsTag ? measure + ' · ' + wsTag.spec.label : measure) + (linked?.notEstimated ? ' · drawing only' : '')), ax: anchor.x, ay: anchor.y, dx: el.tagDx, dy: el.tagDy }
     })
     const boxes = layoutTags(inputs, zoom)
     return boxes.map(t => {
@@ -6826,17 +6860,24 @@ export default function TakeoffPage() {
             </>
           )}
 
-          <div style={{ marginBottom: 10 }}>
-            <label style={labelStyle}>Room Name</label>
-            <input style={inputStyle} placeholder="e.g. Kitchen" value={item.roomName ?? ''}
-              onChange={e => saveItemEdit({ ...item, roomName: e.target.value })} />
-          </div>
+          {/* a calculator has its own Room / location in its header (it becomes this item's room when saved): the box here is for items with no calculator */}
+          {!builtAssembly && (
+            <div style={{ marginBottom: 10 }}>
+              <label style={labelStyle}>Room Name</label>
+              <input style={inputStyle} placeholder="e.g. Kitchen" value={item.roomName ?? ''}
+                onChange={e => saveItemEdit({ ...item, roomName: e.target.value })} />
+            </div>
+          )}
 
           {linkedEl && (
             <div style={{ marginBottom: 10 }}>
-              <label style={labelStyle}>Drawing Label</label>
-              <input style={inputStyle} value={linkedEl.label}
-                onChange={e => saveElementEdit({ ...linkedEl, label: e.target.value })} />
+              <label style={labelStyle}>Drawing Label {!linkedEl.labelCustom && <span style={{ fontWeight: 400, color: 'var(--to-muted)' }}>(named from what it is: type to change it)</span>}</label>
+              <input style={inputStyle} value={labelOf(linkedEl)}
+                onChange={e => saveElementEdit({ ...linkedEl, label: e.target.value, labelCustom: true })} />
+              {linkedEl.labelCustom && (
+                <button type="button" onClick={() => saveElementEdit({ ...linkedEl, label: `${linkedEl.phase} ${Date.now().toString(36).slice(-4)}`, labelCustom: undefined })}
+                  style={{ fontSize: 10.5, color: 'var(--to-accent, #2563eb)', background: 'none', border: 'none', cursor: 'pointer', padding: '3px 0 0' }}>↻ Name it from what it is again</button>
+              )}
             </div>
           )}
 
@@ -7792,7 +7833,7 @@ export default function TakeoffPage() {
                   </label>
                 )}
                 <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--to-textb)', whiteSpace: 'nowrap', paddingRight: item.elementId ? 92 : 0,
-                  overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}{item.notEstimated && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, color: 'var(--to-muted)', border: '1px solid var(--to-border)', borderRadius: 8, padding: '0 6px' }}>drawing only</span>}</div>
+                  overflow: 'hidden', textOverflow: 'ellipsis' }}>{scheduleName(item)}{item.notEstimated && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, color: 'var(--to-muted)', border: '1px solid var(--to-border)', borderRadius: 8, padding: '0 6px' }}>drawing only</span>}</div>
                 {renderLineAlignField(item, true)}
                 <div style={{ fontSize: 11, color: 'var(--to-muted)', marginTop: 2 }}>
                   <span style={{ color: 'var(--to-text)', fontFamily: 'monospace' }}>

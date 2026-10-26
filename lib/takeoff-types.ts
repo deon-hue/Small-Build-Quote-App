@@ -100,7 +100,9 @@ export interface DrawnElement {
   type:        'line' | 'rect' | 'polygon'
   points:      TakeoffPoint[]   // SVG coords (pixels)
   phase:       TakeoffPhase
-  label:       string           // e.g. "South Wall"
+  label:       string           // e.g. "South Wall". An automatic one (a phase and four characters) is shown as what the drawing is (lib/takeoff-labels.ts) until a label is typed
+  /** true once a label has been typed in Drawing Label: it is then kept exactly as typed */
+  labelCustom?: boolean
   color:       string           // hex
   // computed measurements (metres, set after drawing)
   length?:     number   // metres
