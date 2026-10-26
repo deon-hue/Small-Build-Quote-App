@@ -53,6 +53,15 @@ export function tilingKindFor(kind?: string): string {
   }
 }
 
+/** The kind of room the skirting and trim calculator calls a plan room's kind */
+export function trimKindFor(kind?: string): string {
+  switch (kind) {
+    case 'kitchen': case 'living': case 'dining': case 'bedroom': case 'hall': case 'study': case 'utility': return kind
+    case 'bathroom': case 'ensuite': case 'wc': return 'bathroom'
+    default: return 'other'
+  }
+}
+
 /** The kind of room the strip-out calculator calls a plan room's kind */
 export function stripKindFor(kind?: string): string {
   switch (kind) {

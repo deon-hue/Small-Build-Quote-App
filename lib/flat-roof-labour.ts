@@ -787,3 +787,11 @@ export function suggestWindowsDoorsLabour(tasks: { key: string; trade: 'fitter' 
     .filter(t => t.hours > 0)
     .map(t => ({ key: 'wd-' + t.key, trade: t.trade as LabourTradeKind, task: t.task, hours: t.hours, basis: t.basis }))
 }
+
+/** The labour for the Skirtings, Architraves & Trim calculator (Joinery & Fixtures → Skirtings, Architraves & Trim (by room)): a carpenter's time in each room on the skirting, its corners, the architraves and the rails, as the
+ * calculator's own engine works it out (the hours and the working come from its table and are passed in). Rough estimates, as everywhere here. */
+export function suggestTrimLabour(tasks: { key: string; trade: 'carpenter'; task: string; hours: number; basis: string }[]): LabourSuggestion[] {
+  return tasks
+    .filter(t => t.hours > 0)
+    .map(t => ({ key: 'trim-' + t.key, trade: t.trade as LabourTradeKind, task: t.task, hours: t.hours, basis: t.basis }))
+}

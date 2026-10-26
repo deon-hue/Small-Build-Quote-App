@@ -58,9 +58,9 @@ const FOUNDATION_LINE_CALCS = new Set(['fnd-strip', 'fnd-trench-fill', 'fnd-pile
 const FOUNDATION_SHAPE_CALCS = new Set(['fnd-raft', 'fnd-pad'])
 // A floor is a shape (its footprint) priced by its calculator from the area and perimeter drawn: the sub-phases of Floors & Screeds that have one
 /** Phases where picking a calculator sub-phase makes the item a marker on the plan and the calculator card opens (Decoration, Plumbing & Heating, Drainage & Services): the sizes are typed in the calculator. */
-const MARKER_CALC_PHASES = new Set<string>(['Decoration', 'Plumbing & Heating', 'Drainage & Services', 'Plastering & Boarding', 'Tiling & Finishes', 'Windows & Doors'])
+const MARKER_CALC_PHASES = new Set<string>(['Decoration', 'Plumbing & Heating', 'Drainage & Services', 'Plastering & Boarding', 'Tiling & Finishes', 'Windows & Doors', 'Joinery & Fixtures'])
 /** calculators sized from an AREA drawn on the plan: picking one before drawing starts the Rectangle tool, not the Line tool a phase such as Plumbing & Heating starts with (its Line is a pipe) */
-const AREA_DRAWN_CALCS = new Set(['plumb-ufh', 'tile-ufh-electric', 'tile-floor-rooms', 'tile-prep-rooms'])
+const AREA_DRAWN_CALCS = new Set(['plumb-ufh', 'tile-ufh-electric', 'tile-floor-rooms', 'tile-prep-rooms', 'join-skirting-rooms'])
 const FLOOR_SHAPE_CALCS = new Set(['fs-screeded-floor', 'fs-floor-overlay', 'fs-concrete-slab', 'fs-block-beam', 'fs-suspended-timber', 'fs-insulated-concrete'])
 import LabourCostBuilder from './components/LabourCostBuilder'
 import { SharedWallAreasProvider } from '@/components/TilingShareContext'
@@ -1410,7 +1410,7 @@ export default function TakeoffPage() {
       const boPhaseName = bo ? boPhases.find(p => p.id === bo.phase_id)?.name : undefined
       const hasCalculator = !!(bo?.canonical_id && BUILT_ASSEMBLY_CANON_IDS[bo.canonical_id])
       const foundationFits = item.phase !== 'Foundations' || (el.type === 'line' ? FOUNDATION_LINE_CALCS.has(bo?.canonical_id ?? '') : FOUNDATION_SHAPE_CALCS.has(bo?.canonical_id ?? ''))
-      if (bo && boPhaseName === item.phase && foundationFits && ((item.phase !== 'Roof' && item.phase !== 'Foundations' && !MARKER_CALC_PHASES.has(item.phase)) || hasCalculator)) {
+      if (bo && boPhaseName === item.phase && foundationFits && ((item.phase !== 'Roof' && item.phase !== 'Foundations' && (!MARKER_CALC_PHASES.has(item.phase) || item.phase === 'Joinery & Fixtures')) || hasCalculator)) {
         item.taskSubphaseId = bo.id
         item.subPhase = bo.name
         if (bo.canonical_id === 'tile-prep-rooms') item.prepScope = el.type === 'line' ? 'walls' : drawPrepScope
@@ -5874,7 +5874,8 @@ export default function TakeoffPage() {
     // Tiling Preparation: the drawing says what it is for (the floor, the walls, or both) before it is priced
     const _prepCalc        = _tileCalc && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'tile-prep-rooms'
     // warm-water underfloor heating is sized from the area drawn: it becomes the first zone, named for the room it sits in
-    const _ufhCalc         = isDecoCalc && item.phase === 'Plumbing & Heating' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'plumb-ufh'
+    // (also the skirting and trim calculator: a drawn area is its first room, named for the room it sits in, just as for underfloor heating)
+    const _ufhCalc         = isDecoCalc && ((item.phase === 'Plumbing & Heating' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'plumb-ufh') || (item.phase === 'Joinery & Fixtures' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'join-skirting-rooms'))
     const isTaskPhase      = _phaseHasTasks && !isBuildup && !isExtWall && !isPlaster && !isIntWall && !isDemo && !isDemoCalc && !isFoundationLine && !isDecoCalc
     const showWallLine     = isLineBased && (isExtWall || isIntWall || isPlaster)
     const hasOpenings      = (isExtWall || isIntWall || isPlaster) && isLineBased
@@ -6816,6 +6817,8 @@ export default function TakeoffPage() {
                 <div style={{ fontSize: 11, color: 'var(--to-muted)', marginBottom: 8 }}>
                   {_tileCalc
                     ? 'Priced room by room with its own calculator. The area drawn here sizes the first room (a line drawn gives the first wall area its length for wall tiling): add the other rooms and the finishes in the calculator.'
+                    : _ufhCalc
+                    ? 'Priced room by room with its own calculator. The area drawn here is the first room (or zone) in the calculator: add the others and the finishes there.'
                     : _lengthFedCalc
                     ? "Priced wall by wall with its own calculator. The length of the line drawn here is the first wall's length: add the height, openings and the finish in the calculator."
                     : `Priced room by room with its own calculator. The ${_plasterLine ? 'line' : 'area'} drawn here is only a marker on the plan: add the rooms in the calculator.`}

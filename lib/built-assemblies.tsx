@@ -44,6 +44,7 @@ import AssemblyTileWallDemo from '@/components/AssemblyTileWallDemo'
 import AssemblyTilePrepDemo from '@/components/AssemblyTilePrepDemo'
 import AssemblyTileUfhDemo from '@/components/AssemblyTileUfhDemo'
 import AssemblyWindowsDoorsDemo from '@/components/AssemblyWindowsDoorsDemo'
+import AssemblyTrimDemo from '@/components/AssemblyTrimDemo'
 import AssemblyPipeworkDemo from '@/components/AssemblyPipeworkDemo'
 import AssemblyDrainageDemo from '@/components/AssemblyDrainageDemo'
 import AssemblySoakawayDemo from '@/components/AssemblySoakawayDemo'
@@ -70,7 +71,7 @@ import type { PlanRoomInfo } from '@/lib/rooms-from-walls'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import type { CalcSize } from '@/lib/calc-size'
 
-export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation' | 'pad-foundation' | 'piled-foundation' | 'underpinning' | 'electrics' | 'decoration' | 'plaster-rooms' | 'render' | 'wall-insulation' | 'screed-floor' | 'floor-overlay' | 'concrete-slab' | 'block-beam' | 'timber-floor' | 'insulated-concrete' | 'plumbing' | 'heating' | 'ufh' | 'pipework' | 'drainage' | 'soakaway' | 'services' | 'wall-removal' | 'strip-out' | 'waste-skips' | 'external-demo' | 'tile-floor' | 'tile-wall' | 'tile-prep' | 'tile-ufh' | 'windows-doors'
+export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation' | 'pad-foundation' | 'piled-foundation' | 'underpinning' | 'electrics' | 'decoration' | 'plaster-rooms' | 'render' | 'wall-insulation' | 'screed-floor' | 'floor-overlay' | 'concrete-slab' | 'block-beam' | 'timber-floor' | 'insulated-concrete' | 'plumbing' | 'heating' | 'ufh' | 'pipework' | 'drainage' | 'soakaway' | 'services' | 'wall-removal' | 'strip-out' | 'waste-skips' | 'external-demo' | 'tile-floor' | 'tile-wall' | 'tile-prep' | 'tile-ufh' | 'windows-doors' | 'skirting'
 
 /** Fired when a calculator's "Save & Price" is used from inside a real quote — absent in
  * the Back Office preview context, which has no quote to save into. */
@@ -177,6 +178,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'demo-waste-skips-calc': { icon: 'waste-skips', render: opts => <AssemblyWasteDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'demo-external-calc': { icon: 'external-demo', render: opts => <AssemblyExternalDemoDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'wd-schedule': { icon: 'windows-doors', render: opts => <AssemblyWindowsDoorsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} planOpenings={opts?.planOpenings} /> },
+  'join-skirting-rooms': { icon: 'skirting', render: opts => <AssemblyTrimDemo planRooms={opts?.planRooms} onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} externalName={opts?.externalName} /> },
   'tile-floor-rooms': { icon: 'tile-floor', render: opts => <AssemblyTileFloorDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} planRooms={opts?.planRooms} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} externalName={opts?.externalName} /> },
   'tile-wall-rooms': { icon: 'tile-wall', render: opts => <AssemblyTileWallDemo planRooms={opts?.planRooms} onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} externalName={opts?.externalName} externalLengthMm={opts?.externalLengthMm} /> },
   'tile-prep-rooms': { icon: 'tile-prep', render: opts => <AssemblyTilePrepDemo planRooms={opts?.planRooms} onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} externalLengthMm={opts?.externalLengthMm} externalName={opts?.externalName} drawnFor={opts?.prepScope} /> },
@@ -316,6 +318,16 @@ export function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; siz
           <rect x="4" y="9" width="6" height="6" fill="#ffffff" stroke="#2b6cb0" strokeWidth="1.3" />
           <path d="M4 12h6" stroke="#2b6cb0" strokeWidth="1" />
           <path d="M14 15V6M14 6A9 9 0 0 1 21.5 11" stroke="#7c3aed" strokeWidth="1.4" strokeLinecap="round" />
+        </svg>
+      )
+    case 'skirting':
+      // A skirting board along the foot of a wall: the board with its moulded top edge, standing on the floor line.
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M3 4v11" stroke="#d6d3d1" strokeWidth="1" />
+          <path d="M3 21h18" stroke="#78716c" strokeWidth="1.5" strokeLinecap="round" />
+          <path d="M3 15.5h18v5.5H3z" fill="#fef3c7" stroke="#a16207" strokeWidth="1.4" strokeLinejoin="round" />
+          <path d="M3 17.3h18" stroke="#a16207" strokeWidth="1" />
         </svg>
       )
     case 'tile-floor':

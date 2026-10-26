@@ -927,6 +927,15 @@ const joinerySubphases: PhaseSubphase[] = [
       t('join-window-board',        'Window board / sill (MDF or hardwood)', 'nr',   8,   35,   45,    0,    0,    0,  'Internal painted or hardwood'),
     ],
   },
+  // Skirtings, architraves and trim priced room by room (assembly calculator), beside the task-based sub-phase above. Listed last so a new line in Take-off still starts on a task.
+  {
+    id: 'join-skirting-rooms',
+    phase: 'Joinery & Fixtures',
+    name: 'Skirtings, Architraves & Trim (by room)',
+    markupPct: 20,
+    ukWarning: 'Fit skirting after the floor finish is down (or allow for a gap and scotia), and leave a small gap to a timber floor for expansion. Fix with adhesive and pins into the wall, or into studs, and fill and caulk before painting.',
+    tasks: [],  // priced by the Skirtings, Architraves & Trim calculator (rooms: skirting profile and length, corners, architraves, dado, picture rail, scotia)
+  },
 ]
 
 // ── 10. TILING & FINISHES ─────────────────────────────────────────────────────
