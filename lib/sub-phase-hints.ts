@@ -13,6 +13,7 @@ const HINTS: Record<string, string> = {
   'ew-sleeper-wall': 'sleeper wall under a block-and-beam floor',
   'ew-parapet-wall': 'parapet wall at roof edge',
   'ew-solid-brick': 'solid brick external wall, 225mm thick',
+  'ew-solid-brick-victorian': 'old-fashioned solid brick wall as on a Victorian house, one, one and a half or two bricks thick with no cavity, laid in lime or cement mortar (not a cavity wall)',
   'ew-timber-frame': 'timber-frame external wall',
   // Foundations
   'fnd-strip': 'strip foundation: a trench dug and part-filled with concrete, with solid blockwork built up from it to the DPC. Not a raft, pad or piled foundation',

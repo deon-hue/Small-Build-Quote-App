@@ -1359,6 +1359,18 @@ const externalWallsSubphases: PhaseSubphase[] = [
     ],
   },
   {
+    id: 'ew-solid-brick-victorian',
+    phase: 'External Walls',
+    name: 'Solid Brick Wall – Victorian (1½ brick)',
+    markupPct: 20,
+    ukWarning: 'A solid brick wall has no cavity and does not meet Part L on its own: it needs insulation inside or outside, and a check for damp and condensation. Use lime mortar where matching an old wall that must breathe. The designer confirms lintel sizes and the stability of a thin wall.',
+    tasks: [
+      t('ew-sbv-labour',      'Bricklaying labour',                    'm²', 20, 0, 0, 0, 0, 0, 'Labour – build solid brick wall, one and a half bricks thick, facing outside and commons behind'),
+      t('ew-sbv-bricks',      'Facing and common bricks',              'm²', 20, 0, 0, 0, 0, 0, 'Facing bricks to the outer face with common bricks built in behind, 327.5mm solid wall'),
+      t('ew-sbv-dpc',         'DPC to base of wall',                   'lm', 20, 0, 0, 0, 0, 0, 'DPC the full width of the wall at its base'),
+    ],
+  },
+  {
     id: 'ew-garden-room-timber',
     phase: 'External Walls',
     name: 'Timber Garden Room Wall',

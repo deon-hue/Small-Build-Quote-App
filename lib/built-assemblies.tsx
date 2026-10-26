@@ -15,6 +15,7 @@ import AssemblyWallDemo from '@/components/AssemblyWallDemo'
 import AssemblyMasonryWallDemo from '@/components/AssemblyMasonryWallDemo'
 import AssemblyCavityWallDemo from '@/components/AssemblyCavityWallDemo'
 import AssemblySolidBlockWallDemo from '@/components/AssemblySolidBlockWallDemo'
+import AssemblySolidBrickWallDemo from '@/components/AssemblySolidBrickWallDemo'
 import AssemblyTimberFrameWallDemo from '@/components/AssemblyTimberFrameWallDemo'
 import AssemblyDwarfWallDemo from '@/components/AssemblyDwarfWallDemo'
 import AssemblySleeperWallDemo from '@/components/AssemblySleeperWallDemo'
@@ -138,6 +139,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'iw-block-masonry': { icon: 'block-wall', render: opts => <AssemblyMasonryWallDemo context="partition" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} noSampleOpenings={opts?.noSampleOpenings} /> },
   'ew-blockwork-100': { icon: 'block-wall', render: opts => <AssemblyMasonryWallDemo context="external-wall" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} noSampleOpenings={opts?.noSampleOpenings} /> },
   'ew-blockwork-215': { icon: 'block-wall', render: opts => <AssemblySolidBlockWallDemo laidDefault="flat" onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
+  'ew-solid-brick-victorian': { icon: 'block-wall', render: opts => <AssemblySolidBrickWallDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'ew-garden-room-timber': { icon: 'timber-frame-wall', render: opts => <AssemblyTimberFrameWallDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} noSampleOpenings={opts?.noSampleOpenings} /> },
   'ew-dwarf-wall': { icon: 'dwarf-wall', render: opts => <AssemblyDwarfWallDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'ew-sleeper-wall': { icon: 'sleeper-wall', render: opts => <AssemblySleeperWallDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },

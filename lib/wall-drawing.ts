@@ -96,6 +96,16 @@ export function solidBlockSpec(v: Record<string, unknown>): WallSpec | null {
   return make(layers)
 }
 
+/** A solid brick wall (the Victorian wall) from its saved calculator: one, one and a half or two bricks of brick, rendered outside and plastered inside if the calculator says so. The brick is drawn to the next 5mm (327.5mm shows as 330). */
+export function solidBrickSpec(v: Record<string, unknown>): WallSpec | null {
+  const mm = v.thickness === 'one' ? 215 : v.thickness === 'two' ? 440 : 327.5
+  const layers: WallLayer[] = []
+  if (v.externalFinish && v.externalFinish !== 'none') layers.push({ kind: 'render', mm: 15 })
+  layers.push({ kind: 'brick', mm: Math.ceil(mm / 5) * 5 })
+  if (v.internalFinish && v.internalFinish !== 'none') layers.push({ kind: 'board', mm: 12.5 })
+  return make(layers)
+}
+
 /** A wall from its build-up type's layers (the Back Office wall type): every layer with a thickness, in the order listed. A partial-fill layer with no air gap listed gets the 25mm gap a real partial-fill cavity has. */
 export function specFromMakeupLayers(layers: { name: string; thickness: number }[]): WallSpec | null {
   const out: WallLayer[] = []
@@ -127,6 +137,8 @@ export function defaultWallSpec(canonicalId: string | undefined): WallSpec | nul
     case 'ew-cav-partial': return cavityWallSpec({ insulation: 'pir' }, false)
     case 'ew-blockwork-100': return make([{ kind: 'render', mm: 15 }, { kind: 'block', mm: 100 }])
     case 'ew-blockwork-215': return make([{ kind: 'render', mm: 15 }, { kind: 'block', mm: 215 }])
+    // (a Victorian solid brick wall with nothing saved is drawn the way the calculator starts: one and a half bricks)
+    case 'ew-solid-brick-victorian': return solidBrickSpec({})
     // (a stud partition with nothing saved is drawn the way the calculator starts: boarded both sides, 50mm of acoustic mineral wool between the studs)
     case 'iw-stud-partition': return studWallSpec({}, 'timber')
     case 'iw-metal-stud': return studWallSpec({}, 'metal')
