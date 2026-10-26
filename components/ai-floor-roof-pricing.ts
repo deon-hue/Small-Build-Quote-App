@@ -6,11 +6,14 @@
 import type { BOLabourTrade, BOSubPhase } from '@/lib/back-office-types'
 import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
 import { BUILT_ASSEMBLY_CANONICAL_IDS } from '@/lib/built-assembly-ids'
-import { floorFromScope, roofFromScope, FLOOR_ROOF_AI_IDS, type AiFloor, type AiRoof } from '@/lib/floor-roof-ai'
+import { floorFromScope, roofFromScope, FLOOR_ROOF_AI_IDS as FLOOR_ROOF_ONLY_IDS, type AiFloor, type AiRoof } from '@/lib/floor-roof-ai'
+import { JOINERY_AI_SET } from '@/lib/joinery-ai'
+import { priceJoineryOne } from '@/components/ai-joinery-pricing'
 import { priceCalculatorHeadless } from '@/components/ai-headless-pricing'
 import type { PricedCalc } from '@/components/ai-drainage-pricing'
 
-export { FLOOR_ROOF_AI_IDS }
+/** every calculator line priced by mounting the calculator itself: the floors and roofs, and (the same way) the Joinery & Fixtures and the Windows and Doors calculators */
+export const FLOOR_ROOF_AI_IDS: ReadonlySet<string> = new Set<string>([...FLOOR_ROOF_ONLY_IDS, ...JOINERY_AI_SET])
 
 const FLOOR_NS: Record<string, string> = {
   'fs-screeded-floor': 'AssemblyScreedFloorDemo',
@@ -113,7 +116,7 @@ export async function priceFloorRoofPhases(
     const calcSub = boSubPhases.filter(s => s.name === sp.phase).find(s => s.canonical_id && BUILT_ASSEMBLY_CANONICAL_IDS.has(s.canonical_id))
     const id = calcSub?.canonical_id
     if (!id || !FLOOR_ROOF_AI_IDS.has(id)) continue
-    out.set(sp, await priceOne(id, sp.calc, labourTrades).catch(() => null))
+    out.set(sp, await (JOINERY_AI_SET.has(id) ? priceJoineryOne(id, sp.calc, labourTrades) : priceOne(id, sp.calc, labourTrades)).catch(() => null))
   }
   return out
 }
