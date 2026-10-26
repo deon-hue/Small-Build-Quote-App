@@ -5887,7 +5887,11 @@ export default function TakeoffPage() {
     // length; a roof by the box its drawn shape sits in.
     const isBoxShape = isRoof || isFoundationShape
     const roofBox = isBoxShape ? drawnBoxMm(item) : undefined
-    const floorDims = (isFloorShape || _tileCalc || _ufhCalc) ? drawnAreaPerimeter(item) : undefined
+    // A LINE drawn for walls (Wall Tiling, or the walls of Tiling Preparation) is its own OPEN length. drawnAreaPerimeter closes any drawing of three or more points into a shape (right for a floor drawn with the Line tool), which for a
+    // wall line adds the side that closes it: a U of 4.01m of line came out as 2.0m² and 6.07m of wall. So such a line hands the calculator no area, only its length.
+    const _tileCanon = _tileCalc ? boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id : undefined
+    const _wallLineOnly = _tileCalc && linkedEl?.type === 'line' && (_tileCanon === 'tile-wall-rooms' || (_tileCanon === 'tile-prep-rooms' && (item.prepScope ?? 'walls') === 'walls'))
+    const floorDims = (isFloorShape || _tileCalc || _ufhCalc) && !_wallLineOnly ? drawnAreaPerimeter(item) : undefined
     // a block and beam floor with a beam direction chosen: the beams span the side they run along (the drawn box's height when they run up and down, its width when left to right)
     const _isBlockBeam = isFloorShape && (boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'fs-block-beam' || item.floorMakeupId === 'block_beam')
     const _bbEl = _isBlockBeam && item.beamDir && item.elementId ? project.elements.find(e => e.id === item.elementId) : undefined
