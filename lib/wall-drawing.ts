@@ -129,6 +129,14 @@ export function specFromMakeupLayers(layers: { name: string; thickness: number }
   return make(out)
 }
 
+/** An outside wall that had a Build-up Type when it was drawn and was then switched to a calculator (the "Calculators" group of the Build-up Type list) still carries the old Build-up Type, which would otherwise win and draw it as that wall (a cavity wall, say).
+ *  True when a calculator sub-phase is picked and the Build-up Type is not the one paired with that calculator, so the calculator's own make-up is drawn instead. */
+export function calculatorOverridesMakeup(calcCanonical: string | undefined, makeupId: string | undefined, pairing: Record<string, string>): boolean {
+  if (!calcCanonical) return false
+  if (!makeupId) return true
+  return pairing[makeupId] !== calcCanonical
+}
+
 /** What a kind of wall is when nothing more specific is known (its sub-phase's standard). */
 export function defaultWallSpec(canonicalId: string | undefined): WallSpec | null {
   switch (canonicalId) {

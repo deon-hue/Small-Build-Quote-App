@@ -66,7 +66,7 @@ import ClientFilePicker from '@/components/ClientFilePicker'
 import { planResize, applyResize } from '@/lib/calc-size'
 import { defaultToolbars, mergeToolbars, toolbarsOn, setToolbarDock, renameToolbar, setToolbarLabels, setToolbarVisible, moveToolbar, allowedDocks, isSideDock, DOCK_LABEL, DEFAULT_TOOLBARS, type TbId, type TbDock, type TbPref } from '@/lib/takeoff-toolbars'
 import { alignPointsToLower } from '@/lib/level-align'
-import { mitreCuts, mergeCollinearSides, wallDrawing, wallBand, offsetPolyline, totalMm, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, solidBrickSpec, studWallSpec, specFromMakeupLayers, defaultWallSpec, constructionWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
+import { mitreCuts, mergeCollinearSides, wallDrawing, wallBand, offsetPolyline, totalMm, signedArea, chainWalls, cavityWallSpec, solidBlockSpec, solidBrickSpec, calculatorOverridesMakeup, studWallSpec, specFromMakeupLayers, defaultWallSpec, constructionWallSpec, LAYER_STYLE } from '@/lib/wall-drawing'
 import { sidesOf, splitOpenings } from '@/lib/wall-split'
 import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
 import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, segmentMiddle, flippedSwing, pointAtDist, type PlacedOpening, type WallBand } from '@/lib/wall-openings'
@@ -4530,6 +4530,8 @@ export default function TakeoffPage() {
     const boSub = internal ? (intSel ? boSubPhases.find(sp => sp.id === intSel.id) : undefined) : (item.taskSubphaseId ? boSubPhases.find(sp => sp.id === item.taskSubphaseId) : undefined)
     const makeupId = item.floorMakeupId ?? (external && !item.taskSubphaseId ? allWallMakeups[0]?.id : undefined)   // an external wall with no type picked shows the first type, as the Properties panel does
     const canonical = boSub?.canonical_id ?? (makeupId ? WALL_MAKEUP_TO_SUBPHASE_CANONICAL[makeupId] : undefined)
+    // an outside wall switched from a Build-up Type to a calculator after it was drawn still carries the old Build-up Type: the calculator's own make-up is what it is now
+    if (!spec && external && calculatorOverridesMakeup(boSub?.canonical_id ?? undefined, makeupId, WALL_MAKEUP_TO_SUBPHASE_CANONICAL)) spec = defaultWallSpec(boSub?.canonical_id ?? undefined)
     if (!spec && external && makeupId) { const mk = allWallMakeups.find(m => m.id === makeupId); if (mk) spec = specFromMakeupLayers(mk.layers) }
     if (!spec) spec = defaultWallSpec(canonical)
     // a partition with no calculator behind its sub-phase is drawn from its Construction type (metal stud 70mm to start, as its Properties show)
