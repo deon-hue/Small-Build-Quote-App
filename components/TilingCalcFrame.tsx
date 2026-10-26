@@ -49,7 +49,7 @@ interface FrameProps {
   onSave?: (result: TilingSaveResult) => void
   labourTrades: BOLabourTrade[]
   /** the rooms editor (left) and the side sections (right: job situation and so on); given the cost of one room */
-  children: (ctx: { roomCost: (roomId: string) => number }) => { main: React.ReactNode; side: React.ReactNode }
+  children: (ctx: { roomCost: (roomId: string) => number; /** the materials of one part of a room: the lines of that room whose key (the part of the line id before the room) passes the test */ partCost: (roomId: string, test: (key: string) => boolean) => number }) => { main: React.ReactNode; side: React.ReactNode }
 }
 
 export default function TilingCalcFrame({ id, defaultName, subject, lines, labourTasks, error, warnings, descShort, descFull, hasResult, onClose, onSave, labourTrades, suggestLabour, children }: FrameProps) {
@@ -68,6 +68,7 @@ export default function TilingCalcFrame({ id, defaultName, subject, lines, labou
   })), [lines, rateOverrides])
   const costedLines: CostedLine[] = layers.map(l => costLayer(l, l.fixedQty ?? 0))
   const roomCost = (roomId: string) => costedLines.filter(l => l.layerId.endsWith('|' + roomId)).reduce((s, l) => s + l.cost, 0)
+  const partCost = (roomId: string, test: (key: string) => boolean) => costedLines.filter(l => l.layerId.endsWith('|' + roomId) && test(l.layerId.split('|')[0])).reduce((s, l) => s + l.cost, 0)
 
   // Miscellaneous materials
   const [miscMaterialLines, setMiscMaterialLines] = useCalcState<MiscMaterialLine[]>(id, 'miscMaterialLines', [])
@@ -119,7 +120,7 @@ export default function TilingCalcFrame({ id, defaultName, subject, lines, labou
     ? <span style={{ fontSize: 10, color: '#16a34a' }}>updates as you change the rooms</span>
     : <button onClick={reset} title={`Go back to the ${what} written from the rooms — overwrites your edits below`} style={{ fontSize: 10, color: '#0369a1', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>↻ Edited by you — regenerate</button>
 
-  const { main, side } = children({ roomCost })
+  const { main, side } = children({ roomCost, partCost })
 
   return (
     <div style={{ border: '2px dashed #0369a1', borderRadius: 10, background: '#f5fbff', padding: 14, marginBottom: 20 }}>

@@ -44,6 +44,28 @@ interface Props {
 }
 
 const uid = () => Math.random().toString(36).slice(2, 9)
+
+/** A clearly marked part of a room's card (the floor, the walls, the waterproofing, the ceiling): its own colour, a heading that says what it is and what it comes to, so the floor and the walls read as two separate pieces of work. */
+const SECTION_TONE = {
+  floor: { bg: '#eff6ff', bd: '#60a5fa', head: '#dbeafe', ink: '#1e40af' },
+  walls: { bg: '#fffbeb', bd: '#f59e0b', head: '#fef3c7', ink: '#92400e' },
+  water: { bg: '#ecfeff', bd: '#22d3ee', head: '#cffafe', ink: '#0e7490' },
+  ceiling: { bg: '#f8fafc', bd: '#94a3b8', head: '#e2e8f0', ink: '#475569' },
+} as const
+function PrepSection({ tone, icon, title, detail, cost, children }: { tone: keyof typeof SECTION_TONE; icon: string; title: string; detail?: string; cost?: number; children: React.ReactNode }) {
+  const t = SECTION_TONE[tone]
+  return (
+    <div style={{ background: t.bg, border: `1.5px solid ${t.bd}`, borderRadius: 8, marginTop: 10, overflow: 'hidden' }}>
+      <div style={{ background: t.head, color: t.ink, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: `1px solid ${t.bd}` }}>
+        <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: 0.6, textTransform: 'uppercase' }}>{icon} {title}</span>
+        {detail && <span style={{ fontSize: 11, fontWeight: 500 }}>{detail}</span>}
+        <span style={{ flex: 1 }} />
+        {cost !== undefined && cost > 0 && <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700 }} title="Materials for this part of the room (the tiler's time is in the labour section below)">£{cost.toFixed(2)}</span>}
+      </div>
+      <div style={{ padding: '8px 10px 10px' }}>{children}</div>
+    </div>
+  )
+}
 const sub: React.CSSProperties = { fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4, margin: '8px 0 4px' }
 
 export default function AssemblyTilePrepDemo({ onClose, onSave, labourTrades = [], externalAreaM2, externalPerimeterM, externalLengthMm, externalName, planRooms, drawnFor }: Props) {
@@ -166,7 +188,7 @@ export default function AssemblyTilePrepDemo({ onClose, onSave, labourTrades = [
       descShort={descInput ? describeTilePrepShort(descInput) : ''} descFull={descInput ? describeTilePrep(descInput) : ''}
       hasResult={!!r} onClose={onClose} onSave={onSave} labourTrades={labourTrades}
     >
-      {({ roomCost }) => ({
+      {({ roomCost, partCost }) => ({
         main: (
           <>
             <PlanRoomsBar planRooms={planRooms} isAdded={id => rooms.some(r => r.planRoomId === id)} onAdd={r => addPlanRooms([r])} onAddAll={addPlanRooms} />
@@ -200,6 +222,7 @@ export default function AssemblyTilePrepDemo({ onClose, onSave, labourTrades = [
               const sum = r?.rooms.find(s => s.roomId === rm.id)
               const f = rm.floor
               const anyTank = f.tanked || rm.zones.some(z => z.tanked)
+              const floorOn = f.primer || f.levelMm > 0 || f.cover !== 'none' || f.tanked
               return (
                 <div key={rm.id} style={{ background: '#fff', border: '1px solid #bae6fd', borderRadius: 8, padding: 10, marginBottom: 10 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
@@ -211,69 +234,70 @@ export default function AssemblyTilePrepDemo({ onClose, onSave, labourTrades = [
                   <RoomShapeFields room={rm} onChange={patch => updateRoom(rm.id, patch)} fromPlan={!!rm.fromPlan} />
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 8 }}>
                     <PropRow label="Height (m)"><TilingNumInput v={rm.heightM} set={n => updateRoom(rm.id, { heightM: n })} step={0.1} /></PropRow>
-                    <PropRow label="Floor area (m²) — blank = from the room"><TilingAutoInput v={rm.floorAreaOverrideM2} set={n => updateRoom(rm.id, { floorAreaOverrideM2: n })} auto={floorAreaM2(rm)} /></PropRow>
                   </div>
 
-                  <div style={sub}>Floor</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 8 }}>
-                    <PropRow label="Levelling compound (mm) — 0 = none"><TilingNumInput v={f.levelMm} set={n => updateFloor(rm.id, { levelMm: n })} step={1} /></PropRow>
-                    <PropRow label="Covered with">
-                      <select value={f.cover} onChange={e => updateFloor(rm.id, { cover: e.target.value as FloorCover })} style={propInput}>
-                        {FLOOR_COVERS.map(c => <option key={c} value={c}>{FLOOR_COVER_LABEL[c]}</option>)}
-                      </select>
-                    </PropRow>
-                    {f.cover === 'backer' && <PropRow label="Floor board">{boardSelect(f.coverBoardId, v => updateFloor(rm.id, { coverBoardId: v }))}</PropRow>}
-                    <PropRow label="Floor underneath">
-                      <select value={f.base ?? 'screed'} onChange={e => updateFloor(rm.id, { base: e.target.value as FloorBase })} style={propInput}>
-                        {(Object.keys(FLOOR_BASE_LABEL) as FloorBase[]).map(b => <option key={b} value={b}>{FLOOR_BASE_LABEL[b]}</option>)}
-                      </select>
-                    </PropRow>
-                    {f.cover === 'decoupling' && (
-                      <PropRow label="Membrane">
-                        <select value={f.membrane ?? 'plain'} onChange={e => updateFloor(rm.id, { membrane: e.target.value as Membrane })} style={propInput}>
-                          {(Object.keys(MEMBRANE_LABEL) as Membrane[]).map(m => <option key={m} value={m}>{MEMBRANE_LABEL[m]}</option>)}
+                  <PrepSection tone="floor" icon="⬜" title="Floor" detail={`${floorAreaM2(rm).toFixed(1)}m² of floor${floorOn ? '' : ': nothing is done to it'}`} cost={partCost(rm.id, k => /^(primer|level|edge|decoupling|decoupling-adh|floor-)/.test(k) || k === 'floorclean')}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 8 }}>
+                      <PropRow label="Floor area (m²) — blank = from the room"><TilingAutoInput v={rm.floorAreaOverrideM2} set={n => updateRoom(rm.id, { floorAreaOverrideM2: n })} auto={floorAreaM2(rm)} /></PropRow>
+                      <PropRow label="Levelling compound (mm) — 0 = none"><TilingNumInput v={f.levelMm} set={n => updateFloor(rm.id, { levelMm: n })} step={1} /></PropRow>
+                      <PropRow label="Covered with">
+                        <select value={f.cover} onChange={e => updateFloor(rm.id, { cover: e.target.value as FloorCover })} style={propInput}>
+                          {FLOOR_COVERS.map(c => <option key={c} value={c}>{FLOOR_COVER_LABEL[c]}</option>)}
                         </select>
                       </PropRow>
-                    )}
-                  </div>
-                  <div style={{ marginTop: 4 }}>
-                    <TilingCheck label="Primer" on={f.primer || f.levelMm > 0} set={b => updateFloor(rm.id, { primer: b })} />
-                    <TilingCheck label="Waterproof (tank) the floor, with an upstand" on={f.tanked} set={b => updateFloor(rm.id, { tanked: b })} />
-                  </div>
-
-                  <div style={sub}>Wall areas</div>
-                  {rm.zones.length === 0 && <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>No wall areas in this room.</div>}
-                  {rm.zones.map(z => (
-                    <div key={z.id} style={{ border: '1px solid #e2e8f0', borderRadius: 6, padding: 6, marginBottom: 6 }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(110px, 1.6fr) repeat(3, minmax(60px, 1fr)) 60px 22px', gap: 6, alignItems: 'end' }}>
-                        <PropRow label="Area"><input value={z.label} onChange={e => updateZone(rm.id, z.id, { label: e.target.value })} style={propInput} /></PropRow>
-                        <PropRow label="Length (m)"><TilingNumInput v={z.lengthM} set={n => updateZone(rm.id, z.id, { lengthM: n })} step={0.1} /></PropRow>
-                        <PropRow label="Height (m)"><TilingNumInput v={z.heightM} set={n => updateZone(rm.id, z.id, { heightM: n })} step={0.1} /></PropRow>
-                        <PropRow label="Less (m²)"><TilingNumInput v={z.deductM2} set={n => updateZone(rm.id, z.id, { deductM2: n })} step={0.1} /></PropRow>
-                        <div style={{ fontSize: 11, color: '#64748b', paddingBottom: 6, textAlign: 'right' }}>{zoneAreaM2(z).toFixed(1)}m²</div>
-                        <button type="button" onClick={() => setRooms(p => p.map(x => x.id === rm.id ? { ...x, zones: x.zones.filter(q => q.id !== z.id) } : x))} title="Remove this area" style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 15, lineHeight: 1, paddingBottom: 6 }}>×</button>
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 8, marginTop: 4 }}>
-                        <PropRow label="Backer board">{boardSelect(z.boardId, v => updateZone(rm.id, z.id, { boardId: v }), true, () => updateZone(rm.id, z.id, { boardId: 'none' }))}</PropRow>
-                        {z.boardId !== 'none' && (
-                          <PropRow label="Fixed to">
-                            <select value={z.base} onChange={e => updateZone(rm.id, z.id, { base: e.target.value as WallBase })} style={propInput}>
-                              {BASES.map(b => <option key={b} value={b}>{WALL_BASE_LABEL[b]}</option>)}
-                            </select>
-                          </PropRow>
-                        )}
-                      </div>
-                      <TilingCheck label="Waterproof (tank) this area" on={z.tanked} set={b => updateZone(rm.id, z.id, { tanked: b })} />
+                      {f.cover === 'backer' && <PropRow label="Floor board">{boardSelect(f.coverBoardId, v => updateFloor(rm.id, { coverBoardId: v }))}</PropRow>}
+                      <PropRow label="Floor underneath">
+                        <select value={f.base ?? 'screed'} onChange={e => updateFloor(rm.id, { base: e.target.value as FloorBase })} style={propInput}>
+                          {(Object.keys(FLOOR_BASE_LABEL) as FloorBase[]).map(b => <option key={b} value={b}>{FLOOR_BASE_LABEL[b]}</option>)}
+                        </select>
+                      </PropRow>
+                      {f.cover === 'decoupling' && (
+                        <PropRow label="Membrane">
+                          <select value={f.membrane ?? 'plain'} onChange={e => updateFloor(rm.id, { membrane: e.target.value as Membrane })} style={propInput}>
+                            {(Object.keys(MEMBRANE_LABEL) as Membrane[]).map(m => <option key={m} value={m}>{MEMBRANE_LABEL[m]}</option>)}
+                          </select>
+                        </PropRow>
+                      )}
                     </div>
-                  ))}
-                  <div style={{ display: 'flex', gap: 6, margin: '4px 0 6px' }}>
-                    <button type="button" onClick={() => addZone(rm.id, false)} style={{ ...tilingSmall, cursor: 'pointer', background: '#f1f5f9' }}>+ Add a wall area</button>
-                    <button type="button" onClick={() => addZone(rm.id, true)} title="Every wall of the room, less a door and the windows of a typical room of this kind" style={{ ...tilingSmall, cursor: 'pointer', background: '#f1f5f9' }}>+ All the walls</button>
-                  </div>
+                    <div style={{ marginTop: 4 }}>
+                      <TilingCheck label="Primer" on={f.primer || f.levelMm > 0} set={b => updateFloor(rm.id, { primer: b })} />
+                      <TilingCheck label="Waterproof (tank) the floor, with an upstand" on={f.tanked} set={b => updateFloor(rm.id, { tanked: b })} />
+                    </div>
+                  </PrepSection>
+
+                  <PrepSection tone="walls" icon="🧱" title="Walls" detail={rm.zones.length === 0 ? 'no wall areas in this room' : `${rm.zones.reduce((s, z) => s + zoneAreaM2(z), 0).toFixed(1)}m² of wall in ${rm.zones.length} area${rm.zones.length === 1 ? '' : 's'}`} cost={partCost(rm.id, k => k.startsWith('wb-'))}>
+                    {rm.zones.length === 0 && <div style={{ fontSize: 11, color: '#92400e', marginBottom: 6 }}>No wall areas in this room: add the walls that need boarding or waterproofing.</div>}
+                    {rm.zones.map(z => (
+                      <div key={z.id} style={{ background: '#fff', border: '1px solid #fcd34d', borderRadius: 6, padding: 6, marginBottom: 6 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(110px, 1.6fr) repeat(3, minmax(60px, 1fr)) 60px 22px', gap: 6, alignItems: 'end' }}>
+                          <PropRow label="Area"><input value={z.label} onChange={e => updateZone(rm.id, z.id, { label: e.target.value })} style={propInput} /></PropRow>
+                          <PropRow label="Length (m)"><TilingNumInput v={z.lengthM} set={n => updateZone(rm.id, z.id, { lengthM: n })} step={0.1} /></PropRow>
+                          <PropRow label="Height (m)"><TilingNumInput v={z.heightM} set={n => updateZone(rm.id, z.id, { heightM: n })} step={0.1} /></PropRow>
+                          <PropRow label="Less (m²)"><TilingNumInput v={z.deductM2} set={n => updateZone(rm.id, z.id, { deductM2: n })} step={0.1} /></PropRow>
+                          <div style={{ fontSize: 11, color: '#64748b', paddingBottom: 6, textAlign: 'right' }}>{zoneAreaM2(z).toFixed(1)}m²</div>
+                          <button type="button" onClick={() => setRooms(p => p.map(x => x.id === rm.id ? { ...x, zones: x.zones.filter(q => q.id !== z.id) } : x))} title="Remove this area" style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 15, lineHeight: 1, paddingBottom: 6 }}>×</button>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 8, marginTop: 4 }}>
+                          <PropRow label="Backer board">{boardSelect(z.boardId, v => updateZone(rm.id, z.id, { boardId: v }), true, () => updateZone(rm.id, z.id, { boardId: 'none' }))}</PropRow>
+                          {z.boardId !== 'none' && (
+                            <PropRow label="Fixed to">
+                              <select value={z.base} onChange={e => updateZone(rm.id, z.id, { base: e.target.value as WallBase })} style={propInput}>
+                                {BASES.map(b => <option key={b} value={b}>{WALL_BASE_LABEL[b]}</option>)}
+                              </select>
+                            </PropRow>
+                          )}
+                        </div>
+                        <TilingCheck label="Waterproof (tank) this area" on={z.tanked} set={b => updateZone(rm.id, z.id, { tanked: b })} />
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', gap: 6, margin: '4px 0 0' }}>
+                      <button type="button" onClick={() => addZone(rm.id, false)} style={{ ...tilingSmall, cursor: 'pointer', background: '#fff' }}>+ Add a wall area</button>
+                      <button type="button" onClick={() => addZone(rm.id, true)} title="Every wall of the room, less a door and the windows of a typical room of this kind" style={{ ...tilingSmall, cursor: 'pointer', background: '#fff' }}>+ All the walls</button>
+                    </div>
+                  </PrepSection>
 
                   {anyTank && (
-                    <>
-                      <div style={sub}>Waterproofing</div>
+                    <PrepSection tone="water" icon="💧" title="Waterproofing" detail="floor upstand and walls together" cost={partCost(rm.id, k => k.startsWith('tank'))}>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
                         <PropRow label="System">
                           <select value={rm.tankSystem} onChange={e => updateRoom(rm.id, { tankSystem: e.target.value as TankSystem })} style={propInput}>
@@ -284,25 +308,26 @@ export default function AssemblyTilePrepDemo({ onClose, onSave, labourTrades = [
                         <PropRow label="Pipe collars and seals (nr)"><TilingNumInput v={rm.collars} set={n => updateRoom(rm.id, { collars: Math.round(n) })} /></PropRow>
                         <PropRow label="Floor waste cuffs (nr)"><TilingNumInput v={rm.cuffs} set={n => updateRoom(rm.id, { cuffs: Math.round(n) })} /></PropRow>
                       </div>
-                    </>
+                    </PrepSection>
                   )}
 
-                  <div style={sub}>Ceiling</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 8 }}>
-                    <PropRow label="Ceiling gets">
-                      <select value={rm.ceiling.kind} onChange={e => updateCeiling(rm.id, { kind: e.target.value as CeilingKind })} style={propInput}>
-                        {CEILINGS.map(c => <option key={c} value={c}>{CEILING_LABEL[c]}</option>)}
-                      </select>
-                    </PropRow>
-                    {rm.ceiling.kind === 'backer' && <PropRow label="Ceiling board">{boardSelect(rm.ceiling.boardId, v => updateCeiling(rm.id, { boardId: v }))}</PropRow>}
-                    {rm.ceiling.kind !== 'none' && <PropRow label="Ceiling area (m²) — blank = the floor area"><TilingAutoInput v={rm.ceiling.areaOverrideM2} set={n => updateCeiling(rm.id, { areaOverrideM2: n })} auto={ceilingAreaM2(rm)} /></PropRow>}
-                    <PropRow label="Situation">
-                      <select value={rm.situationId ?? ''} onChange={e => updateRoom(rm.id, { situationId: e.target.value || null })} style={propInput}>
-                        <option value="">Same as the job</option>
-                        {DEFAULT_TILING_SITUATIONS.map(s => <option key={s.id} value={s.id}>{s.label.split(' (')[0]}</option>)}
-                      </select>
-                    </PropRow>
-                  </div>
+                  <PrepSection tone="ceiling" icon="▭" title="Ceiling" detail={rm.ceiling.kind === 'none' ? 'nothing is done to it' : undefined} cost={partCost(rm.id, k => k.startsWith('ceil'))}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 8 }}>
+                      <PropRow label="Ceiling gets">
+                        <select value={rm.ceiling.kind} onChange={e => updateCeiling(rm.id, { kind: e.target.value as CeilingKind })} style={propInput}>
+                          {CEILINGS.map(c => <option key={c} value={c}>{CEILING_LABEL[c]}</option>)}
+                        </select>
+                      </PropRow>
+                      {rm.ceiling.kind === 'backer' && <PropRow label="Ceiling board">{boardSelect(rm.ceiling.boardId, v => updateCeiling(rm.id, { boardId: v }))}</PropRow>}
+                      {rm.ceiling.kind !== 'none' && <PropRow label="Ceiling area (m²) — blank = the floor area"><TilingAutoInput v={rm.ceiling.areaOverrideM2} set={n => updateCeiling(rm.id, { areaOverrideM2: n })} auto={ceilingAreaM2(rm)} /></PropRow>}
+                      <PropRow label="Situation (the whole room)">
+                        <select value={rm.situationId ?? ''} onChange={e => updateRoom(rm.id, { situationId: e.target.value || null })} style={propInput}>
+                          <option value="">Same as the job</option>
+                          {DEFAULT_TILING_SITUATIONS.map(s => <option key={s.id} value={s.id}>{s.label.split(' (')[0]}</option>)}
+                        </select>
+                      </PropRow>
+                    </div>
+                  </PrepSection>
                   <div style={{ marginTop: 6, borderTop: '1px dashed #e2e8f0', paddingTop: 6 }}>
                     <TilingCheck label="Dust sheets and protection" on={rm.protect} set={b => updateRoom(rm.id, { protect: b })} />
                   </div>
