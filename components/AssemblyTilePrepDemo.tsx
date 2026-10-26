@@ -13,8 +13,8 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useCalcState } from '@/components/calc-state'
 import type { CostedLine } from '@/lib/assembly-calc'
 import {
-  calculateTilePrep, newTilePrepRoom, newPrepZone, floorAreaM2, ceilingAreaM2, autoTapeLm, BACKER_BOARDS, WALL_BASE_LABEL, TANK_LABEL, FLOOR_COVER_LABEL, CEILING_LABEL,
-  type TilePrepRoom, type TilePrepResult, type PrepZone, type WallBase, type TankSystem, type FloorCover, type CeilingKind, type BackerId,
+  calculateTilePrep, newTilePrepRoom, newPrepZone, floorAreaM2, ceilingAreaM2, autoTapeLm, BACKER_BOARDS, WALL_BASE_LABEL, TANK_LABEL, FLOOR_COVER_LABEL, CEILING_LABEL, FLOOR_BASE_LABEL, MEMBRANE_LABEL,
+  type TilePrepRoom, type TilePrepResult, type PrepZone, type WallBase, type TankSystem, type FloorCover, type CeilingKind, type BackerId, type FloorBase, type Membrane,
 } from '@/lib/tile-prep-units'
 import PlanRoomsBar from '@/components/PlanRoomsBar'
 import type { PlanRoomInfo } from '@/lib/rooms-from-walls'
@@ -220,6 +220,18 @@ export default function AssemblyTilePrepDemo({ onClose, onSave, labourTrades = [
                       </select>
                     </PropRow>
                     {f.cover === 'backer' && <PropRow label="Floor board">{boardSelect(f.coverBoardId, v => updateFloor(rm.id, { coverBoardId: v }))}</PropRow>}
+                    <PropRow label="Floor underneath">
+                      <select value={f.base ?? 'screed'} onChange={e => updateFloor(rm.id, { base: e.target.value as FloorBase })} style={propInput}>
+                        {(Object.keys(FLOOR_BASE_LABEL) as FloorBase[]).map(b => <option key={b} value={b}>{FLOOR_BASE_LABEL[b]}</option>)}
+                      </select>
+                    </PropRow>
+                    {f.cover === 'decoupling' && (
+                      <PropRow label="Membrane">
+                        <select value={f.membrane ?? 'plain'} onChange={e => updateFloor(rm.id, { membrane: e.target.value as Membrane })} style={propInput}>
+                          {(Object.keys(MEMBRANE_LABEL) as Membrane[]).map(m => <option key={m} value={m}>{MEMBRANE_LABEL[m]}</option>)}
+                        </select>
+                      </PropRow>
+                    )}
                   </div>
                   <div style={{ marginTop: 4 }}>
                     <TilingCheck label="Primer" on={f.primer || f.levelMm > 0} set={b => updateFloor(rm.id, { primer: b })} />

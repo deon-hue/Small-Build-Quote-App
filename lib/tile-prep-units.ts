@@ -26,7 +26,13 @@ export const WALL_BASE_LABEL: Record<WallBase, string> = { studs: 'Timber or met
 export type TankSystem = 'liquid' | 'sheet'
 export const TANK_LABEL: Record<TankSystem, string> = { liquid: 'Liquid-applied membrane (two coats)', sheet: 'Sheet membrane bonded in adhesive' }
 export type FloorCover = 'none' | 'backer' | 'decoupling'
-export const FLOOR_COVER_LABEL: Record<FloorCover, string> = { none: 'Nothing', backer: 'Tile backer board (over a timber floor)', decoupling: 'Decoupling mat (over a screed that may move)' }
+export const FLOOR_COVER_LABEL: Record<FloorCover, string> = { none: 'Nothing', backer: 'Tile backer board (over a timber floor)', decoupling: 'Decoupling (uncoupling) membrane (over a floor that may move or crack)' }
+/** What the floor under the board or membrane is: the membrane and its fixing do not change, but chipboard has its own warning (it swells and moves when it gets damp) */
+export type FloorBase = 'screed' | 'timber' | 'chipboard'
+export const FLOOR_BASE_LABEL: Record<FloorBase, string> = { screed: 'Screed or concrete', timber: 'Plywood, OSB or boarded timber floor', chipboard: 'Chipboard flooring' }
+/** The decoupling membrane: a plain one for an unheated floor (or one with warm-water pipes in the screed), or a studded one with channels that take electric heating cable */
+export type Membrane = 'plain' | 'heating'
+export const MEMBRANE_LABEL: Record<Membrane, string> = { plain: 'Plain uncoupling membrane (unheated floor, or warm-water pipes in the screed)', heating: 'Electric-heating membrane (studded, takes the heating cable)' }
 export type CeilingKind = 'none' | 'mr-board' | 'backer'
 export const CEILING_LABEL: Record<CeilingKind, string> = { none: 'Nothing', 'mr-board': 'Moisture-resistant plasterboard, taped and jointed', backer: 'Tile backer board (ceiling to be tiled)' }
 
@@ -54,6 +60,9 @@ export interface TilePrepRoom extends RoomShapeExtras {
     cover: FloorCover
     coverBoardId: BackerId
     tanked: boolean
+    /** the floor underneath (screed when not given) and, for a decoupling membrane, which kind (plain when not given) */
+    base?: FloorBase
+    membrane?: Membrane
   }
   tankSystem: TankSystem
   /** metres of waterproof tape to corners and junctions; null = worked out from the areas */
@@ -91,7 +100,8 @@ export const MATERIAL_RATES = {
   primerL: 4.8,              // £/L acrylic or epoxy tile primer
   levelBag: 18.5,            // £ per 20kg bag of self-levelling compound
   edgeStrip: 0.65,           // £/lm perimeter foam strip for a levelled floor
-  decoupling: 11.5,          // £/m² decoupling mat
+  decoupling: 11.5,          // £/m² plain uncoupling membrane
+  heatingMembrane: 29,       // £/m² studded membrane with channels for electric heating cable
   adhesiveBag: 24,           // £ per 20kg bag of flexible adhesive (bonding board and mats)
   screws: 0.55,              // £/m² screws and washers for backer board to studs or joists
   plugs: 0.3,                // £/m² plugs for backer board bonded to masonry
@@ -117,6 +127,7 @@ export const HOURS = {
   cleanM2: 0.03,                       // sweep, vacuum, scrape and wipe a floor ready
   primerM2: 0.03, levelM2: 0.12, levelPerMmM2: 0.004, edgeLm: 0.04,
   decouplingM2: 0.32,
+  heatingMembraneM2: 0.42,             // the studded membrane takes longer to lay and bond (the cable itself is laid in Electric Underfloor Heating)
   tankLiquidM2: 0.28, tankSheetM2: 0.36, tapeLm: 0.08, collarEach: 0.25, cuffEach: 0.4,
   ceilingBoardM2: 0.24, ceilingTapeM2: 0.16,
 } as const
@@ -214,11 +225,16 @@ export function calculateTilePrep(input: TilePrepInput): TilePrepResult {
         task('tiler', 'floorboard', 'fix the backer board to the floor', [{ qty: floorM2, unit: 'm²', what: 'floor board', rate: b.hoursM2 }])
         parts.push(`${b.label.split(' (')[0].toLowerCase()} fixed to ${n1(floorM2)}m² of floor`)
       } else if (f.cover === 'decoupling') {
-        add('decoupling', 'decoupling mat', 'm²', rate('decoupling'), floorM2 * 1.05)
-        add('decoupling-adh', 'flexible adhesive to bond the mat', 'bag', rate('adhesiveBag'), (floorM2 * COVERAGE.adhesiveKgM2Mat * 1.05) / COVERAGE.bagKg)
-        task('tiler', 'decoupling', 'lay the decoupling mat', [{ qty: floorM2, unit: 'm²', what: 'mat', rate: HOURS.decouplingM2 }])
-        parts.push(`a decoupling mat to ${n1(floorM2)}m² of floor`)
+        const heated = f.membrane === 'heating'
+        const baseWord = f.base === 'chipboard' ? 'chipboard floor' : f.base === 'timber' ? 'timber floor' : 'screed floor'
+        add('decoupling', heated ? 'electric-heating (studded) decoupling membrane' : 'decoupling membrane', 'm²', rate(heated ? 'heatingMembrane' : 'decoupling'), floorM2 * 1.05)
+        add('decoupling-adh', 'flexible adhesive to bond the membrane', 'bag', rate('adhesiveBag'), (floorM2 * COVERAGE.adhesiveKgM2Mat * 1.05) / COVERAGE.bagKg)
+        task('tiler', 'decoupling', heated ? 'lay the electric-heating membrane' : 'lay the decoupling membrane', [{ qty: floorM2, unit: 'm²', what: 'membrane', rate: heated ? HOURS.heatingMembraneM2 : HOURS.decouplingM2 }])
+        parts.push(`${heated ? 'an electric-heating decoupling membrane' : 'a decoupling membrane'} bonded to ${n1(floorM2)}m² of ${baseWord}`)
+        if (heated) warnings.push(`${rn}: the heating cable, its thermostat and the electrician are priced in Electric Underfloor Heating. Use loose cable there (not mats) for a cable-channel membrane, and leave out its insulation board: the membrane carries the cable.`)
       }
+      if (f.base === 'chipboard' && f.cover === 'none') warnings.push(`${rn}: tiles should not go straight onto chipboard flooring, which swells and moves if it gets damp. Overboard it with plywood or backer board, or use a decoupling membrane the maker approves for chipboard.`)
+      if (f.base === 'chipboard' && f.cover === 'decoupling') warnings.push(`${rn}: check the membrane maker allows it over chipboard flooring (it must be sound, dry and screwed down firmly) or overboard the chipboard with plywood first.`)
     }
 
     // ── Walls: backer board ──────────────────────────────────────────────────────
