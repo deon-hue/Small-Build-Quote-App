@@ -936,6 +936,15 @@ const joinerySubphases: PhaseSubphase[] = [
     ukWarning: 'Fit skirting after the floor finish is down (or allow for a gap and scotia), and leave a small gap to a timber floor for expansion. Fix with adhesive and pins into the wall, or into studs, and fill and caulk before painting.',
     tasks: [],  // priced by the Skirtings, Architraves & Trim calculator (rooms: skirting profile and length, corners, architraves, dado, picture rail, scotia)
   },
+  // Staircases and balustrades priced one staircase at a time (assembly calculator), beside the task-based Staircase & Balustrade above. Listed last so a new line in Take-off still starts on a task.
+  {
+    id: 'join-stairs-calc',
+    phase: 'Joinery & Fixtures',
+    name: 'Staircase & Balustrade (by staircase)',
+    markupPct: 20,
+    ukWarning: 'Stairs must comply with Part K: rise max 220mm, going min 220mm, pitch max 42 degrees, 2.0m headroom, a handrail on at least one side (both sides if 1000mm or wider), and guarding where the drop is over 600mm with no gap that a 100mm sphere can pass through.',
+    tasks: [],  // priced by the Staircase calculator (each staircase: shape, height and risers, going, width, made or built on site or client-supplied, balustrade, handrails, underside boarding)
+  },
 ]
 
 // ── 10. TILING & FINISHES ─────────────────────────────────────────────────────

@@ -795,3 +795,11 @@ export function suggestTrimLabour(tasks: { key: string; trade: 'carpenter'; task
     .filter(t => t.hours > 0)
     .map(t => ({ key: 'trim-' + t.key, trade: t.trade as LabourTradeKind, task: t.task, hours: t.hours, basis: t.basis }))
 }
+
+/** The labour for the Staircase & Balustrade calculator (Joinery & Fixtures → Staircase & Balustrade (by staircase)): a carpenter's time to fit or build each staircase, the balustrade and handrail, and a labourer to help carry
+ * and lift it, as the calculator's own engine works them out (the hours and the working come from its table and are passed in). Rough estimates, as everywhere here. */
+export function suggestStairsLabour(tasks: { key: string; trade: 'carpenter' | 'labourer'; task: string; hours: number; basis: string }[]): LabourSuggestion[] {
+  return tasks
+    .filter(t => t.hours > 0)
+    .map(t => ({ key: 'stairs-' + t.key, trade: t.trade as LabourTradeKind, task: t.task, hours: t.hours, basis: t.basis }))
+}

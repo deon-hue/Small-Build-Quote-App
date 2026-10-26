@@ -40,6 +40,7 @@ export const STRIP_ITEMS: StripItemType[] = [
   { id: 'window', name: 'Window taken out (with its board)', unit: 'nr', hours: 0.8, wasteM3: 0.12, group: 'joinery' },
   { id: 'door-ext', name: 'External door taken out (with its frame)', unit: 'nr', hours: 1.2, wasteM3: 0.25, group: 'joinery' },
   { id: 'door-patio', name: 'Patio, French or bi-fold doors taken out', unit: 'nr', hours: 2.5, wasteM3: 0.6, group: 'joinery', note: 'Large glazed units are heavy: two people, and a way to carry them out.' },
+  { id: 'stairs', name: 'Staircase taken out (with its balustrade)', unit: 'nr', hours: 4, wasteM3: 1.2, group: 'joinery', note: 'Check what the stairs are holding up, and the stairwell opening before it is taken out.' },
   { id: 'fireplace', name: 'Fireplace and surround', unit: 'nr', hours: 2, wasteM3: 0.4, group: 'joinery' },
   { id: 'kitchen-units', name: 'Kitchen units', unit: 'lm', hours: 0.9, wasteM3: 0.35, group: 'kitchen' },
   { id: 'worktop', name: 'Worktop', unit: 'lm', hours: 0.5, wasteM3: 0.2, group: 'kitchen' },
