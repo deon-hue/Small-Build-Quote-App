@@ -126,6 +126,8 @@ export interface AssemblyRenderOpts {
   wallOpenings?: PlanWallOpening[]
   /** A by-room calculator: the rooms found on the Take-off plan, which it can add with their sizes and then follows. */
   planRooms?: PlanRoomInfo[]
+  /** Tiling Preparation: what the drawing is for (the floor, the walls, or both) */
+  prepScope?: 'floor' | 'walls' | 'both'
 }
 
 type BuiltAssemblyEntry = {
@@ -177,7 +179,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'wd-schedule': { icon: 'windows-doors', render: opts => <AssemblyWindowsDoorsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} planOpenings={opts?.planOpenings} /> },
   'tile-floor-rooms': { icon: 'tile-floor', render: opts => <AssemblyTileFloorDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} planRooms={opts?.planRooms} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} externalName={opts?.externalName} /> },
   'tile-wall-rooms': { icon: 'tile-wall', render: opts => <AssemblyTileWallDemo planRooms={opts?.planRooms} onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} externalName={opts?.externalName} externalLengthMm={opts?.externalLengthMm} /> },
-  'tile-prep-rooms': { icon: 'tile-prep', render: opts => <AssemblyTilePrepDemo planRooms={opts?.planRooms} onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} externalName={opts?.externalName} /> },
+  'tile-prep-rooms': { icon: 'tile-prep', render: opts => <AssemblyTilePrepDemo planRooms={opts?.planRooms} onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} externalLengthMm={opts?.externalLengthMm} externalName={opts?.externalName} drawnFor={opts?.prepScope} /> },
   'tile-ufh-electric': { icon: 'tile-ufh', render: opts => <AssemblyTileUfhDemo planRooms={opts?.planRooms} onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} externalName={opts?.externalName} /> },
   'plaster-insul-wall': { icon: 'wall-insulation', render: opts => <AssemblyWallInsulationDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'plaster-render': { icon: 'render', render: opts => <AssemblyRenderDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },

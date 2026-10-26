@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useApp } from '@/contexts/AppContext'
 import { linkProject, parseOpenForQuote, type OpenForQuote } from '@/lib/takeoff-link'
+import { PREP_DRAWN_FOR_LABEL, type PrepDrawnFor } from '@/lib/tile-prep-units'
 import { makeDebouncedSave, isEmptyTakeoff, isUuid, newProjectId, loadTakeoffFromSupabase, saveTakeoffToSupabase, listTakeoffSummaries, deleteTakeoffProject, type TakeoffSummary } from '@/lib/takeoff-sync'
 import { sheetOf, roomLabelsOf, setRoomLabels, roomShapesOf, setRoomShapes, roomEdgesOf, setRoomEdges, activeSheetIdOf, onActiveSheet, onActiveLevel, activeLevelIdOf, levelOf, levelName, levelBelow, ghostLevel, elementsOnGhostLevel, viewKey, itemLevelId, addLevel, switchActiveLevel, renameLevel, setLevelHeight, removeLevel, moveElementToLevel, copyLevelContents, levelInsertIndex, LEVEL_PRESETS, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet, setSheetPaper, guidesOf, setGuides } from '@/lib/takeoff-sheets'
 import type { WallRef } from '@/lib/wall-drawing'
@@ -783,6 +784,8 @@ export default function TakeoffPage() {
   const [sendChooser, setSendChooser] = useState(false)
   // a request from the quote page to open one of its take-offs (or a fresh one), acted on once the cloud sync has settled
   const [pendingQuoteOpen, setPendingQuoteOpen] = useState<OpenForQuote | null>(null)
+  // Tiling Preparation: what the next drawing is for (the floor, the walls, or both), chosen before drawing and put on each item drawn
+  const [drawPrepScope, setDrawPrepScope] = useState<PrepDrawnFor>('floor')
   const [sendQuoteSearch, setSendQuoteSearch] = useState('')
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
 
@@ -1409,6 +1412,7 @@ export default function TakeoffPage() {
       if (bo && boPhaseName === item.phase && foundationFits && ((item.phase !== 'Roof' && item.phase !== 'Foundations' && !MARKER_CALC_PHASES.has(item.phase)) || hasCalculator)) {
         item.taskSubphaseId = bo.id
         item.subPhase = bo.name
+        if (bo.canonical_id === 'tile-prep-rooms') item.prepScope = el.type === 'line' ? 'walls' : drawPrepScope
         if (item.phase === 'Foundations') {
           if (el.type === 'line') {
             const pairedType = Object.entries(FOUNDATION_MAKEUP_BY_TYPE).find(([, mk]) => mk && WALL_MAKEUP_TO_SUBPHASE_CANONICAL[mk] === bo.canonical_id)?.[0]
@@ -5821,6 +5825,8 @@ export default function TakeoffPage() {
     const _lengthFedCalc    = isDecoCalc && ((item.phase === 'Plastering & Boarding' && ['plaster-render', 'plaster-insul-wall'].includes(boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id ?? '')) || (item.phase === 'Drainage & Services' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'drain-runs') || (item.phase === 'Plumbing & Heating' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'plumb-pipework'))
     // the tiling calculators are sized from what is drawn: an area gives the first room its size, a line gives wall tiling its first wall's length
     const _tileCalc        = isDecoCalc && item.phase === 'Tiling & Finishes'
+    // Tiling Preparation: the drawing says what it is for (the floor, the walls, or both) before it is priced
+    const _prepCalc        = _tileCalc && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'tile-prep-rooms'
     // warm-water underfloor heating is sized from the area drawn: it becomes the first zone, named for the room it sits in
     const _ufhCalc         = isDecoCalc && item.phase === 'Plumbing & Heating' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'plumb-ufh'
     const isTaskPhase      = _phaseHasTasks && !isBuildup && !isExtWall && !isPlaster && !isIntWall && !isDemo && !isDemoCalc && !isFoundationLine && !isDecoCalc
@@ -5861,7 +5867,7 @@ export default function TakeoffPage() {
     const renderAssemblyPanel = (savePatch: Partial<TakeoffItem>) => builtAssembly && (
       // keyed by the wall and the kind of calculator: picking another wall (or another build-up type) must start a NEW calculator from THAT wall's own saved values, never carry on with the last wall's
       <AssemblyItemPanel
-        key={item.id + '|' + (item.floorMakeupId ?? '') + '|' + (item.taskSubphaseId ?? '') + '|' + (item.demoSubphaseId ?? '')}
+        key={item.id + '|' + (item.floorMakeupId ?? '') + '|' + (item.taskSubphaseId ?? '') + '|' + (item.demoSubphaseId ?? '') + '|' + (item.prepScope ?? '')}
         name={item.name}
         lengthM={item.length ?? 0}
         measureLabel={isBoxShape ? 'Size' : isFloorShape || ((_tileCalc || _ufhCalc) && floorDims) ? 'Area' : _tileCalc && (item.length ?? 0) > 0 ? 'Length' : (isDecoCalc && !_lengthFedCalc) || _demoMarker ? 'Marker' : undefined}
@@ -5887,6 +5893,7 @@ export default function TakeoffPage() {
           noSampleOpenings: item.elementId ? true : undefined,
           basics: isFoundationLine ? { widthMm: item.foundationWidth ?? 600, depthMm: item.foundationDepth ?? 1000 } : undefined,
           planRooms: roomData ? roomInfos : undefined,
+          prepScope: _prepCalc ? (item.prepScope ?? (linkedEl?.type === 'line' ? 'walls' : 'floor')) : undefined,
           onSave: result => {
             const { calcState, state: _state, size, ...res } = result
             saveItemEdit({
@@ -6763,6 +6770,28 @@ export default function TakeoffPage() {
                     ? "Priced wall by wall with its own calculator. The length of the line drawn here is the first wall's length: add the height, openings and the finish in the calculator."
                     : `Priced room by room with its own calculator. The ${_plasterLine ? 'line' : 'area'} drawn here is only a marker on the plan: add the rooms in the calculator.`}
                 </div>
+                {_prepCalc && (() => {
+                  const isLine = linkedEl?.type === 'line'
+                  const cur: PrepDrawnFor = item.prepScope ?? (isLine ? 'walls' : 'floor')
+                  const setScope = (v: PrepDrawnFor) => {
+                    if (v === cur) return
+                    if ((item.assemblyResult || item.assemblyCalcState) && !window.confirm('Changing what this drawing is for starts the calculator again: the rooms and prices already set in it for this item are cleared. Carry on?')) return
+                    saveItemEdit({ ...item, prepScope: v, assemblyResult: undefined, assemblyCalcState: undefined })
+                  }
+                  return (
+                    <div style={{ marginBottom: 10 }}>
+                      <label style={labelStyle}>This drawing is</label>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {(['floor', 'walls', 'both'] as const).map(v => (
+                      <button key={v} type="button" disabled={(isLine && v !== 'walls')} onClick={() => setScope(v)}
+                        title={v === 'floor' ? 'The area drawn is the floor of the room' : v === 'walls' ? 'A line is the length of one wall; an area gives the walls around it' : 'A whole room: its floor and its walls (the usual wall areas for what the room is called)'}
+                        style={{ fontSize: 11.5, padding: '3px 10px', borderRadius: 10, border: '1px solid var(--to-border)', cursor: 'pointer', fontFamily: 'inherit', opacity: (isLine && v !== 'walls') ? 0.45 : 1, background: cur === v ? 'var(--to-accent, #7fdc3c)' : 'var(--to-alt)', color: cur === v ? '#10210a' : 'var(--to-text)', fontWeight: cur === v ? 700 : 400 }}>{PREP_DRAWN_FOR_LABEL[v]}</button>
+                    ))}
+                      </div>
+                      <div style={{ fontSize: 10.5, color: 'var(--to-muted)', marginTop: 4 }}>{isLine ? 'A line is the length of a wall to prepare.' : 'Choose before it is priced. Changing it starts the calculator again.'}</div>
+                    </div>
+                  )
+                })()}
                 {renderAssemblyPanel({})}
               </>
             )
@@ -7540,6 +7569,22 @@ export default function TakeoffPage() {
                   <div style={{ fontWeight: 600, marginBottom: 4 }}>🧮 {selectedSub?.name}</div>
                   <div style={{ fontSize: 11, color: 'var(--to-muted)' }}>
                     Priced with its own calculator — there are no tasks to pick. {(activePhase === 'Decoration' || activePhase === 'Tiling & Finishes' || activePhase === 'Windows & Doors') ? 'Draw an area on the plan (it is only a marker), then open the calculator to price it.' : (activePhase === 'Plumbing & Heating' || activePhase === 'Drainage & Services') ? 'Draw a line on the plan (it is only a marker), then open the calculator to price it.' : 'Draw the wall, then open the calculator to price it.'}
+                  </div>
+                </div>
+              )}
+
+              {selectedSubCanonical === 'tile-prep-rooms' && (
+                <div style={{ marginBottom: 12 }}>
+                  <label style={labelStyle}>This drawing is</label>
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {(['floor', 'walls', 'both'] as const).map(v => (
+                      <button key={v} type="button" disabled={false} onClick={() => { setDrawPrepScope(v); setTool(v === 'walls' ? 'line' : 'rect') }}
+                        title={v === 'floor' ? 'The area drawn is the floor of the room' : v === 'walls' ? 'A line is the length of one wall; an area gives the walls around it' : 'A whole room: its floor and its walls (the usual wall areas for what the room is called)'}
+                        style={{ fontSize: 11.5, padding: '3px 10px', borderRadius: 10, border: '1px solid var(--to-border)', cursor: 'pointer', fontFamily: 'inherit', opacity: false ? 0.45 : 1, background: drawPrepScope === v ? 'var(--to-accent, #7fdc3c)' : 'var(--to-alt)', color: drawPrepScope === v ? '#10210a' : 'var(--to-text)', fontWeight: drawPrepScope === v ? 700 : 400 }}>{PREP_DRAWN_FOR_LABEL[v]}</button>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 10.5, color: 'var(--to-muted)', marginTop: 4 }}>
+                    {drawPrepScope === 'floor' ? 'Draw the area of the floor to prepare.' : drawPrepScope === 'walls' ? 'Draw a line along a wall (its length), or an area to prepare the walls around it.' : 'Draw the room: its floor, and its walls as the usual areas for what the room is called.'} You can change it on the item before it is priced.
                   </div>
                 </div>
               )}

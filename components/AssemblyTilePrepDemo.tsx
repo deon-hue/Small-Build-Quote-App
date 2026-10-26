@@ -14,7 +14,7 @@ import { useCalcState } from '@/components/calc-state'
 import type { CostedLine } from '@/lib/assembly-calc'
 import {
   calculateTilePrep, newTilePrepRoom, newPrepZone, floorAreaM2, ceilingAreaM2, autoTapeLm, BACKER_BOARDS, WALL_BASE_LABEL, TANK_LABEL, FLOOR_COVER_LABEL, CEILING_LABEL, FLOOR_BASE_LABEL, MEMBRANE_LABEL,
-  type TilePrepRoom, type TilePrepResult, type PrepZone, type WallBase, type TankSystem, type FloorCover, type CeilingKind, type BackerId, type FloorBase, type Membrane,
+  prepRoomFromDrawing, refitPrepRoomToDrawing, type PrepDrawing, type PrepDrawnFor, type TilePrepRoom, type TilePrepResult, type PrepZone, type WallBase, type TankSystem, type FloorCover, type CeilingKind, type BackerId, type FloorBase, type Membrane,
 } from '@/lib/tile-prep-units'
 import PlanRoomsBar from '@/components/PlanRoomsBar'
 import type { PlanRoomInfo } from '@/lib/rooms-from-walls'
@@ -37,29 +37,32 @@ interface Props {
   externalPerimeterM?: number
   /** the name of the room the drawn shape sits in, when that room is named */
   externalName?: string
+  /** the length of a line drawn in Take-off, mm (walls only: it is the length of the first wall area) */
+  externalLengthMm?: number
+  /** what the drawing in Take-off is for: the floor (an area), the walls (a line, or the edges of an area) or both (a whole room). The floor when not said, as it has always been. */
+  drawnFor?: PrepDrawnFor
 }
 
 const uid = () => Math.random().toString(36).slice(2, 9)
 const sub: React.CSSProperties = { fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4, margin: '8px 0 4px' }
 
-export default function AssemblyTilePrepDemo({ onClose, onSave, labourTrades = [], externalAreaM2, externalPerimeterM, externalName, planRooms }: Props) {
+export default function AssemblyTilePrepDemo({ onClose, onSave, labourTrades = [], externalAreaM2, externalPerimeterM, externalLengthMm, externalName, planRooms, drawnFor }: Props) {
   const ID = 'AssemblyTilePrepDemo'
-  // The area drawn in Take-off (if any) sizes the first room, which follows it until the drawing changes
+  // What is drawn in Take-off (an area, or a line) and what it is for. The first room is made from it and follows it until the drawing changes: the floor (the area), the walls (the line, or the edges of the area) or both.
+  const scope: PrepDrawnFor = drawnFor ?? 'floor'
   const planArea = externalAreaM2 && externalAreaM2 > 0 ? externalAreaM2 : 0
   const planPerimeter = externalPerimeterM && externalPerimeterM > 0 ? externalPerimeterM : 0
-  const planSides = planArea > 0 ? sidesFromAreaPerimeter(planArea, planPerimeter) : null
-  const planName = externalName?.trim() || 'Room from the plan'
-  const planRoom = (): TilePrepRoom => {
-    const k = TILING_ROOM_KIND_BY_ID.other
-    return { ...newTilePrepRoom('room-' + uid(), planName, 'other', { lengthM: planSides?.long ?? k.lengthM, widthM: planSides?.short ?? k.widthM, heightM: k.heightM, collars: 0 }, []), shape: 'other' as const, otherAreaM2: planArea, otherPerimeterM: planPerimeter, fromPlan: { areaM2: planArea, perimeterM: planPerimeter, name: planName } }
-  }
-  // The job starts with no rooms: you add the ones being prepared (or the drawn area is the first)
-  const [rooms, setRooms] = useCalcState<TilePrepRoom[]>(ID, 'rooms', () => (planSides ? [planRoom()] : []))
+  const lineLm = planArea > 0 ? 0 : externalLengthMm && externalLengthMm > 0 ? externalLengthMm / 1000 : 0
+  const planName = externalName?.trim() || (scope === 'walls' ? (planArea > 0 ? 'Walls from the plan' : 'Wall from the plan') : 'Room from the plan')
+  const drawing: PrepDrawing = { scope, name: planName, areaM2: planArea, perimeterM: planPerimeter, lineLm }
+  const planRoom = (): TilePrepRoom | null => prepRoomFromDrawing('room-' + uid(), drawing)
+  const hasPlan = planRoom() !== null
+  // The job starts with no rooms: you add the ones being prepared (or the drawing is the first)
+  const [rooms, setRooms] = useCalcState<TilePrepRoom[]>(ID, 'rooms', () => { const r = planRoom(); return r ? [r] : [] })
   useEffect(() => {
-    if (!planSides) return
-    setRooms(p => (p.length === 0 ? [planRoom()] : p.map(r => (r.fromPlan && (r.fromPlan.areaM2 !== planArea || r.fromPlan.perimeterM !== planPerimeter || (r.fromPlan.name ?? 'Room from the plan') !== planName)
-      ? { ...r, name: r.name === (r.fromPlan.name ?? 'Room from the plan') ? planName : r.name, ...(r.fromPlan.areaM2 !== planArea || r.fromPlan.perimeterM !== planPerimeter ? { lengthM: planSides.long, widthM: planSides.short, floorAreaOverrideM2: null, otherAreaM2: planArea, otherPerimeterM: planPerimeter } : {}), fromPlan: { areaM2: planArea, perimeterM: planPerimeter, name: planName } } : r))))
-  }, [planArea, planPerimeter, planName])
+    if (!hasPlan) return
+    setRooms(p => { if (p.length === 0) { const r = planRoom(); return r ? [r] : p } return p.map(r => refitPrepRoomToDrawing(r, drawing)) })
+  }, [planArea, planPerimeter, planName, lineLm])
   const [addKind, setAddKind] = useCalcState(ID, 'addKind', 'shower')
   // The Wall Tiling areas saved elsewhere in this quote or take-off (undefined where there is none to look in, e.g. the Back Office preview)
   const sharedWall = useSharedWallRooms()
@@ -173,8 +176,8 @@ export default function AssemblyTilePrepDemo({ onClose, onSave, labourTrades = [
                 {TILING_ROOM_KINDS.map(k => <option key={k.id} value={k.id}>{k.label}</option>)}
               </select>
               <button type="button" onClick={addRoom} style={{ background: '#0369a1', color: '#fff', border: 'none', borderRadius: 5, fontSize: 12, fontWeight: 600, padding: '4px 12px', cursor: 'pointer' }}>+ Add room</button>
-              {planSides && !rooms.some(x => x.fromPlan) && (
-                <button type="button" onClick={() => setRooms(p => [...p, planRoom()])} title="Add the area drawn on the plan as a room" style={{ ...tilingSmall, cursor: 'pointer', background: '#f1f5f9' }}>+ The drawn area ({planArea.toFixed(1)}m²)</button>
+              {hasPlan && !rooms.some(x => x.fromPlan) && (
+                <button type="button" onClick={() => setRooms(p => { const r = planRoom(); return r ? [...p, r] : p })} title={scope === 'walls' ? 'Add the wall drawn on the plan as a room' : 'Add the area drawn on the plan as a room'} style={{ ...tilingSmall, cursor: 'pointer', background: '#f1f5f9' }}>{scope === 'walls' ? `+ The drawn wall (${(planArea > 0 ? planPerimeter : lineLm).toFixed(1)}m)` : `+ The drawn area (${planArea.toFixed(1)}m²)`}</button>
               )}
               {sharedWall !== undefined && (
                 <button type="button" onClick={copyWallAreas} disabled={sharedWall.length === 0}

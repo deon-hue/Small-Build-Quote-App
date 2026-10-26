@@ -284,6 +284,8 @@ export interface TakeoffItem {
   /** which part of a wall or foundation the line you drew is: its outside face (the usual for an outside wall), its middle (a partition or a foundation) or its inside face. It moves where the wall or foundation is painted and measured from; lengths still come from the drawn line. */
   lineAlign?: 'outside' | 'centre' | 'inside'
   /** a drawing only: shown on the plan (and used for rooms and snapping) but not estimated: no calculator, not in the quote, not priced */
+  /** Tiling Preparation (by room): what the drawing is for: the floor of a room, its walls, or both. A line is always walls; an area is the floor when not said. */
+  prepScope?: 'floor' | 'walls' | 'both'
   notEstimated?: boolean
   /** a block and beam floor: which way its beams run on the plan ('vertical' = up and down, 'horizontal' = left to right); missing = across the shorter side */
   beamDir?: 'vertical' | 'horizontal'

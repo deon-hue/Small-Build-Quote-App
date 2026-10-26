@@ -8,7 +8,7 @@
 // the screen costs the lines it returns through the shared costLayer.
 
 import {
-  zoneAreaM2, roomFootprint, money, hoursOf, n1, nonNeg,
+  zoneAreaM2, roomFootprint, money, hoursOf, n1, nonNeg, TILING_ROOM_KIND_BY_ID, zonesFromKind, allWallsZone, sidesFromAreaPerimeter,
   type RoomShapeExtras, type TilingSituation, type TilingZone, type TilingLabourTask, type TilingLine, type TilingRoomSummary,
 } from './tiling-common'
 
@@ -75,7 +75,7 @@ export interface TilePrepRoom extends RoomShapeExtras {
   situationId: string | null
   protect: boolean
   /** the drawn area and perimeter (from Take-off) this room was last sized from: it follows them until they change */
-  fromPlan?: { areaM2: number; perimeterM: number; /** the name the room was given from the plan: it follows the plan's room name while still that */ name?: string }
+  fromPlan?: { areaM2: number; perimeterM: number; /** the name the room was given from the plan: it follows the plan's room name while still that */ name?: string; /** what the drawing was for (a room saved before this has none: the floor) and the wall length it gave, m */ scope?: PrepDrawnFor; wallLm?: number }
   /** the room on the Take-off plan this one was made from, and what the plan said when it was last fed (it follows the plan until the plan's room changes) */
   planRoomId?: string
   planRoomSig?: string
@@ -90,6 +90,92 @@ export function newTilePrepRoom(id: string, name: string, kindId: string, k: { l
     situationId: null, protect: true,
   }
 }
+// ── A drawing in Take-off says what it is for ─────────────────────────────────────────────────────────────────────────────────────────────────
+
+/** What a drawing in Take-off is for: the floor of a room (an area), its walls (a line, or the edges of an area), or both (a whole room, as a bathroom or shower room is done). */
+export type PrepDrawnFor = 'floor' | 'walls' | 'both'
+export const PREP_DRAWN_FOR_LABEL: Record<PrepDrawnFor, string> = { floor: 'The floor', walls: 'The walls', both: 'Floor and walls' }
+/** the id of the wall area made from a drawing, so it can follow the drawing without touching one the estimator added */
+export const PLAN_WALL_ID = 'plan-wall'
+
+/** The kind of room a name looks like ("Main bathroom" is a bathroom), for a room drawn and named in Take-off; unknown is 'other' */
+export function prepKindFromName(name: string): string {
+  const n = (name || '').toLowerCase()
+  if (/shower|wet ?room|en-?suite/.test(n)) return 'shower'
+  if (/bath/.test(n)) return 'bathroom'
+  if (/cloak|\bwc\b|toilet/.test(n)) return 'cloakroom'
+  if (/kitchen/.test(n)) return 'kitchen'
+  if (/utility|laundry/.test(n)) return 'utility'
+  return 'other'
+}
+
+export interface PrepDrawing {
+  scope: PrepDrawnFor
+  name: string
+  /** the drawn area and its edge, m² and m (0 = a line was drawn, or nothing) */
+  areaM2: number
+  perimeterM: number
+  /** the length of a line drawn, m */
+  lineLm: number
+}
+
+/** The metres of wall a drawing gives: the edge of an area drawn, else the line drawn (0 when it gives none). */
+export const drawingWallLm = (d: Pick<PrepDrawing, 'areaM2' | 'perimeterM' | 'lineLm'>) => (d.areaM2 > 0 && d.perimeterM > 0 ? d.perimeterM : Math.max(0, d.lineLm))
+
+/**
+ * The first room of a Tiling Preparation calculator made from what is drawn in Take-off. The FLOOR is the area drawn (primed, as the calculator starts). The WALLS are one wall area as long as the line drawn,
+ * or the edge of the area drawn, at the room's height, boarded in foam backer board (waterproofed too when the room is a shower room); there is no floor preparation then. BOTH is a whole room: the usual wall
+ * areas for what the room is called (a bath surround and splashback for a bathroom, a shower's walls for a shower room, every wall for any other room), the floor tanked in a shower room. Null when the drawing
+ * cannot give what it is for (a floor or a whole room needs an area; walls need an area or a line).
+ */
+export function prepRoomFromDrawing(id: string, d: PrepDrawing): TilePrepRoom | null {
+  const hasArea = d.areaM2 > 0
+  const wallLm = drawingWallLm(d)
+  if (d.scope !== 'walls' && !hasArea) return null
+  if (d.scope === 'walls' && !(wallLm > 0)) return null
+  const kindId = d.scope === 'floor' ? 'other' : prepKindFromName(d.name)
+  const k = TILING_ROOM_KIND_BY_ID[kindId] ?? TILING_ROOM_KIND_BY_ID.other
+  const sides = hasArea ? sidesFromAreaPerimeter(d.areaM2, d.perimeterM) : null
+  const dims = { lengthM: sides?.long ?? k.lengthM, widthM: sides?.short ?? k.widthM, heightM: k.heightM, collars: d.scope === 'walls' ? 0 : d.scope === 'floor' ? 0 : k.collars }
+  let zones: PrepZone[] = []
+  if (d.scope === 'walls') {
+    zones = [{ id: PLAN_WALL_ID, label: hasArea ? 'Walls from the plan' : 'Wall from the plan', lengthM: wallLm, heightM: k.heightM, deductM2: 0, base: 'studs', boardId: 'foam-10', tanked: kindId === 'shower' }]
+  } else if (d.scope === 'both') {
+    zones = kindId !== 'other'
+      ? zonesFromKind(kindId).map(newPrepZone)
+      : [{ ...allWallsZone({ lengthM: dims.lengthM, widthM: dims.widthM, heightM: dims.heightM, doors: 0, windows: 0 }), base: 'studs' as WallBase, boardId: 'foam-10' as BackerId, tanked: false }]
+  }
+  const room = newTilePrepRoom(id, d.name, kindId, dims, zones)
+  if (d.scope === 'walls') { room.floor = { ...room.floor, primer: false }; room.floorAreaOverrideM2 = 0 }   // nothing is done to the floor: it has no area to prepare
+  if (d.scope === 'both' && kindId === 'shower') room.floor = { ...room.floor, tanked: true }   // a wet room is tanked on the floor too
+  if (hasArea) { room.shape = 'other'; room.otherAreaM2 = d.areaM2; room.otherPerimeterM = d.perimeterM }
+  room.fromPlan = { areaM2: d.areaM2, perimeterM: d.perimeterM, name: d.name, scope: d.scope, wallLm }
+  return room
+}
+
+/**
+ * The room made from a drawing, brought up to date when the drawing changes: a new size follows (the room's floor, and the wall area made from the drawing while its length is still what the drawing gave),
+ * and a name follows while the room still has the name the drawing gave it. Anything the estimator typed over is left alone.
+ */
+export function refitPrepRoomToDrawing(r: TilePrepRoom, d: PrepDrawing): TilePrepRoom {
+  const fp = r.fromPlan
+  if (!fp) return r
+  const wallLm = drawingWallLm(d)
+  const sizeChanged = fp.areaM2 !== d.areaM2 || fp.perimeterM !== d.perimeterM
+  const wallChanged = (fp.wallLm ?? 0) !== wallLm
+  const nameChanged = (fp.name ?? 'Room from the plan') !== d.name
+  if (!sizeChanged && !wallChanged && !nameChanged) return r
+  let next: TilePrepRoom = { ...r }
+  if (nameChanged && r.name === (fp.name ?? 'Room from the plan')) next.name = d.name
+  if (sizeChanged && d.areaM2 > 0) {
+    const sides = sidesFromAreaPerimeter(d.areaM2, d.perimeterM)
+    next = { ...next, lengthM: sides.long, widthM: sides.short, floorAreaOverrideM2: (fp.scope ?? 'floor') === 'walls' ? 0 : null, otherAreaM2: d.areaM2, otherPerimeterM: d.perimeterM }
+  }
+  if (wallChanged && wallLm > 0) next.zones = next.zones.map(z => (z.id === PLAN_WALL_ID && z.lengthM === (fp.wallLm ?? z.lengthM) ? { ...z, lengthM: wallLm } : z))
+  next.fromPlan = { areaM2: d.areaM2, perimeterM: d.perimeterM, name: d.name, scope: fp.scope ?? 'floor', wallLm }
+  return next
+}
+
 /** A wall area to prepare: boarded and waterproofed when it is a shower, bath or wet room wall; boarded only otherwise */
 export function newPrepZone(z: TilingZone): PrepZone {
   const wet = /shower|bath|wet/i.test(z.label)
