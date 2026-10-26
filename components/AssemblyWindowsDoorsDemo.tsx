@@ -12,9 +12,9 @@ import React, { useEffect, useMemo } from 'react'
 import { useCalcState } from '@/components/calc-state'
 import type { CostedLine } from '@/lib/assembly-calc'
 import {
-  calculateWindowsDoors, newOpening, unitPrice, mergePlanOpenings, planOpeningSig, KINDS, KIND_BY_ID, isInternalDoor, isWindow, DEFAULT_WD_SITUATIONS,
+  calculateWindowsDoors, newOpening, unitPrice, mergePlanOpenings, planOpeningSig, KINDS, KIND_BY_ID, isInternalDoor, isWindow, kindInScope, DEFAULT_WD_SITUATIONS,
   MATERIAL_LABEL, GLAZING_LABEL, SUPPLY_LABEL, SWING_LABEL, CILL_LABEL,
-  type WdOpening, type PlanOpening, type WdResult, type OpeningKind, type WdMaterial, type WdGlazing, type WdSupply, type WdSwing, type CillChoice,
+  type WdOpening, type PlanOpening, type WdResult, type WdScope, type OpeningKind, type WdMaterial, type WdGlazing, type WdSupply, type WdSwing, type CillChoice,
 } from '@/lib/wd-units'
 import { describeWd, describeWdShort, type WdDescriptionInput } from '@/lib/wd-description'
 import { suggestWindowsDoorsLabour } from '@/lib/flat-roof-labour'
@@ -28,10 +28,14 @@ interface Props {
   labourTrades?: BOLabourTrade[]
   /** the doors and windows placed on the Take-off drawing: they are added here, and follow the drawing until typed over */
   planOpenings?: PlanOpening[]
+  /** which calculator it is: the windows one (windows and the bi-fold and sliding door systems), the doors one (every other door), or the older one with both, kept for quotes already saved */
+  scope?: WdScope
 }
 
 const uid = () => Math.random().toString(36).slice(2, 9)
 const GROUPS = ['Windows', 'External doors', 'Internal doors'] as const
+const SCOPE_ID: Record<WdScope, string> = { all: 'AssemblyWindowsDoorsDemo', windows: 'AssemblyWindowsDemo', doors: 'AssemblyDoorsDemo' }
+const SCOPE_NAME: Record<WdScope, string> = { all: 'Windows and doors', windows: 'Windows', doors: 'Doors' }
 const MATERIALS = Object.keys(MATERIAL_LABEL) as WdMaterial[]
 const GLAZINGS = Object.keys(GLAZING_LABEL) as WdGlazing[]
 const SUPPLIES = Object.keys(SUPPLY_LABEL) as WdSupply[]
@@ -45,11 +49,16 @@ function nextRef(openings: WdOpening[], kind: OpeningKind): string {
   return `${prefix}${used + 1}`
 }
 
-export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades = [], planOpenings }: Props) {
-  const ID = 'AssemblyWindowsDoorsDemo'
+export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades = [], planOpenings: allPlanOpenings, scope = 'all' }: Props) {
+  const ID = SCOPE_ID[scope]
+  // only the openings that belong to this calculator are fed to it from the plan: a window or bi-fold to the windows one, any other door to the doors one
+  const planOpenings = allPlanOpenings ? allPlanOpenings.filter(p => kindInScope(p.kind, scope)) : undefined
+  const scopeKinds = KINDS.filter(k => kindInScope(k.id, scope))
+  const groupLabel = (g: (typeof GROUPS)[number]) => (scope === 'windows' && g === 'External doors' ? 'Bi-fold and sliding doors' : g)
+  const groups = GROUPS.filter(g => scopeKinds.some(k => k.group === g))
   // The job starts with no openings: you add the ones the job has
   const [openings, setOpenings] = useCalcState<WdOpening[]>(ID, 'openings', [])
-  const [addKind, setAddKind] = useCalcState<OpeningKind>(ID, 'addKind', 'win-casement')
+  const [addKind, setAddKind] = useCalcState<OpeningKind>(ID, 'addKind', scope === 'doors' ? 'door-front' : 'win-casement')
   const [jobSituationId, setJobSituationId] = useCalcState(ID, 'jobSituationId', 'ground')
 
   // the openings drawn on the plan: added here, kept in step with the drawing (one typed over stays as typed until the drawing's opening changes)
@@ -65,7 +74,7 @@ export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades
   /** a different kind of opening: its standard size, material and trims (what was typed in the old one's fields is dropped, but the reference, room and number stay) */
   function changeKind(o: WdOpening, kind: OpeningKind) {
     const fresh = newOpening(o.id, nextRef(openings.filter(x => x.id !== o.id), kind), kind, o.location)
-    setOpenings(p => p.map(x => (x.id === o.id ? { ...fresh, qty: o.qty, supply: o.supply, pcEach: o.pcEach, removeOld: o.removeOld, planId: o.planId, fromPlan: o.fromPlan } : x)))
+    setOpenings(p => p.map(x => (x.id === o.id ? { ...fresh, qty: o.qty, supply: o.supply, pcEach: o.pcEach, removeOld: o.removeOld, planId: o.planId, fromPlan: o.fromPlan, ...(isInternalDoor(kind) && kind !== 'door-int-pocket' && o.existingFrame ? { existingFrame: true, lining: false } : {}) } : x)))
   }
 
   const result = useMemo((): { ok: true; r: WdResult } | { ok: false; error: string } => {
@@ -78,12 +87,12 @@ export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades
   const descInput: WdDescriptionInput | null = r ? {
     openings: openings.map(o => ({ ref: o.ref, location: o.location, parts: r.openings.find(x => x.openingId === o.id)?.parts ?? [] })).filter(o => o.parts.length > 0),
     windows: count('Windows'), externalDoors: count('External doors'), internalDoors: count('Internal doors'),
-    anyProvisional: openings.some(o => o.supply === 'pc'), anyClientSupplied: openings.some(o => o.supply === 'client'),
+    anyProvisional: openings.some(o => o.supply === 'pc'), anyClientSupplied: openings.some(o => o.supply === 'client'), scope,
   } : null
 
   return (
     <TilingCalcFrame
-      id={ID} defaultName="Windows and doors" subject="windows and doors" lines={r?.lines ?? []} labourTasks={r?.labour ?? []} suggestLabour={suggestWindowsDoorsLabour as (t: any[]) => any}
+      id={ID} defaultName={SCOPE_NAME[scope]} subject={SCOPE_NAME[scope].toLowerCase()} lines={r?.lines ?? []} labourTasks={r?.labour ?? []} suggestLabour={suggestWindowsDoorsLabour as (t: any[]) => any}
       error={result.ok ? null : result.error} warnings={r?.warnings ?? []}
       descShort={descInput ? describeWdShort(descInput) : ''} descFull={descInput ? describeWd(descInput) : ''}
       hasResult={!!r} onClose={onClose} onSave={onSave} labourTrades={labourTrades}
@@ -94,9 +103,9 @@ export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>Openings</span>
               <select value={addKind} onChange={e => setAddKind(e.target.value as OpeningKind)} style={{ ...tilingSmall, minWidth: 190 }}>
-                {GROUPS.map(g => (
-                  <optgroup key={g} label={g}>
-                    {KINDS.filter(k => k.group === g).map(k => <option key={k.id} value={k.id}>{k.label}</option>)}
+                {groups.map(g => (
+                  <optgroup key={g} label={groupLabel(g)}>
+                    {scopeKinds.filter(k => k.group === g).map(k => <option key={k.id} value={k.id}>{k.label}</option>)}
                   </optgroup>
                 ))}
               </select>
@@ -105,7 +114,7 @@ export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades
 
             {openings.length === 0 && (
               <div style={{ fontSize: 12, color: '#64748b', background: '#fff', border: '1px dashed #bae6fd', borderRadius: 6, padding: '14px 12px', marginBottom: 10 }}>
-                No openings yet. Pick a kind of window or door above and press <strong>+ Add opening</strong>, then set its size, material and who supplies it.
+                No openings yet. Pick a kind of {scope === 'windows' ? 'window' : scope === 'doors' ? 'door' : 'window or door'} above and press <strong>+ Add opening</strong>, then set its size, material and who supplies it.
               </div>
             )}
 
@@ -119,9 +128,9 @@ export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades
                     <input value={o.ref} onChange={e => update(o.id, { ref: e.target.value })} title="Reference on the schedule" style={{ fontWeight: 700, fontSize: 13, width: 52, border: '1px solid transparent', borderBottom: '1px solid #e2e8f0', outline: 'none', background: 'transparent' }} />
                     <input value={o.location} onChange={e => update(o.id, { location: e.target.value })} placeholder="Room / wall" style={{ fontSize: 12, width: 130, border: '1px solid #e2e8f0', borderRadius: 4, padding: '3px 6px' }} />
                     <select value={o.kind} onChange={e => changeKind(o, e.target.value as OpeningKind)} style={{ ...tilingSmall, minWidth: 170 }}>
-                      {GROUPS.map(g => (
-                        <optgroup key={g} label={g}>
-                          {KINDS.filter(x => x.group === g).map(x => <option key={x.id} value={x.id}>{x.label}</option>)}
+                      {groups.map(g => (
+                        <optgroup key={g} label={groupLabel(g)}>
+                          {scopeKinds.filter(x => x.group === g).map(x => <option key={x.id} value={x.id}>{x.label}</option>)}
                         </optgroup>
                       ))}
                     </select>
@@ -171,7 +180,8 @@ export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades
                   </div>
                   <div style={{ marginTop: 6, borderTop: '1px dashed #e2e8f0', paddingTop: 6 }}>
                     {!internal && <TilingCheck label="Coloured (not white)" on={o.coloured} set={b => update(o.id, { coloured: b })} />}
-                    {internal && o.kind !== 'door-int-pocket' && <TilingCheck label="Lining" on={o.lining} set={b => update(o.id, { lining: b })} />}
+                    {internal && o.kind !== 'door-int-pocket' && <TilingCheck label="Fit to a frame already in the wall (the door is trimmed to fit it)" on={!!o.existingFrame} set={b => update(o.id, { existingFrame: b, lining: !b })} />}
+                    {internal && o.kind !== 'door-int-pocket' && !o.existingFrame && <TilingCheck label="Lining" on={o.lining} set={b => update(o.id, { lining: b })} />}
                     {internal && <TilingCheck label="Architrave" on={o.architrave} set={b => update(o.id, { architrave: b })} />}
                     {internal && <TilingCheck label="Ironmongery" on={o.ironmongery} set={b => update(o.id, { ironmongery: b })} />}
                     {o.removeOld && (

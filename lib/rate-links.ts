@@ -40,7 +40,7 @@ export function normUnit(u: string | null | undefined): string {
  * are per room ("wall-paint|room-1"): a link there is to the KIND of material, so every room's wall paint, in this quote and the next, shares one link.
  */
 export function linkKey(assemblyId: string, layerId: string): string {
-  return assemblyId === 'deco-internal-walls' || assemblyId === 'plaster-rooms' || assemblyId === 'plaster-render' || assemblyId === 'plaster-insul-wall' || assemblyId === 'tile-floor-rooms' || assemblyId === 'tile-wall-rooms' || assemblyId === 'tile-prep-rooms' || assemblyId === 'tile-ufh-electric' || assemblyId === 'wd-schedule' || assemblyId === 'join-skirting-rooms' || assemblyId === 'join-stairs-calc' || assemblyId === 'join-kitchen-fit' || assemblyId === 'join-furniture-calc' || assemblyId === 'join-secondfix-calc' ? layerId.split('|')[0] : layerId
+  return assemblyId === 'deco-internal-walls' || assemblyId === 'plaster-rooms' || assemblyId === 'plaster-render' || assemblyId === 'plaster-insul-wall' || assemblyId === 'tile-floor-rooms' || assemblyId === 'tile-wall-rooms' || assemblyId === 'tile-prep-rooms' || assemblyId === 'tile-ufh-electric' || assemblyId === 'wd-schedule' || assemblyId === 'wd-windows' || assemblyId === 'wd-doors' || assemblyId === 'join-skirting-rooms' || assemblyId === 'join-stairs-calc' || assemblyId === 'join-kitchen-fit' || assemblyId === 'join-furniture-calc' || assemblyId === 'join-secondfix-calc' ? layerId.split('|')[0] : layerId
 }
 
 export const unitsMatch = (a: string | null | undefined, b: string | null | undefined) => normUnit(a) === normUnit(b)

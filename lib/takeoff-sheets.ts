@@ -382,7 +382,7 @@ export function copyLevelContents(p: TakeoffProject, fromId: string, toId: strin
     return { ...el, id, levelId: toId, points: el.points.map(pt => ({ ...pt })), tagDx: undefined, tagDy: undefined }
   })
   const items: TakeoffItem[] = p.items
-    .filter(it => it.elementId && idMap.has(it.elementId) && !it.electricsSummary && !it.plumbSummary && !it.wdSummary)
+    .filter(it => it.elementId && idMap.has(it.elementId) && !it.electricsSummary && !it.plumbSummary && !it.wdSummary && !it.wdScopeSummary)
     .map(it => ({ ...it, id: newId(), elementId: idMap.get(it.elementId!)!, drawnOpenings: undefined }))
   const sheetId = activeSheetIdOf(p)
   const copyList = <T extends OnLevel & { id: string; points: { x: number; y: number }[] }>(list: T[] | undefined): T[] =>

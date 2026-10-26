@@ -23,7 +23,7 @@ import { BUILT_ASSEMBLY_CANON_IDS } from '@/lib/built-assemblies'
 import { WALL_MAKEUP_TO_SUBPHASE_CANONICAL } from '@/lib/built-assembly-ids'
 import AssemblyItemPanel from './components/AssemblyWindow'
 import ElectricalPointsPanel, { POINT_GROUP_COLOUR } from './components/ElectricalPointsPanel'
-import OpeningsPanel from './components/OpeningsPanel'
+import OpeningsPanel, { type OpeningsCard } from './components/OpeningsPanel'
 import RoomsPanel from './components/RoomsPanel'
 import { detectRooms, roomFromPolygon, splitDrawnRoom, sortRooms, roomIndexAt, pointInPolygon, isAxisRect, rectFromCorners, moveOutline, resizeRectOutline, labelAfterEdit, type DrawnRoomShape, describeRooms, labelIndexForRooms, ROOM_KIND_BY_ID, type DetectedRoom, type PlanRoomInfo, type RoomLabel, type RoomWithOpenings } from '@/lib/rooms-from-walls'
 import { POINT_BY_ID, type ElectricsSavedState } from '@/lib/electrics-units'
@@ -46,6 +46,9 @@ const PLUMB_ITEM_ID = 'plumb-summary'
 // The one Take-off item that holds the boiler / heating system (the Heating Plant calculator for the boiler marker and the radiators on the plan).
 const BOILER_ITEM_ID = 'plumb-boiler'
 const WD_ITEM_ID = 'wd-summary'
+/** the Windows and the Doors calculators each keep their saved price on an item of their own (the placed openings stay on the one above) */
+const WD_WINDOWS_ID = 'wd-windows-summary'
+const WD_DOORS_ID = 'wd-doors-summary'
 /** A selected drawing is shown in this blue (it used to be white, which cannot be seen on a white sheet) */
 const SEL_COLOUR = '#1565c0'
 const OPENING_COLOUR = { win: '#2b6cb0', ext: '#7c3aed', int: '#b45309' }
@@ -74,7 +77,7 @@ import { mitreCuts, mergeCollinearSides, wallDrawing, wallBand, offsetPolyline, 
 import { sidesOf, splitOpenings } from '@/lib/wall-split'
 import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
 import { openingShape, locateOnPath, clampDist, pathLength, nextOpeningRef, hasSwing, wallOpeningTypeFor, planWallOpenings, segmentMiddle, flippedSwing, pointAtDist, type PlacedOpening, type WallBand } from '@/lib/wall-openings'
-import { KIND_BY_ID as WD_KIND_BY_ID, planOpeningSig, type OpeningKind, type WdSwing, type PlanOpening } from '@/lib/wd-units'
+import { KIND_BY_ID as WD_KIND_BY_ID, planOpeningSig, kindInScope, type OpeningKind, type WdSwing, type PlanOpening } from '@/lib/wd-units'
 import { buildDragLinks, applyLink, joinCorner, type DragLink } from '@/lib/wall-links'
 import { cornersOf, segmentsFor, snapPoint, anchorsFor, parseTyped, pointAtDistance, rectCornerAt, rotateShape, type SnapResult, type SnapAnchor } from '@/lib/takeoff-snap'
 import { newHistory, observe as observeHistory, undoStep, redoStep, type History } from '@/lib/takeoff-history'
@@ -2091,6 +2094,7 @@ export default function TakeoffPage() {
     if (it.plumbSummary) return BUILT_ASSEMBLY_CANON_IDS['plumb-install']
     if (it.boilerSummary) return BUILT_ASSEMBLY_CANON_IDS['plumb-heating-plant']
     if (it.wdSummary) return BUILT_ASSEMBLY_CANON_IDS['wd-schedule']
+    if (it.wdScopeSummary) return BUILT_ASSEMBLY_CANON_IDS[it.wdScopeSummary === 'windows' ? 'wd-windows' : 'wd-doors']
     const demoCalc = demoCalcSub(it)
     if (demoCalc?.calculatorId) return BUILT_ASSEMBLY_CANON_IDS[demoCalc.calculatorId]
     // External walls and roofs both: a calculator picked by sub-phase, else the Build-up Type.
@@ -2994,6 +2998,17 @@ export default function TakeoffPage() {
     const sub = boSubPhases.find(sp => sp.canonical_id === 'wd-schedule')
     return { id: WD_ITEM_ID, name: 'Windows and doors', phase: 'Windows & Doors', qty: 1, unit: 'item', wdSummary: true, placedOpenings: [], ...(sub && { taskSubphaseId: sub.id, subPhase: sub.name }) }
   }
+  /** the Windows or the Doors calculator's own item: made the first time its card is opened or saved */
+  function newWdScopeItem(scope: 'windows' | 'doors'): TakeoffItem {
+    const sub = boSubPhases.find(sp => sp.canonical_id === (scope === 'windows' ? 'wd-windows' : 'wd-doors'))
+    return { id: scope === 'windows' ? WD_WINDOWS_ID : WD_DOORS_ID, name: scope === 'windows' ? 'Windows' : 'Doors', phase: 'Windows & Doors', qty: 1, unit: 'item', wdScopeSummary: scope, ...(sub && { taskSubphaseId: sub.id, subPhase: sub.name }) }
+  }
+  function changeWdScopeItem(scope: 'windows' | 'doors', fn: (it: TakeoffItem) => TakeoffItem) {
+    setProject(p => {
+      const items = p.items.some(it => it.wdScopeSummary === scope) ? p.items : [...p.items, newWdScopeItem(scope)]
+      return { ...p, items: items.map(it => it.wdScopeSummary === scope ? fn(it) : it) }
+    })
+  }
   function changeWdItem(fn: (it: TakeoffItem) => TakeoffItem) {
     setProject(p => {
       const items = p.items.some(it => it.wdSummary) ? p.items : [...p.items, newWdItem()]
@@ -3167,6 +3182,55 @@ export default function TakeoffPage() {
     const plan: PlanOpening[] = livePlaced.filter(o => !o.notEstimated).map(o => ({ id: o.id, ref: o.ref, location: o.location, kind: o.kind, widthMm: o.widthMm, heightMm: o.heightMm, swing: o.swing }))
     const planKey = plan.map(planOpeningSig).join(';') + '#' + plan.map(o => o.id).join(',')
     const stale = !!it?.assemblyResult && it.wdPricedKey !== undefined && it.wdPricedKey !== planKey
+    // the Windows card and the Doors card: each is fed only the openings that belong to it (a window or bi-fold or sliding door system to Windows, any other door to Doors) and has its own saved price
+    const scopeCards: OpeningsCard[] = (['windows', 'doors'] as const).map(scope => {
+      const sid = scope === 'windows' ? WD_WINDOWS_ID : WD_DOORS_ID
+      const canon = scope === 'windows' ? 'wd-windows' : 'wd-doors'
+      const sit = project.items.find(i => i.wdScopeSummary === scope)
+      const sPlan = plan.filter(o => kindInScope(o.kind, scope))
+      const sKey = sPlan.map(planOpeningSig).join(';') + '#' + sPlan.map(o => o.id).join(',')
+      const drawingOnly = livePlaced.filter(o => o.notEstimated && kindInScope(o.kind, scope)).length
+      return {
+        key: sid, name: scope === 'windows' ? 'Windows' : 'Doors',
+        measureText: `${sPlan.length}${drawingOnly > 0 ? ` (and ${drawingOnly} drawing only)` : ''}`,
+        saved: sit?.assemblyResult,
+        stale: !!sit?.assemblyResult && sit.wdPricedKey !== undefined && sit.wdPricedKey !== sKey,
+        open: assemblyWindowItemId === sid,
+        onOpen: () => { changeWdScopeItem(scope, x => x); setAssemblyWindowItemId(sid) },
+        onClose: () => setAssemblyWindowItemId(null),
+        calculator: BUILT_ASSEMBLY_CANON_IDS[canon]?.render({
+          labourTrades,
+          calcState: sit?.assemblyCalcState,
+          planOpenings: sPlan,
+          onSave: result => {
+            const { calcState, state: _state, size: _size, ...res } = result
+            const sub = boSubPhases.find(sp => sp.canonical_id === canon)
+            changeWdScopeItem(scope, x => ({ ...x, assemblyResult: res, assemblyCalcState: calcState, wdPricedKey: sKey, name: result.name, ...(sub && { taskSubphaseId: sub.id, subPhase: sub.name }) }))
+            setAssemblyWindowItemId(null)
+          },
+        }),
+      }
+    })
+    // the older calculator with both in one is only shown when a quote already priced from it (so nothing already priced changes, and the two new ones are not counted twice)
+    const legacyCard: OpeningsCard[] = it?.assemblyResult || it?.assemblyCalcState ? [{
+      key: WD_ITEM_ID, name: 'Windows and doors (older, both together)',
+      measureText: `${livePlaced.filter(o => !o.notEstimated).length}${livePlaced.some(o => o.notEstimated) ? ` (and ${livePlaced.filter(o => o.notEstimated).length} drawing only)` : ''}`,
+      saved: it?.assemblyResult, stale,
+      open: assemblyWindowItemId === WD_ITEM_ID,
+      onOpen: () => { changeWdItem(x => x); setAssemblyWindowItemId(WD_ITEM_ID) },
+      onClose: () => setAssemblyWindowItemId(null),
+      calculator: built?.render({
+        labourTrades,
+        calcState: it?.assemblyCalcState,
+        planOpenings: plan,
+        onSave: result => {
+          const { calcState, state: _state, size: _size, ...res } = result
+          const sub = boSubPhases.find(sp => sp.canonical_id === 'wd-schedule')
+          changeWdItem(x => ({ ...x, assemblyResult: res, assemblyCalcState: calcState, wdPricedKey: planKey, name: result.name, ...(sub && { taskSubphaseId: sub.id, subPhase: sub.name }) }))
+          setAssemblyWindowItemId(null)
+        },
+      }),
+    }] : []
     const sel = livePlaced.find(o => o.id === selectedOpeningId)
     const selEl = sel ? project.elements.find(e => e.id === sel.wallId) : undefined
     const selGeo = selEl ? wallGeometry(selEl) : null
@@ -3185,25 +3249,7 @@ export default function TakeoffPage() {
         onMoveAlong={moveOpeningAlong}
         onCentre={centreOpening}
         onFlip={flipOpening}
-        saved={it?.assemblyResult}
-        stale={stale}
-        calculatorOpen={assemblyWindowItemId === WD_ITEM_ID}
-        onOpenCalculator={() => { changeWdItem(x => x); setAssemblyWindowItemId(WD_ITEM_ID) }}
-        onCloseCalculator={() => setAssemblyWindowItemId(null)}
-        calculator={built?.render({
-          labourTrades,
-          calcState: it?.assemblyCalcState,
-          planOpenings: plan,
-          onSave: result => {
-            const { calcState, state: _state, size: _size, ...res } = result
-            const sub = boSubPhases.find(sp => sp.canonical_id === 'wd-schedule')
-            changeWdItem(x => ({
-              ...x, assemblyResult: res, assemblyCalcState: calcState, wdPricedKey: planKey, name: result.name,
-              ...(sub && { taskSubphaseId: sub.id, subPhase: sub.name }),
-            }))
-            setAssemblyWindowItemId(null)
-          },
-        })}
+        cards={[...scopeCards, ...legacyCard]}
       />
     )
   }
@@ -7581,7 +7627,7 @@ export default function TakeoffPage() {
     const item = editingItem ?? phaseDefaults
     if ((activePhase === 'Electrics' && tool === 'electric') || item?.electricsSummary) return renderElectricsPanel()
     if ((activePhase === 'Plumbing & Heating' && (tool === 'plumb' || pipeDraw)) || item?.plumbSummary || item?.boilerSummary) return renderPlumbingPanel()
-    if ((activePhase === 'Windows & Doors' && tool === 'opening') || item?.wdSummary) return renderOpeningsPanel()
+    if ((activePhase === 'Windows & Doors' && tool === 'opening') || item?.wdSummary || item?.wdScopeSummary) return renderOpeningsPanel()
     if (tool === 'room') return renderRoomsPanel()
     if (!item) {
       return (
@@ -7856,7 +7902,7 @@ export default function TakeoffPage() {
                   cursor: 'pointer', background: item.notEstimated ? 'rgba(148,163,184,0.22)' : editingItem?.id === item.id ? 'var(--to-hover)' : 'transparent',
                 }}
               >
-                {item.elementId && !item.plumbSummary && !item.electricsSummary && !item.wdSummary && !item.boilerSummary && (
+                {item.elementId && !item.plumbSummary && !item.electricsSummary && !item.wdSummary && !item.wdScopeSummary && !item.boilerSummary && (
                   <label title="Not estimated: it stays on the plan as a drawing (shaded grey) but has no calculator, is not priced and is not sent to the quote" onClick={e => e.stopPropagation()}
                     style={{ position: 'absolute', right: 10, top: 7, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', fontSize: 10, color: item.notEstimated ? '#475569' : 'var(--to-muted)', cursor: 'pointer', fontWeight: item.notEstimated ? 700 : 400 }}>
                     <input type="checkbox" checked={!!item.notEstimated} onChange={e => { setProject(p => ({ ...p, items: p.items.map(it => it.id === item.id ? { ...it, notEstimated: e.target.checked || undefined } : it) })); if (editingItem?.id === item.id) setEditingItem({ ...item, notEstimated: e.target.checked || undefined }); showToast(e.target.checked ? 'Not estimated: now a drawing only' : 'Estimated again') }} />

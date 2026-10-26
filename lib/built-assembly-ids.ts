@@ -55,6 +55,8 @@ export const BUILT_ASSEMBLY_CANONICAL_IDS = new Set<string>([
   'tile-prep-rooms',
   'tile-ufh-electric',
   'wd-schedule',
+  'wd-windows',
+  'wd-doors',
   'join-skirting-rooms',
   'join-stairs-calc',
   'join-kitchen-fit',

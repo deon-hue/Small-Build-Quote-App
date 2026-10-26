@@ -116,7 +116,7 @@ export interface OpeningShape {
   gap: Pt[]
 }
 
-const isLeafDoor = (k: OpeningKind) => k === 'door-front' || k === 'door-back' || k === 'door-int-single' || k === 'door-int-fire'
+const isLeafDoor = (k: OpeningKind) => k === 'door-front' || k === 'door-back' || k === 'door-composite' || k === 'door-security' || k === 'door-int-single' || k === 'door-int-fire'
 const isDoublePair = (k: OpeningKind) => k === 'door-french' || k === 'door-int-double'
 
 /** Does a kind of opening get a swing choice (a door leaf that hinges)? */

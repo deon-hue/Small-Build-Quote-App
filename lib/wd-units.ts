@@ -8,10 +8,10 @@
 
 export type OpeningKind =
   | 'win-casement' | 'win-tilt-turn' | 'win-fixed' | 'win-sash' | 'win-bay'
-  | 'door-front' | 'door-back' | 'door-french' | 'door-bifold' | 'door-sliding' | 'door-garage'
+  | 'door-front' | 'door-back' | 'door-composite' | 'door-security' | 'door-french' | 'door-bifold' | 'door-sliding' | 'door-garage'
   | 'door-int-single' | 'door-int-fire' | 'door-int-double' | 'door-int-pocket'
 export type OpeningGroup = 'Windows' | 'External doors' | 'Internal doors'
-export type WdMaterial = 'upvc' | 'aluminium' | 'timber' | 'composite'
+export type WdMaterial = 'upvc' | 'aluminium' | 'timber' | 'composite' | 'steel'
 export type WdGlazing = 'single' | 'double' | 'triple'
 export type WdSupply = 'we' | 'pc' | 'client'
 /** Which way a door opens: in or out of the room, and which side it is hinged on, seen from the side you push it open from. */
@@ -39,6 +39,8 @@ export const KINDS: KindInfo[] = [
   { id: 'win-sash', label: 'Sash window', group: 'Windows', stdW: 900, stdH: 1500, fixed: 250, perM2: 750, hrsBase: 4, hrsPerM2: 2, trade: 'fitter', swings: false, defaultMaterial: 'timber' },
   { id: 'win-bay', label: 'Bay window', group: 'Windows', stdW: 2400, stdH: 1350, fixed: 500, perM2: 520, hrsBase: 6, hrsPerM2: 2, trade: 'fitter', swings: false, defaultMaterial: 'upvc' },
   { id: 'door-front', label: 'Front door', group: 'External doors', stdW: 900, stdH: 2100, fixed: 520, perM2: 220, hrsBase: 4, hrsPerM2: 0.5, trade: 'fitter', swings: true, defaultMaterial: 'composite' },
+  { id: 'door-composite', label: 'Composite door', group: 'External doors', stdW: 920, stdH: 2100, fixed: 640, perM2: 260, hrsBase: 4, hrsPerM2: 0.5, trade: 'fitter', swings: true, defaultMaterial: 'composite' },
+  { id: 'door-security', label: 'Security door (PAS 24 or steel)', group: 'External doors', stdW: 926, stdH: 2057, fixed: 850, perM2: 320, hrsBase: 5, hrsPerM2: 0.6, trade: 'fitter', swings: true, defaultMaterial: 'steel' },
   { id: 'door-back', label: 'Back door', group: 'External doors', stdW: 900, stdH: 2100, fixed: 300, perM2: 150, hrsBase: 3, hrsPerM2: 0.5, trade: 'fitter', swings: true, defaultMaterial: 'upvc' },
   { id: 'door-french', label: 'French doors (pair)', group: 'External doors', stdW: 1500, stdH: 2100, fixed: 250, perM2: 160, hrsBase: 4, hrsPerM2: 0.8, trade: 'fitter', swings: true, defaultMaterial: 'upvc' },
   { id: 'door-bifold', label: 'Bi-fold doors', group: 'External doors', stdW: 3000, stdH: 2100, fixed: 300, perM2: 560, hrsBase: 6, hrsPerM2: 1.6, trade: 'fitter', swings: false, defaultMaterial: 'aluminium' },
@@ -53,10 +55,15 @@ export const KIND_BY_ID: Record<string, KindInfo> = Object.fromEntries(KINDS.map
 export const isInternalDoor = (k: OpeningKind) => KIND_BY_ID[k]?.group === 'Internal doors'
 export const isWindow = (k: OpeningKind) => KIND_BY_ID[k]?.group === 'Windows'
 
-export const MATERIAL_LABEL: Record<WdMaterial, string> = { upvc: 'uPVC', aluminium: 'Aluminium', timber: 'Timber', composite: 'Composite' }
+/** The two calculators the schedule is split into (the older one with both stays for saved quotes): WINDOWS take the windows and the big glazed bi-fold and sliding door systems a window fitter installs; DOORS take every other door */
+export type WdScope = 'all' | 'windows' | 'doors'
+export const WINDOWS_SCOPE_KINDS: OpeningKind[] = ['win-casement', 'win-tilt-turn', 'win-fixed', 'win-sash', 'win-bay', 'door-bifold', 'door-sliding']
+export const kindInScope = (kind: OpeningKind, scope: WdScope): boolean => scope === 'all' || WINDOWS_SCOPE_KINDS.includes(kind) === (scope === 'windows')
+
+export const MATERIAL_LABEL: Record<WdMaterial, string> = { upvc: 'uPVC', aluminium: 'Aluminium', timber: 'Timber', composite: 'Composite', steel: 'Steel' }
 /** the material as it reads in a sentence */
-export const MATERIAL_WORD: Record<WdMaterial, string> = { upvc: 'uPVC', aluminium: 'aluminium', timber: 'timber', composite: 'composite' }
-export const MATERIAL_FACTOR: Record<WdMaterial, number> = { upvc: 1, aluminium: 1.45, timber: 1.5, composite: 1 }
+export const MATERIAL_WORD: Record<WdMaterial, string> = { upvc: 'uPVC', aluminium: 'aluminium', timber: 'timber', composite: 'composite', steel: 'steel' }
+export const MATERIAL_FACTOR: Record<WdMaterial, number> = { upvc: 1, aluminium: 1.45, timber: 1.5, composite: 1, steel: 1 }
 export const GLAZING_LABEL: Record<WdGlazing, string> = { single: 'Single glazed', double: 'Double glazed', triple: 'Triple glazed' }
 export const GLAZING_FACTOR: Record<WdGlazing, number> = { single: 0.85, double: 1, triple: 1.15 }
 export const COLOUR_FACTOR = 1.12
@@ -93,6 +100,8 @@ export interface WdOpening {
   architrave: boolean
   ironmongery: boolean
   removeOld: boolean
+  /** an internal door fitted to a frame (lining) that is already in the wall: no new lining, and the door is trimmed to fit it */
+  existingFrame?: boolean
   /** the opening placed on the Take-off drawing this one follows (it keeps following until typed over), and what it was last fed from it */
   planId?: string
   fromPlan?: string
@@ -119,7 +128,7 @@ export const MATERIAL_RATES = {
   sundriesDoor: 25,      // £ per door
   wastePerOld: 8,        // £ per opening: skip share for the old window or door
 } as const
-export const HOURS = { windowBoard: 0.75, externalCill: 0.5, lining: 1, architrave: 0.75, ironmongery: 0.5, removeOldWindow: 1, removeOldDoor: 1.5 } as const
+export const HOURS = { existingFrame: 1, windowBoard: 0.75, externalCill: 0.5, lining: 1, architrave: 0.75, ironmongery: 0.5, removeOldWindow: 1, removeOldDoor: 1.5 } as const
 /** The labourer helps: this share of the fitter's hours, and a second pair of hands (half the fitting hours again) on a unit this big (m²) */
 export const LABOURER_SHARE = 0.15
 export const BIG_UNIT_M2 = 3
@@ -154,8 +163,9 @@ export function openingWords(o: WdOpening): string {
   const k = KIND_BY_ID[o.kind]
   const size = `${o.widthMm} x ${o.heightMm}`
   if (isInternalDoor(o.kind)) {
-    const set = [o.lining && 'lining', o.architrave && 'architrave', o.ironmongery && 'ironmongery'].filter(Boolean) as string[]
-    return `${size} ${k.label.toLowerCase()}${set.length ? ` with ${set.length === 1 ? set[0] : set.slice(0, -1).join(', ') + ' and ' + set[set.length - 1]}` : ''}`
+    const frame = !!o.existingFrame && o.kind !== 'door-int-pocket'
+    const set = [o.lining && !frame && 'lining', o.architrave && 'architrave', o.ironmongery && 'ironmongery'].filter(Boolean) as string[]
+    return `${size} ${k.label.toLowerCase()}${frame ? ' fitted to the existing frame' : ''}${set.length ? ` with ${set.length === 1 ? set[0] : set.slice(0, -1).join(', ') + ' and ' + set[set.length - 1]}` : ''}`
   }
   return `${size} ${MATERIAL_WORD[o.material]} ${k.label.toLowerCase()}, ${GLAZING_LABEL[o.glazing].toLowerCase()}, ${o.coloured ? 'coloured' : 'white'}`
 }
@@ -207,10 +217,14 @@ export function calculateWindowsDoors(input: WdInput): WdResult {
       if (o.cill === 'external' || o.cill === 'both') { add('cill', 'external cill', 'nr', rate('externalCill'), qty); addHours('external cill', HOURS.externalCill * qty); parts.push('external cill') }
     }
     if (internal) {
-      if (o.lining) { add('lining', 'door lining set', 'nr', rate('liningSet'), qty); addHours('door lining', HOURS.lining * qty) }
+      const frame = !!o.existingFrame && o.kind !== 'door-int-pocket'
+      if (frame) { addHours('trim the door to the existing frame and re-cut the hinge recesses', HOURS.existingFrame * qty); parts.push('the door trimmed to fit the frame') }
+      if (o.lining && !frame) { add('lining', 'door lining set', 'nr', rate('liningSet'), qty); addHours('door lining', HOURS.lining * qty) }
       if (o.architrave) { add('architrave', 'architrave set (both sides)', 'nr', rate('architraveSet'), qty); addHours('architrave', HOURS.architrave * qty) }
       if (o.ironmongery) { add('ironmongery', 'door ironmongery (handles, hinges, latch)', 'nr', rate('ironmongerySet'), qty); addHours('ironmongery', HOURS.ironmongery * qty) }
-      if (o.kind === 'door-int-fire' && (!o.lining || !o.ironmongery)) warnings.push(`${label}: a fire door needs a fire-rated lining and fire-rated hinges and latch to work as a fire door.`)
+      if (o.kind === 'door-int-fire' && frame) warnings.push(`${label}: a fire door only works as one in a fire-rated frame: check the existing frame is, or fit a new lining.`)
+      if (frame) warnings.push(`${label}: the existing frame may be slightly out of square or not plumb: the door is trimmed to suit it, and a frame that is badly out needs packing or a new lining.`)
+      if (o.kind === 'door-int-fire' && !frame && (!o.lining || !o.ironmongery)) warnings.push(`${label}: a fire door needs a fire-rated lining and fire-rated hinges and latch to work as a fire door.`)
     }
     add('sundries', 'foam, sealant, packers and fixings', 'item', windowKind ? rate('sundriesWindow') : rate('sundriesDoor'), qty)
     if (o.removeOld) {
@@ -222,6 +236,7 @@ export function calculateWindowsDoors(input: WdInput): WdResult {
     // ── warnings ─────────────────────────────────────────────────────────────────
     if (o.kind === 'door-bifold' && o.widthMm > 4500) warnings.push(`${label}: bi-fold doors over 4.5m wide are usually made as two sets with a post: check with the supplier.`)
     if (windowKind && o.heightMm * o.widthMm < 330000 && o.cill !== 'none') warnings.push(`${label}: this window is small. A bedroom window needs an openable area of at least 0.33m² (450 x 750mm clear) for escape.`)
+    if (o.kind === 'door-security') warnings.push(`${label}: a security door is only PAS 24 or Secured by Design as a complete set (door, frame and locks): check the certificate and fit it to the maker's detail.`)
     if (o.supply === 'client' && k.group !== 'Internal doors') warnings.push(`${label}: with the client supplying it, check the size and the delivery date before the opening is closed up.`)
 
     // ── the fitter's time, and the labourer who helps ────────────────────────────

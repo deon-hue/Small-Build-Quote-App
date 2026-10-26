@@ -399,6 +399,23 @@ const windowsDoorSubphases: PhaseSubphase[] = [
     ukWarning: 'Replacement windows and external doors in England need FENSA, Certass or Building Control approval. Bedroom windows need an openable area of at least 0.33m² for escape. Fire doors need fire-rated lining and ironmongery.',
     tasks: [],  // priced by the Windows and doors calculator (one line per opening: type, size, material, glazing, who supplies it, cill, lining, architrave, ironmongery)
   },
+  // The same schedule split in two (assembly calculators): the windows one (windows and the bi-fold and sliding door systems) and the doors one (every other door). The one above stays for quotes already saved.
+  {
+    id: 'wd-windows',
+    phase: 'Windows & Doors',
+    name: 'Windows (by opening)',
+    markupPct: 20,
+    ukWarning: 'Replacement windows and bi-fold or sliding doors in England need FENSA, Certass or Building Control approval. Bedroom windows need an openable area of at least 0.33m² for escape. Bi-fold doors over 4.5m wide are usually made as two sets with a post.',
+    tasks: [],  // priced by the Windows calculator (one line per opening: casement, tilt-and-turn, fixed, sash and bay windows, bi-fold and sliding doors; material, glazing, who supplies it, cill)
+  },
+  {
+    id: 'wd-doors',
+    phase: 'Windows & Doors',
+    name: 'Doors (by opening)',
+    markupPct: 20,
+    ukWarning: 'Replacement external doors in England need FENSA, Certass or Building Control approval. A security door is only PAS 24 or Secured by Design as a complete set. Fire doors need a fire-rated frame, hinges and latch. An internal door fitted to an existing frame is trimmed to suit it.',
+    tasks: [],  // priced by the Doors calculator (one line per door: front, back, composite, security, French, garage and internal doors; material, who supplies it, swing, lining or the existing frame, architrave, ironmongery)
+  },
 ]
 
 // ── 5. INTERNAL WALLS & PARTITIONS ───────────────────────────────────────────

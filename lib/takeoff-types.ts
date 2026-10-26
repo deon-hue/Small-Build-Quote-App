@@ -299,6 +299,8 @@ export interface TakeoffItem {
   placedOpenings?: PlacedOpening[]
   /** the openings on the plan when the calculator was last saved, to say when the plan has changed since */
   wdPricedKey?: string
+  /** the Windows or the Doors calculator's own item: it holds that calculator's saved price and state (the placed openings themselves stay on the one wdSummary item), and the openings on the plan when it was last saved */
+  wdScopeSummary?: 'windows' | 'doors'
 }
 
 // ── Construction Layer Cost Records ──────────────────────────────────────────

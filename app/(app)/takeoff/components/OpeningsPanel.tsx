@@ -38,12 +38,20 @@ interface Props {
   onCentre: (id: string) => void
   /** turn it over to face the other side of the wall */
   onFlip: (id: string) => void
+  /** the calculators the openings on the plan are fed to: one card each (Windows, Doors, and the older one with both when a saved quote still uses it) */
+  cards: OpeningsCard[]
+}
+export interface OpeningsCard {
+  key: string
+  name: string
+  /** what the card says it measures: how many openings are on the plan for it */
+  measureText: string
   saved?: { lines: CostedLine[]; location?: string }
   stale?: boolean
-  calculatorOpen: boolean
-  onOpenCalculator: () => void
-  onCloseCalculator: () => void
-  /** the calculator element (BUILT_ASSEMBLY_CANON_IDS['wd-schedule'].render(...)) */
+  open: boolean
+  onOpen: () => void
+  onClose: () => void
+  /** the calculator element (BUILT_ASSEMBLY_CANON_IDS['wd-windows'].render(...)) */
   calculator: React.ReactNode
 }
 
@@ -176,23 +184,27 @@ export default function OpeningsPanel(p: Props) {
         </div>
       )}
 
-      {p.saved && p.stale && (
-        <div style={{ fontSize: 11.5, color: '#d97706', background: 'rgba(217,119,6,0.12)', border: '1px solid #d97706', borderRadius: 6, padding: '6px 9px', marginBottom: 8, lineHeight: 1.4 }}>
-          ⚠ The openings on the plan have changed since this was priced. Open the calculator and press Save &amp; Price again.
+      {p.cards.map(c => (
+        <div key={c.key}>
+          {c.saved && c.stale && (
+            <div style={{ fontSize: 11.5, color: '#d97706', background: 'rgba(217,119,6,0.12)', border: '1px solid #d97706', borderRadius: 6, padding: '6px 9px', marginBottom: 8, lineHeight: 1.4 }}>
+              ⚠ The openings on the plan have changed since the {c.name.toLowerCase()} were priced. Open the calculator and press Save &amp; Price again.
+            </div>
+          )}
+          <AssemblyItemPanel
+            name={c.name}
+            lengthM={0}
+            measureLabel="On the plan"
+            measureText={c.measureText}
+            saved={c.saved}
+            open={c.open}
+            onOpen={c.onOpen}
+            onClose={c.onClose}
+          >
+            {c.calculator}
+          </AssemblyItemPanel>
         </div>
-      )}
-      <AssemblyItemPanel
-        name="Windows and doors"
-        lengthM={0}
-        measureLabel="Openings on the plan"
-        measureText={`${p.openings.filter(o => !o.notEstimated).length}${p.openings.some(o => o.notEstimated) ? ` (and ${p.openings.filter(o => o.notEstimated).length} drawing only)` : ""}`}
-        saved={p.saved}
-        open={p.calculatorOpen}
-        onOpen={p.onOpenCalculator}
-        onClose={p.onCloseCalculator}
-      >
-        {p.calculator}
-      </AssemblyItemPanel>
+      ))}
     </div>
   )
 }
