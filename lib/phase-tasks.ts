@@ -963,6 +963,15 @@ const joinerySubphases: PhaseSubphase[] = [
     ukWarning: 'Scribe the run to the walls, floor and ceiling, and fix into studs or with the right fixings for the wall. Sliding doors need a level floor and ceiling. A cupboard under the stairs on an escape route may need 30-minute fire protection (Part B).',
     tasks: [],  // priced by the Fitted Furniture calculator (each run: size, built on site or kit or delivered, carcass board, doors, bays with shelves, rails and drawers, plinth, filler, handles)
   },
+  // Boxing-in, shelving and other small second-fix carpentry priced one item at a time (assembly calculator). Listed last so a new line in Take-off still starts on a task.
+  {
+    id: 'join-secondfix-calc',
+    phase: 'Joinery & Fixtures',
+    name: 'Boxing-in, Shelving & Second Fix (by item)',
+    markupPct: 20,
+    ukWarning: 'Leave access panels at every pipe joint, valve and stopcock. Boxing round a boiler or flue needs the clearances and ventilation in the maker instructions. Fire protection to structural steel has a rating set by the engineer or Building Control. Fix shelves into masonry or studs, not plasterboard alone.',
+    tasks: [],  // priced by the Boxing-in, Shelving & Second Fix calculator (each item: boxing, steel casing, shelves, bath panel, radiator cover, loft hatch, ironmongery, other carpentry by the hour)
+  },
 ]
 
 // ── 10. TILING & FINISHES ─────────────────────────────────────────────────────

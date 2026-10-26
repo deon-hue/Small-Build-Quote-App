@@ -819,3 +819,11 @@ export function suggestFurnitureLabour(tasks: { key: string; trade: 'carpenter' 
     .filter(t => t.hours > 0)
     .map(t => ({ key: 'furn-' + t.key, trade: t.trade as LabourTradeKind, task: t.task, hours: t.hours, basis: t.basis }))
 }
+
+/** The labour for the Boxing-in, Shelving & Second Fix calculator (Joinery & Fixtures → Boxing-in, Shelving & Second Fix (by item)): the carpenter's time on each item, with a labourer to help lift beam casing, as the
+ * calculator's own engine works them out (the hours and the working come from its table and are passed in). Rough estimates, as everywhere here. */
+export function suggestSecondFixLabour(tasks: { key: string; trade: 'carpenter' | 'labourer'; task: string; hours: number; basis: string }[]): LabourSuggestion[] {
+  return tasks
+    .filter(t => t.hours > 0)
+    .map(t => ({ key: 'secondfix-' + t.key, trade: t.trade as LabourTradeKind, task: t.task, hours: t.hours, basis: t.basis }))
+}
