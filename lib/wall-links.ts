@@ -72,11 +72,15 @@ export function applyLink(l: DragLink, dx: number, dy: number): Pt {
 
 // ── Joining two walls at a corner ───────────────────────────────────────────────────────────────────────────────────────
 
-export type JoinResult = { ok: true; point: Pt; aIdx: number; bIdx: number; aMoved: number; bMoved: number } | { ok: false; reason: 'parallel' | 'far' | 'same' }
+export type JoinResult =
+  | { ok: true; point: Pt; aIdx: number; bIdx: number; aMoved: number; bMoved: number; /** a T: this wall runs on past the crossing (the crossing is well inside it), so it stays where it is and only the other wall's end moves */ aHold: boolean; bHold: boolean }
+  | { ok: false; reason: 'parallel' | 'far' | 'same' | 'cross' }
 
 /**
  * Where two walls meet if they are extended (or trimmed) to a corner: the crossing of the two sides that were picked (side `aSeg` of the first wall's points, side `bSeg` of the second's), and which end of each side
  * moves there (the one nearer the crossing). `maxReach` is the farthest (plan pixels) an end may move: walls that would have to be dragged further than that do not belong to the same corner.
+ * A T JUNCTION is a wall that stops against the side of another: when the crossing is well inside one of the two sides (at least a sixth of `maxReach`, half a metre for 3m, from both its ends) that wall is the one that
+ * runs through, so it is held and only the other wall's nearer end is moved to meet it. If the crossing is well inside BOTH sides they cross each other and there is nothing to join.
  */
 export function joinCorner(a: Pt[], aSeg: number, b: Pt[], bSeg: number, maxReach: number): JoinResult {
   const A0 = a[aSeg], A1 = a[aSeg + 1], B0 = b[bSeg], B1 = b[bSeg + 1]
@@ -89,7 +93,13 @@ export function joinCorner(a: Pt[], aSeg: number, b: Pt[], bSeg: number, maxReac
   const d = (p: Pt) => Math.hypot(p.x - P.x, p.y - P.y)
   const aIdx = d(A0) <= d(A1) ? aSeg : aSeg + 1
   const bIdx = d(B0) <= d(B1) ? bSeg : bSeg + 1
-  const aMoved = d(a[aIdx]), bMoved = d(b[bIdx])
+  // where along each side the crossing is (0 to 1 is between its two ends)
+  const u = ((B0.x - A0.x) * ry - (B0.y - A0.y) * rx) / det
+  const edge = Math.max(maxReach / 6, 1)
+  const inside = (frac: number, p0: Pt, p1: Pt) => frac > 0 && frac < 1 && d(p0) > edge && d(p1) > edge
+  const aHold = inside(t, A0, A1), bHold = inside(u, B0, B1)
+  if (aHold && bHold) return { ok: false, reason: 'cross' }
+  const aMoved = aHold ? 0 : d(a[aIdx]), bMoved = bHold ? 0 : d(b[bIdx])
   if (aMoved > maxReach || bMoved > maxReach) return { ok: false, reason: 'far' }
-  return { ok: true, point: P, aIdx, bIdx, aMoved, bMoved }
+  return { ok: true, point: P, aIdx, bIdx, aMoved, bMoved, aHold, bHold }
 }

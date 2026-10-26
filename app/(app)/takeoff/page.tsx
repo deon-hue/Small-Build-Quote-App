@@ -3400,13 +3400,16 @@ export default function TakeoffPage() {
       const isWall = (x?: DrawnElement) => !!x && (x.phase === 'External Walls' || x.phase === 'Internal Walls & Partitions')
       if (isWall(A) && isWall(el)) {
         if (A!.type !== 'line' || el.type !== 'line') { showToast('A rectangle or polygon wall cannot be joined as one: select it and press "Split into separate walls" first'); return }
-        // the two sides, one on each wall, whose ends are nearest each other
+        // the two sides, one on each wall, that come nearest each other: the end of one to the body of the other (a T) or end to end (a corner)
+        const segDist = (p: TakeoffPoint, a0: TakeoffPoint, a1: TakeoffPoint) => {
+          const dx = a1.x - a0.x, dy = a1.y - a0.y, l2 = dx * dx + dy * dy
+          const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a0.x) * dx + (p.y - a0.y) * dy) / l2))
+          return Math.hypot(p.x - (a0.x + t * dx), p.y - (a0.y + t * dy))
+        }
         let best: { aIdx: number; bIdx: number; d: number } | null = null
         for (let i = 0; i < A!.points.length - 1; i++) for (let j = 0; j < el.points.length - 1; j++) {
-          for (const pa of [A!.points[i], A!.points[i + 1]]) for (const pb of [el.points[j], el.points[j + 1]]) {
-            const d = Math.hypot(pa.x - pb.x, pa.y - pb.y)
-            if (!best || d < best.d) best = { aIdx: i, bIdx: j, d }
-          }
+          const d = Math.min(segDist(el.points[j], A!.points[i], A!.points[i + 1]), segDist(el.points[j + 1], A!.points[i], A!.points[i + 1]), segDist(A!.points[i], el.points[j], el.points[j + 1]), segDist(A!.points[i + 1], el.points[j], el.points[j + 1]))
+          if (!best || d < best.d) best = { aIdx: i, bIdx: j, d }
         }
         if (best) { setJoinPair({ aId: A!.id, aIdx: best.aIdx, bId: el.id, bIdx: best.bIdx }); showToast('Two walls picked: press Join to meet them at the corner'); return }
       }
@@ -4246,19 +4249,45 @@ export default function TakeoffPage() {
     const mpp = project.calibration.mpp
     const res = joinCorner(A.points, aIdx, B.points, bIdx, 3 / (mpp || DEFAULT_MPP))
     if (!res.ok) {
-      showToast(res.reason === 'parallel' ? 'Those two walls run parallel, so they never meet' : 'Those walls are too far from meeting (the ends would move over 3 m): pick the two walls of one corner')
+      showToast(res.reason === 'parallel' ? 'Those two walls run parallel, so they never meet' : res.reason === 'cross' ? 'Those two walls already cross each other: pick the wall that should stop, and the wall it stops against' : 'Those walls are too far from meeting (the end would move over 3 m): pick the two walls that meet')
       setJoinFirst(null); setJoinPair(null)
       return
     }
-    if (res.aMoved < 0.5 && res.bMoved < 0.5) { showToast('Those walls already meet at the corner'); setJoinFirst(null); setJoinPair(null); return }
-    const P = res.point
+    // a partition that stops against an OUTSIDE wall ends at that wall's INSIDE face (as it does when it is drawn there with Snap on), not on the line the outside wall was drawn along, which is its outside face
+    let P = res.point
+    let aMoved = res.aMoved, bMoved = res.bMoved
+    if (res.aHold !== res.bHold) {
+      const held = res.aHold ? A : B, mover = res.aHold ? B : A, mSeg = res.aHold ? bIdx : aIdx
+      if (held.phase === 'External Walls' && mover.phase === 'Internal Walls & Partitions') {
+        const m0 = mover.points[mSeg], m1 = mover.points[mSeg + 1]
+        let bestFace: { f0: TakeoffPoint; f1: TakeoffPoint; d: number } | null = null
+        for (const [f0, f1] of insideFaces().segments) {
+          const dx = f1.x - f0.x, dy = f1.y - f0.y, l2 = dx * dx + dy * dy
+          const tt = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((P.x - f0.x) * dx + (P.y - f0.y) * dy) / l2))
+          const d = Math.hypot(P.x - (f0.x + tt * dx), P.y - (f0.y + tt * dy))
+          if (!bestFace || d < bestFace.d) bestFace = { f0, f1, d }
+        }
+        if (bestFace && bestFace.d <= 1 / (mpp || DEFAULT_MPP)) {
+          const rx = m1.x - m0.x, ry = m1.y - m0.y, sx = bestFace.f1.x - bestFace.f0.x, sy = bestFace.f1.y - bestFace.f0.y
+          const det = rx * sy - ry * sx
+          if (Math.abs(det) > 1e-9) {
+            const tt = ((bestFace.f0.x - m0.x) * sy - (bestFace.f0.y - m0.y) * sx) / det
+            P = { x: m0.x + tt * rx, y: m0.y + tt * ry }
+            const end = mover.points[res.aHold ? res.bIdx : res.aIdx]
+            if (res.aHold) bMoved = Math.hypot(P.x - end.x, P.y - end.y); else aMoved = Math.hypot(P.x - end.x, P.y - end.y)
+          }
+        }
+      }
+    }
+    if (aMoved < 0.5 && bMoved < 0.5) { showToast('Those walls already meet'); setJoinFirst(null); setJoinPair(null); return }
     const aOrig = A.points[res.aIdx], bOrig = B.points[res.bIdx]
     const others = wallsOnSheet().filter(w => w.id !== A.id && w.id !== B.id)
-    const aLinks = buildDragLinks(A, res.aIdx, others, 3), bLinks = buildDragLinks(B, res.bIdx, others, 3)
+    // a T: the wall that runs on through stays where it is; only the wall that stops against it has an end to move
+    const aLinks = res.aHold ? [] : buildDragLinks(A, res.aIdx, others, 3), bLinks = res.bHold ? [] : buildDragLinks(B, res.bIdx, others, 3)
     setProject(prev => {
       const elements = prev.elements.map(e => {
-        if (e.id === A.id) return { ...e, points: e.points.map((p, i) => (i === res.aIdx ? { x: P.x, y: P.y } : p)) }
-        if (e.id === B.id) return { ...e, points: e.points.map((p, i) => (i === res.bIdx ? { x: P.x, y: P.y } : p)) }
+        if (e.id === A.id) return res.aHold ? e : { ...e, points: e.points.map((p, i) => (i === res.aIdx ? { x: P.x, y: P.y } : p)) }
+        if (e.id === B.id) return res.bHold ? e : { ...e, points: e.points.map((p, i) => (i === res.bIdx ? { x: P.x, y: P.y } : p)) }
         const mine = [...aLinks.filter(l => l.elId === e.id).map(l => ({ l, dx: P.x - aOrig.x, dy: P.y - aOrig.y })), ...bLinks.filter(l => l.elId === e.id).map(l => ({ l, dx: P.x - bOrig.x, dy: P.y - bOrig.y }))]
         if (mine.length === 0) return e
         const pts = e.points.map(p => ({ ...p }))
@@ -4269,7 +4298,7 @@ export default function TakeoffPage() {
     })
     setJoinFirst(null); setJoinPair(null)
     const m = (px: number) => (px * mpp).toFixed(2)
-    showToast(`Corner joined (one wall moved ${m(res.aMoved)} m, the other ${m(res.bMoved)} m). Ctrl+Z undoes it.`)
+    showToast(res.aHold || res.bHold ? `T joined: the wall that stops moved ${m(res.aHold ? bMoved : aMoved)} m to meet the other, which stays where it is. Ctrl+Z undoes it.` : `Corner joined (one wall moved ${m(aMoved)} m, the other ${m(bMoved)} m). Ctrl+Z undoes it.`)
   }
 
   /** the first wall picked for a Join Corner, picked out in orange */
