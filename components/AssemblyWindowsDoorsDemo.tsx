@@ -174,7 +174,14 @@ export default function AssemblyWindowsDoorsDemo({ onClose, onSave, labourTrades
                     {internal && o.kind !== 'door-int-pocket' && <TilingCheck label="Lining" on={o.lining} set={b => update(o.id, { lining: b })} />}
                     {internal && <TilingCheck label="Architrave" on={o.architrave} set={b => update(o.id, { architrave: b })} />}
                     {internal && <TilingCheck label="Ironmongery" on={o.ironmongery} set={b => update(o.id, { ironmongery: b })} />}
-                    <TilingCheck label="Take out the old one" on={o.removeOld} set={b => update(o.id, { removeOld: b })} />
+                    {o.removeOld && (
+                      <>
+                        <TilingCheck label="Take out the old one" on={o.removeOld} set={b => update(o.id, { removeOld: b })} />
+                        <div style={{ fontSize: 10.5, color: '#b45309', marginTop: 2, lineHeight: 1.4 }}>
+                          Taking out old windows and doors is now priced in Demolition, Strip-Out by Room. This tick is kept only so a quote priced before keeps its figure: untick it once the removal is priced there.
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               )
