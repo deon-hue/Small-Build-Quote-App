@@ -434,6 +434,9 @@ export interface TakeoffProject {
   /** The levels of the building, bottom to top. Empty/undefined = no levels (everything is shown together, as before). A level applies to every sheet. */
   levels?:        TakeoffLevel[]
   activeLevelId?: string
+  /** the saved quote this take-off was opened from (Open in Take-off on the quote): Send to Quote then goes back INTO that quote, adding the take-off's sub-phases to it */
+  quoteId?:       string
+  quoteRef?:      string
   /** measurements on the plan that were pulled in or out (o, plan pixels from the wall) or slid along their side (s), by measurement (see dimKey in Take-off) */
   dimAdjust?:     Record<string, { o?: number; s?: number }>
   calibration:  ScaleCalibration

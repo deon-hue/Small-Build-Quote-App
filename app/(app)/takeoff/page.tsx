@@ -1280,6 +1280,27 @@ export default function TakeoffPage() {
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Opened from a saved quote ("Open in Take-off"): the take-off is linked to that quote, and Send to Quote goes back into it (the quote's customer, address and title fill the blanks)
+  useEffect(() => {
+    let raw: string | null = null
+    try { raw = sessionStorage.getItem('sbc_takeoff_link_quote'); if (raw) sessionStorage.removeItem('sbc_takeoff_link_quote') } catch { /* no storage */ }
+    if (!raw) return
+    let link: { id: string; ref: string; title?: string; customer?: { name?: string; address?: string } }
+    try { link = JSON.parse(raw) } catch { return }
+    if (!link?.id) return
+    const p0 = project
+    if (p0.quoteId && p0.quoteId !== link.id && !window.confirm('This take-off is linked to ' + (p0.quoteRef || 'another quote') + '. Link it to ' + link.ref + ' instead?')) return
+    if (!isEmptyTakeoff(p0) && !p0.quoteId && !window.confirm('Link the take-off on screen to ' + link.ref + '?\n\nOK links it (it keeps its drawings). Cancel leaves it as it is, not linked: press ✕ Close take-off for a fresh one, then use Open in Take-off on the quote again.')) return
+    setProject(p => ({
+      ...p, quoteId: link.id, quoteRef: link.ref,
+      name: !p.name || p.name === 'New Take-off' ? [link.customer?.name, link.title || link.ref].filter(Boolean).join(' – ') : p.name,
+      address: p.address || link.customer?.address || '',
+      siteAddress: p.siteAddress || link.customer?.address || undefined,
+      projectName: p.projectName || link.title || undefined,
+    }))
+    showToast('Linked to ' + link.ref + ': Send to Quote will add this take-off to it')
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Handle queued element (dblclick batching) ──────────────────────────────
   useEffect(() => {
     const el = queuedFinishRef.current
@@ -3957,7 +3978,8 @@ export default function TakeoffPage() {
   }
 
   // ── Send directly to New Quote (no file download) ─────────────────────────
-  function sendToQuote() {
+  /** `intoLinked`: send back INTO the saved quote this take-off was opened from (its sub-phases are added to that quote); otherwise a new quote is made */
+  function sendToQuote(intoLinked = false) {
     // A wall with a calculator that hasn't been priced would go to the quote as a plain build-up
     // (e.g. the default cavity wall layers) rather than what it's labelled as — say so first.
     // the electrics and plumbing items hold what was placed on the plan: with nothing placed and nothing priced there is nothing to send
@@ -3979,6 +4001,8 @@ export default function TakeoffPage() {
     const { planImageUrl: _, ...rest } = project
     const data = { version: 1, ...rest, items: sendItems }
     sessionStorage.setItem('sbc_takeoff_for_quote', JSON.stringify(data))
+    if (intoLinked && project.quoteId) sessionStorage.setItem('sbc_takeoff_into_quote', project.quoteId)
+    else sessionStorage.removeItem('sbc_takeoff_into_quote')
     router.push('/new-quote')
   }
 
@@ -7702,11 +7726,27 @@ export default function TakeoffPage() {
 
         {/* Send / Export to quote */}
         <div style={{ padding: '14px', borderTop: '1px solid var(--to-border)', marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <button
-            style={{ ...btnStyle, width: '100%', justifyContent: 'center', background: '#2563eb', color: '#fff', borderColor: '#1d4ed8', fontWeight: 600 }}
-            onClick={sendToQuote}>
-            📋 Send to Quote
-          </button>
+          {project.quoteId ? (
+            <>
+              <button
+                style={{ ...btnStyle, width: '100%', justifyContent: 'center', background: '#2563eb', color: '#fff', borderColor: '#1d4ed8', fontWeight: 600 }}
+                title="Adds this take-off's sub-phases to the saved quote it was opened from. What is in the quote stays; you are asked what to do where it already has the same sub-phase."
+                onClick={() => sendToQuote(true)}>
+                📋 Send to {project.quoteRef || 'the linked quote'}
+              </button>
+              <button
+                style={{ ...btnStyle, width: '100%', justifyContent: 'center', background: darkMode ? '#1e293b' : '#f1f5f9', fontSize: 11 }}
+                onClick={() => sendToQuote(false)}>
+                Send to a new quote instead
+              </button>
+            </>
+          ) : (
+            <button
+              style={{ ...btnStyle, width: '100%', justifyContent: 'center', background: '#2563eb', color: '#fff', borderColor: '#1d4ed8', fontWeight: 600 }}
+              onClick={() => sendToQuote(false)}>
+              📋 Send to Quote
+            </button>
+          )}
           <button
             style={{ ...btnStyle, width: '100%', justifyContent: 'center', background: darkMode ? '#1e293b' : '#f1f5f9', fontSize: 11 }}
             onClick={exportForQuote}>
@@ -7929,6 +7969,14 @@ export default function TakeoffPage() {
       case 'job':
         return (
           <>
+            {project.quoteId && (
+              <span title={'Linked to ' + (project.quoteRef || 'a saved quote') + ': Send to Quote adds this take-off to it. Press the x to unlink.'}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, color: '#0369a1', background: '#e0f2fe', border: '1px solid #7dd3fc', borderRadius: 10, padding: '2px 4px 2px 8px', whiteSpace: 'nowrap' }}>
+                Quote {project.quoteRef || ''}
+                <button type="button" aria-label="Unlink the quote" onClick={() => setProject(p => ({ ...p, quoteId: undefined, quoteRef: undefined }))}
+                  style={{ background: 'none', border: 'none', color: '#0369a1', cursor: 'pointer', fontSize: 12, lineHeight: 1, padding: '0 3px' }}>×</button>
+              </span>
+            )}
             {editingName ? (
               <input
                 autoFocus

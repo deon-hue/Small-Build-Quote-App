@@ -20,7 +20,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { TakeoffProject, TakeoffSheet } from './takeoff-types'
 
 /** The customer and reference details of a take-off. They have no columns of their own, so they ride inside the `calibration` JSON like the sheets do. */
-export type TakeoffMeta = Pick<TakeoffProject, 'clientId' | 'client' | 'projectName' | 'takeoffRef' | 'siteAddress' | 'roomLabels' | 'roomShapes' | 'roomEdges' | 'guides' | 'levels' | 'activeLevelId' | 'dimAdjust'>
+export type TakeoffMeta = Pick<TakeoffProject, 'clientId' | 'client' | 'projectName' | 'takeoffRef' | 'siteAddress' | 'roomLabels' | 'roomShapes' | 'roomEdges' | 'guides' | 'quoteId' | 'quoteRef' | 'levels' | 'activeLevelId' | 'dimAdjust'>
 
 function metaOf(p: TakeoffProject): TakeoffMeta | undefined {
   const m: TakeoffMeta = {}
@@ -33,6 +33,7 @@ function metaOf(p: TakeoffProject): TakeoffMeta | undefined {
   if (p.roomShapes?.length) m.roomShapes = p.roomShapes
   if (p.roomEdges?.length) m.roomEdges = p.roomEdges
   if (p.guides?.length) m.guides = p.guides
+  if (p.quoteId) { m.quoteId = p.quoteId; if (p.quoteRef) m.quoteRef = p.quoteRef }
   if (p.levels?.length) { m.levels = p.levels; if (p.activeLevelId) m.activeLevelId = p.activeLevelId }
   if (p.dimAdjust && Object.keys(p.dimAdjust).length) m.dimAdjust = p.dimAdjust
   return Object.keys(m).length ? m : undefined

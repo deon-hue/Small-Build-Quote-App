@@ -42,6 +42,7 @@ import { priceDemolitionCalcFromScope, DEMOLITION_AI_IDS } from '@/components/ai
 import { pricePlasterCalcFromScope, PLASTER_AI_IDS } from '@/components/ai-plaster-pricing'
 import { priceTilingCalcFromScope, TILING_AI_IDS } from '@/components/ai-tiling-pricing'
 import { prepSpecWithWallTilingAreas, ufhSpecWithPrepMembrane } from '@/lib/tiling-ai'
+import { planTakeoffMerge, applyTakeoffMerge, type MergeChoice } from '@/lib/takeoff-merge'
 import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchQuoteDefaults, fetchAllQuoteDefaults, upsertTask, fetchLabourTrades, fetchProducts, fetchPlantItems, fetchPhases, fetchSubPhases, fetchTasks } from '@/lib/back-office-queries'
 import type { BOLabourTrade, BOProduct, BOPlantItem, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
 import type { FloorMakeup } from '@/lib/takeoff-types'
@@ -317,6 +318,9 @@ export default function NewQuotePage() {
   const [photo, setPhoto] = useState('')
   const [phases, setPhases] = useState<QuotePhase[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
+  // sending a take-off INTO this quote: what it will add, refresh and clash with, shown for the estimator to answer (keep both or replace) before anything changes
+  const [mergeAsk, setMergeAsk] = useState<null | { ref: string; added: number; refreshed: number; conflicts: { key: number; name: string; count: number }[]; done: (c: Record<number, MergeChoice> | null) => void }>(null)
+  const [mergePick, setMergePick] = useState<Record<number, MergeChoice>>({})
   const [attachments, setAttachments] = useState<QuoteDocument[]>([])
   // Per-session key so a brand-new, not-yet-saved quote's attachments never collide with
   // a different abandoned draft's — see lib/quote-documents.ts.
@@ -422,6 +426,23 @@ export default function NewQuotePage() {
     // This exact bug wiped a live customer quote (QT-1282, Sept 2026).
     if (initRanRef.current) return
     initRanRef.current = true
+
+    // A take-off sent back INTO the saved quote it was opened from: open that quote and add the take-off to it
+    const intoId = sessionStorage.getItem('sbc_takeoff_into_quote')
+    const intoData = sessionStorage.getItem('sbc_takeoff_for_quote')
+    if (intoId && intoData) {
+      sessionStorage.removeItem('sbc_takeoff_into_quote')
+      sessionStorage.removeItem('sbc_takeoff_for_quote')
+      const iq = quotes.find(x => x.id === intoId)
+      if (!iq) { alert('That quote could not be found, so the take-off was not sent. Open Take-off and send it to a new quote, or open the quote and try again.'); setStep('landing'); return }
+      loadQuoteForEdit(iq); setStep('workspace')
+      if (iq.status === 'accepted') { alert('This quote has been accepted and is locked, so the take-off was not added. Make a copy or a variation, link the take-off to that and send it again.'); return }
+      if (iq.quoteSource === 'quick') { alert('This is a Quick Quote (one lump sum), so it cannot take the take-off\'s sub-phases. Send the take-off to a new quote instead.'); return }
+      ;(async () => {
+        try { await applyTakeoffData(JSON.parse(intoData), { into: iq }) } catch { alert('Could not add the take-off to the quote: the quote was not changed.') }
+      })()
+      return
+    }
 
     // Resume editing an existing saved quote
     const editId = sessionStorage.getItem('sbc_edit_quote')
@@ -1116,7 +1137,7 @@ export default function NewQuotePage() {
     siteAddress?: string
     projectName?: string
     takeoffRef?:  string
-  }) {
+  }, opts?: { into?: Quote }) {
     // Fetch Back Office task rates (from_takeoff=true tasks, grouped by phase)
     const boRates = await fetchBOTakeoffRates()
     const hasBORates = Object.keys(boRates).length > 0
@@ -1127,11 +1148,16 @@ export default function NewQuotePage() {
           return
         }
 
-        if (phases.length && !confirm('Import take-off? This will replace your current phases.')) return
+        if (!opts?.into && phases.length && !confirm('Import take-off? This will replace your current phases.')) return
 
         const newPhases: QuotePhase[] = []
+        // every sub-phase made from a take-off item carries that item's id, so a second send into the same quote refreshes it in place
+        let tagStart = 0
+        let tagItem: TakeoffItem | null = null
+        const tagPending = () => { if (tagItem) for (let k = tagStart; k < newPhases.length; k++) newPhases[k] = { ...newPhases[k], takeoffItemId: tagItem.id } }
 
         for (const item of data.items as TakeoffItem[]) {
+          tagPending(); tagStart = newPhases.length; tagItem = item
           // Use the original takeoff phase name as the parent so the hierarchy is clear
           // (e.g. "External Walls" not "Phase 3 – Structural Shell")
           const parentPhase = item.phase
@@ -1406,6 +1432,7 @@ export default function NewQuotePage() {
           }
         }
 
+        tagPending()
         // ── Labour lines pass: add BO trade-labour sub-phases for any item
         //    that has labourLines saved on it.  These are ADDITIVE to the
         //    material/task rows already created above.
@@ -1418,7 +1445,7 @@ export default function NewQuotePage() {
             .map(l => `${l.tradeName} (${l.rateType}): ${l.quantity} × £${l.rate.toFixed(2)}${l.operatives > 1 ? ` × ${l.operatives} ops` : ''} = £${l.total.toFixed(2)}`)
             .join(' | ')
           const labSubPhase = `Labour — ${item.name || item.phase}`
-          newPhases.push(makePhase(
+          newPhases.push({ ...makePhase(
             labSubPhase,
             [
               { desc: labDesc, qty: 1, unit: 'sum', labour: labTotal, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: labDesc, itemType: 'labour' },
@@ -1428,8 +1455,11 @@ export default function NewQuotePage() {
               { desc: '', qty: 1, unit: 'sum', labour: 0, materials: 0, plantHire: 0, subcontractors: 0, other: 0, notes: '', itemType: 'other' },
             ],
             labParent,
-          ))
+          ), takeoffItemId: item.id + '|labour' })
         }
+
+        // sent INTO a saved quote: add to what is there (nothing is replaced unless the estimator says so)
+        if (opts?.into) { await mergeIntoQuote(newPhases, opts.into); return }
 
         setPhases(newPhases)
         setViewMode('breakdown')  // switch to structured view after import
@@ -1467,6 +1497,41 @@ export default function NewQuotePage() {
       } catch {
         alert('Could not process take-off data. Make sure it was exported from the Take-off tool.')
       }
+  }
+
+  /** Asks the estimator, before anything changes, what to do where the take-off clashes with the quote's own sub-phases; resolves with the answers, or null if they cancel. */
+  function askMerge(ref: string, added: number, refreshed: number, conflicts: { key: number; name: string; count: number }[]): Promise<Record<number, MergeChoice> | null> {
+    return new Promise(resolve => {
+      setMergePick(Object.fromEntries(conflicts.map(c => [c.key, 'both' as MergeChoice])))
+      setMergeAsk({ ref, added, refreshed, conflicts, done: resolve })
+    })
+  }
+
+  /**
+   * The take-off's sub-phases go INTO the saved quote `q`: what is in the quote stays, the take-off ones are added beside it (a sub-phase sent before is refreshed in place), and where the quote already has a sub-phase
+   * of the same kind (one priced by hand, say) the estimator chooses to keep both or replace the quote's, each time. The quote is backed up first.
+   */
+  async function mergeIntoQuote(incoming: QuotePhase[], q: Quote) {
+    const existing = (JSON.parse(JSON.stringify(q.phases)) as QuotePhase[]).map(p => ({ ...p, id: ++phaseCounter, items: toTypedItems(p.items).map((i: Omit<QuoteItem, 'id'>) => ({ ...i, id: ++itemCounter })) }))
+    const plan = planTakeoffMerge(existing, incoming)
+    const conflicts = plan.conflicts.map(c => ({ key: c.existing, name: existing[c.existing].phase, count: c.incoming.length }))
+    const picked = await askMerge(q.ref, plan.fresh.length, plan.refresh.length, conflicts)
+    if (!picked) return   // cancelled: the quote is as it was
+    if (editingId || q.id) await backupQuoteBeforeReplace(q.id)
+    const merged = applyTakeoffMerge(existing, incoming, plan, picked)
+    if (merged.length < existing.length - conflicts.filter(c => picked[c.key] === 'replace').length) { alert('Something went wrong merging the take-off: the quote was not changed.'); return }
+    setPhases(merged)
+    setViewMode('breakdown')
+    const replaced = conflicts.filter(c => picked[c.key] === 'replace').length
+    alert(`✓ Added to ${q.ref}: ${plan.fresh.length} new sub-phase${plan.fresh.length === 1 ? '' : 's'}${plan.refresh.length ? `, ${plan.refresh.length} refreshed` : ''}${conflicts.length ? `, ${conflicts.length - replaced} kept beside the quote's own${replaced ? `, ${replaced} replaced` : ''}` : ''}. A copy of the quote as it was is saved in its version history.`)
+  }
+
+  /** Opens Take-off linked to this saved quote (its customer, address and title fill the take-off, and Send to Quote there goes back into this quote). */
+  function openInTakeoff() {
+    const q = quotes.find(x => x.id === editingId)
+    if (!q) return
+    sessionStorage.setItem('sbc_takeoff_link_quote', JSON.stringify({ id: q.id, ref: q.ref, title: q.title || '', customer: { name: custName, email: custEmail, phone: custPhone, address: custAddr } }))
+    router.push('/takeoff')
   }
 
   async function importTakeoff(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1784,7 +1849,45 @@ export default function NewQuotePage() {
               </span>
             )}
           </div>
-          <button className="btn-sm btn-outline" onClick={cancelEdit}>Cancel Edit</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn-sm btn-outline" onClick={openInTakeoff} title="Open Take-off linked to this quote: draw and price there, then send it back into this quote">✏️ Open in Take-off</button>
+            <button className="btn-sm btn-outline" onClick={cancelEdit}>Cancel Edit</button>
+          </div>
+        </div>
+      )}
+      {mergeAsk && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: 'var(--surface-2, #fff)', color: 'var(--text, #1e293b)', borderRadius: 10, padding: 20, width: 'min(560px, 100%)', maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,0.3)' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>Send the take-off into {mergeAsk.ref}</div>
+            <div style={{ fontSize: 13, color: 'var(--muted, #64748b)', lineHeight: 1.5, marginBottom: 12 }}>
+              Everything already in the quote stays. {mergeAsk.added} new sub-phase{mergeAsk.added === 1 ? '' : 's'} will be added{mergeAsk.refreshed > 0 ? `, and ${mergeAsk.refreshed} sent from this take-off before ${mergeAsk.refreshed === 1 ? 'is' : 'are'} refreshed where ${mergeAsk.refreshed === 1 ? 'it stands' : 'they stand'}` : ''}.
+              A copy of the quote as it is now is saved first.
+            </div>
+            {mergeAsk.conflicts.length > 0 && (
+              <>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>The quote already has these. Keep both, or replace the quote&apos;s own?</div>
+                {mergeAsk.conflicts.map(c => (
+                  <div key={c.key} style={{ border: '1px solid var(--border, #e2e8f0)', borderRadius: 8, padding: '8px 10px', marginBottom: 8 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{c.name} <span style={{ fontWeight: 400, color: 'var(--muted, #64748b)' }}>· the take-off adds {c.count} sub-phase{c.count === 1 ? '' : 's'} for it</span></div>
+                    <div style={{ display: 'flex', gap: 14, marginTop: 4, flexWrap: 'wrap', fontSize: 13 }}>
+                      <label style={{ display: 'flex', gap: 5, alignItems: 'center', cursor: 'pointer' }}>
+                        <input type="radio" name={'merge-' + c.key} checked={(mergePick[c.key] ?? 'both') === 'both'} onChange={() => setMergePick(p => ({ ...p, [c.key]: 'both' }))} />
+                        Keep both (the take-off one goes in beside it)
+                      </label>
+                      <label style={{ display: 'flex', gap: 5, alignItems: 'center', cursor: 'pointer' }}>
+                        <input type="radio" name={'merge-' + c.key} checked={mergePick[c.key] === 'replace'} onChange={() => setMergePick(p => ({ ...p, [c.key]: 'replace' }))} />
+                        Replace the quote&apos;s one
+                      </label>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+              <button className="btn-sm btn-outline" onClick={() => { const d = mergeAsk.done; setMergeAsk(null); d(null) }}>Cancel</button>
+              <button className="btn-sm btn-primary" onClick={() => { const d = mergeAsk.done; const pick = mergePick; setMergeAsk(null); d(pick) }}>Add to {mergeAsk.ref}</button>
+            </div>
+          </div>
         </div>
       )}
 
