@@ -803,3 +803,11 @@ export function suggestStairsLabour(tasks: { key: string; trade: 'carpenter' | '
     .filter(t => t.hours > 0)
     .map(t => ({ key: 'stairs-' + t.key, trade: t.trade as LabourTradeKind, task: t.task, hours: t.hours, basis: t.basis }))
 }
+
+/** The labour for the Kitchen Installation calculator (Joinery & Fixtures → Kitchen Installation (by kitchen)): the kitchen fitter's time on each kitchen (units, worktops, trims, appliances) and a labourer to carry and lift, as
+ * the calculator's own engine works them out (the hours and the working come from its table and are passed in). Rough estimates, as everywhere here. */
+export function suggestKitchenFitLabour(tasks: { key: string; trade: 'carpenter' | 'labourer'; task: string; hours: number; basis: string }[]): LabourSuggestion[] {
+  return tasks
+    .filter(t => t.hours > 0)
+    .map(t => ({ key: 'kitchen-' + t.key, trade: t.trade as LabourTradeKind, task: t.task, hours: t.hours, basis: t.basis }))
+}

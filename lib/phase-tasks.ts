@@ -945,6 +945,15 @@ const joinerySubphases: PhaseSubphase[] = [
     ukWarning: 'Stairs must comply with Part K: rise max 220mm, going min 220mm, pitch max 42 degrees, 2.0m headroom, a handrail on at least one side (both sides if 1000mm or wider), and guarding where the drop is over 600mm with no gap that a 100mm sphere can pass through.',
     tasks: [],  // priced by the Staircase calculator (each staircase: shape, height and risers, going, width, made or built on site or client-supplied, balustrade, handrails, underside boarding)
   },
+  // A fitted kitchen priced one kitchen at a time (assembly calculator), beside the labour-only Kitchen Installation above. Listed last so a new line in Take-off still starts on a task.
+  {
+    id: 'join-kitchen-fit',
+    phase: 'Joinery & Fixtures',
+    name: 'Kitchen Installation (by kitchen)',
+    markupPct: 20,
+    ukWarning: 'Level the base units first and hang the wall units to the marked line, fixing into studs or with the right fixings for the wall. Solid timber worktops must acclimatise and be sealed on all sides. A gas hob is connected by a Gas Safe engineer; the electrics by a qualified electrician.',
+    tasks: [],  // priced by the Kitchen Installation calculator (each kitchen: units, who supplies them, flat-pack, worktops, cut-outs, upstand, plinth, cornice, handles, appliances)
+  },
 ]
 
 // ── 10. TILING & FINISHES ─────────────────────────────────────────────────────
