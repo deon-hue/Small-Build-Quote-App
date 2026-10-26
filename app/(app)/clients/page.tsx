@@ -1229,6 +1229,17 @@ function ClientsPageInner() {
                   Portal &amp; Quote Settings
                 </div>
 
+                {/* The portal and the emailed quote find a client's settings by their email address: with two contacts on the same address it uses only one of them (which one is not chosen), so these settings may not be the ones the client is shown */}
+                {(() => {
+                  const mine = (form.email || '').trim().toLowerCase()
+                  const others = mine ? clients.filter(c => c.id !== editingClient?.id && (c.email || '').trim().toLowerCase() === mine) : []
+                  return others.length > 0 ? (
+                    <div style={{ fontSize: 12, color: '#92400e', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 6, padding: '8px 10px', marginBottom: 12, lineHeight: 1.5 }}>
+                      ⚠ {others.length === 1 ? 'Another contact has' : `${others.length} other contacts have`} this same email address ({others.map(c => c.name || c.email).join(', ')}). The client portal and the emailed quote use only ONE contact for an email address, so the settings below may not be the ones this client is shown. Delete the duplicate contact (or give it a different email) and set the options on the one you keep.
+                    </div>
+                  ) : null
+                })()}
+
                 {/* Quote display level */}
                 <div className="fg" style={{ marginBottom: 12 }}>
                   <label>Quote Display (Portal, HTML email &amp; PDF)</label>

@@ -121,9 +121,10 @@ export async function buildQuotePdf(
   const quoteView        = opts.quoteView        ?? 'full'
   const showScope        = opts.showScope        ?? true
   const showPaymentTerms = opts.showPaymentTerms ?? true
-  // 'full' shows item-level prices; 'phases' shows phase totals + item names but
-  // no item prices; 'total_only' skips the phase/item table entirely, matching
-  // the same three levels used by the portal and HTML-email views.
+  // 'full' shows every price; 'phases' ("list of phases, no amounts") shows the phase names and the item
+  // names, quantities and units with NO phase or item prices (the totals at the foot are shown);
+  // 'total_only' skips the phase/item table entirely, matching the same three levels used by the portal
+  // and HTML-email views.
   const showItemPrices   = quoteView === 'full'
   const showPhaseSection = quoteView !== 'total_only'
   const co = settings
@@ -309,9 +310,7 @@ export async function buildQuotePdf(
     y -= 10
 
     // ── Table columns ───────────────────────────────────────────────────────
-    // The amount/VAT columns are always reserved here — phase totals show for
-    // both 'full' and 'phases' — only individual item prices are conditionally
-    // hidden (showItemPrices).
+    // The amount/VAT columns are reserved here; they are only filled in for 'full' (showItemPrices).
     const COL = {
       desc:  MARGIN,
       descW: qVat ? CONTENT_W - 40 - 36 - 80 - 72 : CONTENT_W - 40 - 36 - 80,
@@ -336,7 +335,7 @@ export async function buildQuotePdf(
     }
     y -= TABLE_ROW_H
 
-    // ── Phase rows — phase total always shown at this detail level ──────────
+    // ── Phase rows — the phase total only for 'full' ────────────────────────
     let rowAlt = false
     for (const p of quote.phases) {
       const phaseSell = calcPhaseSell(p, qMkp)
@@ -345,12 +344,14 @@ export async function buildQuotePdf(
 
       ensureSpace(TABLE_ROW_H + 2)
       drawRect(page, MARGIN, y - TABLE_ROW_H, CONTENT_W, TABLE_ROW_H, C.lightBlue)
-      drawText(page, safe(phaseLabel), COL.desc + 4, y - 10, 7.5, fontBold, C.charcoal, COL.descW - 120)
-      const ptLabel = 'Phase total'
-      const ptLabelW = fontBold.widthOfTextAtSize(ptLabel, 6.5)
-      drawText(page, ptLabel, COL.amt - ptLabelW - 6, y - 10, 6.5, fontBold, C.charcoal)
-      drawText(page, fmtGBP(phaseSell), COL.amt + 2, y - 10, 7.5, fontBold, C.charcoal, COL.amtW - 4)
-      if (qVat) drawText(page, fmtGBP(phaseVat), COL.vat + 2, y - 10, 7.5, fontBold, C.charcoal, COL.vatW - 4)
+      drawText(page, safe(phaseLabel), COL.desc + 4, y - 10, 7.5, fontBold, C.charcoal, showItemPrices ? COL.descW - 120 : COL.descW - 8)
+      if (showItemPrices) {
+        const ptLabel = 'Phase total'
+        const ptLabelW = fontBold.widthOfTextAtSize(ptLabel, 6.5)
+        drawText(page, ptLabel, COL.amt - ptLabelW - 6, y - 10, 6.5, fontBold, C.charcoal)
+        drawText(page, fmtGBP(phaseSell), COL.amt + 2, y - 10, 7.5, fontBold, C.charcoal, COL.amtW - 4)
+        if (qVat) drawText(page, fmtGBP(phaseVat), COL.vat + 2, y - 10, 7.5, fontBold, C.charcoal, COL.vatW - 4)
+      }
       y -= TABLE_ROW_H
 
       // Item rows — description/qty/unit always shown; price only if showItemPrices

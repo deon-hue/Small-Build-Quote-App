@@ -262,9 +262,9 @@ export function buildHtmlClientView(q: Quote, settings: Settings, opts: HtmlOpts
          </div>`
       : `<div style="width:52px;height:52px;border-radius:6px;background:${color}18;border:1px solid ${color}44;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;margin-right:14px">${emoji}</div>`
 
-    // 'phases' view: show name, item/task list and the phase total, but hide
-    // per-item and per-phase prices. 'full' shows everything.
-    const priceHtml = (quoteView === 'full' || quoteView === 'phases')
+    // 'phases' view ("Phases only — list of phases, no amounts"): the phase names, their descriptions and the item list, with NO phase price and no item prices; only the totals at the foot of the quote
+    // are shown. 'full' shows every price. (It used to print each phase's price in 'phases' view, against what the setting says.)
+    const priceHtml = quoteView === 'full'
       ? `<div style="text-align:right;flex-shrink:0">
            <div style="font-weight:700;font-size:14px;color:#2b2f33;font-family:'DM Mono',monospace">£${sell.toLocaleString('en-GB', { minimumFractionDigits: 2 })}</div>
            ${qVat ? `<div style="font-size:11px;color:#4a90a4;font-family:'DM Mono',monospace">+£${vatAmt.toLocaleString('en-GB', { minimumFractionDigits: 2 })} VAT</div>` : ''}

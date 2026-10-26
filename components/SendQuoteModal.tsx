@@ -221,9 +221,9 @@ export default function SendQuoteModal({ quote, onClose, onSent }: Props) {
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6, lineHeight: 1.4 }}>
                   {pdfView === 'full'
-                    ? '✓ Shows all phase totals and individual line item costs.'
+                    ? '✓ Shows every phase total and individual line item cost.'
                     : pdfView === 'phases'
-                    ? '✓ Shows phase totals and item names — no individual item prices.'
+                    ? '✓ Shows the phases and their items — no phase or item prices (the total is at the foot).'
                     : '✓ Shows the grand total only — no phase or item breakdown.'}
                 </div>
               </div>

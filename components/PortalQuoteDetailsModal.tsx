@@ -380,8 +380,8 @@ export default function PortalQuoteDetailsModal({
                       {pi + 1}. {phase.phase}
                       {!isPreview && <AskAboutButton label={phase.phase} onAsk={ask} />}
                     </div>
-                    {/* Phase total — shown for 'full' and 'phases' views */}
-                    {(quoteView === 'full' || quoteView === 'phases') && (
+                    {/* Phase total — 'full' only: 'phases' is "list of phases, no amounts" (the totals at the foot are shown) */}
+                    {quoteView === 'full' && (
                       <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 13, fontWeight: 700, color: 'var(--moss)' }}>
                         {fmt(calcPhaseSell(phase, quote.markup))}
                       </div>
