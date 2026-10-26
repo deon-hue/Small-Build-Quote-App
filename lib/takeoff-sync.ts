@@ -181,6 +181,9 @@ export interface TakeoffSummary {
   /** the customer's name, if one was set */
   clientName: string
   sheetNames: string[]
+  /** the saved quote it is linked to (Open in Take-off on the quote, or Send to Quote), if any */
+  quoteId: string
+  quoteRef: string
 }
 
 /** Every take-off the user has saved, most recently changed first, as short summaries for choosing one to open. */
@@ -194,7 +197,17 @@ export async function listTakeoffSummaries(sb: SupabaseClient, userId: string): 
     id: r.id, name: r.name || 'Untitled take-off', address: r.address || r.calibration?.meta?.siteAddress || '', jobType: r.job_type || '',
     updatedAt: r.updated_at, createdAt: r.created_at, clientName: r.calibration?.meta?.client?.name || '',
     sheetNames: ((r.calibration?.sheets ?? []) as TakeoffSheet[]).map(x => x.name),
+    quoteId: r.calibration?.meta?.quoteId || '', quoteRef: r.calibration?.meta?.quoteRef || '',
   }))
+}
+
+/** The take-offs linked to one saved quote, most recently changed first (what the quote's "Open in Take-off" lists). */
+export function summariesForQuote(all: TakeoffSummary[], quoteId: string): TakeoffSummary[] {
+  return all.filter(t => !!quoteId && t.quoteId === quoteId).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
+}
+
+export async function listTakeoffsForQuote(sb: SupabaseClient, userId: string, quoteId: string): Promise<TakeoffSummary[]> {
+  return summariesForQuote(await listTakeoffSummaries(sb, userId), quoteId)
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────

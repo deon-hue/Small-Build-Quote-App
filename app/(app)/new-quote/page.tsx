@@ -46,6 +46,8 @@ import { priceFloorRoofPhases, FLOOR_ROOF_AI_IDS } from '@/components/ai-floor-r
 import type { PricedCalc } from '@/components/ai-drainage-pricing'
 import { prepSpecWithWallTilingAreas, ufhSpecWithPrepMembrane } from '@/lib/tiling-ai'
 import { planTakeoffMerge, applyTakeoffMerge, type MergeChoice } from '@/lib/takeoff-merge'
+import { listTakeoffsForQuote, type TakeoffSummary } from '@/lib/takeoff-sync'
+import type { QuoteLink } from '@/lib/takeoff-link'
 import { fetchWallTypesWithLayers, wallTypesToMakeups, fetchQuoteDefaults, fetchAllQuoteDefaults, upsertTask, fetchLabourTrades, fetchProducts, fetchPlantItems, fetchPhases, fetchSubPhases, fetchTasks } from '@/lib/back-office-queries'
 import type { BOLabourTrade, BOProduct, BOPlantItem, BOPhase, BOSubPhase, BOTask } from '@/lib/back-office-types'
 import type { FloorMakeup } from '@/lib/takeoff-types'
@@ -324,6 +326,8 @@ export default function NewQuotePage() {
   const [phases, setPhases] = useState<QuotePhase[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   // sending a take-off INTO this quote: what it will add, refresh and clash with, shown for the estimator to answer (keep both or replace) before anything changes
+  // "Open in Take-off": the take-offs already linked to this quote, to open one, start a new one, or link the one already open in Take-off
+  const [takeoffPicker, setTakeoffPicker] = useState<null | { loading: boolean; list: TakeoffSummary[]; error?: string }>(null)
   const [mergeAsk, setMergeAsk] = useState<null | { ref: string; added: number; refreshed: number; conflicts: { key: number; name: string; count: number }[]; done: (c: Record<number, MergeChoice> | null) => void }>(null)
   const [mergePick, setMergePick] = useState<Record<number, MergeChoice>>({})
   const [attachments, setAttachments] = useState<QuoteDocument[]>([])
@@ -1532,11 +1536,35 @@ export default function NewQuotePage() {
     alert(`✓ Added to ${q.ref}: ${plan.fresh.length} new sub-phase${plan.fresh.length === 1 ? '' : 's'}${plan.refresh.length ? `, ${plan.refresh.length} refreshed` : ''}${conflicts.length ? `, ${conflicts.length - replaced} kept beside the quote's own${replaced ? `, ${replaced} replaced` : ''}` : ''}. A copy of the quote as it was is saved in its version history.`)
   }
 
-  /** Opens Take-off linked to this saved quote (its customer, address and title fill the take-off, and Send to Quote there goes back into this quote). */
-  function openInTakeoff() {
+  /** What this quote tells Take-off about itself: its id and reference, its job name, and its customer's name and address (they fill the blanks of the take-off it is linked to). */
+  function quoteLinkForTakeoff(): QuoteLink | null {
     const q = quotes.find(x => x.id === editingId)
-    if (!q) return
-    sessionStorage.setItem('sbc_takeoff_link_quote', JSON.stringify({ id: q.id, ref: q.ref, title: q.title || '', customer: { name: custName, email: custEmail, phone: custPhone, address: custAddr } }))
+    return q ? { id: q.id, ref: q.ref, title: q.title || '', customer: { name: custName, address: custAddr } } : null
+  }
+
+  /** "Open in Take-off": lists the take-offs already linked to this saved quote (open one, start a new one for it, or link the take-off already open in Take-off), then goes to Take-off. */
+  async function openInTakeoff() {
+    if (!quoteLinkForTakeoff()) return
+    setTakeoffPicker({ loading: true, list: [] })
+    try {
+      const sb = createClient()
+      const { data } = await sb.auth.getUser()
+      if (!data.user) throw new Error('not signed in')
+      setTakeoffPicker({ loading: false, list: await listTakeoffsForQuote(sb, data.user.id, editingId as string) })
+    } catch {
+      setTakeoffPicker({ loading: false, list: [], error: 'Could not load this quote\'s take-offs. You can still start a new one or use the take-off already open.' })
+    }
+  }
+
+  /** Goes to Take-off: `open` is one of the quote's take-offs, `fresh` starts a new one for the quote, neither links whatever take-off is already open there (it asks first if that has drawings). */
+  function goToTakeoff(how: { open?: string; fresh?: boolean }) {
+    const link = quoteLinkForTakeoff()
+    if (!link) return
+    try {
+      if (how.open || how.fresh) sessionStorage.setItem('sbc_takeoff_open', JSON.stringify({ id: how.open, fresh: !!how.fresh, link }))
+      else sessionStorage.setItem('sbc_takeoff_link_quote', JSON.stringify(link))
+    } catch { alert('Could not open Take-off from here. Open Take-off from the menu instead.'); return }
+    setTakeoffPicker(null)
     router.push('/takeoff')
   }
 
@@ -1857,8 +1885,37 @@ export default function NewQuotePage() {
             )}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn-sm btn-outline" onClick={openInTakeoff} title="Open Take-off linked to this quote: draw and price there, then send it back into this quote">✏️ Open in Take-off</button>
+            <button className="btn-sm btn-outline" onClick={openInTakeoff} title="Open Take-off linked to this quote: choose one of its take-offs or start a new one, draw and price there, then send it back into this quote">✏️ Open in Take-off</button>
             <button className="btn-sm btn-outline" onClick={cancelEdit}>Cancel Edit</button>
+          </div>
+        </div>
+      )}
+      {takeoffPicker && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={e => { if (e.target === e.currentTarget) setTakeoffPicker(null) }}>
+          <div style={{ background: 'var(--surface-2, #fff)', color: 'var(--text, #1e293b)', borderRadius: 10, padding: 20, width: 'min(560px, 100%)', maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,0.3)' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>Take-offs for {quotes.find(x => x.id === editingId)?.ref ?? 'this quote'}</div>
+            <div style={{ fontSize: 13, color: 'var(--muted, #64748b)', lineHeight: 1.5, marginBottom: 12 }}>
+              The take-offs linked to this quote. Open one to carry on drawing and pricing, then send it back into the quote.
+            </div>
+            {takeoffPicker.loading && <div style={{ fontSize: 13, color: 'var(--muted, #64748b)', marginBottom: 12 }}>Looking for this quote&apos;s take-offs…</div>}
+            {takeoffPicker.error && <div style={{ fontSize: 13, color: '#b45309', marginBottom: 12 }}>{takeoffPicker.error}</div>}
+            {!takeoffPicker.loading && !takeoffPicker.error && takeoffPicker.list.length === 0 && (
+              <div style={{ fontSize: 13, color: 'var(--muted, #64748b)', marginBottom: 12 }}>No take-off is linked to this quote yet. Start a new one for it, or link the take-off you already have open in Take-off.</div>
+            )}
+            {takeoffPicker.list.map(t => (
+              <div key={t.id} style={{ border: '1px solid var(--border, #e2e8f0)', borderRadius: 8, padding: '8px 10px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted, #64748b)' }}>{[t.address, t.sheetNames.length ? t.sheetNames.length + ' plan' + (t.sheetNames.length === 1 ? '' : 's') : '', 'changed ' + String(t.updatedAt).slice(0, 10)].filter(Boolean).join(' · ')}</div>
+                </div>
+                <button className="btn-sm btn-primary" onClick={() => goToTakeoff({ open: t.id })}>Open</button>
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12, flexWrap: 'wrap' }}>
+              <button className="btn-sm btn-outline" onClick={() => setTakeoffPicker(null)}>Cancel</button>
+              <button className="btn-sm btn-outline" title="Link the take-off that is already open in Take-off (it asks first if it has drawings in it)" onClick={() => goToTakeoff({})}>Use the take-off already open</button>
+              <button className="btn-sm btn-primary" onClick={() => goToTakeoff({ fresh: true })}>➕ New take-off for this quote</button>
+            </div>
           </div>
         </div>
       )}

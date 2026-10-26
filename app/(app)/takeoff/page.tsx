@@ -5,6 +5,7 @@ import NumInput from '@/components/NumInput'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useApp } from '@/contexts/AppContext'
+import { linkProject, parseOpenForQuote, type OpenForQuote } from '@/lib/takeoff-link'
 import { makeDebouncedSave, isEmptyTakeoff, isUuid, newProjectId, loadTakeoffFromSupabase, saveTakeoffToSupabase, listTakeoffSummaries, deleteTakeoffProject, type TakeoffSummary } from '@/lib/takeoff-sync'
 import { sheetOf, roomLabelsOf, setRoomLabels, roomShapesOf, setRoomShapes, roomEdgesOf, setRoomEdges, activeSheetIdOf, onActiveSheet, onActiveLevel, activeLevelIdOf, levelOf, levelName, levelBelow, ghostLevel, elementsOnGhostLevel, viewKey, itemLevelId, addLevel, switchActiveLevel, renameLevel, setLevelHeight, removeLevel, moveElementToLevel, copyLevelContents, levelInsertIndex, LEVEL_PRESETS, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet, setSheetPaper, guidesOf, setGuides } from '@/lib/takeoff-sheets'
 import type { WallRef } from '@/lib/wall-drawing'
@@ -780,6 +781,8 @@ export default function TakeoffPage() {
   // Send to Quote asks where it goes when the take-off is not linked to a saved quote: a new quote, or one of the saved quotes (it is then linked to it)
   const { quotes: savedQuotes } = useApp()
   const [sendChooser, setSendChooser] = useState(false)
+  // a request from the quote page to open one of its take-offs (or a fresh one), acted on once the cloud sync has settled
+  const [pendingQuoteOpen, setPendingQuoteOpen] = useState<OpenForQuote | null>(null)
   const [sendQuoteSearch, setSendQuoteSearch] = useState('')
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
 
@@ -1266,24 +1269,60 @@ export default function TakeoffPage() {
         setBoTasks(tk.filter(t => t.active))
       })
 
+      // The quote page asked for one of its take-offs (or a fresh one) to be opened: read it now, act on it once the cloud sync below has settled (it could otherwise put the old take-off back over the one opened)
+      let pendingOpen: OpenForQuote | null = null
+      try { pendingOpen = parseOpenForQuote(sessionStorage.getItem('sbc_takeoff_open')); sessionStorage.removeItem('sbc_takeoff_open') } catch { /* no storage */ }
+
       // Async cloud sync — merge if the Supabase record has a newer updatedAt
-      const local = loadProject()
-      if (!local?.id) return
-      const remote = await loadTakeoffFromSupabase(sb, local.id, uid)
-      if (!remote) return
-      const remoteTime = new Date(remote.updatedAt).getTime()
-      const localTime  = new Date(local.updatedAt ?? 0).getTime()
-      if (remoteTime > localTime) {
-        // Cloud is newer — restore remote data (keep planImageUrl from local)
-        setProject(prev => ({
-          ...remote,
-          planImageUrl: prev.planImageUrl,
-          sheets: remote.sheets ?? prev.sheets,
-          activeSheetId: remote.activeSheetId ?? prev.activeSheetId,
-        }))
+      const syncCloud = async () => {
+        const local = loadProject()
+        if (!local?.id) return
+        const remote = await loadTakeoffFromSupabase(sb, local.id, uid)
+        if (!remote) return
+        const remoteTime = new Date(remote.updatedAt).getTime()
+        const localTime  = new Date(local.updatedAt ?? 0).getTime()
+        if (remoteTime > localTime) {
+          // Cloud is newer — restore remote data (keep planImageUrl from local)
+          setProject(prev => ({
+            ...remote,
+            planImageUrl: prev.planImageUrl,
+            sheets: remote.sheets ?? prev.sheets,
+            activeSheetId: remote.activeSheetId ?? prev.activeSheetId,
+          }))
+        }
       }
+      await syncCloud()
+      if (pendingOpen) setPendingQuoteOpen(pendingOpen)
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // "Open in Take-off" on a saved quote, choosing one of the quote's take-offs (or a fresh one): the take-off on screen is put safely in your account first (and the switch is NOT made if that fails),
+  // then the chosen one is opened, linked to the quote, with the quote's customer, address and job name filling its blanks.
+  useEffect(() => {
+    const pend = pendingQuoteOpen
+    if (!pend || !userId) return
+    setPendingQuoteOpen(null)
+    ;(async () => {
+      setTakeoffBusy(true)
+      try {
+        const saved = await saveCurrentToCloud()
+        if (!saved) { alert('Could not save the take-off on screen to your account just now, so Take-off was not switched to ' + pend.link.ref + '. It is still here, unchanged. Check your connection and try Open in Take-off again.'); return }
+        if (pend.id) {
+          const remote = await loadTakeoffFromSupabase(createClient(), pend.id, userId)
+          if (!remote) { alert('Could not open that take-off. Check your connection and try again.'); return }
+          resetScreenForOtherTakeoff()
+          setProject(linkProject({ ...remote, updatedAt: new Date().toISOString() }, pend.link))
+          showToast('Opened "' + (remote.name || 'take-off') + '", linked to ' + pend.link.ref)
+        } else {
+          resetScreenForOtherTakeoff()
+          setProject(linkProject({ ...blankProject(), name: '' }, pend.link))
+          showToast('A new take-off for ' + pend.link.ref + ': Send to Quote will add it to that quote')
+        }
+      } finally {
+        setTakeoffBusy(false)
+      }
+    })()
+  }, [pendingQuoteOpen, userId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Opened from a saved quote ("Open in Take-off"): the take-off is linked to that quote, and Send to Quote goes back into it (the quote's customer, address and title fill the blanks)
   useEffect(() => {
@@ -1296,13 +1335,7 @@ export default function TakeoffPage() {
     const p0 = project
     if (p0.quoteId && p0.quoteId !== link.id && !window.confirm('This take-off is linked to ' + (p0.quoteRef || 'another quote') + '. Link it to ' + link.ref + ' instead?')) return
     if (!isEmptyTakeoff(p0) && !p0.quoteId && !window.confirm('Link the take-off on screen to ' + link.ref + '?\n\nOK links it (it keeps its drawings). Cancel leaves it as it is, not linked: press ✕ Close take-off for a fresh one, then use Open in Take-off on the quote again.')) return
-    setProject(p => ({
-      ...p, quoteId: link.id, quoteRef: link.ref,
-      name: !p.name || p.name === 'New Take-off' ? [link.customer?.name, link.title || link.ref].filter(Boolean).join(' – ') : p.name,
-      address: p.address || link.customer?.address || '',
-      siteAddress: p.siteAddress || link.customer?.address || undefined,
-      projectName: p.projectName || link.title || undefined,
-    }))
+    setProject(p => linkProject(p, link))
     showToast('Linked to ' + link.ref + ': Send to Quote will add this take-off to it')
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
