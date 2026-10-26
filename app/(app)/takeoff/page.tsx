@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback, useMemo, ChangeEvent } from '
 import NumInput from '@/components/NumInput'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { useApp } from '@/contexts/AppContext'
 import { makeDebouncedSave, isEmptyTakeoff, isUuid, newProjectId, loadTakeoffFromSupabase, saveTakeoffToSupabase, listTakeoffSummaries, deleteTakeoffProject, type TakeoffSummary } from '@/lib/takeoff-sync'
 import { sheetOf, roomLabelsOf, setRoomLabels, roomShapesOf, setRoomShapes, roomEdgesOf, setRoomEdges, activeSheetIdOf, onActiveSheet, onActiveLevel, activeLevelIdOf, levelOf, levelName, levelBelow, ghostLevel, elementsOnGhostLevel, viewKey, itemLevelId, addLevel, switchActiveLevel, renameLevel, setLevelHeight, removeLevel, moveElementToLevel, copyLevelContents, levelInsertIndex, LEVEL_PRESETS, elementsOnActiveSheet, activeSheetElementIds, itemSheetId, sheetName, makeSheet, sheetNameFromFile, parsePageList, addSheets, switchActiveSheet, setActiveSheetCalibration, renameSheet, removeSheet, setSheetPaper, guidesOf, setGuides } from '@/lib/takeoff-sheets'
 import type { WallRef } from '@/lib/wall-drawing'
@@ -776,6 +777,10 @@ export default function TakeoffPage() {
   const [selectedOpeningId, setSelectedOpeningId] = useState<string | null>(null)
   const [rawMouse, setRawMouse] = useState<TakeoffPoint | null>(null)
   const [selectedTaskSubphaseId, setSelectedTaskSubphaseId] = useState<string | null>(null)
+  // Send to Quote asks where it goes when the take-off is not linked to a saved quote: a new quote, or one of the saved quotes (it is then linked to it)
+  const { quotes: savedQuotes } = useApp()
+  const [sendChooser, setSendChooser] = useState(false)
+  const [sendQuoteSearch, setSendQuoteSearch] = useState('')
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
 
   // Calibration dialog
@@ -3987,7 +3992,8 @@ export default function TakeoffPage() {
 
   // ── Send directly to New Quote (no file download) ─────────────────────────
   /** `intoLinked`: send back INTO the saved quote this take-off was opened from (its sub-phases are added to that quote); otherwise a new quote is made */
-  function sendToQuote(intoLinked = false) {
+  function sendToQuote(intoLinked = false, intoQuoteId?: string) {
+    const into = intoQuoteId ?? project.quoteId
     // A wall with a calculator that hasn't been priced would go to the quote as a plain build-up
     // (e.g. the default cavity wall layers) rather than what it's labelled as — say so first.
     // the electrics and plumbing items hold what was placed on the plan: with nothing placed and nothing priced there is nothing to send
@@ -4009,9 +4015,16 @@ export default function TakeoffPage() {
     const { planImageUrl: _, ...rest } = project
     const data = { version: 1, ...rest, items: sendItems }
     sessionStorage.setItem('sbc_takeoff_for_quote', JSON.stringify(data))
-    if (intoLinked && project.quoteId) sessionStorage.setItem('sbc_takeoff_into_quote', project.quoteId)
+    if (intoLinked && into) sessionStorage.setItem('sbc_takeoff_into_quote', into)
     else sessionStorage.removeItem('sbc_takeoff_into_quote')
     router.push('/new-quote')
+  }
+
+  /** Send to a saved quote picked in the chooser: the take-off is linked to it (so the next send goes straight back to it) and its sub-phases are added to that quote */
+  function sendToSavedQuote(q: { id: string; ref: string }) {
+    setSendChooser(false); setSendQuoteSearch('')
+    setProject(p => ({ ...p, quoteId: q.id, quoteRef: q.ref }))
+    setTimeout(() => sendToQuote(true, q.id), 200)   // a moment for the link to be saved with the take-off before the page changes
   }
 
   // ── Drawing aids: snapping, typed lengths, undo / redo, copy and rotate ─────────────────────────────
@@ -7754,8 +7767,8 @@ export default function TakeoffPage() {
           ) : (
             <button
               style={{ ...btnStyle, width: '100%', justifyContent: 'center', background: '#2563eb', color: '#fff', borderColor: '#1d4ed8', fontWeight: 600 }}
-              onClick={() => sendToQuote(false)}>
-              📋 Send to Quote
+              onClick={() => setSendChooser(true)}>
+              📋 Send to Quote…
             </button>
           )}
           <button
@@ -9172,6 +9185,40 @@ export default function TakeoffPage() {
       })()}
 
       {/* ── Adding a plan: from this computer or from a customer's files ───── */}
+      {sendChooser && (() => {
+        // only quotes that can take a take-off: not deleted, filed or accepted (locked), and not a Quick Quote (one lump sum)
+        const term = sendQuoteSearch.trim().toLowerCase()
+        const list = savedQuotes
+          .filter(q => q.status !== 'deleted' && q.status !== 'accepted' && q.status !== 'archived' && q.quoteSource !== 'quick')
+          .filter(q => !term || [q.ref, q.title, q.customer?.name, q.customer?.address].join(' ').toLowerCase().includes(term))
+          .sort((a, b) => String(b.lastEdited).localeCompare(String(a.lastEdited)))
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={e => { if (e.target === e.currentTarget) setSendChooser(false) }}>
+            <div style={{ background: 'var(--to-panel, #fff)', color: 'var(--to-text, #1e293b)', border: '1px solid var(--to-border, #e2e8f0)', borderRadius: 10, width: 'min(460px, 94vw)', padding: 18, boxShadow: '0 12px 48px rgba(0,0,0,0.4)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, flex: 1 }}>Send this take-off to…</div>
+                <button onClick={() => setSendChooser(false)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'inherit', lineHeight: 1 }} aria-label="Close">×</button>
+              </div>
+              <button onClick={() => { setSendChooser(false); sendToQuote(false) }} style={{ ...btnStyle, display: 'block', width: '100%', textAlign: 'left', padding: '12px 14px', marginBottom: 12, fontSize: 13, background: '#2563eb', color: '#fff', borderColor: '#1d4ed8' }}>
+                📄 A new quote<div style={{ fontSize: 11, opacity: 0.85, fontWeight: 400, marginTop: 2 }}>Starts a fresh quote from this take-off</div>
+              </button>
+              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>or add it to a saved quote</div>
+              <div style={{ fontSize: 11, opacity: 0.75, marginBottom: 8 }}>What is already in the quote stays. Where the quote has the same sub-phase you are asked to keep both or replace, and a copy of the quote is saved first.</div>
+              <input value={sendQuoteSearch} onChange={e => setSendQuoteSearch(e.target.value)} placeholder="Search by reference, customer or job name" style={{ width: '100%', boxSizing: 'border-box', fontSize: 12, padding: '6px 8px', marginBottom: 8, background: 'var(--to-bg, #fff)', color: 'inherit', border: '1px solid var(--to-border, #e2e8f0)', borderRadius: 5, fontFamily: 'inherit' }} />
+              <div style={{ maxHeight: 260, overflowY: 'auto', border: '1px solid var(--to-border, #e2e8f0)', borderRadius: 6 }}>
+                {list.length === 0 && <div style={{ padding: 12, fontSize: 12, opacity: 0.7 }}>{savedQuotes.length === 0 ? 'No saved quotes yet.' : 'No saved quote matches. Accepted quotes, filed quotes and Quick Quotes cannot take a take-off.'}</div>}
+                {list.slice(0, 40).map(q => (
+                  <button key={q.id} onClick={() => sendToSavedQuote(q)} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px', background: 'transparent', color: 'inherit', border: 'none', borderBottom: '1px solid var(--to-border, #e2e8f0)', cursor: 'pointer', fontFamily: 'inherit' }}>
+                    <div style={{ fontSize: 12, fontWeight: 700 }}>{q.ref}{q.customer?.name ? ' · ' + q.customer.name : ''}</div>
+                    <div style={{ fontSize: 11, opacity: 0.75 }}>{[q.title, q.status].filter(Boolean).join(' · ')}{q.lastEdited ? ' · edited ' + String(q.lastEdited).slice(0, 10) : ''}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {planChooserOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={e => { if (e.target === e.currentTarget) { setPlanChooserOpen(false); setBlankForm(null) } }}>
           <div style={{ background: 'var(--to-panel, #fff)', color: 'var(--to-text, #1e293b)', border: '1px solid var(--to-border, #e2e8f0)', borderRadius: 10, width: 'min(420px, 92vw)', padding: 18, boxShadow: '0 12px 48px rgba(0,0,0,0.4)' }}>
