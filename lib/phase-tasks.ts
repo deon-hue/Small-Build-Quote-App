@@ -954,6 +954,15 @@ const joinerySubphases: PhaseSubphase[] = [
     ukWarning: 'Level the base units first and hang the wall units to the marked line, fixing into studs or with the right fixings for the wall. Solid timber worktops must acclimatise and be sealed on all sides. A gas hob is connected by a Gas Safe engineer; the electrics by a qualified electrician.',
     tasks: [],  // priced by the Kitchen Installation calculator (each kitchen: units, who supplies them, flat-pack, worktops, cut-outs, upstand, plinth, cornice, handles, appliances)
   },
+  // Fitted furniture priced one run at a time (assembly calculator), beside the task-based Fitted Furniture & Wardrobes above. Listed last so a new line in Take-off still starts on a task.
+  {
+    id: 'join-furniture-calc',
+    phase: 'Joinery & Fixtures',
+    name: 'Fitted Furniture & Wardrobes (by run)',
+    markupPct: 20,
+    ukWarning: 'Scribe the run to the walls, floor and ceiling, and fix into studs or with the right fixings for the wall. Sliding doors need a level floor and ceiling. A cupboard under the stairs on an escape route may need 30-minute fire protection (Part B).',
+    tasks: [],  // priced by the Fitted Furniture calculator (each run: size, built on site or kit or delivered, carcass board, doors, bays with shelves, rails and drawers, plinth, filler, handles)
+  },
 ]
 
 // ── 10. TILING & FINISHES ─────────────────────────────────────────────────────

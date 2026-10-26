@@ -5878,6 +5878,7 @@ export default function TakeoffPage() {
     const _ufhCalc         = isDecoCalc && ((item.phase === 'Plumbing & Heating' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'plumb-ufh') || (item.phase === 'Joinery & Fixtures' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'join-skirting-rooms'))
     const _stairCalc       = isDecoCalc && item.phase === 'Joinery & Fixtures' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'join-stairs-calc'
     const _kitchenCalc     = isDecoCalc && item.phase === 'Joinery & Fixtures' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'join-kitchen-fit'
+    const _furnCalc        = isDecoCalc && item.phase === 'Joinery & Fixtures' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'join-furniture-calc'
     const isTaskPhase      = _phaseHasTasks && !isBuildup && !isExtWall && !isPlaster && !isIntWall && !isDemo && !isDemoCalc && !isFoundationLine && !isDecoCalc
     const showWallLine     = isLineBased && (isExtWall || isIntWall || isPlaster)
     const hasOpenings      = (isExtWall || isIntWall || isPlaster) && isLineBased
@@ -5924,7 +5925,7 @@ export default function TakeoffPage() {
         name={item.name}
         lengthM={item.length ?? 0}
         measureLabel={isBoxShape ? 'Size' : isFloorShape || ((_tileCalc || _ufhCalc) && floorDims) ? 'Area' : _tileCalc && (item.length ?? 0) > 0 ? 'Length' : (isDecoCalc && !_lengthFedCalc) || _demoMarker ? 'Marker' : undefined}
-        measureText={isBoxShape ? (roofBox ? `${(roofBox.lengthMm / 1000).toFixed(2)} × ${(roofBox.widthMm / 1000).toFixed(2)} m` : 'Not drawn') : isFloorShape || ((_tileCalc || _ufhCalc) && floorDims) ? (floorDims ? `${floorDims.areaM2.toFixed(1)} m²` : 'Not drawn') : _tileCalc && (item.length ?? 0) > 0 ? `${(item.length ?? 0).toFixed(2)} m` : _demoMarker ? 'sizes are typed in the calculator' : isDecoCalc && !_lengthFedCalc ? (_stairCalc ? 'staircases are set in the calculator' : _kitchenCalc ? 'kitchens are set in the calculator' : item.phase === 'Windows & Doors' ? 'openings are set in the calculator' : 'rooms are set in the calculator') : undefined}
+        measureText={isBoxShape ? (roofBox ? `${(roofBox.lengthMm / 1000).toFixed(2)} × ${(roofBox.widthMm / 1000).toFixed(2)} m` : 'Not drawn') : isFloorShape || ((_tileCalc || _ufhCalc) && floorDims) ? (floorDims ? `${floorDims.areaM2.toFixed(1)} m²` : 'Not drawn') : _tileCalc && (item.length ?? 0) > 0 ? `${(item.length ?? 0).toFixed(2)} m` : _demoMarker ? 'sizes are typed in the calculator' : isDecoCalc && !_lengthFedCalc ? (_stairCalc ? 'staircases are set in the calculator' : _kitchenCalc ? 'kitchens are set in the calculator' : _furnCalc ? 'fitted furniture is set in the calculator' : item.phase === 'Windows & Doors' ? 'openings are set in the calculator' : 'rooms are set in the calculator') : undefined}
         saved={item.assemblyResult}
         open={assemblyWindowItemId === item.id}
         onOpen={() => setAssemblyWindowItemId(item.id)}
@@ -6819,6 +6820,8 @@ export default function TakeoffPage() {
                 <div style={{ fontSize: 11, color: 'var(--to-muted)', marginBottom: 8 }}>
                   {_tileCalc
                     ? 'Priced room by room with its own calculator. The area drawn here sizes the first room (a line drawn gives the first wall area its length for wall tiling): add the other rooms and the finishes in the calculator.'
+                    : _furnCalc
+                    ? 'Priced run by run with its own calculator. The area drawn here is only a marker on the plan: add each wardrobe or run of fitted furniture in the calculator.'
                     : _kitchenCalc
                     ? 'Priced kitchen by kitchen with its own calculator. The area drawn here is only a marker on the plan: add each kitchen in the calculator.'
                     : _stairCalc
