@@ -73,6 +73,20 @@ export type CavityQuantitySource =
 // flat roof modules declare theirs beside themselves, further down.)
 export type AssemblyQuantitySource = WallQuantitySource | MasonryQuantitySource | CavityQuantitySource | SolidBlockQuantitySource | TimberFrameQuantitySource | DwarfQuantitySource | SleeperQuantitySource | FlatRoofQuantitySource | ParapetQuantitySource
 
+/**
+ * The area of the openings that is really IN the wall. Each opening is held to the wall (a door taller than the wall, or one standing off an end, cannot take more off than the wall has there), so the
+ * piers beside a door that runs the whole height keep their bricks instead of the sum going below zero and every brick vanishing. An opening outside the wall is warned about separately.
+ */
+export function openingsAreaInWallM2(openings: { widthMm: number; heightMm: number; offsetMm: number; sillHeightMm: number }[], lengthMm: number, heightMm: number): number {
+  return openings.reduce((s, o) => {
+    const off = Number.isFinite(o.offsetMm) ? o.offsetMm : 0
+    const sill = Number.isFinite(o.sillHeightMm) ? Math.max(0, o.sillHeightMm) : 0
+    const w = Math.max(0, Math.min(off + o.widthMm, lengthMm) - Math.max(off, 0))
+    const h = Math.max(0, Math.min(sill + o.heightMm, heightMm) - Math.min(sill, heightMm))
+    return s + (w / 1000) * (h / 1000)
+  }, 0)
+}
+
 export interface AssemblyOpening {
   id: string
   kind: 'window' | 'door' | 'bifold' | 'custom'
@@ -173,7 +187,7 @@ export function calculateWallGeometry(input: WallInput): WallGeometry {
   if (C <= 0) throw new Error('Stud centres must be greater than zero.')
 
   const grossAreaM2 = toM(L) * toM(H)
-  const openingAreaM2 = openings.reduce((s, o) => s + toM(o.widthMm) * toM(o.heightMm), 0)
+  const openingAreaM2 = openingsAreaInWallM2(openings, L, H)
   const netAreaM2 = Math.max(0, grossAreaM2 - openingAreaM2)
 
   const positions = studPositionsMm(L, C)
@@ -319,7 +333,7 @@ export function calculateMasonryGeometry(input: MasonryWallInput): MasonryWallGe
   if (blockLengthMm <= 0 || blockHeightMm <= 0) throw new Error('Block size must be greater than zero.')
 
   const grossAreaM2 = toM(L) * toM(H)
-  const openingAreaM2 = openings.reduce((s, o) => s + toM(o.widthMm) * toM(o.heightMm), 0)
+  const openingAreaM2 = openingsAreaInWallM2(openings, L, H)
   const netAreaM2 = Math.max(0, grossAreaM2 - openingAreaM2)
 
   const blockAreaM2 = toM(blockLengthMm) * toM(blockHeightMm)
@@ -476,7 +490,7 @@ export function calculateCavityGeometry(input: CavityWallInput): CavityWallGeome
   }
 
   const grossAreaM2 = toM(L) * toM(H)
-  const openingAreaM2 = openings.reduce((s, o) => s + toM(o.widthMm) * toM(o.heightMm), 0)
+  const openingAreaM2 = openingsAreaInWallM2(openings, L, H)
   const netAreaM2 = Math.max(0, grossAreaM2 - openingAreaM2)
 
   const blockAreaM2 = toM(blockLengthMm) * toM(blockHeightMm)
@@ -702,7 +716,7 @@ export function calculateSolidBlockGeometry(input: SolidBlockWallInput): SolidBl
   const courseHeightMm = verticalMm + 10
 
   const grossAreaM2 = toM(L) * toM(H)
-  const openingAreaM2 = openings.reduce((s, o) => s + toM(o.widthMm) * toM(o.heightMm), 0)
+  const openingAreaM2 = openingsAreaInWallM2(openings, L, H)
   const netAreaM2 = Math.max(0, grossAreaM2 - openingAreaM2)
 
   const blockFaceM2 = toM(coordAlongMm) * toM(courseHeightMm)

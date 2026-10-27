@@ -525,25 +525,46 @@ const PLAN_COLOURS = ['#e74c3c', '#e67e22', '#f1c40f', '#27ae60', '#16a085', '#2
 const openingsAreaOf = (item: TakeoffItem) => [...(item.openings ?? []), ...(item.drawnOpenings ?? [])].reduce((s, o) => s + o.width * o.height, 0)
 
 /** The wall items kept in step with the doors and windows placed on their walls: each wall item carries the openings drawn on it (drawnOpenings) and its net area (and an internal wall's materials) follow. Nothing changes where nothing was drawn. */
+const isWallPhase = (item: TakeoffItem) => item.phase === 'External Walls' || item.phase === 'Internal Walls & Partitions'
+
+/**
+ * A wall drawn as a line is first measured in METRES (its length). A door or window can only come off an AREA, so before anything is taken off, the wall is measured as length x height in m2
+ * (an outside wall at its height, 2.7m if none; an inside wall 2.4m), as it is once its Properties have been opened. A wall that is already an area, or has no length, is returned as it is.
+ * (A wall drawn after picking its phase from the list was left in metres, because it already had a height, so nothing ever came off it.)
+ */
+function asAreaWall(item: TakeoffItem): TakeoffItem {
+  if (!isWallPhase(item) || item.length == null || (item.unit === 'm²' && item.area != null)) return item
+  const h = item.phase === 'External Walls' ? (item.wallHeight ?? 2.7) : (item.wallConstructionType ? (item.wallHeight ?? 2.4) : 2.4)
+  const area = +(item.length * h).toFixed(3)
+  return { ...item, wallHeight: h, area, qty: area, unit: 'm²' }
+}
+
+/** An area-priced wall's quantity is its gross area less every opening (typed and drawn), and an inside wall's materials follow it. A wall priced another way keeps its own quantity. */
+function netOfOpenings(item: TakeoffItem): TakeoffItem {
+  if (item.unit !== 'm²' || item.area == null) return item
+  const net = +Math.max(0, item.area - openingsAreaOf(item)).toFixed(3)
+  const next: TakeoffItem = { ...item, qty: net }
+  if (next.phase === 'Internal Walls & Partitions' && next.calculatedMaterials) {
+    const sides = (next.finishSides ?? 2) as 1 | 2
+    next.calculatedMaterials = calcMaterialLines((next.wallConstructionType ?? 'stud_metal_70') as WallConstructionType, (next.wallFinishType ?? 'board_skim') as WallFinishType, sides, net, next.calculatedMaterials)
+    next.materialsConfirmed = false
+  }
+  return next
+}
+
+/** A wall with doors or windows drawn on it that is still measured in metres (made before the wall was measured as an area from the start): its area is worked out and the openings taken off */
+const wallNeedsArea = (item: TakeoffItem) => isWallPhase(item) && (item.drawnOpenings?.length ?? 0) > 0 && item.length != null && !(item.unit === 'm²' && item.area != null)
+
 function withDrawnOpenings(items: TakeoffItem[], placed: PlacedOpening[]): TakeoffItem[] {
   return items.map(item => {
-    if (!item.elementId || (item.phase !== 'External Walls' && item.phase !== 'Internal Walls & Partitions')) return item
+    if (!item.elementId || !isWallPhase(item)) return item
     const drawn: WallOpening[] = placed.filter(o => o.wallId === item.elementId).map(o => ({
       id: 'po-' + o.id, type: wallOpeningTypeFor(o.kind), label: o.ref, width: o.widthMm / 1000, height: o.heightMm / 1000,
     }))
-    if (JSON.stringify(drawn) === JSON.stringify(item.drawnOpenings ?? [])) return item
-    const next: TakeoffItem = { ...item, drawnOpenings: drawn.length ? drawn : undefined }
-    // an area-priced wall (net = gross less every opening); a wall priced another way keeps its own quantity
-    if (next.unit === 'm²' && next.area != null) {
-      const net = +Math.max(0, next.area - openingsAreaOf(next)).toFixed(3)
-      next.qty = net
-      if (next.phase === 'Internal Walls & Partitions' && next.calculatedMaterials) {
-        const sides = (next.finishSides ?? 2) as 1 | 2
-        next.calculatedMaterials = calcMaterialLines((next.wallConstructionType ?? 'stud_metal_70') as WallConstructionType, (next.wallFinishType ?? 'board_skim') as WallFinishType, sides, net, next.calculatedMaterials)
-        next.materialsConfirmed = false
-      }
-    }
-    return next
+    const same = JSON.stringify(drawn) === JSON.stringify(item.drawnOpenings ?? [])
+    const base = drawn.length > 0 ? asAreaWall(item) : item
+    if (same && base === item) return item
+    return netOfOpenings({ ...base, drawnOpenings: drawn.length ? drawn : undefined })
   })
 }
 
@@ -563,12 +584,13 @@ function recalcItemsForMpp(
 
     let length: number | undefined, area: number | undefined, volume: number | undefined
     let qty = item.qty
-    const unit = item.unit
+    let unit = item.unit
 
     if (el.type === 'line') {
       length = polylineLength(el.points, mpp)
       // Wall items: recalculate gross area and net area from new length
       if (item.phase === 'External Walls' && item.wallHeight != null) {
+        unit = 'm²'   // the quantity below is an area, so the unit is too (a wall left in metres showed 7.95 m beside an area)
         area = +(length * item.wallHeight).toFixed(3)
         const openingsArea = openingsAreaOf(item)
         qty = +(Math.max(0, area - openingsArea)).toFixed(3)
@@ -1522,6 +1544,13 @@ export default function TakeoffPage() {
       item.foundationType = item.foundationType ?? phaseDefaults.foundationType
       if (phaseDefaults.spec) item.spec = item.spec ?? phaseDefaults.spec
       if (phaseDefaults.subPhase) item.subPhase = item.subPhase ?? phaseDefaults.subPhase
+    }
+
+    // An outside wall drawn as a line is priced by area from the start (length x height), as it is once its Properties are opened: a phase picked from the list gives it a height straight away, which used to leave it
+    // in metres, so a door or window placed on it had no area to come off
+    if (item.phase === 'External Walls' && el.type === 'line' && item.wallHeight != null && item.length != null && item.area == null) {
+      const a = +(item.length * item.wallHeight).toFixed(3)
+      item.area = a; item.qty = a; item.unit = 'm²'
     }
 
     // Floor-specific enrichment
@@ -4049,6 +4078,12 @@ export default function TakeoffPage() {
     setPanelMode('properties')
   }
 
+  // A wall that already has doors or windows drawn on it but is still measured in metres (made before a wall was an area from the start) is given its area, and the openings come off it
+  useEffect(() => {
+    if (!project.items.some(wallNeedsArea)) return
+    setProject(p => ({ ...p, items: p.items.map(i => (wallNeedsArea(i) ? netOfOpenings(asAreaWall(i)) : i)) }))
+  }, [project.items])
+
   // Tiling & Finishes starts on its by-room calculator. Its older task sub-phases (Wall Tiling, Floor Tiling, Surface Preparation) come first in the list, so an untouched list used to draw an area as a flat 'Wall Tiling' task
   // priced from the old task lines and never opened the calculator. The pick is only a starting point: any other sub-phase can be chosen in the Properties panel before drawing, and it starts again after each drawing.
   useEffect(() => {
@@ -5967,7 +6002,7 @@ export default function TakeoffPage() {
       }
       if (linkedEl?.type === 'line' && item.wallHeight == null) {
         const _gross = +((item.length ?? 0) * 2.7).toFixed(3)
-        item = { ...item, wallHeight: 2.7, area: _gross, qty: _gross, unit: 'm²' }
+        item = { ...item, wallHeight: 2.7, area: _gross, qty: +Math.max(0, _gross - openingsAreaOf(item)).toFixed(3), unit: 'm²' }
         saveItemEdit(item)
       }
     }
@@ -5992,13 +6027,14 @@ export default function TakeoffPage() {
       const _defH: number = 2.4
       const _defSides: 1 | 2 = 2
       const _gross = +((item.length ?? 0) * _defH).toFixed(3)
+      const _net = +Math.max(0, _gross - openingsAreaOf(item)).toFixed(3)   // doors and windows already drawn on it come off
       item = {
         ...item,
         wallConstructionType: 'stud_metal_70' as WallConstructionType,
         wallFinishType:       'board_skim'     as WallFinishType,
         finishSides: _defSides, wallHeight: _defH,
-        area: _gross, qty: _gross, unit: 'm²',
-        calculatedMaterials: calcMaterialLines('stud_metal_70', 'board_skim', _defSides, _gross),
+        area: _gross, qty: _net, unit: 'm²',
+        calculatedMaterials: calcMaterialLines('stud_metal_70', 'board_skim', _defSides, _net),
         materialsConfirmed: false,
       }
       saveItemEdit(item)
@@ -6153,6 +6189,8 @@ export default function TakeoffPage() {
           wallOpenings: isExtWall && item.elementId ? planWallOpenings(livePlaced, item.elementId, project.calibration.mpp) : undefined,
           // a wall drawn here starts with no window or door: the calculator shows what is drawn on it (cavity walls are fed them), not its own sample
           noSampleOpenings: item.elementId ? true : undefined,
+          // a wall starts the calculator at the height it was drawn at (the calculator's own 2.4m used to be taken whatever the wall was, so the wall, 3m in its Properties, was priced 2.4m high)
+          initialHeightMm: isExtWall && (item.wallHeight ?? 0) > 0 ? Math.round((item.wallHeight ?? 0) * 1000) : undefined,
           basics: isFoundationLine ? { widthMm: item.foundationWidth ?? 600, depthMm: item.foundationDepth ?? 1000 } : undefined,
           planRooms: roomData ? roomInfos : undefined,
           prepScope: _prepCalc ? (item.prepScope ?? (linkedEl?.type === 'line' ? 'walls' : 'floor')) : undefined,

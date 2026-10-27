@@ -5,7 +5,7 @@
 // Mortar: the wall's volume less the bricks' own, with an allowance (x1.35) for waste, squeeze-out and filling the frogs; that comes to about 0.06 m3 per m2 of one-brick wall and 0.1 m3 per m2 of one and a half brick wall, which is what the usual
 // estimating tables give.
 
-import { costLayer, type AssemblyLayerDef, type AssemblyOpening, type CostedLine } from './assembly-calc'
+import { costLayer, openingsAreaInWallM2, type AssemblyLayerDef, type AssemblyOpening, type CostedLine } from './assembly-calc'
 
 export const BRICK_LENGTH_MM = 215
 export const BRICK_WIDTH_MM = 102.5
@@ -111,7 +111,7 @@ export function calculateSolidBrickGeometry(input: SolidBrickWallInput): SolidBr
   if (!t) throw new Error('Pick how many bricks thick the wall is.')
 
   const grossAreaM2 = toM(L) * toM(H)
-  const openingAreaM2 = openings.reduce((s, o) => s + toM(o.widthMm) * toM(o.heightMm), 0)
+  const openingAreaM2 = openingsAreaInWallM2(openings, L, H)
   const netAreaM2 = Math.max(0, grossAreaM2 - openingAreaM2)
 
   const bricksPerM2 = BRICKS_PER_SKIN_M2 * t.skins
