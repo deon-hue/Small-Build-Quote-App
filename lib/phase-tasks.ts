@@ -541,7 +541,16 @@ const drainageSubphases: PhaseSubphase[] = [
     name: 'Underground Drainage (by run)',
     markupPct: 18,
     ukWarning: 'Works to public sewers require the water company\'s consent and adoption needs SuDS compliance. Building Control inspect and test the drain before it is covered.',
-    tasks: [],  // priced by the Underground drainage calculator (runs: use, size, length, depth, how dug, surface; chambers, connections, CCTV)
+    tasks: [],  // priced by the Underground drainage calculator (runs: use, size, length, depth, how dug, surface; CCTV survey). The chambers, gullies and connections are the next sub-phase.
+  },
+  // Inspection chambers, manholes, rodding eyes, gullies and connections to an existing drain or the sewer, one item at a time (assembly calculator). Split from the runs so each is a thing at a place that can be put on the plan.
+  {
+    id: 'drain-chambers-gullies',
+    phase: 'Drainage & Services',
+    name: 'Chambers, Gullies & Connections (by item)',
+    markupPct: 18,
+    ukWarning: 'Where chambers go, their depths and the falls are the drainage designer\'s. A connection to the public sewer needs the water company\'s consent and charges. Building Control inspect before anything is covered.',
+    tasks: [],  // priced by the Chambers, gullies & connections calculator (items: inspection chamber, manhole, rodding eye, gullies, connections; depth, cover, how the pit is dug)
   },
   // A soakaway sized from the roof and paving that drain to it, with channel drains, gullies, downpipe connections and water butts (assembly calculator). Sits beside the task-based Rainwater sub-phase, which is untouched.
   {

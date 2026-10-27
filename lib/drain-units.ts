@@ -1,7 +1,8 @@
 // Underground drainage priced by the run (Drainage & Services → Underground Drainage (by run)). Each run is a length of drain with a use (foul, surface water or combined), a pipe size, an average
 // trench depth, how it is dug (machine or by hand) and what it crosses (soft ground, block paving, tarmac or concrete). From that it works out the trench (volume dug, by machine or by hand, and the machine days),
-// the pipe, the granular bed and surround, the backfill and the soil taken away, trench support where it is deep, and putting the surface back. Chambers and manholes, rodding eyes, connections to an
-// existing drain or the sewer and a CCTV survey are counted separately for the job. Counts and prices only: falls, sizes, depths and any work to a public sewer are the drainage designer's and the water company's.
+// the pipe, the granular bed and surround, the backfill and the soil taken away, trench support where it is deep, and putting the surface back, and a CCTV survey is counted for the job. The chambers, manholes,
+// gullies and connections are their own calculator now (lib/drain-items-units.ts), so each can be put on the plan; the chamber, connection and sewer counts below stay in this engine only so that a line saved before that
+// split still prices what it had. Counts and prices only: falls, sizes, depths and any work to a public sewer are the drainage designer's and the water company's.
 // Self-contained (no cross-file runtime imports), so it can be hand-tested with plain Node; the screen costs the lines it returns through the shared costLayer with each layer's fixedQty set from the quantity.
 // All rates are samples to be checked against real prices.
 

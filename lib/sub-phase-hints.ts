@@ -84,7 +84,8 @@ const HINTS: Record<string, string> = {
   'drain-above-ground': 'soil and waste pipes above ground, stacks and vents',
   'drain-cap-off': 'capping off, diverting or moving existing drains and services',
   'drain-rainwater': 'rainwater and surface water disposal at ground level: soakaways and drains',
-  'drain-runs': 'new underground drain runs priced by length and trench depth: foul, surface water or combined drains, with inspection chambers, manholes, connections to the sewer and a CCTV survey',
+  'drain-runs': 'new underground drain runs priced by length and trench depth: foul, surface water or combined drains, with a CCTV survey (the inspection chambers, manholes, gullies and connections to the sewer are their own line, Chambers Gullies and Connections)',
+  'drain-chambers-gullies': 'inspection chambers, manholes, rodding eyes, trapped, yard and road gullies, and connections to an existing drain or the public sewer, counted one by one with their depth and cover (the pipe between them is Underground Drainage by run)',
   'drain-soakaway': 'a soakaway sized from the roof and paved areas that drain to it, with channel drains, yard gullies, downpipe connections and water butts',
   'drain-services': 'new utility connections: water, gas, electricity and telecoms supplies to the building, with the trench, duct, meter box and the utility company charge',
   // Demolition (calculators)

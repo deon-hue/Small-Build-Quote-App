@@ -634,7 +634,8 @@ export function suggestSuspendedTimberFloorLabour(g: {
  * the surface back, and builds the chambers. The machine digging is the digger and its operator, priced as plant in the calculator, so it is not in these hours. Rough estimates, as everywhere here. */
 export function suggestUndergroundDrainageLabour(g: {
   layLm: number; handDigM3: number; gravelM3: number; backfillM3: number; softM2: number; pavingM2: number; tarmacM2: number; concreteM2: number
-  shallowIc: number; deepIc: number; manholes: number; roddingEyes: number
+  /** chambers, manholes and rodding eyes are now their own calculator (Chambers, Gullies & Connections): these are only for a drainage line saved before the split, which still has them */
+  shallowIc?: number; deepIc?: number; manholes?: number; roddingEyes?: number
 }): LabourSuggestion[] {
   const w = LABOUR_RATES.groundworker
   const dig = line('drain-dig', 'labourer', 'Hand-dig the trench where the machine cannot reach', [{ qty: g.handDigM3, unit: 'm³', what: 'dug by hand', rate: w.drainHandDigM3 }])
@@ -644,10 +645,10 @@ export function suggestUndergroundDrainageLabour(g: {
     { qty: g.backfillM3, unit: 'm³', what: 'backfilled and compacted', rate: w.backfillM3 },
   ])
   const chambers = line('drain-chambers', 'labourer', 'Build in the chambers, manholes and rodding eyes', [
-    { qty: g.shallowIc, unit: 'nr', what: 'shallow inspection chambers', rate: w.drainShallowIc },
-    { qty: g.deepIc, unit: 'nr', what: 'deeper inspection chambers', rate: w.drainDeepIc },
-    { qty: g.manholes, unit: 'nr', what: 'manholes', rate: w.drainManhole },
-    { qty: g.roddingEyes, unit: 'nr', what: 'rodding eyes', rate: w.drainRoddingEye },
+    { qty: g.shallowIc ?? 0, unit: 'nr', what: 'shallow inspection chambers', rate: w.drainShallowIc },
+    { qty: g.deepIc ?? 0, unit: 'nr', what: 'deeper inspection chambers', rate: w.drainDeepIc },
+    { qty: g.manholes ?? 0, unit: 'nr', what: 'manholes', rate: w.drainManhole },
+    { qty: g.roddingEyes ?? 0, unit: 'nr', what: 'rodding eyes', rate: w.drainRoddingEye },
   ])
   const surface = line('drain-surface', 'labourer', 'Reinstate the surface over the trench', [
     { qty: g.softM2, unit: 'm²', what: 'soft ground', rate: w.drainSoftM2 },
@@ -656,6 +657,15 @@ export function suggestUndergroundDrainageLabour(g: {
     { qty: g.concreteM2, unit: 'm²', what: 'concrete', rate: w.drainConcreteM2 },
   ])
   return [dig, lay, chambers, surface].filter((x): x is LabourSuggestion => x !== null)
+}
+
+/** The labour for the Chambers, Gullies & Connections calculator (Drainage & Services → Chambers, Gullies & Connections (by item)): a labourer builds in the inspection chambers and manholes, fits the gullies and rodding eyes,
+ * hand-digs the pits the machine does not, and places the beds, concrete and backfill, as the calculator's own engine works them out (the hours and the working come from its table and are passed in). The machine digging is the digger
+ * and its operator, priced as plant in the calculator. Rough estimates, as everywhere here. */
+export function suggestDrainItemsLabour(tasks: { key: string; trade: 'labourer'; task: string; hours: number; basis: string }[]): LabourSuggestion[] {
+  return tasks
+    .filter(t => t.hours > 0)
+    .map(t => ({ key: 'drain-items-' + t.key, trade: t.trade as LabourTradeKind, task: t.task, hours: t.hours, basis: t.basis }))
 }
 
 /** The labour for a soakaway and rainwater fittings (Drainage & Services → Soakaway & Rainwater): a groundworker builds the soakaway (crates, stone or rings, wrapped in geotextile, with its silt chamber), backfills it, lays the

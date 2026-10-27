@@ -1,4 +1,4 @@
-// Pricing the three Drainage & Services calculators from what the AI quote heard in the scope (see lib/drainage-ai.ts for the checking). Each uses the calculator's own engine, its own labour
+// Pricing the four Drainage & Services calculators from what the AI quote heard in the scope (see lib/drainage-ai.ts for the checking). Each uses the calculator's own engine, its own labour
 // suggestions (priced at the company's trades), standard settings and sample rates, with the 20% profit line and the digger priced in days on site, exactly as the screen does before anything
 // is edited. It also returns the calculator's saved state (`calcState`), so opening the calculator from the quote shows the same runs, areas or services, and a plain-English review note saying
 // what was priced and what was assumed. Kept next to the screens (not in lib/) because it uses the same costing helpers they do.
@@ -7,7 +7,7 @@ import type { AssemblyLayerDef } from '@/lib/assembly-calc'
 import type { CalcStateSnapshot } from '@/lib/calc-snapshot'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import { planDigger, diggerLayers } from '@/lib/digger-on-site'
-import { suggestUndergroundDrainageLabour, suggestSoakawayLabour, suggestServicesLabour } from '@/lib/flat-roof-labour'
+import { suggestUndergroundDrainageLabour, suggestSoakawayLabour, suggestServicesLabour, suggestDrainItemsLabour } from '@/lib/flat-roof-labour'
 import { costFromBasics, type PricedFromBasics } from '@/components/assembly-basics-pricing'
 import { calculateDrain, DRAIN_USE_LABEL, DRAIN_PIPE, SURFACE_LABEL as DRAIN_SURFACE_LABEL } from '@/lib/drain-units'
 import { describeDrain, describeDrainShort } from '@/lib/drain-description'
@@ -15,13 +15,14 @@ import { calculateSoakaway } from '@/lib/soakaway-units'
 import { describeSoakaway, describeSoakawayShort } from '@/lib/soakaway-description'
 import { calculateServices, UTILITIES, WORK_LABEL, SURFACE_LABEL as SVC_SURFACE_LABEL } from '@/lib/services-units'
 import { describeServices, describeServicesShort } from '@/lib/services-description'
-import { drainFromScope, soakawayFromScope, servicesFromScope } from '@/lib/drainage-ai'
+import { calculateDrainItems, drainItemWords, DRAIN_ITEMS } from '@/lib/drain-items-units'
+import { describeDrainItems, describeDrainItemsShort } from '@/lib/drain-items-description'
+import { drainFromScope, drainItemsFromScope, soakawayFromScope, servicesFromScope } from '@/lib/drainage-ai'
 import { plural } from '@/lib/ai-spec'
-import { CHAMBER_KINDS, CHAMBER_WORDS } from '@/components/AssemblyDrainageDemo'
 import { KIND_WORDS } from '@/components/AssemblySoakawayDemo'
 import { UTILITY_WORDS } from '@/components/AssemblyServicesDemo'
 
-export const DRAINAGE_AI_IDS = new Set(['drain-runs', 'drain-soakaway', 'drain-services'])
+export const DRAINAGE_AI_IDS = new Set(['drain-runs', 'drain-chambers-gullies', 'drain-soakaway', 'drain-services'])
 
 export interface PricedCalc extends PricedFromBasics {
   calcState: CalcStateSnapshot
@@ -45,19 +46,32 @@ export function priceDrainageCalcFromScope(o: { canonicalId: string; spec: unkno
         const r = calculateDrain({ runs: ai.runs, chambers: ai.chambers, connectExisting: ai.connectExisting, connectSewer: ai.connectSewer, cctv: ai.cctv, importBackfill: ai.importBackfill })
         const suggestions = suggestUndergroundDrainageLabour({
           layLm: r.totalLm, handDigM3: r.handM3, gravelM3: r.gravelM3, backfillM3: r.backfillM3, softM2: r.reinstateM2.soft, pavingM2: r.reinstateM2.paving, tarmacM2: r.reinstateM2.tarmac, concreteM2: r.reinstateM2.concrete,
-          shallowIc: ai.chambers['ic-shallow'] ?? 0, deepIc: ai.chambers['ic-deep'] ?? 0, manholes: ai.chambers.manhole ?? 0, roddingEyes: ai.chambers['rodding-eye'] ?? 0,
         })
         const lines = costFromBasics({ layers: asLayers(r.lines, { days: r.excavatorDays, why: 'digging the drain trenches' }), suggestions, labourTrades: o.labourTrades })
         const priced = ai.runs.filter(x => x.lengthM > 0 && DRAIN_PIPE[x.size] && x.depthMm >= 300)
         const d = {
           runs: priced.map(x => ({ name: x.name.trim() || `${DRAIN_USE_LABEL[x.use]} drain`, what: `${x.size}mm ${DRAIN_USE_LABEL[x.use].toLowerCase()}`, lengthM: x.lengthM, depthMm: x.depthMm, dug: x.dig === 'machine' ? 'by machine' : 'by hand', crosses: DRAIN_SURFACE_LABEL[x.surface].split(' (')[0].toLowerCase() })),
-          totalLm: r.totalLm, chambers: CHAMBER_KINDS.filter(k => (ai.chambers[k] ?? 0) > 0).map(k => `${ai.chambers[k]} ${ai.chambers[k] === 1 ? CHAMBER_WORDS[k][0] : CHAMBER_WORDS[k][1]}`),
-          connectExisting: ai.connectExisting, connectSewer: ai.connectSewer, cctv: ai.cctv, importBackfill: ai.importBackfill,
+          totalLm: r.totalLm, chambers: [] as string[],
+          connectExisting: 0, connectSewer: 0, cctv: ai.cctv, importBackfill: ai.importBackfill,
         }
         return {
           name: 'Underground drainage', qty: 1, location: '', description: describeDrainShort(d), detail: describeDrain(d), lines,
           calcState: { id: 'drain-runs', values: { AssemblyDrainageDemo: { runs: ai.runs, chambers: ai.chambers, connectExisting: ai.connectExisting, connectSewer: ai.connectSewer, cctv: ai.cctv, importBackfill: ai.importBackfill } } },
-          note: `Priced by the drainage calculator from what your scope states (${r.totalLm > 0 ? `${r.totalLm}m of drain in ${plural(ai.runs.length, 'run', 'runs')}` : 'no drain lengths'}${r.chamberCount > 0 ? `, ${plural(r.chamberCount, 'chamber or manhole', 'chambers and manholes')}` : ''}${ai.connectSewer + ai.connectExisting > 0 ? `, ${plural(ai.connectSewer + ai.connectExisting, 'connection', 'connections')}` : ''}${ai.cctv ? ', a CCTV survey' : ''}) with the calculator's standard settings and sample rates; the digger is priced in days on site.${ai.assumed.length > 0 ? ` The scope did not state: ${ai.assumed.join('; ')}.` : ''} A sewer connection is a provisional sum: the water company's own charges are separate. Open the calculator to check the runs and depths.`,
+          note: `Priced by the drainage calculator from what your scope states (${r.totalLm > 0 ? `${r.totalLm}m of drain in ${plural(ai.runs.length, 'run', 'runs')}` : 'no drain lengths'}${ai.cctv ? ', a CCTV survey' : ''}) with the calculator's standard settings and sample rates; the digger is priced in days on site.${ai.assumed.length > 0 ? ` The scope did not state: ${ai.assumed.join('; ')}.` : ''} The inspection chambers, manholes, gullies and connections are not in this line: they are priced by the Chambers, Gullies & Connections line.${ai.strayItems ? ' The AI named chambers or connections with the runs and none are priced here: check that line has them.' : ''} Open the calculator to check the runs and depths.`,
+        }
+      }
+      case 'drain-chambers-gullies': {
+        const ai = drainItemsFromScope(o.spec)
+        if (!ai) return null
+        const r = calculateDrainItems({ items: ai.items, diggerWithRuns: false })
+        const suggestions = suggestDrainItemsLabour(r.labour)
+        const lines = costFromBasics({ layers: asLayers(r.lines, { days: r.excavatorDays, why: 'digging the chamber and gully pits' }), suggestions, labourTrades: o.labourTrades })
+        const words = { items: drainItemWords(ai.items) }
+        const parts = Object.entries(r.counts).filter(([, n]) => n > 0).map(([k, n]) => plural(n, DRAIN_ITEMS[k as keyof typeof DRAIN_ITEMS].word[0], DRAIN_ITEMS[k as keyof typeof DRAIN_ITEMS].word[1]))
+        return {
+          name: 'Drainage chambers, gullies and connections', qty: 1, location: '', description: describeDrainItemsShort(words), detail: describeDrainItems(words), lines,
+          calcState: { id: 'drain-chambers-gullies', values: { AssemblyDrainItemsDemo: { items: ai.items } } },
+          note: `Priced by the chambers, gullies and connections calculator from what your scope states (${parts.join(', ')}) with the calculator's standard settings and sample rates; the digger is priced in days on site, and is also priced in the drain runs line, so check its days are not counted twice.${ai.assumed.length > 0 ? ` The scope did not state: ${ai.assumed.join('; ')}.` : ''} A sewer connection is a provisional sum: the water company's own charges are separate. The depths decide the extension sections and rings, so open the calculator to check them.`,
         }
       }
       case 'drain-soakaway': {

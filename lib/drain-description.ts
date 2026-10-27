@@ -42,6 +42,8 @@ export function describeDrain(i: DrainDescriptionInput): string {
   if (i.connectSewer > 0) lines.push(`${plural(i.connectSewer, 'connection', 'connections')} to the public sewer (a provisional sum: the water company's approval and charges are separate).`)
   lines.push(i.importBackfill ? 'All the excavated soil is taken away and the trench is backfilled with imported granular material.' : 'Surplus soil is taken away; the rest is used to backfill the trench.')
   if (i.cctv) lines.push('A CCTV survey of the new drain is carried out and the report supplied.')
-  lines.push('Not included: drainage inside the building or above ground (priced with the plumbing), soakaways and rainwater gullies (priced separately), the water company\'s fees and approvals, or diverting any services found in the trench.')
+  // the chambers, gullies and connections are their own calculator: say so unless this (older) line still carries them
+  const separate = i.chambers.length === 0 && i.connectExisting === 0 && i.connectSewer === 0
+  lines.push(`Not included: ${separate ? 'inspection chambers, manholes, gullies and connections (priced separately), ' : ''}drainage inside the building or above ground (priced with the plumbing), soakaways and rainwater gullies (priced separately), the water company\'s fees and approvals, or diverting any services found in the trench.`)
   return lines.join('\n')
 }

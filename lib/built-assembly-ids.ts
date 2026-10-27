@@ -45,6 +45,7 @@ export const BUILT_ASSEMBLY_CANONICAL_IDS = new Set<string>([
   'plumb-ufh',
   'plumb-pipework',
   'drain-runs',
+  'drain-chambers-gullies',
   'drain-soakaway',
   'drain-services',
   'demo-wall-removal-calc',

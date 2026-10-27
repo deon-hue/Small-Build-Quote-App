@@ -4,7 +4,8 @@
  * Assembly Calculator — Underground drainage, priced by the run (Drainage & Services → Underground Drainage (by run)).
  * Each run is a length of drain with a use, a pipe size, an average trench depth, how it is dug and what it crosses. The trench (by machine or by hand), the pipe, the granular bed and surround,
  * the backfill and soil taken away, trench support for the deeper runs, and putting the surface back are worked out from that; the digger is priced in days on site (with fuel and delivery), as in the
- * foundation calculators. Chambers and manholes, rodding eyes, connections to an existing drain or the sewer and a CCTV survey are counted for the job. The engine is lib/drain-units.ts.
+ * foundation calculators. A CCTV survey is counted for the job. The chambers, manholes, gullies and connections are their own calculator (Chambers, Gullies & Connections, components/AssemblyDrainItemsDemo.tsx), so each
+ * can be put on the plan as a thing at a place; a drainage line saved BEFORE that split still has its chambers and connections, which stay here (and stay priced) until they are set to nothing. The engine is lib/drain-units.ts.
  */
 
 import React, { useEffect, useMemo } from 'react'
@@ -68,6 +69,10 @@ export default function AssemblyDrainageDemo({ onClose, onSave, labourTrades = [
   const [disabledLayerIds, setDisabledLayerIds] = useCalcState<Set<string>>(ID, 'disabledLayerIds', new Set())
   function toggleLayer(id: string) { setDisabledLayerIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
   const noSidesLayers = useMemo(() => new Set<string>(), [])
+  // Chambers and connections moved to their own calculator. A line saved before still has them, and they stay priced and editable here for as long as the panel is open (the box is kept once it has been shown)
+  const hasLegacy = CHAMBER_KINDS.some(k => (chambers[k] ?? 0) > 0) || connectExisting > 0 || connectSewer > 0
+  const legacyShown = React.useRef(false)
+  if (hasLegacy) legacyShown.current = true
 
   function addRun() {
     setRuns(p => {
@@ -269,19 +274,25 @@ export default function AssemblyDrainageDemo({ onClose, onSave, labourTrades = [
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <CollapsibleSection title="Chambers and manholes" borderColor="#bae6fd">
-            {CHAMBER_KINDS.map(k => (
-              <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                <span style={{ fontSize: 11.5, color: '#334155', flex: 1 }}>{CHAMBERS[k].label}</span>
-                <NumInput type="number" min={0} value={chambers[k] ?? 0} onChange={e => setChambers(p => ({ ...p, [k]: Math.max(0, Math.round(+e.target.value || 0)) }))} style={{ fontSize: 12, padding: '3px 5px', border: '1px solid #e2e8f0', borderRadius: 4, width: 46, textAlign: 'right', boxSizing: 'border-box' }} />
+          {legacyShown.current && (
+            <CollapsibleSection title="Chambers and connections (priced before the split)" borderColor="#fde68a" defaultOpen>
+              <div style={{ fontSize: 10.5, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 4, padding: '4px 8px', marginBottom: 6, lineHeight: 1.4 }}>
+                These were priced here before chambers, manholes, gullies and connections became their own calculator (Chambers, Gullies &amp; Connections). They are still counted in this price. If you add them in that calculator, set these to 0 so they are not paid twice.
               </div>
-            ))}
-          </CollapsibleSection>
+              {CHAMBER_KINDS.map(k => (
+                <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <span style={{ fontSize: 11.5, color: '#334155', flex: 1 }}>{CHAMBERS[k].label}</span>
+                  <NumInput type="number" min={0} value={chambers[k] ?? 0} onChange={e => setChambers(p => ({ ...p, [k]: Math.max(0, Math.round(+e.target.value || 0)) }))} style={{ fontSize: 12, padding: '3px 5px', border: '1px solid #e2e8f0', borderRadius: 4, width: 46, textAlign: 'right', boxSizing: 'border-box' }} />
+                </div>
+              ))}
+              <PropRow label="Connections to an existing drain (nr)">{numInput(connectExisting, n => setConnectExisting(Math.round(n)), 0, 1)}</PropRow>
+              <PropRow label="Connections to the public sewer (nr)">{numInput(connectSewer, n => setConnectSewer(Math.round(n)), 0, 1)}</PropRow>
+            </CollapsibleSection>
+          )}
 
-          <CollapsibleSection title="Connections and survey" borderColor="#bae6fd">
-            <PropRow label="Connections to an existing drain (nr)">{numInput(connectExisting, n => setConnectExisting(Math.round(n)), 0, 1)}</PropRow>
-            <PropRow label="Connections to the public sewer (nr)">{numInput(connectSewer, n => setConnectSewer(Math.round(n)), 0, 1)}</PropRow>
+          <CollapsibleSection title="Survey" borderColor="#bae6fd">
             {check('CCTV survey of the new drain', cctv, setCctv, 'With a report, for Building Control or the water company')}
+            <div style={{ fontSize: 10, color: '#94a3b8', margin: '4px 0 2px' }}>Inspection chambers, manholes, gullies and connections to a drain or the sewer are priced in Chambers, Gullies &amp; Connections (by item).</div>
           </CollapsibleSection>
 
           <CollapsibleSection title="Backfill" borderColor="#bae6fd">

@@ -53,6 +53,7 @@ import AssemblyPipeworkDemo from '@/components/AssemblyPipeworkDemo'
 import AssemblyDrainageDemo from '@/components/AssemblyDrainageDemo'
 import AssemblySoakawayDemo from '@/components/AssemblySoakawayDemo'
 import AssemblyServicesDemo from '@/components/AssemblyServicesDemo'
+import AssemblyDrainItemsDemo from '@/components/AssemblyDrainItemsDemo'
 import AssemblyWallRemovalDemo from '@/components/AssemblyWallRemovalDemo'
 import AssemblyStripOutDemo from '@/components/AssemblyStripOutDemo'
 import AssemblyWasteDemo from '@/components/AssemblyWasteDemo'
@@ -76,7 +77,7 @@ import type { PlanRoomInfo } from '@/lib/rooms-from-walls'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import type { CalcSize } from '@/lib/calc-size'
 
-export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation' | 'pad-foundation' | 'piled-foundation' | 'underpinning' | 'electrics' | 'decoration' | 'plaster-rooms' | 'render' | 'render-hackoff' | 'wall-insulation' | 'screed-floor' | 'floor-overlay' | 'concrete-slab' | 'block-beam' | 'timber-floor' | 'insulated-concrete' | 'plumbing' | 'heating' | 'ufh' | 'pipework' | 'drainage' | 'soakaway' | 'services' | 'wall-removal' | 'strip-out' | 'waste-skips' | 'external-demo' | 'tile-floor' | 'tile-wall' | 'tile-prep' | 'tile-ufh' | 'windows-doors' | 'skirting' | 'stairs' | 'kitchen-fit' | 'furniture' | 'second-fix'
+export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation' | 'pad-foundation' | 'piled-foundation' | 'underpinning' | 'electrics' | 'decoration' | 'plaster-rooms' | 'render' | 'render-hackoff' | 'wall-insulation' | 'screed-floor' | 'floor-overlay' | 'concrete-slab' | 'block-beam' | 'timber-floor' | 'insulated-concrete' | 'plumbing' | 'heating' | 'ufh' | 'pipework' | 'drainage' | 'drain-chambers' | 'soakaway' | 'services' | 'wall-removal' | 'strip-out' | 'waste-skips' | 'external-demo' | 'tile-floor' | 'tile-wall' | 'tile-prep' | 'tile-ufh' | 'windows-doors' | 'skirting' | 'stairs' | 'kitchen-fit' | 'furniture' | 'second-fix'
 
 /** Fired when a calculator's "Save & Price" is used from inside a real quote — absent in
  * the Back Office preview context, which has no quote to save into. */
@@ -176,6 +177,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'plumb-ufh': { icon: 'ufh', render: opts => <AssemblyUfhDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalName={opts?.externalName} planRooms={opts?.planRooms} /> },
   'plumb-pipework': { icon: 'pipework', render: opts => <AssemblyPipeworkDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'drain-runs': { icon: 'drainage', render: opts => <AssemblyDrainageDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
+  'drain-chambers-gullies': { icon: 'drain-chambers', render: opts => <AssemblyDrainItemsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'drain-soakaway': { icon: 'soakaway', render: opts => <AssemblySoakawayDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'drain-services': { icon: 'services', render: opts => <AssemblyServicesDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'demo-wall-removal-calc': { icon: 'wall-removal', render: opts => <AssemblyWallRemovalDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
@@ -535,6 +537,16 @@ export function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; siz
           <rect x="3.5" y="13" width="17" height="3.4" rx="1.7" stroke="#92400e" strokeWidth="1.5" />
           <rect x="9.5" y="7" width="5" height="6" stroke="#64748b" strokeWidth="1.4" />
           <path d="M9 7h6" stroke="#64748b" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      )
+    case 'drain-chambers':
+      // An inspection chamber seen from above: a round cover with a grating, and a pipe running through it.
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M1.5 12h4M18.5 12h4" stroke="#92400e" strokeWidth="2.4" strokeLinecap="round" />
+          <circle cx="12" cy="12" r="6.5" stroke="#64748b" strokeWidth="1.6" />
+          <circle cx="12" cy="12" r="4" stroke="#94a3b8" strokeWidth="1.2" />
+          <path d="M9 12h6M12 9v6" stroke="#64748b" strokeWidth="1.2" strokeLinecap="round" />
         </svg>
       )
     case 'soakaway':

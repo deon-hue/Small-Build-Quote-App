@@ -24,7 +24,7 @@ import {
 import { LabourSuggestionPanel } from '@/components/AssemblyFlatRoofDemo'
 
 /** A cost line and a labour task as any by-room (or by-opening) calculator's engine hands them over */
-export interface FrameLine { id: string; name: string; category: 'materials' | 'plant' | 'subcontractors'; unit: string; unitCost: number; qty: number }
+export interface FrameLine { id: string; name: string; category: 'materials' | 'plant' | 'subcontractors' | 'other'; unit: string; unitCost: number; qty: number }
 export interface FrameLabourTask { key: string; trade: string; task: string; hours: number; basis: string }
 
 export interface TilingSaveResult { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }

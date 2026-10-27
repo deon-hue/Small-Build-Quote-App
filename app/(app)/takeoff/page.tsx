@@ -6123,6 +6123,8 @@ export default function TakeoffPage() {
     const _kitchenCalc     = isDecoCalc && item.phase === 'Joinery & Fixtures' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'join-kitchen-fit'
     const _furnCalc        = isDecoCalc && item.phase === 'Joinery & Fixtures' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'join-furniture-calc'
     const _secondFixCalc   = isDecoCalc && item.phase === 'Joinery & Fixtures' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'join-secondfix-calc'
+    // chambers, manholes, gullies and connections are typed in the calculator, item by item (a drawing is only a marker until they can be placed on the plan)
+    const _drainItemsCalc  = isDecoCalc && item.phase === 'Drainage & Services' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'drain-chambers-gullies'
     const isTaskPhase      = _phaseHasTasks && !isBuildup && !isExtWall && !isPlaster && !isIntWall && !isDemo && !isDemoCalc && !isFoundationLine && !isDecoCalc
     const showWallLine     = isLineBased && (isExtWall || isIntWall || isPlaster)
     const hasOpenings      = (isExtWall || isIntWall || isPlaster) && isLineBased
@@ -6169,7 +6171,7 @@ export default function TakeoffPage() {
         name={item.name}
         lengthM={item.length ?? 0}
         measureLabel={isBoxShape ? 'Size' : isFloorShape || ((_tileCalc || _ufhCalc) && floorDims) ? 'Area' : _tileCalc && (item.length ?? 0) > 0 ? 'Length' : (isDecoCalc && !_lengthFedCalc) || _demoMarker ? 'Marker' : undefined}
-        measureText={isBoxShape ? (roofBox ? `${(roofBox.lengthMm / 1000).toFixed(2)} × ${(roofBox.widthMm / 1000).toFixed(2)} m` : 'Not drawn') : isFloorShape || ((_tileCalc || _ufhCalc) && floorDims) ? (floorDims ? `${floorDims.areaM2.toFixed(1)} m²` : 'Not drawn') : _tileCalc && (item.length ?? 0) > 0 ? `${(item.length ?? 0).toFixed(2)} m` : _demoMarker ? 'sizes are typed in the calculator' : isDecoCalc && !_lengthFedCalc ? (_stairCalc ? 'staircases are set in the calculator' : _kitchenCalc ? 'kitchens are set in the calculator' : _furnCalc ? 'fitted furniture is set in the calculator' : _secondFixCalc ? 'items are set in the calculator' : item.phase === 'Windows & Doors' ? 'openings are set in the calculator' : 'rooms are set in the calculator') : undefined}
+        measureText={isBoxShape ? (roofBox ? `${(roofBox.lengthMm / 1000).toFixed(2)} × ${(roofBox.widthMm / 1000).toFixed(2)} m` : 'Not drawn') : isFloorShape || ((_tileCalc || _ufhCalc) && floorDims) ? (floorDims ? `${floorDims.areaM2.toFixed(1)} m²` : 'Not drawn') : _tileCalc && (item.length ?? 0) > 0 ? `${(item.length ?? 0).toFixed(2)} m` : _demoMarker ? 'sizes are typed in the calculator' : isDecoCalc && !_lengthFedCalc ? (_drainItemsCalc ? 'chambers and gullies are set in the calculator' : _stairCalc ? 'staircases are set in the calculator' : _kitchenCalc ? 'kitchens are set in the calculator' : _furnCalc ? 'fitted furniture is set in the calculator' : _secondFixCalc ? 'items are set in the calculator' : item.phase === 'Windows & Doors' ? 'openings are set in the calculator' : 'rooms are set in the calculator') : undefined}
         saved={item.assemblyResult}
         open={assemblyWindowItemId === item.id}
         onOpen={() => setAssemblyWindowItemId(item.id)}
@@ -7064,7 +7066,9 @@ export default function TakeoffPage() {
                   </select>
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--to-muted)', marginBottom: 8 }}>
-                  {_tileCalc
+                  {_drainItemsCalc
+                    ? 'Priced item by item with its own calculator. What is drawn here is only a marker on the plan: add each inspection chamber, manhole, gully and connection in the calculator. The drain pipe between them is a line drawn as Underground Drainage (by run).'
+                    : _tileCalc
                     ? 'Priced room by room with its own calculator. The area drawn here sizes the first room (a line drawn gives the first wall area its length for wall tiling): add the other rooms and the finishes in the calculator.'
                     : _secondFixCalc
                     ? 'Priced item by item with its own calculator. The area drawn here is only a marker on the plan: add the boxing, shelves and other items in the calculator.'

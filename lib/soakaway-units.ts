@@ -131,6 +131,7 @@ export function calculateSoakaway(i: SoakawayInput): SoakawayResult {
     lines.push({ id: 'haunch-heavy', name: 'Concrete bed and haunching to the channel (heavy duty)', category: 'materials', unit: 'lm', unitCost: CHANNELS.heavy.haunchPerLm, qty: ch })
   }
   if (cl > 0 || ch > 0) lines.push({ id: 'channel-outlet', name: 'Channel end caps and outlets', category: 'materials', unit: 'nr', unitCost: CHANNEL_OUTLET_EACH, qty: (cl > 0 ? 1 : 0) + (ch > 0 ? 1 : 0) })
+  if (i.gullies > 0) warnings.push('Gullies are also a kind of item in Chambers, Gullies & Connections (by item): count each gully in one calculator only, so it is not paid twice.')
   if (i.gullies > 0) lines.push({ id: 'gullies', name: 'Yard or rainwater gully with grating', category: 'materials', unit: 'nr', unitCost: GULLY_EACH, qty: Math.round(i.gullies) })
   if (i.downpipeConnections > 0) lines.push({ id: 'downpipe-connections', name: 'Downpipe connection to the drain (shoe, back inlet or gully)', category: 'materials', unit: 'nr', unitCost: DOWNPIPE_CONNECTION_EACH, qty: Math.round(i.downpipeConnections) })
   if (i.waterButts > 0) lines.push({ id: 'water-butts', name: 'Water butt with diverter kit', category: 'materials', unit: 'nr', unitCost: WATER_BUTT_EACH, qty: Math.round(i.waterButts) })
