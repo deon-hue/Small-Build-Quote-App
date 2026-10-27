@@ -9,7 +9,7 @@ import NumInput from '@/components/NumInput'
 import { createClient } from '@/lib/supabase/client'
 import { useApp } from '@/contexts/AppContext'
 import { fetchJobCosts, insertJobCost, updateJobCost } from '@/lib/job-costs'
-import type { JobCost, JobCostCategory } from '@/lib/types'
+import type { Client, JobCost, JobCostCategory } from '@/lib/types'
 import {
   ORDER_TYPES, ORDER_STATUS_LABEL, isExpectedCost, orderIsFromQuote, poRef, expectedNet, hireUnits, isCommitted, committedTotals, overrunNote, matchSuggestions, orderWhatsAppText, waLink, addDays, todayYmd, orderDateLabel,
   fetchJobOrders, insertJobOrder, updateJobOrder, deleteJobOrder, fetchDeletedOrders, restoreJobOrder, purgeJobOrder, requestChanged, amendedSince,
@@ -19,6 +19,7 @@ import {
 import { showSupplierPriceForm } from '@/lib/supplier-quote-config'
 import { TYPE_SPEC, parseSpec, composeSpec, parseHowLong, howLongText, HOW_LONG_KEY, type HowLongUnit } from '@/lib/order-spec'
 import { Recipients } from './OrderRecipients'
+import { NewClientModal } from './NewClientModal'
 import PriceRequestItems from './PriceRequestItems'
 import { withCode } from '@/lib/mail-address'
 
@@ -159,6 +160,12 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
       const rated = ORDER_TYPES[f.orderType].rateBasis !== 'fixed'
       return { ...f, details: composeSpec(f.orderType, { ...s.values, [HOW_LONG_KEY]: n ? howLongText(n, unit) : '' }, s.note), ...(rated && n ? { rateBasis: unit as RateBasis, plannedUnits: n } : {}) }
     })
+  }
+  // a supplier added from the order form: saved in Contacts by the pop-up, then used for this order (read from what the pop-up gives back, as the list of suppliers has not been redrawn yet)
+  const [addingSupplier, setAddingSupplier] = useState(false)
+  function chooseNewSupplier(c: Client) {
+    setForm(f => f ? { ...f, supplierId: c.id, supplierName: c.name, supplierContact: [c.first, c.last].filter(Boolean).join(' '), supplierEmail: c.email || '', supplierPhone: c.phone || '' } : f)
+    setAddingSupplier(false)
   }
   function pickSupplier(id: string) {
     const s = suppliers.find(x => x.id === id)
@@ -770,6 +777,8 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                         <option value="">Pick a supplier…</option>
                         {[...suppliers].sort((a, b) => a.name.localeCompare(b.name)).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                       </select>
+                      <button type="button" onClick={() => setAddingSupplier(true)} style={{ background: 'none', border: 'none', padding: 0, marginTop: 4, color: '#15803d', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>＋ Add a new supplier</button>
+                      {addingSupplier && <NewClientModal clientType="supplier" addedFrom="order" prefill={{ name: form.supplierName, email: form.supplierEmail, phone: form.supplierPhone }} onClose={() => setAddingSupplier(false)} onCreated={chooseNewSupplier} />}
                     </div>
                     <div><label style={lab}>Supplier name *</label><input style={inp} value={form.supplierName} onChange={e => set('supplierName', e.target.value)} placeholder="Dave's Skips" /></div>
                     <div><label style={lab}>Person there (for “Hi Dave”)</label><input style={inp} value={form.supplierContact} onChange={e => set('supplierContact', e.target.value)} /></div>

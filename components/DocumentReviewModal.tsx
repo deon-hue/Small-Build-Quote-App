@@ -11,6 +11,7 @@ import type { InboxDocument, JobCostCategory, PaymentStatus, BillLineItem, Varia
 import type { ExtractedCostLine } from '@/lib/doc-extract/types'
 import { useRouter } from 'next/navigation'
 import DocumentPreviewPane from './DocumentPreviewPane'
+import { NewClientModal } from './NewClientModal'
 
 interface JobOption { id: string; label: string }
 interface Props { doc: InboxDocument; jobs: JobOption[]; userId: string; onClose: () => void; onSaved: () => void }
@@ -226,6 +227,9 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose: onClos
     }
   }
 
+  // a supplier added from this form (the name read off the document, or typed, is filled in): saved in Contacts, then chosen
+  const [addingSupplier, setAddingSupplier] = useState(false)
+
   function handleContactChange(id: string) {
     setSupplierId(id)
     if (id) {
@@ -394,6 +398,8 @@ export default function DocumentReviewModal({ doc, jobs, userId, onClose: onClos
                 {!supplierId && (
                   <input style={{ ...inp, marginTop: 4 }} placeholder="Or type name" value={supplier} onChange={e => setSupplier(e.target.value)} />
                 )}
+                <button type="button" onClick={() => setAddingSupplier(true)} style={{ background: 'none', border: 'none', padding: 0, marginTop: 4, color: '#15803d', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>＋ Add {!supplierId && supplier.trim() ? `“${supplier.trim()}” as ` : ''}a new supplier</button>
+                {addingSupplier && <NewClientModal clientType="supplier" addedFrom="document" prefill={{ name: supplierId ? '' : supplier }} onClose={() => setAddingSupplier(false)} onCreated={c => { setSupplierId(c.id); setSupplier(c.name); setAddingSupplier(false) }} />}
               </Field>
               <Field label="Date"><input type="date" style={inp} value={docDate} onChange={e => setDocDate(e.target.value)} /></Field>
               <Field label="Invoice / receipt #"><input style={inp} value={docNumber} onChange={e => setDocNumber(e.target.value)} /></Field>

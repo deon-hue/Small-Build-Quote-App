@@ -12,6 +12,7 @@ import { useApp } from '@/contexts/AppContext'
 import { buildJobReportHtml } from '@/lib/jobReportHtml'
 import SendJobReportModal from './SendJobReportModal'
 import JobOrdersModal from './JobOrdersModal'
+import { NewClientModal } from './NewClientModal'
 import { fetchJobOrders, insertJobOrder, expectedCostOrders, committedTotals, expectedNet, isCommitted, poRef, matchSuggestions, orderDateLabel, overrunNote, type JobOrder } from '@/lib/job-orders'
 
 interface Props {
@@ -109,6 +110,8 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
   const [manual, setManual] = useState<ManualState | null>(null)
   const [expError, setExpError] = useState('')
   const [supplierDrop, setSupplierDrop] = useState(false)
+  // a supplier added from the cost form: the pop-up saves them in Contacts and the cost is for them
+  const [addingSupplier, setAddingSupplier] = useState(false)
   const supplierRef = useRef<HTMLDivElement>(null)
   const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set())
   const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set())
@@ -366,8 +369,15 @@ export default function JobDocumentsModal({ jobId, jobLabel, budget, revenue, co
                             No match — &quot;{manual.supplier}&quot; will be saved as a new supplier name
                           </div>
                         )}
+                        <div
+                          onMouseDown={() => { setSupplierDrop(false); setAddingSupplier(true) }}
+                          style={{ padding: '8px 10px', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: '#15803d', background: '#f0fdf4', borderTop: '1px solid #bbf7d0', position: 'sticky', bottom: 0 }}
+                        >
+                          ＋ Add {manual.supplier.trim() ? `“${manual.supplier.trim()}” as ` : ''}a new supplier
+                        </div>
                       </div>
                     )}
+                    {addingSupplier && <NewClientModal clientType="supplier" addedFrom="cost" prefill={{ name: manual.supplier }} onClose={() => setAddingSupplier(false)} onCreated={c => { setManual(m => m && { ...m, supplier: c.name }); setAddingSupplier(false) }} />}
                   </div>
                 </Field>
                 {!manual.expected && (<>

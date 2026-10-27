@@ -5,17 +5,25 @@
 import React, { useState } from 'react'
 import type { Supplier } from '@/lib/types'
 import type { QuoteInvitee } from '@/lib/job-orders'
+import { NewClientModal } from './NewClientModal'
+import type { Client } from '@/lib/types'
 
 export const blankWho = (): QuoteInvitee => ({ supplierName: '', supplierContact: '', supplierEmail: '', supplierPhone: '' })
 
 /** Who a request goes to: pick suppliers from Contacts, or type one that is not there. */
 export function Recipients({ suppliers, value, onChange, inp, lab, btn }: { suppliers: Supplier[]; value: QuoteInvitee[]; onChange: (v: QuoteInvitee[]) => void; inp: React.CSSProperties; lab: React.CSSProperties; btn: React.CSSProperties }) {
   const [one, setOne] = useState<QuoteInvitee>(blankWho())
+  // the same pop-up as everywhere else a supplier is picked: saves a real supplier in Contacts and asks them for a price straight away
+  const [adding, setAdding] = useState(false)
   const taken = new Set(value.map(v => v.supplierId).filter(Boolean))
   function addContact(id: string) {
     const s = suppliers.find(x => x.id === id)
     if (!s || taken.has(s.id)) return
     onChange([...value, { supplierId: s.id, supplierName: s.name, supplierContact: s.contactName || '', supplierEmail: s.email || '', supplierPhone: s.phone || '' }])
+  }
+  function addSaved(c: Client) {
+    if (!taken.has(c.id)) onChange([...value, { supplierId: c.id, supplierName: c.name, supplierContact: [c.first, c.last].filter(Boolean).join(' '), supplierEmail: c.email || '', supplierPhone: c.phone || '' }])
+    setOne(blankWho()); setAdding(false)
   }
   function addTyped() {
     if (!one.supplierName.trim()) return
@@ -37,7 +45,9 @@ export function Recipients({ suppliers, value, onChange, inp, lab, btn }: { supp
           <option value="">＋ Add from your Contacts…</option>
           {[...suppliers].filter(s => !taken.has(s.id)).sort((a, b) => a.name.localeCompare(b.name)).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
+        <button type="button" onClick={() => setAdding(true)} style={{ ...btn, color: '#15803d', borderColor: '#bbf7d0', background: '#f0fdf4' }}>＋ Add a new supplier</button>
       </div>
+      {adding && <NewClientModal clientType="supplier" addedFrom="order" prefill={{ name: one.supplierName, email: one.supplierEmail, phone: one.supplierPhone }} onClose={() => setAdding(false)} onCreated={addSaved} />}
       <div style={{ fontSize: 11, color: '#94a3b8', margin: '8px 0 4px' }}>Not in Contacts? Type them in:</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
         <input style={inp} placeholder="Supplier name" value={one.supplierName} onChange={e => setOne({ ...one, supplierName: e.target.value })} />
