@@ -744,6 +744,32 @@ export const DEFAULT_DEMO_SUBPHASES: DemoSubphase[] = [
     tasks: [],
     calculatorId: 'demo-external-calc',
   },
+  // The Outbuildings & External calculator split in two (the same engine and screen, lib/external-demo-units.ts): the older combined entry above stays for quotes already saved with it.
+  {
+    id: 'outbuildings-calc',
+    name: 'Outbuildings (calculator)',
+    markupPct: 25,
+    warnings: ['Prefab garages can have asbestos cement roofs: a licensed contractor must remove them first.'],
+    tasks: [],
+    calculatorId: 'demo-outbuildings-calc',
+  },
+  {
+    id: 'external-works-calc',
+    name: 'External Works: surfaces, walls and fences (calculator)',
+    markupPct: 25,
+    warnings: ['Check for drains and services under hard surfaces before breaking them out. A boundary wall may be a party wall.'],
+    tasks: [],
+    calculatorId: 'demo-external-works-calc',
+  },
+  // Hacking off existing render (lib/render-hackoff-units.ts): the SAME calculator is also listed under Plastering & Boarding (Render Hack-Off (by wall)).
+  {
+    id: 'render-hackoff-calc',
+    name: 'Render Hack-Off (by wall) (calculator)',
+    markupPct: 25,
+    warnings: ['Old textured coatings (before about 2000) can contain asbestos: have a sample tested before anything is hacked off if there is any doubt.'],
+    tasks: [],
+    calculatorId: 'demo-render-hackoff-calc',
+  },
 ]
 
 // ── LocalStorage helpers ──────────────────────────────────────────────────────

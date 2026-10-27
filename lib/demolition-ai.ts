@@ -7,6 +7,7 @@ import { WALL_KINDS, type WallKind } from './wall-removal-units'
 import { STRIP_BY_ID, STRIP_ROOM_BY_ID, STRIP_ITEMS, usualStripItems, type StripRoom } from './strip-out-units'
 import { WASTE_KINDS, type WasteItem, type WasteKind } from './waste-units'
 import { OUT_KINDS, HARD_KINDS, type ExtItem, type ExtType, type OutKind, type HardKind } from './external-demo-units'
+import { HACK_KINDS, newHackWall, type HackWall, type HackKind } from './render-hackoff-units'
 import { isObj, whole, between, str } from './ai-spec'
 
 let seq = 0
@@ -204,6 +205,47 @@ export function externalDemoFromScope(spec: unknown): AiExternalDemo | null {
   return { items, machine: spec.machine !== false, useGrab: spec.useGrab === true, assumed }
 }
 
+// ── Hacking off existing render ─────────────────────────────────────────────────────────────────────────────────────────
+
+export interface AiRenderHackoff {
+  walls: HackWall[]
+  scaffold: boolean
+  useGrab: boolean
+  asbestosTests: number
+  /** what the scope did not say, so the calculator's standard was used: for the review note */
+  assumed: string[]
+}
+
+export function renderHackoffFromScope(spec: unknown): AiRenderHackoff | null {
+  if (!isObj(spec)) return null
+  const walls: HackWall[] = []
+  const assumed: string[] = []
+  const list = Array.isArray(spec.walls) ? spec.walls.slice(0, 12) : []
+  for (const raw of list) {
+    if (!isObj(raw)) continue
+    const length = between(raw.lengthM, 0, 300)
+    if (length === null || length <= 0) continue   // never invent the length of a wall
+    const name = str(raw.name, 60) || `Wall ${walls.length + 1}`
+    const w = newHackWall('ai-hack-' + ++seq, name, length)
+    // the height, when the scope does not give it, is the calculator's usual 2.6m, and the openings are left out (never invented)
+    const h = between(raw.heightM, 0, 15)
+    if (h === null) assumed.push(`the height of ${name} (taken as 2.6m)`); else w.heightM = h
+    w.windows = whole(raw.windows, 0, 40) ?? 0
+    w.doors = whole(raw.doors, 0, 20) ?? 0
+    w.gableM2 = between(raw.gableM2, 0, 300) ?? 0
+    const kindRaw = typeof raw.kind === 'string' && raw.kind in HACK_KINDS ? (raw.kind as HackKind) : null
+    if (!kindRaw) assumed.push(`the kind of render on ${name} (taken as sand and cement)`)
+    w.kind = kindRaw ?? 'sand-cement'
+    w.thicknessMm = between(raw.thicknessMm, 0, 80) ?? HACK_KINDS[w.kind].thicknessMm
+    w.tool = raw.tool === 'hand' ? 'hand' : 'machine'
+    w.brushDown = raw.brushDown !== false
+    w.repointPct = between(raw.repointPct, 0, 100) ?? 0
+    walls.push(w)
+  }
+  if (walls.length === 0) return null
+  return { walls, scaffold: spec.scaffold === true, useGrab: spec.useGrab === true, asbestosTests: whole(spec.asbestosTests, 0, 10) ?? 0, assumed }
+}
+
 // ── What the AI is told ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /** The part of the AI's instructions that explains the "calc" object for each demolition calculator line, with the exact ids it may use. */
@@ -218,5 +260,7 @@ export function demolitionPromptGuide(): string {
   - "Wall Removal / Knock-Through (calculator)": "calc": {"kind": "<wall kind>", "lengthM": <width of the opening or length of wall taken out, m>, "heightM": <m>, "thicknessMm": <mm>, "structural": true|false, "services": <sockets, pipes or cables in the wall to move>}. ONE wall only (the main one). "lengthM" is required: if the scope states no length, leave "calc" out. Leave out "kind", "heightM", "thicknessMm" and "structural" unless stated ("structural" is true only if the scope says load-bearing or an RSJ/steel beam goes in, false only if it says it is not load-bearing). Kinds: ${walls}. Use this line for knocking through or removing a wall, instead of the general structural-demolition task lines.
   - "Strip-Out by Room (calculator)": "calc": {"rooms": [{"name": "Kitchen", "kind": "<room kind>", "areaM2": <m²>, "heightM": <m>, "items": {"<item id>": <count>}}], "asbestosSurveys": <count>}. One entry per room the scope names to strip out, using its own name. "kind" is one of: ${rooms}. "items": only what the scope states, with the quantity in the unit shown, using exactly these ids: ${items}. If the scope names a room but not what comes out, LEAVE "items" OUT and the calculator uses the usual items for that kind of room. Leave out "areaM2" unless stated. Use this line for stripping out rooms (kitchens, bathrooms, floors, ceilings, wall finishes), instead of the general strip-out task lines. It already includes the skips for those rooms.
   - "Waste & Skips (calculator)": "calc": {"items": [{"name": "Rubble", "kind": "<kind>", "volumeM3": <m³>}], "useGrab": true, "hazardous": <count>, "roadSkips": <count>, "roadWeeks": <weeks>}. An item ONLY where the scope states a volume of waste. Kinds: ${wastes}. Use this line only for waste the scope gives separately; do not add it for rooms already in the strip-out line. "hazardous" only if asbestos or similar is mentioned; "roadSkips" only if skips go on the road.
-  - "Outbuildings & External (calculator)": "calc": {"machine": true, "useGrab": false, "items": [{"type": "outbuilding"|"hard"|"wall"|"fence", "name": "Garden shed", "outKind": "<kind>", "hardKind": "<kind>", "areaM2": <m²>, "lengthM": <m>, "heightM": <m>, "thicknessMm": <mm>, "breakBase": true|false}]}. Use "areaM2" for an outbuilding or hard surface and "lengthM" for a wall or fence; an item ONLY where the scope states its size. Outbuilding kinds: ${outs}. Hard surface kinds: ${hards}. "breakBase" is false only if the scope says the base stays.`
+  - "Outbuildings & External (calculator)": "calc": {"machine": true, "useGrab": false, "items": [{"type": "outbuilding"|"hard"|"wall"|"fence", "name": "Garden shed", "outKind": "<kind>", "hardKind": "<kind>", "areaM2": <m²>, "lengthM": <m>, "heightM": <m>, "thicknessMm": <mm>, "breakBase": true|false}]}. Use "areaM2" for an outbuilding or hard surface and "lengthM" for a wall or fence; an item ONLY where the scope states its size. Outbuilding kinds: ${outs}. Hard surface kinds: ${hards}. "breakBase" is false only if the scope says the base stays.
+  - "Outbuildings (calculator)" and "External Works: surfaces, walls and fences (calculator)": the same "calc" shape as "Outbuildings & External (calculator)" above, but the first takes ONLY items of type "outbuilding" and the second ONLY "hard", "wall" and "fence". Use these two instead of the older combined line.
+  - "Render Hack-Off (by wall) (calculator)" (also "Render Hack-Off (by wall)" under Plastering & Boarding; use ONE of them, never both): "calc": {"walls": [{"name": "Front elevation", "lengthM": <m>, "heightM": <m>, "windows": <count>, "doors": <count>, "gableM2": <m²>, "kind": "sand-cement"|"pebbledash"|"monocouche"|"thin-coat"|"lime", "thicknessMm": <mm>, "tool": "machine"|"hand", "repointPct": <% of the brickwork to repoint>}], "scaffold": false, "useGrab": false, "asbestosTests": <count>}. One entry per wall or elevation the scope says has its render taken off, and a wall ONLY where the scope states its length; leave out anything not stated (the height, the kind of render and the thickness are then the calculator's usual). "tool" is "hand" only if the scope says by hand. "scaffold" is true only if the scope asks for scaffold to be included. Use this line for hacking off or removing existing render, not the new render (that is External Render).`
 }

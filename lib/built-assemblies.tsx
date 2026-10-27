@@ -57,6 +57,7 @@ import AssemblyWallRemovalDemo from '@/components/AssemblyWallRemovalDemo'
 import AssemblyStripOutDemo from '@/components/AssemblyStripOutDemo'
 import AssemblyWasteDemo from '@/components/AssemblyWasteDemo'
 import AssemblyExternalDemoDemo from '@/components/AssemblyExternalDemoDemo'
+import AssemblyRenderHackoffDemo from '@/components/AssemblyRenderHackoffDemo'
 import AssemblyRoofStructureDemo from '@/components/AssemblyRoofStructureDemo'
 import AssemblyRoofCoveringDemo from '@/components/AssemblyRoofCoveringDemo'
 import AssemblyRooflightsDemo from '@/components/AssemblyRooflightsDemo'
@@ -75,7 +76,7 @@ import type { PlanRoomInfo } from '@/lib/rooms-from-walls'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import type { CalcSize } from '@/lib/calc-size'
 
-export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation' | 'pad-foundation' | 'piled-foundation' | 'underpinning' | 'electrics' | 'decoration' | 'plaster-rooms' | 'render' | 'wall-insulation' | 'screed-floor' | 'floor-overlay' | 'concrete-slab' | 'block-beam' | 'timber-floor' | 'insulated-concrete' | 'plumbing' | 'heating' | 'ufh' | 'pipework' | 'drainage' | 'soakaway' | 'services' | 'wall-removal' | 'strip-out' | 'waste-skips' | 'external-demo' | 'tile-floor' | 'tile-wall' | 'tile-prep' | 'tile-ufh' | 'windows-doors' | 'skirting' | 'stairs' | 'kitchen-fit' | 'furniture' | 'second-fix'
+export type AssemblyIcon = 'stud-wall' | 'metal-stud-wall' | 'block-wall' | 'cavity-wall' | 'timber-frame-wall' | 'dwarf-wall' | 'sleeper-wall' | 'flat-roof' | 'parapet-wall' | 'roof-covering' | 'gutters' | 'rooflights' | 'fascia-soffit' | 'strip-foundation' | 'raft-foundation' | 'pad-foundation' | 'piled-foundation' | 'underpinning' | 'electrics' | 'decoration' | 'plaster-rooms' | 'render' | 'render-hackoff' | 'wall-insulation' | 'screed-floor' | 'floor-overlay' | 'concrete-slab' | 'block-beam' | 'timber-floor' | 'insulated-concrete' | 'plumbing' | 'heating' | 'ufh' | 'pipework' | 'drainage' | 'soakaway' | 'services' | 'wall-removal' | 'strip-out' | 'waste-skips' | 'external-demo' | 'tile-floor' | 'tile-wall' | 'tile-prep' | 'tile-ufh' | 'windows-doors' | 'skirting' | 'stairs' | 'kitchen-fit' | 'furniture' | 'second-fix'
 
 /** Fired when a calculator's "Save & Price" is used from inside a real quote — absent in
  * the Back Office preview context, which has no quote to save into. */
@@ -181,6 +182,9 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'demo-strip-out-calc': { icon: 'strip-out', render: opts => <AssemblyStripOutDemo planRooms={opts?.planRooms} onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'demo-waste-skips-calc': { icon: 'waste-skips', render: opts => <AssemblyWasteDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'demo-external-calc': { icon: 'external-demo', render: opts => <AssemblyExternalDemoDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
+  'demo-outbuildings-calc': { icon: 'external-demo', render: opts => <AssemblyExternalDemoDemo scope="outbuildings" onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
+  'demo-external-works-calc': { icon: 'external-demo', render: opts => <AssemblyExternalDemoDemo scope="external" onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
+  'demo-render-hackoff-calc': { icon: 'render-hackoff', render: opts => <AssemblyRenderHackoffDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'wd-windows': { icon: 'windows-doors', render: opts => <AssemblyWindowsDoorsDemo scope="windows" onSave={opts?.onSave} labourTrades={opts?.labourTrades} planOpenings={opts?.planOpenings} /> },
   'wd-doors': { icon: 'windows-doors', render: opts => <AssemblyWindowsDoorsDemo scope="doors" onSave={opts?.onSave} labourTrades={opts?.labourTrades} planOpenings={opts?.planOpenings} /> },
   'wd-schedule': { icon: 'windows-doors', render: opts => <AssemblyWindowsDoorsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} planOpenings={opts?.planOpenings} /> },
@@ -195,6 +199,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'tile-ufh-electric': { icon: 'tile-ufh', render: opts => <AssemblyTileUfhDemo planRooms={opts?.planRooms} onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalPerimeterM={opts?.externalPerimeterM} externalName={opts?.externalName} /> },
   'plaster-insul-wall': { icon: 'wall-insulation', render: opts => <AssemblyWallInsulationDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'plaster-render': { icon: 'render', render: opts => <AssemblyRenderDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
+  'plaster-render-hackoff': { icon: 'render-hackoff', render: opts => <AssemblyRenderHackoffDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'plaster-rooms': { icon: 'plaster-rooms', render: opts => <AssemblyPlasterRoomsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} planRooms={opts?.planRooms} /> },
   'deco-internal-walls': { icon: 'decoration', render: opts => <AssemblyDecorationDemo planRooms={opts?.planRooms} onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'elec-install': { icon: 'electrics', render: opts => <AssemblyElectricsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} roomsOnPlan={opts?.planRooms} planRooms={opts?.electrics?.planRooms} initialState={opts?.electrics?.initialState} /> },
@@ -581,6 +586,16 @@ export function AssemblyIconGlyph({ icon, size = 24 }: { icon: AssemblyIcon; siz
           <path d="M2 8h20l-3 11H5L2 8z" stroke="#b45309" strokeWidth="1.6" strokeLinejoin="round" />
           <path d="M6 8l1.5-3h9L18 8" stroke="#78716c" strokeWidth="1.4" strokeLinejoin="round" />
           <path d="M8 12l1 4M12 12v4M16 12l-1 4" stroke="#b45309" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+      )
+    case 'render-hackoff':
+      // A rendered wall with a chisel breaking the render off it, the bare brick showing where it has come away.
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="6" width="18" height="14" stroke="#78716c" strokeWidth="1.5" />
+          <path d="M3 6h9l-2 4 3 2-2 4 2 4H3z" stroke="#a16207" strokeWidth="1.3" strokeLinejoin="round" />
+          <path d="M14 9h7M15 13h6M14 17h7" stroke="#dc2626" strokeWidth="1.2" strokeLinecap="round" />
+          <path d="M15.5 3.5l3 3" stroke="#334155" strokeWidth="1.8" strokeLinecap="round" />
         </svg>
       )
     case 'external-demo':

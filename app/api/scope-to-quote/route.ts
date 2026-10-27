@@ -26,8 +26,8 @@ export const maxDuration = 300
 const CALC_OBJECT_ASK_IDS = new Set([
   'plumb-install', 'plumb-heating-plant', 'plumb-ufh', 'plumb-pipework',
   'drain-runs', 'drain-soakaway', 'drain-services',
-  'demo-wall-removal-calc', 'demo-strip-out-calc', 'demo-waste-skips-calc', 'demo-external-calc',
-  'plaster-rooms', 'plaster-render', 'plaster-insul-wall',
+  'demo-wall-removal-calc', 'demo-strip-out-calc', 'demo-waste-skips-calc', 'demo-external-calc', 'demo-outbuildings-calc', 'demo-external-works-calc', 'demo-render-hackoff-calc',
+  'plaster-rooms', 'plaster-render', 'plaster-render-hackoff', 'plaster-insul-wall',
   'tile-floor-rooms', 'tile-wall-rooms', 'tile-prep-rooms', 'tile-ufh-electric',
   'ew-solid-brick-victorian',
   'fs-screeded-floor', 'fs-floor-overlay', 'fs-concrete-slab', 'fs-insulated-concrete', 'fs-block-beam', 'fs-suspended-timber',

@@ -17,12 +17,21 @@ import { calculateWaste, WASTE_KINDS, type WasteKind } from '@/lib/waste-units'
 import { describeWaste, describeWasteShort } from '@/lib/waste-description'
 import { calculateExternalDemo, OUT_KINDS, type ExtItem, type OutKind, type HardKind } from '@/lib/external-demo-units'
 import { describeExternalDemo, describeExternalDemoShort } from '@/lib/external-demo-description'
-import { wallRemovalFromScope, stripOutFromScope, wasteFromScope, externalDemoFromScope } from '@/lib/demolition-ai'
+import { wallRemovalFromScope, stripOutFromScope, wasteFromScope, externalDemoFromScope, renderHackoffFromScope } from '@/lib/demolition-ai'
+import { calculateRenderHackoff, DEFAULT_HACK_SITUATIONS, KIND_WORDS } from '@/lib/render-hackoff-units'
+import { describeRenderHackoff, describeRenderHackoffShort } from '@/lib/render-hackoff-description'
+import { suggestRenderHackoffLabour } from '@/lib/flat-roof-labour'
+import { EXT_SCOPE_TYPES, SCOPE_ID as EXT_SCOPE_ID, type ExtScope } from '@/components/AssemblyExternalDemoDemo'
 import { plural } from '@/lib/ai-spec'
 import { WALL_WORDS } from '@/components/AssemblyWallRemovalDemo'
 import { unitWord } from '@/components/AssemblyStripOutDemo'
 
-export const DEMOLITION_AI_IDS = new Set(['demo-wall-removal-calc', 'demo-strip-out-calc', 'demo-waste-skips-calc', 'demo-external-calc'])
+// plaster-render-hackoff is the Plastering & Boarding listing of the same render hack-off calculator, priced here
+export const DEMOLITION_AI_IDS = new Set(['demo-wall-removal-calc', 'demo-strip-out-calc', 'demo-waste-skips-calc', 'demo-external-calc', 'demo-outbuildings-calc', 'demo-external-works-calc', 'demo-render-hackoff-calc', 'plaster-render-hackoff'])
+
+/** which things each of the external demolition lines takes */
+const EXT_SCOPE_OF: Record<string, ExtScope> = { 'demo-external-calc': 'all', 'demo-outbuildings-calc': 'outbuildings', 'demo-external-works-calc': 'external' }
+const EXT_NAME_OF: Record<ExtScope, string> = { all: 'Outbuildings and external demolition', outbuildings: 'Outbuildings demolition', external: 'External demolition' }
 
 type RawLine = { id: string; name: string; category: AssemblyLayerDef['category']; unit: string; unitCost: number; qty: number }
 const asLayers = (lines: RawLine[]): AssemblyLayerDef[] =>
@@ -96,9 +105,15 @@ export function priceDemolitionCalcFromScope(o: { canonicalId: string; spec: unk
           note: `Priced by the waste calculator from the volumes in your scope (${r.totalM3.toFixed(1)}m³ of waste: ${r.grabLoads > 0 ? `${plural(r.grabLoads, 'grab lorry load', 'grab lorry loads')}${r.skips > 0 ? ' and ' : ''}` : ''}${r.skips > 0 ? plural(r.skips, 'skip', 'skips') : ''}) with the calculator's standard settings and sample rates. Heavy waste only part fills a skip, so rubble needs more skips than mixed waste. If the same waste is already in the strip-out or outbuilding lines, check it is not counted twice.`,
         }
       }
-      case 'demo-external-calc': {
-        const ai = externalDemoFromScope(o.spec)
-        if (!ai) return null
+      case 'demo-external-calc':
+      case 'demo-outbuildings-calc':
+      case 'demo-external-works-calc': {
+        const scope = EXT_SCOPE_OF[o.canonicalId]
+        const found = externalDemoFromScope(o.spec)
+        if (!found) return null
+        // each line takes only its own kinds of thing: a surface given to the Outbuildings line is not put in it
+        const ai = { ...found, items: found.items.filter(x => EXT_SCOPE_TYPES[scope].includes(x.type)) }
+        if (ai.items.length === 0) return null
         const r = calculateExternalDemo({ items: ai.items, machine: ai.machine, useGrab: ai.useGrab })
         const layers: AssemblyLayerDef[] = [...(r.excavatorDays > 0 ? diggerLayers(planDigger(r.excavatorDays, null), 'breaking out the concrete', 'Mini excavator with operator') : []), ...asLayers(r.lines)]
         const suggestions = suggestExternalDemoLabour(r.items.map(x => ({ id: x.id, name: x.name.toLowerCase(), hours: x.hours })))
@@ -108,9 +123,22 @@ export function priceDemolitionCalcFromScope(o: { canonicalId: string; spec: unk
           machine: ai.machine && r.machineM3 > 0, skips: r.skipsGeneral + r.skipsInert, grabLoads: r.grabLoads,
         }
         return {
-          name: 'Outbuildings and external demolition', qty: 1, location: '', description: describeExternalDemoShort(d), detail: describeExternalDemo(d), lines,
-          calcState: { id: 'demo-external-calc', values: { AssemblyExternalDemoDemo: { items: ai.items, machine: ai.machine, useGrab: ai.useGrab } } },
+          name: EXT_NAME_OF[scope], qty: 1, location: '', description: describeExternalDemoShort(d), detail: describeExternalDemo(d), lines,
+          calcState: { id: o.canonicalId, values: { [EXT_SCOPE_ID[scope]]: { items: ai.items, machine: ai.machine, useGrab: ai.useGrab } } },
           note: `Priced by the outbuildings and external calculator from the sizes in your scope (${ai.items.map(extWords).join('; ')}) with the calculator's standard settings and sample rates.${ai.assumed.length > 0 ? ` The scope did not say: ${ai.assumed.join('; ')}.` : ''}${r.warnings.length > 0 ? ` ${r.warnings[0]}` : ''} Open the calculator to check the items and the bases.`,
+        }
+      }
+      case 'demo-render-hackoff-calc':
+      case 'plaster-render-hackoff': {
+        const ai = renderHackoffFromScope(o.spec)
+        if (!ai) return null
+        const r = calculateRenderHackoff({ walls: ai.walls, jobSituationId: 'ground', situations: DEFAULT_HACK_SITUATIONS, rates: {}, scaffold: ai.scaffold, useGrab: ai.useGrab, asbestosTests: ai.asbestosTests })
+        const lines = costFromBasics({ layers: asLayers(r.lines), suggestions: suggestRenderHackoffLabour(r.labour), labourTrades: o.labourTrades })
+        const d = { walls: r.walls.map(x => ({ name: x.name, parts: x.parts })), scaffold: ai.scaffold, totalAreaM2: r.totalAreaM2, skips: r.skips, grabLoads: r.grabLoads, asbestosTests: ai.asbestosTests }
+        return {
+          name: 'Hack off existing render', qty: 1, location: '', description: describeRenderHackoffShort(d), detail: describeRenderHackoff(d), lines,
+          calcState: { id: o.canonicalId, values: { AssemblyRenderHackoffDemo: { walls: ai.walls, jobSituationId: 'ground', scaffold: ai.scaffold, useGrab: ai.useGrab, asbestosTests: ai.asbestosTests } } },
+          note: `Priced by the render hack-off calculator from the walls in your scope (${r.walls.map(x => `${x.name}, ${x.areaM2}m² of ${KIND_WORDS[ai.walls.find(w => w.id === x.wallId)?.kind ?? 'sand-cement']}`).join('; ')}: about ${Math.round(r.totalHours)} labour hours and ${r.grabLoads > 0 ? plural(r.grabLoads, 'grab lorry load', 'grab lorry loads') : plural(r.skips, 'skip', 'skips')} for the rubble), with the calculator's standard settings and sample rates. Windows and doors not mentioned were not taken out of the area.${ai.assumed.length > 0 ? ` The scope did not say: ${ai.assumed.join('; ')}.` : ''} Scaffold is ${ai.scaffold ? 'included' : 'not included (it is usually priced once under Site Setup)'}, and new render, painting and repairs to the brickwork are not in it.`,
         }
       }
       default: return null

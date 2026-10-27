@@ -169,6 +169,15 @@ const plasterSubphases: PhaseSubphase[] = [
     ukWarning: 'Internal wall insulation must be assessed for interstitial condensation risk and the wall checked for damp first. Vapour control layer required on the warm side.',
     tasks: [],  // priced by the Wall insulation calculator (walls: length, height, lining system and thickness, VCL, reveals, lath, backing)
   },
+  // Hacking off existing external render, priced wall by wall (assembly calculator): the SAME calculator is also listed under Demolition (Render Hack-Off (by wall)). Listed last so a new line in Take-off still starts on a task.
+  {
+    id: 'plaster-render-hackoff',
+    phase: 'Plastering & Boarding',
+    name: 'Render Hack-Off (by wall)',
+    markupPct: 20,
+    ukWarning: 'Old textured coatings (before about 2000) can contain asbestos: have a sample tested before anything is hacked off if there is any doubt.',
+    tasks: [],  // priced by the Render hack-off calculator (walls: length, height, openings, kind and thickness of render, tool, brushing down, repointing, rubble)
+  },
 ]
 
 // ── 2. STRUCTURAL FRAME ───────────────────────────────────────────────────────

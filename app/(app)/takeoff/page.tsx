@@ -6064,8 +6064,8 @@ export default function TakeoffPage() {
     // a demolition item priced by a calculator (Wall Removal / Knock-Through) is not a task item
     const isDemoCalc       = isDemoPhase && !!demoCalcSub(item)
     const isDemo           = isDemoPhase && !isDemoCalc
-    // Only Wall Removal is sized by the drawn line; the other demolition calculators take typed sizes, so the line is just a marker
-    const _demoMarker      = isDemoCalc && demoCalcSub(item)?.calculatorId !== 'demo-wall-removal-calc'
+    // Wall Removal and Render Hack-Off are sized by the drawn line (its length is the first wall's length); the other demolition calculators take typed sizes, so the line is just a marker
+    const _demoMarker      = isDemoCalc && !['demo-wall-removal-calc', 'demo-render-hackoff-calc'].includes(demoCalcSub(item)?.calculatorId ?? '')
     const isExtWall        = item.phase === 'External Walls'
     const isIntWall        = item.phase === 'Internal Walls & Partitions' && isLineBased
     const isPlaster        = item.phase === 'Plastering & Boarding' && !_plasterCalc
@@ -6075,7 +6075,7 @@ export default function TakeoffPage() {
     // Decoration is a task phase, except when the sub-phase picked has a calculator (Internal decoration): then the calculator prices it
     const isDecoCalc       = MARKER_CALC_PHASES.has(item.phase) && !!resolveBuiltAssembly(item)
     // the external render and wall insulation calculators take their first wall's length from the drawn line, so the card shows the length, not a marker
-    const _lengthFedCalc    = isDecoCalc && ((item.phase === 'Plastering & Boarding' && ['plaster-render', 'plaster-insul-wall'].includes(boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id ?? '')) || (item.phase === 'Drainage & Services' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'drain-runs') || (item.phase === 'Plumbing & Heating' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'plumb-pipework'))
+    const _lengthFedCalc    = isDecoCalc && ((item.phase === 'Plastering & Boarding' && ['plaster-render', 'plaster-render-hackoff', 'plaster-insul-wall'].includes(boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id ?? '')) || (item.phase === 'Drainage & Services' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'drain-runs') || (item.phase === 'Plumbing & Heating' && boSubPhases.find(b => b.id === item.taskSubphaseId)?.canonical_id === 'plumb-pipework'))
     // the tiling calculators are sized from what is drawn: an area gives the first room its size, a line gives wall tiling its first wall's length
     const _tileCalc        = isDecoCalc && item.phase === 'Tiling & Finishes'
     // Tiling Preparation: the drawing says what it is for (the floor, the walls, or both) before it is priced

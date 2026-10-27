@@ -764,6 +764,14 @@ export function suggestRenderLabour(tasks: { key: string; trade: 'plasterer' | '
     .map(t => ({ key: 'render-' + t.key, trade: (t.trade === 'plasterer' ? 'renderer' : 'labourer') as LabourTradeKind, task: t.task, hours: t.hours, basis: t.basis }))
 }
 
+/** The labour for hacking off existing render wall by wall (Plastering & Boarding / Demolition → Render Hack-Off (by wall)): the labourer's tasks for each wall (sheeting up, hacking off, brushing down, clearing up) and a bricklayer for any
+ * repointing, as the calculator's own engine works them out (the hours and the working come from its table and are passed in). Rough estimates, as everywhere here. */
+export function suggestRenderHackoffLabour(tasks: { key: string; trade: 'labourer' | 'bricklayer'; task: string; hours: number; basis: string }[]): LabourSuggestion[] {
+  return tasks
+    .filter(t => t.hours > 0)
+    .map(t => ({ key: 'hackoff-' + t.key, trade: (t.trade === 'bricklayer' ? 'bricklayer' : 'labourer') as LabourTradeKind, task: t.task, hours: t.hours, basis: t.basis }))
+}
+
 /** The labour for wall insulation and backing wall by wall (Plastering & Boarding → Wall Insulation & Backing (by wall)): the fixer's tasks for each wall (the trade that does the plasterboard and insulation), a carpenter for any timber
  * backing, and the labourer who carries the boards, as the calculator's own engine works them out (the hours and the working come from its table and are passed in). Rough estimates, as everywhere here. */
 export function suggestInsulationLabour(tasks: { key: string; trade: 'plasterer' | 'carpenter' | 'labourer'; task: string; hours: number; basis: string }[]): LabourSuggestion[] {

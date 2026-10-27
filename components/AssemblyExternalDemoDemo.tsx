@@ -5,6 +5,8 @@
  * An outbuilding (shed, brick or prefab garage, conservatory, lean-to) from its footprint, with its concrete base if it comes out; a concrete, tarmac, slab or block-paving surface from its area and thickness; a garden or
  * boundary wall from its length, height and thickness; and fencing by the metre. The labourer's hours, the inert and general waste and the skips (or grab lorry loads) are worked out from them; breaking out concrete can
  * use a mini excavator with a breaker, with the digger priced in days on site. A prefab garage's asbestos roof is a provisional sum. The engine is lib/external-demo-units.ts.
+ * It is on the Demolition list three ways, all this same screen and engine (as the Windows and Doors calculators are): Outbuildings & External (the older one, all four kinds), Outbuildings (sheds, garages,
+ * conservatories, lean-tos) and External Works (surfaces, walls and fences). Each has its own saved state, so each is its own quote line.
  */
 
 import React, { useMemo } from 'react'
@@ -32,20 +34,29 @@ interface Props {
   onClose?: () => void
   onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }) => void
   labourTrades?: BOLabourTrade[]
+  /** which things this one lists: all four (the older Outbuildings & External), only outbuildings, or only the external works (surfaces, walls, fences) */
+  scope?: ExtScope
 }
+
+export type ExtScope = 'all' | 'outbuildings' | 'external'
+/** the kinds of thing each scope lists */
+export const EXT_SCOPE_TYPES: Record<ExtScope, ExtType[]> = { all: ['outbuilding', 'hard', 'wall', 'fence'], outbuildings: ['outbuilding'], external: ['hard', 'wall', 'fence'] }
+export const SCOPE_ID: Record<ExtScope, string> = { all: 'AssemblyExternalDemoDemo', outbuildings: 'AssemblyOutbuildingsDemo', external: 'AssemblyExternalWorksDemo' }
+const SCOPE_NAME: Record<ExtScope, string> = { all: 'Outbuildings and external demolition', outbuildings: 'Outbuildings demolition', external: 'External demolition: surfaces, walls and fences' }
 
 const TYPE_LABEL: Record<ExtType, string> = { outbuilding: 'An outbuilding', hard: 'A concrete, tarmac or paved surface', wall: 'A garden or boundary wall', fence: 'Fencing' }
 const TYPE_COLOUR: Record<ExtType, string> = { outbuilding: '#a16207', hard: '#64748b', wall: '#92400e', fence: '#65a30d' }
 const uid = () => Math.random().toString(36).slice(2, 9)
 
-export default function AssemblyExternalDemoDemo({ onClose, onSave, labourTrades = [] }: Props) {
-  const ID = 'AssemblyExternalDemoDemo'
-  const [name, setName] = useCalcState(ID, 'name', 'Outbuildings and external demolition')
+export default function AssemblyExternalDemoDemo({ onClose, onSave, labourTrades = [], scope = 'all' }: Props) {
+  const ID = SCOPE_ID[scope]
+  const scopeTypes = EXT_SCOPE_TYPES[scope]
+  const [name, setName] = useCalcState(ID, 'name', SCOPE_NAME[scope])
   const [location, setLocation] = useCalcState(ID, 'location', '')
   const [qty, setQty] = useCalcState(ID, 'qty', 1)
   // The job starts with nothing: you add what comes down
   const [items, setItems] = useCalcState<ExtItem[]>(ID, 'items', [])
-  const [addType, setAddType] = useCalcState<ExtType>(ID, 'addType', 'outbuilding')
+  const [addTypeChosen, setAddType] = useCalcState<ExtType>(ID, 'addType', scopeTypes[0])
   const [machine, setMachine] = useCalcState(ID, 'machine', true)
   const [useGrab, setUseGrab] = useCalcState(ID, 'useGrab', false)
   const [diggerDays, setDiggerDays] = useCalcState<number | null>(ID, 'diggerDays', null)
@@ -56,6 +67,7 @@ export default function AssemblyExternalDemoDemo({ onClose, onSave, labourTrades
   const noSidesLayers = useMemo(() => new Set<string>(), [])
 
   function addItem() {
+    const addType = scopeTypes.includes(addTypeChosen) ? addTypeChosen : scopeTypes[0]
     setItems(p => [...p, {
       id: 'ext-' + uid(), name: '', type: addType, outKind: 'garage-brick', hardKind: 'concrete', areaM2: addType === 'outbuilding' ? 15 : 20, heightM: addType === 'wall' ? 1.8 : 2.4,
       thicknessMm: addType === 'wall' ? 215 : HARD_KINDS.concrete.defaultMm, lengthM: 10, breakBase: addType === 'outbuilding', baseMm: 100,
@@ -68,6 +80,8 @@ export default function AssemblyExternalDemoDemo({ onClose, onSave, labourTrades
     catch (e: any) { return { ok: false, error: e.message as string } }
   }, [items, machine, useGrab])
   const r = result.ok ? result.r : null
+  // the engine's own messages, less the ones that do not belong to this list (its empty message names every kind; the hard-surface one is for surfaces)
+  const warnings = (r?.warnings ?? []).filter(w => !w.startsWith('Nothing to demolish yet') && !(scope === 'outbuildings' && w.startsWith('Check for drains and services')))
 
   const layers: AssemblyLayerDef[] = useMemo(() => {
     if (!r) return []
@@ -191,7 +205,7 @@ export default function AssemblyExternalDemoDemo({ onClose, onSave, labourTrades
 
       {/* An engine error is a banner above the controls, never instead of them: typing a value digit by digit passes through invalid ones. */}
       {!result.ok && <div style={{ color: '#c0392b', fontSize: 12, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, padding: '6px 10px', marginBottom: 10 }}>⚠ {result.error}</div>}
-      {r && r.warnings.map((w, i) => (
+      {warnings.map((w, i) => (
         <div key={i} style={{ fontSize: 11, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 4, padding: '4px 8px', marginBottom: 6 }}>⚠ {w}</div>
       ))}
 
@@ -199,15 +213,17 @@ export default function AssemblyExternalDemoDemo({ onClose, onSave, labourTrades
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>To demolish</span>
-            <select value={addType} onChange={e => setAddType(e.target.value as ExtType)} style={{ ...small, minWidth: 200 }}>
-              {(Object.keys(TYPE_LABEL) as ExtType[]).map(t => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}
-            </select>
+            {scopeTypes.length > 1 && (
+              <select value={scopeTypes.includes(addTypeChosen) ? addTypeChosen : scopeTypes[0]} onChange={e => setAddType(e.target.value as ExtType)} style={{ ...small, minWidth: 200 }}>
+                {scopeTypes.map(t => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}
+              </select>
+            )}
             <button type="button" onClick={addItem} style={{ background: '#0369a1', color: '#fff', border: 'none', borderRadius: 5, fontSize: 12, fontWeight: 600, padding: '4px 12px', cursor: 'pointer' }}>+ Add</button>
           </div>
 
           {items.length === 0 && (
             <div style={{ fontSize: 12, color: '#64748b', background: '#fff', border: '1px dashed #bae6fd', borderRadius: 6, padding: '14px 12px', marginBottom: 10 }}>
-              Nothing yet. Pick what is coming down above and press <strong>+ Add</strong>.
+              Nothing yet. {scopeTypes.length > 1 ? 'Pick what is coming down above and press ' : 'Press '}<strong>+ Add</strong>{scopeTypes.length > 1 ? '' : scope === 'outbuildings' ? ' for each shed, garage, conservatory or lean-to coming down' : ''}.
             </div>
           )}
 
