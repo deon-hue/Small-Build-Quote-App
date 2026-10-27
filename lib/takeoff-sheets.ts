@@ -9,6 +9,7 @@ import type { RoomLabel, DrawnRoomShape, RoomEdge } from './rooms-from-walls'
 import type { Guide } from './guides'
 import type { ElectricPoint } from './electric-points'
 import type { PlumbPoint, PlumbPipe } from './plumb-points'
+import type { DrainPoint } from './drain-points'
 
 export const DEFAULT_SHEET_CALIBRATION: ScaleCalibration = { mpp: 0.0265, label: '1:100' }
 
@@ -207,8 +208,9 @@ export function parsePageList(text: string, total: number): number[] | null {
 
 const stampPoints = (pts: ElectricPoint[] | undefined, id: string): ElectricPoint[] | undefined => (pts ? pts.map(pt => (pt.sheetId ? pt : { ...pt, sheetId: id })) : pts)
 const stampPlumb = <T extends { sheetId?: string }>(pts: T[] | undefined, id: string): T[] | undefined => (pts ? pts.map(pt => (pt.sheetId ? pt : { ...pt, sheetId: id })) : pts)
-type PlumbThings = { plumbPoints?: PlumbPoint[]; plumbPipes?: PlumbPipe[] }
-const mapPlumb = <I extends PlumbThings>(it: I, f: <T extends { sheetId?: string; levelId?: string }>(l: T[]) => T[]): I => (it.plumbPoints || it.plumbPipes ? { ...it, ...(it.plumbPoints ? { plumbPoints: f(it.plumbPoints) } : {}), ...(it.plumbPipes ? { plumbPipes: f(it.plumbPipes) } : {}) } : it)
+type PlumbThings = { plumbPoints?: PlumbPoint[]; plumbPipes?: PlumbPipe[]; drainPoints?: DrainPoint[] }
+// the plumbing fittings and pipes, and the drainage chambers and gullies, are kept on the same kind of summary item and belong to a sheet and a level the same way
+const mapPlumb = <I extends PlumbThings>(it: I, f: <T extends { sheetId?: string; levelId?: string }>(l: T[]) => T[]): I => (it.plumbPoints || it.plumbPipes || it.drainPoints ? { ...it, ...(it.plumbPoints ? { plumbPoints: f(it.plumbPoints) } : {}), ...(it.plumbPipes ? { plumbPipes: f(it.plumbPipes) } : {}), ...(it.drainPoints ? { drainPoints: f(it.drainPoints) } : {}) } : it)
 
 /** Adds sheets after any that exist. The first time (no sheets yet) the existing drawings and electrical points are stamped as the first sheet's, and the first new sheet takes the project's current
  *  scale (it was measured at that scale). The last added sheet becomes the one showing. */
@@ -226,7 +228,7 @@ export function addSheets(p: TakeoffProject, added: TakeoffSheet[]): TakeoffProj
     if (p.guides?.length) first.guides = p.guides
     sheets = [first, ...sheets.slice(1)]
     elements = p.elements.map(e => (e.sheetId ? e : { ...e, sheetId: first.id }))
-    items = p.items.map(it => (it.electricPoints ? { ...it, electricPoints: stampPoints(it.electricPoints, first.id) } : it.plumbPoints || it.plumbPipes ? mapPlumb(it, l => stampPlumb(l, first.id)!) : it))
+    items = p.items.map(it => (it.electricPoints ? { ...it, electricPoints: stampPoints(it.electricPoints, first.id) } : it.plumbPoints || it.plumbPipes || it.drainPoints ? mapPlumb(it, l => stampPlumb(l, first.id)!) : it))
   }
   const active = added[added.length - 1]
   const { roomLabels: _moved, roomShapes: _moved2, roomEdges: _moved3, guides: _moved4, ...rest } = p
@@ -256,7 +258,7 @@ export function removeSheet(p: TakeoffProject, id: string): { project: TakeoffPr
   if (!p.sheets?.some(s => s.id === id)) return { project: p, removedElements: 0, removedItems: 0 }
   const onIt = (thing: { sheetId?: string }) => sheetOf(thing, p) === id
   const doomed = new Set(p.elements.filter(onIt).map(e => e.id))
-  const items = p.items.filter(it => !(it.elementId && doomed.has(it.elementId))).map(it => (it.electricPoints ? { ...it, electricPoints: it.electricPoints.filter(pt => !onIt(pt)) } : it.plumbPoints || it.plumbPipes ? mapPlumb(it, l => l.filter(pt => !onIt(pt))) : it))
+  const items = p.items.filter(it => !(it.elementId && doomed.has(it.elementId))).map(it => (it.electricPoints ? { ...it, electricPoints: it.electricPoints.filter(pt => !onIt(pt)) } : it.plumbPoints || it.plumbPipes || it.drainPoints ? mapPlumb(it, l => l.filter(pt => !onIt(pt))) : it))
   const remaining = p.sheets.filter(s => s.id !== id)
   const elements = p.elements.filter(e => !doomed.has(e.id))
   const wasActive = activeSheetIdOf(p) === id
@@ -304,7 +306,7 @@ export function addLevel(p: TakeoffProject, id: string, name: string, heightMm?:
     levels,
     activeLevelId: id,
     elements: p.elements.map(st),
-    items: p.items.map(it => (it.electricPoints ? { ...it, electricPoints: it.electricPoints.map(st) } : it.plumbPoints || it.plumbPipes ? mapPlumb(it, l => l.map(st)) : it)),
+    items: p.items.map(it => (it.electricPoints ? { ...it, electricPoints: it.electricPoints.map(st) } : it.plumbPoints || it.plumbPipes || it.drainPoints ? mapPlumb(it, l => l.map(st)) : it)),
     ...(sheets ? { sheets } : {}),
     ...(p.roomLabels ? { roomLabels: stampList(p.roomLabels) } : {}),
     ...(p.roomShapes ? { roomShapes: stampList(p.roomShapes) } : {}),
@@ -347,7 +349,7 @@ export function removeLevel(p: TakeoffProject, id: string): { project: TakeoffPr
   if (!p.levels?.some(l => l.id === id)) return { project: p, removedElements: 0, removedItems: 0 }
   const onIt = (thing: OnLevel) => levelOf(thing, p) === id
   const doomed = new Set(p.elements.filter(onIt).map(e => e.id))
-  const items = p.items.filter(it => !(it.elementId && doomed.has(it.elementId))).map(it => (it.electricPoints ? { ...it, electricPoints: it.electricPoints.filter(pt => !onIt(pt)) } : it.plumbPoints || it.plumbPipes ? mapPlumb(it, l => l.filter(pt => !onIt(pt))) : it))
+  const items = p.items.filter(it => !(it.elementId && doomed.has(it.elementId))).map(it => (it.electricPoints ? { ...it, electricPoints: it.electricPoints.filter(pt => !onIt(pt)) } : it.plumbPoints || it.plumbPipes || it.drainPoints ? mapPlumb(it, l => l.filter(pt => !onIt(pt))) : it))
   const keep = <T extends OnLevel>(l: T[] | undefined): T[] | undefined => (l ? l.filter(x => !onIt(x)) : l)
   const sheets = p.sheets?.map(s => ({ ...s, roomLabels: keep(s.roomLabels), roomShapes: keep(s.roomShapes), roomEdges: keep(s.roomEdges) }))
   const remaining = p.levels.filter(l => l.id !== id)
@@ -382,7 +384,7 @@ export function copyLevelContents(p: TakeoffProject, fromId: string, toId: strin
     return { ...el, id, levelId: toId, points: el.points.map(pt => ({ ...pt })), tagDx: undefined, tagDy: undefined }
   })
   const items: TakeoffItem[] = p.items
-    .filter(it => it.elementId && idMap.has(it.elementId) && !it.electricsSummary && !it.plumbSummary && !it.wdSummary && !it.wdScopeSummary)
+    .filter(it => it.elementId && idMap.has(it.elementId) && !it.electricsSummary && !it.plumbSummary && !it.drainSummary && !it.wdSummary && !it.wdScopeSummary)
     .map(it => ({ ...it, id: newId(), elementId: idMap.get(it.elementId!)!, drawnOpenings: undefined }))
   const sheetId = activeSheetIdOf(p)
   const copyList = <T extends OnLevel & { id: string; points: { x: number; y: number }[] }>(list: T[] | undefined): T[] =>

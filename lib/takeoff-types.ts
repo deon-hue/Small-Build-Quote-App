@@ -6,6 +6,7 @@ import type { WallConstructionType, WallFinishType, CalculatedMaterial } from '.
 import type { CostedLine } from './assembly-calc'
 import type { ElectricPoint } from './electric-points'
 import type { PlumbPoint, PlumbPipe } from './plumb-points'
+import type { DrainPoint } from './drain-points'
 import type { BuildingAge } from './radiators'
 import type { PlacedOpening } from './wall-openings'
 import type { RoomLabel, DrawnRoomShape, RoomEdge } from './rooms-from-walls'
@@ -14,7 +15,7 @@ import type { CalcStateSnapshot } from './calc-snapshot'
 
 // ── Drawing tools ─────────────────────────────────────────────────────────────
 
-export type DrawingTool = 'select' | 'line' | 'rect' | 'polygon' | 'floor' | 'click' | 'electric' | 'plumb' | 'opening' | 'room' | 'join' | 'measure' | 'guide'
+export type DrawingTool = 'select' | 'line' | 'rect' | 'polygon' | 'floor' | 'click' | 'electric' | 'plumb' | 'drain' | 'opening' | 'room' | 'join' | 'measure' | 'guide'
 
 // ── Measurement categories (match quote parentPhase names) ────────────────────
 
@@ -283,6 +284,13 @@ export interface TakeoffItem {
   plumbPricedKey?: string
   /** the boiler / heating system: one item holding the Heating Plant calculator for the boiler marker, priced as its own line */
   boilerSummary?: boolean
+
+  // Drainage & Services: the one "Drainage chambers and gullies" item holds every chamber, manhole, rodding eye, gully and connection placed on the plan (so they save with the project) and what the
+  // Chambers, Gullies & Connections calculator was last saved as.
+  drainSummary?: boolean
+  drainPoints?: DrainPoint[]
+  /** the plan's items (their kinds, references, depths and covers) when the calculator was last saved, to say when the plan has changed since */
+  drainPricedKey?: string
   /** which part of a wall or foundation the line you drew is: its outside face (the usual for an outside wall), its middle (a partition or a foundation) or its inside face. It moves where the wall or foundation is painted and measured from; lengths still come from the drawn line. */
   lineAlign?: 'outside' | 'centre' | 'inside'
   /** a drawing only: shown on the plan (and used for rooms and snapping) but not estimated: no calculator, not in the quote, not priced */

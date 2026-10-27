@@ -96,6 +96,10 @@ export interface DrainItem {
   cover: CoverGrade
   qty: number
   dig: PitDig
+  /** made from a point placed on the Take-off plan (the point's id): it follows the point until a value is typed over, and goes when the point is deleted */
+  planId?: string
+  /** what the plan last gave this item, so a value typed over it can be told from one that still follows the plan */
+  fromPlan?: { kind: DrainItemKind; ref: string; where: string; depthMm: number; cover: CoverGrade; dig: PitDig }
 }
 
 export interface DrainItemsInput {

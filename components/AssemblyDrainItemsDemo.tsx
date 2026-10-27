@@ -8,7 +8,7 @@
  * The engine is lib/drain-items-units.ts; the body shared with the tiling calculators is components/TilingCalcFrame.tsx.
  */
 
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import { useCalcState } from '@/components/calc-state'
 import type { CostedLine } from '@/lib/assembly-calc'
 import DiggerOnSiteSection from '@/components/DiggerOnSiteSection'
@@ -18,6 +18,7 @@ import {
   type DrainItem, type DrainItemKind, type DrainItemGroup, type CoverGrade, type PitDig, type DrainItemsResult,
 } from '@/lib/drain-items-units'
 import { describeDrainItems, describeDrainItemsShort } from '@/lib/drain-items-description'
+import { mergePlacedDrainItems, type PlacedDrain } from '@/lib/drain-points'
 import { suggestDrainItemsLabour } from '@/lib/flat-roof-labour'
 import type { BOLabourTrade } from '@/lib/back-office-types'
 import { propInput, PropRow, CollapsibleSection } from '@/components/assembly-ui'
@@ -27,6 +28,8 @@ interface Props {
   onClose?: () => void
   onSave?: (result: { name: string; qty: number; location: string; description: string; detail?: string; lines: CostedLine[] }) => void
   labourTrades?: BOLabourTrade[]
+  /** the items placed on the Take-off plan: each becomes an item here, follows the plan until a value is typed over, and goes when it is deleted on the plan */
+  placed?: PlacedDrain[]
 }
 
 const uid = () => Math.random().toString(36).slice(2, 9)
@@ -34,13 +37,20 @@ const GROUPS: DrainItemGroup[] = ['chamber', 'gully', 'connection']
 const COVERS = Object.keys(COVER_LABEL) as CoverGrade[]
 const GROUP_COLOUR: Record<DrainItemGroup, string> = { chamber: '#92400e', gully: '#2563eb', connection: '#7c3aed' }
 
-export default function AssemblyDrainItemsDemo({ onClose, onSave, labourTrades = [] }: Props) {
+export default function AssemblyDrainItemsDemo({ onClose, onSave, labourTrades = [], placed }: Props) {
   const ID = 'AssemblyDrainItemsDemo'
   // The job starts with no items: you add the ones it has
   const [items, setItems] = useCalcState<DrainItem[]>(ID, 'items', [])
   const [addKind, setAddKind] = useCalcState<DrainItemKind>(ID, 'addKind', 'ic')
   const [diggerWithRuns, setDiggerWithRuns] = useCalcState(ID, 'diggerWithRuns', false)
   const [diggerDays, setDiggerDays] = useCalcState<number | null>(ID, 'diggerDays', null)
+
+  // Items placed on the plan come in as items here and stay in step with it
+  const placedKey = JSON.stringify(placed ?? null)
+  useEffect(() => {
+    if (!placed) return
+    setItems(p => { const next = mergePlacedDrainItems(p, placed); return JSON.stringify(next) === JSON.stringify(p) ? p : next })
+  }, [placedKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function addItem() { setItems(p => [...p, newDrainItem('di-' + uid(), addKind, nextRef(p, addKind))]) }
   function update(id: string, patch: Partial<DrainItem>) { setItems(p => p.map(x => (x.id === id ? { ...x, ...patch } : x))) }
@@ -96,6 +106,12 @@ export default function AssemblyDrainItemsDemo({ onClose, onSave, labourTrades =
               <span style={{ fontSize: 10.5, color: '#94a3b8' }}>One for each chamber, gully or connection, or one with a number for several the same.</span>
             </div>
 
+            {placed && (
+              <div style={{ fontSize: 11, color: '#0369a1', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 6, padding: '6px 10px', marginBottom: 10, lineHeight: 1.45 }}>
+                {placed.length === 0 ? 'Nothing is placed on the plan yet.' : `${placed.length} item${placed.length === 1 ? ' is' : 's are'} placed on the plan and listed here.`} Each follows the plan (its kind, reference, depth and cover) until you type over it here. Items you add here yourself have no place on the plan.
+              </div>
+            )}
+
             {items.length === 0 && (
               <div style={{ fontSize: 12, color: '#64748b', background: '#fff', border: '1px dashed #bae6fd', borderRadius: 6, padding: '14px 12px', marginBottom: 10 }}>
                 No items yet. Pick a kind above and press <strong>+ Add item</strong>, then give it its depth and cover. The pipe between them is priced in Underground Drainage (by run).
@@ -124,7 +140,9 @@ export default function AssemblyDrainItemsDemo({ onClose, onSave, labourTrades =
                     </select>
                     <span style={{ flex: 1 }} />
                     <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: '#475569', minWidth: 70, textAlign: 'right' }}>{cost > 0 ? `£${cost.toFixed(2)}` : ''}</span>
-                    <button type="button" onClick={() => setItems(p => p.filter(y => y.id !== x.id))} title="Remove this item" style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
+                    {x.planId
+                      ? <span title="Placed on the plan: delete it there to remove it from here" style={{ fontSize: 10.5, color: '#0369a1', whiteSpace: 'nowrap' }}>📍 on the plan</span>
+                      : <button type="button" onClick={() => setItems(p => p.filter(y => y.id !== x.id))} title="Remove this item" style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>}
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
                     <PropRow label="Number"><TilingNumInput v={x.qty} set={n => update(x.id, { qty: Math.round(n) })} step={1} /></PropRow>

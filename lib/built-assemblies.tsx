@@ -54,6 +54,7 @@ import AssemblyDrainageDemo from '@/components/AssemblyDrainageDemo'
 import AssemblySoakawayDemo from '@/components/AssemblySoakawayDemo'
 import AssemblyServicesDemo from '@/components/AssemblyServicesDemo'
 import AssemblyDrainItemsDemo from '@/components/AssemblyDrainItemsDemo'
+import type { PlacedDrain } from '@/lib/drain-points'
 import AssemblyWallRemovalDemo from '@/components/AssemblyWallRemovalDemo'
 import AssemblyStripOutDemo from '@/components/AssemblyStripOutDemo'
 import AssemblyWasteDemo from '@/components/AssemblyWasteDemo'
@@ -125,6 +126,8 @@ export interface AssemblyRenderOpts {
   /** a block and beam floor with a beam direction chosen on the plan: the span of its beams, mm (the drawn side the beams run along) */
   externalSpanMm?: number
   plumbPlaced?: PlacedRoom[]
+  /** the chambers, manholes, gullies and connections placed on the Take-off plan, for the Chambers, Gullies & Connections calculator */
+  drainPlaced?: PlacedDrain[]
   /** the heating pipe runs drawn on the Take-off plan, sized with their fittings counted (the Plumbing Installation calculator prices them) */
   plumbPipes?: PipeSummary
   /** Windows & Doors only: the doors and windows placed on the Take-off plan, which the calculator adds and follows. */
@@ -177,7 +180,7 @@ const RAW_BUILT_ASSEMBLIES: Record<string, BuiltAssemblyEntry> = {
   'plumb-ufh': { icon: 'ufh', render: opts => <AssemblyUfhDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalAreaM2={opts?.externalAreaM2} externalName={opts?.externalName} planRooms={opts?.planRooms} /> },
   'plumb-pipework': { icon: 'pipework', render: opts => <AssemblyPipeworkDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
   'drain-runs': { icon: 'drainage', render: opts => <AssemblyDrainageDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },
-  'drain-chambers-gullies': { icon: 'drain-chambers', render: opts => <AssemblyDrainItemsDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
+  'drain-chambers-gullies': { icon: 'drain-chambers', render: opts => <AssemblyDrainItemsDemo placed={opts?.drainPlaced} onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'drain-soakaway': { icon: 'soakaway', render: opts => <AssemblySoakawayDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'drain-services': { icon: 'services', render: opts => <AssemblyServicesDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} /> },
   'demo-wall-removal-calc': { icon: 'wall-removal', render: opts => <AssemblyWallRemovalDemo onSave={opts?.onSave} labourTrades={opts?.labourTrades} externalLengthMm={opts?.externalLengthMm} /> },

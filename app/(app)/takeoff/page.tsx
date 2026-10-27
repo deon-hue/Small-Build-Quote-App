@@ -29,6 +29,10 @@ import { detectRooms, roomFromPolygon, splitDrawnRoom, sortRooms, roomIndexAt, p
 import { POINT_BY_ID, type ElectricsSavedState } from '@/lib/electrics-units'
 import { planRoomsFromPoints, roomAtPoint, rectToPolygon, POINT_SHORT, type ElectricPoint } from '@/lib/electric-points'
 import PlumbingPointsPanel, { PLUMB_GROUP_COLOUR, HEAT_SOURCE_COLOUR } from './components/PlumbingPointsPanel'
+import DrainPointsPanel from './components/DrainPointsPanel'
+import { drainSymbol, DRAIN_GROUP_COLOUR } from '@/lib/drain-symbols'
+import { DRAIN_ITEMS } from '@/lib/drain-items-units'
+import { newDrainPoint, placedDrainOf, drainPricedKey, type DrainPoint } from '@/lib/drain-points'
 import { FITTING_BY_ID } from '@/lib/plumbing-units'
 import { plumbSymbol, facingAngle, type SymShape, type SymRole } from '@/lib/plumb-symbols'
 import { electricSymbol } from '@/lib/electric-symbols'
@@ -46,6 +50,8 @@ const PLUMB_ITEM_ID = 'plumb-summary'
 // The one Take-off item that holds the boiler / heating system (the Heating Plant calculator for the boiler marker and the radiators on the plan).
 const BOILER_ITEM_ID = 'plumb-boiler'
 const WD_ITEM_ID = 'wd-summary'
+// The one Take-off item that holds every drainage chamber, manhole, rodding eye, gully and connection placed on the plan (and the Chambers, Gullies & Connections calculator's saved price).
+const DRAIN_ITEM_ID = 'drain-summary'
 /** the Windows and the Doors calculators each keep their saved price on an item of their own (the placed openings stay on the one above) */
 const WD_WINDOWS_ID = 'wd-windows-summary'
 const WD_DOORS_ID = 'wd-doors-summary'
@@ -168,6 +174,7 @@ const TOOL_DISPLAY: Record<DrawingTool, string> = {
   click:   'Click to Place Item',
   electric: 'Place Electrical Point',
   plumb: 'Place Plumbing Fitting',
+  drain: 'Place Chamber / Manhole / Gully',
   opening: 'Place Window / Door',
   room: 'Rooms',
   join: 'Join Corner',
@@ -796,6 +803,10 @@ export default function TakeoffPage() {
   const [plumbRadHeight, setPlumbRadHeight] = useState(600)
   const [plumbRoom, setPlumbRoom] = useState('')
   const [selectedPlumbPointId, setSelectedPlumbPointId] = useState<string | null>(null)
+  // Drainage & Services: the kind of chamber, manhole or gully for the next click, where it is (in words), and the placed item that is selected
+  const [drainKind, setDrainKind] = useState<import('@/lib/drain-items-units').DrainItemKind>('ic')
+  const [drainWhere, setDrainWhere] = useState('')
+  const [selectedDrainPointId, setSelectedDrainPointId] = useState<string | null>(null)
   // heating pipe runs: the Line tool in 'draw a pipe run' mode, and the run that is selected
   const [pipeDraw, setPipeDraw] = useState(false)
   const [selectedPlumbPipeId, setSelectedPlumbPipeId] = useState<string | null>(null)
@@ -1996,6 +2007,11 @@ export default function TakeoffPage() {
       placePlumbPoint(svgCoords(e))
       return
     }
+    if (tool === 'drain') {
+      if (activePhase !== 'Drainage & Services') { showToast('🕳 Choose the Drainage & Services phase to place chambers and gullies'); return }
+      placeDrainPoint(svgCoords(e))
+      return
+    }
     if (tool === 'opening') {
       placeOpening(svgCoords(e))
       return
@@ -2209,6 +2225,7 @@ export default function TakeoffPage() {
   function resolveBuiltAssembly(it: TakeoffItem) {
     if (it.electricsSummary) return BUILT_ASSEMBLY_CANON_IDS['elec-install']
     if (it.plumbSummary) return BUILT_ASSEMBLY_CANON_IDS['plumb-install']
+    if (it.drainSummary) return BUILT_ASSEMBLY_CANON_IDS['drain-chambers-gullies']
     if (it.boilerSummary) return BUILT_ASSEMBLY_CANON_IDS['plumb-heating-plant']
     if (it.wdSummary) return BUILT_ASSEMBLY_CANON_IDS['wd-schedule']
     if (it.wdScopeSummary) return BUILT_ASSEMBLY_CANON_IDS[it.wdScopeSummary === 'windows' ? 'wd-windows' : 'wd-doors']
@@ -2299,6 +2316,11 @@ export default function TakeoffPage() {
   const plumbAge: BuildingAge = plumbItem?.plumbAge ?? 'mid'
   const plumbPipes: PlumbPipe[] = plumbItem?.plumbPipes ?? []
   const boilerItem = project.items.find(it => it.boilerSummary)
+  const drainItem = project.items.find(it => it.drainSummary)
+  const drainPoints: DrainPoint[] = drainItem?.drainPoints ?? []
+  const drainShowing = drainPoints.filter(q => onActiveSheet(q, project) && onActiveLevel(q, project))
+  const drainPlaced = drainPoints.map(placedDrainOf)
+  const drainKeyNow = drainPricedKey(drainPoints)
 
   function newElectricsItem(): TakeoffItem {
     const sub = boSubPhases.find(sp => sp.canonical_id === 'elec-install')
@@ -2335,7 +2357,7 @@ export default function TakeoffPage() {
     if (tool !== 'select') return
     e.stopPropagation()
     setSelectedElectricPointId(pt.id)
-    setSelectedPlumbPointId(null); setSelectedPlumbPipeId(null)
+    setSelectedPlumbPointId(null); setSelectedDrainPointId(null); setSelectedPlumbPipeId(null)
     setSelectedId(null)   // one thing is picked at a time: the Delete key must not remove a wall that was picked before
     setSelectedOpeningId(null)
     setPanelMode('properties')
@@ -2416,6 +2438,50 @@ export default function TakeoffPage() {
     window.addEventListener('mouseup', up)
   }
 
+  // ── Drainage chambers, manholes, gullies and connections (Drainage & Services) ───────────────────────────
+  // Kept on one "Drainage chambers and gullies" item (created the first time one is needed), the same way as the plumbing fittings. The Chambers, Gullies & Connections calculator lists them and follows the plan.
+  function newDrainSummaryItem(): TakeoffItem {
+    const sub = boSubPhases.find(sp => sp.canonical_id === 'drain-chambers-gullies')
+    return { id: DRAIN_ITEM_ID, name: 'Drainage chambers and gullies', phase: 'Drainage & Services', qty: 1, unit: 'item', drainSummary: true, drainPoints: [], ...(sub && { taskSubphaseId: sub.id, subPhase: sub.name }) }
+  }
+
+  function changeDrainItem(fn: (it: TakeoffItem) => TakeoffItem) {
+    setProject(p => {
+      const items = p.items.some(it => it.drainSummary) ? p.items : [...p.items, newDrainSummaryItem()]
+      return { ...p, items: items.map(it => it.drainSummary ? fn(it) : it) }
+    })
+  }
+
+  function changeDrainPoints(fn: (pts: DrainPoint[]) => DrainPoint[]) {
+    changeDrainItem(it => ({ ...it, drainPoints: fn(it.drainPoints ?? []) }))
+  }
+
+  function placeDrainPoint(pt: TakeoffPoint) {
+    const id = uid()
+    changeDrainPoints(pts => [...pts, newDrainPoint(id, drainKind, pt, pts, drainWhere.trim(), activeSheetId ?? undefined, activeLevelId ?? undefined)])
+    setSelectedDrainPointId(id)
+  }
+
+  function startDrainPointDrag(e: React.MouseEvent, pt: DrainPoint) {
+    if (tool !== 'select') return
+    e.stopPropagation()
+    setSelectedDrainPointId(pt.id)
+    setSelectedPlumbPointId(null); setSelectedPlumbPipeId(null); setSelectedElectricPointId(null)
+    setSelectedId(null)
+    setSelectedOpeningId(null)
+    setPanelMode('properties')
+    setEditingItem(drainItem ?? null)
+    const rect = svgRef.current!.getBoundingClientRect()
+    const pan = panOffset, z = zoom
+    const move = (ev: MouseEvent) => {
+      const x = (ev.clientX - rect.left - pan.x) / z, y = (ev.clientY - rect.top - pan.y) / z
+      changeDrainPoints(pts => pts.map(q => q.id === pt.id ? { ...q, x, y } : q))
+    }
+    const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up) }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+  }
+
   // A pipe's end snaps to a radiator or the boiler, then to another pipe's bend or end, then onto the side of another pipe (a tee): within 10 screen pixels
   function pipeSnapPoint(raw: TakeoffPoint): TakeoffPoint | null {
     const r = 10 / zoom
@@ -2444,12 +2510,12 @@ export default function TakeoffPage() {
     if (!(len * mpp > 0.05)) { showToast('That pipe run is too short'); return }
     const id = uid()
     changePlumbItem(it => ({ ...it, plumbPipes: [...(it.plumbPipes ?? []), { id, points: pts.map(p => ({ x: p.x, y: p.y })), ...(activeSheetId ? { sheetId: activeSheetId } : {}), ...(activeLevelId ? { levelId: activeLevelId } : {}) }] }))
-    setSelectedPlumbPipeId(id); setSelectedPlumbPointId(null)
+    setSelectedPlumbPipeId(id); setSelectedPlumbPointId(null); setSelectedDrainPointId(null)
     showToast(`Pipe run added (${(len * mpp).toFixed(2)} m). Draw the next run, or press Esc to stop.`)
   }
 
   function selectPlumbPipe(id: string) {
-    setSelectedPlumbPipeId(id); setSelectedPlumbPointId(null); setSelectedElectricPointId(null)
+    setSelectedPlumbPipeId(id); setSelectedPlumbPointId(null); setSelectedDrainPointId(null); setSelectedElectricPointId(null)
     setSelectedId(null); setSelectedOpeningId(null); setPanelMode('properties'); setEditingItem(plumbItem ?? null)
   }
 
@@ -3390,7 +3456,7 @@ export default function TakeoffPage() {
         roomSuggestions={roomNames}
         selectedPointId={selectedElectricPointId} onSelectPoint={setSelectedElectricPointId}
         onUpdatePoint={(id, patch) => changeElectricPoints(pts => pts.map(q => q.id === id ? { ...q, ...patch } : q))}
-        onDeletePoint={id => { changeElectricPoints(pts => pts.filter(q => q.id !== id)); setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedPlumbPipeId(null) }}
+        onDeletePoint={id => { changeElectricPoints(pts => pts.filter(q => q.id !== id)); setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedDrainPointId(null); setSelectedPlumbPipeId(null) }}
         saved={it?.assemblyResult}
         stale={stale}
         calculatorOpen={assemblyWindowItemId === ELECTRICS_ITEM_ID}
@@ -3436,7 +3502,7 @@ export default function TakeoffPage() {
         roomSuggestions={roomNames}
         selectedPointId={selectedPlumbPointId} onSelectPoint={setSelectedPlumbPointId}
         onUpdatePoint={(id, patch) => changePlumbPoints(pts => pts.map(q => q.id === id ? { ...q, ...patch } : q))}
-        onDeletePoint={id => { changePlumbPoints(pts => pts.filter(q => q.id !== id)); setSelectedPlumbPointId(null); setSelectedPlumbPipeId(null) }}
+        onDeletePoint={id => { changePlumbPoints(pts => pts.filter(q => q.id !== id)); setSelectedPlumbPointId(null); setSelectedDrainPointId(null); setSelectedPlumbPipeId(null) }}
         roomOf={q => q.roomName}
         sizes={plumbSizes}
         heatOf={q => {
@@ -3485,6 +3551,43 @@ export default function TakeoffPage() {
             const sub = boSubPhases.find(sp => sp.canonical_id === 'plumb-install')
             changePlumbItem(x => ({
               ...x, assemblyResult: res, assemblyCalcState: calcState, plumbPricedKey: placedKey, name: result.name,
+              ...(sub && { taskSubphaseId: sub.id, subPhase: sub.name }),
+            }))
+            setAssemblyWindowItemId(null)
+          },
+        })}
+      />
+    )
+  }
+
+  function renderDrainPanel() {
+    const it = drainItem
+    const built = BUILT_ASSEMBLY_CANON_IDS['drain-chambers-gullies']
+    const stale = !!it?.assemblyResult && it.drainPricedKey !== undefined && it.drainPricedKey !== drainKeyNow
+    return (
+      <DrainPointsPanel
+        points={drainPoints}
+        placing={tool === 'drain'}
+        onPlacing={on => { setTool(on ? 'drain' : 'select'); if (!on) { setDrawPoints([]); setIsDrawing(false) } }}
+        kind={drainKind} onKind={setDrainKind}
+        where={drainWhere} onWhere={setDrainWhere}
+        selectedPointId={selectedDrainPointId} onSelectPoint={setSelectedDrainPointId}
+        onUpdatePoint={(id, patch) => changeDrainPoints(pts => pts.map(q => q.id === id ? { ...q, ...patch } : q))}
+        onDeletePoint={id => { changeDrainPoints(pts => pts.filter(q => q.id !== id)); setSelectedDrainPointId(null) }}
+        saved={it?.assemblyResult}
+        stale={stale}
+        calculatorOpen={assemblyWindowItemId === DRAIN_ITEM_ID}
+        onOpenCalculator={() => { changeDrainItem(x => x); setAssemblyWindowItemId(DRAIN_ITEM_ID) }}
+        onCloseCalculator={() => setAssemblyWindowItemId(null)}
+        calculator={built?.render({
+          labourTrades,
+          calcState: it?.assemblyCalcState,
+          drainPlaced,
+          onSave: result => {
+            const { calcState, state: _state, size: _size, ...res } = result
+            const sub = boSubPhases.find(sp => sp.canonical_id === 'drain-chambers-gullies')
+            changeDrainItem(x => ({
+              ...x, assemblyResult: res, assemblyCalcState: calcState, drainPricedKey: drainKeyNow, name: result.name,
               ...(sub && { taskSubphaseId: sub.id, subPhase: sub.name }),
             }))
             setAssemblyWindowItemId(null)
@@ -3624,7 +3727,7 @@ export default function TakeoffPage() {
     if (created.length > 0) {
       setProject(p => switchActiveSheet(addSheets(p, created), created[0].id))
       // the new sheet starts clean: nothing selected from the sheet we were on
-      setSelectedId(null); setEditingElement(null); setEditingItem(null); setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedPlumbPipeId(null); setDrawPoints([]); setIsDrawing(false); setAssemblyWindowItemId(null)
+      setSelectedId(null); setEditingElement(null); setEditingItem(null); setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedDrainPointId(null); setSelectedPlumbPipeId(null); setDrawPoints([]); setIsDrawing(false); setAssemblyWindowItemId(null)
     }
     if (!savedOnDevice) showToast('This browser cannot keep plans between visits (a private window?). They will be lost when you close the page.')
     else if (created.length > 1) showToast(created.length + ' sheets added. Set the scale of each before you draw on it.')
@@ -3701,7 +3804,7 @@ export default function TakeoffPage() {
     const target = project.sheets?.find(s => s.id === id)
     setProject(p => switchActiveSheet(p, id))
     if (!keepSelection) { setSelectedId(null); setEditingElement(null); setEditingItem(null) }
-    setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedPlumbPipeId(null)
+    setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedDrainPointId(null); setSelectedPlumbPipeId(null)
     setDrawPoints([])
     setIsDrawing(false)
     setMeasureDone(null)
@@ -3747,7 +3850,7 @@ export default function TakeoffPage() {
   /** Clears what belonged to the view being left (the selection, a half-drawn shape, an open calculator) when another level shows. */
   function clearViewState(keepSelection = false) {
     if (!keepSelection) { setSelectedId(null); setEditingElement(null); setEditingItem(null) }
-    setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedPlumbPipeId(null)
+    setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedDrainPointId(null); setSelectedPlumbPipeId(null)
     setSelectedOpeningId(null)
     setSelectedEdgeId(null)
     setSelectedRoomPt(null)
@@ -3870,7 +3973,7 @@ export default function TakeoffPage() {
     setEditingItem(null)
     setDrawPoints([])
     setIsDrawing(false)
-    setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedPlumbPipeId(null)
+    setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedDrainPointId(null); setSelectedPlumbPipeId(null)
     showToast('Sheet removed. Recovery copy saved.')
   }
 
@@ -4002,7 +4105,7 @@ export default function TakeoffPage() {
     setResetInProgress(true)
     createRecoverySnapshot('clear')
     // Keep items that are NOT linked to any element (manually-added, pricing-only rows)
-    const unlinkedItems = project.items.filter(it => !it.elementId && !it.boilerSummary).map(it => it.electricsSummary ? { ...it, electricPoints: [] } : it.plumbSummary ? { ...it, plumbPoints: [], plumbPipes: [] } : it.wdSummary ? { ...it, placedOpenings: [] } : it)
+    const unlinkedItems = project.items.filter(it => !it.elementId && !it.boilerSummary).map(it => it.electricsSummary ? { ...it, electricPoints: [] } : it.plumbSummary ? { ...it, plumbPoints: [], plumbPipes: [] } : it.drainSummary ? { ...it, drainPoints: [] } : it.wdSummary ? { ...it, placedOpenings: [] } : it)
     setProject(p => ({
       ...p,
       elements: [],
@@ -4134,7 +4237,7 @@ export default function TakeoffPage() {
     setEditingElement(null)
     setEditingItem(null)
     setPhaseDefaults(null)
-    setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedPlumbPipeId(null)
+    setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedDrainPointId(null); setSelectedPlumbPipeId(null)
     setAssemblyWindowItemId(null)
     setMeasureDone(null)
     setCalibDrawing(false)
@@ -4270,7 +4373,7 @@ export default function TakeoffPage() {
     // A wall with a calculator that hasn't been priced would go to the quote as a plain build-up
     // (e.g. the default cavity wall layers) rather than what it's labelled as — say so first.
     // the electrics and plumbing items hold what was placed on the plan: with nothing placed and nothing priced there is nothing to send
-    const sendItems = project.items.filter(it => !it.notEstimated && !((it.plumbSummary && !it.assemblyResult && !it.plumbPoints?.length && !it.plumbPipes?.length) || (it.electricsSummary && !it.assemblyResult && !it.electricPoints?.length) || (it.boilerSummary && !it.assemblyResult)))
+    const sendItems = project.items.filter(it => !it.notEstimated && !((it.plumbSummary && !it.assemblyResult && !it.plumbPoints?.length && !it.plumbPipes?.length) || (it.electricsSummary && !it.assemblyResult && !it.electricPoints?.length) || (it.boilerSummary && !it.assemblyResult) || (it.drainSummary && !it.assemblyResult && !it.drainPoints?.length)))
     const unpriced = sendItems.filter(it => resolveBuiltAssembly(it) && !it.assemblyResult)
     if (unpriced.length > 0 && !window.confirm(
       `${unpriced.length} item${unpriced.length !== 1 ? 's have' : ' has'} a calculator that hasn't been priced yet:\n\n` +
@@ -4284,6 +4387,9 @@ export default function TakeoffPage() {
     for (const w of plumbPipeSummary?.warnings ?? []) plumbNotes.push('Heating pipes: ' + w)
     const bo = sendItems.find(it => it.boilerSummary)
     if (bo?.assemblyResult && bo.boilerPricedKey !== undefined && bo.boilerPricedKey !== boilerKeyNow) plumbNotes.push('The radiators on the plan have changed since the boiler was priced: open the heating system and check the boiler size and the number of radiators.')
+    // the chambers and gullies were priced, but the ones on the plan have changed since
+    const dr = sendItems.find(it => it.drainSummary)
+    if (dr?.assemblyResult && dr.drainPricedKey !== undefined && dr.drainPricedKey !== drainKeyNow && !window.confirm('The chambers, manholes and gullies on the plan have changed since they were priced, so the quote would carry the old price. Open the Chambers, Gullies & Connections calculator and Save & Price it again.\n\nSend anyway?')) return
     if (plumbNotes.length > 0 && !window.confirm('Check the plumbing before it goes to the quote:\n\n' + plumbNotes.map(n => '- ' + n).join('\n') + '\n\nSend anyway?')) return
     const { planImageUrl: _, ...rest } = project
     const data = { version: 1, ...rest, items: sendItems }
@@ -4644,7 +4750,7 @@ export default function TakeoffPage() {
   }
   function restoreDrawings(snap: { elements: DrawnElement[]; items: TakeoffItem[] }) {
     setProject(p => ({ ...p, elements: snap.elements, items: snap.items }))
-    setSelectedId(null); setEditingElement(null); setEditingItem(null); setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedPlumbPipeId(null)
+    setSelectedId(null); setEditingElement(null); setEditingItem(null); setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedDrainPointId(null); setSelectedPlumbPipeId(null)
     setHistoryTick(t => t + 1)
   }
 
@@ -4652,7 +4758,7 @@ export default function TakeoffPage() {
   function duplicateSelected() {
     const el = selectedId ? project.elements.find(e => e.id === selectedId) : undefined
     if (!el) { showToast('Select a drawing first, then copy it'); return }
-    const item = project.items.find(it => it.elementId === el.id && !it.electricsSummary && !it.plumbSummary)
+    const item = project.items.find(it => it.elementId === el.id && !it.electricsSummary && !it.plumbSummary && !it.drainSummary)
     const off = 30 / zoom
     const copy: DrawnElement = { ...el, id: uid(), points: el.points.map(p => ({ ...p, x: p.x + off, y: p.y + off })), tagDx: undefined, tagDy: undefined }
     const copyItem: TakeoffItem | null = item ? { ...item, id: uid(), elementId: copy.id } : null
@@ -4670,6 +4776,11 @@ export default function TakeoffPage() {
     if (selectedElectricPointId && electricPoints.some(q => q.id === selectedElectricPointId)) {
       const id = selectedElectricPointId
       changeElectricPoints(pts => pts.map(q => (q.id === id ? { ...q, x: q.x + ux * d, y: q.y + uy * d } : q)))
+      return true
+    }
+    if (selectedDrainPointId && drainPoints.some(q => q.id === selectedDrainPointId)) {
+      const id = selectedDrainPointId
+      changeDrainPoints(pts => pts.map(q => (q.id === id ? { ...q, x: q.x + ux * d, y: q.y + uy * d } : q)))
       return true
     }
     if (selectedPlumbPipeId && plumbPipes.some(q => q.id === selectedPlumbPipeId)) {
@@ -4747,7 +4858,7 @@ export default function TakeoffPage() {
   }, [project.elements, project.items, historyKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // picking a drawing or a placed opening lets go of a picked electrical point (so Delete takes away only what is picked)
-  useEffect(() => { if (selectedId || selectedOpeningId) { setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedPlumbPipeId(null) } }, [selectedId, selectedOpeningId])
+  useEffect(() => { if (selectedId || selectedOpeningId) { setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedDrainPointId(null); setSelectedPlumbPipeId(null) } }, [selectedId, selectedOpeningId])
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -4796,8 +4907,14 @@ export default function TakeoffPage() {
           e.preventDefault()
           const gone = selectedElectricPointId
           changeElectricPoints(pts => pts.filter(q => q.id !== gone))
-          setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedPlumbPipeId(null)
+          setSelectedElectricPointId(null); setSelectedPlumbPointId(null); setSelectedDrainPointId(null); setSelectedPlumbPipeId(null)
           showToast('Electrical point deleted')
+        } else if (selectedDrainPointId && drainPoints.some(q => q.id === selectedDrainPointId)) {
+          e.preventDefault()
+          const gone = selectedDrainPointId
+          changeDrainPoints(pts => pts.filter(q => q.id !== gone))
+          setSelectedDrainPointId(null)
+          showToast('Drainage item deleted')
         } else if (selectedPlumbPipeId && plumbPipes.some(q => q.id === selectedPlumbPipeId)) {
           e.preventDefault()
           const gone = selectedPlumbPipeId
@@ -4808,7 +4925,7 @@ export default function TakeoffPage() {
           e.preventDefault()
           const gone = selectedPlumbPointId
           changePlumbPoints(pts => pts.filter(q => q.id !== gone))
-          setSelectedPlumbPointId(null); setSelectedPlumbPipeId(null)
+          setSelectedPlumbPointId(null); setSelectedDrainPointId(null); setSelectedPlumbPipeId(null)
           showToast('Plumbing fitting deleted')
         } else if (selectedOpeningId) deleteOpening(selectedOpeningId)
         else if (tool === 'guide' && selectedGuideId) { e.preventDefault(); deleteGuide(selectedGuideId) }
@@ -7830,6 +7947,7 @@ export default function TakeoffPage() {
     const item = editingItem ?? phaseDefaults
     if ((activePhase === 'Electrics' && tool === 'electric') || item?.electricsSummary) return renderElectricsPanel()
     if ((activePhase === 'Plumbing & Heating' && (tool === 'plumb' || pipeDraw)) || item?.plumbSummary || item?.boilerSummary) return renderPlumbingPanel()
+    if ((activePhase === 'Drainage & Services' && tool === 'drain') || item?.drainSummary) return renderDrainPanel()
     if ((activePhase === 'Windows & Doors' && tool === 'opening') || item?.wdSummary || item?.wdScopeSummary) return renderOpeningsPanel()
     if (tool === 'room') return renderRoomsPanel()
     if (!item) {
@@ -8225,13 +8343,14 @@ export default function TakeoffPage() {
     { t: 'opening',  icon: '🪟', label: 'Place Window / Door',     pinned: true,  show: activePhase === 'Windows & Doors' },
     { t: 'electric', icon: '⚡', label: 'Place Electrical Point',  pinned: true,  show: activePhase === 'Electrics' },
     { t: 'plumb',    icon: '🚿', label: 'Place Plumbing Fitting',  pinned: true,  show: activePhase === 'Plumbing & Heating' },
+    { t: 'drain',    icon: '🕳', label: 'Place Chamber / Manhole / Gully', pinned: true, show: activePhase === 'Drainage & Services' },
     { t: 'click',    icon: '💠', label: 'Click to Place Item',     pinned: false, show: true },
   ]
   function chooseTool(t: DrawingTool) {
     if (tool === 'measure' || t === 'measure' || tool === 'guide' || t === 'guide') { setDrawPoints([]); setIsDrawing(false) }
     if (tool === 'room' && (t === 'rect' || t === 'polygon')) startRoomDraw(t); else if (tool === 'room' && t === 'line') startRoomDraw('edge'); else setTool(t)
     if (t === 'select') { setDrawPoints([]); setIsDrawing(false) }
-    if (t === 'electric' || t === 'plumb') { setPanelMode('properties'); setPanelOpen(true) }
+    if (t === 'electric' || t === 'plumb' || t === 'drain') { setPanelMode('properties'); setPanelOpen(true) }
     if (t === 'opening' || t === 'room') { setPanelMode('properties'); setPanelOpen(true); setEditingItem(null); setEditingElement(null); setSelectedId(null) }
     if (t === 'join') { setJoinFirst(null); showToast('Join Corner: click one wall near the corner, then the other') }
   }
@@ -9112,6 +9231,35 @@ export default function TakeoffPage() {
                 )
               })}
 
+              {/* Drainage chambers, manholes, gullies and connections — each drawn as its symbol at the size of the real thing (never under about 16 screen pixels across), with its reference. Drag one in Select mode to move it. */}
+              {!hiddenPhases.has('Drainage & Services') && drainShowing.map(pt => {
+                const k = DRAIN_ITEMS[pt.kind]
+                if (!k) return null
+                const chosen = pt.id === selectedDrainPointId
+                const colour = DRAIN_GROUP_COLOUR[k.group]
+                const sym = drainSymbol(pt.kind)
+                const mpp = project.calibration.mpp
+                const name = pt.ref + ' · ' + k.word[0] + (pt.where ? ' · ' + pt.where : '')
+                const unit = sym ? Math.max(0.01 / mpp, 16 / (zoom * Math.max(sym.w, sym.h))) : 1
+                const half = sym ? (Math.max(sym.w, sym.h) * unit) / 2 : 10 / zoom
+                return (
+                  <g key={pt.id} transform={`translate(${pt.x}, ${pt.y})`}
+                    onMouseDown={ev => startDrainPointDrag(ev, pt)}
+                    onClick={ev => { if (tool === 'select') ev.stopPropagation() }}
+                    style={{ cursor: tool === 'select' ? 'move' : 'inherit' }}>
+                    <title>{name}</title>
+                    {sym ? (
+                      <g transform={`scale(${unit})`}>
+                        <rect x={-sym.w / 2 - 2} y={-sym.h / 2 - 2} width={sym.w + 4} height={sym.h + 4} fill="transparent" stroke="none" />
+                        {chosen && <rect x={-sym.w / 2 - 2.5} y={-sym.h / 2 - 2.5} width={sym.w + 5} height={sym.h + 5} rx={3} fill="none" stroke={SEL_COLOUR} strokeWidth={1.2} strokeDasharray="4 3" vectorEffect="non-scaling-stroke" />}
+                        {sym.shapes.map((sh, i) => symShape(sh, i, chosen ? SEL_COLOUR : undefined, colour))}
+                      </g>
+                    ) : <circle r={10 / zoom} fill={colour} stroke={chosen ? '#fff' : '#111'} strokeWidth={(chosen ? 2.5 : 1) / zoom} opacity={0.95} />}
+                    <text y={half + 11 / zoom} textAnchor="middle" fontSize={9.5 / zoom} fontWeight={800} fill={colour} stroke="#fff" strokeWidth={2.5 / zoom} paintOrder="stroke" style={{ pointerEvents: 'none' }}>{pt.ref}</text>
+                  </g>
+                )
+              })}
+
               {/* Vertex handles — rendered above all elements when an element is selected.
                   Shown in ALL tool modes so the user can immediately adjust a just-drawn
                   element without having to switch to select mode first.
@@ -9263,6 +9411,7 @@ export default function TakeoffPage() {
               tool === 'click' ? 'Click to place an item' :
               tool === 'electric' ? 'Place electrical points' :
               tool === 'plumb' ? 'Place plumbing fittings and radiators' :
+              tool === 'drain' ? 'Place drainage chambers, manholes and gullies' :
               tool === 'opening' ? 'Place windows and doors (click a wall)' :
               tool === 'room' ? 'Rooms (click a room to name it)' :
               tool === 'join' ? (joinFirst ? 'Join Corner: now click the other wall' : 'Join Corner: click one wall near the corner') :
