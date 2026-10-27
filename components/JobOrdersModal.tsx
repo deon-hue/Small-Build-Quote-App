@@ -13,7 +13,7 @@ import type { JobCost, JobCostCategory } from '@/lib/types'
 import {
   ORDER_TYPES, ORDER_STATUS_LABEL, isExpectedCost, orderIsFromQuote, poRef, expectedNet, hireUnits, isCommitted, committedTotals, overrunNote, matchSuggestions, orderWhatsAppText, waLink, addDays, todayYmd, orderDateLabel,
   fetchJobOrders, insertJobOrder, updateJobOrder, deleteJobOrder, fetchDeletedOrders, restoreJobOrder, purgeJobOrder, requestChanged, amendedSince,
-  asksIfCanDo, quoteRequestText, quoteLink, noteOfDetails, cheapestQuoteId, cheapestMix, lineTotal, pricedQuote, quoteNet, areaOnly, QUOTE_STATUS_LABEL, fetchOrderQuotes, insertOrderQuotes, updateOrderQuote, deleteOrderQuote, fetchAllJobOrders, fetchIncomingQuotes, type IncomingQuote,
+  asksIfCanDo, quoteRequestText, quoteLink, noteOfDetails, noteTextOfDetails, cheapestQuoteId, cheapestMix, lineTotal, pricedQuote, quoteNet, areaOnly, QUOTE_STATUS_LABEL, fetchOrderQuotes, insertOrderQuotes, updateOrderQuote, deleteOrderQuote, fetchAllJobOrders, fetchIncomingQuotes, type IncomingQuote,
   type JobOrder, type OrderType, type PayTerms, type RateBasis, type OrderStatus, type OrderQuote, type QuoteInvitee, type QuoteStatus,
 } from '@/lib/job-orders'
 import { showSupplierPriceForm } from '@/lib/supplier-quote-config'
@@ -782,7 +782,7 @@ export default function JobOrdersModal({ jobId, jobLabel, jobAddress = '', zInde
                     <div><label style={lab}>What{form.orderType === 'other' || form.orderType === 'materials' ? ' *' : ''}</label><input style={inp} value={form.title} onChange={e => set('title', e.target.value)} placeholder={ORDER_TYPES[form.orderType].example || 'What are you ordering?'} /></div>
                     {(() => {
                       const materialsList = form.orderType === 'materials' && (form.items ?? []).length > 0
-                      const note = materialsList ? noteOfDetails(form.details) : parseSpec(form.orderType, form.details).note
+                      const note = materialsList ? noteTextOfDetails(form.details) : parseSpec(form.orderType, form.details).note
                       return <div><label style={lab}>{form.orderType === 'materials' ? 'A note for the supplier' : 'Notes for the supplier'}</label><textarea style={{ ...inp, minHeight: 34, resize: 'vertical' }} rows={note.includes('\n') ? 6 : 1} value={note} onChange={e => (form.orderType === 'materials' ? set('details', e.target.value) : setNote(e.target.value))} placeholder={form.orderType === 'materials' ? 'Quantity, size, anything they need to know' : 'Anything else they need to know'} /></div>
                     })()}
                   </div>

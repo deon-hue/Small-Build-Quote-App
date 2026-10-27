@@ -795,6 +795,16 @@ export function noteOfDetails(details: string): string {
 }
 
 /**
+ * The same note, for a box someone is TYPING in: nothing is trimmed, so a space typed at the end is still there for the next letter (noteOfDetails trims, which is right for what is saved and
+ * sent but, used as the value of a box, stripped every space as it was typed and ran the words together). Only a request made before items were kept separately has a "Please price" list to cut off.
+ */
+export function noteTextOfDetails(details: string): string {
+  const d = details || ''
+  const i = d.indexOf('Please price')
+  return i < 0 ? d : d.slice(0, i).trimEnd()
+}
+
+/**
  * What a supplier is shown as the detail of a request: the note, and, when it lists items, the ask and the items as a list. Built from the items each time, so changing the items
  * changes what is sent. A request made before items were kept separately already has its list written into its details, and is left as it is.
  */
