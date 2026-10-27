@@ -1992,6 +1992,7 @@ export default function SubcontractorsPage() {
                   onChange={id => { setWeekSub(id); setWeekRows(buildWeekRows(weekStart, id, timeLogs)) }}
                   contacts={subs}
                   placeholder="Search subcontractor…"
+                  addNew={{ addedFrom: 'timesheet', clientType: 'subcontractor', onCreated: c => { setWeekSub(c.id); setWeekRows(buildWeekRows(weekStart, c.id, timeLogs)) } }}
                 />
               </div>
               <div>

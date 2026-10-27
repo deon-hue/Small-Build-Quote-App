@@ -16,7 +16,7 @@ interface Props {
   placeholder?: string
   style?: React.CSSProperties
   /** shows '＋ Add new client' under the list: it opens the add-client pop-up and, once saved, hands the new client back here (the picker's own onChange is not called: the screen fills its fields from the client) */
-  addNew?: { addedFrom?: string; onCreated: (client: Client) => void }
+  addNew?: { addedFrom?: string; /** a client (the start), a supplier or a subcontractor */ clientType?: Client['clientType']; onCreated: (client: Client) => void }
 }
 
 export function ContactPicker({ value, onChange, contacts, placeholder = 'Search contact…', style, addNew }: Props) {
@@ -133,7 +133,7 @@ export function ContactPicker({ value, onChange, contacts, placeholder = 'Search
               onMouseDown={e => { e.preventDefault(); setAdding(query.trim()); setOpen(false); setQuery('') }}
               style={{ padding: '10px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#16a34a', background: '#f0fdf4', borderTop: '1px solid #bbf7d0', position: 'sticky', bottom: 0 }}
             >
-              ＋ Add {query.trim() ? <>&ldquo;{query.trim()}&rdquo; as a </> : 'a '}new client
+              ＋ Add {query.trim() ? <>&ldquo;{query.trim()}&rdquo; as a </> : 'a '}new {addNew.clientType || 'client'}
             </div>
           )}
         </div>
@@ -142,6 +142,7 @@ export function ContactPicker({ value, onChange, contacts, placeholder = 'Search
         <NewClientModal
           prefill={{ name: adding }}
           addedFrom={addNew.addedFrom}
+          clientType={addNew.clientType}
           onClose={() => setAdding(null)}
           onCreated={c => { setAdding(null); addNew.onCreated(c) }}
         />

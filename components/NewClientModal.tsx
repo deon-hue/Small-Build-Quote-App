@@ -2,7 +2,8 @@
 
 /**
  * NewClientModal: the pop-up for adding a client from wherever a client's name is asked for (New Quote,
- * Quick Quote, Jobs, Invoices) when they are not in the list. It saves a real contact (the same `addClient`
+ * Quick Quote, Jobs, Invoices) when they are not in the list. The same pop-up adds a supplier (Bills) or a
+ * subcontractor (timesheets) with `clientType`. It saves a real contact (the same `addClient`
  * the Contacts page uses) and hands the saved client back through `onCreated`, so the screen can fill its own
  * fields. It is drawn into the page body so it sits over any other pop-up it was opened from.
  */
@@ -25,6 +26,8 @@ interface Props {
   prefill?: NewClientPrefill
   /** where the contact was added from, kept on the contact ('quote', 'job', 'invoice', ...) */
   addedFrom?: string
+  /** who is being added: a client (the start), a supplier or a subcontractor */
+  clientType?: Client['clientType']
   onClose: () => void
   onCreated: (client: Client) => void
 }
@@ -50,7 +53,8 @@ export function clientAddressBlock(c: Pick<Client, 'address' | 'postcode'>): str
   return addr ? `${addr}\n${pc}` : pc
 }
 
-export function NewClientModal({ prefill, addedFrom = 'manual', onClose, onCreated }: Props) {
+export function NewClientModal({ prefill, addedFrom = 'manual', clientType = 'client', onClose, onCreated }: Props) {
+  const who = clientType === 'client' ? 'client' : clientType
   const { clients, addClient } = useApp()
   const [name, setName] = useState(prefill?.name || '')
   const [first, setFirst] = useState('')
@@ -60,6 +64,7 @@ export function NewClientModal({ prefill, addedFrom = 'manual', onClose, onCreat
   const [address, setAddress] = useState(prefill?.address || '')
   const [postcode, setPostcode] = useState(prefill?.postcode || '')
   const [notes, setNotes] = useState('')
+  const [accountNumber, setAccountNumber] = useState('')
   const [terms, setTerms] = useState<string>('Payment on receipt')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -67,12 +72,12 @@ export function NewClientModal({ prefill, addedFrom = 'manual', onClose, onCreat
   const nameKey = name.trim().toLowerCase()
   const emailKey = email.trim().toLowerCase()
   const clash = clients.find(c =>
-    (!c.clientType || c.clientType === 'client') &&
+    (c.clientType || 'client') === clientType &&
     ((nameKey && (c.name || '').trim().toLowerCase() === nameKey) || (emailKey && (c.email || '').trim().toLowerCase() === emailKey)),
   )
 
   async function save() {
-    if (!name.trim()) { setError('Please give the client a name.'); return }
+    if (!name.trim()) { setError(`Please give the ${who} a name.`); return }
     setSaving(true); setError('')
     try {
       // first and last names are worked out from the full name unless they were typed
@@ -83,20 +88,21 @@ export function NewClientModal({ prefill, addedFrom = 'manual', onClose, onCreat
         last: last.trim() || auto.last,
         email: email.trim(), phone: phone.trim(), address: address.trim(), postcode: postcode.trim(),
         notes: notes.trim(), paymentTerms: terms,
-        clientType: 'client', addedFrom,
+        accountNumber: clientType === 'client' ? '' : accountNumber.trim(),
+        clientType, addedFrom,
       })
       onCreated(created)
     } catch (e) {
-      setError(e instanceof Error && e.message ? `Could not save the client: ${e.message}` : 'Could not save the client. Please try again.')
+      setError(e instanceof Error && e.message ? `Could not save the ${who}: ${e.message}` : `Could not save the ${who}. Please try again.`)
       setSaving(false)
     }
   }
 
   const body = (
     <div className="modal-overlay" style={{ zIndex: 1200 }} onMouseDown={e => { if (e.target === e.currentTarget && !saving) onClose() }}>
-      <div className="form-modal" style={{ width: 'min(520px, 96vw)' }} role="dialog" aria-label="Add a new client">
+      <div className="form-modal" style={{ width: 'min(520px, 96vw)' }} role="dialog" aria-label={`Add a new ${who}`}>
         <div className="form-modal-hd">
-          <div style={{ fontWeight: 700, fontSize: 17 }}>Add a new client</div>
+          <div style={{ fontWeight: 700, fontSize: 17 }}>Add a new {who}</div>
           <button type="button" className="modal-close" onClick={onClose} disabled={saving}>×</button>
         </div>
         <div className="form-modal-bd">
@@ -138,6 +144,12 @@ export function NewClientModal({ prefill, addedFrom = 'manual', onClose, onCreat
             <label>Postcode</label>
             <input value={postcode} onChange={e => setPostcode(e.target.value.toUpperCase())} placeholder="SW17 0AB" maxLength={10} />
           </div>
+          {clientType !== 'client' && (
+            <div className="fg">
+              <label>Our account number with them</label>
+              <input value={accountNumber} onChange={e => setAccountNumber(e.target.value)} placeholder="Shown on price requests and orders, so they know which account" />
+            </div>
+          )}
           <div className="fg">
             <label>Payment Terms</label>
             <select value={terms} onChange={e => setTerms(e.target.value)}>
@@ -152,7 +164,7 @@ export function NewClientModal({ prefill, addedFrom = 'manual', onClose, onCreat
         </div>
         <div className="form-modal-ft">
           <button type="button" className="btn btn-outline" onClick={onClose} disabled={saving}>Cancel</button>
-          <button type="button" className="btn btn-primary" onClick={save} disabled={saving || !name.trim()}>{saving ? 'Saving…' : 'Add client'}</button>
+          <button type="button" className="btn btn-primary" onClick={save} disabled={saving || !name.trim()}>{saving ? 'Saving…' : `Add ${who}`}</button>
         </div>
       </div>
     </div>

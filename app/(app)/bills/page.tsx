@@ -568,6 +568,7 @@ export default function BillsPage() {
                     onChange={handleSupplierChange}
                     contacts={suppliers}
                     placeholder="Search supplier…"
+                    addNew={{ addedFrom: 'bill', clientType: 'supplier', onCreated: c => { setSupplierId(c.id); setSupplierName(c.name) } }}
                   />
                   {!supplierId && (
                     <input placeholder="Or type supplier name" value={supplierName}
