@@ -314,12 +314,6 @@ textarea{resize:vertical;min-height:56px}
   .desktop-only-notice .dn-title{font-size:17px;font-weight:700;margin-bottom:6px}
   .desktop-only-notice .dn-text{font-size:14px;color:var(--muted);line-height:1.5}
 }
-/* Take-off & Draw also opens on a TABLET held wide: a real touchscreen at least 900px across (a phone, or a tablet held upright, keeps the notice, which says to turn it sideways) */
-@media (hover:none) and (pointer:coarse) and (min-width:900px){
-  .desktop-only.tablet-ok{display:flex!important}
-  .desktop-only-page.tablet-ok{display:contents}
-  .desktop-only-notice.tablet-ok{display:none}
-}
 
 /* ── Phone design layer ── */
 /* One shared look for every phone/tablet screen: rounded cards, buttons and

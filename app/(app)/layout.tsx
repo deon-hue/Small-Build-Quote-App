@@ -92,7 +92,7 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
           {can('quotes')  && navItem('/quote-requests','📬', 'Quote Requests')}
           {can('quotes')  && navItem('/new-quote',   '✎', 'New Quote')}
           {can('quotes')  && navItem('/quick-quote', '⚡', 'Quick Quote')}
-          {can('quotes')  && navItem('/takeoff',     '📐', 'Take-off & Draw', 'desktop-only tablet-ok')}
+          {can('quotes')  && navItem('/takeoff',     '📐', 'Take-off & Draw', 'desktop-only')}
           {can('invoices')&& navItem('/invoices',  '◻', 'Invoices')}
           {can('invoices')&& navItem('/bills',           '📄', 'Bills')}
           {can('invoices')&& navItem('/subcontractors', '🔧', 'Subcontractors')}
@@ -124,7 +124,7 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
 // launcher: this is /dashboard — on touch devices show the icon Home screen instead of the
 // dashboard. homeBack: any other page — on touch devices show a "Home" back button.
 // Both are CSS-gated to touch hardware, so desktop and narrow desktop windows are unchanged.
-function AppLayoutInner({ children, title, desktopOnly = false, tabletOk = false, launcher = false, homeBack = false }: { children: React.ReactNode, title: string, desktopOnly?: boolean, tabletOk?: boolean, launcher?: boolean, homeBack?: boolean }) {
+function AppLayoutInner({ children, title, desktopOnly = false, launcher = false, homeBack = false }: { children: React.ReactNode, title: string, desktopOnly?: boolean, launcher?: boolean, homeBack?: boolean }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [launcherNotes, setLauncherNotes] = useState(false)
 
@@ -147,11 +147,11 @@ function AppLayoutInner({ children, title, desktopOnly = false, tabletOk = false
             </>
           ) : desktopOnly ? (
             <>
-              <div className={`desktop-only-notice${tabletOk ? ' tablet-ok' : ''}`}>
-                <div className="dn-title">{tabletOk ? `${title} needs a wide screen` : `${title} is desktop-only`}</div>
-                <div className="dn-text">{tabletOk ? 'Turn your tablet sideways to use it, or open it on a computer. It isn\'t available on phones.' : 'Open it on a computer to use it. It isn\'t available on phones and tablets.'}</div>
+              <div className="desktop-only-notice">
+                <div className="dn-title">{title} is desktop-only</div>
+                <div className="dn-text">Open it on a computer to use it. It isn&apos;t available on phones and tablets.</div>
               </div>
-              <div className={`desktop-only-page${tabletOk ? ' tablet-ok' : ''}`}>{children}</div>
+              <div className="desktop-only-page">{children}</div>
             </>
           ) : children}
         </div>
@@ -277,7 +277,7 @@ function AppLayoutWrapper({ children }: { children: React.ReactNode }) {
   const isHome = pathname === '/dashboard'
   return (
     <>
-      <AppLayoutInner title={title} desktopOnly={desktopOnly} tabletOk={pathname === '/takeoff'} launcher={isHome} homeBack={!isHome}>{children}</AppLayoutInner>
+      <AppLayoutInner title={title} desktopOnly={desktopOnly} launcher={isHome} homeBack={!isHome}>{children}</AppLayoutInner>
       {!loading && hasCompany && <FeedbackButton />}
       <TermsUpdateModal />
     </>
