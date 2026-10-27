@@ -47,6 +47,16 @@ async function toJpeg(file: File): Promise<Blob> {
   } finally { URL.revokeObjectURL(url) }
 }
 
+/** The most pictures, and the most bytes of them, attached to one email (a request is for a price, not a catalogue; the rest are still on the price page). */
+export const EMAIL_MAX_PICTURES = 10
+export const EMAIL_MAX_PICTURE_BYTES = 8 * 1024 * 1024
+
+/** The name a picture is attached under: "1-Floor-tile-grey.jpg". Plain letters and numbers only, whatever the item is called, and the number keeps two items of the same name apart. */
+export function pictureFileName(itemName: string, n: number): string {
+  const slug = (itemName || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/g, '')
+  return `${n}-${slug || 'item'}.jpg`
+}
+
 /** Uploads a picture for an item and returns its path. A picture pasted, dropped, chosen or taken on a phone all come through here. */
 export async function uploadItemImage(sb: SupabaseClient, file: File): Promise<{ path: string } | { error: string }> {
   if (!file.type.startsWith('image/')) return { error: 'That is not a picture. Choose a photo or screenshot (JPG, PNG, WebP…).' }

@@ -30,6 +30,8 @@ export interface PriceRequestEmailInput {
   listOnly?: boolean
   /** a skip, digger, portaloo...: they reply to the email with a price and whether they can do it (a PDF quote is still welcome) */
   askIfCanDo?: boolean
+  /** the names of items whose picture is attached to this email (empty or left out: none) */
+  pictures?: string[]
 }
 
 const esc = (s: unknown) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -48,6 +50,10 @@ export function priceRequestBody(p: PriceRequestEmailInput): string {
     cell('Our account', e(p.account ?? '')),
   ].join('')
 
+  const names = (p.pictures ?? []).map(n => n.trim()).filter(Boolean)
+  const pics = names.length === 0 ? '' : emailCallout(
+    `<p style="margin:0;font-size:14px;line-height:1.6;color:${BRAND.ink}">${names.length === 1 ? 'A picture of this item is' : 'Pictures of these items are'} <strong>attached to this email</strong> so you can see what we need: ${names.map(n => e(n)).join('; ')}.${p.listOnly ? '' : ' They are on the price page too.'}</p>`, 'Pictures')
+
   if (p.listOnly && p.inboxEmail && p.askIfCanDo) {
     const when = p.needed ? ` on <strong>${e(p.needed)}</strong>` : ''
     return (
@@ -55,7 +61,7 @@ export function priceRequestBody(p: PriceRequestEmailInput): string {
       emailPara(p.amended
         ? `We have changed this request since we last sent it to you${p.theirRef ? ` (your earlier quote reference was <strong>${e(p.theirRef)}</strong>)` : ''}. Please look at the details below and let us know your price again, and whether you can still do it.`
         : 'Could you please give us a price for the following, and tell us if you can do it?', 14) +
-      emailCard(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">${rows}</table>`) +
+      emailCard(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">${rows}</table>`) + pics +
       emailCallout(`<p style="margin:0 0 8px;font-size:14px;line-height:1.6;color:${BRAND.ink}"><strong>Just reply to this email</strong> with your price (ex VAT) and whether you can do it${when}. Please quote <strong>${e(p.ref)}</strong> in your reply.</p><p style="margin:0;font-size:14px;line-height:1.6;color:${BRAND.ink}">If you would rather send a written quote, email it as a PDF attached to the email to <strong>${e(p.inboxEmail)}</strong> with <strong>${e(p.ref)}</strong> on it and in the email subject.</p>`, 'How to reply') +
       emailCallout(`<p style="margin:0;font-size:14px;line-height:1.6;color:${BRAND.ink}">Our purchase order number is <strong>${e(p.ref)}</strong>. If we go ahead we will send you the order with the full address, and ask you to quote ${e(p.ref)} on your invoice.</p>`, 'Reference') +
       emailPara(`Thanks,<br><strong>${e(p.senderName || p.companyName || '')}</strong>${p.companyPhone ? `<br>${e(p.companyPhone)}` : ''}`, 0)
@@ -68,7 +74,7 @@ export function priceRequestBody(p: PriceRequestEmailInput): string {
       emailPara(p.amended
         ? `We have changed this request since we last sent it to you${p.theirRef ? ` (your earlier quote reference was <strong>${e(p.theirRef)}</strong>)` : ''}. Please look at the details below and send us an updated quote.`
         : 'Could you please quote for the following?', 14) +
-      emailCard(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">${rows}</table>`) +
+      emailCard(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">${rows}</table>`) + pics +
       emailCallout(`<p style="margin:0 0 8px;font-size:14px;line-height:1.6;color:${BRAND.ink}">Please quote from your own system and <strong>email the quote as a PDF attached to the email</strong> to:</p><p style="margin:0 0 8px;font-size:15px;font-weight:700;color:${BRAND.ink}">${e(p.inboxEmail)}</p><p style="margin:0;font-size:14px;line-height:1.6;color:${BRAND.ink}">It <strong>must show our purchase order number ${e(p.ref)}</strong>: please put it on the quote and in the email subject. A quote pasted into the email, or sent as a link, cannot be read.</p>`, 'How to reply') +
       emailCallout(`<p style="margin:0;font-size:14px;line-height:1.6;color:${BRAND.ink}">Our purchase order number is <strong>${e(p.ref)}</strong>. If we go ahead we will send you the order with the full address, and ask you to quote ${e(p.ref)} on your invoice.</p>`, 'Reference') +
       emailPara(`Thanks,<br><strong>${e(p.senderName || p.companyName || '')}</strong>${p.companyPhone ? `<br>${e(p.companyPhone)}` : ''}`, 0)
@@ -80,7 +86,7 @@ export function priceRequestBody(p: PriceRequestEmailInput): string {
     emailPara(p.amended
       ? `We have changed this request since we last sent it to you, so please check the details below and update your price if it changes.${p.theirRef ? ` Your earlier quote reference was <strong>${e(p.theirRef)}</strong>.` : ''} It takes a minute and you do not need to log in.`
       : 'Please could you give us a price for the following. It takes a minute and you do not need to log in.', 14) +
-    emailCard(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">${rows}</table>`) +
+    emailCard(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">${rows}</table>`) + pics +
     emailButton(e(p.link), p.amended ? 'Check and update your price' : 'Give your price', p.inboxEmail ? 'Price, earliest delivery date and how long the price stands.' : 'Price, earliest delivery date and how long the price stands. Or press reply and tell us.') +
     (p.inboxEmail ? emailCallout(`<p style="margin:0;font-size:14px;line-height:1.6;color:${BRAND.ink}">You can send us your own quote from your own system instead. Just <strong>forward or email it as a PDF attached to the email</strong> (a photo attached as a file is fine too) to <strong>${e(p.inboxEmail)}</strong> and put <strong>${e(p.ref)}</strong> on it. A quote pasted into the writing of the email, or a link to it, cannot be read. We will match it to this request, so there is no need to fill in the form as well.</p>`, 'Use your own quoting system?') : '') +
     emailCallout(`<p style="margin:0;font-size:14px;line-height:1.6;color:${BRAND.ink}">Our reference is <strong>${e(p.ref)}</strong>. If we go ahead we will send you the order with the full address, and ask you to quote ${e(p.ref)} on your invoice.</p>`, 'Reference') +
