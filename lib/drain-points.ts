@@ -73,3 +73,24 @@ export function drainCounts(points: { kind: DrainItemKind }[]): Map<DrainItemKin
 export function drainPricedKey(points: DrainPoint[]): string {
   return JSON.stringify(points.map(p => [p.id, p.kind, p.ref, p.where, p.depthMm, p.cover, p.dig]))
 }
+
+/** The placed item nearest a place on the plan, if one is within `radiusPx` (plan pixels): where a drain run snaps to, so it starts, bends and ends exactly on a chamber, manhole, gully or connection */
+export function nearestDrainPoint<T extends { x: number; y: number }>(points: T[], at: { x: number; y: number }, radiusPx: number): T | null {
+  let best: T | null = null
+  let bd = radiusPx
+  for (const p of points) {
+    const d = Math.hypot(p.x - at.x, p.y - at.y)
+    if (d <= bd) { bd = d; best = p }
+  }
+  return best
+}
+
+/** The corners and ends of the drawn lines that sit on a place (within `tolPx`): the ends of a drain run that is joined to a chamber, so the run goes with the chamber when it is moved */
+export function runEndsAt(elements: { id: string; type: string; points: { x: number; y: number }[] }[], at: { x: number; y: number }, tolPx: number): { elId: string; k: number }[] {
+  const out: { elId: string; k: number }[] = []
+  for (const el of elements) {
+    if (el.type !== 'line') continue
+    el.points.forEach((p, k) => { if (Math.hypot(p.x - at.x, p.y - at.y) <= tolPx) out.push({ elId: el.id, k }) })
+  }
+  return out
+}

@@ -32,7 +32,7 @@ import PlumbingPointsPanel, { PLUMB_GROUP_COLOUR, HEAT_SOURCE_COLOUR } from './c
 import DrainPointsPanel from './components/DrainPointsPanel'
 import { drainSymbol, DRAIN_GROUP_COLOUR } from '@/lib/drain-symbols'
 import { DRAIN_ITEMS } from '@/lib/drain-items-units'
-import { newDrainPoint, placedDrainOf, drainPricedKey, type DrainPoint } from '@/lib/drain-points'
+import { newDrainPoint, placedDrainOf, drainPricedKey, nearestDrainPoint, runEndsAt, type DrainPoint } from '@/lib/drain-points'
 import { FITTING_BY_ID } from '@/lib/plumbing-units'
 import { plumbSymbol, facingAngle, type SymShape, type SymRole } from '@/lib/plumb-symbols'
 import { electricSymbol } from '@/lib/electric-symbols'
@@ -1821,8 +1821,11 @@ export default function TakeoffPage() {
           const below = snapOn && dragged.phase === 'External Walls' ? lowerOuterWalls() : []
           const gp = snapOn ? guideSnapParts() : null
           const r = snapPoint(want, { anchors: [...(below.length ? [...anchors2, ...anchorsFor(below)] : anchors2), ...(gp ? gp.anchors : [])], radius: snapPx / zoom, snap: snapOn, ortho: false, grid: gridSnap ? { stepPx: gridMinorPx() } : undefined, segments: [...(below.length ? [...(segs2 ?? []), ...segmentsFor(below)] : (segs2 ?? [])), ...(gp ? gp.segments : [])] })
-          dx += r.pt.x - want.x; dy += r.pt.y - want.y
-          setSnapInfo(r.kind === 'none' ? null : r)
+          // a corner of a drain run snaps to a placed chamber, manhole, gully or connection ahead of the usual snaps
+          const dsn = snapOn && dragged.phase === 'Drainage & Services' && dragged.type === 'line' ? drainSnapPoint(want) : null
+          const r2: SnapResult = dsn ? { pt: dsn, kind: 'end', target: dsn } : r
+          dx += r2.pt.x - want.x; dy += r2.pt.y - want.y
+          setSnapInfo(r2.kind === 'none' ? null : r2)
         }
       }
       const links = dragRef.current?.links ?? []
@@ -2462,6 +2465,32 @@ export default function TakeoffPage() {
     setSelectedDrainPointId(id)
   }
 
+  /** The chamber, manhole, gully or connection a drain run snaps to: the nearest placed item on the showing sheet and level within the snap radius */
+  function drainSnapPoint(raw: TakeoffPoint): TakeoffPoint | null {
+    if (hiddenPhases.has('Drainage & Services')) return null
+    const q = nearestDrainPoint(drainShowing, raw, snapPx / zoom)
+    return q ? { x: q.x, y: q.y } : null
+  }
+
+  /** Moves a placed item. The ends and corners of the drain runs that sit on it (within 3 plan pixels) go with it, so a run stays joined to its chamber, and those runs are measured again. One change, so one undo. */
+  function moveDrainPoint(id: string, x: number, y: number) {
+    setProject(p => {
+      const item = p.items.find(it => it.drainSummary)
+      const q = item?.drainPoints?.find(r => r.id === id)
+      if (!item || !q) return p
+      const ends = runEndsAt(p.elements.filter(el => el.phase === 'Drainage & Services' && onActiveSheet(el, p) && onActiveLevel(el, p)), { x: q.x, y: q.y }, 3)
+      const elements = ends.length === 0 ? p.elements : p.elements.map(el => {
+        const mine = ends.filter(en => en.elId === el.id)
+        if (mine.length === 0) return el
+        const pts = el.points.map(pp => ({ ...pp }))
+        for (const en of mine) pts[en.k] = { ...pts[en.k], x, y }
+        return { ...el, points: pts }
+      })
+      const items = p.items.map(it => (it.drainSummary ? { ...it, drainPoints: (it.drainPoints ?? []).map(r => (r.id === id ? { ...r, x, y } : r)) } : it))
+      return { ...p, elements, items: ends.length === 0 ? items : recalcItemsForMpp(items, elements, p.calibration.mpp, new Set(ends.map(en => en.elId))) }
+    })
+  }
+
   function startDrainPointDrag(e: React.MouseEvent, pt: DrainPoint) {
     if (tool !== 'select') return
     e.stopPropagation()
@@ -2475,7 +2504,7 @@ export default function TakeoffPage() {
     const pan = panOffset, z = zoom
     const move = (ev: MouseEvent) => {
       const x = (ev.clientX - rect.left - pan.x) / z, y = (ev.clientY - rect.top - pan.y) / z
-      changeDrainPoints(pts => pts.map(q => q.id === pt.id ? { ...q, x, y } : q))
+      moveDrainPoint(pt.id, x, y)
     }
     const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up) }
     window.addEventListener('mousemove', move)
@@ -4660,6 +4689,11 @@ export default function TakeoffPage() {
   /** while a heating pipe is drawn the cursor snaps to radiators, the boiler and other pipes first, then to the usual things */
   function drawingPoint(raw: TakeoffPoint): SnapResult {
     const base = drawingPointBase(raw)
+    // a drain run starts, bends and ends exactly on a chamber, manhole, gully or connection that is placed within the snap radius (ahead of the usual snaps)
+    if (snapOn && tool === 'line' && !pipeDraw && activePhase === 'Drainage & Services') {
+      const d = drainSnapPoint(base.pt) ?? drainSnapPoint(raw)
+      if (d) return { pt: d, kind: 'end', target: d }
+    }
     if (!(pipeDraw && tool === 'line' && snapOn)) return base
     const s = pipeSnapPoint(base.pt) ?? pipeSnapPoint(raw)
     return s ? { pt: s, kind: 'end', target: s } : base
@@ -4780,7 +4814,8 @@ export default function TakeoffPage() {
     }
     if (selectedDrainPointId && drainPoints.some(q => q.id === selectedDrainPointId)) {
       const id = selectedDrainPointId
-      changeDrainPoints(pts => pts.map(q => (q.id === id ? { ...q, x: q.x + ux * d, y: q.y + uy * d } : q)))
+      const q = drainPoints.find(r => r.id === id)
+      if (q) moveDrainPoint(id, q.x + ux * d, q.y + uy * d)
       return true
     }
     if (selectedPlumbPipeId && plumbPipes.some(q => q.id === selectedPlumbPipeId)) {
