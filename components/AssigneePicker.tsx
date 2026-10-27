@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { bookedDays, describeDays, dayLabel, toggleDay, type TaskDay } from '@/lib/task-days'
 import type { AssigneePick } from '@/lib/task-assignments'
+import { NewClientModal } from '@/components/NewClientModal'
 
 export interface PickerContact { id: string; name: string }
 export interface PickerExtra { key: string; name: string }
@@ -47,6 +48,8 @@ export default function AssigneePicker({ contacts, extras, selected, onChange, l
   const [adding, setAdding] = useState(false)
   const [query, setQuery] = useState('')
   const [openKey, setOpenKey] = useState<string | null>(null)
+  const [newSub, setNewSub] = useState<string | null>(null)       // the 'Add a new subcontractor' pop-up (the name typed in the search box)
+  const [justAdded, setJustAdded] = useState<string | null>(null)  // a subcontractor just saved: booked on the task as soon as the list has them
   const addRef = useRef<HTMLDivElement>(null)
   const nameOf = (k: string) => contacts.find(c => c.id === k)?.name ?? extras.find(e => e.key === k)?.name ?? ''
   const showDays = !!taskDays && taskDays.length > 1 && !!onDaysChange
@@ -62,6 +65,11 @@ export default function AssigneePicker({ contacts, extras, selected, onChange, l
     document.addEventListener('mousedown', onDown)
     return () => document.removeEventListener('mousedown', onDown)
   }, [adding])
+
+  // the new subcontractor is booked once the screen's own list includes them (the screen saves with the list it has at that moment, so booking before then would lose them)
+  useEffect(() => {
+    if (justAdded && contacts.some(c => c.id === justAdded)) { if (!selected.includes(justAdded)) onChange([...selected, justAdded]); setJustAdded(null) }
+  }, [justAdded, contacts, selected, onChange])
 
   const add = (id: string) => { onChange([...selected, id]); setAdding(false); setQuery('') }
   const remove = (k: string) => { onChange(selected.filter(x => x !== k)); if (openKey === k) setOpenKey(null) }
@@ -90,7 +98,7 @@ export default function AssigneePicker({ contacts, extras, selected, onChange, l
               <div style={{ maxHeight: 180, overflowY: 'auto', marginTop: 4 }}>
                 {available.length === 0 && (
                   <div style={{ fontSize: 11.5, color: 'var(--muted)', padding: '8px 6px' }}>
-                    {contacts.length === 0 ? 'Save subcontractors in Contacts to book them here.' : q ? 'No one matches that.' : 'Everyone is already on this task.'}
+                    {contacts.length === 0 ? 'No subcontractors yet — add one below.' : q ? 'No one matches that.' : 'Everyone is already on this task.'}
                   </div>
                 )}
                 {available.map(c => (
@@ -102,9 +110,22 @@ export default function AssigneePicker({ contacts, extras, selected, onChange, l
                   </button>
                 ))}
               </div>
+              <button type="button" onClick={() => { setNewSub(query.trim()); setAdding(false); setQuery('') }}
+                style={{ display: 'block', width: '100%', textAlign: 'left', marginTop: 4, fontSize: 12.5, fontWeight: 700, padding: '7px 8px', border: 'none', borderTop: '1px solid #bbf7d0', background: '#f0fdf4', color: '#16a34a', cursor: 'pointer', fontFamily: 'inherit', borderRadius: 5 }}>
+                ＋ Add {query.trim() ? <>&ldquo;{query.trim()}&rdquo; as a </> : 'a '}new subcontractor
+              </button>
             </div>
           )}
         </div>
+        {newSub !== null && (
+          <NewClientModal
+            prefill={{ name: newSub }}
+            addedFrom="schedule"
+            clientType="subcontractor"
+            onClose={() => setNewSub(null)}
+            onCreated={c => { setNewSub(null); setJustAdded(c.id) }}
+          />
+        )}
       </div>
 
       {selected.length === 0 ? (
