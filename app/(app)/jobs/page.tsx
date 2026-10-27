@@ -406,6 +406,7 @@ function JobsPageInner() {
                     }}
                     contacts={clients.map(c => ({ id: c.id, name: c.name }))}
                     placeholder="Search customer…"
+                    addNew={{ addedFrom: 'job', onCreated: c => setForm(f => ({ ...f, client: c.name })) }}
                   />
                   {!clients.some(c => c.name.trim().toLowerCase() === form.client.trim().toLowerCase()) && (
                     <input

@@ -26,6 +26,8 @@ import QuickQuoteItemsEditor, { quickItemsTotals } from '@/components/QuickQuote
 import { reassignQuoteDocuments, reassignDraftDocuments } from '@/lib/quote-documents'
 import type { QuoteDocument, QuoteMiscItem } from '@/lib/types'
 import ScopeEditor from '@/components/ScopeEditor'
+import { NewClientModal, clientAddressBlock } from '@/components/NewClientModal'
+import type { Client } from '@/lib/types'
 
 let itemId = 1000
 
@@ -44,6 +46,7 @@ export default function QuickQuotePage() {
   const [custPhone, setCustPhone] = useState('')
   const [clientSearch, setClientSearch] = useState('')
   const [clientDrop,   setClientDrop]   = useState(false)
+  const [newClientOpen, setNewClientOpen] = useState(false)   // the 'Add a new client' pop-up
   const [contactSaved, setContactSaved] = useState(false)
 
   // ── Job ───────────────────────────────────────────────────────────────────
@@ -94,11 +97,12 @@ export default function QuickQuotePage() {
     setClientSearch('')
   }
 
-  async function saveAsNewContact() {
-    if (!custName.trim()) return
-    await upsertClientFromQuote({ name: custName, address: custAddr, email: custEmail, phone: custPhone })
+  // a client who is not in the list is added in the pop-up (what is typed so far is filled in) and then fills these boxes
+  function clientAdded(c: Client) {
+    setCustName(c.name || ''); setCustEmail(c.email || ''); setCustPhone(c.phone || '')
+    setCustAddr(clientAddressBlock(c) || custAddr)
+    setNewClientOpen(false); setClientDrop(false); setClientSearch('')
     setContactSaved(true)
-    setClientDrop(false); setClientSearch('')
     setTimeout(() => setContactSaved(false), 3000)
   }
 
@@ -228,7 +232,7 @@ export default function QuickQuotePage() {
             placeholder="Type a name or email…"
             style={{ width: '100%', padding: '8px 10px', fontSize: 13, boxSizing: 'border-box', border: '1px solid var(--border)', borderRadius: 6, fontFamily: 'inherit' }}
           />
-          {clientDrop && filteredClients.length > 0 && (
+          {clientDrop && (
             <div style={{ position: 'absolute', zIndex: 100, top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid var(--border)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.1)', maxHeight: 220, overflowY: 'auto', marginTop: 2 }}>
               {filteredClients.map(c => (
                 <div
@@ -242,6 +246,12 @@ export default function QuickQuotePage() {
                   {c.email && <span style={{ color: 'var(--muted)', marginLeft: 8, fontSize: 12 }}>{c.email}</span>}
                 </div>
               ))}
+              <div
+                onClick={() => { setClientDrop(false); setNewClientOpen(true) }}
+                style={{ padding: '9px 14px', fontSize: 13, fontWeight: 600, color: '#16a34a', background: '#f0fdf4', cursor: 'pointer', borderTop: '1px solid #bbf7d0' }}
+              >
+                ＋ Add {clientSearch.trim() ? <>&ldquo;{clientSearch.trim()}&rdquo; as a </> : 'a '}new client
+              </div>
               <div
                 onClick={() => setClientDrop(false)}
                 style={{ padding: '7px 14px', fontSize: 11, color: 'var(--muted)', cursor: 'pointer', textAlign: 'center', borderTop: '1px solid #f0f0f0' }}
@@ -297,10 +307,18 @@ export default function QuickQuotePage() {
           <div style={{ marginTop: 10, fontSize: 12, color: '#16a34a', fontWeight: 600 }}>✓ Contact saved</div>
         )}
         {clientNameIsNew && !contactSaved && (
-          <button type="button" onClick={saveAsNewContact}
+          <button type="button" onClick={() => setNewClientOpen(true)}
             style={{ marginTop: 10, padding: '6px 14px', fontSize: 12, fontWeight: 600, color: '#16a34a', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 6, cursor: 'pointer' }}>
-            ＋ Save &ldquo;{custName}&rdquo; as new contact
+            ＋ Add &ldquo;{custName}&rdquo; as a new client
           </button>
+        )}
+        {newClientOpen && (
+          <NewClientModal
+            prefill={{ name: clientSearch.trim() || custName, email: custEmail, phone: custPhone, address: custAddr }}
+            addedFrom="quote"
+            onClose={() => setNewClientOpen(false)}
+            onCreated={clientAdded}
+          />
         )}
       </div>
 

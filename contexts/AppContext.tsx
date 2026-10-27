@@ -47,7 +47,8 @@ interface AppContextType {
   /** deletes a quote that is in Recently deleted for good */
   purgeQuote: (id: string) => Promise<void>
 
-  addClient: (client: Omit<Client, 'id'>) => Promise<void>
+  /** saves the contact and hands the saved client back (with its new id), so a screen can use it straight away */
+  addClient: (client: Omit<Client, 'id'>) => Promise<Client>
   updateClient: (client: Client) => Promise<void>
   deleteClient: (id: string) => Promise<void>
   upsertClientFromQuote: (customer: Quote['customer']) => Promise<void>
@@ -626,7 +627,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [supabase])
 
   // ── Clients ──────────────────────────────────────────────────
-  const addClient = useCallback(async (c: Omit<Client, 'id'>) => {
+  const addClient = useCallback(async (c: Omit<Client, 'id'>): Promise<Client> => {
     const { data: { user } } = await supabase.auth.getUser()
     const ownerId = dataOwnerIdRef.current || user!.id
     const portalSettings = c.portalSettings || DEFAULT_CLIENT_PORTAL_SETTINGS
@@ -662,7 +663,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // the postcode is written on its own, so a database without the column (supabase/client-postcode.sql) still saves everything else
     if (c.postcode) await supabase.from('clients').update({ postcode: c.postcode }).eq('id', data.id)
     if (c.paidViaPayroll !== undefined && c.paidViaPayroll !== null) await supabase.from('clients').update({ paid_via_payroll: c.paidViaPayroll }).eq('id', data.id)
-    setClients(prev => [...prev, {
+    const created: Client = {
       id: data.id, name: data.name, first: data.first_name || '', last: data.last_name || '',
       phone: data.phone || '', email: data.email || '', address: data.address || '',
       notes: data.notes || '', paymentTerms: data.payment_terms || 'Payment on receipt',
@@ -680,11 +681,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       subPaymentType: data.sub_payment_type || 'invoice',
       isPaye: data.is_paye ?? false,
       xeroContactId: data.xero_contact_id || null,
-    }])
+    }
+    setClients(prev => [...prev, created])
     if (isSupplierType(data.client_type)) setSuppliers(prev => withSupplier(prev, supplierFromClient({
       id: data.id, name: data.name, first: data.first_name || '', last: data.last_name || '', phone: data.phone || '', email: data.email || '', address: data.address || '',
       notes: data.notes || '', addedFrom: data.added_from || '', xeroContactId: data.xero_contact_id || null, accountNumber: c.accountNumber || '', postcode: c.postcode || '',
     } as Client)))
+    return created
   }, [supabase])
 
   const updateClient = useCallback(async (c: Client) => {

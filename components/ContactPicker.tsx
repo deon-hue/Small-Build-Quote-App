@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { NewClientModal } from '@/components/NewClientModal'
+import type { Client } from '@/lib/types'
 
 export interface ContactOption {
   id: string
@@ -13,11 +15,14 @@ interface Props {
   contacts: ContactOption[]
   placeholder?: string
   style?: React.CSSProperties
+  /** shows '＋ Add new client' under the list: it opens the add-client pop-up and, once saved, hands the new client back here (the picker's own onChange is not called: the screen fills its fields from the client) */
+  addNew?: { addedFrom?: string; onCreated: (client: Client) => void }
 }
 
-export function ContactPicker({ value, onChange, contacts, placeholder = 'Search contact…', style }: Props) {
+export function ContactPicker({ value, onChange, contacts, placeholder = 'Search contact…', style, addNew }: Props) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const [adding, setAdding] = useState<string | null>(null)   // the pop-up is open (the name typed in the search box)
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -72,6 +77,7 @@ export function ContactPicker({ value, onChange, contacts, placeholder = 'Search
           onKeyDown={e => {
             if (e.key === 'Escape') { setOpen(false); setQuery('') }
             if (e.key === 'Enter' && filtered.length > 0) handleSelect(filtered[0])
+            else if (e.key === 'Enter' && addNew && query.trim()) { setAdding(query.trim()); setOpen(false); setQuery('') }
           }}
         />
       ) : (
@@ -103,7 +109,7 @@ export function ContactPicker({ value, onChange, contacts, placeholder = 'Search
           boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
         }}>
           {filtered.length === 0 ? (
-            <div style={{ padding: '10px 12px', fontSize: 13, color: '#9ca3af' }}>No contacts found</div>
+            <div style={{ padding: '10px 12px', fontSize: 13, color: '#9ca3af' }}>No contacts found{addNew ? ' — add them below' : ''}</div>
           ) : (
             filtered.map(c => (
               <div
@@ -122,7 +128,23 @@ export function ContactPicker({ value, onChange, contacts, placeholder = 'Search
               </div>
             ))
           )}
+          {addNew && (
+            <div
+              onMouseDown={e => { e.preventDefault(); setAdding(query.trim()); setOpen(false); setQuery('') }}
+              style={{ padding: '10px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#16a34a', background: '#f0fdf4', borderTop: '1px solid #bbf7d0', position: 'sticky', bottom: 0 }}
+            >
+              ＋ Add {query.trim() ? <>&ldquo;{query.trim()}&rdquo; as a </> : 'a '}new client
+            </div>
+          )}
         </div>
+      )}
+      {addNew && adding !== null && (
+        <NewClientModal
+          prefill={{ name: adding }}
+          addedFrom={addNew.addedFrom}
+          onClose={() => setAdding(null)}
+          onCreated={c => { setAdding(null); addNew.onCreated(c) }}
+        />
       )}
     </div>
   )

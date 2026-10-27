@@ -5,6 +5,7 @@ import NumInput from '@/components/NumInput'
 import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { ContactPicker } from '@/components/ContactPicker'
+import { clientAddressBlock } from '@/components/NewClientModal'
 import { fmt, fmtK, calcPhaseSell, jobDisplayTitle } from '@/lib/utils'
 import { buildInvoiceHtml } from '@/lib/invoiceHtml'
 import type { Invoice, InvoiceLineItem, PaymentMilestone } from '@/lib/types'
@@ -612,6 +613,12 @@ export default function InvoicesPage() {
                     }}
                     contacts={clients.map(c => ({ id: c.id, name: c.name }))}
                     placeholder="Search customer…"
+                    addNew={{ addedFrom: 'invoice', onCreated: c => {
+                      setClientName(c.name)
+                      if (c.email) setClientEmail(c.email)
+                      const addr = clientAddressBlock(c)
+                      if (addr) setClientAddress(addr)
+                    } }}
                   />
                   {!clients.some(c => c.name.trim().toLowerCase() === clientName.trim().toLowerCase()) && (
                     <input

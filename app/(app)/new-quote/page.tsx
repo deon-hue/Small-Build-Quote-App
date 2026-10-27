@@ -7,7 +7,8 @@ import { QuoteGoneError, quoteSaveMessage } from '@/lib/quote-errors'
 import VaultedCeilingReminder from '@/components/VaultedCeilingReminder'
 import { fmt, VAT, JOB_TYPES, calcPhase, calcPhaseSell, uid } from '@/lib/utils'
 import { PRODUCT_NAME } from '@/lib/product-config'
-import type { QuotePhase, QuoteItem, Quote, TakeoffPhaseMeta, QuoteDocument, QuoteMiscItem } from '@/lib/types'
+import type { QuotePhase, QuoteItem, Quote, TakeoffPhaseMeta, QuoteDocument, QuoteMiscItem, Client } from '@/lib/types'
+import { NewClientModal, clientAddressBlock } from '@/components/NewClientModal'
 import QuoteAttachments from '@/components/QuoteAttachments'
 import QuickQuoteItemsEditor from '@/components/QuickQuoteItemsEditor'
 import { reassignQuoteDocuments, reassignDraftDocuments } from '@/lib/quote-documents'
@@ -362,6 +363,7 @@ export default function NewQuotePage() {
   const [clientDrop, setClientDrop] = useState(false)
   const [clientSearch, setClientSearch] = useState('')
   const [contactSaved, setContactSaved] = useState(false)
+  const [newClientOpen, setNewClientOpen] = useState(false)   // the 'Add a new client' pop-up
   const [collapsedPhases, setCollapsedPhases] = useState<Set<number>>(new Set())
   const [labourTrades,  setLabourTrades]  = useState<BOLabourTrade[]>([])
   const [boProducts,    setBoProducts]    = useState<BOProduct[]>([])
@@ -1765,11 +1767,12 @@ export default function NewQuotePage() {
     setClientDrop(false); setClientSearch('')
   }
 
-  async function saveAsNewContact() {
-    if (!custName.trim()) return
-    await upsertClientFromQuote({ name: custName, address: custAddr, email: custEmail, phone: custPhone })
+  // a client who is not in the list is added in the pop-up (name, email, phone and address typed so far are filled in) and then fills these boxes
+  function clientAdded(c: Client) {
+    setCustName(c.name || ''); setCustEmail(c.email || ''); setCustPhone(c.phone || '')
+    setCustAddr(clientAddressBlock(c) || custAddr)
+    setNewClientOpen(false); setClientDrop(false); setClientSearch('')
     setContactSaved(true)
-    setClientDrop(false); setClientSearch('')
     setTimeout(() => setContactSaved(false), 3000)
   }
 
@@ -2092,7 +2095,7 @@ export default function NewQuotePage() {
                   placeholder="Search or type name…"
                   autoComplete="off"
                 />
-                {clientDrop && (filteredClients.length > 0 || clientNameIsNew) && (
+                {clientDrop && (
                   <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '1.5px solid var(--border)', borderRadius: 6, zIndex: 100, boxShadow: '0 4px 12px rgba(0,0,0,0.12)', maxHeight: 220, overflowY: 'auto' }}>
                     {filteredClients.map(c => (
                       <div key={c.id} onMouseDown={e => { e.preventDefault(); selectClient(c.id) }}
@@ -2106,10 +2109,10 @@ export default function NewQuotePage() {
                         </div>
                       </div>
                     ))}
-                    {clientNameIsNew && (
-                      <div onMouseDown={e => { e.preventDefault(); saveAsNewContact() }}
-                        style={{ padding: '9px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, color: '#16a34a', fontWeight: 600, fontSize: 12, borderTop: filteredClients.length > 0 ? '1px solid var(--border)' : 'none', background: '#f0fdf4' }}>
-                        <span style={{ fontSize: 14 }}>＋</span> Add &ldquo;{custName}&rdquo; as new contact
+                    {(clientNameIsNew || filteredClients.length === 0) && (
+                      <div onMouseDown={e => { e.preventDefault(); setClientDrop(false); setNewClientOpen(true) }}
+                        style={{ padding: '9px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, color: '#16a34a', fontWeight: 600, fontSize: 12, borderTop: filteredClients.length > 0 ? '1px solid var(--border)' : 'none', background: '#f0fdf4', position: 'sticky', bottom: 0 }}>
+                        <span style={{ fontSize: 14 }}>＋</span> {custName.trim() ? <>Add &ldquo;{custName}&rdquo; as a new client</> : 'Add a new client'}
                       </div>
                     )}
                   </div>
@@ -2131,10 +2134,18 @@ export default function NewQuotePage() {
                 <div style={{ fontSize: 12, color: '#16a34a', fontWeight: 600, marginBottom: 4 }}>✓ Contact saved</div>
               )}
               {clientNameIsNew && !contactSaved && (
-                <button type="button" onClick={saveAsNewContact}
+                <button type="button" onClick={() => setNewClientOpen(true)}
                   style={{ width: '100%', padding: '6px 12px', fontSize: 12, fontWeight: 600, color: '#16a34a', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 6, cursor: 'pointer', marginBottom: 4 }}>
-                  ＋ Save &ldquo;{custName}&rdquo; as new contact
+                  ＋ Add &ldquo;{custName}&rdquo; as a new client
                 </button>
+              )}
+              {newClientOpen && (
+                <NewClientModal
+                  prefill={{ name: custName, email: custEmail, phone: custPhone, address: custAddr }}
+                  addedFrom="quote"
+                  onClose={() => setNewClientOpen(false)}
+                  onCreated={clientAdded}
+                />
               )}
               <div className="fg">
                 <label>Job Title</label>
