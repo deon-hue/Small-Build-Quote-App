@@ -10,6 +10,7 @@ import { BRAND, emailShell, emailPara, emailCard, emailButton } from '@/lib/emai
 import { pushToOwner } from '@/lib/push'
 import { withCode } from '@/lib/mail-address'
 import { accountNumberFor } from '@/lib/supplier-account'
+import { isItemImagePath } from '@/lib/order-item-images'
 
 const TOKEN = /^[0-9a-f]{64}$/
 const YMD = /^\d{4}-\d{2}-\d{2}$/
@@ -29,6 +30,12 @@ async function load(token: string) {
   if (!oRow) return null
   const { data: s } = await sb.from('settings').select('company_name, phone, email, logo, contact, address, mail_code').eq('user_id', oRow.user_id).maybeSingle()
   return { sb, quote: rowToQuote(qRow), order: rowToOrder(oRow), ownerId: oRow.user_id as string, settings: s as Record<string, string> | null }
+}
+
+// A picture of an item, if the builder added one: a link that works for a day and shows only that picture. Only a path made by the app's own upload is signed.
+async function signedImage(sb: ReturnType<typeof createServiceRoleClient>, path?: string): Promise<string> {
+  if (!isItemImagePath(path)) return ''
+  try { const { data } = await sb.storage.from('job-documents').createSignedUrl(path, 86400); return data?.signedUrl ?? '' } catch { return '' }
 }
 
 export async function GET(_req: NextRequest, ctx: Ctx) {
@@ -58,7 +65,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       account,
       // set when the request was changed after the supplier last saw it or answered it, so the page can say so
       amendedAt: o.amendedAt && (q.repliedAt ?? q.sentAt) && Date.parse(o.amendedAt) > Date.parse((q.repliedAt ?? q.sentAt) as string) ? o.amendedAt : '',
-      items: (o.items ?? []).map(i => ({ id: i.id, name: i.name, qty: i.qty, unit: i.unit })),
+      items: await Promise.all((o.items ?? []).map(async i => ({ id: i.id, name: i.name, qty: i.qty, unit: i.unit, image: await signedImage(sb, i.image) }))),
       reply: q.status === 'replied' || q.status === 'chosen' ? { price: q.price, rateBasis: q.rateBasis, deliveryDate: q.deliveryDate, validUntil: q.validUntil, notes: q.notes, lines: q.lines, deliveryCharge: q.deliveryCharge, supplierRef: q.supplierRef } : null,
     })
   } catch {

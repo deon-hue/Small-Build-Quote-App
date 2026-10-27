@@ -9,7 +9,7 @@ import { useParams } from 'next/navigation'
 
 interface Info {
   company: string; contactPhone: string; contactName: string; logoUrl: string; ref: string; supplierName: string
-  inboxEmail?: string; title: string; details: string; orderType: string; items: { id: string; name: string; qty: number; unit: string }[]; area: string; deliveryDate: string; deliverySlot: string; offHireDate: string
+  inboxEmail?: string; title: string; details: string; orderType: string; items: { id: string; name: string; qty: number; unit: string; image?: string }[]; area: string; deliveryDate: string; deliverySlot: string; offHireDate: string
   rateBasis: 'fixed' | 'day' | 'week'; plannedUnits: number
   state: 'open' | 'chosen' | 'closed'; status: string; amendedAt?: string; account?: string
   reply: { price: number | null; rateBasis: 'fixed' | 'day' | 'week'; deliveryDate: string; validUntil: string; notes: string; lines?: { id: string; unitPrice: number | null; unavailable: boolean; note: string }[]; deliveryCharge?: number; supplierRef?: string } | null
@@ -37,6 +37,8 @@ export default function SupplierQuotePage() {
   // a request that lists items: a price for each, and delivery
   const [lines, setLines] = useState<Record<string, { price: string; unavailable: boolean; note: string }>>({})
   const [deliveryCharge, setDeliveryCharge] = useState('')
+  // a picture of an item the builder added, shown full size over the page
+  const [zoom, setZoom] = useState('')
 
   useEffect(() => {
     let live = true
@@ -171,8 +173,19 @@ export default function SupplierQuotePage() {
                               const lt = lineTotal(it.id, it.qty)
                               return (
                                 <div key={it.id} style={{ border: `1px solid ${LINE}`, borderRadius: 8, padding: '10px 12px', background: l.unavailable ? '#f8fafc' : '#fff' }}>
-                                  <div style={{ fontWeight: 700, fontSize: 15, lineHeight: 1.35 }}>{it.name}</div>
-                                  <div style={{ fontSize: 13, color: MUTED, marginTop: 2 }}>{it.qty} {it.unit}</div>
+                                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                                    {it.image && (
+                                      <button type="button" onClick={() => setZoom(it.image ?? '')} aria-label={`Show the picture of ${it.name} bigger`} style={{ flexShrink: 0, padding: 0, border: `1px solid ${LINE}`, borderRadius: 8, background: '#f8fafc', cursor: 'zoom-in', overflow: 'hidden', width: 88, height: 88 }}>
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img src={it.image} alt={it.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                                      </button>
+                                    )}
+                                    <div style={{ minWidth: 0 }}>
+                                      <div style={{ fontWeight: 700, fontSize: 15, lineHeight: 1.35 }}>{it.name}</div>
+                                      <div style={{ fontSize: 13, color: MUTED, marginTop: 2 }}>{it.qty} {it.unit}</div>
+                                      {it.image && <div style={{ fontSize: 12, color: MUTED, marginTop: 4 }}>Picture of what we need: tap to enlarge</div>}
+                                    </div>
+                                  </div>
                                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 8, alignItems: 'end' }}>
                                     <div>
                                       <label style={lab}>Unit price (£)</label>
@@ -249,6 +262,13 @@ export default function SupplierQuotePage() {
               </>
             )}
           </div>
+          {zoom && (
+            <div onClick={() => setZoom('')} role="dialog" aria-label="Picture of the item" style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(15,23,42,0.88)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, cursor: 'zoom-out' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={zoom} alt="The item" style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 8, background: '#fff' }} />
+              <button type="button" onClick={() => setZoom('')} aria-label="Close the picture" style={{ position: 'absolute', top: 14, right: 14, width: 40, height: 40, borderRadius: 20, border: 'none', background: '#fff', color: INK, fontSize: 22, fontWeight: 700, cursor: 'pointer' }}>×</button>
+            </div>
+          )}
           <div style={{ background: '#1e293b', padding: '16px 22px', fontSize: 12, color: 'rgba(255,255,255,0.75)', lineHeight: 1.6 }}><strong style={{ color: '#fff' }}>{info?.company ?? ''}</strong></div>
         </div>
       </div>

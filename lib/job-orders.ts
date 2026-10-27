@@ -5,6 +5,7 @@
 // The pure parts (the sums, the matching, the wording of the messages) live here so they can be tested; the database calls are at the end.
 
 import { SUPPLIER_PRICE_FORM_ON, showSupplierPriceForm } from './supplier-quote-config'
+import { isItemImagePath, removeItemImages } from './order-item-images'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { JobCost, JobCostCategory } from './types'
 
@@ -76,7 +77,8 @@ export interface JobOrder {
 }
 
 /** One thing to be priced on a request: how many, of what. Never carries our own price. */
-export interface OrderItem { id: string; name: string; qty: number; unit: string }
+/** `image` is the path of a picture of the item for the supplier to see (lib/order-item-images.ts); it is only ever the path, never a link */
+export interface OrderItem { id: string; name: string; qty: number; unit: string; image?: string }
 /** A supplier's answer for one item: a unit price ex VAT, or that they cannot supply it, with an optional note ("can do the 7N block instead"). */
 export interface QuoteLine { id: string; unitPrice: number | null; unavailable: boolean; note: string }
 
@@ -507,7 +509,9 @@ function parseItems(v: unknown): OrderItem[] {
   if (!Array.isArray(v)) return []
   return v.filter(x => x && typeof x === 'object').map((x, i) => {
     const r = x as Record<string, unknown>
-    return { id: typeof r.id === 'string' && r.id ? r.id : `it-${i}`, name: str(r.name), qty: Number(r.qty) || 0, unit: str(r.unit) }
+    const item: OrderItem = { id: typeof r.id === 'string' && r.id ? r.id : `it-${i}`, name: str(r.name), qty: Number(r.qty) || 0, unit: str(r.unit) }
+    if (isItemImagePath(r.image)) item.image = r.image
+    return item
   })
 }
 function parseLines(v: unknown): QuoteLine[] {
@@ -572,7 +576,7 @@ export async function updateOrderQuote(sb: SupabaseClient, id: string, p: Partia
 
 /** Has a request that was already sent been changed in a way a supplier would care about? (the wording, the items, when, where or how it is priced) */
 export function requestChanged(prev: JobOrder, next: Partial<JobOrder>): boolean {
-  const key = (o: Partial<JobOrder>) => JSON.stringify([o.title ?? '', o.details ?? '', (o.items ?? []).map(i => [i.name, i.qty, i.unit]), o.deliveryDate ?? '', o.deliverySlot ?? '', o.offHireDate ?? '', areaOnly(o.siteAddress ?? ''), o.rateBasis ?? 'fixed', o.plannedUnits ?? 1])
+  const key = (o: Partial<JobOrder>) => JSON.stringify([o.title ?? '', o.details ?? '', (o.items ?? []).map(i => [i.name, i.qty, i.unit, i.image ?? '']), o.deliveryDate ?? '', o.deliverySlot ?? '', o.offHireDate ?? '', areaOnly(o.siteAddress ?? ''), o.rateBasis ?? 'fixed', o.plannedUnits ?? 1])
   return key(prev) !== key({ ...prev, ...next })
 }
 
@@ -663,6 +667,11 @@ export async function restoreJobOrder(sb: SupabaseClient, id: string): Promise<b
 
 /** Delete forever: the request and, with it, its suppliers and their replies. Only offered from Recently deleted. */
 export async function purgeJobOrder(sb: SupabaseClient, id: string): Promise<void> {
+  // the pictures of its items go with it (best effort)
+  try {
+    const { data } = await sb.from('job_orders').select('items').eq('id', id).maybeSingle()
+    await removeItemImages(sb, parseItems(data?.items).map(i => i.image).filter((p): p is string => !!p))
+  } catch { /* the request is deleted either way */ }
   await sb.from('job_orders').delete().eq('id', id)
 }
 
