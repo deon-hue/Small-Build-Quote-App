@@ -226,7 +226,8 @@ function buildEmailHtml(rawPayload: NotifyClientPayload, portalUrl: string): str
           <tr><td colspan="2" style="border-top:1px solid ${BRAND.line};padding-top:6px"></td></tr>
           ${row('Balance outstanding', fmtGbp(payload.reportOutstanding), `font-weight:700;color:${outstandingColour};`)}
         </table>`),
-        emailNotice(`📎 <strong>The full breakdown is attached</strong> — including invoice-by-invoice and payment-by-payment detail. Please open the attachment to review it.`),
+        emailNotice(`📎 <strong>The full breakdown is attached as a PDF</strong> — including invoice-by-invoice and payment-by-payment detail. Please open the attachment to review it.`),
+        portalUrl ? emailButton(portalUrl, 'View your account online →', 'See your invoices, variations and payments, and get in touch with us, in your secure client portal.') : '',
         emailContact(`If anything doesn't look right, just get in touch and we'll go through it together.`, payload.companyPhone, payload.companyEmail),
       ].join('\n      '),
     })
@@ -470,9 +471,10 @@ export async function POST(req: NextRequest) {
   // this never risks Supabase's own outbound-email rate limit, and never sends a second,
   // separately-branded email alongside the one built here.
   let magicPortalUrl: string | null = null
-  if ((payload.type === 'quote_sent' || payload.type === 'contract_sent') && clientEmail) {
+  // (the financial summary gets one too, but only for a contact: with no clientId the plain portal link is used, so an address typed into the dialog never creates an account)
+  if ((payload.type === 'quote_sent' || payload.type === 'contract_sent' || (payload.type === 'job_report' && payload.clientId)) && clientEmail) {
     try {
-      const link = await createPortalSignInLink(clientEmail, appUrl, payload.type === 'contract_sent' ? '/portal/contracts' : '/portal/quotes')
+      const link = await createPortalSignInLink(clientEmail, appUrl, payload.type === 'contract_sent' ? '/portal/contracts' : payload.type === 'job_report' ? '/portal' : '/portal/quotes')
       if ('error' in link) {
         console.error('[notify-client] sign-in link failed:', link.error)
       } else {
@@ -519,7 +521,7 @@ export async function POST(req: NextRequest) {
       const html    = buildEmailHtml(payload, portalUrl)
       const subject = buildEmailSubject(payload)
 
-      // PDF attachment (quote_sent type only)
+      // PDF attachment (a quote, or the job financial summary)
       const attachment = payload.pdfBase64
         ? { filename: payload.pdfFilename || 'Quotation.pdf', content: payload.pdfBase64 }
         : null

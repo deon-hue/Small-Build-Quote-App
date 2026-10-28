@@ -15,7 +15,7 @@ export interface JobReportData {
   payments: JobPayment[]
 }
 
-const VAR_STATUS_LABEL: Record<string, string> = {
+export const VAR_STATUS_LABEL: Record<string, string> = {
   draft: 'Draft', sent: 'Awaiting Your Response', approved: 'Approved',
   rejected: 'Rejected', cancelled: 'Cancelled', invoiced: 'Approved (Invoiced)', paid: 'Approved (Paid)',
 }
@@ -24,27 +24,32 @@ const VAR_STATUS_COLOR: Record<string, string> = {
   rejected: '#dc2626', cancelled: '#94a3b8', invoiced: '#16a34a', paid: '#16a34a',
 }
 const INV_BADGE: Record<string, string> = { draft: '#aaa', sent: '#4a90a4', paid: '#7ab533', overdue: '#c0392b' }
-const PAYMENT_METHOD_LABEL: Record<string, string> = { cash: 'Cash', cheque: 'Cheque', bank_transfer: 'Bank Transfer', other: 'Other' }
+export const PAYMENT_METHOD_LABEL: Record<string, string> = { cash: 'Cash', cheque: 'Cheque', bank_transfer: 'Bank Transfer', other: 'Other' }
 
-export function buildJobReportHtml(data: JobReportData, settings: Settings): string {
-  const fmt = (n: number) => '£' + Number(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  const fmtDate = (d: string) => d ? new Date(d.length <= 10 ? d + 'T12:00:00' : d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
-
-  // Same grouping rule the app already uses everywhere else (JobDocumentsModal, the
-  // portal jobs view) — approved/invoiced/paid variations count toward the contract total;
-  // draft/sent are pending, rejected/cancelled never did.
+/**
+ * The figures of the report, worked out once so the web page, the attached PDF and the email's summary card can never disagree.
+ * Same grouping rule the app already uses everywhere else (JobDocumentsModal, the portal jobs view): approved/invoiced/paid variations count toward the contract total;
+ * draft/sent are pending, rejected/cancelled never did.
+ */
+export function jobReportFigures(data: JobReportData) {
   const approvedVariations = data.variations.filter(v => v.status === 'approved' || v.status === 'invoiced' || v.status === 'paid')
   const pendingVariations  = data.variations.filter(v => v.status === 'draft' || v.status === 'sent')
   const closedVariations   = data.variations.filter(v => v.status === 'rejected' || v.status === 'cancelled')
-
   const approvedVariationsTotal = approvedVariations.reduce((s, v) => s + v.total, 0)
   const adjustedContractTotal = data.contractValue + approvedVariationsTotal
-
   const invoicedTotal = data.invoices.reduce((s, i) => s + i.total, 0)
   const paidInvoicesTotal = data.invoices.filter(i => i.status === 'paid').reduce((s, i) => s + i.total, 0)
   const cashReceived = data.payments.reduce((s, p) => s + p.amount, 0)
   const totalReceived = paidInvoicesTotal + cashReceived
   const balanceOutstanding = +(adjustedContractTotal - totalReceived).toFixed(2)
+  return { approvedVariations, pendingVariations, closedVariations, approvedVariationsTotal, adjustedContractTotal, invoicedTotal, paidInvoicesTotal, cashReceived, totalReceived, balanceOutstanding }
+}
+
+export function buildJobReportHtml(data: JobReportData, settings: Settings): string {
+  const fmt = (n: number) => '£' + Number(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const fmtDate = (d: string) => d ? new Date(d.length <= 10 ? d + 'T12:00:00' : d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
+
+  const { approvedVariations, pendingVariations, closedVariations, approvedVariationsTotal, adjustedContractTotal, invoicedTotal, totalReceived, balanceOutstanding } = jobReportFigures(data)
 
   const logoHtml = settings.logo
     ? `<img src="${settings.logo}" style="height:56px;max-width:180px;object-fit:contain;margin-bottom:8px" />`

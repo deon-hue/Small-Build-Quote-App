@@ -3,9 +3,8 @@
 /**
  * SendJobReportModal
  *
- * Emails the customer financial report (lib/jobReportHtml.ts) to the client — an HTML
- * attachment, same pattern as SendQuoteModal's PDF attachment, via /api/notify-client
- * (job_report type). The email body is a short branded summary; the full breakdown
+ * Emails the customer financial report to the client as a PDF attachment (lib/jobReportPdf.ts, made by /api/generate-job-report-pdf), the same pattern as SendQuoteModal's PDF,
+ * via /api/notify-client (job_report type). The email body is a short branded summary with a button to the client portal; the full breakdown
  * (variations/invoices/payments, no cost/labour detail) is in the attachment.
  */
 
@@ -13,7 +12,6 @@ import { useState } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import type { Invoice, JobPayment, Variation } from '@/lib/types'
 import type { NotifyClientPayload } from '@/app/api/notify-client/route'
-import { buildJobReportHtml } from '@/lib/jobReportHtml'
 import { useDraggableModal } from './useDraggableModal'
 import ModalResizeHandle from './ModalResizeHandle'
 import ModalMaximizeButton from './ModalMaximizeButton'
@@ -30,20 +28,15 @@ interface Props {
   onSent?: () => void
 }
 
-// Resend expects base64 attachment content — btoa alone chokes on non-Latin1 chars (£ is
-// fine, but be safe for anything else that ends up in company details or client names).
-function utf8ToBase64(str: string): string {
-  return btoa(unescape(encodeURIComponent(str)))
-}
-
 export default function SendJobReportModal({ clientName, jobType, jobAddress, contractValue, variations, invoices, payments, onClose, onSent }: Props) {
   const { settings, clients } = useApp()
 
   // Best-effort recipient guess — the Job record itself has no email field, so try the
   // matching Client record first, then whichever invoice on this job has one. Always
   // shown and editable before sending, never auto-sent without the user confirming it.
+  const matchedClient = clients.find(c => c.name.toLowerCase() === clientName.toLowerCase())
   const guessedEmail =
-    clients.find(c => c.name.toLowerCase() === clientName.toLowerCase())?.email ||
+    matchedClient?.email ||
     invoices.find(i => i.clientEmail)?.clientEmail ||
     ''
 
@@ -68,8 +61,19 @@ export default function SendJobReportModal({ clientName, jobType, jobAddress, co
     setError('')
     setBusy(true)
     try {
-      const html = buildJobReportHtml({ jobType, clientName, jobAddress, contractValue, variations, invoices, payments }, settings)
-      const filename = `Job-Financial-Summary-${clientName.replace(/[^a-z0-9]/gi, '_')}.html`
+      // the report as a PDF, made on the server (the same drawing code as the quote PDF)
+      const pdfRes = await fetch('/api/generate-job-report-pdf', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: { jobType, clientName, jobAddress, contractValue, variations, invoices, payments }, settings }),
+      })
+      if (!pdfRes.ok) {
+        const e = await pdfRes.json().catch(() => ({}))
+        throw new Error(`Could not make the PDF: ${(e as { error?: string }).error || pdfRes.statusText}`)
+      }
+      const { pdf: pdfBase64 } = await pdfRes.json() as { pdf: string }
+      const filename = `Job-Financial-Summary-${clientName.replace(/[^a-z0-9]/gi, '_')}.pdf`
+      // the portal button signs them straight in only when the address is the contact's own (so an address typed in here never creates an account)
+      const knownContact = matchedClient && matchedClient.email && matchedClient.email.trim().toLowerCase() === toEmail.trim().toLowerCase() ? matchedClient : undefined
 
       const payload: NotifyClientPayload = {
         type: 'job_report',
@@ -85,7 +89,8 @@ export default function SendJobReportModal({ clientName, jobType, jobAddress, co
         companyName: settings.name,
         companyPhone: settings.phone,
         companyEmail: settings.email,
-        pdfBase64: utf8ToBase64(html),
+        clientId: knownContact?.id,
+        pdfBase64,
         pdfFilename: filename,
       }
 
@@ -152,7 +157,7 @@ export default function SendJobReportModal({ clientName, jobType, jobAddress, co
               </div>
 
               <div style={{ background: '#fff8e1', border: '1px solid #ffe082', borderRadius: 6, padding: '10px 14px', fontSize: 12, color: '#5d4037' }}>
-                📎 The full report (contract value, variations, invoices, payments — no cost or labour detail) will be attached to the email.
+                📎 The full report (contract value, variations, invoices, payments — no cost or labour detail) will be attached to the email as a PDF, with a button to their client portal.
               </div>
 
               <div>
