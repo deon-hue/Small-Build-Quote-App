@@ -16,6 +16,7 @@ import { useDraggableModal } from '@/components/useDraggableModal'
 import ModalResizeHandle from '@/components/ModalResizeHandle'
 import ModalMaximizeButton from '@/components/ModalMaximizeButton'
 import EnquiryFormSetup from '@/components/EnquiryFormSetup'
+import { parsePastedMessage } from '@/lib/lead-from-message'
 import './touch.css'
 
 interface ClientFile { name: string; url: string; isImage: boolean }
@@ -477,6 +478,25 @@ function AddLeadModal({ leads, clients, today, onClose, onSaved, onOpenExisting 
   const [chase, setChase] = useState<string | null>(addDays(today, 1))
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  const [paste, setPaste] = useState('')
+  const [pasteNote, setPasteNote] = useState('')
+
+  /** Reads a pasted email or message and fills in what it finds: nothing already typed is overwritten */
+  function fillFromPaste() {
+    const p = parsePastedMessage(paste)
+    if (!paste.trim()) return
+    const found: string[] = []
+    setF(cur => {
+      const next = { ...cur }
+      if (!cur.name.trim() && p.name) { next.name = p.name; found.push('name') }
+      if (!cur.email.trim() && p.email) { next.email = p.email; found.push('email') }
+      if (!cur.phone.trim() && p.phone) { next.phone = p.phone; found.push('phone') }
+      if (!cur.want.trim() && p.want) { next.want = p.want; found.push('what they want') }
+      if (cur.source === 'My contacts') next.source = p.kind === 'email' ? 'Email' : p.kind === 'chat' ? 'WhatsApp' : cur.source
+      return next
+    })
+    setPasteNote(p.name || p.email || p.phone ? `Filled in what could be found${p.name ? '' : ': there was no name, so please type one'}. Check it below.` : 'No name, phone or email could be found in that. The words are in "What they want": please type the rest.')
+  }
 
   // is this person already here, as a lead or as a contact?
   const sameLead = findSamePerson({ email: f.email, phone: f.phone }, leads.map(l => ({ ...l, email: l.client_email, phone: l.client_phone })))
@@ -512,6 +532,15 @@ function AddLeadModal({ leads, clients, today, onClose, onSaved, onOpenExisting 
         </div>
         <div className="form-modal-bd" style={{ overflowY: 'auto', flex: 1, display: 'grid', gap: 12 }}>
           {err && <div style={{ background: '#fdecea', border: '1px solid #f5c6c0', color: '#a93226', borderRadius: 6, padding: '8px 12px', fontSize: 13 }}>{err}</div>}
+          <details style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', background: '#fff' }}>
+            <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>📋 Paste an email or a message</summary>
+            <div style={{ fontSize: 12, color: 'var(--muted)', margin: '6px 0' }}>Paste an email (with its From and Subject lines), a WhatsApp or Messenger message, or your own note. It fills in the name, phone, email and what they want where it can.</div>
+            <textarea value={paste} onChange={e => { setPaste(e.target.value); setPasteNote('') }} rows={5} style={{ ...input, resize: 'vertical' }} placeholder="Paste here" aria-label="Pasted email or message" />
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
+              <button type="button" className="btn-sm btn-primary" style={{ fontSize: 12 }} onClick={fillFromPaste} disabled={!paste.trim()}>Fill in the details</button>
+              {pasteNote && <span style={{ fontSize: 12, color: 'var(--muted)' }}>{pasteNote}</span>}
+            </div>
+          </details>
           <div><span style={label}>Name *</span><input autoFocus value={f.name} onChange={e => setF({ ...f, name: e.target.value })} style={input} /></div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div><span style={label}>Phone</span><input inputMode="tel" value={f.phone} onChange={e => setF({ ...f, phone: e.target.value })} style={input} /></div>

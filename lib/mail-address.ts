@@ -31,3 +31,26 @@ export function codeFromRecipients(recipients: (string | undefined | null)[], do
   }
   return found.size === 1 ? [...found][0] : null
 }
+
+/**
+ * Was the message sent to the leads address (leads@buildospro.ai, or a company's own leads-ab12cd34@buildospro.ai, with a plus or a hyphen)? `base` is the shared address (NEXT_PUBLIC_LEADS_EMAIL).
+ * With no base address set, nothing is a leads address. Pure.
+ */
+export function isLeadsRecipient(recipients: (string | undefined | null)[], base: string | undefined | null): boolean {
+  const b = (base || '').trim().toLowerCase()
+  const at = b.lastIndexOf('@')
+  if (at <= 0) return false
+  const local = b.slice(0, at).split('+')[0], domain = b.slice(at + 1)
+  const rx = /([a-z0-9._-]+(?:\+[a-z0-9]+)?)@([a-z0-9.-]+)/gi
+  for (const r of recipients) {
+    if (!r) continue
+    rx.lastIndex = 0
+    let m: RegExpExecArray | null
+    while ((m = rx.exec(r)) !== null) {
+      if (m[2].toLowerCase() !== domain) continue
+      const l = m[1].toLowerCase()
+      if (l === local || (l.startsWith(local) && /^[+-][0-9a-f]{8}$/.test(l.slice(local.length)))) return true
+    }
+  }
+  return false
+}

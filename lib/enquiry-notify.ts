@@ -10,7 +10,7 @@ export interface EnquiryEmail { subject: string; html: string; replyTo?: string 
 const oneLine = (s: string) => s.replace(/[\r\n\t]+/g, ' ').trim()
 
 /** The email's words. Everything the visitor typed is escaped, so nothing they type can put markup or a link of their own in the builder's inbox. */
-export function buildEnquiryEmail(companyName: string, e: EnquiryInput, leadsUrl: string, logoUrl?: string): EnquiryEmail {
+export function buildEnquiryEmail(companyName: string, e: EnquiryInput, leadsUrl: string, logoUrl?: string, via: 'form' | 'email' = 'form'): EnquiryEmail {
   const row = (label: string, value: string) => value
     ? `<tr><td style="padding:6px 14px 6px 0;font-size:12px;color:${BRAND.muted};vertical-align:top;white-space:nowrap">${escapeHtml(label)}</td><td style="padding:6px 0;font-size:14px;color:${BRAND.ink};vertical-align:top">${value}</td></tr>`
     : ''
@@ -26,25 +26,25 @@ export function buildEnquiryEmail(companyName: string, e: EnquiryInput, leadsUrl
   ].join('')}</table>`
 
   const html = emailShell({
-    company: escapeHtml(companyName), kicker: 'Enquiry', title: '📬 New enquiry', logoUrl,
+    company: escapeHtml(companyName), kicker: via === 'email' ? 'Lead by email' : 'Enquiry', title: via === 'email' ? '📬 New lead by email' : '📬 New enquiry', logoUrl,
     body: [
-      emailPara(`<strong>${escapeHtml(e.name)}</strong> has sent an enquiry through your enquiry form.`, 14),
+      emailPara(`<strong>${escapeHtml(e.name)}</strong> ${via === 'email' ? 'has emailed your leads address' : 'has sent an enquiry through your enquiry form'}.`, 14),
       table,
       `<div style="margin:0 0 22px;padding:14px 16px;background:${BRAND.card};border:1px solid ${BRAND.line};border-radius:6px;font-size:14px;line-height:1.6;color:${BRAND.ink}">${what}</div>`,
       leadsUrl ? emailButton(escapeHtml(leadsUrl), 'Open your Leads →') : '',
       `<p style="margin:18px 0 0;font-size:12px;color:${BRAND.muted};line-height:1.6">Reply to this email to answer them directly. It is already in your Leads list as a New lead.</p>`,
     ].join('\n      '),
-    footerHtml: `Sent by your enquiry form · ${escapeHtml(companyName)}`,
+    footerHtml: `${via === 'email' ? 'Sent from your leads address' : 'Sent by your enquiry form'} · ${escapeHtml(companyName)}`,
   })
   return { subject: oneLine(`📬 New enquiry — ${e.name}${e.jobType ? ' · ' + e.jobType : ''}`).slice(0, 200), html, replyTo: e.email || undefined }
 }
 
-export async function notifyBuilderOfEnquiry(opts: { to: string; companyName: string; input: EnquiryInput; origin: string; ownerId: string; hasLogo: boolean }): Promise<void> {
+export async function notifyBuilderOfEnquiry(opts: { to: string; companyName: string; input: EnquiryInput; origin: string; ownerId: string; hasLogo: boolean; via?: 'form' | 'email' }): Promise<void> {
   try {
     const key = process.env.RESEND_API_KEY
     if (!key || !opts.to) return
     const origin = opts.origin.replace(/\/+$/, '')
-    const mail = buildEnquiryEmail(opts.companyName, opts.input, origin ? `${origin}/quote-requests` : '', opts.hasLogo && origin ? `${origin}/api/public/company-logo/${opts.ownerId}` : undefined)
+    const mail = buildEnquiryEmail(opts.companyName, opts.input, origin ? `${origin}/quote-requests` : '', opts.hasLogo && origin ? `${origin}/api/public/company-logo/${opts.ownerId}` : undefined, opts.via ?? 'form')
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
